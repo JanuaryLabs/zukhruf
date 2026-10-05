@@ -70,4 +70,4 @@ See [failure modes](../concepts/failure-modes.md).
 - Four processes each did 25 read-then-write increments of one counter file. The counter was 100 at the end, and the fencing tokens increased in the order of the grants.
 - A holder process that got `SIGKILL` did not block the next caller.
 - A mutation test removed the release step, the removal of stopped holders, and the head check. The tests found each change.
-- One gap is known: no test makes a rewrite lose a ticket. The append again step is not proven by a test.
+- `src/lock-stores/file-system/ticket-queue-file-store.test.ts` pauses a release before its rename, so that the rename deletes the ticket of a new waiter. The waiter appends its ticket again and gets the key. Without the append again step, this test fails.

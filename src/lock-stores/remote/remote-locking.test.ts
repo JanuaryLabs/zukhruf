@@ -103,3 +103,106 @@ describe('Remote locking protocol', () => {
 		}
 	});
 });
+
+/** A coordinator that started after a failover, and a way to connect scripted peers to it. */
+function coordinatorAfterFailover(graceWindow: number) {
+	const coordinator = new LockCoordinator({ tokens: new CounterTokenSource(), graceWindow });
+	const connect = () => {
+		const peer = scriptedPeer<LockResponse, LockRequest>();
+		coordinator.serve(peer.connection);
+		return peer;
+	};
+	return { coordinator, connect };
+}
+
+/** Resolves `'granted'` if `lease` arrives within `milliseconds`, otherwise `'waiting'`. */
+async function grantedWithin(lease: Promise<unknown>, milliseconds: number) {
+	const timeout = Promise.withResolvers<'waiting'>();
+	const timer = setTimeout(() => timeout.resolve('waiting'), milliseconds);
+	try {
+		return await Promise.race([lease.then(() => 'granted' as const), timeout.promise]);
+	} finally {
+		clearTimeout(timer);
+	}
+}
+
+describe('Grace window after a failover', () => {
+	test('an acquire that arrives during the grace window is granted only after it ends', async (t) => {
+		// Arrange
+		const { connect } = coordinatorAfterFailover(200);
+		const waiter = connect();
+
+		// Act
+		waiter.deliver({ op: 'acquire', id: 'w', key: 'product:42' });
+		await delay(100);
+		const duringGrace = [...waiter.sent];
+
+		// Assert
+		assert.deepEqual(duringGrace, [], 'Nothing may be granted during the grace window');
+		await waitUntil(
+			t,
+			() => waiter.sent.some((response) => response.op === 'granted'),
+			'The acquire must be granted once the grace window ends',
+		);
+	});
+
+	test('a reassert that arrives after the grace window is refused', async (t) => {
+		// Arrange: a holder reconnects too late, for example after a freeze.
+		const { connect } = coordinatorAfterFailover(50);
+		const holder = connect();
+		await delay(100);
+
+		// Act
+		holder.deliver({ op: 'reassert', id: 'h', key: 'product:42', token: '7' });
+
+		// Assert
+		await waitUntil(t, () => holder.sent.length > 0, 'The coordinator must answer the reassert');
+		assert.deepEqual(holder.sent, [{ op: 'rejected', id: 'h' }]);
+	});
+
+	test('a reasserted key stays with its holder, ahead of an acquire that arrived first', async () => {
+		// Arrange: a waiter's acquire arrives before the holder reconnects.
+		const { coordinator, connect } = coordinatorAfterFailover(100);
+		const waiter = connect();
+		const holder = connect();
+		waiter.deliver({ op: 'acquire', id: 'w', key: 'product:42' });
+		holder.deliver({ op: 'reassert', id: 'h', key: 'product:42', token: '5' });
+
+		// Act: the grace window ends while the holder still has the key.
+		await delay(200);
+		const afterGrace = [...waiter.sent];
+		holder.deliver({ op: 'release', id: 'h' });
+
+		// Assert: the waiter gets the key only after the holder releases it.
+		assert.deepEqual(afterGrace, [], 'The waiter was granted a key that a holder reasserted');
+		assert.equal(
+			await grantedWithin(coordinator.acquire('other-key'), settle),
+			'granted',
+			'Other keys must not wait',
+		);
+		await delay(settle);
+		assert.equal(waiter.sent[0]?.op, 'granted', 'The waiter must get the key after the release');
+	});
+
+	test('when two holders reassert one key, the newer token keeps it', async (t) => {
+		// Arrange
+		const { coordinator, connect } = coordinatorAfterFailover(150);
+		const older = connect();
+		const newer = connect();
+
+		// Act
+		older.deliver({ op: 'reassert', id: 'o', key: 'product:42', token: '5' });
+		newer.deliver({ op: 'reassert', id: 'n', key: 'product:42', token: '9' });
+		await waitUntil(t, () => older.sent.length > 0, 'The older claim must be answered');
+		older.drop();
+		await delay(200);
+
+		// Assert: the older claim is refused, and its disconnect does not free the newer holder's key.
+		assert.deepEqual(older.sent, [{ op: 'rejected', id: 'o' }]);
+		assert.deepEqual(newer.sent, [], 'The newer claim must not be refused');
+		const next = coordinator.acquire('product:42');
+		assert.equal(await grantedWithin(next, settle), 'waiting', 'The newer holder must still have the key');
+		newer.deliver({ op: 'release', id: 'n' });
+		assert.equal(await grantedWithin(next, 1000), 'granted', 'The key must be free after the newer holder releases it');
+	});
+});

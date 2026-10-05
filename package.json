@@ -7,7 +7,7 @@
     "./leader-election": "./src/leader-election/index.ts"
   },
   "scripts": {
-    "test": "node --test 'src/**/*.test.ts' 'examples/**/*.test.ts'"
+    "test": "node --test --test-force-exit --test-timeout=60000 'src/**/*.test.ts' 'examples/**/*.test.ts'"
   },
   "engines": {
     "node": ">=26.9.0"

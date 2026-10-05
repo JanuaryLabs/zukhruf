@@ -127,4 +127,4 @@ docs/
   concepts/  stores/  recipes/  adr/
 ```
 
-The tests run each lock store through the same scenarios: single process, many threads, many processes, a killed holder, and a failover. Mutation tests broke the mechanisms on purpose, and the tests found every break but one: no test triggers the case where `TicketQueueFileStore` must append a lost ticket again.
+The tests run each lock store through the same scenarios: single process, many threads, many processes, a killed holder, and a failover. Mutation tests broke the mechanisms on purpose, and a test found each break. A test that breaks something stops the run at once (`--test-force-exit`), so a broken release fails in seconds and does not hang.
