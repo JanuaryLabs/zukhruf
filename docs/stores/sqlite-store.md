@@ -4,7 +4,7 @@ A host lock store that uses an exclusive SQLite transaction as the lock. The ope
 
 | Reach | Order | Holder process stops | Default token source |
 |---|---|---|---|
-| Host | No order | Released by the kernel | `FileTokenSource` (durable) |
+| Host | First come, first served in one process; no order between processes | Released by the kernel | `FileTokenSource` (durable) |
 
 ## What
 
@@ -28,16 +28,16 @@ The file lock stores must find a stopped holder by its process ID. That check ca
 
 ## When not
 
-- The order of waiters is important. Use [TicketQueueFileStore](./ticket-queue-file-store.md).
-- Many processes wait for one key at the same time. Each waiter keeps one database connection open while it waits.
+- The order of waiters across processes is important. Use [TicketQueueFileStore](./ticket-queue-file-store.md).
 - You need the key soon after a release. Waiters poll.
 
 ## How it works
 
-1. The process opens the key's database file with no busy timeout.
-2. It runs `BEGIN EXCLUSIVE`. If another connection has the transaction, SQLite says `SQLITE_BUSY` at once.
-3. On `SQLITE_BUSY`, the process waits `pollInterval` and tries again. It does not use a SQLite busy timeout, because that timeout stops the event loop.
-4. To release the key, the holder runs `ROLLBACK` and closes the connection.
+1. Callers in one process first line up in a queue in memory, in the order of their calls. Only the first caller in that queue continues to the next step. Thus one process keeps at most one database file open for each key, however many callers wait.
+2. That caller opens the key's database file with no busy timeout.
+3. It runs `BEGIN EXCLUSIVE`. If another connection has the transaction, SQLite says `SQLITE_BUSY` at once.
+4. On `SQLITE_BUSY`, the caller waits `pollInterval` and tries again. It does not use a SQLite busy timeout, because that timeout stops the event loop.
+5. To release the key, the holder runs `ROLLBACK` and closes the connection. Then the next caller in the in-process queue continues.
 
 Do not change the journal mode of these files. The tests use only the default mode.
 
@@ -45,7 +45,7 @@ The transaction ends with `ROLLBACK`, so the fencing token counter cannot be in 
 
 ## Acquire modes
 
-`tryAcquire` runs `BEGIN EXCLUSIVE` once. A waiter that gives up stops its attempts and closes its connection. See [acquire modes](../concepts/acquire-modes.md).
+`tryAcquire` gives up at once if another caller in this process holds or waits for the key. Otherwise it runs `BEGIN EXCLUSIVE` once. A waiter that gives up stops its attempts and closes its connection, or leaves the in-process queue. See [acquire modes](../concepts/acquire-modes.md).
 
 ## Failure modes
 
@@ -67,3 +67,4 @@ See [failure modes](../concepts/failure-modes.md).
 - A child process held the lock and got `SIGKILL`. The parent got the lock at its next attempt.
 - Two connections in one process also exclude each other (`SQLITE_BUSY`, code 5).
 - A mutation test changed `BEGIN EXCLUSIVE` to `BEGIN`. Eight tests failed.
+- `src/lock-stores/sqlite/sqlite-store.test.ts`: fifty callers that wait in one process add no open files (before the in-process queue, they added fifty), and callers in one process get the key in the order of their calls.
