@@ -51,6 +51,24 @@ If you are not sure:
 - **One process:** use `MemoryStore`.
 - **Several processes on one host:** use `SqliteStore`.
 
+## Acquire modes
+
+A key is exclusive for every caller. The acquire mode decides only what one caller does while the key is busy: wait (the default), or skip.
+
+```ts
+import { Modes } from 'mutex';
+
+const report = mutex.key('report:daily', { mode: Modes.skipIfBusy() });
+
+const tick = await report.run(buildReport);                         // a cron tick skips if a report runs
+if (!tick.acquired) return;
+
+const fresh = await report.run(buildReport, { mode: Modes.wait() }); // an admin waits, then runs
+await mutex.acquire('product:42', reserve, { mode: Modes.skipIfBusy({ waitAtMost: 500 }) });
+```
+
+A mode that can skip returns `{ acquired: true, value } | { acquired: false }`, and TypeScript makes you check `acquired`. See [Acquire modes](./docs/concepts/acquire-modes.md).
+
 ## Fencing tokens
 
 A holder can lose its key and not know it, for example when its process freezes. Each lease has a fencing token that increases with each grant. Send the token with each write, and let the resource refuse lower tokens:
@@ -72,6 +90,7 @@ See [Fencing tokens](./docs/concepts/fencing-tokens.md) and the recipe [Protect 
 **Concepts**
 
 - [Reach](./docs/concepts/reach.md): who can share a lock, and how to select it.
+- [Acquire modes](./docs/concepts/acquire-modes.md): wait or skip while a key is busy.
 - [Fencing tokens](./docs/concepts/fencing-tokens.md): how a resource refuses a stale holder.
 - [Leader election](./docs/concepts/leader-election.md): how `SocketStore` selects its coordinator.
 - [Failure modes](./docs/concepts/failure-modes.md): what each lock store does when something stops.
@@ -88,6 +107,7 @@ See [Fencing tokens](./docs/concepts/fencing-tokens.md) and the recipe [Protect 
 6. [Survive a crashed holder](./docs/recipes/survive-a-crashed-holder.md)
 7. [Run a job in only one process](./docs/recipes/singleton-job-with-leader-election.md)
 8. [Write your own lock store](./docs/recipes/write-your-own-lock-store.md)
+9. [Skip a job that is already running](./docs/recipes/skip-a-job-that-is-already-running.md)
 
 **Decisions**: the [architecture decision records](./docs/adr) tell why the design is as it is.
 
@@ -114,7 +134,7 @@ npx tsc -p .      # type check
 
 ```
 src/
-  mutex/             Mutex, Lease, LockStore, LockLostError
+  mutex/             Mutex, Key, acquire modes, Lease, LockStore, LockLostError
   fencing/           fencing tokens and token sources
   lock-stores/       one folder for each lock store
     remote/          the coordinator and client that ThreadStore, IpcStore and SocketStore share

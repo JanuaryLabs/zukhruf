@@ -4,7 +4,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { FileTokenSource } from '../../fencing/file-token-source.ts';
 import type { TokenSource } from '../../fencing/token-source.ts';
 import { leaseFor, type Lease } from '../../mutex/lease.ts';
-import type { LockStore } from '../../mutex/lock-store.ts';
+import type { AcquireOptions, LockStore } from '../../mutex/lock-store.ts';
 import { createExclusive } from '../../shared/fs/create-exclusive.ts';
 import { safeFileName } from '../../shared/fs/safe-file-name.ts';
 import { Owner } from './owner.ts';
@@ -14,6 +14,13 @@ export interface FileLockStoreOptions {
 	pollInterval?: number;
 	/** Defaults to durable per-key counter files beside the locks. */
 	tokens?: TokenSource;
+}
+
+export interface PollOptions {
+	/** Stops between attempts when it aborts; the poll then rejects with `signal.reason`. */
+	signal?: AbortSignal | undefined;
+	/** Whether the wait between attempts keeps the process alive. */
+	keepAlive?: boolean;
 }
 
 /** Shares one lock directory between processes: each key maps to `<directory>/<key>.lock`. */
@@ -34,21 +41,39 @@ export abstract class FileLockStore implements LockStore {
 		this.#tokens = tokens;
 	}
 
-	async acquire(key: string): Promise<Lease> {
-		await mkdir(this.#directory, { recursive: true });
-		const held = await this.lock(
-			join(this.#directory, `${safeFileName(key)}.lock`),
-		);
+	async acquire(key: string, { signal }: AcquireOptions = {}): Promise<Lease> {
+		signal?.throwIfAborted();
+		const held = await this.lock(await this.#pathFor(key), signal);
 		return leaseFor(key, held, this.#tokens);
 	}
 
-	protected abstract lock(path: string): Promise<AsyncDisposable>;
+	async tryAcquire(key: string): Promise<Lease | undefined> {
+		const held = await this.tryLock(await this.#pathFor(key));
+		return held && leaseFor(key, held, this.#tokens);
+	}
 
-	protected async poll<T>(attempt: () => Promise<T | undefined>): Promise<T> {
+	/** Holds the lock at `path`, waiting for other holders, until `signal` aborts. */
+	protected abstract lock(
+		path: string,
+		signal: AbortSignal | undefined,
+	): Promise<AsyncDisposable>;
+
+	/** Holds the lock at `path` only if no other holder has it now. */
+	protected abstract tryLock(path: string): Promise<AsyncDisposable | undefined>;
+
+	protected async poll<T>(
+		attempt: () => Promise<T | undefined>,
+		{ signal, keepAlive = true }: PollOptions = {},
+	): Promise<T> {
 		for (;;) {
 			const result = await attempt();
 			if (result !== undefined) return result;
-			await delay(this.#pollInterval);
+			try {
+				await delay(this.#pollInterval, undefined, { signal, ref: keepAlive });
+			} catch (error) {
+				signal?.throwIfAborted();
+				throw error;
+			}
 		}
 	}
 
@@ -66,5 +91,10 @@ export abstract class FileLockStore implements LockStore {
 		} finally {
 			await unlink(reclaim);
 		}
+	}
+
+	async #pathFor(key: string): Promise<string> {
+		await mkdir(this.#directory, { recursive: true });
+		return join(this.#directory, `${safeFileName(key)}.lock`);
 	}
 }

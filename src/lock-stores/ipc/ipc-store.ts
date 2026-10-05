@@ -1,5 +1,5 @@
 import type { Lease } from '../../mutex/lease.ts';
-import type { LockStore } from '../../mutex/lock-store.ts';
+import type { AcquireOptions, LockStore } from '../../mutex/lock-store.ts';
 import type { ClientConnection, Connector } from '../remote/connector.ts';
 import { RemoteLockClient } from '../remote/remote-lock-client.ts';
 import { ProcessChannelConnection } from './process-channel-connection.ts';
@@ -33,7 +33,11 @@ export class IpcStore implements LockStore {
 		this.#client = new RemoteLockClient(new ProcessChannelConnector());
 	}
 
-	acquire(key: string): Promise<Lease> {
-		return this.#client.acquire(key);
+	acquire(key: string, options?: AcquireOptions): Promise<Lease> {
+		return this.#client.acquire(key, options);
+	}
+
+	tryAcquire(key: string): Promise<Lease | undefined> {
+		return this.#client.tryAcquire(key);
 	}
 }

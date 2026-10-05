@@ -2,7 +2,8 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { FencingToken } from '../../fencing/fencing-token.ts';
 import type { TokenSource } from '../../fencing/token-source.ts';
 import type { Lease } from '../../mutex/lease.ts';
-import type { LockStore } from '../../mutex/lock-store.ts';
+import type { AcquireOptions, LockStore } from '../../mutex/lock-store.ts';
+import { untilAborted } from '../../shared/until-aborted.ts';
 import { MemoryStore } from '../memory/memory-store.ts';
 import type { Connection } from './connection.ts';
 import type { LockRequest, LockResponse } from './protocol.ts';
@@ -44,9 +45,15 @@ export class LockCoordinator implements LockStore {
 			: Promise.resolve();
 	}
 
-	async acquire(key: string): Promise<Lease> {
-		await this.#graceOver;
-		return this.#store.acquire(key);
+	async acquire(key: string, { signal }: AcquireOptions = {}): Promise<Lease> {
+		await untilAborted(this.#graceOver, signal);
+		return this.#store.acquire(key, { signal });
+	}
+
+	/** Nothing is granted during the grace window, so a key counts as busy then. */
+	async tryAcquire(key: string): Promise<Lease | undefined> {
+		if (this.#inGrace) return undefined;
+		return this.#store.tryAcquire(key);
 	}
 
 	serve(connection: Connection<LockResponse, LockRequest>): void {
@@ -107,19 +114,26 @@ class Session {
 				if (this.#requested.has(request.id)) return;
 				this.#requested.add(request.id);
 				const lease = await this.#coordinator.acquire(request.key);
-				if (this.#closed) return lease[Symbol.asyncDispose]();
-				this.#leases.set(request.id, lease);
-				return this.#reply({
-					op: 'granted',
-					id: request.id,
-					token: lease.token.toString(),
-				});
+				return this.#grant(request.id, lease);
+			}
+			case 'try': {
+				if (this.#requested.has(request.id)) return;
+				this.#requested.add(request.id);
+				const lease = await this.#coordinator.tryAcquire(request.key);
+				if (!lease) {
+					this.#requested.delete(request.id);
+					return this.#reply({ op: 'busy', id: request.id });
+				}
+				return this.#grant(request.id, lease);
+			}
+			case 'cancel': {
+				// A request still in line is released by #grant when its turn comes.
+				this.#requested.delete(request.id);
+				return this.#releaseLease(request.id);
 			}
 			case 'release': {
-				const lease = this.#leases.get(request.id);
-				this.#leases.delete(request.id);
 				this.#requested.delete(request.id);
-				return lease?.[Symbol.asyncDispose]();
+				return this.#releaseLease(request.id);
 			}
 			case 'reassert': {
 				const claim = this.#coordinator.reassert(
@@ -135,6 +149,21 @@ class Session {
 				return;
 			}
 		}
+	}
+
+	/** A request cancelled or a peer gone while the grant was on its way releases the key at once. */
+	#grant(id: string, lease: Lease) {
+		if (this.#closed || !this.#requested.has(id)) {
+			return lease[Symbol.asyncDispose]();
+		}
+		this.#leases.set(id, lease);
+		return this.#reply({ op: 'granted', id, token: lease.token.toString() });
+	}
+
+	#releaseLease(id: string) {
+		const lease = this.#leases.get(id);
+		this.#leases.delete(id);
+		return lease?.[Symbol.asyncDispose]();
 	}
 
 	/** A newer claim took this session's reasserted lease over, so it must not release it. */

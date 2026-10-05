@@ -38,6 +38,10 @@ Each key has a promise chain. A new waiter adds a promise to the end of the chai
 
 A task that fails does not stop the chain. The next waiter gets the key, and the caller of the failed task gets the error.
 
+## Acquire modes
+
+`tryAcquire` checks whether the key has a queue, and grants a free key before the next event loop turn. A caller that gives up keeps its place in the queue. When its place reaches the front, the key passes on to the next caller at once. See [acquire modes](../concepts/acquire-modes.md).
+
 ## Failure modes
 
 The locks are in memory, so they stop with the process. No other process can wait for them. See [failure modes](../concepts/failure-modes.md).

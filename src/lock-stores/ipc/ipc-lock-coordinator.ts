@@ -2,7 +2,7 @@ import type { ChildProcess } from 'node:child_process';
 import { CounterTokenSource } from '../../fencing/counter-token-source.ts';
 import type { TokenSource } from '../../fencing/token-source.ts';
 import type { Lease } from '../../mutex/lease.ts';
-import type { LockStore } from '../../mutex/lock-store.ts';
+import type { AcquireOptions, LockStore } from '../../mutex/lock-store.ts';
 import { LockCoordinator } from '../remote/lock-coordinator.ts';
 import { ChildProcessConnection } from './child-process-connection.ts';
 
@@ -22,8 +22,12 @@ export class IpcLockCoordinator implements LockStore {
 		this.#coordinator = new LockCoordinator({ tokens });
 	}
 
-	acquire(key: string): Promise<Lease> {
-		return this.#coordinator.acquire(key);
+	acquire(key: string, options?: AcquireOptions): Promise<Lease> {
+		return this.#coordinator.acquire(key, options);
+	}
+
+	tryAcquire(key: string): Promise<Lease | undefined> {
+		return this.#coordinator.tryAcquire(key);
 	}
 
 	/**

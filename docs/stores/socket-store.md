@@ -50,6 +50,10 @@ The leader is a normal app process. You do not start or watch a separate server.
 
 Messages are lines of JSON. A socket does not keep message boundaries: in a test, two small messages arrived in one piece, and one large message arrived in 25 pieces of 8,192 bytes.
 
+## Acquire modes
+
+`tryAcquire` sends one `try` request, and the coordinator answers `granted` or `busy` at once. A caller that gives up while it waits sends `cancel`. If the grant was already on its way, the caller gives the key back. During the grace window after a failover, every `try` is answered `busy`. See [acquire modes](../concepts/acquire-modes.md).
+
 ## Failure modes
 
 | Event | Result |

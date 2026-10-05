@@ -2,7 +2,7 @@ import { EventEmitter } from 'node:events';
 import { join } from 'node:path';
 import { LeaderElection } from '../../leader-election/leader-election.ts';
 import type { Lease } from '../../mutex/lease.ts';
-import type { LockStore } from '../../mutex/lock-store.ts';
+import type { AcquireOptions, LockStore } from '../../mutex/lock-store.ts';
 import { RemoteLockClient } from '../remote/remote-lock-client.ts';
 import { ElectingConnector } from './electing-connector.ts';
 import { LockServer } from './lock-server.ts';
@@ -78,8 +78,12 @@ export class SocketStore
 		return this.#role;
 	}
 
-	acquire(key: string): Promise<Lease> {
-		return this.#client.acquire(key);
+	acquire(key: string, options?: AcquireOptions): Promise<Lease> {
+		return this.#client.acquire(key, options);
+	}
+
+	tryAcquire(key: string): Promise<Lease | undefined> {
+		return this.#client.tryAcquire(key);
 	}
 
 	async [Symbol.asyncDispose]() {

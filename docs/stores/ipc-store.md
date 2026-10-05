@@ -56,6 +56,10 @@ On macOS and Linux, the IPC channel between a parent and a child is a pair of co
 
 **The child does not stay alive only for the lock.** Node.js keeps a child alive while it has listeners on the IPC channel. `IpcStore` adds its listeners only while it waits for a grant. Thus your child can stop when its own work is done, and your own `message` listeners still control its life.
 
+## Acquire modes
+
+`tryAcquire` sends one `try` request, and the coordinator answers `granted` or `busy` at once. A caller that gives up while it waits sends `cancel`. If the grant was already on its way, the caller gives the key back. See [acquire modes](../concepts/acquire-modes.md).
+
 ## Failure modes
 
 | Event | Result |

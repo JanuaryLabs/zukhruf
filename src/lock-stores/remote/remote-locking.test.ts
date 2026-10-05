@@ -206,3 +206,64 @@ describe('Grace window after a failover', () => {
 		assert.equal(await grantedWithin(next, 1000), 'granted', 'The key must be free after the newer holder releases it');
 	});
 });
+
+describe('Giving up over the protocol', () => {
+	test('a grant that arrives after the caller gave up is released', async (t) => {
+		// Arrange: a client waits for a key through a scripted coordinator.
+		const coordinator = scriptedPeer<LockRequest, LockResponse>();
+		const client = new RemoteLockClient({ connect: async () => coordinator.connection });
+		const giveUp = new AbortController();
+		const attempt = client.acquire('product:42', { signal: giveUp.signal });
+		await waitUntil(t, () => coordinator.sent.length > 0, 'The client must send its acquire');
+		const id = coordinator.sent[0]!.id;
+
+		try {
+			// Act: the caller gives up, and the grant was already on its way.
+			giveUp.abort();
+			await assert.rejects(attempt);
+			coordinator.deliver({ op: 'granted', id, token: '1' });
+			await delay(settle);
+
+			// Assert: the client cancels its request and gives the late grant back.
+			assert.deepEqual(coordinator.sent.slice(1), [
+				{ op: 'cancel', id },
+				{ op: 'release', id },
+			]);
+		} finally {
+			client.close();
+		}
+	});
+
+	test('a try during the grace window is answered busy', async (t) => {
+		// Arrange
+		const { connect } = coordinatorAfterFailover(200);
+		const client = connect();
+
+		// Act
+		client.deliver({ op: 'try', id: 't', key: 'product:42' });
+
+		// Assert: nothing is granted during the grace window, so the key counts as busy.
+		await waitUntil(t, () => client.sent.length > 0, 'The coordinator must answer the try');
+		assert.deepEqual(client.sent, [{ op: 'busy', id: 't' }]);
+	});
+
+	test('a waiter that cancels does not keep the key from the callers after it', async (t) => {
+		// Arrange: one peer holds the key, a second peer waits for it.
+		const coordinator = new LockCoordinator({ tokens: new CounterTokenSource() });
+		const holder = scriptedPeer<LockResponse, LockRequest>();
+		const quitter = scriptedPeer<LockResponse, LockRequest>();
+		coordinator.serve(holder.connection);
+		coordinator.serve(quitter.connection);
+		holder.deliver({ op: 'acquire', id: 'h', key: 'product:42' });
+		await waitUntil(t, () => holder.sent.length > 0, 'The holder must be granted');
+		quitter.deliver({ op: 'acquire', id: 'q', key: 'product:42' });
+
+		// Act: the waiter cancels, then the holder releases.
+		quitter.deliver({ op: 'cancel', id: 'q' });
+		holder.deliver({ op: 'release', id: 'h' });
+
+		// Assert: the next caller gets the key, and the waiter that cancelled was never granted.
+		assert.equal(await grantedWithin(coordinator.acquire('product:42'), 1000), 'granted');
+		assert.deepEqual(quitter.sent, [], 'A cancelled request must not be granted');
+	});
+});

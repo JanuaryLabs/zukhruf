@@ -41,6 +41,10 @@ A lock file is the oldest and easiest way to share a lock between processes. Too
 
 Removal of a stopped holder uses `<key>.lock.reclaim`, as in [TicketQueueFileStore](./ticket-queue-file-store.md#how-it-works). Without it, two waiters could each remove a lock file that the other waiter had just created.
 
+## Acquire modes
+
+`tryAcquire` makes one attempt. If that attempt finds a stopped holder and removes it, `tryAcquire` makes one more attempt. A waiter that gives up stops its attempts and leaves nothing behind. See [acquire modes](../concepts/acquire-modes.md).
+
 ## Failure modes
 
 The same as [TicketQueueFileStore](./ticket-queue-file-store.md#failure-modes): a stopped holder process is removed, a stopped holder thread is not, and a reused process ID makes waiters wait longer.

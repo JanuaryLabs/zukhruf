@@ -43,6 +43,10 @@ Do not change the journal mode of these files. The tests use only the default mo
 
 The transaction ends with `ROLLBACK`, so the fencing token counter cannot be in the database. The default token source keeps it in a counter file next to the database.
 
+## Acquire modes
+
+`tryAcquire` runs `BEGIN EXCLUSIVE` once. A waiter that gives up stops its attempts and closes its connection. See [acquire modes](../concepts/acquire-modes.md).
+
 ## Failure modes
 
 - **A holder process stops:** the kernel removes the lock. The next waiter gets the key at its next attempt.

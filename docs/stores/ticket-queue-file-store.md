@@ -48,6 +48,10 @@ A rewrite can lose a ticket that a new waiter appended at the same moment. The n
 
 On a file system that ignores the case of letters (the macOS default), the keys `A` and `a` use the same file. They then share one lock. This makes some callers wait, but it never lets two holders in.
 
+## Acquire modes
+
+`tryAcquire` gives up at once when the queue has a ticket of a live process. A waiter that gives up cannot remove its ticket, because only the head may rewrite the queue. Its ticket stays in line, and a background loop removes it when it reaches the front. That loop does not keep the process alive; if the process stops first, waiters remove the ticket as a stopped holder. See [acquire modes](../concepts/acquire-modes.md).
+
 ## Failure modes
 
 - **A holder process stops:** a waiter removes the ticket at its next poll.

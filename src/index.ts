@@ -1,7 +1,21 @@
 export { Mutex } from './mutex/mutex.ts';
+export { Key } from './mutex/key.ts';
 export { leaseFor, type Lease } from './mutex/lease.ts';
-export type { LockStore } from './mutex/lock-store.ts';
+export type { AcquireOptions, LockStore } from './mutex/lock-store.ts';
 export { LockLostError } from './mutex/lock-lost-error.ts';
+export type {
+	Acquired,
+	AcquireMode,
+	ModeResult,
+	NotAcquired,
+	Outcome,
+} from './mutex/acquire-mode.ts';
+export { Modes } from './mutex/acquire-modes/modes.ts';
+export { WaitMode } from './mutex/acquire-modes/wait-mode.ts';
+export {
+	SkipIfBusyMode,
+	type SkipIfBusyOptions,
+} from './mutex/acquire-modes/skip-if-busy-mode.ts';
 
 export { FencingToken } from './fencing/fencing-token.ts';
 export type { TokenSource } from './fencing/token-source.ts';

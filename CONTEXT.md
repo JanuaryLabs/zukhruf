@@ -11,7 +11,7 @@ The object that runs a task while the caller holds a key. It gets each lease fro
 _Avoid_: Lock, lock manager
 
 **Key**:
-The name of the thing that only one holder at a time can work on.
+The thing that only one holder at a time can work on, identified by its name. A key can have a default acquire mode.
 _Avoid_: Resource name, lock name, lock ID
 
 **Acquire**:
@@ -37,6 +37,18 @@ _Avoid_: Owner, locker
 **Waiter**:
 A caller that asked for a key and does not have it yet.
 _Avoid_: Contender, pending caller
+
+**Acquire mode**:
+What one caller does while its key is busy. It never changes exclusivity, and two callers of one key can use different acquire modes. A key can have a default acquire mode that one call overrides.
+_Avoid_: Lock mode, lock type
+
+**Wait**:
+The acquire mode in which the caller waits until the key is granted. The task always runs.
+_Avoid_: Block, lock
+
+**Skip if busy**:
+The acquire mode in which the caller gives up when the key stays busy, at once or after a time limit. The task then does not run.
+_Avoid_: Try-lock, skip after, timeout
 
 ### Lock stores and reach
 

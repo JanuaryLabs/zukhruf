@@ -5,6 +5,7 @@ Start with the [project README](../README.md). The glossary is in [CONTEXT.md](.
 ## Concepts
 
 - [Reach](./concepts/reach.md)
+- [Acquire modes](./concepts/acquire-modes.md)
 - [Fencing tokens](./concepts/fencing-tokens.md)
 - [Leader election](./concepts/leader-election.md)
 - [Failure modes](./concepts/failure-modes.md)
@@ -28,6 +29,7 @@ Start with the [project README](../README.md). The glossary is in [CONTEXT.md](.
 6. [Survive a crashed holder](./recipes/survive-a-crashed-holder.md)
 7. [Run a job in only one process](./recipes/singleton-job-with-leader-election.md)
 8. [Write your own lock store](./recipes/write-your-own-lock-store.md)
+9. [Skip a job that is already running](./recipes/skip-a-job-that-is-already-running.md)
 
 ## Architecture decision records
 
@@ -36,3 +38,4 @@ Start with the [project README](../README.md). The glossary is in [CONTEXT.md](.
 3. [A fencing token on every lease](./adr/0003-a-fencing-token-on-every-lease.md)
 4. [When the parent stops, held keys stay held](./adr/0004-parent-stops-held-keys-stay.md)
 5. [Threads use a coordinator, not Web Locks](./adr/0005-threads-use-a-coordinator-not-web-locks.md)
+6. [Acquire modes are strategies over two lock store operations](./adr/0006-acquire-modes-are-strategies-over-two-store-operations.md)

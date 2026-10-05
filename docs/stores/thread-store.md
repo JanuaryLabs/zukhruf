@@ -61,6 +61,10 @@ The coordinator grants keys first come, first served. When a worker stops for an
 
 **The worker does not stay alive only for the lock.** A `message` listener on the port keeps a worker alive. `ThreadStore` adds its listener only while it waits for a grant. A message that arrives without a listener waits in the port.
 
+## Acquire modes
+
+`tryAcquire` sends one `try` request, and the coordinator answers `granted` or `busy` at once. A caller that gives up while it waits sends `cancel`. If the grant was already on its way, the caller gives the key back. See [acquire modes](../concepts/acquire-modes.md).
+
 ## Failure modes
 
 | Event | Result |
