@@ -147,3 +147,8 @@ vite.config.ts.timestamp-*
 
 # Turbo Repo
 .turbo
+
+.nx
+
+# Test reporter output
+test-results.xml

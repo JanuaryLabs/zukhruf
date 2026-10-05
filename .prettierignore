@@ -1,0 +1,7 @@
+# Add files here to ignore them from prettier formatting
+/coverage
+/.nx/cache
+/.nx/workspace-data
+**/dist
+*.tsbuildinfo
+package-lock.json

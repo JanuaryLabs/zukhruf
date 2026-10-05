@@ -1,0 +1,52 @@
+{
+  "name": "@zukhruf/mutex",
+  "version": "0.1.0",
+  "description": "A mutex with interchangeable lock stores, from one object to every process on a host, with fencing tokens on every lease.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/JanuaryLabs/zukhruf",
+    "directory": "packages/mutex"
+  },
+  "bugs": {
+    "url": "https://github.com/JanuaryLabs/zukhruf/issues"
+  },
+  "homepage": "https://github.com/JanuaryLabs/zukhruf/tree/main/packages/mutex#readme",
+  "keywords": [
+    "mutex",
+    "lock",
+    "fencing-token",
+    "leader-election",
+    "inter-process"
+  ],
+  "type": "module",
+  "engines": {
+    "node": ">=26.9.0"
+  },
+  "types": "./dist/index.d.ts",
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./leader-election": {
+      "types": "./dist/leader-election/index.d.ts",
+      "import": "./dist/leader-election/index.js",
+      "default": "./dist/leader-election/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "!dist/spec/**",
+    "!**/*.tsbuildinfo",
+    "!**/*.test.*"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "devDependencies": {
+    "hono": "^4.13.13"
+  }
+}

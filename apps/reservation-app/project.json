@@ -1,0 +1,16 @@
+{
+  "name": "reservation-app",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "apps/reservation-app/src",
+  "projectType": "application",
+  "targets": {
+    "format": {},
+    "test": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "node --test --test-force-exit --test-timeout=60000 --test-reporter=spec --test-reporter-destination=stdout --test-reporter=junit --test-reporter-destination=test-results.xml \"src/**/*.test.ts\"",
+        "cwd": "{projectRoot}"
+      }
+    }
+  }
+}

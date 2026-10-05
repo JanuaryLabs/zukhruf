@@ -1,0 +1,9 @@
+{
+  "name": "@zukhruf/reservation-app",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@zukhruf/mutex": "*",
+    "hono": "^4.13.13"
+  }
+}

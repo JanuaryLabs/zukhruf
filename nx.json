@@ -1,0 +1,87 @@
+{
+  "$schema": "./node_modules/nx/schemas/nx-schema.json",
+  "analytics": false,
+  "plugins": [
+    {
+      "plugin": "@nx/js/typescript",
+      "options": {
+        "typecheck": {
+          "targetName": "typecheck"
+        },
+        "build": {
+          "targetName": "build",
+          "configName": "tsconfig.lib.json"
+        }
+      }
+    },
+    {
+      "plugin": "@nx/eslint/plugin",
+      "options": {
+        "targetName": "lint"
+      }
+    }
+  ],
+  "targetDefaults": {
+    "format": {
+      "command": "prettier --write {projectRoot}"
+    },
+    "lint": {
+      "dependsOn": ["format"],
+      "inputs": [
+        "default",
+        "^default",
+        "{workspaceRoot}/eslint.config.mjs",
+        "{workspaceRoot}/personal.eslint.config.mjs",
+        "{workspaceRoot}/island.eslint.config.mjs",
+        {
+          "externalDependencies": [
+            "eslint",
+            "typescript-eslint",
+            "eslint-plugin-import-x",
+            "eslint-plugin-functional",
+            "@nx/eslint-plugin",
+            "@nx/devkit",
+            "jsonc-eslint-parser"
+          ]
+        }
+      ]
+    },
+    "typecheck": {
+      "dependsOn": ["lint", "..."]
+    },
+    "test": {
+      "dependsOn": ["build", "^build"],
+      "outputs": ["{projectRoot}/test-results.xml"]
+    }
+  },
+  "release": {
+    "projects": ["tag:scope:public"],
+    "conventionalCommits": {
+      "types": {
+        "chore": {
+          "changelog": {
+            "hidden": true
+          }
+        },
+        "refactor": {
+          "semverBump": "patch"
+        }
+      }
+    },
+    "changelog": {
+      "workspaceChangelog": {
+        "file": false
+      }
+    },
+    "version": {
+      "preVersionCommand": "npm run verify:packages",
+      "conventionalCommits": true
+    },
+    "releaseTag": {
+      "pattern": "release/{version}"
+    }
+  },
+  "sync": {
+    "applyChanges": true
+  }
+}

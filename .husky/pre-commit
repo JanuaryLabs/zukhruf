@@ -1,0 +1,26 @@
+#!/usr/bin/env sh
+set -e
+export PATH="node_modules/.bin:$PATH"
+
+# nx.json's `sync.applyChanges: true` only auto-applies in an interactive TTY,
+# so a commit from a GUI client or an agent shell would carry the trigger
+# without the synced tsconfig references. `nx sync` (no --check) has no TTY
+# branch — it flushes and exits.
+sync_before=$(mktemp)
+sync_after=$(mktemp)
+git diff --name-only | sort > "$sync_before"
+NX_DAEMON=false npx nx sync
+git diff --name-only | sort > "$sync_after"
+
+# Stage only what sync itself dirtied. `git add -A` would sweep every
+# in-progress edit into the commit; this tree may be shared by concurrent
+# agents. A file already modified before the run is left alone.
+synced=$(comm -13 "$sync_before" "$sync_after")
+rm -f "$sync_before" "$sync_after"
+if [ -n "$synced" ]; then
+  echo "Staging synced files:"
+  printf '%s\n' "$synced"
+  printf '%s\n' "$synced" | tr '\n' '\0' | xargs -0 git add --
+fi
+
+npx lint-staged
