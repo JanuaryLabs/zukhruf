@@ -1,0 +1,2 @@
+# Prettier checks for LF, and Git on Windows checks out CRLF unless told otherwise.
+* text=auto eol=lf
