@@ -23,6 +23,16 @@ export interface NotAcquired {
   readonly acquired: false;
 }
 
-/** A mode that always acquires gives the task's value; a mode that may give up says whether it acquired. */
-export type ModeResult<M extends AcquireMode, T> =
-  M extends AcquireMode<'always'> ? T : Acquired<T> | NotAcquired;
+/** What a run gives back, for each outcome. */
+export interface OutcomeResults<T> {
+  /** A mode that always acquires gives the task's value. */
+  always: T;
+  /** A mode that may give up says whether it acquired. */
+  maybe: Acquired<T> | NotAcquired;
+}
+
+/** The result of a run with mode `M`. */
+export type ModeResult<
+  M extends AcquireMode,
+  T,
+> = OutcomeResults<T>[M['outcome']];

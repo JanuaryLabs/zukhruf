@@ -35,9 +35,10 @@ export class FencedRegister {
   }
 
   writes(): number {
-    const row = this.#database.prepare('SELECT writes FROM register').get() as {
-      writes: bigint;
-    };
+    const row = this.#database.prepare('SELECT writes FROM register').get();
+    if (typeof row?.writes !== 'bigint') {
+      throw new Error('The register table has no row.');
+    }
     return Number(row.writes);
   }
 }

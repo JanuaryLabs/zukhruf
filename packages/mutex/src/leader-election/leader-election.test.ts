@@ -69,7 +69,9 @@ describe('Leader election', () => {
         `The first candidate must lead.\n${leader.stderr}`,
         5000,
       );
-      const firstEpoch = BigInt(leader.find('leader')?.epoch as string);
+      const epoch = leader.find('leader')?.epoch;
+      assert.ok(typeof epoch === 'string', 'The leader must report its epoch');
+      const firstEpoch = BigInt(epoch);
       assert.equal(
         await election.campaign({ timeout: 100 }),
         undefined,

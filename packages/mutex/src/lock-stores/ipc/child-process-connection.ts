@@ -2,7 +2,11 @@ import type { ChildProcess } from 'node:child_process';
 
 import type { Connection, ConnectionHandlers } from '../remote/connection.ts';
 import { unwrap, wrap } from '../remote/envelope.ts';
-import type { LockRequest, LockResponse } from '../remote/protocol.ts';
+import {
+  type LockRequest,
+  type LockResponse,
+  isLockRequest,
+} from '../remote/protocol.ts';
 
 /**
  * The parent's end of the IPC channel to one child. The kernel closes the
@@ -33,8 +37,8 @@ export class ChildProcessConnection implements Connection<
 
   listen({ message, close }: ConnectionHandlers<LockRequest>) {
     const onMessage = (envelope: unknown) => {
-      const request = unwrap<LockRequest>(envelope);
-      if (request) message(request);
+      const request = unwrap(envelope);
+      if (isLockRequest(request)) message(request);
     };
     const onDisconnect = () => {
       this.close();

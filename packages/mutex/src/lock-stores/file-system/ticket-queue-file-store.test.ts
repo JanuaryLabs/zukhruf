@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { createRequire, syncBuiltinESMExports } from 'node:module';
+// The default export is the module object itself, which mock.method can patch;
+// syncBuiltinESMExports then copies the patch to the named exports.
+import fsPromises from 'node:fs/promises';
+import { syncBuiltinESMExports } from 'node:module';
 import { join } from 'node:path';
 import { describe, mock, test } from 'node:test';
 
@@ -8,10 +11,6 @@ import type { Lease } from '../../mutex/lease.ts';
 import { scratchDirectory } from '../../testing/scratch-directory.ts';
 import { waitUntil } from '../../testing/wait-until.ts';
 import { TicketQueueFileStore } from './ticket-queue-file-store.ts';
-
-const fsPromises = createRequire(import.meta.url)(
-  'node:fs/promises',
-) as typeof import('node:fs/promises');
 
 const ticketsIn = (queue: string) =>
   readFileSync(queue, 'utf8').split('\n').filter(Boolean).length;

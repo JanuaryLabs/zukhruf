@@ -5,7 +5,11 @@ import { EpochTokenSource } from '../../fencing/epoch-token-source.ts';
 import type { Leadership } from '../../leader-election/leadership.ts';
 import { isErrno } from '../../shared/fs/errno.ts';
 import { LockCoordinator } from '../remote/lock-coordinator.ts';
-import type { LockRequest, LockResponse } from '../remote/protocol.ts';
+import {
+  type LockRequest,
+  type LockResponse,
+  isLockRequest,
+} from '../remote/protocol.ts';
 import { SocketConnection } from './socket-connection.ts';
 
 export interface LockServerOptions {
@@ -55,7 +59,7 @@ export class LockServer {
       connections.add(socket);
       socket.once('close', () => connections.delete(socket));
       coordinator.serve(
-        new SocketConnection<LockResponse, LockRequest>(socket),
+        new SocketConnection<LockResponse, LockRequest>(socket, isLockRequest),
       );
     });
     await new Promise<void>((resolve, reject) => {

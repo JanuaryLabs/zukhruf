@@ -49,6 +49,10 @@ export interface StoreCase {
   openInThread?(directory: string): LockStore;
 }
 
+const isAsyncDisposable = (value: object): value is AsyncDisposable =>
+  Symbol.asyncDispose in value &&
+  typeof value[Symbol.asyncDispose] === 'function';
+
 /** A store that every participant builds the same way, with nothing to adopt. */
 function sharedByDirectory(create: (directory: string) => LockStore) {
   return {
@@ -59,9 +63,7 @@ function sharedByDirectory(create: (directory: string) => LockStore) {
         adoptProcess() {},
         adoptThread() {},
         async [Symbol.asyncDispose]() {
-          if (Symbol.asyncDispose in store) {
-            await (store as LockStore & AsyncDisposable)[Symbol.asyncDispose]();
-          }
+          if (isAsyncDisposable(store)) await store[Symbol.asyncDispose]();
         },
       };
     },

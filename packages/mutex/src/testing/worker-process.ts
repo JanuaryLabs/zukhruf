@@ -1,9 +1,24 @@
 import { type ChildProcess, spawn } from 'node:child_process';
 
+import { isRecord } from '../shared/is-record.ts';
+
 export interface WorkerMessage {
   type: string;
   [field: string]: unknown;
 }
+
+export interface WorkerProcess extends AsyncDisposable {
+  readonly child: ChildProcess;
+  readonly closed: Promise<void>;
+  readonly messages: WorkerMessage[];
+  stderr: string;
+  exit: { code: number | null; signal: NodeJS.Signals | null } | null;
+  has(type: string): boolean;
+  find(type: string): WorkerMessage | undefined;
+}
+
+const isWorkerMessage = (message: unknown): message is WorkerMessage =>
+  isRecord(message) && typeof message.type === 'string';
 
 export interface WorkerOptions {
   /** Joins the child to a coordinator before it can send anything. */
@@ -19,7 +34,7 @@ export function startWorker(
   source: string,
   name: string,
   { host, nodeOptions = [] }: WorkerOptions = {},
-) {
+): WorkerProcess {
   const child = spawn(
     process.execPath,
     [...nodeOptions, '--input-type=module', '--eval', source, name],
@@ -27,15 +42,12 @@ export function startWorker(
   );
   host?.adoptProcess(child);
   const closed = Promise.withResolvers<void>();
-  const worker = {
+  const worker: WorkerProcess = {
     child,
     closed: closed.promise,
-    messages: [] as WorkerMessage[],
+    messages: [],
     stderr: '',
-    exit: null as {
-      code: number | null;
-      signal: NodeJS.Signals | null;
-    } | null,
+    exit: null,
     has(type: string) {
       return worker.messages.some((message) => message.type === type);
     },
@@ -60,8 +72,7 @@ export function startWorker(
     closed.resolve();
   });
   child.on('message', (message) => {
-    if (typeof message === 'object' && message !== null && 'type' in message)
-      worker.messages.push(message as WorkerMessage);
+    if (isWorkerMessage(message)) worker.messages.push(message);
   });
   return worker;
 }

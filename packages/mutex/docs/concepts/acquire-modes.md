@@ -76,7 +76,7 @@ const tryThreeTimes: AcquireMode<'maybe'> = {
 };
 ```
 
-Set `outcome` to `'always'` only if your mode never returns `undefined`. The result type depends on it.
+Set `outcome` to `'always'` only if your mode never returns `undefined`. The result type depends on it. If a mode with the outcome `'always'` returns `undefined`, the call rejects and the task does not run.
 
 ## Evidence
 

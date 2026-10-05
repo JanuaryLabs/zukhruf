@@ -4,7 +4,11 @@ import { setTimeout as delay } from 'node:timers/promises';
 import type { LeaderElection } from '../../leader-election/leader-election.ts';
 import type { Leadership } from '../../leader-election/leadership.ts';
 import type { ClientConnection, Connector } from '../remote/connector.ts';
-import type { LockRequest, LockResponse } from '../remote/protocol.ts';
+import {
+  type LockRequest,
+  type LockResponse,
+  isLockResponse,
+} from '../remote/protocol.ts';
 import { SocketConnection } from './socket-connection.ts';
 
 export interface ElectingConnectorOptions {
@@ -34,7 +38,10 @@ export class ElectingConnector implements Connector {
       const socket = await reach(socketPath);
       if (socket) {
         connected();
-        return new SocketConnection<LockRequest, LockResponse>(socket);
+        return new SocketConnection<LockRequest, LockResponse>(
+          socket,
+          isLockResponse,
+        );
       }
       const leadership = await election.campaign({ timeout: pollInterval });
       if (leadership) await serve(leadership);

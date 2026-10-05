@@ -47,7 +47,13 @@ export class RemoteLockClient implements LockStore {
         this.#request(id, key, 'acquire'),
         signal,
       );
-      return this.#hold(id, key, token as FencingToken);
+      // The coordinator answers 'busy' only to a try; an acquire waits for its grant.
+      if (!token) {
+        throw new Error(
+          `The lock coordinator answered 'busy' to an acquire of key "${key}".`,
+        );
+      }
+      return this.#hold(id, key, token);
     } catch (error) {
       if (signal?.aborted && this.#current) {
         void this.#send(this.#current, { op: 'cancel', id });

@@ -1,6 +1,10 @@
 import type { Connection, ConnectionHandlers } from '../remote/connection.ts';
 import { unwrap, wrap } from '../remote/envelope.ts';
-import type { LockRequest, LockResponse } from '../remote/protocol.ts';
+import {
+  type LockRequest,
+  type LockResponse,
+  isLockResponse,
+} from '../remote/protocol.ts';
 
 /**
  * The child's end of the IPC channel to its parent. Node counts `message` and
@@ -17,8 +21,8 @@ export class ProcessChannelConnection implements Connection<
   #listening = false;
 
   readonly #onMessage = (envelope: unknown) => {
-    const response = unwrap<LockResponse>(envelope);
-    if (response) this.#handlers?.message(response);
+    const response = unwrap(envelope);
+    if (isLockResponse(response)) this.#handlers?.message(response);
   };
 
   readonly #onDisconnect = () => {

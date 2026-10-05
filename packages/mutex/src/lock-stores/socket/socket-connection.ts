@@ -6,16 +6,22 @@ import type { Connection, ConnectionHandlers } from '../remote/connection.ts';
 /**
  * Newline-delimited JSON over a stream socket. A stream has no message
  * boundaries (writes arrive merged and split), and JSON escapes newlines inside
- * strings, so one line is always one message.
+ * strings, so one line is always one message. `isIncoming` checks each message
+ * from the peer; a line that is not one closes the connection.
  */
 export class SocketConnection<Outgoing, Incoming> implements Connection<
   Outgoing,
   Incoming
 > {
   readonly #socket: Socket;
+  readonly #isIncoming: (message: unknown) => message is Incoming;
 
-  constructor(socket: Socket) {
+  constructor(
+    socket: Socket,
+    isIncoming: (message: unknown) => message is Incoming,
+  ) {
     this.#socket = socket;
+    this.#isIncoming = isIncoming;
     // Every error is followed by `close`, which is where the peer's loss is handled.
     socket.on('error', () => {});
   }
@@ -36,7 +42,9 @@ export class SocketConnection<Outgoing, Incoming> implements Connection<
     createInterface({ input: this.#socket, crlfDelay: Infinity })
       .on('line', (line) => {
         try {
-          message(JSON.parse(line) as Incoming);
+          const parsed: unknown = JSON.parse(line);
+          if (this.#isIncoming(parsed)) message(parsed);
+          else this.close();
         } catch {
           this.close();
         }

@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { hostname } from 'node:os';
 
 import { isErrno } from '../../shared/fs/errno.ts';
+import { isRecord } from '../../shared/is-record.ts';
 
 /**
  * Identifies one lock request and the process that made it, so waiters can
@@ -24,11 +25,16 @@ export class Owner {
   }
 
   static parse(serialized: string): Owner {
-    const { pid, host, id } = JSON.parse(serialized) as Pick<
-      Owner,
-      'pid' | 'host' | 'id'
-    >;
-    return new Owner(pid, host, id);
+    const parsed: unknown = JSON.parse(serialized);
+    if (
+      !isRecord(parsed) ||
+      typeof parsed.pid !== 'number' ||
+      typeof parsed.host !== 'string' ||
+      typeof parsed.id !== 'string'
+    ) {
+      throw new SyntaxError(`Not a lock owner: ${serialized}`);
+    }
+    return new Owner(parsed.pid, parsed.host, parsed.id);
   }
 
   serialize(): string {

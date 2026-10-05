@@ -65,9 +65,16 @@ describe('Reservation endpoint', () => {
 
       try {
         const responses = await Promise.all(requests);
-        const bodies = (await Promise.all(
-          responses.map((response) => response.json()),
-        )) as Array<{ outcome: string }>;
+        const outcomes = await Promise.all(
+          responses.map(async (response) => {
+            const body: unknown = await response.json();
+            return typeof body === 'object' &&
+              body !== null &&
+              'outcome' in body
+              ? body.outcome
+              : undefined;
+          }),
+        );
 
         // Assert: exactly one caller gets the item, whichever arrives first.
         assert.deepEqual(
@@ -76,7 +83,7 @@ describe('Reservation endpoint', () => {
           'With one item available, exactly one request must return 201 and the other 409',
         );
         assert.deepEqual(
-          bodies.map((body) => body.outcome).sort(),
+          outcomes.sort(),
           ['reserved', 'sold-out'],
           'The losing request must be told the product sold out, not that its lock was stale',
         );

@@ -2,7 +2,11 @@ import type { Worker } from 'node:worker_threads';
 
 import type { Connection, ConnectionHandlers } from '../remote/connection.ts';
 import { unwrap, wrap } from '../remote/envelope.ts';
-import type { LockRequest, LockResponse } from '../remote/protocol.ts';
+import {
+  type LockRequest,
+  type LockResponse,
+  isLockRequest,
+} from '../remote/protocol.ts';
 
 /**
  * The coordinator's end of the message port to one worker thread. `Worker`
@@ -25,8 +29,8 @@ export class WorkerConnection implements Connection<LockResponse, LockRequest> {
 
   listen({ message, close }: ConnectionHandlers<LockRequest>) {
     const onMessage = (envelope: unknown) => {
-      const request = unwrap<LockRequest>(envelope);
-      if (request) message(request);
+      const request = unwrap(envelope);
+      if (isLockRequest(request)) message(request);
     };
     const onExit = () => {
       this.#exited = true;

@@ -8,6 +8,7 @@ import { scratchDirectory } from '../testing/scratch-directory.ts';
 import { type StoreHost, storeCases } from '../testing/store-cases.ts';
 import { waitUntil } from '../testing/wait-until.ts';
 import { startWorker } from '../testing/worker-process.ts';
+import type { AcquireMode } from './acquire-mode.ts';
 import { Modes } from './acquire-modes/modes.ts';
 import { Mutex } from './mutex.ts';
 
@@ -216,6 +217,32 @@ for (const store of storeCases) {
 }
 
 describe('Acquire mode result types', () => {
+  test('a mode that says it always acquires but gives up rejects instead of running the task', async () => {
+    // Arrange: a custom mode that breaks its contract.
+    const mutex = new Mutex(new MemoryStore());
+    const brokenWait: AcquireMode<'always'> = {
+      outcome: 'always',
+      acquire: async () => undefined,
+    };
+    let ran = false;
+
+    // Act
+    const call = mutex.acquire(
+      'report:daily',
+      async () => {
+        ran = true;
+      },
+      { mode: brokenWait },
+    );
+
+    // Assert: the caller learns of the broken mode, and gets no value typed as the task's.
+    await assert.rejects(
+      call,
+      /outcome is 'always' gave up on key "report:daily"/,
+    );
+    assert.equal(ran, false, 'The task must not run without the key');
+  });
+
   test('the result type follows the acquire mode', async () => {
     const mutex = new Mutex(new MemoryStore());
 

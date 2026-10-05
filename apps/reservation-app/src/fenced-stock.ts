@@ -46,10 +46,10 @@ export class FencedStock implements Disposable {
   }
 
   quantity(product: string): number {
-    const row = this.#database
+    const quantity = this.#database
       .prepare('SELECT quantity FROM stock WHERE product = ?')
-      .get(product) as { quantity: bigint } | undefined;
-    return Number(row?.quantity ?? 0n);
+      .get(product)?.quantity;
+    return typeof quantity === 'bigint' ? Number(quantity) : 0;
   }
 
   reserve(product: string, token: FencingToken): Reservation {
@@ -61,10 +61,12 @@ export class FencedStock implements Disposable {
       .run(token.value, product, token.value);
     if (Number(changes) > 0) return 'reserved';
 
-    const row = this.#database
+    const fence = this.#database
       .prepare('SELECT fence FROM stock WHERE product = ?')
-      .get(product) as { fence: bigint } | undefined;
-    return row && row.fence > token.value ? 'stale' : 'sold-out';
+      .get(product)?.fence;
+    return typeof fence === 'bigint' && fence > token.value
+      ? 'stale'
+      : 'sold-out';
   }
 
   close() {

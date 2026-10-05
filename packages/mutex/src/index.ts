@@ -9,6 +9,7 @@ export type {
   ModeResult,
   NotAcquired,
   Outcome,
+  OutcomeResults,
 } from './mutex/acquire-mode.ts';
 export { Modes } from './mutex/acquire-modes/modes.ts';
 export { WaitMode } from './mutex/acquire-modes/wait-mode.ts';
