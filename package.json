@@ -1,0 +1,27 @@
+{
+  "name": "mutex",
+  "version": "1.0.0",
+  "description": "A mutex with interchangeable lock stores, from one object to every process on a host, with fencing tokens on every lease.",
+  "exports": {
+    ".": "./src/index.ts",
+    "./leader-election": "./src/leader-election/index.ts"
+  },
+  "scripts": {
+    "test": "node --test 'src/**/*.test.ts' 'examples/**/*.test.ts'"
+  },
+  "engines": {
+    "node": ">=26.9.0"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "devDependencies": {
+    "@hono/node-server": "^2.1.3",
+    "@types/node": "^26.6.4",
+    "hono": "^4.13.12",
+    "i": "^0.3.7",
+    "npm": "^12.2.0",
+    "typescript": "^7.0.2"
+  }
+}
