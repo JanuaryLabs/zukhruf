@@ -21,7 +21,7 @@ import { LeaderElection } from '@zukhruf/mutex/leader-election';
 const election = new LeaderElection('/var/lib/my-app/election');
 await using leadership = await election.campaign({ timeout: 1000 });
 if (leadership) {
-	console.log(`I am the leader, epoch ${leadership.epoch}`);
+  console.log(`I am the leader, epoch ${leadership.epoch}`);
 }
 ```
 

@@ -4,17 +4,17 @@
  * without knowing it (frozen, partitioned, or outlived by a failover).
  */
 export class FencingToken {
-	readonly value: bigint;
+  readonly value: bigint;
 
-	constructor(value: bigint) {
-		this.value = value;
-	}
+  constructor(value: bigint) {
+    this.value = value;
+  }
 
-	isNewerThan(other: FencingToken): boolean {
-		return this.value > other.value;
-	}
+  isNewerThan(other: FencingToken): boolean {
+    return this.value > other.value;
+  }
 
-	toString(): string {
-		return this.value.toString();
-	}
+  toString(): string {
+    return this.value.toString();
+  }
 }

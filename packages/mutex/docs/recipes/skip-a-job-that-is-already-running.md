@@ -16,6 +16,7 @@ Five cron ticks fire at the same time. Then a sixth tick runs while the admin as
 
 ```ts title="skip-a-running-job.ts"
 import { setTimeout as delay } from 'node:timers/promises';
+
 import { MemoryStore, Modes, Mutex } from '@zukhruf/mutex';
 
 const mutex = new Mutex(new MemoryStore());
@@ -23,22 +24,28 @@ const report = mutex.key('report:daily', { mode: Modes.skipIfBusy() });
 const runs: string[] = [];
 
 async function buildReport(trigger: string) {
-	await delay(100); // Building the report takes time.
-	runs.push(trigger);
-	return trigger;
+  await delay(100); // Building the report takes time.
+  runs.push(trigger);
+  return trigger;
 }
 
 // Five ticks at the same time: one builds the report, four skip.
 const ticks = await Promise.all(
-	[1, 2, 3, 4, 5].map((n) => report.run(() => buildReport(`cron ${n}`))),
+  [1, 2, 3, 4, 5].map((n) => report.run(() => buildReport(`cron ${n}`))),
 );
 
 // A tick runs, and the admin asks at the same time: the admin waits, then builds a fresh report.
 const tick = report.run(() => buildReport('cron 6'));
-const admin = await report.run(() => buildReport('admin'), { mode: Modes.wait() });
+const admin = await report.run(() => buildReport('admin'), {
+  mode: Modes.wait(),
+});
 await tick;
 
-console.log({ skipped: ticks.filter((result) => !result.acquired).length, admin, runs });
+console.log({
+  skipped: ticks.filter((result) => !result.acquired).length,
+  admin,
+  runs,
+});
 ```
 
 Output:

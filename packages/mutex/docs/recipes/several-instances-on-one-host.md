@@ -6,12 +6,12 @@
 
 ## Select a lock store
 
-| You want | Use |
-|---|---|
-| No cleanup after a crash, and no server | [SqliteStore](../stores/sqlite-store.md) |
+| You want                                 | Use                                                          |
+| ---------------------------------------- | ------------------------------------------------------------ |
+| No cleanup after a crash, and no server  | [SqliteStore](../stores/sqlite-store.md)                     |
 | First come, first served, and only files | [TicketQueueFileStore](../stores/ticket-queue-file-store.md) |
-| The next waiter gets the key at once | [SocketStore](../stores/socket-store.md) |
-| To see the holders with `ls` and `cat` | [LockFileStore](../stores/lock-file-store.md) |
+| The next waiter gets the key at once     | [SocketStore](../stores/socket-store.md)                     |
+| To see the holders with `ls` and `cat`   | [LockFileStore](../stores/lock-file-store.md)                |
 
 If you are not sure, start with `SqliteStore`. You can change the lock store later. The code changes in one line.
 
@@ -25,29 +25,30 @@ import { once } from 'node:events';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+
 import { Mutex, SqliteStore } from '@zukhruf/mutex';
 
 const [role, shared] = process.argv.slice(2);
 
 if (role === 'instance') {
-	// One copy of the app. All copies use the same directory for their locks.
-	const mutex = new Mutex(new SqliteStore(join(shared!, 'locks')));
-	const counter = join(shared!, 'counter');
-	for (let i = 0; i < 20; i++) {
-		await mutex.acquire('counter', async () => {
-			const value = Number(await readFile(counter, 'utf8'));
-			await writeFile(counter, String(value + 1));
-		});
-	}
+  // One copy of the app. All copies use the same directory for their locks.
+  const mutex = new Mutex(new SqliteStore(join(shared!, 'locks')));
+  const counter = join(shared!, 'counter');
+  for (let i = 0; i < 20; i++) {
+    await mutex.acquire('counter', async () => {
+      const value = Number(await readFile(counter, 'utf8'));
+      await writeFile(counter, String(value + 1));
+    });
+  }
 } else {
-	const directory = await mkdtemp(join(tmpdir(), 'instances-'));
-	await writeFile(join(directory, 'counter'), '0');
-	const exits = [1, 2, 3].map(() =>
-		once(fork(import.meta.filename, ['instance', directory]), 'exit'),
-	);
-	await Promise.all(exits);
-	console.log('counter:', await readFile(join(directory, 'counter'), 'utf8'));
-	await rm(directory, { recursive: true, force: true });
+  const directory = await mkdtemp(join(tmpdir(), 'instances-'));
+  await writeFile(join(directory, 'counter'), '0');
+  const exits = [1, 2, 3].map(() =>
+    once(fork(import.meta.filename, ['instance', directory]), 'exit'),
+  );
+  await Promise.all(exits);
+  console.log('counter:', await readFile(join(directory, 'counter'), 'utf8'));
+  await rm(directory, { recursive: true, force: true });
 }
 ```
 

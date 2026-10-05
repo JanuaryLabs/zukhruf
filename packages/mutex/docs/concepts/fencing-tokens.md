@@ -27,7 +27,7 @@ Read the token from the lease:
 
 ```ts
 await mutex.acquire('product:42', async (lease) => {
-	await stock.reserve('product:42', lease.token);
+  await stock.reserve('product:42', lease.token);
 });
 ```
 
@@ -57,12 +57,12 @@ Fencing tokens protect only fenced resources. If a stale holder sends an email o
 
 A **token source** makes the fencing tokens for a lock store. The lock store calls it while the key is held. Thus two tokens for one key are never made at the same time.
 
-| Token source | Tokens continue after a restart? | Default for |
-|---|---|---|
-| `CounterTokenSource` | No. It counts in memory. | `MemoryStore`, `IpcLockCoordinator`, `ThreadLockCoordinator` |
-| `MonotonicClockTokenSource` | No. It reads the clock of the process. | — |
-| `FileTokenSource` | Yes. It keeps one counter file for each key. | `TicketQueueFileStore`, `LockFileStore`, `SqliteStore` |
-| `EpochTokenSource` | Yes. Each new leader has a higher epoch. | `SocketStore` (fixed) |
+| Token source                | Tokens continue after a restart?             | Default for                                                  |
+| --------------------------- | -------------------------------------------- | ------------------------------------------------------------ |
+| `CounterTokenSource`        | No. It counts in memory.                     | `MemoryStore`, `IpcLockCoordinator`, `ThreadLockCoordinator` |
+| `MonotonicClockTokenSource` | No. It reads the clock of the process.       | —                                                            |
+| `FileTokenSource`           | Yes. It keeps one counter file for each key. | `TicketQueueFileStore`, `LockFileStore`, `SqliteStore`       |
+| `EpochTokenSource`          | Yes. Each new leader has a higher epoch.     | `SocketStore` (fixed)                                        |
 
 **Use a durable token source with a durable resource.** A database keeps the highest token after your process stops. A memory token source starts again at 1. Then the database refuses all new writes. Give the lock store a durable token source:
 
@@ -70,7 +70,7 @@ A **token source** makes the fencing tokens for a lock store. The lock store cal
 import { FileTokenSource, MemoryStore, Mutex } from '@zukhruf/mutex';
 
 const mutex = new Mutex(
-	new MemoryStore({ tokens: new FileTokenSource('/var/lib/my-app/fences') }),
+  new MemoryStore({ tokens: new FileTokenSource('/var/lib/my-app/fences') }),
 );
 ```
 

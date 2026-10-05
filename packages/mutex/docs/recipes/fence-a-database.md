@@ -20,10 +20,18 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
-import { FileTokenSource, MemoryStore, Mutex, type FencingToken } from '@zukhruf/mutex';
+
+import {
+  type FencingToken,
+  FileTokenSource,
+  MemoryStore,
+  Mutex,
+} from '@zukhruf/mutex';
 
 const directory = await mkdtemp(join(tmpdir(), 'fenced-'));
-const database = new DatabaseSync(join(directory, 'shop.db'), { readBigInts: true });
+const database = new DatabaseSync(join(directory, 'shop.db'), {
+  readBigInts: true,
+});
 database.exec(`
 	CREATE TABLE stock (
 		product  TEXT PRIMARY KEY,
@@ -31,30 +39,35 @@ database.exec(`
 		fence    INTEGER NOT NULL DEFAULT 0
 	)
 `);
-database.prepare('INSERT INTO stock (product, quantity) VALUES (?, ?)').run('product:42', 2);
+database
+  .prepare('INSERT INTO stock (product, quantity) VALUES (?, ?)')
+  .run('product:42', 2);
 
 /** Reserves one item, unless a newer holder already wrote this product. */
 function reserve(product: string, token: FencingToken): boolean {
-	const { changes } = database
-		.prepare(
-			`UPDATE stock SET quantity = quantity - 1, fence = ?
+  const { changes } = database
+    .prepare(
+      `UPDATE stock SET quantity = quantity - 1, fence = ?
 			 WHERE product = ? AND fence <= ? AND quantity > 0`,
-		)
-		.run(token.value, product, token.value);
-	return Number(changes) > 0;
+    )
+    .run(token.value, product, token.value);
+  return Number(changes) > 0;
 }
 
 // The database is durable, so the tokens must be durable too.
 const mutex = new Mutex(
-	new MemoryStore({ tokens: new FileTokenSource(join(directory, 'fences')) }),
+  new MemoryStore({ tokens: new FileTokenSource(join(directory, 'fences')) }),
 );
 
 // Holder A gets the key. For this demo, it keeps its token after the release.
-const staleToken = await mutex.acquire('product:42', async (lease) => lease.token);
+const staleToken = await mutex.acquire(
+  'product:42',
+  async (lease) => lease.token,
+);
 
 // Holder B gets the key later and reserves an item.
 const newer = await mutex.acquire('product:42', async (lease) =>
-	reserve('product:42', lease.token),
+  reserve('product:42', lease.token),
 );
 
 // Holder A continues and writes with its old token.

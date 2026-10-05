@@ -8,10 +8,10 @@ import { join } from 'node:path';
  * queue in the background while the directory is removed.
  */
 export async function scratchDirectory() {
-	const path = await mkdtemp(join(tmpdir(), 'mutex-test-'));
-	return {
-		path,
-		[Symbol.asyncDispose]: () =>
-			rm(path, { recursive: true, force: true, maxRetries: 5, retryDelay: 20 }),
-	};
+  const path = await mkdtemp(join(tmpdir(), 'mutex-test-'));
+  return {
+    path,
+    [Symbol.asyncDispose]: () =>
+      rm(path, { recursive: true, force: true, maxRetries: 5, retryDelay: 20 }),
+  };
 }

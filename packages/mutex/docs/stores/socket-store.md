@@ -2,9 +2,9 @@
 
 A host lock store with a coordinator. The processes that use it elect one leader, and the leader grants keys to all of them through a Unix socket.
 
-| Reach | Order | Holder process stops | Default token source |
-|---|---|---|---|
-| Host | First come, first served (in one term) | Released in approximately 2 ms | `EpochTokenSource` (fixed) |
+| Reach | Order                                  | Holder process stops           | Default token source       |
+| ----- | -------------------------------------- | ------------------------------ | -------------------------- |
+| Host  | First come, first served (in one term) | Released in approximately 2 ms | `EpochTokenSource` (fixed) |
 
 ## What
 
@@ -55,22 +55,22 @@ Messages are lines of JSON. A socket does not keep message boundaries: in a test
 
 ## Failure modes
 
-| Event | Result |
-|---|---|
-| A holder stops | The leader releases its keys in approximately 2 ms. |
-| The leader stops | A failover occurs. Holders reassert their keys during the grace window. |
+| Event                                            | Result                                                                                                                                                               |
+| ------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A holder stops                                   | The leader releases its keys in approximately 2 ms.                                                                                                                  |
+| The leader stops                                 | A failover occurs. Holders reassert their keys during the grace window.                                                                                              |
 | A holder is frozen during the whole grace window | Its reassert is refused. A newer holder can get the key. A fenced resource refuses the late writes of the frozen holder, and the frozen holder gets `LockLostError`. |
-| A holder thread stops | Its connection closes, and the key is released. |
+| A holder thread stops                            | Its connection closes, and the key is released.                                                                                                                      |
 
 See [failure modes](../concepts/failure-modes.md).
 
 ## Options
 
-| Option | Default | Description |
-|---|---|---|
-| `directory` (first argument) | — | The shared directory. All processes must use the same path. |
-| `pollInterval` | `10` | Milliseconds between two attempts to connect or to campaign. |
-| `graceWindow` | `500` | Milliseconds after a failover in which the new leader grants no keys. It must be longer than the time that a holder needs to connect again. |
+| Option                       | Default | Description                                                                                                                                 |
+| ---------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `directory` (first argument) | —       | The shared directory. All processes must use the same path.                                                                                 |
+| `pollInterval`               | `10`    | Milliseconds between two attempts to connect or to campaign.                                                                                |
+| `graceWindow`                | `500`   | Milliseconds after a failover in which the new leader grants no keys. It must be longer than the time that a holder needs to connect again. |
 
 `SocketStore` always uses `EpochTokenSource`. The safety of a failover depends on the epoch, so you cannot change the token source.
 

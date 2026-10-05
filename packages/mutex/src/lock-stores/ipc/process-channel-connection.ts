@@ -9,53 +9,54 @@ import type { LockRequest, LockResponse } from '../remote/protocol.ts';
  * own listeners in charge of the process lifetime. Messages that arrive while
  * not listening are buffered by Node and delivered on the next `ref`.
  */
-export class ProcessChannelConnection
-	implements Connection<LockRequest, LockResponse>
-{
-	#handlers: ConnectionHandlers<LockResponse> | undefined;
-	#listening = false;
+export class ProcessChannelConnection implements Connection<
+  LockRequest,
+  LockResponse
+> {
+  #handlers: ConnectionHandlers<LockResponse> | undefined;
+  #listening = false;
 
-	readonly #onMessage = (envelope: unknown) => {
-		const response = unwrap<LockResponse>(envelope);
-		if (response) this.#handlers?.message(response);
-	};
+  readonly #onMessage = (envelope: unknown) => {
+    const response = unwrap<LockResponse>(envelope);
+    if (response) this.#handlers?.message(response);
+  };
 
-	readonly #onDisconnect = () => {
-		this.unref();
-		this.#handlers?.close();
-	};
+  readonly #onDisconnect = () => {
+    this.unref();
+    this.#handlers?.close();
+  };
 
-	send(request: LockRequest): Promise<void> {
-		return new Promise((resolve, reject) => {
-			if (!process.send || !process.connected) {
-				reject(new Error('The IPC channel to the parent is closed.'));
-				return;
-			}
-			process.send(wrap(request), undefined, {}, (error) =>
-				error ? reject(error) : resolve(),
-			);
-		});
-	}
+  send(request: LockRequest): Promise<void> {
+    return new Promise((resolve, reject) => {
+      if (!process.send || !process.connected) {
+        reject(new Error('The IPC channel to the parent is closed.'));
+        return;
+      }
+      process.send(wrap(request), undefined, {}, (error) =>
+        error ? reject(error) : resolve(),
+      );
+    });
+  }
 
-	listen(handlers: ConnectionHandlers<LockResponse>) {
-		this.#handlers = handlers;
-	}
+  listen(handlers: ConnectionHandlers<LockResponse>) {
+    this.#handlers = handlers;
+  }
 
-	ref() {
-		if (this.#listening) return;
-		this.#listening = true;
-		process.on('message', this.#onMessage);
-		process.on('disconnect', this.#onDisconnect);
-	}
+  ref() {
+    if (this.#listening) return;
+    this.#listening = true;
+    process.on('message', this.#onMessage);
+    process.on('disconnect', this.#onDisconnect);
+  }
 
-	unref() {
-		if (!this.#listening) return;
-		this.#listening = false;
-		process.off('message', this.#onMessage);
-		process.off('disconnect', this.#onDisconnect);
-	}
+  unref() {
+    if (!this.#listening) return;
+    this.#listening = false;
+    process.off('message', this.#onMessage);
+    process.off('disconnect', this.#onDisconnect);
+  }
 
-	close() {
-		this.unref();
-	}
+  close() {
+    this.unref();
+  }
 }

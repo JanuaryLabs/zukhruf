@@ -6,12 +6,12 @@
 
 ## Select a lock store
 
-| Lock store | How it finds a stopped holder | Time to the next grant |
-|---|---|---|
-| [SqliteStore](../stores/sqlite-store.md) | The kernel removes the file lock. | The next attempt of a waiter (`pollInterval`) |
-| [SocketStore](../stores/socket-store.md) | The kernel closes the connection to the leader. | Approximately 2 ms |
-| [IpcStore](../stores/ipc-store.md) | The kernel closes the IPC channel to the parent. | Approximately 2 ms |
-| [TicketQueueFileStore](../stores/ticket-queue-file-store.md), [LockFileStore](../stores/lock-file-store.md) | A waiter checks if the holder's process ID exists. | The next attempt of a waiter |
+| Lock store                                                                                                  | How it finds a stopped holder                      | Time to the next grant                        |
+| ----------------------------------------------------------------------------------------------------------- | -------------------------------------------------- | --------------------------------------------- |
+| [SqliteStore](../stores/sqlite-store.md)                                                                    | The kernel removes the file lock.                  | The next attempt of a waiter (`pollInterval`) |
+| [SocketStore](../stores/socket-store.md)                                                                    | The kernel closes the connection to the leader.    | Approximately 2 ms                            |
+| [IpcStore](../stores/ipc-store.md)                                                                          | The kernel closes the IPC channel to the parent.   | Approximately 2 ms                            |
+| [TicketQueueFileStore](../stores/ticket-queue-file-store.md), [LockFileStore](../stores/lock-file-store.md) | A waiter checks if the holder's process ID exists. | The next attempt of a waiter                  |
 
 The kernel methods do not depend on process IDs. Prefer them if your system starts many processes, because the system can give a stopped process's ID to a new process.
 
@@ -25,31 +25,34 @@ import { once } from 'node:events';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+
 import { Mutex, SqliteStore } from '@zukhruf/mutex';
 
 const [role, shared] = process.argv.slice(2);
 
 if (role === 'holder') {
-	setInterval(() => {}, 1000); // Stay alive until the parent kills this process.
-	const mutex = new Mutex(new SqliteStore(shared!));
-	await mutex.acquire('nightly-report', async () => {
-		process.send!('holding');
-		await new Promise(() => {}); // The crash occurs before the release.
-	});
+  setInterval(() => {}, 1000); // Stay alive until the parent kills this process.
+  const mutex = new Mutex(new SqliteStore(shared!));
+  await mutex.acquire('nightly-report', async () => {
+    process.send!('holding');
+    await new Promise(() => {}); // The crash occurs before the release.
+  });
 } else {
-	const directory = await mkdtemp(join(tmpdir(), 'crash-'));
-	const holder = fork(import.meta.filename, ['holder', directory]);
-	await once(holder, 'message');
+  const directory = await mkdtemp(join(tmpdir(), 'crash-'));
+  const holder = fork(import.meta.filename, ['holder', directory]);
+  await once(holder, 'message');
 
-	holder.kill('SIGKILL');
-	await once(holder, 'exit');
-	const crashed = performance.now();
+  holder.kill('SIGKILL');
+  await once(holder, 'exit');
+  const crashed = performance.now();
 
-	const mutex = new Mutex(new SqliteStore(directory));
-	await mutex.acquire('nightly-report', async () => {
-		console.log(`got the key ${Math.round(performance.now() - crashed)} ms after the crash`);
-	});
-	await rm(directory, { recursive: true, force: true });
+  const mutex = new Mutex(new SqliteStore(directory));
+  await mutex.acquire('nightly-report', async () => {
+    console.log(
+      `got the key ${Math.round(performance.now() - crashed)} ms after the crash`,
+    );
+  });
+  await rm(directory, { recursive: true, force: true });
 }
 ```
 

@@ -9,24 +9,28 @@
 The endpoint reads the stock, waits for the database, and then writes the stock. Two requests can both read `1` before one of them writes `0`.
 
 ```ts title="without-mutex.ts"
-import { Hono } from 'hono';
 import { setTimeout as delay } from 'node:timers/promises';
+
+import { Hono } from 'hono';
 
 let stock = 1;
 const app = new Hono();
 
 app.post('/reserve', async (c) => {
-	if (stock === 0) return c.json({ reserved: false }, 409);
-	await delay(10); // The database call that saves the reservation.
-	stock -= 1;
-	return c.json({ reserved: true }, 201);
+  if (stock === 0) return c.json({ reserved: false }, 409);
+  await delay(10); // The database call that saves the reservation.
+  stock -= 1;
+  return c.json({ reserved: true }, 201);
 });
 
 const responses = await Promise.all([
-	app.request('/reserve', { method: 'POST' }),
-	app.request('/reserve', { method: 'POST' }),
+  app.request('/reserve', { method: 'POST' }),
+  app.request('/reserve', { method: 'POST' }),
 ]);
-console.log(responses.map((response) => response.status), { stock });
+console.log(
+  responses.map((response) => response.status),
+  { stock },
+);
 ```
 
 Output:
@@ -42,8 +46,10 @@ Both customers got the item, and the stock is below zero.
 Put the read and the write inside `mutex.acquire`. Use one key for each product.
 
 ```ts title="reserve.ts"
-import { Hono } from 'hono';
 import { setTimeout as delay } from 'node:timers/promises';
+
+import { Hono } from 'hono';
+
 import { MemoryStore, Mutex } from '@zukhruf/mutex';
 
 let stock = 1;
@@ -51,20 +57,23 @@ const mutex = new Mutex(new MemoryStore());
 const app = new Hono();
 
 app.post('/reserve', async (c) => {
-	const reserved = await mutex.acquire('product:42', async () => {
-		if (stock === 0) return false;
-		await delay(10); // The database call that saves the reservation.
-		stock -= 1;
-		return true;
-	});
-	return c.json({ reserved }, reserved ? 201 : 409);
+  const reserved = await mutex.acquire('product:42', async () => {
+    if (stock === 0) return false;
+    await delay(10); // The database call that saves the reservation.
+    stock -= 1;
+    return true;
+  });
+  return c.json({ reserved }, reserved ? 201 : 409);
 });
 
 const responses = await Promise.all([
-	app.request('/reserve', { method: 'POST' }),
-	app.request('/reserve', { method: 'POST' }),
+  app.request('/reserve', { method: 'POST' }),
+  app.request('/reserve', { method: 'POST' }),
 ]);
-console.log(responses.map((response) => response.status), { stock });
+console.log(
+  responses.map((response) => response.status),
+  { stock },
+);
 ```
 
 Output:

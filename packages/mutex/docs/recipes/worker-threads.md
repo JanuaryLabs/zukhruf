@@ -19,33 +19,41 @@ The main thread and three worker threads each add 1 to a shared counter 20 times
 ```ts title="threads.ts"
 import { once } from 'node:events';
 import { setImmediate as nextTurn } from 'node:timers/promises';
-import { isMainThread, Worker, workerData } from 'node:worker_threads';
-import { Mutex, ThreadLockCoordinator, ThreadStore, type LockStore } from '@zukhruf/mutex';
+import { Worker, isMainThread, workerData } from 'node:worker_threads';
+
+import {
+  type LockStore,
+  Mutex,
+  ThreadLockCoordinator,
+  ThreadStore,
+} from '@zukhruf/mutex';
 
 async function addTwenty(store: LockStore, counter: Int32Array) {
-	const mutex = new Mutex(store);
-	for (let i = 0; i < 20; i++) {
-		await mutex.acquire('counter', async () => {
-			const value = counter[0]!;
-			await nextTurn(); // Other threads run here.
-			counter[0] = value + 1;
-		});
-	}
+  const mutex = new Mutex(store);
+  for (let i = 0; i < 20; i++) {
+    await mutex.acquire('counter', async () => {
+      const value = counter[0]!;
+      await nextTurn(); // Other threads run here.
+      counter[0] = value + 1;
+    });
+  }
 }
 
 if (isMainThread) {
-	const counter = new Int32Array(new SharedArrayBuffer(4));
-	const coordinator = new ThreadLockCoordinator();
-	const exits = [1, 2, 3].map(() => {
-		const worker = new Worker(new URL(import.meta.url), { workerData: counter });
-		coordinator.adopt(worker);
-		return once(worker, 'exit');
-	});
-	await addTwenty(coordinator, counter);
-	await Promise.all(exits);
-	console.log('counter:', counter[0]);
+  const counter = new Int32Array(new SharedArrayBuffer(4));
+  const coordinator = new ThreadLockCoordinator();
+  const exits = [1, 2, 3].map(() => {
+    const worker = new Worker(new URL(import.meta.url), {
+      workerData: counter,
+    });
+    coordinator.adopt(worker);
+    return once(worker, 'exit');
+  });
+  await addTwenty(coordinator, counter);
+  await Promise.all(exits);
+  console.log('counter:', counter[0]);
 } else {
-	await addTwenty(new ThreadStore(), workerData as Int32Array);
+  await addTwenty(new ThreadStore(), workerData as Int32Array);
 }
 ```
 

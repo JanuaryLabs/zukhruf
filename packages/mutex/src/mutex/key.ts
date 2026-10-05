@@ -7,22 +7,22 @@ import type { Mutex } from './mutex.ts';
  * otherwise. Build it with `mutex.key(name, { mode })`.
  */
 export class Key<D extends AcquireMode> {
-	readonly name: string;
-	readonly #mutex: Mutex;
-	readonly #mode: D;
+  readonly name: string;
+  readonly #mutex: Mutex;
+  readonly #mode: D;
 
-	constructor(mutex: Mutex, name: string, mode: D) {
-		this.#mutex = mutex;
-		this.name = name;
-		this.#mode = mode;
-	}
+  constructor(mutex: Mutex, name: string, mode: D) {
+    this.#mutex = mutex;
+    this.name = name;
+    this.#mode = mode;
+  }
 
-	run<T, M extends AcquireMode = D>(
-		task: (lease: Lease) => Promise<T>,
-		{ mode }: { mode?: M } = {},
-	): Promise<ModeResult<M, T>> {
-		return this.#mutex.acquire(this.name, task, {
-			mode: (mode ?? this.#mode) as M,
-		});
-	}
+  run<T, M extends AcquireMode = D>(
+    task: (lease: Lease) => Promise<T>,
+    { mode }: { mode?: M } = {},
+  ): Promise<ModeResult<M, T>> {
+    return this.#mutex.acquire(this.name, task, {
+      mode: (mode ?? this.#mode) as M,
+    });
+  }
 }

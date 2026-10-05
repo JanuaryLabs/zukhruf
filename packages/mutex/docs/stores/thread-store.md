@@ -2,8 +2,8 @@
 
 A lock store for worker threads. The thread that starts the workers is the coordinator. The workers ask it for keys through their message ports.
 
-| Reach | Order | Holder thread stops | Default token source |
-|---|---|---|---|
+| Reach   | Order                    | Holder thread stops                   | Default token source |
+| ------- | ------------------------ | ------------------------------------- | -------------------- |
 | Process | First come, first served | Released when the worker emits `exit` | `CounterTokenSource` |
 
 ## What
@@ -18,6 +18,7 @@ The coordinator must **adopt** each worker after it starts the worker:
 ```ts
 // main.ts
 import { Worker } from 'node:worker_threads';
+
 import { Mutex, ThreadLockCoordinator } from '@zukhruf/mutex';
 
 const coordinator = new ThreadLockCoordinator();
@@ -67,11 +68,11 @@ The coordinator grants keys first come, first served. When a worker stops for an
 
 ## Failure modes
 
-| Event | Result |
-|---|---|
-| A worker stops while it holds a key | The coordinator releases the key when the worker emits `exit`. |
-| The coordinator's thread is busy | Waiters wait until it is free. In a test, 50 ms of CPU work delayed an answer by 50.2 ms. |
-| The process stops | All threads stop. No coordinator or holder is left. |
+| Event                               | Result                                                                                    |
+| ----------------------------------- | ----------------------------------------------------------------------------------------- |
+| A worker stops while it holds a key | The coordinator releases the key when the worker emits `exit`.                            |
+| The coordinator's thread is busy    | Waiters wait until it is free. In a test, 50 ms of CPU work delayed an answer by 50.2 ms. |
+| The process stops                   | All threads stop. No coordinator or holder is left.                                       |
 
 See [failure modes](../concepts/failure-modes.md).
 
@@ -79,8 +80,8 @@ See [failure modes](../concepts/failure-modes.md).
 
 `ThreadLockCoordinator`:
 
-| Option | Default | Description |
-|---|---|---|
+| Option   | Default                    | Description                                                        |
+| -------- | -------------------------- | ------------------------------------------------------------------ |
 | `tokens` | `new CounterTokenSource()` | The token source. The default starts at 1 when the process starts. |
 
 `ThreadStore` has no options. It throws an error in the main thread, because the main thread has no parent port.

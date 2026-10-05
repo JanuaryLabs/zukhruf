@@ -6,14 +6,14 @@
 
 ```ts
 interface LockStore {
-	/** Resolves once `key` is exclusively held. Stops waiting when `signal` aborts. */
-	acquire(key: string, options?: { signal?: AbortSignal }): Promise<Lease>;
-	/** Holds `key` only if that is possible without waiting for another holder. */
-	tryAcquire(key: string): Promise<Lease | undefined>;
+  /** Resolves once `key` is exclusively held. Stops waiting when `signal` aborts. */
+  acquire(key: string, options?: { signal?: AbortSignal }): Promise<Lease>;
+  /** Holds `key` only if that is possible without waiting for another holder. */
+  tryAcquire(key: string): Promise<Lease | undefined>;
 }
 
 interface Lease extends AsyncDisposable {
-	readonly token: FencingToken;
+  readonly token: FencingToken;
 }
 ```
 
@@ -32,35 +32,49 @@ A decorator adds behavior to any lock store. This decorator measures the time th
 
 ```ts title="wait-time-store.ts"
 import { setTimeout as delay } from 'node:timers/promises';
-import { MemoryStore, Mutex, type AcquireOptions, type Lease, type LockStore } from '@zukhruf/mutex';
+
+import {
+  type AcquireOptions,
+  type Lease,
+  type LockStore,
+  MemoryStore,
+  Mutex,
+} from '@zukhruf/mutex';
 
 /** Reports how long each caller waited for its key. */
 class WaitTimeStore implements LockStore {
-	readonly #inner: LockStore;
-	readonly #report: (key: string, milliseconds: number) => void;
+  readonly #inner: LockStore;
+  readonly #report: (key: string, milliseconds: number) => void;
 
-	constructor(inner: LockStore, report: (key: string, milliseconds: number) => void) {
-		this.#inner = inner;
-		this.#report = report;
-	}
+  constructor(
+    inner: LockStore,
+    report: (key: string, milliseconds: number) => void,
+  ) {
+    this.#inner = inner;
+    this.#report = report;
+  }
 
-	async acquire(key: string, options?: AcquireOptions): Promise<Lease> {
-		const started = performance.now();
-		const lease = await this.#inner.acquire(key, options);
-		this.#report(key, performance.now() - started);
-		return lease;
-	}
+  async acquire(key: string, options?: AcquireOptions): Promise<Lease> {
+    const started = performance.now();
+    const lease = await this.#inner.acquire(key, options);
+    this.#report(key, performance.now() - started);
+    return lease;
+  }
 
-	tryAcquire(key: string): Promise<Lease | undefined> {
-		return this.#inner.tryAcquire(key);
-	}
+  tryAcquire(key: string): Promise<Lease | undefined> {
+    return this.#inner.tryAcquire(key);
+  }
 }
 
 const waits: number[] = [];
 const mutex = new Mutex(
-	new WaitTimeStore(new MemoryStore(), (key, milliseconds) => waits.push(milliseconds)),
+  new WaitTimeStore(new MemoryStore(), (key, milliseconds) =>
+    waits.push(milliseconds),
+  ),
 );
-await Promise.all([1, 2, 3].map(() => mutex.acquire('report', () => delay(50))));
+await Promise.all(
+  [1, 2, 3].map(() => mutex.acquire('report', () => delay(50))),
+);
 console.log(waits.map((milliseconds) => Math.round(milliseconds / 50) * 50));
 ```
 
@@ -83,23 +97,27 @@ import { mkdir, mkdtemp, rm, rmdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
+
 import { FileLockStore, Mutex } from '@zukhruf/mutex';
 
 class DirectoryLockStore extends FileLockStore {
-	protected lock(path: string, signal: AbortSignal | undefined): Promise<AsyncDisposable> {
-		return this.poll(() => this.tryLock(path), { signal });
-	}
+  protected lock(
+    path: string,
+    signal: AbortSignal | undefined,
+  ): Promise<AsyncDisposable> {
+    return this.poll(() => this.tryLock(path), { signal });
+  }
 
-	protected async tryLock(path: string): Promise<AsyncDisposable | undefined> {
-		const held = `${path}.d`;
-		try {
-			await mkdir(held);
-			return { [Symbol.asyncDispose]: () => rmdir(held) };
-		} catch (error) {
-			if ((error as NodeJS.ErrnoException).code === 'EEXIST') return undefined;
-			throw error;
-		}
-	}
+  protected async tryLock(path: string): Promise<AsyncDisposable | undefined> {
+    const held = `${path}.d`;
+    try {
+      await mkdir(held);
+      return { [Symbol.asyncDispose]: () => rmdir(held) };
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'EEXIST') return undefined;
+      throw error;
+    }
+  }
 }
 
 const directory = await mkdtemp(join(tmpdir(), 'directory-lock-'));
@@ -107,13 +125,13 @@ const mutex = new Mutex(new DirectoryLockStore(directory));
 let active = 0;
 let mostActive = 0;
 await Promise.all(
-	[1, 2, 3].map(() =>
-		mutex.acquire('report', async () => {
-			mostActive = Math.max(mostActive, ++active);
-			await delay(20);
-			active--;
-		}),
-	),
+  [1, 2, 3].map(() =>
+    mutex.acquire('report', async () => {
+      mostActive = Math.max(mostActive, ++active);
+      await delay(20);
+      active--;
+    }),
+  ),
 );
 console.log({ mostActive });
 await rm(directory, { recursive: true, force: true });

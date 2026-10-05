@@ -2,9 +2,9 @@
 
 A host lock store that uses an exclusive SQLite transaction as the lock. The operating system kernel releases the lock when the holder stops.
 
-| Reach | Order | Holder process stops | Default token source |
-|---|---|---|---|
-| Host | First come, first served in one process; no order between processes | Released by the kernel | `FileTokenSource` (durable) |
+| Reach | Order                                                               | Holder process stops   | Default token source        |
+| ----- | ------------------------------------------------------------------- | ---------------------- | --------------------------- |
+| Host  | First come, first served in one process; no order between processes | Released by the kernel | `FileTokenSource` (durable) |
 
 ## What
 
@@ -56,11 +56,11 @@ See [failure modes](../concepts/failure-modes.md).
 
 ## Options
 
-| Option | Default | Description |
-|---|---|---|
-| `directory` (first argument) | — | The shared directory. |
-| `pollInterval` | `10` | Milliseconds between two attempts. |
-| `tokens` | `new FileTokenSource(directory)` | The token source. Tokens continue after a restart. |
+| Option                       | Default                          | Description                                        |
+| ---------------------------- | -------------------------------- | -------------------------------------------------- |
+| `directory` (first argument) | —                                | The shared directory.                              |
+| `pollInterval`               | `10`                             | Milliseconds between two attempts.                 |
+| `tokens`                     | `new FileTokenSource(directory)` | The token source. Tokens continue after a restart. |
 
 ## Evidence
 

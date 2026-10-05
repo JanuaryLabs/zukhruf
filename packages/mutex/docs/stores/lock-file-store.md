@@ -2,9 +2,9 @@
 
 A host lock store that uses one file for each held key. The process that creates the file holds the key.
 
-| Reach | Order | Holder process stops | Default token source |
-|---|---|---|---|
-| Host | No order | Released after a waiter checks the process | `FileTokenSource` (durable) |
+| Reach | Order    | Holder process stops                       | Default token source        |
+| ----- | -------- | ------------------------------------------ | --------------------------- |
+| Host  | No order | Released after a waiter checks the process | `FileTokenSource` (durable) |
 
 ## What
 
@@ -51,11 +51,11 @@ The same as [TicketQueueFileStore](./ticket-queue-file-store.md#failure-modes): 
 
 ## Options
 
-| Option | Default | Description |
-|---|---|---|
-| `directory` (first argument) | — | The shared directory. |
-| `pollInterval` | `10` | Milliseconds between two attempts. |
-| `tokens` | `new FileTokenSource(directory)` | The token source. Tokens continue after a restart. |
+| Option                       | Default                          | Description                                        |
+| ---------------------------- | -------------------------------- | -------------------------------------------------- |
+| `directory` (first argument) | —                                | The shared directory.                              |
+| `pollInterval`               | `10`                             | Milliseconds between two attempts.                 |
+| `tokens`                     | `new FileTokenSource(directory)` | The token source. Tokens continue after a restart. |
 
 ## Evidence
 

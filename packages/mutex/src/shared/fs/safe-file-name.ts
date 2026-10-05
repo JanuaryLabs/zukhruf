@@ -5,5 +5,5 @@
  * name, which over-locks but never under-locks.
  */
 export function safeFileName(key: string): string {
-	return encodeURIComponent(key).replaceAll('.', '%2E');
+  return encodeURIComponent(key).replaceAll('.', '%2E');
 }

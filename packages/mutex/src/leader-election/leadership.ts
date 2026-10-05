@@ -5,22 +5,22 @@ import type { DatabaseSync } from 'node:sqlite';
  * the kernel releases the claim and another campaigner can win.
  */
 export class Leadership implements AsyncDisposable {
-	/** Grows with every term, so a newer leader can always outrank an older one. */
-	readonly epoch: bigint;
-	readonly #claim: DatabaseSync;
+  /** Grows with every term, so a newer leader can always outrank an older one. */
+  readonly epoch: bigint;
+  readonly #claim: DatabaseSync;
 
-	constructor(epoch: bigint, claim: DatabaseSync) {
-		this.epoch = epoch;
-		this.#claim = claim;
-	}
+  constructor(epoch: bigint, claim: DatabaseSync) {
+    this.epoch = epoch;
+    this.#claim = claim;
+  }
 
-	async resign(): Promise<void> {
-		if (!this.#claim.isOpen) return;
-		this.#claim.exec('ROLLBACK');
-		this.#claim.close();
-	}
+  async resign(): Promise<void> {
+    if (!this.#claim.isOpen) return;
+    this.#claim.exec('ROLLBACK');
+    this.#claim.close();
+  }
 
-	[Symbol.asyncDispose](): Promise<void> {
-		return this.resign();
-	}
+  [Symbol.asyncDispose](): Promise<void> {
+    return this.resign();
+  }
 }

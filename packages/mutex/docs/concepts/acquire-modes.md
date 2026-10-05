@@ -4,10 +4,10 @@ A key is exclusive for every caller: one holder at a time. An **acquire mode** d
 
 ## The two acquire modes
 
-| Acquire mode | While the key is busy | The task | Result type |
-|---|---|---|---|
-| `Modes.wait()` (default) | The caller waits until the key is granted. | Always runs. | The task's value |
-| `Modes.skipIfBusy()` | The caller gives up at once. | Does not run. | `{ acquired: true, value } \| { acquired: false }` |
+| Acquire mode                            | While the key is busy                           | The task                      | Result type                                        |
+| --------------------------------------- | ----------------------------------------------- | ----------------------------- | -------------------------------------------------- |
+| `Modes.wait()` (default)                | The caller waits until the key is granted.      | Always runs.                  | The task's value                                   |
+| `Modes.skipIfBusy()`                    | The caller gives up at once.                    | Does not run.                 | `{ acquired: true, value } \| { acquired: false }` |
 | `Modes.skipIfBusy({ waitAtMost: 500 })` | The caller waits at most 500 ms, then gives up. | Runs only if granted in time. | `{ acquired: true, value } \| { acquired: false }` |
 
 ```ts
@@ -20,7 +20,7 @@ const sold: boolean = await mutex.acquire('product:42', async () => reserve());
 
 // Skip if busy: check `acquired` before you read `value`.
 const result = await mutex.acquire('report:daily', async () => buildReport(), {
-	mode: Modes.skipIfBusy(),
+  mode: Modes.skipIfBusy(),
 });
 if (result.acquired) console.log(result.value);
 ```
@@ -34,7 +34,7 @@ Most keys have one kind of caller. Give the key a default acquire mode, and let 
 ```ts
 const report = mutex.key('report:daily', { mode: Modes.skipIfBusy() });
 
-await report.run(task);                         // The cron job skips if a report runs.
+await report.run(task); // The cron job skips if a report runs.
 await report.run(task, { mode: Modes.wait() }); // The admin button waits and then runs.
 ```
 
@@ -59,19 +59,20 @@ An acquire mode is a strategy object. You can write one with the two operations:
 
 ```ts
 import { setTimeout as delay } from 'node:timers/promises';
+
 import type { AcquireMode, Lease, LockStore } from '@zukhruf/mutex';
 
 /** Tries three times, 100 ms apart. */
 const tryThreeTimes: AcquireMode<'maybe'> = {
-	outcome: 'maybe',
-	async acquire(store: LockStore, key: string): Promise<Lease | undefined> {
-		for (let attempt = 0; attempt < 3; attempt++) {
-			const lease = await store.tryAcquire(key);
-			if (lease) return lease;
-			await delay(100);
-		}
-		return undefined;
-	},
+  outcome: 'maybe',
+  async acquire(store: LockStore, key: string): Promise<Lease | undefined> {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const lease = await store.tryAcquire(key);
+      if (lease) return lease;
+      await delay(100);
+    }
+    return undefined;
+  },
 };
 ```
 

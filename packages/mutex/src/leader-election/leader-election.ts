@@ -2,19 +2,20 @@ import { mkdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { setTimeout as delay } from 'node:timers/promises';
+
 import { atomicWrite } from '../shared/fs/atomic-write.ts';
 import { isErrno } from '../shared/fs/errno.ts';
 import { isBusy } from '../shared/sqlite/is-busy.ts';
 import { Leadership } from './leadership.ts';
 
 export interface LeaderElectionOptions {
-	/** Milliseconds between attempts while another process leads. */
-	pollInterval?: number;
+  /** Milliseconds between attempts while another process leads. */
+  pollInterval?: number;
 }
 
 export interface CampaignOptions {
-	/** Milliseconds to keep trying before conceding to the current leader. */
-	timeout?: number;
+  /** Milliseconds to keep trying before conceding to the current leader. */
+  timeout?: number;
 }
 
 /**
@@ -25,61 +26,67 @@ export interface CampaignOptions {
  * while campaigners run: a new file would let a second leader win.
  */
 export class LeaderElection {
-	readonly #directory: string;
-	readonly #pollInterval: number;
+  readonly #directory: string;
+  readonly #pollInterval: number;
 
-	constructor(directory: string, { pollInterval = 10 }: LeaderElectionOptions = {}) {
-		this.#directory = directory;
-		this.#pollInterval = pollInterval;
-	}
+  constructor(
+    directory: string,
+    { pollInterval = 10 }: LeaderElectionOptions = {},
+  ) {
+    this.#directory = directory;
+    this.#pollInterval = pollInterval;
+  }
 
-	/** Resolves with the new term, or `undefined` if another process still leads after `timeout`. */
-	async campaign({ timeout = 0 }: CampaignOptions = {}): Promise<Leadership | undefined> {
-		await mkdir(this.#directory, { recursive: true });
-		// A busy timeout above zero would block this process's event loop while it
-		// waits, so the claim is retried here instead.
-		const claim = new DatabaseSync(join(this.#directory, 'leader.lock'), {
-			timeout: 0,
-		});
-		const deadline = performance.now() + timeout;
-		try {
-			for (;;) {
-				if (this.#tryClaim(claim)) return new Leadership(await this.#nextEpoch(), claim);
-				if (performance.now() >= deadline) break;
-				await delay(this.#pollInterval);
-			}
-		} catch (error) {
-			claim.close();
-			throw error;
-		}
-		claim.close();
-		return undefined;
-	}
+  /** Resolves with the new term, or `undefined` if another process still leads after `timeout`. */
+  async campaign({ timeout = 0 }: CampaignOptions = {}): Promise<
+    Leadership | undefined
+  > {
+    await mkdir(this.#directory, { recursive: true });
+    // A busy timeout above zero would block this process's event loop while it
+    // waits, so the claim is retried here instead.
+    const claim = new DatabaseSync(join(this.#directory, 'leader.lock'), {
+      timeout: 0,
+    });
+    const deadline = performance.now() + timeout;
+    try {
+      for (;;) {
+        if (this.#tryClaim(claim))
+          return new Leadership(await this.#nextEpoch(), claim);
+        if (performance.now() >= deadline) break;
+        await delay(this.#pollInterval);
+      }
+    } catch (error) {
+      claim.close();
+      throw error;
+    }
+    claim.close();
+    return undefined;
+  }
 
-	#tryClaim(claim: DatabaseSync): boolean {
-		try {
-			claim.exec('BEGIN EXCLUSIVE');
-			return true;
-		} catch (error) {
-			if (isBusy(error)) return false;
-			throw error;
-		}
-	}
+  #tryClaim(claim: DatabaseSync): boolean {
+    try {
+      claim.exec('BEGIN EXCLUSIVE');
+      return true;
+    } catch (error) {
+      if (isBusy(error)) return false;
+      throw error;
+    }
+  }
 
-	/** Safe without further locking: only the claim holder gets here. */
-	async #nextEpoch(): Promise<bigint> {
-		const path = join(this.#directory, 'leader.epoch');
-		const epoch = (await readEpoch(path)) + 1n;
-		await atomicWrite(path, epoch.toString());
-		return epoch;
-	}
+  /** Safe without further locking: only the claim holder gets here. */
+  async #nextEpoch(): Promise<bigint> {
+    const path = join(this.#directory, 'leader.epoch');
+    const epoch = (await readEpoch(path)) + 1n;
+    await atomicWrite(path, epoch.toString());
+    return epoch;
+  }
 }
 
 async function readEpoch(path: string): Promise<bigint> {
-	try {
-		return BigInt(await readFile(path, 'utf8'));
-	} catch (error) {
-		if (isErrno(error, 'ENOENT')) return 0n;
-		throw error;
-	}
+  try {
+    return BigInt(await readFile(path, 'utf8'));
+  } catch (error) {
+    if (isErrno(error, 'ENOENT')) return 0n;
+    throw error;
+  }
 }

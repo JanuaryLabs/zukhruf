@@ -1,5 +1,6 @@
 import { mkdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
+
 import { atomicWrite } from '../shared/fs/atomic-write.ts';
 import { isErrno } from '../shared/fs/errno.ts';
 import { safeFileName } from '../shared/fs/safe-file-name.ts';
@@ -12,26 +13,26 @@ import type { TokenSource } from './token-source.ts';
  * the key's lock: read, increment and replace are not atomic on their own.
  */
 export class FileTokenSource implements TokenSource {
-	readonly #directory: string;
+  readonly #directory: string;
 
-	constructor(directory: string) {
-		this.#directory = directory;
-	}
+  constructor(directory: string) {
+    this.#directory = directory;
+  }
 
-	async next(key: string): Promise<FencingToken> {
-		await mkdir(this.#directory, { recursive: true });
-		const path = join(this.#directory, `${safeFileName(key)}.fence`);
-		const token = (await readCounter(path)) + 1n;
-		await atomicWrite(path, token.toString());
-		return new FencingToken(token);
-	}
+  async next(key: string): Promise<FencingToken> {
+    await mkdir(this.#directory, { recursive: true });
+    const path = join(this.#directory, `${safeFileName(key)}.fence`);
+    const token = (await readCounter(path)) + 1n;
+    await atomicWrite(path, token.toString());
+    return new FencingToken(token);
+  }
 }
 
 async function readCounter(path: string): Promise<bigint> {
-	try {
-		return BigInt(await readFile(path, 'utf8'));
-	} catch (error) {
-		if (isErrno(error, 'ENOENT')) return 0n;
-		throw error;
-	}
+  try {
+    return BigInt(await readFile(path, 'utf8'));
+  } catch (error) {
+    if (isErrno(error, 'ENOENT')) return 0n;
+    throw error;
+  }
 }

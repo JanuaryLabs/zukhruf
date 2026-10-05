@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { EventEmitter } from 'node:events';
 import { join, resolve } from 'node:path';
+
 import { LeaderElection } from '../../leader-election/leader-election.ts';
 import type { Lease } from '../../mutex/lease.ts';
 import type { AcquireOptions, LockStore } from '../../mutex/lock-store.ts';
@@ -14,13 +15,13 @@ const SOCKET_PATH_LIMIT = 103;
 export type SocketRole = 'leader' | 'follower';
 
 export interface SocketStoreOptions {
-	/** Milliseconds between connection and campaign attempts. */
-	pollInterval?: number;
-	/**
-	 * Milliseconds a new leader grants nothing, so holders from the previous
-	 * term can reassert first. Must exceed how long a holder takes to reconnect.
-	 */
-	graceWindow?: number;
+  /** Milliseconds between connection and campaign attempts. */
+  pollInterval?: number;
+  /**
+   * Milliseconds a new leader grants nothing, so holders from the previous
+   * term can reassert first. Must exceed how long a holder takes to reconnect.
+   */
+  graceWindow?: number;
 }
 
 /**
@@ -34,61 +35,61 @@ export interface SocketStoreOptions {
  * that checks tokens, and its lease ends with `LockLostError`.
  */
 export class SocketStore
-	extends EventEmitter<{ role: [SocketRole] }>
-	implements LockStore, AsyncDisposable
+  extends EventEmitter<{ role: [SocketRole] }>
+  implements LockStore, AsyncDisposable
 {
-	readonly #client: RemoteLockClient;
-	#server: LockServer | undefined;
-	#role: SocketRole | undefined;
+  readonly #client: RemoteLockClient;
+  #server: LockServer | undefined;
+  #role: SocketRole | undefined;
 
-	constructor(
-		directory: string,
-		{ pollInterval = 10, graceWindow = 500 }: SocketStoreOptions = {},
-	) {
-		super();
-		const socketPath = socketPathFor(directory);
-		this.#client = new RemoteLockClient(
-			new ElectingConnector({
-				socketPath,
-				election: new LeaderElection(directory, { pollInterval }),
-				pollInterval,
-				serve: async (leadership) => {
-					this.#server = await LockServer.start(socketPath, leadership, {
-						// The first term of a directory has no predecessor to wait for.
-						graceWindow: leadership.epoch > 1n ? graceWindow : 0,
-					});
-					this.#setRole('leader');
-				},
-				connected: () => {
-					if (!this.#server) this.#setRole('follower');
-				},
-			}),
-		);
-	}
+  constructor(
+    directory: string,
+    { pollInterval = 10, graceWindow = 500 }: SocketStoreOptions = {},
+  ) {
+    super();
+    const socketPath = socketPathFor(directory);
+    this.#client = new RemoteLockClient(
+      new ElectingConnector({
+        socketPath,
+        election: new LeaderElection(directory, { pollInterval }),
+        pollInterval,
+        serve: async (leadership) => {
+          this.#server = await LockServer.start(socketPath, leadership, {
+            // The first term of a directory has no predecessor to wait for.
+            graceWindow: leadership.epoch > 1n ? graceWindow : 0,
+          });
+          this.#setRole('leader');
+        },
+        connected: () => {
+          if (!this.#server) this.#setRole('follower');
+        },
+      }),
+    );
+  }
 
-	/** Whether this process serves the locks, or `undefined` before it first needed one. */
-	get role(): SocketRole | undefined {
-		return this.#role;
-	}
+  /** Whether this process serves the locks, or `undefined` before it first needed one. */
+  get role(): SocketRole | undefined {
+    return this.#role;
+  }
 
-	acquire(key: string, options?: AcquireOptions): Promise<Lease> {
-		return this.#client.acquire(key, options);
-	}
+  acquire(key: string, options?: AcquireOptions): Promise<Lease> {
+    return this.#client.acquire(key, options);
+  }
 
-	tryAcquire(key: string): Promise<Lease | undefined> {
-		return this.#client.tryAcquire(key);
-	}
+  tryAcquire(key: string): Promise<Lease | undefined> {
+    return this.#client.tryAcquire(key);
+  }
 
-	async [Symbol.asyncDispose]() {
-		this.#client.close();
-		await this.#server?.close();
-	}
+  async [Symbol.asyncDispose]() {
+    this.#client.close();
+    await this.#server?.close();
+  }
 
-	#setRole(role: SocketRole) {
-		if (this.#role === role) return;
-		this.#role = role;
-		this.emit('role', role);
-	}
+  #setRole(role: SocketRole) {
+    if (this.#role === role) return;
+    this.#role = role;
+    this.emit('role', role);
+  }
 }
 
 /**
@@ -97,18 +98,18 @@ export class SocketStore
  * Windows paths ignore case, so the path is lowercased first.
  */
 function socketPathFor(directory: string): string {
-	if (process.platform === 'win32') {
-		const id = createHash('sha256')
-			.update(resolve(directory).toLowerCase())
-			.digest('hex')
-			.slice(0, 32);
-		return `\\\\.\\pipe\\mutex-${id}`;
-	}
-	const socketPath = join(directory, 'lock.sock');
-	if (Buffer.byteLength(socketPath) > SOCKET_PATH_LIMIT) {
-		throw new RangeError(
-			`The socket path ${socketPath} exceeds ${SOCKET_PATH_LIMIT} bytes; choose a shorter directory.`,
-		);
-	}
-	return socketPath;
+  if (process.platform === 'win32') {
+    const id = createHash('sha256')
+      .update(resolve(directory).toLowerCase())
+      .digest('hex')
+      .slice(0, 32);
+    return `\\\\.\\pipe\\mutex-${id}`;
+  }
+  const socketPath = join(directory, 'lock.sock');
+  if (Buffer.byteLength(socketPath) > SOCKET_PATH_LIMIT) {
+    throw new RangeError(
+      `The socket path ${socketPath} exceeds ${SOCKET_PATH_LIMIT} bytes; choose a shorter directory.`,
+    );
+  }
+  return socketPath;
 }

@@ -12,12 +12,12 @@ Start with the [project README](../README.md). The glossary is in [CONTEXT.md](.
 
 ## Lock stores
 
-| Reach | Lock store |
-|---|---|
-| Instance | [MemoryStore](./stores/memory-store.md) |
-| Process | [ThreadStore and ThreadLockCoordinator](./stores/thread-store.md) |
-| Process tree | [IpcStore and IpcLockCoordinator](./stores/ipc-store.md) |
-| Host | [TicketQueueFileStore](./stores/ticket-queue-file-store.md), [LockFileStore](./stores/lock-file-store.md), [SqliteStore](./stores/sqlite-store.md), [SocketStore](./stores/socket-store.md) |
+| Reach        | Lock store                                                                                                                                                                                  |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Instance     | [MemoryStore](./stores/memory-store.md)                                                                                                                                                     |
+| Process      | [ThreadStore and ThreadLockCoordinator](./stores/thread-store.md)                                                                                                                           |
+| Process tree | [IpcStore and IpcLockCoordinator](./stores/ipc-store.md)                                                                                                                                    |
+| Host         | [TicketQueueFileStore](./stores/ticket-queue-file-store.md), [LockFileStore](./stores/lock-file-store.md), [SqliteStore](./stores/sqlite-store.md), [SocketStore](./stores/socket-store.md) |
 
 ## Recipes
 

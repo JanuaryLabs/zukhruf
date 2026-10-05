@@ -21,38 +21,47 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
+
 import { LeaderElection } from '@zukhruf/mutex/leader-election';
 
 const [role, shared] = process.argv.slice(2);
 
 if (role === 'candidate') {
-	const election = new LeaderElection(shared!);
-	for (;;) {
-		const leadership = await election.campaign({ timeout: 200 });
-		if (!leadership) continue; // Another copy leads. Try again.
-		process.send!({ pid: process.pid, epoch: Number(leadership.epoch) });
-		for (;;) {
-			await delay(100); // Run one step of the job here.
-		}
-	}
+  const election = new LeaderElection(shared!);
+  for (;;) {
+    const leadership = await election.campaign({ timeout: 200 });
+    if (!leadership) continue; // Another copy leads. Try again.
+    process.send!({ pid: process.pid, epoch: Number(leadership.epoch) });
+    for (;;) {
+      await delay(100); // Run one step of the job here.
+    }
+  }
 } else {
-	const directory = await mkdtemp(join(tmpdir(), 'singleton-'));
-	const candidates = [1, 2, 3].map(() => fork(import.meta.filename, ['candidate', directory]));
-	const leaders: Array<{ pid: number; epoch: number }> = [];
-	for (const candidate of candidates) {
-		candidate.on('message', (leader) => leaders.push(leader as (typeof leaders)[number]));
-	}
+  const directory = await mkdtemp(join(tmpdir(), 'singleton-'));
+  const candidates = [1, 2, 3].map(() =>
+    fork(import.meta.filename, ['candidate', directory]),
+  );
+  const leaders: Array<{ pid: number; epoch: number }> = [];
+  for (const candidate of candidates) {
+    candidate.on('message', (leader) =>
+      leaders.push(leader as (typeof leaders)[number]),
+    );
+  }
 
-	while (leaders.length < 1) await delay(10);
-	const first = leaders[0]!;
-	candidates.find((candidate) => candidate.pid === first.pid)!.kill('SIGKILL');
+  while (leaders.length < 1) await delay(10);
+  const first = leaders[0]!;
+  candidates.find((candidate) => candidate.pid === first.pid)!.kill('SIGKILL');
 
-	while (leaders.length < 2) await delay(10);
-	const second = leaders[1]!;
-	console.log({ firstEpoch: first.epoch, secondEpoch: second.epoch, samePid: first.pid === second.pid });
+  while (leaders.length < 2) await delay(10);
+  const second = leaders[1]!;
+  console.log({
+    firstEpoch: first.epoch,
+    secondEpoch: second.epoch,
+    samePid: first.pid === second.pid,
+  });
 
-	for (const candidate of candidates) candidate.kill();
-	await rm(directory, { recursive: true, force: true });
+  for (const candidate of candidates) candidate.kill();
+  await rm(directory, { recursive: true, force: true });
 }
 ```
 

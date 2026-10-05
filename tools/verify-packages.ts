@@ -6,7 +6,13 @@
  */
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { globSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  globSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 
@@ -41,7 +47,10 @@ try {
 
   const tarballs = packages.map(({ directory, manifest }) => {
     const [packed] = JSON.parse(
-      npm(['pack', '--json', '--ignore-scripts', '--pack-destination', consumer], directory),
+      npm(
+        ['pack', '--json', '--ignore-scripts', '--pack-destination', consumer],
+        directory,
+      ),
     );
     const files = new Set<string>(
       packed.files.map(({ path }: { path: string }) => path),
@@ -66,7 +75,10 @@ try {
     join(consumer, 'package.json'),
     JSON.stringify({ name: 'consumer', private: true, type: 'module' }),
   );
-  npm(['install', '--no-audit', '--no-fund', '--ignore-scripts', ...tarballs], consumer);
+  npm(
+    ['install', '--no-audit', '--no-fund', '--ignore-scripts', ...tarballs],
+    consumer,
+  );
 
   for (const { manifest } of packages) {
     for (const subpath of Object.keys(manifest.exports)) {
@@ -74,7 +86,11 @@ try {
       const specifier = manifest.name + subpath.slice(1);
       execFileSync(
         process.execPath,
-        ['--input-type=module', '--eval', `await import(${JSON.stringify(specifier)});`],
+        [
+          '--input-type=module',
+          '--eval',
+          `await import(${JSON.stringify(specifier)});`,
+        ],
         { cwd: consumer },
       );
       console.log(`${specifier} imports from node_modules`);

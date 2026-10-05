@@ -5,5 +5,5 @@ import type { FencingToken } from './fencing-token.ts';
  * minting for one key is never concurrent and each token is newer than the last.
  */
 export interface TokenSource {
-	next(key: string): Promise<FencingToken>;
+  next(key: string): Promise<FencingToken>;
 }

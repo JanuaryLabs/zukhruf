@@ -6,10 +6,10 @@ import type { TokenSource } from './token-source.ts';
  * resources that do not outlive the process with it.
  */
 export class CounterTokenSource implements TokenSource {
-	#last = 0n;
+  #last = 0n;
 
-	async next(_key: string): Promise<FencingToken> {
-		this.#last++;
-		return new FencingToken(this.#last);
-	}
+  async next(_key: string): Promise<FencingToken> {
+    this.#last++;
+    return new FencingToken(this.#last);
+  }
 }

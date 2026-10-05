@@ -3,6 +3,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, test } from 'node:test';
+
 import { CounterTokenSource } from './counter-token-source.ts';
 import { EpochTokenSource } from './epoch-token-source.ts';
 import type { FencingToken } from './fencing-token.ts';
@@ -11,79 +12,86 @@ import { MonotonicClockTokenSource } from './monotonic-clock-token-source.ts';
 import type { TokenSource } from './token-source.ts';
 
 async function scratchDirectory() {
-	const path = await mkdtemp(join(tmpdir(), 'fencing-test-'));
-	return {
-		path,
-		[Symbol.asyncDispose]: () => rm(path, { recursive: true, force: true }),
-	};
+  const path = await mkdtemp(join(tmpdir(), 'fencing-test-'));
+  return {
+    path,
+    [Symbol.asyncDispose]: () => rm(path, { recursive: true, force: true }),
+  };
 }
 
-const sources: Array<{ name: string; create(directory: string): TokenSource }> = [
-	{ name: 'CounterTokenSource', create: () => new CounterTokenSource() },
-	{ name: 'FileTokenSource', create: (directory) => new FileTokenSource(directory) },
-	{
-		name: 'MonotonicClockTokenSource',
-		create: () => new MonotonicClockTokenSource(),
-	},
-	{ name: 'EpochTokenSource', create: () => new EpochTokenSource(7n) },
-];
+const sources: Array<{ name: string; create(directory: string): TokenSource }> =
+  [
+    { name: 'CounterTokenSource', create: () => new CounterTokenSource() },
+    {
+      name: 'FileTokenSource',
+      create: (directory) => new FileTokenSource(directory),
+    },
+    {
+      name: 'MonotonicClockTokenSource',
+      create: () => new MonotonicClockTokenSource(),
+    },
+    { name: 'EpochTokenSource', create: () => new EpochTokenSource(7n) },
+  ];
 
 describe('Token sources', () => {
-	for (const source of sources) {
-		test(`${source.name} mints strictly newer tokens for a key`, async () => {
-			// Arrange
-			await using directory = await scratchDirectory();
-			const tokens = source.create(directory.path);
-			const minted: FencingToken[] = [];
+  for (const source of sources) {
+    test(`${source.name} mints strictly newer tokens for a key`, async () => {
+      // Arrange
+      await using directory = await scratchDirectory();
+      const tokens = source.create(directory.path);
+      const minted: FencingToken[] = [];
 
-			// Act
-			for (let i = 0; i < 1000; i++) minted.push(await tokens.next('product:42'));
+      // Act
+      for (let i = 0; i < 1000; i++)
+        minted.push(await tokens.next('product:42'));
 
-			// Assert
-			assert.ok(
-				minted.every(
-					(token, index) => index === 0 || token.isNewerThan(minted[index - 1]!),
-				),
-				'Every token must be newer than the one minted before it',
-			);
-		});
-	}
+      // Assert
+      assert.ok(
+        minted.every(
+          (token, index) =>
+            index === 0 || token.isNewerThan(minted[index - 1]!),
+        ),
+        'Every token must be newer than the one minted before it',
+      );
+    });
+  }
 
-	test('a FileTokenSource over the same directory continues above the previous maximum', async () => {
-		// Arrange: a previous process minted tokens, then exited.
-		await using directory = await scratchDirectory();
-		const previous = new FileTokenSource(directory.path);
-		await previous.next('product:42');
-		const last = await previous.next('product:42');
+  test('a FileTokenSource over the same directory continues above the previous maximum', async () => {
+    // Arrange: a previous process minted tokens, then exited.
+    await using directory = await scratchDirectory();
+    const previous = new FileTokenSource(directory.path);
+    await previous.next('product:42');
+    const last = await previous.next('product:42');
 
-		// Act: a new process starts over the same directory.
-		const next = await new FileTokenSource(directory.path).next('product:42');
+    // Act: a new process starts over the same directory.
+    const next = await new FileTokenSource(directory.path).next('product:42');
 
-		// Assert
-		assert.ok(
-			next.isNewerThan(last),
-			`The restarted source minted ${next}, which must be newer than ${last}`,
-		);
-	});
+    // Assert
+    assert.ok(
+      next.isNewerThan(last),
+      `The restarted source minted ${next}, which must be newer than ${last}`,
+    );
+  });
 
-	test('every token from a newer epoch beats every token from an older epoch', async () => {
-		// Arrange: the old leader has minted many tokens.
-		const oldLeader = new EpochTokenSource(3n);
-		let oldest = await oldLeader.next('product:42');
-		for (let i = 0; i < 10_000; i++) oldest = await oldLeader.next('product:42');
+  test('every token from a newer epoch beats every token from an older epoch', async () => {
+    // Arrange: the old leader has minted many tokens.
+    const oldLeader = new EpochTokenSource(3n);
+    let oldest = await oldLeader.next('product:42');
+    for (let i = 0; i < 10_000; i++)
+      oldest = await oldLeader.next('product:42');
 
-		// Act: the next leader mints its first token.
-		const first = await new EpochTokenSource(4n).next('product:42');
+    // Act: the next leader mints its first token.
+    const first = await new EpochTokenSource(4n).next('product:42');
 
-		// Assert
-		assert.ok(
-			first.isNewerThan(oldest),
-			`The new epoch's first token (${first}) must beat the old epoch's latest (${oldest})`,
-		);
-	});
+    // Assert
+    assert.ok(
+      first.isNewerThan(oldest),
+      `The new epoch's first token (${first}) must beat the old epoch's latest (${oldest})`,
+    );
+  });
 
-	test('an epoch beyond the signed 64-bit token range is rejected', () => {
-		assert.throws(() => new EpochTokenSource(1n << 31n), RangeError);
-		assert.throws(() => new EpochTokenSource(-1n), RangeError);
-	});
+  test('an epoch beyond the signed 64-bit token range is rejected', () => {
+    assert.throws(() => new EpochTokenSource(1n << 31n), RangeError);
+    assert.throws(() => new EpochTokenSource(-1n), RangeError);
+  });
 });

@@ -10,15 +10,15 @@ A lock store must also work when something stops. This page tells you what each 
 
 ## What each lock store does
 
-| Lock store | A holder process stops | A holder thread stops | A holder freezes |
-|---|---|---|---|
-| `MemoryStore` | The lock stops with the process. | — (one instance cannot be shared by threads) | Waiters wait. |
-| `ThreadStore` | The lock stops with the process. | Released when the worker emits `exit`. | Waiters wait. |
-| `IpcStore` | Released in approximately 2 ms. The parent sees the connection close. | — | Waiters wait. |
-| `TicketQueueFileStore` | Released. A waiter sees that the process does not exist and removes it. | **The key stays held** until the process stops. | Waiters wait. |
-| `LockFileStore` | Released. A waiter sees that the process does not exist and removes it. | **The key stays held** until the process stops. | Waiters wait. |
-| `SqliteStore` | Released. The kernel removes the file lock. | Released. | Waiters wait. |
-| `SocketStore` | Released in approximately 2 ms. The leader sees the connection close. | Released. | Waiters wait. After a failover, the holder gets a lost lease. |
+| Lock store             | A holder process stops                                                  | A holder thread stops                           | A holder freezes                                              |
+| ---------------------- | ----------------------------------------------------------------------- | ----------------------------------------------- | ------------------------------------------------------------- |
+| `MemoryStore`          | The lock stops with the process.                                        | — (one instance cannot be shared by threads)    | Waiters wait.                                                 |
+| `ThreadStore`          | The lock stops with the process.                                        | Released when the worker emits `exit`.          | Waiters wait.                                                 |
+| `IpcStore`             | Released in approximately 2 ms. The parent sees the connection close.   | —                                               | Waiters wait.                                                 |
+| `TicketQueueFileStore` | Released. A waiter sees that the process does not exist and removes it. | **The key stays held** until the process stops. | Waiters wait.                                                 |
+| `LockFileStore`        | Released. A waiter sees that the process does not exist and removes it. | **The key stays held** until the process stops. | Waiters wait.                                                 |
+| `SqliteStore`          | Released. The kernel removes the file lock.                             | Released.                                       | Waiters wait.                                                 |
+| `SocketStore`          | Released in approximately 2 ms. The leader sees the connection close.   | Released.                                       | Waiters wait. After a failover, the holder gets a lost lease. |
 
 The file lock stores identify a holder by its process. A worker thread that stops does not stop its process, so nobody removes it. Release the key before you terminate a worker thread.
 
@@ -26,10 +26,10 @@ The file lock stores identify a holder by its process. A worker thread that stop
 
 ## When a coordinator stops
 
-| Lock store | Waiters | Holders |
-|---|---|---|
-| `IpcStore` (the parent stops) | Get `CoordinatorUnavailableError`. On Windows, Node.js stops the children too, unless they were started with `detached: true`. | Keep the key. No coordinator is left to grant it to another holder ([ADR 0004](../adr/0004-parent-stops-held-keys-stay.md)). |
-| `SocketStore` (the leader stops) | Send their request to the new leader. | Reassert during the grace window. A refused reassert gives a lost lease. |
+| Lock store                       | Waiters                                                                                                                        | Holders                                                                                                                      |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------- |
+| `IpcStore` (the parent stops)    | Get `CoordinatorUnavailableError`. On Windows, Node.js stops the children too, unless they were started with `detached: true`. | Keep the key. No coordinator is left to grant it to another holder ([ADR 0004](../adr/0004-parent-stops-held-keys-stay.md)). |
+| `SocketStore` (the leader stops) | Send their request to the new leader.                                                                                          | Reassert during the grace window. A refused reassert gives a lost lease.                                                     |
 
 ## Errors
 

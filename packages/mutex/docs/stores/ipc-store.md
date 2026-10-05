@@ -2,8 +2,8 @@
 
 A lock store for a parent process and the child processes that it starts. The parent is the coordinator. The children ask it for keys through the Node.js IPC channel.
 
-| Reach | Order | Holder process stops | Default token source |
-|---|---|---|---|
+| Reach        | Order                    | Holder process stops           | Default token source |
+| ------------ | ------------------------ | ------------------------------ | -------------------- |
 | Process tree | First come, first served | Released in approximately 2 ms | `CounterTokenSource` |
 
 ## What
@@ -18,6 +18,7 @@ The parent must **adopt** each child after it starts the child:
 ```ts
 // parent.ts
 import { fork } from 'node:child_process';
+
 import { IpcLockCoordinator, Mutex } from '@zukhruf/mutex';
 
 const coordinator = new IpcLockCoordinator();
@@ -62,10 +63,10 @@ On macOS and Linux, the IPC channel between a parent and a child is a pair of co
 
 ## Failure modes
 
-| Event | Result |
-|---|---|
-| A child stops while it holds a key | The coordinator releases the key in approximately 2 ms. |
-| The parent stops | Children that wait get `CoordinatorUnavailableError`. Children that hold a key keep it, because no coordinator is left to grant it ([ADR 0004](../adr/0004-parent-stops-held-keys-stay.md)). On Windows, Node.js stops the children too, unless they were started with `detached: true`. |
+| Event                              | Result                                                                                                                                                                                                                                                                                   |
+| ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A child stops while it holds a key | The coordinator releases the key in approximately 2 ms.                                                                                                                                                                                                                                  |
+| The parent stops                   | Children that wait get `CoordinatorUnavailableError`. Children that hold a key keep it, because no coordinator is left to grant it ([ADR 0004](../adr/0004-parent-stops-held-keys-stay.md)). On Windows, Node.js stops the children too, unless they were started with `detached: true`. |
 
 See [failure modes](../concepts/failure-modes.md).
 
@@ -73,8 +74,8 @@ See [failure modes](../concepts/failure-modes.md).
 
 `IpcLockCoordinator`:
 
-| Option | Default | Description |
-|---|---|---|
+| Option   | Default                    | Description                                                       |
+| -------- | -------------------------- | ----------------------------------------------------------------- |
 | `tokens` | `new CounterTokenSource()` | The token source. The default starts at 1 when the parent starts. |
 
 `IpcStore` has no options. It throws an error if the process has no IPC channel.

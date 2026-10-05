@@ -9,9 +9,10 @@ The words in these documents have one meaning each. See the glossary in [CONTEXT
 Two requests ask for the last item at the same time. Each request reads the stock, waits for the database, and then writes the stock. Both requests read `1`, so both sell the item.
 
 ```ts
-if (stock > 0) {         // both requests see 1
-	await saveReservation(); // the other request runs here
-	stock -= 1;              // both requests write
+if (stock > 0) {
+  // both requests see 1
+  await saveReservation(); // the other request runs here
+  stock -= 1; // both requests write
 }
 ```
 
@@ -23,10 +24,10 @@ import { MemoryStore, Mutex } from '@zukhruf/mutex';
 const mutex = new Mutex(new MemoryStore());
 
 const reserved = await mutex.acquire('product:42', async () => {
-	if (stock === 0) return false;
-	await saveReservation();
-	stock -= 1;
-	return true;
+  if (stock === 0) return false;
+  await saveReservation();
+  stock -= 1;
+  return true;
 });
 ```
 
@@ -36,15 +37,15 @@ The full program is in the recipe [Stop two requests from selling the last item]
 
 First find who writes to the resource. Then select the lock store with that [reach](./docs/concepts/reach.md).
 
-| Lock store | Reach | Order | A holder stops | Needs |
-|---|---|---|---|---|
-| [MemoryStore](./docs/stores/memory-store.md) | One object | First come, first served | The locks stop with the process | Nothing |
-| [ThreadStore](./docs/stores/thread-store.md) | One process (threads) | First come, first served | Released when the worker exits | `adopt(worker)` |
-| [IpcStore](./docs/stores/ipc-store.md) | Parent and its children | First come, first served | Released in approximately 2 ms | `fork()` and `adopt(child)` |
-| [TicketQueueFileStore](./docs/stores/ticket-queue-file-store.md) | One host | First come, first served | Released after a process check | A shared directory |
-| [LockFileStore](./docs/stores/lock-file-store.md) | One host | No order | Released after a process check | A shared directory |
-| [SqliteStore](./docs/stores/sqlite-store.md) | One host | First come, first served in one process | Released by the kernel | A shared directory |
-| [SocketStore](./docs/stores/socket-store.md) | One host | First come, first served | Released in approximately 2 ms | A shared directory |
+| Lock store                                                       | Reach                   | Order                                   | A holder stops                  | Needs                       |
+| ---------------------------------------------------------------- | ----------------------- | --------------------------------------- | ------------------------------- | --------------------------- |
+| [MemoryStore](./docs/stores/memory-store.md)                     | One object              | First come, first served                | The locks stop with the process | Nothing                     |
+| [ThreadStore](./docs/stores/thread-store.md)                     | One process (threads)   | First come, first served                | Released when the worker exits  | `adopt(worker)`             |
+| [IpcStore](./docs/stores/ipc-store.md)                           | Parent and its children | First come, first served                | Released in approximately 2 ms  | `fork()` and `adopt(child)` |
+| [TicketQueueFileStore](./docs/stores/ticket-queue-file-store.md) | One host                | First come, first served                | Released after a process check  | A shared directory          |
+| [LockFileStore](./docs/stores/lock-file-store.md)                | One host                | No order                                | Released after a process check  | A shared directory          |
+| [SqliteStore](./docs/stores/sqlite-store.md)                     | One host                | First come, first served in one process | Released by the kernel          | A shared directory          |
+| [SocketStore](./docs/stores/socket-store.md)                     | One host                | First come, first served                | Released in approximately 2 ms  | A shared directory          |
 
 If you are not sure:
 
@@ -60,11 +61,13 @@ import { Modes } from '@zukhruf/mutex';
 
 const report = mutex.key('report:daily', { mode: Modes.skipIfBusy() });
 
-const tick = await report.run(buildReport);                         // a cron tick skips if a report runs
+const tick = await report.run(buildReport); // a cron tick skips if a report runs
 if (!tick.acquired) return;
 
 const fresh = await report.run(buildReport, { mode: Modes.wait() }); // an admin waits, then runs
-await mutex.acquire('product:42', reserve, { mode: Modes.skipIfBusy({ waitAtMost: 500 }) });
+await mutex.acquire('product:42', reserve, {
+  mode: Modes.skipIfBusy({ waitAtMost: 500 }),
+});
 ```
 
 A mode that can skip returns `{ acquired: true, value } | { acquired: false }`, and TypeScript makes you check `acquired`. See [Acquire modes](./docs/concepts/acquire-modes.md).
@@ -75,11 +78,11 @@ A holder can lose its key and not know it, for example when its process freezes.
 
 ```ts
 await mutex.acquire('product:42', async (lease) => {
-	await database.run(
-		`UPDATE stock SET quantity = quantity - 1, fence = ?
+  await database.run(
+    `UPDATE stock SET quantity = quantity - 1, fence = ?
 		 WHERE product = ? AND fence <= ? AND quantity > 0`,
-		[lease.token.value, 'product:42', lease.token.value],
-	);
+    [lease.token.value, 'product:42', lease.token.value],
+  );
 });
 ```
 

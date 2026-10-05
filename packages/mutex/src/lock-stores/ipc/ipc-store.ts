@@ -6,13 +6,13 @@ import { ProcessChannelConnection } from './process-channel-connection.ts';
 
 /** The channel to the parent cannot be re-established, so it is handed out once. */
 class ProcessChannelConnector implements Connector {
-	#handedOut = false;
+  #handedOut = false;
 
-	async connect(): Promise<ClientConnection | undefined> {
-		if (this.#handedOut || !process.connected) return undefined;
-		this.#handedOut = true;
-		return new ProcessChannelConnection();
-	}
+  async connect(): Promise<ClientConnection | undefined> {
+    if (this.#handedOut || !process.connected) return undefined;
+    this.#handedOut = true;
+    return new ProcessChannelConnection();
+  }
 }
 
 /**
@@ -22,22 +22,22 @@ class ProcessChannelConnector implements Connector {
  * coordinator is left to grant them to anyone else.
  */
 export class IpcStore implements LockStore {
-	readonly #client: RemoteLockClient;
+  readonly #client: RemoteLockClient;
 
-	constructor() {
-		if (!process.send) {
-			throw new Error(
-				'IpcStore needs an IPC channel to its parent; start this process with fork() or an "ipc" stdio entry.',
-			);
-		}
-		this.#client = new RemoteLockClient(new ProcessChannelConnector());
-	}
+  constructor() {
+    if (!process.send) {
+      throw new Error(
+        'IpcStore needs an IPC channel to its parent; start this process with fork() or an "ipc" stdio entry.',
+      );
+    }
+    this.#client = new RemoteLockClient(new ProcessChannelConnector());
+  }
 
-	acquire(key: string, options?: AcquireOptions): Promise<Lease> {
-		return this.#client.acquire(key, options);
-	}
+  acquire(key: string, options?: AcquireOptions): Promise<Lease> {
+    return this.#client.acquire(key, options);
+  }
 
-	tryAcquire(key: string): Promise<Lease | undefined> {
-		return this.#client.tryAcquire(key);
-	}
+  tryAcquire(key: string): Promise<Lease | undefined> {
+    return this.#client.tryAcquire(key);
+  }
 }

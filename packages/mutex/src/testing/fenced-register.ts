@@ -1,4 +1,5 @@
 import { DatabaseSync } from 'node:sqlite';
+
 import type { FencingToken } from '../fencing/fencing-token.ts';
 
 /**
@@ -7,11 +8,14 @@ import type { FencingToken } from '../fencing/fencing-token.ts';
  * stale holder being fenced off.
  */
 export class FencedRegister {
-	readonly #database: DatabaseSync;
+  readonly #database: DatabaseSync;
 
-	constructor(path: string) {
-		this.#database = new DatabaseSync(path, { readBigInts: true, timeout: 1000 });
-		this.#database.exec(`
+  constructor(path: string) {
+    this.#database = new DatabaseSync(path, {
+      readBigInts: true,
+      timeout: 1000,
+    });
+    this.#database.exec(`
 			CREATE TABLE IF NOT EXISTS register (
 				id     INTEGER PRIMARY KEY CHECK (id = 1),
 				writes INTEGER NOT NULL,
@@ -19,21 +23,21 @@ export class FencedRegister {
 			);
 			INSERT INTO register VALUES (1, 0, 0) ON CONFLICT DO NOTHING;
 		`);
-	}
+  }
 
-	write(token: FencingToken): 'written' | 'stale' {
-		const { changes } = this.#database
-			.prepare(
-				'UPDATE register SET writes = writes + 1, fence = ? WHERE id = 1 AND fence <= ?',
-			)
-			.run(token.value, token.value);
-		return Number(changes) > 0 ? 'written' : 'stale';
-	}
+  write(token: FencingToken): 'written' | 'stale' {
+    const { changes } = this.#database
+      .prepare(
+        'UPDATE register SET writes = writes + 1, fence = ? WHERE id = 1 AND fence <= ?',
+      )
+      .run(token.value, token.value);
+    return Number(changes) > 0 ? 'written' : 'stale';
+  }
 
-	writes(): number {
-		const row = this.#database.prepare('SELECT writes FROM register').get() as {
-			writes: bigint;
-		};
-		return Number(row.writes);
-	}
+  writes(): number {
+    const row = this.#database.prepare('SELECT writes FROM register').get() as {
+      writes: bigint;
+    };
+    return Number(row.writes);
+  }
 }

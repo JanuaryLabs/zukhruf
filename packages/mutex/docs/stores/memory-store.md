@@ -2,8 +2,8 @@
 
 The simplest lock store. It keeps the locks in the memory of one object.
 
-| Reach | Order | Holder process stops | Default token source |
-|---|---|---|---|
+| Reach    | Order                    | Holder process stops   | Default token source |
+| -------- | ------------------------ | ---------------------- | -------------------- |
 | Instance | First come, first served | The locks stop with it | `CounterTokenSource` |
 
 ## What
@@ -14,7 +14,9 @@ The simplest lock store. It keeps the locks in the memory of one object.
 import { MemoryStore, Mutex } from '@zukhruf/mutex';
 
 const mutex = new Mutex(new MemoryStore());
-const reserved = await mutex.acquire('product:42', async () => reserveOneItem());
+const reserved = await mutex.acquire('product:42', async () =>
+  reserveOneItem(),
+);
 ```
 
 ## Why
@@ -48,8 +50,8 @@ The locks are in memory, so they stop with the process. No other process can wai
 
 ## Options
 
-| Option | Default | Description |
-|---|---|---|
+| Option   | Default                    | Description                                                                                                      |
+| -------- | -------------------------- | ---------------------------------------------------------------------------------------------------------------- |
 | `tokens` | `new CounterTokenSource()` | The token source. The default starts at 1 in each process. For a durable fenced resource, use `FileTokenSource`. |
 
 ## Evidence

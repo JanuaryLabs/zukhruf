@@ -2,9 +2,9 @@
 
 A host lock store that keeps a queue of waiters in a file. It is the only host lock store that grants keys first come, first served.
 
-| Reach | Order | Holder process stops | Default token source |
-|---|---|---|---|
-| Host | First come, first served | Released after a waiter checks the process | `FileTokenSource` (durable) |
+| Reach | Order                    | Holder process stops                       | Default token source        |
+| ----- | ------------------------ | ------------------------------------------ | --------------------------- |
+| Host  | First come, first served | Released after a waiter checks the process | `FileTokenSource` (durable) |
 
 ## What
 
@@ -63,11 +63,11 @@ See [failure modes](../concepts/failure-modes.md).
 
 ## Options
 
-| Option | Default | Description |
-|---|---|---|
-| `directory` (first argument) | — | The shared directory. All processes must use the same path. |
-| `pollInterval` | `10` | Milliseconds between two reads of the queue. |
-| `tokens` | `new FileTokenSource(directory)` | The token source. The default keeps one counter file for each key, so tokens continue after a restart. |
+| Option                       | Default                          | Description                                                                                            |
+| ---------------------------- | -------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| `directory` (first argument) | —                                | The shared directory. All processes must use the same path.                                            |
+| `pollInterval`               | `10`                             | Milliseconds between two reads of the queue.                                                           |
+| `tokens`                     | `new FileTokenSource(directory)` | The token source. The default keeps one counter file for each key, so tokens continue after a restart. |
 
 ## Evidence
 

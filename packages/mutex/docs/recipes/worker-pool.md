@@ -22,38 +22,44 @@ import { once } from 'node:events';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { IpcLockCoordinator, IpcStore, Mutex, type LockStore } from '@zukhruf/mutex';
+
+import {
+  IpcLockCoordinator,
+  IpcStore,
+  type LockStore,
+  Mutex,
+} from '@zukhruf/mutex';
 
 const [role, counter] = process.argv.slice(2);
 
 async function addTwenty(store: LockStore, file: string) {
-	const mutex = new Mutex(store);
-	for (let i = 0; i < 20; i++) {
-		await mutex.acquire('counter', async () => {
-			const value = Number(await readFile(file, 'utf8'));
-			await writeFile(file, String(value + 1));
-		});
-	}
+  const mutex = new Mutex(store);
+  for (let i = 0; i < 20; i++) {
+    await mutex.acquire('counter', async () => {
+      const value = Number(await readFile(file, 'utf8'));
+      await writeFile(file, String(value + 1));
+    });
+  }
 }
 
 if (role === 'worker') {
-	await addTwenty(new IpcStore(), counter!);
+  await addTwenty(new IpcStore(), counter!);
 } else {
-	const directory = await mkdtemp(join(tmpdir(), 'pool-'));
-	const file = join(directory, 'counter');
-	await writeFile(file, '0');
+  const directory = await mkdtemp(join(tmpdir(), 'pool-'));
+  const file = join(directory, 'counter');
+  await writeFile(file, '0');
 
-	const coordinator = new IpcLockCoordinator();
-	const exits = [1, 2, 3].map(() => {
-		const worker = fork(import.meta.filename, ['worker', file]);
-		coordinator.adopt(worker);
-		return once(worker, 'exit');
-	});
+  const coordinator = new IpcLockCoordinator();
+  const exits = [1, 2, 3].map(() => {
+    const worker = fork(import.meta.filename, ['worker', file]);
+    coordinator.adopt(worker);
+    return once(worker, 'exit');
+  });
 
-	await addTwenty(coordinator, file);
-	await Promise.all(exits);
-	console.log('counter:', await readFile(file, 'utf8'));
-	await rm(directory, { recursive: true, force: true });
+  await addTwenty(coordinator, file);
+  await Promise.all(exits);
+  console.log('counter:', await readFile(file, 'utf8'));
+  await rm(directory, { recursive: true, force: true });
 }
 ```
 

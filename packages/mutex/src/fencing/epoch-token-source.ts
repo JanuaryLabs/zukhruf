@@ -11,21 +11,21 @@ const SEQUENCE_LIMIT = 1n << SEQUENCE_BITS;
  * predecessor's grants. The result fits a signed 64-bit integer.
  */
 export class EpochTokenSource implements TokenSource {
-	readonly #epoch: bigint;
-	#sequence = 0n;
+  readonly #epoch: bigint;
+  #sequence = 0n;
 
-	constructor(epoch: bigint) {
-		if (epoch < 0n || epoch >= EPOCH_LIMIT) {
-			throw new RangeError(`Epoch ${epoch} is outside [0, ${EPOCH_LIMIT}).`);
-		}
-		this.#epoch = epoch;
-	}
+  constructor(epoch: bigint) {
+    if (epoch < 0n || epoch >= EPOCH_LIMIT) {
+      throw new RangeError(`Epoch ${epoch} is outside [0, ${EPOCH_LIMIT}).`);
+    }
+    this.#epoch = epoch;
+  }
 
-	async next(_key: string): Promise<FencingToken> {
-		this.#sequence++;
-		if (this.#sequence >= SEQUENCE_LIMIT) {
-			throw new RangeError(`Epoch ${this.#epoch} has no tokens left.`);
-		}
-		return new FencingToken((this.#epoch << SEQUENCE_BITS) | this.#sequence);
-	}
+  async next(_key: string): Promise<FencingToken> {
+    this.#sequence++;
+    if (this.#sequence >= SEQUENCE_LIMIT) {
+      throw new RangeError(`Epoch ${this.#epoch} has no tokens left.`);
+    }
+    return new FencingToken((this.#epoch << SEQUENCE_BITS) | this.#sequence);
+  }
 }
