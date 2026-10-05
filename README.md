@@ -37,4 +37,10 @@ npx nx release --skip-publish             # versions, commits, tags release/<ver
 git push origin main --follow-tags
 ```
 
-The `release/*` tag starts `.github/workflows/release.yml`, which publishes to npm. The first release needs `--first-release`.
+The `release/*` tag starts `.github/workflows/release.yml`, which publishes to npm.
+
+No `release/*` tag exists before the first release, so Nx bumps the version in `package.json`. To publish that version as it is, give it explicitly:
+
+```sh
+npx nx release 0.1.0 --first-release --skip-publish
+```
