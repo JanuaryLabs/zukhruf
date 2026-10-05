@@ -166,7 +166,10 @@ describe('Socket lock server failover', () => {
 
 	test(
 		'a holder frozen past the grace window is fenced off and learns its lock was lost',
-		{ timeout: 15000 },
+		{
+			timeout: 15000,
+			skip: process.platform === 'win32' ? 'Windows cannot freeze a process with SIGSTOP' : false,
+		},
 		async (t) => {
 			// Arrange: a fenced register, a leader, and a holder inside its callback.
 			await using directory = await scratchDirectory();

@@ -45,5 +45,4 @@ If the task throws an error and the release also throws, you get a `SuppressedEr
 - **A reused process ID.** The file lock stores check if a process ID exists. If the system gives the ID to a new process, the waiter waits until that new process stops. The waiter never gets the key too early.
 - **A stop during a reclaim.** The file lock stores use `<key>.lock.reclaim` while they remove a stopped holder. If a process stops during that step, which takes microseconds, remove the file by hand.
 - **Holders on other machines.** The file lock stores do not remove a holder from another host, because they cannot check its process.
-- **Windows.** `SocketStore` does not support Windows.
 - **Token sources in memory.** Their tokens start again at 1 when the process starts again. See [fencing tokens](./fencing-tokens.md#token-sources).

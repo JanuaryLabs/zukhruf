@@ -1,5 +1,6 @@
+import { createHash } from 'node:crypto';
 import { EventEmitter } from 'node:events';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { LeaderElection } from '../../leader-election/leader-election.ts';
 import type { Lease } from '../../mutex/lease.ts';
 import type { AcquireOptions, LockStore } from '../../mutex/lock-store.ts';
@@ -45,15 +46,7 @@ export class SocketStore
 		{ pollInterval = 10, graceWindow = 500 }: SocketStoreOptions = {},
 	) {
 		super();
-		if (process.platform === 'win32') {
-			throw new Error('SocketStore supports Unix domain sockets only (macOS, Linux).');
-		}
-		const socketPath = join(directory, 'lock.sock');
-		if (Buffer.byteLength(socketPath) > SOCKET_PATH_LIMIT) {
-			throw new RangeError(
-				`The socket path ${socketPath} exceeds ${SOCKET_PATH_LIMIT} bytes; choose a shorter directory.`,
-			);
-		}
+		const socketPath = socketPathFor(directory);
 		this.#client = new RemoteLockClient(
 			new ElectingConnector({
 				socketPath,
@@ -96,4 +89,26 @@ export class SocketStore
 		this.#role = role;
 		this.emit('role', role);
 	}
+}
+
+/**
+ * A Unix socket file in the directory on macOS and Linux. On Windows, a named
+ * pipe: pipe names are global, so the name comes from the directory, and
+ * Windows paths ignore case, so the path is lowercased first.
+ */
+function socketPathFor(directory: string): string {
+	if (process.platform === 'win32') {
+		const id = createHash('sha256')
+			.update(resolve(directory).toLowerCase())
+			.digest('hex')
+			.slice(0, 32);
+		return `\\\\.\\pipe\\mutex-${id}`;
+	}
+	const socketPath = join(directory, 'lock.sock');
+	if (Buffer.byteLength(socketPath) > SOCKET_PATH_LIMIT) {
+		throw new RangeError(
+			`The socket path ${socketPath} exceeds ${SOCKET_PATH_LIMIT} bytes; choose a shorter directory.`,
+		);
+	}
+	return socketPath;
 }

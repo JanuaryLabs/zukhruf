@@ -44,7 +44,7 @@ First find who writes to the resource. Then select the lock store with that [rea
 | [TicketQueueFileStore](./docs/stores/ticket-queue-file-store.md) | One host | First come, first served | Released after a process check | A shared directory |
 | [LockFileStore](./docs/stores/lock-file-store.md) | One host | No order | Released after a process check | A shared directory |
 | [SqliteStore](./docs/stores/sqlite-store.md) | One host | First come, first served in one process | Released by the kernel | A shared directory |
-| [SocketStore](./docs/stores/socket-store.md) | One host | First come, first served | Released in approximately 2 ms | A shared directory (macOS, Linux) |
+| [SocketStore](./docs/stores/socket-store.md) | One host | First come, first served | Released in approximately 2 ms | A shared directory |
 
 If you are not sure:
 

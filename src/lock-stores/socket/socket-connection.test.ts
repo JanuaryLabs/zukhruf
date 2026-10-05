@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
 import { once } from 'node:events';
 import { connect, createServer, type Socket } from 'node:net';
 import { join } from 'node:path';
@@ -11,7 +12,10 @@ describe('Socket connection', () => {
 	test('a peer that dies while this side writes is reported as closed, not thrown', async (t) => {
 		// Arrange: a connection whose peer accepts and then destroys its end at once.
 		await using directory = await scratchDirectory();
-		const socketPath = join(directory.path, 'peer.sock');
+		const socketPath =
+			process.platform === 'win32'
+				? `\\\\.\\pipe\\mutex-test-${randomUUID()}`
+				: join(directory.path, 'peer.sock');
 		const peers: Socket[] = [];
 		const server = createServer((peer) => {
 			peers.push(peer);

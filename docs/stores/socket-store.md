@@ -8,7 +8,7 @@ A host lock store with a coordinator. The processes that use it elect one leader
 
 ## What
 
-All processes that use `SocketStore` with the same directory are candidates. The first process that needs a key when no leader exists wins the election ([ADR 0001](../adr/0001-every-process-is-a-candidate.md)). It becomes the coordinator and listens on `<directory>/lock.sock`. All processes, the leader also, ask the leader for keys through that socket.
+All processes that use `SocketStore` with the same directory are candidates. The first process that needs a key when no leader exists wins the election ([ADR 0001](../adr/0001-every-process-is-a-candidate.md)). It becomes the coordinator and listens on the socket of the directory: `<directory>/lock.sock` on macOS and Linux, or a named pipe on Windows. All processes, the leader also, ask the leader for keys through that socket.
 
 ```ts
 import { Mutex, SocketStore } from 'mutex';
@@ -33,13 +33,12 @@ The leader is a normal app process. You do not start or watch a separate server.
 ## When not
 
 - One process does all the writes. Use [MemoryStore](./memory-store.md).
-- You use Windows. `SocketStore` supports only Unix sockets (macOS and Linux).
-- The directory path is long. The socket path `<directory>/lock.sock` must be 103 bytes or less.
+- On macOS and Linux, the directory path is long. The socket path `<directory>/lock.sock` must be 103 bytes or less. (Windows has no such limit.)
 - Your processes start and stop very often. Each stop of the leader causes a failover and a grace window.
 
 ## How it works
 
-1. A process needs a key and connects to `<directory>/lock.sock`.
+1. A process needs a key and connects to the socket of the directory. On Windows, the socket is the named pipe `\\.\pipe\mutex-<hash of the directory>`. Windows removes a named pipe when its process stops, so a new leader has no stale socket file to remove.
 2. If no process listens, the process starts a [campaign](../concepts/leader-election.md). If it wins, it starts the server and connects to itself.
 3. The leader grants keys in the order of the requests. Each fencing token contains the epoch of the leader, so a new leader's tokens are higher than all tokens of earlier leaders.
 4. The leader does not stay alive only to serve others. When its own work ends, it stops, and a failover occurs.

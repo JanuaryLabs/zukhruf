@@ -37,9 +37,12 @@ export class LockServer {
 		{ graceWindow }: LockServerOptions,
 	): Promise<LockServer> {
 		// Only the leader gets here, so removing a dead leader's socket file cannot race another server.
-		await unlink(socketPath).catch((error: unknown) => {
-			if (!isErrno(error, 'ENOENT')) throw error;
-		});
+		// Windows removes a named pipe when its process stops, so there is no file to remove.
+		if (process.platform !== 'win32') {
+			await unlink(socketPath).catch((error: unknown) => {
+				if (!isErrno(error, 'ENOENT')) throw error;
+			});
+		}
 		const coordinator = new LockCoordinator({
 			tokens: new EpochTokenSource(leadership.epoch),
 			graceWindow,
