@@ -109,7 +109,8 @@ describe('Leader election', () => {
 
 			// Assert: timers kept firing, so waiting never blocked the event loop.
 			assert.equal(outcome, undefined);
-			assert.ok(ticks >= 20, `Only ${ticks} timer ticks ran during a 300ms campaign`);
+			// A blocked event loop gives 0 or 1 ticks; Windows timers fire about every 15.6 ms, so expect few.
+			assert.ok(ticks >= 5, `Only ${ticks} timer ticks ran during a 300ms campaign`);
 		} finally {
 			clearInterval(timer);
 		}

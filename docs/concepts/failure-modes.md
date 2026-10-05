@@ -28,7 +28,7 @@ The file lock stores identify a holder by its process. A worker thread that stop
 
 | Lock store | Waiters | Holders |
 |---|---|---|
-| `IpcStore` (the parent stops) | Get `CoordinatorUnavailableError`. | Keep the key. No coordinator is left to grant it to another holder ([ADR 0004](../adr/0004-parent-stops-held-keys-stay.md)). |
+| `IpcStore` (the parent stops) | Get `CoordinatorUnavailableError`. On Windows, Node.js stops the children too, unless they were started with `detached: true`. | Keep the key. No coordinator is left to grant it to another holder ([ADR 0004](../adr/0004-parent-stops-held-keys-stay.md)). |
 | `SocketStore` (the leader stops) | Send their request to the new leader. | Reassert during the grace window. A refused reassert gives a lost lease. |
 
 ## Errors

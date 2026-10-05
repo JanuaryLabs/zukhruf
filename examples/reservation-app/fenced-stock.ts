@@ -9,7 +9,7 @@ export type Reservation = 'reserved' | 'sold-out' | 'stale';
  * without knowing cannot act after a newer holder. Each reservation is one
  * conditional UPDATE, so checking and decrementing cannot interleave.
  */
-export class FencedStock {
+export class FencedStock implements Disposable {
 	readonly #database: DatabaseSync;
 
 	constructor(path: string) {
@@ -64,5 +64,13 @@ export class FencedStock {
 			.prepare('SELECT fence FROM stock WHERE product = ?')
 			.get(product) as { fence: bigint } | undefined;
 		return row && row.fence > token.value ? 'stale' : 'sold-out';
+	}
+
+	close() {
+		this.#database.close();
+	}
+
+	[Symbol.dispose]() {
+		this.close();
 	}
 }

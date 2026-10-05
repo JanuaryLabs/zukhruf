@@ -65,7 +65,7 @@ On macOS and Linux, the IPC channel between a parent and a child is a pair of co
 | Event | Result |
 |---|---|
 | A child stops while it holds a key | The coordinator releases the key in approximately 2 ms. |
-| The parent stops | Children that wait get `CoordinatorUnavailableError`. Children that hold a key keep it, because no coordinator is left to grant it ([ADR 0004](../adr/0004-parent-stops-held-keys-stay.md)). |
+| The parent stops | Children that wait get `CoordinatorUnavailableError`. Children that hold a key keep it, because no coordinator is left to grant it ([ADR 0004](../adr/0004-parent-stops-held-keys-stay.md)). On Windows, Node.js stops the children too, unless they were started with `detached: true`. |
 
 See [failure modes](../concepts/failure-modes.md).
 

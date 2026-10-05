@@ -1016,7 +1016,13 @@ for (const store of storeCases.filter((candidate) => candidate.reach === 'host')
 describe('Process-tree mutex with IpcStore', () => {
 	test(
 		'a child waiting for a key learns that no coordinator is left when its parent dies',
-		{ timeout: 10000 },
+		{
+			timeout: 10000,
+			skip:
+				process.platform === 'win32'
+					? 'On Windows, libuv stops the children of a process that stops (job object), so no child is left waiting'
+					: false,
+		},
 		async (t) => {
 			// Arrange: a parent holds the key and coordinates a child that waits for it.
 			// The child reports through a journal file, because its only channel is to that parent.

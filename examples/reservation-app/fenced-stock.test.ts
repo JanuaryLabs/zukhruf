@@ -12,7 +12,10 @@ async function stockOf(quantity: number) {
 	stock.restock('product:42', quantity);
 	return {
 		stock,
-		[Symbol.asyncDispose]: () => rm(directory, { recursive: true, force: true }),
+		[Symbol.asyncDispose]: async () => {
+			stock.close();
+			await rm(directory, { recursive: true, force: true });
+		},
 	};
 }
 

@@ -85,6 +85,7 @@ describe('Reservation endpoint', () => {
 				);
 			} finally {
 				await Promise.allSettled(requests);
+				stock.close();
 				await rm(directory, { recursive: true, force: true });
 			}
 		},
@@ -121,6 +122,7 @@ describe('Reservation endpoint', () => {
 				);
 				assert.equal(stock.quantity('product:42'), 0, 'The single item must be consumed exactly once');
 			} finally {
+				stock.close();
 				await rm(directory, { recursive: true, force: true, maxRetries: 5, retryDelay: 20 });
 			}
 		},
