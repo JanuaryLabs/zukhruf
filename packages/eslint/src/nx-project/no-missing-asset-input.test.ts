@@ -134,6 +134,12 @@ test('no-missing-asset-input: root-ignored assets', () => {
         ),
         filename,
       },
+      // A glob whose base is the workspace root itself: no ignore file can
+      // drop the root, and `ignore` rejects the empty path it would get.
+      {
+        code: projectJson('[{"input":".","glob":"**","output":"."}]'),
+        filename: workspace.path('project.json'),
+      },
     ],
     invalid: [
       // A generated file ignored from the root .gitignore builds green while

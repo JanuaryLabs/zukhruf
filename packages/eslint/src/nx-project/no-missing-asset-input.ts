@@ -1,5 +1,5 @@
 import { existsSync, readFileSync, statSync } from 'node:fs';
-import { dirname, join, relative, resolve } from 'node:path';
+import { dirname, join, posix, relative, resolve, sep } from 'node:path';
 
 import type { Rule } from 'eslint';
 import ignore, { type Ignore } from 'ignore';
@@ -124,9 +124,15 @@ const rule: Rule.RuleModule = {
       pattern: string,
     ): void => {
       const base = staticBase(pattern);
-      const fromWorkspace =
-        relative(workspaceRoot, resolve(root, base)) +
-        (base === pattern ? '' : '/');
+      // `ignore` takes a workspace-relative path with `/` separators.
+      const directory = relative(workspaceRoot, resolve(root, base))
+        .split(sep)
+        .join('/');
+      // No ignore file can drop the workspace root itself.
+      if (directory === '') {
+        return;
+      }
+      const fromWorkspace = directory + (base === pattern ? '' : '/');
       const matched = ignoreFiles.find(({ matcher }) =>
         matcher.ignores(fromWorkspace),
       );
@@ -203,7 +209,9 @@ const rule: Rule.RuleModule = {
       }
       const glob = stringValue(fields.get('glob'));
       if (glob !== undefined) {
-        reportIfIgnored(element, inputRoot, join(input, glob));
+        // A glob is a `/`-separated pattern on every OS; path.join would
+        // write backslashes on Windows, which staticBase never splits.
+        reportIfIgnored(element, inputRoot, posix.join(input, glob));
       }
     }
 
