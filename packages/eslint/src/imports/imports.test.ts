@@ -1,7 +1,6 @@
 import { test } from 'node:test';
 
 import { typescriptRuleTester } from '../testing/rule-tester.ts';
-import noDeepagentsAgent from './no-deepagents-agent.ts';
 import noPlaywrightTest from './no-playwright-test.ts';
 import noStateManagers from './no-state-managers.ts';
 
@@ -20,18 +19,6 @@ test('no-state-managers bans each package and its subpaths in every import form'
       { code: `export * from 'mobx';` },
       { code: `const toolkit = await import('@reduxjs/toolkit');` },
     ].map((item) => ({ ...item, errors: [{ messageId: 'banned' }] })),
-  });
-});
-
-test('no-deepagents-agent', () => {
-  typescriptRuleTester().run('no-deepagents-agent', noDeepagentsAgent, {
-    valid: [{ code: `import { engine } from '@deepagents/context';` }],
-    invalid: [
-      {
-        code: `import { agent } from '@deepagents/agent';`,
-        errors: [{ messageId: 'banned' }],
-      },
-    ],
   });
 });
 

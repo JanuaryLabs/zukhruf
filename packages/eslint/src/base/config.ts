@@ -14,7 +14,6 @@ import {
   TESTS,
   TYPESCRIPT,
 } from '../files.ts';
-import noDeepagentsAgent from '../imports/no-deepagents-agent.ts';
 import noPlaywrightTest from '../imports/no-playwright-test.ts';
 import noStateManagers from '../imports/no-state-managers.ts';
 import noEnum from '../language/no-enum.ts';
@@ -23,7 +22,6 @@ import { noFloatingPromises, noLet } from './options.ts';
 
 const importBans = {
   'no-state-managers': noStateManagers,
-  'no-deepagents-agent': noDeepagentsAgent,
   'no-playwright-test': noPlaywrightTest,
 };
 
