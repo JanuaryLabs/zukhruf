@@ -40,7 +40,13 @@ export class ElectingConnector implements ClientConnector {
     for (;;) {
       const leader = await reachUnlessAborted(socketPath, signal);
       if (leader) {
-        connected();
+        try {
+          connected();
+        } catch (error) {
+          // Nobody will use this socket, and an open one would keep the process alive.
+          leader.destroy();
+          throw error;
+        }
         return new SocketConnection<LockRequest, LockResponse>(
           leader,
           isLockResponse,

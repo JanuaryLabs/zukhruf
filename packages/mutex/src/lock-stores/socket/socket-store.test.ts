@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
+import { once } from 'node:events';
 import { mkdir, readFile } from 'node:fs/promises';
+import { createServer } from 'node:net';
 import { join } from 'node:path';
 import { describe, test } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -483,4 +485,96 @@ describe('Socket store roles', () => {
     // Assert
     assert.deepEqual(stayed, ['follower', 'follower']);
   });
+});
+
+describe('Socket store follower failure', () => {
+  test(
+    'a follower whose role listener throws gives up that acquire and leaves nothing open',
+    { timeout: 10_000 },
+    async (t) => {
+      // Arrange: a leader serves the directory from this process.
+      await using directory = await scratchDirectory();
+      await using leader = new SocketStore(directory.path, {
+        pollInterval: 10,
+      });
+      await (await leader.acquire('warm-up'))[Symbol.asyncDispose]();
+
+      // Act: a follower process whose role listener throws once acquires twice, then just ends.
+      await using follower = startWorker(
+        `
+				import { Mutex } from ${JSON.stringify(mutexUrl.href)};
+				import { SocketStore } from ${JSON.stringify(socketStoreUrl.href)};
+
+				const store = new SocketStore(${JSON.stringify(directory.path)}, { pollInterval: 10 });
+				const mutex = new Mutex(store);
+				store.once('role', () => {
+					throw new Error('The role listener failed');
+				});
+				const outcome = (acquiring) =>
+					acquiring.then(() => 'granted', (error) => error.message);
+				process.send({ type: 'first', outcome: await outcome(mutex.acquire('product:42', async () => {})) });
+				process.send({ type: 'second', outcome: await outcome(mutex.acquire('product:42', async () => {})) });
+			`,
+        'follower',
+      );
+      await waitUntil(
+        t,
+        () => follower.exit !== null,
+        `The follower must end on its own once its work is done.\n${follower.stderr}`,
+        5000,
+      );
+
+      // Assert: the failed acquire reported the listener's error, the next one worked, and nothing kept the process alive.
+      assert.equal(follower.find('first')?.outcome, 'The role listener failed');
+      assert.equal(follower.find('second')?.outcome, 'granted');
+      assert.deepEqual(
+        follower.exit,
+        { code: 0, signal: null },
+        follower.stderr,
+      );
+    },
+  );
+
+  test(
+    'a follower whose role listener throws closes its connection to the leader',
+    {
+      skip:
+        process.platform === 'win32'
+          ? 'The stand-in leader listens on the Unix socket path'
+          : false,
+    },
+    async (t) => {
+      // Arrange: a stand-in leader holds the term and serves the socket path; it records when its peer goes away.
+      await using directory = await scratchDirectory();
+      await using _term = await new LeaderElection(directory.path, {
+        pollInterval: 10,
+      }).campaign();
+      let peerClosed = false;
+      const leader = createServer((peer) => {
+        peer.once('close', () => (peerClosed = true));
+      });
+      leader.listen(join(directory.path, 'lock.sock'));
+      await once(leader, 'listening');
+      await using store = new SocketStore(directory.path, { pollInterval: 10 });
+      store.once('role', () => {
+        throw new Error('The role listener failed');
+      });
+
+      try {
+        // Act
+        await assert.rejects(store.acquire('product:42'), {
+          message: 'The role listener failed',
+        });
+
+        // Assert: nothing keeps the connection open after the follower gave it up.
+        await waitUntil(
+          t,
+          () => peerClosed,
+          'The follower must close the connection it gave up',
+        );
+      } finally {
+        leader.close();
+      }
+    },
+  );
 });
