@@ -1,3 +1,4 @@
+import { Latch } from '../../shared/latch.ts';
 import type { Connection } from './connection.ts';
 import type { Connector } from './connector.ts';
 
@@ -138,14 +139,15 @@ class Connecting<Outgoing, Incoming> implements State<Outgoing> {
   readonly status = 'connecting';
   readonly #supervision: Supervision<Outgoing, Incoming>;
   readonly #abort = new AbortController();
-  #settled: Promise<void> = Promise.resolve();
+  /** Opens when the connect ends, so `close` can wait for it. */
+  readonly #ended = new Latch();
 
   constructor(supervision: Supervision<Outgoing, Incoming>) {
     this.#supervision = supervision;
   }
 
   enter() {
-    this.#settled = this.#connect();
+    void this.#connect().finally(() => this.#ended.open());
   }
 
   async #connect() {
@@ -183,7 +185,7 @@ class Connecting<Outgoing, Incoming> implements State<Outgoing> {
   async close() {
     this.#supervision.become(new Closed());
     this.#abort.abort();
-    await this.#settled;
+    await this.#ended.wait();
   }
 }
 
