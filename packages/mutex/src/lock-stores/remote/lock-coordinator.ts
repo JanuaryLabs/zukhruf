@@ -156,13 +156,11 @@ class Session {
   ) {
     this.#coordinator = coordinator;
     this.#phase = new Serving(connection);
-    connection.listen({
-      message: (request) => {
-        this.#handle(request).catch(() => connection.close());
-      },
-      close: () => {
-        void this.#end();
-      },
+    connection.on('message', (request) => {
+      this.#handle(request).catch(() => connection.close());
+    });
+    connection.once('close', () => {
+      void this.#end();
     });
   }
 

@@ -754,6 +754,76 @@ describe('Remote lock client connection lifecycle', () => {
     }
   });
 
+  test('a client that waits keeps its process alive through a reconnect', async (t) => {
+    // Arrange: an acquire waits on the first connection.
+    const { connector, calls } = scriptedConnector<LockRequest, LockResponse>();
+    const client = clientOver(connector);
+    const first = scriptedPeer<LockRequest, LockResponse>();
+    const second = scriptedPeer<LockRequest, LockResponse>();
+    watch(client.acquire('product:42'));
+    await waitUntil(t, () => calls.length === 1, 'The client must connect');
+    calls[0]!.resolve(first.connection);
+    await waitUntil(
+      t,
+      () => first.sent.length === 1,
+      'The acquire must be sent',
+    );
+
+    try {
+      // Act
+      first.drop();
+      await waitUntil(t, () => calls.length === 2, 'The client must reconnect');
+      calls[1]!.resolve(second.connection);
+      await waitUntil(
+        t,
+        () => second.sent.length === 1,
+        'The acquire must be sent again',
+      );
+
+      // Assert
+      assert.equal(
+        second.refs.at(-1),
+        'ref',
+        'A client that waits must keep its new connection referenced',
+      );
+    } finally {
+      await client.close();
+    }
+  });
+
+  test('a client that only holds keys lets its process exit through a reconnect', async (t) => {
+    // Arrange: the client holds a key and waits for nothing.
+    const { connector, calls } = scriptedConnector<LockRequest, LockResponse>();
+    const client = clientOver(connector);
+    const first = grantingPeer();
+    const second = scriptedPeer<LockRequest, LockResponse>();
+    const acquiring = client.acquire('product:42');
+    await waitUntil(t, () => calls.length === 1, 'The client must connect');
+    calls[0]!.resolve(first.connection);
+    await acquiring;
+
+    try {
+      // Act
+      first.drop();
+      await waitUntil(t, () => calls.length === 2, 'The client must reconnect');
+      calls[1]!.resolve(second.connection);
+      await waitUntil(
+        t,
+        () => second.sent.some((request) => request.op === 'reassert'),
+        'The held key must be reasserted',
+      );
+
+      // Assert
+      assert.equal(
+        second.refs.at(-1),
+        'unref',
+        'A client that waits for nothing must not keep its process alive',
+      );
+    } finally {
+      await client.close();
+    }
+  });
+
   test('after a reconnect, held keys are reasserted before waiting acquires are sent again', async (t) => {
     // Arrange: the client holds one key and waits for another.
     const { connector, calls } = scriptedConnector<LockRequest, LockResponse>();

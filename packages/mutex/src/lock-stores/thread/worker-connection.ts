@@ -1,6 +1,7 @@
+import { EventEmitter } from 'node:events';
 import type { Worker } from 'node:worker_threads';
 
-import type { Connection, ConnectionHandlers } from '../remote/connection.ts';
+import type { Connection, ConnectionEvents } from '../remote/connection.ts';
 import { unwrap, wrap } from '../remote/envelope.ts';
 import {
   type LockRequest,
@@ -13,36 +14,35 @@ import {
  * emits `exit` however the thread stops, so a terminated or crashed holder
  * is always noticed.
  */
-export class WorkerConnection implements Connection<LockResponse, LockRequest> {
+export class WorkerConnection
+  extends EventEmitter<ConnectionEvents<LockRequest>>
+  implements Connection<LockResponse, LockRequest>
+{
   readonly #worker: Worker;
-  #exited = false;
-  #detach = () => {};
+
+  readonly #onMessage = (envelope: unknown) => {
+    const request = unwrap(envelope);
+    if (isLockRequest(request)) this.emit('message', request);
+  };
+
+  readonly #onExit = () => {
+    this.close();
+    this.emit('close');
+  };
 
   constructor(worker: Worker) {
+    super();
     this.#worker = worker;
+    worker.on('message', this.#onMessage);
+    worker.once('exit', this.#onExit);
   }
 
   async send(response: LockResponse): Promise<void> {
-    if (this.#exited) throw new Error('The worker thread has exited.');
+    // A stopped worker drops messages without an error; its thread id is -1 from then on.
+    if (this.#worker.threadId === -1) {
+      throw new Error('The worker thread has exited.');
+    }
     this.#worker.postMessage(wrap(response));
-  }
-
-  listen({ message, close }: ConnectionHandlers<LockRequest>) {
-    const onMessage = (envelope: unknown) => {
-      const request = unwrap(envelope);
-      if (isLockRequest(request)) message(request);
-    };
-    const onExit = () => {
-      this.#exited = true;
-      this.close();
-      close();
-    };
-    this.#worker.on('message', onMessage);
-    this.#worker.once('exit', onExit);
-    this.#detach = () => {
-      this.#worker.off('message', onMessage);
-      this.#worker.off('exit', onExit);
-    };
   }
 
   /** The running worker already keeps its starting thread alive. */
@@ -51,6 +51,7 @@ export class WorkerConnection implements Connection<LockResponse, LockRequest> {
   unref() {}
 
   close() {
-    this.#detach();
+    this.#worker.off('message', this.#onMessage);
+    this.#worker.off('exit', this.#onExit);
   }
 }

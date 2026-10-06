@@ -39,15 +39,14 @@ export class RemoteLockClient implements LockStore {
 
   constructor(link: ConnectionSupervisor<LockRequest, LockResponse>) {
     this.#link = link;
-    link.listen({
-      connected: () => this.#resume(),
-      message: (response) => this.#receive(response),
-      disconnected: () => this.#interrupt(),
-      // Held keys stay exclusive: no coordinator is left to grant them to anyone else.
-      unavailable: () =>
-        this.#rejectAll((key) => new CoordinatorUnavailableError(key)),
-      failed: (error) => this.#fail(error),
-    });
+    link.on('connected', () => this.#resume());
+    link.on('message', (response) => this.#receive(response));
+    link.on('disconnected', () => this.#interrupt());
+    // Held keys stay exclusive: no coordinator is left to grant them to anyone else.
+    link.on('unavailable', () =>
+      this.#rejectAll((key) => new CoordinatorUnavailableError(key)),
+    );
+    link.on('failed', (error) => this.#fail(error));
   }
 
   async acquire(key: string, { signal }: AcquireOptions = {}): Promise<Lease> {
@@ -152,6 +151,8 @@ export class RemoteLockClient implements LockStore {
 
   /** A new connection: reassert held keys first, then send what waits. */
   #resume() {
+    // A new connection starts with its adapter's default, which may not match whether this client waits.
+    this.#updateRef();
     for (const [id, { key, token }] of this.#held) {
       this.#link.send({ op: 'reassert', id, key, token: token.toString() });
     }

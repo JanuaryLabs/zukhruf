@@ -1,6 +1,7 @@
 import type { ChildProcess } from 'node:child_process';
+import { EventEmitter } from 'node:events';
 
-import type { Connection, ConnectionHandlers } from '../remote/connection.ts';
+import type { Connection, ConnectionEvents } from '../remote/connection.ts';
 import { unwrap, wrap } from '../remote/envelope.ts';
 import {
   type LockRequest,
@@ -12,15 +13,27 @@ import {
  * The parent's end of the IPC channel to one child. The kernel closes the
  * channel when the child dies, so `disconnect` reports even a SIGKILL.
  */
-export class ChildProcessConnection implements Connection<
-  LockResponse,
-  LockRequest
-> {
+export class ChildProcessConnection
+  extends EventEmitter<ConnectionEvents<LockRequest>>
+  implements Connection<LockResponse, LockRequest>
+{
   readonly #child: ChildProcess;
-  #detach = () => {};
+
+  readonly #onMessage = (envelope: unknown) => {
+    const request = unwrap(envelope);
+    if (isLockRequest(request)) this.emit('message', request);
+  };
+
+  readonly #onDisconnect = () => {
+    this.close();
+    this.emit('close');
+  };
 
   constructor(child: ChildProcess) {
+    super();
     this.#child = child;
+    child.on('message', this.#onMessage);
+    child.once('disconnect', this.#onDisconnect);
   }
 
   send(response: LockResponse): Promise<void> {
@@ -35,29 +48,13 @@ export class ChildProcessConnection implements Connection<
     });
   }
 
-  listen({ message, close }: ConnectionHandlers<LockRequest>) {
-    const onMessage = (envelope: unknown) => {
-      const request = unwrap(envelope);
-      if (isLockRequest(request)) message(request);
-    };
-    const onDisconnect = () => {
-      this.close();
-      close();
-    };
-    this.#child.on('message', onMessage);
-    this.#child.once('disconnect', onDisconnect);
-    this.#detach = () => {
-      this.#child.off('message', onMessage);
-      this.#child.off('disconnect', onDisconnect);
-    };
-  }
-
   /** The running child already keeps the parent alive. */
   ref() {}
 
   unref() {}
 
   close() {
-    this.#detach();
+    this.#child.off('message', this.#onMessage);
+    this.#child.off('disconnect', this.#onDisconnect);
   }
 }

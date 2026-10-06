@@ -20,13 +20,11 @@ function supervised() {
   const { connector, calls } = scriptedConnector<Message, Message>();
   const supervisor = new ConnectionSupervisor(connector);
   const events: string[] = [];
-  supervisor.listen({
-    connected: () => events.push('connected'),
-    message: ({ n }) => events.push(`message ${n}`),
-    disconnected: () => events.push('disconnected'),
-    unavailable: () => events.push('unavailable'),
-    failed: (error) => events.push(`failed: ${String(error)}`),
-  });
+  supervisor.on('connected', () => events.push('connected'));
+  supervisor.on('message', ({ n }) => events.push(`message ${n}`));
+  supervisor.on('disconnected', () => events.push('disconnected'));
+  supervisor.on('unavailable', () => events.push('unavailable'));
+  supervisor.on('failed', (error) => events.push(`failed: ${String(error)}`));
   return { supervisor, calls, events };
 }
 
@@ -198,13 +196,7 @@ describe('Connection supervisor', () => {
         throw new Error('EACCES');
       },
     });
-    supervisor.listen({
-      connected: () => {},
-      message: () => {},
-      disconnected: () => {},
-      unavailable: () => {},
-      failed: (error) => events.push(String(error)),
-    });
+    supervisor.on('failed', (error) => events.push(String(error)));
 
     try {
       // Act
@@ -330,17 +322,12 @@ describe('Connection supervisor', () => {
     const first = scriptedPeer<Message, Message>();
     const connected = Promise.withResolvers<void>();
     let duringLoss: { status: string; sent: boolean } | undefined;
-    supervisor.listen({
-      connected: () => connected.resolve(),
-      message: () => {},
-      disconnected: () => {
-        duringLoss = {
-          status: supervisor.status,
-          sent: supervisor.send({ n: 1 }),
-        };
-      },
-      unavailable: () => {},
-      failed: () => {},
+    supervisor.once('connected', () => connected.resolve());
+    supervisor.on('disconnected', () => {
+      duringLoss = {
+        status: supervisor.status,
+        sent: supervisor.send({ n: 1 }),
+      };
     });
     supervisor.open();
     calls[0]!.resolve(first.connection);
@@ -363,34 +350,26 @@ describe('Connection supervisor', () => {
     }
   });
 
-  test('the ref setting is applied to every connection, the replacement too', async (t) => {
-    // Arrange: a process that waits on its connection.
+  test('ref and unref reach the open connection, and nothing else touches it', async (t) => {
+    // Arrange
     const { supervisor, calls, events } = supervised();
-    const first = scriptedPeer<Message, Message>();
-    const second = scriptedPeer<Message, Message>();
+    const peer = scriptedPeer<Message, Message>();
     supervisor.ref();
     supervisor.open();
+    calls[0]!.resolve(peer.connection);
+    await waitUntil(
+      t,
+      () => events.includes('connected'),
+      'The connection must be reported',
+    );
 
     try {
-      // Act: the connection is replaced, and then the wait ends.
-      calls[0]!.resolve(first.connection);
-      await waitUntil(
-        t,
-        () => events.includes('connected'),
-        'The connection must be reported',
-      );
-      first.drop();
-      calls[1]!.resolve(second.connection);
-      await waitUntil(
-        t,
-        () => events.filter((event) => event === 'connected').length === 2,
-        'The replacement must be reported',
-      );
+      // Act
+      supervisor.ref();
       supervisor.unref();
 
-      // Assert
-      assert.deepEqual(first.refs, ['ref']);
-      assert.deepEqual(second.refs, ['ref', 'unref']);
+      // Assert: a ref before the connection opened reaches nothing; its listener applies it on `connected`.
+      assert.deepEqual(peer.refs, ['ref', 'unref']);
     } finally {
       await supervisor.close();
     }

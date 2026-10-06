@@ -1,6 +1,8 @@
+import { EventEmitter } from 'node:events';
+
 import type {
   Connection,
-  ConnectionHandlers,
+  ConnectionEvents,
 } from '../lock-stores/remote/connection.ts';
 
 /** One end of a connection whose peer is driven by the test. */
@@ -9,26 +11,25 @@ export function scriptedPeer<Outgoing, Incoming>(
 ) {
   const sent: Outgoing[] = [];
   const refs: ('ref' | 'unref')[] = [];
-  let handlers: ConnectionHandlers<Incoming> | undefined;
   let closes = 0;
-  const connection: Connection<Outgoing, Incoming> = {
-    async send(message) {
-      sent.push(message);
-      await onSend(message);
+  const connection: Connection<Outgoing, Incoming> = Object.assign(
+    new EventEmitter<ConnectionEvents<Incoming>>(),
+    {
+      async send(message: Outgoing) {
+        sent.push(message);
+        await onSend(message);
+      },
+      ref() {
+        refs.push('ref');
+      },
+      unref() {
+        refs.push('unref');
+      },
+      close() {
+        closes++;
+      },
     },
-    listen(listeners) {
-      handlers = listeners;
-    },
-    ref() {
-      refs.push('ref');
-    },
-    unref() {
-      refs.push('unref');
-    },
-    close() {
-      closes++;
-    },
-  };
+  );
   return {
     connection,
     sent,
@@ -36,8 +37,8 @@ export function scriptedPeer<Outgoing, Incoming>(
     get closes() {
       return closes;
     },
-    deliver: (message: Incoming) => handlers?.message(message),
-    drop: () => handlers?.close(),
+    deliver: (message: Incoming) => connection.emit('message', message),
+    drop: () => connection.emit('close'),
   };
 }
 

@@ -31,7 +31,7 @@ describe('Socket connection', () => {
       (message): message is unknown => true,
     );
     let closed = false;
-    connection.listen({ message: () => {}, close: () => (closed = true) });
+    connection.once('close', () => (closed = true));
 
     try {
       // Act: keep writing until the dead peer makes a write fail.

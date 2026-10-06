@@ -1,6 +1,7 @@
+import { EventEmitter } from 'node:events';
 import type { MessagePort } from 'node:worker_threads';
 
-import type { Connection, ConnectionHandlers } from '../remote/connection.ts';
+import type { Connection, ConnectionEvents } from '../remote/connection.ts';
 import { unwrap, wrap } from '../remote/envelope.ts';
 import {
   type LockRequest,
@@ -15,20 +16,19 @@ import {
  * coordinator cannot stop without its workers stopping too, so `close` is
  * never reported.
  */
-export class ParentPortConnection implements Connection<
-  LockRequest,
-  LockResponse
-> {
+export class ParentPortConnection
+  extends EventEmitter<ConnectionEvents<LockResponse>>
+  implements Connection<LockRequest, LockResponse>
+{
   readonly #port: MessagePort;
-  #handlers: ConnectionHandlers<LockResponse> | undefined;
-  #listening = false;
 
   readonly #onMessage = (envelope: unknown) => {
     const response = unwrap(envelope);
-    if (isLockResponse(response)) this.#handlers?.message(response);
+    if (isLockResponse(response)) this.emit('message', response);
   };
 
   constructor(port: MessagePort) {
+    super();
     this.#port = port;
   }
 
@@ -36,19 +36,13 @@ export class ParentPortConnection implements Connection<
     this.#port.postMessage(wrap(request));
   }
 
-  listen(handlers: ConnectionHandlers<LockResponse>) {
-    this.#handlers = handlers;
-  }
-
+  /** Removes the listener before it adds it, so a second `ref` does not listen twice. */
   ref() {
-    if (this.#listening) return;
-    this.#listening = true;
+    this.unref();
     this.#port.on('message', this.#onMessage);
   }
 
   unref() {
-    if (!this.#listening) return;
-    this.#listening = false;
     this.#port.off('message', this.#onMessage);
   }
 

@@ -1,3 +1,5 @@
+import { EventEmitter } from 'node:events';
+
 import { Latch } from '../../shared/latch.ts';
 import type { Connection } from './connection.ts';
 import type { Connector } from './connector.ts';
@@ -5,16 +7,16 @@ import type { Connector } from './connector.ts';
 export type SupervisorStatus =
   'idle' | 'connecting' | 'connected' | 'unavailable' | 'closed';
 
-export interface SupervisorHandlers<Incoming> {
+export interface SupervisorEvents<Incoming> {
   /** A connection is open: the first one, or the replacement for a lost one. */
-  connected(): void;
-  message(message: Incoming): void;
+  connected: [];
+  message: [message: Incoming];
   /** The open connection is gone and a replacement is on its way. Nothing sent on it will be answered. */
-  disconnected(): void;
+  disconnected: [];
   /** The connector can never connect again. */
-  unavailable(): void;
+  unavailable: [];
   /** One attempt to connect failed; the next `open` tries again. */
-  failed(error: unknown): void;
+  failed: [error: unknown];
 }
 
 /**
@@ -23,19 +25,18 @@ export interface SupervisorHandlers<Incoming> {
  * left. It never reads the messages it carries: what a replacement must be
  * told again is for its listener to decide.
  */
-export class ConnectionSupervisor<Outgoing, Incoming> {
+export class ConnectionSupervisor<Outgoing, Incoming> extends EventEmitter<
+  SupervisorEvents<Incoming>
+> {
   readonly #supervision: Supervision<Outgoing, Incoming>;
 
   constructor(connector: Connector<Outgoing, Incoming>) {
-    this.#supervision = new Supervision(connector);
+    super();
+    this.#supervision = new Supervision(connector, this);
   }
 
   get status(): SupervisorStatus {
     return this.#supervision.state.status;
-  }
-
-  listen(handlers: SupervisorHandlers<Incoming>) {
-    this.#supervision.handlers = handlers;
   }
 
   /** Starts connecting, unless a connection is open, on its way, or never coming. */
@@ -48,13 +49,17 @@ export class ConnectionSupervisor<Outgoing, Incoming> {
     return this.#supervision.state.send(message);
   }
 
-  /** Keeps the process alive through this connection and every replacement. */
+  /**
+   * Keeps the process alive through the open connection. A replacement starts
+   * with its adapter's default, so a listener that waits applies this again on
+   * `connected`.
+   */
   ref() {
-    this.#supervision.reference(true);
+    this.#supervision.state.reference(true);
   }
 
   unref() {
-    this.#supervision.reference(false);
+    this.#supervision.state.reference(false);
   }
 
   /** Closes for good, after any connect still on its way has stopped. */
@@ -73,23 +78,18 @@ interface State<Outgoing> {
   close(): Promise<void>;
 }
 
-const unheard: SupervisorHandlers<unknown> = {
-  connected() {},
-  message() {},
-  disconnected() {},
-  unavailable() {},
-  failed() {},
-};
-
 /** What the states share: the current state, and how to move to the next. */
 class Supervision<Outgoing, Incoming> {
   readonly connector: Connector<Outgoing, Incoming>;
-  handlers: SupervisorHandlers<Incoming> = unheard;
-  referenced = false;
+  readonly events: EventEmitter<SupervisorEvents<Incoming>>;
   state: State<Outgoing>;
 
-  constructor(connector: Connector<Outgoing, Incoming>) {
+  constructor(
+    connector: Connector<Outgoing, Incoming>,
+    events: EventEmitter<SupervisorEvents<Incoming>>,
+  ) {
     this.connector = connector;
+    this.events = events;
     this.state = new Idle(this);
   }
 
@@ -101,12 +101,6 @@ class Supervision<Outgoing, Incoming> {
   become(state: State<Outgoing>) {
     this.state = state;
     state.enter();
-  }
-
-  reference(referenced: boolean) {
-    if (this.referenced === referenced) return;
-    this.referenced = referenced;
-    this.state.reference(referenced);
   }
 }
 
@@ -160,7 +154,7 @@ class Connecting<Outgoing, Incoming> implements State<Outgoing> {
     } catch (error) {
       if (!supervision.isCurrent(this)) return;
       supervision.become(new Idle(supervision));
-      supervision.handlers.failed(error);
+      supervision.events.emit('failed', error);
       return;
     }
     if (!supervision.isCurrent(this)) {
@@ -204,14 +198,12 @@ class Connected<Outgoing, Incoming> implements State<Outgoing> {
 
   enter() {
     const supervision = this.#supervision;
-    this.#connection.listen({
-      message: (message) => {
-        if (supervision.isCurrent(this)) supervision.handlers.message(message);
-      },
-      close: () => this.#lose(),
+    this.#connection.on('message', (message) => {
+      if (supervision.isCurrent(this))
+        supervision.events.emit('message', message);
     });
-    this.reference(supervision.referenced);
-    supervision.handlers.connected();
+    this.#connection.once('close', () => this.#lose());
+    supervision.events.emit('connected');
   }
 
   open() {}
@@ -239,7 +231,7 @@ class Connected<Outgoing, Incoming> implements State<Outgoing> {
     this.#connection.close();
     // Leave this state before the listener hears of the loss, so its sends wait for the replacement.
     supervision.become(new Connecting(supervision));
-    supervision.handlers.disconnected();
+    supervision.events.emit('disconnected');
   }
 }
 
@@ -252,7 +244,7 @@ class Unavailable<Outgoing, Incoming> implements State<Outgoing> {
   }
 
   enter() {
-    this.#supervision.handlers.unavailable();
+    this.#supervision.events.emit('unavailable');
   }
 
   open() {}

@@ -1,7 +1,8 @@
+import { EventEmitter } from 'node:events';
 import type { Socket } from 'node:net';
 import { createInterface } from 'node:readline';
 
-import type { Connection, ConnectionHandlers } from '../remote/connection.ts';
+import type { Connection, ConnectionEvents } from '../remote/connection.ts';
 
 /**
  * Newline-delimited JSON over a stream socket. A stream has no message
@@ -9,21 +10,33 @@ import type { Connection, ConnectionHandlers } from '../remote/connection.ts';
  * strings, so one line is always one message. `isIncoming` checks each message
  * from the peer; a line that is not one closes the connection.
  */
-export class SocketConnection<Outgoing, Incoming> implements Connection<
-  Outgoing,
-  Incoming
-> {
+export class SocketConnection<Outgoing, Incoming>
+  extends EventEmitter<ConnectionEvents<Incoming>>
+  implements Connection<Outgoing, Incoming>
+{
   readonly #socket: Socket;
-  readonly #isIncoming: (message: unknown) => message is Incoming;
 
   constructor(
     socket: Socket,
     isIncoming: (message: unknown) => message is Incoming,
   ) {
+    super();
     this.#socket = socket;
-    this.#isIncoming = isIncoming;
     // Every error is followed by `close`, which is where the peer's loss is handled.
     socket.on('error', () => {});
+    createInterface({ input: socket, crlfDelay: Infinity })
+      .on('line', (line) => {
+        try {
+          const parsed: unknown = JSON.parse(line);
+          if (isIncoming(parsed)) this.emit('message', parsed);
+          else this.close();
+        } catch {
+          this.close();
+        }
+      })
+      // readline re-emits socket errors (e.g. EPIPE when the peer died); `close` reports the loss.
+      .on('error', () => {});
+    socket.once('close', () => this.emit('close'));
   }
 
   send(message: Outgoing): Promise<void> {
@@ -36,22 +49,6 @@ export class SocketConnection<Outgoing, Incoming> implements Connection<
         error ? reject(error) : resolve(),
       );
     });
-  }
-
-  listen({ message, close }: ConnectionHandlers<Incoming>) {
-    createInterface({ input: this.#socket, crlfDelay: Infinity })
-      .on('line', (line) => {
-        try {
-          const parsed: unknown = JSON.parse(line);
-          if (this.#isIncoming(parsed)) message(parsed);
-          else this.close();
-        } catch {
-          this.close();
-        }
-      })
-      // readline re-emits socket errors (e.g. EPIPE when the peer died); `close` reports the loss.
-      .on('error', () => {});
-    this.#socket.once('close', close);
   }
 
   ref() {

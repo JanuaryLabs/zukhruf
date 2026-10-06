@@ -1,4 +1,6 @@
-import type { Connection, ConnectionHandlers } from '../remote/connection.ts';
+import { EventEmitter } from 'node:events';
+
+import type { Connection, ConnectionEvents } from '../remote/connection.ts';
 import { unwrap, wrap } from '../remote/envelope.ts';
 import {
   type LockRequest,
@@ -13,21 +15,18 @@ import {
  * own listeners in charge of the process lifetime. Messages that arrive while
  * not listening are buffered by Node and delivered on the next `ref`.
  */
-export class ProcessChannelConnection implements Connection<
-  LockRequest,
-  LockResponse
-> {
-  #handlers: ConnectionHandlers<LockResponse> | undefined;
-  #listening = false;
-
+export class ProcessChannelConnection
+  extends EventEmitter<ConnectionEvents<LockResponse>>
+  implements Connection<LockRequest, LockResponse>
+{
   readonly #onMessage = (envelope: unknown) => {
     const response = unwrap(envelope);
-    if (isLockResponse(response)) this.#handlers?.message(response);
+    if (isLockResponse(response)) this.emit('message', response);
   };
 
   readonly #onDisconnect = () => {
     this.unref();
-    this.#handlers?.close();
+    this.emit('close');
   };
 
   send(request: LockRequest): Promise<void> {
@@ -42,20 +41,14 @@ export class ProcessChannelConnection implements Connection<
     });
   }
 
-  listen(handlers: ConnectionHandlers<LockResponse>) {
-    this.#handlers = handlers;
-  }
-
+  /** Removes the listeners before it adds them, so a second `ref` does not listen twice. */
   ref() {
-    if (this.#listening) return;
-    this.#listening = true;
+    this.unref();
     process.on('message', this.#onMessage);
     process.on('disconnect', this.#onDisconnect);
   }
 
   unref() {
-    if (!this.#listening) return;
-    this.#listening = false;
     process.off('message', this.#onMessage);
     process.off('disconnect', this.#onDisconnect);
   }
