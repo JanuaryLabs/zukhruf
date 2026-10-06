@@ -13,7 +13,8 @@ import { SocketConnection } from './socket-connection.ts';
 
 export interface ElectingConnectorOptions {
   socketPath: string;
-  election: LeaderElection;
+  /** The connector only campaigns, so it needs only that part of an election. */
+  election: Pick<LeaderElection, 'campaign'>;
   pollInterval: number;
   /** Starts serving for a term this process just won. */
   serve(leadership: Leadership): Promise<void>;
