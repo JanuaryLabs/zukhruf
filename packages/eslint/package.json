@@ -1,0 +1,67 @@
+{
+  "name": "@zukhruf/eslint",
+  "version": "0.1.0",
+  "description": "ESLint rules and configs shared across workspaces. Every check is its own named rule, so a repo's own config cannot silently erase it.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/JanuaryLabs/zukhruf",
+    "directory": "packages/eslint"
+  },
+  "bugs": {
+    "url": "https://github.com/JanuaryLabs/zukhruf/issues"
+  },
+  "homepage": "https://github.com/JanuaryLabs/zukhruf/tree/main/packages/eslint#readme",
+  "keywords": [
+    "eslint",
+    "eslintplugin",
+    "eslint-plugin",
+    "nx"
+  ],
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "types": "./dist/index.d.ts",
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./nx": {
+      "types": "./dist/nx.d.ts",
+      "import": "./dist/nx.js",
+      "default": "./dist/nx.js"
+    }
+  },
+  "files": [
+    "dist",
+    "!dist/spec/**",
+    "!**/*.tsbuildinfo",
+    "!**/*.test.*"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "globals": "^17.13.0",
+    "ignore": "^7.0.12"
+  },
+  "peerDependencies": {
+    "@eslint/js": "^9.30.0 || ^10.0.0",
+    "@nx/eslint-plugin": ">=21.0.0",
+    "eslint": "^9.30.0 || ^10.0.0",
+    "eslint-plugin-functional": "^10.0.0",
+    "eslint-plugin-import-x": "^4.16.0",
+    "jsonc-eslint-parser": "^2.4.0 || ^3.0.0",
+    "typescript": ">=5.8.0 <6.1.0",
+    "typescript-eslint": "^8.47.0"
+  },
+  "peerDependenciesMeta": {
+    "@nx/eslint-plugin": {
+      "optional": true
+    }
+  }
+}

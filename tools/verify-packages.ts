@@ -71,12 +71,38 @@ try {
     return join(consumer, packed.filename);
   });
 
+  // A consumer installs a package's peers itself, and npm skips the optional
+  // ones (@zukhruf/eslint/nx needs @nx/eslint-plugin). Pin every peer to the
+  // version installed here, the one this workspace's tests ran against.
+  const peers = [
+    ...new Set(
+      packages.flatMap(({ manifest }) =>
+        Object.keys(manifest.peerDependencies ?? {}),
+      ),
+    ),
+  ].map((name) => {
+    const installed = JSON.parse(
+      readFileSync(
+        join(workspace, 'node_modules', name, 'package.json'),
+        'utf8',
+      ),
+    );
+    return `${name}@${installed.version}`;
+  });
+
   writeFileSync(
     join(consumer, 'package.json'),
     JSON.stringify({ name: 'consumer', private: true, type: 'module' }),
   );
   npm(
-    ['install', '--no-audit', '--no-fund', '--ignore-scripts', ...tarballs],
+    [
+      'install',
+      '--no-audit',
+      '--no-fund',
+      '--ignore-scripts',
+      ...tarballs,
+      ...peers,
+    ],
     consumer,
   );
 
