@@ -3,15 +3,9 @@
   "$schema": "../../node_modules/nx/schemas/project-schema.json",
   "sourceRoot": "packages/eslint/src",
   "projectType": "library",
-  "tags": ["scope:public", "layer:island"],
+  "tags": ["scope:public", "layer:island", "test:node"],
   "targets": {
     "format": {},
-    "test": {
-      "executor": "nx:run-commands",
-      "options": {
-        "command": "node --test --test-force-exit --test-timeout=60000 --test-reporter=spec --test-reporter-destination=stdout --test-reporter=junit --test-reporter-destination=test-results.xml \"src/**/*.test.ts\"",
-        "cwd": "{projectRoot}"
-      }
-    }
+    "test": {}
   }
 }

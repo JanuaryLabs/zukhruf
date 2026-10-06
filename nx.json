@@ -51,10 +51,24 @@
     "typecheck": {
       "dependsOn": ["lint", "..."]
     },
-    "test": {
-      "dependsOn": ["build", "^build"],
-      "outputs": ["{projectRoot}/test-results.xml"]
-    }
+    "test": [
+      {
+        "executor": "nx:run-commands",
+        "dependsOn": ["build", "^build"],
+        "outputs": ["{projectRoot}/test-results.xml"],
+        "options": {
+          "cwd": "{projectRoot}"
+        }
+      },
+      {
+        "filter": {
+          "projects": ["tag:test:node"]
+        },
+        "options": {
+          "command": "node --test --test-force-exit --test-timeout=60000 --test-reporter=spec --test-reporter-destination=stdout --test-reporter=junit --test-reporter-destination=test-results.xml \"src/**/*.test.ts\""
+        }
+      }
+    ]
   },
   "release": {
     "projects": ["tag:scope:public"],
