@@ -3,8 +3,9 @@ import { readFile, unlink } from 'node:fs/promises';
 import { createExclusive } from '../../shared/fs/create-exclusive.ts';
 import { isErrno } from '../../shared/fs/errno.ts';
 import { patiently } from '../../shared/fs/patiently.ts';
+import { Caller } from './caller.ts';
 import { FileLockStore } from './file-lock-store.ts';
-import { Owner } from './owner.ts';
+import { Presence } from './presence.ts';
 
 /**
  * Whoever creates the lock file holds the key; releasing deletes it. Waiters
@@ -15,33 +16,60 @@ export class LockFileStore extends FileLockStore {
     path: string,
     signal: AbortSignal | undefined,
   ): Promise<AsyncDisposable> {
-    const me = Owner.current();
+    const me = Caller.current();
     return this.poll(() => this.#attempt(path, me), { signal });
   }
 
   protected async tryLock(path: string): Promise<AsyncDisposable | undefined> {
-    const me = Owner.current();
-    // An attempt that finds a dead holder removes it, so one more attempt can then succeed.
+    const me = Caller.current();
+    // An attempt that finds a gone holder removes it, so one more attempt can then succeed.
     return (await this.#attempt(path, me)) ?? this.#attempt(path, me);
   }
 
+  /** A waiter is present only while it tries to create the file, so giving up leaves nothing behind. */
   async #attempt(
     path: string,
-    me: Owner,
+    me: Caller,
   ): Promise<AsyncDisposable | undefined> {
-    if (await createExclusive(path, me.serialize())) {
-      return { [Symbol.asyncDispose]: () => removeLockFile(path) };
+    const holder = await readHolder(path);
+    if (holder) {
+      await this.#evictIfGone(path, holder);
+      return undefined;
     }
 
-    const holder = await readHolder(path);
-    if (holder && !holder.isAlive()) {
-      await this.withReclaimLock(path, async () => {
-        if ((await readHolder(path))?.id === holder.id) {
-          await removeLockFile(path);
-        }
-      });
+    const presence = Presence.claim(Presence.pathOf(path, me));
+    const created = await createExclusive(path, me.serialize()).catch(
+      async (error: unknown) => {
+        await presence.withdraw();
+        throw error;
+      },
+    );
+    if (!created) {
+      await presence.withdraw();
+      return undefined;
     }
-    return undefined;
+    return {
+      [Symbol.asyncDispose]: () =>
+        presence.releaseAfter(() => removeLockFile(path)),
+    };
+  }
+
+  async #evictIfGone(path: string, holder: Caller) {
+    const presence = Presence.pathOf(path, holder);
+    const state = Presence.check(presence);
+    if (state === 'present') return;
+    if (state === 'missing') {
+      // A release removes the record before the presence file, so a record still in place never had one.
+      if ((await readHolder(path))?.id === holder.id) {
+        throw Presence.missing(path, presence);
+      }
+      return;
+    }
+    await this.withReclaimLock(path, async () => {
+      if ((await readHolder(path))?.id !== holder.id) return;
+      await removeLockFile(path);
+      await Presence.delete(presence);
+    });
   }
 }
 
@@ -49,9 +77,9 @@ function removeLockFile(path: string) {
   return patiently(() => unlink(path));
 }
 
-async function readHolder(path: string): Promise<Owner | undefined> {
+async function readHolder(path: string): Promise<Caller | undefined> {
   try {
-    return Owner.parse(await patiently(() => readFile(path, 'utf8')));
+    return Caller.parse(await patiently(() => readFile(path, 'utf8')));
   } catch (error) {
     if (isErrno(error, 'ENOENT')) return undefined;
     throw error;

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
+import { readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline';
 import { describe, test } from 'node:test';
@@ -13,10 +14,10 @@ import { LockFileStore } from './lock-file-store.ts';
 import { TicketQueueFileStore } from './ticket-queue-file-store.ts';
 
 /**
- * Starts another program that opens `path` with no sharing, as a virus scanner
- * can, and keeps it open until `close` is called.
+ * Starts another program that opens `path`, as a virus scanner can, letting
+ * others do only what `share` allows, and keeps it open until `close` is called.
  */
-async function holdOpen(path: string) {
+async function holdOpen(path: string, share: 'None' | 'ReadWrite') {
   const quoted = path.replaceAll("'", "''");
   const child = spawn(
     'powershell.exe',
@@ -24,7 +25,7 @@ async function holdOpen(path: string) {
       '-NoProfile',
       '-NonInteractive',
       '-Command',
-      `$file = [System.IO.File]::Open('${quoted}', 'Open', 'Read', 'None'); [Console]::Out.WriteLine('open'); [void][Console]::In.ReadLine(); $file.Close()`,
+      `$file = [System.IO.File]::Open('${quoted}', 'Open', 'Read', '${share}'); [Console]::Out.WriteLine('open'); [void][Console]::In.ReadLine(); $file.Close()`,
     ],
     { stdio: ['pipe', 'pipe', 'inherit'] },
   );
@@ -74,6 +75,7 @@ describe('File lock stores on Windows', () => {
         const waiter = mutex.acquire('report-daily', async () => 'next');
         await using scanner = await holdOpen(
           join(directory.path, 'report-daily.lock'),
+          'None',
         );
 
         // Act: the holder releases while the other program holds the file, which then lets it go.
@@ -87,6 +89,54 @@ describe('File lock stores on Windows', () => {
           'The release must wait out the other program, not fail',
         );
         assert.equal(await waiter, 'next');
+      },
+    );
+
+    test(
+      `${name}: a presence file that another program keeps open fails the release with its name, and the key is free`,
+      {
+        timeout: 20000,
+        skip:
+          process.platform === 'win32'
+            ? false
+            : 'Only Windows refuses to delete a file that another program holds open',
+      },
+      async () => {
+        // Arrange: a holder, and another program that keeps the holder's
+        // presence file open beside SQLite without letting it be deleted.
+        await using directory = await scratchDirectory();
+        const mutex = new Mutex(open(directory.path));
+        const entered = Promise.withResolvers<void>();
+        const finish = Promise.withResolvers<void>();
+        const holder = mutex.acquire('report-daily', async () => {
+          entered.resolve();
+          await finish.promise;
+        });
+        await entered.promise;
+        const [presence] = (await readdir(directory.path)).filter((file) =>
+          file.endsWith('.presence'),
+        );
+        assert.ok(presence, 'The holder must keep a presence file');
+        await using scanner = await holdOpen(
+          join(directory.path, presence),
+          'ReadWrite',
+        );
+
+        // Act: the holder releases while the other program keeps the file
+        // open for longer than a release waits.
+        finish.resolve();
+
+        // Assert: the release names the file it could not delete, and the key is free anyway.
+        await assert.rejects(holder, (error: unknown) => {
+          assert.ok(error instanceof Error, String(error));
+          assert.ok(error.message.includes(presence), error.message);
+          return true;
+        });
+        await scanner.close();
+        assert.equal(
+          await mutex.acquire('report-daily', async () => 'next'),
+          'next',
+        );
       },
     );
   }

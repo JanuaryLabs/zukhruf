@@ -1118,14 +1118,7 @@ for (const store of storeCases.filter(
 
     test(
       'the key of a worker thread that was terminated goes to the next waiter',
-      {
-        timeout: 15000,
-        todo:
-          store.name === 'LockFileStore' ||
-          store.name === 'TicketQueueFileStore'
-            ? 'File stores know a holder only by its process, and the process of a terminated thread lives on (backlog #2326)'
-            : false,
-      },
+      { timeout: 15000 },
       async () => {
         // Arrange: this thread asks first, so a SocketStore leads from here and
         // terminating the holder never ends the leader's term.

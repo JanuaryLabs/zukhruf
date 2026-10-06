@@ -22,8 +22,6 @@ export interface FileLockStoreOptions {
 export interface PollOptions {
   /** Stops between attempts when it aborts; the poll then rejects with `signal.reason`. */
   signal?: AbortSignal | undefined;
-  /** Whether the wait between attempts keeps the process alive. */
-  keepAlive?: boolean;
 }
 
 /** Shares one lock directory between processes: each key maps to `<directory>/<key>.lock`. */
@@ -68,13 +66,13 @@ export abstract class FileLockStore implements LockStore {
 
   protected async poll<T>(
     attempt: () => Promise<T | undefined>,
-    { signal, keepAlive = true }: PollOptions = {},
+    { signal }: PollOptions = {},
   ): Promise<T> {
     for (;;) {
       const result = await attempt();
       if (result !== undefined) return result;
       try {
-        await delay(this.#pollInterval, undefined, { signal, ref: keepAlive });
+        await delay(this.#pollInterval, undefined, { signal });
       } catch (error) {
         signal?.throwIfAborted();
         throw error;

@@ -136,10 +136,7 @@ for (const storeName of stores) {
   describe(`${storeName} shared by containers on one machine`, () => {
     test(
       'a waiter never takes the key of a holder that is alive in another container with the same hostname',
-      {
-        skip: noDocker,
-        todo: 'Owner.isAlive() checks the PID in the waiter’s own PID namespace: a PID that only exists in the holder’s container reads as dead (backlog #2323)',
-      },
+      { skip: noDocker },
       async (t) => {
         // Arrange: the holder starts after 300 other processes, so its PID
         // number does not exist in a fresh container, where the waiter runs.
@@ -167,10 +164,7 @@ for (const storeName of stores) {
 
     test(
       'a waiter gets the key of a holder that was killed in another container with its own hostname',
-      {
-        skip: noDocker,
-        todo: 'Owner.isAlive() takes another hostname for another machine and never evicts its holder, and Docker gives each container its own hostname (backlog #2324)',
-      },
+      { skip: noDocker },
       async (t) => {
         // Arrange: each container keeps the hostname Docker gives it.
         await using volume = await docker.volume();
@@ -199,10 +193,7 @@ for (const storeName of stores) {
 
     test(
       'a waiter gets the key of a holder that was killed in another container with the same hostname',
-      {
-        skip: noDocker,
-        todo: 'Owner.isAlive() looks up the dead holder’s PID 1 in the waiter’s own PID namespace, where PID 1 is the waiter itself (backlog #2324)',
-      },
+      { skip: noDocker },
       async (t) => {
         // Arrange: holder and waiter are each their container's main process, PID 1.
         await using volume = await docker.volume();
