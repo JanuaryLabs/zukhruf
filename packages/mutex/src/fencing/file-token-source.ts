@@ -1,7 +1,7 @@
 import { mkdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
-import { atomicWrite } from '../shared/fs/atomic-write.ts';
+import { durableWrite } from '../shared/fs/durable-write.ts';
 import { isErrno } from '../shared/fs/errno.ts';
 import { safeFileName } from '../shared/fs/safe-file-name.ts';
 import { FencingToken } from './fencing-token.ts';
@@ -23,7 +23,7 @@ export class FileTokenSource implements TokenSource {
     await mkdir(this.#directory, { recursive: true });
     const path = join(this.#directory, `${safeFileName(key)}.fence`);
     const token = (await readCounter(path)) + 1n;
-    await atomicWrite(path, token.toString());
+    await durableWrite(path, token.toString());
     return new FencingToken(token);
   }
 }

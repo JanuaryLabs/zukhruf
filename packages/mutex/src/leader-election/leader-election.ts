@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { setTimeout as delay } from 'node:timers/promises';
 
-import { atomicWrite } from '../shared/fs/atomic-write.ts';
+import { durableWrite } from '../shared/fs/durable-write.ts';
 import { isErrno } from '../shared/fs/errno.ts';
 import { isBusy } from '../shared/sqlite/is-busy.ts';
 import { Leadership } from './leadership.ts';
@@ -77,7 +77,7 @@ export class LeaderElection {
   async #nextEpoch(): Promise<bigint> {
     const path = join(this.#directory, 'leader.epoch');
     const epoch = (await readEpoch(path)) + 1n;
-    await atomicWrite(path, epoch.toString());
+    await durableWrite(path, epoch.toString());
     return epoch;
   }
 }

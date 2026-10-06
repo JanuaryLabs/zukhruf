@@ -1,5 +1,10 @@
 import assert from 'node:assert/strict';
-import { describe, test } from 'node:test';
+// The default export is the module object itself, which mock.method can patch;
+// syncBuiltinESMExports then copies the patch to the named exports.
+import fsPromises from 'node:fs/promises';
+import { syncBuiltinESMExports } from 'node:module';
+import { dirname } from 'node:path';
+import { describe, mock, test } from 'node:test';
 
 import { scratchDirectory } from '../testing/scratch-directory.ts';
 import { waitUntil } from '../testing/wait-until.ts';
@@ -143,3 +148,124 @@ describe('Leader election', () => {
     }
   });
 });
+
+describe('Leader election durability', () => {
+  test('a won term writes its epoch to disk before it replaces the previous one', async () => {
+    // Arrange
+    await using directory = await scratchDirectory();
+    const election = new LeaderElection(directory.path);
+    using disk = recordDiskWrites();
+
+    // Act
+    await using leadership = await election.campaign();
+
+    // Assert: content first, then its sync, then the one-step replacement, which holds the term's epoch.
+    assert.ok(leadership, 'The first campaign in an empty directory must win');
+    const replacement = disk.replacementIn(directory.path);
+    const before = disk.events.slice(0, replacement.index);
+    const written = before.findIndex(
+      (event) => event.op === 'write' && event.path === replacement.from,
+    );
+    const synced = before.findIndex(
+      (event) => event.op === 'sync' && event.path === replacement.from,
+    );
+    assert.ok(written >= 0, 'The new epoch must be written');
+    assert.ok(
+      synced > written,
+      'The new epoch must reach the disk after it is written and before it replaces the old one',
+    );
+    assert.equal(
+      await fsPromises.readFile(replacement.to, 'utf8'),
+      leadership.epoch.toString(),
+    );
+  });
+
+  test(
+    'a won term is on disk before the campaign returns, so a power loss cannot repeat its epoch',
+    {
+      skip:
+        process.platform === 'win32'
+          ? 'Windows never syncs a directory'
+          : false,
+    },
+    async () => {
+      // Arrange
+      await using directory = await scratchDirectory();
+      const election = new LeaderElection(directory.path);
+      using disk = recordDiskWrites();
+
+      // Act
+      await using _leadership = await election.campaign();
+
+      // Assert
+      const replacement = disk.replacementIn(directory.path);
+      assert.ok(
+        disk.events
+          .slice(replacement.index + 1)
+          .some(
+            (event) => event.op === 'sync' && event.path === directory.path,
+          ),
+        'The directory that holds the new epoch must reach the disk before the term starts',
+      );
+    },
+  );
+});
+
+type DiskEvent =
+  | { op: 'write' | 'sync'; path: string }
+  | { op: 'rename'; from: string; to: string };
+
+/**
+ * Records what this process asks the operating system to write and make
+ * durable, by patching node:fs/promises `open` (and each handle's `writeFile`
+ * and `sync`) and `rename`. It pins those Node APIs: an equivalent call such
+ * as `fs.fsync(fd)` would not be seen. Every call still reaches the real disk.
+ */
+function recordDiskWrites() {
+  const events: DiskEvent[] = [];
+  const open = fsPromises.open;
+  const rename = fsPromises.rename;
+  mock.method(
+    fsPromises,
+    'open',
+    async (...args: Parameters<typeof fsPromises.open>) => {
+      const handle = await open(...args);
+      const path = String(args[0]);
+      const writeFile = handle.writeFile.bind(handle);
+      const sync = handle.sync.bind(handle);
+      handle.writeFile = async (...data: Parameters<typeof writeFile>) => {
+        events.push({ op: 'write', path });
+        return writeFile(...data);
+      };
+      handle.sync = async () => {
+        events.push({ op: 'sync', path });
+        return sync();
+      };
+      return handle;
+    },
+  );
+  mock.method(fsPromises, 'rename', async (from: string, to: string) => {
+    events.push({ op: 'rename', from, to });
+    return rename(from, to);
+  });
+  syncBuiltinESMExports();
+  return {
+    events,
+    /** The rename that put a new file into `directory`, and where it sits among the events. */
+    replacementIn(directory: string) {
+      const index = events.findIndex(
+        (event) => event.op === 'rename' && dirname(event.to) === directory,
+      );
+      const event = events[index];
+      assert.ok(
+        event?.op === 'rename',
+        'The file must be replaced in one step',
+      );
+      return { index, from: event.from, to: event.to };
+    },
+    [Symbol.dispose]() {
+      mock.restoreAll();
+      syncBuiltinESMExports();
+    },
+  };
+}
