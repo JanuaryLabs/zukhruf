@@ -24,12 +24,13 @@ The file lock stores identify a holder by its process. A worker thread that stop
 
 **No lock store can release the key of a frozen holder safely.** A frozen holder can continue at any time. Only a [fenced resource](./fencing-tokens.md) can refuse its late writes.
 
-## When a coordinator stops
+## When a coordinator stops or a campaign fails
 
 | Lock store                       | Waiters                                                                                                                        | Holders                                                                                                                      |
 | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------- |
 | `IpcStore` (the parent stops)    | Get `CoordinatorUnavailableError`. On Windows, Node.js stops the children too, unless they were started with `detached: true`. | Keep the key. No coordinator is left to grant it to another holder ([ADR 0004](../adr/0004-parent-stops-held-keys-stay.md)). |
 | `SocketStore` (the leader stops) | Send their request to the new leader.                                                                                          | Reassert during the grace window. A refused reassert gives a lost lease.                                                     |
+| `SocketStore` (a campaign fails) | Get the error of the campaign, for example a disk error. The next request connects again.                                      | Get `LockLostError` when they release. No leader got their reassert, so another holder may have the key.                     |
 
 ## Errors
 

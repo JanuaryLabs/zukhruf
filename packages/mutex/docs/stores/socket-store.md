@@ -45,7 +45,7 @@ The leader is a normal app process. You do not start or watch a separate server.
 
 **Failover.** When the leader stops, a follower wins a new campaign. The new leader grants no keys during the grace window. In that time, each holder reasserts its keys and each waiter sends its request again. Then the new leader continues. See [leader election](../concepts/leader-election.md#failover-in-the-socket-lock-store).
 
-**Shutdown.** `await store[Symbol.asyncDispose]()` (or `await using`) closes the connection of this process. If this process is the leader, it closes all connections, stops the server, and ends its term. Followers then elect a new leader and keep their keys.
+**Shutdown.** `await store[Symbol.asyncDispose]()` (or `await using`) closes the connection of this process. Each waiter in this process gets an error. If a campaign of this process is in progress, the campaign stops, and the process does not start the server. If this process is the leader, it closes all connections, stops the server, and ends its term. Followers then elect a new leader and keep their keys.
 
 Messages are lines of JSON. A socket does not keep message boundaries: in a test, two small messages arrived in one piece, and one large message arrived in 25 pieces of 8,192 bytes.
 
@@ -61,6 +61,7 @@ Messages are lines of JSON. A socket does not keep message boundaries: in a test
 | The leader stops                                 | A failover occurs. Holders reassert their keys during the grace window.                                                                                              |
 | A holder is frozen during the whole grace window | Its reassert is refused. A newer holder can get the key. A fenced resource refuses the late writes of the frozen holder, and the frozen holder gets `LockLostError`. |
 | A holder thread stops                            | Its connection closes, and the key is released.                                                                                                                      |
+| A campaign fails, for example with a disk error  | Each waiter gets that error. A holder that did not reassert its keys gets `LockLostError` when it releases. The next `acquire` connects again.                       |
 
 See [failure modes](../concepts/failure-modes.md).
 
