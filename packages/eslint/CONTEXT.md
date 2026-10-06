@@ -61,3 +61,17 @@ _Avoid_: Shared code
 **Port**:
 An interface that an island declares and a host implements, such as a store or a requester. A port returns `unknown`, never a generic type.
 _Avoid_: Adapter interface, contract
+
+### Manifests
+
+**Project shape**:
+What a project's `package.json` must declare, decided by its build target: bundled or unbundled.
+_Avoid_: Project kind, inline/external
+
+**Bundled project**:
+An application whose build inlines the workspace packages it imports, such as a Vite app or esbuild with `bundle` on. Its manifest declares every npm package those packages pull in, but not the workspace packages themselves.
+_Avoid_: Inline project
+
+**Unbundled project**:
+Every project that is not bundled: libraries, an `nx:noop` shell, esbuild with `bundle: false`. Its manifest declares what its own code imports.
+_Avoid_: Library (when shape is meant)

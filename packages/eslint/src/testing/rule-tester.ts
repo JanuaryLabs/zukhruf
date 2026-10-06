@@ -18,6 +18,28 @@ export function typescriptRuleTester(): RuleTester {
   });
 }
 
+/**
+ * A tester for rules that read types. Each case names a `filename` under
+ * `root`; the project service checks it with `root`'s tsconfig.json, so the
+ * file does not have to exist.
+ */
+export function typedRuleTester(root: string): RuleTester {
+  return new RuleTester({
+    languageOptions: {
+      parser: tseslint.parser,
+      ecmaVersion: 'latest',
+      sourceType: 'module',
+      parserOptions: {
+        projectService: {
+          allowDefaultProject: ['*.ts'],
+          defaultProject: 'tsconfig.json',
+        },
+        tsconfigRootDir: root,
+      },
+    },
+  });
+}
+
 export function jsonRuleTester(): RuleTester {
   return new RuleTester({ languageOptions: { parser: jsonc } });
 }

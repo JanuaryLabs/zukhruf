@@ -12,7 +12,8 @@ export interface Project {
 
 const projectByDirectory = new Map<string, Project | undefined>();
 
-function readJson(path: string): unknown {
+/** The parsed JSON file at `path`, or `undefined` when there is none. */
+export function readJson(path: string): unknown {
   return existsSync(path) ? JSON.parse(readFileSync(path, 'utf8')) : undefined;
 }
 

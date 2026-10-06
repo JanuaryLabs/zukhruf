@@ -65,7 +65,8 @@ export function fixtureConfig(body: string): string {
   return [
     `import { defineConfig } from ${url('eslint/config')};`,
     `import zukhruf from ${url('@zukhruf/eslint')};`,
-    `import island from ${url('@zukhruf/eslint/nx')};`,
+    `import island, { manifest } from ${url('@zukhruf/eslint/nx')};`,
+    `import hermes from ${url('@zukhruf/eslint/react-native')};`,
     `export default defineConfig(${body});`,
   ].join('\n');
 }

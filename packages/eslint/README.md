@@ -22,7 +22,7 @@ You need ESLint 9.30 or later, and Node.js 24 or later.
 npm install --save-dev @zukhruf/eslint
 ```
 
-Its peers are `eslint`, `@eslint/js`, `typescript-eslint`, `typescript`, `eslint-plugin-import-x`, `eslint-plugin-functional` and `jsonc-eslint-parser`. `@zukhruf/eslint/nx` also needs `@nx/eslint-plugin`. npm installs the peers for you. With `legacy-peer-deps=true` in `.npmrc`, npm does not, so add them to your devDependencies.
+Its peers are `eslint`, `@eslint/js`, `typescript-eslint`, `typescript`, `eslint-plugin-import-x`, `eslint-plugin-functional` and `jsonc-eslint-parser`. `@zukhruf/eslint/nx` also needs `@nx/eslint-plugin`, and `@zukhruf/eslint/react-native` needs `eslint-plugin-es-x`. npm installs the peers for you. With `legacy-peer-deps=true` in `.npmrc`, npm does not, so add them to your devDependencies.
 
 ```js
 // eslint.config.mjs
@@ -40,21 +40,23 @@ Put framework presets (for example Nx's `flat/react`) **before** the zukhruf con
 
 ## Configs
 
-| Config            | Files                 | Rules                                                                                                                                                                                                                                                                                                                                          |
-| ----------------- | --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `base`            | all source            | `@eslint/js` and `typescript-eslint` recommended; `consistent-type-assertions` (never), `no-namespace`, `zukhruf/no-enum`; `import-x/no-duplicates`, `import-x/no-unassigned-import`; `functional/no-let` (module scope); `zukhruf/no-state-managers`, `zukhruf/no-playwright-test`; typed lint: `no-floating-promises`, `no-misused-promises` |
-| `tests`           | test files            | `no-test-lifecycle-hooks`, `require-msw-error-on-unhandled-request`                                                                                                                                                                                                                                                                            |
-| `diagnostics`     | source, not tests     | `no-fabricated-fallback`, `no-hardcoded-id-shape`, `consistent-event-name`                                                                                                                                                                                                                                                                     |
-| `env`             | TypeScript, not tests | `no-undeclared-process-env`, `no-single-env-read-wrapper`, `no-default-for-path-env`                                                                                                                                                                                                                                                           |
-| `packaged-app`    | TypeScript, not tests | `no-bare-spawn`                                                                                                                                                                                                                                                                                                                                |
-| `react`           | `.tsx`, `.jsx`        | `require-combobox-popover-modal`                                                                                                                                                                                                                                                                                                               |
-| `react-router`    | source                | `require-loader-data-type-argument`; outside tests: `no-raw-route-path`, `no-internal-anchor`                                                                                                                                                                                                                                                  |
-| `hono`            | TypeScript, not tests | `no-untyped-empty-json`                                                                                                                                                                                                                                                                                                                        |
-| `tailwind`        | source                | `no-h-screen`, `no-arbitrary-z-index`, `no-will-change`                                                                                                                                                                                                                                                                                        |
-| `pulumi`          | TypeScript            | `require-server-replace-guard`                                                                                                                                                                                                                                                                                                                 |
-| `nx-project-json` | `project.json`        | `no-missing-asset-input`                                                                                                                                                                                                                                                                                                                       |
+| Config            | Files                 | Rules                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| ----------------- | --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `base`            | all source            | `@eslint/js` and `typescript-eslint` recommended; `consistent-type-assertions` (never), `no-namespace`, `zukhruf/no-enum`; `import-x/no-duplicates`, `import-x/no-unassigned-import`; `functional/no-let` (module scope); `zukhruf/no-state-managers`, `zukhruf/no-playwright-test`; typed lint: `no-floating-promises`, `no-misused-promises`, `only-throw-error`, `switch-exhaustiveness-check` (a `default` counts as exhaustive), `zukhruf/no-promise-field` |
+| `tests`           | test files            | `no-test-lifecycle-hooks`, `require-msw-error-on-unhandled-request`                                                                                                                                                                                                                                                                                                                                                                                              |
+| `diagnostics`     | source, not tests     | `no-fabricated-fallback`, `no-hardcoded-id-shape`, `consistent-event-name`                                                                                                                                                                                                                                                                                                                                                                                       |
+| `env`             | TypeScript, not tests | `no-undeclared-process-env`, `no-single-env-read-wrapper`, `no-default-for-path-env`                                                                                                                                                                                                                                                                                                                                                                             |
+| `packaged-app`    | TypeScript, not tests | `no-bare-spawn`                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| `react`           | `.tsx`, `.jsx`        | `require-combobox-popover-modal`                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| `react-router`    | source                | `require-loader-data-type-argument`; outside tests: `no-raw-route-path`, `no-internal-anchor`                                                                                                                                                                                                                                                                                                                                                                    |
+| `hono`            | TypeScript, not tests | `no-untyped-empty-json`                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| `tailwind`        | source                | `no-h-screen`, `no-arbitrary-z-index`, `no-will-change`                                                                                                                                                                                                                                                                                                                                                                                                          |
+| `pulumi`          | TypeScript            | `require-server-replace-guard`                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| `nx-project-json` | `project.json`        | `no-missing-asset-input`                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 
 `base` turns on typed lint (`parserOptions.projectService`). Each linted TypeScript file must be in a tsconfig.
+
+`zukhruf/no-promise-field` reads each class field's type, so it also sees a promise behind an alias, in a type argument (`Map<string, Promise<X>>`), or inferred from the initializer. A field that holds a function returning a promise is fine: that is a memoized function. To wait until something has happened, use a state object or a one-shot latch.
 
 ### Options for a repo
 
@@ -127,6 +129,56 @@ An island is an Nx project tagged `layer:island`. Its tags come from its `projec
 ```js
 'island/dependency-checks': ['error', dependencyPolicy({ ignoredDependencies: ['electron'] })]
 ```
+
+### Every other manifest
+
+`manifest/recommended` checks the `package.json` of every project that is not an island. What a manifest must declare depends on the project's shape:
+
+- A **bundled** project is an application whose build inlines the workspace packages it imports. Their manifests are not there when it is deployed, so its own manifest declares every npm package they pull in. Workspace packages themselves are not demanded.
+- Every other project is **unbundled**. It declares what its own code imports.
+
+An application bundles unless its build is `nx:noop`, or esbuild with `bundle: false`. A build target that an Nx plugin infers (Vite's, for example) counts as bundling.
+
+```js
+import island, { manifest } from '@zukhruf/eslint/nx';
+
+export default defineConfig({
+  plugins: { island, manifest },
+  extends: ['island/recommended', 'manifest/recommended'],
+  rules: {
+    'manifest/dependency-checks': [
+      'error',
+      {
+        ignoredDependencies: ['electron'],
+        projects: {
+          'apps/website': { ignoredDependencies: ['@radix-ui/react-slot'] },
+        },
+      },
+    ],
+  },
+});
+```
+
+The rule decides each manifest's options itself, so your options add to the shared policy and never replace it. `projects` keys are folders relative to the workspace root. Like Nx's own rule, it needs the project graph that `nx` caches; without it, the rule checks nothing. It reads the workspace's package names once per process, so an editor's ESLint server sees a newly added workspace package only after a restart.
+
+## React Native: Hermes
+
+`@zukhruf/eslint/react-native` needs `eslint-plugin-es-x`. es-x 10 needs ESLint 10.6 or later; on ESLint 9, install `eslint-plugin-es-x@9`. `hermes/recommended` checks the code that ships in the app, and leaves tests, config files and scripts alone, because those run in Node:
+
+- the `Intl` APIs Hermes does not have: es-x's `no-intl-displaynames`, `no-intl-durationformat`, `no-intl-listformat`, `no-intl-locale`, `no-intl-pluralrules`, `no-intl-relativetimeformat` and `no-intl-segmenter`;
+- Node's built-in modules: `import-x/no-nodejs-modules`;
+- `hermes/no-missing-console`: `console.clear`, `dir`, `dirxml`, `profile`, `profileEnd` and `timeLog`, which React Native release builds do not have, and `console[name]` with a computed name.
+
+```js
+import hermes from '@zukhruf/eslint/react-native';
+
+export default defineConfig({
+  plugins: { zukhruf, hermes },
+  extends: ['zukhruf/base', 'hermes/recommended'],
+});
+```
+
+If the app installs an npm polyfill that has a Node module's name, allow it: `'import-x/no-nodejs-modules': ['error', { allow: ['buffer'] }]`.
 
 ## Development
 

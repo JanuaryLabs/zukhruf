@@ -3,7 +3,9 @@ import { test } from 'node:test';
 
 import type { Linter } from 'eslint';
 
+import hermes from '../hermes/plugin.ts';
 import island from '../island/plugin.ts';
+import manifest from '../manifest/plugin.ts';
 import zukhruf from '../plugin.ts';
 
 // Rules whose options are one list a repo fills with its own entries. Flat
@@ -15,13 +17,15 @@ const REPO_OWNED = [
   '@typescript-eslint/no-restricted-imports',
 ];
 
+const plugins = { zukhruf, island, manifest, hermes };
+
 function configsOf(plugin: { configs: Record<string, Linter.Config[]> }) {
   return Object.entries(plugin.configs).flatMap(([name, configs]) =>
     configs.map((config) => ({ name, config })),
   );
 }
 
-const shipped = [...configsOf(zukhruf), ...configsOf(island)];
+const shipped = Object.values(plugins).flatMap(configsOf);
 
 test('no shipped config sets a rule that a repo owns', () => {
   const offenders = shipped.flatMap(({ name, config }) =>
@@ -45,14 +49,15 @@ test('each package rule is turned on by exactly one config', () => {
   const owners = new Map<string, Set<string>>();
   for (const { name, config } of shipped) {
     for (const rule of Object.keys(config.rules ?? {})) {
-      if (!rule.startsWith('zukhruf/') && !rule.startsWith('island/')) continue;
+      if (!Object.keys(plugins).some((key) => rule.startsWith(`${key}/`))) {
+        continue;
+      }
       owners.set(rule, (owners.get(rule) ?? new Set()).add(name));
     }
   }
-  const declared = [
-    ...Object.keys(zukhruf.rules).map((rule) => `zukhruf/${rule}`),
-    ...Object.keys(island.rules).map((rule) => `island/${rule}`),
-  ];
+  const declared = Object.entries(plugins).flatMap(([key, plugin]) =>
+    Object.keys(plugin.rules).map((rule) => `${key}/${rule}`),
+  );
 
   assert.deepEqual(
     declared.filter((rule) => owners.get(rule)?.size !== 1),

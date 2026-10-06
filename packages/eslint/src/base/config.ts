@@ -5,6 +5,7 @@ import { defineConfig } from 'eslint/config';
 import globals from 'globals';
 import tseslint from 'typescript-eslint';
 
+import noPromiseField from '../async-values/no-promise-field.ts';
 import { type Concept, enable } from '../concept.ts';
 import {
   BUILD_OUTPUT,
@@ -25,7 +26,11 @@ const importBans = {
   'no-playwright-test': noPlaywrightTest,
 };
 
-const rules = { 'no-enum': noEnum, ...importBans };
+const rules = {
+  'no-enum': noEnum,
+  'no-promise-field': noPromiseField,
+  ...importBans,
+};
 
 /**
  * What every TypeScript repo gets: the recommended sets of @eslint/js and
@@ -115,6 +120,7 @@ export const base: Concept = {
         // workspace, so it is right under `nx lint` (cwd = the project).
         name: 'zukhruf/base/typed',
         files: TYPESCRIPT,
+        plugins,
         languageOptions: {
           parserOptions: {
             projectService: true,
@@ -134,6 +140,16 @@ export const base: Concept = {
             'error',
             { checksConditionals: false, checksSpreads: false },
           ],
+          // A thrown string or object has no stack, and `catch (error)` code
+          // reads `error.message`.
+          '@typescript-eslint/only-throw-error': 'error',
+          // A switch over a union that misses a member and has no `default`
+          // silently does nothing for it.
+          '@typescript-eslint/switch-exhaustiveness-check': [
+            'error',
+            { considerDefaultExhaustiveForUnions: true },
+          ],
+          'zukhruf/no-promise-field': 'error',
         },
       },
     ),

@@ -1,4 +1,11 @@
 export { default } from './island/plugin.ts';
+export { default as manifest } from './manifest/plugin.ts';
+export {
+  manifestPolicy,
+  type ManifestPolicyOptions,
+  type ProjectExtras,
+} from './manifest/manifest-policy.ts';
+export { projectShape, type ProjectShape } from './manifest/project-shape.ts';
 export {
   dependencyPolicy,
   type DependencyPolicyOptions,
