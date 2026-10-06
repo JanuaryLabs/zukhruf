@@ -277,6 +277,119 @@ describe('Grace window after a failover', () => {
       'The key must be free after the newer holder releases it',
     );
   });
+
+  test('waiters that arrive during the grace window are granted in arrival order', async (t) => {
+    // Arrange: two peers wait for one key during the grace window.
+    const { connect } = coordinatorAfterFailover(100);
+    const first = connect();
+    const second = connect();
+    first.deliver({ op: 'acquire', id: 'f', key: 'product:42' });
+    second.deliver({ op: 'acquire', id: 's', key: 'product:42' });
+    await waitUntil(
+      t,
+      () => first.sent.length > 0,
+      'The first waiter must be granted when the grace window ends',
+    );
+    await delay(settle);
+    const secondBeforeRelease = [...second.sent];
+
+    // Act
+    first.deliver({ op: 'release', id: 'f' });
+
+    // Assert
+    assert.equal(first.sent[0]?.op, 'granted');
+    assert.deepEqual(
+      secondBeforeRelease,
+      [],
+      'The second waiter must wait for the first',
+    );
+    await waitUntil(
+      t,
+      () => second.sent.some((response) => response.op === 'granted'),
+      'The second waiter must be granted after the first releases',
+    );
+  });
+
+  test('a try after the grace window can be granted', async (t) => {
+    // Arrange
+    const { connect } = coordinatorAfterFailover(50);
+    const peer = connect();
+    await delay(100);
+
+    // Act
+    peer.deliver({ op: 'try', id: 't', key: 'product:42' });
+
+    // Assert
+    await waitUntil(
+      t,
+      () => peer.sent.length > 0,
+      'The coordinator must answer the try',
+    );
+    assert.equal(peer.sent[0]?.op, 'granted');
+  });
+});
+
+describe('A peer that disconnects from its coordinator', () => {
+  test('a peer that disconnects while it waits does not keep the key', async () => {
+    // Arrange: the key is held, and a peer waits for it.
+    const coordinator = new LockCoordinator({
+      tokens: new CounterTokenSource(),
+    });
+    const holder = await coordinator.acquire('product:42');
+    const quitter = scriptedPeer<LockResponse, LockRequest>();
+    coordinator.serve(quitter.connection);
+    quitter.deliver({ op: 'acquire', id: 'q', key: 'product:42' });
+
+    // Act: the peer disconnects, and then the holder releases.
+    quitter.drop();
+    await holder[Symbol.asyncDispose]();
+
+    // Assert: the grant that reached the gone peer is given back.
+    assert.equal(
+      await grantedWithin(coordinator.acquire('product:42'), 1000),
+      'granted',
+      'A peer that left must not keep the key it waited for',
+    );
+    assert.deepEqual(quitter.sent, [], 'A peer that left must not be answered');
+  });
+
+  test('a peer that disconnects right after it reasserts does not keep the key', async () => {
+    // Arrange
+    const { coordinator, connect } = coordinatorAfterFailover(100);
+    const holder = connect();
+
+    // Act: the peer reasserts and disconnects in the same turn.
+    holder.deliver({ op: 'reassert', id: 'h', key: 'product:42', token: '5' });
+    holder.drop();
+
+    // Assert: once the grace window ends, the key is free.
+    assert.equal(
+      await grantedWithin(coordinator.acquire('product:42'), 1000),
+      'granted',
+      'A peer that left must not keep the key it reasserted',
+    );
+  });
+
+  test('a peer that disconnects releases the keys it holds', async (t) => {
+    // Arrange
+    const coordinator = new LockCoordinator({
+      tokens: new CounterTokenSource(),
+    });
+    const peer = scriptedPeer<LockResponse, LockRequest>();
+    coordinator.serve(peer.connection);
+    peer.deliver({ op: 'acquire', id: 'a', key: 'product:42' });
+    await waitUntil(t, () => peer.sent.length > 0, 'The peer must be granted');
+
+    // Act
+    peer.drop();
+
+    // Assert
+    assert.equal(
+      await grantedWithin(coordinator.acquire('product:42'), 1000),
+      'granted',
+      'A peer that left must not keep the keys it held',
+    );
+  });
 });
 
 describe('Giving up over the protocol', () => {
