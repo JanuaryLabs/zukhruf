@@ -1,0 +1,11 @@
+{
+  "name": "testing",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "packages/testing/src",
+  "projectType": "library",
+  "tags": ["scope:public", "layer:island", "test:node"],
+  "targets": {
+    "format": {},
+    "test": {}
+  }
+}

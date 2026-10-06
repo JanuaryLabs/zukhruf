@@ -1,0 +1,128 @@
+{
+  "name": "@zukhruf/testing",
+  "version": "0.3.1",
+  "description": "Disposable fixtures for integration tests: Docker containers and database servers, SQLite and DuckDB databases, HTTP servers and streams. A supervisor removes what a killed test run left behind.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/JanuaryLabs/zukhruf",
+    "directory": "packages/testing"
+  },
+  "bugs": {
+    "url": "https://github.com/JanuaryLabs/zukhruf/issues"
+  },
+  "homepage": "https://github.com/JanuaryLabs/zukhruf/tree/main/packages/testing#readme",
+  "keywords": [
+    "testing",
+    "integration-tests",
+    "fixtures",
+    "docker",
+    "postgres",
+    "mysql",
+    "sql-server",
+    "disposable"
+  ],
+  "type": "module",
+  "engines": {
+    "node": ">=24.4.0"
+  },
+  "bin": {
+    "zukhruf-docker-tests": "./dist/scripts/run-docker-tests.js"
+  },
+  "exports": {
+    "./package.json": "./package.json",
+    "./async": {
+      "types": "./dist/async/index.d.ts",
+      "import": "./dist/async/index.js",
+      "default": "./dist/async/index.js"
+    },
+    "./docker": {
+      "types": "./dist/docker/index.d.ts",
+      "import": "./dist/docker/index.js",
+      "default": "./dist/docker/index.js"
+    },
+    "./postgres": {
+      "types": "./dist/databases/postgres.d.ts",
+      "import": "./dist/databases/postgres.js",
+      "default": "./dist/databases/postgres.js"
+    },
+    "./mysql": {
+      "types": "./dist/databases/mysql.d.ts",
+      "import": "./dist/databases/mysql.js",
+      "default": "./dist/databases/mysql.js"
+    },
+    "./sqlserver": {
+      "types": "./dist/databases/sqlserver.d.ts",
+      "import": "./dist/databases/sqlserver.js",
+      "default": "./dist/databases/sqlserver.js"
+    },
+    "./clickhouse": {
+      "types": "./dist/databases/clickhouse.d.ts",
+      "import": "./dist/databases/clickhouse.js",
+      "default": "./dist/databases/clickhouse.js"
+    },
+    "./sqlite": {
+      "types": "./dist/databases/sqlite.d.ts",
+      "import": "./dist/databases/sqlite.js",
+      "default": "./dist/databases/sqlite.js"
+    },
+    "./duckdb": {
+      "types": "./dist/databases/duckdb.d.ts",
+      "import": "./dist/databases/duckdb.js",
+      "default": "./dist/databases/duckdb.js"
+    },
+    "./bigquery": {
+      "types": "./dist/databases/bigquery.d.ts",
+      "import": "./dist/databases/bigquery.js",
+      "default": "./dist/databases/bigquery.js"
+    },
+    "./http": {
+      "types": "./dist/http/http-server.d.ts",
+      "import": "./dist/http/http-server.js",
+      "default": "./dist/http/http-server.js"
+    },
+    "./streams": {
+      "types": "./dist/streams/stream-harness.d.ts",
+      "import": "./dist/streams/stream-harness.js",
+      "default": "./dist/streams/stream-harness.js"
+    }
+  },
+  "files": [
+    "dist",
+    "!dist/spec/**",
+    "!**/*.tsbuildinfo",
+    "!**/*.test.*"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "devDependencies": {
+    "@duckdb/node-api": "^1.5.5-r.3",
+    "@google-cloud/bigquery": "^8.3.1",
+    "@types/mssql": "^12.3.0",
+    "@types/pg": "^8.23.1",
+    "mssql": "^12.7.4",
+    "pg": "^8.23.1"
+  },
+  "dependencies": {
+    "nano-spawn": "^2.1.0",
+    "p-memoize": "^8.0.0",
+    "p-retry": "^8.0.1"
+  },
+  "peerDependencies": {
+    "@duckdb/node-api": "^1.5.5-r.3",
+    "@google-cloud/bigquery": "^8.3.1",
+    "mssql": "^12.7.0"
+  },
+  "peerDependenciesMeta": {
+    "@duckdb/node-api": {
+      "optional": true
+    },
+    "@google-cloud/bigquery": {
+      "optional": true
+    },
+    "mssql": {
+      "optional": true
+    }
+  }
+}
