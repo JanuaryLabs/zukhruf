@@ -1,0 +1,55 @@
+name: Probe Linux containers on Windows
+
+# Throwaway: answers whether a GitHub-hosted Windows runner can run the Linux
+# containers that the file stores' container tests need, and whether a C:\ path
+# mounts into one. Removed once it has run.
+on:
+  workflow_dispatch:
+
+jobs:
+  probe:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    env:
+      # wsl.exe prints UTF-16 unless told otherwise, which reads as gibberish in logs.
+      WSL_UTF8: 1
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Docker engine
+        continue-on-error: true
+        run: |
+          docker version
+          "Server OS type: $(docker info --format '{{.OSType}}')"
+
+      - name: Pull a Linux image
+        id: pull
+        continue-on-error: true
+        run: docker pull node:26-alpine
+
+      - name: Mount a C:\ path into a Linux container
+        id: mount
+        if: steps.pull.outcome == 'success'
+        continue-on-error: true
+        run: docker run --rm --volume "${{ github.workspace }}:/pkg:ro" node:26-alpine ls /pkg/packages/mutex
+
+      - name: Boot a WSL2 distribution
+        id: wsl
+        continue-on-error: true
+        run: |
+          wsl --version
+          wsl --status
+          wsl --install --distribution Ubuntu --no-launch --web-download
+          wsl --distribution Ubuntu --user root -- uname -a
+
+      - name: Summary
+        if: always()
+        run: |
+          @(
+            '| check | outcome |'
+            '| --- | --- |'
+            '| pull node:26-alpine | ${{ steps.pull.outcome }} |'
+            '| mount C:\ into a Linux container | ${{ steps.mount.outcome }} |'
+            '| boot a WSL2 distribution | ${{ steps.wsl.outcome }} |'
+          ) | Add-Content $env:GITHUB_STEP_SUMMARY
