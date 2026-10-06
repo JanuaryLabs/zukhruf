@@ -58,6 +58,7 @@ On a file system that ignores the case of letters (the macOS default), the keys 
 - **A holder thread stops:** the key stays held until the process stops.
 - **A reused process ID:** a waiter waits until the new process stops. It never gets the key too early.
 - **A process stops during a reclaim:** remove `<key>.lock.reclaim` by hand.
+- **Windows refuses the lock file for a moment:** another program holds the file open with no sharing, for example a virus scanner, or a delete of the file is in progress. The lock store tries again for up to 1 second. Then it reports the error, because Windows gives the same error for a real permission denial.
 
 See [failure modes](../concepts/failure-modes.md).
 

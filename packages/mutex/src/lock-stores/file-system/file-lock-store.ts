@@ -8,6 +8,7 @@ import { assertLocalDirectory } from '../../local-directory/local-directory.ts';
 import { type Lease, leaseFor } from '../../mutex/lease.ts';
 import type { AcquireOptions, LockStore } from '../../mutex/lock-store.ts';
 import { createExclusive } from '../../shared/fs/create-exclusive.ts';
+import { patiently } from '../../shared/fs/patiently.ts';
 import { safeFileName } from '../../shared/fs/safe-file-name.ts';
 import { Owner } from './owner.ts';
 
@@ -93,7 +94,7 @@ export abstract class FileLockStore implements LockStore {
     try {
       await task();
     } finally {
-      await unlink(reclaim);
+      await patiently(() => unlink(reclaim));
     }
   }
 

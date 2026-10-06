@@ -47,7 +47,7 @@ Removal of a stopped holder uses `<key>.lock.reclaim`, as in [TicketQueueFileSto
 
 ## Failure modes
 
-The same as [TicketQueueFileStore](./ticket-queue-file-store.md#failure-modes): a stopped holder process is removed, a stopped holder thread is not, and a reused process ID makes waiters wait longer.
+The same as [TicketQueueFileStore](./ticket-queue-file-store.md#failure-modes): a stopped holder process is removed, a stopped holder thread is not, and a reused process ID makes waiters wait longer. On Windows, a lock file that Windows refuses for a moment is tried again for up to 1 second.
 
 ## Options
 

@@ -2,6 +2,7 @@ import { appendFile, readFile } from 'node:fs/promises';
 
 import { atomicWrite } from '../../shared/fs/atomic-write.ts';
 import { isErrno } from '../../shared/fs/errno.ts';
+import { patiently } from '../../shared/fs/patiently.ts';
 import { FileLockStore } from './file-lock-store.ts';
 import { Owner } from './owner.ts';
 
@@ -110,12 +111,12 @@ async function evictDeadHead(path: string) {
 }
 
 async function enqueue(path: string, owner: Owner) {
-  await appendFile(path, `${owner.serialize()}\n`);
+  await patiently(() => appendFile(path, `${owner.serialize()}\n`));
 }
 
 async function readTickets(path: string): Promise<Owner[]> {
   try {
-    const content = await readFile(path, 'utf8');
+    const content = await patiently(() => readFile(path, 'utf8'));
     // The last segment is empty or a ticket still being appended.
     return content.split('\n').slice(0, -1).map(Owner.parse);
   } catch (error) {

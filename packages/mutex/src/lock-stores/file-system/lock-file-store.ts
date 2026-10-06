@@ -2,6 +2,7 @@ import { readFile, unlink } from 'node:fs/promises';
 
 import { createExclusive } from '../../shared/fs/create-exclusive.ts';
 import { isErrno } from '../../shared/fs/errno.ts';
+import { patiently } from '../../shared/fs/patiently.ts';
 import { FileLockStore } from './file-lock-store.ts';
 import { Owner } from './owner.ts';
 
@@ -29,22 +30,28 @@ export class LockFileStore extends FileLockStore {
     me: Owner,
   ): Promise<AsyncDisposable | undefined> {
     if (await createExclusive(path, me.serialize())) {
-      return { [Symbol.asyncDispose]: () => unlink(path) };
+      return { [Symbol.asyncDispose]: () => removeLockFile(path) };
     }
 
     const holder = await readHolder(path);
     if (holder && !holder.isAlive()) {
       await this.withReclaimLock(path, async () => {
-        if ((await readHolder(path))?.id === holder.id) await unlink(path);
+        if ((await readHolder(path))?.id === holder.id) {
+          await removeLockFile(path);
+        }
       });
     }
     return undefined;
   }
 }
 
+function removeLockFile(path: string) {
+  return patiently(() => unlink(path));
+}
+
 async function readHolder(path: string): Promise<Owner | undefined> {
   try {
-    return Owner.parse(await readFile(path, 'utf8'));
+    return Owner.parse(await patiently(() => readFile(path, 'utf8')));
   } catch (error) {
     if (isErrno(error, 'ENOENT')) return undefined;
     throw error;
