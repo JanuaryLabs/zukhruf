@@ -35,5 +35,8 @@ test('hermes/recommended flags what Hermes lacks in app code, and leaves Node-si
     'hermes/no-missing-console',
     'import-x/no-nodejs-modules',
   ]);
-  assert.ok(findings.every(({ file }) => file.endsWith('/src/app.js')));
+  assert.deepEqual(
+    new Set(findings.map(({ file }) => file)),
+    new Set([workspace.path('src/app.js')]),
+  );
 });
