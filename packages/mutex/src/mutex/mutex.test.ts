@@ -20,7 +20,9 @@ import {
   storeCases,
 } from '../testing/store-cases.ts';
 import { waitUntil } from '../testing/wait-until.ts';
+import { watch } from '../testing/watch.ts';
 import { startWorker } from '../testing/worker-process.ts';
+import { Modes } from './acquire-modes/modes.ts';
 import { Mutex } from './mutex.ts';
 
 const mutexUrl = new URL('./mutex.ts', import.meta.url);
@@ -804,6 +806,65 @@ for (const store of storeCases.filter(
         );
       },
     );
+
+    test(
+      'a waiter keeps waiting while the holder is frozen, and gets the key once it resumes and releases',
+      {
+        timeout: 15000,
+        skip:
+          process.platform === 'win32'
+            ? 'Windows cannot freeze a process with SIGSTOP'
+            : false,
+      },
+      async (t) => {
+        // Arrange: this process asks first, so a SocketStore leads from here and
+        // freezing the holder never freezes the coordinator.
+        await using directory = await scratchDirectory();
+        await using host = store.open(directory.path);
+        const mutex = new Mutex(host.store);
+        await mutex.acquire('warm-up', async () => {});
+        const holderSource = `
+					${workerPrelude(directory.path)}
+					const release = Promise.withResolvers();
+					process.on('message', (command) => {
+						if (command === 'release') release.resolve();
+					});
+					await mutex.acquire('product:42', async () => {
+						process.send({ type: 'holding' });
+						await release.promise;
+					});
+					process.send({ type: 'released' });
+				`;
+        await using holder = startWorker(holderSource, 'holder', { host });
+        await waitUntil(
+          t,
+          () => holder.has('holding'),
+          `The holder must take the key\n${holder.stderr}`,
+        );
+
+        // Act: the holder freezes, and this process waits for the key.
+        holder.child.kill('SIGSTOP');
+        const waiter = watch(
+          mutex.acquire('product:42', async (lease) => lease.token),
+        );
+        await delay(settle * 10);
+        const whileFrozen = waiter.now.status;
+        holder.child.kill('SIGCONT');
+        holder.child.send('release');
+
+        // Assert: a frozen holder can resume at any time, so its key stays its own.
+        assert.equal(
+          whileFrozen,
+          'pending',
+          'A waiter took the key of a frozen holder, which can still resume and write',
+        );
+        await waitUntil(
+          t,
+          () => waiter.now.status === 'fulfilled',
+          'The waiter must get the key once the holder releases it',
+        );
+      },
+    );
   });
 }
 
@@ -1051,6 +1112,66 @@ for (const store of storeCases.filter(
           result,
           { counter: 80, overlaps: 0 },
           'Two threads held the key at the same time',
+        );
+      },
+    );
+
+    test(
+      'the key of a worker thread that was terminated goes to the next waiter',
+      {
+        timeout: 15000,
+        todo:
+          store.name === 'LockFileStore' ||
+          store.name === 'TicketQueueFileStore'
+            ? 'File stores know a holder only by its process, and the process of a terminated thread lives on (backlog #2326)'
+            : false,
+      },
+      async () => {
+        // Arrange: this thread asks first, so a SocketStore leads from here and
+        // terminating the holder never ends the leader's term.
+        await using directory = await scratchDirectory();
+        await using host = store.open(directory.path);
+        const mutex = new Mutex(host.store);
+        await mutex.acquire('warm-up', async () => {});
+        const thread = startThread(
+          host,
+          threadSource(
+            store.name,
+            directory.path,
+            `
+						setInterval(() => {}, 1000);
+						await mutex.acquire('product:42', async () => {
+							parentPort.postMessage('holding');
+							await new Promise(() => {});
+						});
+					`,
+          ),
+        );
+        await once(thread, 'message');
+        const whileHeld = await mutex.acquire(
+          'product:42',
+          async (lease) => lease.token,
+          { mode: Modes.skipIfBusy() },
+        );
+        assert.equal(
+          whileHeld.acquired,
+          false,
+          'The thread must hold the key when it is terminated',
+        );
+
+        // Act: the thread stops for good while it holds the key.
+        await thread.terminate();
+        const next = await mutex.acquire(
+          'product:42',
+          async (lease) => lease.token,
+          { mode: Modes.skipIfBusy({ waitAtMost: 2000 }) },
+        );
+
+        // Assert: a terminated thread can never release, so nothing should keep its key.
+        assert.equal(
+          next.acquired,
+          true,
+          'The key is still held by a thread that no longer exists',
         );
       },
     );

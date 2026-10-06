@@ -4,6 +4,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 
 import { CounterTokenSource } from '../../fencing/counter-token-source.ts';
 import { LockLostError } from '../../mutex/lock-lost-error.ts';
+import { Mutex } from '../../mutex/mutex.ts';
 import {
   scriptedConnector,
   scriptedPeer,
@@ -842,6 +843,73 @@ describe('Remote lock client connection lifecycle', () => {
       await client.close();
     }
   });
+
+  test(
+    'a task whose key is lost while it runs is told before it ends',
+    {
+      todo: 'The lease has no signal: a task learns of a loss only when its lease is released, after it ran (backlog #2325)',
+    },
+    async (t) => {
+      // Arrange: a task holds a key through the Mutex, on the client's first connection.
+      const { connector, calls } = scriptedConnector<
+        LockRequest,
+        LockResponse
+      >();
+      const client = clientOver(connector);
+      const first = grantingPeer();
+      const timeline: string[] = [];
+      const holding = Promise.withResolvers<void>();
+      const finish = Promise.withResolvers<void>();
+      const running = new Mutex(client)
+        .acquire('product:42', async (lease) => {
+          if ('signal' in lease && lease.signal instanceof AbortSignal) {
+            lease.signal.addEventListener('abort', () =>
+              timeline.push('the task is told its key is lost'),
+            );
+          }
+          holding.resolve();
+          await finish.promise;
+          timeline.push('the task ends');
+        })
+        .catch((error: unknown) => {
+          timeline.push(
+            error instanceof LockLostError
+              ? 'LockLostError after the task'
+              : `unexpected: ${String(error)}`,
+          );
+        });
+
+      try {
+        await waitUntil(t, () => calls.length === 1, 'The client must connect');
+        calls[0]!.resolve(first.connection);
+        await holding.promise;
+
+        // Act: while the task runs, the connection drops and connecting again fails.
+        first.drop();
+        await waitUntil(
+          t,
+          () => calls.length === 2,
+          'The client must reconnect',
+        );
+        calls[1]!.reject(
+          new Error('EACCES: the lock directory is not writable'),
+        );
+        await delay(settle);
+        finish.resolve();
+        await running;
+
+        // Assert: the task heard of the loss while it could still stop writing.
+        assert.deepEqual(timeline, [
+          'the task is told its key is lost',
+          'the task ends',
+          'LockLostError after the task',
+        ]);
+      } finally {
+        finish.resolve();
+        await client.close();
+      }
+    },
+  );
 
   test('an acquire whose connection drops while it is sent is sent again once on the next connection', async (t) => {
     // Arrange: the first connection drops during the send of the acquire.
