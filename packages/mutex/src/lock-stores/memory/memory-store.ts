@@ -2,15 +2,17 @@ import { CounterTokenSource } from '../../fencing/counter-token-source.ts';
 import type { TokenSource } from '../../fencing/token-source.ts';
 import { type Lease, leaseFor } from '../../mutex/lease.ts';
 import type { AcquireOptions, LockStore } from '../../mutex/lock-store.ts';
+import { Latch } from '../../shared/latch.ts';
 import { untilAborted } from '../../shared/until-aborted.ts';
 
 export interface MemoryStoreOptions {
   tokens?: TokenSource;
 }
 
-/** Per-key FIFO promise chain; locks are shared only through this instance. */
+/** Per-key FIFO line of latches; locks are shared only through this instance. */
 export class MemoryStore implements LockStore {
-  readonly #tails = new Map<string, Promise<void>>();
+  /** For each key, the latch that the last caller in line opens when it releases. */
+  readonly #lines = new Map<string, Latch>();
   readonly #tokens: TokenSource;
 
   constructor({ tokens = new CounterTokenSource() }: MemoryStoreOptions = {}) {
@@ -19,22 +21,19 @@ export class MemoryStore implements LockStore {
 
   async acquire(key: string, { signal }: AcquireOptions = {}): Promise<Lease> {
     signal?.throwIfAborted();
-    const previous = this.#tails.get(key);
-    const released = Promise.withResolvers<void>();
-    const tail = previous
-      ? previous.then(() => released.promise)
-      : released.promise;
-    this.#tails.set(key, tail);
+    const previous = this.#lines.get(key);
+    const released = new Latch();
+    this.#lines.set(key, released);
     const release = async () => {
-      released.resolve();
-      if (this.#tails.get(key) === tail) this.#tails.delete(key);
+      released.open();
+      if (this.#lines.get(key) === released) this.#lines.delete(key);
     };
 
-    const turn = Promise.resolve(previous);
+    const turn = previous?.wait() ?? Promise.resolve();
     try {
       await untilAborted(turn, signal);
     } catch (error) {
-      // A waiter cannot leave the middle of the chain, so its place passes the key on when its turn comes.
+      // A waiter cannot leave the middle of the line, so its place passes the key on when its turn comes.
       void turn.then(release);
       throw error;
     }
@@ -42,7 +41,7 @@ export class MemoryStore implements LockStore {
   }
 
   async tryAcquire(key: string): Promise<Lease | undefined> {
-    if (this.#tails.has(key)) return undefined;
+    if (this.#lines.has(key)) return undefined;
     return this.acquire(key);
   }
 }
