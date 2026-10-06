@@ -3,7 +3,11 @@ import type { Lease } from '../lease.ts';
 import type { AcquireOptions, LockStore } from '../lock-store.ts';
 
 export interface SkipIfBusyOptions {
-  /** Milliseconds to wait for a busy key before giving up. Defaults to 0: one attempt only. */
+  /**
+   * Milliseconds to wait for another holder before giving up. The limit
+   * starts when the lock store answers that the key is busy: a slow answer
+   * does not show a busy key. Defaults to 0: one attempt only.
+   */
   waitAtMost?: number;
 }
 

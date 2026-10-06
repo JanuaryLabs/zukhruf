@@ -36,9 +36,9 @@ Most race conditions occur inside one process. For example, two HTTP requests re
 
 ## How it works
 
-Each key has a promise chain. A new waiter adds a promise to the end of the chain and waits for the promise before it. When a holder releases the key, its promise resolves, and the next waiter continues. When the chain becomes empty, `MemoryStore` removes the key from the map.
+Each key has a queue. Each caller that joins the queue gets a one-shot latch: a gate that opens once and never closes again. The caller opens its latch when it releases the key. The next caller waits for that latch, so it gets the key only after the caller before it. A caller that gives up opens its latch when its turn comes, so the caller behind it never gets the key early. When the last caller in the queue releases the key, `MemoryStore` removes the key from the map.
 
-A task that fails does not stop the chain. The next waiter gets the key, and the caller of the failed task gets the error.
+A task that fails does not stop the queue. The next waiter gets the key, and the caller of the failed task gets the error.
 
 ## Acquire modes
 

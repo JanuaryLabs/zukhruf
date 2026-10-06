@@ -393,6 +393,28 @@ for (const store of storeCases) {
   });
 }
 
+describe('The time limit of skip if busy', () => {
+  test('the limit starts when the lock store answers, so a free key that it answers late is still acquired', async () => {
+    // Arrange: a lock store whose first answer comes after the limit, as while a coordinator connects.
+    const inner = new MemoryStore();
+    const mutex = new Mutex({
+      acquire: (key, options) => inner.acquire(key, options),
+      tryAcquire: async (key) => {
+        await delay(100);
+        return inner.tryAcquire(key);
+      },
+    });
+
+    // Act
+    const result = await mutex.acquire('report:daily', async () => 'report', {
+      mode: Modes.skipIfBusy({ waitAtMost: 20 }),
+    });
+
+    // Assert: a slow answer is not a busy key, so the mode does not give up.
+    assert.deepEqual(result, { acquired: true, value: 'report' });
+  });
+});
+
 describe('Cancelling a wait', () => {
   test("a key passes one call's signal on, with its own mode and with an override", async () => {
     // Arrange
