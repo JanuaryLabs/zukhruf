@@ -20,7 +20,6 @@ export interface LockCoordinatorOptions {
 
 interface Reassertion {
   token: FencingToken;
-  lease: Promise<Lease>;
   lose(): void;
 }
 
@@ -135,11 +134,11 @@ class GraceWindow implements CoordinatorPhase {
     const existing = this.#reassertions.get(key);
     if (existing && !token.isNewerThan(existing.token)) return undefined;
 
+    // Waiters join the line only after grace, so this claim is next once the
+    // claim it outranks gives the key back, even if that claim already let it go.
+    const lease = this.#store.acquire(key);
     existing?.lose();
-    // Nothing is granted during grace, so the first claim gets the key at once
-    // and a newer claim takes over that same lease.
-    const lease = existing?.lease ?? this.#store.acquire(key);
-    this.#reassertions.set(key, { token, lease, lose });
+    this.#reassertions.set(key, { token, lose });
     return lease;
   }
 }
@@ -147,7 +146,6 @@ class GraceWindow implements CoordinatorPhase {
 class Session {
   readonly #coordinator: LockCoordinator;
   readonly #requested = new Set<string>();
-  readonly #lost = new Set<string>();
   #phase: SessionPhase;
 
   constructor(
@@ -193,16 +191,22 @@ class Session {
         return this.#phase.release(request.id);
       }
       case 'reassert': {
+        // Registered like any request, so a release that arrives before the claim resolves gives the key back.
+        if (this.#requested.has(request.id)) return;
+        this.#requested.add(request.id);
         const claim = this.#coordinator.reassert(
           request.key,
           new FencingToken(BigInt(request.token)),
           () => this.#lose(request.id),
         );
         if (!claim) {
+          this.#requested.delete(request.id);
           return this.#phase.reply({ op: 'rejected', id: request.id });
         }
         const lease = await claim;
-        if (this.#lost.has(request.id)) return;
+        if (!this.#requested.has(request.id)) {
+          return lease[Symbol.asyncDispose]();
+        }
         return this.#phase.keep(lease, request.id);
       }
     }
@@ -214,9 +218,10 @@ class Session {
     return this.#phase.grant(lease, id);
   }
 
-  /** A newer claim took this session's reasserted lease over, so it must not release it. */
+  /** A newer claim outranked this session's reassertion, so the key goes to that claim next. */
   #lose(id: string) {
-    this.#lost.add(id);
+    // A holder that already released has nothing to give back and nothing to learn.
+    if (!this.#requested.delete(id)) return;
     this.#phase.lose(id);
   }
 
@@ -267,7 +272,7 @@ class Serving implements SessionPhase {
   }
 
   lose(id: string) {
-    this.#leases.delete(id);
+    void this.release(id);
     void this.reply({ op: 'rejected', id });
   }
 
