@@ -9,17 +9,14 @@ import { ParentPortConnection } from './parent-port-connection.ts';
 
 /** A worker has one port to its parent thread for its whole life. */
 class ParentPortConnector implements ClientConnector {
-  readonly #port: MessagePort;
-  #handedOut = false;
+  readonly #connection: Iterator<ParentPortConnection, undefined>;
 
   constructor(port: MessagePort) {
-    this.#port = port;
+    this.#connection = [new ParentPortConnection(port)].values();
   }
 
   async connect(): Promise<ClientConnection | undefined> {
-    if (this.#handedOut) return undefined;
-    this.#handedOut = true;
-    return new ParentPortConnection(this.#port);
+    return this.#connection.next().value;
   }
 }
 

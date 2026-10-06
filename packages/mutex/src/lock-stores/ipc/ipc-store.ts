@@ -7,12 +7,13 @@ import { ProcessChannelConnection } from './process-channel-connection.ts';
 
 /** The channel to the parent cannot be re-established, so it is handed out once. */
 class ProcessChannelConnector implements ClientConnector {
-  #handedOut = false;
+  readonly #channel: Iterator<ProcessChannelConnection, undefined> = [
+    new ProcessChannelConnection(),
+  ].values();
 
   async connect(): Promise<ClientConnection | undefined> {
-    if (this.#handedOut || !process.connected) return undefined;
-    this.#handedOut = true;
-    return new ProcessChannelConnection();
+    if (!process.connected) return undefined;
+    return this.#channel.next().value;
   }
 }
 

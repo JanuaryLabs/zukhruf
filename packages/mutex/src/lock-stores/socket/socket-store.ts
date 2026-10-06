@@ -40,7 +40,8 @@ export class SocketStore
   implements LockStore, AsyncDisposable
 {
   readonly #client: RemoteLockClient;
-  #server: LockServer | undefined;
+  /** The lock servers this process started; disposing the store closes them. */
+  readonly #servers = new AsyncDisposableStack();
   #role: SocketRole | undefined;
 
   constructor(
@@ -56,15 +57,14 @@ export class SocketStore
           election: new LeaderElection(directory, { pollInterval }),
           pollInterval,
           serve: async (leadership) => {
-            this.#server = await LockServer.start(socketPath, leadership, {
+            const server = await LockServer.start(socketPath, leadership, {
               // The first term of a directory has no predecessor to wait for.
               graceWindow: leadership.epoch > 1n ? graceWindow : 0,
             });
+            this.#servers.adopt(server, (started) => started.close());
             this.#setRole('leader');
           },
-          connected: () => {
-            if (!this.#server) this.#setRole('follower');
-          },
+          connected: () => this.#setRole('follower'),
         }),
       ),
     );
@@ -86,7 +86,7 @@ export class SocketStore
   /** Stops a campaign still in progress first, so no lock server starts after disposal. */
   async [Symbol.asyncDispose]() {
     await this.#client.close();
-    await this.#server?.close();
+    await this.#servers.disposeAsync();
   }
 
   #setRole(role: SocketRole) {

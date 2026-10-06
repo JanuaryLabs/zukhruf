@@ -12,7 +12,7 @@ import { graceWindow, settle } from '../../testing/store-cases.ts';
 import { waitUntil } from '../../testing/wait-until.ts';
 import { watch } from '../../testing/watch.ts';
 import { startWorker } from '../../testing/worker-process.ts';
-import { SocketStore } from './socket-store.ts';
+import { type SocketRole, SocketStore } from './socket-store.ts';
 
 const mutexUrl = new URL('../../mutex/mutex.ts', import.meta.url);
 const socketStoreUrl = new URL('./socket-store.ts', import.meta.url);
@@ -334,5 +334,47 @@ describe('Socket store disposal', () => {
       'rejected',
       'The acquire must fail with its disposed store',
     );
+  });
+});
+
+describe('Socket store roles', () => {
+  test('a store that becomes the leader reports only the leader role', async () => {
+    // Arrange
+    await using directory = await scratchDirectory();
+    await using store = new SocketStore(directory.path, { pollInterval: 10 });
+    const roles: SocketRole[] = [];
+    store.on('role', (role) => roles.push(role));
+
+    // Act: the first acquire in the directory wins the election.
+    const lease = await store.acquire('product:42');
+    await lease[Symbol.asyncDispose]();
+
+    // Assert
+    assert.deepEqual(
+      roles,
+      ['leader'],
+      'A leader must not report itself as a follower',
+    );
+    assert.equal(store.role, 'leader');
+  });
+
+  test('a store that reaches another leader reports only the follower role', async () => {
+    // Arrange: one store leads the directory.
+    await using directory = await scratchDirectory();
+    await using leader = new SocketStore(directory.path, { pollInterval: 10 });
+    await (await leader.acquire('warm-up'))[Symbol.asyncDispose]();
+    await using follower = new SocketStore(directory.path, {
+      pollInterval: 10,
+    });
+    const roles: SocketRole[] = [];
+    follower.on('role', (role) => roles.push(role));
+
+    // Act
+    const lease = await follower.acquire('product:42');
+    await lease[Symbol.asyncDispose]();
+
+    // Assert
+    assert.deepEqual(roles, ['follower']);
+    assert.equal(follower.role, 'follower');
   });
 });

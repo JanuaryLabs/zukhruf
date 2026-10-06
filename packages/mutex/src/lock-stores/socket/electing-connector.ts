@@ -17,6 +17,7 @@ export interface ElectingConnectorOptions {
   pollInterval: number;
   /** Starts serving for a term this process just won. */
   serve(leadership: Leadership): Promise<void>;
+  /** Reached the server of another process, so this process follows it. */
   connected(): void;
 }
 
@@ -36,24 +37,44 @@ export class ElectingConnector implements ClientConnector {
     const { socketPath, election, pollInterval, serve, connected } =
       this.#options;
     for (;;) {
-      signal.throwIfAborted();
-      const socket = await reach(socketPath);
-      if (signal.aborted) socket?.destroy();
-      signal.throwIfAborted();
-      if (socket) {
+      const leader = await reachUnlessAborted(socketPath, signal);
+      if (leader) {
         connected();
         return new SocketConnection<LockRequest, LockResponse>(
-          socket,
+          leader,
           isLockResponse,
         );
       }
       const leadership = await election.campaign({ timeout: pollInterval });
       if (signal.aborted) await leadership?.resign();
       signal.throwIfAborted();
-      if (leadership) await serve(leadership);
-      else await delay(pollInterval, undefined, { signal });
+      if (leadership) {
+        await serve(leadership);
+        // This process leads now, so it reaches its own server without following anyone.
+        const own = await reachUnlessAborted(socketPath, signal);
+        if (own) {
+          return new SocketConnection<LockRequest, LockResponse>(
+            own,
+            isLockResponse,
+          );
+        }
+      } else {
+        await delay(pollInterval, undefined, { signal });
+      }
     }
   }
+}
+
+/** Like `reach`, but a socket reached after `signal` aborted is destroyed, not returned. */
+async function reachUnlessAborted(
+  socketPath: string,
+  signal: AbortSignal,
+): Promise<Socket | undefined> {
+  signal.throwIfAborted();
+  const socket = await reach(socketPath);
+  if (signal.aborted) socket?.destroy();
+  signal.throwIfAborted();
+  return socket;
 }
 
 /** Resolves `undefined` when nothing listens yet (no file, or a dead leader's file). */
