@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import { mkdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { describe, test } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -334,6 +334,79 @@ describe('Socket store disposal', () => {
       'rejected',
       'The acquire must fail with its disposed store',
     );
+  });
+});
+
+describe('Socket store lock server failure', () => {
+  test(
+    'a leader whose lock server cannot start reports why and ends its term',
+    {
+      skip:
+        process.platform === 'win32'
+          ? 'A named pipe has no file that a directory can block'
+          : false,
+    },
+    async () => {
+      // Arrange: a directory where the socket file must go makes the lock server fail to start.
+      await using directory = await scratchDirectory();
+      const socketPath = join(directory.path, 'lock.sock');
+      await mkdir(socketPath);
+      await using store = new SocketStore(directory.path, { pollInterval: 10 });
+
+      // Act
+      const failure = await store.acquire('product:42').then(
+        () => undefined,
+        (error: unknown) => error,
+      );
+
+      // Assert
+      assert.ok(
+        failure instanceof Error &&
+          'path' in failure &&
+          failure.path === socketPath,
+        `The acquire must fail with the lock server's own start error, got ${String(failure)}`,
+      );
+      await using leadership = await new LeaderElection(directory.path, {
+        pollInterval: 10,
+      }).campaign();
+      assert.ok(
+        leadership,
+        'A leader whose lock server failed to start must end its term',
+      );
+    },
+  );
+
+  test('a leader whose role listener throws closes its lock server before ending its term', async () => {
+    // Arrange: the first acquire in the directory makes this store the leader.
+    await using directory = await scratchDirectory();
+    await using store = new SocketStore(directory.path, { pollInterval: 10 });
+    const listenerFailure = new Error('The role listener failed');
+    store.once('role', () => {
+      throw listenerFailure;
+    });
+
+    // Act
+    const failure = await store.acquire('product:42').then(
+      () => undefined,
+      (error: unknown) => error,
+    );
+
+    // Assert: no lock server may outlive its term, or a second leader could grant the same keys.
+    assert.equal(failure, listenerFailure);
+    const otherLeader = new SocketStore(directory.path, { pollInterval: 10 });
+    const roles: SocketRole[] = [];
+    otherLeader.on('role', (role) => roles.push(role));
+    try {
+      const lease = await otherLeader.acquire('product:42');
+      await lease[Symbol.asyncDispose]();
+      assert.deepEqual(
+        roles,
+        ['leader'],
+        'Another store must lead, not follow a lock server whose term ended',
+      );
+    } finally {
+      await otherLeader[Symbol.asyncDispose]();
+    }
   });
 });
 

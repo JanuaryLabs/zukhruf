@@ -49,7 +49,13 @@ export class ElectingConnector implements ClientConnector {
       if (signal.aborted) await leadership?.resign();
       signal.throwIfAborted();
       if (leadership) {
-        await serve(leadership);
+        try {
+          await serve(leadership);
+        } catch (error) {
+          // A term that nothing serves would stop every other candidate from leading.
+          await leadership.resign();
+          throw error;
+        }
         // This process leads now, so it reaches its own server without following anyone.
         const own = await reachUnlessAborted(socketPath, signal);
         if (own) {

@@ -57,12 +57,17 @@ export class SocketStore
           election: new LeaderElection(directory, { pollInterval }),
           pollInterval,
           serve: async (leadership) => {
-            const server = await LockServer.start(socketPath, leadership, {
-              // The first term of a directory has no predecessor to wait for.
-              graceWindow: leadership.epoch > 1n ? graceWindow : 0,
-            });
-            this.#servers.adopt(server, (started) => started.close());
+            // Until serving has fully started, a failure closes the new server, so no server outlives its term.
+            await using starting = new AsyncDisposableStack();
+            starting.adopt(
+              await LockServer.start(socketPath, leadership, {
+                // The first term of a directory has no predecessor to wait for.
+                graceWindow: leadership.epoch > 1n ? graceWindow : 0,
+              }),
+              (started) => started.close(),
+            );
             this.#setRole('leader');
+            this.#servers.use(starting.move());
           },
           connected: () => this.#setRole('follower'),
         }),
