@@ -6,6 +6,7 @@ import globals from 'globals';
 import tseslint from 'typescript-eslint';
 
 import noPromiseField from '../async-values/no-promise-field.ts';
+import noPhaseFlag from '../class-state/no-phase-flag.ts';
 import { type Concept, enable } from '../concept.ts';
 import {
   BUILD_OUTPUT,
@@ -29,6 +30,7 @@ const importBans = {
 const rules = {
   'no-enum': noEnum,
   'no-promise-field': noPromiseField,
+  'no-phase-flag': noPhaseFlag,
   ...importBans,
 };
 
@@ -150,6 +152,7 @@ export const base: Concept = {
             { considerDefaultExhaustiveForUnions: true },
           ],
           'zukhruf/no-promise-field': 'error',
+          'zukhruf/no-phase-flag': 'error',
         },
       },
     ),
