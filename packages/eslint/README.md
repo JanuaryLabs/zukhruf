@@ -22,6 +22,8 @@ You need ESLint 9.30 or later, and Node.js 24 or later.
 npm install --save-dev @zukhruf/eslint
 ```
 
+Its peers are `eslint`, `@eslint/js`, `typescript-eslint`, `typescript`, `eslint-plugin-import-x`, `eslint-plugin-functional` and `jsonc-eslint-parser`. `@zukhruf/eslint/nx` also needs `@nx/eslint-plugin`. npm installs the peers for you. With `legacy-peer-deps=true` in `.npmrc`, npm does not, so add them to your devDependencies.
+
 ```js
 // eslint.config.mjs
 import { defineConfig } from 'eslint/config';
