@@ -75,7 +75,7 @@ See [failure modes](../concepts/failure-modes.md).
 
 `SocketStore` always uses `EpochTokenSource`. The safety of a failover depends on the epoch, so you cannot change the token source.
 
-`store.role` is `'leader'`, `'follower'`, or `undefined` before the first `acquire`. The `'role'` event tells you when it changes.
+The `'role'` event tells you each time this process starts to lead, or starts to follow a leader. A follower gets the event again after each failover. To keep the current role, store the last value that the event gave you.
 
 ## Evidence
 

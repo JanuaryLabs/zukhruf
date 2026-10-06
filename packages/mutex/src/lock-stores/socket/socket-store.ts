@@ -42,7 +42,6 @@ export class SocketStore
   readonly #client: RemoteLockClient;
   /** The lock servers this process started; disposing the store closes them. */
   readonly #servers = new AsyncDisposableStack();
-  #role: SocketRole | undefined;
 
   constructor(
     directory: string,
@@ -66,18 +65,13 @@ export class SocketStore
               }),
               (started) => started.close(),
             );
-            this.#setRole('leader');
+            this.emit('role', 'leader');
             this.#servers.use(starting.move());
           },
-          connected: () => this.#setRole('follower'),
+          connected: () => this.emit('role', 'follower'),
         }),
       ),
     );
-  }
-
-  /** Whether this process serves the locks, or `undefined` before it first needed one. */
-  get role(): SocketRole | undefined {
-    return this.#role;
   }
 
   acquire(key: string, options?: AcquireOptions): Promise<Lease> {
@@ -92,12 +86,6 @@ export class SocketStore
   async [Symbol.asyncDispose]() {
     await this.#client.close();
     await this.#servers.disposeAsync();
-  }
-
-  #setRole(role: SocketRole) {
-    if (this.#role === role) return;
-    this.#role = role;
-    this.emit('role', role);
   }
 }
 

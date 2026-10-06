@@ -166,8 +166,10 @@ describe('Socket lock server failover', () => {
         pollInterval: 10,
         graceWindow,
       });
+      const leaderRoles: SocketRole[] = [];
+      leaderStore.on('role', (role) => leaderRoles.push(role));
       await new Mutex(leaderStore).acquire('warm-up', async () => {});
-      assert.equal(leaderStore.role, 'leader');
+      assert.deepEqual(leaderRoles, ['leader']);
       await using follower = startWorker(
         participant(
           directory.path,
@@ -313,6 +315,8 @@ describe('Socket store disposal', () => {
     // Arrange: the first acquire in a directory makes the store campaign.
     await using directory = await scratchDirectory();
     const store = new SocketStore(directory.path, { pollInterval: 10 });
+    const roles: SocketRole[] = [];
+    store.on('role', (role) => roles.push(role));
     const acquiring = watch(store.acquire('product:42'));
 
     // Act
@@ -324,11 +328,7 @@ describe('Socket store disposal', () => {
       pollInterval: 10,
     }).campaign();
     assert.ok(leadership, 'A disposed store must not keep a leadership term');
-    assert.equal(
-      store.role,
-      undefined,
-      'A disposed store must not start serving',
-    );
+    assert.deepEqual(roles, [], 'A disposed store must not start serving');
     assert.equal(
       acquiring.now.status,
       'rejected',
@@ -428,7 +428,6 @@ describe('Socket store roles', () => {
       ['leader'],
       'A leader must not report itself as a follower',
     );
-    assert.equal(store.role, 'leader');
   });
 
   test('a store that reaches another leader reports only the follower role', async () => {
@@ -448,6 +447,40 @@ describe('Socket store roles', () => {
 
     // Assert
     assert.deepEqual(roles, ['follower']);
-    assert.equal(follower.role, 'follower');
+  });
+
+  test('a follower reports the follower role again when it reaches a new leader', async (t) => {
+    // Arrange: one store leads, and two stores follow it.
+    await using directory = await scratchDirectory();
+    const options = { pollInterval: 10, graceWindow: 50 };
+    const leader = new SocketStore(directory.path, options);
+    await (await leader.acquire('warm-up'))[Symbol.asyncDispose]();
+    await using first = new SocketStore(directory.path, options);
+    await using second = new SocketStore(directory.path, options);
+    const roles = new Map<SocketStore, SocketRole[]>([
+      [first, []],
+      [second, []],
+    ]);
+    for (const [store, seen] of roles) {
+      store.on('role', (role) => seen.push(role));
+      await (await store.acquire('warm-up'))[Symbol.asyncDispose]();
+    }
+
+    // Act: the leader stops, and one follower takes over.
+    await leader[Symbol.asyncDispose]();
+    await waitUntil(
+      t,
+      () => [...roles.values()].some((seen) => seen.includes('leader')),
+      'A follower must take over as leader',
+    );
+    const stayed = [...roles.values()].find((seen) => !seen.includes('leader'));
+    await waitUntil(
+      t,
+      () => stayed?.length === 2,
+      'The other follower must follow the new leader',
+    );
+
+    // Assert
+    assert.deepEqual(stayed, ['follower', 'follower']);
   });
 });
