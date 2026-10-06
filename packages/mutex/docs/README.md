@@ -40,3 +40,4 @@ Start with the [project README](../README.md). The glossary is in [CONTEXT.md](.
 5. [Threads use a coordinator, not Web Locks](./adr/0005-threads-use-a-coordinator-not-web-locks.md)
 6. [Acquire modes are strategies over two lock store operations](./adr/0006-acquire-modes-are-strategies-over-two-store-operations.md)
 7. [The connection to a coordinator is separate from the lock requests](./adr/0007-the-connection-is-separate-from-the-lock-requests.md)
+8. [A caller cancels with a signal; an acquire mode gives up](./adr/0008-a-caller-cancels-an-acquire-mode-gives-up.md)

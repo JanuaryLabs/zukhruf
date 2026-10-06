@@ -21,7 +21,7 @@ interface Lease extends AsyncDisposable {
 
 1. **Grant a key to one holder at a time.** `acquire` resolves only when no other lease for the key exists.
 2. **`tryAcquire` never waits for another holder.** It returns `undefined` when the key is busy.
-3. **Stop waiting when the signal aborts**, and reject with `signal.reason`. If your lock store keeps a queue that a waiter cannot leave, keep its place and pass the key on when its turn comes. The [acquire modes](../concepts/acquire-modes.md) depend on this.
+3. **Stop waiting when the signal aborts**, and reject with `signal.reason`. If your lock store keeps a queue that a waiter cannot leave, keep its place and pass the key on when its turn comes. The [acquire modes](../concepts/acquire-modes.md) depend on this. A caller that [cancels](../concepts/acquire-modes.md#cancel-a-wait) also depends on this: the mutex gives its signal to your lock store.
 4. **Release the key in `[Symbol.asyncDispose]`.** The mutex calls it after the task, also when the task fails.
 5. **Make the fencing token while the key is held.** Use `leaseFor(key, held, tokens)`. It calls the token source, and it releases the key if the token source fails.
 6. **Let the user give a token source.** Use an option `tokens`, as the other lock stores do.

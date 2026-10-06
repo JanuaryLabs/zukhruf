@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict';
+import { getEventListeners } from 'node:events';
 import { describe, test } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
 import { Worker } from 'node:worker_threads';
 
 import { MemoryStore } from '../lock-stores/memory/memory-store.ts';
 import { scratchDirectory } from '../testing/scratch-directory.ts';
-import { type StoreHost, storeCases } from '../testing/store-cases.ts';
+import { type StoreHost, settle, storeCases } from '../testing/store-cases.ts';
 import { waitUntil } from '../testing/wait-until.ts';
 import { startWorker } from '../testing/worker-process.ts';
 import type { AcquireMode } from './acquire-mode.ts';
@@ -213,8 +214,368 @@ for (const store of storeCases) {
         );
       },
     );
+
+    test(
+      'a waiting caller that cancels rejects with its reason, and the callers after it still get the key',
+      { timeout: 5000 },
+      async () => {
+        // Arrange: a holder, a caller that will cancel, and a caller that waits.
+        await using directory = await scratchDirectory();
+        await using host = store.open(directory.path);
+        const mutex = new Mutex(host.store);
+        const holder = await hold(mutex, 'report:daily');
+        const cancel = new AbortController();
+        const reason = new Error('cancelled');
+        let ran = false;
+        const cancelled = mutex.acquire(
+          'report:daily',
+          async () => {
+            ran = true;
+          },
+          { signal: cancel.signal },
+        );
+        const next = mutex.acquire('report:daily', async () => 'next');
+
+        try {
+          assert.equal(await within(cancelled, settle), 'still waiting');
+
+          // Act
+          cancel.abort(reason);
+
+          // Assert
+          await assert.rejects(cancelled, (error) => error === reason);
+        } finally {
+          await holder.release();
+        }
+        assert.equal(
+          await within(next, 2000),
+          'done',
+          'The caller that cancelled must not keep the key from the caller after it',
+        );
+        assert.equal(
+          ran,
+          false,
+          'A caller that cancelled must not run its task',
+        );
+      },
+    );
+
+    test(
+      'skipIfBusy({ waitAtMost }) rejects with the reason when its caller cancels before the limit',
+      { timeout: 5000 },
+      async () => {
+        // Arrange
+        await using directory = await scratchDirectory();
+        await using host = store.open(directory.path);
+        const mutex = new Mutex(host.store);
+        const holder = await hold(mutex, 'report:daily');
+        const cancel = new AbortController();
+        const reason = new Error('cancelled');
+        const attempt = mutex.acquire('report:daily', async () => 'report', {
+          mode: Modes.skipIfBusy({ waitAtMost: 10_000 }),
+          signal: cancel.signal,
+        });
+
+        try {
+          assert.equal(await within(attempt, settle), 'still waiting');
+
+          // Act
+          cancel.abort(reason);
+
+          // Assert: a cancel is a rejection, not a mode that gave up.
+          await assert.rejects(attempt, (error) => error === reason);
+        } finally {
+          await holder.release();
+        }
+      },
+    );
+
+    test(
+      'skipIfBusy({ waitAtMost }) still gives up after the limit when its caller has a signal that does not abort',
+      { timeout: 5000 },
+      async () => {
+        // Arrange
+        await using directory = await scratchDirectory();
+        await using host = store.open(directory.path);
+        const mutex = new Mutex(host.store);
+        const holder = await hold(mutex, 'report:daily');
+
+        try {
+          // Act
+          const result = await mutex.acquire(
+            'report:daily',
+            async () => 'report',
+            {
+              mode: Modes.skipIfBusy({ waitAtMost: 100 }),
+              signal: new AbortController().signal,
+            },
+          );
+
+          // Assert
+          assert.deepEqual(result, { acquired: false });
+        } finally {
+          await holder.release();
+        }
+      },
+    );
+
+    test('a caller that already cancelled rejects in every mode, and leaves a free key free', async () => {
+      // Arrange
+      await using directory = await scratchDirectory();
+      await using host = store.open(directory.path);
+      const mutex = new Mutex(host.store);
+      const reason = new Error('cancelled');
+      const signal = AbortSignal.abort(reason);
+      let ran = false;
+      const task = async () => {
+        ran = true;
+      };
+
+      // Act
+      const results = await Promise.allSettled([
+        mutex.acquire('report:daily', task, { signal }),
+        mutex.acquire('report:daily', task, { mode: Modes.wait(), signal }),
+        mutex.acquire('report:daily', task, {
+          mode: Modes.skipIfBusy(),
+          signal,
+        }),
+        mutex.acquire('report:daily', task, {
+          mode: Modes.skipIfBusy({ waitAtMost: 100 }),
+          signal,
+        }),
+      ]);
+
+      // Assert
+      assert.deepEqual(
+        results.map(
+          (result) => result.status === 'rejected' && result.reason === reason,
+        ),
+        [true, true, true, true],
+      );
+      assert.equal(ran, false, 'A caller that cancelled must not run its task');
+      assert.deepEqual(
+        await mutex.acquire('report:daily', async () => 'next', {
+          mode: Modes.skipIfBusy(),
+        }),
+        { acquired: true, value: 'next' },
+      );
+    });
+
+    test(
+      'one signal shared by many calls keeps no abort listeners after they finish',
+      { timeout: 5000 },
+      async () => {
+        // Arrange: a free key, a busy key, and a skip with a limit, all with one signal.
+        await using directory = await scratchDirectory();
+        await using host = store.open(directory.path);
+        const mutex = new Mutex(host.store);
+        const { signal } = new AbortController();
+        await mutex.acquire('report:daily', async () => 'free', { signal });
+        const holder = await hold(mutex, 'report:daily');
+        const waited = mutex.acquire('report:daily', async () => 'waited', {
+          signal,
+        });
+
+        // Act
+        const skipped = await mutex.acquire(
+          'report:daily',
+          async () => 'skipped',
+          { mode: Modes.skipIfBusy({ waitAtMost: 50 }), signal },
+        );
+        await holder.release();
+        await waited;
+
+        // Assert
+        assert.deepEqual(skipped, { acquired: false });
+        assert.equal(getEventListeners(signal, 'abort').length, 0);
+      },
+    );
   });
 }
+
+describe('Cancelling a wait', () => {
+  test("a key passes one call's signal on, with its own mode and with an override", async () => {
+    // Arrange
+    const mutex = new Mutex(new MemoryStore());
+    const report = mutex.key('report:daily', {
+      mode: Modes.skipIfBusy({ waitAtMost: 10_000 }),
+    });
+    const holder = await hold(mutex, report.name);
+    const cancel = new AbortController();
+    const reason = new Error('cancelled');
+    const own = report.run(async () => 'own', { signal: cancel.signal });
+    const overridden = report.run(async () => 'overridden', {
+      mode: Modes.wait(),
+      signal: cancel.signal,
+    });
+
+    try {
+      // Act
+      cancel.abort(reason);
+      const results = await Promise.allSettled([own, overridden]);
+
+      // Assert
+      assert.deepEqual(
+        results.map(
+          (result) => result.status === 'rejected' && result.reason === reason,
+        ),
+        [true, true],
+      );
+    } finally {
+      await holder.release();
+    }
+  });
+
+  test(
+    "each built-in mode passes the caller's signal on to the lock store, so the store stops waiting",
+    { timeout: 5000 },
+    async () => {
+      // Arrange: a lock store that records the signal of each wait, and a holder outside it.
+      const inner = new MemoryStore();
+      const signals: (AbortSignal | undefined)[] = [];
+      const mutex = new Mutex({
+        acquire: (key, options) => {
+          signals.push(options?.signal);
+          return inner.acquire(key, options);
+        },
+        tryAcquire: (key) => inner.tryAcquire(key),
+      });
+      await using _holder = await inner.acquire('report:daily');
+      const cancel = new AbortController();
+      const calls = Promise.allSettled([
+        mutex.acquire('report:daily', async () => {}, {
+          mode: Modes.wait(),
+          signal: cancel.signal,
+        }),
+        mutex.acquire('report:daily', async () => {}, {
+          mode: Modes.skipIfBusy({ waitAtMost: 10_000 }),
+          signal: cancel.signal,
+        }),
+      ]);
+      assert.equal(await within(calls, settle), 'still waiting');
+
+      // Act
+      cancel.abort(new Error('cancelled'));
+      await calls;
+
+      // Assert
+      assert.deepEqual(
+        signals.map((signal) => signal?.aborted),
+        [true, true],
+      );
+    },
+  );
+
+  test(
+    'a mode that does not pass the signal on still rejects at once, and gives back the key it gets later',
+    { timeout: 5000 },
+    async () => {
+      // Arrange: a custom mode that waits without the caller's signal.
+      const mutex = new Mutex(new MemoryStore());
+      const unheeding: AcquireMode<'always'> = {
+        outcome: 'always',
+        acquire: (store, key) => store.acquire(key),
+      };
+      const holder = await hold(mutex, 'report:daily');
+      const cancel = new AbortController();
+      const reason = new Error('cancelled');
+      let ran = false;
+      const cancelled = mutex.acquire(
+        'report:daily',
+        async () => {
+          ran = true;
+        },
+        { mode: unheeding, signal: cancel.signal },
+      );
+
+      try {
+        // Act
+        cancel.abort(reason);
+
+        // Assert: the caller does not wait for the holder to release.
+        await assert.rejects(cancelled, (error) => error === reason);
+      } finally {
+        await holder.release();
+      }
+      assert.equal(
+        await within(
+          mutex.acquire('report:daily', async () => 'next'),
+          2000,
+        ),
+        'done',
+        'The key that the mode got after the cancel must be given back',
+      );
+      assert.equal(ran, false, 'A caller that cancelled must not run its task');
+    },
+  );
+
+  test(
+    "skipIfBusy rejects when its caller cancels during the first attempt, and gives that attempt's key back",
+    { timeout: 5000 },
+    async () => {
+      // Arrange: a lock store whose one attempt answers only when the gate opens.
+      const inner = new MemoryStore();
+      const gate = Promise.withResolvers<void>();
+      const mutex = new Mutex({
+        acquire: (key, options) => inner.acquire(key, options),
+        tryAcquire: async (key) => {
+          await gate.promise;
+          return inner.tryAcquire(key);
+        },
+      });
+      const cancel = new AbortController();
+      const reason = new Error('cancelled');
+      let ran = false;
+      const attempt = mutex.acquire(
+        'report:daily',
+        async () => {
+          ran = true;
+        },
+        { mode: Modes.skipIfBusy(), signal: cancel.signal },
+      );
+
+      // Act: the caller cancels, and then its attempt gets the free key.
+      cancel.abort(reason);
+      gate.resolve();
+
+      // Assert
+      await assert.rejects(attempt, (error) => error === reason);
+      assert.equal(
+        await within(
+          mutex.acquire('report:daily', async () => 'next'),
+          2000,
+        ),
+        'done',
+        'The key that the attempt got after the cancel must be given back',
+      );
+      assert.equal(ran, false, 'A caller that cancelled must not run its task');
+    },
+  );
+
+  test('a caller that cancels after its task started gets the task value, and holds the key until the task ends', async () => {
+    // Arrange
+    const mutex = new Mutex(new MemoryStore());
+    const cancel = new AbortController();
+    let duringTask: unknown;
+
+    // Act
+    const value = await mutex.acquire(
+      'report:daily',
+      async () => {
+        cancel.abort(new Error('cancelled'));
+        duringTask = await mutex.acquire('report:daily', async () => 'other', {
+          mode: Modes.skipIfBusy(),
+        });
+        return 'report';
+      },
+      { signal: cancel.signal },
+    );
+
+    // Assert
+    assert.equal(value, 'report');
+    assert.deepEqual(duringTask, { acquired: false });
+  });
+});
 
 describe('Acquire mode result types', () => {
   test('a mode that says it always acquires but gives up rejects instead of running the task', async () => {
@@ -262,9 +623,26 @@ describe('Acquire mode result types', () => {
       mode: Modes.wait(),
     });
 
+    const { signal } = new AbortController();
+    const cancellable: number = await mutex.acquire('k', async () => 1, {
+      signal,
+    });
+    const cancellableSkip = await key.run(async () => 'x', { signal });
+    // @ts-expect-error a signal does not change what a mode that may give up returns
+    void cancellableSkip.value;
+    // @ts-expect-error a signal belongs to one call, not to a key
+    mutex.key('k', { mode: Modes.skipIfBusy(), signal });
+
     assert.deepEqual(
-      [value, checked, viaKey, overridden],
-      [1, 1, { acquired: true, value: 'x' }, 'x'],
+      [value, checked, viaKey, overridden, cancellable, cancellableSkip],
+      [
+        1,
+        1,
+        { acquired: true, value: 'x' },
+        'x',
+        1,
+        { acquired: true, value: 'x' },
+      ],
     );
   });
 
@@ -277,11 +655,14 @@ describe('Acquire mode result types', () => {
   });
 });
 
-/** A child or thread that skips while its host holds the key, then reports both results. */
+/** A child or thread that skips, then cancels a wait, while its host holds the key, and reports each result. */
 const skipperBody = `
 	const atOnce = await mutex.acquire('report:daily', async () => 'ran', { mode: Modes.skipIfBusy() });
 	const afterLimit = await mutex.acquire('report:daily', async () => 'ran', { mode: Modes.skipIfBusy({ waitAtMost: 100 }) });
-	report({ type: 'results', atOnce, afterLimit });
+	const cancel = new AbortController();
+	setTimeout(() => cancel.abort(new Error('cancelled')), 50);
+	const cancelled = await mutex.acquire('report:daily', async () => 'ran', { signal: cancel.signal }).catch((error) => error.message);
+	report({ type: 'results', atOnce, afterLimit, cancelled });
 `;
 
 for (const store of storeCases.filter(
@@ -290,7 +671,7 @@ for (const store of storeCases.filter(
 )) {
   describe(`Acquire modes across processes with ${store.name}`, () => {
     test(
-      'a process that skips while another process holds gives up, and leaves the key free',
+      'a process that skips or cancels while another process holds gets no key, and leaves the key free',
       { timeout: 10000 },
       async (t) => {
         // Arrange: this process holds the key; a child (kept alive) tries to skip.
@@ -321,13 +702,18 @@ for (const store of storeCases.filter(
         );
         await holder.release();
 
-        // Assert: both attempts gave up, and no grant was left with the child.
+        // Assert: both skips gave up, the wait was cancelled, and no grant was left with the child.
         assert.deepEqual(
           {
             atOnce: child.find('results')?.atOnce,
             afterLimit: child.find('results')?.afterLimit,
+            cancelled: child.find('results')?.cancelled,
           },
-          { atOnce: { acquired: false }, afterLimit: { acquired: false } },
+          {
+            atOnce: { acquired: false },
+            afterLimit: { acquired: false },
+            cancelled: 'cancelled',
+          },
         );
         assert.equal(
           await within(
@@ -347,7 +733,7 @@ for (const store of storeCases.filter(
 )) {
   describe(`Acquire modes across threads with ${store.name}`, () => {
     test(
-      'a thread that skips while another thread holds gives up, and leaves the key free',
+      'a thread that skips or cancels while another thread holds gets no key, and leaves the key free',
       { timeout: 10000 },
       async () => {
         // Arrange: the main thread holds the key; a worker (kept alive) tries to skip.
@@ -371,11 +757,14 @@ for (const store of storeCases.filter(
           { eval: true },
         );
         host.adoptThread(thread);
-        const results = new Promise<{ atOnce: unknown; afterLimit: unknown }>(
-          (resolve) =>
-            thread.on('message', (message) => {
-              if (message?.type === 'results') resolve(message);
-            }),
+        const results = new Promise<{
+          atOnce: unknown;
+          afterLimit: unknown;
+          cancelled: unknown;
+        }>((resolve) =>
+          thread.on('message', (message) => {
+            if (message?.type === 'results') resolve(message);
+          }),
         );
 
         try {
@@ -385,8 +774,16 @@ for (const store of storeCases.filter(
 
           // Assert
           assert.deepEqual(
-            { atOnce: reported.atOnce, afterLimit: reported.afterLimit },
-            { atOnce: { acquired: false }, afterLimit: { acquired: false } },
+            {
+              atOnce: reported.atOnce,
+              afterLimit: reported.afterLimit,
+              cancelled: reported.cancelled,
+            },
+            {
+              atOnce: { acquired: false },
+              afterLimit: { acquired: false },
+              cancelled: 'cancelled',
+            },
           );
           assert.equal(
             await within(

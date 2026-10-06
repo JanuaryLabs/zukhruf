@@ -1,5 +1,5 @@
 import type { Lease } from './lease.ts';
-import type { LockStore } from './lock-store.ts';
+import type { AcquireOptions, LockStore } from './lock-store.ts';
 
 /** Whether an acquire mode always ends with the key held, or may give up. */
 export type Outcome = 'always' | 'maybe';
@@ -10,8 +10,15 @@ export type Outcome = 'always' | 'maybe';
  */
 export interface AcquireMode<O extends Outcome = Outcome> {
   readonly outcome: O;
-  /** Resolves with a lease, or `undefined` when this caller gives up. */
-  acquire(store: LockStore, key: string): Promise<Lease | undefined>;
+  /**
+   * Resolves with a lease, or `undefined` when this caller gives up. Pass
+   * `signal` on to each wait, so that a cancel stops the wait at once.
+   */
+  acquire(
+    store: LockStore,
+    key: string,
+    options: AcquireOptions,
+  ): Promise<Lease | undefined>;
 }
 
 export interface Acquired<T> {

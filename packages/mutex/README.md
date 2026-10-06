@@ -70,7 +70,9 @@ await mutex.acquire('product:42', reserve, {
 });
 ```
 
-A mode that can skip returns `{ acquired: true, value } | { acquired: false }`, and TypeScript makes you check `acquired`. See [Acquire modes](./docs/concepts/acquire-modes.md).
+A mode that can skip returns `{ acquired: true, value } | { acquired: false }`, and TypeScript makes you check `acquired`.
+
+To stop a wait, give a signal to the call: `mutex.acquire(key, task, { signal })`. When the signal aborts, the call rejects with `signal.reason`, and the task does not run. See [Acquire modes](./docs/concepts/acquire-modes.md).
 
 ## Fencing tokens
 
@@ -93,7 +95,7 @@ See [Fencing tokens](./docs/concepts/fencing-tokens.md) and the recipe [Protect 
 **Concepts**
 
 - [Reach](./docs/concepts/reach.md): who can share a lock, and how to select it.
-- [Acquire modes](./docs/concepts/acquire-modes.md): wait or skip while a key is busy.
+- [Acquire modes](./docs/concepts/acquire-modes.md): wait or skip while a key is busy, and cancel a wait.
 - [Fencing tokens](./docs/concepts/fencing-tokens.md): how a resource refuses a stale holder.
 - [Leader election](./docs/concepts/leader-election.md): how `SocketStore` selects its coordinator.
 - [Failure modes](./docs/concepts/failure-modes.md): what each lock store does when something stops.

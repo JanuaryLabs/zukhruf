@@ -1,5 +1,6 @@
 import type { AcquireMode, Outcome, OutcomeResults } from './acquire-mode.ts';
 import type { Lease } from './lease.ts';
+import type { AcquireOptions } from './lock-store.ts';
 import type { Mutex } from './mutex.ts';
 
 /**
@@ -21,19 +22,22 @@ export class Key<O extends Outcome> {
   /** Runs `task` with the key's own acquire mode. */
   run<T>(
     task: (lease: Lease) => Promise<T>,
-    options?: { mode?: undefined },
+    options?: AcquireOptions & { mode?: undefined },
   ): Promise<OutcomeResults<T>[O]>;
   /** Runs `task` with `mode` instead of the key's own acquire mode. */
   run<T, P extends Outcome>(
     task: (lease: Lease) => Promise<T>,
-    options: { mode: AcquireMode<P> },
+    options: AcquireOptions & { mode: AcquireMode<P> },
   ): Promise<OutcomeResults<T>[P]>;
   run<T, P extends Outcome>(
     task: (lease: Lease) => Promise<T>,
-    { mode }: { mode?: AcquireMode<P> | undefined } = {},
+    {
+      mode,
+      signal,
+    }: AcquireOptions & { mode?: AcquireMode<P> | undefined } = {},
   ): Promise<OutcomeResults<T>[O] | OutcomeResults<T>[P]> {
     return mode === undefined
-      ? this.#mutex.acquire(this.name, task, { mode: this.#mode })
-      : this.#mutex.acquire(this.name, task, { mode });
+      ? this.#mutex.acquire(this.name, task, { mode: this.#mode, signal })
+      : this.#mutex.acquire(this.name, task, { mode, signal });
   }
 }

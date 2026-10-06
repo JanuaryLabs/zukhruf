@@ -50,6 +50,14 @@ _Avoid_: Block, lock
 The acquire mode in which the caller gives up when the key stays busy, at once or after a time limit. The task then does not run.
 _Avoid_: Try-lock, skip after, timeout
 
+**Give up**:
+An acquire mode stops a wait. The caller gets `{ acquired: false }`, and the task does not run.
+_Avoid_: Cancel, time out
+
+**Cancel**:
+A caller stops its own wait with a signal. The call rejects with the reason of the signal, and the task does not run. A cancel stops only the wait: when the caller holds the key, the task runs to its end.
+_Avoid_: Give up, abort (the signal aborts; the caller cancels)
+
 ### Lock stores and reach
 
 **Lock store**:

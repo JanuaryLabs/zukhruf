@@ -4,6 +4,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, test } from 'node:test';
+import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 
@@ -94,6 +95,52 @@ describe('Reservation endpoint', () => {
         );
       } finally {
         await Promise.allSettled(requests);
+        stock.close();
+        await rm(directory, { recursive: true, force: true });
+      }
+    },
+  );
+
+  test(
+    'a client that leaves while its reservation waits for the key reserves nothing',
+    { timeout: 5000 },
+    async () => {
+      // Arrange: one item left, and another holder on the product's key.
+      const directory = await mkdtemp(join(tmpdir(), 'app-test-'));
+      const stock = new FencedStock(join(directory, 'inventory.db'));
+      stock.seed('product:42', 1);
+      const mutex = new Mutex(new TicketQueueFileStore(directory));
+      const app = createApp({ mutex, stock });
+      const entered = Promise.withResolvers<void>();
+      const release = Promise.withResolvers<void>();
+      const holder = mutex.acquire('product:42', async () => {
+        entered.resolve();
+        await release.promise;
+      });
+      await entered.promise;
+      const leave = new AbortController();
+
+      try {
+        // Act: the client sends its reservation, then leaves while it waits.
+        const response = app.request('/reserve', {
+          method: 'POST',
+          signal: leave.signal,
+        });
+        await delay(100);
+        leave.abort();
+
+        // Assert: the request ends at once, and the item is still there after the holder leaves.
+        assert.equal((await response).status, 499);
+        release.resolve();
+        await holder;
+        assert.equal(
+          stock.quantity('product:42'),
+          1,
+          'A client that left must not consume the item',
+        );
+      } finally {
+        release.resolve();
+        await holder;
         stock.close();
         await rm(directory, { recursive: true, force: true });
       }

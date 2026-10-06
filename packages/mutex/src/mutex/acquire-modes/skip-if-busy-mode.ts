@@ -1,6 +1,6 @@
 import type { AcquireMode } from '../acquire-mode.ts';
 import type { Lease } from '../lease.ts';
-import type { LockStore } from '../lock-store.ts';
+import type { AcquireOptions, LockStore } from '../lock-store.ts';
 
 export interface SkipIfBusyOptions {
   /** Milliseconds to wait for a busy key before giving up. Defaults to 0: one attempt only. */
@@ -21,16 +21,23 @@ export class SkipIfBusyMode implements AcquireMode<'maybe'> {
     this.#waitAtMost = waitAtMost;
   }
 
-  async acquire(store: LockStore, key: string): Promise<Lease | undefined> {
+  async acquire(
+    store: LockStore,
+    key: string,
+    { signal }: AcquireOptions,
+  ): Promise<Lease | undefined> {
     // Always one attempt first: a time limit must never skip a key that is free.
     const lease = await store.tryAcquire(key);
     if (lease || this.#waitAtMost === 0) return lease;
 
-    const signal = AbortSignal.timeout(this.#waitAtMost);
+    // The caller comes first, so a caller that already cancelled is not read as giving up.
+    const timeout = AbortSignal.timeout(this.#waitAtMost);
     try {
-      return await store.acquire(key, { signal });
+      return await store.acquire(key, {
+        signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
+      });
     } catch (error) {
-      if (error === signal.reason) return undefined;
+      if (timeout.aborted && error === timeout.reason) return undefined;
       throw error;
     }
   }
