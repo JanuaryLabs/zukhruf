@@ -4,11 +4,11 @@ A key is exclusive for every caller: one holder at a time. An **acquire mode** d
 
 ## The two acquire modes
 
-| Acquire mode                            | While the key is busy                           | The task                      | Result type                                        |
-| --------------------------------------- | ----------------------------------------------- | ----------------------------- | -------------------------------------------------- |
-| `Modes.wait()` (default)                | The caller waits until the key is granted.      | Always runs.                  | The task's value                                   |
-| `Modes.skipIfBusy()`                    | The caller gives up at once.                    | Does not run.                 | `{ acquired: true, value } \| { acquired: false }` |
-| `Modes.skipIfBusy({ waitAtMost: 500 })` | The caller waits at most 500 ms, then gives up. | Runs only if granted in time. | `{ acquired: true, value } \| { acquired: false }` |
+| Acquire mode                            | While the key is busy                                          | The task                      | Result type                                        |
+| --------------------------------------- | -------------------------------------------------------------- | ----------------------------- | -------------------------------------------------- |
+| `Modes.wait()` (default)                | The caller waits until the key is granted.                     | Always runs.                  | The task's value                                   |
+| `Modes.skipIfBusy()`                    | The caller gives up at once.                                   | Does not run.                 | `{ acquired: true, value } \| { acquired: false }` |
+| `Modes.skipIfBusy({ waitAtMost: 500 })` | The caller waits at most 500 ms for the holder, then gives up. | Runs only if granted in time. | `{ acquired: true, value } \| { acquired: false }` |
 
 ```ts
 import { Modes, Mutex, SqliteStore } from '@zukhruf/mutex';
@@ -79,6 +79,8 @@ Each lock store gives two operations:
 
 `skipIfBusy` always makes one `tryAcquire` first. Thus a free key is never skipped because of time. If the key is busy and `waitAtMost` is more than 0, it then calls `acquire` with one signal. This signal aborts at the end of `waitAtMost` or when the caller cancels (`AbortSignal.any`). Only the end of `waitAtMost` makes `skipIfBusy` give up.
 
+**The time limit counts only the wait for another holder.** It starts when the lock store answers that the key is busy. A lock store with a coordinator can take longer to answer, for example while it connects, while a campaign runs, or while the leader is frozen. That time does not count, because a slow answer does not show that the key is busy. If `skipIfBusy` gave up then, `{ acquired: false }` would tell of a holder that maybe does not exist. To limit the total time of a call, also give a signal, for example `AbortSignal.timeout(2000)`. When that signal aborts, the call rejects. It does not give up. See [Cancel a wait](#cancel-a-wait) and [ADR 0010](../adr/0010-the-time-limit-of-skip-if-busy-counts-only-the-wait-for-a-holder.md).
+
 The mutex gives the caller's signal to the acquire mode, and the acquire mode gives it to the lock store. Thus the lock store stops the wait at once. The mutex also watches the signal itself. Thus an acquire mode that does not give the signal on cannot make a caller that cancelled wait.
 
 **A caller that gives up or cancels keeps its place in line.** Some lock stores have a queue that a waiter cannot leave from the middle. `MemoryStore` and `TicketQueueFileStore` keep the place of a caller that stopped its wait. When that place reaches the front, the lock store passes the key on to the next caller at once. Thus a caller that stopped its wait never blocks the callers after it, and the order of the queue does not change.
@@ -123,6 +125,7 @@ Give `signal` to each wait in your mode. Then a cancel stops your mode at once. 
 
 - `src/mutex/acquire-modes.test.ts` runs every lock store through these cases: give up at once; acquire a free key; give up after the limit; acquire when the key is released within the limit; a caller that gave up does not block the callers after it; a key's default and an override.
 - The same file runs every lock store through these cases for a cancel: a waiter that cancels rejects with the reason, and the callers after it still get the key; `skipIfBusy({ waitAtMost })` rejects when its caller cancels; it still gives up when the signal does not abort; a caller that cancelled before the call rejects in each mode and leaves a free key free; one signal for many calls keeps no listeners.
+- With a lock store whose first answer comes after the limit: `skipIfBusy({ waitAtMost })` still acquires a free key, because a slow answer is not a busy key.
 - With `MemoryStore`: a key gives one call's signal on; each built-in mode gives the signal to the lock store; a mode that does not give the signal on still rejects at once, and the mutex releases the key that it gets later; a cancel during the first attempt of `skipIfBusy` releases the key of that attempt; a cancel after the task started does not stop the task.
 - The same file tests a child process and a worker thread that give up, and then cancel a wait, while another process or thread holds the key. After that, the key is still free for the next caller.
 - `src/lock-stores/remote/remote-locking.test.ts`: a grant that arrives after the caller gave up is released; a `try` during the grace window is answered `busy`; a waiter that cancels does not keep the key.

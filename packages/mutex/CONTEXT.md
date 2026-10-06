@@ -47,7 +47,7 @@ The acquire mode in which the caller waits until the key is granted. The task al
 _Avoid_: Block, lock
 
 **Skip if busy**:
-The acquire mode in which the caller gives up when the key stays busy, at once or after a time limit. The task then does not run.
+The acquire mode in which the caller gives up when the key stays busy, at once or after a time limit. The task then does not run. The time limit counts only the wait for another holder.
 _Avoid_: Try-lock, skip after, timeout
 
 **Give up**:

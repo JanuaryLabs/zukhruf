@@ -62,7 +62,7 @@ The result of a cron tick is `{ acquired: true, value } | { acquired: false }`. 
 
 ## Things to know
 
-- **To wait a short time before you skip**, use `Modes.skipIfBusy({ waitAtMost: 500 })`. The caller waits at most 500 ms, then gives up.
+- **To wait a short time before you skip**, use `Modes.skipIfBusy({ waitAtMost: 500 })`. If a report runs, the caller waits at most 500 ms for it, then gives up. The time limit does not count a slow answer from the lock store. To limit the total time, also give a signal.
 - **A skipped tick does not run later.** If every tick must run, use the default `Modes.wait()`.
 - **The admin can stop its wait.** Give a signal: `report.run(task, { mode: Modes.wait(), signal })`. When the signal aborts, the call rejects, and the report does not run. This is a cancel, not a skip.
 - **A caller that gave up or cancelled keeps its place in line** in some lock stores, and passes the key on when its place reaches the front. It never blocks the callers after it.
