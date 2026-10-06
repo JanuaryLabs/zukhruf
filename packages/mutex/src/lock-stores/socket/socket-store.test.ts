@@ -552,6 +552,10 @@ describe('Socket store follower failure', () => {
       let peerClosed = false;
       const leader = createServer((peer) => {
         peer.once('close', () => (peerClosed = true));
+        // It speaks this protocol, so the follower gets as far as reporting its role.
+        peer.once('data', () =>
+          peer.write(`${JSON.stringify({ op: 'welcome' })}\n`),
+        );
       });
       leader.listen(join(directory.path, 'lock.sock'));
       await once(leader, 'listening');

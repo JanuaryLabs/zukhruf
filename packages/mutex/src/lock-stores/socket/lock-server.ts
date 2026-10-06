@@ -10,6 +10,7 @@ import {
   type LockResponse,
   isLockRequest,
 } from '../remote/protocol.ts';
+import { welcome } from './handshake.ts';
 import { SocketConnection } from './socket-connection.ts';
 
 export interface LockServerOptions {
@@ -58,9 +59,16 @@ export class LockServer {
       socket.unref();
       connections.add(socket);
       socket.once('close', () => connections.delete(socket));
-      coordinator.serve(
-        new SocketConnection<LockResponse, LockRequest>(socket, isLockRequest),
-      );
+      // A peer that speaks another protocol is refused before it can send anything this coordinator would misread.
+      void welcome(socket).then((speaksOurs) => {
+        if (!speaksOurs) return;
+        coordinator.serve(
+          new SocketConnection<LockResponse, LockRequest>(
+            socket,
+            isLockRequest,
+          ),
+        );
+      });
     });
     await new Promise<void>((resolve, reject) => {
       server.once('error', reject);

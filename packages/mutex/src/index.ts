@@ -48,6 +48,7 @@ export {
 export { TicketQueueFileStore } from './lock-stores/file-system/ticket-queue-file-store.ts';
 export { LockFileStore } from './lock-stores/file-system/lock-file-store.ts';
 export { SqliteStore } from './lock-stores/sqlite/sqlite-store.ts';
+export { ProtocolVersionError } from './lock-stores/socket/protocol-version-error.ts';
 export {
   SocketStore,
   type SocketRole,
