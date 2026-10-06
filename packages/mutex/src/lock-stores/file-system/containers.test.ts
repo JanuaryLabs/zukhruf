@@ -1,11 +1,14 @@
 import assert from 'node:assert/strict';
-import { execFile, spawnSync } from 'node:child_process';
-import { randomUUID } from 'node:crypto';
 import { type TestContext, describe, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
-import { promisify } from 'node:util';
 
-const run = promisify(execFile);
+import {
+  type Container,
+  Docker,
+  type DockerVolume,
+  TestRun,
+  skipWithoutDocker,
+} from '@zukhruf/testing/docker';
 
 /**
  * Containers are platform setup that no operation of the stores exposes. Two
@@ -13,10 +16,14 @@ const run = promisify(execFile);
  * hostname and its own PID namespace. A test never pulls the image.
  */
 const image = 'node:26-alpine';
+const docker = new Docker({ testRun: TestRun.fromEnvironment(process.env) });
 const noDocker =
-  spawnSync('docker', ['image', 'inspect', image]).status === 0
-    ? false
-    : `needs Docker with the ${image} image; run \`docker pull ${image}\` to include these tests`;
+  (await skipWithoutDocker(docker, process.env)) ||
+  ((await docker.command(['image', 'inspect', image]).then(
+    () => false,
+    () => true,
+  )) &&
+    `needs the ${image} image; run \`docker pull ${image}\` to include these tests`);
 
 const packageRoot = fileURLToPath(new URL('../../../', import.meta.url));
 const mutexInContainer = 'file:///pkg/src/index.ts';
@@ -44,78 +51,42 @@ const waiterSource = (storeName: string) => `
 	console.log(JSON.stringify(result));
 `;
 
-async function docker(...args: string[]): Promise<string> {
-  const { stdout } = await run('docker', args);
-  return stdout.trim();
-}
-
-interface Named extends AsyncDisposable {
-  name: string;
-}
-
-/** The lock directory that the containers of one test share. */
-async function sharedVolume(): Promise<Named> {
-  const name = `mutex-test-${randomUUID()}`;
-  await docker('volume', 'create', name);
-  return {
-    name,
-    async [Symbol.asyncDispose]() {
-      await docker('volume', 'rm', '--force', name);
-    },
-  };
-}
-
 interface ContainerOptions {
-  volume: Named;
+  /** The lock directory that the containers of one test share. */
+  volume: DockerVolume;
   hostname?: string;
   /** Passed to the command as `$SOURCE`, so a shell can start it. */
   source?: string;
 }
 
-function mounts({ volume, hostname, source }: ContainerOptions): string[] {
-  return [
-    ...(hostname ? ['--hostname', hostname] : []),
-    ...(source ? ['--env', `SOURCE=${source}`] : []),
-    '--volume',
-    `${volume.name}:/locks`,
-    '--volume',
-    `${packageRoot}:/pkg:ro`,
-  ];
-}
+/** The image, the shared lock directory and the package, for one container. */
+const placement = ({ volume, hostname, source }: ContainerOptions) => ({
+  image,
+  ...(hostname ? { hostname } : {}),
+  ...(source ? { env: { SOURCE: source } } : {}),
+  mounts: [
+    { source: volume.name, target: '/locks' },
+    { source: packageRoot, target: '/pkg', readOnly: true },
+  ],
+});
 
-async function startContainer(
-  options: ContainerOptions,
-  ...command: string[]
-): Promise<Named> {
-  const name = `mutex-test-${randomUUID()}`;
-  await docker(
-    'run',
-    '--detach',
-    '--name',
-    name,
-    ...mounts(options),
-    image,
-    ...command,
-  );
-  return {
-    name,
-    async [Symbol.asyncDispose]() {
-      await docker('rm', '--force', name);
-    },
-  };
-}
+const startContainer = (options: ContainerOptions, ...command: string[]) =>
+  docker.start({ ...placement(options), command });
 
 /** Waits until the holder in `container` prints that it holds the key. */
 function holdingIn(
   t: TestContext,
-  container: Named,
+  container: Container,
 ): Promise<{ pid: number; token: string }> {
   return t.waitFor(
     async () => {
-      const line = (await docker('logs', container.name))
+      const line = (await container.logs())
         .split('\n')
         .find((candidate) => candidate.includes('"holding"'));
-      assert.ok(line, `The holder in ${container.name} must take the key`);
+      assert.ok(
+        line,
+        `The holder in ${container.containerId} must take the key`,
+      );
       return JSON.parse(line);
     },
     { interval: 100, timeout: 20000 },
@@ -129,16 +100,10 @@ async function waiterIn(
   options: ContainerOptions,
   storeName: string,
 ): Promise<Grant> {
-  const output = await docker(
-    'run',
-    '--rm',
-    ...mounts(options),
-    image,
-    'node',
-    '--input-type=module',
-    '--eval',
-    waiterSource(storeName),
-  );
+  const output = await docker.run({
+    ...placement(options),
+    command: ['node', '--input-type=module', '--eval', waiterSource(storeName)],
+  });
   return JSON.parse(output.split('\n').at(-1)!);
 }
 
@@ -156,17 +121,16 @@ function assertTakenOver(
 }
 
 /** Every lock file in the volume with its owner record, for failure messages. */
-const lockFiles = (volume: Named) =>
-  docker(
-    'run',
-    '--rm',
-    '--volume',
-    `${volume.name}:/locks`,
+const lockFiles = (volume: DockerVolume) =>
+  docker.run({
     image,
-    'sh',
-    '-c',
-    'for f in /locks/*.lock; do echo "$f: $(cat "$f")"; done',
-  );
+    mounts: [{ source: volume.name, target: '/locks' }],
+    command: [
+      'sh',
+      '-c',
+      'for f in /locks/*.lock; do echo "$f: $(cat "$f")"; done',
+    ],
+  });
 
 for (const storeName of stores) {
   describe(`${storeName} shared by containers on one machine`, () => {
@@ -179,7 +143,7 @@ for (const storeName of stores) {
       async (t) => {
         // Arrange: the holder starts after 300 other processes, so its PID
         // number does not exist in a fresh container, where the waiter runs.
-        await using volume = await sharedVolume();
+        await using volume = await docker.volume();
         await using holder = await startContainer(
           { volume, hostname: 'app', source: holderSource(storeName) },
           'sh',
@@ -209,7 +173,7 @@ for (const storeName of stores) {
       },
       async (t) => {
         // Arrange: each container keeps the hostname Docker gives it.
-        await using volume = await sharedVolume();
+        await using volume = await docker.volume();
         await using holder = await startContainer(
           { volume },
           'node',
@@ -218,7 +182,7 @@ for (const storeName of stores) {
           holderSource(storeName),
         );
         const held = await holdingIn(t, holder);
-        await docker('kill', holder.name);
+        await holder.kill();
         const record = await lockFiles(volume);
 
         // Act
@@ -241,7 +205,7 @@ for (const storeName of stores) {
       },
       async (t) => {
         // Arrange: holder and waiter are each their container's main process, PID 1.
-        await using volume = await sharedVolume();
+        await using volume = await docker.volume();
         await using holder = await startContainer(
           { volume, hostname: 'app' },
           'node',
@@ -250,7 +214,7 @@ for (const storeName of stores) {
           holderSource(storeName),
         );
         const held = await holdingIn(t, holder);
-        await docker('kill', holder.name);
+        await holder.kill();
         const record = await lockFiles(volume);
 
         // Act
@@ -271,7 +235,7 @@ for (const storeName of stores) {
       async (t) => {
         // Arrange: the container's shell starts the holder and reaps it when it
         // dies, so a dead holder leaves no zombie that still answers kill(pid, 0).
-        await using volume = await sharedVolume();
+        await using volume = await docker.volume();
         await using box = await startContainer(
           { volume, hostname: 'app', source: holderSource(storeName) },
           'sh',
@@ -279,17 +243,15 @@ for (const storeName of stores) {
           'node --input-type=module --eval "$SOURCE" & wait; sleep infinity',
         );
         const held = await holdingIn(t, box);
-        await docker('exec', box.name, 'kill', '-9', String(held.pid));
+        await box.exec(['kill', '-9', String(held.pid)]);
 
         // Act: the waiter runs in the same container, so it sees the holder's PID namespace.
-        const output = await docker(
-          'exec',
-          box.name,
+        const { stdout: output } = await box.exec([
           'node',
           '--input-type=module',
           '--eval',
           waiterSource(storeName),
-        );
+        ]);
 
         // Assert: one PID namespace is the case the stores are built for.
         assertTakenOver(

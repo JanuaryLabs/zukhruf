@@ -47,6 +47,7 @@
     "access": "public"
   },
   "devDependencies": {
+    "@zukhruf/testing": "^0.3.1",
     "hono": "^4.13.13"
   }
 }
