@@ -4,11 +4,13 @@ import { join } from 'node:path';
 import { describe, test } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
 
+import { LeaderElection } from '../../leader-election/leader-election.ts';
 import { Mutex } from '../../mutex/mutex.ts';
 import { FencedRegister } from '../../testing/fenced-register.ts';
 import { scratchDirectory } from '../../testing/scratch-directory.ts';
 import { graceWindow, settle } from '../../testing/store-cases.ts';
 import { waitUntil } from '../../testing/wait-until.ts';
+import { watch } from '../../testing/watch.ts';
 import { startWorker } from '../../testing/worker-process.ts';
 import { SocketStore } from './socket-store.ts';
 
@@ -304,4 +306,33 @@ describe('Socket lock server failover', () => {
       assert.equal(register.writes(), 1, 'Only the newer holder may write');
     },
   );
+});
+
+describe('Socket store disposal', () => {
+  test('a store disposed while it becomes the leader leaves no lock server and no term behind', async () => {
+    // Arrange: the first acquire in a directory makes the store campaign.
+    await using directory = await scratchDirectory();
+    const store = new SocketStore(directory.path, { pollInterval: 10 });
+    const acquiring = watch(store.acquire('product:42'));
+
+    // Act
+    await store[Symbol.asyncDispose]();
+    await delay(settle);
+
+    // Assert
+    await using leadership = await new LeaderElection(directory.path, {
+      pollInterval: 10,
+    }).campaign();
+    assert.ok(leadership, 'A disposed store must not keep a leadership term');
+    assert.equal(
+      store.role,
+      undefined,
+      'A disposed store must not start serving',
+    );
+    assert.equal(
+      acquiring.now.status,
+      'rejected',
+      'The acquire must fail with its disposed store',
+    );
+  });
 });

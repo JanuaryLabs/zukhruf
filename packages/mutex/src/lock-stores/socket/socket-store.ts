@@ -5,6 +5,7 @@ import { join, resolve } from 'node:path';
 import { LeaderElection } from '../../leader-election/leader-election.ts';
 import type { Lease } from '../../mutex/lease.ts';
 import type { AcquireOptions, LockStore } from '../../mutex/lock-store.ts';
+import { ConnectionSupervisor } from '../remote/connection-supervisor.ts';
 import { RemoteLockClient } from '../remote/remote-lock-client.ts';
 import { ElectingConnector } from './electing-connector.ts';
 import { LockServer } from './lock-server.ts';
@@ -49,21 +50,23 @@ export class SocketStore
     super();
     const socketPath = socketPathFor(directory);
     this.#client = new RemoteLockClient(
-      new ElectingConnector({
-        socketPath,
-        election: new LeaderElection(directory, { pollInterval }),
-        pollInterval,
-        serve: async (leadership) => {
-          this.#server = await LockServer.start(socketPath, leadership, {
-            // The first term of a directory has no predecessor to wait for.
-            graceWindow: leadership.epoch > 1n ? graceWindow : 0,
-          });
-          this.#setRole('leader');
-        },
-        connected: () => {
-          if (!this.#server) this.#setRole('follower');
-        },
-      }),
+      new ConnectionSupervisor(
+        new ElectingConnector({
+          socketPath,
+          election: new LeaderElection(directory, { pollInterval }),
+          pollInterval,
+          serve: async (leadership) => {
+            this.#server = await LockServer.start(socketPath, leadership, {
+              // The first term of a directory has no predecessor to wait for.
+              graceWindow: leadership.epoch > 1n ? graceWindow : 0,
+            });
+            this.#setRole('leader');
+          },
+          connected: () => {
+            if (!this.#server) this.#setRole('follower');
+          },
+        }),
+      ),
     );
   }
 
@@ -80,8 +83,9 @@ export class SocketStore
     return this.#client.tryAcquire(key);
   }
 
+  /** Stops a campaign still in progress first, so no lock server starts after disposal. */
   async [Symbol.asyncDispose]() {
-    this.#client.close();
+    await this.#client.close();
     await this.#server?.close();
   }
 

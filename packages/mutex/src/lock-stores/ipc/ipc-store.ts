@@ -1,11 +1,12 @@
 import type { Lease } from '../../mutex/lease.ts';
 import type { AcquireOptions, LockStore } from '../../mutex/lock-store.ts';
-import type { ClientConnection, Connector } from '../remote/connector.ts';
+import { ConnectionSupervisor } from '../remote/connection-supervisor.ts';
+import type { ClientConnection, ClientConnector } from '../remote/connector.ts';
 import { RemoteLockClient } from '../remote/remote-lock-client.ts';
 import { ProcessChannelConnection } from './process-channel-connection.ts';
 
 /** The channel to the parent cannot be re-established, so it is handed out once. */
-class ProcessChannelConnector implements Connector {
+class ProcessChannelConnector implements ClientConnector {
   #handedOut = false;
 
   async connect(): Promise<ClientConnection | undefined> {
@@ -30,7 +31,9 @@ export class IpcStore implements LockStore {
         'IpcStore needs an IPC channel to its parent; start this process with fork() or an "ipc" stdio entry.',
       );
     }
-    this.#client = new RemoteLockClient(new ProcessChannelConnector());
+    this.#client = new RemoteLockClient(
+      new ConnectionSupervisor(new ProcessChannelConnector()),
+    );
   }
 
   acquire(key: string, options?: AcquireOptions): Promise<Lease> {

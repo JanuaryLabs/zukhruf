@@ -1,39 +1,60 @@
 import assert from 'node:assert/strict';
-import { describe, test } from 'node:test';
+import { type TestContext, describe, test } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
 
 import { CounterTokenSource } from '../../fencing/counter-token-source.ts';
+import { LockLostError } from '../../mutex/lock-lost-error.ts';
+import {
+  scriptedConnector,
+  scriptedPeer,
+} from '../../testing/scripted-peer.ts';
 import { settle } from '../../testing/store-cases.ts';
 import { waitUntil } from '../../testing/wait-until.ts';
-import type { Connection, ConnectionHandlers } from './connection.ts';
+import { watch } from '../../testing/watch.ts';
+import { ConnectionSupervisor } from './connection-supervisor.ts';
+import type { ClientConnector } from './connector.ts';
+import { CoordinatorUnavailableError } from './coordinator-unavailable-error.ts';
 import { LockCoordinator } from './lock-coordinator.ts';
 import type { LockRequest, LockResponse } from './protocol.ts';
 import { RemoteLockClient } from './remote-lock-client.ts';
 
-/** One end of a connection whose peer is driven by the test. */
-function scriptedPeer<Outgoing, Incoming>(
-  onSend: (message: Outgoing) => Promise<void> = async () => {},
+function clientOver(connector: ClientConnector) {
+  return new RemoteLockClient(new ConnectionSupervisor(connector));
+}
+
+/** A coordinator's end that grants every acquire and try at once. */
+function grantingPeer() {
+  let tokens = 0;
+  const peer = scriptedPeer<LockRequest, LockResponse>(async (request) => {
+    if (request.op === 'acquire' || request.op === 'try') {
+      queueMicrotask(() =>
+        peer.deliver({ op: 'granted', id: request.id, token: `${++tokens}` }),
+      );
+    }
+  });
+  return peer;
+}
+
+/** Opens the client's first connection with a warm-up try, and gives back whatever it was granted. */
+async function openFirstConnection(
+  t: TestContext,
+  client: RemoteLockClient,
+  calls: ReturnType<
+    typeof scriptedConnector<LockRequest, LockResponse>
+  >['calls'],
+  peer: ReturnType<typeof scriptedPeer<LockRequest, LockResponse>>,
 ) {
-  const sent: Outgoing[] = [];
-  let handlers: ConnectionHandlers<Incoming> | undefined;
-  const connection: Connection<Outgoing, Incoming> = {
-    async send(message) {
-      sent.push(message);
-      await onSend(message);
-    },
-    listen(listeners) {
-      handlers = listeners;
-    },
-    ref() {},
-    unref() {},
-    close() {},
-  };
-  return {
-    connection,
-    sent,
-    deliver: (message: Incoming) => handlers?.message(message),
-    drop: () => handlers?.close(),
-  };
+  const warmUp = client.tryAcquire('warm-up');
+  await waitUntil(t, () => calls.length === 1, 'The client must connect');
+  calls[0]!.resolve(peer.connection);
+  await waitUntil(
+    t,
+    () => peer.sent.length > 0,
+    'The warm-up try must be sent',
+  );
+  peer.deliver({ op: 'busy', id: peer.sent[0]!.id });
+  const lease = await warmUp;
+  await lease?.[Symbol.asyncDispose]();
 }
 
 describe('Remote locking protocol', () => {
@@ -95,9 +116,7 @@ describe('Remote locking protocol', () => {
     });
     const second = scriptedPeer<LockRequest, LockResponse>();
     const connections = [first.connection, second.connection];
-    const client = new RemoteLockClient({
-      connect: async () => connections.shift(),
-    });
+    const client = clientOver({ connect: async () => connections.shift() });
     const lease = await client.acquire('product:42');
 
     try {
@@ -118,7 +137,7 @@ describe('Remote locking protocol', () => {
       );
     } finally {
       releaseStalls.resolve();
-      client.close();
+      await client.close();
     }
   });
 });
@@ -264,9 +283,7 @@ describe('Giving up over the protocol', () => {
   test('a grant that arrives after the caller gave up is released', async (t) => {
     // Arrange: a client waits for a key through a scripted coordinator.
     const coordinator = scriptedPeer<LockRequest, LockResponse>();
-    const client = new RemoteLockClient({
-      connect: async () => coordinator.connection,
-    });
+    const client = clientOver({ connect: async () => coordinator.connection });
     const giveUp = new AbortController();
     const attempt = client.acquire('product:42', { signal: giveUp.signal });
     await waitUntil(
@@ -289,7 +306,7 @@ describe('Giving up over the protocol', () => {
         { op: 'release', id },
       ]);
     } finally {
-      client.close();
+      await client.close();
     }
   });
 
@@ -341,5 +358,326 @@ describe('Giving up over the protocol', () => {
       [],
       'A cancelled request must not be granted',
     );
+  });
+});
+
+describe('Remote lock client connection lifecycle', () => {
+  test('closing the client as its connection opens rejects the acquire, and the connection carries nothing', async (t) => {
+    // Arrange: an acquire waits for the first connection.
+    const { connector, calls } = scriptedConnector<LockRequest, LockResponse>();
+    const client = clientOver(connector);
+    const peer = grantingPeer();
+    const acquiring = watch(client.acquire('product:42'));
+    await waitUntil(t, () => calls.length === 1, 'The client must connect');
+
+    // Act: the connection opens just as the client closes.
+    calls[0]!.resolve(peer.connection);
+    await client.close();
+    await delay(settle);
+
+    // Assert
+    assert.equal(
+      acquiring.now.status,
+      'rejected',
+      'A closed client must not grant',
+    );
+    assert.deepEqual(
+      peer.sent,
+      [],
+      'Nothing may be sent on a connection that opens after close',
+    );
+    assert.equal(peer.closes, 1, 'That connection must be closed');
+  });
+
+  test('closing the client rejects an acquire that still waits', async (t) => {
+    // Arrange: an acquire reached a coordinator that does not answer it.
+    const { connector, calls } = scriptedConnector<LockRequest, LockResponse>();
+    const client = clientOver(connector);
+    const peer = scriptedPeer<LockRequest, LockResponse>();
+    const acquiring = watch(client.acquire('product:42'));
+    await waitUntil(t, () => calls.length === 1, 'The client must connect');
+    calls[0]!.resolve(peer.connection);
+    await waitUntil(
+      t,
+      () => peer.sent.length === 1,
+      'The acquire must reach the coordinator',
+    );
+
+    // Act
+    await client.close();
+
+    // Assert
+    await waitUntil(
+      t,
+      () => acquiring.now.status === 'rejected',
+      'A waiting acquire must be rejected when its client closes',
+    );
+  });
+
+  test('a try made while the client reconnects is asked of the new coordinator once', async (t) => {
+    // Arrange: the first connection dropped, and the next one is on its way.
+    const { connector, calls } = scriptedConnector<LockRequest, LockResponse>();
+    const client = clientOver(connector);
+    const first = scriptedPeer<LockRequest, LockResponse>();
+    const second = grantingPeer();
+    await openFirstConnection(t, client, calls, first);
+    first.drop();
+    await waitUntil(t, () => calls.length === 2, 'The client must reconnect');
+
+    try {
+      // Act
+      const trying = client.tryAcquire('product:42');
+      calls[1]!.resolve(second.connection);
+      const lease = await trying;
+      await delay(settle);
+
+      // Assert: no coordinator said busy, so the new one decides.
+      assert.ok(
+        lease,
+        'A free key must be granted to a try made during a reconnect',
+      );
+      assert.deepEqual(
+        second.sent.map((request) => request.op),
+        ['try'],
+        'The try must be sent once, and its grant kept',
+      );
+    } finally {
+      await client.close();
+    }
+  });
+
+  test('an acquire made while the client reconnects is sent once on the new connection', async (t) => {
+    // Arrange: the first connection dropped, and the next one is on its way.
+    const { connector, calls } = scriptedConnector<LockRequest, LockResponse>();
+    const client = clientOver(connector);
+    const first = scriptedPeer<LockRequest, LockResponse>();
+    const second = scriptedPeer<LockRequest, LockResponse>();
+    await openFirstConnection(t, client, calls, first);
+    first.drop();
+    await waitUntil(t, () => calls.length === 2, 'The client must reconnect');
+
+    try {
+      // Act
+      watch(client.acquire('product:42'));
+      calls[1]!.resolve(second.connection);
+      await delay(settle);
+
+      // Assert
+      assert.deepEqual(
+        second.sent.map((request) => request.op),
+        ['acquire'],
+        'The acquire must be sent exactly once',
+      );
+    } finally {
+      await client.close();
+    }
+  });
+
+  test('an acquire given up before the connection opens never reaches the coordinator', async (t) => {
+    // Arrange: an acquire waits for the first connection.
+    const { connector, calls } = scriptedConnector<LockRequest, LockResponse>();
+    const client = clientOver(connector);
+    const peer = grantingPeer();
+    const giveUp = new AbortController();
+    const acquiring = client.acquire('product:42', { signal: giveUp.signal });
+    await waitUntil(t, () => calls.length === 1, 'The client must connect');
+
+    try {
+      // Act: the caller gives up, then the connection opens.
+      giveUp.abort();
+      await assert.rejects(acquiring, { name: 'AbortError' });
+      calls[0]!.resolve(peer.connection);
+      await delay(settle);
+
+      // Assert
+      assert.deepEqual(
+        peer.sent,
+        [],
+        'A request given up before it was sent must never be sent',
+      );
+    } finally {
+      await client.close();
+    }
+  });
+
+  test('a connector that fails rejects the waiting acquire with its error, and the next acquire connects again', async (t) => {
+    // Arrange
+    const { connector, calls } = scriptedConnector<LockRequest, LockResponse>();
+    const client = clientOver(connector);
+    const failure = new Error('EACCES: the lock directory is not writable');
+    const acquiring = client.acquire('product:42');
+    await waitUntil(t, () => calls.length === 1, 'The client must connect');
+
+    try {
+      // Act
+      calls[0]!.reject(failure);
+      await assert.rejects(acquiring, (error) => error === failure);
+      watch(client.acquire('product:42'));
+
+      // Assert
+      await waitUntil(
+        t,
+        () => calls.length === 2,
+        'The next acquire must ask the connector again',
+      );
+    } finally {
+      await client.close();
+    }
+  });
+
+  test('a holder whose reconnect fails learns that its lease was lost', async (t) => {
+    // Arrange: the client holds a key on its first connection.
+    const { connector, calls } = scriptedConnector<LockRequest, LockResponse>();
+    const client = clientOver(connector);
+    const first = grantingPeer();
+    const unhandled: unknown[] = [];
+    const collect = (reason: unknown) => unhandled.push(reason);
+    process.on('unhandledRejection', collect);
+
+    try {
+      const acquiring = client.acquire('product:42');
+      await waitUntil(t, () => calls.length === 1, 'The client must connect');
+      calls[0]!.resolve(first.connection);
+      const lease = await acquiring;
+
+      // Act: the connection drops, and connecting again fails.
+      first.drop();
+      await waitUntil(t, () => calls.length === 2, 'The client must reconnect');
+      calls[1]!.reject(new Error('EACCES: the lock directory is not writable'));
+      await delay(settle);
+
+      // Assert: no coordinator heard the reassert, so another holder may have the key.
+      await assert.rejects(
+        async () => lease[Symbol.asyncDispose](),
+        LockLostError,
+      );
+      assert.deepEqual(
+        unhandled,
+        [],
+        'A failed reconnect must not become an unhandled rejection',
+      );
+    } finally {
+      process.off('unhandledRejection', collect);
+      await client.close();
+    }
+  });
+
+  test('an acquire whose connection drops while it is sent is sent again once on the next connection', async (t) => {
+    // Arrange: the first connection drops during the send of the acquire.
+    const { connector, calls } = scriptedConnector<LockRequest, LockResponse>();
+    const client = clientOver(connector);
+    const first = scriptedPeer<LockRequest, LockResponse>(async () => {
+      first.drop();
+    });
+    const second = grantingPeer();
+    const acquiring = client.acquire('product:42');
+    await waitUntil(t, () => calls.length === 1, 'The client must connect');
+
+    try {
+      // Act
+      calls[0]!.resolve(first.connection);
+      await waitUntil(t, () => calls.length === 2, 'The client must reconnect');
+      calls[1]!.resolve(second.connection);
+      const lease = await acquiring;
+
+      // Assert
+      assert.ok(lease, 'The acquire must be granted on the next connection');
+      assert.deepEqual(
+        second.sent.map((request) => request.op),
+        ['acquire'],
+        'The acquire must be sent again exactly once',
+      );
+    } finally {
+      await client.close();
+    }
+  });
+
+  test('a try in flight when no coordinator is left fails as unavailable', async (t) => {
+    // Arrange: a try reached a coordinator that does not answer it.
+    const { connector, calls } = scriptedConnector<LockRequest, LockResponse>();
+    const client = clientOver(connector);
+    const first = scriptedPeer<LockRequest, LockResponse>();
+    const trying = client.tryAcquire('product:42');
+    await waitUntil(t, () => calls.length === 1, 'The client must connect');
+    calls[0]!.resolve(first.connection);
+    await waitUntil(t, () => first.sent.length === 1, 'The try must be sent');
+
+    try {
+      // Act: the coordinator stops, and nothing can replace it.
+      first.drop();
+      await waitUntil(t, () => calls.length === 2, 'The client must reconnect');
+      calls[1]!.resolve(undefined);
+
+      // Assert
+      await assert.rejects(trying, CoordinatorUnavailableError);
+    } finally {
+      await client.close();
+    }
+  });
+
+  test('a try in flight when its coordinator is replaced is answered busy and not asked again', async (t) => {
+    // Arrange: a try reached a coordinator that does not answer it.
+    const { connector, calls } = scriptedConnector<LockRequest, LockResponse>();
+    const client = clientOver(connector);
+    const first = scriptedPeer<LockRequest, LockResponse>();
+    const second = grantingPeer();
+    const trying = client.tryAcquire('product:42');
+    await waitUntil(t, () => calls.length === 1, 'The client must connect');
+    calls[0]!.resolve(first.connection);
+    await waitUntil(t, () => first.sent.length === 1, 'The try must be sent');
+
+    try {
+      // Act: the coordinator stops, and a new one takes over.
+      first.drop();
+      await waitUntil(t, () => calls.length === 2, 'The client must reconnect');
+      calls[1]!.resolve(second.connection);
+
+      // Assert: a try is one attempt, and its coordinator is gone.
+      assert.equal(await trying, undefined);
+      await delay(settle);
+      assert.deepEqual(second.sent, [], 'The try must not be sent again');
+    } finally {
+      await client.close();
+    }
+  });
+
+  test('after a reconnect, held keys are reasserted before waiting acquires are sent again', async (t) => {
+    // Arrange: the client holds one key and waits for another.
+    const { connector, calls } = scriptedConnector<LockRequest, LockResponse>();
+    const client = clientOver(connector);
+    const first = scriptedPeer<LockRequest, LockResponse>(async (request) => {
+      if (request.op === 'acquire' && request.key === 'held') {
+        queueMicrotask(() =>
+          first.deliver({ op: 'granted', id: request.id, token: '1' }),
+        );
+      }
+    });
+    const second = scriptedPeer<LockRequest, LockResponse>();
+    const holding = client.acquire('held');
+    await waitUntil(t, () => calls.length === 1, 'The client must connect');
+    calls[0]!.resolve(first.connection);
+    await holding;
+    watch(client.acquire('waiting'));
+    await waitUntil(
+      t,
+      () => first.sent.length === 2,
+      'Both acquires must be sent',
+    );
+
+    try {
+      // Act
+      first.drop();
+      await waitUntil(t, () => calls.length === 2, 'The client must reconnect');
+      calls[1]!.resolve(second.connection);
+      await delay(settle);
+
+      // Assert
+      assert.deepEqual(
+        second.sent.map((request) => request.op),
+        ['reassert', 'acquire'],
+      );
+    } finally {
+      await client.close();
+    }
   });
 });

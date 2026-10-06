@@ -2,12 +2,13 @@ import { type MessagePort, parentPort } from 'node:worker_threads';
 
 import type { Lease } from '../../mutex/lease.ts';
 import type { AcquireOptions, LockStore } from '../../mutex/lock-store.ts';
-import type { ClientConnection, Connector } from '../remote/connector.ts';
+import { ConnectionSupervisor } from '../remote/connection-supervisor.ts';
+import type { ClientConnection, ClientConnector } from '../remote/connector.ts';
 import { RemoteLockClient } from '../remote/remote-lock-client.ts';
 import { ParentPortConnection } from './parent-port-connection.ts';
 
 /** A worker has one port to its parent thread for its whole life. */
-class ParentPortConnector implements Connector {
+class ParentPortConnector implements ClientConnector {
   readonly #port: MessagePort;
   #handedOut = false;
 
@@ -35,7 +36,9 @@ export class ThreadStore implements LockStore {
         'ThreadStore runs in a worker thread; use ThreadLockCoordinator in the thread that starts the workers.',
       );
     }
-    this.#client = new RemoteLockClient(new ParentPortConnector(parentPort));
+    this.#client = new RemoteLockClient(
+      new ConnectionSupervisor(new ParentPortConnector(parentPort)),
+    );
   }
 
   acquire(key: string, options?: AcquireOptions): Promise<Lease> {
