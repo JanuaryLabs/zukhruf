@@ -4,6 +4,7 @@ import { defineConfig } from 'eslint/config';
 import zukhruf from './packages/eslint/src/index.ts';
 import island, {
   islandConstraint,
+  manifest,
   moduleBoundaries,
 } from './packages/eslint/src/nx.ts';
 
@@ -14,7 +15,7 @@ import island, {
 export default defineConfig(
   nx.configs['flat/base'],
   {
-    plugins: { zukhruf, island },
+    plugins: { zukhruf, island, manifest },
     extends: [
       'zukhruf/base',
       'zukhruf/tests',
@@ -22,6 +23,7 @@ export default defineConfig(
       'zukhruf/diagnostics',
       'zukhruf/nx-project-json',
       'island/recommended',
+      'manifest/recommended',
     ],
     settings: { island: { libraries: ['packages/**/*.ts'] } },
   },
