@@ -3,13 +3,18 @@ name: Probe Linux containers on Windows
 # Throwaway: answers whether the file stores' container tests can run on a
 # Windows host with Docker Desktop, where the package directory is a Windows
 # path mounted into a Linux container. Removed once it has run.
+#
+# An earlier run hung the runner in `docker desktop start` and left no log, so
+# nothing here blocks: Docker Desktop is launched without waiting, every docker
+# call runs in a job with its own time limit, and the step prints Docker
+# Desktop's own logs before it ends.
 on:
   workflow_dispatch:
 
 jobs:
   probe:
     runs-on: windows-latest
-    timeout-minutes: 30
+    timeout-minutes: 25
     env:
       DOCKER: C:\Program Files\Docker\Docker\resources\bin\docker.exe
     steps:
@@ -19,32 +24,52 @@ jobs:
       - name: Install Docker Desktop
         id: install
         continue-on-error: true
+        timeout-minutes: 8
         run: |
           # The runner's own engine serves Windows containers on the pipe Docker Desktop wants.
           Stop-Service docker -ErrorAction SilentlyContinue
           Invoke-WebRequest 'https://desktop.docker.com/win/main/amd64/Docker%20Desktop%20Installer.exe' -OutFile installer.exe
-          Start-Process installer.exe -Wait -ArgumentList 'install', '--quiet', '--accept-license', '--always-run-service'
+          Start-Process installer.exe -Wait -ArgumentList 'install', '--quiet', '--accept-license', '--always-run-service', '--backend=wsl-2'
           if (-not (Test-Path $env:DOCKER)) { throw "Docker Desktop's CLI is missing at $env:DOCKER" }
 
       - name: Start the Linux engine
         id: start
         if: steps.install.outcome == 'success'
         continue-on-error: true
+        timeout-minutes: 9
         run: |
-          & $env:DOCKER desktop start
-          if ($LASTEXITCODE -ne 0) { Start-Process 'C:\Program Files\Docker\Docker\Docker Desktop.exe' }
-          $deadline = (Get-Date).AddMinutes(10)
+          # Runs a command in a job, so a call that hangs costs at most $seconds.
+          function Bounded([int] $seconds, [scriptblock] $command) {
+            $job = Start-Job $command
+            if (Wait-Job $job -Timeout $seconds) { Receive-Job $job 2>&1 } else { "(no answer within ${seconds}s)" }
+            Remove-Job $job -Force
+          }
+          Start-Process 'C:\Program Files\Docker\Docker\Docker Desktop.exe'
+          $started = Get-Date
           do {
-            Start-Sleep -Seconds 5
-            $os = & $env:DOCKER --context desktop-linux info --format '{{.OSType}}' 2>$null
-          } until ($os -eq 'linux' -or (Get-Date) -gt $deadline)
-          & $env:DOCKER --context desktop-linux version
-          if ($os -ne 'linux') { throw "The Linux engine did not come up: '$os'" }
+            Start-Sleep -Seconds 15
+            $os = Bounded 20 { & $env:DOCKER --context desktop-linux info --format '{{.OSType}}' }
+            # Docker may print warnings beside the answer, so look for it among the lines.
+            $ready = $os -contains 'linux'
+            "{0,4}s: {1}" -f [int]((Get-Date) - $started).TotalSeconds, ($os -join ' ')
+          } until ($ready -or ((Get-Date) - $started).TotalMinutes -gt 5)
+
+          '== processes'
+          Get-Process *docker*, *wsl*, vmmem* -ErrorAction SilentlyContinue | Format-Table Name, Id, StartTime -AutoSize | Out-String
+          '== wsl -l -v'
+          Bounded 20 { $env:WSL_UTF8 = 1; wsl -l -v }
+          '== newest Docker Desktop logs'
+          Get-ChildItem "$env:LOCALAPPDATA\Docker\log" -Recurse -File -ErrorAction SilentlyContinue |
+            Sort-Object LastWriteTime -Descending | Select-Object -First 4 |
+            ForEach-Object { "--- $($_.FullName)"; Get-Content $_.FullName -Tail 30 }
+
+          if (-not $ready) { throw "The Linux engine did not come up: '$($os -join ' ')'" }
 
       - name: Pull a Linux image
         id: pull
         if: steps.start.outcome == 'success'
         continue-on-error: true
+        timeout-minutes: 5
         run: |
           & $env:DOCKER --context desktop-linux pull node:26-alpine
           if ($LASTEXITCODE -ne 0) { throw 'pull failed' }
@@ -53,6 +78,7 @@ jobs:
         id: mount
         if: steps.pull.outcome == 'success'
         continue-on-error: true
+        timeout-minutes: 5
         run: |
           # fileURLToPath gives the package directory with a trailing backslash.
           $packageRoot = "${{ github.workspace }}\packages\mutex\"
