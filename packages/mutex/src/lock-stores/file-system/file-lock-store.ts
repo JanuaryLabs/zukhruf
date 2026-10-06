@@ -4,6 +4,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 
 import { FileTokenSource } from '../../fencing/file-token-source.ts';
 import type { TokenSource } from '../../fencing/token-source.ts';
+import { assertLocalDirectory } from '../../local-directory/local-directory.ts';
 import { type Lease, leaseFor } from '../../mutex/lease.ts';
 import type { AcquireOptions, LockStore } from '../../mutex/lock-store.ts';
 import { createExclusive } from '../../shared/fs/create-exclusive.ts';
@@ -97,6 +98,7 @@ export abstract class FileLockStore implements LockStore {
   }
 
   async #pathFor(key: string): Promise<string> {
+    await assertLocalDirectory(this.#directory);
     await mkdir(this.#directory, { recursive: true });
     return join(this.#directory, `${safeFileName(key)}.lock`);
   }

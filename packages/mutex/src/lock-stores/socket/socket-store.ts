@@ -8,6 +8,7 @@ import type { AcquireOptions, LockStore } from '../../mutex/lock-store.ts';
 import { ConnectionSupervisor } from '../remote/connection-supervisor.ts';
 import { RemoteLockClient } from '../remote/remote-lock-client.ts';
 import { ElectingConnector } from './electing-connector.ts';
+import { LocalDirectoryConnector } from './local-directory-connector.ts';
 import { LockServer } from './lock-server.ts';
 
 /** macOS allows 104 bytes including the terminating NUL; Linux allows 108. */
@@ -51,25 +52,28 @@ export class SocketStore
     const socketPath = socketPathFor(directory);
     this.#client = new RemoteLockClient(
       new ConnectionSupervisor(
-        new ElectingConnector({
-          socketPath,
-          election: new LeaderElection(directory, { pollInterval }),
-          pollInterval,
-          serve: async (leadership) => {
-            // Until serving has fully started, a failure closes the new server, so no server outlives its term.
-            await using starting = new AsyncDisposableStack();
-            starting.adopt(
-              await LockServer.start(socketPath, leadership, {
-                // The first term of a directory has no predecessor to wait for.
-                graceWindow: leadership.epoch > 1n ? graceWindow : 0,
-              }),
-              (started) => started.close(),
-            );
-            this.emit('role', 'leader');
-            this.#servers.use(starting.move());
-          },
-          connected: () => this.emit('role', 'follower'),
-        }),
+        new LocalDirectoryConnector(
+          directory,
+          new ElectingConnector({
+            socketPath,
+            election: new LeaderElection(directory, { pollInterval }),
+            pollInterval,
+            serve: async (leadership) => {
+              // Until serving has fully started, a failure closes the new server, so no server outlives its term.
+              await using starting = new AsyncDisposableStack();
+              starting.adopt(
+                await LockServer.start(socketPath, leadership, {
+                  // The first term of a directory has no predecessor to wait for.
+                  graceWindow: leadership.epoch > 1n ? graceWindow : 0,
+                }),
+                (started) => started.close(),
+              );
+              this.emit('role', 'leader');
+              this.#servers.use(starting.move());
+            },
+            connected: () => this.emit('role', 'follower'),
+          }),
+        ),
       ),
     );
   }

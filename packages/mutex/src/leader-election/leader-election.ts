@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { setTimeout as delay } from 'node:timers/promises';
 
+import { assertLocalDirectory } from '../local-directory/local-directory.ts';
 import { durableWrite } from '../shared/fs/durable-write.ts';
 import { isErrno } from '../shared/fs/errno.ts';
 import { isBusy } from '../shared/sqlite/is-busy.ts';
@@ -41,6 +42,7 @@ export class LeaderElection {
   async campaign({ timeout = 0 }: CampaignOptions = {}): Promise<
     Leadership | undefined
   > {
+    await assertLocalDirectory(this.#directory);
     await mkdir(this.#directory, { recursive: true });
     // A busy timeout above zero would block this process's event loop while it
     // waits, so the claim is retried here instead.
