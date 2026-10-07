@@ -1,28 +1,24 @@
 import type { DatabaseOptions } from './database.ts';
 import {
-  type MysqlCompatibleDatabase,
-  MysqlCompatibleServer,
-  type MysqlFlavor,
-} from './mysql-compatible-server.ts';
+  type MysqlFamilyDatabase,
+  MysqlFamilyServer,
+} from './mysql-family-server.ts';
 
 export type { Database, DatabaseOptions } from './database.ts';
 
 export type MysqlOptions = DatabaseOptions;
 
-export type MysqlDatabase = MysqlCompatibleDatabase;
+export type MysqlDatabase = MysqlFamilyDatabase;
 
-const mysql: MysqlFlavor = {
-  image: 'mysql:8.4',
-  client: 'mysql',
-  scheme: 'mysql',
-  environment: (password, database) => ({
-    MYSQL_ROOT_PASSWORD: password,
-    MYSQL_DATABASE: database,
-  }),
-};
+export class Mysql extends MysqlFamilyServer {
+  protected override readonly client = 'mysql';
+  protected override readonly scheme = 'mysql';
 
-export class Mysql extends MysqlCompatibleServer {
-  constructor(options: MysqlOptions) {
-    super(mysql, options);
+  constructor({ image = 'mysql:8.4', ...options }: MysqlOptions) {
+    super({ ...options, image });
+  }
+
+  protected override environment(password: string, database: string) {
+    return { MYSQL_ROOT_PASSWORD: password, MYSQL_DATABASE: database };
   }
 }

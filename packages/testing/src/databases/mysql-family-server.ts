@@ -5,46 +5,43 @@ import type { ServiceContainer } from '../docker/container.ts';
 import type { Docker } from '../docker/docker.ts';
 import type { Database, DatabaseOptions } from './database.ts';
 
-export interface MysqlCompatibleDatabase extends Database {
+export interface MysqlFamilyDatabase extends Database {
   query: (sql: string) => Promise<Record<string, string | null>[]>;
-}
-
-/** What a server that speaks MySQL's protocol and client flags names its own way. */
-export interface MysqlFlavor {
-  /** The image when the options name none. */
-  image: string;
-  /** The command-line client inside the image. */
-  client: string;
-  /** The scheme of the connection string. */
-  scheme: string;
-  environment: (password: string, database: string) => Record<string, string>;
 }
 
 /** The image creates only root, from the root password in its environment. */
 const user = 'root';
 
-export class MysqlCompatibleServer {
-  readonly #flavor: MysqlFlavor;
+/**
+ * A template method for servers that speak MySQL's protocol and client flags:
+ * acquisitions, readiness, queries and the batch parser stay the same. A
+ * subclass names the client in its image, the connection string's scheme and
+ * the environment, and passes its default image to this constructor.
+ */
+export abstract class MysqlFamilyServer {
   readonly #docker: Docker;
   readonly #options;
 
-  constructor(
-    flavor: MysqlFlavor,
-    {
-      docker,
-      image = flavor.image,
-      password = 'testpassword',
-      database = 'app',
-      labels,
-    }: DatabaseOptions,
-  ) {
-    this.#flavor = flavor;
+  protected abstract readonly client: string;
+  protected abstract readonly scheme: string;
+  protected abstract environment(
+    password: string,
+    database: string,
+  ): Record<string, string>;
+
+  constructor({
+    docker,
+    image,
+    password = 'testpassword',
+    database = 'app',
+    labels,
+  }: DatabaseOptions & { image: string }) {
     this.#docker = docker;
     this.#options = { image, password, database, labels };
   }
 
   /** Create an isolated database on the persistent shared server. */
-  async database(): Promise<MysqlCompatibleDatabase> {
+  async database(): Promise<MysqlFamilyDatabase> {
     const container = await this.#acquire('app', 'reuse');
     const database = `test_${randomUUID().replaceAll('-', '')}`;
     try {
@@ -65,7 +62,7 @@ export class MysqlCompatibleServer {
   }
 
   /** Start a dedicated server; the returned handle owns its container. */
-  async start(): Promise<MysqlCompatibleDatabase> {
+  async start(): Promise<MysqlFamilyDatabase> {
     const { database } = this.#options;
     const container = await this.#acquire(database, 'serve');
     return this.#handle(container, database, () => container.cleanup());
@@ -74,7 +71,7 @@ export class MysqlCompatibleServer {
   #sql(container: ServiceContainer, sql: string) {
     const { password } = this.#options;
     return container.exec([
-      this.#flavor.client,
+      this.client,
       `-u${user}`,
       `-p${password}`,
       '--execute',
@@ -89,7 +86,7 @@ export class MysqlCompatibleServer {
   ): Promise<Record<string, string | null>[]> {
     const { password } = this.#options;
     const { stdout } = await container.exec([
-      this.#flavor.client,
+      this.client,
       `-u${user}`,
       `-p${password}`,
       '--database',
@@ -129,7 +126,7 @@ export class MysqlCompatibleServer {
       image,
       labels,
       internalPort: 3306,
-      env: this.#flavor.environment(password, database),
+      env: this.environment(password, database),
       tmpfs: ['/var/lib/mysql:rw,size=512m'],
       memorySwappiness: 0,
       healthy: (container) => this.#ready(container),
@@ -142,7 +139,7 @@ export class MysqlCompatibleServer {
     return timebox(
       () =>
         container.exec([
-          this.#flavor.client,
+          this.client,
           '-h',
           '127.0.0.1',
           `-u${user}`,
@@ -158,10 +155,10 @@ export class MysqlCompatibleServer {
     container: ServiceContainer,
     database: string,
     cleanup: () => Promise<void>,
-  ): MysqlCompatibleDatabase {
+  ): MysqlFamilyDatabase {
     const { image, password } = this.#options;
     return {
-      connectionString: `${this.#flavor.scheme}://${user}:${password}@${container.host}:${container.port}/${database}`,
+      connectionString: `${this.scheme}://${user}:${password}@${container.host}:${container.port}/${database}`,
       image,
       user,
       password,
