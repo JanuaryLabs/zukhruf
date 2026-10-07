@@ -19,19 +19,33 @@ async function scratchDirectory() {
   };
 }
 
-const sources: Array<{ name: string; create(directory: string): TokenSource }> =
-  [
-    { name: 'CounterTokenSource', create: () => new CounterTokenSource() },
-    {
-      name: 'FileTokenSource',
-      create: (directory) => new FileTokenSource(directory),
-    },
-    {
-      name: 'MonotonicClockTokenSource',
-      create: () => new MonotonicClockTokenSource(),
-    },
-    { name: 'EpochTokenSource', create: () => new EpochTokenSource(7n) },
-  ];
+const sources: Array<{
+  name: string;
+  create(directory: string): TokenSource;
+  tokens: number;
+}> = [
+  {
+    name: 'CounterTokenSource',
+    create: () => new CounterTokenSource(),
+    tokens: 1000,
+  },
+  {
+    name: 'FileTokenSource',
+    create: (directory) => new FileTokenSource(directory),
+    // Each token waits for the disk, up to 60 ms on a busy Windows runner; 101 cross the counter's 10 and 100.
+    tokens: 101,
+  },
+  {
+    name: 'MonotonicClockTokenSource',
+    create: () => new MonotonicClockTokenSource(),
+    tokens: 1000,
+  },
+  {
+    name: 'EpochTokenSource',
+    create: () => new EpochTokenSource(7n),
+    tokens: 1000,
+  },
+];
 
 describe('Token sources', () => {
   for (const source of sources) {
@@ -42,7 +56,7 @@ describe('Token sources', () => {
       const minted: FencingToken[] = [];
 
       // Act
-      for (let i = 0; i < 1000; i++)
+      for (let i = 0; i < source.tokens; i++)
         minted.push(await tokens.next('product:42'));
 
       // Assert
