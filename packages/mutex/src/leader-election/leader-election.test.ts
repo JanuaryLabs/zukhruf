@@ -44,7 +44,8 @@ describe('Leader election', () => {
           workers.every(
             (worker) => worker.has('leader') || worker.has('follower'),
           ),
-        `Every candidate must report its outcome.\n${workers.map((worker) => worker.stderr).join('')}`,
+        () =>
+          `Every candidate must report its outcome.\n${workers.map((worker) => worker.stderr).join('')}`,
         5000,
       );
 
@@ -71,7 +72,7 @@ describe('Leader election', () => {
       await waitUntil(
         t,
         () => leader.has('leader'),
-        `The first candidate must lead.\n${leader.stderr}`,
+        () => `The first candidate must lead.\n${leader.stderr}`,
         5000,
       );
       const epoch = leader.find('leader')?.epoch;

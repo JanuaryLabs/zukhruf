@@ -384,7 +384,12 @@ describe('Socket store protocol handshake', () => {
         'leader',
         { nodeOptions: ['--expose-gc'] },
       );
-      await waitUntil(t, () => leader.has('ready'), leader.stderr, 10_000);
+      await waitUntil(
+        t,
+        () => leader.has('ready'),
+        () => leader.stderr,
+        10_000,
+      );
       const memory = async () => {
         const told = leader.messages.length;
         leader.child.send('measure');

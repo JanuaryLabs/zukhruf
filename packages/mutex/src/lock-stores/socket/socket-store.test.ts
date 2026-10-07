@@ -69,7 +69,7 @@ describe('Socket lock server failover', () => {
       await waitUntil(
         t,
         () => leader.has('ready'),
-        `The leader must start.\n${leader.stderr}`,
+        () => `The leader must start.\n${leader.stderr}`,
         5000,
       );
       assert.equal(
@@ -94,7 +94,7 @@ describe('Socket lock server failover', () => {
       await waitUntil(
         t,
         () => holder.has('entered'),
-        `The holder must enter.\n${holder.stderr}`,
+        () => `The holder must enter.\n${holder.stderr}`,
         5000,
       );
       await using waiter = startWorker(
@@ -109,7 +109,7 @@ describe('Socket lock server failover', () => {
       await waitUntil(
         t,
         () => waiter.has('attempted'),
-        `The waiter must start.\n${waiter.stderr}`,
+        () => `The waiter must start.\n${waiter.stderr}`,
         5000,
       );
       await delay(settle);
@@ -134,7 +134,7 @@ describe('Socket lock server failover', () => {
       await waitUntil(
         t,
         () => holder.has('done') && waiter.has('done'),
-        `Both must finish.\n${holder.stderr}${waiter.stderr}`,
+        () => `Both must finish.\n${holder.stderr}${waiter.stderr}`,
         5000,
       );
       assert.equal(
@@ -186,7 +186,7 @@ describe('Socket lock server failover', () => {
       await waitUntil(
         t,
         () => follower.has('entered'),
-        `The follower must enter.\n${follower.stderr}`,
+        () => `The follower must enter.\n${follower.stderr}`,
         5000,
       );
       const deadline = Promise.withResolvers<'timed out'>();
@@ -209,7 +209,7 @@ describe('Socket lock server failover', () => {
         await waitUntil(
           t,
           () => follower.has('done'),
-          `The follower must finish.\n${follower.stderr}`,
+          () => `The follower must finish.\n${follower.stderr}`,
           5000,
         );
         assert.equal(
@@ -253,7 +253,7 @@ describe('Socket lock server failover', () => {
       await waitUntil(
         t,
         () => leader.has('ready'),
-        `The leader must start.\n${leader.stderr}`,
+        () => `The leader must start.\n${leader.stderr}`,
         5000,
       );
       await using frozen = startWorker(
@@ -263,7 +263,7 @@ describe('Socket lock server failover', () => {
       await waitUntil(
         t,
         () => frozen.has('entered'),
-        `The holder must enter.\n${frozen.stderr}`,
+        () => `The holder must enter.\n${frozen.stderr}`,
         5000,
       );
 
@@ -280,7 +280,8 @@ describe('Socket lock server failover', () => {
         await waitUntil(
           t,
           () => successor.has('done'),
-          `The successor must get the key once the grace window passes.\n${successor.stderr}`,
+          () =>
+            `The successor must get the key once the grace window passes.\n${successor.stderr}`,
           5000,
         );
         assert.equal(successor.find('wrote')?.write, 'written');
@@ -295,7 +296,7 @@ describe('Socket lock server failover', () => {
       await waitUntil(
         t,
         () => frozen.has('done'),
-        `The frozen holder must finish.\n${frozen.stderr}`,
+        () => `The frozen holder must finish.\n${frozen.stderr}`,
         5000,
       );
       assert.equal(
@@ -526,7 +527,8 @@ describe('Socket store follower failure', () => {
       await waitUntil(
         t,
         () => follower.exit !== null,
-        `The follower must end on its own once its work is done.\n${follower.stderr}`,
+        () =>
+          `The follower must end on its own once its work is done.\n${follower.stderr}`,
         5000,
       );
 

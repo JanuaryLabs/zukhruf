@@ -168,7 +168,12 @@ for (const store of stores) {
           callerSource(store, directory.path),
           'holder',
         );
-        await waitUntil(t, () => holder.has('holding'), holder.stderr, 5000);
+        await waitUntil(
+          t,
+          () => holder.has('holding'),
+          () => holder.stderr,
+          5000,
+        );
         await chmod(directory.path, 0o555);
         try {
           // Act
@@ -176,7 +181,7 @@ for (const store of stores) {
           await waitUntil(
             t,
             () => holder.has('release failed') || holder.has('released'),
-            holder.stderr,
+            () => holder.stderr,
             5000,
           );
           assert.ok(
@@ -262,7 +267,12 @@ for (const store of stores) {
           callerSource(store, directory.path),
           'holder',
         );
-        await waitUntil(t, () => holder.has('holding'), holder.stderr, 5000);
+        await waitUntil(
+          t,
+          () => holder.has('holding'),
+          () => holder.stderr,
+          5000,
+        );
         assert.equal((await presenceFilesIn(directory.path)).length, 1);
         holder.child.kill('SIGKILL');
         await holder.closed;
@@ -311,7 +321,12 @@ for (const store of stores) {
           callerSource(store, directory.path),
           'holder',
         );
-        await waitUntil(t, () => holder.has('holding'), holder.stderr, 5000);
+        await waitUntil(
+          t,
+          () => holder.has('holding'),
+          () => holder.stderr,
+          5000,
+        );
         const [presence] = await presenceFilesIn(directory.path);
         assert.ok(presence, 'The holder must keep a presence file');
         await chmod(join(directory.path, presence), 0o000);
@@ -421,7 +436,12 @@ describe('TicketQueueFileStore: presence files of waiters', () => {
         callerSource(ticketQueue, directory.path),
         'holder',
       );
-      await waitUntil(t, () => holder.has('holding'), holder.stderr, 5000);
+      await waitUntil(
+        t,
+        () => holder.has('holding'),
+        () => holder.stderr,
+        5000,
+      );
       await using waiter = startWorker(
         callerSource(ticketQueue, directory.path),
         'waiter',
@@ -436,7 +456,12 @@ describe('TicketQueueFileStore: presence files of waiters', () => {
       waiter.child.kill('SIGKILL');
       await waiter.closed;
       holder.child.send('release');
-      await waitUntil(t, () => holder.has('released'), holder.stderr, 5000);
+      await waitUntil(
+        t,
+        () => holder.has('released'),
+        () => holder.stderr,
+        5000,
+      );
 
       // Act
       await takeAndRelease(ticketQueue, directory.path);
@@ -479,19 +504,30 @@ describe('TicketQueueFileStore: presence files of waiters', () => {
           callerSource(ticketQueue, directory.path),
           'holder',
         );
-        await waitUntil(t, () => holder.has('holding'), holder.stderr, 5000);
+        await waitUntil(
+          t,
+          () => holder.has('holding'),
+          () => holder.stderr,
+          5000,
+        );
         await endWait(new Mutex(ticketQueue.create(directory.path)), () =>
           waitUntil(
             t,
             () => ticketsIn(queueIn(directory.path)) === 2,
-            `The waiter must line up behind the holder.\n${holder.stderr}`,
+            () =>
+              `The waiter must line up behind the holder.\n${holder.stderr}`,
             5000,
           ),
         );
         assert.equal(ticketsIn(queueIn(directory.path)), 2);
         assert.equal((await presenceFilesIn(directory.path)).length, 2);
         holder.child.send('release');
-        await waitUntil(t, () => holder.has('released'), holder.stderr, 5000);
+        await waitUntil(
+          t,
+          () => holder.has('released'),
+          () => holder.stderr,
+          5000,
+        );
 
         // Act
         await takeAndRelease(ticketQueue, directory.path);
@@ -514,7 +550,12 @@ test(
       callerSource(ticketQueue, directory.path),
       'holder',
     );
-    await waitUntil(t, () => holder.has('holding'), holder.stderr, 5000);
+    await waitUntil(
+      t,
+      () => holder.has('holding'),
+      () => holder.stderr,
+      5000,
+    );
     await using first = startWorker(
       callerSource(ticketQueue, directory.path),
       'first',

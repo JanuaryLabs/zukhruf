@@ -112,7 +112,12 @@ describe('A waiter that dies while it evicts a dead holder', () => {
           holderSource(store.url, store.name, directory.path),
           'holder',
         );
-        await waitUntil(t, () => holder.has('holding'), holder.stderr, 5000);
+        await waitUntil(
+          t,
+          () => holder.has('holding'),
+          () => holder.stderr,
+          5000,
+        );
         holder.child.kill('SIGKILL');
         await holder.closed;
         await using evicter = startWorker(
@@ -124,7 +129,12 @@ describe('A waiter that dies while it evicts a dead holder', () => {
           ),
           'evicter',
         );
-        await waitUntil(t, () => evicter.has('evicting'), evicter.stderr, 5000);
+        await waitUntil(
+          t,
+          () => evicter.has('evicting'),
+          () => evicter.stderr,
+          5000,
+        );
         const first = store.create(directory.path);
         const second = store.create(directory.path);
 
@@ -205,7 +215,12 @@ describe('A waiter that dies while it evicts a dead holder', () => {
           holderSource(store.url, store.name, directory.path),
           'holder',
         );
-        await waitUntil(t, () => holder.has('holding'), holder.stderr, 5000);
+        await waitUntil(
+          t,
+          () => holder.has('holding'),
+          () => holder.stderr,
+          5000,
+        );
         holder.child.kill('SIGKILL');
         await holder.closed;
         const [lockFile] = (await readdir(directory.path)).filter((file) =>

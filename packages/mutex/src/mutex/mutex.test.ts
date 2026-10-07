@@ -141,7 +141,7 @@ for (const store of storeCases) {
         await waitUntil(
           t,
           () => application.exit !== null,
-          `The application must finish.\n${application.stderr}`,
+          () => `The application must finish.\n${application.stderr}`,
           newProcessTimeout,
         );
 
@@ -702,12 +702,13 @@ for (const store of storeCases.filter(
           await using second = startWorker(workerSource, 'second', { host });
           const stderr = () => first.stderr + second.stderr;
           const waitFor = (condition: () => boolean, message: string) =>
-            waitUntil(t, condition, `${message}\n${stderr()}`);
+            waitUntil(t, condition, () => `${message}\n${stderr()}`);
 
           await waitUntil(
             t,
             () => first.has('ready') && second.has('ready'),
-            `Both Node processes must be ready before the contention scenario starts\n${stderr()}`,
+            () =>
+              `Both Node processes must be ready before the contention scenario starts\n${stderr()}`,
             newProcessTimeout,
           );
 
@@ -786,7 +787,8 @@ for (const store of storeCases.filter(
           await waitUntil(
             t,
             () => holder.has('entered'),
-            `The holder process must enter its callback.\n${holder.stderr}`,
+            () =>
+              `The holder process must enter its callback.\n${holder.stderr}`,
             newProcessTimeout,
           );
           const mutex = new Mutex(host.store);
@@ -906,7 +908,7 @@ for (const store of storeCases.filter(
         await waitUntil(
           t,
           () => holder.has('holding'),
-          `The holder must take the key\n${holder.stderr}`,
+          () => `The holder must take the key\n${holder.stderr}`,
           newProcessTimeout,
         );
 

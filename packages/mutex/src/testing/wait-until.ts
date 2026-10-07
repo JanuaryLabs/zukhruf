@@ -8,14 +8,22 @@ import type { TestContext } from 'node:test';
  */
 export const newProcessTimeout = 10_000;
 
+/**
+ * Polls `condition` until it holds. A `message` function runs when a check
+ * fails, so it reads state such as a worker's stderr at that moment, not when
+ * the wait started.
+ */
 export function waitUntil(
   t: TestContext,
   condition: () => boolean,
-  message: string,
+  message: string | (() => string),
   timeout = 2000,
 ) {
-  return t.waitFor(() => assert.ok(condition(), message), {
-    interval: 5,
-    timeout,
-  });
+  return t.waitFor(
+    () => {
+      if (!condition())
+        assert.fail(typeof message === 'function' ? message() : message);
+    },
+    { interval: 5, timeout },
+  );
 }
