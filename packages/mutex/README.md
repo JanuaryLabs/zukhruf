@@ -131,7 +131,7 @@ See [Fencing tokens](./docs/concepts/fencing-tokens.md) and the recipe [Protect 
 
 ## Use it
 
-This project is an experiment. You need Node.js 26.9 or later.
+This project is an experiment.
 
 ```sh
 npm install @zukhruf/mutex
