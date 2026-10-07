@@ -165,3 +165,15 @@ test(
     );
   },
 );
+
+test('HTTP servers listen on the IPv4 loopback interface only', async () => {
+  await using server = await new HttpServer().start((_request, response) => {
+    response.end();
+  });
+
+  assert.deepEqual(server.server.address(), {
+    address: '127.0.0.1',
+    family: 'IPv4',
+    port: Number(new URL(server.origin).port),
+  });
+});
