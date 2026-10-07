@@ -10,6 +10,7 @@ import { ProtocolVersionError } from '../../index.ts';
 import { LeaderElection } from '../../leader-election/leader-election.ts';
 import { scratchDirectory } from '../../testing/scratch-directory.ts';
 import { waitUntil } from '../../testing/wait-until.ts';
+import { isLockRequest } from '../remote/protocol.ts';
 import { PROTOCOL_VERSION } from './handshake.ts';
 import { type SocketRole, SocketStore } from './socket-store.ts';
 
@@ -21,8 +22,8 @@ const onUnixSockets = {
 };
 
 /**
- * A stand-in leader on the store's socket path. It reads each connection's
- * first line and lets `answer` reply or hang up, as a leader that runs
+ * A stand-in leader on the store's socket path. It reads each line of each
+ * connection and lets `answer` reply or hang up, as a leader that runs
  * another version would.
  */
 async function standInLeader(
@@ -33,7 +34,7 @@ async function standInLeader(
   const server = createServer((peer) => {
     peers.add(peer);
     peer.on('error', () => {});
-    createInterface({ input: peer }).once('line', (line) => answer(peer, line));
+    createInterface({ input: peer }).on('line', (line) => answer(peer, line));
   });
   server.listen(join(directory, 'lock.sock'));
   await once(server, 'listening');
@@ -277,6 +278,82 @@ describe('Socket store protocol handshake', () => {
       // Assert: the hang-up came from a leader that stopped, so the store follows its successor.
       assert.equal(result, 'granted');
       assert.deepEqual(roles, ['follower']);
+    },
+  );
+
+  test(
+    'a holder hung up on by its stopping leader keeps its key from a successor that already leads',
+    onUnixSockets,
+    async () => {
+      // Arrange: the store holds a key from the stand-in leader. When the
+      // store connects again, the stand-in keeps that hello unanswered,
+      // because it stops: it ends its term, and a successor takes it over.
+      await using directory = await scratchDirectory();
+      const term = await new LeaderElection(directory.path, {
+        pollInterval: 10,
+      }).campaign();
+      assert.ok(term, 'The stand-in must win the first term');
+      let hellos = 0;
+      let first: Socket | undefined;
+      const reconnected = Promise.withResolvers<Socket>();
+      await using _leader = await standInLeader(
+        directory.path,
+        (peer, line) => {
+          if (isHello(line)) {
+            hellos++;
+            if (hellos === 1) {
+              first = peer;
+              peer.write(`${JSON.stringify({ op: 'welcome' })}\n`);
+            } else if (hellos === 2) reconnected.resolve(peer);
+            else peer.destroy();
+            return;
+          }
+          const request: unknown = JSON.parse(line);
+          if (isLockRequest(request) && request.op === 'acquire') {
+            const token = String((term.epoch << 32n) | 1n);
+            peer.write(
+              `${JSON.stringify({ op: 'granted', id: request.id, token })}\n`,
+            );
+          }
+        },
+      );
+      await using store = new SocketStore(directory.path, { pollInterval: 10 });
+      await using successor = new SocketStore(directory.path, {
+        pollInterval: 10,
+      });
+      const lease = await store.acquire('product:42');
+      const journal: string[] = [];
+
+      // Act: the stand-in stops while the store holds the key, and the
+      // successor leads before the stand-in hangs up on the store.
+      first?.destroy();
+      const hungUp = await reconnected.promise;
+      await term.resign();
+      const leading = once(successor, 'role');
+      const waiting = outcome(
+        successor.acquire('product:42').then((granted) => {
+          journal.push('waiter:enter');
+          return granted;
+        }),
+      );
+      await leading;
+      hungUp.destroy();
+      // Another key is granted only after the grace window. After it, the
+      // successor would grant the waiter if the store had not reasserted its key.
+      await (await successor.acquire('other'))[Symbol.asyncDispose]();
+      const kept = !lease.signal.aborted;
+      journal.push('holder:leave');
+      await lease[Symbol.asyncDispose]();
+      const waited = await waiting;
+
+      // Assert: the store reasserted its key in time, so the waiter waited for the release.
+      assert.deepEqual(
+        journal,
+        ['holder:leave', 'waiter:enter'],
+        'A waiter entered while the holder still held the key',
+      );
+      assert.ok(kept, 'The holder must keep its key across the failover');
+      assert.equal(waited, 'granted');
     },
   );
 

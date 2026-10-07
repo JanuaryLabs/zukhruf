@@ -15,8 +15,8 @@ import { ProtocolVersionError } from './protocol-version-error.ts';
 import { SocketConnection } from './socket-connection.ts';
 
 /**
- * How long a leader that hung up on the hello may take to end its term. One
- * that stops ends it within moments; one from before the handshake keeps it.
+ * How long a leader may keep its term while it hangs up on every hello. One
+ * that stops ends its term within moments; one from before the handshake keeps it.
  */
 const HANDSHAKE_PATIENCE = 1000;
 
@@ -44,51 +44,85 @@ export class ElectingConnector implements ClientConnector {
   }
 
   async connect(signal: AbortSignal): Promise<ClientConnection> {
-    const { socketPath, election, pollInterval, serve } = this.#options;
+    const { socketPath, pollInterval } = this.#options;
     for (;;) {
       const leader = await reachUnlessAborted(socketPath, signal);
       if (leader) {
-        const connection = await this.#follow(leader, signal);
+        const connection =
+          (await this.#follow(leader, signal)) ??
+          (await this.#outlastHangUp(signal));
         if (connection) return connection;
       }
-      const leadership = await election.campaign({
-        timeout: leader ? HANDSHAKE_PATIENCE : pollInterval,
-      });
-      if (signal.aborted) await leadership?.resign();
-      signal.throwIfAborted();
+      const leadership = await this.#campaign(pollInterval, signal);
       if (leadership) {
-        try {
-          await serve(leadership);
-        } catch (error) {
-          // A term that nothing serves would stop every other candidate from leading.
-          await leadership.resign();
-          throw error;
-        }
-        // This process leads now, so it reaches its own server without following anyone.
-        const own = await reachUnlessAborted(socketPath, signal);
-        if (own) {
-          if ((await greetUnlessAborted(own, signal)).kind === 'welcome') {
-            return new SocketConnection<LockRequest, LockResponse>(
-              own,
-              isLockResponse,
-            );
-          }
-          own.destroy();
-        }
-      } else if (leader) {
-        // The term is still held: either the leader that hung up predates the
-        // handshake, or a successor took over while it stopped. Only the
-        // successor answers a second hello.
-        const again = await reachUnlessAborted(socketPath, signal);
-        if (again) {
-          const connection = await this.#follow(again, signal);
-          if (connection) return connection;
-          throw new ProtocolVersionError(PROTOCOL_VERSION, undefined);
-        }
+        const own = await this.#lead(leadership, signal);
+        if (own) return own;
       } else {
         await delay(pollInterval, undefined, { signal });
       }
     }
+  }
+
+  /**
+   * After a leader hung up on the hello: a leader that stops frees its term
+   * within moments, so this process leads or follows the successor soon
+   * enough to reassert its keys in the successor's grace window. A leader from
+   * before the handshake keeps its term and hangs up on every hello, which
+   * fails the connect after HANDSHAKE_PATIENCE. Resolves `undefined` once
+   * nothing listens.
+   */
+  async #outlastHangUp(
+    signal: AbortSignal,
+  ): Promise<ClientConnection | undefined> {
+    const { socketPath, pollInterval } = this.#options;
+    const deadline = performance.now() + HANDSHAKE_PATIENCE;
+    for (;;) {
+      const leadership = await this.#campaign(0, signal);
+      if (leadership) return this.#lead(leadership, signal);
+      const again = await reachUnlessAborted(socketPath, signal);
+      if (!again) return undefined;
+      const connection = await this.#follow(again, signal);
+      if (connection) return connection;
+      if (performance.now() >= deadline) {
+        throw new ProtocolVersionError(PROTOCOL_VERSION, undefined);
+      }
+      await delay(pollInterval, undefined, { signal });
+    }
+  }
+
+  /** Campaigns until `timeout`; a term won after `signal` aborted is resigned. */
+  async #campaign(
+    timeout: number,
+    signal: AbortSignal,
+  ): Promise<Leadership | undefined> {
+    const leadership = await this.#options.election.campaign({ timeout });
+    if (signal.aborted) await leadership?.resign();
+    signal.throwIfAborted();
+    return leadership;
+  }
+
+  /** Serves the term this process just won, and reaches its own server without following anyone. */
+  async #lead(
+    leadership: Leadership,
+    signal: AbortSignal,
+  ): Promise<ClientConnection | undefined> {
+    try {
+      await this.#options.serve(leadership);
+    } catch (error) {
+      // A term that nothing serves would stop every other candidate from leading.
+      await leadership.resign();
+      throw error;
+    }
+    const own = await reachUnlessAborted(this.#options.socketPath, signal);
+    if (!own) return undefined;
+    if ((await greetUnlessAborted(own, signal)).kind === 'welcome') {
+      return new SocketConnection<LockRequest, LockResponse>(
+        own,
+        isLockResponse,
+      );
+    }
+    own.destroy();
+    return undefined;
   }
 
   /** Follows the leader on `socket` if it speaks this protocol; `undefined` when it hung up on the hello. */
