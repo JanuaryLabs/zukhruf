@@ -7,14 +7,19 @@
 ```ts
 interface LockStore {
   /** Resolves once `key` is exclusively held. Stops waiting when `signal` aborts. */
-  acquire(key: string, options?: { signal?: AbortSignal }): Promise<Lease>;
+  acquire(key: string, options?: { signal?: AbortSignal }): Promise<LockHandle>;
   /** Holds `key` only if that is possible without waiting for another holder. */
-  tryAcquire(key: string): Promise<Lease | undefined>;
+  tryAcquire(key: string): Promise<LockHandle | undefined>;
 }
 
-interface Lease extends AsyncDisposable {
+/** What the task gets. */
+interface Lease {
   readonly token: FencingToken;
+  readonly signal: AbortSignal;
 }
+
+/** What your lock store gives the mutex: the lease and the release. */
+interface LockHandle extends Lease, AsyncDisposable {}
 ```
 
 ## The rules
@@ -22,9 +27,10 @@ interface Lease extends AsyncDisposable {
 1. **Grant a key to one holder at a time.** `acquire` resolves only when no other lease for the key exists.
 2. **`tryAcquire` never waits for another holder.** It returns `undefined` when the key is busy.
 3. **Stop waiting when the signal aborts**, and reject with `signal.reason`. If your lock store keeps a queue that a waiter cannot leave, keep its place and pass the key on when its turn comes. The [acquire modes](../concepts/acquire-modes.md) depend on this. A caller that [cancels](../concepts/acquire-modes.md#cancel-a-wait) also depends on this: the mutex gives its signal to your lock store.
-4. **Release the key in `[Symbol.asyncDispose]`.** The mutex calls it after the task, also when the task fails.
-5. **Make the fencing token while the key is held.** Use `leaseFor(key, held, tokens)`. It calls the token source, and it releases the key if the token source fails.
-6. **Let the user give a token source.** Use an option `tokens`, as the other lock stores do.
+4. **Release the key in `[Symbol.asyncDispose]` of the lock handle.** Only the mutex calls it, after the task, also when the task fails. The task never gets the lock handle. Do not throw when the key is already lost: there is nothing left to release.
+5. **Abort the signal when another holder may get the key.** Abort it with a `LockLostError` for the key. The task can then stop, and the mutex rejects the call with `LockLostError`. If your lock store never loses a key while its holder runs, give a signal that never aborts.
+6. **Make the fencing token while the key is held.** Use `leaseFor(key, held, tokens)`. It calls the token source, it gives a signal that never aborts, and it releases the key if the token source fails.
+7. **Let the user give a token source.** Use an option `tokens`, as the other lock stores do.
 
 ## Example 1: wrap a lock store
 
@@ -35,7 +41,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 
 import {
   type AcquireOptions,
-  type Lease,
+  type LockHandle,
   type LockStore,
   MemoryStore,
   Mutex,
@@ -54,14 +60,14 @@ class WaitTimeStore implements LockStore {
     this.#report = report;
   }
 
-  async acquire(key: string, options?: AcquireOptions): Promise<Lease> {
+  async acquire(key: string, options?: AcquireOptions): Promise<LockHandle> {
     const started = performance.now();
-    const lease = await this.#inner.acquire(key, options);
+    const handle = await this.#inner.acquire(key, options);
     this.#report(key, performance.now() - started);
-    return lease;
+    return handle;
   }
 
-  tryAcquire(key: string): Promise<Lease | undefined> {
+  tryAcquire(key: string): Promise<LockHandle | undefined> {
     return this.#inner.tryAcquire(key);
   }
 }
@@ -84,7 +90,7 @@ Output:
 [ 0, 50, 100 ]
 ```
 
-The decorator gives the lease of the inner lock store back without a change, and it passes the `signal` on. Thus the fencing token, the release, and the acquire modes stay correct.
+The decorator gives the lock handle of the inner lock store back without a change, and it passes the `signal` of the caller on. Thus the fencing token, the signal of the lease, the release, and the acquire modes stay correct.
 
 ## Example 2: a new way to hold a key in a directory
 

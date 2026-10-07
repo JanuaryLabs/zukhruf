@@ -12,7 +12,7 @@ holder B:                       [lease] read stock=1, write stock=0
 result:    two customers got the last item
 ```
 
-A is a **stale holder**. The mutex cannot stop A, because A does not know that it lost the key.
+A is a **stale holder**. The mutex cannot stop A, because A does not know that it lost the key. Sometimes the lock store sees the loss, and then the signal of the lease aborts (see [failure modes](./failure-modes.md#errors)). But a frozen holder can write before its lock store sees the loss, so the signal cannot replace the fencing token.
 
 ## The solution
 

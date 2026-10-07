@@ -2,9 +2,9 @@
 
 A host lock store that uses one file for each held key. The process that creates the file holds the key.
 
-| Reach | Order    | Holder process stops                       | Default token source        |
-| ----- | -------- | ------------------------------------------ | --------------------------- |
-| Host  | No order | Released after a waiter checks the process | `FileTokenSource` (durable) |
+| Reach | Order    | Holder stops                                  | Default token source        |
+| ----- | -------- | --------------------------------------------- | --------------------------- |
+| Host  | No order | Released after a waiter finds that it stopped | `FileTokenSource` (durable) |
 
 ## What
 
@@ -30,16 +30,19 @@ A lock file is the oldest and easiest way to share a lock between processes. Too
 
 - The order of waiters is important. Use [TicketQueueFileStore](./ticket-queue-file-store.md).
 - You need the key soon after a release. Waiters poll.
-- You stop worker threads that hold keys. The process stays alive, so the key stays held.
 
 ## How it works
 
-1. The process writes its identity (process ID, host name, unique ID) to a temporary file.
-2. It creates a hard link from the temporary file to `<key>.lock`. A link fails if the name exists, and it is atomic. Thus the lock file always contains a full identity.
-3. If the link fails, the process reads the lock file. If the holder process does not exist, the process removes the lock file and tries again.
-4. To release the key, the holder deletes `<key>.lock`.
+1. If `<key>.lock` does not exist, the caller starts its [presence](../adr/0012-a-file-store-holder-is-judged-by-its-presence.md): an exclusive SQLite transaction on `<key>.lock.<id>.presence`. The kernel ends the presence when the process or the thread of the caller stops.
+2. The caller writes its identity (process ID, host name, unique ID) to a temporary file.
+3. It creates a hard link from the temporary file to `<key>.lock`. A link fails if the name exists, and it is atomic. Thus the lock file always contains a full identity.
+4. If the link fails, the caller ends its presence and deletes the presence file. Thus a waiter keeps no presence while it waits.
+5. If the lock file exists, the caller reads the presence file of the holder. If it can read that file, the holder stopped. The caller then removes the lock file and the presence file, and tries again.
+6. To release the key, the holder deletes `<key>.lock`. Then it ends its presence and deletes the presence file.
 
-Removal of a stopped holder uses `<key>.lock.reclaim`, as in [TicketQueueFileStore](./ticket-queue-file-store.md#how-it-works). Without it, two waiters could each remove a lock file that the other waiter had just created.
+The process ID and the host name in the lock file are for people. The lock store does not use them.
+
+Removal of a stopped holder uses `<key>.lock.reclaim`, as in [TicketQueueFileStore](./ticket-queue-file-store.md#how-it-works). Without it, two waiters could each remove a lock file that the other waiter had just created. If the lock file names a holder that has no presence file, the acquire fails with an error that gives the names of both files. An older version of the lock store wrote that lock file.
 
 ## Acquire modes
 
@@ -47,7 +50,7 @@ Removal of a stopped holder uses `<key>.lock.reclaim`, as in [TicketQueueFileSto
 
 ## Failure modes
 
-The same as [TicketQueueFileStore](./ticket-queue-file-store.md#failure-modes): a stopped holder process is removed, a stopped holder thread is not, and a reused process ID makes waiters wait longer. On Windows, a lock file that Windows refuses for a moment is tried again for up to 1 second.
+The same as [TicketQueueFileStore](./ticket-queue-file-store.md#failure-modes): a stopped holder process or thread is removed, also when it is a zombie or it runs in another container on the same machine. A frozen holder keeps the key. On Windows, a lock file that Windows refuses for a moment is tried again for up to 1 second.
 
 ## Options
 
@@ -62,3 +65,4 @@ The same as [TicketQueueFileStore](./ticket-queue-file-store.md#failure-modes): 
 - Four processes each did 25 read-then-write increments. The counter was 100 at the end.
 - A mutation test made the file creation not exclusive (a copy, not a link). Eight tests failed, so the tests depend on the exclusive create.
 - A mutation test stopped the removal of stopped holders. The test with a killed holder failed.
+- Real containers that share one lock volume: a waiter never takes the key of a live holder in another container, and it gets the key of a holder that was killed in another container. A mutation test that judged holders by process ID failed these tests.

@@ -18,7 +18,7 @@ const mutex = new Mutex(new SqliteStore('/var/lib/my-app/locks'));
 
 ## Why
 
-The file lock stores must find a stopped holder by its process ID. That check can be wrong when the system uses the same ID again. SQLite asks the kernel for the lock, and the kernel removes the lock when the process stops. Thus no process must find or remove a stopped holder.
+SQLite asks the kernel for the lock, and the kernel removes the lock when the process stops. Thus no process must find or remove a stopped holder. The file lock stores use the same kernel lock as a [presence](../adr/0012-a-file-store-holder-is-judged-by-its-presence.md), but they still remove the file of a stopped holder.
 
 ## When
 

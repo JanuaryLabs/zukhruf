@@ -6,14 +6,14 @@
 
 ## Select a lock store
 
-| Lock store                                                                                                  | How it finds a stopped holder                      | Time to the next grant                        |
-| ----------------------------------------------------------------------------------------------------------- | -------------------------------------------------- | --------------------------------------------- |
-| [SqliteStore](../stores/sqlite-store.md)                                                                    | The kernel removes the file lock.                  | The next attempt of a waiter (`pollInterval`) |
-| [SocketStore](../stores/socket-store.md)                                                                    | The kernel closes the connection to the leader.    | Approximately 2 ms                            |
-| [IpcStore](../stores/ipc-store.md)                                                                          | The kernel closes the IPC channel to the parent.   | Approximately 2 ms                            |
-| [TicketQueueFileStore](../stores/ticket-queue-file-store.md), [LockFileStore](../stores/lock-file-store.md) | A waiter checks if the holder's process ID exists. | The next attempt of a waiter                  |
+| Lock store                                                                                                  | How it finds a stopped holder                                                | Time to the next grant                        |
+| ----------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- | --------------------------------------------- |
+| [SqliteStore](../stores/sqlite-store.md)                                                                    | The kernel removes the file lock.                                            | The next attempt of a waiter (`pollInterval`) |
+| [SocketStore](../stores/socket-store.md)                                                                    | The kernel closes the connection to the leader.                              | Approximately 2 ms                            |
+| [IpcStore](../stores/ipc-store.md)                                                                          | The kernel closes the IPC channel to the parent.                             | Approximately 2 ms                            |
+| [TicketQueueFileStore](../stores/ticket-queue-file-store.md), [LockFileStore](../stores/lock-file-store.md) | The kernel ends the presence of the holder, and a waiter removes the holder. | The next attempt of a waiter                  |
 
-The kernel methods do not depend on process IDs. Prefer them if your system starts many processes, because the system can give a stopped process's ID to a new process.
+All these methods ask the kernel, so none depends on process IDs. They also work for a zombie process, and for containers that share one lock directory on one machine.
 
 ## The program
 
@@ -70,4 +70,4 @@ SQLite asks the kernel for the file lock. When a process stops for any reason, a
 
 - **A crash is not a freeze.** A frozen process keeps its key, because it can continue at any time. Only a [fenced resource](./fence-a-database.md) protects you from a frozen holder.
 - **The work of the crashed holder can be half done.** The lock store releases the key, but it cannot undo the writes. Use database transactions for work that must be all or nothing.
-- **Worker threads are different.** If a thread stops but its process does not, the file lock stores keep the key. See [failure modes](../concepts/failure-modes.md).
+- **Worker threads are the same.** If a thread stops but its process does not, the kernel ends the locks of that thread, and the key is released. See [failure modes](../concepts/failure-modes.md).

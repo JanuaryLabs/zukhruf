@@ -83,7 +83,7 @@ Each lock store gives two operations:
 
 The mutex gives the caller's signal to the acquire mode, and the acquire mode gives it to the lock store. Thus the lock store stops the wait at once. The mutex also watches the signal itself. Thus an acquire mode that does not give the signal on cannot make a caller that cancelled wait.
 
-**A caller that gives up or cancels keeps its place in line.** Some lock stores have a queue that a waiter cannot leave from the middle. `MemoryStore` and `TicketQueueFileStore` keep the place of a caller that stopped its wait. When that place reaches the front, the lock store passes the key on to the next caller at once. Thus a caller that stopped its wait never blocks the callers after it, and the order of the queue does not change.
+**A caller that gives up or cancels keeps its place in line.** Some lock stores have a queue that a waiter cannot leave from the middle. `MemoryStore` and `TicketQueueFileStore` keep the place of a caller that stopped its wait. When that place reaches the front, `MemoryStore` passes the key on to the next caller at once. `TicketQueueFileStore` ends the presence of that caller, so the next waiter removes its ticket at its next poll. Thus a caller that stopped its wait never blocks the callers after it, and the order of the queue does not change.
 
 ## Write your own acquire mode
 
@@ -95,7 +95,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import type {
   AcquireMode,
   AcquireOptions,
-  Lease,
+  LockHandle,
   LockStore,
 } from '@zukhruf/mutex';
 
@@ -106,10 +106,10 @@ const tryThreeTimes: AcquireMode<'maybe'> = {
     store: LockStore,
     key: string,
     { signal }: AcquireOptions,
-  ): Promise<Lease | undefined> {
+  ): Promise<LockHandle | undefined> {
     for (let attempt = 0; attempt < 3; attempt++) {
-      const lease = await store.tryAcquire(key);
-      if (lease) return lease;
+      const handle = await store.tryAcquire(key);
+      if (handle) return handle;
       await delay(100, undefined, { signal });
     }
     return undefined;

@@ -23,12 +23,16 @@ The lock store gives a lease for a key to one waiter.
 _Avoid_: Allow, assign
 
 **Release**:
-A holder gives the key back, so that the next waiter can get it.
+The mutex gives the key back when the task ends, so that the next waiter can get it. Only the mutex releases a key.
 _Avoid_: Unlock, free
 
 **Lease**:
-The proof that a caller holds a key. A lease has a fencing token.
-_Avoid_: Lock handle, ticket
+The proof that a caller holds a key. A lease has a fencing token and a signal. The signal aborts when the lock store may grant the key to another holder.
+_Avoid_: Ticket
+
+**Lock handle**:
+What a lock store gives the mutex for a granted key: the lease and the release. Only the mutex has the lock handle. The task gets only the lease.
+_Avoid_: Lease, guard
 
 **Holder**:
 The caller that has the lease for a key now.
@@ -84,6 +88,10 @@ _Avoid_: Cluster, worker pool
 A reach that includes all processes on one machine.
 _Avoid_: Server, node
 
+**Presence**:
+The kernel lock that a holder or a waiter of a file lock store keeps while it runs. A waiter that can take the presence of another caller knows that the caller stopped.
+_Avoid_: Liveness check, heartbeat, process check
+
 ### Fencing
 
 **Fencing token**:
@@ -103,7 +111,7 @@ A holder that lost its key without knowing it, for example while it was frozen.
 _Avoid_: Zombie, expired holder
 
 **Lost lease**:
-A lease whose key the lock store may have granted to another holder while the first holder still worked.
+A lease whose key the lock store may have granted to another holder while the first holder still worked. The signal of a lost lease aborts.
 _Avoid_: Stolen lock, broken lock
 
 ### Coordination

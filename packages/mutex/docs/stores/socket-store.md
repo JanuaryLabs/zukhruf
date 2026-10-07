@@ -20,7 +20,7 @@ store.on('role', (role) => console.log(`This process is the ${role}`));
 
 ## Why
 
-The other host lock stores poll. A waiter learns about a release only at its next attempt, and it must find a stopped holder by its process ID. With a coordinator, the leader tells the next waiter at once. The kernel closes the connection of a process that stops, so the leader also knows at once.
+The other host lock stores poll. A waiter learns about a release, or about a stopped holder, only at its next attempt. With a coordinator, the leader tells the next waiter at once. The kernel closes the connection of a process that stops, so the leader also knows at once.
 
 The leader is a normal app process. You do not start or watch a separate server.
 
@@ -28,7 +28,7 @@ The leader is a normal app process. You do not start or watch a separate server.
 
 - More than one process on one host writes to the resource.
 - You want the next waiter to get the key soon after a release.
-- You want fast recovery when a holder stops, and no check of process IDs.
+- You want fast recovery when a holder stops.
 
 ## When not
 
@@ -55,13 +55,13 @@ Messages are lines of JSON. A socket does not keep message boundaries: in a test
 
 ## Failure modes
 
-| Event                                            | Result                                                                                                                                                               |
-| ------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| A holder stops                                   | The leader releases its keys in approximately 2 ms.                                                                                                                  |
-| The leader stops                                 | A failover occurs. Holders reassert their keys during the grace window.                                                                                              |
-| A holder is frozen during the whole grace window | Its reassert is refused. A newer holder can get the key. A fenced resource refuses the late writes of the frozen holder, and the frozen holder gets `LockLostError`. |
-| A holder thread stops                            | Its connection closes, and the key is released.                                                                                                                      |
-| A campaign fails, for example with a disk error  | Each waiter gets that error. A holder that did not reassert its keys gets `LockLostError` when it releases. The next `acquire` connects again.                       |
+| Event                                            | Result                                                                                                                                                                                                                                |
+| ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A holder stops                                   | The leader releases its keys in approximately 2 ms.                                                                                                                                                                                   |
+| The leader stops                                 | A failover occurs. Holders reassert their keys during the grace window.                                                                                                                                                               |
+| A holder is frozen during the whole grace window | Its reassert is refused. A newer holder can get the key. When the frozen holder continues, the signal of its lease aborts with `LockLostError`, and the call rejects with `LockLostError`. A fenced resource refuses its late writes. |
+| A holder thread stops                            | Its connection closes, and the key is released.                                                                                                                                                                                       |
+| A campaign fails, for example with a disk error  | Each waiter gets that error. For a holder that did not reassert its keys, the signal of the lease aborts with `LockLostError`. The next `acquire` connects again.                                                                     |
 
 See [failure modes](../concepts/failure-modes.md).
 
@@ -82,6 +82,6 @@ The `'role'` event tells you each time this process starts to lead, or starts to
 - After `SIGKILL` of a client, the server saw the connection close in 1.25 ms.
 - `src/lock-stores/socket/socket-store.test.ts`:
   - A holder keeps its key when the leader stops, and a waiter gets the key only after the release.
-  - A holder that is frozen past the grace window is refused by a fenced resource (`'stale'`) and gets `LockLostError`.
+  - A holder that is frozen past the grace window sees the signal of its lease abort before it writes. A fenced resource refuses its write (`'stale'`), and the call rejects with `LockLostError`.
   - A leader that shuts down does not wait for its followers, and a follower keeps its key.
 - A mutation test removed the grace window, the reassert, and the epoch. The tests found each change.

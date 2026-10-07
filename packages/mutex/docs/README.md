@@ -44,3 +44,5 @@ Start with the [project README](../README.md). The glossary is in [CONTEXT.md](.
 9. [A phase is a state object, a latch, or an event](./adr/0009-a-phase-is-a-state-object-a-latch-or-an-event.md)
 10. [The time limit of skip if busy counts only the wait for a holder](./adr/0010-the-time-limit-of-skip-if-busy-counts-only-the-wait-for-a-holder.md)
 11. [A Windows refusal of a lock file is tried again for a limited time](./adr/0011-a-windows-refusal-of-a-lock-file-is-tried-again-for-a-limited-time.md)
+12. [A file store holder is judged by its presence](./adr/0012-a-file-store-holder-is-judged-by-its-presence.md)
+13. [A lost lease aborts the signal of the lease](./adr/0013-a-lost-lease-aborts-the-signal-of-the-lease.md)

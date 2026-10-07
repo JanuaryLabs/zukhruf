@@ -41,7 +41,7 @@ When the leader stops, the kernel closes all connections to it. Then this occurs
 5. Each waiter sends its request again.
 6. After the grace window, the new leader grants keys to waiters.
 
-The grace window prevents a waiter from getting a key that a holder still has. For two reasserts of one key, the higher token wins. A reassert after the grace window is refused, and that holder gets `LockLostError` when it releases the key.
+The grace window prevents a waiter from getting a key that a holder still has. For two reasserts of one key, the higher token wins. A reassert after the grace window is refused. Then the signal of that holder's lease aborts with `LockLostError`, and the call of that holder rejects with `LockLostError`.
 
 The first leader of a directory (epoch 1) has no grace window, because no earlier leader had holders.
 

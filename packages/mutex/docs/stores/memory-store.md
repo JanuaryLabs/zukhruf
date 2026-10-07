@@ -36,7 +36,7 @@ Most race conditions occur inside one process. For example, two HTTP requests re
 
 ## How it works
 
-Each key has a queue. Each caller that joins the queue gets a one-shot latch: a gate that opens once and never closes again. The caller opens its latch when it releases the key. The next caller waits for that latch, so it gets the key only after the caller before it. A caller that gives up opens its latch when its turn comes, so the caller behind it never gets the key early. When the last caller in the queue releases the key, `MemoryStore` removes the key from the map.
+Each key has a queue. Each caller that joins the queue gets a one-shot latch: a gate that opens once and never closes again. The latch opens when the mutex releases the key of that caller. The next caller waits for that latch, so it gets the key only after the caller before it. A caller that gives up opens its latch when its turn comes, so the caller behind it never gets the key early. When the last caller in the queue releases the key, `MemoryStore` removes the key from the map.
 
 A task that fails does not stop the queue. The next waiter gets the key, and the caller of the failed task gets the error.
 

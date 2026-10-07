@@ -37,15 +37,15 @@ The full program is in the recipe [Stop two requests from selling the last item]
 
 First find who writes to the resource. Then select the lock store with that [reach](./docs/concepts/reach.md).
 
-| Lock store                                                       | Reach                   | Order                                   | A holder stops                  | Needs                       |
-| ---------------------------------------------------------------- | ----------------------- | --------------------------------------- | ------------------------------- | --------------------------- |
-| [MemoryStore](./docs/stores/memory-store.md)                     | One object              | First come, first served                | The locks stop with the process | Nothing                     |
-| [ThreadStore](./docs/stores/thread-store.md)                     | One process (threads)   | First come, first served                | Released when the worker exits  | `adopt(worker)`             |
-| [IpcStore](./docs/stores/ipc-store.md)                           | Parent and its children | First come, first served                | Released in approximately 2 ms  | `fork()` and `adopt(child)` |
-| [TicketQueueFileStore](./docs/stores/ticket-queue-file-store.md) | One host                | First come, first served                | Released after a process check  | A shared directory          |
-| [LockFileStore](./docs/stores/lock-file-store.md)                | One host                | No order                                | Released after a process check  | A shared directory          |
-| [SqliteStore](./docs/stores/sqlite-store.md)                     | One host                | First come, first served in one process | Released by the kernel          | A shared directory          |
-| [SocketStore](./docs/stores/socket-store.md)                     | One host                | First come, first served                | Released in approximately 2 ms  | A shared directory          |
+| Lock store                                                       | Reach                   | Order                                   | A holder stops                                | Needs                       |
+| ---------------------------------------------------------------- | ----------------------- | --------------------------------------- | --------------------------------------------- | --------------------------- |
+| [MemoryStore](./docs/stores/memory-store.md)                     | One object              | First come, first served                | The locks stop with the process               | Nothing                     |
+| [ThreadStore](./docs/stores/thread-store.md)                     | One process (threads)   | First come, first served                | Released when the worker exits                | `adopt(worker)`             |
+| [IpcStore](./docs/stores/ipc-store.md)                           | Parent and its children | First come, first served                | Released in approximately 2 ms                | `fork()` and `adopt(child)` |
+| [TicketQueueFileStore](./docs/stores/ticket-queue-file-store.md) | One host                | First come, first served                | Released after a waiter finds that it stopped | A shared directory          |
+| [LockFileStore](./docs/stores/lock-file-store.md)                | One host                | No order                                | Released after a waiter finds that it stopped | A shared directory          |
+| [SqliteStore](./docs/stores/sqlite-store.md)                     | One host                | First come, first served in one process | Released by the kernel                        | A shared directory          |
+| [SocketStore](./docs/stores/socket-store.md)                     | One host                | First come, first served                | Released in approximately 2 ms                | A shared directory          |
 
 If you are not sure:
 
@@ -87,6 +87,19 @@ await mutex.acquire('product:42', async (lease) => {
   );
 });
 ```
+
+Sometimes the lock store sees the loss, for example after a failover of `SocketStore`. Then the signal of the lease aborts with `LockLostError`, and the task can stop before its next write. When the task ends, the call rejects with `LockLostError`:
+
+```ts
+await mutex.acquire('product:42', async (lease) => {
+  for (const order of orders) {
+    lease.signal.throwIfAborted();
+    await ship(order, lease.token);
+  }
+});
+```
+
+The signal is a warning. A frozen holder can write before its lock store sees the loss, so the fencing token is still the protection.
 
 See [Fencing tokens](./docs/concepts/fencing-tokens.md) and the recipe [Protect a database from stale holders](./docs/recipes/fence-a-database.md).
 
@@ -144,7 +157,7 @@ The tests run from `src/`, not from `dist/`: they start workers and child proces
 
 ```
 src/
-  mutex/             Mutex, Key, acquire modes, Lease, LockStore, LockLostError
+  mutex/             Mutex, Key, acquire modes, Lease, LockHandle, LockStore, LockLostError
   fencing/           fencing tokens and token sources
   lock-stores/       one folder for each lock store
     remote/          the coordinator and client that ThreadStore, IpcStore and SocketStore share
