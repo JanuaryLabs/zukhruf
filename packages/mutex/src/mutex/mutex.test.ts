@@ -714,9 +714,12 @@ for (const store of storeCases.filter(
 
           // Act: first holds the key while second attempts to acquire that same key.
           first.child.send('start');
-          await waitFor(
+          // The first acquire of a new process also opens the store.
+          await waitUntil(
+            t,
             () => first.has('entered'),
-            'The first process must enter its callback',
+            () => `The first process must enter its callback\n${stderr()}`,
+            newProcessTimeout,
           );
           second.child.send('start');
           await waitFor(
