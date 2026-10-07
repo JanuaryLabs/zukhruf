@@ -14,7 +14,7 @@ export class Mysql extends MysqlFamilyServer {
   protected override readonly client = 'mysql';
   protected override readonly scheme = 'mysql';
 
-  constructor({ image = 'mysql:8.4', ...options }: MysqlOptions) {
+  constructor({ image = 'mysql:lts', ...options }: MysqlOptions) {
     super({ ...options, image });
   }
 
