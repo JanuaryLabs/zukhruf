@@ -12,6 +12,9 @@ import { type TestRun, forwardPrefix } from './test-run.ts';
 export const quote = (value: string): string =>
   `'${value.replaceAll("'", "'\\''")}'`;
 
+/** Local Unix sockets, Docker Desktop's named pipe on Windows, and SSH engines. A `tcp://` engine may be on another machine. */
+const supportedEndpoints = ['unix://', 'npipe://', 'ssh://'];
+
 /** Resolve with the Docker CLI so its native context/environment precedence wins. */
 export class DockerHost {
   readonly endpoint: string;
@@ -28,9 +31,9 @@ export class DockerHost {
       '{{.Endpoints.docker.Host}}',
     ]);
     const endpoint = stdout.trim();
-    if (!endpoint.startsWith('unix://') && !endpoint.startsWith('ssh://')) {
+    if (!supportedEndpoints.some((scheme) => endpoint.startsWith(scheme))) {
       throw new Error(
-        `Unsupported Docker endpoint ${endpoint}; tests support unix:// and ssh://`,
+        `Unsupported Docker endpoint ${endpoint}; tests support ${supportedEndpoints.join(', ')}`,
       );
     }
     return new DockerHost(endpoint);

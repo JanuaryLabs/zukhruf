@@ -26,7 +26,7 @@ It needs Node.js 24.4 or later.
 
 ## Docker
 
-A `Docker` is the engine the Docker CLI selects. It resolves the engine once, on first use, and every handle it returns keeps that engine. It supports local Unix sockets and SSH engines (`ssh://`); it does not support Windows named pipes.
+A `Docker` is the engine the Docker CLI selects. It resolves the engine once, on first use, and every handle it returns keeps that engine. It supports local Unix sockets, Docker Desktop's named pipe on Windows (`npipe://`), and SSH engines (`ssh://`). On Windows, volumes and containers are tested; `directory()` is not.
 
 ```ts
 import { Docker, TestRun, skipWithoutDocker } from '@zukhruf/testing/docker';
@@ -143,4 +143,4 @@ npx nx run testing:test        # builds, then runs the tests
 npx nx run testing:typecheck   # formats, lints, then type checks
 ```
 
-The Docker-backed tests follow `ZUKHRUF_TESTING_DOCKER`. CI skips them on every operating system, and `.github/workflows/docker.yml` runs them on Linux with `required` when this package changes.
+The Docker-backed tests follow `ZUKHRUF_TESTING_DOCKER`. CI skips them on every operating system, and `.github/workflows/docker.yml` runs them with `required` when this package changes: on Linux, and on Windows through Docker Desktop for the mutex's container tests.

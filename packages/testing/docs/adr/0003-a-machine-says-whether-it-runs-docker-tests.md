@@ -10,4 +10,5 @@ A test that needs Docker can skip when Docker does not answer, or fail. Skipping
 
 ## Consequences
 
-- `ci.yml` sets `skip` on every operating system. `docker.yml` sets `required` on Linux and runs when the package, the file stores of the mutex, or the lock file change.
+- `ci.yml` sets `skip` on every operating system. `docker.yml` sets `required` and runs when the package, the file stores of the mutex, or the lock file change: on Linux for both packages, and on Windows, through Docker Desktop's Linux engine, for the mutex.
+- A test skips only when this variable says so, never over a missing image: `docker run` pulls it. A check that skipped on a missing image let the Docker job pass with every container test skipped.

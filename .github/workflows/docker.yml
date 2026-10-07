@@ -23,7 +23,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  docker:
+  linux:
     runs-on: ubuntu-latest
     env:
       # Fail instead of skipping: this job exists to run them.
@@ -43,3 +43,65 @@ jobs:
 
       - name: Test the Docker-backed projects
         run: npx nx run-many -t test --projects=testing,mutex
+
+  windows:
+    # The mutex's container tests from a Windows host, as a Windows developer
+    # runs them: Docker Desktop's Linux engine, with the package mounted from a
+    # Windows path. The runner's own Docker serves only Windows containers.
+    runs-on: windows-latest
+    timeout-minutes: 30
+    env:
+      ZUKHRUF_TESTING_DOCKER: required
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup Node
+        uses: actions/setup-node@v7
+        with:
+          node-version: lts/*
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Docker Desktop
+        timeout-minutes: 8
+        run: |
+          # The runner's own engine holds the pipe Docker Desktop wants.
+          Stop-Service docker -ErrorAction SilentlyContinue
+          Invoke-WebRequest 'https://desktop.docker.com/win/main/amd64/Docker%20Desktop%20Installer.exe' -OutFile "$env:RUNNER_TEMP\docker-desktop.exe"
+          Start-Process "$env:RUNNER_TEMP\docker-desktop.exe" -Wait -ArgumentList 'install', '--quiet', '--accept-license', '--always-run-service', '--backend=wsl-2'
+
+      - name: Start Docker Desktop's Linux engine
+        timeout-minutes: 8
+        env:
+          DESKTOP_CLI: C:\Program Files\Docker\Docker\resources\bin\docker.exe
+        run: |
+          # `docker desktop start` hung a runner and left no log; launching the app returns at once.
+          Start-Process 'C:\Program Files\Docker\Docker\Docker Desktop.exe'
+          # Runs a command in a job, so a call that hangs costs at most $seconds.
+          function Bounded([int] $seconds, [scriptblock] $command) {
+            $job = Start-Job $command
+            if (Wait-Job $job -Timeout $seconds) { Receive-Job $job 2>&1 } else { "(no answer within ${seconds}s)" }
+            Remove-Job $job -Force
+          }
+          $started = Get-Date
+          do {
+            Start-Sleep -Seconds 10
+            $os = Bounded 20 { & $env:DESKTOP_CLI --context desktop-linux info --format '{{.OSType}}' }
+            # Docker may print warnings beside the answer, so look for it among the lines.
+            $ready = $os -contains 'linux'
+            "{0,4}s: {1}" -f [int]((Get-Date) - $started).TotalSeconds, ($os -join ' ')
+          } until ($ready -or ((Get-Date) - $started).TotalMinutes -gt 5)
+          if (-not $ready) {
+            Get-ChildItem "$env:LOCALAPPDATA\Docker\log" -Recurse -File -ErrorAction SilentlyContinue |
+              Sort-Object LastWriteTime -Descending | Select-Object -First 4 |
+              ForEach-Object { "--- $($_.FullName)"; Get-Content $_.FullName -Tail 30 }
+            throw "Docker Desktop's Linux engine did not answer: '$($os -join ' ')'"
+          }
+          Split-Path $env:DESKTOP_CLI >> $env:GITHUB_PATH
+          'DOCKER_CONTEXT=desktop-linux' >> $env:GITHUB_ENV
+
+      - name: Test the mutex
+        run: npx nx run mutex:test
