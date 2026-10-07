@@ -1,0 +1,21 @@
+name: Set up the workspace
+description: Installs the newest Node.js LTS and the workspace's npm dependencies.
+
+inputs:
+  registry-url:
+    description: The npm registry to authenticate against. Only a job that publishes sets it.
+    required: false
+
+runs:
+  using: composite
+  steps:
+    - name: Setup Node
+      uses: actions/setup-node@v7
+      with:
+        node-version: lts/*
+        cache: npm
+        registry-url: ${{ inputs.registry-url }}
+
+    - name: Install dependencies
+      shell: bash
+      run: npm ci
