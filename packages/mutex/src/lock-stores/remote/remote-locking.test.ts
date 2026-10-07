@@ -17,8 +17,9 @@ import { ConnectionSupervisor } from './connection-supervisor.ts';
 import type { ClientConnector } from './connector.ts';
 import { CoordinatorUnavailableError } from './coordinator-unavailable-error.ts';
 import { LockCoordinator } from './lock-coordinator.ts';
-import type { LockRequest, LockResponse } from './protocol.ts';
+import type { LockRequest, LockResponse, RequestEnvelope } from './protocol.ts';
 import { RemoteLockClient } from './remote-lock-client.ts';
+import { UnsupportedRequestError } from './unsupported-request-error.ts';
 
 function clientOver(connector: ClientConnector) {
   return new RemoteLockClient(new ConnectionSupervisor(connector));
@@ -1220,4 +1221,158 @@ describe('Remote lock client connection lifecycle', () => {
       await client.close();
     }
   });
+});
+
+describe('Holder check over the protocol', () => {
+  test('a coordinator answers a request it does not know as unsupported, and its peer keeps its key', async (t) => {
+    // Arrange: a peer of a newer version holds a key.
+    const coordinator = new LockCoordinator({
+      tokens: new CounterTokenSource(),
+    });
+    const peer = scriptedPeer<LockResponse, LockRequest | RequestEnvelope>();
+    coordinator.serve(peer.connection);
+    peer.deliver({ op: 'acquire', id: 'a', key: 'product:42' });
+    await waitUntil(
+      t,
+      () => peer.sent.some((response) => response.op === 'granted'),
+      'The peer must be granted the key',
+    );
+
+    // Act: 'renew' stands in for a request that a later version adds.
+    peer.deliver({ op: 'renew', id: 'r' });
+    await waitUntil(
+      t,
+      () => peer.sent.length === 2,
+      'The coordinator must answer the request',
+    );
+    const stillHeld = await coordinator.isHeld('product:42');
+
+    // Assert
+    assert.deepEqual(peer.sent[1], { op: 'unsupported', id: 'r' });
+    assert.equal(peer.closes, 0, 'The connection must stay open');
+    assert.equal(stillHeld, true, 'The peer must keep its key');
+  });
+
+  test('a look during the grace window waits for it to end, then sees the key that was reasserted', async (t) => {
+    // Arrange: a holder from before the failover reasserts its key.
+    const { connect } = coordinatorAfterFailover(200);
+    const holder = connect();
+    const looker = connect();
+    holder.deliver({
+      op: 'reassert',
+      id: 'h',
+      key: 'product:42',
+      token: '7',
+    });
+
+    // Act
+    looker.deliver({ op: 'isHeld', id: 'held', key: 'product:42' });
+    looker.deliver({ op: 'isHeld', id: 'free', key: 'product:7' });
+    await delay(100);
+    const duringGrace = [...looker.sent];
+    await waitUntil(
+      t,
+      () => looker.sent.length === 2,
+      'The looks must be answered once the grace window ends',
+    );
+
+    // Assert
+    assert.deepEqual(
+      duringGrace,
+      [],
+      'Holders may still reassert, so no look is answered yet',
+    );
+    assert.deepEqual(
+      [...looker.sent].sort((a, b) => a.id.localeCompare(b.id)),
+      [
+        { op: 'held', id: 'free', held: false },
+        { op: 'held', id: 'held', held: true },
+      ],
+    );
+  });
+
+  test(
+    'a look its coordinator does not know rejects with UnsupportedRequestError',
+    { timeout: 5000 },
+    async (t) => {
+      // Arrange: a coordinator that answers every look as unsupported.
+      const { connector, calls } = scriptedConnector<
+        LockRequest,
+        LockResponse
+      >();
+      const client = clientOver(connector);
+      const peer = scriptedPeer<LockRequest, LockResponse>(async (request) => {
+        if (request.op === 'isHeld') {
+          queueMicrotask(() =>
+            peer.deliver({ op: 'unsupported', id: request.id }),
+          );
+        }
+      });
+
+      // Act
+      const look = client.isHeld('product:42');
+      await waitUntil(t, () => calls.length === 1, 'The client must connect');
+      calls[0]!.resolve(peer.connection);
+
+      // Assert
+      await assert.rejects(
+        look,
+        (error: unknown) =>
+          error instanceof UnsupportedRequestError &&
+          error.op === 'isHeld' &&
+          error.key === 'product:42',
+      );
+    },
+  );
+
+  test('a look cut off by a lost connection is asked again of the next coordinator', async (t) => {
+    // Arrange: the first coordinator is lost before it answers the look.
+    const { connector, calls } = scriptedConnector<LockRequest, LockResponse>();
+    const client = clientOver(connector);
+    const first = scriptedPeer<LockRequest, LockResponse>();
+    const look = client.isHeld('product:42');
+    await waitUntil(t, () => calls.length === 1, 'The client must connect');
+    calls[0]!.resolve(first.connection);
+    await waitUntil(
+      t,
+      () => first.sent.some((request) => request.op === 'isHeld'),
+      'The look must be sent',
+    );
+
+    // Act
+    first.drop();
+    await waitUntil(t, () => calls.length === 2, 'The client must reconnect');
+    const second = scriptedPeer<LockRequest, LockResponse>(async (request) => {
+      if (request.op === 'isHeld') {
+        queueMicrotask(() =>
+          second.deliver({ op: 'held', id: request.id, held: true }),
+        );
+      }
+    });
+    calls[1]!.resolve(second.connection);
+
+    // Assert
+    assert.equal(await look, true);
+  });
+
+  test(
+    'a look with no coordinator left rejects with CoordinatorUnavailableError',
+    { timeout: 5000 },
+    async (t) => {
+      // Arrange
+      const { connector, calls } = scriptedConnector<
+        LockRequest,
+        LockResponse
+      >();
+      const client = clientOver(connector);
+
+      // Act
+      const look = client.isHeld('product:42');
+      await waitUntil(t, () => calls.length === 1, 'The client must connect');
+      calls[0]!.resolve(undefined);
+
+      // Assert
+      await assert.rejects(look, CoordinatorUnavailableError);
+    },
+  );
 });

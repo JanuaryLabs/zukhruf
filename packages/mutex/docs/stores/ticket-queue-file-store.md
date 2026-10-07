@@ -55,6 +55,10 @@ On a file system that ignores the case of letters (the macOS default), the keys 
 
 `tryAcquire` first removes the tickets of stopped callers at the front of the queue. Then it gives up at once if the queue still has a ticket. A waiter that gives up cannot remove its ticket, because only the head may rewrite the queue. It ends its presence instead. Its ticket then belongs to a stopped caller, and the next waiter that finds it at the front removes it. See [acquire modes](../concepts/acquire-modes.md).
 
+## Holder check
+
+`isHeld(key)` reads the first ticket of the queue and then the presence file of its caller. A caller at the front that stopped counts as no holder, also when a waiter is in the queue after it: that waiter holds the key only after it removed the stopped caller. A holder check writes no file, and it does not create the directory. See [ADR 0015](../adr/0015-a-holder-check-never-acquires-the-key.md).
+
 ## Failure modes
 
 - **A holder process or thread stops:** a waiter removes the ticket at its next poll. This is also true for a zombie process, and for a holder in another container on the same machine.

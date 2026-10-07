@@ -74,6 +74,16 @@ A mode that can skip returns `{ acquired: true, value } | { acquired: false }`, 
 
 To stop a wait, give a signal to the call: `mutex.acquire(key, task, { signal })`. When the signal aborts, the call rejects with `signal.reason`, and the task does not run. See [Acquire modes](./docs/concepts/acquire-modes.md).
 
+## Holder check
+
+A status view must show if a task runs, but it must not make the key busy. `isHeld` tells if a key has a holder now, and it never acquires the key:
+
+```ts
+const running = await report.isHeld(); // or: await mutex.isHeld('report:daily')
+```
+
+A caller that skips if busy is never refused because of a holder check. The holder can change before the answer arrives, so show the answer, but do not acquire a key because of it: an acquire mode decides that. See [ADR 0015](./docs/adr/0015-a-holder-check-never-acquires-the-key.md).
+
 ## Fencing tokens
 
 A holder can lose its key and not know it, for example when its process freezes. Each lease has a fencing token that increases with each grant. Send the token with each write, and let the resource refuse lower tokens:

@@ -33,13 +33,14 @@ SQLite asks the kernel for the lock, and the kernel removes the lock when the pr
 
 ## How it works
 
-The database file of a key is `<key>.lock`, and the token file of the default `FileTokenSource` is `<key>.fence`. In these names, `<key>` is the key, percent-encoded. For example, `/` becomes `%2F`, and `.` becomes `%2E`. A key that is too long for a file name, or that is not well-formed Unicode, gets a short name: the first 32 characters of the encoded key, `%%`, and the SHA-256 digest of the key. The name of a key that fits does not change from version to version, so processes of two versions share its lock.
+The database file of a key is `<key>.lock`, the folder of its holder is `<key>.lock.holder`, and the token file of the default `FileTokenSource` is `<key>.fence`. In these names, `<key>` is the key, percent-encoded. For example, `/` becomes `%2F`, and `.` becomes `%2E`. A key that is too long for a file name, or that is not well-formed Unicode, gets a short name: the first 32 characters of the encoded key, `%%`, and the SHA-256 digest of the key. The name of a key that fits does not change from version to version, so processes of two versions share its lock.
 
 1. Callers in one process first line up in a queue in memory, in the order of their calls. Only the first caller in that queue continues to the next step. Thus one process keeps at most one database file open for each key, however many callers wait.
 2. That caller opens the key's database file with no busy timeout.
 3. It runs `BEGIN EXCLUSIVE`. If another connection has the transaction, SQLite says `SQLITE_BUSY` at once.
 4. On `SQLITE_BUSY`, the caller waits `pollInterval` and tries again. It does not use a SQLite busy timeout, because that timeout stops the event loop.
-5. To release the key, the holder runs `ROLLBACK` and closes the connection. Then the next caller in the in-process queue continues.
+5. The holder writes its name for a [holder check](#holder-check). It starts its [presence](../adr/0012-a-file-store-holder-is-judged-by-its-presence.md) on `<key>.lock.holder/caller.<id>.presence`. Then it writes its identity to `<key>.lock.holder/caller`. Then it deletes the other files in `<key>.lock.holder`: holders that stopped left them there. Only the holder of the key writes in this folder.
+6. To release the key, the holder deletes `caller`, ends its presence, and deletes its presence file. Then it runs `ROLLBACK` and closes the connection, also when a delete failed. Then the next caller in the in-process queue continues.
 
 Do not change the journal mode of these files. The tests use only the default mode.
 
@@ -48,6 +49,12 @@ The transaction ends with `ROLLBACK`, so the fencing token counter cannot be in 
 ## Acquire modes
 
 `tryAcquire` gives up at once if another caller in this process holds or waits for the key. Otherwise it runs `BEGIN EXCLUSIVE` once. A waiter that gives up stops its attempts and closes its connection, or leaves the in-process queue. See [acquire modes](../concepts/acquire-modes.md).
+
+## Holder check
+
+`isHeld(key)` reads `<key>.lock.holder/caller` and then the presence file that it names. It never opens `<key>.lock`. A read of that file makes the key busy for a caller that runs `BEGIN EXCLUSIVE` at the same moment, so a holder check that read it could make a caller that skips if busy give up on a free key. A holder that stopped counts as no holder. A holder check writes no file, and it does not create the directory.
+
+A holder of version 0.3.9 or earlier writes no `caller` file, so a holder check of a later version does not see that holder. Use one package version in all processes that share the directory. See [ADR 0015](../adr/0015-a-holder-check-never-acquires-the-key.md).
 
 ## Failure modes
 

@@ -8,6 +8,7 @@ import { untilAborted } from '../../shared/until-aborted.ts';
 import type { ConnectionSupervisor } from './connection-supervisor.ts';
 import { CoordinatorUnavailableError } from './coordinator-unavailable-error.ts';
 import type { LockRequest, LockResponse } from './protocol.ts';
+import { Queries } from './queries.ts';
 
 interface Pending {
   key: string;
@@ -37,9 +38,11 @@ export class RemoteLockClient implements LockStore {
   readonly #link: ConnectionSupervisor<LockRequest, LockResponse>;
   readonly #pending = new Map<string, Pending>();
   readonly #held = new Map<string, Held>();
+  readonly #queries: Queries;
 
   constructor(link: ConnectionSupervisor<LockRequest, LockResponse>) {
     this.#link = link;
+    this.#queries = new Queries(link, () => this.#updateRef());
     link.on('connected', () => this.#resume());
     link.on('message', (response) => this.#receive(response));
     link.on('disconnected', () => this.#interrupt());
@@ -78,6 +81,11 @@ export class RemoteLockClient implements LockStore {
     return token && this.#hold(id, key, token);
   }
 
+  async isHeld(key: string): Promise<boolean> {
+    this.#assertUsable(key);
+    return this.#queries.ask(key);
+  }
+
   /** Disconnects for good. Over a socket, the coordinator then releases whatever this client still holds. */
   async close() {
     const closing = this.#link.close();
@@ -85,13 +93,17 @@ export class RemoteLockClient implements LockStore {
     await closing;
   }
 
-  #request(id: string, key: string, attempt: Pending['attempt']): Pending {
+  #assertUsable(key: string) {
     if (this.#link.status === 'closed') {
       throw new Error('This lock client is closed.');
     }
     if (this.#link.status === 'unavailable') {
       throw new CoordinatorUnavailableError(key);
     }
+  }
+
+  #request(id: string, key: string, attempt: Pending['attempt']): Pending {
+    this.#assertUsable(key);
     const pending: Pending = {
       key,
       attempt,
@@ -160,6 +172,12 @@ export class RemoteLockClient implements LockStore {
       case 'rejected':
         this.#lose(response.id);
         return;
+      case 'held':
+        this.#queries.answer(response.id, response.held);
+        return;
+      case 'unsupported':
+        this.#queries.refuse(response.id);
+        return;
     }
   }
 
@@ -176,6 +194,7 @@ export class RemoteLockClient implements LockStore {
         this.#take(id)?.answer.resolve(undefined);
       else if (pending.delivery === 'queued') this.#dispatch(id, pending);
     }
+    this.#queries.askAgain();
   }
 
   #interrupt() {
@@ -195,6 +214,7 @@ export class RemoteLockClient implements LockStore {
     for (const [id, { key }] of this.#pending) {
       this.#take(id)?.answer.reject(reason(key));
     }
+    this.#queries.rejectAll(reason);
   }
 
   /** Removes a request that is about to be answered, so a late grant for it is given back. */
@@ -207,7 +227,7 @@ export class RemoteLockClient implements LockStore {
   }
 
   #updateRef() {
-    if (this.#pending.size > 0) this.#link.ref();
+    if (this.#pending.size > 0 || this.#queries.size > 0) this.#link.ref();
     else this.#link.unref();
   }
 }

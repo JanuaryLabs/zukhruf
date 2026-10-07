@@ -403,6 +403,7 @@ describe('The time limit of skip if busy', () => {
         await delay(100);
         return inner.tryAcquire(key);
       },
+      isHeld: (key) => inner.isHeld(key),
     });
 
     // Act
@@ -461,6 +462,7 @@ describe('Cancelling a wait', () => {
           return inner.acquire(key, options);
         },
         tryAcquire: (key) => inner.tryAcquire(key),
+        isHeld: (key) => inner.isHeld(key),
       });
       await using _holder = await inner.acquire('report:daily');
       const cancel = new AbortController();
@@ -544,6 +546,7 @@ describe('Cancelling a wait', () => {
           await gate.promise;
           return inner.tryAcquire(key);
         },
+        isHeld: (key) => inner.isHeld(key),
       });
       const cancel = new AbortController();
       const reason = new Error('cancelled');
@@ -719,7 +722,7 @@ for (const store of storeCases.filter(
         await waitUntil(
           t,
           () => child.has('results'),
-          `The child must report.\n${child.stderr}`,
+          () => `The child must report.\n${child.stderr}`,
           5000,
         );
         await holder.release();

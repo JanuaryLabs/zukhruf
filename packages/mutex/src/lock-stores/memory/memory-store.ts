@@ -47,4 +47,9 @@ export class MemoryStore implements LockStore {
     if (this.#lines.has(key)) return undefined;
     return this.acquire(key);
   }
+
+  /** The first caller in a key's line holds it, so a key with a line is held. */
+  async isHeld(key: string): Promise<boolean> {
+    return this.#lines.has(key);
+  }
 }

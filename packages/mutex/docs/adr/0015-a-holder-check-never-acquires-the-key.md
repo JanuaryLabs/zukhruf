@@ -1,0 +1,33 @@
+# A holder check never acquires the key
+
+Some callers must know if a key has a holder, but they do not want the key. For example, the status command of a CLI shows if a sync runs now. Before, a caller could find this out only with an acquire: the status command ran an empty task with skip if busy. That acquire competed with the callers that wanted the key. While a status command held the key, a sync that skips if busy gave up. The CLI made each sync wait up to 5 seconds to hide this, so a sync that was really refused waited 5 seconds too. Each status command also made a fencing token, and the default token source writes each token to disk with `fsync`. Thus each lock store now has a third operation, `isHeld(key)`, and `Mutex.isHeld(key)` and `Key.isHeld()` call it. A **holder check** reads only what shows a holder. It never takes the lock that callers of `acquire` and `tryAcquire` need, and it makes no fencing token. The holder can change before the answer arrives. Thus an acquire mode does not use a holder check: only an attempt decides if a caller gets the key.
+
+Each lock store answers from its own source:
+
+- `MemoryStore` reads the queue of the key. The first caller in the queue holds the key.
+- `LockFileStore` reads the lock file, and then the [presence](./0012-a-file-store-holder-is-judged-by-its-presence.md) of the holder that it names. A holder that stopped counts as no holder. The holder check does not remove it: only a caller that acquires the key removes it.
+- `TicketQueueFileStore` reads the first ticket, and then the presence of its caller. A waiter after a first caller that stopped does not count: it holds the key only after it removed that caller.
+- `SqliteStore` reads a holder record, `<key>.lock.holder/caller`, and then the presence that the record names. To hold a key, a caller runs `BEGIN EXCLUSIVE` on `<key>.lock`, starts its presence in the holder folder, writes the record, and then deletes the files that holders that stopped left in the folder. To release the key, the holder deletes the record and ends its presence before it runs `ROLLBACK`.
+- `ThreadStore`, `IpcStore` and `SocketStore` ask their coordinator, and the coordinator answers from its memory. During the grace window after a failover, the coordinator answers only after the window ends, because the holders from before the failover reassert their keys in that window.
+
+## Considered Options
+
+- **An acquire with skip if busy.** This was the only way before. In a test, a read of a free `SqliteStore` key in another thread made a `tryAcquire` at the same moment answer busy. Each such acquire also made a fencing token.
+- **A SQLite busy timeout on each attempt.** An attempt would wait for a short read to end. In a test with a 50 ms busy timeout, an attempt after a read of 10 ms got the key after 21 ms. An attempt after a read of 200 ms answered busy after 60 ms. An attempt against a real holder also answered busy after 60 ms. Thus a slow read still makes a free key busy, and each real "busy" answer costs the full time. SQLite gives the same `SQLITE_BUSY` for a reader and for a holder, so an attempt cannot wait for the one and not for the other.
+- **A key that ends unless its holder renews it.** A check could then read a time and use no lock. [ADR 0012](./0012-a-file-store-holder-is-judged-by-its-presence.md) rejected this: a frozen holder loses its key while it can still continue and write, so two holders run at the same time.
+- **The answer "busy" in place of "held".** In `TicketQueueFileStore`, a waiter can be in the queue after a first caller that stopped. "Busy" says yes. Then a status command shows a sync that stopped as a sync that runs. "Held" says no.
+- **`isHeld` only on the lock stores that can answer.** `Mutex` and `Key` would need the type of their lock store, so that `key.isHeld()` compiles only for those lock stores. Every lock store can answer, `SqliteStore` with a presence. Thus all lock stores share one interface.
+- **No `SqliteStore`.** `LockFileStore` and `TicketQueueFileStore` also have the reach host. But `SqliteStore` gets a key from a holder that stopped with no removal of that holder.
+- **A presence with a fixed name for `SqliteStore`.** A holder check would know the name before the holder starts its presence. A check that reads the file at that moment makes the start fail, because it uses no busy timeout. The record gives the name only after the presence started, as in ADR 0012.
+- **The presence next to `<key>.lock`.** The name `<key>.lock.<id>.presence` is 46 characters longer than `<key>.lock`. Then a key of 205 to 242 characters would get a short name, so processes of an earlier version would use other files for that key, and two holders could run. The folder name `<key>.lock.holder` is shorter than the SQLite journal `<key>.lock-journal`, so each key keeps the name that earlier versions gave it.
+
+## Consequences
+
+- A caller that skips if busy needs no wait for holder checks. A holder check of a file lock store writes no file and makes no directory.
+- A lock store has three operations. A lock store that you write must answer `isHeld` without a grant. See [Write your own lock store](../recipes/write-your-own-lock-store.md). Acquire modes still use only two operations ([ADR 0006](./0006-acquire-modes-are-strategies-over-two-store-operations.md)).
+- A subclass of `FileLockStore` implements a third method, `isHeldAt(path)`.
+- `SqliteStore` makes a folder, a presence file and a record for each grant, and deletes the record and the presence file at each release. The next holder deletes the files of a holder that stopped.
+- A `SqliteStore` holder of version 0.3.9 or earlier writes no record. A holder check of a later version does not see that holder.
+- A `SocketStore` process that has no leader campaigns for a holder check, as it does for an acquire. It can become the leader, it writes the term, and it waits for the grace window. When that process stops, a failover occurs, and a holder that does not reassert its key in the next grace window loses it.
+- A waiter of a coordinator that cancelled can count as a holder for a short time: the coordinator grants it the key, and then gets the key back.
+- The answer can be old when it arrives. Show it, but do not acquire a key because of it.

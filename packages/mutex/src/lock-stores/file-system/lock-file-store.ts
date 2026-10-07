@@ -57,21 +57,22 @@ export class LockFileStore extends FileLockStore {
     };
   }
 
+  /** A gone holder stays: only a caller that acquires evicts it. */
+  protected isHeldAt(path: string): Promise<boolean> {
+    return Presence.isNamedCallerPresent(path, () => readHolder(path));
+  }
+
   async #evictIfGone(path: string, holder: Caller) {
-    const presence = Presence.pathOf(path, holder);
-    const state = Presence.check(presence);
-    if (state === 'present') return;
-    if (state === 'missing') {
-      // A release removes the record before the presence file, so a record still in place never had one.
-      if ((await readHolder(path))?.id === holder.id) {
-        throw Presence.missing(path, presence);
-      }
-      return;
-    }
+    const state = await Presence.judge(
+      path,
+      holder,
+      async () => (await readHolder(path))?.id === holder.id,
+    );
+    if (state !== 'gone') return;
     await this.withReclaimLock(path, async () => {
       if ((await readHolder(path))?.id !== holder.id) return;
       await removeLockFile(path);
-      await Presence.delete(presence);
+      await Presence.delete(Presence.pathOf(path, holder));
     });
   }
 }

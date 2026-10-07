@@ -53,6 +53,12 @@ Messages are lines of JSON. A socket does not keep message boundaries: in a test
 
 `tryAcquire` sends one `try` request, and the coordinator answers `granted` or `busy` at once. A caller that gives up while it waits sends `cancel`. If the grant was already on its way, the caller gives the key back. During the grace window after a failover, every `try` is answered `busy`. See [acquire modes](../concepts/acquire-modes.md).
 
+## Holder check
+
+`isHeld(key)` sends an `isHeld` request, and the leader answers from its memory. A process that has no leader campaigns first, as it does for an acquire. Thus a holder check can make the process the leader and write the term. A new leader answers only after its grace window, because the holders from before the failover reassert their keys in that window.
+
+A leader of version 0.3.9 or earlier does not know the `isHeld` request, and it closes the connection of a process that sends a request that it does not know. Thus a process sends `isHeld` only to a leader that lists it in its `welcome`. With an older leader, the holder check rejects with `UnsupportedRequestError`, and the connection and the held keys stay. See [ADR 0015](../adr/0015-a-holder-check-never-acquires-the-key.md) and [ADR 0016](../adr/0016-a-leader-lists-the-requests-that-it-added.md).
+
 ## Failure modes
 
 | Event                                            | Result                                                                                                                                                                                                                                |

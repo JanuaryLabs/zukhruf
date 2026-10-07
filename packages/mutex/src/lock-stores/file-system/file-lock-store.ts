@@ -47,13 +47,19 @@ export abstract class FileLockStore implements LockStore {
     { signal }: AcquireOptions = {},
   ): Promise<LockHandle> {
     signal?.throwIfAborted();
-    const held = await this.lock(await this.#pathFor(key), signal);
+    const held = await this.lock(await this.#prepare(key), signal);
     return leaseFor(key, held, this.#tokens);
   }
 
   async tryAcquire(key: string): Promise<LockHandle | undefined> {
-    const held = await this.tryLock(await this.#pathFor(key));
+    const held = await this.tryLock(await this.#prepare(key));
     return held && leaseFor(key, held, this.#tokens);
+  }
+
+  /** Makes no directory: a key in a directory that does not exist has no holder. */
+  async isHeld(key: string): Promise<boolean> {
+    await assertLocalDirectory(this.#directory);
+    return this.isHeldAt(this.#pathFor(key));
   }
 
   /**
@@ -73,6 +79,9 @@ export abstract class FileLockStore implements LockStore {
   protected abstract tryLock(
     path: string,
   ): Promise<AsyncDisposable | undefined>;
+
+  /** Whether the lock at `path` has a holder now, learned without a lock that a caller of `lock` or `tryLock` needs. */
+  protected abstract isHeldAt(path: string): Promise<boolean>;
 
   protected async poll<T>(
     attempt: () => Promise<T | undefined>,
@@ -114,9 +123,13 @@ export abstract class FileLockStore implements LockStore {
     }
   }
 
-  async #pathFor(key: string): Promise<string> {
+  async #prepare(key: string): Promise<string> {
     await assertLocalDirectory(this.#directory);
     await mkdir(this.#directory, { recursive: true });
+    return this.#pathFor(key);
+  }
+
+  #pathFor(key: string): string {
     const name = safeFileName(key, '.lock'.length + this.longestSuffix);
     return join(this.#directory, `${name}.lock`);
   }

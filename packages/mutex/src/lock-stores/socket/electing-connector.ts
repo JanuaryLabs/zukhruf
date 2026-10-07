@@ -10,6 +10,7 @@ import {
   type LockResponse,
   isLockResponse,
 } from '../remote/protocol.ts';
+import { AdvertisedOpsConnection } from './advertised-ops-connection.ts';
 import { type Greeting, PROTOCOL_VERSION, greet } from './handshake.ts';
 import { ProtocolVersionError } from './protocol-version-error.ts';
 import { SocketConnection } from './socket-connection.ts';
@@ -115,12 +116,8 @@ export class ElectingConnector implements ClientConnector {
     }
     const own = await reachUnlessAborted(this.#options.socketPath, signal);
     if (!own) return undefined;
-    if ((await greetUnlessAborted(own, signal)).kind === 'welcome') {
-      return new SocketConnection<LockRequest, LockResponse>(
-        own,
-        isLockResponse,
-      );
-    }
+    const greeting = await greetUnlessAborted(own, signal);
+    if (greeting.kind === 'welcome') return leaderConnection(own, greeting.ops);
     own.destroy();
     return undefined;
   }
@@ -145,11 +142,18 @@ export class ElectingConnector implements ClientConnector {
       socket.destroy();
       throw error;
     }
-    return new SocketConnection<LockRequest, LockResponse>(
-      socket,
-      isLockResponse,
-    );
+    return leaderConnection(socket, greeting.ops);
   }
+}
+
+function leaderConnection(
+  socket: Socket,
+  listed: ReadonlySet<string>,
+): ClientConnection {
+  return new AdvertisedOpsConnection(
+    new SocketConnection<LockRequest, LockResponse>(socket, isLockResponse),
+    listed,
+  );
 }
 
 /** Like `reach`, but a socket reached after `signal` aborted is destroyed, not returned. */

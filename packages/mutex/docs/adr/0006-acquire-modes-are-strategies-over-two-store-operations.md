@@ -11,4 +11,4 @@ Callers need different reactions to a busy key: wait, give up at once, or give u
 
 ## Consequences
 
-A custom `LockStore` must implement both operations. The result of a mode that may give up is `{ acquired: true, value } | { acquired: false }`, so TypeScript makes the caller check `acquired`.
+A custom `LockStore` must implement both operations. Since [ADR 0015](0015-a-holder-check-never-acquires-the-key.md), a lock store has a third operation, `isHeld(key)`, for a holder check. Acquire modes do not use it, so a new acquire mode still needs only the two operations. The result of a mode that may give up is `{ acquired: true, value } | { acquired: false }`, so TypeScript makes the caller check `acquired`.

@@ -6,9 +6,9 @@ import type { Leadership } from '../../leader-election/leadership.ts';
 import { isErrno } from '../../shared/fs/errno.ts';
 import { LockCoordinator } from '../remote/lock-coordinator.ts';
 import {
-  type LockRequest,
   type LockResponse,
-  isLockRequest,
+  type RequestEnvelope,
+  isRequestEnvelope,
 } from '../remote/protocol.ts';
 import { welcome } from './handshake.ts';
 import { SocketConnection } from './socket-connection.ts';
@@ -63,9 +63,9 @@ export class LockServer {
       void welcome(socket).then((speaksOurs) => {
         if (!speaksOurs) return;
         coordinator.serve(
-          new SocketConnection<LockResponse, LockRequest>(
+          new SocketConnection<LockResponse, RequestEnvelope>(
             socket,
-            isLockRequest,
+            isRequestEnvelope,
           ),
         );
       });

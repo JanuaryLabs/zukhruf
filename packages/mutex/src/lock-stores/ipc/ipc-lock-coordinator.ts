@@ -33,6 +33,10 @@ export class IpcLockCoordinator implements LockStore {
     return this.#coordinator.tryAcquire(key);
   }
 
+  isHeld(key: string): Promise<boolean> {
+    return this.#coordinator.isHeld(key);
+  }
+
   /**
    * Serves `child`, which must have an IPC channel. When the child exits,
    * everything it held or waited for is released.

@@ -12,11 +12,12 @@ const open = new Set<DatabaseSync>();
 
 /**
  * A caller's presence: an exclusive SQLite transaction on a file of its own,
- * held from before the caller's record (a lock file or a ticket) appears until
- * after it is gone. The kernel ends it when the caller's process or thread
- * stops, however it stops, so a waiter that can read the file knows the caller
- * is gone. Nothing may open the file except through SQLite: closing any other
- * handle to it drops this process's lock without a word.
+ * held from before the caller's record (a lock file, a ticket, or the holder
+ * record of `SqliteStore`) appears until after it is gone. The kernel ends it
+ * when the caller's process or thread stops, however it stops, so a waiter
+ * that can read the file knows the caller is gone. Nothing may open the file
+ * except through SQLite: closing any other handle to it drops this process's
+ * lock without a word.
  */
 export class Presence {
   readonly #path: string;
@@ -71,6 +72,41 @@ export class Presence {
       throw error;
     } finally {
       database.close();
+    }
+  }
+
+  /**
+   * Whether `caller`, whom the record at `record` named, still runs. A caller's
+   * record goes before its presence file, so a missing presence file is a
+   * fault while `stillNamed` says the record names the caller, and means the
+   * caller `moved` on when it does not.
+   */
+  static async judge(
+    record: string,
+    caller: Caller,
+    stillNamed: () => Promise<boolean>,
+  ): Promise<'present' | 'gone' | 'moved'> {
+    const path = Presence.pathOf(record, caller);
+    const state = Presence.check(path);
+    if (state !== 'missing') return state;
+    if (await stillNamed()) throw Presence.missing(record, path);
+    return 'moved';
+  }
+
+  /** Whether the caller that `readNamed` reads from the record at `record` still runs. Writes nothing. */
+  static async isNamedCallerPresent(
+    record: string,
+    readNamed: () => Promise<Caller | undefined>,
+  ): Promise<boolean> {
+    for (;;) {
+      const caller = await readNamed();
+      if (!caller) return false;
+      const state = await Presence.judge(
+        record,
+        caller,
+        async () => (await readNamed())?.id === caller.id,
+      );
+      if (state !== 'moved') return state === 'present';
     }
   }
 

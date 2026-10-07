@@ -1,11 +1,17 @@
 import assert from 'node:assert/strict';
 import { readdirSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, test } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
 
 import { Mutex } from '../../mutex/mutex.ts';
 import { scratchDirectory } from '../../testing/scratch-directory.ts';
+import { newProcessTimeout, waitUntil } from '../../testing/wait-until.ts';
+import { startWorker } from '../../testing/worker-process.ts';
 import { SqliteStore } from './sqlite-store.ts';
+
+const mutexUrl = new URL('../../mutex/mutex.ts', import.meta.url);
+const storeUrl = new URL('./sqlite-store.ts', import.meta.url);
 
 const openFiles = () => readdirSync('/dev/fd').length;
 
@@ -84,6 +90,48 @@ describe('SqliteStore', () => {
 
       // Assert
       assert.deepEqual(order, [0, 1, 2, 3, 4]);
+    },
+  );
+});
+
+describe('SqliteStore holder record', () => {
+  test(
+    'a holder that was killed leaves no file once the next holder took the key and let it go',
+    { timeout: 30000 },
+    async (t) => {
+      // Arrange: a holder process dies while it holds the key.
+      await using directory = await scratchDirectory();
+      await using holder = startWorker(
+        `
+				import { Mutex } from ${JSON.stringify(mutexUrl.href)};
+				import { SqliteStore } from ${JSON.stringify(storeUrl.href)};
+				const mutex = new Mutex(new SqliteStore(${JSON.stringify(directory.path)}));
+				setInterval(() => {}, 1000);
+				await mutex.acquire('report:daily', async () => {
+					process.send({ type: 'entered' });
+					await new Promise(() => {});
+				});
+			`,
+        'holder',
+      );
+      await waitUntil(
+        t,
+        () => holder.has('entered'),
+        () => `The holder must enter its task.\n${holder.stderr}`,
+        newProcessTimeout,
+      );
+      holder.child.kill('SIGKILL');
+      await holder.closed;
+      const mutex = new Mutex(new SqliteStore(directory.path));
+
+      // Act
+      await mutex.acquire('report:daily', async () => {});
+
+      // Assert: the files of the killed holder do not pile up, one set for each crash.
+      assert.deepEqual(
+        readdirSync(join(directory.path, 'report%3Adaily.lock.holder')),
+        [],
+      );
     },
   );
 });

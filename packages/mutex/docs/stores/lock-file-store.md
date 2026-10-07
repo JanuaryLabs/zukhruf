@@ -50,6 +50,10 @@ Removal of a stopped holder uses `<key>.lock.reclaim`, as in [TicketQueueFileSto
 
 `tryAcquire` makes one attempt. If that attempt finds a stopped holder and removes it, `tryAcquire` makes one more attempt. A waiter that gives up stops its attempts and leaves nothing behind. See [acquire modes](../concepts/acquire-modes.md).
 
+## Holder check
+
+`isHeld(key)` reads `<key>.lock` and then the presence file of the holder that it names. A holder that stopped counts as no holder. A holder check does not remove that holder: only a caller that acquires the key removes it. A holder check writes no file, and it does not create the directory. See [ADR 0015](../adr/0015-a-holder-check-never-acquires-the-key.md).
+
 ## Failure modes
 
 The same as [TicketQueueFileStore](./ticket-queue-file-store.md#failure-modes): a stopped holder process or thread is removed, also when it is a zombie or it runs in another container on the same machine. A frozen holder keeps the key. On Windows, a lock file that Windows refuses for a moment is tried again for up to 1 second.

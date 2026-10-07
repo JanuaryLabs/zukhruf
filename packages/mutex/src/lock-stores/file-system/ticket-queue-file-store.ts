@@ -52,6 +52,14 @@ export class TicketQueueFileStore extends FileLockStore {
     return holding(path, me, presence);
   }
 
+  /** The first ticket's caller holds the key. A gone one does not, and a waiter behind it holds nothing yet. */
+  protected isHeldAt(path: string): Promise<boolean> {
+    return Presence.isNamedCallerPresent(
+      path,
+      async () => (await readTickets(path))[0],
+    );
+  }
+
   async #attempt(path: string, me: Caller): Promise<true | undefined> {
     const tickets = await readTickets(path);
     if (!tickets.some((ticket) => ticket.id === me.id)) {
@@ -91,15 +99,11 @@ export class TicketQueueFileStore extends FileLockStore {
 
 /** Whether the caller at the head of the queue at `path` no longer runs. */
 async function isGone(path: string, head: Caller): Promise<boolean> {
-  const presence = Presence.pathOf(path, head);
-  const state = Presence.check(presence);
-  if (state === 'missing') {
-    // A ticket leaves the queue before its presence file, so a ticket still first never had one.
-    if ((await readTickets(path))[0]?.id === head.id) {
-      throw Presence.missing(path, presence);
-    }
-    return false;
-  }
+  const state = await Presence.judge(
+    path,
+    head,
+    async () => (await readTickets(path))[0]?.id === head.id,
+  );
   return state === 'gone';
 }
 

@@ -4,9 +4,9 @@ import { EventEmitter } from 'node:events';
 import type { Connection, ConnectionEvents } from '../remote/connection.ts';
 import { unwrap, wrap } from '../remote/envelope.ts';
 import {
-  type LockRequest,
   type LockResponse,
-  isLockRequest,
+  type RequestEnvelope,
+  isRequestEnvelope,
 } from '../remote/protocol.ts';
 
 /**
@@ -14,14 +14,14 @@ import {
  * channel when the child dies, so `disconnect` reports even a SIGKILL.
  */
 export class ChildProcessConnection
-  extends EventEmitter<ConnectionEvents<LockRequest>>
-  implements Connection<LockResponse, LockRequest>
+  extends EventEmitter<ConnectionEvents<RequestEnvelope>>
+  implements Connection<LockResponse, RequestEnvelope>
 {
   readonly #child: ChildProcess;
 
   readonly #onMessage = (envelope: unknown) => {
     const request = unwrap(envelope);
-    if (isLockRequest(request)) this.emit('message', request);
+    if (isRequestEnvelope(request)) this.emit('message', request);
   };
 
   readonly #onDisconnect = () => {

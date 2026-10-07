@@ -44,6 +44,10 @@ A task that fails does not stop the queue. The next waiter gets the key, and the
 
 `tryAcquire` checks whether the key has a queue, and grants a free key before the next event loop turn. A caller that gives up keeps its place in the queue. When its place reaches the front, the key passes on to the next caller at once. See [acquire modes](../concepts/acquire-modes.md).
 
+## Holder check
+
+`isHeld(key)` reads the queue of the key. The first caller in the queue holds the key, so a key with a queue has a holder. A holder check does not join the queue. See [ADR 0015](../adr/0015-a-holder-check-never-acquires-the-key.md).
+
 ## Failure modes
 
 The locks are in memory, so they stop with the process. No other process can wait for them. See [failure modes](../concepts/failure-modes.md).

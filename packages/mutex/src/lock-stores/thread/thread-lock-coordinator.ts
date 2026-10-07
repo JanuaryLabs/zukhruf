@@ -34,6 +34,10 @@ export class ThreadLockCoordinator implements LockStore {
     return this.#coordinator.tryAcquire(key);
   }
 
+  isHeld(key: string): Promise<boolean> {
+    return this.#coordinator.isHeld(key);
+  }
+
   /** Serves `worker`. When the thread stops, everything it held or waited for is released. */
   adopt(worker: Worker) {
     this.#coordinator.serve(new WorkerConnection(worker));

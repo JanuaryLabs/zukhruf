@@ -86,6 +86,10 @@ export class SocketStore
     return this.#client.tryAcquire(key);
   }
 
+  isHeld(key: string): Promise<boolean> {
+    return this.#client.isHeld(key);
+  }
+
   /** Stops a campaign still in progress first, so no lock server starts after disposal. */
   async [Symbol.asyncDispose]() {
     await this.#client.close();

@@ -44,4 +44,8 @@ export class IpcStore implements LockStore {
   tryAcquire(key: string): Promise<LockHandle | undefined> {
     return this.#client.tryAcquire(key);
   }
+
+  isHeld(key: string): Promise<boolean> {
+    return this.#client.isHeld(key);
+  }
 }

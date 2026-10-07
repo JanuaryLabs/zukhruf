@@ -42,6 +42,10 @@ _Avoid_: Owner, locker
 A caller that asked for a key and does not have it yet.
 _Avoid_: Contender, pending caller
 
+**Holder check**:
+A caller asks whether a key has a holder now. The lock store answers without a grant, so a holder check never makes a key busy for a caller that acquires it. The holder can change before the answer arrives: show the answer, but do not acquire a key because of it.
+_Avoid_: Peek, probe, query, try (a try acquires)
+
 **Acquire mode**:
 What one caller does while its key is busy. It never changes exclusivity, and two callers of one key can use different acquire modes. A key can have a default acquire mode that one call overrides.
 _Avoid_: Lock mode, lock type

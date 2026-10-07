@@ -6,7 +6,11 @@ import { Latch } from '../../shared/latch.ts';
 import { untilAborted } from '../../shared/until-aborted.ts';
 import { MemoryStore } from '../memory/memory-store.ts';
 import type { Connection } from './connection.ts';
-import type { LockRequest, LockResponse } from './protocol.ts';
+import {
+  type LockResponse,
+  type RequestEnvelope,
+  isLockRequest,
+} from './protocol.ts';
 
 export interface LockCoordinatorOptions {
   tokens: TokenSource;
@@ -26,6 +30,7 @@ interface Reassertion {
 interface CoordinatorPhase {
   acquire(key: string, options: AcquireOptions): Promise<LockHandle>;
   tryAcquire(key: string): Promise<LockHandle | undefined>;
+  isHeld(key: string): Promise<boolean>;
   reassert(
     key: string,
     token: FencingToken,
@@ -68,7 +73,12 @@ export class LockCoordinator implements LockStore {
     return this.#phase.tryAcquire(key);
   }
 
-  serve(connection: Connection<LockResponse, LockRequest>): void {
+  /** Holders from before a failover reassert during the grace window, so a look waits for it to end. */
+  async isHeld(key: string): Promise<boolean> {
+    return this.#phase.isHeld(key);
+  }
+
+  serve(connection: Connection<LockResponse, RequestEnvelope>): void {
     new Session(this, connection);
   }
 
@@ -102,6 +112,10 @@ class Granting implements CoordinatorPhase {
     return this.#store.tryAcquire(key);
   }
 
+  isHeld(key: string): Promise<boolean> {
+    return this.#store.isHeld(key);
+  }
+
   reassert(): undefined {
     return undefined;
   }
@@ -129,6 +143,12 @@ class GraceWindow implements CoordinatorPhase {
     return undefined;
   }
 
+  /** A holder that does not reassert before the window ends loses its key, so the answer after it is exact. */
+  async isHeld(key: string): Promise<boolean> {
+    await this.#over.wait();
+    return this.#next.isHeld(key);
+  }
+
   reassert(
     key: string,
     token: FencingToken,
@@ -153,7 +173,7 @@ class Session {
 
   constructor(
     coordinator: LockCoordinator,
-    connection: Connection<LockResponse, LockRequest>,
+    connection: Connection<LockResponse, RequestEnvelope>,
   ) {
     this.#coordinator = coordinator;
     this.#phase = new Serving(connection);
@@ -165,7 +185,12 @@ class Session {
     });
   }
 
-  async #handle(request: LockRequest) {
+  async #handle(request: RequestEnvelope) {
+    // A newer process may ask what this version does not know. The answer
+    // keeps its connection, and with it every key it holds.
+    if (!isLockRequest(request)) {
+      return this.#phase.reply({ op: 'unsupported', id: request.id });
+    }
     switch (request.op) {
       case 'acquire': {
         // A reconnecting client may resend a request; granting it twice would orphan one lease.
@@ -183,6 +208,10 @@ class Session {
           return this.#phase.reply({ op: 'busy', id: request.id });
         }
         return this.#grant(lease, request.id);
+      }
+      case 'isHeld': {
+        const held = await this.#coordinator.isHeld(request.key);
+        return this.#phase.reply({ op: 'held', id: request.id, held });
       }
       case 'cancel': {
         // A request still in line is released by #grant when its turn comes.
@@ -247,10 +276,10 @@ interface SessionPhase {
 
 /** The peer is connected: the session keeps its leases and answers it. */
 class Serving implements SessionPhase {
-  readonly #connection: Connection<LockResponse, LockRequest>;
+  readonly #connection: Connection<LockResponse, RequestEnvelope>;
   readonly #leases = new Map<string, LockHandle>();
 
-  constructor(connection: Connection<LockResponse, LockRequest>) {
+  constructor(connection: Connection<LockResponse, RequestEnvelope>) {
     this.#connection = connection;
   }
 

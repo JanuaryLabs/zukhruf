@@ -56,6 +56,11 @@ export class Mutex {
       : this.#run(key, task, mode, signal);
   }
 
+  /** Whether `key` has a holder now, learned without acquiring it. The holder can change before the answer arrives. */
+  isHeld(key: string): Promise<boolean> {
+    return this.#store.isHeld(key);
+  }
+
   /** A key whose callers wait, unless one call says otherwise. */
   key(name: string, options?: { mode?: undefined }): Key<'always'>;
   /** A key whose callers use `mode`, unless one call says otherwise. */

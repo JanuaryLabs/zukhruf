@@ -30,3 +30,4 @@ A leader of package version 0.3.0 or earlier does not know `hello`. It closes th
 - The `hello` and the `refused` answer must keep their shape. If a leader does not see a `hello` as a `hello`, a process of a later protocol version gets no answer and waits.
 - `HANDSHAKE_PATIENCE` must be longer than the time that a leader needs to end its term when it stops. If it is shorter, a holder in a normal failover gets `ProtocolVersionError`.
 - When you change a message, change `PROTOCOL_VERSION`. Then processes of the old and the new package version refuse each other with an error, and they do not read a message incorrectly.
+- When you add a request, do not change `PROTOCOL_VERSION`. Add the request to `ADDED_OPS`, so that the `welcome` lists it. See [ADR 0016](0016-a-leader-lists-the-requests-that-it-added.md).

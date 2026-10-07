@@ -55,11 +55,15 @@ On macOS and Linux, the IPC channel between a parent and a child is a pair of co
 
 `IpcStore` sends `acquire` and `release` messages in an envelope (`{ '@lock': … }`), so that they do not mix with the messages of your app. The coordinator grants keys first come, first served. When a child stops, the operating system closes the channel. The coordinator then releases the keys of that child and forgets its requests.
 
-**The child does not stay alive only for the lock.** Node.js keeps a child alive while it has listeners on the IPC channel. `IpcStore` adds its listeners only while it waits for a grant. Thus your child can stop when its own work is done, and your own `message` listeners still control its life.
+**The child does not stay alive only for the lock.** Node.js keeps a child alive while it has listeners on the IPC channel. `IpcStore` adds its listeners only while it waits for a grant or for the answer to a holder check. Thus your child can stop when its own work is done, and your own `message` listeners still control its life.
 
 ## Acquire modes
 
 `tryAcquire` sends one `try` request, and the coordinator answers `granted` or `busy` at once. A caller that gives up while it waits sends `cancel`. If the grant was already on its way, the caller gives the key back. See [acquire modes](../concepts/acquire-modes.md).
+
+## Holder check
+
+`isHeld(key)` in a child asks the coordinator of the parent, and the coordinator answers from its memory. `IpcLockCoordinator.isHeld(key)` in the parent answers at once. A coordinator of version 0.3.9 or earlier ignores the request, and the holder check of the child waits. Use one package version in the process tree. See [ADR 0015](../adr/0015-a-holder-check-never-acquires-the-key.md).
 
 ## Failure modes
 

@@ -19,6 +19,11 @@ export class Key<O extends Outcome> {
     this.#mode = mode;
   }
 
+  /** Whether the key has a holder now, learned without acquiring it. The holder can change before the answer arrives. */
+  isHeld(): Promise<boolean> {
+    return this.#mutex.isHeld(this.name);
+  }
+
   /** Runs `task` with the key's own acquire mode. */
   run<T>(
     task: (lease: Lease) => Promise<T>,

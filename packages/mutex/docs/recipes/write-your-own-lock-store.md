@@ -2,7 +2,7 @@
 
 **Use case.** You need a lock store that this project does not have. For example, you want to measure how long callers wait, or you want to use a different way to hold a key.
 
-**What you need.** The `LockStore` interface. A `Mutex` accepts any object that has these two methods:
+**What you need.** The `LockStore` interface. A `Mutex` accepts any object that has these three methods:
 
 ```ts
 interface LockStore {
@@ -10,6 +10,8 @@ interface LockStore {
   acquire(key: string, options?: { signal?: AbortSignal }): Promise<LockHandle>;
   /** Holds `key` only if that is possible without waiting for another holder. */
   tryAcquire(key: string): Promise<LockHandle | undefined>;
+  /** Whether `key` has a holder now. Never acquires the key. */
+  isHeld(key: string): Promise<boolean>;
 }
 
 /** What the task gets. */
@@ -31,6 +33,7 @@ interface LockHandle extends Lease, AsyncDisposable {}
 5. **Abort the signal when another holder may get the key.** Abort it with a `LockLostError` for the key. The task can then stop, and the mutex rejects the call with `LockLostError`. If your lock store never loses a key while its holder runs, give a signal that never aborts.
 6. **Make the fencing token while the key is held.** Use `leaseFor(key, held, tokens)`. It calls the token source, it gives a signal that never aborts, and it releases the key if the token source fails.
 7. **Let the user give a token source.** Use an option `tokens`, as the other lock stores do.
+8. **Answer `isHeld` without a grant.** A [holder check](../../CONTEXT.md) reads what shows a holder. It never takes the lock that callers of `acquire` and `tryAcquire` need, and it makes no fencing token. Otherwise a holder check can make a free key busy, and a caller that skips if busy gives up. See [ADR 0015](../adr/0015-a-holder-check-never-acquires-the-key.md).
 
 ## Example 1: wrap a lock store
 
@@ -70,6 +73,10 @@ class WaitTimeStore implements LockStore {
   tryAcquire(key: string): Promise<LockHandle | undefined> {
     return this.#inner.tryAcquire(key);
   }
+
+  isHeld(key: string): Promise<boolean> {
+    return this.#inner.isHeld(key);
+  }
 }
 
 const waits: number[] = [];
@@ -94,13 +101,14 @@ The decorator gives the lock handle of the inner lock store back without a chang
 
 ## Example 2: a new way to hold a key in a directory
 
-`FileLockStore` is the base class of the file lock stores. It changes a key into a safe file path, waits between attempts, and makes fencing tokens. You write `tryLock(path)`, one attempt, and `lock(path, signal)`, which repeats the attempt with `poll` until the key is free or the signal aborts.
+`FileLockStore` is the base class of the file lock stores. It changes a key into a safe file path, waits between attempts, and makes fencing tokens. You write `tryLock(path)`, one attempt, and `lock(path, signal)`, which repeats the attempt with `poll` until the key is free or the signal aborts. You also write `isHeldAt(path)`, which tells whether the key at `path` has a holder, without an attempt.
 
 You also give `longestSuffix`: the length of the longest text that your lock store adds to `path` to name another file. `FileLockStore` gives a short name to a key that is too long for a file name with that text. If you add a longer text later, increase `longestSuffix` too. Otherwise a long key can fail with `ENAMETOOLONG`.
 
 This lock store holds a key while a directory exists. `mkdir` fails when the directory exists, so only one process can create it. The directory is `<path>.d`, so `longestSuffix` is 2.
 
 ```ts title="directory-lock-store.ts"
+import { existsSync } from 'node:fs';
 import { mkdir, mkdtemp, rm, rmdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -128,6 +136,11 @@ class DirectoryLockStore extends FileLockStore {
       throw error;
     }
   }
+
+  /** The directory shows a holder. A check of it never creates it. */
+  protected async isHeldAt(path: string): Promise<boolean> {
+    return existsSync(`${path}.d`);
+  }
 }
 
 const directory = await mkdtemp(join(tmpdir(), 'directory-lock-'));
@@ -143,14 +156,14 @@ await Promise.all(
     }),
   ),
 );
-console.log({ mostActive });
+console.log({ mostActive, heldAfter: await mutex.isHeld('report') });
 await rm(directory, { recursive: true, force: true });
 ```
 
 Output:
 
 ```
-{ mostActive: 1 }
+{ mostActive: 1, heldAfter: false }
 ```
 
 `poll` calls your attempt again after `pollInterval` until it returns a value, and it stops when the signal aborts. Return `undefined` when another holder has the key.

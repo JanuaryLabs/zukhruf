@@ -72,10 +72,12 @@ The rules:
 
 ## How it works
 
-Each lock store gives two operations:
+An acquire mode uses two operations of the lock store:
 
 - `acquire(key, { signal })` waits for the key, and stops waiting when `signal` aborts.
 - `tryAcquire(key)` makes one attempt and never waits.
+
+The lock store has a third operation, `isHeld(key)`, for a [holder check](../../CONTEXT.md). An acquire mode does not use it: the holder can change before the answer arrives, so only an attempt can decide if a caller gets the key. See [ADR 0015](../adr/0015-a-holder-check-never-acquires-the-key.md).
 
 `skipIfBusy` always makes one `tryAcquire` first. Thus a free key is never skipped because of time. If the key is busy and `waitAtMost` is more than 0, it then calls `acquire` with one signal. This signal aborts at the end of `waitAtMost` or when the caller cancels (`AbortSignal.any`). Only the end of `waitAtMost` makes `skipIfBusy` give up.
 

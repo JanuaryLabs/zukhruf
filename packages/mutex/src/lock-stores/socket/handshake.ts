@@ -1,19 +1,22 @@
 import type { Socket } from 'node:net';
 
 import { isRecord } from '../../shared/is-record.ts';
+import { ADDED_OPS } from '../remote/protocol.ts';
 
 /**
  * The version of the messages a socket store's processes exchange. It changes
  * only when they change, so processes that run different package versions
  * with the same protocol still share a directory. The `hello` and the
  * `refused` answer keep their shape in every version: they are how two
- * versions find out that they differ.
+ * versions find out that they differ. A request added later needs no new
+ * version: the `welcome` lists it (see `ADDED_OPS`).
  */
 export const PROTOCOL_VERSION = 1;
 
 /** What a leader answered to this process's `hello`. */
 export type Greeting =
-  | { kind: 'welcome' }
+  /** `ops`: the added requests the leader answers; a leader of 0.3.x lists none. */
+  | { kind: 'welcome'; ops: ReadonlySet<string> }
   | { kind: 'refused'; version: number }
   /** The leader closed the connection without an answer: it stops, or it predates the handshake. */
   | { kind: 'closed' };
@@ -24,7 +27,9 @@ export async function greet(socket: Socket): Promise<Greeting> {
     `${JSON.stringify({ op: 'hello', version: PROTOCOL_VERSION })}\n`,
   );
   const answer = parse(await readLine(socket));
-  if (isRecord(answer) && answer.op === 'welcome') return { kind: 'welcome' };
+  if (isRecord(answer) && answer.op === 'welcome') {
+    return { kind: 'welcome', ops: listedOps(answer.ops) };
+  }
   if (
     isRecord(answer) &&
     answer.op === 'refused' &&
@@ -51,7 +56,8 @@ export async function welcome(socket: Socket): Promise<boolean> {
     return false;
   }
   if (hello.version === PROTOCOL_VERSION) {
-    socket.write(`${JSON.stringify({ op: 'welcome' })}\n`);
+    // A follower of 0.3.x reads only `op`, so the list is new to followers only.
+    socket.write(`${JSON.stringify({ op: 'welcome', ops: [...ADDED_OPS] })}\n`);
     return true;
   }
   // Destroyed once the answer is written: a paused socket would never see a silent process hang up.
@@ -60,6 +66,13 @@ export async function welcome(socket: Socket): Promise<boolean> {
     () => socket.destroy(),
   );
   return false;
+}
+
+function listedOps(ops: unknown): ReadonlySet<string> {
+  if (!Array.isArray(ops)) return new Set();
+  return new Set(
+    ops.filter((op: unknown): op is string => typeof op === 'string'),
+  );
 }
 
 function parse(line: string | undefined): unknown {

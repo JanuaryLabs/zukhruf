@@ -6,8 +6,10 @@ import { createInterface } from 'node:readline';
 import { describe, test } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
 
-import { ProtocolVersionError } from '../../index.ts';
+import { ProtocolVersionError, UnsupportedRequestError } from '../../index.ts';
 import { LeaderElection } from '../../leader-election/leader-election.ts';
+import { Mutex } from '../../mutex/mutex.ts';
+import { isRecord } from '../../shared/is-record.ts';
 import { scratchDirectory } from '../../testing/scratch-directory.ts';
 import { waitUntil } from '../../testing/wait-until.ts';
 import { startWorker } from '../../testing/worker-process.ts';
@@ -648,6 +650,77 @@ describe('Socket store protocol handshake', () => {
         clearInterval(writing);
         socket.destroy();
       }
+    },
+  );
+});
+
+describe('Requests added after protocol version 1', () => {
+  test(
+    'a store never sends a look to a leader of 0.3.x, so the look fails and the store keeps its key',
+    { ...onUnixSockets, timeout: 10000 },
+    async () => {
+      // Arrange: a leader of 0.3.x welcomes without a list of added requests,
+      // and hangs up on any request it does not know.
+      await using directory = await scratchDirectory();
+      await using term = await new LeaderElection(directory.path, {
+        pollInterval: 10,
+      }).campaign();
+      assert.ok(term, 'The stand-in must win the first term');
+      const knownToOldLeaders = new Set([
+        'acquire',
+        'try',
+        'cancel',
+        'release',
+        'reassert',
+      ]);
+      const received: string[] = [];
+      await using _leader = await standInLeader(
+        directory.path,
+        (peer, line) => {
+          if (isHello(line)) {
+            peer.write(`${JSON.stringify({ op: 'welcome' })}\n`);
+            return;
+          }
+          const request: unknown = JSON.parse(line);
+          if (!isRecord(request) || typeof request.op !== 'string') return;
+          received.push(request.op);
+          if (!knownToOldLeaders.has(request.op)) {
+            peer.destroy();
+            return;
+          }
+          if (request.op === 'acquire') {
+            const token = String((term.epoch << 32n) | 1n);
+            peer.write(
+              `${JSON.stringify({ op: 'granted', id: request.id, token })}\n`,
+            );
+          }
+        },
+      );
+      await using store = new SocketStore(directory.path, { pollInterval: 10 });
+      const mutex = new Mutex(store);
+
+      // Act: look while this store holds the key.
+      const seen = await mutex.acquire('product:42', async ({ signal }) => {
+        const look = await mutex.isHeld('product:42').then(
+          () => 'answered',
+          (error: unknown) => error,
+        );
+        // A hang-up caused by the look would reach the store meanwhile.
+        await delay(50);
+        return { look, received: [...received], lost: signal.aborted };
+      });
+
+      // Assert
+      assert.ok(
+        seen.look instanceof UnsupportedRequestError,
+        `The look must fail as unsupported, got ${String(seen.look)}`,
+      );
+      assert.deepEqual(
+        seen.received,
+        ['acquire'],
+        'The old leader must never receive the look',
+      );
+      assert.equal(seen.lost, false, 'The store must keep its key');
     },
   );
 });
