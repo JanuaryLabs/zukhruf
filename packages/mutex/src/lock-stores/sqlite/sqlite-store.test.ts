@@ -1,14 +1,20 @@
 import assert from 'node:assert/strict';
 import { readdirSync } from 'node:fs';
+import { chmod } from 'node:fs/promises';
 import { join } from 'node:path';
 import { describe, test } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
 
+import { Modes } from '../../mutex/acquire-modes/modes.ts';
 import { Mutex } from '../../mutex/mutex.ts';
+import { isRecord } from '../../shared/is-record.ts';
 import { scratchDirectory } from '../../testing/scratch-directory.ts';
 import { newProcessTimeout, waitUntil } from '../../testing/wait-until.ts';
 import { startWorker } from '../../testing/worker-process.ts';
 import { SqliteStore } from './sqlite-store.ts';
+
+const posixOnly =
+  process.platform === 'win32' ? 'Windows has no read-only directories' : false;
 
 const mutexUrl = new URL('../../mutex/mutex.ts', import.meta.url);
 const storeUrl = new URL('./sqlite-store.ts', import.meta.url);
@@ -131,6 +137,48 @@ describe('SqliteStore holder record', () => {
       assert.deepEqual(
         readdirSync(join(directory.path, 'report%3Adaily.lock.holder')),
         [],
+      );
+    },
+  );
+
+  test(
+    'a release that cannot remove the holder record rejects with its name, and the key is free',
+    { skip: posixOnly, timeout: 10000 },
+    async () => {
+      // Arrange: the holder folder turns read-only while the task holds the key, so the release cannot remove the record.
+      await using directory = await scratchDirectory();
+      const mutex = new Mutex(new SqliteStore(directory.path));
+      const folder = join(directory.path, 'report%3Adaily.lock.holder');
+
+      // Act
+      let release: unknown;
+      try {
+        release = await mutex
+          .acquire('report:daily', () => chmod(folder, 0o555))
+          .then(
+            () => 'released',
+            (error: unknown) => error,
+          );
+      } finally {
+        await chmod(folder, 0o755);
+      }
+      const held = await mutex.isHeld('report:daily');
+      const next = await mutex.acquire('report:daily', async () => 'got it', {
+        mode: Modes.skipIfBusy(),
+      });
+
+      // Assert
+      assert.ok(
+        isRecord(release) &&
+          typeof release.path === 'string' &&
+          release.path.endsWith('caller'),
+        `The release must fail and name the record, got ${String(release)}`,
+      );
+      assert.equal(held, false, 'The key must read as free');
+      assert.deepEqual(
+        next,
+        { acquired: true, value: 'got it' },
+        'The next caller in this process must get the key',
       );
     },
   );
