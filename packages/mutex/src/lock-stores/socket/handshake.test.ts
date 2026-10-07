@@ -10,6 +10,7 @@ import { ProtocolVersionError } from '../../index.ts';
 import { LeaderElection } from '../../leader-election/leader-election.ts';
 import { scratchDirectory } from '../../testing/scratch-directory.ts';
 import { waitUntil } from '../../testing/wait-until.ts';
+import { startWorker } from '../../testing/worker-process.ts';
 import { isLockRequest } from '../remote/protocol.ts';
 import { PROTOCOL_VERSION } from './handshake.ts';
 import { type SocketRole, SocketStore } from './socket-store.ts';
@@ -357,6 +358,61 @@ describe('Socket store protocol handshake', () => {
           'The leader must close its side once the process closes its side',
         );
         assert.deepEqual(answers, []);
+      } finally {
+        socket.destroy();
+      }
+    },
+  );
+
+  test(
+    'a leader keeps no more than a short first line of a process that sends no newline',
+    onUnixSockets,
+    async (t) => {
+      // Arrange: a leader in its own process, which tells its buffer memory after a full collection.
+      await using directory = await scratchDirectory();
+      await using leader = startWorker(
+        `
+        import { SocketStore } from ${JSON.stringify(new URL('./socket-store.ts', import.meta.url).href)};
+        const store = new SocketStore(${JSON.stringify(directory.path)}, { pollInterval: 10 });
+        await (await store.acquire('warm-up'))[Symbol.asyncDispose]();
+        process.on('message', () => {
+          globalThis.gc();
+          process.send({ type: 'memory', bytes: process.memoryUsage().arrayBuffers });
+        });
+        process.send({ type: 'ready' });
+      `,
+        'leader',
+        { nodeOptions: ['--expose-gc'] },
+      );
+      await waitUntil(t, () => leader.has('ready'), leader.stderr, 10_000);
+      const memory = async () => {
+        const told = leader.messages.length;
+        leader.child.send('measure');
+        await waitUntil(
+          t,
+          () => leader.messages.length > told,
+          'The leader must tell its memory',
+        );
+        return Number(leader.messages.at(-1)?.bytes);
+      };
+      const before = await memory();
+      const socket = connect(join(directory.path, 'lock.sock'));
+      await once(socket, 'connect');
+
+      try {
+        // Act: the process sends 32 MiB and no newline. A write ends only once the leader read most of it.
+        const mebibyte = Buffer.alloc(1024 * 1024, 'x');
+        for (let sent = 0; sent < 32; sent++) {
+          if (!socket.write(mebibyte)) await once(socket, 'drain');
+        }
+        await new Promise((resolve) => socket.write('x', resolve));
+
+        // Assert: the leader drops what it read instead of keeping it for a line that never ends.
+        const kept = (await memory()) - before;
+        assert.ok(
+          kept < 8 * 1024 * 1024,
+          `The leader kept ${kept} bytes of a line with no end`,
+        );
       } finally {
         socket.destroy();
       }
