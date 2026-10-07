@@ -1,6 +1,20 @@
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
-import { type RequestListener, type Server, createServer } from 'node:http';
+import {
+  type IncomingMessage,
+  type Server,
+  type ServerResponse,
+  createServer,
+} from 'node:http';
+
+/**
+ * Answers one request. It may be async: a rejection stays unhandled and fails
+ * the process, as a throw in a synchronous handler does.
+ */
+export type HttpHandler = (
+  request: IncomingMessage,
+  response: ServerResponse,
+) => unknown;
 
 export interface HttpServerHandle extends AsyncDisposable {
   origin: string;
@@ -16,9 +30,9 @@ export interface BackgroundHttpServer {
 
 /** Each acquisition owns a loopback HTTP server on an available port. */
 export class HttpServer {
-  async start(handler: RequestListener): Promise<HttpServerHandle> {
+  async start(handler: HttpHandler): Promise<HttpServerHandle> {
     await using resources = new AsyncDisposableStack();
-    const server = createServer(handler);
+    const server = serve(handler);
     await listen(server);
 
     resources.defer(async () => {
@@ -39,13 +53,19 @@ export class HttpServer {
   }
 
   /** Serves until the process exits and never keeps it running, even while a connection is open. */
-  async background(handler: RequestListener): Promise<BackgroundHttpServer> {
-    const server = createServer(handler);
+  async background(handler: HttpHandler): Promise<BackgroundHttpServer> {
+    const server = serve(handler);
     server.on('connection', (socket) => socket.unref());
     await listen(server);
     server.unref();
     return { origin: originOf(server) };
   }
+}
+
+function serve(handler: HttpHandler): Server {
+  return createServer((request, response) => {
+    void handler(request, response);
+  });
 }
 
 async function listen(server: Server): Promise<void> {

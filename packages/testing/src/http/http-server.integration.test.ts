@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { Server } from 'node:http';
 import { test } from 'node:test';
 
-import spawn from 'nano-spawn';
+import spawn, { SubprocessError } from 'nano-spawn';
 
 import { HttpServer } from './http-server.ts';
 
@@ -121,5 +121,47 @@ test(
     const { origin, body } = JSON.parse(stdout);
     assert.equal(new URL(origin).hostname, '127.0.0.1');
     assert.equal(body, '/answered');
+  },
+);
+
+test('an async handler answers', { timeout: 5_000 }, async () => {
+  await using server = await new HttpServer().start(
+    async (_request, response) => {
+      await Promise.resolve();
+      response.end('async');
+    },
+  );
+
+  assert.equal(await (await fetch(server.origin)).text(), 'async');
+});
+
+test(
+  'a rejected async handler fails its process with its own error',
+  { timeout: 15_000 },
+  async () => {
+    // A server that answered or reset instead would hide a broken fake.
+    const child = spawn(
+      process.execPath,
+      [
+        '--input-type=module',
+        '--eval',
+        `
+          const { HttpServer } = await import(${JSON.stringify(new URL('./http-server.ts', import.meta.url).href)});
+          await using server = await new HttpServer().start(async () => {
+            throw new Error('the fake broke');
+          });
+          await fetch(server.origin);
+        `,
+      ],
+      { timeout: 10_000 },
+    );
+
+    await assert.rejects(
+      child,
+      (error: unknown) =>
+        error instanceof SubprocessError &&
+        error.exitCode === 1 &&
+        error.stderr.includes('Error: the fake broke'),
+    );
   },
 );

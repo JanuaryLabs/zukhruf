@@ -2,12 +2,15 @@
 
 Tests bring two kinds of handler to an HTTP server: a Node.js request listener, `(request, response)`, and a fetch handler, `(Request) => Response`, from a web framework such as Hono or Better Auth. A fetch handler needs a bridge to Node.js. The bridge streams bodies in both directions, forwards aborts and keeps each `Set-Cookie` header. Each framework ships its bridge: `@hono/node-server` exports `getRequestListener`, which its own `serve()` uses, and `better-auth/node` exports `toNodeHandler`. Thus `start` and `background` take a request listener, and a test passes its framework's bridge.
 
+Each bridge is async. Thus a handler can return a promise, and a rejection stays unhandled: it fails the process, as a throw in a synchronous handler does. A test then fails, also when a broken handler would look like a network error to the code under test.
+
 Some handlers need the origin, for example an auth server whose base URL is its own origin. The listener reads a `const` that the test declares after the acquisition. No request arrives before that, because only the test knows the origin until it gives it to a client.
 
 ## Considered Options
 
 - **An entry for fetch handlers.** The package would own a bridge that each framework already maintains, or depend on `@hono/node-server` and `hono`. A bridge that a consumer wrote by hand kept only the last `Set-Cookie` header and buffered each body.
 - **An acquisition in two steps: listen, then serve a handler.** Between the steps the server listens but answers nothing, and a request waits.
+- **Node.js's own rejection capture.** An `http.Server` can answer 500 for a rejected handler. It turns a broken handler into a response that a test can mistake for the behavior under test, and it is available only for all emitters of the process, through `EventEmitter.captureRejections`.
 - **A factory that receives the origin and returns the listener.** Some tests set environment variables and import modules between the origin and the listener. The factory would be asynchronous, with the same step between.
 
 ## Consequences
