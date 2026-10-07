@@ -12,9 +12,6 @@
     "prepare": "git config core.hooksPath .husky && git config blame.ignoreRevsFile .git-blame-ignore-revs || exit 0",
     "verify:packages": "nx run-many -t build --projects=tag:scope:public && node tools/verify-packages.ts"
   },
-  "engines": {
-    "node": ">=26.9.0"
-  },
   "lint-staged": {
     "*.{ts,mts,cts,js,mjs,cjs,json,md,yml,yaml}": [
       "prettier --write"

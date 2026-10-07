@@ -20,8 +20,6 @@ Each package has its own glossary. [CONTEXT-MAP.md](./CONTEXT-MAP.md) lists them
 
 ## Development
 
-You need Node.js 26.9 or later.
-
 ```sh
 npm install
 npx nx run-many -t test        # builds, then runs every test

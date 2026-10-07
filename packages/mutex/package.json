@@ -20,9 +20,6 @@
     "inter-process"
   ],
   "type": "module",
-  "engines": {
-    "node": ">=26.9.0"
-  },
   "types": "./dist/index.d.ts",
   "exports": {
     "./package.json": "./package.json",
