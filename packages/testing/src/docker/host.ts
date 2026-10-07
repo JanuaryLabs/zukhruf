@@ -1,10 +1,9 @@
-import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { mkdtempDisposable, stat } from 'node:fs/promises';
 import { type Socket, connect, createServer } from 'node:net';
 import { join } from 'node:path';
 
-import command from 'nano-spawn';
+import command, { type Result, SubprocessError } from 'nano-spawn';
 
 import { timebox } from '../async/timebox.ts';
 import { type TestRun, forwardPrefix } from './test-run.ts';
@@ -112,7 +111,7 @@ export class DockerHost {
       // OpenSSH multiplexes client streams over one authenticated connection.
       // Node owns the ephemeral TCP listener, so no port-reservation race or
       // fresh SSH login is added to each database client's connect timeout.
-      const child = spawn(
+      const ssh = command(
         'ssh',
         this.sshArgs([
           '-N',
@@ -127,30 +126,27 @@ export class DockerHost {
           '-L',
           `${path}:127.0.0.1:${port}`,
         ]),
-        { stdio: ['ignore', 'ignore', 'pipe'] },
+        { stdin: 'ignore', stdout: 'ignore' },
       );
-      let errorOutput = '';
-      let spawnError: Error | undefined;
-      child.stderr.on('data', (data) => {
-        errorOutput += data;
-      });
-      child.once('error', (error) => {
-        spawnError = error;
-      });
-      const exited = new Promise<void>((resolve) =>
-        child.once('close', (code) => {
-          if (code && errorOutput)
-            process.stderr.write(`Docker SSH forwarding: ${errorOutput}`);
-          for (const socket of sockets) socket.destroy();
-          if (server.listening) server.close();
-          resolve();
-        }),
+      // How ssh ended, with what it printed: a Result for exit 0, or the
+      // SubprocessError for a failure or a signal.
+      const exit = ssh.then(
+        (result): Result => result,
+        (error: unknown) => {
+          if (error instanceof SubprocessError) return error;
+          throw error;
+        },
       );
+      void exit.then(() => {
+        for (const socket of sockets) socket.destroy();
+        if (server.listening) server.close();
+      });
+      const child = await ssh.nodeChildProcess;
       resources.defer(async () => {
         child.kill('SIGTERM');
         const deadline = setTimeout(() => child.kill('SIGKILL'), 1_000);
         try {
-          await exited;
+          await exit;
         } finally {
           clearTimeout(deadline);
         }
@@ -169,24 +165,43 @@ export class DockerHost {
       });
       // OpenSSH binds local forwards after authentication. Wait for that
       // listener before publishing the TCP port to a database client.
-      await timebox(
-        async () => {
-          if (spawnError) throw spawnError;
-          if (child.exitCode !== null || child.signalCode !== null)
+      const waiting = new AbortController();
+      try {
+        await Promise.race([
+          timebox(
+            async () => {
+              if (!(await stat(path)).isSocket())
+                throw new Error(
+                  'Docker SSH forwarding did not create a Unix socket',
+                );
+            },
+            {
+              maxRetryTime: 15_000,
+              signal: waiting.signal,
+              shouldRetry: ({ error }) =>
+                'code' in error && error.code === 'ENOENT',
+            },
+          ),
+          exit.then((outcome) => {
             throw new Error(
-              `Docker SSH forwarding exited: ${errorOutput.trim()}`,
+              `Docker SSH forwarding exited: ${outcome.stderr.trim()}`,
+              { cause: outcome },
             );
-          if (!(await stat(path)).isSocket())
-            throw new Error(
-              'Docker SSH forwarding did not create a Unix socket',
-            );
-        },
-        {
-          maxRetryTime: 15_000,
-          shouldRetry: ({ error }) =>
-            !spawnError && 'code' in error && error.code === 'ENOENT',
-        },
-      );
+          }),
+        ]);
+      } finally {
+        waiting.abort();
+      }
+      // Runs first on close, before ssh is stopped: an ssh that already
+      // exited ended the forward while it was in use.
+      resources.defer(async () => {
+        if (child.exitCode === null && child.signalCode === null) return;
+        const outcome = await exit;
+        throw new Error(
+          `Docker SSH forwarding was lost: ${outcome.stderr.trim()}`,
+          { cause: outcome },
+        );
+      });
       server.listen(0, '127.0.0.1');
       await once(server, 'listening');
       server.unref();

@@ -66,11 +66,10 @@ export class ServiceContainer extends Container {
     this.disconnect = disconnect;
   }
 
+  /** Removes the container, then closes the forward; when both fail, a SuppressedError holds both. */
   override async cleanup(): Promise<void> {
-    try {
-      await super.cleanup();
-    } finally {
-      await this.disconnect();
-    }
+    await using forward = new AsyncDisposableStack();
+    forward.defer(this.disconnect);
+    await super.cleanup();
   }
 }

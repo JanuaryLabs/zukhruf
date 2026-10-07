@@ -62,7 +62,7 @@ test('a holder in another container', async () => {
 
 Options: `image`, `command`, `name`, `hostname`, `env`, `labels`, `mounts`, `tmpfs`, `ipcHost`, `memory` (default `1g`), `cpus` (default `1`), `memorySwappiness`. `serve` and `reuse` also take `internalPort` and `healthy`, a function that throws until the server is ready; it runs on every acquisition. Use `timebox` for polling inside it.
 
-A `Container` has `containerId`, `exec(command)`, `logs()`, `kill(signal)` and `cleanup()`. Disposal removes it with its anonymous volumes. A `ServiceContainer` also has `host` and `port`; on an SSH engine the port is a local forward that belongs to the acquiring process. `disconnect()` closes that forward and leaves the container running for its other users.
+A `Container` has `containerId`, `exec(command)`, `logs()`, `kill(signal)` and `cleanup()`. Disposal removes it with its anonymous volumes. A `ServiceContainer` also has `host` and `port`; on an SSH engine the port is a local forward that belongs to the acquiring process. `disconnect()` closes that forward and leaves the container running for its other users. If the forward ended before, for example because the SSH connection died, `disconnect()` rejects with what ssh printed. When the removal fails too, `cleanup()` rejects with a `SuppressedError` that holds both errors. Nothing is written to stderr.
 
 ### Shared servers
 
