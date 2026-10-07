@@ -6,14 +6,12 @@ import { promisify } from 'node:util';
 
 import command from 'nano-spawn';
 
-import { Docker, TestRun, skipWithoutDocker } from '../docker/index.ts';
+import { Docker, TestRun } from '../docker/index.ts';
 import { Postgres } from './postgres.ts';
 import { SQL_SERVER_FULL_IMAGE, SqlServer } from './sqlserver.ts';
 
 const execute = promisify(execFile);
 const docker = new Docker({ testRun: TestRun.fromEnvironment(process.env) });
-const skip = await skipWithoutDocker(docker, process.env);
-
 /** Removes the servers a test created under its own verification label. */
 async function removeScope(scope: string): Promise<void> {
   const { stdout } = await docker.command([
@@ -28,7 +26,7 @@ async function removeScope(scope: string): Promise<void> {
 
 test(
   'one instance acquires concurrent databases with independent scope cleanup',
-  { skip, timeout: 120_000 },
+  { timeout: 120_000 },
   async () => {
     const scope = randomUUID();
     const postgres = new Postgres({
@@ -79,7 +77,7 @@ test(
 
 test(
   'explicit SQL Server startup creates the requested database and owns cleanup',
-  { skip, timeout: 240_000 },
+  { timeout: 240_000 },
   async (t) => {
     const database = `owned_${randomUUID().replaceAll('-', '')}`;
     const server = await new SqlServer({ docker, database }).start();
@@ -173,7 +171,7 @@ for (const [engine, helper, config] of [
 ] as const) {
   test(
     `${engine} shares across processes and restarts until explicit cleanup`,
-    { skip, timeout: 300_000 },
+    { timeout: 300_000 },
     async (t) => {
       const scope = randomUUID();
       const labels = { 'dev.zukhruf.testing.verification': scope };

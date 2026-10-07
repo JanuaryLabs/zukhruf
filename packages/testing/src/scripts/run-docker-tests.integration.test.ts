@@ -15,14 +15,13 @@ import { fileURLToPath } from 'node:url';
 
 import spawn, { SubprocessError } from 'nano-spawn';
 
-import { Docker, TestRun, skipWithoutDocker } from '../docker/index.ts';
+import { Docker, TestRun } from '../docker/index.ts';
 
 const docker = new Docker();
 const skip =
-  (await skipWithoutDocker(docker, process.env)) ||
-  (process.platform === 'win32'
+  process.platform === 'win32'
     ? 'the supervisor stops a run as a POSIX process group'
-    : false);
+    : false;
 const supervisor = fileURLToPath(
   new URL('./run-docker-tests.ts', import.meta.url),
 );

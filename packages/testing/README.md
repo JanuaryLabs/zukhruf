@@ -8,32 +8,33 @@ The words in these documents have one meaning each. See the glossary in [CONTEXT
 
 Each area has its own import path, so a test loads only the drivers it uses. The three drivers are optional peer dependencies: install the one an area names.
 
-| Import                        | Gives                                                                                                        | Needs                    |
-| ----------------------------- | ------------------------------------------------------------------------------------------------------------ | ------------------------ |
-| `@zukhruf/testing/async`      | `timebox`, `settleWithin`                                                                                    |                          |
-| `@zukhruf/testing/docker`     | `Docker`, `Container`, `ServiceContainer`, `DockerVolume`, `DockerDirectory`, `TestRun`, `skipWithoutDocker` | Docker CLI               |
-| `@zukhruf/testing/postgres`   | `Postgres`                                                                                                   | Docker CLI               |
-| `@zukhruf/testing/mysql`      | `Mysql`                                                                                                      | Docker CLI               |
-| `@zukhruf/testing/mariadb`    | `Mariadb`                                                                                                    | Docker CLI               |
-| `@zukhruf/testing/sqlserver`  | `SqlServer`, `SQL_SERVER_FULL_IMAGE`, `SQL_SERVER_EDGE_IMAGE`                                                | Docker CLI, `mssql`      |
-| `@zukhruf/testing/clickhouse` | `ClickHouse`                                                                                                 | Docker CLI               |
-| `@zukhruf/testing/sqlite`     | `Sqlite`                                                                                                     |                          |
-| `@zukhruf/testing/duckdb`     | `DuckDB`                                                                                                     | `@duckdb/node-api`       |
-| `@zukhruf/testing/bigquery`   | `BigQuery`                                                                                                   | `@google-cloud/bigquery` |
-| `@zukhruf/testing/http`       | `HttpServer`                                                                                                 |                          |
-| `@zukhruf/testing/streams`    | `StreamHarness`                                                                                              |                          |
+| Import                        | Gives                                                                                   | Needs                    |
+| ----------------------------- | --------------------------------------------------------------------------------------- | ------------------------ |
+| `@zukhruf/testing/async`      | `timebox`, `settleWithin`                                                               |                          |
+| `@zukhruf/testing/docker`     | `Docker`, `Container`, `ServiceContainer`, `DockerVolume`, `DockerDirectory`, `TestRun` | Docker CLI               |
+| `@zukhruf/testing/postgres`   | `Postgres`                                                                              | Docker CLI               |
+| `@zukhruf/testing/mysql`      | `Mysql`                                                                                 | Docker CLI               |
+| `@zukhruf/testing/mariadb`    | `Mariadb`                                                                               | Docker CLI               |
+| `@zukhruf/testing/sqlserver`  | `SqlServer`, `SQL_SERVER_FULL_IMAGE`, `SQL_SERVER_EDGE_IMAGE`                           | Docker CLI, `mssql`      |
+| `@zukhruf/testing/clickhouse` | `ClickHouse`                                                                            | Docker CLI               |
+| `@zukhruf/testing/sqlite`     | `Sqlite`                                                                                |                          |
+| `@zukhruf/testing/duckdb`     | `DuckDB`                                                                                | `@duckdb/node-api`       |
+| `@zukhruf/testing/bigquery`   | `BigQuery`                                                                              | `@google-cloud/bigquery` |
+| `@zukhruf/testing/http`       | `HttpServer`                                                                            |                          |
+| `@zukhruf/testing/streams`    | `StreamHarness`                                                                         |                          |
 
 ## Docker
 
-A `Docker` is the engine the Docker CLI selects. It resolves the engine once, on first use, and every handle it returns keeps that engine. It supports local Unix sockets, Docker Desktop's named pipe on Windows (`npipe://`), and SSH engines (`ssh://`). On Windows, volumes and containers are tested; `directory()` is not.
+A `Docker` is the engine the Docker CLI selects. It resolves the engine once, on first use, and every handle it returns keeps that engine. It supports local Unix sockets, Docker Desktop's named pipe on Windows (`npipe://`), and SSH engines (`ssh://`).
+
+A test that needs Docker has no skip option. When the engine does not answer, the first acquisition fails with "Docker is required for container-backed tests" and the engine's error as the cause. Start Docker to run these tests.
 
 ```ts
-import { Docker, TestRun, skipWithoutDocker } from '@zukhruf/testing/docker';
+import { Docker, TestRun } from '@zukhruf/testing/docker';
 
 const docker = new Docker({ testRun: TestRun.fromEnvironment(process.env) });
-const skip = await skipWithoutDocker(docker, process.env);
 
-test('a holder in another container', { skip }, async () => {
+test('a holder in another container', async () => {
   await using volume = await docker.volume();
   await using holder = await docker.start({
     image: 'node:lts-alpine',
@@ -76,16 +77,6 @@ docker stop <container-id>
 
 They run with `--rm`, so stopping also removes them. The image tag is part of the configuration: stop the server to pick up a newer image behind the same tag.
 
-### Skipping without Docker
-
-`skipWithoutDocker(docker, process.env)` returns the `skip` option of a test that needs Docker. `ZUKHRUF_TESTING_DOCKER` decides:
-
-| Value      | Result                                                                                |
-| ---------- | ------------------------------------------------------------------------------------- |
-| `required` | Runs. Throws when Docker does not answer, so a machine that must run the tests fails. |
-| `skip`     | Skips.                                                                                |
-| unset      | Runs when Docker answers, skips with a reason when it does not.                       |
-
 ## The supervisor
 
 Disposal cleans up after a test that ends. A test process that is killed (a timeout, Ctrl-C, `--test-force-exit`) never disposes its handles, and a running container does not stop by itself. The `zukhruf-docker-tests` command runs `node --test` as one supervised run:
@@ -111,7 +102,7 @@ import { Postgres } from '@zukhruf/testing/postgres';
 
 const postgres = new Postgres({ docker });
 
-test('stores a record', { skip }, async () => {
+test('stores a record', async () => {
   await using database = await postgres.database();
   // database.connectionString. Close your clients before the scope ends.
 });
@@ -156,4 +147,4 @@ npx nx run testing:test        # builds, then runs the tests
 npx nx run testing:typecheck   # formats, lints, then type checks
 ```
 
-The Docker-backed tests follow `ZUKHRUF_TESTING_DOCKER`. CI skips them on every operating system, and `.github/workflows/docker.yml` runs them with `required` when this package changes: on Linux, and on Windows through Docker Desktop for the mutex's container tests.
+The tests that need Docker run on every machine, and fail when the engine does not answer. CI runs every test on Linux, where Docker runs Linux containers.

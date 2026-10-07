@@ -4,10 +4,9 @@ import { test } from 'node:test';
 
 import { SubprocessError } from 'nano-spawn';
 
-import { Docker, TestRun, skipWithoutDocker } from './index.ts';
+import { Docker, TestRun } from './index.ts';
 
 const docker = new Docker({ testRun: TestRun.fromEnvironment(process.env) });
-const skip = await skipWithoutDocker(docker, process.env);
 const image = 'alpine:latest';
 
 const inspect = async (id: string, format: string): Promise<string> =>
@@ -15,7 +14,7 @@ const inspect = async (id: string, format: string): Promise<string> =>
 
 test(
   'a container keeps what it printed after its command exits, until disposal removes it',
-  { skip, timeout: 60_000 },
+  { timeout: 60_000 },
   async (t) => {
     const container = await docker.start({
       image,
@@ -55,7 +54,7 @@ test(
 
 test(
   'a container runs its command with the hostname, environment, labels and volume it was given, and publishes no port',
-  { skip, timeout: 60_000 },
+  { timeout: 60_000 },
   async (t) => {
     const scope = randomUUID();
     await using volume = await docker.volume();
@@ -112,7 +111,7 @@ test(
 
 test(
   'a read-only mount refuses writes from the container',
-  { skip, timeout: 60_000 },
+  { timeout: 60_000 },
   async () => {
     await using volume = await docker.volume();
 
@@ -131,7 +130,7 @@ test(
 
 test(
   'disposing a container removes the anonymous volumes its image declares',
-  { skip, timeout: 60_000 },
+  { timeout: 60_000 },
   async () => {
     // Postgres declares a data volume. Unlike a server, this container runs
     // without --rm, so only disposal can remove the volume with it.
@@ -175,7 +174,7 @@ test(
 
 test(
   'kill stops the main process of a running container',
-  { skip, timeout: 60_000 },
+  { timeout: 60_000 },
   async (t) => {
     await using container = await docker.start({
       image,
@@ -200,7 +199,7 @@ test(
   },
 );
 
-test('disposing a volume removes it', { skip, timeout: 60_000 }, async () => {
+test('disposing a volume removes it', { timeout: 60_000 }, async () => {
   const volume = await docker.volume();
   const listed = async () =>
     (

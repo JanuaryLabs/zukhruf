@@ -11,6 +11,5 @@ export {
   type Mount,
   type ServiceOptions,
 } from './docker.ts';
-export { DOCKER_TESTS, skipWithoutDocker } from './skip-without-docker.ts';
 export { TestRun } from './test-run.ts';
 export { DockerVolume } from './volume.ts';

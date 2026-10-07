@@ -1,15 +1,13 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { Docker, TestRun, skipWithoutDocker } from '../docker/index.ts';
+import { Docker, TestRun } from '../docker/index.ts';
 import { ClickHouse } from './clickhouse.ts';
 
 const docker = new Docker({ testRun: TestRun.fromEnvironment(process.env) });
-const skip = await skipWithoutDocker(docker, process.env);
-
 test(
   'a ClickHouse server answers in its container and over HTTP on this machine, until disposal removes it',
-  { skip, timeout: 180_000 },
+  { timeout: 180_000 },
   async () => {
     const server = await new ClickHouse({
       docker,

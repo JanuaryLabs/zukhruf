@@ -7,7 +7,6 @@ import {
   Docker,
   type DockerVolume,
   TestRun,
-  skipWithoutDocker,
 } from '@zukhruf/testing/docker';
 
 /**
@@ -17,7 +16,6 @@ import {
  */
 const image = 'node:lts-alpine';
 const docker = new Docker({ testRun: TestRun.fromEnvironment(process.env) });
-const noDocker = await skipWithoutDocker(docker, process.env);
 
 const packageRoot = fileURLToPath(new URL('../../../', import.meta.url));
 const mutexInContainer = 'file:///pkg/src/index.ts';
@@ -128,123 +126,107 @@ const lockFiles = (volume: DockerVolume) =>
 
 for (const storeName of stores) {
   describe(`${storeName} shared by containers on one machine`, () => {
-    test(
-      'a waiter never takes the key of a holder that is alive in another container with the same hostname',
-      { skip: noDocker },
-      async (t) => {
-        // Arrange: the holder starts after 300 other processes, so its PID
-        // number does not exist in a fresh container, where the waiter runs.
-        await using volume = await docker.volume();
-        await using holder = await startContainer(
-          { volume, hostname: 'app', source: holderSource(storeName) },
-          'sh',
-          '-c',
-          'i=0; while [ $i -lt 300 ]; do /bin/true; i=$((i+1)); done; node --input-type=module --eval "$SOURCE"; true',
-        );
-        const held = await holdingIn(t, holder);
-        const record = await lockFiles(volume);
+    test('a waiter never takes the key of a holder that is alive in another container with the same hostname', async (t) => {
+      // Arrange: the holder starts after 300 other processes, so its PID
+      // number does not exist in a fresh container, where the waiter runs.
+      await using volume = await docker.volume();
+      await using holder = await startContainer(
+        { volume, hostname: 'app', source: holderSource(storeName) },
+        'sh',
+        '-c',
+        'i=0; while [ $i -lt 300 ]; do /bin/true; i=$((i+1)); done; node --input-type=module --eval "$SOURCE"; true',
+      );
+      const held = await holdingIn(t, holder);
+      const record = await lockFiles(volume);
 
-        // Act: a second container with the same hostname asks for the key.
-        const waiter = await waiterIn({ volume, hostname: 'app' }, storeName);
+      // Act: a second container with the same hostname asks for the key.
+      const waiter = await waiterIn({ volume, hostname: 'app' }, storeName);
 
-        // Assert: the holder is still inside its task, so the key is busy.
-        assert.deepEqual(
-          waiter,
-          { acquired: false },
-          `Two holders: PID ${held.pid} holds token ${held.token} in its own container, and the waiter took the key too. The lock file said ${record}`,
-        );
-      },
-    );
+      // Assert: the holder is still inside its task, so the key is busy.
+      assert.deepEqual(
+        waiter,
+        { acquired: false },
+        `Two holders: PID ${held.pid} holds token ${held.token} in its own container, and the waiter took the key too. The lock file said ${record}`,
+      );
+    });
 
-    test(
-      'a waiter gets the key of a holder that was killed in another container with its own hostname',
-      { skip: noDocker },
-      async (t) => {
-        // Arrange: each container keeps the hostname Docker gives it.
-        await using volume = await docker.volume();
-        await using holder = await startContainer(
-          { volume },
-          'node',
-          '--input-type=module',
-          '--eval',
-          holderSource(storeName),
-        );
-        const held = await holdingIn(t, holder);
-        await holder.kill();
-        const record = await lockFiles(volume);
+    test('a waiter gets the key of a holder that was killed in another container with its own hostname', async (t) => {
+      // Arrange: each container keeps the hostname Docker gives it.
+      await using volume = await docker.volume();
+      await using holder = await startContainer(
+        { volume },
+        'node',
+        '--input-type=module',
+        '--eval',
+        holderSource(storeName),
+      );
+      const held = await holdingIn(t, holder);
+      await holder.kill();
+      const record = await lockFiles(volume);
 
-        // Act
-        const waiter = await waiterIn({ volume }, storeName);
+      // Act
+      const waiter = await waiterIn({ volume }, storeName);
 
-        // Assert: nothing is left that could still use the key.
-        assertTakenOver(
-          waiter,
-          held,
-          `The holder's container is gone, yet its key stays held. The lock file says ${record}`,
-        );
-      },
-    );
+      // Assert: nothing is left that could still use the key.
+      assertTakenOver(
+        waiter,
+        held,
+        `The holder's container is gone, yet its key stays held. The lock file says ${record}`,
+      );
+    });
 
-    test(
-      'a waiter gets the key of a holder that was killed in another container with the same hostname',
-      { skip: noDocker },
-      async (t) => {
-        // Arrange: holder and waiter are each their container's main process, PID 1.
-        await using volume = await docker.volume();
-        await using holder = await startContainer(
-          { volume, hostname: 'app' },
-          'node',
-          '--input-type=module',
-          '--eval',
-          holderSource(storeName),
-        );
-        const held = await holdingIn(t, holder);
-        await holder.kill();
-        const record = await lockFiles(volume);
+    test('a waiter gets the key of a holder that was killed in another container with the same hostname', async (t) => {
+      // Arrange: holder and waiter are each their container's main process, PID 1.
+      await using volume = await docker.volume();
+      await using holder = await startContainer(
+        { volume, hostname: 'app' },
+        'node',
+        '--input-type=module',
+        '--eval',
+        holderSource(storeName),
+      );
+      const held = await holdingIn(t, holder);
+      await holder.kill();
+      const record = await lockFiles(volume);
 
-        // Act
-        const waiter = await waiterIn({ volume, hostname: 'app' }, storeName);
+      // Act
+      const waiter = await waiterIn({ volume, hostname: 'app' }, storeName);
 
-        // Assert
-        assertTakenOver(
-          waiter,
-          held,
-          `The holder's container is gone, yet its key stays held. The lock file says ${record}`,
-        );
-      },
-    );
+      // Assert
+      assertTakenOver(
+        waiter,
+        held,
+        `The holder's container is gone, yet its key stays held. The lock file says ${record}`,
+      );
+    });
 
-    test(
-      'a waiter gets the key of a holder that was killed in its own container',
-      { skip: noDocker },
-      async (t) => {
-        // Arrange: the container's shell starts the holder and reaps it when it
-        // dies, so a dead holder leaves no zombie that still answers kill(pid, 0).
-        await using volume = await docker.volume();
-        await using box = await startContainer(
-          { volume, hostname: 'app', source: holderSource(storeName) },
-          'sh',
-          '-c',
-          'node --input-type=module --eval "$SOURCE" & wait; sleep infinity',
-        );
-        const held = await holdingIn(t, box);
-        await box.exec(['kill', '-9', String(held.pid)]);
+    test('a waiter gets the key of a holder that was killed in its own container', async (t) => {
+      // Arrange: the container's shell starts the holder and reaps it when it
+      // dies, so a dead holder leaves no zombie that still answers kill(pid, 0).
+      await using volume = await docker.volume();
+      await using box = await startContainer(
+        { volume, hostname: 'app', source: holderSource(storeName) },
+        'sh',
+        '-c',
+        'node --input-type=module --eval "$SOURCE" & wait; sleep infinity',
+      );
+      const held = await holdingIn(t, box);
+      await box.exec(['kill', '-9', String(held.pid)]);
 
-        // Act: the waiter runs in the same container, so it sees the holder's PID namespace.
-        const { stdout: output } = await box.exec([
-          'node',
-          '--input-type=module',
-          '--eval',
-          waiterSource(storeName),
-        ]);
+      // Act: the waiter runs in the same container, so it sees the holder's PID namespace.
+      const { stdout: output } = await box.exec([
+        'node',
+        '--input-type=module',
+        '--eval',
+        waiterSource(storeName),
+      ]);
 
-        // Assert: one PID namespace is the case the stores are built for.
-        assertTakenOver(
-          JSON.parse(output.split('\n').at(-1)!),
-          held,
-          'A dead holder in the waiter’s own PID namespace must be evicted',
-        );
-      },
-    );
+      // Assert: one PID namespace is the case the stores are built for.
+      assertTakenOver(
+        JSON.parse(output.split('\n').at(-1)!),
+        held,
+        'A dead holder in the waiter’s own PID namespace must be evicted',
+      );
+    });
   });
 }

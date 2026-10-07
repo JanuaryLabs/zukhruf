@@ -3,11 +3,9 @@ import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
 import { timebox } from '../async/index.ts';
-import { Docker, TestRun, skipWithoutDocker } from './index.ts';
+import { Docker, TestRun } from './index.ts';
 
 const docker = new Docker({ testRun: TestRun.fromEnvironment(process.env) });
-const skip = await skipWithoutDocker(docker, process.env);
-
 interface InspectedMounts {
   Mounts: { Type: string; Name: string }[];
 }
@@ -23,7 +21,7 @@ const containersLabelled = async (label: string): Promise<string[]> =>
 
 test(
   'disposing an owned server removes its anonymous volumes',
-  { skip, timeout: 120_000 },
+  { timeout: 120_000 },
   async () => {
     await using container = await docker.serve({
       image: 'postgres:18-alpine',
@@ -68,7 +66,7 @@ test(
 
 test(
   'Docker identity preserves configuration, ownership, and unfinished creation',
-  { skip, timeout: 120_000 },
+  { timeout: 120_000 },
   async (t) => {
     const scope = randomUUID();
     const verification = `dev.zukhruf.testing.verification=${scope}`;

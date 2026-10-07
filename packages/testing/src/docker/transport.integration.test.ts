@@ -11,14 +11,12 @@ import {
   SQL_SERVER_FULL_IMAGE,
   SqlServer,
 } from '../databases/sqlserver.ts';
-import { Docker, TestRun, skipWithoutDocker } from './index.ts';
+import { Docker, TestRun } from './index.ts';
 
 const docker = new Docker({ testRun: TestRun.fromEnvironment(process.env) });
-const skip = await skipWithoutDocker(docker, process.env);
-
 test(
   'the selected Docker engine exposes a database to this Node process',
-  { skip, timeout: 120_000 },
+  { timeout: 120_000 },
   async () => {
     await using database = await new Postgres({ docker }).start();
     const client = new pg.Client({
@@ -38,7 +36,7 @@ test(
 
 test(
   'ports stay private and handles keep their original engine',
-  { skip, timeout: 120_000 },
+  { timeout: 120_000 },
   async () => {
     const original = await docker.info();
     await using database = await new Postgres({ docker }).start();
@@ -71,7 +69,7 @@ test(
 
 test(
   'disposing one database connection preserves other users of the shared server',
-  { skip, timeout: 120_000 },
+  { timeout: 120_000 },
   async () => {
     const labels = { 'dev.zukhruf.testing.verification': crypto.randomUUID() };
     const postgres = new Postgres({ docker, labels });
@@ -100,27 +98,23 @@ test(
   },
 );
 
-test(
-  'host fixtures preserve bytes, executable modes, and symlinks',
-  { skip },
-  async () => {
-    await using directory = await docker.directory();
-    await directory.mkdir("space and 'quote");
-    const file = "space and 'quote/hello.txt";
-    await directory.writeFile(file, 'hello\n\n', 0o755);
-    await directory.symlink('hello.txt', "space and 'quote/link.txt");
-    assert.equal(
-      await directory.readFile("space and 'quote/link.txt"),
-      'hello\n\n',
-    );
-    await directory.chmod(file, 0o644);
-    await assert.rejects(directory.writeFile('../outside', 'no'), /inside/);
-  },
-);
+test('host fixtures preserve bytes, executable modes, and symlinks', async () => {
+  await using directory = await docker.directory();
+  await directory.mkdir("space and 'quote");
+  const file = "space and 'quote/hello.txt";
+  await directory.writeFile(file, 'hello\n\n', 0o755);
+  await directory.symlink('hello.txt', "space and 'quote/link.txt");
+  assert.equal(
+    await directory.readFile("space and 'quote/link.txt"),
+    'hello\n\n',
+  );
+  await directory.chmod(file, 0o644);
+  await assert.rejects(directory.writeFile('../outside', 'no'), /inside/);
+});
 
 test(
   'MySQL exposes its protocol on the Node host',
-  { skip, timeout: 180_000 },
+  { timeout: 180_000 },
   async () => {
     await using database = await new Mysql({ docker }).start();
     const client = connect({ host: database.host, port: database.port });
@@ -149,7 +143,7 @@ test(
 
 test(
   'SQL Server chooses an image for the engine and accepts host connections',
-  { skip, timeout: 240_000 },
+  { timeout: 240_000 },
   async () => {
     const { default: sql } = await import('mssql');
     const { architecture } = await docker.info();

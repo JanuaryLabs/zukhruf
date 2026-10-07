@@ -7,14 +7,13 @@ import { test } from 'node:test';
 
 import spawn from 'nano-spawn';
 
-import { Docker, skipWithoutDocker } from './index.ts';
+import { Docker } from './index.ts';
 
 const docker = new Docker();
 const skip =
-  (await skipWithoutDocker(docker, process.env)) ||
-  (process.platform === 'win32'
+  process.platform === 'win32'
     ? 'the Docker CLI stand-in is a POSIX shell script'
-    : false);
+    : false;
 
 /**
  * Stands in for the Docker CLI on PATH. Each `container inspect <name>` call
