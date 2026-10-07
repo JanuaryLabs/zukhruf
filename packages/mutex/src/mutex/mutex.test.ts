@@ -100,7 +100,7 @@ for (const store of storeCases) {
 
     test(
       'handling a failed operation without a waiter keeps the application alive',
-      { timeout: 5000 },
+      { timeout: 15000 },
       async (t) => {
         // Arrange: isolate process-level rejection handling from the test runner.
         // All mutex operations still happen inside ONE process and ONE Mutex instance.
@@ -138,10 +138,14 @@ for (const store of storeCases) {
           'application',
           { host, nodeOptions: ['--unhandled-rejections=strict'] },
         );
+        // A new Node process loads the TypeScript sources first: about 170 ms
+        // on a calm machine, and more than 2 s on a CI runner that also runs
+        // the Docker tests.
         await waitUntil(
           t,
           () => application.exit !== null,
-          `The application must finish within two seconds.\n${application.stderr}`,
+          `The application must finish within ten seconds.\n${application.stderr}`,
+          10_000,
         );
 
         // Assert: catching a callback error must be enough to keep the app running.
