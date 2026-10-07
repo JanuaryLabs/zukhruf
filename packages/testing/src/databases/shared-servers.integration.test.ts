@@ -126,10 +126,11 @@ const worker = `
   import command from 'nano-spawn';
   import sql from 'mssql';
   import { Docker, TestRun } from ${JSON.stringify(new URL('../docker/index.ts', import.meta.url).href)};
+  import { Mariadb } from ${JSON.stringify(new URL('./mariadb.ts', import.meta.url).href)};
   import { Mysql } from ${JSON.stringify(new URL('./mysql.ts', import.meta.url).href)};
   import { Postgres } from ${JSON.stringify(new URL('./postgres.ts', import.meta.url).href)};
   import { SqlServer } from ${JSON.stringify(new URL('./sqlserver.ts', import.meta.url).href)};
-  const helpers = { Mysql, Postgres, SqlServer };
+  const helpers = { Mariadb, Mysql, Postgres, SqlServer };
   const docker = new Docker({ testRun: TestRun.fromEnvironment(process.env) });
   const { helper, config, fail } = JSON.parse(process.argv[1]);
   let handle;
@@ -141,7 +142,7 @@ const worker = `
         await command('docker', ['exec', container.containerId, 'psql',
           '-U', container.user, '-d', container.database, '-v', 'ON_ERROR_STOP=1',
           '-c', 'CREATE TABLE isolated (id INT); INSERT INTO isolated VALUES (1)']);
-      } else if (helper === 'Mysql') {
+      } else if (helper === 'Mysql' || helper === 'Mariadb') {
         assert.deepEqual(await container.query('SHOW TABLES'), []);
         await container.query('CREATE TABLE isolated (id INT)');
         await container.query('INSERT INTO isolated VALUES (1)');
@@ -166,6 +167,7 @@ const worker = `
 for (const [engine, helper, config] of [
   ['postgres', 'Postgres', { user: 'shared_tester' }],
   ['mysql', 'Mysql', {}],
+  ['mariadb', 'Mariadb', {}],
   ['sqlserver', 'SqlServer', {}],
   ['sqlserver-full', 'SqlServer', { image: SQL_SERVER_FULL_IMAGE }],
 ] as const) {
@@ -241,11 +243,11 @@ for (const [engine, helper, config] of [
             `SELECT COUNT(*) FROM pg_database WHERE datname IN (${names})`,
           ]);
           assert.equal(stdout.trim(), '0');
-        } else if (engine === 'mysql') {
+        } else if (engine === 'mysql' || engine === 'mariadb') {
           const { stdout } = await command('docker', [
             'exec',
             server.containerId,
-            'mysql',
+            engine,
             `-u${server.user}`,
             `-p${server.password}`,
             '--batch',

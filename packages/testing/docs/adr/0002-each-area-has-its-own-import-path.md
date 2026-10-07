@@ -10,5 +10,5 @@ The package began as one entry point that re-exported everything. Importing `tim
 
 ## Consequences
 
-- Postgres, MySQL and ClickHouse need no driver: they reach the server with `docker exec` and give the test a connection string.
+- Postgres, MySQL, MariaDB and ClickHouse need no driver: they reach the server with `docker exec` and give the test a connection string.
 - A test of the package imports each area in a process where the other areas' drivers cannot be resolved.

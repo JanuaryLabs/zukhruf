@@ -19,6 +19,7 @@
     "docker",
     "postgres",
     "mysql",
+    "mariadb",
     "sql-server",
     "disposable"
   ],
@@ -47,6 +48,11 @@
       "types": "./dist/databases/mysql.d.ts",
       "import": "./dist/databases/mysql.js",
       "default": "./dist/databases/mysql.js"
+    },
+    "./mariadb": {
+      "types": "./dist/databases/mariadb.d.ts",
+      "import": "./dist/databases/mariadb.js",
+      "default": "./dist/databases/mariadb.js"
     },
     "./sqlserver": {
       "types": "./dist/databases/sqlserver.d.ts",
@@ -98,7 +104,9 @@
     "@google-cloud/bigquery": "^8.3.1",
     "@types/mssql": "^12.3.0",
     "@types/pg": "^8.23.1",
+    "mariadb": "^3.5.4",
     "mssql": "^12.7.4",
+    "mysql2": "^3.24.5",
     "pg": "^8.23.1"
   },
   "dependencies": {

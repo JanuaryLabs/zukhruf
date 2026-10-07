@@ -31,6 +31,10 @@ _Avoid_: Server container
 A service container that `reuse()` shares between processes and runs, one per configuration.
 _Avoid_: Global container, singleton
 
+**Background server**:
+An HTTP server whose scope is the process. It serves until the process exits and never keeps the process running. Its acquisition returns the origin, not a handle.
+_Avoid_: Daemon, global server, unref'd server
+
 **Run**:
 One supervised `node --test` invocation. What its test processes create carries the run's label, or a record in the run's directory.
 _Avoid_: Session, scope

@@ -5,8 +5,9 @@ import spawn, { SubprocessError } from 'nano-spawn';
 
 /**
  * A consumer installs only the drivers of the areas it imports: the three
- * drivers are optional peers. This child-process hook makes each driver
- * unresolvable, the way a consumer without it sees the package.
+ * drivers are optional peers, and the mariadb and mysql2 drivers of this
+ * package's own tests are no dependency at all. This child-process hook makes
+ * each driver unresolvable, the way a consumer without it sees the package.
  */
 const withoutDrivers = (drivers: string[]): string[] => [
   '--import',
@@ -30,7 +31,14 @@ const importArea = (area: string, drivers: string[]) =>
     `await import('@zukhruf/testing/${area}');`,
   ]);
 
-const drivers = ['mssql', '@duckdb/node-api', '@google-cloud/bigquery'];
+const drivers = [
+  'mssql',
+  '@duckdb/node-api',
+  '@google-cloud/bigquery',
+  'mariadb',
+  'mysql2',
+  'mysql2/promise',
+];
 
 test('every area without a driver imports when no driver is installed', async () => {
   for (const area of [
@@ -38,6 +46,7 @@ test('every area without a driver imports when no driver is installed', async ()
     'docker',
     'postgres',
     'mysql',
+    'mariadb',
     'clickhouse',
     'sqlite',
     'http',

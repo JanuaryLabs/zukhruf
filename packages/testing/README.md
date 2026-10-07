@@ -1,6 +1,6 @@
 # @zukhruf/testing
 
-Disposable fixtures for integration tests on Node.js: Docker containers and database servers, SQLite and DuckDB databases, BigQuery datasets, HTTP servers and controlled streams. Each acquisition returns a handle that `await using` cleans up, also when the test fails. A supervisor removes what a killed test run left behind.
+Disposable fixtures for integration tests on Node.js: Docker containers and database servers, SQLite and DuckDB databases, BigQuery datasets, HTTP servers and controlled streams. Each acquisition returns a handle that `await using` cleans up, also when the test fails. A background server has no handle: it lives until the process exits. A supervisor removes what a killed test run left behind.
 
 The words in these documents have one meaning each. See the glossary in [CONTEXT.md](./CONTEXT.md).
 
@@ -14,6 +14,7 @@ Each area has its own import path, so a test loads only the drivers it uses. The
 | `@zukhruf/testing/docker`     | `Docker`, `Container`, `ServiceContainer`, `DockerVolume`, `DockerDirectory`, `TestRun`, `skipWithoutDocker` | Docker CLI               |
 | `@zukhruf/testing/postgres`   | `Postgres`                                                                                                   | Docker CLI               |
 | `@zukhruf/testing/mysql`      | `Mysql`                                                                                                      | Docker CLI               |
+| `@zukhruf/testing/mariadb`    | `Mariadb`                                                                                                    | Docker CLI               |
 | `@zukhruf/testing/sqlserver`  | `SqlServer`, `SQL_SERVER_FULL_IMAGE`, `SQL_SERVER_EDGE_IMAGE`                                                | Docker CLI, `mssql`      |
 | `@zukhruf/testing/clickhouse` | `ClickHouse`                                                                                                 | Docker CLI               |
 | `@zukhruf/testing/sqlite`     | `Sqlite`                                                                                                     |                          |
@@ -103,7 +104,7 @@ To pass the run to another container API, spread `docker.defaults`: it holds the
 
 ## Databases
 
-`Postgres`, `Mysql` and `SqlServer` take the `docker` to run on. Each `database()` call creates a fresh database on a shared server; disposal drops it. `start()` creates a dedicated server; disposal stops it.
+`Postgres`, `Mysql`, `Mariadb` and `SqlServer` take the `docker` to run on. Each `database()` call creates a fresh database on a shared server; disposal drops it. `start()` creates a dedicated server; disposal stops it.
 
 ```ts
 import { Postgres } from '@zukhruf/testing/postgres';
@@ -116,7 +117,7 @@ test('stores a record', { skip }, async () => {
 });
 ```
 
-The handle has `connectionString`, `host`, `port`, `user`, `password`, `database`, `image` and `containerId`. `Mysql` handles also have `query(sql)`. Without an image, `SqlServer` picks Azure SQL Edge on an ARM engine and SQL Server 2022 elsewhere. `ClickHouse` takes an explicit `image` and starts a dedicated server, so a test can create server-wide users and functions.
+The handle has `connectionString`, `host`, `port`, `user`, `password`, `database`, `image` and `containerId`. `Mysql` and `Mariadb` handles also have `query(sql)`. Without an image, `Mysql` runs `mysql:lts` and `Mariadb` runs `mariadb:lts`. MariaDB 11 and later have no `mysql` client, so use `Mariadb` for a MariaDB image. A `Mariadb` connection string starts with `mariadb://`, because the `mariadb` driver accepts no other scheme. Without an image, `SqlServer` picks Azure SQL Edge on an ARM engine and SQL Server 2022 elsewhere. `ClickHouse` takes an explicit `image` and starts a dedicated server, so a test can create server-wide users and functions.
 
 `Sqlite` creates a file-backed database in a temporary directory, with a native `DatabaseSync` connection. Disposal closes the connection and removes the directory, including WAL files. `writeLock(path, durationMs)` holds a write lock from another process, which releases it after `durationMs`, even while the caller blocks in a synchronous write.
 
@@ -127,6 +128,20 @@ The handle has `connectionString`, `host`, `port`, `user`, `password`, `database
 ## HTTP servers and streams
 
 `new HttpServer().start(handler)` listens on `127.0.0.1` on a free port and resolves once it listens. The handle has `origin` and the native `server`. Disposal closes active connections and waits for the server to close.
+
+Some modules read an origin when they load, so every test in the file uses the same server. `background(handler)` starts a background server for them. It listens until the process exits and never keeps the process running, also while a connection to it is open. It returns only `origin`, because nothing disposes it. Use `start` when only one test reads the origin.
+
+```ts
+import { HttpServer } from '@zukhruf/testing/http';
+
+const keys = await new HttpServer().background((request, response) => {
+  response.end(JSON.stringify(jwks));
+});
+process.env.KEYS_URL = keys.origin;
+const { verify } = await import('./verify.ts');
+```
+
+The handler is a Node.js request listener. A web framework gives one for its fetch handler: `getRequestListener((request) => app.fetch(request))` from `@hono/node-server`, or `toNodeHandler((request) => auth.handler(request))` from `better-auth/node`. A handler that needs the origin can read a `const` that the test declares after the acquisition: no request arrives before the test gives the origin to a client.
 
 `StreamHarness` gives a controlled producer, `source<T>()`, with `enqueue`, `close`, `error` and a read-only `state`, and a disposable `reader(stream)` that locks a stream without reading ahead. `collectUntilError()` returns the remaining chunks and either `completed` or `errored` with the error.
 
