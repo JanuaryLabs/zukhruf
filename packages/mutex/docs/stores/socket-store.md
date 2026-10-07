@@ -69,14 +69,15 @@ See [failure modes](../concepts/failure-modes.md).
 
 During a rolling upgrade, processes of two package versions of `@zukhruf/mutex` can use one directory. They can share it when they speak the same protocol version. The protocol version changes only when the messages between the processes change. All package versions from 0.3.1 speak protocol version 1.
 
-Before a process sends its first request, it tells the leader its protocol version. The leader serves it or refuses it. Package versions 0.3.0 and earlier do not tell their protocol version. See [ADR 0014](../adr/0014-a-process-says-its-protocol-version-before-its-first-request.md).
+Before a process sends its first request, it tells the leader its protocol version. The leader serves it or refuses it. Package versions 0.3.0 and earlier do not tell their protocol version, and the leader does not answer them. See [ADR 0014](../adr/0014-a-process-says-its-protocol-version-before-its-first-request.md).
 
 | This process     | The leader               | Result                                                                                                                      |
 | ---------------- | ------------------------ | --------------------------------------------------------------------------------------------------------------------------- |
 | 0.3.1 or later   | Same protocol version    | The processes share the directory.                                                                                          |
 | 0.3.1 or later   | Another protocol version | The acquire fails at once with `ProtocolVersionError`. The error gives both protocol versions.                              |
 | 0.3.1 or later   | 0.3.0 or earlier         | The acquire fails after approximately 1 second with `ProtocolVersionError`. `theirs` is `undefined`.                        |
-| 0.3.0 or earlier | 0.3.1 or later           | No error. The acquire does not end. The process connects again without a pause, and the leader must refuse each connection. |
+| 0.3.0 or earlier | 0.3.1 to 0.3.6           | No error. The acquire does not end. The process connects again without a pause, and the leader must refuse each connection. |
+| 0.3.0 or earlier | 0.3.7 or later           | No error. The leader does not answer, so the acquire does not end. The process stays connected and uses no CPU time.        |
 
 `ProtocolVersionError` has two properties: `ours` is the protocol version of this process, and `theirs` is the protocol version of the leader.
 
@@ -104,9 +105,11 @@ The `'role'` event tells you each time this process starts to lead, or starts to
 - A mutation test removed the grace window, the reassert, and the epoch. The tests found each change.
 - A test with real processes of the published package versions 0.3.0, 0.3.1 and 0.3.5 on macOS:
   - A process of 0.3.5 and a leader of 0.3.0: the acquire failed with `ProtocolVersionError` after 1,007 ms.
-  - A process of 0.3.0 and a leader of 0.3.5: the process connected again 123,673 times in 5 seconds, and its acquire did not end.
+  - A process of 0.3.0 and a leader of 0.3.6: in 5 seconds, the process connected again 98,985 times, and the leader used 2,300 ms of CPU time. The acquire did not end. With the leader of 0.3.7: 1 connection, and 0 ms of CPU time in each process.
   - A process of 0.3.5 and a leader of 0.3.1: the process got its key in 3 ms.
 - `src/lock-stores/socket/handshake.test.ts`:
   - A process whose leader speaks another protocol version fails its acquire, and the error gives both protocol versions.
   - A process whose leader keeps its term but closes the connection on the `hello` fails its acquire.
   - A holder whose `hello` gets to a leader that stops keeps its key from a new leader that already leads.
+  - A leader gives no answer to a process that opens without a `hello`, and keeps it connected until its term ends. A process that connects again after each close keeps its first connection.
+  - A leader closes its side when a process that it gave no answer closes its side.

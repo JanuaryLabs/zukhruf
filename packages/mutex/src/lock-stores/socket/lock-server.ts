@@ -59,7 +59,7 @@ export class LockServer {
       socket.unref();
       connections.add(socket);
       socket.once('close', () => connections.delete(socket));
-      // A peer that speaks another protocol is refused before it can send anything this coordinator would misread.
+      // Only a process that speaks this protocol is served, so this coordinator never reads a message it would misread.
       void welcome(socket).then((speaksOurs) => {
         if (!speaksOurs) return;
         coordinator.serve(

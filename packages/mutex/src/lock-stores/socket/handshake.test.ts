@@ -85,6 +85,45 @@ const outcome = (acquiring: Promise<AsyncDisposable>) =>
     (error: unknown) => error,
   );
 
+/**
+ * A process of package version 0.3.0 or earlier, as a leader sees it: it opens
+ * each connection with `line` instead of a hello, and it connects again at
+ * once when the leader closes the connection. A connect that fails stops it,
+ * because nothing listens then.
+ */
+async function processWithoutHello(directory: string, line: string) {
+  const answers: string[] = [];
+  let closes = 0;
+  let stopped = false;
+  const open = () => {
+    const socket = connect(join(directory, 'lock.sock'));
+    socket.on('error', () => {});
+    socket.once('connect', () => {
+      createInterface({ input: socket }).on('line', (answer) =>
+        answers.push(answer),
+      );
+      socket.write(`${line}\n`);
+      socket.once('close', () => {
+        closes++;
+        if (!stopped) current = open();
+      });
+    });
+    return socket;
+  };
+  let current = open();
+  await once(current, 'connect');
+  return {
+    answers,
+    get closes() {
+      return closes;
+    },
+    [Symbol.dispose]() {
+      stopped = true;
+      current.destroy();
+    },
+  };
+}
+
 describe('Socket store protocol handshake', () => {
   test(
     'a store whose leader speaks another protocol version fails its acquire, naming both versions',
@@ -199,14 +238,11 @@ describe('Socket store protocol handshake', () => {
 
   for (const [what, line] of [
     ['another protocol version', JSON.stringify({ op: 'hello', version: 99 })],
-    ['a line that is not JSON', 'not json'],
-    [
-      'a lock request with no hello',
-      JSON.stringify({ op: 'acquire', id: 'x', key: 'product:42' }),
-    ],
+    // Any hello gets an answer: a process of a later protocol must learn that it differs, not wait.
+    ['no protocol version', JSON.stringify({ op: 'hello' })],
   ] as const) {
     test(
-      `a leader refuses a peer that opens with ${what}, and its followers keep working`,
+      `a leader refuses a process whose hello gives ${what}, and its followers keep working`,
       onUnixSockets,
       async () => {
         // Arrange: a real leader serves the directory, and a follower uses it.
@@ -223,7 +259,7 @@ describe('Socket store protocol handshake', () => {
         // Act
         const answers = await askLeader(directory.path, line);
 
-        // Assert: the leader names its own version and hangs up on that peer only.
+        // Assert: the leader names its own version and hangs up on that process only.
         assert.equal(answers.length, 1);
         const [answer] = answers;
         assert.ok(answer);
@@ -241,6 +277,91 @@ describe('Socket store protocol handshake', () => {
       },
     );
   }
+
+  for (const [what, line] of [
+    ['a line that is not JSON', 'not json'],
+    [
+      'a lock request with no hello',
+      JSON.stringify({ op: 'acquire', id: 'x', key: 'product:42' }),
+    ],
+  ] as const) {
+    test(
+      `a leader gives no answer to a process that opens with ${what}, and keeps it connected until its term ends`,
+      onUnixSockets,
+      async (t) => {
+        // Arrange: a real leader serves the directory, and a follower uses it.
+        await using directory = await scratchDirectory();
+        await using leader = new SocketStore(directory.path, {
+          pollInterval: 10,
+        });
+        await (await leader.acquire('warm-up'))[Symbol.asyncDispose]();
+        await using follower = new SocketStore(directory.path, {
+          pollInterval: 10,
+        });
+        await (await follower.acquire('warm-up'))[Symbol.asyncDispose]();
+
+        // Act: a process that connects again after each hang-up opens with that line.
+        using old = await processWithoutHello(directory.path, line);
+        const followed = await outcome(follower.acquire('product:42'));
+        // A leader that hangs up starts the loop of connections at once; this time lets it show.
+        await delay(200);
+
+        // Assert: no answer and no hang-up, and the request was never served.
+        assert.equal(old.closes, 0, `The leader hung up ${old.closes} times`);
+        assert.deepEqual(old.answers, []);
+        assert.equal(followed, 'granted');
+        // The end of the term still closes the connection, so the process was connected all along.
+        await leader[Symbol.asyncDispose]();
+        await waitUntil(
+          t,
+          () => old.closes === 1,
+          'The end of the term must close the connection',
+        );
+      },
+    );
+  }
+
+  test(
+    'a leader closes its side when a process that it gave no answer closes its side',
+    onUnixSockets,
+    async (t) => {
+      // Arrange: a real leader, and a process that opens with a lock request and no hello.
+      await using directory = await scratchDirectory();
+      await using leader = new SocketStore(directory.path, {
+        pollInterval: 10,
+      });
+      await (await leader.acquire('warm-up'))[Symbol.asyncDispose]();
+      const socket = connect({
+        path: join(directory.path, 'lock.sock'),
+        allowHalfOpen: true,
+      });
+      await once(socket, 'connect');
+      const answers: string[] = [];
+      createInterface({ input: socket }).on('line', (answer) =>
+        answers.push(answer),
+      );
+      let leaderClosed = false;
+      socket.once('end', () => (leaderClosed = true));
+
+      try {
+        // Act: the process sends two requests at once, as 0.3.0 does on connect, and exits.
+        // A paused leader keeps the second request unread, and then it never reads the close behind it.
+        socket.end(
+          `${JSON.stringify({ op: 'acquire', id: 'x', key: 'product:42' })}\n${JSON.stringify({ op: 'acquire', id: 'y', key: 'report-daily' })}\n`,
+        );
+
+        // Assert: the leader sees the close, so the connection does not stay open until the term ends.
+        await waitUntil(
+          t,
+          () => leaderClosed,
+          'The leader must close its side once the process closes its side',
+        );
+        assert.deepEqual(answers, []);
+      } finally {
+        socket.destroy();
+      }
+    },
+  );
 
   test(
     'a store hung up on during a failover follows the leader that took over',

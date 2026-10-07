@@ -5,7 +5,9 @@ import { isRecord } from '../../shared/is-record.ts';
 /**
  * The version of the messages a socket store's processes exchange. It changes
  * only when they change, so processes that run different package versions
- * with the same protocol still share a directory.
+ * with the same protocol still share a directory. The `hello` and the
+ * `refused` answer keep their shape in every version: they are how two
+ * versions find out that they differ.
  */
 export const PROTOCOL_VERSION = 1;
 
@@ -34,21 +36,25 @@ export async function greet(socket: Socket): Promise<Greeting> {
 }
 
 /**
- * Reads a new peer's `hello`. A peer that speaks this protocol is welcomed;
- * any other first line is refused with this leader's version, and the
- * connection ends once that answer is written.
+ * Reads a new process's `hello`. A process that speaks this protocol is
+ * welcomed. A `hello` of another version is refused with this leader's
+ * version, and the connection ends once that answer is written. A process
+ * that opens with anything else predates the handshake: it cannot read
+ * `refused`, and it connects again at once after any hang-up. So it gets no
+ * answer, and it stays connected until it hangs up or the term ends.
  */
 export async function welcome(socket: Socket): Promise<boolean> {
   const hello = parse(await readLine(socket));
-  if (
-    isRecord(hello) &&
-    hello.op === 'hello' &&
-    hello.version === PROTOCOL_VERSION
-  ) {
+  if (!isRecord(hello) || hello.op !== 'hello') {
+    // Flowing with no reader drops its lines, so a close behind them still ends the socket.
+    socket.resume();
+    return false;
+  }
+  if (hello.version === PROTOCOL_VERSION) {
     socket.write(`${JSON.stringify({ op: 'welcome' })}\n`);
     return true;
   }
-  // Destroyed once the answer is written: a paused socket would never see a silent peer hang up.
+  // Destroyed once the answer is written: a paused socket would never see a silent process hang up.
   socket.end(
     `${JSON.stringify({ op: 'refused', version: PROTOCOL_VERSION })}\n`,
     () => socket.destroy(),
