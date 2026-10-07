@@ -7,13 +7,14 @@ import type { Database, DatabaseOptions } from './database.ts';
 
 export type { Database, DatabaseOptions } from './database.ts';
 
-export interface MysqlOptions extends DatabaseOptions {
-  user?: string;
-}
+export type MysqlOptions = DatabaseOptions;
 
 export interface MysqlDatabase extends Database {
   query: (sql: string) => Promise<Record<string, string | null>[]>;
 }
+
+/** The image creates only root, from MYSQL_ROOT_PASSWORD. */
+const user = 'root';
 
 export class Mysql {
   readonly #docker: Docker;
@@ -24,11 +25,10 @@ export class Mysql {
     image = 'mysql:8.4',
     password = 'testpassword',
     database = 'app',
-    user = 'root',
     labels,
   }: MysqlOptions) {
     this.#docker = docker;
-    this.#options = { image, password, database, user, labels };
+    this.#options = { image, password, database, labels };
   }
 
   /** Create an isolated database on the persistent shared server. */
@@ -60,7 +60,7 @@ export class Mysql {
   }
 
   #sql(container: ServiceContainer, sql: string) {
-    const { user, password } = this.#options;
+    const { password } = this.#options;
     return container.exec([
       'mysql',
       `-u${user}`,
@@ -75,7 +75,7 @@ export class Mysql {
     database: string,
     sql: string,
   ): Promise<Record<string, string | null>[]> {
-    const { user, password } = this.#options;
+    const { password } = this.#options;
     const { stdout } = await container.exec([
       'mysql',
       `-u${user}`,
@@ -125,17 +125,17 @@ export class Mysql {
   }
 
   #ready(container: ServiceContainer) {
-    const { user, password } = this.#options;
+    const { password } = this.#options;
     return timebox(
       () =>
         container.exec([
-          'mysqladmin',
-          'ping',
+          'mysql',
           '-h',
           '127.0.0.1',
           `-u${user}`,
           `-p${password}`,
-          '--silent',
+          '--execute',
+          'SELECT 1',
         ]),
       { maxRetryTime: 90_000 },
     );
@@ -146,7 +146,7 @@ export class Mysql {
     database: string,
     cleanup: () => Promise<void>,
   ): MysqlDatabase {
-    const { image, user, password } = this.#options;
+    const { image, password } = this.#options;
     return {
       connectionString: `mysql://${user}:${password}@${container.host}:${container.port}/${database}`,
       image,
