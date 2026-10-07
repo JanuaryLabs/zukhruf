@@ -60,11 +60,11 @@ The same as [TicketQueueFileStore](./ticket-queue-file-store.md#failure-modes): 
 
 ## Options
 
-| Option                       | Default                          | Description                                        |
-| ---------------------------- | -------------------------------- | -------------------------------------------------- |
-| `directory` (first argument) | —                                | The shared directory.                              |
-| `pollInterval`               | `10`                             | Milliseconds between two attempts.                 |
-| `tokens`                     | `new FileTokenSource(directory)` | The token source. Tokens continue after a restart. |
+| Option                       | Default                          | Description                                                                                                                   |
+| ---------------------------- | -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `directory` (first argument) | —                                | The shared directory. It belongs to the lock store alone: no other program may add, change, or remove files or folders in it. |
+| `pollInterval`               | `10`                             | Milliseconds between two attempts.                                                                                            |
+| `tokens`                     | `new FileTokenSource(directory)` | The token source. Tokens continue after a restart.                                                                            |
 
 ## Evidence
 

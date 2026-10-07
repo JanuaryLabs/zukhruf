@@ -91,11 +91,11 @@ To upgrade from 0.3.0 or earlier, stop all processes that use the directory. The
 
 ## Options
 
-| Option                       | Default | Description                                                                                                                                 |
-| ---------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| `directory` (first argument) | —       | The shared directory. All processes must use the same path.                                                                                 |
-| `pollInterval`               | `10`    | Milliseconds between two attempts to connect or to campaign.                                                                                |
-| `graceWindow`                | `500`   | Milliseconds after a failover in which the new leader grants no keys. It must be longer than the time that a holder needs to connect again. |
+| Option                       | Default | Description                                                                                                                                                         |
+| ---------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `directory` (first argument) | —       | The shared directory. All processes must use the same path. It belongs to the lock store alone: no other program may add, change, or remove files or folders in it. |
+| `pollInterval`               | `10`    | Milliseconds between two attempts to connect or to campaign.                                                                                                        |
+| `graceWindow`                | `500`   | Milliseconds after a failover in which the new leader grants no keys. It must be longer than the time that a holder needs to connect again.                         |
 
 `SocketStore` always uses `EpochTokenSource`. The safety of a failover depends on the epoch, so you cannot change the token source.
 

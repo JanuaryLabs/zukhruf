@@ -71,11 +71,11 @@ See [failure modes](../concepts/failure-modes.md).
 
 ## Options
 
-| Option                       | Default                          | Description                                                                                            |
-| ---------------------------- | -------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| `directory` (first argument) | —                                | The shared directory. All processes must use the same path.                                            |
-| `pollInterval`               | `10`                             | Milliseconds between two reads of the queue.                                                           |
-| `tokens`                     | `new FileTokenSource(directory)` | The token source. The default keeps one counter file for each key, so tokens continue after a restart. |
+| Option                       | Default                          | Description                                                                                                                                                         |
+| ---------------------------- | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `directory` (first argument) | —                                | The shared directory. All processes must use the same path. It belongs to the lock store alone: no other program may add, change, or remove files or folders in it. |
+| `pollInterval`               | `10`                             | Milliseconds between two reads of the queue.                                                                                                                        |
+| `tokens`                     | `new FileTokenSource(directory)` | The token source. The default keeps one counter file for each key, so tokens continue after a restart.                                                              |
 
 ## Evidence
 

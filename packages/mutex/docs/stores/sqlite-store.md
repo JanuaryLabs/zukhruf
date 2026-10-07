@@ -54,6 +54,8 @@ The transaction ends with `ROLLBACK`, so the fencing token counter cannot be in 
 
 `isHeld(key)` reads `<key>.lock.holder/caller` and then the presence file that it names. It never opens `<key>.lock`. A read of that file makes the key busy for a caller that runs `BEGIN EXCLUSIVE` at the same moment, so a holder check that read it could make a caller that skips if busy give up on a free key. A holder that stopped counts as no holder. A holder check writes no file, and it does not create the directory.
 
+The holder folder belongs to the lock store. If another program removes `caller` while the key is held, holder checks do not see the holder, and the release rejects with `ENOENT` for `caller`. The key is free after that release.
+
 A holder of version 0.3.9 or earlier writes no `caller` file, so a holder check of a later version does not see that holder. Use one package version in all processes that share the directory. See [ADR 0015](../adr/0015-a-holder-check-never-acquires-the-key.md).
 
 ## Failure modes
@@ -65,11 +67,11 @@ See [failure modes](../concepts/failure-modes.md).
 
 ## Options
 
-| Option                       | Default                          | Description                                        |
-| ---------------------------- | -------------------------------- | -------------------------------------------------- |
-| `directory` (first argument) | —                                | The shared directory.                              |
-| `pollInterval`               | `10`                             | Milliseconds between two attempts.                 |
-| `tokens`                     | `new FileTokenSource(directory)` | The token source. Tokens continue after a restart. |
+| Option                       | Default                          | Description                                                                                                                   |
+| ---------------------------- | -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `directory` (first argument) | —                                | The shared directory. It belongs to the lock store alone: no other program may add, change, or remove files or folders in it. |
+| `pollInterval`               | `10`                             | Milliseconds between two attempts.                                                                                            |
+| `tokens`                     | `new FileTokenSource(directory)` | The token source. Tokens continue after a restart.                                                                            |
 
 ## Evidence
 
