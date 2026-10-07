@@ -98,6 +98,9 @@
     },
     "releaseTag": {
       "pattern": "release/{version}"
+    },
+    "git": {
+      "push": true
     }
   },
   "sync": {
