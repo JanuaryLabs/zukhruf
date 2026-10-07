@@ -6,6 +6,8 @@
   "tags": ["scope:public", "layer:island", "test:node"],
   "targets": {
     "format": {},
-    "test": {}
+    "test": {
+      "parallelism": false
+    }
   }
 }

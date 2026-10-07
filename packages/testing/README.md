@@ -147,4 +147,4 @@ npx nx run testing:test        # builds, then runs the tests
 npx nx run testing:typecheck   # formats, lints, then type checks
 ```
 
-The tests that need Docker run on every machine, and fail when the engine does not answer. CI runs every test on Linux, where Docker runs Linux containers.
+The tests that need Docker run on every machine, and fail when the engine does not answer. CI runs every test on Linux, where Docker runs Linux containers. The `test` target runs alone (`parallelism: false`): Nx starts no other task while it runs, because its database servers slow down the timing tests of the other projects.
