@@ -126,6 +126,7 @@ See [Fencing tokens](./docs/concepts/fencing-tokens.md) and the recipe [Protect 
 7. [Run a job in only one process](./docs/recipes/singleton-job-with-leader-election.md)
 8. [Write your own lock store](./docs/recipes/write-your-own-lock-store.md)
 9. [Skip a job that is already running](./docs/recipes/skip-a-job-that-is-already-running.md)
+10. [Compute a value once and share it](./docs/recipes/compute-once-and-share-it.md)
 
 **Decisions**: the [architecture decision records](./docs/adr) tell why the design is as it is.
 

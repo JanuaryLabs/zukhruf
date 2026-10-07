@@ -30,6 +30,7 @@ Start with the [project README](../README.md). The glossary is in [CONTEXT.md](.
 7. [Run a job in only one process](./recipes/singleton-job-with-leader-election.md)
 8. [Write your own lock store](./recipes/write-your-own-lock-store.md)
 9. [Skip a job that is already running](./recipes/skip-a-job-that-is-already-running.md)
+10. [Compute a value once and share it](./recipes/compute-once-and-share-it.md)
 
 ## Architecture decision records
 
