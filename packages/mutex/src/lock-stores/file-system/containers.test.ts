@@ -13,17 +13,11 @@ import {
 /**
  * Containers are platform setup that no operation of the stores exposes. Two
  * containers on one machine share its kernel and a volume, but each has its own
- * hostname and its own PID namespace. A test never pulls the image.
+ * hostname and its own PID namespace.
  */
 const image = 'node:lts-alpine';
 const docker = new Docker({ testRun: TestRun.fromEnvironment(process.env) });
-const noDocker =
-  (await skipWithoutDocker(docker, process.env)) ||
-  ((await docker.command(['image', 'inspect', image]).then(
-    () => false,
-    () => true,
-  )) &&
-    `needs the ${image} image; run \`docker pull ${image}\` to include these tests`);
+const noDocker = await skipWithoutDocker(docker, process.env);
 
 const packageRoot = fileURLToPath(new URL('../../../', import.meta.url));
 const mutexInContainer = 'file:///pkg/src/index.ts';
