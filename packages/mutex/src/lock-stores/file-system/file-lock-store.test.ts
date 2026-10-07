@@ -20,8 +20,11 @@ import { TicketQueueFileStore } from './ticket-queue-file-store.ts';
  * process takes to answer the other, which a busy runner stretches past the
  * second that a refusal may last. The program tells the clock time at which it
  * opened the file and at which it let go.
- * The first PowerShell of a run can take most of a test's time limit to start
- * on a busy Windows runner, so these tests keep the suite's limit.
+ * A PowerShell loads each call the first time it makes it, and the first
+ * PowerShell of a run loads slowly, so the program makes each call of the hold
+ * once before it opens the file. The first PowerShell of a run can also take
+ * most of a test's time limit to start on a busy Windows runner, so these
+ * tests keep the suite's limit.
  */
 async function holdOpen(
   path: string,
@@ -29,34 +32,44 @@ async function holdOpen(
   moment?: number,
 ) {
   const quoted = path.replaceAll("'", "''");
+  const now = '[DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()';
   const keep =
     moment === undefined
       ? '[void][Console]::In.ReadLine()'
-      : `Start-Sleep -Milliseconds ${moment}`;
-  const now = '[DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()';
+      : `[System.Threading.Thread]::Sleep(${moment})`;
+  const script = [
+    '$warm = [System.IO.Path]::GetTempFileName()',
+    `[System.IO.File]::Open($warm, 'Open', 'Read', '${share}').Close()`,
+    '[System.IO.File]::Delete($warm)',
+    '[System.Threading.Thread]::Sleep(0)',
+    `[Console]::Out.WriteLine('ready ' + ${now})`,
+    '[void][Console]::In.ReadLine()',
+    `$file = [System.IO.File]::Open('${quoted}', 'Open', 'Read', '${share}')`,
+    `[Console]::Out.WriteLine('open ' + ${now})`,
+    keep,
+    '$file.Close()',
+    `[Console]::Out.WriteLine('closed ' + ${now})`,
+  ].join('; ');
   const child = spawn(
     'powershell.exe',
-    [
-      '-NoProfile',
-      '-NonInteractive',
-      '-Command',
-      `$file = [System.IO.File]::Open('${quoted}', 'Open', 'Read', '${share}'); [Console]::Out.WriteLine('open ' + ${now}); ${keep}; $file.Close(); [Console]::Out.WriteLine('closed ' + ${now})`,
-    ],
+    ['-NoProfile', '-NonInteractive', '-Command', script],
     { stdio: ['pipe', 'pipe', 'inherit'] },
   );
-  // A program timed by itself reads nothing, and an input at its end lets it exit.
-  if (moment !== undefined) child.stdin.end();
   const exited = once(child, 'exit');
   const lines = createInterface({ input: child.stdout })[
     Symbol.asyncIterator
   ]();
-  const reported = async (event: 'open' | 'closed') => {
+  const reported = async (event: 'ready' | 'open' | 'closed') => {
     const { value } = await lines.next();
     const [said, time] = String(value).split(' ');
     assert.equal(said, event, `PowerShell must report ${event} for ${path}`);
     return Number(time);
   };
+  await reported('ready');
+  child.stdin.write('\n');
   const openedAt = await reported('open');
+  // A program timed by itself reads nothing more, and an input at its end lets it exit.
+  if (moment !== undefined) child.stdin.end();
   return {
     openedAt,
     /** Lets go of the file, or, after a moment, waits until the program let go; resolves the time at which it did. */
@@ -100,6 +113,8 @@ describe('File lock stores on Windows', () => {
         });
         await entered.promise;
         const waiter = mutex.acquire('report-daily', async () => 'next');
+        // Settled from the start, so a failure is reported with the times below.
+        const outcomes = Promise.allSettled([holder, waiter]);
         // Half of the second that `patiently` waits out, so the holder releases inside the moment.
         await using scanner = await holdOpen(
           join(directory.path, 'report-daily.lock'),
@@ -113,15 +128,19 @@ describe('File lock stores on Windows', () => {
         const closedAt = await scanner.close();
 
         // Assert: the release met the refusal, and neither the release nor the waiter failed.
+        const times = `The other program held the file for ${closedAt - scanner.openedAt} ms, and the holder released ${releasedAt - scanner.openedAt} ms after the open`;
         assert.ok(
           releasedAt < closedAt,
-          `The holder released ${releasedAt - scanner.openedAt} ms after the other program opened the file, but it let go after ${closedAt - scanner.openedAt} ms, so the release met no refusal`,
+          `${times}, so the release met no refusal`,
         );
-        await assert.doesNotReject(
-          holder,
-          'The release must wait out the other program, not fail',
+        assert.deepEqual(
+          await outcomes,
+          [
+            { status: 'fulfilled', value: undefined },
+            { status: 'fulfilled', value: 'next' },
+          ],
+          `${times}. The release and the waiter must wait out the other program, not fail`,
         );
-        assert.equal(await waiter, 'next');
       },
     );
 
