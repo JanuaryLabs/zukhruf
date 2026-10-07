@@ -14,8 +14,12 @@ git diff --name-only | sort > "$sync_after"
 
 # Stage only what sync itself dirtied. `git add -A` would sweep every
 # in-progress edit into the commit; this tree may be shared by concurrent
-# agents. A file already modified before the run is left alone.
-synced=$(comm -13 "$sync_before" "$sync_after")
+# agents. A file already modified before the run is left alone. So is a file
+# that changed during the run but is not a tsconfig*.json: the only sync
+# generator here, @nx/js:typescript-sync, writes only those, so anything else
+# is an agent's save. A generator that writes other files would need this
+# filter widened, or `nx sync:check` fails CI.
+synced=$(comm -13 "$sync_before" "$sync_after" | grep -E '(^|/)tsconfig[^/]*\.json$' || true)
 rm -f "$sync_before" "$sync_after"
 if [ -n "$synced" ]; then
   echo "Staging synced files:"
