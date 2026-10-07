@@ -16,6 +16,8 @@ import { TicketQueueFileStore } from './ticket-queue-file-store.ts';
 /**
  * Starts another program that opens `path`, as a virus scanner can, letting
  * others do only what `share` allows, and keeps it open until `close` is called.
+ * The first PowerShell of a run can take most of a test's time limit to start
+ * on a busy Windows runner, so these tests keep the suite's limit.
  */
 async function holdOpen(path: string, share: 'None' | 'ReadWrite') {
   const quoted = path.replaceAll("'", "''");
@@ -55,7 +57,6 @@ describe('File lock stores on Windows', () => {
     test(
       `${name}: a lock file that another program holds open for a moment fails neither the release nor the next waiter`,
       {
-        timeout: 20000,
         skip:
           process.platform === 'win32'
             ? false
@@ -95,7 +96,6 @@ describe('File lock stores on Windows', () => {
     test(
       `${name}: a presence file that another program keeps open fails the release with its name, and the key is free`,
       {
-        timeout: 20000,
         skip:
           process.platform === 'win32'
             ? false
