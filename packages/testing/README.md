@@ -37,14 +37,14 @@ const skip = await skipWithoutDocker(docker, process.env);
 test('a holder in another container', { skip }, async () => {
   await using volume = await docker.volume();
   await using holder = await docker.start({
-    image: 'node:26-alpine',
+    image: 'node:lts-alpine',
     hostname: 'app',
     mounts: [{ source: volume.name, target: '/locks' }],
     command: ['node', '--eval', 'setInterval(() => {}, 1000)'],
   });
   await holder.kill();
   const output = await docker.run({
-    image: 'node:26-alpine',
+    image: 'node:lts-alpine',
     mounts: [{ source: volume.name, target: '/locks', readOnly: true }],
     command: ['ls', '/locks'],
   });

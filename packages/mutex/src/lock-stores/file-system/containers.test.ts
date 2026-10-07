@@ -15,7 +15,7 @@ import {
  * containers on one machine share its kernel and a volume, but each has its own
  * hostname and its own PID namespace. A test never pulls the image.
  */
-const image = 'node:26-alpine';
+const image = 'node:lts-alpine';
 const docker = new Docker({ testRun: TestRun.fromEnvironment(process.env) });
 const noDocker =
   (await skipWithoutDocker(docker, process.env)) ||

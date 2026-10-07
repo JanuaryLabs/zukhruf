@@ -35,7 +35,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v7
         with:
-          node-version: 26
+          node-version: lts/*
           cache: npm
 
       - name: Install dependencies
@@ -43,7 +43,7 @@ jobs:
 
       # The mutex's container tests never pull their image themselves.
       - name: Pull the mutex's container image
-        run: docker pull node:26-alpine
+        run: docker pull node:lts-alpine
 
       - name: Test the Docker-backed projects
         run: npx nx run-many -t test --projects=testing,mutex
