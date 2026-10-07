@@ -18,6 +18,9 @@ import { Presence } from './presence.ts';
  * its waiter notices and appends it again.
  */
 export class TicketQueueFileStore extends FileLockStore {
+  /** A presence file has the longest name this store makes for a key. */
+  protected readonly longestSuffix = Presence.suffixLength;
+
   protected async lock(
     path: string,
     signal: AbortSignal | undefined,

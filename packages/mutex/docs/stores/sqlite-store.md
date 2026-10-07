@@ -33,6 +33,8 @@ SQLite asks the kernel for the lock, and the kernel removes the lock when the pr
 
 ## How it works
 
+The database file of a key is `<key>.lock`, and the token file of the default `FileTokenSource` is `<key>.fence`. In these names, `<key>` is the key, percent-encoded. For example, `/` becomes `%2F`, and `.` becomes `%2E`. A key that is too long for a file name, or that is not well-formed Unicode, gets a short name: the first 32 characters of the encoded key, `%%`, and the SHA-256 digest of the key. The name of a key that fits does not change from version to version, so processes of two versions share its lock.
+
 1. Callers in one process first line up in a queue in memory, in the order of their calls. Only the first caller in that queue continues to the next step. Thus one process keeps at most one database file open for each key, however many callers wait.
 2. That caller opens the key's database file with no busy timeout.
 3. It runs `BEGIN EXCLUSIVE`. If another connection has the transaction, SQLite says `SQLITE_BUSY` at once.

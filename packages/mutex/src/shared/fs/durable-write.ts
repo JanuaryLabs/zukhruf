@@ -5,13 +5,18 @@ import { dirname } from 'node:path';
 import { isErrno } from './errno.ts';
 import { replaceFile } from './replace-file.ts';
 
+const draftOf = (path: string) => `${path}.${randomUUID()}.tmp`;
+
+/** The length of what `durableWrite` adds to a path to name its draft. */
+export const draftSuffixLength = draftOf('').length;
+
 /**
  * Replaces `path` in one step like `atomicWrite`, and returns only once both
  * the new content and the replacement survive a power loss: a counter that
  * goes back after a crash would hand out a token twice.
  */
 export async function durableWrite(path: string, content: string) {
-  const draft = `${path}.${randomUUID()}.tmp`;
+  const draft = draftOf(path);
   try {
     await writeSynced(draft, content);
     await replaceFile(draft, path);

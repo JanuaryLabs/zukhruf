@@ -5,7 +5,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { patiently } from '../../shared/fs/patiently.ts';
 import { isBusy } from '../../shared/sqlite/is-busy.ts';
 import { isCantOpen } from '../../shared/sqlite/is-cant-open.ts';
-import type { Caller } from './caller.ts';
+import { Caller } from './caller.ts';
 
 /** Garbage collection closes a connection nobody references, which would end a presence its caller still holds. */
 const open = new Set<DatabaseSync>();
@@ -26,6 +26,9 @@ export class Presence {
     this.#path = path;
     this.#database = database;
   }
+
+  /** The length of what `pathOf` adds to a record's path. */
+  static readonly suffixLength = Presence.pathOf('', Caller.current()).length;
 
   /** The presence file of `caller`, whose record is at `record`. */
   static pathOf(record: string, caller: Caller): string {

@@ -12,6 +12,9 @@ import { Presence } from './presence.ts';
  * retry in no particular order, so this store is not FIFO.
  */
 export class LockFileStore extends FileLockStore {
+  /** A presence file has the longest name this store makes for a key. */
+  protected readonly longestSuffix = Presence.suffixLength;
+
   protected lock(
     path: string,
     signal: AbortSignal | undefined,

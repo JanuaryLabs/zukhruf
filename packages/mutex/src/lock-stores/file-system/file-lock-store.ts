@@ -56,6 +56,13 @@ export abstract class FileLockStore implements LockStore {
     return held && leaseFor(key, held, this.#tokens);
   }
 
+  /**
+   * The length of the longest text this lock store adds to a lock path to
+   * name another file for the key. A key whose name would not fit a file name
+   * with it gets a shorter name.
+   */
+  protected abstract readonly longestSuffix: number;
+
   /** Holds the lock at `path`, waiting for other holders, until `signal` aborts. */
   protected abstract lock(
     path: string,
@@ -110,7 +117,8 @@ export abstract class FileLockStore implements LockStore {
   async #pathFor(key: string): Promise<string> {
     await assertLocalDirectory(this.#directory);
     await mkdir(this.#directory, { recursive: true });
-    return join(this.#directory, `${safeFileName(key)}.lock`);
+    const name = safeFileName(key, '.lock'.length + this.longestSuffix);
+    return join(this.#directory, `${name}.lock`);
   }
 }
 

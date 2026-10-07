@@ -6,9 +6,11 @@ import { join } from 'node:path';
 import { createInterface } from 'node:readline';
 import { describe, test } from 'node:test';
 
+import { CounterTokenSource } from '../../fencing/counter-token-source.ts';
 import type { LockStore } from '../../mutex/lock-store.ts';
 import { Mutex } from '../../mutex/mutex.ts';
 import { scratchDirectory } from '../../testing/scratch-directory.ts';
+import { SqliteStore } from '../sqlite/sqlite-store.ts';
 import { LockFileStore } from './lock-file-store.ts';
 import { TicketQueueFileStore } from './ticket-queue-file-store.ts';
 
@@ -85,6 +87,96 @@ async function holdOpen(
     },
   };
 }
+
+/**
+ * Each file lock store with the longest key it held before keys of any length
+ * were possible, and the files it makes for a key while it holds the key.
+ */
+const namedStores = [
+  {
+    name: 'LockFileStore',
+    open: (directory: string) => new LockFileStore(directory),
+    longest: 204,
+    fence: true,
+    presence: true,
+  },
+  {
+    name: 'TicketQueueFileStore',
+    open: (directory: string) => new TicketQueueFileStore(directory),
+    longest: 204,
+    fence: true,
+    presence: true,
+  },
+  {
+    name: 'SqliteStore',
+    open: (directory: string) => new SqliteStore(directory),
+    longest: 208,
+    fence: true,
+    presence: false,
+  },
+  {
+    name: 'SqliteStore with tokens in memory',
+    open: (directory: string) =>
+      new SqliteStore(directory, { tokens: new CounterTokenSource() }),
+    longest: 242,
+    fence: false,
+    presence: false,
+  },
+];
+
+describe('Lock file names', () => {
+  for (const store of namedStores) {
+    for (const [key, name] of [
+      ['orders/حساب.v2', 'orders%2F%D8%AD%D8%B3%D8%A7%D8%A8%2Ev2'],
+      ['k'.repeat(store.longest), 'k'.repeat(store.longest)],
+    ] as const) {
+      test(`${store.name} keeps the file name that earlier versions gave a key of ${key.length} characters`, async () => {
+        // Arrange: processes of an earlier version may use the same directory.
+        await using directory = await scratchDirectory();
+        const mutex = new Mutex(store.open(directory.path));
+
+        // Act: list the directory while the key is held.
+        const files = await mutex.acquire(key, () => readdir(directory.path));
+
+        // Assert: the files have the names that the earlier version uses, so both versions share the lock.
+        assert.ok(
+          files.includes(`${name}.lock`),
+          `The lock file must be ${name}.lock, got ${files.join(', ')}`,
+        );
+        if (store.fence) {
+          assert.ok(
+            files.includes(`${name}.fence`),
+            `The token file must be ${name}.fence, got ${files.join(', ')}`,
+          );
+        }
+        if (store.presence) {
+          assert.ok(
+            files.some(
+              (file) =>
+                file.startsWith(`${name}.lock.`) && file.endsWith('.presence'),
+            ),
+            `The presence file must be named after ${name}.lock, got ${files.join(', ')}`,
+          );
+        }
+      });
+    }
+
+    test(`${store.name} holds a key one character longer than the longest key that earlier versions held`, async () => {
+      // Arrange
+      await using directory = await scratchDirectory();
+      const mutex = new Mutex(store.open(directory.path));
+
+      // Act
+      const result = await mutex.acquire(
+        'k'.repeat(store.longest + 1),
+        async () => 'held',
+      );
+
+      // Assert
+      assert.equal(result, 'held');
+    });
+  }
+});
 
 const fileStores: [string, (directory: string) => LockStore][] = [
   ['LockFileStore', (directory) => new LockFileStore(directory)],

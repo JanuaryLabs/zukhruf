@@ -96,7 +96,9 @@ The decorator gives the lock handle of the inner lock store back without a chang
 
 `FileLockStore` is the base class of the file lock stores. It changes a key into a safe file path, waits between attempts, and makes fencing tokens. You write `tryLock(path)`, one attempt, and `lock(path, signal)`, which repeats the attempt with `poll` until the key is free or the signal aborts.
 
-This lock store holds a key while a directory exists. `mkdir` fails when the directory exists, so only one process can create it.
+You also give `longestSuffix`: the length of the longest text that your lock store adds to `path` to name another file. `FileLockStore` gives a short name to a key that is too long for a file name with that text. If you add a longer text later, increase `longestSuffix` too. Otherwise a long key can fail with `ENAMETOOLONG`.
+
+This lock store holds a key while a directory exists. `mkdir` fails when the directory exists, so only one process can create it. The directory is `<path>.d`, so `longestSuffix` is 2.
 
 ```ts title="directory-lock-store.ts"
 import { mkdir, mkdtemp, rm, rmdir } from 'node:fs/promises';
@@ -107,6 +109,8 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { FileLockStore, Mutex } from '@zukhruf/mutex';
 
 class DirectoryLockStore extends FileLockStore {
+  protected readonly longestSuffix = '.d'.length;
+
   protected lock(
     path: string,
     signal: AbortSignal | undefined,

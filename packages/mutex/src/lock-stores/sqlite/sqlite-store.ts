@@ -17,6 +17,8 @@ import { MemoryStore } from '../memory/memory-store.ts';
  * however many callers wait, and first-come order within the process.
  */
 export class SqliteStore extends FileLockStore {
+  /** SQLite keeps the rollback journal of a key's database at `<path>-journal`. */
+  protected readonly longestSuffix = '-journal'.length;
   readonly #inProcess = new MemoryStore();
 
   override async acquire(

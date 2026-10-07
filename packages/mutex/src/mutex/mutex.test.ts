@@ -28,6 +28,15 @@ import { Mutex } from './mutex.ts';
 const mutexUrl = new URL('./mutex.ts', import.meta.url);
 const storeCasesUrl = new URL('../testing/store-cases.ts', import.meta.url);
 
+/** Longer than any file name, so a lock store that names a file after the key cannot use the key as it is. */
+const longKey = 'k'.repeat(1000);
+
+/** Names a key in a test title without printing all of a long key. */
+const label = (key: string) =>
+  key.length > 32
+    ? `${JSON.stringify(`…${key.slice(-4)}`)} of ${key.length} characters`
+    : JSON.stringify(key);
+
 for (const store of storeCases) {
   describe(`Single-process mutex with ${store.name}`, () => {
     test(
@@ -390,8 +399,14 @@ for (const store of storeCases) {
       }
     });
 
-    for (const key of ['constructor', '__proto__']) {
-      test(`resource name ${JSON.stringify(key)} supports ordinary mutex operations`, async (t) => {
+    for (const key of [
+      'constructor',
+      '__proto__',
+      longKey,
+      'مخزن'.repeat(75),
+      'report-\uD800',
+    ]) {
+      test(`resource name ${label(key)} supports ordinary mutex operations`, async (t) => {
         // Arrange: resource names may come directly from user-supplied names or slugs.
         await using directory = await scratchDirectory();
         await using host = store.open(directory.path);
@@ -415,7 +430,7 @@ for (const store of storeCases) {
           await waitUntil(
             t,
             () => firstStarted,
-            `The first operation for ${JSON.stringify(key)} must start`,
+            `The first operation for ${label(key)} must start`,
           );
           operations.push(
             mutex.acquire(key, async () => {
@@ -427,7 +442,7 @@ for (const store of storeCases) {
           assert.equal(
             secondStarted,
             false,
-            `The second operation for ${JSON.stringify(key)} must wait for the first`,
+            `The second operation for ${label(key)} must wait for the first`,
           );
           finishFirst.resolve();
           const results = await Promise.race([
@@ -439,7 +454,7 @@ for (const store of storeCases) {
           assert.notEqual(
             results,
             null,
-            `Both operations for ${JSON.stringify(key)} must finish within one second`,
+            `Both operations for ${label(key)} must finish within one second`,
           );
           assert.deepEqual(
             results,
@@ -447,11 +462,53 @@ for (const store of storeCases) {
               { status: 'fulfilled', value: true },
               { status: 'fulfilled', value: false },
             ],
-            `Resource name ${JSON.stringify(key)} must work and preserve both callers' results`,
+            `Resource name ${label(key)} must work and preserve both callers' results`,
           );
         } finally {
           finishFirst.resolve();
           clearTimeout(timer);
+        }
+      });
+    }
+
+    for (const [held, other] of [
+      [`${longKey.slice(1)}1`, `${longKey.slice(1)}2`],
+      ['report-\uD800', 'report-\uD801'],
+      ['report-\uD800', 'report-�'],
+    ] as const) {
+      test(`resource names ${label(held)} and ${label(other)} are separate locks`, async (t) => {
+        // Arrange: one caller holds the first name.
+        await using directory = await scratchDirectory();
+        await using host = store.open(directory.path);
+        const mutex = new Mutex(host.store);
+        const finishHolder = Promise.withResolvers<void>();
+        let holding = false;
+        const holder = mutex.acquire(held, async () => {
+          holding = true;
+          await finishHolder.promise;
+        });
+
+        try {
+          await waitUntil(
+            t,
+            () => holding,
+            `The holder of ${label(held)} must start`,
+          );
+
+          // Act: another caller asks for the second name and does not wait.
+          const result = await mutex.acquire(other, async () => 'ran', {
+            mode: Modes.skipIfBusy(),
+          });
+
+          // Assert: names that differ only near their end, or only in a lone surrogate, do not share a lock.
+          assert.deepEqual(
+            result,
+            { acquired: true, value: 'ran' },
+            `${label(other)} must be free while ${label(held)} is held`,
+          );
+        } finally {
+          finishHolder.resolve();
+          await holder;
         }
       });
     }
@@ -547,39 +604,41 @@ for (const store of storeCases) {
       );
     });
 
-    test(
-      'a new store over the same directory keeps issuing newer tokens',
-      {
-        skip: store.durableTokens
-          ? false
-          : 'this store keeps its token counter in memory by design',
-      },
-      async () => {
-        // Arrange: one store instance holds the key once, then goes away (e.g. a restart).
-        await using directory = await scratchDirectory();
-        let before: FencingToken;
+    for (const key of ['product:42', longKey]) {
+      test(
+        `a new store over the same directory keeps issuing newer tokens for resource name ${label(key)}`,
         {
-          await using previous = store.open(directory.path);
-          before = await new Mutex(previous.store).acquire(
-            'product:42',
+          skip: store.durableTokens
+            ? false
+            : 'this store keeps its token counter in memory by design',
+        },
+        async () => {
+          // Arrange: one store instance holds the key once, then goes away (e.g. a restart).
+          await using directory = await scratchDirectory();
+          let before: FencingToken;
+          {
+            await using previous = store.open(directory.path);
+            before = await new Mutex(previous.store).acquire(
+              key,
+              async (lease) => lease.token,
+            );
+          }
+
+          // Act: a fresh instance over the same directory holds the key again.
+          await using restarted = store.open(directory.path);
+          const after = await new Mutex(restarted.store).acquire(
+            key,
             async (lease) => lease.token,
           );
-        }
 
-        // Act: a fresh instance over the same directory holds the key again.
-        await using restarted = store.open(directory.path);
-        const after = await new Mutex(restarted.store).acquire(
-          'product:42',
-          async (lease) => lease.token,
-        );
-
-        // Assert: the restart did not reset the token sequence.
-        assert.ok(
-          after.isNewerThan(before),
-          `The token after a restart (${after}) must be newer than before it (${before})`,
-        );
-      },
-    );
+          // Assert: the restart did not reset the token sequence.
+          assert.ok(
+            after.isNewerThan(before),
+            `The token after a restart (${after}) must be newer than before it (${before})`,
+          );
+        },
+      );
+    }
   });
 }
 
@@ -596,17 +655,18 @@ for (const store of storeCases.filter(
 			const mutex = new Mutex(createChildStore(${JSON.stringify(store.name)}, ${JSON.stringify(directory)}));
 		`;
 
-    test(
-      'two Node processes using the same product key take turns and both finish',
-      { timeout: 15000 },
-      async (t) => {
-        // Arrange: the callers have separate memory but share a resource key.
-        await using directory = await scratchDirectory();
-        await using host = store.open(directory.path);
-        const journal = join(directory.path, 'callbacks.log');
+    for (const key of ['product:42', longKey]) {
+      test(
+        `two Node processes using resource name ${label(key)} take turns and both finish`,
+        { timeout: 15000 },
+        async (t) => {
+          // Arrange: the callers have separate memory but share a resource key.
+          await using directory = await scratchDirectory();
+          await using host = store.open(directory.path);
+          const journal = join(directory.path, 'callbacks.log');
 
-        // The log records real callback boundaries; it never grants or blocks a lock.
-        const workerSource = `
+          // The log records real callback boundaries; it never grants or blocks a lock.
+          const workerSource = `
 					import { appendFileSync } from 'node:fs';
 					${workerPrelude(directory.path)}
 					const finish = Promise.withResolvers();
@@ -621,7 +681,7 @@ for (const store of storeCases.filter(
 						process.send({ type: 'attempted' });
 
 						try {
-							const result = await mutex.acquire('product:42', async () => {
+							const result = await mutex.acquire(${JSON.stringify(key)}, async () => {
 								appendFileSync(journal, name + ':enter\\n');
 								process.send({ type: 'entered' });
 								await finish.promise;
@@ -637,116 +697,119 @@ for (const store of storeCases.filter(
 					process.send({ type: 'ready' });
 				`;
 
-        await using first = startWorker(workerSource, 'first', { host });
-        await using second = startWorker(workerSource, 'second', { host });
-        const stderr = () => first.stderr + second.stderr;
-        const waitFor = (condition: () => boolean, message: string) =>
-          waitUntil(t, condition, `${message}\n${stderr()}`);
+          await using first = startWorker(workerSource, 'first', { host });
+          await using second = startWorker(workerSource, 'second', { host });
+          const stderr = () => first.stderr + second.stderr;
+          const waitFor = (condition: () => boolean, message: string) =>
+            waitUntil(t, condition, `${message}\n${stderr()}`);
 
-        await waitFor(
-          () => first.has('ready') && second.has('ready'),
-          'Both Node processes must be ready before the contention scenario starts',
-        );
+          await waitFor(
+            () => first.has('ready') && second.has('ready'),
+            'Both Node processes must be ready before the contention scenario starts',
+          );
 
-        // Act: first holds the key while second attempts to acquire that same key.
-        first.child.send('start');
-        await waitFor(
-          () => first.has('entered'),
-          'The first process must enter its callback',
-        );
-        second.child.send('start');
-        await waitFor(
-          () => second.has('attempted'),
-          'The second process must attempt the same resource key',
-        );
-        // Both workers are already running. Keep the first callback open briefly
-        // so an unprotected second callback has an opportunity to overlap it.
-        await delay(100, undefined, { signal: t.signal });
-        first.child.send('finish');
-        await waitFor(
-          () => first.has('completed') && second.has('entered'),
-          'After the first operation finishes, the second process must enter its callback',
-        );
-        second.child.send('finish');
-        await waitFor(
-          () => first.exit !== null && second.exit !== null,
-          'Both processes must finish their operations and exit',
-        );
+          // Act: first holds the key while second attempts to acquire that same key.
+          first.child.send('start');
+          await waitFor(
+            () => first.has('entered'),
+            'The first process must enter its callback',
+          );
+          second.child.send('start');
+          await waitFor(
+            () => second.has('attempted'),
+            'The second process must attempt the same resource key',
+          );
+          // Both workers are already running. Keep the first callback open briefly
+          // so an unprotected second callback has an opportunity to overlap it.
+          await delay(100, undefined, { signal: t.signal });
+          first.child.send('finish');
+          await waitFor(
+            () => first.has('completed') && second.has('entered'),
+            'After the first operation finishes, the second process must enter its callback',
+          );
+          second.child.send('finish');
+          await waitFor(
+            () => first.exit !== null && second.exit !== null,
+            'Both processes must finish their operations and exit',
+          );
 
-        // Assert: both callers finish, and the actual callback intervals never overlap.
-        assert.deepEqual(
-          [first.exit, second.exit],
-          [
-            { code: 0, signal: null },
-            { code: 0, signal: null },
-          ],
-          `Both worker processes must exit successfully.\n${stderr()}`,
-        );
-        assert.deepEqual(
-          [first, second].map(
-            (worker) =>
-              worker.messages.find((message) => message.type === 'completed')
-                ?.result,
-          ),
-          [true, false],
-          'Each process must receive its own callback result: true for first, false for second',
-        );
-        assert.deepEqual(
-          (await readFile(journal, 'utf8')).trim().split('\n'),
-          ['first:enter', 'first:leave', 'second:enter', 'second:leave'],
-          'The second process must not enter the same product callback before the first process leaves it',
-        );
-      },
-    );
+          // Assert: both callers finish, and the actual callback intervals never overlap.
+          assert.deepEqual(
+            [first.exit, second.exit],
+            [
+              { code: 0, signal: null },
+              { code: 0, signal: null },
+            ],
+            `Both worker processes must exit successfully.\n${stderr()}`,
+          );
+          assert.deepEqual(
+            [first, second].map(
+              (worker) =>
+                worker.messages.find((message) => message.type === 'completed')
+                  ?.result,
+            ),
+            [true, false],
+            'Each process must receive its own callback result: true for first, false for second',
+          );
+          assert.deepEqual(
+            (await readFile(journal, 'utf8')).trim().split('\n'),
+            ['first:enter', 'first:leave', 'second:enter', 'second:leave'],
+            'The second process must not enter the same product callback before the first process leaves it',
+          );
+        },
+      );
+    }
 
-    test(
-      'a holder process killed while holding the lock does not block the next caller',
-      { timeout: 15000 },
-      async (t) => {
-        // Arrange: another process enters the callback and never leaves it.
-        await using directory = await scratchDirectory();
-        await using host = store.open(directory.path);
-        await using holder = startWorker(
-          `
+    for (const key of ['product:42', longKey]) {
+      test(
+        `a holder process killed while holding resource name ${label(key)} does not block the next caller`,
+        { timeout: 15000 },
+        async (t) => {
+          // Arrange: another process enters the callback and never leaves it.
+          await using directory = await scratchDirectory();
+          await using host = store.open(directory.path);
+          await using holder = startWorker(
+            `
 						${workerPrelude(directory.path)}
 						setInterval(() => {}, 1000);
-						await mutex.acquire('product:42', async () => {
+						await mutex.acquire(${JSON.stringify(key)}, async () => {
 							process.send({ type: 'entered' });
 							await new Promise(() => {});
 						});
 					`,
-          'holder',
-          { host },
-        );
-        await waitUntil(
-          t,
-          () => holder.has('entered'),
-          `The holder process must enter its callback.\n${holder.stderr}`,
-        );
-        const mutex = new Mutex(host.store);
-        const deadline = Promise.withResolvers<null>();
-        const timer = setTimeout(() => deadline.resolve(null), 2000);
-
-        try {
-          // Act: the holder dies without releasing, then this process asks for the same key.
-          holder.child.kill('SIGKILL');
-          await holder.closed;
-          const acquired = await Promise.race([
-            mutex.acquire('product:42', async () => true),
-            deadline.promise,
-          ]);
-
-          // Assert: the dead holder's lock is recovered instead of blocking forever.
-          assert.equal(
-            acquired,
-            true,
-            'A caller must acquire the key within two seconds after its holder process was killed',
+            'holder',
+            { host },
           );
-        } finally {
-          clearTimeout(timer);
-        }
-      },
-    );
+          await waitUntil(
+            t,
+            () => holder.has('entered'),
+            `The holder process must enter its callback.\n${holder.stderr}`,
+          );
+          const mutex = new Mutex(host.store);
+          const deadline = Promise.withResolvers<null>();
+          const timer = setTimeout(() => deadline.resolve(null), 2000);
+
+          try {
+            // Act: the holder dies without releasing, then this process asks for the same key.
+            holder.child.kill('SIGKILL');
+            await holder.closed;
+            const acquired = await Promise.race([
+              mutex.acquire(key, async () => true),
+              deadline.promise,
+            ]);
+
+            // Assert: the dead holder's lock is recovered instead of blocking forever.
+            assert.equal(
+              acquired,
+              true,
+              'A caller must acquire the key within two seconds after its holder process was killed',
+            );
+          } finally {
+            clearTimeout(timer);
+          }
+        },
+      );
+    }
 
     test(
       'four processes incrementing a shared counter never lose an update',
