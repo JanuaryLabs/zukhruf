@@ -228,7 +228,11 @@ describe('A waiter that dies while it evicts a dead holder', () => {
         await assert.rejects(acquiring, (error: unknown) => {
           assert.ok(error instanceof Error);
           assert.match(error.message, /older version/);
-          assert.ok(error.message.includes(reclaim), error.message);
+          // The message quotes the path as JSON, which doubles each Windows backslash.
+          assert.ok(
+            error.message.includes(JSON.stringify(reclaim)),
+            error.message,
+          );
           return true;
         });
       },

@@ -220,7 +220,11 @@ for (const store of stores) {
         await assert.rejects(acquiring, (error: unknown) => {
           assert.ok(error instanceof Error, String(error));
           assert.match(error.message, /older version/);
-          assert.ok(error.message.includes(record), error.message);
+          // The message quotes the path as JSON, which doubles each Windows backslash.
+          assert.ok(
+            error.message.includes(JSON.stringify(record)),
+            error.message,
+          );
           assert.ok(error.message.includes(`${id}.presence`), error.message);
           return true;
         });
