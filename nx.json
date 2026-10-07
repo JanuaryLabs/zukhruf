@@ -94,13 +94,15 @@
     },
     "version": {
       "preVersionCommand": "npm run verify:packages",
-      "conventionalCommits": true
+      "conventionalCommits": true,
+      "git": {
+        "commit": true,
+        "tag": true,
+        "push": true
+      }
     },
     "releaseTag": {
       "pattern": "release/{version}"
-    },
-    "git": {
-      "push": true
     }
   },
   "sync": {
