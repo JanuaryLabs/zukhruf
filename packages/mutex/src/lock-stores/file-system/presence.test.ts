@@ -347,13 +347,15 @@ for (const store of stores) {
         const name = process.argv[1];
         const directory = ${JSON.stringify(directory.path)};
         const mutex = new Mutex(new ${store.name}(directory, { pollInterval: 5 }));
-        const register = new FencedRegister(directory + '/register.db');
+        // Opened inside the task, so the key serializes every write to the register, its creation too.
+        let register;
         const modes = [Modes.wait(), Modes.skipIfBusy(), Modes.skipIfBusy({ waitAtMost: 5 })];
         let stale = 0;
         try {
           for (let round = 0; round < 30; round++) {
             await mutex.acquire('product-42', async (lease) => {
               appendFileSync(${JSON.stringify(journal)}, name + ':enter\\n');
+              register ??= new FencedRegister(directory + '/register.db');
               if (register.write(lease.token) === 'stale') stale++;
               await new Promise((resolve) => setTimeout(resolve, 1));
               appendFileSync(${JSON.stringify(journal)}, name + ':leave\\n');
