@@ -5,7 +5,6 @@ import { readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline';
 import { describe, test } from 'node:test';
-import { setTimeout as delay } from 'node:timers/promises';
 
 import type { LockStore } from '../../mutex/lock-store.ts';
 import { Mutex } from '../../mutex/mutex.ts';
@@ -15,30 +14,57 @@ import { TicketQueueFileStore } from './ticket-queue-file-store.ts';
 
 /**
  * Starts another program that opens `path`, as a virus scanner can, letting
- * others do only what `share` allows, and keeps it open until `close` is called.
+ * others do only what `share` allows. It keeps the file open until `close` is
+ * called, or, with `moment`, for that many milliseconds after it opened the
+ * file: a moment timed by this process would also count the time that each
+ * process takes to answer the other, which a busy runner stretches past the
+ * second that a refusal may last. The program tells the clock time at which it
+ * opened the file and at which it let go.
  * The first PowerShell of a run can take most of a test's time limit to start
  * on a busy Windows runner, so these tests keep the suite's limit.
  */
-async function holdOpen(path: string, share: 'None' | 'ReadWrite') {
+async function holdOpen(
+  path: string,
+  share: 'None' | 'ReadWrite',
+  moment?: number,
+) {
   const quoted = path.replaceAll("'", "''");
+  const keep =
+    moment === undefined
+      ? '[void][Console]::In.ReadLine()'
+      : `Start-Sleep -Milliseconds ${moment}`;
+  const now = '[DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()';
   const child = spawn(
     'powershell.exe',
     [
       '-NoProfile',
       '-NonInteractive',
       '-Command',
-      `$file = [System.IO.File]::Open('${quoted}', 'Open', 'Read', '${share}'); [Console]::Out.WriteLine('open'); [void][Console]::In.ReadLine(); $file.Close()`,
+      `$file = [System.IO.File]::Open('${quoted}', 'Open', 'Read', '${share}'); [Console]::Out.WriteLine('open ' + ${now}); ${keep}; $file.Close(); [Console]::Out.WriteLine('closed ' + ${now})`,
     ],
     { stdio: ['pipe', 'pipe', 'inherit'] },
   );
+  // A program timed by itself reads nothing, and an input at its end lets it exit.
+  if (moment !== undefined) child.stdin.end();
   const exited = once(child, 'exit');
-  const lines = createInterface({ input: child.stdout });
-  const { value: first } = await lines[Symbol.asyncIterator]().next();
-  assert.equal(first, 'open', `PowerShell must open ${path}`);
+  const lines = createInterface({ input: child.stdout })[
+    Symbol.asyncIterator
+  ]();
+  const reported = async (event: 'open' | 'closed') => {
+    const { value } = await lines.next();
+    const [said, time] = String(value).split(' ');
+    assert.equal(said, event, `PowerShell must report ${event} for ${path}`);
+    return Number(time);
+  };
+  const openedAt = await reported('open');
   return {
+    openedAt,
+    /** Lets go of the file, or, after a moment, waits until the program let go; resolves the time at which it did. */
     close: async () => {
-      child.stdin.end('\n');
+      if (child.stdin.writable) child.stdin.end('\n');
+      const closedAt = await reported('closed');
       await exited;
+      return closedAt;
     },
     [Symbol.asyncDispose]: async () => {
       if (child.exitCode === null) child.kill();
@@ -74,17 +100,23 @@ describe('File lock stores on Windows', () => {
         });
         await entered.promise;
         const waiter = mutex.acquire('report-daily', async () => 'next');
+        // Half of the second that `patiently` waits out, so the holder releases inside the moment.
         await using scanner = await holdOpen(
           join(directory.path, 'report-daily.lock'),
           'None',
+          500,
         );
 
         // Act: the holder releases while the other program holds the file, which then lets it go.
+        const releasedAt = Date.now();
         finish.resolve();
-        await delay(100);
-        await scanner.close();
+        const closedAt = await scanner.close();
 
-        // Assert
+        // Assert: the release met the refusal, and neither the release nor the waiter failed.
+        assert.ok(
+          releasedAt < closedAt,
+          `The holder released ${releasedAt - scanner.openedAt} ms after the other program opened the file, but it let go after ${closedAt - scanner.openedAt} ms, so the release met no refusal`,
+        );
         await assert.doesNotReject(
           holder,
           'The release must wait out the other program, not fail',
