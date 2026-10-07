@@ -456,12 +456,17 @@ describe('TicketQueueFileStore: presence files of waiters', () => {
     ],
     [
       'cancels',
-      (mutex: Mutex) =>
-        mutex
-          .acquire('product-42', async () => {}, {
-            signal: AbortSignal.timeout(50),
-          })
-          .catch((error: unknown) => error),
+      async (mutex: Mutex, linedUp: () => Promise<void>) => {
+        // A cancelled call rejects at once, while its lock store may still be
+        // lining it up: cancel only once the waiter is in the queue.
+        const cancel = new AbortController();
+        const waiting = mutex
+          .acquire('product-42', async () => {}, { signal: cancel.signal })
+          .catch((error: unknown) => error);
+        await linedUp();
+        cancel.abort();
+        return waiting;
+      },
     ],
   ] as const) {
     test(
@@ -475,7 +480,14 @@ describe('TicketQueueFileStore: presence files of waiters', () => {
           'holder',
         );
         await waitUntil(t, () => holder.has('holding'), holder.stderr, 5000);
-        await endWait(new Mutex(ticketQueue.create(directory.path)));
+        await endWait(new Mutex(ticketQueue.create(directory.path)), () =>
+          waitUntil(
+            t,
+            () => ticketsIn(queueIn(directory.path)) === 2,
+            `The waiter must line up behind the holder.\n${holder.stderr}`,
+            5000,
+          ),
+        );
         assert.equal(ticketsIn(queueIn(directory.path)), 2);
         assert.equal((await presenceFilesIn(directory.path)).length, 2);
         holder.child.send('release');
