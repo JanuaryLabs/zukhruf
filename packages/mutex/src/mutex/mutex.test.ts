@@ -19,7 +19,7 @@ import {
   settle,
   storeCases,
 } from '../testing/store-cases.ts';
-import { waitUntil } from '../testing/wait-until.ts';
+import { newProcessTimeout, waitUntil } from '../testing/wait-until.ts';
 import { watch } from '../testing/watch.ts';
 import { startWorker } from '../testing/worker-process.ts';
 import { Modes } from './acquire-modes/modes.ts';
@@ -138,14 +138,11 @@ for (const store of storeCases) {
           'application',
           { host, nodeOptions: ['--unhandled-rejections=strict'] },
         );
-        // A new Node process loads the TypeScript sources first: about 170 ms
-        // on a calm machine, and more than 2 s on a CI runner that also runs
-        // the Docker tests.
         await waitUntil(
           t,
           () => application.exit !== null,
-          `The application must finish within ten seconds.\n${application.stderr}`,
-          10_000,
+          `The application must finish.\n${application.stderr}`,
+          newProcessTimeout,
         );
 
         // Assert: catching a callback error must be enough to keep the app running.
@@ -707,9 +704,11 @@ for (const store of storeCases.filter(
           const waitFor = (condition: () => boolean, message: string) =>
             waitUntil(t, condition, `${message}\n${stderr()}`);
 
-          await waitFor(
+          await waitUntil(
+            t,
             () => first.has('ready') && second.has('ready'),
-            'Both Node processes must be ready before the contention scenario starts',
+            `Both Node processes must be ready before the contention scenario starts\n${stderr()}`,
+            newProcessTimeout,
           );
 
           // Act: first holds the key while second attempts to acquire that same key.
@@ -788,6 +787,7 @@ for (const store of storeCases.filter(
             t,
             () => holder.has('entered'),
             `The holder process must enter its callback.\n${holder.stderr}`,
+            newProcessTimeout,
           );
           const mutex = new Mutex(host.store);
           const deadline = Promise.withResolvers<null>();
@@ -907,6 +907,7 @@ for (const store of storeCases.filter(
           t,
           () => holder.has('holding'),
           `The holder must take the key\n${holder.stderr}`,
+          newProcessTimeout,
         );
 
         // Act: the holder freezes, and this process waits for the key.
@@ -999,7 +1000,7 @@ for (const store of storeCases.filter(
   describe(`Cross-thread mutex with ${store.name}`, () => {
     test(
       'a thread waits while another thread of the same process holds the key',
-      { timeout: 5000 },
+      { timeout: 15000 },
       async (t) => {
         // Arrange: the main thread holds the key.
         await using directory = await scratchDirectory();
@@ -1027,6 +1028,7 @@ for (const store of storeCases.filter(
             t,
             () => events.includes('requested'),
             'The thread must start',
+            newProcessTimeout,
           );
           await delay(settle);
           const enteredWhileHeld = events.includes('entered');
