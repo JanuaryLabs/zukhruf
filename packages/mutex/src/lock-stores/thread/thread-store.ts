@@ -1,6 +1,6 @@
 import { type MessagePort, parentPort } from 'node:worker_threads';
 
-import type { Lease } from '../../mutex/lease.ts';
+import type { LockHandle } from '../../mutex/lease.ts';
 import type { AcquireOptions, LockStore } from '../../mutex/lock-store.ts';
 import { ConnectionSupervisor } from '../remote/connection-supervisor.ts';
 import type { ClientConnection, ClientConnector } from '../remote/connector.ts';
@@ -38,11 +38,11 @@ export class ThreadStore implements LockStore {
     );
   }
 
-  acquire(key: string, options?: AcquireOptions): Promise<Lease> {
+  acquire(key: string, options?: AcquireOptions): Promise<LockHandle> {
     return this.#client.acquire(key, options);
   }
 
-  tryAcquire(key: string): Promise<Lease | undefined> {
+  tryAcquire(key: string): Promise<LockHandle | undefined> {
     return this.#client.tryAcquire(key);
   }
 }

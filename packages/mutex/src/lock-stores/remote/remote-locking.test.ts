@@ -3,6 +3,7 @@ import { type TestContext, describe, test } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
 
 import { CounterTokenSource } from '../../fencing/counter-token-source.ts';
+import type { Lease } from '../../mutex/lease.ts';
 import { LockLostError } from '../../mutex/lock-lost-error.ts';
 import { Mutex } from '../../mutex/mutex.ts';
 import {
@@ -828,11 +829,14 @@ describe('Remote lock client connection lifecycle', () => {
       calls[1]!.reject(new Error('EACCES: the lock directory is not writable'));
       await delay(settle);
 
-      // Assert: no coordinator heard the reassert, so another holder may have the key.
-      await assert.rejects(
-        async () => lease[Symbol.asyncDispose](),
-        LockLostError,
+      // Assert: no coordinator heard the reassert, so another holder may have
+      // the key; releasing it then has nothing left to release.
+      assert.ok(
+        lease.signal.reason instanceof LockLostError,
+        `The lease must say the key is lost, not ${String(lease.signal.reason)}`,
       );
+      assert.equal(lease.signal.reason.key, 'product:42');
+      await assert.doesNotReject(async () => lease[Symbol.asyncDispose]());
       assert.deepEqual(
         unhandled,
         [],
@@ -844,12 +848,139 @@ describe('Remote lock client connection lifecycle', () => {
     }
   });
 
-  test(
-    'a task whose key is lost while it runs is told before it ends',
-    {
-      todo: 'The lease has no signal: a task learns of a loss only when its lease is released, after it ran (backlog #2325)',
-    },
-    async (t) => {
+  test('a task whose key is lost while it runs is told before it ends', async (t) => {
+    // Arrange: a task holds a key through the Mutex, on the client's first connection.
+    const { connector, calls } = scriptedConnector<LockRequest, LockResponse>();
+    const client = clientOver(connector);
+    const first = grantingPeer();
+    const timeline: string[] = [];
+    const holding = Promise.withResolvers<Lease>();
+    const finish = Promise.withResolvers<void>();
+    const running = new Mutex(client)
+      .acquire('product:42', async (lease) => {
+        lease.signal.addEventListener('abort', () =>
+          timeline.push(
+            lease.signal.reason instanceof LockLostError
+              ? `the task is told ${lease.signal.reason.key} is lost`
+              : `unexpected reason: ${String(lease.signal.reason)}`,
+          ),
+        );
+        holding.resolve(lease);
+        await finish.promise;
+        timeline.push('the task ends');
+      })
+      .catch((error: unknown) => {
+        timeline.push(
+          error instanceof LockLostError
+            ? 'LockLostError after the task'
+            : `unexpected: ${String(error)}`,
+        );
+      });
+
+    try {
+      await waitUntil(t, () => calls.length === 1, 'The client must connect');
+      calls[0]!.resolve(first.connection);
+      const lease = await holding.promise;
+
+      // Act: while the task runs, the connection drops and connecting again fails.
+      first.drop();
+      await waitUntil(t, () => calls.length === 2, 'The client must reconnect');
+      calls[1]!.reject(new Error('EACCES: the lock directory is not writable'));
+      await waitUntil(t, () => lease.signal.aborted, 'The key must be lost');
+      finish.resolve();
+      await running;
+
+      // Assert: the task heard of the loss while it could still stop writing,
+      // and finishing normally does not hide that the key was not exclusive.
+      assert.deepEqual(timeline, [
+        'the task is told product:42 is lost',
+        'the task ends',
+        'LockLostError after the task',
+      ]);
+    } finally {
+      finish.resolve();
+      await client.close();
+    }
+  });
+
+  test('a task whose reassert the new coordinator refuses is told before it ends, and releases nothing', async (t) => {
+    // Arrange: a task holds a key through the Mutex, and the next coordinator refuses every reassert.
+    const { connector, calls } = scriptedConnector<LockRequest, LockResponse>();
+    const client = clientOver(connector);
+    const first = grantingPeer();
+    const second = scriptedPeer<LockRequest, LockResponse>(async (request) => {
+      if (request.op === 'reassert') {
+        queueMicrotask(() =>
+          second.deliver({ op: 'rejected', id: request.id }),
+        );
+      }
+    });
+    const told = Promise.withResolvers<unknown>();
+    const holding = Promise.withResolvers<void>();
+    const finish = Promise.withResolvers<void>();
+    const running = watch(
+      new Mutex(client).acquire('product:42', async (lease) => {
+        lease.signal.addEventListener('abort', () =>
+          told.resolve(lease.signal.reason),
+        );
+        holding.resolve();
+        await finish.promise;
+      }),
+    );
+
+    try {
+      await waitUntil(t, () => calls.length === 1, 'The client must connect');
+      calls[0]!.resolve(first.connection);
+      await holding.promise;
+
+      // Act: the connection drops, and the coordinator behind the next one refuses the reassert.
+      first.drop();
+      await waitUntil(t, () => calls.length === 2, 'The client must reconnect');
+      calls[1]!.resolve(second.connection);
+      const reason = await told.promise;
+      finish.resolve();
+      await waitUntil(
+        t,
+        () => running.now.status !== 'pending',
+        'The call must end',
+      );
+
+      // Assert: the task was told while it ran, the call reports the loss,
+      // and the coordinator that refused the key is not asked to release it.
+      assert.ok(reason instanceof LockLostError, String(reason));
+      assert.equal(reason.key, 'product:42');
+      const ended = running.now;
+      assert.ok(
+        ended.status === 'rejected' && ended.reason === reason,
+        `The call must reject with the lease's LockLostError, not ${JSON.stringify(ended)}`,
+      );
+      assert.deepEqual(
+        second.sent.filter((request) => request.op === 'release'),
+        [],
+      );
+    } finally {
+      finish.resolve();
+      await client.close();
+    }
+  });
+
+  for (const [what, failure, expected] of [
+    [
+      'its own error',
+      (_lease: Lease) => new Error('the write failed'),
+      // A new LockLostError for the key, keeping the task's error as its cause.
+      (error: LockLostError, thrown: unknown) =>
+        error.key === 'product:42' && error.cause === thrown,
+    ],
+    [
+      'the reason of its lease signal',
+      (lease: Lease) => lease.signal.reason,
+      // The lease's own LockLostError, not wrapped again.
+      (error: LockLostError, thrown: unknown) =>
+        error === thrown && error.cause === undefined,
+    ],
+  ] as const) {
+    test(`a task that throws ${what} after its key is lost rejects its caller with LockLostError`, async (t) => {
       // Arrange: a task holds a key through the Mutex, on the client's first connection.
       const { connector, calls } = scriptedConnector<
         LockRequest,
@@ -857,34 +988,22 @@ describe('Remote lock client connection lifecycle', () => {
       >();
       const client = clientOver(connector);
       const first = grantingPeer();
-      const timeline: string[] = [];
-      const holding = Promise.withResolvers<void>();
+      const holding = Promise.withResolvers<Lease>();
       const finish = Promise.withResolvers<void>();
-      const running = new Mutex(client)
-        .acquire('product:42', async (lease) => {
-          if ('signal' in lease && lease.signal instanceof AbortSignal) {
-            lease.signal.addEventListener('abort', () =>
-              timeline.push('the task is told its key is lost'),
-            );
-          }
-          holding.resolve();
-          await finish.promise;
-          timeline.push('the task ends');
-        })
-        .catch((error: unknown) => {
-          timeline.push(
-            error instanceof LockLostError
-              ? 'LockLostError after the task'
-              : `unexpected: ${String(error)}`,
-          );
-        });
+      let thrown: unknown;
+      const running = new Mutex(client).acquire('product:42', async (lease) => {
+        holding.resolve(lease);
+        await finish.promise;
+        thrown = failure(lease);
+        throw thrown;
+      });
 
       try {
         await waitUntil(t, () => calls.length === 1, 'The client must connect');
         calls[0]!.resolve(first.connection);
-        await holding.promise;
+        const lease = await holding.promise;
 
-        // Act: while the task runs, the connection drops and connecting again fails.
+        // Act: the key is lost while the task runs, and then the task fails.
         first.drop();
         await waitUntil(
           t,
@@ -894,22 +1013,24 @@ describe('Remote lock client connection lifecycle', () => {
         calls[1]!.reject(
           new Error('EACCES: the lock directory is not writable'),
         );
-        await delay(settle);
+        await waitUntil(t, () => lease.signal.aborted, 'The key must be lost');
         finish.resolve();
-        await running;
 
-        // Assert: the task heard of the loss while it could still stop writing.
-        assert.deepEqual(timeline, [
-          'the task is told its key is lost',
-          'the task ends',
-          'LockLostError after the task',
-        ]);
+        // Assert: the caller learns the key was not exclusive, with the task's error kept.
+        await assert.rejects(running, (error: unknown) => {
+          assert.ok(error instanceof LockLostError, String(error));
+          assert.ok(
+            expected(error, thrown),
+            `Unexpected LockLostError: cause ${String(error.cause)}`,
+          );
+          return true;
+        });
       } finally {
         finish.resolve();
         await client.close();
       }
-    },
-  );
+    });
+  }
 
   test('an acquire whose connection drops while it is sent is sent again once on the next connection', async (t) => {
     // Arrange: the first connection drops during the send of the acquire.

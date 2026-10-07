@@ -1,4 +1,4 @@
-import type { Lease } from './lease.ts';
+import type { LockHandle } from './lease.ts';
 import type { AcquireOptions, LockStore } from './lock-store.ts';
 
 /** Whether an acquire mode always ends with the key held, or may give up. */
@@ -18,7 +18,7 @@ export interface AcquireMode<O extends Outcome = Outcome> {
     store: LockStore,
     key: string,
     options: AcquireOptions,
-  ): Promise<Lease | undefined>;
+  ): Promise<LockHandle | undefined>;
 }
 
 export interface Acquired<T> {

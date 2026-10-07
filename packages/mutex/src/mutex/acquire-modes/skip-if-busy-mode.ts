@@ -1,5 +1,5 @@
 import type { AcquireMode } from '../acquire-mode.ts';
-import type { Lease } from '../lease.ts';
+import type { LockHandle } from '../lease.ts';
 import type { AcquireOptions, LockStore } from '../lock-store.ts';
 
 export interface SkipIfBusyOptions {
@@ -29,7 +29,7 @@ export class SkipIfBusyMode implements AcquireMode<'maybe'> {
     store: LockStore,
     key: string,
     { signal }: AcquireOptions,
-  ): Promise<Lease | undefined> {
+  ): Promise<LockHandle | undefined> {
     // Always one attempt first: a time limit must never skip a key that is free.
     const lease = await store.tryAcquire(key);
     if (lease || this.#waitAtMost === 0) return lease;

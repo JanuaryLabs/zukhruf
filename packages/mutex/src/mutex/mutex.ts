@@ -2,7 +2,8 @@ import { untilAborted } from '../shared/until-aborted.ts';
 import type { AcquireMode, Outcome, OutcomeResults } from './acquire-mode.ts';
 import { WaitMode } from './acquire-modes/wait-mode.ts';
 import { Key } from './key.ts';
-import type { Lease } from './lease.ts';
+import type { Lease, LockHandle } from './lease.ts';
+import { LockLostError } from './lock-lost-error.ts';
 import type { AcquireOptions, LockStore } from './lock-store.ts';
 
 const wait = new WaitMode();
@@ -79,11 +80,22 @@ export class Mutex {
     mode: AcquireMode<O>,
     signal: AbortSignal | undefined,
   ): Promise<OutcomeResults<T>[O]> {
-    const lease = await this.#acquire(key, mode, signal);
-    if (!lease) return gaveUp<T>(key)[mode.outcome];
+    const handle = await this.#acquire(key, mode, signal);
+    if (!handle) return gaveUp<T>(key)[mode.outcome];
 
-    await using held = lease;
-    return ran(await task(held))[mode.outcome];
+    await using held = handle;
+    // The task gets the lease alone: only the mutex releases the key.
+    const { token, signal: lost } = held;
+    let value: T;
+    try {
+      value = await task({ token, signal: lost });
+    } catch (error) {
+      if (!lost.aborted || error === lost.reason) throw error;
+      throw new LockLostError(key, { cause: error });
+    }
+    // A task that finished after its key was lost did its work without exclusivity.
+    if (lost.aborted) throw lost.reason;
+    return ran(value)[mode.outcome];
   }
 
   // A cancelled caller never takes a key, even a free one. A mode that does
@@ -92,7 +104,7 @@ export class Mutex {
     key: string,
     mode: AcquireMode,
     signal: AbortSignal | undefined,
-  ): Promise<Lease | undefined> {
+  ): Promise<LockHandle | undefined> {
     signal?.throwIfAborted();
     const acquiring = mode.acquire(this.#store, key, { signal });
     try {
@@ -104,7 +116,7 @@ export class Mutex {
   }
 }
 
-async function giveBack(acquiring: Promise<Lease | undefined>) {
+async function giveBack(acquiring: Promise<LockHandle | undefined>) {
   try {
     await (await acquiring)?.[Symbol.asyncDispose]();
   } catch {

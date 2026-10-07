@@ -3,7 +3,7 @@ import { EventEmitter } from 'node:events';
 import { join, resolve } from 'node:path';
 
 import { LeaderElection } from '../../leader-election/leader-election.ts';
-import type { Lease } from '../../mutex/lease.ts';
+import type { LockHandle } from '../../mutex/lease.ts';
 import type { AcquireOptions, LockStore } from '../../mutex/lock-store.ts';
 import { ConnectionSupervisor } from '../remote/connection-supervisor.ts';
 import { RemoteLockClient } from '../remote/remote-lock-client.ts';
@@ -78,11 +78,11 @@ export class SocketStore
     );
   }
 
-  acquire(key: string, options?: AcquireOptions): Promise<Lease> {
+  acquire(key: string, options?: AcquireOptions): Promise<LockHandle> {
     return this.#client.acquire(key, options);
   }
 
-  tryAcquire(key: string): Promise<Lease | undefined> {
+  tryAcquire(key: string): Promise<LockHandle | undefined> {
     return this.#client.tryAcquire(key);
   }
 

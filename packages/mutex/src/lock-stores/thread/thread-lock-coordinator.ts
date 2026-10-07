@@ -2,7 +2,7 @@ import type { Worker } from 'node:worker_threads';
 
 import { CounterTokenSource } from '../../fencing/counter-token-source.ts';
 import type { TokenSource } from '../../fencing/token-source.ts';
-import type { Lease } from '../../mutex/lease.ts';
+import type { LockHandle } from '../../mutex/lease.ts';
 import type { AcquireOptions, LockStore } from '../../mutex/lock-store.ts';
 import { LockCoordinator } from '../remote/lock-coordinator.ts';
 import { WorkerConnection } from './worker-connection.ts';
@@ -26,11 +26,11 @@ export class ThreadLockCoordinator implements LockStore {
     this.#coordinator = new LockCoordinator({ tokens });
   }
 
-  acquire(key: string, options?: AcquireOptions): Promise<Lease> {
+  acquire(key: string, options?: AcquireOptions): Promise<LockHandle> {
     return this.#coordinator.acquire(key, options);
   }
 
-  tryAcquire(key: string): Promise<Lease | undefined> {
+  tryAcquire(key: string): Promise<LockHandle | undefined> {
     return this.#coordinator.tryAcquire(key);
   }
 

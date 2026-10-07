@@ -1,6 +1,6 @@
 export { Mutex } from './mutex/mutex.ts';
 export { Key } from './mutex/key.ts';
-export { leaseFor, type Lease } from './mutex/lease.ts';
+export { leaseFor, type Lease, type LockHandle } from './mutex/lease.ts';
 export type { AcquireOptions, LockStore } from './mutex/lock-store.ts';
 export { LockLostError } from './mutex/lock-lost-error.ts';
 export type {

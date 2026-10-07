@@ -1,6 +1,6 @@
 import { DatabaseSync } from 'node:sqlite';
 
-import type { Lease } from '../../mutex/lease.ts';
+import type { LockHandle } from '../../mutex/lease.ts';
 import type { AcquireOptions } from '../../mutex/lock-store.ts';
 import { isBusy } from '../../shared/sqlite/is-busy.ts';
 import { FileLockStore } from '../file-system/file-lock-store.ts';
@@ -22,7 +22,7 @@ export class SqliteStore extends FileLockStore {
   override async acquire(
     key: string,
     options: AcquireOptions = {},
-  ): Promise<Lease> {
+  ): Promise<LockHandle> {
     // Joining the in-process queue is synchronous, so the order is the order of the calls.
     const turn = await this.#inProcess.acquire(key, options);
     try {
@@ -33,7 +33,7 @@ export class SqliteStore extends FileLockStore {
     }
   }
 
-  override async tryAcquire(key: string): Promise<Lease | undefined> {
+  override async tryAcquire(key: string): Promise<LockHandle | undefined> {
     const turn = await this.#inProcess.tryAcquire(key);
     if (!turn) return undefined;
     try {
@@ -97,12 +97,13 @@ function holding(database: DatabaseSync): AsyncDisposable {
 }
 
 /** Releases the database lock first, then lets the next caller in this process try. */
-function withTurn(lease: Lease, turn: AsyncDisposable): Lease {
+function withTurn(handle: LockHandle, turn: AsyncDisposable): LockHandle {
   return {
-    token: lease.token,
+    token: handle.token,
+    signal: handle.signal,
     [Symbol.asyncDispose]: async () => {
       try {
-        await lease[Symbol.asyncDispose]();
+        await handle[Symbol.asyncDispose]();
       } finally {
         await turn[Symbol.asyncDispose]();
       }

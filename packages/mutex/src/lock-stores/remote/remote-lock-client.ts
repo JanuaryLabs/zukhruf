@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 
 import { FencingToken } from '../../fencing/fencing-token.ts';
-import type { Lease } from '../../mutex/lease.ts';
+import type { LockHandle } from '../../mutex/lease.ts';
 import { LockLostError } from '../../mutex/lock-lost-error.ts';
 import type { AcquireOptions, LockStore } from '../../mutex/lock-store.ts';
 import { untilAborted } from '../../shared/until-aborted.ts';
@@ -24,6 +24,8 @@ interface Pending {
 interface Held {
   key: string;
   token: FencingToken;
+  /** Aborts the lease's signal once another holder may have been granted the key. */
+  lost: AbortController;
 }
 
 /**
@@ -35,7 +37,6 @@ export class RemoteLockClient implements LockStore {
   readonly #link: ConnectionSupervisor<LockRequest, LockResponse>;
   readonly #pending = new Map<string, Pending>();
   readonly #held = new Map<string, Held>();
-  readonly #lost = new Set<string>();
 
   constructor(link: ConnectionSupervisor<LockRequest, LockResponse>) {
     this.#link = link;
@@ -49,7 +50,10 @@ export class RemoteLockClient implements LockStore {
     link.on('failed', (error) => this.#fail(error));
   }
 
-  async acquire(key: string, { signal }: AcquireOptions = {}): Promise<Lease> {
+  async acquire(
+    key: string,
+    { signal }: AcquireOptions = {},
+  ): Promise<LockHandle> {
     signal?.throwIfAborted();
     const id = randomUUID();
     const { answer } = this.#request(id, key, 'acquire');
@@ -68,7 +72,7 @@ export class RemoteLockClient implements LockStore {
     }
   }
 
-  async tryAcquire(key: string): Promise<Lease | undefined> {
+  async tryAcquire(key: string): Promise<LockHandle | undefined> {
     const id = randomUUID();
     const token = await this.#request(id, key, 'try').answer.promise;
     return token && this.#hold(id, key, token);
@@ -114,18 +118,28 @@ export class RemoteLockClient implements LockStore {
     }
   }
 
-  #hold(id: string, key: string, token: FencingToken): Lease {
-    this.#held.set(id, { key, token });
+  #hold(id: string, key: string, token: FencingToken): LockHandle {
+    const lost = new AbortController();
+    this.#held.set(id, { key, token, lost });
     return {
       token,
+      signal: lost.signal,
       [Symbol.asyncDispose]: async () => {
-        // Forget the key first, so a reconnect cannot reassert a released lease.
-        const wasHeld = this.#held.delete(id);
-        if (this.#lost.delete(id)) throw new LockLostError(key);
-        // Without an open connection there is nothing to tell: the coordinator that granted the key is gone.
-        if (wasHeld) this.#link.send({ op: 'release', id });
+        // A lost key is no longer this client's to release. Forget the key
+        // first, so a reconnect cannot reassert a released lease. Without an
+        // open connection there is nothing to tell: the coordinator that
+        // granted the key is gone.
+        if (this.#held.delete(id)) this.#link.send({ op: 'release', id });
       },
     };
+  }
+
+  /** Another holder may be granted `id`'s key now, so its lease is told and nothing reasserts it. */
+  #lose(id: string) {
+    const held = this.#held.get(id);
+    if (!held) return;
+    this.#held.delete(id);
+    held.lost.abort(new LockLostError(held.key));
   }
 
   #receive(response: LockResponse) {
@@ -144,7 +158,7 @@ export class RemoteLockClient implements LockStore {
         this.#take(response.id)?.answer.resolve(undefined);
         return;
       case 'rejected':
-        if (this.#held.delete(response.id)) this.#lost.add(response.id);
+        this.#lose(response.id);
         return;
     }
   }
@@ -173,8 +187,7 @@ export class RemoteLockClient implements LockStore {
 
   /** No coordinator heard the reassertions, so another holder may be granted the held keys. */
   #fail(error: unknown) {
-    for (const id of this.#held.keys()) this.#lost.add(id);
-    this.#held.clear();
+    for (const id of [...this.#held.keys()]) this.#lose(id);
     this.#rejectAll(() => error);
   }
 

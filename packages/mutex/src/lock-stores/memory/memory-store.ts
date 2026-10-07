@@ -1,6 +1,6 @@
 import { CounterTokenSource } from '../../fencing/counter-token-source.ts';
 import type { TokenSource } from '../../fencing/token-source.ts';
-import { type Lease, leaseFor } from '../../mutex/lease.ts';
+import { type LockHandle, leaseFor } from '../../mutex/lease.ts';
 import type { AcquireOptions, LockStore } from '../../mutex/lock-store.ts';
 import { Latch } from '../../shared/latch.ts';
 import { untilAborted } from '../../shared/until-aborted.ts';
@@ -19,7 +19,10 @@ export class MemoryStore implements LockStore {
     this.#tokens = tokens;
   }
 
-  async acquire(key: string, { signal }: AcquireOptions = {}): Promise<Lease> {
+  async acquire(
+    key: string,
+    { signal }: AcquireOptions = {},
+  ): Promise<LockHandle> {
     signal?.throwIfAborted();
     const previous = this.#lines.get(key);
     const released = new Latch();
@@ -40,7 +43,7 @@ export class MemoryStore implements LockStore {
     return leaseFor(key, { [Symbol.asyncDispose]: release }, this.#tokens);
   }
 
-  async tryAcquire(key: string): Promise<Lease | undefined> {
+  async tryAcquire(key: string): Promise<LockHandle | undefined> {
     if (this.#lines.has(key)) return undefined;
     return this.acquire(key);
   }

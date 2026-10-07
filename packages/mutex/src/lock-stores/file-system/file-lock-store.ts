@@ -6,7 +6,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { FileTokenSource } from '../../fencing/file-token-source.ts';
 import type { TokenSource } from '../../fencing/token-source.ts';
 import { assertLocalDirectory } from '../../local-directory/local-directory.ts';
-import { type Lease, leaseFor } from '../../mutex/lease.ts';
+import { type LockHandle, leaseFor } from '../../mutex/lease.ts';
 import type { AcquireOptions, LockStore } from '../../mutex/lock-store.ts';
 import { safeFileName } from '../../shared/fs/safe-file-name.ts';
 import { isBusy } from '../../shared/sqlite/is-busy.ts';
@@ -42,13 +42,16 @@ export abstract class FileLockStore implements LockStore {
     this.#tokens = tokens;
   }
 
-  async acquire(key: string, { signal }: AcquireOptions = {}): Promise<Lease> {
+  async acquire(
+    key: string,
+    { signal }: AcquireOptions = {},
+  ): Promise<LockHandle> {
     signal?.throwIfAborted();
     const held = await this.lock(await this.#pathFor(key), signal);
     return leaseFor(key, held, this.#tokens);
   }
 
-  async tryAcquire(key: string): Promise<Lease | undefined> {
+  async tryAcquire(key: string): Promise<LockHandle | undefined> {
     const held = await this.tryLock(await this.#pathFor(key));
     return held && leaseFor(key, held, this.#tokens);
   }

@@ -240,8 +240,9 @@ describe('Socket lock server failover', () => {
 				const outcome = await mutex.acquire('product:42', async (lease) => {
 					process.send({ type: 'entered' });
 					${then}
+					const told = lease.signal.aborted;
 					const write = new FencedRegister(directory + '/register.db').write(lease.token);
-					process.send({ type: 'wrote', write });
+					process.send({ type: 'wrote', write, told });
 				}).then(() => 'ok', (error) => error.name);
 				process.send({ type: 'done', outcome });
 			`;
@@ -296,6 +297,11 @@ describe('Socket lock server failover', () => {
         () => frozen.has('done'),
         `The frozen holder must finish.\n${frozen.stderr}`,
         5000,
+      );
+      assert.equal(
+        frozen.find('wrote')?.told,
+        true,
+        'The thawed holder must be told it lost the key before it writes',
       );
       assert.equal(
         frozen.find('wrote')?.write,

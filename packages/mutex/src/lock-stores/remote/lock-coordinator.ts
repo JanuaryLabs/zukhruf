@@ -1,6 +1,6 @@
 import { FencingToken } from '../../fencing/fencing-token.ts';
 import type { TokenSource } from '../../fencing/token-source.ts';
-import type { Lease } from '../../mutex/lease.ts';
+import type { LockHandle } from '../../mutex/lease.ts';
 import type { AcquireOptions, LockStore } from '../../mutex/lock-store.ts';
 import { Latch } from '../../shared/latch.ts';
 import { untilAborted } from '../../shared/until-aborted.ts';
@@ -24,13 +24,13 @@ interface Reassertion {
 }
 
 interface CoordinatorPhase {
-  acquire(key: string, options: AcquireOptions): Promise<Lease>;
-  tryAcquire(key: string): Promise<Lease | undefined>;
+  acquire(key: string, options: AcquireOptions): Promise<LockHandle>;
+  tryAcquire(key: string): Promise<LockHandle | undefined>;
   reassert(
     key: string,
     token: FencingToken,
     lose: () => void,
-  ): Promise<Lease> | undefined;
+  ): Promise<LockHandle> | undefined;
 }
 
 /**
@@ -56,12 +56,15 @@ export class LockCoordinator implements LockStore {
     }
   }
 
-  async acquire(key: string, options: AcquireOptions = {}): Promise<Lease> {
+  async acquire(
+    key: string,
+    options: AcquireOptions = {},
+  ): Promise<LockHandle> {
     return this.#phase.acquire(key, options);
   }
 
   /** Nothing is granted during the grace window, so a key counts as busy then. */
-  async tryAcquire(key: string): Promise<Lease | undefined> {
+  async tryAcquire(key: string): Promise<LockHandle | undefined> {
     return this.#phase.tryAcquire(key);
   }
 
@@ -78,7 +81,7 @@ export class LockCoordinator implements LockStore {
     key: string,
     token: FencingToken,
     lose: () => void,
-  ): Promise<Lease> | undefined {
+  ): Promise<LockHandle> | undefined {
     return this.#phase.reassert(key, token, lose);
   }
 }
@@ -91,11 +94,11 @@ class Granting implements CoordinatorPhase {
     this.#store = store;
   }
 
-  acquire(key: string, { signal }: AcquireOptions): Promise<Lease> {
+  acquire(key: string, { signal }: AcquireOptions): Promise<LockHandle> {
     return this.#store.acquire(key, { signal });
   }
 
-  tryAcquire(key: string): Promise<Lease | undefined> {
+  tryAcquire(key: string): Promise<LockHandle | undefined> {
     return this.#store.tryAcquire(key);
   }
 
@@ -117,7 +120,7 @@ class GraceWindow implements CoordinatorPhase {
     this.#next = next;
   }
 
-  async acquire(key: string, { signal }: AcquireOptions): Promise<Lease> {
+  async acquire(key: string, { signal }: AcquireOptions): Promise<LockHandle> {
     await untilAborted(this.#over.wait(), signal);
     return this.#next.acquire(key, { signal });
   }
@@ -130,7 +133,7 @@ class GraceWindow implements CoordinatorPhase {
     key: string,
     token: FencingToken,
     lose: () => void,
-  ): Promise<Lease> | undefined {
+  ): Promise<LockHandle> | undefined {
     const existing = this.#reassertions.get(key);
     if (existing && !token.isNewerThan(existing.token)) return undefined;
 
@@ -213,7 +216,7 @@ class Session {
   }
 
   /** A request cancelled while the grant was on its way releases the key at once. */
-  #grant(lease: Lease, id: string) {
+  #grant(lease: LockHandle, id: string) {
     if (!this.#requested.has(id)) return lease[Symbol.asyncDispose]();
     return this.#phase.grant(lease, id);
   }
@@ -235,8 +238,8 @@ class Session {
 
 interface SessionPhase {
   reply(response: LockResponse): Promise<void>;
-  grant(lease: Lease, id: string): Promise<void>;
-  keep(lease: Lease, id: string): Promise<void>;
+  grant(lease: LockHandle, id: string): Promise<void>;
+  keep(lease: LockHandle, id: string): Promise<void>;
   release(id: string): Promise<void>;
   lose(id: string): void;
   end(): Promise<void>;
@@ -245,7 +248,7 @@ interface SessionPhase {
 /** The peer is connected: the session keeps its leases and answers it. */
 class Serving implements SessionPhase {
   readonly #connection: Connection<LockResponse, LockRequest>;
-  readonly #leases = new Map<string, Lease>();
+  readonly #leases = new Map<string, LockHandle>();
 
   constructor(connection: Connection<LockResponse, LockRequest>) {
     this.#connection = connection;
@@ -256,12 +259,12 @@ class Serving implements SessionPhase {
     await this.#connection.send(response).catch(() => {});
   }
 
-  async grant(lease: Lease, id: string) {
+  async grant(lease: LockHandle, id: string) {
     this.#leases.set(id, lease);
     await this.reply({ op: 'granted', id, token: lease.token.toString() });
   }
 
-  async keep(lease: Lease, id: string) {
+  async keep(lease: LockHandle, id: string) {
     this.#leases.set(id, lease);
   }
 
@@ -287,11 +290,11 @@ class Serving implements SessionPhase {
 class Ended implements SessionPhase {
   async reply() {}
 
-  async grant(lease: Lease) {
+  async grant(lease: LockHandle) {
     await lease[Symbol.asyncDispose]();
   }
 
-  async keep(lease: Lease) {
+  async keep(lease: LockHandle) {
     await lease[Symbol.asyncDispose]();
   }
 

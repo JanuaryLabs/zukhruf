@@ -7,7 +7,7 @@ import { syncBuiltinESMExports } from 'node:module';
 import { join } from 'node:path';
 import { describe, mock, test } from 'node:test';
 
-import type { Lease } from '../../mutex/lease.ts';
+import type { LockHandle } from '../../mutex/lease.ts';
 import { scratchDirectory } from '../../testing/scratch-directory.ts';
 import { waitUntil } from '../../testing/wait-until.ts';
 import { TicketQueueFileStore } from './ticket-queue-file-store.ts';
@@ -40,7 +40,7 @@ describe('TicketQueueFileStore', () => {
       syncBuiltinESMExports();
       const deadline = Promise.withResolvers<'still waiting'>();
       const timer = setTimeout(() => deadline.resolve('still waiting'), 2000);
-      let waiter: Promise<Lease> | undefined;
+      let waiter: Promise<LockHandle> | undefined;
 
       try {
         // Act: the holder has read the queue and paused before it replaces the file.
