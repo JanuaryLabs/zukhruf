@@ -22,8 +22,6 @@ Each area has its own import path, so a test loads only the drivers it uses. The
 | `@zukhruf/testing/http`       | `HttpServer`                                                                                                 |                          |
 | `@zukhruf/testing/streams`    | `StreamHarness`                                                                                              |                          |
 
-It needs Node.js 24.4 or later.
-
 ## Docker
 
 A `Docker` is the engine the Docker CLI selects. It resolves the engine once, on first use, and every handle it returns keeps that engine. It supports local Unix sockets, Docker Desktop's named pipe on Windows (`npipe://`), and SSH engines (`ssh://`). On Windows, volumes and containers are tested; `directory()` is not.

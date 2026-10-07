@@ -16,7 +16,7 @@ This package gives each check its own key, writes every glob as `**/…`, scopes
 
 ## Use it
 
-You need ESLint 9.30 or later, and Node.js 24 or later.
+You need ESLint 9.30 or later.
 
 ```sh
 npm install --save-dev @zukhruf/eslint

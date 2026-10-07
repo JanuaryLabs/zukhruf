@@ -19,9 +19,6 @@
     "nx"
   ],
   "type": "module",
-  "engines": {
-    "node": ">=24"
-  },
   "types": "./dist/index.d.ts",
   "exports": {
     "./package.json": "./package.json",
