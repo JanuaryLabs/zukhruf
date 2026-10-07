@@ -1,41 +1,70 @@
 name: Release
 
+# Releases what the conventional commits on main ask for, once CI is green for
+# that commit: nx release versions, commits, tags, pushes and publishes. A push
+# with nothing to release changes nothing. The release commit and tag are
+# pushed with GITHUB_TOKEN, which starts no further workflow run.
 on:
-  push:
-    tags:
-      - 'release/*'
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+
+# A release is never cancelled: one stopped between the tag and the publish
+# would leave a version that no later run releases.
+concurrency:
+  group: release
+  cancel-in-progress: false
 
 jobs:
-  publish:
+  release:
+    if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push'
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write
       id-token: write
     steps:
       - name: Checkout
         uses: actions/checkout@v7
         with:
+          ref: main
           fetch-depth: 0
 
+      - name: Release only the commit that CI tested
+        id: tested
+        env:
+          TESTED: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          if [ "$(git rev-parse HEAD)" = "$TESTED" ]; then
+            echo "current=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "main moved past $TESTED; the CI run of the newer commit releases it"
+          fi
+
       - name: Setup Node
+        if: steps.tested.outputs.current == 'true'
         uses: actions/setup-node@v7
         with:
           node-version: 26
+          cache: npm
           registry-url: https://registry.npmjs.org/
 
       - name: Verify npm authentication
+        if: steps.tested.outputs.current == 'true'
         run: npm whoami
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_ACCESS_TOKEN }}
 
       - name: Install dependencies
+        if: steps.tested.outputs.current == 'true'
         run: npm ci
 
-      - name: Verify published package contracts
-        run: npm run verify:packages
-
-      - name: Publish packages
-        run: npx nx release publish
+      - name: Release
+        if: steps.tested.outputs.current == 'true'
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          npx nx release --yes --git-push
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_ACCESS_TOKEN }}
           NPM_CONFIG_PROVENANCE: true

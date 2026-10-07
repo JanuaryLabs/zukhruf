@@ -31,18 +31,12 @@ npx nx run <project>:test      # one project, e.g. mutex
 
 ## Release
 
-The packages tagged `scope:public` are released together with conventional commits.
+Releases need no command. The packages tagged `scope:public` are released together, as their conventional commits on `main` ask: a `feat`, `fix` or `refactor` bumps the patch version while the major version is 0, and `chore`, `docs`, `test` and `ci` release nothing.
+
+When CI is green for a push to `main`, `.github/workflows/release.yml` runs `nx release`: it versions the packages, commits `chore(release): publish <version>`, tags `release/<version>`, pushes both and publishes to npm. A push with nothing to release changes nothing. The release runs only for the commit CI tested; when `main` has moved on, the newer commit's CI run releases it.
+
+To see what the next release would be:
 
 ```sh
-npx nx release --skip-publish --dry-run   # shows the next version and changelog
-npx nx release --skip-publish             # versions, commits, tags release/<version>
-git push origin main --follow-tags
-```
-
-The `release/*` tag starts `.github/workflows/release.yml`, which publishes to npm.
-
-No `release/*` tag exists before the first release, so Nx bumps the version in `package.json`. To publish that version as it is, give it explicitly:
-
-```sh
-npx nx release 0.1.0 --first-release --skip-publish
+npx nx release --skip-publish --dry-run
 ```
