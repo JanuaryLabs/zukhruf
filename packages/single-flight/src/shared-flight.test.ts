@@ -217,15 +217,27 @@ test(
       parse: text,
       pollInterval: 10,
     });
+    const sawTheHolder = Promise.withResolvers<void>();
+    let reads = 0;
+    // A joiner reads the flight record again only after it saw the holder run
+    // the flight, so the second read shows that it saw the holder alive.
+    const watched: FlightRecords = {
+      begin: (key) => records.begin(key),
+      finish: (key, id, outcome) => records.finish(key, id, outcome),
+      latest: (key) => records.latest(key),
+      outcome: (key, id) => {
+        if (++reads === 2) sawTheHolder.resolve();
+        return records.outcome(key, id);
+      },
+    };
     const joiner = new SharedFlight({
       mutex: new Mutex(store),
-      records,
+      records: watched,
       parse: text,
       pollInterval: 10,
     });
     const flying = Promise.withResolvers<void>();
     const built = Promise.withResolvers<void>();
-    const joined = Promise.withResolvers<void>();
     try {
       const led = leader.run('sync', async () => {
         flying.resolve();
@@ -234,17 +246,16 @@ test(
       });
       await flying.promise;
       const joinedHere = leader.run('sync', async () => 'second report');
-      const joinedElsewhere = joiner.run('sync', async () => 'third report', {
-        onJoin: () => joined.resolve(),
-      });
-      await joined.promise;
-      await delay(50); // the joiner looks at the holder while it runs
+      const joinedElsewhere = joiner.run('sync', async () => 'third report');
+      await sawTheHolder.promise;
 
       built.resolve();
 
-      await assert.rejects(led, (error) => error === refusal);
-      await assert.rejects(joinedHere, (error) => error === refusal);
-      await assert.rejects(joinedElsewhere, FlightInterruptedError);
+      await Promise.all([
+        assert.rejects(led, (error) => error === refusal),
+        assert.rejects(joinedHere, (error) => error === refusal),
+        assert.rejects(joinedElsewhere, FlightInterruptedError),
+      ]);
     } finally {
       built.resolve();
     }
@@ -423,8 +434,10 @@ test(
 
       built.resolve();
 
-      await assert.rejects(led, (error) => error === failure);
-      await assert.rejects(joinedHere, (error) => error === failure);
+      await Promise.all([
+        assert.rejects(led, (error) => error === failure),
+        assert.rejects(joinedHere, (error) => error === failure),
+      ]);
     } finally {
       built.resolve();
     }
@@ -461,11 +474,13 @@ test(
       await joined.promise;
 
       built.resolve();
-      await assert.rejects(led, (reason) => reason === 'disk full');
-      const error = await joining.then(
-        () => undefined,
-        (reason: unknown) => reason,
-      );
+      const [, error] = await Promise.all([
+        assert.rejects(led, (reason) => reason === 'disk full'),
+        joining.then(
+          () => undefined,
+          (reason: unknown) => reason,
+        ),
+      ]);
 
       assert.ok(error instanceof FlightFailedError, String(error));
       assert.deepEqual(error.failure, { name: 'Error', message: 'disk full' });
@@ -505,11 +520,13 @@ test(
       await joined.promise;
 
       built.resolve();
-      await assert.rejects(led, TypeError);
-      const error = await joining.then(
-        () => undefined,
-        (reason: unknown) => reason,
-      );
+      const [, error] = await Promise.all([
+        assert.rejects(led, TypeError),
+        joining.then(
+          () => undefined,
+          (reason: unknown) => reason,
+        ),
+      ]);
 
       assert.ok(error instanceof FlightFailedError, String(error));
       assert.equal(error.failure.name, 'TypeError');
@@ -629,8 +646,10 @@ test(
       loss.abort(lost);
       built.resolve();
 
-      await assert.rejects(led, (error) => error === lost);
-      await assert.rejects(joining, FlightInterruptedError);
+      await Promise.all([
+        assert.rejects(led, (error) => error === lost),
+        assert.rejects(joining, FlightInterruptedError),
+      ]);
     } finally {
       built.resolve();
     }
@@ -643,18 +662,30 @@ test(
   async () => {
     await using directory = await mkdtempDisposable(join(tmpdir(), 'flights-'));
     const store = new MemoryStore();
-    // The leader keeps outcomes for less time than the joiner waits between two looks.
+    // The leader keeps no outcome once a newer flight of the key began.
     const leader = new SharedFlight({
       mutex: new Mutex(store),
       records: new FileFlightRecords(directory.path, { keepFor: 0 }),
       parse: text,
       pollInterval: 10,
     });
+    const records = new FileFlightRecords(directory.path);
+    const newerBegan = Promise.withResolvers<void>();
+    // The joiner reads the outcome of its flight only after a newer flight began.
+    const slowToRead: FlightRecords = {
+      begin: (key) => records.begin(key),
+      finish: (key, id, outcome) => records.finish(key, id, outcome),
+      latest: (key) => records.latest(key),
+      outcome: async (key, id) => {
+        await newerBegan.promise;
+        return records.outcome(key, id);
+      },
+    };
     const joiner = new SharedFlight({
       mutex: new Mutex(store),
-      records: new FileFlightRecords(directory.path),
+      records: slowToRead,
       parse: text,
-      pollInterval: 300,
+      pollInterval: 10,
     });
     const flying = Promise.withResolvers<void>();
     const built = Promise.withResolvers<void>();
@@ -681,12 +712,14 @@ test(
         return 'next report';
       });
       await nextFlying.promise;
+      newerBegan.resolve();
 
       await assert.rejects(joining, FlightOutcomeLostError);
       nextBuilt.resolve();
       await next;
     } finally {
       built.resolve();
+      newerBegan.resolve();
       nextBuilt.resolve();
     }
   },

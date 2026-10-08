@@ -3,7 +3,6 @@ import { mkdtempDisposable } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
-import { setTimeout as delay } from 'node:timers/promises';
 
 import { Mutex, SqliteStore } from '@zukhruf/mutex';
 
@@ -181,24 +180,38 @@ test(
     const locks = join(directory.path, 'locks');
     await using leader = startCaller(records, locks);
     await leader.heard('flying');
+    const files = new FileFlightRecords(records);
+    const sawTheHolder = Promise.withResolvers<void>();
+    let reads = 0;
+    // A joiner reads the flight record again only after it saw the holder run
+    // the flight, so the second read shows that it saw the holder alive.
+    const watched: FlightRecords = {
+      begin: (key) => files.begin(key),
+      finish: (key, id, outcome) => files.finish(key, id, outcome),
+      latest: (key) => files.latest(key),
+      outcome: (key, id) => {
+        if (++reads === 2) sawTheHolder.resolve();
+        return files.outcome(key, id);
+      },
+    };
     const flights = new SharedFlight({
       mutex: new Mutex(new SqliteStore(locks)),
-      records: new FileFlightRecords(records),
+      records: watched,
       parse: text,
       pollInterval: 10,
     });
-    const joined = Promise.withResolvers<void>();
-    const joining = flights.run('sync', async () => 'report of this process', {
-      onJoin: () => joined.resolve(),
-    });
-    await joined.promise;
-    await delay(50); // the joiner looks at the holder while it runs
+    // It rejects once the joiner sees the holder gone, which can be before this
+    // process hears that its child closed: its handler must exist from the start.
+    const joining = flights
+      .run('sync', async () => 'report of this process')
+      .then(
+        () => undefined,
+        (reason: unknown) => reason,
+      );
+    await sawTheHolder.promise;
 
     await leader.kill();
-    const error = await joining.then(
-      () => undefined,
-      (reason: unknown) => reason,
-    );
+    const error = await joining;
     const next = await flights.run(
       'sync',
       async () => 'report of the next flight',
