@@ -24,13 +24,13 @@
   "exports": {
     "./package.json": "./package.json",
     ".": {
-      "zukhruf": "./src/index.ts",
+      "@zukhruf/source": "./src/index.ts",
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "default": "./dist/index.js"
     },
     "./leader-election": {
-      "zukhruf": "./src/leader-election/index.ts",
+      "@zukhruf/source": "./src/leader-election/index.ts",
       "types": "./dist/leader-election/index.d.ts",
       "import": "./dist/leader-election/index.js",
       "default": "./dist/leader-election/index.js"

@@ -29,14 +29,14 @@ npx nx run <project>:test      # one project, e.g. mutex
 
 ## Use a package's source from another repo
 
-Each export of a package has a `zukhruf` condition first. This condition points at the source in `src/`. The other conditions point at the build in `dist/`. A repo that sets no condition gets `dist/`.
+Each export of a package has a `@zukhruf/source` condition first. This condition points at the source in `src/`. The other conditions point at the build in `dist/`. A repo that sets no condition gets `dist/`.
 
 To change a package and a repo that uses it together, link the package. Then tell Node.js and TypeScript in the other repo to use the condition:
 
 ```sh
-npm link                                    # in packages/<package>
-npm link @zukhruf/<package>                 # in the other repo
-NODE_OPTIONS=--conditions=zukhruf node …    # in the other repo
+npm link                                            # in packages/<package>
+npm link @zukhruf/<package>                         # in the other repo
+NODE_OPTIONS=--conditions=@zukhruf/source node …    # in the other repo
 ```
 
 In the `tsconfig.json` of the other repo:
@@ -44,7 +44,7 @@ In the `tsconfig.json` of the other repo:
 ```json
 {
   "compilerOptions": {
-    "customConditions": ["zukhruf"],
+    "customConditions": ["@zukhruf/source"],
     "allowImportingTsExtensions": true
   }
 }
@@ -56,7 +56,7 @@ TypeScript then checks the source of the package with the options of the other r
 
 Set the condition in Node.js only while the package is linked. The published package has no `src/`, so Node.js stops with `ERR_MODULE_NOT_FOUND`. TypeScript does not stop: when the source file is not there, it uses the next condition, `types`.
 
-The condition has the name of this workspace, as Nx writes it. It is not `development`, because bundlers such as Vite set `development` for every consumer.
+The name follows the `@<scope>/source` convention of Nx and of the "live types" setup in TypeScript monorepos. The scope keeps the name unique. A repo that asks for `@zukhruf/source` gets the source of zukhruf packages only, and not of other packages that define a plain `source` condition. The name is not `development`, because bundlers such as Vite set `development` for every consumer.
 
 ## Release
 

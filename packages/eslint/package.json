@@ -23,19 +23,19 @@
   "exports": {
     "./package.json": "./package.json",
     ".": {
-      "zukhruf": "./src/index.ts",
+      "@zukhruf/source": "./src/index.ts",
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "default": "./dist/index.js"
     },
     "./nx": {
-      "zukhruf": "./src/nx.ts",
+      "@zukhruf/source": "./src/nx.ts",
       "types": "./dist/nx.d.ts",
       "import": "./dist/nx.js",
       "default": "./dist/nx.js"
     },
     "./react-native": {
-      "zukhruf": "./src/react-native.ts",
+      "@zukhruf/source": "./src/react-native.ts",
       "types": "./dist/react-native.d.ts",
       "import": "./dist/react-native.js",
       "default": "./dist/react-native.js"
