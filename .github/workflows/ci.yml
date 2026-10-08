@@ -27,17 +27,32 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Set up the workspace
-        uses: ./.github/actions/setup-workspace
+      - name: Set up the workspace and find what changed
+        uses: ./.github/actions/setup-affected
 
-      - name: Find what changed since the last green commit
-        uses: nrwl/nx-set-shas@v5
+      - parallel:
+          - name: Check Nx workspace sync
+            run: npx nx sync:check
 
-      - name: Check Nx workspace sync
-        run: npx nx sync:check
+          - name: Check formatting
+            run: npx prettier --check .
 
-      - name: Check formatting
-        run: npx prettier --check .
+      - name: Lint, type check, test and build what changed, except the testing package
+        run: npx nx affected -t lint typecheck test test-latest-release build --exclude=testing
 
-      - name: Lint, type check, test and build what changed
-        run: npx nx affected -t lint typecheck test test-latest-release build
+  # The testing package starts five database servers. On the runner of the
+  # other projects, their load made the timing tests of mutex fail, so the
+  # package has a runner of its own.
+  testing:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Set up the workspace and find what changed
+        uses: ./.github/actions/setup-affected
+
+      - name: Lint, type check, test and build the testing package if it changed
+        run: npx nx affected -t lint typecheck test build --exclude='*,!testing'
