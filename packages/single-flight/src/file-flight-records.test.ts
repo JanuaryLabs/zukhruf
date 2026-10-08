@@ -106,9 +106,11 @@ test(
   { timeout: 10_000 },
   async () => {
     await using directory = await mkdtempDisposable(join(tmpdir(), 'flights-'));
-    const holder = new FileFlightRecords(directory.path);
+    // The file keeps one flight, so each write has the same size and the
+    // test costs the same on a slow runner.
+    const holder = new FileFlightRecords(directory.path, { keepFor: 0 });
     const joiner = new FileFlightRecords(directory.path);
-    const report = 'row\n'.repeat(500);
+    const report = 'row\n'.repeat(5000);
     const failures: unknown[] = [];
     let writing = true;
 
