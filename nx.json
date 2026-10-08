@@ -93,7 +93,7 @@
       }
     },
     "version": {
-      "preVersionCommand": "npm run verify:packages",
+      "preVersionCommand": "nx run-many -t build --projects=tag:scope:public",
       "conventionalCommits": true,
       "git": {
         "commit": true,

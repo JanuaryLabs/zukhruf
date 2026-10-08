@@ -19,7 +19,7 @@ const run = promisify(execFile);
 /** Long enough for a slow registry; a registry that never answers fails the file instead of hanging it. */
 const downloadTimeout = 120_000;
 
-/** Windows starts npm through a shell, as tools/verify-packages.ts does. */
+/** npm is npm.cmd on Windows, and Node.js runs a .cmd file only through a shell. */
 async function npm(args: string[]): Promise<string> {
   const { stdout } = await run('npm', args, {
     encoding: 'utf8',

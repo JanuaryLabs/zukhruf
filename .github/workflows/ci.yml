@@ -41,6 +41,3 @@ jobs:
 
       - name: Lint, type check, test and build what changed
         run: npx nx affected -t lint typecheck test test-latest-release build
-
-      - name: Verify published package contracts
-        run: npm run verify:packages

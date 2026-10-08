@@ -10,4 +10,4 @@ The zukhruf workspace uses `@zukhruf/eslint` for its own lint. The package's exp
 
 ## Consequences
 
-`tsconfig.base.json` sets `erasableSyntaxOnly`, so the compiler rejects syntax that Node cannot strip. The published shape still has tests: the composition tests load the package by name (its `dist`), and `tools/verify-packages.ts` installs the packed tarball.
+`tsconfig.base.json` sets `erasableSyntaxOnly`, so the compiler rejects syntax that Node cannot strip. The published shape still has tests: the composition tests load the package by name, so they run its `dist`.

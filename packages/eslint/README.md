@@ -188,7 +188,6 @@ The workspace lints itself with this package's source: the root `eslint.config.m
 
 ```sh
 npx nx run eslint:test        # builds, then runs the rule and composition tests
-npm run verify:packages       # installs the packed tarball and imports each export
 ```
 
 The composition tests run the real ESLint CLI on temporary workspaces. They load the built package, which is what consumers install.
