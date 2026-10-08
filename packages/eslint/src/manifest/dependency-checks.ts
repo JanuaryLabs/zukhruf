@@ -4,6 +4,10 @@ import type { Rule } from 'eslint';
 import { isRecord, stringsAt } from '../authoring/ast.ts';
 import { ruleOf } from '../authoring/rule-module.ts';
 import { inIsland } from '../island/island-scope.ts';
+import {
+  cachedProjectGraph,
+  projectNodeAt,
+} from '../workspace/cached-project-graph.ts';
 import { projectOf } from '../workspace/project-manifest.ts';
 import {
   type ManifestPolicyOptions,
@@ -93,7 +97,11 @@ const rule: Rule.RuleModule = {
   create(context) {
     const project = projectOf(context.physicalFilename);
     if (!project || inIsland(context)) return {};
-    const options = manifestPolicy(project.root, optionsOf(context.options[0]));
+    // Nx's rule checks nothing without the graph or a project in it.
+    const graph = cachedProjectGraph();
+    const node = graph && projectNodeAt(graph, project.root);
+    if (!graph || !node) return {};
+    const options = manifestPolicy(graph, node, optionsOf(context.options[0]));
     const projectContext: Rule.RuleContext = Object.create(context, {
       options: { value: [options] },
     });

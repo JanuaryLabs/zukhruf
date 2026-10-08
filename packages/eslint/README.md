@@ -139,7 +139,11 @@ An island is an Nx project tagged `layer:island`. Its tags come from its `projec
 - A **bundled** project is an application whose build inlines the workspace packages it imports. Their manifests are not there when it is deployed, so its own manifest declares every npm package they pull in. Workspace packages themselves are not demanded.
 - Every other project is **unbundled**. It declares what its own code imports.
 
-An application bundles unless its build is `nx:noop`, or esbuild with `bundle: false`. A build target that an Nx plugin infers (Vite's, for example) counts as bundling.
+The rule reads the build target as Nx resolves it: `project.json`, the target defaults in `nx.json`, and the targets that Nx plugins infer. An application bundles unless its build is `nx:noop`, or esbuild with `bundle: false`.
+
+An esbuild app can name workspace packages in `external`. Its build does not inline those packages, so they come from `node_modules` when the app runs. When the app imports one of them, it is unbundled, and its manifest declares them. Its manifest does not declare the workspace packages that its build still inlines. The rule reads the list that Nx gives esbuild: `external` and `esbuildOptions.external`, less the entries in `excludeFromExternal`. A `*` in an entry is esbuild's wildcard, as in `@acme/*`.
+
+Nx's check follows the imports of all workspace packages, or of none. So when an app inlines some workspace packages and names others in `external`, the rule does not check the npm imports of the inlined packages.
 
 ```js
 import island, { manifest } from '@zukhruf/eslint/nx';
@@ -161,7 +165,7 @@ export default defineConfig({
 });
 ```
 
-The rule decides each manifest's options itself, so your options add to the shared policy and never replace it. `projects` keys are folders relative to the workspace root. Like Nx's own rule, it needs the project graph that `nx` caches; without it, the rule checks nothing. It reads the workspace's package names once per process, so an editor's ESLint server sees a newly added workspace package only after a restart.
+The rule decides each manifest's options itself, so your options add to the shared policy and never replace it. `projects` keys are folders relative to the workspace root. Like Nx's own rule, it needs the project graph that `nx` caches; without it, the rule checks nothing. It needs `@nx/devkit`, which `@nx/eslint-plugin` installs.
 
 ## React Native: Hermes
 

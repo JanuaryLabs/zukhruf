@@ -1,12 +1,10 @@
-import { relative, sep } from 'node:path';
+import type { ProjectGraph, ProjectGraphProjectNode } from '@nx/devkit';
 
 import {
   type DependencyPolicyOptions,
   dependencyPolicy,
 } from '../nx-policy/dependency-policy.ts';
-import { workspacePackages } from '../workspace/workspace-packages.ts';
-import { workspaceRootOf } from '../workspace/workspace-root.ts';
-import { projectShape } from './project-shape.ts';
+import { ProjectBuild } from './project-build.ts';
 
 export interface ProjectExtras {
   /** Packages this project's manifest may leave out, on top of the repo's. */
@@ -23,30 +21,28 @@ export interface ManifestPolicyOptions extends Omit<
 }
 
 /**
- * The complete `@nx/dependency-checks` options for the project at
- * `projectRoot`: the shared policy, the repo's entries, the project's own
- * extras, and what its shape demands. A bundled project declares the npm
- * packages its workspace imports pull in, but not the workspace packages
- * themselves, which its build inlines.
+ * The complete `@nx/dependency-checks` options for `project`: the shared
+ * policy, the repo's entries, the project's own extras, and what its shape
+ * demands. A bundled project declares the npm packages its workspace imports
+ * pull in. No project declares the workspace packages its build inlines.
  */
 export function manifestPolicy(
-  projectRoot: string,
+  graph: ProjectGraph,
+  project: ProjectGraphProjectNode,
   {
     projects = {},
     ignoredDependencies = [],
     ...options
   }: ManifestPolicyOptions = {},
 ) {
-  const workspaceRoot = workspaceRootOf(projectRoot) ?? projectRoot;
-  const folder = relative(workspaceRoot, projectRoot).split(sep).join('/');
-  const bundled = projectShape(projectRoot) === 'bundled';
+  const build = new ProjectBuild(graph, project);
   return dependencyPolicy({
     ...options,
-    includeTransitiveDependencies: bundled,
+    includeTransitiveDependencies: build.shape === 'bundled',
     ignoredDependencies: [
-      ...(bundled ? workspacePackages(workspaceRoot) : []),
+      ...build.inlined,
       ...ignoredDependencies,
-      ...(projects[folder]?.ignoredDependencies ?? []),
+      ...(projects[project.data.root]?.ignoredDependencies ?? []),
     ],
   });
 }
