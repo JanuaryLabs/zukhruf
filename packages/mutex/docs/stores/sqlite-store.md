@@ -75,6 +75,7 @@ See [failure modes](../concepts/failure-modes.md).
 
 ## Evidence
 
+- `src/lock-stores/mixed-version.test.ts`: a process of the latest release and a process of this source share one directory. In both directions, each one sees the holder of the other, does not get its key, and gets the key after the release. The test downloads the latest release each run, so each change is checked against the version that runs beside it during an upgrade.
 - A child process held the lock and got `SIGKILL`. The parent got the lock at its next attempt.
 - Two connections in one process also exclude each other (`SQLITE_BUSY`, code 5).
 - A mutation test changed `BEGIN EXCLUSIVE` to `BEGIN`. Eight tests failed.

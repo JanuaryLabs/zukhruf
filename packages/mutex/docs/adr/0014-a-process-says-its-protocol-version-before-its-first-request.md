@@ -19,7 +19,7 @@ A leader of package version 0.3.0 or earlier does not know `hello`. It closes th
 
 ## Consequences
 
-- Package versions 0.3.1 and later speak protocol version 1, so they can share a directory. In a test, a leader of 0.3.1 and a process of 0.3.5 shared one.
+- Package versions 0.3.1 and later speak protocol version 1, so they can share a directory. In a test, a leader of 0.3.1 and a process of 0.3.5 shared one. `src/lock-stores/mixed-version.test.ts` checks each change against the latest release, with a leader of each version.
 - A process of 0.3.1 or later fails its acquire with `ProtocolVersionError` in two cases:
   - The leader speaks another protocol version. The acquire fails at once. `theirs` gives the protocol version of the leader.
   - The leader is of 0.3.0 or earlier. The acquire fails after approximately 1 second (1,007 ms in a test). `theirs` is `undefined`.

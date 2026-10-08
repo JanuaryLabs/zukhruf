@@ -79,6 +79,7 @@ See [failure modes](../concepts/failure-modes.md).
 
 ## Evidence
 
+- `src/lock-stores/mixed-version.test.ts`: a process of the latest release and a process of this source share one directory. In both directions, each one sees the holder of the other, does not get its key, and gets the key after the release. The test downloads the latest release each run, so each change is checked against the version that runs beside it during an upgrade.
 - Four processes each did 25 read-then-write increments of one counter file. The counter was 100 at the end, and the fencing tokens increased in the order of the grants.
 - A holder process that got `SIGKILL` did not block the next caller.
 - A mutation test removed the release step, the removal of stopped holders, and the head check. The tests found each change.

@@ -68,6 +68,7 @@ The same as [TicketQueueFileStore](./ticket-queue-file-store.md#failure-modes): 
 
 ## Evidence
 
+- `src/lock-stores/mixed-version.test.ts`: a process of the latest release and a process of this source share one directory. In both directions, each one sees the holder of the other, does not get its key, and gets the key after the release. The test downloads the latest release each run, so each change is checked against the version that runs beside it during an upgrade.
 - Four processes each did 25 read-then-write increments. The counter was 100 at the end.
 - A mutation test made the file creation not exclusive (a copy, not a link). Eight tests failed, so the tests depend on the exclusive create.
 - A mutation test stopped the removal of stopped holders. The test with a killed holder failed.
