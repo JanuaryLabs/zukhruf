@@ -27,6 +27,28 @@ npx nx run-many -t typecheck   # formats, lints, then type checks
 npx nx run <project>:test      # one project, e.g. mutex
 ```
 
+## Use a package's source from another repo
+
+Each export of a package has a `zukhruf` condition first. This condition points at the source in `src/`. The other conditions point at the build in `dist/`. A repo that sets no condition gets `dist/`.
+
+To change a package and a repo that uses it together, link the package. Then tell Node.js and TypeScript to use the condition:
+
+```sh
+npm link                                    # in packages/<package>
+npm link @zukhruf/<package>                 # in the other repo
+NODE_OPTIONS=--conditions=zukhruf node …    # in the other repo
+```
+
+```json
+{ "compilerOptions": { "customConditions": ["zukhruf"] } }
+```
+
+Node.js then runs the `.ts` files of the package, with no build. It can strip their types, because the link goes to a folder outside `node_modules`.
+
+Set the condition in Node.js only while the package is linked. The published package has no `src/`, so Node.js stops with `ERR_MODULE_NOT_FOUND`. TypeScript does not stop: when the source file is not there, it uses the next condition, `types`.
+
+The condition has the name of this workspace, as Nx writes it. It is not `development`, because bundlers such as Vite set `development` for every consumer.
+
 ## Release
 
 Releases need no command. The packages tagged `scope:public` are released together, as their conventional commits on `main` ask: a `feat`, `fix` or `refactor` bumps the patch version while the major version is 0, and `chore`, `docs`, `test` and `ci` release nothing.

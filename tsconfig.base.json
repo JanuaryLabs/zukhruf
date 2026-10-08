@@ -2,6 +2,7 @@
   "compilerOptions": {
     "target": "ESNext",
     "module": "NodeNext",
+    "customConditions": ["zukhruf"],
     "lib": ["ESNext"],
     "types": ["node"],
     "strict": true,

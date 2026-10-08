@@ -30,61 +30,73 @@
   "exports": {
     "./package.json": "./package.json",
     "./async": {
+      "zukhruf": "./src/async/index.ts",
       "types": "./dist/async/index.d.ts",
       "import": "./dist/async/index.js",
       "default": "./dist/async/index.js"
     },
     "./docker": {
+      "zukhruf": "./src/docker/index.ts",
       "types": "./dist/docker/index.d.ts",
       "import": "./dist/docker/index.js",
       "default": "./dist/docker/index.js"
     },
     "./postgres": {
+      "zukhruf": "./src/databases/postgres.ts",
       "types": "./dist/databases/postgres.d.ts",
       "import": "./dist/databases/postgres.js",
       "default": "./dist/databases/postgres.js"
     },
     "./mysql": {
+      "zukhruf": "./src/databases/mysql.ts",
       "types": "./dist/databases/mysql.d.ts",
       "import": "./dist/databases/mysql.js",
       "default": "./dist/databases/mysql.js"
     },
     "./mariadb": {
+      "zukhruf": "./src/databases/mariadb.ts",
       "types": "./dist/databases/mariadb.d.ts",
       "import": "./dist/databases/mariadb.js",
       "default": "./dist/databases/mariadb.js"
     },
     "./sqlserver": {
+      "zukhruf": "./src/databases/sqlserver.ts",
       "types": "./dist/databases/sqlserver.d.ts",
       "import": "./dist/databases/sqlserver.js",
       "default": "./dist/databases/sqlserver.js"
     },
     "./clickhouse": {
+      "zukhruf": "./src/databases/clickhouse.ts",
       "types": "./dist/databases/clickhouse.d.ts",
       "import": "./dist/databases/clickhouse.js",
       "default": "./dist/databases/clickhouse.js"
     },
     "./sqlite": {
+      "zukhruf": "./src/databases/sqlite.ts",
       "types": "./dist/databases/sqlite.d.ts",
       "import": "./dist/databases/sqlite.js",
       "default": "./dist/databases/sqlite.js"
     },
     "./duckdb": {
+      "zukhruf": "./src/databases/duckdb.ts",
       "types": "./dist/databases/duckdb.d.ts",
       "import": "./dist/databases/duckdb.js",
       "default": "./dist/databases/duckdb.js"
     },
     "./bigquery": {
+      "zukhruf": "./src/databases/bigquery.ts",
       "types": "./dist/databases/bigquery.d.ts",
       "import": "./dist/databases/bigquery.js",
       "default": "./dist/databases/bigquery.js"
     },
     "./http": {
+      "zukhruf": "./src/http/http-server.ts",
       "types": "./dist/http/http-server.d.ts",
       "import": "./dist/http/http-server.js",
       "default": "./dist/http/http-server.js"
     },
     "./streams": {
+      "zukhruf": "./src/streams/stream-harness.ts",
       "types": "./dist/streams/stream-harness.d.ts",
       "import": "./dist/streams/stream-harness.js",
       "default": "./dist/streams/stream-harness.js"
