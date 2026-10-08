@@ -31,13 +31,15 @@ npx nx run <project>:test      # one project, e.g. mutex
 
 Each export of a package has a `zukhruf` condition first. This condition points at the source in `src/`. The other conditions point at the build in `dist/`. A repo that sets no condition gets `dist/`.
 
-To change a package and a repo that uses it together, link the package. Then tell Node.js and TypeScript to use the condition:
+To change a package and a repo that uses it together, link the package. Then tell Node.js and TypeScript in the other repo to use the condition:
 
 ```sh
 npm link                                    # in packages/<package>
 npm link @zukhruf/<package>                 # in the other repo
 NODE_OPTIONS=--conditions=zukhruf node …    # in the other repo
 ```
+
+In the `tsconfig.json` of the other repo:
 
 ```json
 { "compilerOptions": { "customConditions": ["zukhruf"] } }

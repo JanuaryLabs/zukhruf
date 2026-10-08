@@ -12,4 +12,4 @@ The zukhruf workspace uses `@zukhruf/eslint` for its own lint. The package's exp
 
 `tsconfig.base.json` sets `erasableSyntaxOnly`, so the compiler rejects syntax that Node cannot strip. The published shape still has tests: the composition tests load the package by name, so they run its `dist`.
 
-Later, each export got a `zukhruf` condition that points at the source, for TypeScript and for a repo that links the package. The root config still imports the source by its path, for the reason above.
+Later, each export got a `zukhruf` condition that points at the source, for a repo that links the package. The root config still imports the source by its path, for the reason above.
