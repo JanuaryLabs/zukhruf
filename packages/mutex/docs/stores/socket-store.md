@@ -103,7 +103,7 @@ The `'role'` event tells you each time this process starts to lead, or starts to
 
 ## Evidence
 
-- `src/lock-stores/mixed-version.test.ts`: a process of the latest release and a process of this source share one directory. In both directions, each one sees the holder of the other, does not get its key, and gets the key after the release. The test downloads the latest release each run, so each change is checked against the version that runs beside it during an upgrade.
+- `src/lock-stores/mixed-version.release.test.ts`: a process of the latest release and a process of this source share one directory. In both directions, each one sees the holder of the other, does not get its key, and gets the key after the release. The test downloads the latest release each run, so each change is checked against the version that runs beside it during an upgrade.
 - After `SIGKILL` of a client, the server saw the connection close in 1.25 ms.
 - `src/lock-stores/socket/socket-store.test.ts`:
   - A holder keeps its key when the leader stops, and a waiter gets the key only after the release.

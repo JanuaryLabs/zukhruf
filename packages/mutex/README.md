@@ -159,12 +159,13 @@ This package is part of the [zukhruf](../../README.md) workspace. Run the comman
 
 ```sh
 npm install
-npx nx run mutex:test        # builds, then runs all tests in src/
+npx nx run mutex:test        # builds, then runs the tests in src/
+npx nx run mutex:test-latest-release   # checks src/ against the latest release on npm
 npx nx run mutex:typecheck   # formats, lints, then type checks
 npx nx run mutex:build       # compiles src/ to dist/
 ```
 
-The tests run from `src/`, not from `dist/`: they start workers and child processes from `.ts` files.
+The tests run from `src/`, not from `dist/`: they start workers and child processes from `.ts` files. A `*.release.test.ts` file checks this source against the latest release, which it downloads from npm. Its result can change when a new version is released, with no change here, so it has its own target, which nx never caches, and CI runs it.
 
 ```
 src/

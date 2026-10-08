@@ -6,6 +6,15 @@
   "tags": ["scope:public", "layer:island", "test:node"],
   "targets": {
     "format": {},
-    "test": {}
+    "test": {},
+    "test-latest-release": {
+      "executor": "nx:run-commands",
+      "dependsOn": ["build", "^build"],
+      "cache": false,
+      "options": {
+        "cwd": "{projectRoot}",
+        "command": "node --test --test-force-exit --test-timeout=60000 \"src/**/*.release.test.ts\""
+      }
+    }
   }
 }

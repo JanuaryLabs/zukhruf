@@ -11,7 +11,7 @@
 
 ## Consequences
 
-- Processes of 0.3.x and of later versions share a directory. Against a leader of 0.3.9 or earlier, only a holder check fails. `src/lock-stores/mixed-version.test.ts` checks the latest release against this source in both directions. It does not check 0.3.9 or earlier.
+- Processes of 0.3.x and of later versions share a directory. Against a leader of 0.3.9 or earlier, only a holder check fails. `src/lock-stores/mixed-version.release.test.ts` checks the latest release against this source in both directions. It does not check 0.3.9 or earlier.
 - After a failover to a leader of an earlier version, a holder check that waits for its answer fails with `UnsupportedRequestError`.
 - IPC channels and worker ports have no `welcome`, so a process expects that its coordinator knows each request. A coordinator of 0.3.9 or earlier ignores a request that it does not know, and a holder check of its child or worker waits. Use one package version in a process tree.
 - When you add a request, add it to `ADDED_OPS`. When you change a message, change `PROTOCOL_VERSION`, as ADR 0014 says.
