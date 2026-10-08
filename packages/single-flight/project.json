@@ -1,0 +1,11 @@
+{
+  "name": "single-flight",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "packages/single-flight/src",
+  "projectType": "library",
+  "tags": ["scope:public", "layer:island", "test:node"],
+  "targets": {
+    "format": {},
+    "test": {}
+  }
+}

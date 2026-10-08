@@ -13,6 +13,9 @@
     },
     {
       "path": "./packages/testing"
+    },
+    {
+      "path": "./packages/single-flight"
     }
   ]
 }
