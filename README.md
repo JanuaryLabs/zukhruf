@@ -42,10 +42,17 @@ NODE_OPTIONS=--conditions=zukhruf node …    # in the other repo
 In the `tsconfig.json` of the other repo:
 
 ```json
-{ "compilerOptions": { "customConditions": ["zukhruf"] } }
+{
+  "compilerOptions": {
+    "customConditions": ["zukhruf"],
+    "allowImportingTsExtensions": true
+  }
+}
 ```
 
 Node.js then runs the `.ts` files of the package, with no build. It can strip their types, because the link goes to a folder outside `node_modules`.
+
+TypeScript then checks the source of the package with the options of the other repo. The source imports its own files with the `.ts` extension, so the other repo needs `allowImportingTsExtensions`. If the other repo emits JavaScript, use `rewriteRelativeImportExtensions` instead.
 
 Set the condition in Node.js only while the package is linked. The published package has no `src/`, so Node.js stops with `ERR_MODULE_NOT_FOUND`. TypeScript does not stop: when the source file is not there, it uses the next condition, `types`.
 
