@@ -35,3 +35,7 @@ _Avoid_: Errno (the C name of a number), status
 **Network directory**:
 A directory on a file system that other machines share, for example NFS or SMB. File locks in it are not shared reliably between machines.
 _Avoid_: Remote directory, mounted directory (a local disk is mounted too)
+
+**Hashed name**:
+The file name of a key that is too long for a file name, or that is not well-formed Unicode. It is the start of the key's encoding, `%%`, and the SHA-256 of the key.
+_Avoid_: Truncated name, short name

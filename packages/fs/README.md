@@ -51,6 +51,25 @@ When a write fails, it removes its draft. Thus failed writes do not fill the dir
 
 A draft has the name of the path plus `draftSuffixLength` characters. Most file systems limit a file name to 255 bytes. A caller that makes long file names, for example from user keys, keeps `draftSuffixLength` characters of room. Otherwise the name of the draft is too long, and the write fails with `ENAMETOOLONG`.
 
+## Name a file after any key
+
+A caller can keep one file for each key, for example one lock file for each lock key. The caller must make a file name from the key. A key can hold `/`, be `.` or `..`, or be too long for a file name. `safeFileName(key, longestSuffix)` gives a name that is one path segment. The name plus `longestSuffix` more characters fits in 255 characters, the longest file name of most file systems.
+
+```ts
+import { join } from 'node:path';
+
+import { createExclusive, draftSuffixLength, safeFileName } from '@zukhruf/fs';
+
+const name = safeFileName('orders/2026', '.lock'.length + draftSuffixLength);
+await createExclusive(join('/var/lib/app/locks', `${name}.lock`), 'pid 4242');
+// The file is orders%2F2026.lock
+```
+
+- A key that fits gets its URI encoding, with each `.` as `%2E`. Thus a name is never `.` or `..`. The name of `job.lock` is `job%2Elock`, so it is never the name of `job` plus the suffix `.lock`.
+- A key that does not fit, or that is not well-formed Unicode, gets a hashed name: the first 32 characters of its encoding, `%%`, and the SHA-256 of its UTF-16 code units in hex. A hashed name has at most 98 characters. An encoding never holds `%%`, so a hashed name is never the name of a key that fits.
+- The rule does not change between versions. Processes of two versions find the same file for a key.
+- On a case-insensitive file system, keys that differ only by case get one file.
+
 ## Try again while Windows refuses a file for a moment
 
 Windows refuses a file for a moment while a delete of it is in progress, or while another program holds it open with no sharing, for example a virus scanner. The error codes are `EPERM`, `EACCES`, and `EBUSY`. A real permission error has the same codes. `patiently` runs an operation again while Windows refuses the file, for up to 1 second. After that, the error reaches the caller. On other systems, `patiently` runs the operation one time.

@@ -6,3 +6,4 @@ export { isErrno } from './errno.ts';
 export { assertLocalDirectory } from './local-directory.ts';
 export { NetworkDirectoryError } from './network-directory-error.ts';
 export { patiently } from './patiently.ts';
+export { safeFileName } from './safe-file-name.ts';

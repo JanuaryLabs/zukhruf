@@ -1,9 +1,13 @@
 import { mkdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
-import { draftSuffixLength, durableWrite, isErrno } from '@zukhruf/fs';
+import {
+  draftSuffixLength,
+  durableWrite,
+  isErrno,
+  safeFileName,
+} from '@zukhruf/fs';
 
-import { safeFileName } from '../shared/safe-file-name.ts';
 import { FencingToken } from './fencing-token.ts';
 import type { TokenSource } from './token-source.ts';
 

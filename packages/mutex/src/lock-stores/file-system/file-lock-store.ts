@@ -3,13 +3,12 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { setTimeout as delay } from 'node:timers/promises';
 
-import { assertLocalDirectory } from '@zukhruf/fs';
+import { assertLocalDirectory, safeFileName } from '@zukhruf/fs';
 
 import { FileTokenSource } from '../../fencing/file-token-source.ts';
 import type { TokenSource } from '../../fencing/token-source.ts';
 import { type LockHandle, leaseFor } from '../../mutex/lease.ts';
 import type { AcquireOptions, LockStore } from '../../mutex/lock-store.ts';
-import { safeFileName } from '../../shared/safe-file-name.ts';
 import { isBusy } from '../../shared/sqlite/is-busy.ts';
 import { isNotADatabase } from '../../shared/sqlite/is-not-a-database.ts';
 

@@ -11,12 +11,13 @@ const visibleStart = 32;
  * caller adds up to `longestSuffix` characters. Encoding every dot means a key
  * can never be `.` or `..`, and suffixes such as `.lock` can never collide with
  * a key. On a case-insensitive file system, keys that differ only by case share
- * a name, which over-locks but never under-locks.
+ * a name and so one file. A lock file then guards more keys than it must, but
+ * never fewer.
  *
  * A key whose encoding does not fit, or that is not well-formed Unicode and so
  * has no encoding, gets the start of its encoding, `%%`, and the SHA-256 of its
  * UTF-16 code units. A key that fits keeps the name earlier versions gave it, so
- * processes of two versions share its lock. No encoding contains `%%`, so the
+ * processes of two versions share its file. No encoding contains `%%`, so the
  * two kinds of name never meet; the digest is hex, whose one case cannot fold
  * two digests into one name; and the code units keep lone surrogates apart.
  */
