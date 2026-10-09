@@ -127,7 +127,7 @@ describe('A replacement in one step', () => {
       const writing = atomicWrite(path, 'first\n');
 
       // Assert
-      await assert.rejects(writing);
+      await assert.rejects(writing, { code: 'EISDIR' });
       assert.deepEqual(
         await readdir(directory.path),
         ['queue'],
@@ -153,7 +153,7 @@ describe('A replacement in one step', () => {
       const writing = durableWrite(path, '42');
 
       // Assert
-      await assert.rejects(writing);
+      await assert.rejects(writing, { code: 'EISDIR' });
       assert.deepEqual(
         await readdir(directory.path),
         ['counter'],

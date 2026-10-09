@@ -116,6 +116,29 @@ describe('A network directory', () => {
     );
   }
 
+  for (const [fileSystem, type] of [
+    ['CIFS', 0xff534d42n],
+    ['SMB2', 0xfe534d42n],
+  ] as const) {
+    test(
+      `a ${fileSystem} type that statfs reports sign-extended is still refused`,
+      { ...onLinux, timeout: 2_000 },
+      async () => {
+        // Arrange: f_type is a signed long, so libuv hands over a magic with its high bit set as 64 sign-extended bits.
+        await using directory = await mkdtempDisposable(
+          join(tmpdir(), 'zukhruf-fs-'),
+        );
+        using _mount = mountAs(directory.path, 0xffff_ffff_0000_0000n | type);
+
+        // Act
+        const checking = assertLocalDirectory(directory.path);
+
+        // Assert
+        await assert.rejects(checking, { fileSystem });
+      },
+    );
+  }
+
   for (const [name, type] of [
     ['ext4', 0xef53n],
     ['a FUSE mount', 0x65735546n],
@@ -174,6 +197,28 @@ describe('A network directory', () => {
 
       // Assert
       await assert.doesNotReject(checking);
+    },
+  );
+
+  test(
+    'a statfs that failed once is not remembered, so a later check can still refuse the directory',
+    { ...onLinux, timeout: 2_000 },
+    async () => {
+      // Arrange: the first check cannot read the file system, then the mount answers as NFS.
+      await using directory = await mkdtempDisposable(
+        join(tmpdir(), 'zukhruf-fs-'),
+      );
+      {
+        using _failing = failStatfs(directory.path, 'EIO');
+        await assertLocalDirectory(directory.path);
+      }
+      using _mount = mountAs(directory.path, 0x6969n);
+
+      // Act
+      const checking = assertLocalDirectory(directory.path);
+
+      // Assert
+      await assert.rejects(checking, NetworkDirectoryError);
     },
   );
 });

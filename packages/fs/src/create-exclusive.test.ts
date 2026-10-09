@@ -14,6 +14,24 @@ import { describe, mock, test } from 'node:test';
 
 import { createExclusive } from './create-exclusive.ts';
 
+/** Records each `link` with the content its source holds at that moment; every link still reaches the disk. */
+function recordLinks() {
+  const links: { from: string; to: string; content: string }[] = [];
+  const link = fsPromises.link;
+  mock.method(fsPromises, 'link', async (from: string, to: string) => {
+    links.push({ from, to, content: await readFile(from, 'utf8') });
+    return link(from, to);
+  });
+  syncBuiltinESMExports();
+  return {
+    links,
+    [Symbol.dispose]() {
+      mock.restoreAll();
+      syncBuiltinESMExports();
+    },
+  };
+}
+
 /** Makes every `link` fail with `code`, as a full or broken disk would. */
 function failLink(code: string) {
   mock.method(fsPromises, 'link', async () => {
@@ -141,6 +159,32 @@ describe('createExclusive', () => {
       );
       assert.equal(await readFile(path, 'utf8'), winners[0]);
       assert.deepEqual(await readdir(directory.path), ['job.lock']);
+    },
+  );
+
+  test(
+    'the file appears by a link of a draft that already holds all of the content, so a reader never sees it empty',
+    { timeout: 2_000 },
+    async () => {
+      // Arrange
+      await using directory = await mkdtempDisposable(
+        join(tmpdir(), 'zukhruf-fs-'),
+      );
+      const path = join(directory.path, 'job.lock');
+      const content = 'pid 4242\n'.repeat(1_000);
+      using disk = recordLinks();
+
+      // Act
+      await createExclusive(path, content);
+
+      // Assert
+      assert.equal(disk.links.length, 1, 'The file must appear in one step');
+      assert.equal(disk.links[0]?.to, path);
+      assert.equal(
+        disk.links[0]?.content,
+        content,
+        'The draft must hold all of the content before it appears at the path',
+      );
     },
   );
 });
