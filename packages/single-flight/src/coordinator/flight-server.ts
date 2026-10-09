@@ -1,6 +1,7 @@
 import { unlink } from 'node:fs/promises';
 import { type Server, type Socket, createServer } from 'node:net';
 
+import { isErrno } from '@zukhruf/fs';
 import { EpochTokenSource } from '@zukhruf/mutex';
 
 import { welcome } from '../connection/handshake.ts';
@@ -11,7 +12,6 @@ import {
   type RequestEnvelope,
   isRequestEnvelope,
 } from '../protocol/flight-protocol.ts';
-import { isErrno } from '../shared/fs/errno.ts';
 import { FlightCoordinator } from './flight-coordinator.ts';
 
 export interface FlightServerOptions {

@@ -6,22 +6,20 @@ The reason is the Rule of Three. Code that a second place needs is copied, and i
 
 Paths on the left are in `packages/mutex/src`. Paths on the right are in `packages/single-flight/src`.
 
+## Moved to `@zukhruf/fs`
+
+The file helpers and the check that refuses a network directory are no longer copies. Both packages use `@zukhruf/fs` (its ADR 0001): `durableWrite`, `isErrno`, `patiently`, `assertLocalDirectory`, and one `NetworkDirectoryError` class that this package gives from its entry point.
+
 ## Copied without a change
 
 | Mutex                                         | Single flight                         |
 | --------------------------------------------- | ------------------------------------- |
 | `lock-stores/remote/connection.ts`            | `connection/connection.ts`            |
 | `lock-stores/remote/connection-supervisor.ts` | `connection/connection-supervisor.ts` |
-| `shared/fs/replace-file.ts`                   | `shared/fs/replace-file.ts`           |
-| `shared/fs/patiently.ts`                      | `shared/fs/patiently.ts`              |
-| `shared/fs/errno.ts`                          | `shared/fs/errno.ts`                  |
 | `shared/sqlite/is-busy.ts`                    | `shared/sqlite/is-busy.ts`            |
 | `shared/is-record.ts`                         | `shared/is-record.ts`                 |
 
 ## Copied with changes
-
-**`shared/fs/durable-write.ts` → `shared/fs/durable-write.ts`.**
-The copy has no `draftSuffixLength`. Only the mutex's file stores use it.
 
 **`leader-election/leader-election.ts` → `election/leader-election.ts`.**
 The claim file is `flight.lock`, not `leader.lock`. The epoch file is `flight.epoch`, not `leader.epoch`. The comments call the elected process the coordinator.
@@ -30,10 +28,6 @@ Why: a single flight and a socket lock store can use one directory. With the sam
 **`leader-election/leadership.ts` → `election/leadership.ts`.**
 Only the comments change: a term belongs to the coordinator.
 Why: in this package, a leader is the caller that runs a flight's work.
-
-**`local-directory/` → `local-directory/`.**
-The comments and the error message name the flight directory and its election.
-`NetworkDirectoryError` is a class of this package. It is not the mutex's class.
 
 **`lock-stores/remote/connector.ts` → `connection/connector.ts`.**
 The lock aliases `ClientConnection` and `ClientConnector` become `FlightConnection` and `FlightConnector`.
@@ -99,7 +93,7 @@ These helpers do not belong in `@zukhruf/coordinator`. A third package that copi
 
 ## What the extraction can share
 
-- **As is:** the connection, the connection supervisor, the socket connection, the local-directory check, and the file and SQLite helpers.
+- **As is:** the connection, the connection supervisor, the socket connection, and the SQLite helpers.
 - **With parameters:**
   - the election: the names of its two files;
   - the socket path: the file name and the pipe prefix;

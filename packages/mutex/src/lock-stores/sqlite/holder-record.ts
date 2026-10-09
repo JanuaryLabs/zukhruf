@@ -2,9 +2,8 @@ import { readFileSync } from 'node:fs';
 import { mkdir, readdir, unlink } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 
-import { atomicWrite } from '../../shared/fs/atomic-write.ts';
-import { isErrno } from '../../shared/fs/errno.ts';
-import { patiently } from '../../shared/fs/patiently.ts';
+import { atomicWrite, isErrno, patiently } from '@zukhruf/fs';
+
 import { Caller } from '../file-system/caller.ts';
 import { Presence } from '../file-system/presence.ts';
 

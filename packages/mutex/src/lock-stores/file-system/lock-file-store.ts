@@ -1,8 +1,7 @@
 import { readFile, unlink } from 'node:fs/promises';
 
-import { createExclusive } from '../../shared/fs/create-exclusive.ts';
-import { isErrno } from '../../shared/fs/errno.ts';
-import { patiently } from '../../shared/fs/patiently.ts';
+import { createExclusive, isErrno, patiently } from '@zukhruf/fs';
+
 import { Caller } from './caller.ts';
 import { FileLockStore } from './file-lock-store.ts';
 import { Presence } from './presence.ts';

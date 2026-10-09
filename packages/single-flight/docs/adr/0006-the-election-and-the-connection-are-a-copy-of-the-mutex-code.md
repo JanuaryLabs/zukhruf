@@ -13,3 +13,4 @@ A single flight needs what the socket lock store of `@zukhruf/mutex` already has
 - A fix in one copy goes into the other copy too, and the commit names both files.
 - The wire of the mutex does not change, so old and new mutex processes never split into two leaders. Pin tests in the mutex guard its file names and bytes.
 - A single flight and a socket lock store can use one directory, and they never meet.
+- The file helpers and the check that refuses a network directory were copies too. They moved to `@zukhruf/fs` when it was extracted (its ADR 0001), so they are no longer copies.

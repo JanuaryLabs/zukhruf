@@ -217,7 +217,6 @@ src/
   protocol/             the messages between a process and its coordinator
   election/             the election in a directory (a copy of the mutex code)
   connection/           the socket, the handshake and the supervisor (a copy)
-  local-directory/      the check for a network file system (a copy)
-  shared/               file and SQLite helpers (a copy)
+  shared/               SQLite and record helpers (a copy); file writes and the network directory check are in @zukhruf/fs
   testing/              the caller process that the tests start
 ```

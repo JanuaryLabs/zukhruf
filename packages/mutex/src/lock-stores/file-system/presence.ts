@@ -2,7 +2,8 @@ import { existsSync } from 'node:fs';
 import { unlink } from 'node:fs/promises';
 import { DatabaseSync } from 'node:sqlite';
 
-import { patiently } from '../../shared/fs/patiently.ts';
+import { patiently } from '@zukhruf/fs';
+
 import { isBusy } from '../../shared/sqlite/is-busy.ts';
 import { isCantOpen } from '../../shared/sqlite/is-cant-open.ts';
 import { Caller } from './caller.ts';

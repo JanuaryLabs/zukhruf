@@ -3,9 +3,8 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { setTimeout as delay } from 'node:timers/promises';
 
-import { assertLocalDirectory } from '../local-directory/local-directory.ts';
-import { durableWrite } from '../shared/fs/durable-write.ts';
-import { isErrno } from '../shared/fs/errno.ts';
+import { assertLocalDirectory, durableWrite, isErrno } from '@zukhruf/fs';
+
 import { isBusy } from '../shared/sqlite/is-busy.ts';
 import { Leadership } from './leadership.ts';
 

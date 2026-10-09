@@ -46,7 +46,8 @@
     "access": "public"
   },
   "dependencies": {
-    "@zukhruf/async": "^0.3.13"
+    "@zukhruf/async": "^0.3.13",
+    "@zukhruf/fs": "^0.3.16"
   },
   "devDependencies": {
     "@zukhruf/testing": "^0.3.1",

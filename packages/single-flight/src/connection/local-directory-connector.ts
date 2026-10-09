@@ -1,4 +1,5 @@
-import { assertLocalDirectory } from '../local-directory/local-directory.ts';
+import { assertLocalDirectory } from '@zukhruf/fs';
+
 import type { FlightConnection, FlightConnector } from './connector.ts';
 
 /**

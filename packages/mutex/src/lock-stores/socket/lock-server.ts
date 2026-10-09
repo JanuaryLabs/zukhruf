@@ -1,9 +1,10 @@
 import { unlink } from 'node:fs/promises';
 import { type Server, type Socket, createServer } from 'node:net';
 
+import { isErrno } from '@zukhruf/fs';
+
 import { EpochTokenSource } from '../../fencing/epoch-token-source.ts';
 import type { Leadership } from '../../leader-election/leadership.ts';
-import { isErrno } from '../../shared/fs/errno.ts';
 import { LockCoordinator } from '../remote/lock-coordinator.ts';
 import {
   type LockResponse,

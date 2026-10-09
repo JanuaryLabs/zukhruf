@@ -41,7 +41,7 @@ export {
 export { IpcStore } from './lock-stores/ipc/ipc-store.ts';
 export { CoordinatorUnavailableError } from './lock-stores/remote/coordinator-unavailable-error.ts';
 export { UnsupportedRequestError } from './lock-stores/remote/unsupported-request-error.ts';
-export { NetworkDirectoryError } from './local-directory/network-directory-error.ts';
+export { NetworkDirectoryError } from '@zukhruf/fs';
 export {
   FileLockStore,
   type FileLockStoreOptions,

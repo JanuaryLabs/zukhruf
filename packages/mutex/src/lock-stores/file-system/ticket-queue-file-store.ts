@@ -1,9 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { appendFile } from 'node:fs/promises';
 
-import { atomicWrite } from '../../shared/fs/atomic-write.ts';
-import { isErrno } from '../../shared/fs/errno.ts';
-import { patiently } from '../../shared/fs/patiently.ts';
+import { atomicWrite, isErrno, patiently } from '@zukhruf/fs';
+
 import { Caller } from './caller.ts';
 import { FileLockStore } from './file-lock-store.ts';
 import { Presence } from './presence.ts';

@@ -6,7 +6,8 @@ import { syncBuiltinESMExports } from 'node:module';
 import { sep } from 'node:path';
 import { describe, mock, test } from 'node:test';
 
-import { NetworkDirectoryError } from '../../local-directory/network-directory-error.ts';
+import { NetworkDirectoryError } from '@zukhruf/fs';
+
 import { scratchDirectory } from '../../testing/scratch-directory.ts';
 import type { ClientConnector } from '../remote/connector.ts';
 import { LocalDirectoryConnector } from './local-directory-connector.ts';

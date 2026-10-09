@@ -41,7 +41,8 @@
     "access": "public"
   },
   "dependencies": {
-    "@zukhruf/async": "^0.3.13"
+    "@zukhruf/async": "^0.3.13",
+    "@zukhruf/fs": "^0.3.16"
   },
   "peerDependencies": {
     "@zukhruf/mutex": "^0.3.11"

@@ -174,7 +174,7 @@ src/
   lock-stores/       one folder for each lock store
     remote/          the coordinator and client that ThreadStore, IpcStore and SocketStore share
   leader-election/   leader election (separate entry point, not part of the mutex)
-  shared/            small file system and SQLite helpers
+  shared/            the file name of a key, and SQLite error checks (the file writes are in @zukhruf/fs)
   testing/           test helpers and the matrix of lock stores (not published)
 docs/
   concepts/  stores/  recipes/  adr/
