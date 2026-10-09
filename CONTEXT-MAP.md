@@ -12,3 +12,4 @@ Each context has its own glossary and its own architecture decision records.
 | Fs            | [packages/fs/CONTEXT.md](./packages/fs/CONTEXT.md)                       | [packages/fs/docs/adr](./packages/fs/docs/adr)                       |
 | Election      | [packages/election/CONTEXT.md](./packages/election/CONTEXT.md)           | [packages/election/docs/adr](./packages/election/docs/adr)           |
 | Lease         | [packages/lease/CONTEXT.md](./packages/lease/CONTEXT.md)                 | [packages/lease/docs/adr](./packages/lease/docs/adr)                 |
+| Fencing       | [packages/fencing/CONTEXT.md](./packages/fencing/CONTEXT.md)             | [packages/fencing/docs/adr](./packages/fencing/docs/adr)             |

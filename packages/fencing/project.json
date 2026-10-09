@@ -1,0 +1,11 @@
+{
+  "name": "fencing",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "packages/fencing/src",
+  "projectType": "library",
+  "tags": ["layer:island", "test:node"],
+  "targets": {
+    "format": {},
+    "test": {}
+  }
+}

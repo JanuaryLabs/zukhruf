@@ -1,0 +1,47 @@
+{
+  "name": "@zukhruf/fencing",
+  "version": "0.3.16",
+  "description": "Fencing tokens: a number that grows with each grant, so a protected resource refuses the writes of a stale holder. Token sources that count in memory, in files, or by epoch, and the fenced lease that carries a token.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/JanuaryLabs/zukhruf",
+    "directory": "packages/fencing"
+  },
+  "bugs": {
+    "url": "https://github.com/JanuaryLabs/zukhruf/issues"
+  },
+  "homepage": "https://github.com/JanuaryLabs/zukhruf/tree/main/packages/fencing#readme",
+  "keywords": [
+    "fencing",
+    "fencing-token",
+    "lock",
+    "lease",
+    "stale",
+    "distributed"
+  ],
+  "type": "module",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "@zukhruf/source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "!dist/spec/**",
+    "!**/*.tsbuildinfo",
+    "!**/*.test.*"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@zukhruf/fs": "^0.3.16",
+    "@zukhruf/lease": "^0.3.16"
+  }
+}

@@ -28,6 +28,9 @@
     },
     {
       "path": "./packages/lease"
+    },
+    {
+      "path": "./packages/fencing"
     }
   ]
 }
