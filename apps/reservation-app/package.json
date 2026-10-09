@@ -3,6 +3,7 @@
   "private": true,
   "type": "module",
   "dependencies": {
+    "@zukhruf/fencing": "*",
     "@zukhruf/mutex": "*",
     "hono": "^4.13.13"
   }

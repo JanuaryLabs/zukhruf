@@ -21,12 +21,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 
-import {
-  type FencingToken,
-  FileTokenSource,
-  MemoryStore,
-  Mutex,
-} from '@zukhruf/mutex';
+import { type FencingToken, FileTokenSource } from '@zukhruf/fencing';
+import { MemoryStore, Mutex } from '@zukhruf/mutex';
 
 const directory = await mkdtemp(join(tmpdir(), 'fenced-'));
 const database = new DatabaseSync(join(directory, 'shop.db'), {

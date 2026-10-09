@@ -1,5 +1,5 @@
 import { Latch } from '@zukhruf/async';
-import type { FencingToken, TokenSource } from '@zukhruf/mutex';
+import type { FencingToken, TokenSource } from '@zukhruf/fencing';
 
 import type { Connection } from '../connection/connection.ts';
 import type {

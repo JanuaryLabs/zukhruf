@@ -14,15 +14,11 @@ interface LockStore {
   isHeld(key: string): Promise<boolean>;
 }
 
-/** What the task gets. */
-interface Lease {
-  readonly token: FencingToken;
-  readonly signal: AbortSignal;
-}
-
 /** What your lock store gives the mutex: the lease and the release. */
-interface LockHandle extends Lease, AsyncDisposable {}
+interface LockHandle extends FencedLease, AsyncDisposable {}
 ```
+
+The task gets a `FencedLease` of [`@zukhruf/fencing`](../../../fencing/README.md): a `token` and a `signal`.
 
 ## The rules
 
@@ -30,7 +26,7 @@ interface LockHandle extends Lease, AsyncDisposable {}
 2. **`tryAcquire` never waits for another holder.** It returns `undefined` when the key is busy.
 3. **Stop waiting when the signal aborts**, and reject with `signal.reason`. If your lock store keeps a queue that a waiter cannot leave, keep its place and pass the key on when its turn comes. The [acquire modes](../concepts/acquire-modes.md) depend on this. A caller that [cancels](../concepts/acquire-modes.md#cancel-a-wait) also depends on this: the mutex gives its signal to your lock store.
 4. **Release the key in `[Symbol.asyncDispose]` of the lock handle.** Only the mutex calls it, after the task, also when the task fails. The task never gets the lock handle. Do not throw when the key is already lost: there is nothing left to release.
-5. **Abort the signal when another holder may get the key.** Abort it with a `LockLostError` for the key. The task can then stop, and the mutex rejects the call with `LockLostError`. If your lock store never loses a key while its holder runs, give a signal that never aborts.
+5. **Abort the signal when another holder may get the key.** Keep a `LeaseController` of [`@zukhruf/lease`](../../../lease/README.md) for each held key, with the key as its subject. Give its `signal` in the lock handle. Call `lose()` when another holder may get the key: the signal then aborts with a `LeaseLostError` for the key. The task can then stop, and the mutex rejects the call with `LeaseLostError`. Call `end()` when the mutex releases the key, so that a loss after the release does nothing. If your lock store never loses a key while its holder runs, give a signal that never aborts.
 6. **Make the fencing token while the key is held.** Use `leaseFor(key, held, tokens)`. It calls the token source, it gives a signal that never aborts, and it releases the key if the token source fails.
 7. **Let the user give a token source.** Use an option `tokens`, as the other lock stores do.
 8. **Answer `isHeld` without a grant.** A [holder check](../../CONTEXT.md) reads what shows a holder. It never takes the lock that callers of `acquire` and `tryAcquire` need, and it makes no fencing token. Otherwise a holder check can make a free key busy, and a caller that skips if busy gives up. See [ADR 0015](../adr/0015-a-holder-check-never-acquires-the-key.md).

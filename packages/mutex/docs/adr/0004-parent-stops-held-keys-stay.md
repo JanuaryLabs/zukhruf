@@ -9,3 +9,5 @@ In the process tree reach, the parent process is the coordinator. When the paren
 ## Consequences
 
 `LockLostError` has one meaning for all lock stores: another holder may have the key now.
+
+2026-10-09: `LockLostError` is now `LeaseLostError` of `@zukhruf/lease`. Its `subject` is the key. Its meaning did not change.

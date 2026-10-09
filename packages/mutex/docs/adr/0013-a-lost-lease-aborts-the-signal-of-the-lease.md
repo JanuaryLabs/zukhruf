@@ -15,3 +15,5 @@ The names follow the terms of other lock libraries: a **handle** that releases t
 - Only the lock stores that use a coordinator over a socket can lose a key while the holder runs: `SocketStore`, after a failover. `ThreadStore` and `IpcStore` keep held keys when their coordinator stops ([ADR 0004](./0004-parent-stops-held-keys-stay.md)). The other lock stores never lose a key while the holder runs, and `leaseFor` gives them a signal that never aborts.
 - A lock store that you write returns a `LockHandle`, not a `Lease`. See [Write your own lock store](../recipes/write-your-own-lock-store.md).
 - A frozen holder can write before its lock store sees the loss. The signal is a warning, and the fencing token is still the protection.
+
+2026-10-09: `LockLostError` is now `LeaseLostError` of `@zukhruf/lease`, and its `subject` is the key. The `Lease` of a task is now `FencedLease` of `@zukhruf/fencing`. The rules of this decision did not change.

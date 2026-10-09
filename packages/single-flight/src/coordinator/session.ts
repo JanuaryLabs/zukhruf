@@ -1,4 +1,4 @@
-import { FencingToken } from '@zukhruf/mutex';
+import { FencingToken } from '@zukhruf/fencing';
 
 import type { Connection } from '../connection/connection.ts';
 import {

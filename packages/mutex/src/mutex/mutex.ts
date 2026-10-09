@@ -1,10 +1,11 @@
 import { untilAborted } from '@zukhruf/async';
+import type { FencedLease } from '@zukhruf/fencing';
+import { LeaseLostError } from '@zukhruf/lease';
 
 import type { AcquireMode, Outcome, OutcomeResults } from './acquire-mode.ts';
 import { WaitMode } from './acquire-modes/wait-mode.ts';
 import { Key } from './key.ts';
-import type { Lease, LockHandle } from './lease.ts';
-import { LockLostError } from './lock-lost-error.ts';
+import type { LockHandle } from './lease.ts';
 import type { AcquireOptions, LockStore } from './lock-store.ts';
 
 const wait = new WaitMode();
@@ -35,18 +36,18 @@ export class Mutex {
   /** Runs `task` while holding `key`, and waits while the key is busy. */
   acquire<T>(
     key: string,
-    task: (lease: Lease) => Promise<T>,
+    task: (lease: FencedLease) => Promise<T>,
     options?: AcquireOptions & { mode?: undefined },
   ): Promise<T>;
   /** Runs `task` while holding `key`. The acquire mode decides what happens while the key is busy. */
   acquire<T, O extends Outcome>(
     key: string,
-    task: (lease: Lease) => Promise<T>,
+    task: (lease: FencedLease) => Promise<T>,
     options: AcquireOptions & { mode: AcquireMode<O> },
   ): Promise<OutcomeResults<T>[O]>;
   acquire<T, O extends Outcome>(
     key: string,
-    task: (lease: Lease) => Promise<T>,
+    task: (lease: FencedLease) => Promise<T>,
     {
       mode,
       signal,
@@ -82,7 +83,7 @@ export class Mutex {
   // against OutcomeResults<T>[O] and needs no type assertion.
   async #run<T, O extends Outcome>(
     key: string,
-    task: (lease: Lease) => Promise<T>,
+    task: (lease: FencedLease) => Promise<T>,
     mode: AcquireMode<O>,
     signal: AbortSignal | undefined,
   ): Promise<OutcomeResults<T>[O]> {
@@ -97,7 +98,7 @@ export class Mutex {
       value = await task({ token, signal: lost });
     } catch (error) {
       if (!lost.aborted || error === lost.reason) throw error;
-      throw new LockLostError(key, { cause: error });
+      throw new LeaseLostError(key, { cause: error });
     }
     // A task that finished after its key was lost did its work without exclusivity.
     if (lost.aborted) throw lost.reason;

@@ -10,3 +10,5 @@ A holder can lose its key and not know it, for example when its process is froze
 ## Consequences
 
 A task gets its lease: `mutex.acquire(key, async (lease) => …)`. A token source that keeps its count in memory starts again at 1 when the process starts again. Use a durable token source with a durable fenced resource.
+
+2026-10-09: `FencingToken`, `TokenSource`, the four token sources, and `FencedLease` (the lease that a task gets) are now in `@zukhruf/fencing`. Import them from that package. The tokens and the `.fence` files did not change.

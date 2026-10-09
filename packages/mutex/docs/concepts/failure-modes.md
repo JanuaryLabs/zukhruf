@@ -30,11 +30,11 @@ The file lock stores identify a holder by its [presence](../adr/0012-a-file-stor
 | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------- |
 | `IpcStore` (the parent stops)    | Get `CoordinatorUnavailableError`. On Windows, Node.js stops the children too, unless they were started with `detached: true`. | Keep the key. No coordinator is left to grant it to another holder ([ADR 0004](../adr/0004-parent-stops-held-keys-stay.md)). |
 | `SocketStore` (the leader stops) | Send their request to the new leader.                                                                                          | Reassert during the grace window. A refused reassert gives a lost lease.                                                     |
-| `SocketStore` (a campaign fails) | Get the error of the campaign, for example a disk error. The next request connects again.                                      | The signal of their lease aborts with `LockLostError`. No leader got their reassert, so another holder may have the key.     |
+| `SocketStore` (a campaign fails) | Get the error of the campaign, for example a disk error. The next request connects again.                                      | The signal of their lease aborts with `LeaseLostError`. No leader got their reassert, so another holder may have the key.    |
 
 ## Errors
 
-- **`LockLostError`**: another holder may have your key now. While the task runs, the signal of the lease aborts with this error. When the task ends, the call rejects with this error, also when the task returned a value. If the task threw a different error, that error is the `cause`. See [ADR 0013](../adr/0013-a-lost-lease-aborts-the-signal-of-the-lease.md).
+- **`LeaseLostError`** of `@zukhruf/lease`: another holder may have your key now. Its `subject` is the key. While the task runs, the signal of the lease aborts with this error. When the task ends, the call rejects with this error, also when the task returned a value. If the task threw a different error, that error is the `cause`. See [ADR 0013](../adr/0013-a-lost-lease-aborts-the-signal-of-the-lease.md).
 - **`CoordinatorUnavailableError`**: no coordinator is left that can grant the key. The request did not run.
 - **`ProtocolVersionError`**: the leader of a `SocketStore` speaks another protocol version, so this process cannot use it. The request did not run. Run one protocol version in each directory. See [SocketStore](../stores/socket-store.md#two-package-versions-in-one-directory).
 

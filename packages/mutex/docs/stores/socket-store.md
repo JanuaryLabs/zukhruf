@@ -61,13 +61,13 @@ A leader of version 0.3.9 or earlier does not know the `isHeld` request, and it 
 
 ## Failure modes
 
-| Event                                            | Result                                                                                                                                                                                                                                |
-| ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| A holder stops                                   | The leader releases its keys in approximately 2 ms.                                                                                                                                                                                   |
-| The leader stops                                 | A failover occurs. Holders reassert their keys during the grace window.                                                                                                                                                               |
-| A holder is frozen during the whole grace window | Its reassert is refused. A newer holder can get the key. When the frozen holder continues, the signal of its lease aborts with `LockLostError`, and the call rejects with `LockLostError`. A fenced resource refuses its late writes. |
-| A holder thread stops                            | Its connection closes, and the key is released.                                                                                                                                                                                       |
-| A campaign fails, for example with a disk error  | Each waiter gets that error. For a holder that did not reassert its keys, the signal of the lease aborts with `LockLostError`. The next `acquire` connects again.                                                                     |
+| Event                                            | Result                                                                                                                                                                                                                                  |
+| ------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A holder stops                                   | The leader releases its keys in approximately 2 ms.                                                                                                                                                                                     |
+| The leader stops                                 | A failover occurs. Holders reassert their keys during the grace window.                                                                                                                                                                 |
+| A holder is frozen during the whole grace window | Its reassert is refused. A newer holder can get the key. When the frozen holder continues, the signal of its lease aborts with `LeaseLostError`, and the call rejects with `LeaseLostError`. A fenced resource refuses its late writes. |
+| A holder thread stops                            | Its connection closes, and the key is released.                                                                                                                                                                                         |
+| A campaign fails, for example with a disk error  | Each waiter gets that error. For a holder that did not reassert its keys, the signal of the lease aborts with `LeaseLostError`. The next `acquire` connects again.                                                                      |
 
 See [failure modes](../concepts/failure-modes.md).
 
@@ -107,7 +107,7 @@ The `'role'` event tells you each time this process starts to lead, or starts to
 - After `SIGKILL` of a client, the server saw the connection close in 1.25 ms.
 - `src/lock-stores/socket/socket-store.test.ts`:
   - A holder keeps its key when the leader stops, and a waiter gets the key only after the release.
-  - A holder that is frozen past the grace window sees the signal of its lease abort before it writes. A fenced resource refuses its write (`'stale'`), and the call rejects with `LockLostError`.
+  - A holder that is frozen past the grace window sees the signal of its lease abort before it writes. A fenced resource refuses its write (`'stale'`), and the call rejects with `LeaseLostError`.
   - A leader that shuts down does not wait for its followers, and a follower keeps its key.
 - A mutation test removed the grace window, the reassert, and the epoch. The tests found each change.
 - A test with real processes of the published package versions 0.3.0, 0.3.1 and 0.3.5 on macOS:

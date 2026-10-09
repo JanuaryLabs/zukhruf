@@ -98,7 +98,7 @@ await mutex.acquire('product:42', async (lease) => {
 });
 ```
 
-Sometimes the lock store sees the loss, for example after a failover of `SocketStore`. Then the signal of the lease aborts with `LockLostError`, and the task can stop before its next write. When the task ends, the call rejects with `LockLostError`:
+Sometimes the lock store sees the loss, for example after a failover of `SocketStore`. Then the signal of the lease aborts with `LeaseLostError`, and the task can stop before its next write. When the task ends, the call rejects with `LeaseLostError`:
 
 ```ts
 await mutex.acquire('product:42', async (lease) => {
@@ -110,6 +110,8 @@ await mutex.acquire('product:42', async (lease) => {
 ```
 
 The signal is a warning. A frozen holder can write before its lock store sees the loss, so the fencing token is still the protection.
+
+The lease is a `FencedLease` of [`@zukhruf/fencing`](../fencing/README.md). Import `FencingToken` and the token sources from `@zukhruf/fencing`. `LeaseLostError` is from [`@zukhruf/lease`](../lease/README.md), and this package also exports it, because its calls reject with it.
 
 See [Fencing tokens](./docs/concepts/fencing-tokens.md) and the recipe [Protect a database from stale holders](./docs/recipes/fence-a-database.md).
 
@@ -169,8 +171,7 @@ The tests run from `src/`, not from `dist/`: they start workers and child proces
 
 ```
 src/
-  mutex/             Mutex, Key, acquire modes, Lease, LockHandle, LockStore, LockLostError
-  fencing/           fencing tokens and token sources
+  mutex/             Mutex, Key, acquire modes, LockHandle, LockStore
   lock-stores/       one folder for each lock store
     remote/          the coordinator and client that ThreadStore, IpcStore and SocketStore share
   leader-election/   leader election (separate entry point, not part of the mutex)

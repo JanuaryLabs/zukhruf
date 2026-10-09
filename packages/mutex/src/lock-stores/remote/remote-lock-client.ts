@@ -1,10 +1,10 @@
 import { randomUUID } from 'node:crypto';
 
 import { untilAborted } from '@zukhruf/async';
+import { FencingToken } from '@zukhruf/fencing';
+import { LeaseController } from '@zukhruf/lease';
 
-import { FencingToken } from '../../fencing/fencing-token.ts';
 import type { LockHandle } from '../../mutex/lease.ts';
-import { LockLostError } from '../../mutex/lock-lost-error.ts';
 import type { AcquireOptions, LockStore } from '../../mutex/lock-store.ts';
 import type { ConnectionSupervisor } from './connection-supervisor.ts';
 import { CoordinatorUnavailableError } from './coordinator-unavailable-error.ts';
@@ -29,8 +29,7 @@ interface Pending extends Pick<
 interface Held {
   key: string;
   token: FencingToken;
-  /** Aborts the lease's signal once another holder may have been granted the key. */
-  lost: AbortController;
+  lease: LeaseController;
 }
 
 /**
@@ -143,12 +142,13 @@ export class RemoteLockClient implements LockStore {
   }
 
   #hold(id: string, key: string, token: FencingToken): LockHandle {
-    const lost = new AbortController();
-    this.#held.set(id, { key, token, lost });
+    const lease = new LeaseController(key);
+    this.#held.set(id, { key, token, lease });
     return {
       token,
-      signal: lost.signal,
+      signal: lease.signal,
       [Symbol.asyncDispose]: async () => {
+        lease.end();
         // A lost key is no longer this client's to release. Forget the key
         // first, so a reconnect cannot reassert a released lease. Without an
         // open connection there is nothing to tell: the coordinator that
@@ -163,7 +163,7 @@ export class RemoteLockClient implements LockStore {
     const held = this.#held.get(id);
     if (!held) return;
     this.#held.delete(id);
-    held.lost.abort(new LockLostError(held.key));
+    held.lease.lose();
   }
 
   #receive(response: LockResponse) {
@@ -171,7 +171,8 @@ export class RemoteLockClient implements LockStore {
       case 'granted': {
         const pending = this.#take(response.id);
         if (pending) {
-          pending.resolve(new FencingToken(BigInt(response.token)));
+          // isLockResponse admits only a token that parses.
+          pending.resolve(FencingToken.parse(response.token)!);
         } else {
           // Nobody waits for this grant any more (the request was cancelled), so give the key back.
           this.#link.send({ op: 'release', id: response.id });

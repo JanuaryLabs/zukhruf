@@ -1,7 +1,7 @@
 import type { Worker } from 'node:worker_threads';
 
-import { CounterTokenSource } from '../../fencing/counter-token-source.ts';
-import type { TokenSource } from '../../fencing/token-source.ts';
+import { CounterTokenSource, type TokenSource } from '@zukhruf/fencing';
+
 import type { LockHandle } from '../../mutex/lease.ts';
 import type { AcquireOptions, LockStore } from '../../mutex/lock-store.ts';
 import { LockCoordinator } from '../remote/lock-coordinator.ts';

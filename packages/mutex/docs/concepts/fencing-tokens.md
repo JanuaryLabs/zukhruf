@@ -1,29 +1,12 @@
 # Fencing tokens
 
-A mutex makes sure that one holder at a time has a key. But a holder can lose its key and not know it. A **fencing token** lets the resource refuse the work of that holder.
+A mutex makes sure that one holder at a time has a key. But a holder can lose its key and not know it, for example when its process freezes. A **fencing token** lets the resource refuse the work of that **stale holder**.
 
-## The problem
+The technique, the rules for a fenced resource, and the token sources are in [`@zukhruf/fencing`](../../../fencing/README.md). This page tells only what the mutex adds: each lease has a token, and each lock store has a default token source.
 
-Process A holds the key and reads the stock. Then process A freezes, for example during a long garbage collection or a `SIGSTOP`. The lock store decides that A stopped, and it grants the key to process B. B sells the last item. Then A continues, and A also sells the last item.
+## Each lease has a token
 
-```
-holder A:  [lease] read stock=1 ......frozen...... write stock=0   ✗ stale write
-holder B:                       [lease] read stock=1, write stock=0
-result:    two customers got the last item
-```
-
-A is a **stale holder**. The mutex cannot stop A, because A does not know that it lost the key. Sometimes the lock store sees the loss, and then the signal of the lease aborts (see [failure modes](./failure-modes.md#errors)). But a frozen holder can write before its lock store sees the loss, so the signal cannot replace the fencing token.
-
-## The solution
-
-Each lease has a fencing token. Each grant of a key has a higher token than all earlier grants of that key. The holder sends its token with each write. The resource keeps the highest token that it has seen, and it refuses a lower one.
-
-```
-B writes with token 34 → resource: highest = 34, write accepted
-A writes with token 33 → resource: 33 < 34, write refused ✓
-```
-
-Read the token from the lease:
+The task gets a `FencedLease` of `@zukhruf/fencing`. Each grant of a key gives a higher token than all earlier grants of that key. Send the token with each write, and let the resource refuse lower tokens:
 
 ```ts
 await mutex.acquire('product:42', async (lease) => {
@@ -31,31 +14,13 @@ await mutex.acquire('product:42', async (lease) => {
 });
 ```
 
-## The resource must do its part
-
-The lock store makes the tokens. The resource must compare them. A stale write goes directly to the resource, not through the mutex. Thus only the resource can refuse it. A resource that compares tokens is a **fenced resource**.
-
-In SQL, do the compare and the write in one statement:
-
-```sql
-UPDATE stock
-SET quantity = quantity - 1, fence = :token
-WHERE product = :product AND fence <= :token AND quantity > 0;
-```
-
-Follow these rules:
-
-- **Refuse only lower tokens.** Use `fence <= :token`, not `fence < :token`. One holder can write two times with the same token.
-- **Do the read and the write in one statement.** If you read first and write later, a stale write can occur between the two.
-- **Compare the tokens as integers.** In `node:sqlite`, bind `token.value` (a `bigint`) and open the database with `readBigInts: true`.
+Sometimes the lock store sees the loss, and then the signal of the lease aborts with `LeaseLostError` (see [failure modes](./failure-modes.md#errors)). But a frozen holder can write before its lock store sees the loss, so the signal cannot replace the fencing token.
 
 See [`apps/reservation-app/src/fenced-stock.ts`](../../../../apps/reservation-app/src/fenced-stock.ts) for a full fenced resource.
 
-Fencing tokens protect only fenced resources. If a stale holder sends an email or calls an API that does not compare tokens, the token does not help.
-
 ## Token sources
 
-A **token source** makes the fencing tokens for a lock store. The lock store calls it while the key is held. Thus two tokens for one key are never made at the same time.
+The lock store calls its token source while it holds the key. Thus two tokens for one key are never made at the same time.
 
 | Token source                | Tokens continue after a restart?             | Default for                                                  |
 | --------------------------- | -------------------------------------------- | ------------------------------------------------------------ |
@@ -67,24 +32,17 @@ A **token source** makes the fencing tokens for a lock store. The lock store cal
 **Use a durable token source with a durable resource.** A database keeps the highest token after your process stops. A memory token source starts again at 1. Then the database refuses all new writes. Give the lock store a durable token source:
 
 ```ts
-import { FileTokenSource, MemoryStore, Mutex } from '@zukhruf/mutex';
+import { FileTokenSource } from '@zukhruf/fencing';
+import { MemoryStore, Mutex } from '@zukhruf/mutex';
 
 const mutex = new Mutex(
   new MemoryStore({ tokens: new FileTokenSource('/var/lib/my-app/fences') }),
 );
 ```
 
-## Why not UUIDv7
-
-UUIDv7 values are unique and approximately ordered by time. A fencing token must be strictly ordered. We tested `crypto.randomUUIDv7()` in Node 26:
-
-- One thread, 100,000 values: 50,160 values were lower than the value before them.
-- Two threads, 2,000 grants one after the other: 936 later grants had a lower value.
-
-Many grants occur in the same millisecond. In that millisecond, UUIDv7 is random. A fenced resource would then refuse correct holders and accept stale holders.
-
 ## Evidence
 
 - `apps/reservation-app/src/fenced-stock.test.ts`: an older token is refused as `'stale'`, and one holder can write two times with one token.
 - `src/lock-stores/socket/socket-store.test.ts`: a holder that was frozen past the grace window writes after a newer holder. A fenced register refuses the write as `'stale'`.
 - `src/mutex/mutex.test.ts`: in each lock store, tokens increase in the order of the grants, also across four processes.
+- `src/lock-stores/socket/wire-compatibility.test.ts` and `npx nx run mutex:test-latest-release`: the tokens on the wire and in `.fence` files are the same as in the published version.

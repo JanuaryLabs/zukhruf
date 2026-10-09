@@ -1,3 +1,5 @@
+import { FencingToken } from '@zukhruf/fencing';
+
 import { isRecord } from '../../shared/is-record.ts';
 
 /** Tokens travel as decimal strings because JSON has no bigint. */
@@ -34,7 +36,7 @@ export interface RequestEnvelope {
 }
 
 const isToken = (value: unknown): boolean =>
-  typeof value === 'string' && /^-?\d+$/.test(value);
+  typeof value === 'string' && FencingToken.parse(value) !== null;
 
 export function isRequestEnvelope(
   message: unknown,

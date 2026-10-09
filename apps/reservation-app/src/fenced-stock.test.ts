@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, test } from 'node:test';
 
-import { FencingToken } from '@zukhruf/mutex';
+import { FencingToken } from '@zukhruf/fencing';
 
 import { FencedStock } from './fenced-stock.ts';
 

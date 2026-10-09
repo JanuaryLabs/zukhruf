@@ -596,7 +596,7 @@ describe('A single flight across processes in the gaps of a failover', () => {
   );
 
   test(
-    'a leader that misses the grace window loses its lease with LockLostError, and its joiners get FlightInterruptedError',
+    'a leader that misses the grace window loses its lease with LeaseLostError, and its joiners get FlightInterruptedError',
     { ...onUnix, timeout: 30_000 },
     async (t) => {
       // Arrange
@@ -625,8 +625,8 @@ describe('A single flight across processes in the gaps of a failover', () => {
       const joined = await heard(t, joiner, 'error', 'j');
 
       // Assert
-      assert.equal(lost.reason, 'LockLostError');
-      assert.equal(led.name, 'LockLostError');
+      assert.equal(lost.reason, 'LeaseLostError');
+      assert.equal(led.name, 'LeaseLostError');
       assert.equal(joined.name, 'FlightInterruptedError');
     },
   );

@@ -1,8 +1,8 @@
 import { unlink } from 'node:fs/promises';
 import { type Server, type Socket, createServer } from 'node:net';
 
+import { EpochTokenSource } from '@zukhruf/fencing';
 import { isErrno } from '@zukhruf/fs';
-import { EpochTokenSource } from '@zukhruf/mutex';
 
 import { welcome } from '../connection/handshake.ts';
 import { SocketConnection } from '../connection/socket-connection.ts';

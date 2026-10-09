@@ -1,6 +1,6 @@
 import { DatabaseSync } from 'node:sqlite';
 
-import type { FencingToken } from '@zukhruf/mutex';
+import type { FencingToken } from '@zukhruf/fencing';
 
 export type Reservation = 'reserved' | 'sold-out' | 'stale';
 

@@ -1,6 +1,6 @@
 import { DatabaseSync } from 'node:sqlite';
 
-import type { FencingToken } from '../fencing/fencing-token.ts';
+import type { FencingToken } from '@zukhruf/fencing';
 
 /**
  * A durable counter that honours fencing tokens: a write that carries a token

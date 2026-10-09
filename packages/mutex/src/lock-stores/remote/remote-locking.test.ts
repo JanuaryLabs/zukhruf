@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
 
-import { CounterTokenSource } from '../../fencing/counter-token-source.ts';
+import { CounterTokenSource } from '@zukhruf/fencing';
+
 import {
   scriptedConnector,
   scriptedPeer,

@@ -1,15 +1,8 @@
-import type { FencingToken } from '../fencing/fencing-token.ts';
-import type { TokenSource } from '../fencing/token-source.ts';
-
-/** Proof that a task holds a key: pass `token` to fenced resources, and stop once `signal` aborts. */
-export interface Lease {
-  readonly token: FencingToken;
-  /** Aborts, with a `LockLostError` as its reason, once another holder may have been granted the key. */
-  readonly signal: AbortSignal;
-}
+import type { FencedLease, TokenSource } from '@zukhruf/fencing';
+import { LeaseController } from '@zukhruf/lease';
 
 /** What a lock store gives the mutex for a granted key: the lease and its release. Only the mutex releases. */
-export interface LockHandle extends Lease, AsyncDisposable {}
+export interface LockHandle extends FencedLease, AsyncDisposable {}
 
 /**
  * Mints the token for a lock that is already held, releasing the lock if
@@ -24,10 +17,14 @@ export async function leaseFor(
 ): Promise<LockHandle> {
   try {
     const token = await tokens.next(key);
+    const lease = new LeaseController(key);
     return {
       token,
-      signal: new AbortController().signal,
-      [Symbol.asyncDispose]: () => held[Symbol.asyncDispose](),
+      signal: lease.signal,
+      [Symbol.asyncDispose]: () => {
+        lease.end();
+        return held[Symbol.asyncDispose]();
+      },
     };
   } catch (error) {
     await held[Symbol.asyncDispose]();

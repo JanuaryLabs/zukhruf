@@ -1,7 +1,6 @@
 import { Latch, untilAborted } from '@zukhruf/async';
+import { CounterTokenSource, type TokenSource } from '@zukhruf/fencing';
 
-import { CounterTokenSource } from '../../fencing/counter-token-source.ts';
-import type { TokenSource } from '../../fencing/token-source.ts';
 import { type LockHandle, leaseFor } from '../../mutex/lease.ts';
 import type { AcquireOptions, LockStore } from '../../mutex/lock-store.ts';
 

@@ -1,5 +1,5 @@
 import { untilAborted } from '@zukhruf/async';
-import type { Lease } from '@zukhruf/mutex';
+import type { FencedLease } from '@zukhruf/fencing';
 
 import { FlightClient, type Lead } from './client/flight-client.ts';
 import type { Codec } from './codec.ts';
@@ -103,13 +103,13 @@ export class SingleFlight<T> implements AsyncDisposable {
   /**
    * Runs `work` for `key` as the leader of a new flight, or joins the flight
    * of `key` in progress. `work` gets the flight's lease: its token, and a
-   * signal that aborts with `LockLostError` once the flight is no longer this
+   * signal that aborts with `LeaseLostError` once the flight is no longer this
    * leader's. A joiner gets the leader's value through the codec, or rejects
    * with `FlightFailedError` or `FlightInterruptedError`.
    */
   async run(
     key: string,
-    work: (lease: Lease) => Promise<T>,
+    work: (lease: FencedLease) => Promise<T>,
     { onJoin, signal }: RunOptions = {},
   ): Promise<FlightValue<T>> {
     const answer = await this.#client.run(key, { signal, onJoin });
@@ -138,7 +138,7 @@ export class SingleFlight<T> implements AsyncDisposable {
 
   /** Runs the work and lands its outcome. Never rejects, so a caller that stopped waiting leaves no rejection behind. */
   async #fly(
-    work: (lease: Lease) => Promise<T>,
+    work: (lease: FencedLease) => Promise<T>,
     lead: Lead,
   ): Promise<Settled<T>> {
     let text: string;

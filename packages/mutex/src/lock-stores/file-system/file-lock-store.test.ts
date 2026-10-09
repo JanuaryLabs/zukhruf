@@ -6,7 +6,8 @@ import { join } from 'node:path';
 import { createInterface } from 'node:readline';
 import { describe, test } from 'node:test';
 
-import { CounterTokenSource } from '../../fencing/counter-token-source.ts';
+import { CounterTokenSource } from '@zukhruf/fencing';
+
 import type { LockStore } from '../../mutex/lock-store.ts';
 import { Mutex } from '../../mutex/mutex.ts';
 import { scratchDirectory } from '../../testing/scratch-directory.ts';

@@ -34,7 +34,7 @@ export interface SocketStoreOptions {
  * a survivor takes over, and holders reassert their keys during the new
  * leader's grace window. Tokens carry the term's epoch, so a holder that
  * missed the window (for example while frozen) is fenced off by any resource
- * that checks tokens, and its lease's signal aborts with `LockLostError`.
+ * that checks tokens, and its lease's signal aborts with `LeaseLostError`.
  */
 export class SocketStore
   extends EventEmitter<{ role: [SocketRole] }>

@@ -27,7 +27,7 @@ The mutex gives the key back when the task ends, so that the next waiter can get
 _Avoid_: Unlock, free
 
 **Lease**:
-The proof that a caller holds a key. A lease has a fencing token and a signal. The signal aborts when the lock store may grant the key to another holder.
+The proof that a caller holds a key. The lease of a mutex is a fenced lease: it has a fencing token and a signal. Its subject is the key. The signal aborts when the lock store may grant the key to another holder. See the glossary of [`@zukhruf/lease`](../lease/CONTEXT.md) and of [`@zukhruf/fencing`](../fencing/CONTEXT.md).
 _Avoid_: Ticket
 
 **Lock handle**:
@@ -98,24 +98,26 @@ _Avoid_: Liveness check, heartbeat, process check
 
 ### Fencing
 
+The glossary of [`@zukhruf/fencing`](../fencing/CONTEXT.md) defines the fencing terms, and the glossary of [`@zukhruf/lease`](../lease/CONTEXT.md) defines the lost lease. The entries below tell only what each term means for a mutex.
+
 **Fencing token**:
-A number that each lease carries. Each grant of a key has a higher number than all earlier grants of that key.
+A number that each lease carries. Each grant of a key has a higher number than all earlier grants of that key. See `@zukhruf/fencing`.
 _Avoid_: Version, revision, lock ID, UUID
 
 **Token source**:
-The thing that makes fencing tokens for a lock store.
+The object that makes the fencing tokens of a lock store. See `@zukhruf/fencing`.
 _Avoid_: Counter, generator
 
 **Fenced resource**:
-A resource that refuses a write with a fencing token lower than the highest token it has seen.
+A resource that refuses a write with a fencing token lower than the highest token it has seen. See `@zukhruf/fencing`.
 _Avoid_: Guarded store, protected resource
 
 **Stale holder**:
-A holder that lost its key without knowing it, for example while it was frozen.
+A holder that lost its key without knowing it, for example while it was frozen. See `@zukhruf/fencing`.
 _Avoid_: Zombie, expired holder
 
 **Lost lease**:
-A lease whose key the lock store may have granted to another holder while the first holder still worked. The signal of a lost lease aborts.
+A lease whose key the lock store may have granted to another holder while the first holder still worked. The signal of a lost lease aborts with `LeaseLostError`. See `@zukhruf/lease`.
 _Avoid_: Stolen lock, broken lock
 
 ### Coordination

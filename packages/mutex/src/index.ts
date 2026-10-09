@@ -1,8 +1,8 @@
 export { Mutex } from './mutex/mutex.ts';
 export { Key } from './mutex/key.ts';
-export { leaseFor, type Lease, type LockHandle } from './mutex/lease.ts';
+export { leaseFor, type LockHandle } from './mutex/lease.ts';
 export type { AcquireOptions, LockStore } from './mutex/lock-store.ts';
-export { LockLostError } from './mutex/lock-lost-error.ts';
+export { LeaseLostError } from '@zukhruf/lease';
 export type {
   Acquired,
   AcquireMode,
@@ -17,13 +17,6 @@ export {
   SkipIfBusyMode,
   type SkipIfBusyOptions,
 } from './mutex/acquire-modes/skip-if-busy-mode.ts';
-
-export { FencingToken } from './fencing/fencing-token.ts';
-export type { TokenSource } from './fencing/token-source.ts';
-export { CounterTokenSource } from './fencing/counter-token-source.ts';
-export { FileTokenSource } from './fencing/file-token-source.ts';
-export { MonotonicClockTokenSource } from './fencing/monotonic-clock-token-source.ts';
-export { EpochTokenSource } from './fencing/epoch-token-source.ts';
 
 export {
   MemoryStore,

@@ -306,7 +306,7 @@ describe('Socket lock server failover', () => {
       );
       assert.equal(
         frozen.find('done')?.outcome,
-        'LockLostError',
+        'LeaseLostError',
         'A holder whose reassertion was refused must learn that it lost the lock',
       );
       assert.equal(register.writes(), 1, 'Only the newer holder may write');

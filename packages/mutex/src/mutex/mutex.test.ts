@@ -11,7 +11,8 @@ import { Worker } from 'node:worker_threads';
 
 import { Hono } from 'hono';
 
-import type { FencingToken } from '../fencing/fencing-token.ts';
+import type { FencingToken } from '@zukhruf/fencing';
+
 import { scratchDirectory } from '../testing/scratch-directory.ts';
 import {
   type StoreCase,

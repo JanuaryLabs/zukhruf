@@ -7,10 +7,11 @@ import { createInterface } from 'node:readline';
 import { type TestContext, describe, test } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
 
+import type { FencedLease } from '@zukhruf/fencing';
+
 import {
-  type Lease,
+  LeaseLostError,
   type LockHandle,
-  LockLostError,
   Mutex,
   SocketStore,
   UnsupportedRequestError,
@@ -179,10 +180,10 @@ describe('A socket store that loses its leader', () => {
       // Assert: no leader heard the reassert, so another holder may have the
       // key; releasing it then has nothing left to release.
       assert.ok(
-        lease.signal.reason instanceof LockLostError,
+        lease.signal.reason instanceof LeaseLostError,
         `The lease must say the key is lost, not ${String(lease.signal.reason)}`,
       );
-      assert.equal(lease.signal.reason.key, 'product:42');
+      assert.equal(lease.signal.reason.subject, 'product:42');
       await assert.doesNotReject(async () => lease[Symbol.asyncDispose]());
       assert.deepEqual(
         unhandled,
@@ -194,19 +195,19 @@ describe('A socket store that loses its leader', () => {
     }
   });
 
-  test('a task whose key is lost while it runs is told before it ends, and its caller then gets LockLostError', async (t) => {
+  test('a task whose key is lost while it runs is told before it ends, and its caller then gets LeaseLostError', async (t) => {
     // Arrange: a task holds a key through the Mutex.
     await using follower = await followerOfStandIn();
     const { leader, store } = follower;
     const timeline: string[] = [];
-    const leased = Promise.withResolvers<Lease>();
+    const leased = Promise.withResolvers<FencedLease>();
     const finish = Promise.withResolvers<void>();
     const running = new Mutex(store)
       .acquire('product:42', async (lease) => {
         lease.signal.addEventListener('abort', () =>
           timeline.push(
-            lease.signal.reason instanceof LockLostError
-              ? `the task is told ${lease.signal.reason.key} is lost`
+            lease.signal.reason instanceof LeaseLostError
+              ? `the task is told ${lease.signal.reason.subject} is lost`
               : `unexpected reason: ${String(lease.signal.reason)}`,
           ),
         );
@@ -216,8 +217,8 @@ describe('A socket store that loses its leader', () => {
       })
       .catch((error: unknown) => {
         timeline.push(
-          error instanceof LockLostError
-            ? 'LockLostError after the task'
+          error instanceof LeaseLostError
+            ? 'LeaseLostError after the task'
             : `unexpected: ${String(error)}`,
         );
       });
@@ -244,7 +245,7 @@ describe('A socket store that loses its leader', () => {
       assert.deepEqual(timeline, [
         'the task is told product:42 is lost',
         'the task ends',
-        'LockLostError after the task',
+        'LeaseLostError after the task',
       ]);
     } finally {
       finish.resolve();
@@ -254,24 +255,24 @@ describe('A socket store that loses its leader', () => {
   for (const [what, failure, expected] of [
     [
       'its own error',
-      (_lease: Lease) => new Error('the write failed'),
-      // A new LockLostError for the key, keeping the task's error as its cause.
-      (error: LockLostError, thrown: unknown) =>
-        error.key === 'product:42' && error.cause === thrown,
+      (_lease: FencedLease) => new Error('the write failed'),
+      // A new LeaseLostError for the key, keeping the task's error as its cause.
+      (error: LeaseLostError, thrown: unknown) =>
+        error.subject === 'product:42' && error.cause === thrown,
     ],
     [
       'the reason of its lease signal',
-      (lease: Lease) => lease.signal.reason,
-      // The lease's own LockLostError, not wrapped again.
-      (error: LockLostError, thrown: unknown) =>
+      (lease: FencedLease) => lease.signal.reason,
+      // The lease's own LeaseLostError, not wrapped again.
+      (error: LeaseLostError, thrown: unknown) =>
         error === thrown && error.cause === undefined,
     ],
   ] as const) {
-    test(`a task that throws ${what} after its key is lost rejects its caller with LockLostError`, async (t) => {
+    test(`a task that throws ${what} after its key is lost rejects its caller with LeaseLostError`, async (t) => {
       // Arrange: a task holds a key through the Mutex.
       await using follower = await followerOfStandIn();
       const { leader, store } = follower;
-      const leased = Promise.withResolvers<Lease>();
+      const leased = Promise.withResolvers<FencedLease>();
       const finish = Promise.withResolvers<void>();
       let thrown: unknown;
       const running = new Mutex(store).acquire('product:42', async (lease) => {
@@ -300,10 +301,10 @@ describe('A socket store that loses its leader', () => {
 
         // Assert: the caller learns the key was not exclusive, with the task's error kept.
         await assert.rejects(running, (error: unknown) => {
-          assert.ok(error instanceof LockLostError, String(error));
+          assert.ok(error instanceof LeaseLostError, String(error));
           assert.ok(
             expected(error, thrown),
-            `Unexpected LockLostError: cause ${String(error.cause)}`,
+            `Unexpected LeaseLostError: cause ${String(error.cause)}`,
           );
           return true;
         });
@@ -366,12 +367,12 @@ describe('A socket store that loses its leader', () => {
       // Assert: the task was told while it ran, the call reports the loss, and
       // the leader that refused the key is not asked to release it.
       assert.equal(reassert.op, 'reassert');
-      assert.ok(reason instanceof LockLostError, String(reason));
-      assert.equal(reason.key, 'product:42');
+      assert.ok(reason instanceof LeaseLostError, String(reason));
+      assert.equal(reason.subject, 'product:42');
       const ended = running.now;
       assert.ok(
         ended.status === 'rejected' && ended.reason === reason,
-        `The call must reject with the lease's LockLostError, not ${JSON.stringify(ended)}`,
+        `The call must reject with the lease's LeaseLostError, not ${JSON.stringify(ended)}`,
       );
       assert.deepEqual(
         second.requests.filter((sent) => sent.op === 'release'),

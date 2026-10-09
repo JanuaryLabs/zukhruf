@@ -1,4 +1,4 @@
-import type { FencingToken } from '@zukhruf/mutex';
+import type { FencingToken } from '@zukhruf/fencing';
 
 import type { Outcome } from '../protocol/flight-protocol.ts';
 import type { Party } from './party.ts';

@@ -1,7 +1,6 @@
 import { Latch, untilAborted } from '@zukhruf/async';
+import { FencingToken, type TokenSource } from '@zukhruf/fencing';
 
-import { FencingToken } from '../../fencing/fencing-token.ts';
-import type { TokenSource } from '../../fencing/token-source.ts';
 import type { LockHandle } from '../../mutex/lease.ts';
 import type { AcquireOptions, LockStore } from '../../mutex/lock-store.ts';
 import { MemoryStore } from '../memory/memory-store.ts';
@@ -228,7 +227,8 @@ class Session {
         this.#requested.add(request.id);
         const claim = this.#coordinator.reassert(
           request.key,
-          new FencingToken(BigInt(request.token)),
+          // isLockRequest admits only a token that parses.
+          FencingToken.parse(request.token)!,
           () => this.#lose(request.id),
         );
         if (!claim) {

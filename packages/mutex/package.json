@@ -47,7 +47,9 @@
   },
   "dependencies": {
     "@zukhruf/async": "^0.3.13",
-    "@zukhruf/fs": "^0.3.16"
+    "@zukhruf/fencing": "^0.3.16",
+    "@zukhruf/fs": "^0.3.16",
+    "@zukhruf/lease": "^0.3.16"
   },
   "devDependencies": {
     "@zukhruf/testing": "^0.3.1",

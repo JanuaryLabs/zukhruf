@@ -1,9 +1,9 @@
 import { unlink } from 'node:fs/promises';
 import { type Server, type Socket, createServer } from 'node:net';
 
+import { EpochTokenSource } from '@zukhruf/fencing';
 import { isErrno } from '@zukhruf/fs';
 
-import { EpochTokenSource } from '../../fencing/epoch-token-source.ts';
 import type { Leadership } from '../../leader-election/leadership.ts';
 import { LockCoordinator } from '../remote/lock-coordinator.ts';
 import {

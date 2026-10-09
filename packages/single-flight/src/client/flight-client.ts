@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto';
 
 import { untilAborted } from '@zukhruf/async';
-import { FencingToken, LockLostError } from '@zukhruf/mutex';
+import { FencingToken } from '@zukhruf/fencing';
+import { LeaseLostError } from '@zukhruf/lease';
 
 import type { ConnectionSupervisor } from '../connection/connection-supervisor.ts';
 import type {
@@ -13,7 +14,7 @@ import type {
 /** This process leads a flight: it runs the work and lands the outcome. */
 export interface Lead {
   readonly token: FencingToken;
-  /** Aborts with a `LockLostError` once the flight is no longer this leader's. */
+  /** Aborts with a `LeaseLostError` once the flight is no longer this leader's. */
   readonly signal: AbortSignal;
   /** Ends the flight with `outcome` for every joiner. Kept and sent again until a coordinator acknowledges it. */
   land(outcome: Outcome): void;
@@ -160,7 +161,7 @@ export class FlightClient {
     const held = this.#held.get(id);
     if (!held) return;
     this.#release(id);
-    held.lost.abort(new LockLostError(held.key));
+    held.lost.abort(new LeaseLostError(held.key));
   }
 
   /** The flight of `id` needs nothing more from this process. */
