@@ -30,7 +30,7 @@ Thus a lease is in this package, and fencing tokens are in `@zukhruf/fencing`.
 
 ## Consequences
 
-- This package has no dependencies. `@zukhruf/fencing` will depend on it, for a lease that also carries a token.
+- This package has no dependencies. `@zukhruf/fencing` depends on it, for a lease that also carries a token (`FencedLease`).
 - `LockLostError` of the mutex and `TermLostError` of the election become `LeaseLostError`. The subject of the mutex is the key. The subject of the election is its leadership.
 - A lease lasts for a session, not for a time. Thus the package has no timer and no renew. An issuer decides when a lease is lost.
 - The package has no events. A holder listens to the `abort` event of the signal.
