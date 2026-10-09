@@ -1,10 +1,9 @@
-import { untilAborted } from '@zukhruf/async';
+import { Latch, untilAborted } from '@zukhruf/async';
 
 import { FencingToken } from '../../fencing/fencing-token.ts';
 import type { TokenSource } from '../../fencing/token-source.ts';
 import type { LockHandle } from '../../mutex/lease.ts';
 import type { AcquireOptions, LockStore } from '../../mutex/lock-store.ts';
-import { Latch } from '../../shared/latch.ts';
 import { MemoryStore } from '../memory/memory-store.ts';
 import type { Connection } from './connection.ts';
 import {

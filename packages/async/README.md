@@ -1,6 +1,6 @@
 # @zukhruf/async
 
-Helpers for code that waits for promises. The package has one function: `untilAborted`. `@zukhruf/mutex` and `@zukhruf/single-flight` use it.
+Helpers for code that waits for promises: `untilAborted` cancels a wait, and `Latch` holds callers until something happened. `@zukhruf/mutex` and `@zukhruf/single-flight` use them.
 
 The words in these documents have one meaning each. See the glossary in [CONTEXT.md](./CONTEXT.md).
 
@@ -35,3 +35,21 @@ An `AbortSignal` is an `EventTarget`. A listener of the `abort` event can call `
 ## No listener stays on the signal
 
 When the promise settles, `untilAborted` removes its listener. Thus many waits on one signal that lives long, for example a signal that stops a server, do not add listeners to it.
+
+## Wait until something happened, with a latch
+
+A latch starts closed. It opens once, with a value. A wait on a closed latch ends when the latch opens, and gets the value. A wait on an open latch ends at once, with the same value. A latch never closes again, and a second `open` changes nothing.
+
+```ts
+import { Latch } from '@zukhruf/async';
+
+const released = new Latch(); // Carries no value.
+const done = new Latch<string>(); // Carries a string.
+
+done.open('report');
+const value = await done.wait(); // 'report'
+```
+
+A latch never rejects. It keeps its value in a box, so it never adopts a promise, whatever its type. Thus a class can keep a latch in a field: the latch cannot fail before somebody awaits it. A latch whose type names a promise refuses one at compile time, because a wait would adopt the promise and could then reject. To share the outcome of work that can fail, give the latch a value that tells how the work ended, for example the `PromiseSettledResult` of `Promise.allSettled`. Each caller then throws the error for itself. See [ADR 0002](./docs/adr/0002-a-latch-carries-a-value-never-a-failure.md).
+
+To stop a wait on a latch, cancel it: `untilAborted(latch.wait(), signal)`.

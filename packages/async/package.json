@@ -1,7 +1,7 @@
 {
   "name": "@zukhruf/async",
   "version": "0.3.14",
-  "description": "Stop a wait for a promise when an AbortSignal aborts, also when another listener stops the abort event, and leave no listener on the signal.",
+  "description": "Helpers for code that waits for promises: cancel a wait when an AbortSignal aborts, and hold callers on a one-shot latch that never rejects.",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -17,7 +17,8 @@
     "abortsignal",
     "abortable",
     "promise",
-    "async"
+    "async",
+    "latch"
   ],
   "type": "module",
   "types": "./dist/index.d.ts",

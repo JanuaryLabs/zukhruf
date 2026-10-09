@@ -1,6 +1,7 @@
 import { EventEmitter } from 'node:events';
 
-import { Latch } from '../../shared/latch.ts';
+import { Latch } from '@zukhruf/async';
+
 import type { Connection } from './connection.ts';
 import type { Connector } from './connector.ts';
 

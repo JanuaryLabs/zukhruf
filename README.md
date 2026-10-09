@@ -4,13 +4,13 @@
 
 ## Packages
 
-| Package                                              | What it does                                                                                                                                                                                       |
-| ---------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [`@zukhruf/mutex`](./packages/mutex)                 | A mutex with interchangeable lock stores, from one object to every process on a host, with fencing tokens on every lease.                                                                          |
-| [`@zukhruf/eslint`](./packages/eslint)               | Shared ESLint rules and configs. Each check is its own named rule, so a repo's config cannot silently erase it. This workspace lints itself with it.                                               |
-| [`@zukhruf/testing`](./packages/testing)             | Disposable fixtures for integration tests: Docker containers and database servers, SQLite and DuckDB databases, HTTP servers and streams. A supervisor removes what a killed test run left behind. |
-| [`@zukhruf/single-flight`](./packages/single-flight) | Callers of one key share the run in progress, in one process or across the processes of a host. A second caller joins the run and gets its outcome, not a "busy" error. It uses `@zukhruf/mutex`.  |
-| [`@zukhruf/async`](./packages/async)                 | Helpers for code that waits for promises. `untilAborted` cancels a wait when its signal aborts, also when other code stops the abort event, and leaves no listener on the signal.                  |
+| Package                                              | What it does                                                                                                                                                                                                   |
+| ---------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`@zukhruf/mutex`](./packages/mutex)                 | A mutex with interchangeable lock stores, from one object to every process on a host, with fencing tokens on every lease.                                                                                      |
+| [`@zukhruf/eslint`](./packages/eslint)               | Shared ESLint rules and configs. Each check is its own named rule, so a repo's config cannot silently erase it. This workspace lints itself with it.                                                           |
+| [`@zukhruf/testing`](./packages/testing)             | Disposable fixtures for integration tests: Docker containers and database servers, SQLite and DuckDB databases, HTTP servers and streams. A supervisor removes what a killed test run left behind.             |
+| [`@zukhruf/single-flight`](./packages/single-flight) | Callers of one key share the run in progress, in one process or across the processes of a host. A second caller joins the run and gets its outcome, not a "busy" error. It uses `@zukhruf/mutex`.              |
+| [`@zukhruf/async`](./packages/async)                 | Helpers for code that waits for promises. `untilAborted` cancels a wait when its signal aborts, also when other code stops the abort event. `Latch` holds callers until something happened, and never rejects. |
 
 ## Apps
 
