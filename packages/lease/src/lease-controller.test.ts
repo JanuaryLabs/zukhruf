@@ -32,6 +32,21 @@ describe('LeaseController', () => {
     assert.equal(Object.hasOwn(controller.signal.reason, 'cause'), false);
   });
 
+  for (const cause of [0, null, '', false]) {
+    test(`a loss keeps a cause of ${JSON.stringify(cause)}, which is a value, not an absence`, () => {
+      // Arrange
+      const controller = new LeaseController('orders');
+
+      // Act
+      controller.lose(cause);
+
+      // Assert
+      assert.ok(controller.signal.reason instanceof LeaseLostError);
+      assert.equal(Object.hasOwn(controller.signal.reason, 'cause'), true);
+      assert.equal(controller.signal.reason.cause, cause);
+    });
+  }
+
   test('a second loss keeps the reason of the first loss', () => {
     // Arrange
     const controller = new LeaseController('orders');

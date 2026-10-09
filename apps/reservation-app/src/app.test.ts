@@ -132,7 +132,10 @@ describe('Reservation endpoint', () => {
         await delay(100);
         leave.abort();
 
-        // Assert: the request ends at once, and the item is still there after the holder leaves.
+        // Assert: the request ends at once, the item is still there after the
+        // holder leaves, and the next caller gets the key. The store lets the
+        // client's attempt go in the background after the 499, so this is also
+        // what shows that no file in the directory is still open (#2344).
         assert.equal((await response).status, 499);
         release.resolve();
         await holder;
@@ -140,6 +143,14 @@ describe('Reservation endpoint', () => {
           stock.quantity('product:42'),
           1,
           'A client that left must not consume the item',
+        );
+        assert.equal(
+          await Promise.race([
+            mutex.acquire('product:42', async () => 'entered' as const),
+            delay(2000, 'still waiting', { ref: false }),
+          ]),
+          'entered',
+          'A client that left must not keep the key',
         );
       } finally {
         release.resolve();

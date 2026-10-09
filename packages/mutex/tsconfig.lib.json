@@ -9,7 +9,13 @@
   "exclude": ["src/**/*.test.ts", "src/testing/**"],
   "references": [
     {
+      "path": "../lease/tsconfig.lib.json"
+    },
+    {
       "path": "../fs/tsconfig.lib.json"
+    },
+    {
+      "path": "../fencing/tsconfig.lib.json"
     },
     {
       "path": "../async/tsconfig.lib.json"
