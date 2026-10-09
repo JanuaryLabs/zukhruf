@@ -77,6 +77,8 @@ See [failure modes](../concepts/failure-modes.md).
 | `pollInterval`               | `10`                             | Milliseconds between two reads of the queue.                                                                                                                        |
 | `tokens`                     | `new FileTokenSource(directory)` | The token source. The default keeps one counter file for each key, so tokens continue after a restart.                                                              |
 
+The token sources come from `@zukhruf/fencing`, for example `import { FileTokenSource } from '@zukhruf/fencing'`.
+
 ## Evidence
 
 - `src/lock-stores/mixed-version.release.test.ts`: a process of the latest release and a process of this source share one directory. In both directions, each one sees the holder of the other, does not get its key, and gets the key after the release. The test downloads the latest release each run, so each change is checked against the version that runs beside it during an upgrade.

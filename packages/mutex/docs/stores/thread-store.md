@@ -88,6 +88,8 @@ See [failure modes](../concepts/failure-modes.md).
 | -------- | -------------------------- | ------------------------------------------------------------------ |
 | `tokens` | `new CounterTokenSource()` | The token source. The default starts at 1 when the process starts. |
 
+The token sources come from `@zukhruf/fencing`, for example `import { CounterTokenSource } from '@zukhruf/fencing'`.
+
 `ThreadStore` has no options. It throws an error in the main thread, because the main thread has no parent port.
 
 ## Evidence

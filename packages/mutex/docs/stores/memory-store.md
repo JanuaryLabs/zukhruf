@@ -58,6 +58,8 @@ The locks are in memory, so they stop with the process. No other process can wai
 | -------- | -------------------------- | ---------------------------------------------------------------------------------------------------------------- |
 | `tokens` | `new CounterTokenSource()` | The token source. The default starts at 1 in each process. For a durable fenced resource, use `FileTokenSource`. |
 
+The token sources come from `@zukhruf/fencing`, for example `import { FileTokenSource } from '@zukhruf/fencing'`.
+
 ## Evidence
 
 The single-process tests in `src/mutex/mutex.test.ts` run against `MemoryStore`:

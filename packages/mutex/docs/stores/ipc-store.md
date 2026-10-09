@@ -82,6 +82,8 @@ See [failure modes](../concepts/failure-modes.md).
 | -------- | -------------------------- | ----------------------------------------------------------------- |
 | `tokens` | `new CounterTokenSource()` | The token source. The default starts at 1 when the parent starts. |
 
+The token sources come from `@zukhruf/fencing`, for example `import { CounterTokenSource } from '@zukhruf/fencing'`.
+
 `IpcStore` has no options. It throws an error if the process has no IPC channel.
 
 ## Evidence
