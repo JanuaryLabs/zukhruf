@@ -43,6 +43,10 @@ const created = await createExclusive('/var/lib/app/job.lock', 'pid 4242');
 if (!created) console.log('Another process holds the job.');
 ```
 
+## A failed write leaves no draft
+
+When a write fails, it removes its draft. Thus failed writes do not fill the directory with drafts. The file at the path keeps its old content.
+
 ## Keep room for the name of the draft
 
 A draft has the name of the path plus `draftSuffixLength` characters. Most file systems limit a file name to 255 bytes. A caller that makes long file names, for example from user keys, keeps `draftSuffixLength` characters of room. Otherwise the name of the draft is too long, and the write fails with `ENAMETOOLONG`.

@@ -112,6 +112,32 @@ const neverOnWindows = {
 
 describe('A replacement in one step', () => {
   test(
+    'an atomic write that cannot replace the path leaves no draft and leaves the path as it was',
+    { timeout: 2_000 },
+    async () => {
+      // Arrange: a directory with content sits at the path, so the rename fails after the draft exists.
+      await using directory = await mkdtempDisposable(
+        join(tmpdir(), 'zukhruf-fs-'),
+      );
+      const path = join(directory.path, 'queue');
+      await mkdir(path);
+      await writeFile(join(path, 'kept'), 'old');
+
+      // Act
+      const writing = atomicWrite(path, 'first\n');
+
+      // Assert
+      await assert.rejects(writing);
+      assert.deepEqual(
+        await readdir(directory.path),
+        ['queue'],
+        'A failed write must not leave its draft',
+      );
+      assert.equal(await readFile(join(path, 'kept'), 'utf8'), 'old');
+    },
+  );
+
+  test(
     'a durable write that cannot replace the path leaves no draft and leaves the path as it was',
     { timeout: 2_000 },
     async () => {
