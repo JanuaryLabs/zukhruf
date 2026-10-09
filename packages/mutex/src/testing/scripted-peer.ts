@@ -1,4 +1,4 @@
-import { EventEmitter } from 'node:events';
+import { EventEmitter, addAbortListener } from 'node:events';
 
 import type {
   Connection,
@@ -57,9 +57,8 @@ export function scriptedConnector<Outgoing, Incoming>() {
         const { promise, resolve, reject } = Promise.withResolvers<
           Connection<Outgoing, Incoming> | undefined
         >();
-        signal.addEventListener('abort', () => reject(signal.reason), {
-          once: true,
-        });
+        // Fires for a signal that already aborted, and for an abort event that an earlier listener stopped.
+        addAbortListener(signal, () => reject(signal.reason));
         calls.push({ signal, resolve, reject });
         return promise;
       },
