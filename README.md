@@ -11,6 +11,7 @@
 | [`@zukhruf/testing`](./packages/testing)             | Disposable fixtures for integration tests: Docker containers and database servers, SQLite and DuckDB databases, HTTP servers and streams. A supervisor removes what a killed test run left behind.                                                                                                                          |
 | [`@zukhruf/single-flight`](./packages/single-flight) | Callers of one key share the run in progress, in one process or across the processes of a host that use one directory. A second caller joins the run and gets its outcome, not a "busy" error. One process of the directory is elected the coordinator, and it pushes each outcome. It uses `@zukhruf/mutex` for its lease. |
 | [`@zukhruf/async`](./packages/async)                 | Helpers for code that waits for promises. `untilAborted` cancels a wait when its signal aborts, also when other code stops the abort event. `Latch` holds callers until something happened, and never rejects.                                                                                                              |
+| [`@zukhruf/fs`](./packages/fs)                       | File writes that a reader never sees half done: replace a file in one step, with or without a sync to the disk, or create it only when it is absent. Also refuses a directory on a network file system, and retries the short refusals of Windows.                                                                          |
 
 ## Apps
 
