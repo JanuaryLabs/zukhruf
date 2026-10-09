@@ -11,7 +11,11 @@ import { CoordinatorUnavailableError } from './coordinator-unavailable-error.ts'
 import type { LockRequest, LockResponse } from './protocol.ts';
 import { Queries } from './queries.ts';
 
-interface Pending {
+/** Keeps only what settles the caller's promise; the caller keeps the promise. */
+interface Pending extends Pick<
+  PromiseWithResolvers<FencingToken | undefined>,
+  'resolve' | 'reject'
+> {
   key: string;
   /** A wait is sent again after a reconnect; a try gives up instead. */
   attempt: 'acquire' | 'try';
@@ -20,7 +24,6 @@ interface Pending {
    * `stranded` went out on a connection that was lost before it was answered.
    */
   delivery: 'queued' | 'sent' | 'stranded';
-  answer: PromiseWithResolvers<FencingToken | undefined>;
 }
 
 interface Held {
@@ -60,9 +63,9 @@ export class RemoteLockClient implements LockStore {
   ): Promise<LockHandle> {
     signal?.throwIfAborted();
     const id = randomUUID();
-    const { answer } = this.#request(id, key, 'acquire');
+    const answer = this.#request(id, key, 'acquire');
     try {
-      const token = await untilAborted(answer.promise, signal);
+      const token = await untilAborted(answer, signal);
       // The coordinator answers 'busy' only to a try; an acquire waits for its grant.
       if (!token) {
         throw new Error(
@@ -78,7 +81,7 @@ export class RemoteLockClient implements LockStore {
 
   async tryAcquire(key: string): Promise<LockHandle | undefined> {
     const id = randomUUID();
-    const token = await this.#request(id, key, 'try').answer.promise;
+    const token = await this.#request(id, key, 'try');
     return token && this.#hold(id, key, token);
   }
 
@@ -103,19 +106,27 @@ export class RemoteLockClient implements LockStore {
     }
   }
 
-  #request(id: string, key: string, attempt: Pending['attempt']): Pending {
+  #request(
+    id: string,
+    key: string,
+    attempt: Pending['attempt'],
+  ): Promise<FencingToken | undefined> {
     this.#assertUsable(key);
+    const { promise, resolve, reject } = Promise.withResolvers<
+      FencingToken | undefined
+    >();
     const pending: Pending = {
       key,
       attempt,
       delivery: 'queued',
-      answer: Promise.withResolvers(),
+      resolve,
+      reject,
     };
     this.#pending.set(id, pending);
     this.#updateRef();
     this.#link.open();
     this.#dispatch(id, pending);
-    return pending;
+    return promise;
   }
 
   #dispatch(id: string, pending: Pending) {
@@ -160,7 +171,7 @@ export class RemoteLockClient implements LockStore {
       case 'granted': {
         const pending = this.#take(response.id);
         if (pending) {
-          pending.answer.resolve(new FencingToken(BigInt(response.token)));
+          pending.resolve(new FencingToken(BigInt(response.token)));
         } else {
           // Nobody waits for this grant any more (the request was cancelled), so give the key back.
           this.#link.send({ op: 'release', id: response.id });
@@ -168,7 +179,7 @@ export class RemoteLockClient implements LockStore {
         return;
       }
       case 'busy':
-        this.#take(response.id)?.answer.resolve(undefined);
+        this.#take(response.id)?.resolve(undefined);
         return;
       case 'rejected':
         this.#lose(response.id);
@@ -191,8 +202,7 @@ export class RemoteLockClient implements LockStore {
     }
     for (const [id, pending] of this.#pending) {
       // A try is one attempt; the coordinator that would have answered it is gone.
-      if (pending.delivery === 'stranded')
-        this.#take(id)?.answer.resolve(undefined);
+      if (pending.delivery === 'stranded') this.#take(id)?.resolve(undefined);
       else if (pending.delivery === 'queued') this.#dispatch(id, pending);
     }
     this.#queries.askAgain();
@@ -213,7 +223,7 @@ export class RemoteLockClient implements LockStore {
 
   #rejectAll(reason: (key: string) => unknown) {
     for (const [id, { key }] of this.#pending) {
-      this.#take(id)?.answer.reject(reason(key));
+      this.#take(id)?.reject(reason(key));
     }
     this.#queries.rejectAll(reason);
   }

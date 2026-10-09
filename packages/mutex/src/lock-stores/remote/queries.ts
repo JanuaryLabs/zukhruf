@@ -4,9 +4,12 @@ import type { ConnectionSupervisor } from './connection-supervisor.ts';
 import type { LockRequest, LockResponse } from './protocol.ts';
 import { UnsupportedRequestError } from './unsupported-request-error.ts';
 
-interface Query {
+/** Keeps only what settles the caller's promise; the caller keeps the promise. */
+interface Query extends Pick<
+  PromiseWithResolvers<boolean>,
+  'resolve' | 'reject'
+> {
   key: string;
-  answer: PromiseWithResolvers<boolean>;
 }
 
 /**
@@ -34,12 +37,12 @@ export class Queries {
 
   ask(key: string): Promise<boolean> {
     const id = randomUUID();
-    const query: Query = { key, answer: Promise.withResolvers() };
-    this.#waiting.set(id, query);
+    const { promise, resolve, reject } = Promise.withResolvers<boolean>();
+    this.#waiting.set(id, { key, resolve, reject });
     this.#changed();
     this.#link.open();
     this.#link.send({ op: 'isHeld', id, key });
-    return query.answer.promise;
+    return promise;
   }
 
   /** A new connection: asks each look that has no answer yet. */
@@ -50,18 +53,18 @@ export class Queries {
   }
 
   answer(id: string, held: boolean) {
-    this.#take(id)?.answer.resolve(held);
+    this.#take(id)?.resolve(held);
   }
 
   /** The coordinator does not know the look: it runs an older version. */
   refuse(id: string) {
     const query = this.#take(id);
-    query?.answer.reject(new UnsupportedRequestError('isHeld', query.key));
+    query?.reject(new UnsupportedRequestError('isHeld', query.key));
   }
 
   rejectAll(reason: (key: string) => unknown) {
     for (const [id, { key }] of this.#waiting) {
-      this.#take(id)?.answer.reject(reason(key));
+      this.#take(id)?.reject(reason(key));
     }
   }
 
