@@ -515,8 +515,9 @@ describe('A peer that gives up or leaves', () => {
     quitter.send({ op: 'acquire', id: 'q', key: 'product:42' });
     await delay(settle);
 
-    // Act: the peer disconnects, and then the holder releases.
+    // Act: the peer disconnects, the leader ends its session, and then the holder releases.
     quitter.drop();
+    await delay(settle);
     await holder[Symbol.asyncDispose]();
 
     // Assert: the key does not go to the peer that left.
