@@ -5,6 +5,7 @@
  */
 export class Latch<T = void> {
   /** Holds the value in a box, so it never adopts a promise and never rejects, whatever `T` is. */
+  // eslint-disable-next-line zukhruf/no-promise-field -- A latch never rejects and is never replaced, so no hazard of the rule applies; it is the primitive the rule recommends.
   readonly #opened = Promise.withResolvers<{ value: T }>();
 
   /**

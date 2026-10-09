@@ -12,4 +12,4 @@ Many objects go through phases. A connection is connecting, connected, or closed
 
 - `store.role` is removed. A consumer listens to the `'role'` event, and keeps the last value if it needs the current role. A follower gets the event again after each failover.
 - The connection supervisor, the coordinator, and each session of the coordinator use state objects. `MemoryStore` queues its callers on latches. A connection delivers its messages and its loss as events.
-- Two lint rules in `zukhruf/base` refuse the common forms. `zukhruf/no-promise-field` refuses a promise in a field. `zukhruf/no-phase-flag` refuses a boolean field, or a field that can be `undefined`, when code outside the constructor sets it. Neither rule sees a phase in a union field. A review must find that form.
+- Two lint rules in `zukhruf/base` refuse the common forms. `zukhruf/no-promise-field` refuses a promise in a field, also in a record that the field holds. `zukhruf/no-phase-flag` refuses a boolean field, or a field that can be `undefined`, when code outside the constructor sets it. Neither rule sees a phase in a union field. A review must find that form.

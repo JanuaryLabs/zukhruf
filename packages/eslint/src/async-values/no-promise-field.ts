@@ -1,35 +1,127 @@
 import { ESLintUtils, type TSESTree } from '@typescript-eslint/utils';
 import {
+  intersectionConstituents,
+  isSymbolFlagSet,
   isThenableType,
   isTypeReference,
   unionConstituents,
 } from 'ts-api-utils';
-import type ts from 'typescript';
+import * as ts from 'typescript';
 
 import { eslintRule } from '../authoring/rule-module.ts';
 
+/** What the walk over one field's type reads from the program. */
+interface Walk {
+  checker: ts.TypeChecker;
+  program: ts.Program;
+  node: ts.Node;
+}
+
+/** A file of TypeScript's lib, or of a package under node_modules. */
+const isLibraryFile = (program: ts.Program, file: ts.SourceFile) =>
+  program.isSourceFileDefaultLibrary(file) ||
+  program.isSourceFileFromExternalLibrary(file);
+
+/**
+ * The result of `Promise.withResolvers()`, from the lib or a polyfill. It keeps
+ * its promise in a property, so a check of the type itself misses it.
+ */
+function isPromiseWithResolvers({ program }: Walk, type: ts.Type): boolean {
+  const symbol = type.getSymbol();
+  return (
+    symbol?.getName() === 'PromiseWithResolvers' &&
+    symbol
+      .getDeclarations()
+      ?.some((declaration) =>
+        isLibraryFile(program, declaration.getSourceFile()),
+      ) === true
+  );
+}
+
+/**
+ * The type arguments of a generic type (`Map<K, V>`) and of a type alias
+ * (`Record<K, V>`, `Partial<T>`), which TypeScript keeps apart.
+ */
+function typeArguments({ checker }: Walk, type: ts.Type): readonly ts.Type[] {
+  return [
+    ...(isTypeReference(type) ? checker.getTypeArguments(type) : []),
+    ...(type.aliasTypeArguments ?? []),
+  ];
+}
+
+/** How many properties deep the walk follows records, so a recursive generic record ends. */
+const RECORD_DEPTH = 4;
+
+/**
+ * A shape of data that the project declares. A class is not one: the rule
+ * checks the fields of each class itself. A library's type is not one either:
+ * its promises, such as a stream writer's `closed`, belong to the library. A
+ * function type is one, but it has no properties, so nothing in it is found.
+ */
+function isProjectRecord({ program }: Walk, type: ts.Type): boolean {
+  const symbol = type.getSymbol();
+  if (!symbol || isSymbolFlagSet(symbol, ts.SymbolFlags.Class)) return false;
+  const declarations = symbol.getDeclarations();
+  return (
+    declarations !== undefined &&
+    declarations.length > 0 &&
+    declarations.every(
+      (declaration) => !isLibraryFile(program, declaration.getSourceFile()),
+    )
+  );
+}
+
+/**
+ * What a record holds: its properties and its index signatures. A method is a
+ * function type, so the walk finds no promise in it.
+ */
+function recordMembers({ checker }: Walk, type: ts.Type): ts.Type[] {
+  return [
+    ...checker
+      .getPropertiesOfType(type)
+      .map((property) => checker.getTypeOfSymbol(property)),
+    ...checker.getIndexInfosOfType(type).map((info) => info.type),
+  ];
+}
+
 /**
  * Whether `type` is a promise, or carries one as a type argument
- * (`Map<string, Promise<X>>`, `Promise<X>[]`). A function type is not entered:
- * a field that holds `() => Promise<X>` holds the memoized function this rule
- * asks for.
+ * (`Map<string, Promise<X>>`, `Promise<X>[]`) or as a member of a record the
+ * project declares, in any member of a union or an intersection. A function
+ * type is not entered: a field that holds `() => Promise<X>` holds the
+ * memoized function this rule asks for.
+ *
+ * `path` holds only the types on the way to this one: a type that one branch
+ * met at the depth limit must still be walked when another branch meets it
+ * higher up.
  */
 function holdsPromise(
-  checker: ts.TypeChecker,
-  node: ts.Node,
+  walk: Walk,
   type: ts.Type,
-  seen = new Set<ts.Type>(),
+  depth = 0,
+  path = new Set<ts.Type>(),
 ): boolean {
-  if (seen.has(type)) return false;
-  seen.add(type);
-  if (isThenableType(checker, node, type)) return true;
-  return unionConstituents(type).some(
-    (part) =>
-      isTypeReference(part) &&
-      checker
-        .getTypeArguments(part)
-        .some((argument) => holdsPromise(checker, node, argument, seen)),
-  );
+  if (path.has(type)) return false;
+  path.add(type);
+  try {
+    if (isThenableType(walk.checker, walk.node, type)) return true;
+    return unionConstituents(type)
+      .flatMap((part) => intersectionConstituents(part))
+      .some(
+        (part) =>
+          isPromiseWithResolvers(walk, part) ||
+          typeArguments(walk, part).some((argument) =>
+            holdsPromise(walk, argument, depth, path),
+          ) ||
+          (depth < RECORD_DEPTH &&
+            isProjectRecord(walk, part) &&
+            recordMembers(walk, part).some((member) =>
+              holdsPromise(walk, member, depth + 1, path),
+            )),
+      );
+  } finally {
+    path.delete(type);
+  }
 }
 
 /** The node that names a field: its key, or a parameter property's binding. */
@@ -64,12 +156,17 @@ const rule = ESLintUtils.RuleCreator.withoutDocs({
   create(context) {
     // Throws the standard "requires type information" error without typed lint.
     const services = ESLintUtils.getParserServices(context);
-    const checker = services.program.getTypeChecker();
+    const { program } = services;
+    const checker = program.getTypeChecker();
     const check = (node: Parameters<typeof fieldName>[0]) => {
       const name = fieldName(node);
       const type = services.getTypeAtLocation(name);
-      const tsNode = services.esTreeNodeToTSNodeMap.get(name);
-      if (holdsPromise(checker, tsNode, type)) {
+      const walk = {
+        checker,
+        program,
+        node: services.esTreeNodeToTSNodeMap.get(name),
+      };
+      if (holdsPromise(walk, type)) {
         context.report({ node, messageId: 'promiseField' });
       }
     };
