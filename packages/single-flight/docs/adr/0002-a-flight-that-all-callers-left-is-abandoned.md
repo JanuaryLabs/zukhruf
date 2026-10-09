@@ -1,5 +1,7 @@
 # A flight that all callers left is abandoned
 
+> Superseded by [ADR 0004](./0004-a-cancel-withdraws-only-its-caller.md): a cancel now withdraws only its caller, and no flight is abandoned.
+
 A caller can cancel its wait with a signal. The cancel of one caller must not stop the flight for the other callers, so no caller's signal reaches the work. But when all callers of a flight cancel, nobody waits for its outcome. Before this decision, the flight then continued for nobody. In a `SharedFlight`, a process that joins reads the flight record until the flight in the other process ends. When it finds no flight to follow, it tries the key, and it can run the work that all its callers cancelled. Thus each flight counts the callers that wait for it. When the last caller cancels, the flight is **abandoned**, in one synchronous step: the flight leaves the map of its key, and a signal that the work got aborts. The next call of the key starts a new flight. The work stops only when it reads the signal. In a `SharedFlight`, a process that joins stops to read the flight record, and it never tries the key for callers that left. A flight that a process leads continues to its end, because joiners in other processes, which this process cannot count, can wait for its outcome.
 
 ## Considered Options

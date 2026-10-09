@@ -1,5 +1,7 @@
 # A joiner follows its flight record without acquiring the key
 
+> Superseded by [ADR 0003](./0003-a-caller-leads-or-joins-in-one-request-to-an-elected-coordinator.md): a caller now leads or joins in one request to an elected coordinator, and there are no flight records.
+
 A second `sync` must not fail when a sync runs. It must join the flight and report its outcome. A joiner in another process must learn two facts: when the flight ends, and its outcome. The lock store knows neither fact. A busy key does not prove that a flight runs: `LockCoordinator` answers "busy" to each attempt during its grace window, and `SqliteStore` answers "busy" while a caller in the same process waits in line. A key that is free does not tell the outcome. Thus the leader writes a flight record before it runs the work, and it writes the outcome into the record when the work ends. A joiner **follows** the record: it reads the record until the flight has an outcome. It uses a [holder check](../../../mutex/docs/adr/0015-a-holder-check-never-acquires-the-key.md) only to learn whether a running flight still has a holder. The joiner never acquires the key.
 
 ## Considered Options

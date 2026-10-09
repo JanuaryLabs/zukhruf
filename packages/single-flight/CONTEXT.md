@@ -1,17 +1,17 @@
 # Single flight
 
-Callers of one key share the flight in progress. A caller that comes while a flight runs does not start a second flight. It joins the flight and gets its outcome. The package uses the mutex of `@zukhruf/mutex` to decide which caller runs the flight. Holder, key, lease and lock store have the meanings that [the mutex glossary](../mutex/CONTEXT.md) gives them.
+Callers of one key share the flight in progress. A caller that comes while a flight runs does not start a second flight. It joins the flight and gets its outcome. All the processes that use one directory share their flights. One of these processes is the coordinator, and each call goes through it. Lease and token have the meanings that [the mutex glossary](../mutex/CONTEXT.md) gives them.
 
 ## Language
 
 ### Flights
 
 **Flight**:
-One run of the work for a key. A key has at most one flight in progress.
+One run of the work for a key. A key has at most one flight in progress in a directory.
 _Avoid_: Job, request, call
 
 **Leader**:
-The caller whose call runs the flight. In a `SharedFlight`, the leader is also the holder of the key. This term is not the leader of leader election in the mutex glossary.
+The caller whose call runs the work of the flight. Its process can be any process of the directory. The leader is not the coordinator.
 _Avoid_: Owner, primary
 
 **Join**:
@@ -19,45 +19,55 @@ A caller waits for the flight in progress instead of starting one. The caller th
 _Avoid_: Dedupe, attach, subscribe
 
 **Joiner**:
-A caller that joined a flight.
-_Avoid_: Follower, waiter (a waiter waits for a key, not for a flight)
+A caller that joined a flight. The coordinator told it which flight it joined, and its `onJoin` ran.
+_Avoid_: Follower, waiter
+
+**Landing**:
+The leader ends its flight with a value or an error. The coordinator pushes that outcome to each joiner.
+_Avoid_: Release, commit
 
 **Outcome**:
-How a flight ended: succeeded, with its value; failed, with its error; or interrupted, with no value.
+How a flight ended: landed with a value, landed with an error, or interrupted.
 _Avoid_: Result, response
 
 **Interrupted**:
-The outcome of a flight whose holder stopped before the flight had a value: its process stopped, its lease was lost, or its records refused the outcome.
+The outcome of a flight that ended without a landing: the process of its leader stopped, or its leader lost the lease of the flight. A joiner of an interrupted flight never runs the work again.
 _Avoid_: Aborted, crashed
 
-**Successor**:
-The flight that began after an earlier flight of the key was interrupted. A joiner of the interrupted flight continues with the successor.
-_Avoid_: Retry, next run
-
-### Callers that stop waiting
+**Codec**:
+The pair `encode` and `decode`. It turns the value of a flight into text and back. The value goes to the joiners as that text.
+_Avoid_: Serializer, parse
 
 **Cancel**:
-A caller stops its own wait with a signal. The call rejects with the reason of the signal. The flight continues for the other callers.
+A caller stops its own wait with a signal. The call rejects with the reason of the signal. The flight continues for the other callers, also when the caller of the leader cancels.
 _Avoid_: Abort (the signal aborts; the caller cancels), give up
 
-**Abandoned**:
-A flight whose callers all cancelled before it ended. The next call of the key starts a new flight. The work of an abandoned flight gets a signal that aborts, and it can stop early.
-_Avoid_: Orphaned, dropped
+### The coordinator
 
-### Across processes
+**Directory**:
+The local folder where the processes that share flights meet. All the processes that use one directory are one group. A key is shared only in its group.
+_Avoid_: Records, lock directory
 
-**Flight record**:
-The durable trace of one flight: its id, and its outcome when it has one. A joiner in another process reads it.
-_Avoid_: Cache, log, result
+**Coordinator**:
+The process of a directory that won the election. It answers each call: lead or join, in one step. It pushes each landing to the joiners.
+_Avoid_: Leader (a leader runs a flight), server, master
 
-**Records**:
-The place that keeps the flight records of the keys, for example one directory. Only the holder of a key writes the flight records of the key. Joiners only read them.
-_Avoid_: Store (the mutex has lock stores), database
+**Term**:
+The time that one coordinator holds its election. A term ends when the process of the coordinator stops or disposes its single flight.
+_Avoid_: Session, lease
 
-**Follow**:
-A joiner in another process reads the flight record of its flight until the flight has an outcome. It asks the mutex for the holder only to learn whether a running flight still has one.
-_Avoid_: Poll the lock, wait for the key
+**Epoch**:
+The number of a term. Each term has a higher epoch than all the terms before it. The epoch is the high 32 bits of each lease token of the term.
+_Avoid_: Generation, version
 
-**Keep window**:
-How long the outcome of a flight stays readable after the flight ended. A joiner that reads later gets no outcome.
-_Avoid_: TTL, cache time
+**Grace window**:
+The first milliseconds of a term that follows another term. The coordinator starts no flight in it, so the leaders can reassert the flights in progress first. The first term of a directory has no grace window.
+_Avoid_: Timeout, delay
+
+**Reassert**:
+A leader tells a new coordinator about the flight that it leads, after the coordinator before it stopped. A reassert after the grace window is refused, and the leader loses its flight.
+_Avoid_: Reclaim, re-register
+
+**Rejoin**:
+A joiner that lost its connection asks the new coordinator for the flight that it joined, by the token of that flight. A rejoin never leads. A call that got no answer joined nothing, so it is not a rejoin: it goes again as a new call.
+_Avoid_: Resend, retry

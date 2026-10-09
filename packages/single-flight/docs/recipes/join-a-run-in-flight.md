@@ -2,11 +2,11 @@
 
 **Use case.** A command-line tool has a `sync` command. A sync takes a long time. A user starts `sync` in two terminals, or cron starts it while the user runs it. A second sync must not run, and a "busy" error does not help the user. The second `sync` must tell the user that a sync runs, wait for it, and report its outcome.
 
-**What you need.** A `SharedFlight` in each process, with a host lock store such as `SqliteStore` and a `FileFlightRecords`. All processes use the same lock directory and the same records directory. The two directories are different.
+**What you need.** A `SingleFlight` in each process, with the same directory and a codec for the value. The directory is a local folder of your tool, for example its data folder.
 
 ## The steps
 
-1. Create a `SharedFlight` with the mutex, the records and a `parse` function for the value.
+1. Create a `SingleFlight` with the directory and the codec.
 2. Call `flights.run('sync', sync, { onJoin })`. The first caller is the leader: its process runs the sync.
 3. Each other caller joins the flight. Its `onJoin` tells the user that a sync runs. Then it waits for the outcome of the flight.
 4. Each caller gets `{ value, joined }`. The value is the same for all callers of the flight.
@@ -23,19 +23,14 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 
-import { Mutex, SqliteStore } from '@zukhruf/mutex';
-import { FileFlightRecords, SharedFlight } from '@zukhruf/single-flight';
+import { SingleFlight } from '@zukhruf/single-flight';
 
 const [role, shared] = process.argv.slice(2);
 
 if (role === 'sync') {
-  const flights = new SharedFlight({
-    mutex: new Mutex(new SqliteStore(join(shared!, 'locks'))),
-    records: new FileFlightRecords(join(shared!, 'flights')),
-    parse: (value) => {
-      if (typeof value !== 'string') throw new TypeError('Not a sync summary.');
-      return value;
-    },
+  const flights = new SingleFlight<string>({
+    directory: join(shared!, 'flights'),
+    codec: { encode: (summary) => summary, decode: (text) => text },
   });
 
   async function sync() {
@@ -51,6 +46,7 @@ if (role === 'sync') {
     join(shared!, 'outcomes.log'),
     `${joined ? 'joined' : 'ran'}: ${value}\n`,
   );
+  await flights[Symbol.asyncDispose]();
 } else {
   const directory = await mkdtemp(join(tmpdir(), 'join-a-sync-'));
   const exits = [1, 2, 3].map(() =>
@@ -84,15 +80,15 @@ A sync is running. Waiting for it…
 
 ## Why it works
 
-Only the holder of the key `sync` runs the sync, so the mutex lets one copy be the leader. Before the leader runs the sync, it writes a flight record: the flight is running. The other copies find the key busy. They read the flight record, call `onJoin`, and then read the flight record again until the flight has an outcome. A joiner never acquires the key, so it never makes the key busy for another caller. See [ADR 0001](../adr/0001-a-joiner-follows-its-flight-record-without-acquiring-the-key.md).
+The three copies use one directory, so they take part in one election. The first copy that wins becomes the coordinator. Each copy then sends its call to the coordinator. The coordinator answers the first call: lead. It answers the other two calls: join. The leader runs the sync. When the sync ends, the coordinator pushes its outcome to the two joiners. See [ADR 0003](../adr/0003-a-caller-leads-or-joins-in-one-request-to-an-elected-coordinator.md).
 
-The value goes into the flight record as JSON. Each copy, also the leader, gets `parse` of that JSON value. Thus all callers get the value in the same shape.
+The value goes to the joiners as text. Each copy, also the leader, gets `decode` of that text. Thus all callers get the value in the same shape.
 
 ## Things to know
 
 - **A copy that starts after the sync ended runs a new sync.** A flight is not a cache. To share a value after its flight ended, see the mutex recipe [Compute a value once and share it](../../../mutex/docs/recipes/compute-once-and-share-it.md).
 - **To limit the wait, give a signal**: `flights.run('sync', sync, { onJoin, signal: AbortSignal.timeout(30_000) })`. When the signal aborts, the call of that copy rejects with the reason of the signal. The sync continues for the other copies.
-- **When the sync fails**, the leader rejects with the original error. A joiner in another process rejects with `FlightFailedError`, which has the `name`, the `message` and the `code` of the error.
-- **When the process of the leader stops during the sync**, a joiner rejects with `FlightInterruptedError`. The next `sync` runs a new sync. If another process begins the next sync first, the joiner continues with that successor and gets its outcome.
-- **Joiners read the flight record every `pollInterval` milliseconds.** The default is 100 ms. For a sync that takes minutes, increase it. Then keep the outcome readable for longer, too: `new FileFlightRecords(directory, { keepFor })` with `keepFor` at least 20 times the `pollInterval`.
-- **Callers in one process share one flight first.** Only one caller in each process reads the flight records.
+- **When the sync fails**, the leader rejects with the original error. A joiner rejects with `FlightFailedError`, which has the `name`, the `message` and the `code` of the error.
+- **When the process of the leader stops during the sync**, each joiner rejects with `FlightInterruptedError`, and no joiner runs the sync again. The next `sync` runs a new sync.
+- **When the coordinator stops during the sync**, the other copies elect a new coordinator. The leader reasserts its flight, and the joiners get the outcome of the sync. See [When a process stops](../../README.md#when-a-process-stops).
+- **Dispose the `SingleFlight` before the process ends.** Disposing waits until the outcome of a sync that this process led reached the coordinator.

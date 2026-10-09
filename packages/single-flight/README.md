@@ -1,6 +1,6 @@
 # @zukhruf/single-flight
 
-Callers of one key share the flight in progress, in one process or across the processes of a host. A caller that comes while a flight runs does not start a second flight and does not fail with a "busy" error. It joins the flight and gets its outcome. This pattern is also known as single-flight or request coalescing, as in Go's `golang.org/x/sync/singleflight`.
+Callers of one key share the flight in progress, in one process and across all the processes that use one directory. A caller that comes while a flight runs does not start a second flight and does not fail with a "busy" error. It joins the flight and gets its outcome. This pattern is also known as single-flight or request coalescing, as in Go's `golang.org/x/sync/singleflight`.
 
 The words in these documents have one meaning each. See the glossary in [CONTEXT.md](./CONTEXT.md).
 
@@ -14,11 +14,18 @@ A user runs `sync`. A second `sync` starts while the first one runs. The mutex o
 The user wanted a sync to happen. Thus the second `sync` must tell the user that a sync runs, wait for it, and report its outcome. That is a join:
 
 ```ts
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 
 import { SingleFlight } from '@zukhruf/single-flight';
 
-const flights = new SingleFlight<string>();
+const directory = await mkdtemp(join(tmpdir(), 'reports-'));
+const flights = new SingleFlight<string>({
+  directory,
+  codec: { encode: (report) => report, decode: (text) => text },
+});
 let builds = 0;
 
 async function buildReport() {
@@ -33,6 +40,8 @@ const calls = [1, 2, 3].map(() =>
   }),
 );
 console.log(await Promise.all(calls), { builds });
+await flights[Symbol.asyncDispose]();
+await rm(directory, { recursive: true, force: true });
 ```
 
 Output:
@@ -47,7 +56,7 @@ A report is being built. Waiting for it…
 ] { builds: 1 }
 ```
 
-The first caller is the leader: its call runs the flight. The other two callers join it. `onJoin` runs once for each joiner, before it waits. A call after the flight ended starts a new flight: a flight is not a cache. To keep a value after its flight, see the mutex recipe [Compute a value once and share it](../mutex/docs/recipes/compute-once-and-share-it.md).
+The first caller is the leader: its call runs the work of the flight. The other two callers join it. `onJoin` runs once for each joiner, before it waits. A call after the flight ended starts a new flight: a flight is not a cache. To keep a value after its flight, see the mutex recipe [Compute a value once and share it](../mutex/docs/recipes/compute-once-and-share-it.md).
 
 ## Use it
 
@@ -57,126 +66,133 @@ This project is an experiment.
 npm install @zukhruf/single-flight @zukhruf/mutex
 ```
 
-`@zukhruf/mutex` is a peer dependency. `SharedFlight` uses its mutex, and `SingleFlight` does not.
+`@zukhruf/mutex` is a peer dependency. The lease that the work gets, and its token, come from it.
 
-## In one process: `SingleFlight`
+## The directory
+
+The directory is the local folder where the processes that share flights meet. Each process that uses a `SingleFlight` keeps three files there: `flight.lock`, `flight.epoch` and `flight.sock`. All the processes that name the same directory are one group, and the callers of one key share a flight in that group only.
+
+There is no default directory. One default would put each application on the host into one group, and unrelated applications that use the same key would join each other's flights. Give each group its own directory, for example a folder of your application's data.
+
+- The directory must be on a local file system. On a network file system, a call rejects with `NetworkDirectoryError`.
+- On macOS and Linux, the path of `flight.sock` must have 103 bytes or fewer. A longer path throws a `RangeError` when you create the `SingleFlight`. On Windows, the socket is a named pipe, and the length of the directory does not matter.
+- A single flight and a socket lock store of `@zukhruf/mutex` can use one directory. They use different files, and they never meet.
+
+## Run a flight
 
 `flights.run(key, work, { onJoin, signal })` resolves with `{ value, joined }`. `joined` is `false` for the leader and `true` for each joiner.
 
-- A failed flight rejects each caller with the original error of the work.
-- `work` gets a signal that aborts when the flight is abandoned. Read it only when the work can stop early.
+All the processes of the directory take part in one election. The winner is the coordinator. Each call asks the coordinator, in one step, to lead a new flight of the key or to join the flight in progress. When the work of the leader ends, the coordinator pushes the outcome to each joiner. Callers in the same process go through the coordinator too, also in worker threads. [ADR 0003](./docs/adr/0003-a-caller-leads-or-joins-in-one-request-to-an-elected-coordinator.md) tells why.
 
-## Across processes: `SharedFlight`
+The work gets the lease of the flight:
 
-A `SharedFlight` makes a flight visible to the other processes of the host. It uses three parts:
+- `token`: a fencing token. Its high 32 bits are the epoch of the coordinator's term, so a newer term always gives higher tokens.
+- `signal`: it aborts with `LockLostError` when the flight is no longer the leader's. This occurs when the leader misses the grace window of a new coordinator.
 
-- A `SingleFlight`: the callers in one process share one flight first.
-- The mutex: the holder of the key is the leader. The other processes learn that the key is busy.
-- The records: the leader writes the flight record, and joiners in other processes read it.
+| Option        | What it does                                                                                                                                                                                   |
+| ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `directory`   | The local folder where the processes of one group meet. See [The directory](#the-directory).                                                                                                   |
+| `codec`       | Turns the value of a flight into text for the joiners, and back. See [The codec](#the-codec).                                                                                                  |
+| `graceWindow` | Milliseconds that a new coordinator starts no flight, so the leaders of the flights in progress can reassert them. It must be longer than a process takes to connect again. Defaults to `500`. |
+
+`flights[Symbol.asyncDispose]()` waits until each landing of this process reached a coordinator, and then it disconnects. When this process is the coordinator, the other processes elect a new one.
+
+## The codec
+
+The value of a flight goes to the joiners as text. The codec has two functions: `encode` turns a value into text, and `decode` turns the text back into a value. The coordinator only carries the text. Thus the format is yours: JSON, or a format that keeps what JSON drops, such as `undefined` and `Map`. The leader gets `decode(encode(value))` too, so each caller gets the value in the same shape.
 
 ```ts
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { Mutex, SqliteStore } from '@zukhruf/mutex';
-import { FileFlightRecords, SharedFlight } from '@zukhruf/single-flight';
+import { type Codec, SingleFlight } from '@zukhruf/single-flight';
 
-const directory = await mkdtemp(join(tmpdir(), 'app-'));
+interface Sync {
+  at: Date;
+  files: number;
+}
 
-const flights = new SharedFlight({
-  mutex: new Mutex(new SqliteStore(join(directory, 'locks'))),
-  records: new FileFlightRecords(join(directory, 'flights')),
-  parse: (value) => {
-    if (typeof value !== 'string') throw new TypeError('Not a sync summary.');
-    return value;
+const syncs: Codec<Sync> = {
+  encode: (sync) => JSON.stringify(sync),
+  decode: (text) => {
+    const { at, files } = JSON.parse(text);
+    return { at: new Date(at), files };
   },
-});
+};
 
-const { value, joined } = await flights.run(
-  'sync',
-  async () => 'synced 42 files',
-  {
-    onJoin: () => console.log('A sync is running. Waiting for it…'),
-  },
-);
-console.log({ value, joined });
+const directory = await mkdtemp(join(tmpdir(), 'syncs-'));
+const flights = new SingleFlight({ directory, codec: syncs });
+const { value } = await flights.run('sync', async () => ({
+  at: new Date('2026-10-09T12:00:00Z'),
+  files: 42,
+}));
+console.log(value.at instanceof Date, value.files);
+await flights[Symbol.asyncDispose]();
 await rm(directory, { recursive: true, force: true });
 ```
 
 Output:
 
 ```
-{ value: 'synced 42 files', joined: false }
+true 42
 ```
 
-The program with three processes is in the recipe [Join a run that is still in flight](./docs/recipes/join-a-run-in-flight.md).
-
-| Option         | What it does                                                                                                                                                        |
-| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `mutex`        | Decides which caller is the leader. All processes must use one lock directory, with a host lock store such as `SqliteStore`.                                        |
-| `records`      | Keeps the flight records. All processes must use the same records. Give the records a directory of their own, never the lock directory.                             |
-| `parse`        | Turns a value read from a flight record into your type. The value travels as JSON, so a `Date` arrives as a string. The leader also gets `parse` of the JSON value. |
-| `pollInterval` | Milliseconds between two reads of a flight record while a caller joins. Defaults to `100`.                                                                          |
-
-The work gets the lease of the key. A leader whose lease is lost records the flight as interrupted, and the call rejects with the reason of the lease.
-
-A joiner never acquires the key. It reads the flight record until the flight has an outcome, and it asks the mutex only whether a running flight still has a holder. [ADR 0001](./docs/adr/0001-a-joiner-follows-its-flight-record-without-acquiring-the-key.md) tells why.
+A codec that cannot encode the value fails the flight for all callers. A codec that cannot decode the text fails only the call that decodes it.
 
 ## Errors
 
-| The caller is                          | The flight                                             | The call rejects with          |
-| -------------------------------------- | ------------------------------------------------------ | ------------------------------ |
-| The leader, or a joiner in its process | Failed                                                 | The original error of the work |
-| A joiner in another process            | Failed                                                 | `FlightFailedError`            |
-| A joiner in another process            | Interrupted: the holder stopped, or its lease was lost | `FlightInterruptedError`       |
-| A joiner in another process            | Its flight record is gone, before the joiner read it   | `FlightOutcomeLostError`       |
-| The leader, or a joiner in its process | Ended, and the records refused its outcome             | The error of the records       |
-| A joiner in another process            | Ended, and the records refused its outcome             | `FlightInterruptedError`       |
+| The caller is | The flight                                                      | The call rejects with                                            |
+| ------------- | --------------------------------------------------------------- | ---------------------------------------------------------------- |
+| The leader    | Its work threw                                                  | The original error of the work                                   |
+| A joiner      | Its work threw                                                  | `FlightFailedError`                                              |
+| A joiner      | Interrupted: the leader's process stopped, or it lost the lease | `FlightInterruptedError`                                         |
+| The leader    | It lost the lease                                               | The reason of the lease's signal: `LockLostError`                |
+| Each caller   | `encode` threw in the leader                                    | The leader: the error of `encode`. A joiner: `FlightFailedError` |
+| One caller    | Its own `decode` threw                                          | The error of `decode`, for that caller only                      |
+| Each caller   | The coordinator speaks another protocol version                 | `ProtocolVersionError`                                           |
+| Each caller   | The directory is on a network file system                       | `NetworkDirectoryError`                                          |
+| Each caller   | The `SingleFlight` is disposed                                  | `Error('This single flight is closed.')`                         |
 
-`FlightFailedError` has the `key` and the `failure`: the `name`, the `message` and the `code` of the error. A thrown value that is not an error keeps only its text. A value that JSON cannot carry, such as a `BigInt`, fails the flight.
-
-When the holder of a flight stops and the next holder begins a new flight, the new flight is the successor. A joiner of the stopped flight continues with the successor and gets its outcome.
+A joiner in the leader's own process is a joiner too: it gets `FlightFailedError`, not the original error. `FlightFailedError` has the `key` and the `failure`: the `name`, the `message` and the `code` of the error. A thrown value that is not an error keeps only its text.
 
 ## Cancel a wait
 
-Give a signal to stop the wait of one caller: `flights.run(key, work, { signal: AbortSignal.timeout(30_000) })`. The call rejects with the reason of the signal. The flight continues for the other callers, also when the leader's caller cancels.
+Give a signal to stop the wait of one caller: `flights.run(key, work, { signal: AbortSignal.timeout(30_000) })`. The call rejects with the reason of the signal. The flight continues for the other callers. When the caller of the leader cancels, the work continues and lands for the joiners. A call whose signal aborted before the call rejects at once: it never leads and never joins. [ADR 0004](./docs/adr/0004-a-cancel-withdraws-only-its-caller.md) tells why.
 
-When all callers of a flight cancel, the flight is abandoned:
+## When a process stops
 
-- The next call of the key starts a new flight.
-- In `SingleFlight`, the signal of the work aborts.
-- In `SharedFlight`, a process that joins stops to read the flight record, and it never starts a flight for callers that left. A flight that a process leads continues to its end, because joiners in other processes can wait for its outcome.
+- **The process of a leader stops.** The coordinator tells each joiner that the flight is interrupted, and each joiner rejects with `FlightInterruptedError` at once. No joiner runs the work again. The next call of the key leads a new flight.
+- **The coordinator stops.** The other processes elect a new coordinator. Its term starts with a grace window. In the grace window:
+  - Each leader reasserts its flight, and sends its landing again when it has one.
+  - Each joiner rejoins its flight by the flight's token, and it gets the outcome of that flight.
+  - A new call waits for the grace window to end. Then it leads or joins.
+- **A leader misses the grace window**, for example because its process was frozen. Its lease is lost: the signal of the lease aborts with `LockLostError`, and its call rejects with that error. Its joiners get `FlightInterruptedError`.
+- **A joiner's leader and the coordinator stop together.** The joiner gets `FlightInterruptedError` at the end of the grace window. It never runs the work again.
 
-[ADR 0002](./docs/adr/0002-a-flight-that-all-callers-left-is-abandoned.md) tells how other tools solve this.
+A call that was on its way to a coordinator that stopped joined nothing. It goes again to the next coordinator as a new call. [ADR 0005](./docs/adr/0005-a-joiner-rejoins-its-flight-by-its-token.md) tells why.
 
-## Records
+## Changes from 0.3.x
 
-`new FileFlightRecords(directory, { keepFor })` keeps one JSON file for each key. The name of the file is the SHA-256 of the key, so any key is a valid file name. The leader replaces the file in one step, so a joiner never reads a part of it.
+Version 0.3.13 to 0.3.15 had a pull design. These parts changed:
 
-`keepFor` is the keep window, in milliseconds. It defaults to `60_000`. Keep it at least 20 times the `pollInterval` of each joiner. A joiner that reads the flight record after the keep window gets `FlightOutcomeLostError`.
-
-To keep the flight records in another place, for example a table of your database, write your own `FlightRecords`:
-
-```ts
-interface FlightRecords {
-  begin(key: string): Promise<string>;
-  finish(key: string, id: string, outcome: Finished): Promise<void>;
-  latest(key: string): Promise<LatestFlight | undefined>;
-  outcome(key: string, id: string): Promise<Outcome>;
-}
-```
-
-- `begin` records a new running flight and returns a new id. A flight of the key that is still running becomes interrupted, and the new flight is its successor.
-- `finish` records the outcome. It does nothing when the flight is not running.
-- `outcome` returns `running`, the outcome, or `missing` when the flight record is gone.
-- Only the holder of the key calls `begin` and `finish`. Joiners call only `latest` and `outcome`.
+- `SharedFlight`, `FlightRecords` and `FileFlightRecords` are gone. Each `SingleFlight` now works across processes. Give it a `directory` and a `codec`.
+- `parse` is gone. The `codec` replaces it.
+- The records, `keepFor` and `pollInterval` are gone. The coordinator pushes each outcome, so nothing is kept and nothing is read again. `FlightOutcomeLostError` is gone too.
+- A joiner in the leader's own process now gets `FlightFailedError`, not the original error of the work. Each caller goes through the coordinator.
+- The signal that told the work that all its callers left is gone. The work gets the lease of the flight.
+- A caller whose signal aborted before the call rejects at once.
+- A joiner of an interrupted flight no longer continues with the next flight of the key. It gets `FlightInterruptedError`.
 
 ## Documentation
 
 - [Join a run that is still in flight](./docs/recipes/join-a-run-in-flight.md): three processes, one sync.
-- [ADR 0001: A joiner follows its flight record without acquiring the key](./docs/adr/0001-a-joiner-follows-its-flight-record-without-acquiring-the-key.md)
-- [ADR 0002: A flight that all callers left is abandoned](./docs/adr/0002-a-flight-that-all-callers-left-is-abandoned.md)
+- [ADR 0003: A caller leads or joins in one request to an elected coordinator](./docs/adr/0003-a-caller-leads-or-joins-in-one-request-to-an-elected-coordinator.md)
+- [ADR 0004: A cancel withdraws only its caller](./docs/adr/0004-a-cancel-withdraws-only-its-caller.md)
+- [ADR 0005: A joiner rejoins its flight by its token](./docs/adr/0005-a-joiner-rejoins-its-flight-by-its-token.md)
+- [ADR 0006: The election and the connection are a copy of the mutex code](./docs/adr/0006-the-election-and-the-connection-are-a-copy-of-the-mutex-code.md)
+- [Code copied from the mutex](./docs/copied-from-mutex.md): each copied file, what changed, and why.
+- Superseded: [ADR 0001](./docs/adr/0001-a-joiner-follows-its-flight-record-without-acquiring-the-key.md) and [ADR 0002](./docs/adr/0002-a-flight-that-all-callers-left-is-abandoned.md).
 
 ## Development
 
@@ -189,16 +205,19 @@ npx nx run single-flight:typecheck   # formats, lints, then type checks
 npx nx run single-flight:build       # compiles src/ to dist/
 ```
 
-The tests run from `src/`, not from `dist/`. The tests across processes start `src/testing/caller.fixture.ts` in child processes.
+The tests run from `src/`, not from `dist/`. The tests across processes start the script of `src/testing/caller.ts` in child processes.
 
 ```
 src/
-  single-flight.ts         SingleFlight: the flights of one process
-  flight.ts                one flight of this process and its callers
-  shared-flight.ts         SharedFlight: the leader, and joiners across processes
-  follow.ts                how a joiner finds and follows a flight record
-  flight-records.ts        the FlightRecords interface and the outcomes
-  file-flight-records.ts   FileFlightRecords: one JSON file for each key
-  errors.ts                FlightFailedError, FlightInterruptedError, FlightOutcomeLostError
-  testing/                 the caller process that the tests start
+  single-flight.ts      SingleFlight: each call goes to the coordinator
+  codec.ts              the Codec interface
+  errors.ts             FlightFailedError, FlightInterruptedError
+  client/               the requests of one process: runs, leads, landings
+  coordinator/          the coordinator of one term: flights, sessions, its server
+  protocol/             the messages between a process and its coordinator
+  election/             the election in a directory (a copy of the mutex code)
+  connection/           the socket, the handshake and the supervisor (a copy)
+  local-directory/      the check for a network file system (a copy)
+  shared/               file and SQLite helpers (a copy)
+  testing/              the caller process that the tests start
 ```
