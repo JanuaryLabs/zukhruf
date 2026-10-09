@@ -137,7 +137,7 @@ rival: undefined
 rival after the resign: 2n
 ```
 
-The socket lock store of `@zukhruf/mutex` and `@zukhruf/single-flight` use `SqliteElection`. Their leaders serve the other candidates over a socket in the same directory, so they work on one host only, also with another backend.
+The socket lock store of `@zukhruf/mutex` and `@zukhruf/single-flight` do not use this package yet. Each of them keeps its own copy of the election ([copied code](./docs/copied-code.md)). When they use it, they will use `SqliteElection`. Their leaders serve the other candidates over a socket in the directory, so they work on one host only, also with another backend.
 
 ## Errors
 

@@ -10,6 +10,10 @@ Paths on the left are in `packages/mutex/src`. Paths on the right are in `packag
 
 The file helpers and the check that refuses a network directory are no longer copies. Both packages use `@zukhruf/fs` (its ADR 0001): `durableWrite`, `isErrno`, `patiently`, `assertLocalDirectory`, and one `NetworkDirectoryError` class that this package gives from its entry point.
 
+## The election has a third copy
+
+`@zukhruf/leader-election` holds a third copy of the election, made into one campaign with a subclass for each backend ([its ledger](../../leader-election/docs/copied-code.md)). This package does not use it yet: the maintainer put that step on hold (backlog #2530). Until then, a fix to the election goes into each of the three places: `election/leader-election.ts` and `election/leadership.ts` here, `leader-election/` in the mutex, and the election files of `@zukhruf/leader-election`. The commit names each file.
+
 ## Copied without a change
 
 | Mutex                                         | Single flight                         |
@@ -95,7 +99,7 @@ These helpers do not belong in `@zukhruf/coordinator`. A third package that copi
 
 - **As is:** the connection, the connection supervisor, the socket connection, and the SQLite helpers.
 - **With parameters:**
-  - the election: the names of its two files;
+  - the election: done in `@zukhruf/leader-election`, where the names of its two files are options. This package does not use it yet (backlog #2530);
   - the socket path: the file name and the pipe prefix;
   - the handshake: the protocol name, the version, and what the welcome lists;
   - the electing connector: the check of the incoming messages;
