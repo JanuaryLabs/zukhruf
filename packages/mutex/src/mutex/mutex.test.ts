@@ -1322,4 +1322,100 @@ describe('Process-tree mutex with IpcStore', () => {
       );
     },
   );
+
+  test(
+    'with no coordinator left, a waiting acquire, a try in flight, and every later call reject with CoordinatorUnavailableError',
+    {
+      timeout: 15_000,
+      skip:
+        process.platform === 'win32'
+          ? 'On Windows, libuv stops the children of a process that stops (job object), and there is no SIGSTOP'
+          : false,
+    },
+    async (t) => {
+      // Arrange: a parent holds the key and coordinates a child that waits for it.
+      // The child reports through a journal file, because its only channel is to that parent.
+      await using directory = await scratchDirectory();
+      const journal = join(directory.path, 'child.log');
+      const indexUrl = new URL('../index.ts', import.meta.url);
+      const childSource = `
+				import { appendFileSync } from 'node:fs';
+				import { IpcStore } from ${JSON.stringify(indexUrl.href)};
+
+				const store = new IpcStore();
+				const log = (line) => appendFileSync(${JSON.stringify(journal)}, line + '\\n');
+				const settled = (name, call) =>
+					call.then(() => log(name + ':settled'), (error) => log(name + ':rejected:' + error.name));
+				settled('acquire', store.acquire('product:42')).then(() => {
+					settled('later acquire', store.acquire('other'));
+					settled('later look', store.isHeld('product:42'));
+				});
+				process.on('SIGUSR2', () => {
+					settled('try', store.tryAcquire('free'));
+					log('try sent');
+				});
+				log('waiting');
+			`;
+      await using parent = startWorker(
+        `
+					import { spawn } from 'node:child_process';
+					import { Mutex } from ${JSON.stringify(mutexUrl.href)};
+					import { IpcLockCoordinator } from ${JSON.stringify(indexUrl.href)};
+
+					const coordinator = new IpcLockCoordinator();
+					const mutex = new Mutex(coordinator);
+					setInterval(() => {}, 1000);
+					await mutex.acquire('product:42', async () => {
+						const child = spawn(process.execPath, ['--input-type=module', '--eval', ${JSON.stringify(childSource)}], { stdio: ['ignore', 'ignore', 'inherit', 'ipc'] });
+						coordinator.adopt(child);
+						process.send({ type: 'entered', child: child.pid });
+						await new Promise(() => {});
+					});
+				`,
+        'parent',
+      );
+      let log: string[] = [];
+      const waitForLog = (done: (log: string[]) => boolean, message: string) =>
+        t.waitFor(
+          async () => {
+            log = (await readFile(journal, 'utf8').catch(() => ''))
+              .trim()
+              .split('\n');
+            assert.ok(
+              done(log),
+              `${message}\n${log.join('\n')}\n${parent.stderr}`,
+            );
+          },
+          { interval: 10, timeout: newProcessTimeout },
+        );
+      await waitForLog(
+        (lines) => lines.includes('waiting'),
+        'The child must ask its parent for the key',
+      );
+      const child = parent.find('entered')?.child;
+      assert.equal(typeof child, 'number');
+
+      // Act: the parent stops answering, the child sends a try, and then the parent dies.
+      parent.child.kill('SIGSTOP');
+      process.kill(Number(child), 'SIGUSR2');
+      await waitForLog(
+        (lines) => lines.includes('try sent'),
+        'The child must send its try',
+      );
+      parent.child.kill('SIGKILL');
+      await parent.closed;
+
+      // Assert: every call is told plainly, at once, instead of waiting forever or being granted.
+      await waitForLog(
+        (lines) => lines.length >= 6,
+        'Every call must end once the coordinator is gone',
+      );
+      assert.deepEqual(log.filter((line) => line.includes(':')).sort(), [
+        'acquire:rejected:CoordinatorUnavailableError',
+        'later acquire:rejected:CoordinatorUnavailableError',
+        'later look:rejected:CoordinatorUnavailableError',
+        'try:rejected:CoordinatorUnavailableError',
+      ]);
+    },
+  );
 });
