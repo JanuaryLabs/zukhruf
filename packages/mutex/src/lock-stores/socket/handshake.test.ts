@@ -415,10 +415,18 @@ describe('Socket store protocol handshake', () => {
         await new Promise((resolve) => socket.write('x', resolve));
 
         // Assert: the leader drops what it read instead of keeping it for a line that never ends.
-        const kept = (await memory()) - before;
-        assert.ok(
-          kept < 8 * 1024 * 1024,
-          `The leader kept ${kept} bytes of a line with no end`,
+        // V8 frees dropped buffers on a background thread, so a count read right after gc() can
+        // still hold them: the leader measures again until the count falls. A leader that keeps
+        // the line stays above the limit for the whole wait.
+        await t.waitFor(
+          async () => {
+            const kept = (await memory()) - before;
+            assert.ok(
+              kept < 8 * 1024 * 1024,
+              `The leader kept ${kept} bytes of a line with no end`,
+            );
+          },
+          { interval: 50, timeout: 5_000 },
         );
       } finally {
         socket.destroy();
