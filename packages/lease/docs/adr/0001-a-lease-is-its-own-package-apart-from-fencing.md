@@ -20,7 +20,7 @@ A lease and fencing answer two different questions. A lease answers the holder: 
 - Fencing with no lease: Kafka refuses a producer with an older epoch, and STONITH stops a node by its power.
 - An election of zukhruf gives a term with an epoch, and it gives no fencing token.
 
-Thus a lease is in this package, and fencing tokens will be in `@zukhruf/fencing`.
+Thus a lease is in this package, and fencing tokens are in `@zukhruf/fencing`.
 
 ## Considered Options
 
