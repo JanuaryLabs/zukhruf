@@ -1,6 +1,6 @@
 {
   "name": "@zukhruf/single-flight",
-  "version": "0.3.14",
+  "version": "0.3.15",
   "description": "Callers of one key share the run already in flight, in one process or across processes, and get its outcome instead of a busy error.",
   "license": "MIT",
   "repository": {
