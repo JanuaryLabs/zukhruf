@@ -2,7 +2,7 @@ import { spawnSync } from 'node:child_process';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { isRecord } from '../authoring/ast.ts';
+import { isRecord } from '../unknown-values.ts';
 
 const eslintBin = join(
   dirname(fileURLToPath(import.meta.resolve('eslint/package.json'))),

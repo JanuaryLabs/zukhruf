@@ -1,8 +1,8 @@
 import type { Rule } from 'eslint';
 
-import { isRecord, stringsAt } from '../authoring/ast.ts';
 import { matchesAnyGlob } from '../authoring/path-scope.ts';
 import { ISLAND_TAG } from '../nx-policy/island-constraint.ts';
+import { isRecord, stringsAt } from '../unknown-values.ts';
 import { projectOf } from '../workspace/project-manifest.ts';
 
 /** Whether the linted file belongs to a project tagged `layer:island`. */

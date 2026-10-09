@@ -1,13 +1,8 @@
 import type { Rule } from 'eslint';
 
-import {
-  identifierName,
-  isAstNode,
-  isRecord,
-  isType,
-  stringsAt,
-} from '../authoring/ast.ts';
+import { identifierName, isAstNode, isType } from '../authoring/ast.ts';
 import { inRoots, isTestFile } from '../authoring/path-scope.ts';
+import { isRecord, stringsAt } from '../unknown-values.ts';
 
 /**
  * A packaged app launched from the GUI does not inherit the shell's PATH: on

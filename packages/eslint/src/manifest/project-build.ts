@@ -1,6 +1,6 @@
 import type { ProjectGraph, ProjectGraphProjectNode } from '@nx/devkit';
 
-import { isRecord, stringsAt } from '../authoring/ast.ts';
+import { isRecord, stringsAt } from '../unknown-values.ts';
 import { workspacePackageName } from '../workspace/cached-project-graph.ts';
 
 /**

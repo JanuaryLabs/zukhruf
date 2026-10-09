@@ -1,6 +1,7 @@
 import type { Rule } from 'eslint';
 
-import { isRecord, isType } from '../authoring/ast.ts';
+import { isType } from '../authoring/ast.ts';
+import { isRecord } from '../unknown-values.ts';
 
 /**
  * `console` output never reaches the host's log or its user; a library

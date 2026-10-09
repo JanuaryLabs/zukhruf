@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { isRecord } from '../authoring/ast.ts';
 import { fixtureWorkspace } from '../testing/fixture-workspace.ts';
 import { fixtureConfig, lint, printConfig } from '../testing/run-eslint.ts';
+import { isRecord } from '../unknown-values.ts';
 
 // Typed lint needs every linted file in a tsconfig; `types: []` keeps the
 // fixture from loading @types the temporary folder does not have.

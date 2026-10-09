@@ -1,9 +1,9 @@
 import nx from '@nx/eslint-plugin';
 import type { Rule } from 'eslint';
 
-import { isRecord, stringsAt } from '../authoring/ast.ts';
 import { ruleOf } from '../authoring/rule-module.ts';
 import { inIsland } from '../island/island-scope.ts';
+import { isRecord, stringsAt } from '../unknown-values.ts';
 import {
   cachedProjectGraph,
   projectNodeAt,

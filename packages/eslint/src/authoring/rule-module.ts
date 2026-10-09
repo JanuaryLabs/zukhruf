@@ -1,6 +1,6 @@
 import type { Rule } from 'eslint';
 
-import { isRecord } from './ast.ts';
+import { isRecord } from '../unknown-values.ts';
 
 /**
  * typescript-eslint and Nx type their rules with their own RuleModule types,

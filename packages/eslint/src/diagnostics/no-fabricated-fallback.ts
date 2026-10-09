@@ -1,7 +1,8 @@
 import type { Rule } from 'eslint';
 
-import { type AstNode, isRecord, isType, stringsAt } from '../authoring/ast.ts';
+import { type AstNode, isType } from '../authoring/ast.ts';
 import { inRoots, isTestFile } from '../authoring/path-scope.ts';
+import { isRecord, stringsAt } from '../unknown-values.ts';
 
 /**
  * A fallback that invents prose is not a default; it is a claim the code

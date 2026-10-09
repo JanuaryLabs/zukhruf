@@ -7,7 +7,7 @@ import {
   workspaceRoot,
 } from '@nx/devkit';
 
-import { isRecord } from '../authoring/ast.ts';
+import { isRecord } from '../unknown-values.ts';
 import { readJson } from './project-manifest.ts';
 
 /**

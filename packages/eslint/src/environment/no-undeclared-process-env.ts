@@ -8,9 +8,9 @@ import {
   type AstNode,
   identifierName,
   isAstNode,
-  isRecord,
   isType,
 } from '../authoring/ast.ts';
+import { isRecord } from '../unknown-values.ts';
 import { projectOf } from '../workspace/project-manifest.ts';
 import {
   relativeToWorkspace,

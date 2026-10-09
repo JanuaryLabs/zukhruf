@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 
-import { isRecord } from '../authoring/ast.ts';
+import { isRecord } from '../unknown-values.ts';
 
 // Rules run once per linted file; most files of a run share a few folders.
 const rootByDirectory = new Map<string, string | undefined>();

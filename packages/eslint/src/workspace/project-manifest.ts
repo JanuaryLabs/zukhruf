@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 
-import { isRecord, stringsAt } from '../authoring/ast.ts';
+import { isRecord, stringsAt } from '../unknown-values.ts';
 
 export interface Project {
   /** Absolute folder that holds the project's project.json or package.json. */

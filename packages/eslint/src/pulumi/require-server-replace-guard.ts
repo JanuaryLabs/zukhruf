@@ -1,11 +1,7 @@
 import type { Rule } from 'eslint';
 
-import {
-  type AstNode,
-  identifierName,
-  isType,
-  stringsAt,
-} from '../authoring/ast.ts';
+import { type AstNode, identifierName, isType } from '../authoring/ast.ts';
+import { stringsAt } from '../unknown-values.ts';
 
 /**
  * A server that sets `ignoreChanges` is one whose replacement someone already
