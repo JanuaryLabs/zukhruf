@@ -25,5 +25,5 @@ What changed from the mutex's copy:
 
 - The campaign is the abstract class `LeaderElection`. The SQLite claim is its subclass `SqliteElection`.
 - The claim file and the epoch file are options (`claimFile`, `epochFile`). The mutex uses `leader.lock` and `leader.epoch`. The single flight uses `flight.lock` and `flight.epoch`.
-- `Leadership` is `Term`. A term has a `signal` that aborts with `TermLostError` when the backend takes the claim away. A second `resign` waits for the first.
+- `Leadership` is `Term`. A term is a lease of `@zukhruf/lease`: its `signal` aborts with `LeaseLostError` when the backend takes the claim away. A second `resign` waits for the first.
 - `campaign` takes a `signal`, and a claim won after it aborted is given up.

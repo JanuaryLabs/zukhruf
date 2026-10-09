@@ -1,6 +1,5 @@
 import { Latch } from '@zukhruf/async';
-
-import { TermLostError } from './term-lost-error.ts';
+import { type Lease, LeaseController } from '@zukhruf/lease';
 
 /** What a term needs from its election to end: the backend's steps for the claim it won. */
 export interface TermSteps {
@@ -16,16 +15,16 @@ export interface TermSteps {
 type Ending = { failed: false } | { failed: true; error: unknown };
 
 /**
- * One term of the elected leader. It ends when the leader resigns, when its
- * process dies, or when the backend takes the claim away. Only the last one
- * can happen while the leader still runs, and then `signal` aborts with
- * `TermLostError`.
+ * One term of the elected leader: a lease on leadership. It ends when the
+ * leader resigns, when its process dies, or when the backend takes the claim
+ * away. Only the last one can happen while the leader still runs, and then
+ * `signal` aborts with `LeaseLostError`.
  */
-export class Term implements AsyncDisposable {
+export class Term implements Lease, AsyncDisposable {
   /** Higher than the epoch of each earlier term, so a newer leader can always outrank an older one. */
   readonly epoch: bigint;
   readonly #steps: TermSteps;
-  readonly #lost = new AbortController();
+  readonly #lease = new LeaseController('leadership');
   /** Aborts once the term starts to end, by resign or by loss. */
   readonly #ending = new AbortController();
   readonly #ended = new Latch<Ending>();
@@ -37,9 +36,9 @@ export class Term implements AsyncDisposable {
     this.#watching.use(steps.watch((reason) => this.#lose(reason)));
   }
 
-  /** Aborts with `TermLostError` when the term ends while its leader still runs. */
+  /** Aborts with `LeaseLostError` when the term ends while its leader still runs. */
   get signal(): AbortSignal {
-    return this.#lost.signal;
+    return this.#lease.signal;
   }
 
   /**
@@ -50,6 +49,7 @@ export class Term implements AsyncDisposable {
   async resign(): Promise<void> {
     if (!this.#ending.signal.aborted) {
       this.#ending.abort();
+      this.#lease.end();
       this.#ended.open(await this.#giveUp());
     }
     const ending = await this.#ended.wait();
@@ -61,10 +61,12 @@ export class Term implements AsyncDisposable {
   }
 
   #lose(reason: Error) {
-    // A resign that began first ends the term; the claim was given up on purpose.
+    // After a resign began, the lease ignores the loss: the leader gave the
+    // claim up on purpose, so it is not told.
+    this.#lease.lose(reason);
+    // The claim is freed once, by the resign or by the first loss.
     if (this.#ending.signal.aborted) return;
     this.#ending.abort();
-    this.#lost.abort(new TermLostError({ cause: reason }));
     // Freed one step later: a watch that reports a loss before it returns is
     // held by then, so it stops before its claim is freed.
     void Promise.resolve()

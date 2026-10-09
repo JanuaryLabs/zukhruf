@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 
 // A backend is written against the package's public entry, as an outside author would.
-import { LeaderElection, TermLostError } from './index.ts';
+import { LeaderElection, LeaseLostError } from './index.ts';
 import { waitUntil } from './testing/wait-until.ts';
 
 interface Script {
@@ -98,7 +98,7 @@ const drain = () => new Promise((resolve) => setImmediate(resolve));
 
 describe('A term that its backend takes away', () => {
   test(
-    'a lost term aborts its signal with TermLostError, stops watching, and frees its claim without giving it up',
+    'a lost term aborts its signal with LeaseLostError, stops watching, and frees its claim without giving it up',
     { timeout: 10_000 },
     async () => {
       // Arrange
@@ -113,7 +113,8 @@ describe('A term that its backend takes away', () => {
 
       // Assert
       assert.ok(term.signal.aborted);
-      assert.ok(term.signal.reason instanceof TermLostError);
+      assert.ok(term.signal.reason instanceof LeaseLostError);
+      assert.equal(term.signal.reason.subject, 'leadership');
       assert.match(
         String(term.signal.reason.cause),
         /lease of attempt 1 expired/,

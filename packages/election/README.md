@@ -1,6 +1,6 @@
 # @zukhruf/election
 
-Candidates campaign for one claim, and the candidate that wins it leads for one term. Each term has an epoch that is higher than the epoch of each earlier term, so a newer leader always outranks an older one. A term ends when the leader resigns or its process dies. With a backend of leases, a term can also be lost while the leader still runs, and the term tells its leader so.
+Candidates campaign for one claim, and the candidate that wins it leads for one term. Each term has an epoch that is higher than the epoch of each earlier term, so a newer leader always outranks an older one. A term is a lease on leadership. It ends when the leader resigns or its process dies. With a backend that can take the claim away, a term can also be lost while the leader still runs, and the signal of the term tells its leader so.
 
 The words in these documents have one meaning each. See the glossary in [CONTEXT.md](./CONTEXT.md).
 
@@ -55,11 +55,24 @@ next term: 2n
 
 ## The term
 
-- `term.epoch` is the number of the term. Pass it into a fencing token, for example `EpochTokenSource` of `@zukhruf/mutex`, so that a resource can refuse an older leader. Each epoch is below 2^31.
-- `term.resign()` ends the term and gives the claim up. A second call waits for the first. `await using` resigns at the end of its scope.
-- `term.signal` aborts with `TermLostError` when the term is lost while its leader still runs. It does not abort when the leader resigns.
+A term is a lease on leadership. `Term` implements the `Lease` interface of [`@zukhruf/lease`](../lease/README.md), so a function that takes a `Lease` also takes a term. See the glossary of [leases](../lease/CONTEXT.md).
 
-A leader that acts for the group must stop when `term.signal` aborts, because another candidate can lead then. `SqliteElection` never loses a living term, so its signal never aborts. A backend of leases can lose one.
+- `term.epoch` is the number of the term. Each epoch is below 2^31.
+- `term.resign()` ends the term and gives the claim up. A second call waits for the first. `await using` resigns at the end of its scope.
+- `term.signal` aborts with `LeaseLostError` when the term is lost while its leader still runs. The `subject` of the error is `'leadership'`, and its `cause` is the reason of the backend. The signal does not abort when the leader resigns.
+
+A leader that acts for the group must stop when `term.signal` aborts, because another candidate can lead then. `SqliteElection` never loses a living term, so its signal never aborts. A backend that can take the claim away can lose one.
+
+A term has no fencing token. The signal warns the leader, but it does not protect a resource: a leader can write after another candidate won. To protect a resource, make fencing tokens from the epoch with `EpochTokenSource` of [`@zukhruf/fencing`](../fencing/README.md). Then a resource can refuse the writes of an older leader:
+
+```ts
+import { EpochTokenSource } from '@zukhruf/fencing';
+
+const tokens = new EpochTokenSource(term.epoch);
+const token = await tokens.next('orders');
+```
+
+[ADR 0002](./docs/adr/0002-a-term-is-a-lease-on-leadership-with-no-fencing.md) tells why.
 
 ## Write a backend
 
@@ -76,7 +89,7 @@ A leader that acts for the group must stop when `term.signal` aborts, because an
 A backend must keep four rules:
 
 1. `tryClaim` gives the epoch in the same step that wins the claim. Each epoch is higher than each earlier one, and below 2^31.
-2. `watch` calls `lose` before the backend can give the claim to another candidate. For a lease, renew it well before it expires, and count the time on a monotonic clock. Then an old leader stops before a new one starts.
+2. `watch` calls `lose` before the backend can give the claim to another candidate. For a claim that the backend keeps only for a time, renew it well before that time ends, and count the time on a monotonic clock. Then an old leader stops before a new one starts.
 3. The campaign never calls `release` after a loss, because the claim can be another candidate's then.
 4. The campaign calls `close` after each end: a won term, a lost term, a failed attempt, or an attempt that never won.
 
@@ -141,15 +154,16 @@ The socket lock store of `@zukhruf/mutex` and `@zukhruf/single-flight` do not us
 
 ## Errors
 
-| Error                   | When                                                                                                   |
-| ----------------------- | ------------------------------------------------------------------------------------------------------ |
-| `NetworkDirectoryError` | The directory of a `SqliteElection` is on a network file system. It is the class of `@zukhruf/fs`.     |
-| `TermLostError`         | The reason of `term.signal` when the backend took the claim away. Its `cause` is the backend's reason. |
-| `signal.reason`         | A campaign rejects with it when its signal aborts.                                                     |
+| Error                   | When                                                                                                                                                                                                              |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `NetworkDirectoryError` | The directory of a `SqliteElection` is on a network file system. It is the class of `@zukhruf/fs`.                                                                                                                |
+| `LeaseLostError`        | The reason of `term.signal` when the backend took the claim away. Its `subject` is `'leadership'`, and its `cause` is the backend's reason. It is the class of `@zukhruf/lease`, and this package exports it too. |
+| `signal.reason`         | A campaign rejects with it when its signal aborts.                                                                                                                                                                |
 
 ## Documentation
 
 - [ADR 0001: Leader election is a package, and each backend is a subclass of one campaign](./docs/adr/0001-leader-election-is-a-package-and-each-backend-is-a-subclass.md)
+- [ADR 0002: A term is a lease on leadership, with no fencing](./docs/adr/0002-a-term-is-a-lease-on-leadership-with-no-fencing.md)
 - [Code copied into this package](./docs/copied-code.md)
 
 ## Development
@@ -166,8 +180,7 @@ npx nx run election:build       # compiles src/ to dist/
 ```
 src/
   leader-election.ts     LeaderElection: the campaign, and the steps of a backend
-  term.ts                Term: the epoch, the signal of a lost term, and resign
-  term-lost-error.ts     TermLostError
+  term.ts                Term: the epoch, the lease on leadership, and resign
   sqlite/                SqliteElection: the backend of one host
   testing/               the helpers that start candidate processes in the tests
 ```
