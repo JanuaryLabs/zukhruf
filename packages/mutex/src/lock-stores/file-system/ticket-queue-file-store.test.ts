@@ -6,6 +6,7 @@ import fsPromises from 'node:fs/promises';
 import { syncBuiltinESMExports } from 'node:module';
 import { join } from 'node:path';
 import { describe, mock, test } from 'node:test';
+import { setTimeout as delay } from 'node:timers/promises';
 
 import type { LockHandle } from '../../mutex/lease.ts';
 import { Mutex } from '../../mutex/mutex.ts';
@@ -42,8 +43,7 @@ describe('TicketQueueFileStore', () => {
         return rename(from, to);
       });
       syncBuiltinESMExports();
-      const deadline = Promise.withResolvers<'still waiting'>();
-      const timer = setTimeout(() => deadline.resolve('still waiting'), 2000);
+      const deadline = delay(2000, 'still waiting' as const, { ref: false });
       let waiter: Promise<LockHandle> | undefined;
 
       try {
@@ -62,18 +62,17 @@ describe('TicketQueueFileStore', () => {
         await released;
 
         // Assert: the waiter notices its lost ticket, appends it again, and gets the key.
-        const outcome = await Promise.race([waiter, deadline.promise]);
+        const outcome = await Promise.race([waiter, deadline]);
         assert.notEqual(
           outcome,
           'still waiting',
           'A waiter whose ticket was lost must append it again and get the key',
         );
       } finally {
-        clearTimeout(timer);
         proceed.resolve();
         mock.restoreAll();
         syncBuiltinESMExports();
-        const lease = await Promise.race([waiter, deadline.promise]);
+        const lease = await Promise.race([waiter, deadline]);
         if (typeof lease === 'object') await lease[Symbol.asyncDispose]();
       }
     },

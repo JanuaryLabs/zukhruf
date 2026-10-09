@@ -189,37 +189,32 @@ describe('Socket lock server failover', () => {
         () => `The follower must enter.\n${follower.stderr}`,
         5000,
       );
-      const deadline = Promise.withResolvers<'timed out'>();
-      const timer = setTimeout(() => deadline.resolve('timed out'), 2000);
+      const deadline = delay(2000, 'timed out' as const, { ref: false });
 
-      try {
-        // Act: the leader shuts down while the follower still holds its key.
-        const shutdown = await Promise.race([
-          leaderStore[Symbol.asyncDispose]().then(() => 'closed' as const),
-          deadline.promise,
-        ]);
-        follower.child.send('finish');
+      // Act: the leader shuts down while the follower still holds its key.
+      const shutdown = await Promise.race([
+        leaderStore[Symbol.asyncDispose]().then(() => 'closed' as const),
+        deadline,
+      ]);
+      follower.child.send('finish');
 
-        // Assert: shutdown does not wait on followers, and the holder keeps its key.
-        assert.equal(
-          shutdown,
-          'closed',
-          'A leader must shut down without waiting for followers to leave',
-        );
-        await waitUntil(
-          t,
-          () => follower.has('done'),
-          () => `The follower must finish.\n${follower.stderr}`,
-          5000,
-        );
-        assert.equal(
-          follower.find('done')?.outcome,
-          'ok',
-          'A follower holding a key must keep it through the handover',
-        );
-      } finally {
-        clearTimeout(timer);
-      }
+      // Assert: shutdown does not wait on followers, and the holder keeps its key.
+      assert.equal(
+        shutdown,
+        'closed',
+        'A leader must shut down without waiting for followers to leave',
+      );
+      await waitUntil(
+        t,
+        () => follower.has('done'),
+        () => `The follower must finish.\n${follower.stderr}`,
+        5000,
+      );
+      assert.equal(
+        follower.find('done')?.outcome,
+        'ok',
+        'A follower holding a key must keep it through the handover',
+      );
     },
   );
 

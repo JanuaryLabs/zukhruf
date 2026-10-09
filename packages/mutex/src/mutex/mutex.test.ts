@@ -223,8 +223,7 @@ for (const store of storeCases) {
       await using host = store.open(directory.path);
       const mutex = new Mutex(host.store);
       const finishFirst = Promise.withResolvers<void>();
-      const deadline = Promise.withResolvers<null>();
-      const timer = setTimeout(() => deadline.resolve(null), 2000);
+      const deadline = delay(2000, null, { ref: false });
       let entered = 0;
       let active = 0;
       let peakActive = 0;
@@ -257,7 +256,7 @@ for (const store of storeCases) {
         );
         await delay(settle);
         finishFirst.resolve();
-        const results = await Promise.race([outcomes, deadline.promise]);
+        const results = await Promise.race([outcomes, deadline]);
 
         // Assert: exclusion must also allow every waiting request to make progress.
         assert.notEqual(
@@ -286,7 +285,6 @@ for (const store of storeCases) {
         );
       } finally {
         finishFirst.resolve();
-        clearTimeout(timer);
         // Do not await outcomes: a deadlocked mutex would hang here instead of failing.
       }
     });
@@ -354,8 +352,7 @@ for (const store of storeCases) {
       await using host = store.open(directory.path);
       const mutex = new Mutex(host.store);
       let stock = 0;
-      const deadline = Promise.withResolvers<null>();
-      const timer = setTimeout(() => deadline.resolve(null), 1000);
+      const deadline = delay(1000, null, { ref: false });
 
       // Act: one request is declined, then stock arrives before the next request.
       const outcomes = Promise.allSettled([
@@ -376,28 +373,24 @@ for (const store of storeCases) {
         })(),
       ]);
 
-      try {
-        const results = await Promise.race([outcomes, deadline.promise]);
+      const results = await Promise.race([outcomes, deadline]);
 
-        // Assert: false is a normal result, and the resource remains usable later.
-        assert.notEqual(
-          results,
-          null,
-          'A later request must finish within one second even when the previous callback returned false',
-        );
-        assert.deepEqual(
-          results,
-          [{ status: 'fulfilled', value: { soldOut: false, restocked: true } }],
-          'The first caller must receive false and the later caller must receive its fresh true result',
-        );
-        assert.equal(
-          stock,
-          0,
-          'The later callback must actually reserve the newly available item exactly once',
-        );
-      } finally {
-        clearTimeout(timer);
-      }
+      // Assert: false is a normal result, and the resource remains usable later.
+      assert.notEqual(
+        results,
+        null,
+        'A later request must finish within one second even when the previous callback returned false',
+      );
+      assert.deepEqual(
+        results,
+        [{ status: 'fulfilled', value: { soldOut: false, restocked: true } }],
+        'The first caller must receive false and the later caller must receive its fresh true result',
+      );
+      assert.equal(
+        stock,
+        0,
+        'The later callback must actually reserve the newly available item exactly once',
+      );
     });
 
     for (const key of [
@@ -413,8 +406,7 @@ for (const store of storeCases) {
         await using host = store.open(directory.path);
         const mutex = new Mutex(host.store);
         const finishFirst = Promise.withResolvers<void>();
-        const deadline = Promise.withResolvers<null>();
-        const timer = setTimeout(() => deadline.resolve(null), 1000);
+        const deadline = delay(1000, null, { ref: false });
         let firstStarted = false;
         let secondStarted = false;
         const operations: Array<Promise<boolean>> = [];
@@ -448,7 +440,7 @@ for (const store of storeCases) {
           finishFirst.resolve();
           const results = await Promise.race([
             Promise.allSettled(operations),
-            deadline.promise,
+            deadline,
           ]);
 
           // Assert: these strings are valid resource names, just like product:42.
@@ -467,7 +459,6 @@ for (const store of storeCases) {
           );
         } finally {
           finishFirst.resolve();
-          clearTimeout(timer);
         }
       });
     }
@@ -795,27 +786,22 @@ for (const store of storeCases.filter(
             newProcessTimeout,
           );
           const mutex = new Mutex(host.store);
-          const deadline = Promise.withResolvers<null>();
-          const timer = setTimeout(() => deadline.resolve(null), 2000);
+          const deadline = delay(2000, null, { ref: false });
 
-          try {
-            // Act: the holder dies without releasing, then this process asks for the same key.
-            holder.child.kill('SIGKILL');
-            await holder.closed;
-            const acquired = await Promise.race([
-              mutex.acquire(key, async () => true),
-              deadline.promise,
-            ]);
+          // Act: the holder dies without releasing, then this process asks for the same key.
+          holder.child.kill('SIGKILL');
+          await holder.closed;
+          const acquired = await Promise.race([
+            mutex.acquire(key, async () => true),
+            deadline,
+          ]);
 
-            // Assert: the dead holder's lock is recovered instead of blocking forever.
-            assert.equal(
-              acquired,
-              true,
-              'A caller must acquire the key within two seconds after its holder process was killed',
-            );
-          } finally {
-            clearTimeout(timer);
-          }
+          // Assert: the dead holder's lock is recovered instead of blocking forever.
+          assert.equal(
+            acquired,
+            true,
+            'A caller must acquire the key within two seconds after its holder process was killed',
+          );
         },
       );
     }
@@ -1079,8 +1065,7 @@ for (const store of storeCases.filter(
         );
         const held = once(holder, 'message');
         const mutex = new Mutex(host.store);
-        const deadline = Promise.withResolvers<null>();
-        const timer = setTimeout(() => deadline.resolve(null), 2000);
+        const deadline = delay(2000, null, { ref: false });
 
         try {
           await held;
@@ -1091,12 +1076,11 @@ for (const store of storeCases.filter(
 
           // Assert: the waiter is granted instead of waiting forever.
           assert.equal(
-            await Promise.race([next, deadline.promise]),
+            await Promise.race([next, deadline]),
             true,
             'The waiter must acquire within two seconds after the holding thread died',
           );
         } finally {
-          clearTimeout(timer);
           await holder.terminate();
         }
       },
