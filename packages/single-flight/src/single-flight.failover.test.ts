@@ -632,6 +632,124 @@ describe('A single flight across processes in the gaps of a failover', () => {
   );
 
   test(
+    'a leader whose work throws after its lease is lost rejects with LeaseLostError that carries the error, and its joiners get FlightInterruptedError',
+    { ...onUnix, timeout: 30_000 },
+    async (t) => {
+      // Arrange
+      await using directory = await scratchDirectory();
+      const options = { graceWindow: 300 };
+      await using coordinator = await coordinatorOf(t, directory.path, options);
+      await using leader = await caller(t, directory.path, 'leader', options);
+      run(leader, 'l', 'sync');
+      await heard(t, leader, 'leading', 'l');
+      await using joiner = await caller(t, directory.path, 'joiner', options);
+      run(joiner, 'j', 'sync');
+      await heard(t, joiner, 'joined', 'j');
+      await using probe = await connected(t, directory.path, 'probe', options);
+      leader.child.kill('SIGSTOP');
+      try {
+        await handOver(t, directory.path, coordinator, [joiner]);
+        await windowEnd(t, probe, 'window');
+      } finally {
+        leader.child.kill('SIGCONT');
+      }
+      await heard(t, leader, 'lost', 'l');
+
+      // Act: the work fails with its own error, not with the reason of the lost lease.
+      leader.child.send({
+        type: 'fail',
+        call: 'l',
+        message: 'The disk is full',
+        code: 'ENOSPC',
+      });
+      const led = await heard(t, leader, 'error', 'l');
+      const joined = await heard(t, joiner, 'error', 'j');
+
+      // Assert
+      assert.equal(led.name, 'LeaseLostError');
+      assert.equal(led.subject, 'sync');
+      assert.deepEqual(led.cause, {
+        message: 'The disk is full',
+        code: 'ENOSPC',
+      });
+      assert.equal(joined.name, 'FlightInterruptedError');
+    },
+  );
+
+  test(
+    'a leader whose work throws the reason of its lost lease rejects with that LeaseLostError, not with a second one around it',
+    { ...onUnix, timeout: 30_000 },
+    async (t) => {
+      // Arrange
+      await using directory = await scratchDirectory();
+      const options = { graceWindow: 300 };
+      await using coordinator = await coordinatorOf(t, directory.path, options);
+      await using leader = await caller(t, directory.path, 'leader', options);
+      run(leader, 'l', 'sync');
+      await heard(t, leader, 'leading', 'l');
+      await using joiner = await caller(t, directory.path, 'joiner', options);
+      run(joiner, 'j', 'sync');
+      await heard(t, joiner, 'joined', 'j');
+      await using probe = await connected(t, directory.path, 'probe', options);
+      leader.child.kill('SIGSTOP');
+      try {
+        await handOver(t, directory.path, coordinator, [joiner]);
+        await windowEnd(t, probe, 'window');
+      } finally {
+        leader.child.kill('SIGCONT');
+      }
+      await heard(t, leader, 'lost', 'l');
+
+      // Act: the work stops with signal.throwIfAborted().
+      leader.child.send({ type: 'throw-reason', call: 'l' });
+      const led = await heard(t, leader, 'error', 'l');
+
+      // Assert: the reason of the signal has no cause; a second LeaseLostError would carry the first as its cause.
+      assert.equal(led.name, 'LeaseLostError');
+      assert.equal(led.subject, 'sync');
+      assert.equal(led.cause, undefined);
+    },
+  );
+
+  test(
+    'a leader whose codec cannot encode the value after its lease is lost rejects with LeaseLostError that carries the codec error',
+    { ...onUnix, timeout: 30_000 },
+    async (t) => {
+      // Arrange
+      await using directory = await scratchDirectory();
+      const options = { graceWindow: 300 };
+      await using coordinator = await coordinatorOf(t, directory.path, options);
+      await using leader = await caller(t, directory.path, 'leader', {
+        ...options,
+        codec: 'encode-throws',
+      });
+      run(leader, 'l', 'sync');
+      await heard(t, leader, 'leading', 'l');
+      await using joiner = await caller(t, directory.path, 'joiner', options);
+      run(joiner, 'j', 'sync');
+      await heard(t, joiner, 'joined', 'j');
+      await using probe = await connected(t, directory.path, 'probe', options);
+      leader.child.kill('SIGSTOP');
+      try {
+        await handOver(t, directory.path, coordinator, [joiner]);
+        await windowEnd(t, probe, 'window');
+      } finally {
+        leader.child.kill('SIGCONT');
+      }
+      await heard(t, leader, 'lost', 'l');
+
+      // Act
+      leader.child.send({ type: 'finish', call: 'l', value: 'stale' });
+      const led = await heard(t, leader, 'error', 'l');
+
+      // Assert
+      assert.equal(led.name, 'LeaseLostError');
+      assert.equal(led.subject, 'sync');
+      assert.deepEqual(led.cause, { message: 'This value cannot be encoded' });
+    },
+  );
+
+  test(
     'when the next coordinator stops too, inside its grace window, the flight survives both, and the joiner gets its value',
     { ...onUnix, timeout: 30_000 },
     async (t) => {

@@ -148,6 +148,7 @@ A codec that cannot encode the value fails the flight for all callers. A codec t
 | A joiner      | Its work threw                                                  | `FlightFailedError`                                              |
 | A joiner      | Interrupted: the leader's process stopped, or it lost the lease | `FlightInterruptedError`                                         |
 | The leader    | It lost the lease                                               | The reason of the lease's signal: `LeaseLostError`               |
+| The leader    | It lost the lease, and then its work threw                      | A new `LeaseLostError`. Its `cause` is the error of the work     |
 | Each caller   | `encode` threw in the leader                                    | The leader: the error of `encode`. A joiner: `FlightFailedError` |
 | One caller    | Its own `decode` threw                                          | The error of `decode`, for that caller only                      |
 | Each caller   | The coordinator speaks another protocol version                 | `ProtocolVersionError`                                           |
@@ -167,7 +168,7 @@ Give a signal to stop the wait of one caller: `flights.run(key, work, { signal: 
   - Each leader reasserts its flight, and sends its landing again when it has one.
   - Each joiner rejoins its flight by the flight's token, and it gets the outcome of that flight.
   - A new call waits for the grace window to end. Then it leads or joins.
-- **A leader misses the grace window**, for example because its process was frozen. Its lease is lost: the signal of the lease aborts with `LeaseLostError`, and its call rejects with that error. Its joiners get `FlightInterruptedError`.
+- **A leader misses the grace window**, for example because its process was frozen. Its lease is lost: the signal of the lease aborts with `LeaseLostError`, and its call rejects with that error. When the work throws its own error after the loss, the call rejects with a new `LeaseLostError`, and the error of the work is its `cause`. Thus `LeaseLostError` always tells the leader that its work did not run alone. Its joiners get `FlightInterruptedError`. [ADR 0007](./docs/adr/0007-a-work-error-after-a-lost-lease-rejects-with-leaselosterror.md) tells why.
 - **A joiner's leader and the coordinator stop together.** The joiner gets `FlightInterruptedError` at the end of the grace window. It never runs the work again.
 
 A call that was on its way to a coordinator that stopped joined nothing. It goes again to the next coordinator as a new call. [ADR 0005](./docs/adr/0005-a-joiner-rejoins-its-flight-by-its-token.md) tells why.
@@ -191,6 +192,7 @@ Version 0.3.13 to 0.3.15 had a pull design. These parts changed:
 - [ADR 0004: A cancel withdraws only its caller](./docs/adr/0004-a-cancel-withdraws-only-its-caller.md)
 - [ADR 0005: A joiner rejoins its flight by its token](./docs/adr/0005-a-joiner-rejoins-its-flight-by-its-token.md)
 - [ADR 0006: The election and the connection are a copy of the mutex code](./docs/adr/0006-the-election-and-the-connection-are-a-copy-of-the-mutex-code.md)
+- [ADR 0007: A work error after a lost lease rejects with LeaseLostError](./docs/adr/0007-a-work-error-after-a-lost-lease-rejects-with-leaselosterror.md)
 - [Code copied from the mutex](./docs/copied-from-mutex.md): each copied file, what changed, and why.
 - Superseded: [ADR 0001](./docs/adr/0001-a-joiner-follows-its-flight-record-without-acquiring-the-key.md) and [ADR 0002](./docs/adr/0002-a-flight-that-all-callers-left-is-abandoned.md).
 

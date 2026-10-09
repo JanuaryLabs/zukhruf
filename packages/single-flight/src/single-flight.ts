@@ -1,5 +1,6 @@
 import { untilAborted } from '@zukhruf/async';
 import type { FencedLease } from '@zukhruf/fencing';
+import { LeaseLostError } from '@zukhruf/lease';
 
 import { FlightClient, type Lead } from './client/flight-client.ts';
 import type { Codec } from './codec.ts';
@@ -104,8 +105,10 @@ export class SingleFlight<T> implements AsyncDisposable {
    * Runs `work` for `key` as the leader of a new flight, or joins the flight
    * of `key` in progress. `work` gets the flight's lease: its token, and a
    * signal that aborts with `LeaseLostError` once the flight is no longer this
-   * leader's. A joiner gets the leader's value through the codec, or rejects
-   * with `FlightFailedError` or `FlightInterruptedError`.
+   * leader's. After that loss, the leader's call rejects with `LeaseLostError`,
+   * also when the work throws its own error. A joiner gets the leader's value
+   * through the codec, or rejects with `FlightFailedError` or
+   * `FlightInterruptedError`.
    */
   async run(
     key: string,
@@ -121,7 +124,7 @@ export class SingleFlight<T> implements AsyncDisposable {
       case 'lead': {
         // The signal stops only this caller's wait. The flight runs on for its joiners.
         const settled = await untilAborted(
-          this.#fly(work, answer.lead),
+          this.#fly(key, work, answer.lead),
           signal,
         );
         if ('error' in settled) throw settled.error;
@@ -138,20 +141,22 @@ export class SingleFlight<T> implements AsyncDisposable {
 
   /** Runs the work and lands its outcome. Never rejects, so a caller that stopped waiting leaves no rejection behind. */
   async #fly(
+    key: string,
     work: (lease: FencedLease) => Promise<T>,
     lead: Lead,
   ): Promise<Settled<T>> {
+    const { token, signal: lost } = lead;
     let text: string;
     try {
-      text = this.#codec.encode(
-        await work({ token: lead.token, signal: lead.signal }),
-      );
+      text = this.#codec.encode(await work({ token, signal: lost }));
     } catch (error) {
       lead.land({ failure: failureOf(error) });
-      return { error };
+      // After a loss, every failure rejects with LeaseLostError: the work did not run alone (ADR 0007).
+      if (!lost.aborted || error === lost.reason) return { error };
+      return { error: new LeaseLostError(key, { cause: error }) };
     }
     // A lost flight's joiners were told that it is interrupted, so this value reaches nobody.
-    if (lead.signal.aborted) return { error: lead.signal.reason };
+    if (lost.aborted) return { error: lost.reason };
     lead.land({ value: text });
     try {
       return { value: this.#codec.decode(text) };

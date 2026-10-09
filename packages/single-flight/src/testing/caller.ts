@@ -26,13 +26,14 @@ export function journalOf(directory: string) {
  * the public API gave it:
  * - `{ type: 'run', call, key }` calls `run`. The work reports `leading` with
  *   its token, and waits for an order for that call: `finish` with a `value`,
- *   `fail` with a `message` and a `code`, or `throw` with a value that is not
- *   an error. A lost lease reports `lost`. `onJoin` reports `joined`.
+ *   `fail` with a `message` and a `code`, `throw` with a value that is not
+ *   an error, or `throw-reason`, which throws the reason of the lease's signal.
+ *   A lost lease reports `lost`. `onJoin` reports `joined`.
  * - `{ type: 'cancel', call }` aborts that call's signal.
  * - `{ type: 'dispose' }` disposes the single flight and reports `disposed`.
  * Each call ends with `value` (with `joined`, the value's keys, and which of
- * them hold a Date) or `error` (with the error's class name, message, and
- * `failure`).
+ * them hold a Date) or `error` (with the error's class name, message,
+ * `failure`, `subject`, and the message and code of its `cause`).
  */
 export function callerSource(
   directory: string,
@@ -70,7 +71,7 @@ export function callerSource(
 
     process.on('message', (order) => {
       if (order.type === 'run') void call(order);
-      if (['finish', 'fail', 'throw'].includes(order.type)) finishes.get(order.call)?.(order);
+      if (['finish', 'fail', 'throw', 'throw-reason'].includes(order.type)) finishes.get(order.call)?.(order);
       if (order.type === 'cancel') cancels.get(order.call)?.abort(new Error('cancelled by ' + name));
       if (order.type === 'dispose') {
         void flights[Symbol.asyncDispose]().then(() => process.send({ type: 'disposed' }));
@@ -105,6 +106,7 @@ export function callerSource(
               throw Object.assign(new Error(order.message), { code: order.code });
             }
             if (order.type === 'throw') throw order.thrown;
+            if (order.type === 'throw-reason') signal.throwIfAborted();
             return order.value;
           },
           { signal: cancel.signal, onJoin: () => process.send({ type: 'joined', call }) },
@@ -119,6 +121,10 @@ export function callerSource(
           name: error?.constructor?.name,
           message: error?.message,
           failure: error?.failure,
+          subject: error?.subject,
+          cause: error?.cause === undefined
+            ? undefined
+            : { message: error.cause?.message, code: error.cause?.code },
         });
       }
     }
