@@ -1,3 +1,5 @@
+import { FencingToken } from '@zukhruf/fencing';
+
 import { isRecord } from '../shared/is-record.ts';
 
 /** A leader's error as text, because an Error object cannot cross a process boundary. */
@@ -51,7 +53,7 @@ export interface RequestEnvelope {
 }
 
 const isToken = (value: unknown): value is string =>
-  typeof value === 'string' && /^\d+$/.test(value);
+  typeof value === 'string' && FencingToken.parse(value) !== null;
 
 export function isRequestEnvelope(
   message: unknown,

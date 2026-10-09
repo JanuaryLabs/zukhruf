@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 
 import { untilAborted } from '@zukhruf/async';
 import { FencingToken } from '@zukhruf/fencing';
-import { LeaseLostError } from '@zukhruf/lease';
+import { LeaseController } from '@zukhruf/lease';
 
 import type { ConnectionSupervisor } from '../connection/connection-supervisor.ts';
 import type {
@@ -47,7 +47,7 @@ interface Pending extends Pick<
 interface Held {
   key: string;
   token: FencingToken;
-  lost: AbortController;
+  lease: LeaseController;
   /** The outcome this leader landed, kept until a coordinator acknowledges it. */
   landing: Outcome | undefined;
 }
@@ -139,13 +139,13 @@ export class FlightClient {
     const held: Held = {
       key,
       token,
-      lost: new AbortController(),
+      lease: new LeaseController(key),
       landing: undefined,
     };
     this.#held.set(id, held);
     return {
       token,
-      signal: held.lost.signal,
+      signal: held.lease.signal,
       land: (outcome) => {
         // A lost flight is no longer this leader's to land.
         if (this.#held.get(id) !== held || held.landing) return;
@@ -161,7 +161,7 @@ export class FlightClient {
     const held = this.#held.get(id);
     if (!held) return;
     this.#release(id);
-    held.lost.abort(new LeaseLostError(held.key));
+    held.lease.lose();
   }
 
   /** The flight of `id` needs nothing more from this process. */
@@ -179,7 +179,7 @@ export class FlightClient {
         // A run withdrawn meanwhile sent `cancel`, which interrupts the flight at the coordinator.
         const pending = this.#take(response.id);
         if (!pending) return;
-        const token = new FencingToken(BigInt(response.token));
+        const token = FencingToken.parse(response.token)!;
         pending.resolve({
           kind: 'lead',
           lead: this.#hold(response.id, pending.key, token),
@@ -203,10 +203,14 @@ export class FlightClient {
       case 'interrupted':
         this.#take(response.id)?.resolve({ kind: 'interrupted' });
         return;
-      case 'ack':
-        // The joiners have the outcome, so there is nothing left to reassert.
-        if (this.#held.get(response.id)?.landing) this.#release(response.id);
+      case 'ack': {
+        // The joiners have the outcome, so there is nothing left to reassert, and no later loss of the lease.
+        const held = this.#held.get(response.id);
+        if (!held?.landing) return;
+        this.#release(response.id);
+        held.lease.end();
         return;
+      }
       case 'rejected':
         this.#lose(response.id);
         return;

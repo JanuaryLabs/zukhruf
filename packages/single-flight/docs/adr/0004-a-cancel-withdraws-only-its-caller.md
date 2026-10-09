@@ -9,6 +9,6 @@ A caller can cancel its wait with a signal. In the first design, a flight counte
 
 ## Consequences
 
-- The work gets one signal, the signal of the lease. It aborts with `LockLostError` when the flight is no longer the leader's. No signal tells the work that its callers left.
+- The work gets one signal, the signal of the lease. It aborts with `LeaseLostError` when the flight is no longer the leader's. No signal tells the work that its callers left.
 - A flight continues after its last caller cancelled. The next call of the key joins it while it is in progress.
 - A call whose signal aborted before the call rejects at once. It never leads and never joins.

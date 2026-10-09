@@ -1,6 +1,6 @@
 # Single flight
 
-Callers of one key share the flight in progress. A caller that comes while a flight runs does not start a second flight. It joins the flight and gets its outcome. All the processes that use one directory share their flights. One of these processes is the coordinator, and each call goes through it. Lease and token have the meanings that [the mutex glossary](../mutex/CONTEXT.md) gives them.
+Callers of one key share the flight in progress. A caller that comes while a flight runs does not start a second flight. It joins the flight and gets its outcome. All the processes that use one directory share their flights. One of these processes is the coordinator, and each call goes through it. Lease has the meaning that [the lease glossary](../lease/CONTEXT.md) gives it. Fencing token has the meaning that [the fencing glossary](../fencing/CONTEXT.md) gives it.
 
 ## Language
 

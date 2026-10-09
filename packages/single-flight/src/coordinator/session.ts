@@ -69,7 +69,7 @@ export class Session implements Inbox {
         return this.#coordinator.reassert(
           party,
           request.key,
-          new FencingToken(BigInt(request.token)),
+          FencingToken.parse(request.token)!,
         );
       }
     }

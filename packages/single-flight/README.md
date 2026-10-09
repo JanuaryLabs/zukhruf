@@ -63,10 +63,10 @@ The first caller is the leader: its call runs the work of the flight. The other 
 This project is an experiment.
 
 ```sh
-npm install @zukhruf/single-flight @zukhruf/mutex
+npm install @zukhruf/single-flight
 ```
 
-`@zukhruf/mutex` is a peer dependency. The lease that the work gets, and its token, come from it.
+The lease that the work gets comes from `@zukhruf/lease`, and its token comes from `@zukhruf/fencing`. Both are dependencies of this package, so you install nothing more.
 
 ## The directory
 
@@ -86,8 +86,8 @@ All the processes of the directory take part in one election. The winner is the 
 
 The work gets the lease of the flight:
 
-- `token`: a fencing token. Its high 32 bits are the epoch of the coordinator's term, so a newer term always gives higher tokens.
-- `signal`: it aborts with `LockLostError` when the flight is no longer the leader's. This occurs when the leader misses the grace window of a new coordinator.
+- `token`: a `FencingToken`. Its high 32 bits are the epoch of the coordinator's term, so a newer term always gives higher tokens.
+- `signal`: it aborts with `LeaseLostError` when the flight is no longer the leader's. The `subject` of the error is the key. This occurs when the leader misses the grace window of a new coordinator.
 
 | Option        | What it does                                                                                                                                                                                   |
 | ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -147,7 +147,7 @@ A codec that cannot encode the value fails the flight for all callers. A codec t
 | The leader    | Its work threw                                                  | The original error of the work                                   |
 | A joiner      | Its work threw                                                  | `FlightFailedError`                                              |
 | A joiner      | Interrupted: the leader's process stopped, or it lost the lease | `FlightInterruptedError`                                         |
-| The leader    | It lost the lease                                               | The reason of the lease's signal: `LockLostError`                |
+| The leader    | It lost the lease                                               | The reason of the lease's signal: `LeaseLostError`               |
 | Each caller   | `encode` threw in the leader                                    | The leader: the error of `encode`. A joiner: `FlightFailedError` |
 | One caller    | Its own `decode` threw                                          | The error of `decode`, for that caller only                      |
 | Each caller   | The coordinator speaks another protocol version                 | `ProtocolVersionError`                                           |
@@ -167,7 +167,7 @@ Give a signal to stop the wait of one caller: `flights.run(key, work, { signal: 
   - Each leader reasserts its flight, and sends its landing again when it has one.
   - Each joiner rejoins its flight by the flight's token, and it gets the outcome of that flight.
   - A new call waits for the grace window to end. Then it leads or joins.
-- **A leader misses the grace window**, for example because its process was frozen. Its lease is lost: the signal of the lease aborts with `LockLostError`, and its call rejects with that error. Its joiners get `FlightInterruptedError`.
+- **A leader misses the grace window**, for example because its process was frozen. Its lease is lost: the signal of the lease aborts with `LeaseLostError`, and its call rejects with that error. Its joiners get `FlightInterruptedError`.
 - **A joiner's leader and the coordinator stop together.** The joiner gets `FlightInterruptedError` at the end of the grace window. It never runs the work again.
 
 A call that was on its way to a coordinator that stopped joined nothing. It goes again to the next coordinator as a new call. [ADR 0005](./docs/adr/0005-a-joiner-rejoins-its-flight-by-its-token.md) tells why.

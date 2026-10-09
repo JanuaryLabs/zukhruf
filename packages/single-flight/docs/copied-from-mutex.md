@@ -66,7 +66,7 @@ Note: on macOS 27 with Node.js 26, a probe listened and connected on socket path
 
 **`lock-stores/socket/lock-server.ts` → `coordinator/flight-server.ts`.**
 
-- It serves a `FlightCoordinator`, not a `LockCoordinator`. `EpochTokenSource` comes from the public exports of `@zukhruf/mutex`.
+- It serves a `FlightCoordinator`, not a `LockCoordinator`. `EpochTokenSource` comes from `@zukhruf/fencing`.
 - `close` ends each connection with `destroySoon`, not `destroy`.
 
 Why: a coordinator process can also lead a flight. When it lands the flight and stops at once, `destroy` can drop a `landed` answer that is still on its way to a joiner. `destroySoon` sends what was written first, and then closes.
