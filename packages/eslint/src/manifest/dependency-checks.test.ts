@@ -29,6 +29,8 @@ interface Layout {
   targetDefaults?: Record<string, unknown>;
   greetTags?: string[];
   greetDependencies?: Record<string, string>;
+  /** greet's files under `src/`, by name; by default `index.ts` imports left-pad. */
+  greetSource?: Record<string, string>;
 }
 
 /**
@@ -41,6 +43,9 @@ function workspaceFiles({
   targetDefaults = {},
   greetTags = [],
   greetDependencies = { 'left-pad': '1.3.0' },
+  greetSource = {
+    'index.ts': `import leftPad from 'left-pad';\nexport const greet = () => leftPad('hi', 5);\n`,
+  },
 }: Layout): Record<string, string> {
   const workspaces = [
     ...Object.keys(apps).map((name) => [`apps/${name}`, `@fx/${name}`]),
@@ -137,7 +142,12 @@ function workspaceFiles({
         build: { executor: 'nx:run-commands', options: { command: 'true' } },
       },
     }),
-    'libs/greet/src/index.ts': `import leftPad from 'left-pad';\nexport const greet = () => leftPad('hi', 5);\n`,
+    ...Object.fromEntries(
+      Object.entries(greetSource).map(([name, source]) => [
+        `libs/greet/src/${name}`,
+        source,
+      ]),
+    ),
     'libs/shout/package.json': JSON.stringify({
       name: '@fx/shout',
       version: '0.0.0',
@@ -328,4 +338,55 @@ test('an island manifest is reported once, by island/dependency-checks', () => {
     ['island/dependency-checks'],
   );
   assert.match(findings[0]?.message ?? '', /left-pad/);
+});
+
+for (const testFile of [
+  'index.test.ts',
+  'index.test.mjs',
+  'index.test.js',
+  'index.test.cjs',
+  'index.spec.jsx',
+]) {
+  test(`the imports of a test file named ${testFile} are not dependencies of the package`, () => {
+    // Arrange: greet ships nothing that imports left-pad; only its test does.
+    using workspace = fixtureWorkspace(
+      workspaceFiles({
+        apps: { web: { build: VITE_BUILD } },
+        greetTags: ['layer:island'],
+        greetDependencies: {},
+        greetSource: {
+          'index.ts': `export const greet = () => 'hi';\n`,
+          [testFile]: `import leftPad from 'left-pad';\nconsole.log(leftPad('hi', 5));\n`,
+        },
+      }),
+    );
+    buildProjectGraph(workspace.root);
+
+    // Act
+    const findings = lint(workspace.root, ['libs/greet/package.json']);
+
+    // Assert
+    assert.deepEqual(findings, []);
+  });
+}
+
+test('the imports of a JavaScript test file are not dependencies of a package that is not an island', () => {
+  // Arrange
+  using workspace = fixtureWorkspace(
+    workspaceFiles({
+      apps: { web: { build: VITE_BUILD } },
+      greetDependencies: {},
+      greetSource: {
+        'index.ts': `export const greet = () => 'hi';\n`,
+        'index.test.mjs': `import leftPad from 'left-pad';\nconsole.log(leftPad('hi', 5));\n`,
+      },
+    }),
+  );
+  buildProjectGraph(workspace.root);
+
+  // Act
+  const findings = lint(workspace.root, ['libs/greet/package.json']);
+
+  // Assert
+  assert.deepEqual(findings, []);
 });

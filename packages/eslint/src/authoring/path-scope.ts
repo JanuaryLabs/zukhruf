@@ -1,8 +1,11 @@
 import { matchesGlob } from 'node:path';
 
+import { TEST_EXTENSIONS } from '../files.ts';
 import { relativeToWorkspace } from '../workspace/workspace-root.ts';
 
-const TEST_FILE = /\.(test|spec)\.[cm]?[jt]sx?$/;
+const TEST_FILE = new RegExp(
+  String.raw`\.(test|spec)\.(${TEST_EXTENSIONS.join('|')})$`,
+);
 
 export function isTestFile(filename: string): boolean {
   return TEST_FILE.test(filename);

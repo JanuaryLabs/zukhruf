@@ -48,6 +48,13 @@ await spawn('docker', ['ps']);`,
         filename: workspace.path('packages/sources/postgres/src/x.test.ts'),
         options: ROOTS,
       },
+      // A JavaScript test file is a test file too.
+      {
+        code: `import spawn from 'nano-spawn';
+await spawn('docker', ['ps']);`,
+        filename: workspace.path('packages/sources/postgres/src/x.spec.mjs'),
+        options: ROOTS,
+      },
       // A user-defined function named spawn is not a subprocess.
       {
         code: `const spawn = (name: string) => name;

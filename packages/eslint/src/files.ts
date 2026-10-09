@@ -6,7 +6,18 @@ export const TYPESCRIPT = ['**/*.ts', '**/*.tsx', '**/*.cts', '**/*.mts'];
 export const JAVASCRIPT = ['**/*.js', '**/*.jsx', '**/*.cjs', '**/*.mjs'];
 export const SOURCE = [...TYPESCRIPT, ...JAVASCRIPT];
 export const JSX = ['**/*.tsx', '**/*.jsx'];
-export const TESTS = ['**/*.{test,spec}.{ts,tsx,cts,mts,js,jsx,cjs,mjs}'];
+/** The extensions a test file can have: `x.test.<extension>` or `x.spec.<extension>`. */
+export const TEST_EXTENSIONS = [
+  'ts',
+  'tsx',
+  'cts',
+  'mts',
+  'js',
+  'jsx',
+  'cjs',
+  'mjs',
+];
+export const TESTS = [`**/*.{test,spec}.{${TEST_EXTENSIONS.join(',')}}`];
 /** Test-support scripts run top-level like tests: their state is arrange state. */
 export const FIXTURES = ['**/*.fixture.ts'];
 /** A script's stdout is its interface. */

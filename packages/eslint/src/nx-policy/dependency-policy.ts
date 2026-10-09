@@ -1,3 +1,5 @@
+import { TESTS } from '../files.ts';
+
 export interface DependencyPolicyOptions {
   ignoredFiles?: string[];
   ignoredDependencies?: string[];
@@ -8,11 +10,9 @@ export interface DependencyPolicyOptions {
   buildTargets?: string[];
 }
 
-const TESTS = '**/*.{test,spec}.{ts,tsx,mts,cts}';
-
 // Test and build-tool files never ship, so their imports are not dependencies.
 const NEVER_SHIPPED = [
-  `{projectRoot}/${TESTS}`,
+  ...TESTS.map((glob) => `{projectRoot}/${glob}`),
   '{projectRoot}/**/{tests,test,e2e,__tests__,__mocks__}/**',
   '{projectRoot}/**/test-setup.{ts,tsx,mts,cts}',
   '{projectRoot}/*.config.{js,cjs,mjs,ts,mts,cts}',
