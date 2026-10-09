@@ -62,7 +62,7 @@ The name follows the `@<scope>/source` convention of Nx and of the "live types" 
 
 ## Release
 
-Releases need no command. The packages tagged `scope:public` are released together, as their conventional commits on `main` ask: a `feat`, `fix` or `refactor` bumps the patch version while the major version is 0, and `chore`, `docs`, `test` and `ci` release nothing.
+Releases need no command. The packages that Nx tags `npm:public`, because their package.json is not private, are released together, as their conventional commits on `main` ask: a `feat`, `fix` or `refactor` bumps the patch version while the major version is 0, and `chore`, `docs`, `test` and `ci` release nothing.
 
 When CI is green for a push to `main`, `.github/workflows/release.yml` runs `nx release version`, which versions the packages, commits `chore(release): publish <version>`, tags `release/<version>` and pushes both, and then `nx release publish`, which publishes to npm. Nothing reaches npm unless `main` has its release commit and tag, and a version already on npm is skipped. A push with nothing to release changes nothing. The release runs only for the commit CI tested; when `main` has moved on, the newer commit's CI run releases it.
 

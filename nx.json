@@ -74,7 +74,7 @@
     ]
   },
   "release": {
-    "projects": ["tag:scope:public"],
+    "projects": ["tag:npm:public"],
     "conventionalCommits": {
       "types": {
         "chore": {
@@ -93,7 +93,7 @@
       }
     },
     "version": {
-      "preVersionCommand": "nx run-many -t build --projects=tag:scope:public",
+      "preVersionCommand": "nx run-many -t build --projects=tag:npm:public",
       "conventionalCommits": true,
       "git": {
         "commit": true,
