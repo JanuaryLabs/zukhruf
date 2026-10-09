@@ -1,0 +1,110 @@
+# Code copied from the mutex
+
+A single flight elects a coordinator among the processes that use one directory. Each caller then talks to that coordinator over a socket. The mutex's socket lock store already does both. This package keeps its own copy of that code, and does not share it with the mutex yet.
+
+The reason is the Rule of Three. Code that a second place needs is copied, and it is extracted only when a third place needs it. The boundary of a shared package then comes from three working copies, not from a guess. The mutex's wire also stays as it is, so old and new mutex processes cannot split into two leaders. When a third consumer needs this code, the shared parts move to `@zukhruf/coordinator` (backlog #2496). Until then, a fix in one copy is made in the other copy too, and the commit names both files. This note is the input for that step.
+
+Paths on the left are in `packages/mutex/src`. Paths on the right are in `packages/single-flight/src`.
+
+## Copied without a change
+
+| Mutex                                         | Single flight                         |
+| --------------------------------------------- | ------------------------------------- |
+| `lock-stores/remote/connection.ts`            | `connection/connection.ts`            |
+| `lock-stores/remote/connection-supervisor.ts` | `connection/connection-supervisor.ts` |
+| `shared/fs/replace-file.ts`                   | `shared/fs/replace-file.ts`           |
+| `shared/fs/patiently.ts`                      | `shared/fs/patiently.ts`              |
+| `shared/fs/errno.ts`                          | `shared/fs/errno.ts`                  |
+| `shared/sqlite/is-busy.ts`                    | `shared/sqlite/is-busy.ts`            |
+| `shared/is-record.ts`                         | `shared/is-record.ts`                 |
+
+## Copied with changes
+
+**`shared/fs/durable-write.ts` → `shared/fs/durable-write.ts`.**
+The copy has no `draftSuffixLength`. Only the mutex's file stores use it.
+
+**`leader-election/leader-election.ts` → `election/leader-election.ts`.**
+The claim file is `flight.lock`, not `leader.lock`. The epoch file is `flight.epoch`, not `leader.epoch`. The comments call the elected process the coordinator.
+Why: a single flight and a socket lock store can use one directory. With the same file names, they would share one election. The winner would serve only one of them, and the other one would never find a server.
+
+**`leader-election/leadership.ts` → `election/leadership.ts`.**
+Only the comments change: a term belongs to the coordinator.
+Why: in this package, a leader is the caller that runs a flight's work.
+
+**`local-directory/` → `local-directory/`.**
+The comments and the error message name the flight directory and its election.
+`NetworkDirectoryError` is a class of this package. It is not the mutex's class.
+
+**`lock-stores/remote/connector.ts` → `connection/connector.ts`.**
+The lock aliases `ClientConnection` and `ClientConnector` become `FlightConnection` and `FlightConnector`.
+
+**`lock-stores/socket/socket-connection.ts` → `connection/socket-connection.ts`.**
+Only an import path changes.
+
+**`lock-stores/socket/local-directory-connector.ts` → `connection/local-directory-connector.ts`.**
+Only its types and comments change.
+
+**`lock-stores/socket/handshake.ts` → `connection/handshake.ts`.**
+
+- The hello names the protocol: `{"op":"hello","protocol":"single-flight","version":1}`. The refusal names it too.
+- The welcome is `{"op":"welcome"}`. It lists no requests, because this protocol has no request that came after version 1.
+- A process that opens with something other than a hello is closed at once. The mutex keeps such a connection open, for its processes from before the handshake. No such process of this package exists.
+- `FIRST_LINE_LIMIT` stays 1024 bytes.
+
+Why: a hello that names its protocol cannot be read as a hello of another protocol.
+
+**`lock-stores/socket/protocol-version-error.ts` → `connection/protocol-version-error.ts`.**
+The messages name the single flight's coordinator, not the socket store's leader.
+
+**`lock-stores/socket/electing-connector.ts` → `connection/electing-connector.ts`.**
+
+- It has no `connected` callback. In the mutex, that callback only emits the `follower` role event. This package has no role event.
+- It does not wrap the connection in `AdvertisedOpsConnection`, because the welcome lists no requests.
+- The connection checks each message as a `FlightResponse`.
+
+**`lock-stores/socket/socket-store.ts` (`socketPathFor`, `SOCKET_PATH_LIMIT`) → `connection/socket-path.ts`.**
+The socket file is `flight.sock`. The Windows pipe is `\\.\pipe\single-flight-<hash>`. The 103-byte limit stays.
+Note: on macOS 27 with Node.js 26, a probe listened and connected on socket paths of 104 to 111 bytes. The mutex's comment says that macOS stops at 104 bytes. The extraction must check that premise before it keeps the limit.
+
+**`lock-stores/socket/lock-server.ts` → `coordinator/flight-server.ts`.**
+
+- It serves a `FlightCoordinator`, not a `LockCoordinator`. `EpochTokenSource` comes from the public exports of `@zukhruf/mutex`.
+- `close` ends each connection with `destroySoon`, not `destroy`.
+
+Why: a coordinator process can also lead a flight. When it lands the flight and stops at once, `destroy` can drop a `landed` answer that is still on its way to a joiner. `destroySoon` sends what was written first, and then closes.
+
+**`lock-stores/remote/protocol.ts` (`RequestEnvelope`, `isRequestEnvelope`) → `protocol/flight-protocol.ts`.**
+They are copied as they are. The rest of that file is the lock protocol, and this package has its own.
+
+## Test helpers copied
+
+The tests start real processes, so this package also copies three helpers from `packages/mutex/src/testing`. They are not part of the package: the build leaves `src/testing` out.
+
+**`testing/wait-until.ts` → `testing/wait-until.ts`.**
+Copied without a change.
+
+**`testing/scratch-directory.ts` → `testing/scratch-directory.ts`.**
+The prefix of the directory is `flights-`, not `mutex-test-`.
+
+**`testing/worker-process.ts` → `testing/worker-process.ts`.**
+`startWorker` has no options: no `host` (it joins a child to the mutex's IPC coordinator) and no `nodeOptions`. The worker has no `exit` and no `find`. These tests use none of them.
+
+These helpers do not belong in `@zukhruf/coordinator`. A third package that copies them is the time to move them to `@zukhruf/testing` (backlog #2509).
+
+## Not copied
+
+- `lock-stores/socket/advertised-ops-connection.ts`: the welcome lists no requests yet.
+- `lock-stores/remote/envelope.ts` and `queries.ts`: this package uses no IPC channel and no look requests.
+- `lock-stores/remote/lock-coordinator.ts` and `remote-lock-client.ts`. `FlightCoordinator`, its sessions and `FlightClient` follow their shape, with phases, a grace window, reassertion and re-sent requests. But their rules are this package's: one request leads or joins, and an outcome goes to every joiner.
+
+## What the extraction can share
+
+- **As is:** the connection, the connection supervisor, the socket connection, the local-directory check, and the file and SQLite helpers.
+- **With parameters:**
+  - the election: the names of its two files;
+  - the socket path: the file name and the pipe prefix;
+  - the handshake: the protocol name, the version, and what the welcome lists;
+  - the electing connector: the check of the incoming messages;
+  - the server: what serves each connection;
+  - the protocol error: the subject of its message.
+- **Not shared:** each coordinator's rules, and each client's requests.

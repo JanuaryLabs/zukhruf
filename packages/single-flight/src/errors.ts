@@ -1,11 +1,11 @@
-import type { RecordedError } from './flight-records.ts';
+import type { Failure } from './protocol/flight-protocol.ts';
 
-/** The flight that this caller joined in another process failed. `failure` is the error that its leader recorded. */
+/** The work of the flight that this caller joined failed. `failure` describes the error that its leader got. */
 export class FlightFailedError extends Error {
   readonly key: string;
-  readonly failure: RecordedError;
+  readonly failure: Failure;
 
-  constructor(key: string, failure: RecordedError) {
+  constructor(key: string, failure: Failure) {
     super(
       `The flight of ${JSON.stringify(key)} failed: ${failure.name}: ${failure.message}`,
     );
@@ -16,9 +16,9 @@ export class FlightFailedError extends Error {
 }
 
 /**
- * The holder of the flight that this caller joined stopped before the flight
- * had an outcome: its process stopped, its lease was lost, or its records
- * refused the outcome.
+ * The flight that this caller joined ended without an outcome: its leader's
+ * process stopped, or its leader lost the flight. The work is never run again
+ * for this caller; a new call starts a new flight.
  */
 export class FlightInterruptedError extends Error {
   readonly key: string;
@@ -32,15 +32,14 @@ export class FlightInterruptedError extends Error {
   }
 }
 
-/** The record of the flight that this caller joined was gone before the caller read its outcome. */
-export class FlightOutcomeLostError extends Error {
-  readonly key: string;
-
-  constructor(key: string) {
-    super(
-      `The record of the flight of ${JSON.stringify(key)} that this caller joined was gone before the caller read its outcome.`,
-    );
-    this.name = 'FlightOutcomeLostError';
-    this.key = key;
+/** The parts of a thrown value that cross to the joiners. A value that is not an error keeps only its text. */
+export function failureOf(error: unknown): Failure {
+  if (!(error instanceof Error)) {
+    return { name: 'Error', message: String(error) };
   }
+  const { name, message } = error;
+  const code = 'code' in error ? error.code : undefined;
+  return typeof code === 'string' || typeof code === 'number'
+    ? { name, message, code }
+    : { name, message };
 }

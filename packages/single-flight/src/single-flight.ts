@@ -1,56 +1,167 @@
-import { Flight } from './flight.ts';
+import { untilAborted } from '@zukhruf/async';
+import type { Lease } from '@zukhruf/mutex';
+
+import { FlightClient, type Lead } from './client/flight-client.ts';
+import type { Codec } from './codec.ts';
+import { ConnectionSupervisor } from './connection/connection-supervisor.ts';
+import { ElectingConnector } from './connection/electing-connector.ts';
+import { LocalDirectoryConnector } from './connection/local-directory-connector.ts';
+import { socketPathFor } from './connection/socket-path.ts';
+import { FlightServer } from './coordinator/flight-server.ts';
+import { LeaderElection } from './election/leader-election.ts';
+import {
+  FlightFailedError,
+  FlightInterruptedError,
+  failureOf,
+} from './errors.ts';
+import type { Outcome } from './protocol/flight-protocol.ts';
+
+/** Milliseconds between two attempts to reach the coordinator or to win its term. */
+const POLL_INTERVAL = 10;
+
+export interface SingleFlightOptions<T> {
+  /**
+   * The local folder where the processes that share flights meet. They keep
+   * `flight.lock`, `flight.epoch` and `flight.sock` there, so every process
+   * that names the same folder is in one group, and callers of one key share
+   * a flight across that group. There is no default: one shared default would
+   * put every application on the host into one group, and unrelated
+   * applications that use the same key would join each other's flights. It
+   * must be on a local file system.
+   */
+  directory: string;
+  /** Turns the flight's value into text for the processes that joined it, and back. */
+  codec: Codec<T>;
+  /**
+   * Milliseconds that a new coordinator starts no flight after the previous
+   * one stopped, so the leaders of flights in progress can claim them again.
+   * Must exceed how long a process takes to reconnect. Defaults to 500.
+   */
+  graceWindow?: number;
+}
 
 export interface RunOptions {
-  /** Called once, before this caller starts to wait for a flight that another caller started. */
+  /** Called once, when this caller joins a flight that another caller leads. */
   onJoin?: (() => void) | undefined;
   /** Stops the wait of this caller only, which then rejects with `signal.reason`. The flight runs on. */
   signal?: AbortSignal | undefined;
 }
 
-/** What a caller gets: the value of the flight, and whether the caller joined a flight that another caller started. */
+/** What a caller gets: the value of the flight, and whether the caller joined a flight that another caller led. */
 export interface FlightValue<T> {
   readonly value: T;
   readonly joined: boolean;
 }
 
-/** Callers of one key in this process share the flight in progress. */
-export class SingleFlight<T> {
-  /** Only the flights in progress: a flight that ended leaves, so the next call starts a new one. */
-  readonly #flights = new Map<string, Flight<T>>();
+/** How the leader's own flight ended for the leader's caller. */
+type Settled<T> = { value: T } | { error: unknown };
+
+/**
+ * Callers of one key share the flight in progress, in this process and in
+ * every process that uses the same directory. One process of the group is
+ * elected the coordinator. Each call asks it, in one step, to lead a new
+ * flight of the key or to join the flight in progress. The leader runs the
+ * work, and the coordinator pushes the outcome to every joiner.
+ */
+export class SingleFlight<T> implements AsyncDisposable {
+  readonly #client: FlightClient;
+  readonly #codec: Codec<T>;
+  /** The flight servers this process started; disposing closes them. */
+  readonly #servers = new AsyncDisposableStack();
+
+  constructor({ directory, codec, graceWindow = 500 }: SingleFlightOptions<T>) {
+    this.#codec = codec;
+    const socketPath = socketPathFor(directory);
+    this.#client = new FlightClient(
+      new ConnectionSupervisor(
+        new LocalDirectoryConnector(
+          directory,
+          new ElectingConnector({
+            socketPath,
+            election: new LeaderElection(directory, {
+              pollInterval: POLL_INTERVAL,
+            }),
+            pollInterval: POLL_INTERVAL,
+            serve: async (leadership) => {
+              // Until serving has fully started, a failure closes the new server, so no server outlives its term.
+              await using starting = new AsyncDisposableStack();
+              starting.adopt(
+                await FlightServer.start(socketPath, leadership, {
+                  // The first term of a directory has no flights to wait for.
+                  graceWindow: leadership.epoch > 1n ? graceWindow : 0,
+                }),
+                (started) => started.close(),
+              );
+              this.#servers.use(starting.move());
+            },
+          }),
+        ),
+      ),
+    );
+  }
 
   /**
-   * Runs `work` for `key`, or joins the flight of `key` in progress. `work`
-   * gets a signal that aborts only when every caller of the flight cancelled:
-   * work that can stop early may read it. Work that ignores it runs on, and
-   * the next call starts a new flight either way.
+   * Runs `work` for `key` as the leader of a new flight, or joins the flight
+   * of `key` in progress. `work` gets the flight's lease: its token, and a
+   * signal that aborts with `LockLostError` once the flight is no longer this
+   * leader's. A joiner gets the leader's value through the codec, or rejects
+   * with `FlightFailedError` or `FlightInterruptedError`.
    */
   async run(
     key: string,
-    work: (abandoned: AbortSignal) => Promise<T>,
+    work: (lease: Lease) => Promise<T>,
     { onJoin, signal }: RunOptions = {},
   ): Promise<FlightValue<T>> {
-    // A caller that already cancelled neither starts nor joins a flight.
-    signal?.throwIfAborted();
-    // No await before the flight is in the map: a second caller must find it.
-    const inProgress = this.#flights.get(key);
-    const flight = inProgress ?? this.#start(key, work);
-    const joined = inProgress !== undefined;
-    if (joined) onJoin?.();
-    // The signal stops only this caller's wait. The work never sees it, so
-    // the other callers still get the value.
-    return { value: await flight.wait(signal), joined };
+    const answer = await this.#client.run(key, { signal, onJoin });
+    switch (answer.kind) {
+      case 'landed':
+        return { value: this.#read(key, answer.outcome), joined: true };
+      case 'interrupted':
+        throw new FlightInterruptedError(key);
+      case 'lead': {
+        // The signal stops only this caller's wait. The flight runs on for its joiners.
+        const settled = await untilAborted(
+          this.#fly(work, answer.lead),
+          signal,
+        );
+        if ('error' in settled) throw settled.error;
+        return { value: settled.value, joined: false };
+      }
+    }
   }
 
-  #start(key: string, work: (abandoned: AbortSignal) => Promise<T>) {
-    const flight = new Flight(work);
-    this.#flights.set(key, flight);
-    const leave = () => {
-      if (this.#flights.get(key) === flight) this.#flights.delete(key);
-    };
-    void flight.ended.then(leave);
-    // In the same step as the abort, so no caller joins a flight that nobody
-    // waits for (Go issue 22724: a new lookup joined a cancelled one).
-    flight.abandoned.addEventListener('abort', leave, { once: true });
-    return flight;
+  /** Disconnects, and stops serving as the coordinator: the other processes elect a successor. */
+  async [Symbol.asyncDispose]() {
+    await this.#client.close();
+    await this.#servers.disposeAsync();
+  }
+
+  /** Runs the work and lands its outcome. Never rejects, so a caller that stopped waiting leaves no rejection behind. */
+  async #fly(
+    work: (lease: Lease) => Promise<T>,
+    lead: Lead,
+  ): Promise<Settled<T>> {
+    let text: string;
+    try {
+      text = this.#codec.encode(
+        await work({ token: lead.token, signal: lead.signal }),
+      );
+    } catch (error) {
+      lead.land({ failure: failureOf(error) });
+      return { error };
+    }
+    // A lost flight's joiners were told that it is interrupted, so this value reaches nobody.
+    if (lead.signal.aborted) return { error: lead.signal.reason };
+    lead.land({ value: text });
+    try {
+      return { value: this.#codec.decode(text) };
+    } catch (error) {
+      return { error };
+    }
+  }
+
+  #read(key: string, outcome: Outcome): T {
+    if ('failure' in outcome) throw new FlightFailedError(key, outcome.failure);
+    return this.#codec.decode(outcome.value);
   }
 }

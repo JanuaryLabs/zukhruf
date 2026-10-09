@@ -2,22 +2,10 @@ export {
   type FlightValue,
   type RunOptions,
   SingleFlight,
+  type SingleFlightOptions,
 } from './single-flight.ts';
-export type {
-  Finished,
-  FlightRecords,
-  LatestFlight,
-  Outcome,
-  RecordedError,
-  Status,
-} from './flight-records.ts';
-export {
-  FileFlightRecords,
-  type FileFlightRecordsOptions,
-} from './file-flight-records.ts';
-export { SharedFlight, type SharedFlightOptions } from './shared-flight.ts';
-export {
-  FlightFailedError,
-  FlightInterruptedError,
-  FlightOutcomeLostError,
-} from './errors.ts';
+export type { Codec } from './codec.ts';
+export type { Failure } from './protocol/flight-protocol.ts';
+export { FlightFailedError, FlightInterruptedError } from './errors.ts';
+export { ProtocolVersionError } from './connection/protocol-version-error.ts';
+export { NetworkDirectoryError } from './local-directory/network-directory-error.ts';
