@@ -22,6 +22,9 @@
     },
     {
       "path": "./packages/fs"
+    },
+    {
+      "path": "./packages/leader-election"
     }
   ]
 }

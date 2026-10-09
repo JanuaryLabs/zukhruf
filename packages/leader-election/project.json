@@ -1,0 +1,11 @@
+{
+  "name": "leader-election",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "packages/leader-election/src",
+  "projectType": "library",
+  "tags": ["layer:island", "test:node"],
+  "targets": {
+    "format": {},
+    "test": {}
+  }
+}
