@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtempDisposable } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, test } from 'node:test';
@@ -10,14 +10,6 @@ import type { FencingToken } from './fencing-token.ts';
 import { FileTokenSource } from './file-token-source.ts';
 import { MonotonicClockTokenSource } from './monotonic-clock-token-source.ts';
 import type { TokenSource } from './token-source.ts';
-
-async function scratchDirectory() {
-  const path = await mkdtemp(join(tmpdir(), 'fencing-test-'));
-  return {
-    path,
-    [Symbol.asyncDispose]: () => rm(path, { recursive: true, force: true }),
-  };
-}
 
 const sources: Array<{
   name: string;
@@ -51,7 +43,9 @@ describe('Token sources', () => {
   for (const source of sources) {
     test(`${source.name} mints strictly newer tokens for a key`, async () => {
       // Arrange
-      await using directory = await scratchDirectory();
+      await using directory = await mkdtempDisposable(
+        join(tmpdir(), 'fencing-test-'),
+      );
       const tokens = source.create(directory.path);
       const minted: FencingToken[] = [];
 
@@ -72,7 +66,9 @@ describe('Token sources', () => {
 
   test('a FileTokenSource over the same directory continues above the previous maximum', async () => {
     // Arrange: a previous process minted tokens, then exited.
-    await using directory = await scratchDirectory();
+    await using directory = await mkdtempDisposable(
+      join(tmpdir(), 'fencing-test-'),
+    );
     const previous = new FileTokenSource(directory.path);
     await previous.next('product:42');
     const last = await previous.next('product:42');

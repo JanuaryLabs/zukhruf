@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, mkdtempDisposable, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, test } from 'node:test';
@@ -50,11 +50,13 @@ describe('Reservation endpoint', () => {
     { timeout: 5000 },
     async () => {
       // Arrange: the app wired like production, over its own directory, with one item left.
-      const directory = await mkdtemp(join(tmpdir(), 'app-test-'));
-      const stock = new FencedStock(join(directory, 'inventory.db'));
+      await using directory = await mkdtempDisposable(
+        join(tmpdir(), 'app-test-'),
+      );
+      const stock = new FencedStock(join(directory.path, 'inventory.db'));
       stock.seed('product:42', 1);
       const app = createApp({
-        mutex: new Mutex(new TicketQueueFileStore(directory)),
+        mutex: new Mutex(new TicketQueueFileStore(directory.path)),
         stock,
       });
 
@@ -96,7 +98,6 @@ describe('Reservation endpoint', () => {
       } finally {
         await Promise.allSettled(requests);
         stock.close();
-        await rm(directory, { recursive: true, force: true });
       }
     },
   );
@@ -106,10 +107,12 @@ describe('Reservation endpoint', () => {
     { timeout: 5000 },
     async () => {
       // Arrange: one item left, and another holder on the product's key.
-      const directory = await mkdtemp(join(tmpdir(), 'app-test-'));
-      const stock = new FencedStock(join(directory, 'inventory.db'));
+      await using directory = await mkdtempDisposable(
+        join(tmpdir(), 'app-test-'),
+      );
+      const stock = new FencedStock(join(directory.path, 'inventory.db'));
       stock.seed('product:42', 1);
-      const mutex = new Mutex(new TicketQueueFileStore(directory));
+      const mutex = new Mutex(new TicketQueueFileStore(directory.path));
       const app = createApp({ mutex, stock });
       const entered = Promise.withResolvers<void>();
       const release = Promise.withResolvers<void>();
@@ -142,7 +145,6 @@ describe('Reservation endpoint', () => {
         release.resolve();
         await holder;
         stock.close();
-        await rm(directory, { recursive: true, force: true });
       }
     },
   );
