@@ -47,7 +47,7 @@ export class SingleFlight<T> {
     const leave = () => {
       if (this.#flights.get(key) === flight) this.#flights.delete(key);
     };
-    flight.ended.then(leave, leave);
+    void flight.ended.then(leave);
     // In the same step as the abort, so no caller joins a flight that nobody
     // waits for (Go issue 22724: a new lookup joined a cancelled one).
     flight.abandoned.addEventListener('abort', leave, { once: true });
