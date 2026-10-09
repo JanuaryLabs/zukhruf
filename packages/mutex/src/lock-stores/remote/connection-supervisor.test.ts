@@ -29,76 +29,7 @@ function supervised() {
 }
 
 describe('Connection supervisor', () => {
-  test('nothing connects until the supervisor is opened, and opening twice connects once', async () => {
-    // Arrange
-    const { supervisor, calls } = supervised();
-    const beforeOpen = calls.length;
-
-    try {
-      // Act
-      supervisor.open();
-      supervisor.open();
-
-      // Assert
-      assert.equal(
-        beforeOpen,
-        0,
-        'A supervisor must not connect before it is opened',
-      );
-      assert.equal(calls.length, 1, 'Opening twice must connect once');
-      assert.equal(supervisor.status, 'connecting');
-    } finally {
-      await supervisor.close();
-    }
-  });
-
-  test('an open connection is reported, and carries messages both ways', async (t) => {
-    // Arrange
-    const { supervisor, calls, events } = supervised();
-    const peer = scriptedPeer<Message, Message>();
-    supervisor.open();
-
-    try {
-      // Act
-      calls[0]!.resolve(peer.connection);
-      await waitUntil(
-        t,
-        () => events.includes('connected'),
-        'The connection must be reported',
-      );
-      const sent = supervisor.send({ n: 1 });
-      peer.deliver({ n: 2 });
-
-      // Assert
-      assert.equal(sent, true);
-      assert.deepEqual(peer.sent, [{ n: 1 }]);
-      assert.deepEqual(events, ['connected', 'message 2']);
-      assert.equal(supervisor.status, 'connected');
-    } finally {
-      await supervisor.close();
-    }
-  });
-
-  test('a connection that opens as the supervisor closes is closed and never reported', async () => {
-    // Arrange
-    const { supervisor, calls, events } = supervised();
-    const peer = scriptedPeer<Message, Message>();
-    supervisor.open();
-
-    // Act: the connection arrives in the same turn as the close.
-    calls[0]!.resolve(peer.connection);
-    await supervisor.close();
-
-    // Assert
-    assert.equal(peer.closes, 1, 'The late connection must be closed');
-    assert.deepEqual(
-      events,
-      [],
-      'A closed supervisor must not report anything',
-    );
-    assert.equal(supervisor.status, 'closed');
-  });
-
+  // Kept as a double: a real campaign cannot be held open to land a close inside it (be7d968).
   test('closing while connecting aborts the connect, and finishes only after it settles', async (t) => {
     // Arrange: a connector that settles only when the test says so.
     const connecting = Promise.withResolvers<undefined>();
@@ -131,63 +62,7 @@ describe('Connection supervisor', () => {
     );
   });
 
-  test('a connector with no coordinator left makes the supervisor unavailable for good', async (t) => {
-    // Arrange
-    const { supervisor, calls, events } = supervised();
-    supervisor.open();
-
-    try {
-      // Act
-      calls[0]!.resolve(undefined);
-      await waitUntil(
-        t,
-        () => events.length > 0,
-        'The outcome must be reported',
-      );
-      supervisor.open();
-
-      // Assert
-      assert.deepEqual(events, ['unavailable']);
-      assert.equal(supervisor.status, 'unavailable');
-      assert.equal(
-        calls.length,
-        1,
-        'An unavailable supervisor must not ask the connector again',
-      );
-    } finally {
-      await supervisor.close();
-    }
-  });
-
-  test('a connector that fails is reported, and the next open connects again', async (t) => {
-    // Arrange
-    const { supervisor, calls, events } = supervised();
-    supervisor.open();
-
-    try {
-      // Act
-      calls[0]!.reject(new Error('EACCES'));
-      await waitUntil(
-        t,
-        () => events.length > 0,
-        'The failure must be reported',
-      );
-      const statusAfterFailure = supervisor.status;
-      supervisor.open();
-
-      // Assert
-      assert.deepEqual(events, ['failed: Error: EACCES']);
-      assert.equal(statusAfterFailure, 'idle');
-      assert.equal(
-        calls.length,
-        2,
-        'Opening after a failure must connect again',
-      );
-    } finally {
-      await supervisor.close();
-    }
-  });
-
+  // Kept as a double: every shipped connector is async, so only a stand-in throws before it returns a promise.
   test('a connector that throws before it returns a promise is reported as failed', async (t) => {
     // Arrange
     const events: string[] = [];
@@ -214,6 +89,7 @@ describe('Connection supervisor', () => {
     }
   });
 
+  // Kept as a double: a real socket reports a peer's drop as one close, never a close and a failed send together.
   test('a close event and a failed send of one connection count as one loss', async (t) => {
     // Arrange: a connection whose sends fail because its peer is gone.
     const { supervisor, calls, events } = supervised();
@@ -243,6 +119,7 @@ describe('Connection supervisor', () => {
     }
   });
 
+  // Kept as a double: a real connection is destroyed when it is replaced, so it delivers nothing late.
   test('messages from a replaced connection are ignored', async (t) => {
     // Arrange: the first connection was lost and replaced.
     const { supervisor, calls, events } = supervised();
@@ -280,6 +157,7 @@ describe('Connection supervisor', () => {
     }
   });
 
+  // Kept as a double: a real connection reports its close later, never inside send().
   test('send reports false while connecting and when the connection drops during the send', async (t) => {
     // Arrange: a connection that drops on every send.
     const { supervisor, calls, events } = supervised();
@@ -315,6 +193,7 @@ describe('Connection supervisor', () => {
     }
   });
 
+  // Kept as a double: no public call runs inside the supervisor's 'disconnected' report.
   test('a send made while the loss is reported does not go to the lost connection', async (t) => {
     // Arrange: a listener that sends as soon as it hears of the loss.
     const { connector, calls } = scriptedConnector<Message, Message>();
@@ -348,55 +227,5 @@ describe('Connection supervisor', () => {
     } finally {
       await supervisor.close();
     }
-  });
-
-  test('ref and unref reach the open connection, and nothing else touches it', async (t) => {
-    // Arrange
-    const { supervisor, calls, events } = supervised();
-    const peer = scriptedPeer<Message, Message>();
-    supervisor.ref();
-    supervisor.open();
-    calls[0]!.resolve(peer.connection);
-    await waitUntil(
-      t,
-      () => events.includes('connected'),
-      'The connection must be reported',
-    );
-
-    try {
-      // Act
-      supervisor.ref();
-      supervisor.unref();
-
-      // Assert: a ref before the connection opened reaches nothing; its listener applies it on `connected`.
-      assert.deepEqual(peer.refs, ['ref', 'unref']);
-    } finally {
-      await supervisor.close();
-    }
-  });
-
-  test('closing closes the open connection and reports nothing more', async (t) => {
-    // Arrange
-    const { supervisor, calls, events } = supervised();
-    const peer = scriptedPeer<Message, Message>();
-    supervisor.open();
-    calls[0]!.resolve(peer.connection);
-    await waitUntil(
-      t,
-      () => events.includes('connected'),
-      'The connection must be reported',
-    );
-
-    // Act
-    await supervisor.close();
-    peer.drop();
-    supervisor.open();
-
-    // Assert
-    assert.equal(peer.closes, 1);
-    assert.deepEqual(events, ['connected']);
-    assert.equal(supervisor.status, 'closed');
-    assert.equal(supervisor.send({ n: 1 }), false);
-    assert.equal(calls.length, 1, 'A closed supervisor must not connect again');
   });
 });
