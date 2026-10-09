@@ -35,20 +35,11 @@ async function hold(mutex: Mutex, key: string) {
 }
 
 /** Resolves `'done'` if `work` settles within `milliseconds`, otherwise `'still waiting'`. */
-async function within(work: Promise<unknown>, milliseconds: number) {
-  const timeout = Promise.withResolvers<'still waiting'>();
-  const timer = setTimeout(
-    () => timeout.resolve('still waiting'),
-    milliseconds,
-  );
-  try {
-    return await Promise.race([
-      work.then(() => 'done' as const),
-      timeout.promise,
-    ]);
-  } finally {
-    clearTimeout(timer);
-  }
+function within(work: Promise<unknown>, milliseconds: number) {
+  return Promise.race([
+    work.then(() => 'done' as const),
+    delay(milliseconds, 'still waiting' as const, { ref: false }),
+  ]);
 }
 
 for (const store of storeCases) {

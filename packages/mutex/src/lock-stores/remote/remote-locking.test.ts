@@ -68,39 +68,34 @@ describe('Remote locking protocol', () => {
     });
     const client = scriptedPeer<LockResponse, LockRequest>();
     coordinator.serve(client.connection);
-    const deadline = Promise.withResolvers<'still held'>();
-    const timer = setTimeout(() => deadline.resolve('still held'), 1000);
+    const deadline = delay(1000, 'still held' as const, { ref: false });
 
-    try {
-      // Act
-      client.deliver({ op: 'acquire', id: 'a', key: 'product:42' });
-      client.deliver({ op: 'acquire', id: 'a', key: 'product:42' });
-      await waitUntil(
-        t,
-        () => client.sent.length > 0,
-        'The first acquire must be granted',
-      );
-      client.deliver({ op: 'release', id: 'a' });
-      await delay(settle);
+    // Act
+    client.deliver({ op: 'acquire', id: 'a', key: 'product:42' });
+    client.deliver({ op: 'acquire', id: 'a', key: 'product:42' });
+    await waitUntil(
+      t,
+      () => client.sent.length > 0,
+      'The first acquire must be granted',
+    );
+    client.deliver({ op: 'release', id: 'a' });
+    await delay(settle);
 
-      // Assert: one grant, and the key is free again after that one release.
-      assert.equal(
-        client.sent.filter((response) => response.op === 'granted').length,
-        1,
-        'The same request id must be granted only once',
-      );
-      const next = await Promise.race([
-        coordinator.acquire('product:42').then(() => 'granted' as const),
-        deadline.promise,
-      ]);
-      assert.equal(
-        next,
-        'granted',
-        'Releasing the request must free the key for the next caller',
-      );
-    } finally {
-      clearTimeout(timer);
-    }
+    // Assert: one grant, and the key is free again after that one release.
+    assert.equal(
+      client.sent.filter((response) => response.op === 'granted').length,
+      1,
+      'The same request id must be granted only once',
+    );
+    const next = await Promise.race([
+      coordinator.acquire('product:42').then(() => 'granted' as const),
+      deadline,
+    ]);
+    assert.equal(
+      next,
+      'granted',
+      'Releasing the request must free the key for the next caller',
+    );
   });
 
   test('a lease released while its connection drops is not reasserted on the next connection', async (t) => {
@@ -162,17 +157,11 @@ function coordinatorAfterFailover(graceWindow: number) {
 }
 
 /** Resolves `'granted'` if `lease` arrives within `milliseconds`, otherwise `'waiting'`. */
-async function grantedWithin(lease: Promise<unknown>, milliseconds: number) {
-  const timeout = Promise.withResolvers<'waiting'>();
-  const timer = setTimeout(() => timeout.resolve('waiting'), milliseconds);
-  try {
-    return await Promise.race([
-      lease.then(() => 'granted' as const),
-      timeout.promise,
-    ]);
-  } finally {
-    clearTimeout(timer);
-  }
+function grantedWithin(lease: Promise<unknown>, milliseconds: number) {
+  return Promise.race([
+    lease.then(() => 'granted' as const),
+    delay(milliseconds, 'waiting' as const, { ref: false }),
+  ]);
 }
 
 describe('Grace window after a failover', () => {

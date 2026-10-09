@@ -1,8 +1,7 @@
 import {
   mkdirSync,
-  mkdtempSync,
+  mkdtempDisposableSync,
   realpathSync,
-  rmSync,
   writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -22,11 +21,10 @@ export interface FixtureWorkspace extends Disposable {
 export function fixtureWorkspace(
   files: Record<string, string>,
 ): FixtureWorkspace {
+  const folder = mkdtempDisposableSync(join(tmpdir(), 'zukhruf-eslint-'));
   // The real path: macOS's tmpdir is a symlink and Windows' can use 8.3 short
   // names, while a child process reports its cwd fully resolved.
-  const root = realpathSync.native(
-    mkdtempSync(join(tmpdir(), 'zukhruf-eslint-')),
-  );
+  const root = realpathSync.native(folder.path);
   for (const [relativePath, content] of Object.entries(files)) {
     const file = join(root, relativePath);
     mkdirSync(dirname(file), { recursive: true });
@@ -35,6 +33,6 @@ export function fixtureWorkspace(
   return {
     root,
     path: (relativePath) => join(root, relativePath),
-    [Symbol.dispose]: () => rmSync(root, { recursive: true, force: true }),
+    [Symbol.dispose]: () => folder.remove(),
   };
 }
