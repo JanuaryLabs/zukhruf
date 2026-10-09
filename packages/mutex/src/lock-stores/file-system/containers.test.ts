@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { type TestContext, describe, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
@@ -8,6 +9,8 @@ import {
   type DockerVolume,
   TestRun,
 } from '@zukhruf/testing/docker';
+
+import { isRecord } from '../../shared/is-record.ts';
 
 /**
  * Containers are platform setup that no operation of the stores exposes. Two
@@ -19,6 +22,22 @@ const docker = new Docker({ testRun: TestRun.fromEnvironment(process.env) });
 
 const packageRoot = fileURLToPath(new URL('../../../', import.meta.url));
 const mutexInContainer = 'file:///pkg/src/index.ts';
+
+/** Each runtime dependency of the package, where Node.js finds it from /pkg, as an install puts it. */
+const manifest: unknown = JSON.parse(
+  readFileSync(new URL('../../../package.json', import.meta.url), 'utf8'),
+);
+assert.ok(
+  isRecord(manifest) && isRecord(manifest.dependencies),
+  'The package.json of the package must list its dependencies',
+);
+const dependencyMounts = Object.keys(manifest.dependencies).map((name) => ({
+  source: fileURLToPath(
+    new URL('.', import.meta.resolve(`${name}/package.json`)),
+  ),
+  target: `/node_modules/${name}`,
+  readOnly: true,
+}));
 
 const stores = ['LockFileStore', 'TicketQueueFileStore'] as const;
 
@@ -51,7 +70,7 @@ interface ContainerOptions {
   source?: string;
 }
 
-/** The image, the shared lock directory and the package, for one container. */
+/** The image, the shared lock directory, the package and its dependencies, for one container. */
 const placement = ({ volume, hostname, source }: ContainerOptions) => ({
   image,
   ...(hostname ? { hostname } : {}),
@@ -59,6 +78,7 @@ const placement = ({ volume, hostname, source }: ContainerOptions) => ({
   mounts: [
     { source: volume.name, target: '/locks' },
     { source: packageRoot, target: '/pkg', readOnly: true },
+    ...dependencyMounts,
   ],
 });
 

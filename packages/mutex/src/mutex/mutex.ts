@@ -1,4 +1,5 @@
-import { untilAborted } from '../shared/until-aborted.ts';
+import { untilAborted } from '@zukhruf/async';
+
 import type { AcquireMode, Outcome, OutcomeResults } from './acquire-mode.ts';
 import { WaitMode } from './acquire-modes/wait-mode.ts';
 import { Key } from './key.ts';

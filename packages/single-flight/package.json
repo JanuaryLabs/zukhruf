@@ -40,6 +40,9 @@
   "publishConfig": {
     "access": "public"
   },
+  "dependencies": {
+    "@zukhruf/async": "^0.3.13"
+  },
   "peerDependencies": {
     "@zukhruf/mutex": "^0.3.11"
   },

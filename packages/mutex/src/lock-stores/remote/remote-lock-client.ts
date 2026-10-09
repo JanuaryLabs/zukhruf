@@ -1,10 +1,11 @@
 import { randomUUID } from 'node:crypto';
 
+import { untilAborted } from '@zukhruf/async';
+
 import { FencingToken } from '../../fencing/fencing-token.ts';
 import type { LockHandle } from '../../mutex/lease.ts';
 import { LockLostError } from '../../mutex/lock-lost-error.ts';
 import type { AcquireOptions, LockStore } from '../../mutex/lock-store.ts';
-import { untilAborted } from '../../shared/until-aborted.ts';
 import type { ConnectionSupervisor } from './connection-supervisor.ts';
 import { CoordinatorUnavailableError } from './coordinator-unavailable-error.ts';
 import type { LockRequest, LockResponse } from './protocol.ts';

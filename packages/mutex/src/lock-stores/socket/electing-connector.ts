@@ -1,9 +1,10 @@
 import { type Socket, connect } from 'node:net';
 import { setTimeout as delay } from 'node:timers/promises';
 
+import { untilAborted } from '@zukhruf/async';
+
 import type { LeaderElection } from '../../leader-election/leader-election.ts';
 import type { Leadership } from '../../leader-election/leadership.ts';
-import { untilAborted } from '../../shared/until-aborted.ts';
 import type { ClientConnection, ClientConnector } from '../remote/connector.ts';
 import {
   type LockRequest,

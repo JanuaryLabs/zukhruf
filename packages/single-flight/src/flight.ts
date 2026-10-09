@@ -1,4 +1,4 @@
-import { untilAborted } from './until-aborted.ts';
+import { untilAborted } from '@zukhruf/async';
 
 /** One run of the work for a key in this process. Every caller that joins it gets how it ended. */
 export class Flight<T> {

@@ -52,7 +52,9 @@ async function isUnpacked(folder: string, version: string): Promise<boolean> {
 /**
  * The latest release of @zukhruf/mutex: what the other processes on a host
  * run while it upgrades to this source. It is unpacked once for each version,
- * and it has no dependencies, so its dist imports as it is.
+ * and its dist imports as it is: its dependency @zukhruf/async resolves to
+ * this workspace's copy through node_modules. That copy takes no part in the
+ * protocol between processes, so it does not change what this test checks.
  */
 async function latestRelease() {
   const version = (await npm(['view', '@zukhruf/mutex', 'version'])).trim();
