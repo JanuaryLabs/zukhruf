@@ -1,4 +1,4 @@
-# @zukhruf/leader-election
+# @zukhruf/election
 
 Candidates campaign for one claim, and the candidate that wins it leads for one term. Each term has an epoch that is higher than the epoch of each earlier term, so a newer leader always outranks an older one. A term ends when the leader resigns or its process dies. With a backend of leases, a term can also be lost while the leader still runs, and the term tells its leader so.
 
@@ -9,7 +9,7 @@ The words in these documents have one meaning each. See the glossary in [CONTEXT
 This project is an experiment.
 
 ```sh
-npm install @zukhruf/leader-election
+npm install @zukhruf/election
 ```
 
 ## Elect a leader of one host
@@ -21,7 +21,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { SqliteElection } from '@zukhruf/leader-election';
+import { SqliteElection } from '@zukhruf/election';
 
 const directory = await mkdtemp(join(tmpdir(), 'jobs-'));
 const election = new SqliteElection({
@@ -83,7 +83,7 @@ A backend must keep four rules:
 This backend elects among the candidates of one process. Its claim is an entry in a map:
 
 ```ts
-import { LeaderElection } from '@zukhruf/leader-election';
+import { LeaderElection } from '@zukhruf/election';
 
 const holders = new Map<string, bigint>();
 let lastEpoch = 0n;
@@ -158,9 +158,9 @@ This package is part of the [zukhruf](../../README.md) workspace. Run the comman
 
 ```sh
 npm install
-npx nx run leader-election:test        # builds, then runs the tests in src/
-npx nx run leader-election:typecheck   # formats, lints, then type checks
-npx nx run leader-election:build       # compiles src/ to dist/
+npx nx run election:test        # builds, then runs the tests in src/
+npx nx run election:typecheck   # formats, lints, then type checks
+npx nx run election:build       # compiles src/ to dist/
 ```
 
 ```

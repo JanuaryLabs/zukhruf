@@ -1,17 +1,17 @@
 {
-  "name": "@zukhruf/leader-election",
+  "name": "@zukhruf/election",
   "version": "0.3.16",
   "description": "Elect one leader among the processes that share a directory, with a term that ends when the leader dies and an epoch that grows with each term. Backends are subclasses of one campaign.",
   "license": "MIT",
   "repository": {
     "type": "git",
     "url": "https://github.com/JanuaryLabs/zukhruf",
-    "directory": "packages/leader-election"
+    "directory": "packages/election"
   },
   "bugs": {
     "url": "https://github.com/JanuaryLabs/zukhruf/issues"
   },
-  "homepage": "https://github.com/JanuaryLabs/zukhruf/tree/main/packages/leader-election#readme",
+  "homepage": "https://github.com/JanuaryLabs/zukhruf/tree/main/packages/election#readme",
   "keywords": [
     "leader-election",
     "election",

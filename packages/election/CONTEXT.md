@@ -1,4 +1,4 @@
-# Leader election
+# Election
 
 Candidates campaign for one claim. The candidate that wins it is the leader for one term. Each term has an epoch that is higher than the epoch of each earlier term. A backend decides what the claim is: for example, a SQLite lock on a local file, or a lease in a database.
 
