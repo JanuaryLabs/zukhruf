@@ -22,5 +22,5 @@ Thus each kind of write is its own function, and one private module names the dr
 - `@zukhruf/mutex` and `@zukhruf/single-flight` depend on `@zukhruf/fs`.
 - A fix to the draft applies to each kind of write.
 - `safeFileName` stays in the mutex: only the mutex makes file names from keys.
-- The check that refuses a network directory is in this package too. It had two copies, in the mutex and in the single flight. The new `@zukhruf/leader-election` package is its third user, so the Rule of Three applies. Its error, `NetworkDirectoryError`, is one class. The packages that refuse a network directory give that class from their own entry points, so a catch with `instanceof` works for each of them.
+- The check that refuses a network directory is in this package too. It had two copies, in the mutex and in the single flight. The new `@zukhruf/election` package is its third user, so the Rule of Three applies. Its error, `NetworkDirectoryError`, is one class. The packages that refuse a network directory give that class from their own entry points, so a catch with `instanceof` works for each of them.
 - The tests of this package have their own copies of the test helpers that record and refuse disk calls. A test file keeps its helpers (backlog #2509).
