@@ -1,0 +1,11 @@
+{
+  "name": "lease",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "packages/lease/src",
+  "projectType": "library",
+  "tags": ["layer:island", "test:node"],
+  "targets": {
+    "format": {},
+    "test": {}
+  }
+}

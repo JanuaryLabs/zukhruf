@@ -1,0 +1,43 @@
+{
+  "name": "@zukhruf/lease",
+  "version": "0.3.16",
+  "description": "A lease and its loss: the holder gets an AbortSignal that aborts once, with LeaseLostError, when another holder may have the right. The issuer keeps a LeaseController.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/JanuaryLabs/zukhruf",
+    "directory": "packages/lease"
+  },
+  "bugs": {
+    "url": "https://github.com/JanuaryLabs/zukhruf/issues"
+  },
+  "homepage": "https://github.com/JanuaryLabs/zukhruf/tree/main/packages/lease#readme",
+  "keywords": [
+    "lease",
+    "lock",
+    "leader-election",
+    "abortsignal",
+    "abortcontroller",
+    "distributed"
+  ],
+  "type": "module",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "@zukhruf/source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "!dist/spec/**",
+    "!**/*.tsbuildinfo",
+    "!**/*.test.*"
+  ],
+  "publishConfig": {
+    "access": "public"
+  }
+}

@@ -13,6 +13,7 @@
 | [`@zukhruf/async`](./packages/async)                 | Helpers for code that waits for promises. `untilAborted` cancels a wait when its signal aborts, also when other code stops the abort event. `Latch` holds callers until something happened, and never rejects.                                                                                                              |
 | [`@zukhruf/fs`](./packages/fs)                       | File writes that a reader never sees half done: replace a file in one step, with or without a sync to the disk, or create it only when it is absent. Also refuses a directory on a network file system, and retries the short refusals of Windows.                                                                          |
 | [`@zukhruf/election`](./packages/election)           | Elects one leader among candidates, with a term that ends when the leader resigns or dies, and an epoch that grows with each term. `SqliteElection` elects among the processes of one host; other backends are subclasses of one campaign.                                                                                  |
+| [`@zukhruf/lease`](./packages/lease)                 | A lease and its loss: the holder gets a signal that aborts once, with `LeaseLostError`, when another holder may have the right. An issuer gives out leases with `LeaseController`. A lease lasts for a session, not for a time.                                                                                             |
 
 ## Apps
 
