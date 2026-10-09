@@ -16,6 +16,9 @@
     },
     {
       "path": "./packages/single-flight"
+    },
+    {
+      "path": "./packages/async"
     }
   ]
 }
