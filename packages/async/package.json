@@ -1,6 +1,6 @@
 {
   "name": "@zukhruf/async",
-  "version": "0.3.13",
+  "version": "0.3.14",
   "description": "Stop a wait for a promise when an AbortSignal aborts, also when another listener stops the abort event, and leave no listener on the signal.",
   "license": "MIT",
   "repository": {
