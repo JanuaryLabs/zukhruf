@@ -1,6 +1,6 @@
 import { appendFile } from 'node:fs/promises';
 
-import { atomicWrite, patiently } from '@zukhruf/fs';
+import { atomicWrite, draftSuffixLength, patiently } from '@zukhruf/fs';
 
 import { Caller } from './caller.ts';
 import { FileLockStore } from './file-lock-store.ts';
@@ -17,8 +17,11 @@ import { readRecord } from './record-file.ts';
  * its waiter notices and appends it again.
  */
 export class TicketQueueFileStore extends FileLockStore {
-  /** A presence file has the longest name this store makes for a key. */
-  protected readonly longestSuffix = Presence.suffixLength;
+  /** The longer of a presence file and the draft that `atomicWrite` writes beside the record. */
+  protected readonly longestSuffix = Math.max(
+    Presence.suffixLength,
+    draftSuffixLength,
+  );
 
   protected async lock(
     path: string,

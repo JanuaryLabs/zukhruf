@@ -1,6 +1,6 @@
 import { unlink } from 'node:fs/promises';
 
-import { createExclusive, patiently } from '@zukhruf/fs';
+import { createExclusive, draftSuffixLength, patiently } from '@zukhruf/fs';
 
 import { Caller } from './caller.ts';
 import { FileLockStore } from './file-lock-store.ts';
@@ -12,8 +12,11 @@ import { readRecord } from './record-file.ts';
  * retry in no particular order, so this store is not FIFO.
  */
 export class LockFileStore extends FileLockStore {
-  /** A presence file has the longest name this store makes for a key. */
-  protected readonly longestSuffix = Presence.suffixLength;
+  /** The longer of a presence file and the draft that `createExclusive` writes beside the record. */
+  protected readonly longestSuffix = Math.max(
+    Presence.suffixLength,
+    draftSuffixLength,
+  );
 
   protected lock(
     path: string,
