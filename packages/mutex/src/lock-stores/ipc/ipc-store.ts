@@ -1,9 +1,8 @@
 import { promisify } from 'node:util';
 
-import type { LockHandle } from '../../mutex/lease.ts';
-import type { AcquireOptions, LockStore } from '../../mutex/lock-store.ts';
 import { ConnectionSupervisor } from '../remote/connection-supervisor.ts';
 import type { ClientConnection, ClientConnector } from '../remote/connector.ts';
+import { DelegatingLockStore } from '../remote/delegating-lock-store.ts';
 import { RemoteLockClient } from '../remote/remote-lock-client.ts';
 import { ProcessChannelConnection } from './process-channel-connection.ts';
 
@@ -27,9 +26,7 @@ class ProcessChannelConnector implements ClientConnector {
  * `CoordinatorUnavailableError`; held keys stay exclusive, because no
  * coordinator is left to grant them to anyone else.
  */
-export class IpcStore implements LockStore {
-  readonly #client: RemoteLockClient;
-
+export class IpcStore extends DelegatingLockStore {
   constructor() {
     if (!process.send) {
       throw new Error(
@@ -39,20 +36,10 @@ export class IpcStore implements LockStore {
     const channel = new ProcessChannelConnection(
       promisify<unknown, void>(process.send).bind(process),
     );
-    this.#client = new RemoteLockClient(
-      new ConnectionSupervisor(new ProcessChannelConnector(channel)),
+    super(
+      new RemoteLockClient(
+        new ConnectionSupervisor(new ProcessChannelConnector(channel)),
+      ),
     );
-  }
-
-  acquire(key: string, options?: AcquireOptions): Promise<LockHandle> {
-    return this.#client.acquire(key, options);
-  }
-
-  tryAcquire(key: string): Promise<LockHandle | undefined> {
-    return this.#client.tryAcquire(key);
-  }
-
-  isHeld(key: string): Promise<boolean> {
-    return this.#client.isHeld(key);
   }
 }

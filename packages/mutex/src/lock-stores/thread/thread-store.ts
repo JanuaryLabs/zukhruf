@@ -1,9 +1,8 @@
 import { type MessagePort, parentPort } from 'node:worker_threads';
 
-import type { LockHandle } from '../../mutex/lease.ts';
-import type { AcquireOptions, LockStore } from '../../mutex/lock-store.ts';
 import { ConnectionSupervisor } from '../remote/connection-supervisor.ts';
 import type { ClientConnection, ClientConnector } from '../remote/connector.ts';
+import { DelegatingLockStore } from '../remote/delegating-lock-store.ts';
 import { RemoteLockClient } from '../remote/remote-lock-client.ts';
 import { ParentPortConnection } from './parent-port-connection.ts';
 
@@ -24,29 +23,17 @@ class ParentPortConnector implements ClientConnector {
  * The worker-thread side of `ThreadLockCoordinator`: asks the thread that
  * started this worker for keys, through the worker's message port.
  */
-export class ThreadStore implements LockStore {
-  readonly #client: RemoteLockClient;
-
+export class ThreadStore extends DelegatingLockStore {
   constructor() {
     if (!parentPort) {
       throw new Error(
         'ThreadStore runs in a worker thread; use ThreadLockCoordinator in the thread that starts the workers.',
       );
     }
-    this.#client = new RemoteLockClient(
-      new ConnectionSupervisor(new ParentPortConnector(parentPort)),
+    super(
+      new RemoteLockClient(
+        new ConnectionSupervisor(new ParentPortConnector(parentPort)),
+      ),
     );
-  }
-
-  acquire(key: string, options?: AcquireOptions): Promise<LockHandle> {
-    return this.#client.acquire(key, options);
-  }
-
-  tryAcquire(key: string): Promise<LockHandle | undefined> {
-    return this.#client.tryAcquire(key);
-  }
-
-  isHeld(key: string): Promise<boolean> {
-    return this.#client.isHeld(key);
   }
 }

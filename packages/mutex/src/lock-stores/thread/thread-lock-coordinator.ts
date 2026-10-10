@@ -2,8 +2,7 @@ import type { Worker } from 'node:worker_threads';
 
 import { CounterTokenSource, type TokenSource } from '@zukhruf/fencing';
 
-import type { LockHandle } from '../../mutex/lease.ts';
-import type { AcquireOptions, LockStore } from '../../mutex/lock-store.ts';
+import { DelegatingLockStore } from '../remote/delegating-lock-store.ts';
 import { LockCoordinator } from '../remote/lock-coordinator.ts';
 import { WorkerConnection } from './worker-connection.ts';
 
@@ -17,25 +16,15 @@ export interface ThreadLockCoordinatorOptions {
  * which use `ThreadStore`. One thread decides every grant, so two threads can
  * never both be granted a key. Its reach is one process.
  */
-export class ThreadLockCoordinator implements LockStore {
+export class ThreadLockCoordinator extends DelegatingLockStore {
   readonly #coordinator: LockCoordinator;
 
   constructor({
     tokens = new CounterTokenSource(),
   }: ThreadLockCoordinatorOptions = {}) {
-    this.#coordinator = new LockCoordinator({ tokens });
-  }
-
-  acquire(key: string, options?: AcquireOptions): Promise<LockHandle> {
-    return this.#coordinator.acquire(key, options);
-  }
-
-  tryAcquire(key: string): Promise<LockHandle | undefined> {
-    return this.#coordinator.tryAcquire(key);
-  }
-
-  isHeld(key: string): Promise<boolean> {
-    return this.#coordinator.isHeld(key);
+    const coordinator = new LockCoordinator({ tokens });
+    super(coordinator);
+    this.#coordinator = coordinator;
   }
 
   /** Serves `worker`. When the thread stops, everything it held or waited for is released. */

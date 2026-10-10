@@ -2,8 +2,7 @@ import type { ChildProcess } from 'node:child_process';
 
 import { CounterTokenSource, type TokenSource } from '@zukhruf/fencing';
 
-import type { LockHandle } from '../../mutex/lease.ts';
-import type { AcquireOptions, LockStore } from '../../mutex/lock-store.ts';
+import { DelegatingLockStore } from '../remote/delegating-lock-store.ts';
 import { LockCoordinator } from '../remote/lock-coordinator.ts';
 import { ChildProcessConnection } from './child-process-connection.ts';
 
@@ -16,25 +15,15 @@ export interface IpcLockCoordinatorOptions {
  * The parent side of IPC locking: grants keys to this process and to every
  * child it adopts, which use `IpcStore`. Its reach is one process tree.
  */
-export class IpcLockCoordinator implements LockStore {
+export class IpcLockCoordinator extends DelegatingLockStore {
   readonly #coordinator: LockCoordinator;
 
   constructor({
     tokens = new CounterTokenSource(),
   }: IpcLockCoordinatorOptions = {}) {
-    this.#coordinator = new LockCoordinator({ tokens });
-  }
-
-  acquire(key: string, options?: AcquireOptions): Promise<LockHandle> {
-    return this.#coordinator.acquire(key, options);
-  }
-
-  tryAcquire(key: string): Promise<LockHandle | undefined> {
-    return this.#coordinator.tryAcquire(key);
-  }
-
-  isHeld(key: string): Promise<boolean> {
-    return this.#coordinator.isHeld(key);
+    const coordinator = new LockCoordinator({ tokens });
+    super(coordinator);
+    this.#coordinator = coordinator;
   }
 
   /**
