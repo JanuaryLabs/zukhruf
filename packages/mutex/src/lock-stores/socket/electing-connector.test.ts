@@ -72,34 +72,40 @@ describe('Electing connector', () => {
     assert.equal(campaigns, 0, 'An aborted connect must not campaign');
   });
 
-  test('a connect aborted while it waits for its next try rejects with the reason of the signal', async () => {
-    // Arrange: nobody serves the socket, and no campaign wins. The abort lands
-    // after the lost campaign returned, so the connect waits for its next try.
-    await using directory = await scratchDirectory();
-    const abort = new AbortController();
-    const reason = new Error('The store closed');
-    const connector = new ElectingConnector({
-      socketPath: join(directory.path, 'lock.sock'),
-      election: {
-        campaign: async () => {
-          setImmediate(() => abort.abort(reason));
-          return undefined;
+  // A wait that ignores the abort lasts the 60 s poll interval, and it must
+  // fail the test, not hang it.
+  test(
+    'a connect aborted while it waits for its next try rejects with the reason of the signal',
+    { timeout: 5000 },
+    async () => {
+      // Arrange: nobody serves the socket, and no campaign wins. The abort lands
+      // after the lost campaign returned, so the connect waits for its next try.
+      await using directory = await scratchDirectory();
+      const abort = new AbortController();
+      const reason = new Error('The store closed');
+      const connector = new ElectingConnector({
+        socketPath: join(directory.path, 'lock.sock'),
+        election: {
+          campaign: async () => {
+            setImmediate(() => abort.abort(reason));
+            return undefined;
+          },
         },
-      },
-      pollInterval: 60_000,
-      serve: async () => {},
-      connected: () => {},
-    });
+        pollInterval: 60_000,
+        serve: async () => {},
+        connected: () => {},
+      });
 
-    // Act
-    const error = await connector.connect(abort.signal).then(
-      () => assert.fail('An aborted connect must reject'),
-      (error: unknown) => error,
-    );
+      // Act
+      const error = await connector.connect(abort.signal).then(
+        () => assert.fail('An aborted connect must reject'),
+        (error: unknown) => error,
+      );
 
-    // Assert
-    assert.equal(error, reason);
-  });
+      // Assert
+      assert.equal(error, reason);
+    },
+  );
 
   // A connector that opens another number of sockets before it waits never
   // gets the abort, and its 60 s wait must fail the test, not hang it.

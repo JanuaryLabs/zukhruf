@@ -1,10 +1,9 @@
-import { addAbortListener } from 'node:events';
-import { unlink } from 'node:fs/promises';
+import { addAbortListener, once } from 'node:events';
+import { rm } from 'node:fs/promises';
 import { type Server, type Socket, createServer } from 'node:net';
 
 import type { Term } from '@zukhruf/election';
 import { EpochTokenSource } from '@zukhruf/fencing';
-import { isErrno } from '@zukhruf/fs';
 
 import { LockCoordinator } from '../remote/lock-coordinator.ts';
 import {
@@ -47,9 +46,7 @@ export class LockServer {
     // Only the leader gets here, so removing a dead leader's socket file cannot race another server.
     // Windows removes a named pipe when its process stops, so there is no file to remove.
     if (process.platform !== 'win32') {
-      await unlink(socketPath).catch((error: unknown) => {
-        if (!isErrno(error, 'ENOENT')) throw error;
-      });
+      await rm(socketPath, { force: true });
     }
     const coordinator = new LockCoordinator({
       tokens: new EpochTokenSource(term.epoch),
@@ -72,13 +69,8 @@ export class LockServer {
         );
       });
     });
-    await new Promise<void>((resolve, reject) => {
-      server.once('error', reject);
-      server.listen(socketPath, () => {
-        server.off('error', reject);
-        resolve();
-      });
-    });
+    server.listen(socketPath);
+    await once(server, 'listening');
     server.unref();
     const started = new LockServer(server, connections, term);
     // The term may have been lost while the server started.
@@ -94,13 +86,12 @@ export class LockServer {
    * a successor and reassert their keys during its grace window; `close` alone
    * would wait for followers that never disconnect on their own. The term ends
    * only after the socket is gone: in the other order, this close could remove
-   * a successor's socket file. A second caller waits for the first.
+   * a successor's socket file. The first call removes the file at once, so a
+   * second caller finds it gone, and it too resolves only once the term ended.
    */
   async close() {
     this.#closeOnLoss[Symbol.dispose]();
-    const closed = new Promise<void>((resolve) =>
-      this.#server.close(() => resolve()),
-    );
+    const closed = this.#server[Symbol.asyncDispose]();
     for (const socket of this.#connections) socket.destroy();
     await closed;
     await this.#term.resign();
