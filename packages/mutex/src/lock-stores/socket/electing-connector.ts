@@ -6,11 +6,7 @@ import { untilAborted } from '@zukhruf/async';
 import type { LeaderElection, Term } from '@zukhruf/election';
 
 import type { ClientConnection, ClientConnector } from '../remote/connector.ts';
-import {
-  type LockRequest,
-  type LockResponse,
-  isLockResponse,
-} from '../remote/protocol.ts';
+import type { LockRequest } from '../remote/protocol.ts';
 import { AdvertisedOpsConnection } from './advertised-ops-connection.ts';
 import { type Greeting, PROTOCOL_VERSION, greet } from './handshake.ts';
 import { ProtocolVersionError } from './protocol-version-error.ts';
@@ -152,7 +148,7 @@ function leaderConnection(
   listed: ReadonlySet<string>,
 ): ClientConnection {
   return new AdvertisedOpsConnection(
-    new SocketConnection<LockRequest, LockResponse>(socket, isLockResponse),
+    new SocketConnection<LockRequest>(socket),
     listed,
   );
 }

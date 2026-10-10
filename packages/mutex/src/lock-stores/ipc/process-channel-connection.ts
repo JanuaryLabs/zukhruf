@@ -2,11 +2,7 @@ import { EventEmitter } from 'node:events';
 
 import type { Connection, ConnectionEvents } from '../remote/connection.ts';
 import { unwrap, wrap } from '../remote/envelope.ts';
-import {
-  type LockRequest,
-  type LockResponse,
-  isLockResponse,
-} from '../remote/protocol.ts';
+import type { LockRequest } from '../remote/protocol.ts';
 
 /**
  * The child's end of the IPC channel to its parent. Node counts `message` and
@@ -16,15 +12,15 @@ import {
  * not listening are buffered by Node and delivered on the next `ref`.
  */
 export class ProcessChannelConnection
-  extends EventEmitter<ConnectionEvents<LockResponse>>
-  implements Connection<LockRequest, LockResponse>
+  extends EventEmitter<ConnectionEvents>
+  implements Connection<LockRequest>
 {
   /** `process.send`, which reports a send after the channel closed through its callback. */
   readonly #send: (envelope: unknown) => Promise<void>;
 
   readonly #onMessage = (envelope: unknown) => {
-    const response = unwrap(envelope);
-    if (isLockResponse(response)) this.emit('message', response);
+    const message = unwrap(envelope);
+    if (message !== undefined) this.emit('message', message);
   };
 
   readonly #onDisconnect = () => {

@@ -107,7 +107,7 @@ describe('Remote lock client connection lifecycle', () => {
   // Kept as a double: a real connection reports its drop later, never inside send(); socket-store-reconnect.test.ts covers a drop after the send.
   test('an acquire whose connection drops while it is sent is sent again once on the next connection', async (t) => {
     // Arrange: the first connection drops during the send of the acquire.
-    const { connector, calls } = scriptedConnector<LockRequest, LockResponse>();
+    const { connector, calls } = scriptedConnector<LockRequest>();
     const client = clientOver(connector);
     const first = scriptedPeer<LockRequest, LockResponse>(async () => {
       first.drop();

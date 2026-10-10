@@ -50,3 +50,4 @@ Start with the [project README](../README.md). The glossary is in [CONTEXT.md](.
 14. [A process says its protocol version before its first request](./adr/0014-a-process-says-its-protocol-version-before-its-first-request.md)
 15. [A holder check never acquires the key](./adr/0015-a-holder-check-never-acquires-the-key.md)
 16. [A leader lists the requests that it added](./adr/0016-a-leader-lists-the-requests-that-it-added.md)
+17. [A connection closes only when its framing breaks](./adr/0017-a-connection-closes-only-when-its-framing-breaks.md)

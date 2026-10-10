@@ -14,16 +14,13 @@ import {
  * it holds; such a request is answered `unsupported` here instead.
  */
 export class AdvertisedOpsConnection
-  extends EventEmitter<ConnectionEvents<LockResponse>>
-  implements Connection<LockRequest, LockResponse>
+  extends EventEmitter<ConnectionEvents>
+  implements Connection<LockRequest>
 {
-  readonly #leader: Connection<LockRequest, LockResponse>;
+  readonly #leader: Connection<LockRequest>;
   readonly #listed: ReadonlySet<string>;
 
-  constructor(
-    leader: Connection<LockRequest, LockResponse>,
-    listed: ReadonlySet<string>,
-  ) {
+  constructor(leader: Connection<LockRequest>, listed: ReadonlySet<string>) {
     super();
     this.#leader = leader;
     this.#listed = listed;
@@ -35,7 +32,10 @@ export class AdvertisedOpsConnection
     if (ADDED_OPS.has(request.op) && !this.#listed.has(request.op)) {
       // Answered after the send returns, as an answer from the leader would be.
       queueMicrotask(() =>
-        this.emit('message', { op: 'unsupported', id: request.id }),
+        this.emit('message', {
+          op: 'unsupported',
+          id: request.id,
+        } satisfies LockResponse),
       );
       return;
     }

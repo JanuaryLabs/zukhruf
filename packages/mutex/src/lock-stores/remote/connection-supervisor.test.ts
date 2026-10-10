@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
 
+import { isRecord } from '../../shared/is-record.ts';
 import {
   scriptedConnector,
   scriptedPeer,
@@ -17,11 +18,18 @@ interface Message {
 
 /** A supervisor over a scripted connector, and every notification it gave, in order. */
 function supervised() {
-  const { connector, calls } = scriptedConnector<Message, Message>();
+  const { connector, calls } = scriptedConnector<Message>();
   const supervisor = new ConnectionSupervisor(connector);
   const events: string[] = [];
   supervisor.on('connected', () => events.push('connected'));
-  supervisor.on('message', ({ n }) => events.push(`message ${n}`));
+  // The supervisor carries messages unchecked; this test only ever delivers a Message.
+  supervisor.on('message', (message) =>
+    events.push(
+      isRecord(message) && typeof message.n === 'number'
+        ? `message ${message.n}`
+        : `unreadable message ${JSON.stringify(message)}`,
+    ),
+  );
   supervisor.on('disconnected', () => events.push('disconnected'));
   supervisor.on('unavailable', () => events.push('unavailable'));
   supervisor.on('failed', (error) => events.push(`failed: ${String(error)}`));
@@ -34,7 +42,7 @@ describe('Connection supervisor', () => {
     // Arrange: a connector that settles only when the test says so.
     const connecting = Promise.withResolvers<undefined>();
     let signal: AbortSignal | undefined;
-    const supervisor = new ConnectionSupervisor<Message, Message>({
+    const supervisor = new ConnectionSupervisor<Message>({
       connect: (abort) => {
         signal = abort;
         return connecting.promise;
@@ -66,7 +74,7 @@ describe('Connection supervisor', () => {
   test('a connector that throws before it returns a promise is reported as failed', async (t) => {
     // Arrange
     const events: string[] = [];
-    const supervisor = new ConnectionSupervisor<Message, Message>({
+    const supervisor = new ConnectionSupervisor<Message>({
       connect: () => {
         throw new Error('EACCES');
       },
@@ -196,7 +204,7 @@ describe('Connection supervisor', () => {
   // Kept as a double: no public call runs inside the supervisor's 'disconnected' report.
   test('a send made while the loss is reported does not go to the lost connection', async (t) => {
     // Arrange: a listener that sends as soon as it hears of the loss.
-    const { connector, calls } = scriptedConnector<Message, Message>();
+    const { connector, calls } = scriptedConnector<Message>();
     const supervisor = new ConnectionSupervisor(connector);
     const first = scriptedPeer<Message, Message>();
     const connected = Promise.withResolvers<void>();

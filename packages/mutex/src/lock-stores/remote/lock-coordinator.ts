@@ -9,6 +9,7 @@ import {
   type LockResponse,
   type RequestEnvelope,
   isLockRequest,
+  isRequestEnvelope,
 } from './protocol.ts';
 
 export interface LockCoordinatorOptions {
@@ -77,7 +78,7 @@ export class LockCoordinator implements LockStore {
     return this.#phase.isHeld(key);
   }
 
-  serve(connection: Connection<LockResponse, RequestEnvelope>): void {
+  serve(connection: Connection<LockResponse>): void {
     new Session(this, connection);
   }
 
@@ -172,12 +173,14 @@ class Session {
 
   constructor(
     coordinator: LockCoordinator,
-    connection: Connection<LockResponse, RequestEnvelope>,
+    connection: Connection<LockResponse>,
   ) {
     this.#coordinator = coordinator;
     this.#phase = new Serving(connection);
-    connection.on('message', (request) => {
-      this.#handle(request).catch(() => connection.close());
+    connection.on('message', (message) => {
+      // A message with no op or no id cannot be answered, so it is ignored, and the peer keeps its keys (ADR 0017).
+      if (!isRequestEnvelope(message)) return;
+      this.#handle(message).catch(() => connection.close());
     });
     connection.once('close', () => {
       void this.#end();
@@ -282,10 +285,10 @@ interface SessionPhase {
 
 /** The peer is connected: the session keeps its leases and answers it. */
 class Serving implements SessionPhase {
-  readonly #connection: Connection<LockResponse, RequestEnvelope>;
+  readonly #connection: Connection<LockResponse>;
   readonly #leases = new Map<string, LockHandle>();
 
-  constructor(connection: Connection<LockResponse, RequestEnvelope>) {
+  constructor(connection: Connection<LockResponse>) {
     this.#connection = connection;
   }
 

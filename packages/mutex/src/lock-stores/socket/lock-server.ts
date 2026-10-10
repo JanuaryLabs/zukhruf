@@ -6,11 +6,7 @@ import type { Term } from '@zukhruf/election';
 import { EpochTokenSource } from '@zukhruf/fencing';
 
 import { LockCoordinator } from '../remote/lock-coordinator.ts';
-import {
-  type LockResponse,
-  type RequestEnvelope,
-  isRequestEnvelope,
-} from '../remote/protocol.ts';
+import type { LockResponse } from '../remote/protocol.ts';
 import { welcome } from './handshake.ts';
 import { SocketConnection } from './socket-connection.ts';
 
@@ -61,12 +57,7 @@ export class LockServer {
       // Only a process that speaks this protocol is served, so this coordinator never reads a message it would misread.
       void welcome(socket).then((speaksOurs) => {
         if (!speaksOurs) return;
-        coordinator.serve(
-          new SocketConnection<LockResponse, RequestEnvelope>(
-            socket,
-            isRequestEnvelope,
-          ),
-        );
+        coordinator.serve(new SocketConnection<LockResponse>(socket));
       });
     });
     server.listen(socketPath);

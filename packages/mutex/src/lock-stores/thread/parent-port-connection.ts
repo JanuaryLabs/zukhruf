@@ -3,11 +3,7 @@ import type { MessagePort } from 'node:worker_threads';
 
 import type { Connection, ConnectionEvents } from '../remote/connection.ts';
 import { unwrap, wrap } from '../remote/envelope.ts';
-import {
-  type LockRequest,
-  type LockResponse,
-  isLockResponse,
-} from '../remote/protocol.ts';
+import type { LockRequest } from '../remote/protocol.ts';
 
 /**
  * A worker thread's end of the message port to the thread that started it.
@@ -17,14 +13,14 @@ import {
  * never reported.
  */
 export class ParentPortConnection
-  extends EventEmitter<ConnectionEvents<LockResponse>>
-  implements Connection<LockRequest, LockResponse>
+  extends EventEmitter<ConnectionEvents>
+  implements Connection<LockRequest>
 {
   readonly #port: MessagePort;
 
   readonly #onMessage = (envelope: unknown) => {
-    const response = unwrap(envelope);
-    if (isLockResponse(response)) this.emit('message', response);
+    const message = unwrap(envelope);
+    if (message !== undefined) this.emit('message', message);
   };
 
   constructor(port: MessagePort) {

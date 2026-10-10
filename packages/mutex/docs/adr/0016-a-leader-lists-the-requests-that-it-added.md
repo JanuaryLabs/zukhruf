@@ -15,4 +15,4 @@
 - After a failover to a leader of an earlier version, a holder check that waits for its answer fails with `UnsupportedRequestError`.
 - IPC channels and worker ports have no `welcome`, so a process expects that its coordinator knows each request. A coordinator of 0.3.9 or earlier ignores a request that it does not know, and a holder check of its child or worker waits. Use one package version in a process tree.
 - When you add a request, add it to `ADDED_OPS`. When you change a message, change `PROTOCOL_VERSION`, as ADR 0014 says.
-- A line that is not a request, with no `op` or no `id`, still closes the socket connection.
+- A line that is not a request, with no `op` or no `id`, closed the socket connection when this decision was made. Since [ADR 0017](./0017-a-connection-closes-only-when-its-framing-breaks.md), the coordinator ignores it, and the connection stays open.

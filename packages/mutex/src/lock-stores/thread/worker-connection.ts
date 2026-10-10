@@ -3,11 +3,7 @@ import type { Worker } from 'node:worker_threads';
 
 import type { Connection, ConnectionEvents } from '../remote/connection.ts';
 import { unwrap, wrap } from '../remote/envelope.ts';
-import {
-  type LockResponse,
-  type RequestEnvelope,
-  isRequestEnvelope,
-} from '../remote/protocol.ts';
+import type { LockResponse } from '../remote/protocol.ts';
 
 /**
  * The coordinator's end of the message port to one worker thread. `Worker`
@@ -15,14 +11,14 @@ import {
  * is always noticed.
  */
 export class WorkerConnection
-  extends EventEmitter<ConnectionEvents<RequestEnvelope>>
-  implements Connection<LockResponse, RequestEnvelope>
+  extends EventEmitter<ConnectionEvents>
+  implements Connection<LockResponse>
 {
   readonly #worker: Worker;
 
   readonly #onMessage = (envelope: unknown) => {
-    const request = unwrap(envelope);
-    if (isRequestEnvelope(request)) this.emit('message', request);
+    const message = unwrap(envelope);
+    if (message !== undefined) this.emit('message', message);
   };
 
   readonly #onExit = () => {

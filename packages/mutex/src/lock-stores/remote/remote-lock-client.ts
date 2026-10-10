@@ -8,7 +8,11 @@ import type { LockHandle } from '../../mutex/lease.ts';
 import type { AcquireOptions, LockStore } from '../../mutex/lock-store.ts';
 import type { ConnectionSupervisor } from './connection-supervisor.ts';
 import { CoordinatorUnavailableError } from './coordinator-unavailable-error.ts';
-import type { LockRequest, LockResponse } from './protocol.ts';
+import {
+  type LockRequest,
+  type LockResponse,
+  isLockResponse,
+} from './protocol.ts';
 import { Queries } from './queries.ts';
 
 /** Keeps only what settles the caller's promise; the caller keeps the promise. */
@@ -38,16 +42,19 @@ interface Held {
  * ones it waits for. A held key whose reassertion is refused is lost.
  */
 export class RemoteLockClient implements LockStore {
-  readonly #link: ConnectionSupervisor<LockRequest, LockResponse>;
+  readonly #link: ConnectionSupervisor<LockRequest>;
   readonly #pending = new Map<string, Pending>();
   readonly #held = new Map<string, Held>();
   readonly #queries: Queries;
 
-  constructor(link: ConnectionSupervisor<LockRequest, LockResponse>) {
+  constructor(link: ConnectionSupervisor<LockRequest>) {
     this.#link = link;
     this.#queries = new Queries(link, () => this.#updateRef());
     link.on('connected', () => this.#resume());
-    link.on('message', (response) => this.#receive(response));
+    // A message this client cannot read answers nothing it waits for.
+    link.on('message', (message) => {
+      if (isLockResponse(message)) this.#receive(message);
+    });
     link.on('disconnected', () => this.#interrupt());
     // Held keys stay exclusive: no coordinator is left to grant them to anyone else.
     link.on('unavailable', () =>

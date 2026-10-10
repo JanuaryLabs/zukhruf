@@ -4,27 +4,23 @@ import { promisify } from 'node:util';
 
 import type { Connection, ConnectionEvents } from '../remote/connection.ts';
 import { unwrap, wrap } from '../remote/envelope.ts';
-import {
-  type LockResponse,
-  type RequestEnvelope,
-  isRequestEnvelope,
-} from '../remote/protocol.ts';
+import type { LockResponse } from '../remote/protocol.ts';
 
 /**
  * The parent's end of the IPC channel to one child. The kernel closes the
  * channel when the child dies, so `disconnect` reports even a SIGKILL.
  */
 export class ChildProcessConnection
-  extends EventEmitter<ConnectionEvents<RequestEnvelope>>
-  implements Connection<LockResponse, RequestEnvelope>
+  extends EventEmitter<ConnectionEvents>
+  implements Connection<LockResponse>
 {
   readonly #child: ChildProcess;
   /** A send after the channel closed reports the error through its callback. */
   readonly #send: (envelope: Serializable) => Promise<void>;
 
   readonly #onMessage = (envelope: unknown) => {
-    const request = unwrap(envelope);
-    if (isRequestEnvelope(request)) this.emit('message', request);
+    const message = unwrap(envelope);
+    if (message !== undefined) this.emit('message', message);
   };
 
   readonly #onDisconnect = () => {

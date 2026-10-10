@@ -12,7 +12,7 @@ import { isRecord } from '../../shared/is-record.ts';
 import { scratchDirectory } from '../../testing/scratch-directory.ts';
 import { waitUntil } from '../../testing/wait-until.ts';
 import { startWorker } from '../../testing/worker-process.ts';
-import { isLockRequest } from '../remote/protocol.ts';
+import { isLockRequest, isRequestEnvelope } from '../remote/protocol.ts';
 import { PROTOCOL_VERSION } from './handshake.ts';
 import { socketElection } from './socket-election.ts';
 import { type SocketRole, SocketStore } from './socket-store.ts';
@@ -491,7 +491,11 @@ describe('Socket store protocol handshake', () => {
             return;
           }
           const request: unknown = JSON.parse(line);
-          if (isLockRequest(request) && request.op === 'acquire') {
+          if (
+            isRequestEnvelope(request) &&
+            isLockRequest(request) &&
+            request.op === 'acquire'
+          ) {
             const token = String((term.epoch << 32n) | 1n);
             peer.write(
               `${JSON.stringify({ op: 'granted', id: request.id, token })}\n`,

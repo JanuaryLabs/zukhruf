@@ -91,16 +91,16 @@ async function rawPeer(t: TestContext, directory: string) {
     'The leader must answer the hello',
   );
   assert.equal(received.shift()?.op, 'welcome');
-  const lines = (requests: Record<string, unknown>[]) =>
+  const lines = (requests: unknown[]) =>
     requests.map((request) => `${JSON.stringify(request)}\n`).join('');
   return {
     /** Every answer after the welcome, in order. */
     received,
-    send: (...requests: Record<string, unknown>[]) => {
+    send: (...requests: unknown[]) => {
       socket.write(lines(requests));
     },
     /** Sends `requests` and hangs up, so the leader reads them before the close. */
-    leave: (...requests: Record<string, unknown>[]) => {
+    leave: (...requests: unknown[]) => {
       socket.end(lines(requests));
     },
     drop: () => socket.destroy(),
@@ -615,6 +615,48 @@ describe('Requests a leader does not know, and looks', () => {
 
     // Assert
     assert.deepEqual(peer.received[1], { op: 'unsupported', id: 'r' });
+    assert.equal(peer.closed, false, 'The connection must stay open');
+    assert.equal(stillHeld, true, 'The peer must keep its key');
+  });
+
+  test('a peer that sends a JSON line that is not a request keeps its key', async (t) => {
+    // Arrange: a peer holds a key.
+    await using scene = await firstLeader();
+    await using peer = await rawPeer(t, scene.directory);
+    peer.send({ op: 'acquire', id: 'a', key: 'product:42' });
+    await waitUntil(
+      t,
+      () => peer.received.some((response) => response.op === 'granted'),
+      'The peer must be granted the key',
+    );
+
+    // Act: JSON lines that are not requests (no record, no id, no op, neither), then a look.
+    peer.send(
+      null,
+      { op: 'acquire', key: 'product:7' },
+      { id: 'x' },
+      { note: 'not a lock request' },
+      { op: 'isHeld', id: 'look', key: 'product:42' },
+    );
+    await waitUntil(
+      t,
+      () => peer.received.some((response) => response.id === 'look'),
+      'The leader must answer the look after the lines it cannot read',
+    );
+    // Asked after the look was answered, so an answer to any earlier line is in by now.
+    peer.send({ op: 'isHeld', id: 'after', key: 'product:7' });
+    await waitUntil(
+      t,
+      () => peer.received.some((response) => response.id === 'after'),
+      'The leader must answer the second look',
+    );
+    const stillHeld = await scene.leader.isHeld('product:42');
+
+    // Assert: no line got an answer or a grant, and the connection kept the key.
+    assert.deepEqual(peer.received.slice(1), [
+      { op: 'held', id: 'look', held: true },
+      { op: 'held', id: 'after', held: false },
+    ]);
     assert.equal(peer.closed, false, 'The connection must stay open');
     assert.equal(stillHeld, true, 'The peer must keep its key');
   });

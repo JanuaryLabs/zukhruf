@@ -12,8 +12,8 @@ export function scriptedPeer<Outgoing, Incoming>(
   const sent: Outgoing[] = [];
   const refs: ('ref' | 'unref')[] = [];
   let closes = 0;
-  const connection: Connection<Outgoing, Incoming> = Object.assign(
-    new EventEmitter<ConnectionEvents<Incoming>>(),
+  const connection: Connection<Outgoing> = Object.assign(
+    new EventEmitter<ConnectionEvents>(),
     {
       async send(message: Outgoing) {
         sent.push(message);
@@ -42,20 +42,20 @@ export function scriptedPeer<Outgoing, Incoming>(
   };
 }
 
-interface ConnectCall<Outgoing, Incoming> {
+interface ConnectCall<Outgoing> {
   signal: AbortSignal;
-  resolve(connection: Connection<Outgoing, Incoming> | undefined): void;
+  resolve(connection: Connection<Outgoing> | undefined): void;
   reject(error: unknown): void;
 }
 
 /** A connector whose every `connect` waits until the test settles it, or rejects once aborted. */
-export function scriptedConnector<Outgoing, Incoming>() {
-  const calls: ConnectCall<Outgoing, Incoming>[] = [];
+export function scriptedConnector<Outgoing>() {
+  const calls: ConnectCall<Outgoing>[] = [];
   return {
     connector: {
       connect(signal: AbortSignal) {
         const { promise, resolve, reject } = Promise.withResolvers<
-          Connection<Outgoing, Incoming> | undefined
+          Connection<Outgoing> | undefined
         >();
         // Fires for a signal that already aborted, and for an abort event that an earlier listener stopped.
         addAbortListener(signal, () => reject(signal.reason));

@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 
 import type { ConnectionSupervisor } from './connection-supervisor.ts';
-import type { LockRequest, LockResponse } from './protocol.ts';
+import type { LockRequest } from './protocol.ts';
 import { UnsupportedRequestError } from './unsupported-request-error.ts';
 
 /** Keeps only what settles the caller's promise; the caller keeps the promise. */
@@ -18,15 +18,12 @@ interface Query extends Pick<
  * off is asked again of the next coordinator.
  */
 export class Queries {
-  readonly #link: ConnectionSupervisor<LockRequest, LockResponse>;
+  readonly #link: ConnectionSupervisor<LockRequest>;
   /** Called whenever a look starts or ends waiting. */
   readonly #changed: () => void;
   readonly #waiting = new Map<string, Query>();
 
-  constructor(
-    link: ConnectionSupervisor<LockRequest, LockResponse>,
-    changed: () => void,
-  ) {
+  constructor(link: ConnectionSupervisor<LockRequest>, changed: () => void) {
     this.#link = link;
     this.#changed = changed;
   }

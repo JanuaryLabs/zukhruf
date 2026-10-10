@@ -48,19 +48,29 @@ export function isRequestEnvelope(
   );
 }
 
-/** Messages arrive from another thread or process, so their shape is checked before use. */
-export function isLockRequest(message: unknown): message is LockRequest {
-  if (!isRecord(message) || typeof message.id !== 'string') return false;
-  switch (message.op) {
+/**
+ * Messages arrive from another thread or process, so their shape is checked
+ * before use. `isRequestEnvelope` already checked the `op` and the `id`, so
+ * only the fields of each request are left.
+ */
+export function isLockRequest(
+  request: RequestEnvelope,
+): request is LockRequest {
+  switch (request.op) {
     case 'acquire':
     case 'try':
     case 'isHeld':
-      return typeof message.key === 'string';
+      return 'key' in request && typeof request.key === 'string';
     case 'cancel':
     case 'release':
       return true;
     case 'reassert':
-      return typeof message.key === 'string' && isToken(message.token);
+      return (
+        'key' in request &&
+        typeof request.key === 'string' &&
+        'token' in request &&
+        isToken(request.token)
+      );
     default:
       return false;
   }
