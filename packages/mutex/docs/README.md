@@ -51,3 +51,7 @@ Start with the [project README](../README.md). The glossary is in [CONTEXT.md](.
 15. [A holder check never acquires the key](./adr/0015-a-holder-check-never-acquires-the-key.md)
 16. [A leader lists the requests that it added](./adr/0016-a-leader-lists-the-requests-that-it-added.md)
 17. [A connection closes only when its framing breaks](./adr/0017-a-connection-closes-only-when-its-framing-breaks.md)
+
+## Copied code
+
+- [Code that is in two places](./copied-code.md): each copy, what is the same, and what differs.

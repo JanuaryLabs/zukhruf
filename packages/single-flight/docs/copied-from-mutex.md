@@ -6,6 +6,8 @@ The reason is the Rule of Three. Code that a second place needs is copied, and i
 
 Paths on the left are in `packages/mutex/src`. Paths on the right are in `packages/single-flight/src`.
 
+On 2026-10-10, the mutex changed several of these originals. The maintainer chose to change the mutex first, and this package later. So for these changes, the copies here do not follow yet. Backlog #2541 lists each change and the mutex commit to copy. Until then, the rows below say what differs now.
+
 ## Moved to `@zukhruf/fs`
 
 The file helpers and the check that refuses a network directory are no longer copies. Both packages use `@zukhruf/fs` (its ADR 0001): `durableWrite`, `isErrno`, `patiently`, `assertLocalDirectory`, and one `NetworkDirectoryError` class that this package gives from its entry point.
@@ -16,14 +18,18 @@ The file helpers and the check that refuses a network directory are no longer co
 
 ## Copied without a change
 
-| Mutex                                                                                           | Single flight                         |
-| ----------------------------------------------------------------------------------------------- | ------------------------------------- |
-| `lock-stores/remote/connection.ts`                                                              | `connection/connection.ts`            |
-| `lock-stores/remote/connection-supervisor.ts`                                                   | `connection/connection-supervisor.ts` |
-| `shared/sqlite/is-busy.ts` (deleted from the mutex; now private to `FileLock` of `@zukhruf/fs`) | `shared/sqlite/is-busy.ts`            |
-| `shared/is-record.ts`                                                                           | `shared/is-record.ts`                 |
+| Mutex                                                                                           | Single flight              |
+| ----------------------------------------------------------------------------------------------- | -------------------------- |
+| `shared/sqlite/is-busy.ts` (deleted from the mutex; now private to `FileLock` of `@zukhruf/fs`) | `shared/sqlite/is-busy.ts` |
+| `shared/is-record.ts`                                                                           | `shared/is-record.ts`      |
 
 ## Copied with changes
+
+**`lock-stores/remote/connection.ts` → `connection/connection.ts`.**
+The copy has a second type parameter, `Incoming`: its connection gives each message as checked. The mutex removed that parameter in 7f80fa7. A mutex connection gives each message as `unknown`, and the class that reads the protocol checks it (the mutex's ADR 0017). Backlog #2541.
+
+**`lock-stores/remote/connection-supervisor.ts` → `connection/connection-supervisor.ts`.**
+Only the type parameter `Incoming` differs, as in `connection.ts`. Backlog #2541.
 
 **`leader-election/leader-election.ts` (deleted from the mutex; now `@zukhruf/election`) → `election/leader-election.ts`.**
 The claim file is `flight.lock`, not `leader.lock`. The epoch file is `flight.epoch`, not `leader.epoch`. The comments call the elected process the coordinator.
@@ -34,10 +40,14 @@ Only the comments change: a term belongs to the coordinator.
 Why: in this package, a leader is the caller that runs a flight's work.
 
 **`lock-stores/remote/connector.ts` → `connection/connector.ts`.**
-The lock aliases `ClientConnection` and `ClientConnector` become `FlightConnection` and `FlightConnector`.
+The lock aliases `ClientConnection` and `ClientConnector` become `FlightConnection` and `FlightConnector`. The comment on `connect` does not name keys. The copy also keeps the type parameter `Incoming`, which the mutex removed in 7f80fa7 (backlog #2541).
 
 **`lock-stores/socket/socket-connection.ts` → `connection/socket-connection.ts`.**
-Only an import path changes.
+Differs since 2026-10-10 (backlog #2541):
+
+- The copy takes an `isIncoming` check, and it closes the connection for a JSON line that fails the check. The mutex takes no check, and closes only for a line that is not JSON (7f80fa7, the mutex's ADR 0017). The maintainer chose that a JSON line that is not a message is ignored.
+- The copy builds each line with `JSON.stringify` and a newline. The mutex uses `jsonLine` (27f9f3c).
+- The copy wraps each write in a promise, after its own check that the socket is writable. The mutex binds `socket.write` once with `promisify`, and the callback reports a write to a closed socket (46a6cc6).
 
 **`lock-stores/socket/local-directory-connector.ts` → `connection/local-directory-connector.ts`.**
 Only its types and comments change.
@@ -51,6 +61,8 @@ Only its types and comments change.
 
 Why: a hello that names its protocol cannot be read as a hello of another protocol.
 
+Differs since 2026-10-10: the copy builds each line with `JSON.stringify` and a newline. The mutex uses `jsonLine` (27f9f3c). Backlog #2541.
+
 **`lock-stores/socket/protocol-version-error.ts` → `connection/protocol-version-error.ts`.**
 The messages name the single flight's coordinator, not the socket store's leader.
 
@@ -59,6 +71,14 @@ The messages name the single flight's coordinator, not the socket store's leader
 - It has no `connected` callback. In the mutex, that callback only emits the `follower` role event. This package has no role event.
 - It does not wrap the connection in `AdvertisedOpsConnection`, because the welcome lists no requests.
 - The connection checks each message as a `FlightResponse`.
+
+Differs since 2026-10-10 (backlog #2541):
+
+- The copy uses its own `Leadership`, and it campaigns without the signal. The mutex uses `Term` of `@zukhruf/election`, and gives the signal to `campaign` (e40c1d5, backlog #2530).
+- The copy waits between tries with `delay` alone. When the signal aborts there, the connect rejects with an `AbortError`, not with the reason of the signal, so the copy breaks the contract of `Connector`. The mutex wraps the wait in `untilAborted` (9609c2d).
+- The copy gives up a term that it cannot serve, and destroys a socket that it cannot greet, in `catch` blocks. The mutex does both with disposable stacks (86b91bd).
+- The copy reaches a socket with a promise that it builds itself. The mutex waits for `once(socket, 'connect')` (5ac2a20).
+- The mutex's socket connection takes no check (7f80fa7). The copy gives `isFlightResponse` to its socket connection.
 
 **`lock-stores/socket/socket-store.ts` (`socketPathFor`, `SOCKET_PATH_LIMIT`) → `connection/socket-path.ts`.**
 The socket file is `flight.sock`. The Windows pipe is `\\.\pipe\single-flight-<hash>`. The 103-byte limit stays.
@@ -71,8 +91,15 @@ Note: on macOS 27 with Node.js 26, a probe listened and connected on socket path
 
 Why: a coordinator process can also lead a flight. When it lands the flight and stops at once, `destroy` can drop a `landed` answer that is still on its way to a joiner. `destroySoon` sends what was written first, and then closes.
 
+Differs since 2026-10-10 (backlog #2541):
+
+- The mutex's server closes itself when the signal of its term aborts, and it checks the signal again after it starts (e40c1d5). The copy has no such step: its `Leadership` has no signal (backlog #2530).
+- The copy deletes an old socket file with `unlink` and an `ENOENT` check, waits for `listen` with a promise that it builds itself, and closes with `server.close` in a promise. The mutex uses `rm` with `force`, `once(server, 'listening')`, and `server[Symbol.asyncDispose]()` (5ac2a20).
+- The copy gives `isRequestEnvelope` to each socket connection. The mutex gives no check: `LockCoordinator` checks each message (7f80fa7).
+
 **`lock-stores/remote/protocol.ts` (`RequestEnvelope`, `isRequestEnvelope`) → `protocol/flight-protocol.ts`.**
 They are copied as they are. The rest of that file is the lock protocol, and this package has its own.
+Differs since 2026-10-10 (backlog #2541): the mutex's `isLockRequest` checks only the fields of each request, because `LockCoordinator` already ran `isRequestEnvelope` (7f80fa7). `isFlightRequest` here checks the record and the `id` again, after the socket connection ran `isRequestEnvelope`.
 
 ## Test helpers copied
 
@@ -93,16 +120,16 @@ These helpers do not belong in `@zukhruf/coordinator`. A third package that copi
 
 - `lock-stores/socket/advertised-ops-connection.ts`: the welcome lists no requests yet.
 - `lock-stores/remote/envelope.ts` and `queries.ts`: this package uses no IPC channel and no look requests.
-- `lock-stores/remote/lock-coordinator.ts` and `remote-lock-client.ts`. `FlightCoordinator`, its sessions and `FlightClient` follow their shape, with phases, a grace window, reassertion and re-sent requests. But their rules are this package's: one request leads or joins, and an outcome goes to every joiner.
+- `lock-stores/remote/lock-coordinator.ts` and `remote-lock-client.ts`. `FlightCoordinator`, its sessions and `FlightClient` follow their shape, with phases, a grace window, reassertion and re-sent requests. But their rules are this package's: one request leads or joins, and an outcome goes to every joiner. One part is the same: the map of the requests that wait for an answer, and its `#take`, are in `FlightClient` and in two classes of the mutex. The maintainer chose to keep the three places (backlog #2538, the [mutex note](../../mutex/docs/copied-code.md)). A fix to one goes into each, and the commit names each file.
 
 ## What the extraction can share
 
-- **As is:** the connection, the connection supervisor, the socket connection, and the SQLite helpers.
+- **As is, after backlog #2541:** the connection, the connection supervisor, and the socket connection. The SQLite helper `isBusy` is not shared there: `FileLock` of `@zukhruf/fs` keeps it private, and the copy here goes with the election switch (backlog #2530).
 - **With parameters:**
   - the election: done in `@zukhruf/election`, where the names of its two files are options. The mutex uses it. This package does not use it yet (backlog #2530);
   - the socket path: the file name and the pipe prefix;
   - the handshake: the protocol name, the version, and what the welcome lists;
-  - the electing connector: the check of the incoming messages;
+  - the electing connector: the `connected` callback, and what wraps the connection. After backlog #2541, it checks no message: the class that reads the protocol checks it;
   - the server: what serves each connection;
   - the protocol error: the subject of its message.
 - **Not shared:** each coordinator's rules, and each client's requests.
