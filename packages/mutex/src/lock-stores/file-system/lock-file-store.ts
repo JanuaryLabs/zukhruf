@@ -19,7 +19,7 @@ export class LockFileStore extends FileLockStore {
     signal: AbortSignal | undefined,
   ): Promise<AsyncDisposable> {
     const me = Caller.current();
-    return this.poll(() => this.#attempt(path, me), { signal });
+    return this.poll(() => this.#attempt(path, me), signal);
   }
 
   protected async tryLock(path: string): Promise<AsyncDisposable | undefined> {

@@ -1,5 +1,7 @@
 import { setTimeout as delay } from 'node:timers/promises';
 
+import { untilAborted } from '@zukhruf/async';
+
 import { Term } from './term.ts';
 
 export interface CampaignOptions {
@@ -76,7 +78,10 @@ export abstract class LeaderElection<Claim> {
         epoch = await this.tryClaim(claim, signal);
         if (epoch !== undefined) break;
         if (performance.now() >= deadline) break;
-        await pause(this.#pollInterval, signal);
+        await untilAborted(
+          delay(this.#pollInterval, undefined, { signal }),
+          signal,
+        );
       }
     } catch (error) {
       await this.close(claim).catch(() => {});
@@ -109,15 +114,5 @@ export abstract class LeaderElection<Claim> {
       throw error;
     }
     return term.signal.aborted ? 'lost' : term;
-  }
-}
-
-/** Waits between two tries; an abort rejects with the signal's reason, not with a generic AbortError. */
-async function pause(milliseconds: number, signal: AbortSignal | undefined) {
-  try {
-    await delay(milliseconds, undefined, { signal });
-  } catch (error) {
-    signal?.throwIfAborted();
-    throw error;
   }
 }

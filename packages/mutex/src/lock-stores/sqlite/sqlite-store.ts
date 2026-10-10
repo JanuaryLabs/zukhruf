@@ -64,9 +64,7 @@ export class SqliteStore extends FileLockStore {
   ): Promise<AsyncDisposable> {
     const database = new DatabaseSync(path, { timeout: 0 });
     try {
-      await this.poll(async () => (begin(database) ? true : undefined), {
-        signal,
-      });
+      await this.poll(async () => (begin(database) ? true : undefined), signal);
     } catch (error) {
       database.close();
       throw error;

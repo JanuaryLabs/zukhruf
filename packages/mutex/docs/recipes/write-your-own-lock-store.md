@@ -119,7 +119,7 @@ class DirectoryLockStore extends FileLockStore {
     path: string,
     signal: AbortSignal | undefined,
   ): Promise<AsyncDisposable> {
-    return this.poll(() => this.tryLock(path), { signal });
+    return this.poll(() => this.tryLock(path), signal);
   }
 
   protected async tryLock(path: string): Promise<AsyncDisposable | undefined> {

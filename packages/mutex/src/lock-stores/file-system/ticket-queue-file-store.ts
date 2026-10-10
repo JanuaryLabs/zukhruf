@@ -29,7 +29,7 @@ export class TicketQueueFileStore extends FileLockStore {
     const presence = Presence.claim(Presence.pathOf(path, me));
     leaving.defer(() => leave(path, me, presence));
     await enqueue(path, me);
-    await this.poll(() => this.#attempt(path, me), { signal });
+    await this.poll(() => this.#attempt(path, me), signal);
     leaving.move();
     return holding(path, me, presence);
   }

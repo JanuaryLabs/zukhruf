@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { setTimeout as delay } from 'node:timers/promises';
 
+import { untilAborted } from '@zukhruf/async';
 import { FileTokenSource, type TokenSource } from '@zukhruf/fencing';
 import { assertLocalDirectory, safeFileName } from '@zukhruf/fs';
 
@@ -16,11 +17,6 @@ export interface FileLockStoreOptions {
   pollInterval?: number;
   /** Defaults to durable per-key counter files beside the locks. */
   tokens?: TokenSource;
-}
-
-export interface PollOptions {
-  /** Stops between attempts when it aborts; the poll then rejects with `signal.reason`. */
-  signal?: AbortSignal | undefined;
 }
 
 /** Shares one lock directory between processes: each key maps to `<directory>/<key>.lock`. */
@@ -82,19 +78,18 @@ export abstract class FileLockStore implements LockStore {
   /** Whether the lock at `path` has a holder now, learned without a lock that a caller of `lock` or `tryLock` needs. */
   protected abstract isHeldAt(path: string): Promise<boolean>;
 
+  /** Stops between attempts once `signal` aborts, and then rejects with `signal.reason`. */
   protected async poll<T>(
     attempt: () => Promise<T | undefined>,
-    { signal }: PollOptions = {},
+    signal: AbortSignal | undefined,
   ): Promise<T> {
     for (;;) {
       const result = await attempt();
       if (result !== undefined) return result;
-      try {
-        await delay(this.#pollInterval, undefined, { signal });
-      } catch (error) {
-        signal?.throwIfAborted();
-        throw error;
-      }
+      await untilAborted(
+        delay(this.#pollInterval, undefined, { signal }),
+        signal,
+      );
     }
   }
 
