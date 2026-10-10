@@ -2,6 +2,7 @@ import type { Socket } from 'node:net';
 
 import { isRecord } from '../../shared/is-record.ts';
 import { ADDED_OPS } from '../remote/protocol.ts';
+import { jsonLine } from './json-line.ts';
 
 /**
  * The version of the messages a socket store's processes exchange. It changes
@@ -23,9 +24,7 @@ export type Greeting =
 
 /** Says which protocol this process speaks, and reads the leader's answer. */
 export async function greet(socket: Socket): Promise<Greeting> {
-  socket.write(
-    `${JSON.stringify({ op: 'hello', version: PROTOCOL_VERSION })}\n`,
-  );
+  socket.write(jsonLine({ op: 'hello', version: PROTOCOL_VERSION }));
   const answer = parse(await readLine(socket));
   if (isRecord(answer) && answer.op === 'welcome') {
     return { kind: 'welcome', ops: listedOps(answer.ops) };
@@ -57,13 +56,12 @@ export async function welcome(socket: Socket): Promise<boolean> {
   }
   if (hello.version === PROTOCOL_VERSION) {
     // A follower of 0.3.x reads only `op`, so the list is new to followers only.
-    socket.write(`${JSON.stringify({ op: 'welcome', ops: [...ADDED_OPS] })}\n`);
+    socket.write(jsonLine({ op: 'welcome', ops: [...ADDED_OPS] }));
     return true;
   }
   // Destroyed once the answer is written: a paused socket would never see a silent process hang up.
-  socket.end(
-    `${JSON.stringify({ op: 'refused', version: PROTOCOL_VERSION })}\n`,
-    () => socket.destroy(),
+  socket.end(jsonLine({ op: 'refused', version: PROTOCOL_VERSION }), () =>
+    socket.destroy(),
   );
   return false;
 }
