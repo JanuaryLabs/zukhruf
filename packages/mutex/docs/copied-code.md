@@ -17,8 +17,16 @@ The paths are in `packages/mutex/src/lock-stores`. The code that the single flig
 **Listeners only while the connection is referenced.**
 
 - Places: `ref`, `unref` and `close` of `ParentPortConnection` (`thread/parent-port-connection.ts`) and of `ProcessChannelConnection` (`ipc/process-channel-connection.ts`).
-- Same: `ref` removes the listeners and then adds them, so a second `ref` does not listen twice. `unref` removes them. `close` calls `unref`.
-- Differs: the port listens for `message` only. The process channel also listens for `disconnect`, and it emits `close` then.
+- Same: `ref` calls `stopListening` and then `listen`, so a second `ref` does not listen twice. `unref` calls `stopListening`. `close` calls `unref`.
+- Differs: only the events that tell that the peer is gone. The process channel gives `disconnect` to `SharedChannelConnection` (`remote/shared-channel-connection.ts`). The port gives no event, because the coordinator cannot stop while its workers run.
+
+**Listeners from the start until `close`.**
+
+- Places: the constructor, `ref`, `unref` and `close` of `WorkerConnection` (`thread/worker-connection.ts`) and of `ChildProcessConnection` (`ipc/child-process-connection.ts`).
+- Same: the constructor calls `listen`. `ref` and `unref` do nothing, because the peer keeps this process alive while it runs. `close` calls `stopListening`.
+- Differs: the event that tells that the peer is gone: `exit` of the worker, or `disconnect` of the child.
+
+Backlog #2544 is about this code: `close` stops the listeners, but it does not emit `close`. A fix for it goes into both places.
 
 **The message of a closed client.**
 
@@ -68,20 +76,6 @@ The Rule of Three asks to extract the code below. It is not extracted yet. Until
 - Same: a map of requests by id. An entry keeps only what settles the caller's promise. `#take` gets an entry, deletes it, and tells its owner that the map changed, so the owner can `ref` or `unref` its connection. A reject-all takes each entry and rejects it.
 
 The maintainer chose to keep the three places (backlog #2538). The parts that are the same are short, and the parts that differ (the delivery states, what a new connection sends again, what keeps the process alive) stay with each owner. A fourth place, or the coordinator package of backlog #2496, is the time to extract it.
-
-**The check for the envelope of a lock message.** Four places.
-
-- Places: `#onMessage` of `ParentPortConnection` (`thread/parent-port-connection.ts`), `ProcessChannelConnection` (`ipc/process-channel-connection.ts`), `WorkerConnection` (`thread/worker-connection.ts`) and `ChildProcessConnection` (`ipc/child-process-connection.ts`).
-- Same: `unwrap` the envelope, and emit `message` only when the envelope was there. The channel is shared with the application, so its own messages, which have no envelope, are dropped ([ADR 0017](./adr/0017-a-connection-closes-only-when-its-framing-breaks.md)).
-- Differs: only the emitter that the adapter listens on.
-
-**Remove the listeners, then emit `close`.** Three places.
-
-- Places: `#onExit` of `WorkerConnection` (`thread/worker-connection.ts`), and `#onDisconnect` of `ChildProcessConnection` (`ipc/child-process-connection.ts`) and of `ProcessChannelConnection` (`ipc/process-channel-connection.ts`).
-- Same: when the other side stops, the adapter removes its own listeners, and then emits `close`.
-- Differs: `WorkerConnection` and `ChildProcessConnection` add their listeners in the constructor and remove them with `close`. `ProcessChannelConnection` adds them with `ref` and removes them with `unref`.
-
-Backlog #2544 is about this code too: `close` of a worker or child connection does not emit `close`. A fix for it goes into each place.
 
 **A listener that ignores errors, because `close` follows each error.** Three places.
 

@@ -1,36 +1,21 @@
-import { EventEmitter } from 'node:events';
 import type { Worker } from 'node:worker_threads';
 
-import type { Connection, ConnectionEvents } from '../remote/connection.ts';
-import { unwrap, wrap } from '../remote/envelope.ts';
+import { wrap } from '../remote/envelope.ts';
 import type { LockResponse } from '../remote/protocol.ts';
+import { SharedChannelConnection } from '../remote/shared-channel-connection.ts';
 
 /**
  * The coordinator's end of the message port to one worker thread. `Worker`
  * emits `exit` however the thread stops, so a terminated or crashed holder
  * is always noticed.
  */
-export class WorkerConnection
-  extends EventEmitter<ConnectionEvents>
-  implements Connection<LockResponse>
-{
+export class WorkerConnection extends SharedChannelConnection<LockResponse> {
   readonly #worker: Worker;
 
-  readonly #onMessage = (envelope: unknown) => {
-    const message = unwrap(envelope);
-    if (message !== undefined) this.emit('message', message);
-  };
-
-  readonly #onExit = () => {
-    this.close();
-    this.emit('close');
-  };
-
   constructor(worker: Worker) {
-    super();
+    super(worker, ['exit']);
     this.#worker = worker;
-    worker.on('message', this.#onMessage);
-    worker.once('exit', this.#onExit);
+    this.listen();
   }
 
   async send(response: LockResponse): Promise<void> {
@@ -47,7 +32,6 @@ export class WorkerConnection
   unref() {}
 
   close() {
-    this.#worker.off('message', this.#onMessage);
-    this.#worker.off('exit', this.#onExit);
+    this.stopListening();
   }
 }
