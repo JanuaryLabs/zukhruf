@@ -1,6 +1,6 @@
 # @zukhruf/fs
 
-Helpers that write files. A reader never sees a part of a write. `@zukhruf/mutex` and `@zukhruf/single-flight` use them for their lock files, `@zukhruf/fencing` for its fencing counters, and `@zukhruf/election` and `@zukhruf/single-flight` for their election epochs.
+Helpers that write files, and a lock on a file that the kernel frees when its holder dies. A reader never sees a part of a write. `@zukhruf/mutex` and `@zukhruf/single-flight` use them for their lock files, `@zukhruf/fencing` for its fencing counters, and `@zukhruf/election` and `@zukhruf/single-flight` for their election epochs.
 
 The words in these documents have one meaning each. See the glossary in [CONTEXT.md](./CONTEXT.md).
 
@@ -85,6 +85,44 @@ const content = await patiently(() =>
 ```
 
 Each write of this package uses `patiently` for its rename or link.
+
+## Lock a file
+
+A process can die while it holds a lock. When the lock is a file that is present, for example a file from `createExclusive`, the file stays after the process dies. Then the lock stays until somebody deletes the file. A `FileLock` is a lock that the kernel holds. When the process of the holder stops, however it stops, the kernel frees the lock at once.
+
+Node.js has no `flock`. Thus a `FileLock` is an exclusive SQLite transaction on the file. SQLite is part of Node.js (`node:sqlite`), so this package has no dependencies.
+
+```ts
+import { FileLock } from '@zukhruf/fs';
+
+using lock = FileLock.open('/var/lib/app/job.lock');
+if (lock.tryLock()) {
+  try {
+    await runJob();
+  } finally {
+    lock.unlock();
+  }
+} else {
+  console.log('Another process holds the job.');
+}
+```
+
+- `FileLock.open(path)` opens the file. When no file is at the path, it creates an empty file. It takes no lock.
+- `tryLock()` takes the lock and returns `true`. When another handle holds the lock, it returns `false` at once. It never waits: to wait, try again after a pause. Two handles in one process exclude each other too.
+- When the file has other content, `tryLock()` throws. Only an empty file or a SQLite database can be a file lock.
+- `unlock()` lets the lock go. The handle stays open, and it can lock again.
+- A disposal closes the handle. A lock that the handle holds goes with it. A second disposal does nothing.
+- A held lock stays held when nothing refers to its handle any more. Only `unlock()`, a disposal, or the end of the process lets it go.
+
+`FileLock.check(path)` tells if a handle holds the lock now. It returns `'locked'`, `'unlocked'`, or `'missing'` when no file is at the path. It reads the file one time and never creates it. For that read, it holds a shared lock for a moment, so a `tryLock()` at that moment can return `false`. The answer can be old when you use it. Other faults, for example a directory at the path, throw.
+
+Obey these rules:
+
+- Open the file only through `FileLock`. On Unix, the lock is a POSIX record lock of the process. When the process closes any other descriptor of the file, the kernel drops the lock and gives no error.
+- Do not delete the file while processes use it. A new file at the path has no lock, so a second process can lock it while the first one holds the old file.
+- Use `assertLocalDirectory` first. Other machines do not see the lock reliably on a network file system.
+
+The journal of the transaction is in memory, so a holder that dies leaves no `<path>-journal` file. Other programs can hold an exclusive SQLite transaction on the same file in the default journal mode. Such a transaction and a `FileLock` exclude each other. A journal file that such a program leaves is deleted by the next `tryLock()`.
 
 ## Refuse a network directory
 
