@@ -1,11 +1,11 @@
-import { readFileSync } from 'node:fs';
 import { mkdir, readdir, unlink } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 
-import { atomicWrite, isErrno, patiently } from '@zukhruf/fs';
+import { atomicWrite, patiently } from '@zukhruf/fs';
 
 import { Caller } from '../file-system/caller.ts';
 import { Presence } from '../file-system/presence.ts';
+import { readRecord } from '../file-system/record-file.ts';
 
 /**
  * Names the holder of a SQLite lock in `<lock>.holder/caller`, beside the
@@ -67,15 +67,8 @@ export class HolderRecord {
   }
 
   async #read(): Promise<Caller | undefined> {
-    let content: string;
-    try {
-      // A synchronous read opens and closes the file in one call, so Windows
-      // can still replace the record while looks read it.
-      content = await patiently(async () => readFileSync(this.#path, 'utf8'));
-    } catch (error) {
-      if (isErrno(error, 'ENOENT')) return undefined;
-      throw error;
-    }
+    const content = await readRecord(this.#path);
+    if (content === undefined) return undefined;
     try {
       return Caller.parse(content);
     } catch (error) {

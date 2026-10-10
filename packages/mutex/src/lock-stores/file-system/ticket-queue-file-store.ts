@@ -1,11 +1,11 @@
-import { readFileSync } from 'node:fs';
 import { appendFile } from 'node:fs/promises';
 
-import { atomicWrite, isErrno, patiently } from '@zukhruf/fs';
+import { atomicWrite, patiently } from '@zukhruf/fs';
 
 import { Caller } from './caller.ts';
 import { FileLockStore } from './file-lock-store.ts';
 import { Presence } from './presence.ts';
+import { readRecord } from './record-file.ts';
 
 /**
  * FIFO queue in one file: each waiter appends its ticket line and holds the
@@ -144,18 +144,10 @@ async function enqueue(path: string, caller: Caller) {
 }
 
 async function readTickets(path: string): Promise<Caller[]> {
-  try {
-    // Windows cannot replace a file while another handle has it open, so a
-    // release rename fails while waiters read the queue. A synchronous read
-    // opens and closes the file in one call; the asynchronous read of Node.js
-    // 24 keeps it open across several turns of the event loop.
-    const content = await patiently(async () => readFileSync(path, 'utf8'));
-    // The last segment is empty or a ticket still being appended.
-    return content.split('\n').slice(0, -1).map(Caller.parse);
-  } catch (error) {
-    if (isErrno(error, 'ENOENT')) return [];
-    throw error;
-  }
+  const content = await readRecord(path);
+  if (content === undefined) return [];
+  // The last segment is empty or a ticket still being appended.
+  return content.split('\n').slice(0, -1).map(Caller.parse);
 }
 
 async function replace(path: string, tickets: Caller[]) {

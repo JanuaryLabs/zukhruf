@@ -1,10 +1,11 @@
-import { readFile, unlink } from 'node:fs/promises';
+import { unlink } from 'node:fs/promises';
 
-import { createExclusive, isErrno, patiently } from '@zukhruf/fs';
+import { createExclusive, patiently } from '@zukhruf/fs';
 
 import { Caller } from './caller.ts';
 import { FileLockStore } from './file-lock-store.ts';
 import { Presence } from './presence.ts';
+import { readRecord } from './record-file.ts';
 
 /**
  * Whoever creates the lock file holds the key; releasing deletes it. Waiters
@@ -77,10 +78,7 @@ function removeLockFile(path: string) {
 }
 
 async function readHolder(path: string): Promise<Caller | undefined> {
-  try {
-    return Caller.parse(await patiently(() => readFile(path, 'utf8')));
-  } catch (error) {
-    if (isErrno(error, 'ENOENT')) return undefined;
-    throw error;
-  }
+  const content = await readRecord(path);
+  if (content === undefined) return undefined;
+  return Caller.parse(content);
 }
