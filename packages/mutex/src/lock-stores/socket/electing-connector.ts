@@ -59,7 +59,7 @@ export class ElectingConnector implements ClientConnector {
         const own = await this.#lead(term, signal);
         if (own) return own;
       } else {
-        await delay(pollInterval, undefined, { signal });
+        await untilAborted(delay(pollInterval, undefined, { signal }), signal);
       }
     }
   }
@@ -87,7 +87,7 @@ export class ElectingConnector implements ClientConnector {
       if (performance.now() >= deadline) {
         throw new ProtocolVersionError(PROTOCOL_VERSION, undefined);
       }
-      await delay(pollInterval, undefined, { signal });
+      await untilAborted(delay(pollInterval, undefined, { signal }), signal);
     }
   }
 
