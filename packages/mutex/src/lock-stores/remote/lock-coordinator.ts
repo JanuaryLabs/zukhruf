@@ -192,15 +192,12 @@ class Session {
     }
     switch (request.op) {
       case 'acquire': {
-        // A reconnecting client may resend a request; granting it twice would orphan one lease.
-        if (this.#requested.has(request.id)) return;
-        this.#requested.add(request.id);
+        if (!this.#register(request.id)) return;
         const lease = await this.#coordinator.acquire(request.key);
         return this.#grant(lease, request.id);
       }
       case 'try': {
-        if (this.#requested.has(request.id)) return;
-        this.#requested.add(request.id);
+        if (!this.#register(request.id)) return;
         const lease = await this.#coordinator.tryAcquire(request.key);
         if (!lease) {
           this.#requested.delete(request.id);
@@ -223,8 +220,7 @@ class Session {
       }
       case 'reassert': {
         // Registered like any request, so a release that arrives before the claim resolves gives the key back.
-        if (this.#requested.has(request.id)) return;
-        this.#requested.add(request.id);
+        if (!this.#register(request.id)) return;
         const claim = this.#coordinator.reassert(
           request.key,
           // isLockRequest admits only a token that parses.
@@ -242,6 +238,16 @@ class Session {
         return this.#phase.keep(lease, request.id);
       }
     }
+  }
+
+  /**
+   * A reconnecting client may resend a request; granting it twice would orphan
+   * one lease. Returns `false` for an id this session already registered.
+   */
+  #register(id: string): boolean {
+    if (this.#requested.has(id)) return false;
+    this.#requested.add(id);
+    return true;
   }
 
   /** A request cancelled while the grant was on its way releases the key at once. */
