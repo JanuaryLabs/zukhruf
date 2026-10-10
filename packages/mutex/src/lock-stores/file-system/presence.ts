@@ -1,32 +1,23 @@
-import { existsSync } from 'node:fs';
 import { unlink } from 'node:fs/promises';
-import { DatabaseSync } from 'node:sqlite';
 
-import { patiently } from '@zukhruf/fs';
+import { FileLock, patiently } from '@zukhruf/fs';
 
-import { isBusy } from '../../shared/sqlite/is-busy.ts';
-import { isCantOpen } from '../../shared/sqlite/is-cant-open.ts';
 import { Caller } from './caller.ts';
 
-/** Garbage collection closes a connection nobody references, which would end a presence its caller still holds. */
-const open = new Set<DatabaseSync>();
-
 /**
- * A caller's presence: an exclusive SQLite transaction on a file of its own,
- * held from before the caller's record (a lock file, a ticket, or the holder
- * record of `SqliteStore`) appears until after it is gone. The kernel ends it
- * when the caller's process or thread stops, however it stops, so a waiter
- * that can read the file knows the caller is gone. Nothing may open the file
- * except through SQLite: closing any other handle to it drops this process's
- * lock without a word.
+ * A caller's presence: the file lock of a file of its own, held from before
+ * the caller's record (a lock file, a ticket, or the holder record of
+ * `SqliteStore`) appears until after it is gone. The kernel ends it when the
+ * caller's process or thread stops, however it stops, so a waiter that can
+ * check the file knows the caller is gone.
  */
 export class Presence {
   readonly #path: string;
-  readonly #database: DatabaseSync;
+  readonly #lock: FileLock;
 
-  private constructor(path: string, database: DatabaseSync) {
+  private constructor(path: string, lock: FileLock) {
     this.#path = path;
-    this.#database = database;
+    this.#lock = lock;
   }
 
   /** The length of what `pathOf` adds to a record's path. */
@@ -38,42 +29,15 @@ export class Presence {
   }
 
   static claim(path: string): Presence {
-    const database = new DatabaseSync(path, { timeout: 0 });
-    try {
-      // A journal on disk would outlive a caller that dies while present.
-      database.exec('PRAGMA journal_mode = MEMORY');
-      database.exec('BEGIN EXCLUSIVE');
-    } catch (error) {
-      database.close();
-      throw error;
+    using opened = new DisposableStack();
+    const lock = opened.use(FileLock.open(path));
+    if (!lock.tryLock()) {
+      throw new Error(
+        `The presence file ${JSON.stringify(path)} is locked already, but it belongs to one caller only. Another program opened it.`,
+      );
     }
-    open.add(database);
-    return new Presence(path, database);
-  }
-
-  /**
-   * Whether the caller behind `path` still runs. Reading needs a lock that the
-   * caller's exclusive transaction refuses, and opening read-only never creates
-   * the file.
-   */
-  static check(path: string): 'present' | 'gone' | 'missing' {
-    let database: DatabaseSync;
-    try {
-      database = new DatabaseSync(path, { readOnly: true, timeout: 0 });
-    } catch (error) {
-      // A file that exists but cannot be opened is a fault, not a missing presence.
-      if (isCantOpen(error) && !existsSync(path)) return 'missing';
-      throw error;
-    }
-    try {
-      database.prepare('SELECT count(*) FROM sqlite_schema').get();
-      return 'gone';
-    } catch (error) {
-      if (isBusy(error)) return 'present';
-      throw error;
-    } finally {
-      database.close();
-    }
+    opened.move();
+    return new Presence(path, lock);
   }
 
   /**
@@ -88,8 +52,9 @@ export class Presence {
     stillNamed: () => Promise<boolean>,
   ): Promise<'present' | 'gone' | 'moved'> {
     const path = Presence.pathOf(record, caller);
-    const state = Presence.check(path);
-    if (state !== 'missing') return state;
+    const state = FileLock.check(path);
+    if (state === 'locked') return 'present';
+    if (state === 'unlocked') return 'gone';
     if (await stillNamed()) throw Presence.missing(record, path);
     return 'moved';
   }
@@ -132,9 +97,7 @@ export class Presence {
 
   /** Lets the kernel lock go. The file stays for whoever removes the caller's record. */
   end(): void {
-    open.delete(this.#database);
-    this.#database.exec('ROLLBACK');
-    this.#database.close();
+    this.#lock[Symbol.dispose]();
   }
 
   /**

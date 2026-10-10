@@ -1,16 +1,13 @@
 import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
-import { DatabaseSync } from 'node:sqlite';
 import { setTimeout as delay } from 'node:timers/promises';
 
 import { untilAborted } from '@zukhruf/async';
 import { FileTokenSource, type TokenSource } from '@zukhruf/fencing';
-import { assertLocalDirectory, safeFileName } from '@zukhruf/fs';
+import { FileLock, assertLocalDirectory, safeFileName } from '@zukhruf/fs';
 
 import { type LockHandle, leaseFor } from '../../mutex/lease.ts';
 import type { AcquireOptions, LockStore } from '../../mutex/lock-store.ts';
-import { isBusy } from '../../shared/sqlite/is-busy.ts';
-import { isNotADatabase } from '../../shared/sqlite/is-not-a-database.ts';
 
 export interface FileLockStoreOptions {
   /** Milliseconds a waiter sleeps between attempts. */
@@ -98,23 +95,13 @@ export abstract class FileLockStore implements LockStore {
    * same dead holder could each remove a lock the other had just taken. The
    * kernel holds this lock, so a waiter that dies while it evicts frees it at
    * once. Its file stays for the next eviction: deleting it while waiters use
-   * it would let two of them lock two different files. Nothing may open that
-   * file except through SQLite: closing any other handle to it drops this
-   * process's lock without a word.
+   * it would let two of them lock two different files.
    */
   protected async withReclaimLock(path: string, task: () => Promise<void>) {
     const reclaimPath = `${path}.reclaim`;
-    const reclaim = new DatabaseSync(reclaimPath, { timeout: 0 });
-    try {
-      if (!claim(reclaim, reclaimPath)) return;
-      try {
-        await task();
-      } finally {
-        reclaim.exec('ROLLBACK');
-      }
-    } finally {
-      reclaim.close();
-    }
+    using reclaim = FileLock.open(reclaimPath);
+    if (!claim(reclaim, reclaimPath)) return;
+    await task();
   }
 
   async #prepare(key: string): Promise<string> {
@@ -129,15 +116,11 @@ export abstract class FileLockStore implements LockStore {
   }
 }
 
-/** Whether this connection now holds the reclaim lock; another waiter is evicting if not. */
-function claim(reclaim: DatabaseSync, path: string): boolean {
+/** Whether this handle now holds the reclaim lock; another waiter is evicting if not. */
+function claim(reclaim: FileLock, path: string): boolean {
   try {
-    // A journal on disk would outlive a waiter that dies while it holds the lock.
-    reclaim.exec('PRAGMA journal_mode = MEMORY');
-    reclaim.exec('BEGIN EXCLUSIVE');
-    return true;
+    return reclaim.tryLock();
   } catch (error) {
-    if (isBusy(error)) return false;
     if (isNotADatabase(error)) {
       throw new Error(
         `The reclaim file ${JSON.stringify(path)} was left by an older version of @zukhruf/mutex. Stop the processes that run that version, then delete the file.`,
@@ -146,4 +129,16 @@ function claim(reclaim: DatabaseSync, path: string): boolean {
     }
     throw error;
   }
+}
+
+const SQLITE_NOTADB = 26;
+
+/** Whether `error` means the file is not a SQLite database, for example a file that an older version wrote. */
+function isNotADatabase(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    'errcode' in error &&
+    typeof error.errcode === 'number' &&
+    (error.errcode & 0xff) === SQLITE_NOTADB
+  );
 }

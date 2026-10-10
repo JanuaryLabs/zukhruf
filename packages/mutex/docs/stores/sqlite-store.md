@@ -40,9 +40,9 @@ The database file of a key is `<key>.lock`, the folder of its holder is `<key>.l
 3. It runs `BEGIN EXCLUSIVE`. If another connection has the transaction, SQLite says `SQLITE_BUSY` at once.
 4. On `SQLITE_BUSY`, the caller waits `pollInterval` and tries again. It does not use a SQLite busy timeout, because that timeout stops the event loop.
 5. The holder writes its name for a [holder check](#holder-check). It starts its [presence](../adr/0012-a-file-store-holder-is-judged-by-its-presence.md) on `<key>.lock.holder/caller.<id>.presence`. Then it writes its identity to `<key>.lock.holder/caller`. Then it deletes the other files in `<key>.lock.holder`: holders that stopped left them there. Only the holder of the key writes in this folder.
-6. To release the key, the holder deletes `caller`, ends its presence, and deletes its presence file. Then it runs `ROLLBACK` and closes the connection, also when a delete failed. Then the next caller in the in-process queue continues.
+6. To release the key, the holder deletes `caller`, ends its presence, and deletes its presence file. Then it closes the connection, also when a delete failed. SQLite rolls the transaction back when it closes the connection. Then the next caller in the in-process queue continues.
 
-Do not change the journal mode of these files. The tests use only the default mode.
+The lock of a key is the file lock of `@zukhruf/fs`. It keeps the journal of the transaction in memory, so a holder that dies leaves no `<key>.lock-journal` file. Versions 0.3.16 and earlier keep the journal on the disk. The locks of the two journal modes are the same, so processes of the two versions exclude each other. Do not put these files in WAL mode: in WAL mode, an exclusive transaction does not stop readers.
 
 The transaction ends with `ROLLBACK`, so the fencing token counter cannot be in the database. The default token source keeps it in a counter file next to the database.
 

@@ -1,17 +1,14 @@
-import { DatabaseSync } from 'node:sqlite';
+import { FileLock } from '@zukhruf/fs';
 
 import type { LockHandle } from '../../mutex/lease.ts';
 import type { AcquireOptions } from '../../mutex/lock-store.ts';
-import { isBusy } from '../../shared/sqlite/is-busy.ts';
 import { FileLockStore } from '../file-system/file-lock-store.ts';
 import { MemoryStore } from '../memory/memory-store.ts';
 import { HolderRecord } from './holder-record.ts';
 
 /**
- * Holds an exclusive SQLite transaction on the key's database file. SQLite
- * locks through the kernel, which releases them when the holder dies, so a
- * crash never leaves a key locked. Keep the default rollback journal: in WAL
- * mode an exclusive transaction no longer blocks readers.
+ * Holds the file lock of the key's database file. The kernel releases it when
+ * the holder dies, so a crash never leaves a key locked.
  *
  * Even a read of that file makes it busy for a caller that tries to take it,
  * so the holder also names itself in a holder record, which a look reads
@@ -23,9 +20,10 @@ import { HolderRecord } from './holder-record.ts';
  */
 export class SqliteStore extends FileLockStore {
   /**
-   * SQLite keeps the rollback journal of a key's database at `<path>-journal`.
-   * The holder folder `<path>.holder` is shorter, so a key keeps the file name
-   * that versions without the folder gave it.
+   * Published versions keep the rollback journal of a key's database at
+   * `<path>-journal`. New versions keep it in memory, but a key keeps the file
+   * name that those versions gave it, so both versions share its lock. The
+   * holder folder `<path>.holder` is shorter.
    */
   protected readonly longestSuffix = '-journal'.length;
   readonly #inProcess = new MemoryStore();
@@ -62,28 +60,21 @@ export class SqliteStore extends FileLockStore {
     path: string,
     signal: AbortSignal | undefined,
   ): Promise<AsyncDisposable> {
-    const database = new DatabaseSync(path, { timeout: 0 });
-    try {
-      await this.poll(async () => (begin(database) ? true : undefined), signal);
-    } catch (error) {
-      database.close();
-      throw error;
-    }
-    return holding(path, database);
+    using opened = new DisposableStack();
+    const lock = opened.use(FileLock.open(path));
+    await this.poll(async () => (lock.tryLock() ? true : undefined), signal);
+    const held = await holding(path, lock);
+    opened.move();
+    return held;
   }
 
   protected async tryLock(path: string): Promise<AsyncDisposable | undefined> {
-    const database = new DatabaseSync(path, { timeout: 0 });
-    let begun: boolean;
-    try {
-      begun = begin(database);
-    } catch (error) {
-      database.close();
-      throw error;
-    }
-    if (begun) return holding(path, database);
-    database.close();
-    return undefined;
+    using opened = new DisposableStack();
+    const lock = opened.use(FileLock.open(path));
+    if (!lock.tryLock()) return undefined;
+    const held = await holding(path, lock);
+    opened.move();
+    return held;
   }
 
   protected isHeldAt(path: string): Promise<boolean> {
@@ -91,45 +82,18 @@ export class SqliteStore extends FileLockStore {
   }
 }
 
-/** Starts the exclusive transaction, or reports that another connection holds it. */
-function begin(database: DatabaseSync): boolean {
-  try {
-    database.exec('BEGIN EXCLUSIVE');
-    return true;
-  } catch (error) {
-    if (isBusy(error)) return false;
-    throw error;
-  }
-}
-
-/** Names the holder of the transaction. The transaction ends however that, or the release of the record, goes. */
-async function holding(
-  path: string,
-  database: DatabaseSync,
-): Promise<AsyncDisposable> {
-  const record = await new HolderRecord(path)
-    .announce()
-    .catch((error: unknown) => {
-      unlock(database);
-      throw error;
-    });
+/** Names the holder of the lock. The lock goes however the release of the record goes. */
+async function holding(path: string, lock: FileLock): Promise<AsyncDisposable> {
+  const record = await new HolderRecord(path).announce();
   return {
     [Symbol.asyncDispose]: async () => {
       try {
         await record[Symbol.asyncDispose]();
       } finally {
-        unlock(database);
+        lock[Symbol.dispose]();
       }
     },
   };
-}
-
-function unlock(database: DatabaseSync) {
-  try {
-    database.exec('ROLLBACK');
-  } finally {
-    database.close();
-  }
 }
 
 /** Releases the database lock first, then lets the next caller in this process try. */

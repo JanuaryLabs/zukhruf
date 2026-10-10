@@ -16,12 +16,12 @@ The file helpers and the check that refuses a network directory are no longer co
 
 ## Copied without a change
 
-| Mutex                                         | Single flight                         |
-| --------------------------------------------- | ------------------------------------- |
-| `lock-stores/remote/connection.ts`            | `connection/connection.ts`            |
-| `lock-stores/remote/connection-supervisor.ts` | `connection/connection-supervisor.ts` |
-| `shared/sqlite/is-busy.ts`                    | `shared/sqlite/is-busy.ts`            |
-| `shared/is-record.ts`                         | `shared/is-record.ts`                 |
+| Mutex                                                                                           | Single flight                         |
+| ----------------------------------------------------------------------------------------------- | ------------------------------------- |
+| `lock-stores/remote/connection.ts`                                                              | `connection/connection.ts`            |
+| `lock-stores/remote/connection-supervisor.ts`                                                   | `connection/connection-supervisor.ts` |
+| `shared/sqlite/is-busy.ts` (deleted from the mutex; now private to `FileLock` of `@zukhruf/fs`) | `shared/sqlite/is-busy.ts`            |
+| `shared/is-record.ts`                                                                           | `shared/is-record.ts`                 |
 
 ## Copied with changes
 
