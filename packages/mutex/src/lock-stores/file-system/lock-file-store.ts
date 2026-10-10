@@ -39,17 +39,13 @@ export class LockFileStore extends FileLockStore {
       return undefined;
     }
 
-    const presence = Presence.claim(Presence.pathOf(path, me));
-    const created = await createExclusive(path, me.serialize()).catch(
-      async (error: unknown) => {
-        await presence.withdraw();
-        throw error;
-      },
+    await using claiming = new AsyncDisposableStack();
+    const presence = claiming.adopt(
+      Presence.claim(Presence.pathOf(path, me)),
+      (claimed) => claimed.withdraw(),
     );
-    if (!created) {
-      await presence.withdraw();
-      return undefined;
-    }
+    if (!(await createExclusive(path, me.serialize()))) return undefined;
+    claiming.move();
     return {
       [Symbol.asyncDispose]: () =>
         presence.releaseAfter(() => removeLockFile(path)),

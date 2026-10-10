@@ -15,19 +15,20 @@ export async function leaseFor(
   held: AsyncDisposable,
   tokens: TokenSource,
 ): Promise<LockHandle> {
-  try {
-    const token = await tokens.next(key);
-    const lease = new LeaseController(key);
-    return {
-      token,
-      signal: lease.signal,
-      [Symbol.asyncDispose]: () => {
-        lease.end();
-        return held[Symbol.asyncDispose]();
-      },
-    };
-  } catch (error) {
-    await held[Symbol.asyncDispose]();
-    throw error;
-  }
+  await using minting = new AsyncDisposableStack();
+  minting.use(held);
+  const token = await tokens.next(key);
+  minting.move();
+  const lease = new LeaseController(key);
+  return {
+    token,
+    signal: lease.signal,
+    // Not a disposable stack: it would release the lock a turn later, and a
+    // coordinator that reads a release and then a look in one turn would
+    // answer that look from the lock it still holds.
+    [Symbol.asyncDispose]: () => {
+      lease.end();
+      return held[Symbol.asyncDispose]();
+    },
+  };
 }

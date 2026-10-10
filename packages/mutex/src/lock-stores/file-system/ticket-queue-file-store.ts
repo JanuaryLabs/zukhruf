@@ -112,10 +112,10 @@ async function isGone(path: string, head: Caller): Promise<boolean> {
  * it first evicts it, together with the presence file.
  */
 async function leave(path: string, me: Caller, presence: Presence) {
-  const tickets = await readTickets(path).catch((error: unknown) => {
-    presence.end();
-    throw error;
-  });
+  using reading = new DisposableStack();
+  reading.defer(() => presence.end());
+  const tickets = await readTickets(path);
+  reading.move();
   if (tickets.some((ticket) => ticket.id === me.id)) presence.end();
   else await presence.withdraw();
 }

@@ -32,49 +32,39 @@ export class SqliteStore extends FileLockStore {
     key: string,
     options: AcquireOptions = {},
   ): Promise<LockHandle> {
+    await using turn = new AsyncDisposableStack();
     // Joining the in-process queue is synchronous, so the order is the order of the calls.
-    const turn = await this.#inProcess.acquire(key, options);
-    try {
-      return withTurn(await super.acquire(key, options), turn);
-    } catch (error) {
-      await turn[Symbol.asyncDispose]();
-      throw error;
-    }
+    turn.use(await this.#inProcess.acquire(key, options));
+    return withTurn(await super.acquire(key, options), turn);
   }
 
   override async tryAcquire(key: string): Promise<LockHandle | undefined> {
-    const turn = await this.#inProcess.tryAcquire(key);
-    if (!turn) return undefined;
-    try {
-      const lease = await super.tryAcquire(key);
-      if (lease) return withTurn(lease, turn);
-    } catch (error) {
-      await turn[Symbol.asyncDispose]();
-      throw error;
-    }
-    await turn[Symbol.asyncDispose]();
-    return undefined;
+    await using turn = new AsyncDisposableStack();
+    const inProcess = await this.#inProcess.tryAcquire(key);
+    if (!inProcess) return undefined;
+    turn.use(inProcess);
+    const lease = await super.tryAcquire(key);
+    return lease && withTurn(lease, turn);
   }
 
   protected async lock(
     path: string,
     signal: AbortSignal | undefined,
   ): Promise<AsyncDisposable> {
-    using opened = new DisposableStack();
-    const lock = opened.use(FileLock.open(path));
+    await using held = new AsyncDisposableStack();
+    const lock = held.use(FileLock.open(path));
     await this.poll(async () => (lock.tryLock() ? true : undefined), signal);
-    const held = await holding(path, lock);
-    opened.move();
-    return held;
+    // The release removes the record, then lets the lock go even when the record stays.
+    held.use(await new HolderRecord(path).announce());
+    return held.move();
   }
 
   protected async tryLock(path: string): Promise<AsyncDisposable | undefined> {
-    using opened = new DisposableStack();
-    const lock = opened.use(FileLock.open(path));
+    await using held = new AsyncDisposableStack();
+    const lock = held.use(FileLock.open(path));
     if (!lock.tryLock()) return undefined;
-    const held = await holding(path, lock);
-    opened.move();
-    return held;
+    held.use(await new HolderRecord(path).announce());
+    return held.move();
   }
 
   protected isHeldAt(path: string): Promise<boolean> {
@@ -82,31 +72,13 @@ export class SqliteStore extends FileLockStore {
   }
 }
 
-/** Names the holder of the lock. The lock goes however the release of the record goes. */
-async function holding(path: string, lock: FileLock): Promise<AsyncDisposable> {
-  const record = await new HolderRecord(path).announce();
-  return {
-    [Symbol.asyncDispose]: async () => {
-      try {
-        await record[Symbol.asyncDispose]();
-      } finally {
-        lock[Symbol.dispose]();
-      }
-    },
-  };
-}
-
 /** Releases the database lock first, then lets the next caller in this process try. */
-function withTurn(handle: LockHandle, turn: AsyncDisposable): LockHandle {
+function withTurn(handle: LockHandle, turn: AsyncDisposableStack): LockHandle {
+  turn.use(handle);
+  const release = turn.move();
   return {
     token: handle.token,
     signal: handle.signal,
-    [Symbol.asyncDispose]: async () => {
-      try {
-        await handle[Symbol.asyncDispose]();
-      } finally {
-        await turn[Symbol.asyncDispose]();
-      }
-    },
+    [Symbol.asyncDispose]: () => release.disposeAsync(),
   };
 }

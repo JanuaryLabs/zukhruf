@@ -1,12 +1,13 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
-import { readFile, readdir, writeFile } from 'node:fs/promises';
+import { chmod, readFile, readdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline';
 import { describe, test } from 'node:test';
 
 import { CounterTokenSource, type TokenSource } from '@zukhruf/fencing';
+import { isErrno } from '@zukhruf/fs';
 
 import type { LockStore } from '../../mutex/lock-store.ts';
 import { Mutex } from '../../mutex/mutex.ts';
@@ -365,3 +366,51 @@ describe('File lock stores whose token source fails', () => {
     });
   }
 });
+
+test(
+  'LockFileStore: an acquire whose token cannot be minted and whose lock cannot be given back rejects with both errors',
+  {
+    skip:
+      process.platform === 'win32'
+        ? 'Windows has no read-only directories'
+        : process.getuid?.() === 0
+          ? 'root writes into a read-only directory'
+          : false,
+  },
+  async () => {
+    // Arrange: the token source runs while the lock file exists. It makes the
+    // directory read-only, so the release that gives the lock back cannot
+    // delete that file, and then it fails.
+    await using directory = await scratchDirectory();
+    const failure = new Error('The token file could not be written.');
+    const tokens: TokenSource = {
+      async next() {
+        await chmod(directory.path, 0o555);
+        throw failure;
+      },
+    };
+    const store = new LockFileStore(directory.path, { tokens });
+
+    // Act
+    let rejection: unknown;
+    try {
+      rejection = await store.acquire('report-daily').then(
+        () => 'acquired',
+        (error: unknown) => error,
+      );
+    } finally {
+      await chmod(directory.path, 0o755);
+    }
+
+    // Assert: the caller learns both causes, the failed release and the failed mint under it.
+    assert.ok(
+      rejection instanceof SuppressedError,
+      `The acquire must reject with a SuppressedError, got ${String(rejection)}`,
+    );
+    assert.ok(
+      isErrno(rejection.error, 'EACCES'),
+      `The release must fail for the read-only directory, got ${String(rejection.error)}`,
+    );
+    assert.equal(rejection.suppressed, failure);
+  },
+);

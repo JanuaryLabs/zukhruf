@@ -29,13 +29,13 @@ export class HolderRecord {
   async announce(): Promise<AsyncDisposable> {
     const me = Caller.current();
     await mkdir(this.#folder, { recursive: true });
-    const presence = Presence.claim(Presence.pathOf(this.#path, me));
-    try {
-      await atomicWrite(this.#path, me.serialize());
-    } catch (error) {
-      await presence.withdraw();
-      throw error;
-    }
+    await using announcing = new AsyncDisposableStack();
+    const presence = announcing.adopt(
+      Presence.claim(Presence.pathOf(this.#path, me)),
+      (claimed) => claimed.withdraw(),
+    );
+    await atomicWrite(this.#path, me.serialize());
+    announcing.move();
     await this.#clearEarlierHolders(me);
     return {
       [Symbol.asyncDispose]: () =>
