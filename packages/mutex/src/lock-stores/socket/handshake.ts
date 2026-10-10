@@ -3,6 +3,7 @@ import type { Socket } from 'node:net';
 import { isRecord } from '../../shared/is-record.ts';
 import { ADDED_OPS } from '../remote/protocol.ts';
 import { jsonLine } from './json-line.ts';
+import { leaveErrorsToClose } from './leave-errors-to-close.ts';
 
 /**
  * The version of the messages a socket store's processes exchange. It changes
@@ -124,8 +125,7 @@ function readLine(socket: Socket): Promise<string | undefined> {
     socket.off('data', onData);
     resolve(undefined);
   };
-  // Every error is followed by `close`, which reports the lost connection as no answer.
-  socket.on('error', () => {});
+  leaveErrorsToClose(socket);
   socket.on('data', onData);
   socket.once('close', onClose);
   return promise;

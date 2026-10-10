@@ -77,12 +77,6 @@ The Rule of Three asks to extract the code below. It is not extracted yet. Until
 
 The maintainer chose to keep the three places (backlog #2538). The parts that are the same are short, and the parts that differ (the delivery states, what a new connection sends again, what keeps the process alive) stay with each owner. A fourth place, or the coordinator package of backlog #2496, is the time to extract it.
 
-**A listener that ignores errors, because `close` follows each error.** Three places.
-
-- Places: the `error` listener of the socket and of the `readline` interface in the constructor of `SocketConnection` (`socket/socket-connection.ts`), and the `error` listener of the socket in `readLine` (`socket/handshake.ts`).
-- Same: an empty listener. Without a listener, an error stops the process. The `close` that comes after it reports the lost connection.
-- Differs: what `close` does. `SocketConnection` emits `close`. `readLine` gives `undefined` as its line.
-
 **The first ticket of the queue.** Four places.
 
 - Places: `tryLock` (two reads), `isHeldAt` and `isGone` of `TicketQueueFileStore` (`file-system/ticket-queue-file-store.ts`).

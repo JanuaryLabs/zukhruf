@@ -5,6 +5,7 @@ import { promisify } from 'node:util';
 
 import type { Connection, ConnectionEvents } from '../remote/connection.ts';
 import { jsonLine } from './json-line.ts';
+import { leaveErrorsToClose } from './leave-errors-to-close.ts';
 
 /**
  * Newline-delimited JSON over a stream socket. A stream has no message
@@ -24,18 +25,17 @@ export class SocketConnection<Outgoing>
     super();
     this.#socket = socket;
     this.#write = promisify<string, void>(socket.write).bind(socket);
-    // Every error is followed by `close`, which is where the peer's loss is handled.
-    socket.on('error', () => {});
-    createInterface({ input: socket, crlfDelay: Infinity })
-      .on('line', (line) => {
-        try {
-          this.emit('message', JSON.parse(line));
-        } catch {
-          this.close();
-        }
-      })
-      // readline re-emits socket errors (e.g. EPIPE when the peer died); `close` reports the loss.
-      .on('error', () => {});
+    leaveErrorsToClose(socket);
+    const lines = createInterface({ input: socket, crlfDelay: Infinity });
+    lines.on('line', (line) => {
+      try {
+        this.emit('message', JSON.parse(line));
+      } catch {
+        this.close();
+      }
+    });
+    // readline re-emits the socket's errors (e.g. EPIPE when the peer died).
+    leaveErrorsToClose(lines);
     socket.once('close', () => this.emit('close'));
   }
 
