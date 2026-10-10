@@ -139,6 +139,31 @@ describe('A network directory', () => {
     );
   }
 
+  test(
+    'a CIFS type read as a negative number is still refused',
+    { ...onLinux, timeout: 2_000 },
+    async () => {
+      // Arrange: CIFS's magic has its high bit set, so a signed f_type extends its sign.
+      await using directory = await mkdtempDisposable(
+        join(tmpdir(), 'zukhruf-fs-'),
+      );
+      using _mount = mountAs(directory.path, 0xff534d42n - 2n ** 32n);
+
+      // Act
+      const checking = assertLocalDirectory(directory.path);
+
+      // Assert
+      await assert.rejects(checking, (error) => {
+        assert.ok(
+          error instanceof NetworkDirectoryError,
+          `A sign-extended CIFS type must be refused, got ${String(error)}`,
+        );
+        assert.equal(error.fileSystem, 'CIFS');
+        return true;
+      });
+    },
+  );
+
   for (const [name, type] of [
     ['ext4', 0xef53n],
     ['a FUSE mount', 0x65735546n],
@@ -219,6 +244,101 @@ describe('A network directory', () => {
 
       // Assert
       await assert.rejects(checking, NetworkDirectoryError);
+    },
+  );
+
+  test(
+    'a directory that passed the check is not judged again',
+    { ...onLinux, timeout: 2_000 },
+    async () => {
+      // Arrange: the first check finds a local file system.
+      await using directory = await mkdtempDisposable(
+        join(tmpdir(), 'zukhruf-fs-'),
+      );
+      await assertLocalDirectory(directory.path);
+
+      // Act: the same directory would now look like a network mount.
+      using _mount = mountAs(directory.path, 0x6969n);
+      const checking = assertLocalDirectory(directory.path);
+
+      // Assert: the judged directory is not asked again, though the mount is live for a directory not yet judged.
+      await assert.doesNotReject(checking);
+      await assert.rejects(
+        assertLocalDirectory(join(directory.path, 'sibling')),
+        NetworkDirectoryError,
+      );
+    },
+  );
+
+  test(
+    'macOS never refuses a directory by its statfs number',
+    {
+      skip:
+        process.platform === 'darwin'
+          ? false
+          : 'Only macOS numbers its file systems as they load',
+      timeout: 2_000,
+    },
+    async () => {
+      // Arrange: a local directory whose number matches NFS on Linux.
+      await using directory = await mkdtempDisposable(
+        join(tmpdir(), 'zukhruf-fs-'),
+      );
+      using _mount = mountAs(directory.path, 0x6969n);
+
+      // Act
+      const checking = assertLocalDirectory(directory.path);
+
+      // Assert
+      await assert.doesNotReject(checking);
+    },
+  );
+
+  for (const share of [
+    String.raw`\\server\share\locks`,
+    String.raw`\\?\UNC\server\share\locks`,
+    String.raw`\\.\UNC\server\share\locks`,
+    '//server/share/locks',
+  ]) {
+    test(
+      `Windows refuses the network share ${share}`,
+      {
+        skip:
+          process.platform === 'win32'
+            ? false
+            : 'UNC paths exist only on Windows',
+        timeout: 2_000,
+      },
+      async () => {
+        // Act: the check judges the path itself, so the share need not exist.
+        const checking = assertLocalDirectory(share);
+
+        // Assert
+        await assert.rejects(checking, NetworkDirectoryError);
+      },
+    );
+  }
+
+  test(
+    'Windows keeps working in a local directory named with the \\\\?\\ prefix',
+    {
+      skip:
+        process.platform === 'win32'
+          ? false
+          : 'The prefix exists only on Windows',
+      timeout: 2_000,
+    },
+    async () => {
+      // Arrange
+      await using directory = await mkdtempDisposable(
+        join(tmpdir(), 'zukhruf-fs-'),
+      );
+
+      // Act
+      const checking = assertLocalDirectory('\\\\?\\' + directory.path);
+
+      // Assert
+      await assert.doesNotReject(checking);
     },
   );
 });

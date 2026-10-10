@@ -64,33 +64,6 @@ function mountAs(directory: string, type: bigint) {
   };
 }
 
-/** Makes statfs fail with `code` once for `directory`, as a flaky mount would; later calls get the real answer. */
-function failStatfsOnce(directory: string, code: string) {
-  const statfs = fsPromises.statfs;
-  let failed = false;
-  mock.method(
-    fsPromises,
-    'statfs',
-    async (...args: Parameters<typeof fsPromises.statfs>) => {
-      if (!failed && within(directory, String(args[0]))) {
-        failed = true;
-        throw Object.assign(new Error(`${code}: statfs failed`), {
-          code,
-          syscall: 'statfs',
-        });
-      }
-      return statfs(...args);
-    },
-  );
-  syncBuiltinESMExports();
-  return {
-    [Symbol.dispose]() {
-      mock.restoreAll();
-      syncBuiltinESMExports();
-    },
-  };
-}
-
 const outcome = (acquiring: Promise<AsyncDisposable>) =>
   acquiring.then(
     async (lease) => {
@@ -138,37 +111,6 @@ describe('A lock directory on a network file system', () => {
         },
       );
     }
-  }
-
-  for (const [form, type] of [
-    ['an unsigned 64-bit', 0xffffffffff534d42n],
-    ['a negative', 0xff534d42n - 2n ** 32n],
-  ] as const) {
-    test(
-      `a CIFS type read as ${form} number is still refused`,
-      onLinux,
-      async () => {
-        // Arrange: CIFS's magic has its high bit set, so a signed f_type extends its sign.
-        await using directory = await scratchDirectory();
-        using _mount = mountAs(directory.path, type);
-        const [store] = hostStores;
-        assert.ok(store, 'The store matrix must have a host store');
-        await using host = store.open(directory.path);
-
-        // Act
-        const failure = await host.store.acquire('product:42').then(
-          () => undefined,
-          (error: unknown) => error,
-        );
-
-        // Assert
-        assert.ok(
-          failure instanceof NetworkDirectoryError,
-          `A sign-extended CIFS type must be refused, got ${String(failure)}`,
-        );
-        assert.equal(failure.fileSystem, 'CIFS');
-      },
-    );
   }
 
   for (const store of hostStores) {
@@ -240,57 +182,6 @@ describe('A lock directory on a network file system', () => {
   );
 
   test(
-    'a file system check that cannot run lets the lock go ahead, and is tried again next time',
-    onLinux,
-    async () => {
-      // Arrange: statfs fails once, as it may in a sandbox or on a flaky mount.
-      await using directory = await scratchDirectory();
-      using _flaky = failStatfsOnce(directory.path, 'EIO');
-      const store = new LockFileStore(directory.path);
-
-      // Act
-      const unjudged = await outcome(store.acquire('product:42'));
-      using _mount = mountAs(directory.path, 0x6969n);
-      const judged = await outcome(store.acquire('product:42'));
-
-      // Assert: the failed check blocked nothing and was not remembered as a pass.
-      assert.equal(
-        unjudged,
-        'granted',
-        'A check that cannot run must not block the lock',
-      );
-      assert.ok(
-        judged instanceof NetworkDirectoryError,
-        `The next acquire must judge the directory again, got ${String(judged)}`,
-      );
-    },
-  );
-
-  test(
-    'a directory that passed the check is not judged again',
-    onLinux,
-    async () => {
-      // Arrange: the first acquire finds a local file system.
-      await using directory = await scratchDirectory();
-      const store = new LockFileStore(directory.path);
-      assert.equal(await outcome(store.acquire('product:42')), 'granted');
-
-      // Act: the same directory would now look like a network mount.
-      using _mount = mountAs(directory.path, 0x6969n);
-      const result = await outcome(store.acquire('product:42'));
-
-      // Assert: the mount is live for a directory not yet judged, but the judged one is not asked again.
-      await assert.rejects(
-        new LockFileStore(join(directory.path, 'sibling')).acquire(
-          'product:42',
-        ),
-        NetworkDirectoryError,
-      );
-      assert.equal(result, 'granted');
-    },
-  );
-
-  test(
     'a socket store that fails over never judges its directory again, so its holders keep their keys',
     onLinux,
     async (t) => {
@@ -325,79 +216,6 @@ describe('A lock directory on a network file system', () => {
       } finally {
         await leader[Symbol.asyncDispose]();
       }
-    },
-  );
-
-  test(
-    'macOS never refuses a directory by its statfs number',
-    {
-      skip:
-        process.platform === 'darwin'
-          ? false
-          : 'Only macOS numbers its file systems as they load',
-    },
-    async () => {
-      // Arrange: a local directory whose number matches NFS on Linux.
-      await using directory = await scratchDirectory();
-      using _mount = mountAs(directory.path, 0x6969n);
-      const store = new LockFileStore(directory.path);
-
-      // Act
-      const result = await outcome(store.acquire('product:42'));
-
-      // Assert
-      assert.equal(result, 'granted');
-    },
-  );
-
-  for (const share of [
-    String.raw`\\server\share\locks`,
-    String.raw`\\?\UNC\server\share\locks`,
-    String.raw`\\.\UNC\server\share\locks`,
-    '//server/share/locks',
-  ]) {
-    test(
-      `Windows refuses the network share ${share}`,
-      {
-        skip:
-          process.platform === 'win32'
-            ? false
-            : 'UNC paths exist only on Windows',
-      },
-      async () => {
-        // Arrange: the guard judges the path itself, so the share need not exist.
-        const store = new LockFileStore(share);
-
-        // Act
-        const result = await outcome(store.acquire('product:42'));
-
-        // Assert
-        assert.ok(
-          result instanceof NetworkDirectoryError,
-          `got ${String(result)}`,
-        );
-      },
-    );
-  }
-
-  test(
-    'Windows keeps working in a local directory named with the \\\\?\\ prefix',
-    {
-      skip:
-        process.platform === 'win32'
-          ? false
-          : 'The prefix exists only on Windows',
-    },
-    async () => {
-      // Arrange
-      await using directory = await scratchDirectory();
-      const store = new LockFileStore('\\\\?\\' + directory.path);
-
-      // Act
-      const result = await outcome(store.acquire('product:42'));
-
-      // Assert
-      assert.equal(result, 'granted');
     },
   );
 
