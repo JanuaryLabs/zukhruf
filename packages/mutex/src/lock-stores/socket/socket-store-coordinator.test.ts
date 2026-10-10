@@ -504,6 +504,37 @@ describe('Requests that a leader reads in one turn', () => {
       'Releasing the request must free the key for the next caller',
     );
   });
+
+  test('a resent try is granted once, and its release frees the key', async (t) => {
+    // Arrange: a follower's try reaches the leader twice, as after a reconnect.
+    await using scene = await firstLeader();
+    await using peer = await rawPeer(t, scene.directory);
+
+    // Act
+    peer.send(
+      { op: 'try', id: 't', key: 'product:42' },
+      { op: 'try', id: 't', key: 'product:42' },
+    );
+    await waitUntil(
+      t,
+      () => peer.received.length > 0,
+      'The first try must be granted',
+    );
+    peer.send({ op: 'release', id: 't' });
+    await delay(settle);
+
+    // Assert: one grant and no busy answer for the copy, and the key is free again after that one release.
+    assert.deepEqual(
+      peer.received.map((response) => response.op),
+      ['granted'],
+      'The same request id must be answered only once, with its grant',
+    );
+    assert.equal(
+      await grantedWithin(scene.leader.acquire('product:42'), 1000),
+      'granted',
+      'Releasing the request must free the key for the next caller',
+    );
+  });
 });
 
 describe('A peer that gives up or leaves', () => {

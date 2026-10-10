@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { readdirSync } from 'node:fs';
-import { chmod } from 'node:fs/promises';
+import { chmod, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { describe, test } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -101,6 +101,39 @@ describe('SqliteStore', () => {
 });
 
 describe('SqliteStore holder record', () => {
+  // Text that is not JSON, or JSON that names no caller.
+  for (const damaged of ['garbage', '{"pid":1}']) {
+    test(`a holder record that holds ${damaged} names nobody, and the next holder writes its own`, async () => {
+      // Arrange: a power loss in the middle of a write can leave such a record; no operation writes one.
+      await using directory = await scratchDirectory();
+      const mutex = new Mutex(new SqliteStore(directory.path));
+      const folder = join(directory.path, 'report%3Adaily.lock.holder');
+      const record = join(folder, 'caller');
+      await mkdir(folder);
+      await writeFile(record, damaged);
+
+      // Act
+      const heldBefore = await mutex.isHeld('report:daily');
+      const release = await hold(mutex, 'report:daily');
+      const heldWhileHolding = await mutex.isHeld('report:daily');
+      const recordWhileHolding = await readFile(record, 'utf8');
+      await release();
+
+      // Assert
+      assert.equal(heldBefore, false, 'A damaged record must name nobody');
+      assert.notEqual(
+        recordWhileHolding,
+        damaged,
+        'The holder must write its record where the damaged one was',
+      );
+      assert.equal(
+        heldWhileHolding,
+        true,
+        'The holder must replace the damaged record with its own',
+      );
+    });
+  }
+
   test(
     'a holder that was killed leaves no file once the next holder took the key and let it go',
     { timeout: 30000 },

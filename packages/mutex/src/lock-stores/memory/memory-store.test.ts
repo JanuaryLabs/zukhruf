@@ -2,10 +2,25 @@ import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
 
+import { CounterTokenSource, type TokenSource } from '@zukhruf/fencing';
+
 import { settle } from '../../testing/store-cases.ts';
 import { waitUntil } from '../../testing/wait-until.ts';
 import { watch } from '../../testing/watch.ts';
 import { MemoryStore } from './memory-store.ts';
+
+/** Fails the first token it is asked for, and counts after that. */
+function failingOnce(failure: Error): TokenSource {
+  const counter = new CounterTokenSource();
+  let failed = false;
+  return {
+    next(key) {
+      if (failed) return counter.next(key);
+      failed = true;
+      return Promise.reject(failure);
+    },
+  };
+}
 
 describe('MemoryStore', () => {
   test('waiters get the key in the order they asked for it', async () => {
@@ -118,6 +133,23 @@ describe('MemoryStore', () => {
     assert.ok(
       await store.tryAcquire('product:42'),
       'A cancelled acquire must not hold the key',
+    );
+  });
+
+  test('an acquire whose token cannot be minted rejects with that error and leaves the key free', async () => {
+    // Arrange
+    const failure = new Error('The token source is unavailable.');
+    const store = new MemoryStore({ tokens: failingOnce(failure) });
+
+    // Act
+    const acquiring = store.acquire('product:42');
+
+    // Assert: the caller learns the real cause, and the line it joined is gone.
+    await assert.rejects(acquiring, (error) => error === failure);
+    assert.equal(await store.isHeld('product:42'), false);
+    assert.ok(
+      await store.tryAcquire('product:42'),
+      'The next caller must get the key at once',
     );
   });
 });

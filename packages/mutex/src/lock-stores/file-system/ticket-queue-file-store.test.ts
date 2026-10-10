@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 // The default export is the module object itself, which mock.method can patch;
 // syncBuiltinESMExports then copies the patch to the named exports.
-import fsPromises from 'node:fs/promises';
+import fsPromises, { readFile, writeFile } from 'node:fs/promises';
 import { syncBuiltinESMExports } from 'node:module';
 import { join } from 'node:path';
 import { describe, mock, test } from 'node:test';
@@ -129,4 +129,48 @@ describe('TicketQueueFileStore holder check', () => {
       );
     },
   );
+});
+
+/** The errors that `error` carries: a waiter that leaves reads the queue too, so its clean-up can fail as well. */
+const errorsIn = (error: unknown): unknown[] =>
+  error instanceof SuppressedError
+    ? [...errorsIn(error.error), ...errorsIn(error.suppressed)]
+    : [error];
+
+describe('TicketQueueFileStore damaged queue', () => {
+  // Text that is not JSON, or JSON that names no caller.
+  for (const damaged of ['garbage', '{"pid":1}']) {
+    test(`a first ticket line that holds ${damaged} makes every call reject with a SyntaxError and stays first`, async () => {
+      // Arrange: a power loss can leave a complete line whose bytes never reached the disk; no operation writes one.
+      // (A line without its newline is an append still in progress, which the store skips.)
+      await using directory = await scratchDirectory();
+      const store = new TicketQueueFileStore(directory.path, {
+        pollInterval: 10,
+      });
+      const queue = join(directory.path, 'report-daily.lock');
+      await writeFile(queue, `${damaged}\n`);
+
+      // Act
+      const calls = await Promise.allSettled([
+        store.acquire('report-daily', { signal: AbortSignal.timeout(2000) }),
+        store.tryAcquire('report-daily'),
+        store.isHeld('report-daily'),
+      ]);
+
+      // Assert: nobody can tell who is first, so the key stays blocked, loudly, and the line is kept for a person to read.
+      assert.deepEqual(
+        calls.map((call) =>
+          call.status === 'rejected'
+            ? [...new Set(errorsIn(call.reason).map((e) => e?.constructor))]
+            : call.status,
+        ),
+        [[SyntaxError], [SyntaxError], [SyntaxError]],
+        'acquire, tryAcquire and isHeld must each reject because of the damaged line',
+      );
+      assert.ok(
+        (await readFile(queue, 'utf8')).startsWith(`${damaged}\n`),
+        'The damaged ticket must stay first in the queue',
+      );
+    });
+  }
 });

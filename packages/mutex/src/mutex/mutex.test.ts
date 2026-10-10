@@ -13,6 +13,8 @@ import { Hono } from 'hono';
 
 import type { FencingToken } from '@zukhruf/fencing';
 
+import { IpcLockCoordinator } from '../index.ts';
+import { isRecord } from '../shared/is-record.ts';
 import { scratchDirectory } from '../testing/scratch-directory.ts';
 import {
   type StoreCase,
@@ -1132,6 +1134,119 @@ for (const store of storeCases.filter(
     );
 
     test(
+      'messages of its own and unreadable lock messages from a thread leave its locks working',
+      { timeout: 15000 },
+      async (t) => {
+        // Arrange: the thread posts its own messages to the main thread, and lock envelopes that hold no request.
+        await using directory = await scratchDirectory();
+        await using host = store.open(directory.path);
+        const mutex = new Mutex(host.store);
+        const thread = startThread(
+          host,
+          threadSource(
+            store.name,
+            directory.path,
+            `parentPort.postMessage({ type: 'app' });
+						 parentPort.postMessage({ '@lock': 42 });
+						 parentPort.postMessage({ '@lock': null });
+						 parentPort.postMessage({ '@lock': { op: 'acquire' } });
+						 await mutex.acquire('product:42', async () => {});
+						 parentPort.postMessage('released');`,
+          ),
+        );
+        const events: string[] = [];
+        thread.on('message', (event) => {
+          if (typeof event === 'string') events.push(event);
+        });
+
+        try {
+          // Act
+          await waitUntil(
+            t,
+            () => events.includes('released'),
+            'The thread must take and release the key after its other messages',
+            newProcessTimeout,
+          );
+          const next = await Promise.race([
+            mutex.acquire('product:42', async () => 'granted' as const),
+            delay(2000, 'still waiting' as const, { ref: false }),
+          ]);
+
+          // Assert
+          assert.equal(
+            next,
+            'granted',
+            'The main thread must get the key the thread released',
+          );
+        } finally {
+          await thread.terminate();
+        }
+      },
+    );
+
+    test(
+      'a thread that waits for a key ignores a lock message from the main thread that is not a valid answer',
+      { timeout: 15000 },
+      async (t) => {
+        // Arrange: the main thread holds the key, and the thread asks for it.
+        await using directory = await scratchDirectory();
+        await using host = store.open(directory.path);
+        const mutex = new Mutex(host.store);
+        const finishMain = Promise.withResolvers<void>();
+        const held = mutex.acquire('product:42', () => finishMain.promise);
+        const thread = startThread(
+          host,
+          threadSource(
+            store.name,
+            directory.path,
+            `await mutex.acquire('product:42', async () => parentPort.postMessage('entered'));`,
+          ),
+        );
+        const events: string[] = [];
+        let request: string | undefined;
+        thread.on('message', (event: unknown) => {
+          if (typeof event === 'string') events.push(event);
+          const message = isRecord(event) ? event['@lock'] : undefined;
+          if (isRecord(message) && typeof message.id === 'string')
+            request = message.id;
+        });
+
+        try {
+          await waitUntil(
+            t,
+            () => request !== undefined,
+            'The thread must ask for the key',
+            newProcessTimeout,
+          );
+
+          // Act: a grant for the thread's request, with a token that no coordinator issues.
+          thread.postMessage({
+            '@lock': { op: 'granted', id: request, token: 'not-a-token' },
+          });
+          await delay(settle);
+          const enteredBeforeRelease = events.includes('entered');
+          finishMain.resolve();
+          await held;
+
+          // Assert
+          assert.equal(
+            enteredBeforeRelease,
+            false,
+            'The thread entered on a grant that was not valid',
+          );
+          await waitUntil(
+            t,
+            () => events.includes('entered'),
+            'The thread must enter once the main thread releases',
+          );
+        } finally {
+          finishMain.resolve();
+          await thread.terminate();
+        }
+      },
+    );
+
+    test(
       'four threads incrementing a shared counter never overlap or lose an update',
       { timeout: 10000 },
       async () => {
@@ -1231,6 +1346,56 @@ for (const store of storeCases.filter(
 }
 
 describe('Process-tree mutex with IpcStore', () => {
+  test(
+    'messages of its own and unreadable lock messages from a child leave its locks working',
+    { timeout: 15000 },
+    async (t) => {
+      // Arrange: the child sends its parent its own messages, and lock envelopes that hold no request.
+      const coordinator = new IpcLockCoordinator();
+      const mutex = new Mutex(coordinator);
+      const ipcStoreUrl = new URL(
+        '../lock-stores/ipc/ipc-store.ts',
+        import.meta.url,
+      );
+      await using child = startWorker(
+        `
+					import { Mutex } from ${JSON.stringify(mutexUrl.href)};
+					import { IpcStore } from ${JSON.stringify(ipcStoreUrl.href)};
+
+					const mutex = new Mutex(new IpcStore());
+					process.send({ type: 'app' });
+					process.send({ '@lock': 42 });
+					process.send({ '@lock': null });
+					process.send({ '@lock': { op: 'acquire' } });
+					await mutex.acquire('product:42', async () => {});
+					process.send({ type: 'released' });
+				`,
+        'child',
+        { host: { adoptProcess: (process) => coordinator.adopt(process) } },
+      );
+
+      // Act
+      await waitUntil(
+        t,
+        () => child.has('released'),
+        () =>
+          `The child must take and release the key after its other messages.\n${child.stderr}`,
+        newProcessTimeout,
+      );
+      const next = await Promise.race([
+        mutex.acquire('product:42', async () => 'granted' as const),
+        delay(2000, 'still waiting' as const, { ref: false }),
+      ]);
+
+      // Assert
+      assert.equal(
+        next,
+        'granted',
+        'The parent must get the key the child released',
+      );
+    },
+  );
+
   test(
     'a child waiting for a key learns that no coordinator is left when its parent dies',
     {

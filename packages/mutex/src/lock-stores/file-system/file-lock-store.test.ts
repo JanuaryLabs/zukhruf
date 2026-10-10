@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
-import { readdir } from 'node:fs/promises';
+import { readFile, readdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline';
 import { describe, test } from 'node:test';
 
-import { CounterTokenSource } from '@zukhruf/fencing';
+import { CounterTokenSource, type TokenSource } from '@zukhruf/fencing';
 
 import type { LockStore } from '../../mutex/lock-store.ts';
 import { Mutex } from '../../mutex/mutex.ts';
@@ -283,5 +283,85 @@ describe('File lock stores on Windows', () => {
         );
       },
     );
+  }
+});
+
+describe('LockFileStore damaged lock file', () => {
+  // Text that is not JSON, or JSON that names no caller.
+  for (const damaged of ['garbage', '{"pid":1}']) {
+    test(`a lock file that holds ${damaged} makes every call reject with a SyntaxError and stays as it is`, async () => {
+      // Arrange: a power loss in the middle of a write can leave such a file; no operation writes one.
+      await using directory = await scratchDirectory();
+      const store = new LockFileStore(directory.path, { pollInterval: 10 });
+      const lockFile = join(directory.path, 'report-daily.lock');
+      await writeFile(lockFile, damaged);
+
+      // Act
+      const calls = await Promise.allSettled([
+        store.acquire('report-daily', { signal: AbortSignal.timeout(2000) }),
+        store.tryAcquire('report-daily'),
+        store.isHeld('report-daily'),
+      ]);
+
+      // Assert: nobody can tell who holds the key, so it stays blocked, loudly, and the file is kept for a person to read.
+      assert.deepEqual(
+        calls.map((call) =>
+          call.status === 'rejected' ? call.reason?.constructor : call.status,
+        ),
+        [SyntaxError, SyntaxError, SyntaxError],
+        'acquire, tryAcquire and isHeld must each reject with a SyntaxError',
+      );
+      assert.equal(await readFile(lockFile, 'utf8'), damaged);
+    });
+  }
+});
+
+/** Fails the first token it is asked for, and counts after that. */
+function failingOnce(failure: Error): TokenSource {
+  const counter = new CounterTokenSource();
+  let failed = false;
+  return {
+    next(key) {
+      if (failed) return counter.next(key);
+      failed = true;
+      return Promise.reject(failure);
+    },
+  };
+}
+
+describe('File lock stores whose token source fails', () => {
+  for (const [name, open] of [
+    [
+      'LockFileStore',
+      (directory: string, tokens: TokenSource) =>
+        new LockFileStore(directory, { pollInterval: 10, tokens }),
+    ],
+    [
+      'TicketQueueFileStore',
+      (directory: string, tokens: TokenSource) =>
+        new TicketQueueFileStore(directory, { pollInterval: 10, tokens }),
+    ],
+    [
+      'SqliteStore',
+      (directory: string, tokens: TokenSource) =>
+        new SqliteStore(directory, { pollInterval: 10, tokens }),
+    ],
+  ] as const) {
+    test(`${name}: an acquire whose token cannot be minted rejects with that error and leaves the key free`, async () => {
+      // Arrange
+      await using directory = await scratchDirectory();
+      const failure = new Error('The token file could not be written.');
+      const store = open(directory.path, failingOnce(failure));
+
+      // Act
+      const acquiring = store.acquire('report-daily');
+
+      // Assert: the caller learns the real cause, and the lock taken for it is given back.
+      await assert.rejects(acquiring, (error) => error === failure);
+      assert.equal(await store.isHeld('report-daily'), false);
+      const next = await store.tryAcquire('report-daily');
+      assert.ok(next, 'The next caller must get the key at once');
+      await next[Symbol.asyncDispose]();
+    });
   }
 });
