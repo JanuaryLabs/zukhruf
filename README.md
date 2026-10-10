@@ -24,6 +24,10 @@
 
 Each package has its own glossary. [CONTEXT-MAP.md](./CONTEXT-MAP.md) lists them.
 
+## How the packages fit together
+
+The packages import each other in layers: base, coordination, domain, tool and host. Each layer imports only the layers that the ADR lists for it, and `nx lint` refuses each other import. [ADR 0001](./docs/adr/0001-zukhruf-is-a-layered-standard-library.md) gives the layers and the rules that put code into a package.
+
 ## Development
 
 ```sh
