@@ -7,9 +7,8 @@ import { describe, test } from 'node:test';
 
 import { SqliteElection } from '@zukhruf/election';
 import type { FileLock } from '@zukhruf/fs';
-import { LeaseLostError } from '@zukhruf/lease';
 
-import { SingleFlight } from '../index.ts';
+import { LeaseLostError, SingleFlight } from '../index.ts';
 import { scratchDirectory } from '../testing/scratch-directory.ts';
 import { waitUntil } from '../testing/wait-until.ts';
 import { FlightServer } from './flight-server.ts';

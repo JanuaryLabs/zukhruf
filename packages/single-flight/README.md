@@ -157,6 +157,8 @@ A codec that cannot encode the value fails the flight for all callers. A codec t
 
 A joiner in the leader's own process is a joiner too: it gets `FlightFailedError`, not the original error. `FlightFailedError` has the `key` and the `failure`: the `name`, the `message` and the `code` of the error. A thrown value that is not an error keeps only its text.
 
+`LeaseLostError` is the class of [`@zukhruf/lease`](../lease/README.md). This package exports it too, because the call of a leader rejects with it.
+
 ## Cancel a wait
 
 Give a signal to stop the wait of one caller: `flights.run(key, work, { signal: AbortSignal.timeout(30_000) })`. The call rejects with the reason of the signal. The flight continues for the other callers. When the caller of the leader cancels, the work continues and lands for the joiners. A call whose signal aborted before the call rejects at once: it never leads and never joins. [ADR 0004](./docs/adr/0004-a-cancel-withdraws-only-its-caller.md) tells why.
