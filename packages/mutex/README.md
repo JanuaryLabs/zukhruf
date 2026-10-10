@@ -122,7 +122,7 @@ See [Fencing tokens](./docs/concepts/fencing-tokens.md) and the recipe [Protect 
 - [Reach](./docs/concepts/reach.md): who can share a lock, and how to select it.
 - [Acquire modes](./docs/concepts/acquire-modes.md): wait or skip while a key is busy, and cancel a wait.
 - [Fencing tokens](./docs/concepts/fencing-tokens.md): how a resource refuses a stale holder.
-- [Leader election](./docs/concepts/leader-election.md): how `SocketStore` selects its coordinator.
+- [Leader election](../election/docs/concepts/leader-election.md): how `SocketStore` selects its coordinator, with `SqliteElection` of `@zukhruf/election`.
 - [Failure modes](./docs/concepts/failure-modes.md): what each lock store does when something stops.
 
 **Lock stores**: one page for each lock store, with What, Why, When, When not, How it works, Acquire modes, Failure modes, Options, and Evidence. See the table above.
@@ -135,7 +135,7 @@ See [Fencing tokens](./docs/concepts/fencing-tokens.md) and the recipe [Protect 
 4. [Worker threads that share a lock](./docs/recipes/worker-threads.md)
 5. [Protect a database from stale holders](./docs/recipes/fence-a-database.md)
 6. [Survive a crashed holder](./docs/recipes/survive-a-crashed-holder.md)
-7. [Run a job in only one process](./docs/recipes/singleton-job-with-leader-election.md)
+7. [Run a job in only one process](../election/docs/recipes/singleton-job-with-leader-election.md), with `@zukhruf/election`
 8. [Write your own lock store](./docs/recipes/write-your-own-lock-store.md)
 9. [Skip a job that is already running](./docs/recipes/skip-a-job-that-is-already-running.md)
 10. [Compute a value once and share it](./docs/recipes/compute-once-and-share-it.md)
@@ -152,7 +152,6 @@ npm install @zukhruf/mutex
 
 ```ts
 import { Mutex, SqliteStore } from '@zukhruf/mutex';
-import { LeaderElection } from '@zukhruf/mutex/leader-election';
 ```
 
 ## Development
@@ -174,8 +173,7 @@ src/
   mutex/             Mutex, Key, acquire modes, LockHandle, LockStore
   lock-stores/       one folder for each lock store
     remote/          the coordinator and client that ThreadStore, IpcStore and SocketStore share
-  leader-election/   leader election (separate entry point, not part of the mutex)
-  shared/            the file name of a key, and SQLite error checks (the file writes are in @zukhruf/fs)
+  shared/            a record check, and SQLite error checks (key file names and file writes are in @zukhruf/fs)
   testing/           test helpers and the matrix of lock stores (not published)
 docs/
   concepts/  stores/  recipes/  adr/

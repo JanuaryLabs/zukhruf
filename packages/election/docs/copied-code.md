@@ -11,17 +11,16 @@ This package keeps a few small files that other packages also have. Each one is 
 
 The test helpers are in three packages now: the mutex, the single flight and this one. The maintainer chose a third copy for them, and backlog #2509 records it. `isBusy` is a check of a SQLite error, not of a file, so it is not in `@zukhruf/fs`. Backlog #2517 tracks its copies.
 
-## The election is in three places
+## The election is in two places
 
-This package is the election of the mutex, made into one campaign with a subclass for each backend. The mutex and the single flight do not use it yet: the maintainer put that step on hold (backlog #2530). Until they use it, each of them keeps its own copy. A fix to the election goes into each of the three places, and the commit names each file.
+This package is the election of the mutex, made into one campaign with a subclass for each backend. The mutex uses it since 2026-10-10, and its copy is deleted. The single flight does not use it yet: the maintainer put that step on hold (backlog #2530). Until it uses it, the single flight keeps its own copy. A fix to the election goes into each of the two places, and the commit names each file.
 
 | Place         | Files                                                                                      |
 | ------------- | ------------------------------------------------------------------------------------------ |
 | This package  | `src/leader-election.ts`, `src/term.ts`, `src/sqlite/sqlite-election.ts`                   |
-| Mutex         | `packages/mutex/src/leader-election/leader-election.ts`, `leadership.ts`                   |
 | Single flight | `packages/single-flight/src/election/leader-election.ts`, `leadership.ts` (its own ledger) |
 
-What changed from the mutex's copy:
+What changed from the copy that the mutex had, and that the single flight still has:
 
 - The campaign is the abstract class `LeaderElection`. The SQLite claim is its subclass `SqliteElection`.
 - The claim file and the epoch file are options (`claimFile`, `epochFile`). The mutex uses `leader.lock` and `leader.epoch`. The single flight uses `flight.lock` and `flight.epoch`.

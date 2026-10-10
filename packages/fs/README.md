@@ -1,6 +1,6 @@
 # @zukhruf/fs
 
-Helpers that write files. A reader never sees a part of a write. `@zukhruf/mutex` and `@zukhruf/single-flight` use them for their lock files, fencing counters, and election epochs.
+Helpers that write files. A reader never sees a part of a write. `@zukhruf/mutex` and `@zukhruf/single-flight` use them for their lock files, `@zukhruf/fencing` for its fencing counters, and `@zukhruf/election` and `@zukhruf/single-flight` for their election epochs.
 
 The words in these documents have one meaning each. See the glossary in [CONTEXT.md](./CONTEXT.md).
 

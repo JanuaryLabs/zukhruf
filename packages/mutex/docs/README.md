@@ -7,7 +7,7 @@ Start with the [project README](../README.md). The glossary is in [CONTEXT.md](.
 - [Reach](./concepts/reach.md)
 - [Acquire modes](./concepts/acquire-modes.md)
 - [Fencing tokens](./concepts/fencing-tokens.md)
-- [Leader election](./concepts/leader-election.md)
+- [Leader election](../../election/docs/concepts/leader-election.md), in `@zukhruf/election`
 - [Failure modes](./concepts/failure-modes.md)
 
 ## Lock stores
@@ -27,7 +27,7 @@ Start with the [project README](../README.md). The glossary is in [CONTEXT.md](.
 4. [Worker threads that share a lock](./recipes/worker-threads.md)
 5. [Protect a database from stale holders](./recipes/fence-a-database.md)
 6. [Survive a crashed holder](./recipes/survive-a-crashed-holder.md)
-7. [Run a job in only one process](./recipes/singleton-job-with-leader-election.md)
+7. [Run a job in only one process](../../election/docs/recipes/singleton-job-with-leader-election.md), in `@zukhruf/election`
 8. [Write your own lock store](./recipes/write-your-own-lock-store.md)
 9. [Skip a job that is already running](./recipes/skip-a-job-that-is-already-running.md)
 10. [Compute a value once and share it](./recipes/compute-once-and-share-it.md)

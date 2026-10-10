@@ -1,6 +1,6 @@
 # Leader election is a package, and each backend is a subclass of one campaign
 
-The socket lock store of `@zukhruf/mutex` and `@zukhruf/single-flight` each had a copy of the same leader election. The copies were the same except for their file names. The mutex also published its copy as the entry point `@zukhruf/mutex/leader-election` ([mutex ADR 0002](../../../mutex/docs/adr/0002-election-is-not-part-of-the-mutex.md)). Thus the election became this package, and both packages will use it. The election had to be open to other backends too, so that an election across hosts is only a new subclass. Thus `LeaderElection` is an abstract class with the Template Method pattern: the base runs the campaign and owns the term, and a backend implements five steps for its claim. `SqliteElection` is the first backend. A backend can take a claim away while its leader still runs, so the term has a signal that aborts on a loss. That signal is now a lease of `@zukhruf/lease` ([ADR 0002](./0002-a-term-is-a-lease-on-leadership-with-no-fencing.md)).
+The socket lock store of `@zukhruf/mutex` and `@zukhruf/single-flight` each had a copy of the same leader election. The copies were the same except for their file names. The mutex also published its copy as the entry point `@zukhruf/mutex/leader-election` ([mutex ADR 0002](../../../mutex/docs/adr/0002-election-is-not-part-of-the-mutex.md)). Thus the election became this package, for both packages to use. The election had to be open to other backends too, so that an election across hosts is only a new subclass. Thus `LeaderElection` is an abstract class with the Template Method pattern: the base runs the campaign and owns the term, and a backend implements five steps for its claim. `SqliteElection` is the first backend. A backend can take a claim away while its leader still runs, so the term has a signal that aborts on a loss. That signal is now a lease of `@zukhruf/lease` ([ADR 0002](./0002-a-term-is-a-lease-on-leadership-with-no-fencing.md)).
 
 ## Considered Options
 
@@ -10,8 +10,7 @@ The socket lock store of `@zukhruf/mutex` and `@zukhruf/single-flight` each had 
 
 ## Consequences
 
-- The mutex and the single flight do not use this package yet: the maintainer put that step on hold (backlog #2530). Until then, the election is in three places, and a fix goes into each copy ([copied code](../copied-code.md)).
-- When the mutex uses this package, `@zukhruf/mutex/leader-election` goes away, and `Leadership` becomes `Term`.
+- The mutex uses this package since 2026-10-10. Its entry point `@zukhruf/mutex/leader-election` is removed, and `Term` replaced its `Leadership`. The single flight does not use this package yet: the maintainer put that step on hold (backlog #2530). Until then, the election is in two places, and a fix goes into each copy ([copied code](../copied-code.md)).
 - A backend keeps four rules ([README](../../README.md#write-a-backend)). The base cannot enforce the timing rule for a claim that the backend keeps only for a time: `lose` must come before the backend can give the claim to another candidate.
-- A leader that acts for its group stops when `term.signal` aborts. When they use this package, the servers of the socket lock store and of a single flight must do this, although `SqliteElection` never loses a living term.
+- A leader that acts for its group stops when `term.signal` aborts. The server of the socket lock store does this, although `SqliteElection` never loses a living term. The server of a single flight must do this too when it uses this package.
 - Those two servers meet their candidates over a socket in the directory, so they work on one host only, whatever the backend.

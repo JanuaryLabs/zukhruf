@@ -39,11 +39,30 @@ The leader is a normal app process. You do not start or watch a separate server.
 ## How it works
 
 1. A process needs a key and connects to the socket of the directory. On Windows, the socket is the named pipe `\\.\pipe\mutex-<hash of the directory>`. Windows removes a named pipe when its process stops, so a new leader has no stale socket file to remove.
-2. If no process listens, the process starts a [campaign](../concepts/leader-election.md). If it wins, it starts the server and connects to itself.
+2. If no process listens, the process starts a campaign. The election is `SqliteElection` of [`@zukhruf/election`](../../../election/docs/concepts/leader-election.md), with the claim file `<directory>/leader.lock` and the epoch file `<directory>/leader.epoch`. If the process wins, it starts the server and connects to itself.
 3. The leader grants keys in the order of the requests. Each fencing token contains the epoch of the leader, so a new leader's tokens are higher than all tokens of earlier leaders.
 4. The leader does not stay alive only to serve others. When its own work ends, it stops, and a failover occurs.
 
-**Failover.** When the leader stops, a follower wins a new campaign. The new leader grants no keys during the grace window. In that time, each holder reasserts its keys and each waiter sends its request again. Then the new leader continues. See [leader election](../concepts/leader-election.md#failover-in-the-socket-lock-store).
+**Failover.** When the leader stops, or when it loses its term, the kernel or the leader closes all connections to it. Then this occurs:
+
+1. Each follower sees its connection close.
+2. Each follower connects again or starts a campaign. One candidate wins and becomes the new leader with a higher epoch.
+3. The new leader starts a **grace window**. During the grace window, it grants no keys.
+4. Each holder **reasserts** its keys: it tells the new leader the keys and tokens that it holds.
+5. Each waiter sends its request again.
+6. After the grace window, the new leader grants keys to waiters.
+
+The grace window prevents a waiter from getting a key that a holder still has. For two reasserts of one key, the higher token wins. A reassert after the grace window is refused. Then the signal of that holder's lease aborts with `LeaseLostError`, and the call of that holder rejects with `LeaseLostError`.
+
+The first leader of a directory (epoch 1) has no grace window, because no earlier leader had holders.
+
+**A lost term.** The leader stops its server when the signal of its term aborts, because another process can lead then. `SqliteElection` never takes the term from a living leader, so this occurs only with a backend that can take the claim away.
+
+**Rules for the directory.**
+
+- Do not delete `leader.lock` while processes use the directory. A new file has no lock on it, so a second process wins, and two leaders grant the same keys.
+- Do not use `leader.lock` or `leader.epoch` in the directory for another election. That election and the lock store would be one election.
+- The leader closes its socket first and ends its term second. In the other order, the old leader can delete the socket file of the new leader.
 
 **Shutdown.** `await store[Symbol.asyncDispose]()` (or `await using`) closes the connection of this process. Each waiter in this process gets an error. If a campaign of this process is in progress, the campaign stops, and the process does not start the server. If this process is the leader, it closes all connections, stops the server, and ends its term. Followers then elect a new leader and keep their keys.
 
@@ -65,6 +84,7 @@ A leader of version 0.3.9 or earlier does not know the `isHeld` request, and it 
 | ------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | A holder stops                                   | The leader releases its keys in approximately 2 ms.                                                                                                                                                                                     |
 | The leader stops                                 | A failover occurs. Holders reassert their keys during the grace window.                                                                                                                                                                 |
+| The leader loses its term                        | The leader closes its server, and a failover occurs. This needs a backend that can take the claim away; `SqliteElection` never does.                                                                                                    |
 | A holder is frozen during the whole grace window | Its reassert is refused. A newer holder can get the key. When the frozen holder continues, the signal of its lease aborts with `LeaseLostError`, and the call rejects with `LeaseLostError`. A fenced resource refuses its late writes. |
 | A holder thread stops                            | Its connection closes, and the key is released.                                                                                                                                                                                         |
 | A campaign fails, for example with a disk error  | Each waiter gets that error. For a holder that did not reassert its keys, the signal of the lease aborts with `LeaseLostError`. The next `acquire` connects again.                                                                      |
@@ -103,6 +123,9 @@ The `'role'` event tells you each time this process starts to lead, or starts to
 
 ## Evidence
 
+- **A naive takeover is not safe.** Two servers that each did "connect, see `ECONNREFUSED`, delete the socket file, listen" both listened in 11 of 20 races. Clients were split between them. Thus the lock store elects its leader before it removes the socket file.
+- **`ECONNREFUSED` does not mean "no leader".** A live leader with a full connection queue also gave `ECONNREFUSED`.
+- `src/lock-stores/socket/lock-server.test.ts`: a server whose term is lost closes without a call to `close`, and a follower then leads with a higher epoch. A server that starts for a lost term rejects with `LeaseLostError` and serves nobody.
 - `src/lock-stores/mixed-version.release.test.ts`: a process of the latest release and a process of this source share one directory. In both directions, each one sees the holder of the other, does not get its key, and gets the key after the release. The test downloads the latest release each run, so each change is checked against the version that runs beside it during an upgrade.
 - After `SIGKILL` of a client, the server saw the connection close in 1.25 ms.
 - `src/lock-stores/socket/socket-store.test.ts`:

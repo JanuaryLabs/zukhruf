@@ -150,7 +150,7 @@ rival: undefined
 rival after the resign: 2n
 ```
 
-The socket lock store of `@zukhruf/mutex` and `@zukhruf/single-flight` do not use this package yet. Each of them keeps its own copy of the election ([copied code](./docs/copied-code.md)). When they use it, they will use `SqliteElection`. Their leaders serve the other candidates over a socket in the directory, so they work on one host only, also with another backend.
+The socket lock store of `@zukhruf/mutex` uses `SqliteElection`, with the claim file `leader.lock` and the epoch file `leader.epoch`. Its leader serves the other candidates over a socket in the directory, so it works on one host only, also with another backend. Its server stops when `term.signal` aborts. `@zukhruf/single-flight` does not use this package yet, and keeps its own copy of the election ([copied code](./docs/copied-code.md)).
 
 ## Errors
 
@@ -162,6 +162,8 @@ The socket lock store of `@zukhruf/mutex` and `@zukhruf/single-flight` do not us
 
 ## Documentation
 
+- [How SqliteElection elects a leader](./docs/concepts/leader-election.md)
+- [Recipe: Run a job in only one process](./docs/recipes/singleton-job-with-leader-election.md)
 - [ADR 0001: Leader election is a package, and each backend is a subclass of one campaign](./docs/adr/0001-leader-election-is-a-package-and-each-backend-is-a-subclass.md)
 - [ADR 0002: A term is a lease on leadership, with no fencing](./docs/adr/0002-a-term-is-a-lease-on-leadership-with-no-fencing.md)
 - [Code copied into this package](./docs/copied-code.md)

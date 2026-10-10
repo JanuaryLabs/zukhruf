@@ -147,7 +147,7 @@ The number of a leader's term. Each new leader has a higher epoch than all earli
 _Avoid_: Generation, term number
 
 **Failover**:
-A new leader replaces a leader that stopped.
+A new leader replaces a leader that stopped or lost its term.
 _Avoid_: Switchover, handover
 
 **Grace window**:

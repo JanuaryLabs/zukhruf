@@ -10,9 +10,9 @@ Paths on the left are in `packages/mutex/src`. Paths on the right are in `packag
 
 The file helpers and the check that refuses a network directory are no longer copies. Both packages use `@zukhruf/fs` (its ADR 0001): `durableWrite`, `isErrno`, `patiently`, `assertLocalDirectory`, and one `NetworkDirectoryError` class that this package gives from its entry point.
 
-## The election has a third copy
+## The election is in two places
 
-`@zukhruf/election` holds a third copy of the election, made into one campaign with a subclass for each backend ([its ledger](../../election/docs/copied-code.md)). This package does not use it yet: the maintainer put that step on hold (backlog #2530). Until then, a fix to the election goes into each of the three places: `election/leader-election.ts` and `election/leadership.ts` here, `leader-election/` in the mutex, and the election files of `@zukhruf/election`. The commit names each file.
+`@zukhruf/election` holds the election, made into one campaign with a subclass for each backend ([its ledger](../../election/docs/copied-code.md)). The mutex uses it since 2026-10-10, and its copy `leader-election/` is deleted. This package does not use it yet: the maintainer put that step on hold (backlog #2530). Until then, a fix to the election goes into each of the two places: `election/leader-election.ts` and `election/leadership.ts` here, and the election files of `@zukhruf/election`. The commit names each file.
 
 ## Copied without a change
 
@@ -25,11 +25,11 @@ The file helpers and the check that refuses a network directory are no longer co
 
 ## Copied with changes
 
-**`leader-election/leader-election.ts` → `election/leader-election.ts`.**
+**`leader-election/leader-election.ts` (deleted from the mutex; now `@zukhruf/election`) → `election/leader-election.ts`.**
 The claim file is `flight.lock`, not `leader.lock`. The epoch file is `flight.epoch`, not `leader.epoch`. The comments call the elected process the coordinator.
 Why: a single flight and a socket lock store can use one directory. With the same file names, they would share one election. The winner would serve only one of them, and the other one would never find a server.
 
-**`leader-election/leadership.ts` → `election/leadership.ts`.**
+**`leader-election/leadership.ts` (deleted from the mutex; now `Term` of `@zukhruf/election`) → `election/leadership.ts`.**
 Only the comments change: a term belongs to the coordinator.
 Why: in this package, a leader is the caller that runs a flight's work.
 
@@ -99,7 +99,7 @@ These helpers do not belong in `@zukhruf/coordinator`. A third package that copi
 
 - **As is:** the connection, the connection supervisor, the socket connection, and the SQLite helpers.
 - **With parameters:**
-  - the election: done in `@zukhruf/election`, where the names of its two files are options. This package does not use it yet (backlog #2530);
+  - the election: done in `@zukhruf/election`, where the names of its two files are options. The mutex uses it. This package does not use it yet (backlog #2530);
   - the socket path: the file name and the pipe prefix;
   - the handshake: the protocol name, the version, and what the welcome lists;
   - the electing connector: the check of the incoming messages;
