@@ -41,9 +41,8 @@ export class LockFileStore extends FileLockStore {
     }
 
     await using claiming = new AsyncDisposableStack();
-    const presence = claiming.adopt(
-      Presence.claim(Presence.pathOf(path, me)),
-      (claimed) => claimed.withdraw(),
+    const presence = claiming.adopt(Presence.claim(path, me), (claimed) =>
+      claimed.withdraw(),
     );
     if (!(await createExclusive(path, me.serialize()))) return undefined;
     claiming.move();
@@ -59,11 +58,7 @@ export class LockFileStore extends FileLockStore {
   }
 
   async #evictIfGone(path: string, holder: Caller) {
-    const state = await Presence.judge(
-      path,
-      holder,
-      async () => (await readHolder(path))?.id === holder.id,
-    );
+    const state = await Presence.judge(path, holder, () => readHolder(path));
     if (state !== 'gone') return;
     await this.withReclaimLock(path, async () => {
       if ((await readHolder(path))?.id !== holder.id) return;

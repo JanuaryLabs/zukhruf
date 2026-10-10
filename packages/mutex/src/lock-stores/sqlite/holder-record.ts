@@ -31,7 +31,7 @@ export class HolderRecord {
     await mkdir(this.#folder, { recursive: true });
     await using announcing = new AsyncDisposableStack();
     const presence = announcing.adopt(
-      Presence.claim(Presence.pathOf(this.#path, me)),
+      Presence.claim(this.#path, me),
       (claimed) => claimed.withdraw(),
     );
     await atomicWrite(this.#path, me.serialize());

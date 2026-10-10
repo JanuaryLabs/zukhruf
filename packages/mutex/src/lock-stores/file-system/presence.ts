@@ -28,7 +28,9 @@ export class Presence {
     return `${record}.${caller.id}.presence`;
   }
 
-  static claim(path: string): Presence {
+  /** Claims the presence of `caller`, whose record is at `record`. */
+  static claim(record: string, caller: Caller): Presence {
+    const path = Presence.pathOf(record, caller);
     using opened = new DisposableStack();
     const lock = opened.use(FileLock.open(path));
     if (!lock.tryLock()) {
@@ -43,19 +45,21 @@ export class Presence {
   /**
    * Whether `caller`, whom the record at `record` named, still runs. A caller's
    * record goes before its presence file, so a missing presence file is a
-   * fault while `stillNamed` says the record names the caller, and means the
-   * caller `moved` on when it does not.
+   * fault while `readNamed` still reads the caller from the record, and means
+   * the caller `moved` on when it does not.
    */
   static async judge(
     record: string,
     caller: Caller,
-    stillNamed: () => Promise<boolean>,
+    readNamed: () => Promise<Caller | undefined>,
   ): Promise<'present' | 'gone' | 'moved'> {
     const path = Presence.pathOf(record, caller);
     const state = FileLock.check(path);
     if (state === 'locked') return 'present';
     if (state === 'unlocked') return 'gone';
-    if (await stillNamed()) throw Presence.missing(record, path);
+    if ((await readNamed())?.id === caller.id) {
+      throw Presence.missing(record, path);
+    }
     return 'moved';
   }
 
@@ -67,11 +71,7 @@ export class Presence {
     for (;;) {
       const caller = await readNamed();
       if (!caller) return false;
-      const state = await Presence.judge(
-        record,
-        caller,
-        async () => (await readNamed())?.id === caller.id,
-      );
+      const state = await Presence.judge(record, caller, readNamed);
       if (state !== 'moved') return state === 'present';
     }
   }

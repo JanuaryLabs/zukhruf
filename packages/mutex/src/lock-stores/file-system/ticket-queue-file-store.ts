@@ -26,7 +26,7 @@ export class TicketQueueFileStore extends FileLockStore {
   ): Promise<AsyncDisposable> {
     const me = Caller.current();
     await using leaving = new AsyncDisposableStack();
-    const presence = Presence.claim(Presence.pathOf(path, me));
+    const presence = Presence.claim(path, me);
     leaving.defer(() => leave(path, me, presence));
     await enqueue(path, me);
     await this.poll(() => this.#attempt(path, me), signal);
@@ -41,7 +41,7 @@ export class TicketQueueFileStore extends FileLockStore {
 
     const me = Caller.current();
     await using leaving = new AsyncDisposableStack();
-    const presence = Presence.claim(Presence.pathOf(path, me));
+    const presence = Presence.claim(path, me);
     leaving.defer(() => leave(path, me, presence));
     await enqueue(path, me);
     const [first] = await readTickets(path);
@@ -101,7 +101,7 @@ async function isGone(path: string, head: Caller): Promise<boolean> {
   const state = await Presence.judge(
     path,
     head,
-    async () => (await readTickets(path))[0]?.id === head.id,
+    async () => (await readTickets(path))[0],
   );
   return state === 'gone';
 }
