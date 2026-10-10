@@ -2,21 +2,19 @@ import assert from 'node:assert/strict';
 import { join } from 'node:path';
 import { describe, test } from 'node:test';
 
-import {
-  type CampaignOptions,
-  LeaderElection,
-} from '../../leader-election/leader-election.ts';
-import type { Leadership } from '../../leader-election/leadership.ts';
+import type { CampaignOptions, Term } from '@zukhruf/election';
+
 import { scratchDirectory } from '../../testing/scratch-directory.ts';
 import { ElectingConnector } from './electing-connector.ts';
+import { socketElection } from './socket-election.ts';
 
 describe('Electing connector', () => {
   test('a connect aborted while it campaigns resigns the term it wins and never serves', async () => {
     // Arrange: nobody serves the directory, and the abort lands while the campaign wins.
     await using directory = await scratchDirectory();
-    const election = new LeaderElection(directory.path, { pollInterval: 10 });
+    const election = socketElection(directory.path, 10);
     const abort = new AbortController();
-    const served: Leadership[] = [];
+    const served: Term[] = [];
     const connector = new ElectingConnector({
       socketPath: join(directory.path, 'lock.sock'),
       election: {
@@ -27,8 +25,8 @@ describe('Electing connector', () => {
         },
       },
       pollInterval: 10,
-      serve: async (leadership) => {
-        served.push(leadership);
+      serve: async (term) => {
+        served.push(term);
       },
       connected: () => {},
     });
@@ -39,9 +37,7 @@ describe('Electing connector', () => {
     // Assert
     await assert.rejects(connecting, { name: 'AbortError' });
     assert.deepEqual(served, [], 'An aborted connect must not start serving');
-    await using next = await new LeaderElection(directory.path, {
-      pollInterval: 10,
-    }).campaign();
+    await using next = await socketElection(directory.path, 10).campaign();
     assert.ok(next, 'An aborted connect must resign the term it won');
   });
 

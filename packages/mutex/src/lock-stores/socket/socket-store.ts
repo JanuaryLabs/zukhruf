@@ -2,7 +2,6 @@ import { createHash } from 'node:crypto';
 import { EventEmitter } from 'node:events';
 import { join, resolve } from 'node:path';
 
-import { LeaderElection } from '../../leader-election/leader-election.ts';
 import type { LockHandle } from '../../mutex/lease.ts';
 import type { AcquireOptions, LockStore } from '../../mutex/lock-store.ts';
 import { ConnectionSupervisor } from '../remote/connection-supervisor.ts';
@@ -10,6 +9,7 @@ import { RemoteLockClient } from '../remote/remote-lock-client.ts';
 import { ElectingConnector } from './electing-connector.ts';
 import { LocalDirectoryConnector } from './local-directory-connector.ts';
 import { LockServer } from './lock-server.ts';
+import { socketElection } from './socket-election.ts';
 
 /** macOS allows 104 bytes including the terminating NUL; Linux allows 108. */
 const SOCKET_PATH_LIMIT = 103;
@@ -56,15 +56,15 @@ export class SocketStore
           directory,
           new ElectingConnector({
             socketPath,
-            election: new LeaderElection(directory, { pollInterval }),
+            election: socketElection(directory, pollInterval),
             pollInterval,
-            serve: async (leadership) => {
+            serve: async (term) => {
               // Until serving has fully started, a failure closes the new server, so no server outlives its term.
               await using starting = new AsyncDisposableStack();
               starting.adopt(
-                await LockServer.start(socketPath, leadership, {
+                await LockServer.start(socketPath, term, {
                   // The first term of a directory has no predecessor to wait for.
-                  graceWindow: leadership.epoch > 1n ? graceWindow : 0,
+                  graceWindow: term.epoch > 1n ? graceWindow : 0,
                 }),
                 (started) => started.close(),
               );

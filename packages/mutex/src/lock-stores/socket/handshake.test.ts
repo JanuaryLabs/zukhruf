@@ -7,7 +7,6 @@ import { describe, test } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
 
 import { ProtocolVersionError, UnsupportedRequestError } from '../../index.ts';
-import { LeaderElection } from '../../leader-election/leader-election.ts';
 import { Mutex } from '../../mutex/mutex.ts';
 import { isRecord } from '../../shared/is-record.ts';
 import { scratchDirectory } from '../../testing/scratch-directory.ts';
@@ -15,6 +14,7 @@ import { waitUntil } from '../../testing/wait-until.ts';
 import { startWorker } from '../../testing/worker-process.ts';
 import { isLockRequest } from '../remote/protocol.ts';
 import { PROTOCOL_VERSION } from './handshake.ts';
+import { socketElection } from './socket-election.ts';
 import { type SocketRole, SocketStore } from './socket-store.ts';
 
 const onUnixSockets = {
@@ -134,9 +134,7 @@ describe('Socket store protocol handshake', () => {
     async () => {
       // Arrange: a leader that holds the term answers every hello with its own version, 99.
       await using directory = await scratchDirectory();
-      await using _term = await new LeaderElection(directory.path, {
-        pollInterval: 10,
-      }).campaign();
+      await using _term = await socketElection(directory.path, 10).campaign();
       await using _leader = await standInLeader(directory.path, (peer, line) =>
         // It answers only a well-formed hello, so a store that sends anything else fails another way.
         isHello(line)
@@ -163,9 +161,7 @@ describe('Socket store protocol handshake', () => {
     async () => {
       // Arrange: a leader from before the handshake holds the term and hangs up on every hello.
       await using directory = await scratchDirectory();
-      await using _term = await new LeaderElection(directory.path, {
-        pollInterval: 10,
-      }).campaign();
+      await using _term = await socketElection(directory.path, 10).campaign();
       await using _leader = await standInLeader(directory.path, (peer) =>
         peer.destroy(),
       );
@@ -188,9 +184,7 @@ describe('Socket store protocol handshake', () => {
     async () => {
       // Arrange: a stopping leader hangs up on the hello and ends its term a moment later, as a real shutdown does.
       await using directory = await scratchDirectory();
-      const term = await new LeaderElection(directory.path, {
-        pollInterval: 10,
-      }).campaign();
+      const term = await socketElection(directory.path, 10).campaign();
       assert.ok(term, 'The stand-in must win the first term');
       await using _leader = await standInLeader(directory.path, (peer) => {
         peer.destroy();
@@ -440,9 +434,7 @@ describe('Socket store protocol handshake', () => {
     async () => {
       // Arrange: when the store says hello, the stopping leader ends its term, another store takes it over, and only then does the stopping leader hang up.
       await using directory = await scratchDirectory();
-      const term = await new LeaderElection(directory.path, {
-        pollInterval: 10,
-      }).campaign();
+      const term = await socketElection(directory.path, 10).campaign();
       assert.ok(term, 'The stand-in must win the first term');
       await using successor = new SocketStore(directory.path, {
         pollInterval: 10,
@@ -481,9 +473,7 @@ describe('Socket store protocol handshake', () => {
       // store connects again, the stand-in keeps that hello unanswered,
       // because it stops: it ends its term, and a successor takes it over.
       await using directory = await scratchDirectory();
-      const term = await new LeaderElection(directory.path, {
-        pollInterval: 10,
-      }).campaign();
+      const term = await socketElection(directory.path, 10).campaign();
       assert.ok(term, 'The stand-in must win the first term');
       let hellos = 0;
       let first: Socket | undefined;
@@ -594,9 +584,7 @@ describe('Socket store protocol handshake', () => {
     async (t) => {
       // Arrange: a leader that holds the term reads the hello and never answers.
       await using directory = await scratchDirectory();
-      await using _term = await new LeaderElection(directory.path, {
-        pollInterval: 10,
-      }).campaign();
+      await using _term = await socketElection(directory.path, 10).campaign();
       let peerClosed = false;
       let greeted = false;
       await using _leader = await standInLeader(directory.path, (peer) => {
@@ -670,9 +658,7 @@ describe('Requests added after protocol version 1', () => {
       // Arrange: a leader of 0.3.x welcomes without a list of added requests,
       // and hangs up on any request it does not know.
       await using directory = await scratchDirectory();
-      await using term = await new LeaderElection(directory.path, {
-        pollInterval: 10,
-      }).campaign();
+      await using term = await socketElection(directory.path, 10).campaign();
       assert.ok(term, 'The stand-in must win the first term');
       const knownToOldLeaders = new Set([
         'acquire',

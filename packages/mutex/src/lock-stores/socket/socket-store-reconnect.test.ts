@@ -16,13 +16,13 @@ import {
   SocketStore,
   UnsupportedRequestError,
 } from '../../index.ts';
-import { LeaderElection } from '../../leader-election/leader-election.ts';
 import { isRecord } from '../../shared/is-record.ts';
 import { scratchDirectory } from '../../testing/scratch-directory.ts';
 import { settle } from '../../testing/store-cases.ts';
 import { newProcessTimeout, waitUntil } from '../../testing/wait-until.ts';
 import { watch } from '../../testing/watch.ts';
 import { startWorker } from '../../testing/worker-process.ts';
+import { socketElection } from './socket-election.ts';
 
 const indexUrl = new URL('../../index.ts', import.meta.url);
 
@@ -102,9 +102,7 @@ async function standInLeader(directory: string) {
 async function followerOfStandIn() {
   await using stack = new AsyncDisposableStack();
   const directory = stack.use(await scratchDirectory());
-  stack.use(
-    await new LeaderElection(directory.path, { pollInterval: 10 }).campaign(),
-  );
+  stack.use(await socketElection(directory.path, 10).campaign());
   const leader = stack.use(await standInLeader(directory.path));
   const store = stack.use(
     new SocketStore(directory.path, { pollInterval: 10 }),
@@ -775,9 +773,7 @@ describe('A follower process through a reconnect', () => {
     async (t) => {
       // Arrange: a process waits for a key from its first call, before any connection exists.
       await using directory = await scratchDirectory();
-      await using _term = await new LeaderElection(directory.path, {
-        pollInterval: 10,
-      }).campaign();
+      await using _term = await socketElection(directory.path, 10).campaign();
       await using leader = await standInLeader(directory.path);
       await using waiter = startWorker(
         `
@@ -835,9 +831,7 @@ describe('A follower process through a reconnect', () => {
     async (t) => {
       // Arrange: a process holds a key, and stays alive only until the test says so.
       await using directory = await scratchDirectory();
-      await using _term = await new LeaderElection(directory.path, {
-        pollInterval: 10,
-      }).campaign();
+      await using _term = await socketElection(directory.path, 10).campaign();
       await using leader = await standInLeader(directory.path);
       await using holder = startWorker(
         `

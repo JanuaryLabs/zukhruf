@@ -1,10 +1,11 @@
+import { addAbortListener } from 'node:events';
 import { unlink } from 'node:fs/promises';
 import { type Server, type Socket, createServer } from 'node:net';
 
+import type { Term } from '@zukhruf/election';
 import { EpochTokenSource } from '@zukhruf/fencing';
 import { isErrno } from '@zukhruf/fs';
 
-import type { Leadership } from '../../leader-election/leadership.ts';
 import { LockCoordinator } from '../remote/lock-coordinator.ts';
 import {
   type LockResponse,
@@ -21,26 +22,26 @@ export interface LockServerOptions {
 
 /**
  * Serves a `LockCoordinator` on a Unix socket for one leadership term. Tokens
- * carry the term's epoch, so they outrank every token of earlier terms.
+ * carry the term's epoch, so they outrank every token of earlier terms. A
+ * term that is lost may already be another process's, so the server closes
+ * itself when the term's signal aborts.
  */
 export class LockServer {
   readonly #server: Server;
   readonly #connections: Set<Socket>;
-  readonly #leadership: Leadership;
+  readonly #term: Term;
+  readonly #closeOnLoss: Disposable;
 
-  private constructor(
-    server: Server,
-    connections: Set<Socket>,
-    leadership: Leadership,
-  ) {
+  private constructor(server: Server, connections: Set<Socket>, term: Term) {
     this.#server = server;
     this.#connections = connections;
-    this.#leadership = leadership;
+    this.#term = term;
+    this.#closeOnLoss = addAbortListener(term.signal, () => void this.close());
   }
 
   static async start(
     socketPath: string,
-    leadership: Leadership,
+    term: Term,
     { graceWindow }: LockServerOptions,
   ): Promise<LockServer> {
     // Only the leader gets here, so removing a dead leader's socket file cannot race another server.
@@ -51,7 +52,7 @@ export class LockServer {
       });
     }
     const coordinator = new LockCoordinator({
-      tokens: new EpochTokenSource(leadership.epoch),
+      tokens: new EpochTokenSource(term.epoch),
       graceWindow,
     });
     const connections = new Set<Socket>();
@@ -79,7 +80,13 @@ export class LockServer {
       });
     });
     server.unref();
-    return new LockServer(server, connections, leadership);
+    const started = new LockServer(server, connections, term);
+    // The term may have been lost while the server started.
+    if (term.signal.aborted) {
+      await started.close();
+      term.signal.throwIfAborted();
+    }
+    return started;
   }
 
   /**
@@ -87,14 +94,15 @@ export class LockServer {
    * a successor and reassert their keys during its grace window; `close` alone
    * would wait for followers that never disconnect on their own. The term ends
    * only after the socket is gone: in the other order, this close could remove
-   * a successor's socket file.
+   * a successor's socket file. A second caller waits for the first.
    */
   async close() {
+    this.#closeOnLoss[Symbol.dispose]();
     const closed = new Promise<void>((resolve) =>
       this.#server.close(() => resolve()),
     );
     for (const socket of this.#connections) socket.destroy();
     await closed;
-    await this.#leadership.resign();
+    await this.#term.resign();
   }
 }

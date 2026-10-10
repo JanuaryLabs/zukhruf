@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
-import { mkdir, mkdtemp, readFile, rename, rm } from 'node:fs/promises';
+import { access, mkdir, mkdtemp, readFile, rename, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { describe, test } from 'node:test';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -34,16 +34,28 @@ const cache = fileURLToPath(
   new URL('../../node_modules/.cache/latest-release/', import.meta.url),
 );
 
+/** Whether `folder` holds the release `version` and each of its dependencies. */
 async function isUnpacked(folder: string, version: string): Promise<boolean> {
   try {
     const manifest: unknown = JSON.parse(
       await readFile(join(folder, 'package', 'package.json'), 'utf8'),
     );
-    return (
-      isRecord(manifest) &&
-      manifest.name === '@zukhruf/mutex' &&
-      manifest.version === version
-    );
+    if (
+      !isRecord(manifest) ||
+      manifest.name !== '@zukhruf/mutex' ||
+      manifest.version !== version
+    ) {
+      return false;
+    }
+    const dependencies = isRecord(manifest.dependencies)
+      ? Object.keys(manifest.dependencies)
+      : [];
+    for (const name of dependencies) {
+      await access(
+        join(folder, 'package', 'node_modules', name, 'package.json'),
+      );
+    }
+    return true;
   } catch {
     return false;
   }
@@ -52,9 +64,10 @@ async function isUnpacked(folder: string, version: string): Promise<boolean> {
 /**
  * The latest release of @zukhruf/mutex: what the other processes on a host
  * run while it upgrades to this source. It is unpacked once for each version,
- * and its dist imports as it is: its dependency @zukhruf/async resolves to
- * this workspace's copy through node_modules. That copy takes no part in the
- * protocol between processes, so it does not change what this test checks.
+ * with the published versions of its dependencies installed next to it. Its
+ * dependencies, such as @zukhruf/election and @zukhruf/fencing, take part in
+ * the protocol between processes: if they resolved to this workspace's
+ * copies, both sides would run the same code, and a break in it would pass.
  */
 async function latestRelease() {
   const version = (await npm(['view', '@zukhruf/mutex', 'version'])).trim();
@@ -84,6 +97,18 @@ async function latestRelease() {
       await run('tar', ['-xzf', join(draft, filename), '-C', draft], {
         timeout: downloadTimeout,
       });
+      // Only the release's own folder: never this workspace or its lockfile.
+      await npm([
+        'install',
+        '--prefix',
+        join(draft, 'package'),
+        '--omit=dev',
+        '--ignore-scripts',
+        '--no-audit',
+        '--no-fund',
+        '--no-package-lock',
+        '--workspaces=false',
+      ]);
       // A rename is atomic, so a run that unpacks at the same time finds the whole package or none.
       await rename(draft, unpacked).catch((error: unknown) => {
         if (!isRecord(error) || error.code !== 'ENOTEMPTY') throw error;

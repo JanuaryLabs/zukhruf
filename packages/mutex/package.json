@@ -16,7 +16,6 @@
     "mutex",
     "lock",
     "fencing-token",
-    "leader-election",
     "inter-process"
   ],
   "type": "module",
@@ -28,12 +27,6 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "default": "./dist/index.js"
-    },
-    "./leader-election": {
-      "@zukhruf/source": "./src/leader-election/index.ts",
-      "types": "./dist/leader-election/index.d.ts",
-      "import": "./dist/leader-election/index.js",
-      "default": "./dist/leader-election/index.js"
     }
   },
   "files": [
@@ -47,6 +40,7 @@
   },
   "dependencies": {
     "@zukhruf/async": "^0.3.13",
+    "@zukhruf/election": "^0.3.16",
     "@zukhruf/fencing": "^0.3.16",
     "@zukhruf/fs": "^0.3.16",
     "@zukhruf/lease": "^0.3.16"

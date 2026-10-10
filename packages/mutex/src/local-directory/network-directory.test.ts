@@ -12,10 +12,6 @@ import {
   type SocketRole,
   SocketStore,
 } from '../index.ts';
-import {
-  LeaderElection,
-  NetworkDirectoryError as LeaderElectionNetworkDirectoryError,
-} from '../leader-election/index.ts';
 import { scratchDirectory } from '../testing/scratch-directory.ts';
 import { storeCases } from '../testing/store-cases.ts';
 import { waitUntil } from '../testing/wait-until.ts';
@@ -196,23 +192,6 @@ describe('A lock directory on a network file system', () => {
       },
     );
   }
-
-  test(
-    'a leader election refuses a directory on a network file system',
-    onLinux,
-    async () => {
-      // Arrange
-      await using directory = await scratchDirectory();
-      using _mount = mountAs(directory.path, 0x6969n);
-
-      // Act
-      const campaigning = new LeaderElection(directory.path).campaign();
-
-      // Assert: the leader-election entry point exports the same error class.
-      await assert.rejects(campaigning, LeaderElectionNetworkDirectoryError);
-      assert.equal(LeaderElectionNetworkDirectoryError, NetworkDirectoryError);
-    },
-  );
 
   for (const store of hostStores) {
     for (const [name, type] of [
@@ -440,24 +419,6 @@ describe('A lock directory on a network file system', () => {
       },
     );
   }
-
-  test(
-    'a leader election does not create a refused directory',
-    onLinux,
-    async () => {
-      // Arrange
-      await using directory = await scratchDirectory();
-      const notYet = join(directory.path, 'not', 'yet');
-      using _mount = mountAs(directory.path, 0x6969n);
-
-      // Act
-      const campaigning = new LeaderElection(notYet).campaign();
-
-      // Assert
-      await assert.rejects(campaigning, NetworkDirectoryError);
-      assert.deepEqual(await fsPromises.readdir(directory.path), []);
-    },
-  );
 
   test(
     'a socket store refuses a network directory even when a leader already serves it',

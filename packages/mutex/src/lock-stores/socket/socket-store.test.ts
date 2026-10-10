@@ -6,7 +6,6 @@ import { join } from 'node:path';
 import { describe, test } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
 
-import { LeaderElection } from '../../leader-election/leader-election.ts';
 import { Mutex } from '../../mutex/mutex.ts';
 import { FencedRegister } from '../../testing/fenced-register.ts';
 import { scratchDirectory } from '../../testing/scratch-directory.ts';
@@ -14,6 +13,7 @@ import { graceWindow, settle } from '../../testing/store-cases.ts';
 import { waitUntil } from '../../testing/wait-until.ts';
 import { watch } from '../../testing/watch.ts';
 import { startWorker } from '../../testing/worker-process.ts';
+import { socketElection } from './socket-election.ts';
 import { type SocketRole, SocketStore } from './socket-store.ts';
 
 const mutexUrl = new URL('../../mutex/mutex.ts', import.meta.url);
@@ -328,10 +328,8 @@ describe('Socket store disposal', () => {
     await delay(settle);
 
     // Assert
-    await using leadership = await new LeaderElection(directory.path, {
-      pollInterval: 10,
-    }).campaign();
-    assert.ok(leadership, 'A disposed store must not keep a leadership term');
+    await using term = await socketElection(directory.path, 10).campaign();
+    assert.ok(term, 'A disposed store must not keep a leadership term');
     assert.deepEqual(roles, [], 'A disposed store must not start serving');
     assert.equal(
       acquiring.now.status,
@@ -370,11 +368,9 @@ describe('Socket store lock server failure', () => {
           failure.path === socketPath,
         `The acquire must fail with the lock server's own start error, got ${String(failure)}`,
       );
-      await using leadership = await new LeaderElection(directory.path, {
-        pollInterval: 10,
-      }).campaign();
+      await using term = await socketElection(directory.path, 10).campaign();
       assert.ok(
-        leadership,
+        term,
         'A leader whose lock server failed to start must end its term',
       );
     },
@@ -549,9 +545,7 @@ describe('Socket store follower failure', () => {
     async (t) => {
       // Arrange: a stand-in leader holds the term and serves the socket path; it records when its peer goes away.
       await using directory = await scratchDirectory();
-      await using _term = await new LeaderElection(directory.path, {
-        pollInterval: 10,
-      }).campaign();
+      await using _term = await socketElection(directory.path, 10).campaign();
       let peerClosed = false;
       const leader = createServer((peer) => {
         peer.once('close', () => (peerClosed = true));

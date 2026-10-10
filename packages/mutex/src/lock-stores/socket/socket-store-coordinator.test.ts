@@ -8,11 +8,11 @@ import { type TestContext, describe, test } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
 
 import { SocketStore } from '../../index.ts';
-import { LeaderElection } from '../../leader-election/leader-election.ts';
 import { isRecord } from '../../shared/is-record.ts';
 import { scratchDirectory } from '../../testing/scratch-directory.ts';
 import { settle } from '../../testing/store-cases.ts';
 import { waitUntil } from '../../testing/wait-until.ts';
+import { socketElection } from './socket-election.ts';
 
 /**
  * Where every published version of a store meets its leader: `lock.sock` in
@@ -62,9 +62,7 @@ async function firstLeader() {
 async function leaderAfterFailover(graceWindow: number) {
   await using stack = new AsyncDisposableStack();
   const directory = stack.use(await scratchDirectory());
-  const earlier = await new LeaderElection(directory.path, {
-    pollInterval: 10,
-  }).campaign();
+  const earlier = await socketElection(directory.path, 10).campaign();
   await earlier?.resign();
   const store = stack.use(
     new SocketStore(directory.path, { pollInterval: 10, graceWindow }),
