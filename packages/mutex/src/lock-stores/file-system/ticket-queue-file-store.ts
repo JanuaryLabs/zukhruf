@@ -38,7 +38,7 @@ export class TicketQueueFileStore extends FileLockStore {
   }
 
   protected async tryLock(path: string): Promise<AsyncDisposable | undefined> {
-    const [head] = await readTickets(path);
+    const head = await readHead(path);
     if (head) await this.#evictGoneHeads(path, head);
     if ((await readTickets(path)).length > 0) return undefined;
 
@@ -47,19 +47,15 @@ export class TicketQueueFileStore extends FileLockStore {
     const presence = Presence.claim(path, me);
     leaving.defer(() => leave(path, me, presence));
     await enqueue(path, me);
-    const [first] = await readTickets(path);
     // Another waiter appended at the same moment and is first.
-    if (first?.id !== me.id) return undefined;
+    if ((await readHead(path))?.id !== me.id) return undefined;
     leaving.move();
     return holding(path, me, presence);
   }
 
   /** The first ticket's caller holds the key. A gone one does not, and a waiter behind it holds nothing yet. */
   protected isHeldAt(path: string): Promise<boolean> {
-    return Presence.isNamedCallerPresent(
-      path,
-      async () => (await readTickets(path))[0],
-    );
+    return Presence.isNamedCallerPresent(path, () => readHead(path));
   }
 
   async #attempt(path: string, me: Caller): Promise<true | undefined> {
@@ -101,11 +97,7 @@ export class TicketQueueFileStore extends FileLockStore {
 
 /** Whether the caller at the head of the queue at `path` no longer runs. */
 async function isGone(path: string, head: Caller): Promise<boolean> {
-  const state = await Presence.judge(
-    path,
-    head,
-    async () => (await readTickets(path))[0],
-  );
+  const state = await Presence.judge(path, head, () => readHead(path));
   return state === 'gone';
 }
 
@@ -144,6 +136,12 @@ async function removeTicket(path: string, me: Caller) {
 
 async function enqueue(path: string, caller: Caller) {
   await patiently(() => appendFile(path, `${caller.serialize()}\n`));
+}
+
+/** The caller of the first ticket, which holds the key while it runs. */
+async function readHead(path: string): Promise<Caller | undefined> {
+  const [head] = await readTickets(path);
+  return head;
 }
 
 async function readTickets(path: string): Promise<Caller[]> {

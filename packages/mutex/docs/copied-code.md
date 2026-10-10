@@ -76,9 +76,3 @@ The Rule of Three asks to extract the code below. It is not extracted yet. Until
 - Same: a map of requests by id. An entry keeps only what settles the caller's promise. `#take` gets an entry, deletes it, and tells its owner that the map changed, so the owner can `ref` or `unref` its connection. A reject-all takes each entry and rejects it.
 
 The maintainer chose to keep the three places (backlog #2538). The parts that are the same are short, and the parts that differ (the delivery states, what a new connection sends again, what keeps the process alive) stay with each owner. A fourth place, or the coordinator package of backlog #2496, is the time to extract it.
-
-**The first ticket of the queue.** Four places.
-
-- Places: `tryLock` (two reads), `isHeldAt` and `isGone` of `TicketQueueFileStore` (`file-system/ticket-queue-file-store.ts`).
-- Same: read the tickets again, and take the first one. The caller of the first ticket is the holder.
-- Differs: what the caller does with it. `tryLock` evicts a gone head, and later compares the head with itself. `isHeldAt` and `isGone` give the read to `Presence` as `readNamed`.
