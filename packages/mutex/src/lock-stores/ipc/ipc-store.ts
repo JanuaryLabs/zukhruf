@@ -1,3 +1,5 @@
+import { promisify } from 'node:util';
+
 import type { LockHandle } from '../../mutex/lease.ts';
 import type { AcquireOptions, LockStore } from '../../mutex/lock-store.ts';
 import { ConnectionSupervisor } from '../remote/connection-supervisor.ts';
@@ -7,9 +9,11 @@ import { ProcessChannelConnection } from './process-channel-connection.ts';
 
 /** The channel to the parent cannot be re-established, so it is handed out once. */
 class ProcessChannelConnector implements ClientConnector {
-  readonly #channel: Iterator<ProcessChannelConnection, undefined> = [
-    new ProcessChannelConnection(),
-  ].values();
+  readonly #channel: Iterator<ProcessChannelConnection, undefined>;
+
+  constructor(channel: ProcessChannelConnection) {
+    this.#channel = [channel].values();
+  }
 
   async connect(): Promise<ClientConnection | undefined> {
     if (!process.connected) return undefined;
@@ -32,8 +36,11 @@ export class IpcStore implements LockStore {
         'IpcStore needs an IPC channel to its parent; start this process with fork() or an "ipc" stdio entry.',
       );
     }
+    const channel = new ProcessChannelConnection(
+      promisify<unknown, void>(process.send).bind(process),
+    );
     this.#client = new RemoteLockClient(
-      new ConnectionSupervisor(new ProcessChannelConnector()),
+      new ConnectionSupervisor(new ProcessChannelConnector(channel)),
     );
   }
 

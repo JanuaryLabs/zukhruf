@@ -1,6 +1,7 @@
 import { EventEmitter } from 'node:events';
 import type { Socket } from 'node:net';
 import { createInterface } from 'node:readline';
+import { promisify } from 'node:util';
 
 import type { Connection, ConnectionEvents } from '../remote/connection.ts';
 import { jsonLine } from './json-line.ts';
@@ -16,6 +17,8 @@ export class SocketConnection<Outgoing, Incoming>
   implements Connection<Outgoing, Incoming>
 {
   readonly #socket: Socket;
+  /** A write after the socket closed reports the error through its callback. */
+  readonly #write: (line: string) => Promise<void>;
 
   constructor(
     socket: Socket,
@@ -23,6 +26,7 @@ export class SocketConnection<Outgoing, Incoming>
   ) {
     super();
     this.#socket = socket;
+    this.#write = promisify<string, void>(socket.write).bind(socket);
     // Every error is followed by `close`, which is where the peer's loss is handled.
     socket.on('error', () => {});
     createInterface({ input: socket, crlfDelay: Infinity })
@@ -41,15 +45,7 @@ export class SocketConnection<Outgoing, Incoming>
   }
 
   send(message: Outgoing): Promise<void> {
-    return new Promise((resolve, reject) => {
-      if (!this.#socket.writable) {
-        reject(new Error('The socket is closed.'));
-        return;
-      }
-      this.#socket.write(jsonLine(message), (error) =>
-        error ? reject(error) : resolve(),
-      );
-    });
+    return this.#write(jsonLine(message));
   }
 
   ref() {

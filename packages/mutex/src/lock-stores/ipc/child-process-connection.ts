@@ -1,5 +1,6 @@
-import type { ChildProcess } from 'node:child_process';
+import type { ChildProcess, Serializable } from 'node:child_process';
 import { EventEmitter } from 'node:events';
+import { promisify } from 'node:util';
 
 import type { Connection, ConnectionEvents } from '../remote/connection.ts';
 import { unwrap, wrap } from '../remote/envelope.ts';
@@ -18,6 +19,8 @@ export class ChildProcessConnection
   implements Connection<LockResponse, RequestEnvelope>
 {
   readonly #child: ChildProcess;
+  /** A send after the channel closed reports the error through its callback. */
+  readonly #send: (envelope: Serializable) => Promise<void>;
 
   readonly #onMessage = (envelope: unknown) => {
     const request = unwrap(envelope);
@@ -32,20 +35,13 @@ export class ChildProcessConnection
   constructor(child: ChildProcess) {
     super();
     this.#child = child;
+    this.#send = promisify<Serializable, void>(child.send).bind(child);
     child.on('message', this.#onMessage);
     child.once('disconnect', this.#onDisconnect);
   }
 
   send(response: LockResponse): Promise<void> {
-    return new Promise((resolve, reject) => {
-      if (!this.#child.connected) {
-        reject(new Error('The child process has disconnected.'));
-        return;
-      }
-      this.#child.send(wrap(response), (error) =>
-        error ? reject(error) : resolve(),
-      );
-    });
+    return this.#send(wrap(response));
   }
 
   /** The running child already keeps the parent alive. */

@@ -19,6 +19,9 @@ export class ProcessChannelConnection
   extends EventEmitter<ConnectionEvents<LockResponse>>
   implements Connection<LockRequest, LockResponse>
 {
+  /** `process.send`, which reports a send after the channel closed through its callback. */
+  readonly #send: (envelope: unknown) => Promise<void>;
+
   readonly #onMessage = (envelope: unknown) => {
     const response = unwrap(envelope);
     if (isLockResponse(response)) this.emit('message', response);
@@ -29,16 +32,13 @@ export class ProcessChannelConnection
     this.emit('close');
   };
 
+  constructor(send: (envelope: unknown) => Promise<void>) {
+    super();
+    this.#send = send;
+  }
+
   send(request: LockRequest): Promise<void> {
-    return new Promise((resolve, reject) => {
-      if (!process.send || !process.connected) {
-        reject(new Error('The IPC channel to the parent is closed.'));
-        return;
-      }
-      process.send(wrap(request), undefined, {}, (error) =>
-        error ? reject(error) : resolve(),
-      );
-    });
+    return this.#send(wrap(request));
   }
 
   /** Removes the listeners before it adds them, so a second `ref` does not listen twice. */
