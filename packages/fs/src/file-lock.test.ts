@@ -23,6 +23,18 @@ const keepsHandle = (path: string) => `
   console.log('holding');
 `;
 
+/**
+ * A holder as published versions of the packages hold their lock files: a
+ * plain exclusive transaction with the default journal.
+ */
+const holdsPublishedTransaction = (path: string) => `
+  import { DatabaseSync } from 'node:sqlite';
+  const database = new DatabaseSync(${JSON.stringify(path)});
+  database.exec('BEGIN EXCLUSIVE');
+  setInterval(() => database, 1000);
+  console.log('holding');
+`;
+
 /** A holder that drops its only reference to the handle, and then collects garbage. */
 const dropsHandle = (path: string) => `
   ${importFileLock}
@@ -101,37 +113,64 @@ describe('FileLock', () => {
     },
   );
 
+  // Published versions and new versions run in separate processes. In one
+  // process, SQLite's own lock bookkeeping can exclude two handles where the
+  // kernel's locks would not, so these holders are other processes.
   test(
-    'a lock and an exclusive transaction of the default journal mode exclude each other',
-    { timeout: 2_000 },
+    'a lock refuses while another process holds an exclusive transaction of the default journal, and is free after it dies',
+    { timeout: 10_000 },
     async () => {
-      // Arrange: published versions of the packages hold their lock files
-      // with a plain exclusive transaction and the default journal.
+      // Arrange
       await using directory = await mkdtempDisposable(
         join(tmpdir(), 'zukhruf-fs-'),
       );
       const path = join(directory.path, 'job.lock');
-      using published = new DatabaseSync(path);
+      const holder = await startHolder(holdsPublishedTransaction(path));
       using lock = FileLock.open(path);
-      published.exec('BEGIN EXCLUSIVE');
+      try {
+        // Act
+        const lockedWhilePublishedHolds = lock.tryLock();
+        holder.kill();
+        await holder.exited;
+        const lockedAfterPublishedDied = lock.tryLock();
 
-      // Act
-      const lockedWhilePublishedHolds = lock.tryLock();
-      published.exec('ROLLBACK');
-      const lockedAfterPublishedLetGo = lock.tryLock();
+        // Assert
+        assert.equal(
+          lockedWhilePublishedHolds,
+          false,
+          'A transaction of a published version must refuse the lock',
+        );
+        assert.equal(lockedAfterPublishedDied, true);
+      } finally {
+        holder.kill();
+      }
+    },
+  );
 
-      // Assert
-      assert.equal(
-        lockedWhilePublishedHolds,
-        false,
-        'A transaction of a published version must refuse the lock',
+  test(
+    'an exclusive transaction of the default journal is busy while another process holds the lock',
+    { timeout: 10_000 },
+    async () => {
+      // Arrange
+      await using directory = await mkdtempDisposable(
+        join(tmpdir(), 'zukhruf-fs-'),
       );
-      assert.equal(lockedAfterPublishedLetGo, true);
-      assert.throws(
-        () => published.exec('BEGIN EXCLUSIVE'),
-        { errcode: 5 },
-        'A held lock must refuse the transaction of a published version',
-      );
+      const path = join(directory.path, 'job.lock');
+      const holder = await startHolder(keepsHandle(path));
+      using published = new DatabaseSync(path);
+      try {
+        // Act
+        const beginning = () => published.exec('BEGIN EXCLUSIVE');
+
+        // Assert
+        assert.throws(
+          beginning,
+          { errcode: 5 },
+          'A held lock must refuse the transaction of a published version',
+        );
+      } finally {
+        holder.kill();
+      }
     },
   );
 
@@ -146,7 +185,7 @@ describe('FileLock', () => {
       const path = join(directory.path, 'job.lock');
       using holder = FileLock.open(path);
       using other = FileLock.open(path);
-      holder.tryLock();
+      assert.equal(holder.tryLock(), true, 'The holder must get the lock');
 
       // Act
       const started = performance.now();
@@ -157,8 +196,8 @@ describe('FileLock', () => {
       assert.equal(locked, false);
       // A wait inside tryLock would block the event loop: callers wait between tries instead.
       assert.ok(
-        elapsed < 10,
-        `A refusal must not wait, but it took ${elapsed.toFixed(1)} ms`,
+        elapsed < 40,
+        `A refusal must not wait, but it took ${elapsed.toFixed(1)} ms. A busy timeout of 50 ms or more passes this limit; the rest of it is room for a loaded machine.`,
       );
     },
   );
@@ -213,33 +252,37 @@ describe('FileLock', () => {
   );
 
   test(
-    'check tells a held lock from a free one and from a missing file, and creates no file',
-    { timeout: 2_000 },
+    'check tells a lock that another process holds from a free one and from a missing file, and creates no file',
+    { timeout: 10_000 },
     async () => {
-      // Arrange
+      // Arrange: the presence of the mutex checks the lock of a caller in
+      // another process, so a lock must refuse readers there too.
       await using directory = await mkdtempDisposable(
         join(tmpdir(), 'zukhruf-fs-'),
       );
       const path = join(directory.path, 'job.lock');
       const absent = join(directory.path, 'absent.lock');
-      using lock = FileLock.open(path);
-      lock.tryLock();
+      const holder = await startHolder(keepsHandle(path));
+      try {
+        // Act
+        const whileHeld = FileLock.check(path);
+        holder.kill();
+        await holder.exited;
+        const afterHolderDied = FileLock.check(path);
+        const ofAbsent = FileLock.check(absent);
 
-      // Act
-      const whileHeld = FileLock.check(path);
-      lock.unlock();
-      const afterUnlock = FileLock.check(path);
-      const ofAbsent = FileLock.check(absent);
-
-      // Assert
-      assert.equal(whileHeld, 'locked');
-      assert.equal(afterUnlock, 'unlocked');
-      assert.equal(ofAbsent, 'missing');
-      assert.deepEqual(
-        await readdir(directory.path),
-        ['job.lock'],
-        'A check must not create the file it checks',
-      );
+        // Assert
+        assert.equal(whileHeld, 'locked');
+        assert.equal(afterHolderDied, 'unlocked');
+        assert.equal(ofAbsent, 'missing');
+        assert.deepEqual(
+          await readdir(directory.path),
+          ['job.lock'],
+          'A check must not create the file it checks',
+        );
+      } finally {
+        holder.kill();
+      }
     },
   );
 
@@ -297,7 +340,7 @@ describe('FileLock', () => {
       const path = join(directory.path, 'job.lock');
       using first = FileLock.open(path);
       using second = FileLock.open(path);
-      first.tryLock();
+      assert.equal(first.tryLock(), true, 'The first handle must get the lock');
 
       // Act
       first.unlock();
@@ -331,7 +374,11 @@ describe('FileLock', () => {
       const path = join(directory.path, 'job.lock');
       using holding = FileLock.open(path);
       using idle = FileLock.open(path);
-      holding.tryLock();
+      assert.equal(
+        holding.tryLock(),
+        true,
+        'The holding handle must get the lock',
+      );
 
       // Act
       const lockingAgain = () => holding.tryLock();
