@@ -173,7 +173,7 @@ src/
   mutex/             Mutex, Key, acquire modes, LockHandle, LockStore
   lock-stores/       one folder for each lock store
     remote/          the coordinator and client that ThreadStore, IpcStore and SocketStore share
-  shared/            a record check, and SQLite error checks (key file names and file writes are in @zukhruf/fs)
+  shared/            a record check (key file names, file writes and file locks are in @zukhruf/fs)
   testing/           test helpers and the matrix of lock stores (not published)
 docs/
   concepts/  stores/  recipes/  adr/
