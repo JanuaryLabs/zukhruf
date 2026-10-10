@@ -4,12 +4,11 @@ This package keeps a few small files that other packages also have. Each one is 
 
 | Copy                               | Source                                            | What changed                                                                            | Backlog |
 | ---------------------------------- | ------------------------------------------------- | --------------------------------------------------------------------------------------- | ------- |
-| `src/sqlite/is-busy.ts`            | `packages/mutex/src/shared/sqlite/is-busy.ts`     | Nothing.                                                                                | #2517   |
 | `src/testing/wait-until.ts`        | `packages/mutex/src/testing/wait-until.ts`        | Nothing.                                                                                | #2509   |
 | `src/testing/scratch-directory.ts` | `packages/mutex/src/testing/scratch-directory.ts` | The folder name starts with `election-test-`.                                           | #2509   |
 | `src/testing/worker-process.ts`    | `packages/mutex/src/testing/worker-process.ts`    | No `host` and no `nodeOptions` option. The message check is inline, with no `isRecord`. | #2509   |
 
-The test helpers are in three packages now: the mutex, the single flight and this one. The maintainer chose a third copy for them, and backlog #2509 records it. `isBusy` is a check of a SQLite error, not of a file, so it is not in `@zukhruf/fs`. Backlog #2517 tracks its copies.
+The test helpers are in three packages now: the mutex, the single flight and this one. The maintainer chose a third copy for them, and backlog #2509 records it. The claim of `SqliteElection` is a `FileLock` of `@zukhruf/fs`, so this package keeps no copy of the SQLite result-code checks.
 
 ## The election is in two places
 
@@ -26,3 +25,4 @@ What changed from the copy that the mutex had, and that the single flight still 
 - The claim file and the epoch file are options (`claimFile`, `epochFile`). The mutex uses `leader.lock` and `leader.epoch`. The single flight uses `flight.lock` and `flight.epoch`.
 - `Leadership` is `Term`. A term is a lease of `@zukhruf/lease`: its `signal` aborts with `LeaseLostError` when the backend takes the claim away. A second `resign` waits for the first.
 - `campaign` takes a `signal`, and a claim won after it aborted is given up.
+- The claim is a `FileLock` of `@zukhruf/fs`. Its journal is in memory, so a leader that dies leaves no `<claimFile>-journal` file. The locks are the same as with the default journal.

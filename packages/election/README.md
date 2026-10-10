@@ -14,7 +14,7 @@ npm install @zukhruf/election
 
 ## Elect a leader of one host
 
-`SqliteElection` elects one leader among the processes of one host that use the same directory. The claim is an exclusive SQLite transaction on `claimFile`. The operating system holds that lock until the leader's process dies, so a dead leader frees the claim at once, and a living leader never loses it.
+`SqliteElection` elects one leader among the processes of one host that use the same directory. The claim is the `FileLock` of `@zukhruf/fs` on `claimFile`: an exclusive SQLite transaction. The operating system holds that lock until the leader's process dies, so a dead leader frees the claim at once, and a living leader never loses it.
 
 ```ts
 import { mkdtemp, rm } from 'node:fs/promises';

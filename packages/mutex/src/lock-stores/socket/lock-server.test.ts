@@ -2,10 +2,10 @@ import assert from 'node:assert/strict';
 import { addAbortListener } from 'node:events';
 import { connect } from 'node:net';
 import { join } from 'node:path';
-import type { DatabaseSync } from 'node:sqlite';
 import { describe, test } from 'node:test';
 
 import { SqliteElection } from '@zukhruf/election';
+import type { FileLock } from '@zukhruf/fs';
 import { LeaseLostError } from '@zukhruf/lease';
 
 import { scratchDirectory } from '../../testing/scratch-directory.ts';
@@ -33,7 +33,7 @@ class LosableElection extends SqliteElection {
 
   // The parameters are optional because SqliteElection's watch declares none.
   protected override watch(
-    _claim?: DatabaseSync,
+    _claim?: FileLock,
     lose?: (reason: Error) => void,
   ): Disposable {
     return addAbortListener(this.#loss, () =>
