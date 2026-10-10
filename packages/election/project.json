@@ -3,7 +3,7 @@
   "$schema": "../../node_modules/nx/schemas/project-schema.json",
   "sourceRoot": "packages/election/src",
   "projectType": "library",
-  "tags": ["layer:island", "test:node"],
+  "tags": ["layer:island", "std:coordination", "test:node"],
   "targets": {
     "format": {},
     "test": {}
