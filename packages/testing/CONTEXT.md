@@ -1,8 +1,11 @@
 # Testing
 
-Fixtures that an integration test acquires and disposes. The package owns no test data and no product wiring: those stay in the tests.
+Native Node.js test registration and fixtures that an integration test acquires and disposes. The package owns no test data and no product wiring: those stay in the tests.
 
 ## Language
+
+**Parameterized test**:
+One test body registered separately for each named row in an explicit table. Also called a table-driven test. A parameterized suite repeats a group of tests for each row; each test owns its fixtures.
 
 **Fixture**:
 A resource that a test acquires and that cleans up when its scope ends: a container, a database, a server, a stream.
