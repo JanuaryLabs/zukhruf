@@ -4,7 +4,9 @@ import assert from 'node:assert/strict';
 import fsPromises, { symlink } from 'node:fs/promises';
 import { syncBuiltinESMExports } from 'node:module';
 import { join, sep } from 'node:path';
-import { describe, mock, test } from 'node:test';
+import { describe, mock } from 'node:test';
+
+import { test } from '@zukhruf/testing/node';
 
 import {
   LockFileStore,
@@ -81,8 +83,8 @@ const onLinux = {
 };
 
 describe('A lock directory on a network file system', () => {
-  for (const [fileSystem, type] of networkFileSystems) {
-    for (const store of hostStores) {
+  void test.each(networkFileSystems, ([fileSystem, type]) =>
+    test.each(hostStores, (store) =>
       test(
         `${store.name} refuses a directory on ${fileSystem}`,
         onLinux,
@@ -109,11 +111,11 @@ describe('A lock directory on a network file system', () => {
           assert.equal(failure.fileSystem, fileSystem);
           assert.equal(failure.directory, directory.path);
         },
-      );
-    }
-  }
+      ),
+    ),
+  );
 
-  for (const store of hostStores) {
+  void test.each(hostStores, (store) =>
     test(
       `${store.name} leaves a refused directory untouched`,
       onLinux,
@@ -132,32 +134,34 @@ describe('A lock directory on a network file system', () => {
         // Assert: nothing was campaigned for, served, or locked there.
         assert.deepEqual(await fsPromises.readdir(directory.path), []);
       },
-    );
-  }
+    ),
+  );
 
-  for (const store of hostStores) {
-    for (const [name, type] of [
-      ['a FUSE mount', 0x65735546n],
-      ['ext4', 0xef53n],
-    ] as const) {
-      test(
-        `${store.name} keeps working in a directory on ${name}`,
-        onLinux,
-        async () => {
-          // Arrange
-          await using directory = await scratchDirectory();
-          using _mount = mountAs(directory.path, type);
-          await using host = store.open(directory.path);
+  void test.each(hostStores, (store) =>
+    test.each(
+      [
+        ['a FUSE mount', 0x65735546n],
+        ['ext4', 0xef53n],
+      ] as const,
+      ([name, type]) =>
+        test(
+          `${store.name} keeps working in a directory on ${name}`,
+          onLinux,
+          async () => {
+            // Arrange
+            await using directory = await scratchDirectory();
+            using _mount = mountAs(directory.path, type);
+            await using host = store.open(directory.path);
 
-          // Act
-          const result = await outcome(host.store.acquire('product:42'));
+            // Act
+            const result = await outcome(host.store.acquire('product:42'));
 
-          // Assert
-          assert.equal(result, 'granted');
-        },
-      );
-    }
-  }
+            // Assert
+            assert.equal(result, 'granted');
+          },
+        ),
+    ),
+  );
 
   test(
     'a directory that does not exist yet is judged by its nearest existing parent',
@@ -219,7 +223,7 @@ describe('A lock directory on a network file system', () => {
     },
   );
 
-  for (const store of hostStores) {
+  void test.each(hostStores, (store) =>
     test(
       `${store.name} refuses a try on a network directory too`,
       onLinux,
@@ -235,8 +239,8 @@ describe('A lock directory on a network file system', () => {
         // Assert
         await assert.rejects(trying, NetworkDirectoryError);
       },
-    );
-  }
+    ),
+  );
 
   test(
     'a socket store refuses a network directory even when a leader already serves it',

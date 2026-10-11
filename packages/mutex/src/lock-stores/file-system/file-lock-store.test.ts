@@ -4,10 +4,11 @@ import { once } from 'node:events';
 import { chmod, readFile, readdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline';
-import { describe, test } from 'node:test';
+import { describe } from 'node:test';
 
 import { CounterTokenSource, type TokenSource } from '@zukhruf/fencing';
 import { isErrno } from '@zukhruf/fs';
+import { test } from '@zukhruf/testing/node';
 
 import type { LockStore } from '../../mutex/lock-store.ts';
 import { Mutex } from '../../mutex/mutex.ts';
@@ -127,43 +128,46 @@ const namedStores = [
 ];
 
 describe('Lock file names', () => {
-  for (const store of namedStores) {
-    for (const [key, name] of [
-      ['orders/حساب.v2', 'orders%2F%D8%AD%D8%B3%D8%A7%D8%A8%2Ev2'],
-      ['k'.repeat(store.longest), 'k'.repeat(store.longest)],
-    ] as const) {
-      test(`${store.name} keeps the file name that earlier versions gave a key of ${key.length} characters`, async () => {
-        // Arrange: processes of an earlier version may use the same directory.
-        await using directory = await scratchDirectory();
-        const mutex = new Mutex(store.open(directory.path));
+  void test.each(namedStores, (store) => {
+    void test.each(
+      [
+        ['orders/حساب.v2', 'orders%2F%D8%AD%D8%B3%D8%A7%D8%A8%2Ev2'],
+        ['k'.repeat(store.longest), 'k'.repeat(store.longest)],
+      ] as const,
+      ([key, name]) =>
+        test(`${store.name} keeps the file name that earlier versions gave a key of ${key.length} characters`, async () => {
+          // Arrange: processes of an earlier version may use the same directory.
+          await using directory = await scratchDirectory();
+          const mutex = new Mutex(store.open(directory.path));
 
-        // Act: list the directory while the key is held.
-        const files = await mutex.acquire(key, () => readdir(directory.path));
+          // Act: list the directory while the key is held.
+          const files = await mutex.acquire(key, () => readdir(directory.path));
 
-        // Assert: the files have the names that the earlier version uses, so both versions share the lock.
-        assert.ok(
-          files.includes(`${name}.lock`),
-          `The lock file must be ${name}.lock, got ${files.join(', ')}`,
-        );
-        if (store.fence) {
+          // Assert: the files have the names that the earlier version uses, so both versions share the lock.
           assert.ok(
-            files.includes(`${name}.fence`),
-            `The token file must be ${name}.fence, got ${files.join(', ')}`,
+            files.includes(`${name}.lock`),
+            `The lock file must be ${name}.lock, got ${files.join(', ')}`,
           );
-        }
-        if (store.presence) {
-          assert.ok(
-            files.some(
-              (file) =>
-                file.startsWith(`${name}.lock.`) && file.endsWith('.presence'),
-            ),
-            `The presence file must be named after ${name}.lock, got ${files.join(', ')}`,
-          );
-        }
-      });
-    }
+          if (store.fence) {
+            assert.ok(
+              files.includes(`${name}.fence`),
+              `The token file must be ${name}.fence, got ${files.join(', ')}`,
+            );
+          }
+          if (store.presence) {
+            assert.ok(
+              files.some(
+                (file) =>
+                  file.startsWith(`${name}.lock.`) &&
+                  file.endsWith('.presence'),
+              ),
+              `The presence file must be named after ${name}.lock, got ${files.join(', ')}`,
+            );
+          }
+        }),
+    );
 
-    test(`${store.name} holds a key one character longer than the longest key that earlier versions held`, async () => {
+    return test(`${store.name} holds a key one character longer than the longest key that earlier versions held`, async () => {
       // Arrange
       await using directory = await scratchDirectory();
       const mutex = new Mutex(store.open(directory.path));
@@ -177,7 +181,7 @@ describe('Lock file names', () => {
       // Assert
       assert.equal(result, 'held');
     });
-  }
+  });
 });
 
 const fileStores: [string, (directory: string) => LockStore][] = [
@@ -186,7 +190,7 @@ const fileStores: [string, (directory: string) => LockStore][] = [
 ];
 
 describe('File lock stores on Windows', () => {
-  for (const [name, open] of fileStores) {
+  void test.each(fileStores, ([name, open]) => {
     test(
       `${name}: a lock file that another program holds open for a moment fails neither the release nor the next waiter`,
       {
@@ -238,7 +242,7 @@ describe('File lock stores on Windows', () => {
       },
     );
 
-    test(
+    return test(
       `${name}: a presence file that another program keeps open fails the release with its name, and the key is free`,
       {
         skip:
@@ -284,12 +288,12 @@ describe('File lock stores on Windows', () => {
         );
       },
     );
-  }
+  });
 });
 
 describe('LockFileStore damaged lock file', () => {
   // Text that is not JSON, or JSON that names no caller.
-  for (const damaged of ['garbage', '{"pid":1}']) {
+  void test.each(['garbage', '{"pid":1}'], (damaged) =>
     test(`a lock file that holds ${damaged} makes every call reject with a SyntaxError and stays as it is`, async () => {
       // Arrange: a power loss in the middle of a write can leave such a file; no operation writes one.
       await using directory = await scratchDirectory();
@@ -313,8 +317,8 @@ describe('LockFileStore damaged lock file', () => {
         'acquire, tryAcquire and isHeld must each reject with a SyntaxError',
       );
       assert.equal(await readFile(lockFile, 'utf8'), damaged);
-    });
-  }
+    }),
+  );
 });
 
 /** Fails the first token it is asked for, and counts after that. */
@@ -331,40 +335,42 @@ function failingOnce(failure: Error): TokenSource {
 }
 
 describe('File lock stores whose token source fails', () => {
-  for (const [name, open] of [
+  void test.each(
     [
-      'LockFileStore',
-      (directory: string, tokens: TokenSource) =>
-        new LockFileStore(directory, { pollInterval: 10, tokens }),
-    ],
-    [
-      'TicketQueueFileStore',
-      (directory: string, tokens: TokenSource) =>
-        new TicketQueueFileStore(directory, { pollInterval: 10, tokens }),
-    ],
-    [
-      'SqliteStore',
-      (directory: string, tokens: TokenSource) =>
-        new SqliteStore(directory, { pollInterval: 10, tokens }),
-    ],
-  ] as const) {
-    test(`${name}: an acquire whose token cannot be minted rejects with that error and leaves the key free`, async () => {
-      // Arrange
-      await using directory = await scratchDirectory();
-      const failure = new Error('The token file could not be written.');
-      const store = open(directory.path, failingOnce(failure));
+      [
+        'LockFileStore',
+        (directory: string, tokens: TokenSource) =>
+          new LockFileStore(directory, { pollInterval: 10, tokens }),
+      ],
+      [
+        'TicketQueueFileStore',
+        (directory: string, tokens: TokenSource) =>
+          new TicketQueueFileStore(directory, { pollInterval: 10, tokens }),
+      ],
+      [
+        'SqliteStore',
+        (directory: string, tokens: TokenSource) =>
+          new SqliteStore(directory, { pollInterval: 10, tokens }),
+      ],
+    ] as const,
+    ([name, open]) =>
+      test(`${name}: an acquire whose token cannot be minted rejects with that error and leaves the key free`, async () => {
+        // Arrange
+        await using directory = await scratchDirectory();
+        const failure = new Error('The token file could not be written.');
+        const store = open(directory.path, failingOnce(failure));
 
-      // Act
-      const acquiring = store.acquire('report-daily');
+        // Act
+        const acquiring = store.acquire('report-daily');
 
-      // Assert: the caller learns the real cause, and the lock taken for it is given back.
-      await assert.rejects(acquiring, (error) => error === failure);
-      assert.equal(await store.isHeld('report-daily'), false);
-      const next = await store.tryAcquire('report-daily');
-      assert.ok(next, 'The next caller must get the key at once');
-      await next[Symbol.asyncDispose]();
-    });
-  }
+        // Assert: the caller learns the real cause, and the lock taken for it is given back.
+        await assert.rejects(acquiring, (error) => error === failure);
+        assert.equal(await store.isHeld('report-daily'), false);
+        const next = await store.tryAcquire('report-daily');
+        assert.ok(next, 'The next caller must get the key at once');
+        await next[Symbol.asyncDispose]();
+      }),
+  );
 });
 
 test(

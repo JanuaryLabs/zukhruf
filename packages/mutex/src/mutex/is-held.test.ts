@@ -1,9 +1,11 @@
 import assert from 'node:assert/strict';
 import { readdir, stat } from 'node:fs/promises';
 import { join, relative } from 'node:path';
-import { describe, test } from 'node:test';
+import { test } from 'node:test';
 import { setImmediate as nextTurn } from 'node:timers/promises';
 import { Worker } from 'node:worker_threads';
+
+import { describe } from '@zukhruf/testing/node';
 
 import { isRecord } from '../shared/is-record.ts';
 import { scratchDirectory } from '../testing/scratch-directory.ts';
@@ -16,7 +18,7 @@ import { Mutex } from './mutex.ts';
 const mutexUrl = new URL('./mutex.ts', import.meta.url);
 const storeCasesUrl = new URL('../testing/store-cases.ts', import.meta.url);
 
-for (const store of storeCases) {
+void describe.each(storeCases, (store) =>
   describe(`Holder check with ${store.name}`, () => {
     test('a key reads as held only while a task holds it', async () => {
       // Arrange
@@ -98,117 +100,121 @@ for (const store of storeCases) {
         'Looks between two grants must take no token',
       );
     });
-  });
-}
+  }),
+);
 
-for (const store of storeCases.filter(
-  (candidate) => candidate.reach === 'host',
-)) {
-  describe(`Holder check in a directory that does not exist with ${store.name}`, () => {
-    test(
-      'a look answers that nobody holds the key, and makes no directory',
-      {
-        skip:
-          store.name === 'SocketStore'
-            ? 'A look that finds no leader campaigns to lead, and a campaign makes the directory'
-            : false,
-      },
-      async () => {
-        // Arrange
-        await using directory = await scratchDirectory();
-        const locks = join(directory.path, 'locks');
-        await using host = store.open(locks);
-        const mutex = new Mutex(host.store);
+void describe.each(
+  storeCases.filter((candidate) => candidate.reach === 'host'),
+  (store) =>
+    describe(`Holder check in a directory that does not exist with ${store.name}`, () => {
+      test(
+        'a look answers that nobody holds the key, and makes no directory',
+        {
+          skip:
+            store.name === 'SocketStore'
+              ? 'A look that finds no leader campaigns to lead, and a campaign makes the directory'
+              : false,
+        },
+        async () => {
+          // Arrange
+          await using directory = await scratchDirectory();
+          const locks = join(directory.path, 'locks');
+          await using host = store.open(locks);
+          const mutex = new Mutex(host.store);
 
-        // Act
-        const held = await mutex.isHeld('report:daily');
+          // Act
+          const held = await mutex.isHeld('report:daily');
 
-        // Assert
-        assert.equal(held, false);
-        assert.deepEqual(await readdir(directory.path), []);
-      },
-    );
-  });
-}
+          // Assert
+          assert.equal(held, false);
+          assert.deepEqual(await readdir(directory.path), []);
+        },
+      );
+    }),
+);
 
-for (const store of storeCases.filter((candidate) => candidate.openInThread)) {
-  describe(`Holder check from a worker thread with ${store.name}`, () => {
-    test(
-      'looks from another thread never make a caller that skips if busy give up on a free key',
-      { timeout: 15000 },
-      async (t) => {
-        // Arrange: a worker thread looks at the key again and again until it is told to stop.
-        await using directory = await scratchDirectory();
-        await using host = store.open(directory.path);
-        const mutex = new Mutex(host.store);
-        // [stop, looks made]
-        const shared = new Int32Array(new SharedArrayBuffer(8));
-        const looker = startThread(
-          host,
-          threadSource(
-            store.name,
-            directory.path,
-            `
+void describe.each(
+  storeCases.filter((candidate) => candidate.openInThread),
+  (store) =>
+    describe(`Holder check from a worker thread with ${store.name}`, () => {
+      test(
+        'looks from another thread never make a caller that skips if busy give up on a free key',
+        { timeout: 15000 },
+        async (t) => {
+          // Arrange: a worker thread looks at the key again and again until it is told to stop.
+          await using directory = await scratchDirectory();
+          await using host = store.open(directory.path);
+          const mutex = new Mutex(host.store);
+          // [stop, looks made]
+          const shared = new Int32Array(new SharedArrayBuffer(8));
+          const looker = startThread(
+            host,
+            threadSource(
+              store.name,
+              directory.path,
+              `
 						const shared = workerData;
 						while (Atomics.load(shared, 0) === 0) {
 							await mutex.isHeld('report:daily');
 							Atomics.add(shared, 1, 1);
 						}
 					`,
-          ),
-          shared,
-        );
-        try {
-          await waitUntil(
-            t,
-            () => Atomics.load(shared, 1) > 0,
-            'The worker thread must start looking',
-            newProcessTimeout,
+            ),
+            shared,
           );
-
-          // Act: the key is free each time; the attempts go on until 200 looks ran among them.
-          const looksBefore = Atomics.load(shared, 1);
-          const results = [];
-          while (
-            results.length < 50 ||
-            Atomics.load(shared, 1) - looksBefore < 200
-          ) {
-            results.push(
-              await mutex.acquire('report:daily', async () => 'ran', {
-                mode: Modes.skipIfBusy(),
-              }),
+          try {
+            await waitUntil(
+              t,
+              () => Atomics.load(shared, 1) > 0,
+              'The worker thread must start looking',
+              newProcessTimeout,
             );
-            // A memory coordinator answers in microtasks; the turn lets the looks it serves in.
-            await nextTurn();
+
+            // Act: the key is free each time; the attempts go on until 200 looks ran among them.
+            const looksBefore = Atomics.load(shared, 1);
+            const results = [];
+            while (
+              results.length < 50 ||
+              Atomics.load(shared, 1) - looksBefore < 200
+            ) {
+              results.push(
+                await mutex.acquire('report:daily', async () => 'ran', {
+                  mode: Modes.skipIfBusy(),
+                }),
+              );
+              // A memory coordinator answers in microtasks; the turn lets the looks it serves in.
+              await nextTurn();
+            }
+
+            // Assert
+            assert.deepEqual(
+              results.filter((result) => !result.acquired),
+              [],
+              'A look must never make a free key busy',
+            );
+          } finally {
+            Atomics.store(shared, 0, 1);
+            await looker.terminate();
           }
+        },
+      );
+    }),
+);
 
-          // Assert
-          assert.deepEqual(
-            results.filter((result) => !result.acquired),
-            [],
-            'A look must never make a free key busy',
-          );
-        } finally {
-          Atomics.store(shared, 0, 1);
-          await looker.terminate();
-        }
-      },
-    );
-  });
-}
-
-for (const store of storeCases.filter(
-  (candidate) =>
-    candidate.reach === 'host' || candidate.reach === 'process-tree',
-)) {
-  describe(`Holder check across processes with ${store.name}`, () => {
-    const childPrelude = (directory: string) => `
+void describe.each(
+  storeCases.filter(
+    (candidate) =>
+      candidate.reach === 'host' || candidate.reach === 'process-tree',
+  ),
+  (store) =>
+    describe(`Holder check across processes with ${store.name}`, () => {
+      const childPrelude = (directory: string) => `
 			import { Mutex } from ${JSON.stringify(mutexUrl.href)};
 			import { createChildStore } from ${JSON.stringify(storeCasesUrl.href)};
 
 			const mutex = new Mutex(createChildStore(${JSON.stringify(store.name)}, ${JSON.stringify(directory)}));
 		`;
-    const holderSource = (directory: string) => `
+      const holderSource = (directory: string) => `
 			${childPrelude(directory)}
 			setInterval(() => {}, 1000);
 			await mutex.acquire('report:daily', async () => {
@@ -217,199 +223,199 @@ for (const store of storeCases.filter(
 			});
 		`;
 
-    test(
-      'a look sees a holder in another process, and no holder once that process is killed',
-      { timeout: 30000 },
-      async (t) => {
-        // Arrange: another process holds the key and never lets it go.
-        await using directory = await scratchDirectory();
-        await using host = store.open(directory.path);
-        await using holder = startWorker(
-          holderSource(directory.path),
-          'holder',
-          { host },
-        );
-        await waitUntil(
-          t,
-          () => holder.has('entered'),
-          () => `The holder process must enter its task.\n${holder.stderr}`,
-          newProcessTimeout,
-        );
-        const mutex = new Mutex(host.store);
-
-        // Act
-        const whileAlive = await mutex.isHeld('report:daily');
-        holder.child.kill('SIGKILL');
-        await holder.closed;
-        const afterKill = await mutex.isHeld('report:daily');
-
-        // Assert
-        assert.deepEqual(
-          { whileAlive, afterKill },
-          { whileAlive: true, afterKill: false },
-        );
-      },
-    );
-
-    test(
-      'after a killed holder, the next holder reads as held, and nobody once it ends',
-      { timeout: 30000 },
-      async (t) => {
-        // Arrange: a holder process dies while it holds the key.
-        await using directory = await scratchDirectory();
-        await using host = store.open(directory.path);
-        await using holder = startWorker(
-          holderSource(directory.path),
-          'holder',
-          { host },
-        );
-        await waitUntil(
-          t,
-          () => holder.has('entered'),
-          () => `The holder process must enter its task.\n${holder.stderr}`,
-          newProcessTimeout,
-        );
-        holder.child.kill('SIGKILL');
-        await holder.closed;
-        const mutex = new Mutex(host.store);
-
-        // Act
-        const during = await mutex.acquire('report:daily', () =>
-          mutex.isHeld('report:daily'),
-        );
-        const after = await mutex.isHeld('report:daily');
-
-        // Assert
-        assert.deepEqual({ during, after }, { during: true, after: false });
-      },
-    );
-
-    test(
-      'a look leaves the files of a killed holder as they are',
-      {
-        timeout: 30000,
-        skip:
-          store.name === 'SocketStore'
-            ? 'A look that finds no leader campaigns to lead, and a campaign writes the term'
-            : false,
-      },
-      async (t) => {
-        // Arrange: a holder process dies while it holds the key, and leaves its files.
-        await using directory = await scratchDirectory();
-        await using host = store.open(directory.path);
-        await using holder = startWorker(
-          holderSource(directory.path),
-          'holder',
-          { host },
-        );
-        await waitUntil(
-          t,
-          () => holder.has('entered'),
-          () => `The holder process must enter its task.\n${holder.stderr}`,
-          newProcessTimeout,
-        );
-        holder.child.kill('SIGKILL');
-        await holder.closed;
-        const mutex = new Mutex(host.store);
-        const files = await filesIn(directory.path);
-
-        // Act
-        for (let look = 0; look < 5; look++) {
-          await mutex.isHeld('report:daily');
-        }
-
-        // Assert: only a caller that acquires removes a gone holder.
-        assert.deepEqual(await filesIn(directory.path), files);
-      },
-    );
-
-    test(
-      'a look from a child process sees a holder in this process',
-      { timeout: 30000 },
-      async (t) => {
-        // Arrange: this process holds the key until the child has looked.
-        await using directory = await scratchDirectory();
-        await using host = store.open(directory.path);
-        const mutex = new Mutex(host.store);
-        const entered = Promise.withResolvers<void>();
-        const release = Promise.withResolvers<void>();
-        const holding = mutex.acquire('report:daily', async () => {
-          entered.resolve();
-          await release.promise;
-        });
-        try {
-          await entered.promise;
-
-          // Act
-          await using looker = startWorker(
-            `
-							${childPrelude(directory.path)}
-							process.send({ type: 'looked', held: await mutex.isHeld('report:daily') });
-						`,
-            'looker',
+      test(
+        'a look sees a holder in another process, and no holder once that process is killed',
+        { timeout: 30000 },
+        async (t) => {
+          // Arrange: another process holds the key and never lets it go.
+          await using directory = await scratchDirectory();
+          await using host = store.open(directory.path);
+          await using holder = startWorker(
+            holderSource(directory.path),
+            'holder',
             { host },
           );
           await waitUntil(
             t,
-            () => looker.has('looked'),
-            () => `The child must report its look.\n${looker.stderr}`,
+            () => holder.has('entered'),
+            () => `The holder process must enter its task.\n${holder.stderr}`,
             newProcessTimeout,
           );
-
-          // Assert
-          assert.equal(looker.find('looked')?.held, true);
-        } finally {
-          release.resolve();
-          await holding;
-        }
-      },
-    );
-  });
-}
-
-for (const store of storeCases.filter(
-  (candidate) => candidate.reach === 'process',
-)) {
-  describe(`Holder check across threads with ${store.name}`, () => {
-    test(
-      'a look from a worker thread sees a holder in this thread',
-      { timeout: 15000 },
-      async () => {
-        // Arrange: this thread holds the key until the worker has looked.
-        await using directory = await scratchDirectory();
-        await using host = store.open(directory.path);
-        const mutex = new Mutex(host.store);
-        const entered = Promise.withResolvers<void>();
-        const release = Promise.withResolvers<void>();
-        const holding = mutex.acquire('report:daily', async () => {
-          entered.resolve();
-          await release.promise;
-        });
-        try {
-          await entered.promise;
+          const mutex = new Mutex(host.store);
 
           // Act
-          const looker = startThread(
-            host,
-            threadSource(
-              store.name,
-              directory.path,
-              `parentPort.postMessage({ looked: await mutex.isHeld('report:daily') });`,
-            ),
-          );
-          const held = await lookFrom(looker);
-          await looker.terminate();
+          const whileAlive = await mutex.isHeld('report:daily');
+          holder.child.kill('SIGKILL');
+          await holder.closed;
+          const afterKill = await mutex.isHeld('report:daily');
 
           // Assert
-          assert.equal(held, true);
-        } finally {
-          release.resolve();
-          await holding;
-        }
-      },
-    );
-  });
-}
+          assert.deepEqual(
+            { whileAlive, afterKill },
+            { whileAlive: true, afterKill: false },
+          );
+        },
+      );
+
+      test(
+        'after a killed holder, the next holder reads as held, and nobody once it ends',
+        { timeout: 30000 },
+        async (t) => {
+          // Arrange: a holder process dies while it holds the key.
+          await using directory = await scratchDirectory();
+          await using host = store.open(directory.path);
+          await using holder = startWorker(
+            holderSource(directory.path),
+            'holder',
+            { host },
+          );
+          await waitUntil(
+            t,
+            () => holder.has('entered'),
+            () => `The holder process must enter its task.\n${holder.stderr}`,
+            newProcessTimeout,
+          );
+          holder.child.kill('SIGKILL');
+          await holder.closed;
+          const mutex = new Mutex(host.store);
+
+          // Act
+          const during = await mutex.acquire('report:daily', () =>
+            mutex.isHeld('report:daily'),
+          );
+          const after = await mutex.isHeld('report:daily');
+
+          // Assert
+          assert.deepEqual({ during, after }, { during: true, after: false });
+        },
+      );
+
+      test(
+        'a look leaves the files of a killed holder as they are',
+        {
+          timeout: 30000,
+          skip:
+            store.name === 'SocketStore'
+              ? 'A look that finds no leader campaigns to lead, and a campaign writes the term'
+              : false,
+        },
+        async (t) => {
+          // Arrange: a holder process dies while it holds the key, and leaves its files.
+          await using directory = await scratchDirectory();
+          await using host = store.open(directory.path);
+          await using holder = startWorker(
+            holderSource(directory.path),
+            'holder',
+            { host },
+          );
+          await waitUntil(
+            t,
+            () => holder.has('entered'),
+            () => `The holder process must enter its task.\n${holder.stderr}`,
+            newProcessTimeout,
+          );
+          holder.child.kill('SIGKILL');
+          await holder.closed;
+          const mutex = new Mutex(host.store);
+          const files = await filesIn(directory.path);
+
+          // Act
+          for (let look = 0; look < 5; look++) {
+            await mutex.isHeld('report:daily');
+          }
+
+          // Assert: only a caller that acquires removes a gone holder.
+          assert.deepEqual(await filesIn(directory.path), files);
+        },
+      );
+
+      test(
+        'a look from a child process sees a holder in this process',
+        { timeout: 30000 },
+        async (t) => {
+          // Arrange: this process holds the key until the child has looked.
+          await using directory = await scratchDirectory();
+          await using host = store.open(directory.path);
+          const mutex = new Mutex(host.store);
+          const entered = Promise.withResolvers<void>();
+          const release = Promise.withResolvers<void>();
+          const holding = mutex.acquire('report:daily', async () => {
+            entered.resolve();
+            await release.promise;
+          });
+          try {
+            await entered.promise;
+
+            // Act
+            await using looker = startWorker(
+              `
+							${childPrelude(directory.path)}
+							process.send({ type: 'looked', held: await mutex.isHeld('report:daily') });
+						`,
+              'looker',
+              { host },
+            );
+            await waitUntil(
+              t,
+              () => looker.has('looked'),
+              () => `The child must report its look.\n${looker.stderr}`,
+              newProcessTimeout,
+            );
+
+            // Assert
+            assert.equal(looker.find('looked')?.held, true);
+          } finally {
+            release.resolve();
+            await holding;
+          }
+        },
+      );
+    }),
+);
+
+void describe.each(
+  storeCases.filter((candidate) => candidate.reach === 'process'),
+  (store) =>
+    describe(`Holder check across threads with ${store.name}`, () => {
+      test(
+        'a look from a worker thread sees a holder in this thread',
+        { timeout: 15000 },
+        async () => {
+          // Arrange: this thread holds the key until the worker has looked.
+          await using directory = await scratchDirectory();
+          await using host = store.open(directory.path);
+          const mutex = new Mutex(host.store);
+          const entered = Promise.withResolvers<void>();
+          const release = Promise.withResolvers<void>();
+          const holding = mutex.acquire('report:daily', async () => {
+            entered.resolve();
+            await release.promise;
+          });
+          try {
+            await entered.promise;
+
+            // Act
+            const looker = startThread(
+              host,
+              threadSource(
+                store.name,
+                directory.path,
+                `parentPort.postMessage({ looked: await mutex.isHeld('report:daily') });`,
+              ),
+            );
+            const held = await lookFrom(looker);
+            await looker.terminate();
+
+            // Assert
+            assert.equal(held, true);
+          } finally {
+            release.resolve();
+            await holding;
+          }
+        },
+      );
+    }),
+);
 
 /**
  * Worker source that builds the store's thread side, then runs `body` with

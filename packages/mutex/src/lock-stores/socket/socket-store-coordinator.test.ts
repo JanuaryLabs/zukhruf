@@ -4,8 +4,10 @@ import { once } from 'node:events';
 import { connect } from 'node:net';
 import { join, resolve } from 'node:path';
 import { createInterface } from 'node:readline';
-import { type TestContext, describe, test } from 'node:test';
+import { type TestContext, describe } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
+
+import { test } from '@zukhruf/testing/node';
 
 import { SocketStore } from '../../index.ts';
 import { isRecord } from '../../shared/is-record.ts';
@@ -299,59 +301,64 @@ describe('A leader after a failover', () => {
     assert.equal(peer.received[0]?.op, 'granted');
   });
 
-  for (const [leaves, leave] of [
-    ['disconnects', (peer: RawPeer) => peer.drop()],
-    ['releases', (peer: RawPeer) => peer.send({ op: 'release', id: 'first' })],
-  ] as const) {
-    test(`a newer reassert after the first reasserter ${leaves} keeps the key from waiters`, async (t) => {
-      // Arrange: the first reasserter takes the key in the grace window, then lets it go.
-      const graceWindow = 300;
-      await using scene = await leaderAfterFailover(graceWindow);
-      await using first = await rawPeer(t, scene.directory);
-      await using newer = await rawPeer(t, scene.directory);
-      first.send({
-        op: 'reassert',
-        id: 'first',
-        key: 'product:42',
-        token: '5',
-      });
-      await delay(settle);
-      leave(first);
-      await delay(settle);
+  void test.each(
+    [
+      ['disconnects', (peer: RawPeer) => peer.drop()],
+      [
+        'releases',
+        (peer: RawPeer) => peer.send({ op: 'release', id: 'first' }),
+      ],
+    ] as const,
+    ([leaves, leave]) =>
+      test(`a newer reassert after the first reasserter ${leaves} keeps the key from waiters`, async (t) => {
+        // Arrange: the first reasserter takes the key in the grace window, then lets it go.
+        const graceWindow = 300;
+        await using scene = await leaderAfterFailover(graceWindow);
+        await using first = await rawPeer(t, scene.directory);
+        await using newer = await rawPeer(t, scene.directory);
+        first.send({
+          op: 'reassert',
+          id: 'first',
+          key: 'product:42',
+          token: '5',
+        });
+        await delay(settle);
+        leave(first);
+        await delay(settle);
 
-      // Act: a holder with a newer token reasserts the key.
-      newer.send({
-        op: 'reassert',
-        id: 'newer',
-        key: 'product:42',
-        token: '9',
-      });
-      const waiter = scene.leader.acquire('product:42');
+        // Act: a holder with a newer token reasserts the key.
+        newer.send({
+          op: 'reassert',
+          id: 'newer',
+          key: 'product:42',
+          token: '9',
+        });
+        const waiter = scene.leader.acquire('product:42');
 
-      // Assert: only one holder at a time, so the waiter gets the key after the newer holder releases it.
-      assert.equal(
-        await grantedWithin(waiter, graceWindow + 2 * settle),
-        'waiting',
-        'A waiter was granted a key that a newer reasserter holds',
-      );
-      assert.deepEqual(
-        newer.received,
-        [],
-        'The newer claim must not be refused',
-      );
-      assert.deepEqual(
-        first.received,
-        [],
-        'A holder that already let the key go must not be told it lost it',
-      );
-      newer.send({ op: 'release', id: 'newer' });
-      assert.equal(
-        await grantedWithin(waiter, 1000),
-        'granted',
-        'The key must be free after the newer holder releases it',
-      );
-    });
-  }
+        // Assert: only one holder at a time, so the waiter gets the key after the newer holder releases it.
+        assert.equal(
+          await grantedWithin(waiter, graceWindow + 2 * settle),
+          'waiting',
+          'A waiter was granted a key that a newer reasserter holds',
+        );
+        assert.deepEqual(
+          newer.received,
+          [],
+          'The newer claim must not be refused',
+        );
+        assert.deepEqual(
+          first.received,
+          [],
+          'A holder that already let the key go must not be told it lost it',
+        );
+        newer.send({ op: 'release', id: 'newer' });
+        assert.equal(
+          await grantedWithin(waiter, 1000),
+          'granted',
+          'The key must be free after the newer holder releases it',
+        );
+      }),
+  );
 
   test('after a reasserter releases in the grace window, a reassert with an older token is still refused', async (t) => {
     // Arrange: a holder reasserts a newer token and then releases the key.

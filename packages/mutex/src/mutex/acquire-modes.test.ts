@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict';
 import { getEventListeners } from 'node:events';
-import { describe, test } from 'node:test';
+import { test } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
 import { Worker } from 'node:worker_threads';
+
+import { describe } from '@zukhruf/testing/node';
 
 import { MemoryStore } from '../lock-stores/memory/memory-store.ts';
 import { scratchDirectory } from '../testing/scratch-directory.ts';
@@ -42,7 +44,7 @@ function within(work: Promise<unknown>, milliseconds: number) {
   ]);
 }
 
-for (const store of storeCases) {
+void describe.each(storeCases, (store) =>
   describe(`Acquire modes with ${store.name}`, () => {
     test(
       'skipIfBusy gives up at once while another holder has the key, and does not run the task',
@@ -381,8 +383,8 @@ for (const store of storeCases) {
         assert.equal(getEventListeners(signal, 'abort').length, 0);
       },
     );
-  });
-}
+  }),
+);
 
 describe('The time limit of skip if busy', () => {
   test('the limit starts when the lock store answers, so a free key that it answers late is still acquired', async () => {
@@ -681,22 +683,24 @@ const skipperBody = `
 	report({ type: 'results', atOnce, afterLimit, cancelled });
 `;
 
-for (const store of storeCases.filter(
-  (candidate) =>
-    candidate.reach === 'host' || candidate.reach === 'process-tree',
-)) {
-  describe(`Acquire modes across processes with ${store.name}`, () => {
-    test(
-      'a process that skips or cancels while another process holds gets no key, and leaves the key free',
-      { timeout: 10000 },
-      async (t) => {
-        // Arrange: this process holds the key; a child (kept alive) tries to skip.
-        await using directory = await scratchDirectory();
-        await using host = store.open(directory.path);
-        const mutex = new Mutex(host.store);
-        const holder = await hold(mutex, 'report:daily');
-        await using child = startWorker(
-          `
+void describe.each(
+  storeCases.filter(
+    (candidate) =>
+      candidate.reach === 'host' || candidate.reach === 'process-tree',
+  ),
+  (store) =>
+    describe(`Acquire modes across processes with ${store.name}`, () => {
+      test(
+        'a process that skips or cancels while another process holds gets no key, and leaves the key free',
+        { timeout: 10000 },
+        async (t) => {
+          // Arrange: this process holds the key; a child (kept alive) tries to skip.
+          await using directory = await scratchDirectory();
+          await using host = store.open(directory.path);
+          const mutex = new Mutex(host.store);
+          const holder = await hold(mutex, 'report:daily');
+          await using child = startWorker(
+            `
 					import { Mutex } from ${JSON.stringify(mutexUrl.href)};
 					import { Modes } from ${JSON.stringify(modesUrl.href)};
 					import { createChildStore } from ${JSON.stringify(storeCasesUrl.href)};
@@ -705,95 +709,25 @@ for (const store of storeCases.filter(
 					const report = (message) => process.send(message);
 					${skipperBody}
 				`,
-          'skipper',
-          { host },
-        );
+            'skipper',
+            { host },
+          );
 
-        // Act
-        await waitUntil(
-          t,
-          () => child.has('results'),
-          () => `The child must report.\n${child.stderr}`,
-          5000,
-        );
-        await holder.release();
-
-        // Assert: both skips gave up, the wait was cancelled, and no grant was left with the child.
-        assert.deepEqual(
-          {
-            atOnce: child.find('results')?.atOnce,
-            afterLimit: child.find('results')?.afterLimit,
-            cancelled: child.find('results')?.cancelled,
-          },
-          {
-            atOnce: { acquired: false },
-            afterLimit: { acquired: false },
-            cancelled: 'cancelled',
-          },
-        );
-        assert.equal(
-          await within(
-            mutex.acquire('report:daily', async () => 'next'),
-            2000,
-          ),
-          'done',
-          'The key must be free after the holder releases it; the child that gave up must not keep it',
-        );
-      },
-    );
-  });
-}
-
-for (const store of storeCases.filter(
-  (candidate) => candidate.reach === 'process',
-)) {
-  describe(`Acquire modes across threads with ${store.name}`, () => {
-    test(
-      'a thread that skips or cancels while another thread holds gets no key, and leaves the key free',
-      { timeout: 10000 },
-      async () => {
-        // Arrange: the main thread holds the key; a worker (kept alive) tries to skip.
-        await using directory = await scratchDirectory();
-        await using host: StoreHost = store.open(directory.path);
-        const mutex = new Mutex(host.store);
-        const holder = await hold(mutex, 'report:daily');
-        const thread = new Worker(
-          `
-					(async () => {
-						const { parentPort } = await import('node:worker_threads');
-						const { Mutex } = await import(${JSON.stringify(mutexUrl.href)});
-						const { Modes } = await import(${JSON.stringify(modesUrl.href)});
-						const { createThreadStore } = await import(${JSON.stringify(storeCasesUrl.href)});
-						setInterval(() => {}, 1000);
-						const mutex = new Mutex(createThreadStore(${JSON.stringify(store.name)}, ${JSON.stringify(directory.path)}));
-						const report = (message) => parentPort.postMessage(message);
-						${skipperBody}
-					})();
-				`,
-          { eval: true },
-        );
-        host.adoptThread(thread);
-        const results = new Promise<{
-          atOnce: unknown;
-          afterLimit: unknown;
-          cancelled: unknown;
-        }>((resolve) =>
-          thread.on('message', (message) => {
-            if (message?.type === 'results') resolve(message);
-          }),
-        );
-
-        try {
           // Act
-          const reported = await results;
+          await waitUntil(
+            t,
+            () => child.has('results'),
+            () => `The child must report.\n${child.stderr}`,
+            5000,
+          );
           await holder.release();
 
-          // Assert
+          // Assert: both skips gave up, the wait was cancelled, and no grant was left with the child.
           assert.deepEqual(
             {
-              atOnce: reported.atOnce,
-              afterLimit: reported.afterLimit,
-              cancelled: reported.cancelled,
+              atOnce: child.find('results')?.atOnce,
+              afterLimit: child.find('results')?.afterLimit,
+              cancelled: child.find('results')?.cancelled,
             },
             {
               atOnce: { acquired: false },
@@ -807,12 +741,82 @@ for (const store of storeCases.filter(
               2000,
             ),
             'done',
-            'The key must be free after the holder releases it; the thread that gave up must not keep it',
+            'The key must be free after the holder releases it; the child that gave up must not keep it',
           );
-        } finally {
-          await thread.terminate();
-        }
-      },
-    );
-  });
-}
+        },
+      );
+    }),
+);
+
+void describe.each(
+  storeCases.filter((candidate) => candidate.reach === 'process'),
+  (store) =>
+    describe(`Acquire modes across threads with ${store.name}`, () => {
+      test(
+        'a thread that skips or cancels while another thread holds gets no key, and leaves the key free',
+        { timeout: 10000 },
+        async () => {
+          // Arrange: the main thread holds the key; a worker (kept alive) tries to skip.
+          await using directory = await scratchDirectory();
+          await using host: StoreHost = store.open(directory.path);
+          const mutex = new Mutex(host.store);
+          const holder = await hold(mutex, 'report:daily');
+          const thread = new Worker(
+            `
+					(async () => {
+						const { parentPort } = await import('node:worker_threads');
+						const { Mutex } = await import(${JSON.stringify(mutexUrl.href)});
+						const { Modes } = await import(${JSON.stringify(modesUrl.href)});
+						const { createThreadStore } = await import(${JSON.stringify(storeCasesUrl.href)});
+						setInterval(() => {}, 1000);
+						const mutex = new Mutex(createThreadStore(${JSON.stringify(store.name)}, ${JSON.stringify(directory.path)}));
+						const report = (message) => parentPort.postMessage(message);
+						${skipperBody}
+					})();
+				`,
+            { eval: true },
+          );
+          host.adoptThread(thread);
+          const results = new Promise<{
+            atOnce: unknown;
+            afterLimit: unknown;
+            cancelled: unknown;
+          }>((resolve) =>
+            thread.on('message', (message) => {
+              if (message?.type === 'results') resolve(message);
+            }),
+          );
+
+          try {
+            // Act
+            const reported = await results;
+            await holder.release();
+
+            // Assert
+            assert.deepEqual(
+              {
+                atOnce: reported.atOnce,
+                afterLimit: reported.afterLimit,
+                cancelled: reported.cancelled,
+              },
+              {
+                atOnce: { acquired: false },
+                afterLimit: { acquired: false },
+                cancelled: 'cancelled',
+              },
+            );
+            assert.equal(
+              await within(
+                mutex.acquire('report:daily', async () => 'next'),
+                2000,
+              ),
+              'done',
+              'The key must be free after the holder releases it; the thread that gave up must not keep it',
+            );
+          } finally {
+            await thread.terminate();
+          }
+        },
+      );
+    }),
+);

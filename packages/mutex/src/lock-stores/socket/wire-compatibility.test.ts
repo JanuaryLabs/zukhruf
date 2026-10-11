@@ -6,7 +6,9 @@ import { type Socket, connect, createServer } from 'node:net';
 import { join, resolve } from 'node:path';
 import { createInterface } from 'node:readline';
 import { DatabaseSync } from 'node:sqlite';
-import { describe, test } from 'node:test';
+import { describe } from 'node:test';
+
+import { test } from '@zukhruf/testing/node';
 
 import {
   Mutex,
@@ -213,93 +215,97 @@ describe('What a socket store shares with other versions in its directory', () =
     },
   );
 
-  for (const { versions, welcome, sent, look } of [
-    {
-      versions: '0.3.1 to 0.3.9',
-      welcome: '{"op":"welcome"}',
-      // Such a leader hangs up on a request it does not know, so a look never reaches it.
-      sent: ['acquire', 'release'],
-      look: 'unsupported',
-    },
-    {
-      versions: '0.3.10 and later',
-      welcome: '{"op":"welcome","ops":["isHeld"]}',
-      sent: ['acquire', 'isHeld', 'release'],
-      look: 'held',
-    },
-  ] as const) {
-    test(
-      `a store follows a leader of ${versions} on lock.sock with the published hello, and sends it only the requests it reads`,
-      { ...onUnixSockets, timeout: 10_000 },
-      async (t) => {
-        // Arrange: a leader of those versions holds the term, grants each acquire a token of its term 5, and answers each look that the key is held.
-        await using directory = await scratchDirectory();
-        using _term = holdTerm(directory.path);
-        const granted = (5n << 32n) | 1n;
-        const requests: Record<string, unknown>[] = [];
-        await using leader = await publishedLeader(
-          directory.path,
-          (peer, line, opens) => {
-            if (opens) {
-              peer.write(`${welcome}\n`);
-              return;
-            }
-            const request: unknown = JSON.parse(line);
-            if (!isRecord(request)) return;
-            requests.push(request);
-            const id = JSON.stringify(request.id);
-            if (request.op === 'acquire') {
-              peer.write(`{"op":"granted","id":${id},"token":"${granted}"}\n`);
-            }
-            if (request.op === 'isHeld') {
-              peer.write(`{"op":"held","id":${id},"held":true}\n`);
-            }
-          },
-        );
-        await using store = new SocketStore(directory.path, {
-          pollInterval: 10,
-        });
-        const roles: SocketRole[] = [];
-        store.on('role', (role) => roles.push(role));
-        const mutex = new Mutex(store);
-
-        // Act: take the key, and look at it while holding it.
-        const { token, answer } = await mutex.acquire(
-          'product:42',
-          async ({ token }) => ({
-            token,
-            answer: await mutex.isHeld('product:42').then(
-              (held) => (held ? 'held' : 'free'),
-              (error: unknown) =>
-                error instanceof UnsupportedRequestError
-                  ? 'unsupported'
-                  : error,
-            ),
-          }),
-        );
-        // A release has no answer, so the store sends it without waiting.
-        await waitUntil(
-          t,
-          () => requests.some(({ op }) => op === 'release'),
-          () => `Requests: ${JSON.stringify(requests)}`,
-        );
-
-        // Assert
-        assert.deepEqual(leader.firstLines, ['{"op":"hello","version":1}']);
-        assert.equal(token.value, granted);
-        assert.deepEqual(roles, ['follower']);
-        assert.equal(answer, look);
-        assert.deepEqual(
-          requests.map(({ op }) => op),
-          sent,
-        );
-        const [acquire] = requests;
-        assert.equal(acquire?.key, 'product:42');
-        assert.equal(typeof acquire?.id, 'string');
-        assert.equal(requests.at(-1)?.id, acquire?.id);
+  void test.each(
+    [
+      {
+        versions: '0.3.1 to 0.3.9',
+        welcome: '{"op":"welcome"}',
+        // Such a leader hangs up on a request it does not know, so a look never reaches it.
+        sent: ['acquire', 'release'],
+        look: 'unsupported',
       },
-    );
-  }
+      {
+        versions: '0.3.10 and later',
+        welcome: '{"op":"welcome","ops":["isHeld"]}',
+        sent: ['acquire', 'isHeld', 'release'],
+        look: 'held',
+      },
+    ] as const,
+    ({ versions, welcome, sent, look }) =>
+      test(
+        `a store follows a leader of ${versions} on lock.sock with the published hello, and sends it only the requests it reads`,
+        { ...onUnixSockets, timeout: 10_000 },
+        async (t) => {
+          // Arrange: a leader of those versions holds the term, grants each acquire a token of its term 5, and answers each look that the key is held.
+          await using directory = await scratchDirectory();
+          using _term = holdTerm(directory.path);
+          const granted = (5n << 32n) | 1n;
+          const requests: Record<string, unknown>[] = [];
+          await using leader = await publishedLeader(
+            directory.path,
+            (peer, line, opens) => {
+              if (opens) {
+                peer.write(`${welcome}\n`);
+                return;
+              }
+              const request: unknown = JSON.parse(line);
+              if (!isRecord(request)) return;
+              requests.push(request);
+              const id = JSON.stringify(request.id);
+              if (request.op === 'acquire') {
+                peer.write(
+                  `{"op":"granted","id":${id},"token":"${granted}"}\n`,
+                );
+              }
+              if (request.op === 'isHeld') {
+                peer.write(`{"op":"held","id":${id},"held":true}\n`);
+              }
+            },
+          );
+          await using store = new SocketStore(directory.path, {
+            pollInterval: 10,
+          });
+          const roles: SocketRole[] = [];
+          store.on('role', (role) => roles.push(role));
+          const mutex = new Mutex(store);
+
+          // Act: take the key, and look at it while holding it.
+          const { token, answer } = await mutex.acquire(
+            'product:42',
+            async ({ token }) => ({
+              token,
+              answer: await mutex.isHeld('product:42').then(
+                (held) => (held ? 'held' : 'free'),
+                (error: unknown) =>
+                  error instanceof UnsupportedRequestError
+                    ? 'unsupported'
+                    : error,
+              ),
+            }),
+          );
+          // A release has no answer, so the store sends it without waiting.
+          await waitUntil(
+            t,
+            () => requests.some(({ op }) => op === 'release'),
+            () => `Requests: ${JSON.stringify(requests)}`,
+          );
+
+          // Assert
+          assert.deepEqual(leader.firstLines, ['{"op":"hello","version":1}']);
+          assert.equal(token.value, granted);
+          assert.deepEqual(roles, ['follower']);
+          assert.equal(answer, look);
+          assert.deepEqual(
+            requests.map(({ op }) => op),
+            sent,
+          );
+          const [acquire] = requests;
+          assert.equal(acquire?.key, 'product:42');
+          assert.equal(typeof acquire?.id, 'string');
+          assert.equal(requests.at(-1)?.id, acquire?.id);
+        },
+      ),
+  );
 
   test(
     'a leader answers the published hello on lock.sock with the published welcome',

@@ -4,10 +4,11 @@ import { once } from 'node:events';
 import { type Socket, createServer } from 'node:net';
 import { join, resolve } from 'node:path';
 import { createInterface } from 'node:readline';
-import { type TestContext, describe, test } from 'node:test';
+import { type TestContext, describe } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
 
 import type { FencedLease } from '@zukhruf/fencing';
+import { test } from '@zukhruf/testing/node';
 
 import {
   LeaseLostError,
@@ -250,72 +251,81 @@ describe('A socket store that loses its leader', () => {
     }
   });
 
-  for (const [what, failure, expected] of [
+  void test.each(
     [
-      'its own error',
-      (_lease: FencedLease) => new Error('the write failed'),
-      // A new LeaseLostError for the key, keeping the task's error as its cause.
-      (error: LeaseLostError, thrown: unknown) =>
-        error.subject === 'product:42' && error.cause === thrown,
-    ],
-    [
-      'the reason of its lease signal',
-      (lease: FencedLease) => lease.signal.reason,
-      // The lease's own LeaseLostError, not wrapped again.
-      (error: LeaseLostError, thrown: unknown) =>
-        error === thrown && error.cause === undefined,
-    ],
-  ] as const) {
-    test(`a task that throws ${what} after its key is lost rejects its caller with LeaseLostError`, async (t) => {
-      // Arrange: a task holds a key through the Mutex.
-      await using follower = await followerOfStandIn();
-      const { leader, store } = follower;
-      const leased = Promise.withResolvers<FencedLease>();
-      const finish = Promise.withResolvers<void>();
-      let thrown: unknown;
-      const running = new Mutex(store).acquire('product:42', async (lease) => {
-        leased.resolve(lease);
-        await finish.promise;
-        thrown = failure(lease);
-        throw thrown;
-      });
-      const ended = watch(running);
-
-      try {
-        const first = await connection(t, leader, 0);
-        first.welcome();
-        first.answer({
-          op: 'granted',
-          id: (await request(t, first, 0)).id,
-          token: '1',
-        });
-        const lease = await leased.promise;
-
-        // Act: the key is lost while the task runs, and then the task fails.
-        first.drop();
-        (await connection(t, leader, 1)).refuse();
-        await waitUntil(t, () => lease.signal.aborted, 'The key must be lost');
-        finish.resolve();
-
-        // Assert: the caller learns the key was not exclusive, with the task's error kept.
-        await assert.rejects(running, (error: unknown) => {
-          assert.ok(error instanceof LeaseLostError, String(error));
-          assert.ok(
-            expected(error, thrown),
-            `Unexpected LeaseLostError: cause ${String(error.cause)}`,
-          );
-          return true;
-        });
-      } finally {
-        finish.resolve();
-        await waitUntil(
-          t,
-          () => ended.now.status !== 'pending',
-          'The call must end',
+      [
+        'its own error',
+        (_lease: FencedLease) => new Error('the write failed'),
+        // A new LeaseLostError for the key, keeping the task's error as its cause.
+        (error: LeaseLostError, thrown: unknown) =>
+          error.subject === 'product:42' && error.cause === thrown,
+      ],
+      [
+        'the reason of its lease signal',
+        (lease: FencedLease) => lease.signal.reason,
+        // The lease's own LeaseLostError, not wrapped again.
+        (error: LeaseLostError, thrown: unknown) =>
+          error === thrown && error.cause === undefined,
+      ],
+    ] as const,
+    ([what, failure, expected]) =>
+      test(`a task that throws ${what} after its key is lost rejects its caller with LeaseLostError`, async (t) => {
+        // Arrange: a task holds a key through the Mutex.
+        await using follower = await followerOfStandIn();
+        const { leader, store } = follower;
+        const leased = Promise.withResolvers<FencedLease>();
+        const finish = Promise.withResolvers<void>();
+        let thrown: unknown;
+        const running = new Mutex(store).acquire(
+          'product:42',
+          async (lease) => {
+            leased.resolve(lease);
+            await finish.promise;
+            thrown = failure(lease);
+            throw thrown;
+          },
         );
-      }
-    });
-  }
+        const ended = watch(running);
+
+        try {
+          const first = await connection(t, leader, 0);
+          first.welcome();
+          first.answer({
+            op: 'granted',
+            id: (await request(t, first, 0)).id,
+            token: '1',
+          });
+          const lease = await leased.promise;
+
+          // Act: the key is lost while the task runs, and then the task fails.
+          first.drop();
+          (await connection(t, leader, 1)).refuse();
+          await waitUntil(
+            t,
+            () => lease.signal.aborted,
+            'The key must be lost',
+          );
+          finish.resolve();
+
+          // Assert: the caller learns the key was not exclusive, with the task's error kept.
+          await assert.rejects(running, (error: unknown) => {
+            assert.ok(error instanceof LeaseLostError, String(error));
+            assert.ok(
+              expected(error, thrown),
+              `Unexpected LeaseLostError: cause ${String(error.cause)}`,
+            );
+            return true;
+          });
+        } finally {
+          finish.resolve();
+          await waitUntil(
+            t,
+            () => ended.now.status !== 'pending',
+            'The call must end',
+          );
+        }
+      }),
+  );
 
   test('a task whose reassert the new leader rejects is told before it ends, and releases nothing', async (t) => {
     // Arrange: a task holds a key through the Mutex.

@@ -5,8 +5,10 @@ import { readFileSync } from 'node:fs';
 import fsPromises, { readFile, writeFile } from 'node:fs/promises';
 import { syncBuiltinESMExports } from 'node:module';
 import { join } from 'node:path';
-import { describe, mock, test } from 'node:test';
+import { describe, mock } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
+
+import { test } from '@zukhruf/testing/node';
 
 import type { LockHandle } from '../../mutex/lease.ts';
 import { Mutex } from '../../mutex/mutex.ts';
@@ -139,7 +141,7 @@ const errorsIn = (error: unknown): unknown[] =>
 
 describe('TicketQueueFileStore damaged queue', () => {
   // Text that is not JSON, or JSON that names no caller.
-  for (const damaged of ['garbage', '{"pid":1}']) {
+  void test.each(['garbage', '{"pid":1}'], (damaged) =>
     test(`a first ticket line that holds ${damaged} makes every call reject with a SyntaxError and stays first`, async () => {
       // Arrange: a power loss can leave a complete line whose bytes never reached the disk; no operation writes one.
       // (A line without its newline is an append still in progress, which the store skips.)
@@ -171,6 +173,6 @@ describe('TicketQueueFileStore damaged queue', () => {
         (await readFile(queue, 'utf8')).startsWith(`${damaged}\n`),
         'The damaged ticket must stay first in the queue',
       );
-    });
-  }
+    }),
+  );
 });

@@ -7,7 +7,9 @@ import { chmod, readFile, readdir, writeFile } from 'node:fs/promises';
 import { hostname } from 'node:os';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline';
-import { describe, test } from 'node:test';
+import { describe } from 'node:test';
+
+import { test } from '@zukhruf/testing/node';
 
 import { Modes } from '../../mutex/acquire-modes/modes.ts';
 import { Mutex } from '../../mutex/mutex.ts';
@@ -99,7 +101,7 @@ const ticketsIn = (queue: string) => {
   }
 };
 
-for (const store of stores) {
+void test.each(stores, (store) => {
   describe(`${store.name}: a caller that is gone`, () => {
     test(
       'a waiter gets the key of a holder that died but was never reaped',
@@ -345,7 +347,7 @@ for (const store of stores) {
     );
   });
 
-  test(
+  return test(
     `${store.name}: busy processes that wait, skip and give up never hold the key together`,
     { timeout: 60_000 },
     async (t) => {
@@ -421,7 +423,7 @@ for (const store of stores) {
       }
     },
   );
-}
+});
 
 describe('TicketQueueFileStore: presence files of waiters', () => {
   const queueIn = (directory: string) => join(directory, 'product-42.lock');
@@ -471,72 +473,74 @@ describe('TicketQueueFileStore: presence files of waiters', () => {
     },
   );
 
-  for (const [ending, endWait] of [
+  void test.each(
     [
-      'gives up',
-      (mutex: Mutex) =>
-        mutex.acquire('product-42', async () => {}, {
-          mode: Modes.skipIfBusy({ waitAtMost: 50 }),
-        }),
-    ],
-    [
-      'cancels',
-      async (mutex: Mutex, linedUp: () => Promise<void>) => {
-        // A cancelled call rejects at once, while its lock store may still be
-        // lining it up: cancel only once the waiter is in the queue.
-        const cancel = new AbortController();
-        const waiting = mutex
-          .acquire('product-42', async () => {}, { signal: cancel.signal })
-          .catch((error: unknown) => error);
-        await linedUp();
-        cancel.abort();
-        return waiting;
-      },
-    ],
-  ] as const) {
-    test(
-      `a waiter that ${ending} leaves its ticket for an evicter, and no presence file once the key moves past it`,
-      { timeout: 20_000 },
-      async (t) => {
-        // Arrange: a waiter lines up behind a holder and ends its wait.
-        await using directory = await scratchDirectory();
-        await using holder = startWorker(
-          callerSource(ticketQueue, directory.path),
-          'holder',
-        );
-        await waitUntil(
-          t,
-          () => holder.has('holding'),
-          () => holder.stderr,
-          5000,
-        );
-        await endWait(new Mutex(ticketQueue.create(directory.path)), () =>
-          waitUntil(
+      [
+        'gives up',
+        (mutex: Mutex) =>
+          mutex.acquire('product-42', async () => {}, {
+            mode: Modes.skipIfBusy({ waitAtMost: 50 }),
+          }),
+      ],
+      [
+        'cancels',
+        async (mutex: Mutex, linedUp: () => Promise<void>) => {
+          // A cancelled call rejects at once, while its lock store may still be
+          // lining it up: cancel only once the waiter is in the queue.
+          const cancel = new AbortController();
+          const waiting = mutex
+            .acquire('product-42', async () => {}, { signal: cancel.signal })
+            .catch((error: unknown) => error);
+          await linedUp();
+          cancel.abort();
+          return waiting;
+        },
+      ],
+    ] as const,
+    ([ending, endWait]) =>
+      test(
+        `a waiter that ${ending} leaves its ticket for an evicter, and no presence file once the key moves past it`,
+        { timeout: 20_000 },
+        async (t) => {
+          // Arrange: a waiter lines up behind a holder and ends its wait.
+          await using directory = await scratchDirectory();
+          await using holder = startWorker(
+            callerSource(ticketQueue, directory.path),
+            'holder',
+          );
+          await waitUntil(
             t,
-            () => ticketsIn(queueIn(directory.path)) === 2,
-            () =>
-              `The waiter must line up behind the holder.\n${holder.stderr}`,
+            () => holder.has('holding'),
+            () => holder.stderr,
             5000,
-          ),
-        );
-        assert.equal(ticketsIn(queueIn(directory.path)), 2);
-        assert.equal((await presenceFilesIn(directory.path)).length, 2);
-        holder.child.send('release');
-        await waitUntil(
-          t,
-          () => holder.has('released'),
-          () => holder.stderr,
-          5000,
-        );
+          );
+          await endWait(new Mutex(ticketQueue.create(directory.path)), () =>
+            waitUntil(
+              t,
+              () => ticketsIn(queueIn(directory.path)) === 2,
+              () =>
+                `The waiter must line up behind the holder.\n${holder.stderr}`,
+              5000,
+            ),
+          );
+          assert.equal(ticketsIn(queueIn(directory.path)), 2);
+          assert.equal((await presenceFilesIn(directory.path)).length, 2);
+          holder.child.send('release');
+          await waitUntil(
+            t,
+            () => holder.has('released'),
+            () => holder.stderr,
+            5000,
+          );
 
-        // Act
-        await takeAndRelease(ticketQueue, directory.path);
+          // Act
+          await takeAndRelease(ticketQueue, directory.path);
 
-        // Assert
-        assert.deepEqual(await presenceFilesIn(directory.path), []);
-      },
-    );
-  }
+          // Assert
+          assert.deepEqual(await presenceFilesIn(directory.path), []);
+        },
+      ),
+  );
 });
 
 test(

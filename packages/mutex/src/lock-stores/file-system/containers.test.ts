@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { type TestContext, describe, test } from 'node:test';
+import { type TestContext, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 import {
@@ -9,6 +9,7 @@ import {
   type DockerVolume,
   TestRun,
 } from '@zukhruf/testing/docker';
+import { describe } from '@zukhruf/testing/node';
 
 import { isRecord } from '../../shared/is-record.ts';
 
@@ -144,7 +145,7 @@ const lockFiles = (volume: DockerVolume) =>
     ],
   });
 
-for (const storeName of stores) {
+void describe.each(stores, (storeName) =>
   describe(`${storeName} shared by containers on one machine`, () => {
     test('a waiter never takes the key of a holder that is alive in another container with the same hostname', async (t) => {
       // Arrange: the holder starts after 300 other processes, so its PID
@@ -248,5 +249,5 @@ for (const storeName of stores) {
         'A dead holder in the waiter’s own PID namespace must be evicted',
       );
     });
-  });
-}
+  }),
+);

@@ -3,8 +3,10 @@ import { once } from 'node:events';
 import { type Socket, connect, createServer } from 'node:net';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline';
-import { describe, test } from 'node:test';
+import { describe } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
+
+import { test } from '@zukhruf/testing/node';
 
 import { ProtocolVersionError, UnsupportedRequestError } from '../../index.ts';
 import { Mutex } from '../../mutex/mutex.ts';
@@ -233,90 +235,100 @@ describe('Socket store protocol handshake', () => {
     },
   );
 
-  for (const [what, line] of [
-    ['another protocol version', JSON.stringify({ op: 'hello', version: 99 })],
-    // Any hello gets an answer: a process of a later protocol must learn that it differs, not wait.
-    ['no protocol version', JSON.stringify({ op: 'hello' })],
-  ] as const) {
-    test(
-      `a leader refuses a process whose hello gives ${what}, and its followers keep working`,
-      onUnixSockets,
-      async () => {
-        // Arrange: a real leader serves the directory, and a follower uses it.
-        await using directory = await scratchDirectory();
-        await using leader = new SocketStore(directory.path, {
-          pollInterval: 10,
-        });
-        await (await leader.acquire('warm-up'))[Symbol.asyncDispose]();
-        await using follower = new SocketStore(directory.path, {
-          pollInterval: 10,
-        });
-        await (await follower.acquire('warm-up'))[Symbol.asyncDispose]();
-
-        // Act
-        const answers = await askLeader(directory.path, line);
-
-        // Assert: the leader names its own version and hangs up on that process only.
-        assert.equal(answers.length, 1);
-        const [answer] = answers;
-        assert.ok(answer);
-        const refusal: unknown = JSON.parse(answer);
-        assert.ok(
-          typeof refusal === 'object' &&
-            refusal !== null &&
-            'op' in refusal &&
-            refusal.op === 'refused' &&
-            'version' in refusal &&
-            refusal.version === PROTOCOL_VERSION,
-          answer,
-        );
-        assert.equal(await outcome(follower.acquire('product:42')), 'granted');
-      },
-    );
-  }
-
-  for (const [what, line] of [
-    ['a line that is not JSON', 'not json'],
+  void test.each(
     [
-      'a lock request with no hello',
-      JSON.stringify({ op: 'acquire', id: 'x', key: 'product:42' }),
-    ],
-  ] as const) {
-    test(
-      `a leader gives no answer to a process that opens with ${what}, and keeps it connected until its term ends`,
-      onUnixSockets,
-      async (t) => {
-        // Arrange: a real leader serves the directory, and a follower uses it.
-        await using directory = await scratchDirectory();
-        await using leader = new SocketStore(directory.path, {
-          pollInterval: 10,
-        });
-        await (await leader.acquire('warm-up'))[Symbol.asyncDispose]();
-        await using follower = new SocketStore(directory.path, {
-          pollInterval: 10,
-        });
-        await (await follower.acquire('warm-up'))[Symbol.asyncDispose]();
+      [
+        'another protocol version',
+        JSON.stringify({ op: 'hello', version: 99 }),
+      ],
+      // Any hello gets an answer: a process of a later protocol must learn that it differs, not wait.
+      ['no protocol version', JSON.stringify({ op: 'hello' })],
+    ] as const,
+    ([what, line]) =>
+      test(
+        `a leader refuses a process whose hello gives ${what}, and its followers keep working`,
+        onUnixSockets,
+        async () => {
+          // Arrange: a real leader serves the directory, and a follower uses it.
+          await using directory = await scratchDirectory();
+          await using leader = new SocketStore(directory.path, {
+            pollInterval: 10,
+          });
+          await (await leader.acquire('warm-up'))[Symbol.asyncDispose]();
+          await using follower = new SocketStore(directory.path, {
+            pollInterval: 10,
+          });
+          await (await follower.acquire('warm-up'))[Symbol.asyncDispose]();
 
-        // Act: a process that connects again after each hang-up opens with that line.
-        using old = await processWithoutHello(directory.path, line);
-        const followed = await outcome(follower.acquire('product:42'));
-        // A leader that hangs up starts the loop of connections at once; this time lets it show.
-        await delay(200);
+          // Act
+          const answers = await askLeader(directory.path, line);
 
-        // Assert: no answer and no hang-up, and the request was never served.
-        assert.equal(old.closes, 0, `The leader hung up ${old.closes} times`);
-        assert.deepEqual(old.answers, []);
-        assert.equal(followed, 'granted');
-        // The end of the term still closes the connection, so the process was connected all along.
-        await leader[Symbol.asyncDispose]();
-        await waitUntil(
-          t,
-          () => old.closes === 1,
-          'The end of the term must close the connection',
-        );
-      },
-    );
-  }
+          // Assert: the leader names its own version and hangs up on that process only.
+          assert.equal(answers.length, 1);
+          const [answer] = answers;
+          assert.ok(answer);
+          const refusal: unknown = JSON.parse(answer);
+          assert.ok(
+            typeof refusal === 'object' &&
+              refusal !== null &&
+              'op' in refusal &&
+              refusal.op === 'refused' &&
+              'version' in refusal &&
+              refusal.version === PROTOCOL_VERSION,
+            answer,
+          );
+          assert.equal(
+            await outcome(follower.acquire('product:42')),
+            'granted',
+          );
+        },
+      ),
+  );
+
+  void test.each(
+    [
+      ['a line that is not JSON', 'not json'],
+      [
+        'a lock request with no hello',
+        JSON.stringify({ op: 'acquire', id: 'x', key: 'product:42' }),
+      ],
+    ] as const,
+    ([what, line]) =>
+      test(
+        `a leader gives no answer to a process that opens with ${what}, and keeps it connected until its term ends`,
+        onUnixSockets,
+        async (t) => {
+          // Arrange: a real leader serves the directory, and a follower uses it.
+          await using directory = await scratchDirectory();
+          await using leader = new SocketStore(directory.path, {
+            pollInterval: 10,
+          });
+          await (await leader.acquire('warm-up'))[Symbol.asyncDispose]();
+          await using follower = new SocketStore(directory.path, {
+            pollInterval: 10,
+          });
+          await (await follower.acquire('warm-up'))[Symbol.asyncDispose]();
+
+          // Act: a process that connects again after each hang-up opens with that line.
+          using old = await processWithoutHello(directory.path, line);
+          const followed = await outcome(follower.acquire('product:42'));
+          // A leader that hangs up starts the loop of connections at once; this time lets it show.
+          await delay(200);
+
+          // Assert: no answer and no hang-up, and the request was never served.
+          assert.equal(old.closes, 0, `The leader hung up ${old.closes} times`);
+          assert.deepEqual(old.answers, []);
+          assert.equal(followed, 'granted');
+          // The end of the term still closes the connection, so the process was connected all along.
+          await leader[Symbol.asyncDispose]();
+          await waitUntil(
+            t,
+            () => old.closes === 1,
+            'The end of the term must close the connection',
+          );
+        },
+      ),
+  );
 
   test(
     'a leader closes its side when a process that it gave no answer closes its side',

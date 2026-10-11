@@ -2,8 +2,10 @@ import assert from 'node:assert/strict';
 import { readdirSync } from 'node:fs';
 import { chmod, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { describe, test } from 'node:test';
+import { describe } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
+
+import { test } from '@zukhruf/testing/node';
 
 import { Modes } from '../../mutex/acquire-modes/modes.ts';
 import { Mutex } from '../../mutex/mutex.ts';
@@ -102,7 +104,7 @@ describe('SqliteStore', () => {
 
 describe('SqliteStore holder record', () => {
   // Text that is not JSON, or JSON that names no caller.
-  for (const damaged of ['garbage', '{"pid":1}']) {
+  void test.each(['garbage', '{"pid":1}'], (damaged) =>
     test(`a holder record that holds ${damaged} names nobody, and the next holder writes its own`, async () => {
       // Arrange: a power loss in the middle of a write can leave such a record; no operation writes one.
       await using directory = await scratchDirectory();
@@ -131,8 +133,8 @@ describe('SqliteStore holder record', () => {
         true,
         'The holder must replace the damaged record with its own',
       );
-    });
-  }
+    }),
+  );
 
   test(
     'a holder that was killed leaves no file once the next holder took the key and let it go',

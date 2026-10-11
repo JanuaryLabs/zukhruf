@@ -2,9 +2,11 @@ import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { access, mkdir, mkdtemp, readFile, rename, rm } from 'node:fs/promises';
 import { join } from 'node:path';
-import { describe, test } from 'node:test';
+import { describe } from 'node:test';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
+
+import { test } from '@zukhruf/testing/node';
 
 import { Modes } from '../mutex/acquire-modes/modes.ts';
 import { Mutex } from '../mutex/mutex.ts';
@@ -240,7 +242,7 @@ function tokenOf(message: unknown): bigint {
 }
 
 describe('A holder on the latest release, and this source', () => {
-  for (const { store, key } of cases) {
+  void test.each(cases, ({ store, key }) =>
     test(
       `${store}, ${label(key)}: this source sees the holder, waits its turn, and gets a newer token`,
       { timeout: 30000 },
@@ -287,12 +289,12 @@ describe('A holder on the latest release, and this source', () => {
           `The token of this source must be newer than the ${release.version} holder's`,
         );
       },
-    );
-  }
+    ),
+  );
 });
 
 describe('A holder on this source, and the latest release', () => {
-  for (const { store, key } of cases) {
+  void test.each(cases, ({ store, key }) =>
     test(
       `${store}, ${label(key)}: the release sees the holder, waits its turn, and gets a newer token`,
       { timeout: 30000 },
@@ -352,334 +354,341 @@ describe('A holder on this source, and the latest release', () => {
           await holding;
         }
       },
-    );
-  }
+    ),
+  );
 });
 
 describe('A holder on the latest release that was killed, and this source', () => {
-  for (const { store, key } of cases.filter(
-    (candidate) =>
-      candidate.store !== 'SocketStore' && candidate.key.length < 32,
-  )) {
-    test(
-      `${store}, ${label(key)}: this source finds the holder gone and gets the key`,
-      { timeout: 30000 },
-      async (t) => {
-        // Arrange: a process on the release holds the key and is killed, so its records stay behind.
-        await using directory = await scratchDirectory();
-        await using holder = startWorker(
-          releaseHolder(store, directory.path, key),
-          'holder',
-        );
-        await waitUntil(
-          t,
-          () => holder.has('entered'),
-          () => `The ${release.version} holder must enter.\n${holder.stderr}`,
-          newProcessTimeout,
-        );
-        holder.child.kill('SIGKILL');
-        await holder.closed;
-        await using host = openThisSource(store, directory.path);
-        const mutex = new Mutex(host.store);
+  void test.each(
+    cases.filter(
+      (candidate) =>
+        candidate.store !== 'SocketStore' && candidate.key.length < 32,
+    ),
+    ({ store, key }) =>
+      test(
+        `${store}, ${label(key)}: this source finds the holder gone and gets the key`,
+        { timeout: 30000 },
+        async (t) => {
+          // Arrange: a process on the release holds the key and is killed, so its records stay behind.
+          await using directory = await scratchDirectory();
+          await using holder = startWorker(
+            releaseHolder(store, directory.path, key),
+            'holder',
+          );
+          await waitUntil(
+            t,
+            () => holder.has('entered'),
+            () => `The ${release.version} holder must enter.\n${holder.stderr}`,
+            newProcessTimeout,
+          );
+          holder.child.kill('SIGKILL');
+          await holder.closed;
+          await using host = openThisSource(store, directory.path);
+          const mutex = new Mutex(host.store);
 
-        // Act
-        const looked = await mutex.isHeld(key);
-        const next = await mutex.acquire(
-          key,
-          async ({ token }) => token.value,
-          {
-            mode: Modes.skipIfBusy(),
-          },
-        );
+          // Act
+          const looked = await mutex.isHeld(key);
+          const next = await mutex.acquire(
+            key,
+            async ({ token }) => token.value,
+            {
+              mode: Modes.skipIfBusy(),
+            },
+          );
 
-        // Assert: this source reads the presence of the release's holder, finds it gone, and removes its records.
-        assert.equal(
-          looked,
-          false,
-          `The killed ${release.version} holder must read as gone`,
-        );
-        assert.ok(next.acquired, 'This source must get the key');
-        assert.ok(
-          next.value > tokenOf(holder.find('entered')),
-          `The token of this source must be newer than the killed ${release.version} holder's`,
-        );
-      },
-    );
-  }
+          // Assert: this source reads the presence of the release's holder, finds it gone, and removes its records.
+          assert.equal(
+            looked,
+            false,
+            `The killed ${release.version} holder must read as gone`,
+          );
+          assert.ok(next.acquired, 'This source must get the key');
+          assert.ok(
+            next.value > tokenOf(holder.find('entered')),
+            `The token of this source must be newer than the killed ${release.version} holder's`,
+          );
+        },
+      ),
+  );
 });
 
 describe('Two evicters of one dead holder, one on the latest release and one on this source', () => {
-  for (const { store, key } of cases.filter(
-    (candidate) =>
-      (candidate.store === 'LockFileStore' ||
-        candidate.store === 'TicketQueueFileStore') &&
-      candidate.key.length < 32,
-  )) {
-    test(
-      `${store}, ${label(key)}: while the release evicts the dead holder, this source waits its turn, and the release then holds the key alone`,
-      { timeout: 30000 },
-      async (t) => {
-        // Arrange: a holder on the release is killed, and an evicter on the release stops inside its eviction.
-        await using directory = await scratchDirectory();
-        await using holder = startWorker(
-          releaseHolder(store, directory.path, key),
-          'holder',
-        );
-        await waitUntil(
-          t,
-          () => holder.has('entered'),
-          () => `The ${release.version} holder must enter.\n${holder.stderr}`,
-          newProcessTimeout,
-        );
-        holder.child.kill('SIGKILL');
-        await holder.closed;
-        await using evicter = startWorker(
-          pausedEvicter(release.url, store, directory.path, key),
-          'evicter',
-        );
-        await waitUntil(
-          t,
-          () => evicter.has('evicting'),
-          () =>
-            `The ${release.version} evicter must start to evict.\n${evicter.stderr}`,
-          newProcessTimeout,
-        );
-        await using host = openThisSource(store, directory.path);
-        const mutex = new Mutex(host.store);
-        const tryOnce = () =>
-          mutex.acquire(key, async ({ token }) => token.value, {
-            mode: Modes.skipIfBusy(),
-          });
+  void test.each(
+    cases.filter(
+      (candidate) =>
+        (candidate.store === 'LockFileStore' ||
+          candidate.store === 'TicketQueueFileStore') &&
+        candidate.key.length < 32,
+    ),
+    ({ store, key }) => {
+      test(
+        `${store}, ${label(key)}: while the release evicts the dead holder, this source waits its turn, and the release then holds the key alone`,
+        { timeout: 30000 },
+        async (t) => {
+          // Arrange: a holder on the release is killed, and an evicter on the release stops inside its eviction.
+          await using directory = await scratchDirectory();
+          await using holder = startWorker(
+            releaseHolder(store, directory.path, key),
+            'holder',
+          );
+          await waitUntil(
+            t,
+            () => holder.has('entered'),
+            () => `The ${release.version} holder must enter.\n${holder.stderr}`,
+            newProcessTimeout,
+          );
+          holder.child.kill('SIGKILL');
+          await holder.closed;
+          await using evicter = startWorker(
+            pausedEvicter(release.url, store, directory.path, key),
+            'evicter',
+          );
+          await waitUntil(
+            t,
+            () => evicter.has('evicting'),
+            () =>
+              `The ${release.version} evicter must start to evict.\n${evicter.stderr}`,
+            newProcessTimeout,
+          );
+          await using host = openThisSource(store, directory.path);
+          const mutex = new Mutex(host.store);
+          const tryOnce = () =>
+            mutex.acquire(key, async ({ token }) => token.value, {
+              mode: Modes.skipIfBusy(),
+            });
 
-        // Act
-        const whileEvicting = await tryOnce();
-        evicter.child.send('resume');
-        await waitUntil(
-          t,
-          () => evicter.has('holding'),
-          () =>
-            `The ${release.version} evicter must finish and take the key.\n${evicter.stderr}`,
-          newProcessTimeout,
-        );
-        const afterEviction = await tryOnce();
+          // Act
+          const whileEvicting = await tryOnce();
+          evicter.child.send('resume');
+          await waitUntil(
+            t,
+            () => evicter.has('holding'),
+            () =>
+              `The ${release.version} evicter must finish and take the key.\n${evicter.stderr}`,
+            newProcessTimeout,
+          );
+          const afterEviction = await tryOnce();
 
-        // Assert: both versions lock one reclaim file, so they evict in turn, and this source reads
-        // the holder that the release evicter became as present instead of evicting it.
-        assert.equal(
-          whileEvicting.acquired,
-          false,
-          `This source must not evict while the ${release.version} evicter holds the reclaim lock`,
-        );
-        assert.equal(
-          afterEviction.acquired,
-          false,
-          `This source must see the ${release.version} evicter hold the key once it finished, and not evict it`,
-        );
-      },
-    );
+          // Assert: both versions lock one reclaim file, so they evict in turn, and this source reads
+          // the holder that the release evicter became as present instead of evicting it.
+          assert.equal(
+            whileEvicting.acquired,
+            false,
+            `This source must not evict while the ${release.version} evicter holds the reclaim lock`,
+          );
+          assert.equal(
+            afterEviction.acquired,
+            false,
+            `This source must see the ${release.version} evicter hold the key once it finished, and not evict it`,
+          );
+        },
+      );
 
-    test(
-      `${store}, ${label(key)}: when the release evicter dies inside its eviction, this source evicts the dead holder and gets the key`,
-      { timeout: 30000 },
-      async (t) => {
-        // Arrange: a holder on the release is killed, and an evicter on the release stops inside its eviction.
-        await using directory = await scratchDirectory();
-        await using holder = startWorker(
-          releaseHolder(store, directory.path, key),
-          'holder',
-        );
-        await waitUntil(
-          t,
-          () => holder.has('entered'),
-          () => `The ${release.version} holder must enter.\n${holder.stderr}`,
-          newProcessTimeout,
-        );
-        holder.child.kill('SIGKILL');
-        await holder.closed;
-        await using evicter = startWorker(
-          pausedEvicter(release.url, store, directory.path, key),
-          'evicter',
-        );
-        await waitUntil(
-          t,
-          () => evicter.has('evicting'),
-          () =>
-            `The ${release.version} evicter must start to evict.\n${evicter.stderr}`,
-          newProcessTimeout,
-        );
-        await using host = openThisSource(store, directory.path);
-        const mutex = new Mutex(host.store);
+      test(
+        `${store}, ${label(key)}: when the release evicter dies inside its eviction, this source evicts the dead holder and gets the key`,
+        { timeout: 30000 },
+        async (t) => {
+          // Arrange: a holder on the release is killed, and an evicter on the release stops inside its eviction.
+          await using directory = await scratchDirectory();
+          await using holder = startWorker(
+            releaseHolder(store, directory.path, key),
+            'holder',
+          );
+          await waitUntil(
+            t,
+            () => holder.has('entered'),
+            () => `The ${release.version} holder must enter.\n${holder.stderr}`,
+            newProcessTimeout,
+          );
+          holder.child.kill('SIGKILL');
+          await holder.closed;
+          await using evicter = startWorker(
+            pausedEvicter(release.url, store, directory.path, key),
+            'evicter',
+          );
+          await waitUntil(
+            t,
+            () => evicter.has('evicting'),
+            () =>
+              `The ${release.version} evicter must start to evict.\n${evicter.stderr}`,
+            newProcessTimeout,
+          );
+          await using host = openThisSource(store, directory.path);
+          const mutex = new Mutex(host.store);
 
-        // Act: the evicter dies, so the kernel frees its reclaim lock.
-        evicter.child.kill('SIGKILL');
-        await evicter.closed;
-        const next = await mutex.acquire(
-          key,
-          async ({ token }) => token.value,
-          { mode: Modes.skipIfBusy() },
-        );
+          // Act: the evicter dies, so the kernel frees its reclaim lock.
+          evicter.child.kill('SIGKILL');
+          await evicter.closed;
+          const next = await mutex.acquire(
+            key,
+            async ({ token }) => token.value,
+            { mode: Modes.skipIfBusy() },
+          );
 
-        // Assert
-        assert.ok(
-          next.acquired,
-          `This source must evict the dead holder once the ${release.version} evicter is gone`,
-        );
-      },
-    );
+          // Assert
+          assert.ok(
+            next.acquired,
+            `This source must evict the dead holder once the ${release.version} evicter is gone`,
+          );
+        },
+      );
 
-    test(
-      `${store}, ${label(key)}: while this source evicts the dead holder, a waiter on the release waits its turn`,
-      { timeout: 30000 },
-      async (t) => {
-        // Arrange: a holder on the release is killed, and an evicter on this source stops inside its eviction.
-        await using directory = await scratchDirectory();
-        await using holder = startWorker(
-          releaseHolder(store, directory.path, key),
-          'holder',
-        );
-        await waitUntil(
-          t,
-          () => holder.has('entered'),
-          () => `The ${release.version} holder must enter.\n${holder.stderr}`,
-          newProcessTimeout,
-        );
-        holder.child.kill('SIGKILL');
-        await holder.closed;
-        await using evicter = startWorker(
-          pausedEvicter(thisSource, store, directory.path, key),
-          'evicter',
-        );
-        await waitUntil(
-          t,
-          () => evicter.has('evicting'),
-          () => `This source's evicter must start to evict.\n${evicter.stderr}`,
-          newProcessTimeout,
-        );
+      test(
+        `${store}, ${label(key)}: while this source evicts the dead holder, a waiter on the release waits its turn`,
+        { timeout: 30000 },
+        async (t) => {
+          // Arrange: a holder on the release is killed, and an evicter on this source stops inside its eviction.
+          await using directory = await scratchDirectory();
+          await using holder = startWorker(
+            releaseHolder(store, directory.path, key),
+            'holder',
+          );
+          await waitUntil(
+            t,
+            () => holder.has('entered'),
+            () => `The ${release.version} holder must enter.\n${holder.stderr}`,
+            newProcessTimeout,
+          );
+          holder.child.kill('SIGKILL');
+          await holder.closed;
+          await using evicter = startWorker(
+            pausedEvicter(thisSource, store, directory.path, key),
+            'evicter',
+          );
+          await waitUntil(
+            t,
+            () => evicter.has('evicting'),
+            () =>
+              `This source's evicter must start to evict.\n${evicter.stderr}`,
+            newProcessTimeout,
+          );
 
-        // Act: a waiter on the release tries the key once.
-        await using caller = startWorker(
-          releaseCaller(store, directory.path, key),
-          'caller',
-        );
-        await waitUntil(
-          t,
-          () => caller.has('tried'),
-          () => `The ${release.version} waiter must try.\n${caller.stderr}`,
-          newProcessTimeout,
-        );
-        // A waiter that evicted would leave the evicter's live ticket first, and a held key.
-        await using host = openThisSource(store, directory.path);
-        const heldAfterTry = await new Mutex(host.store).isHeld(key);
+          // Act: a waiter on the release tries the key once.
+          await using caller = startWorker(
+            releaseCaller(store, directory.path, key),
+            'caller',
+          );
+          await waitUntil(
+            t,
+            () => caller.has('tried'),
+            () => `The ${release.version} waiter must try.\n${caller.stderr}`,
+            newProcessTimeout,
+          );
+          // A waiter that evicted would leave the evicter's live ticket first, and a held key.
+          await using host = openThisSource(store, directory.path);
+          const heldAfterTry = await new Mutex(host.store).isHeld(key);
 
-        // Act: this source's evicter dies, so the kernel frees its reclaim lock, and the waiter tries again.
-        evicter.child.kill('SIGKILL');
-        await evicter.closed;
-        caller.child.send('again');
-        await waitUntil(
-          t,
-          () => caller.has('tried again'),
-          () =>
-            `The ${release.version} waiter must try again.\n${caller.stderr}`,
-          newProcessTimeout,
-        );
+          // Act: this source's evicter dies, so the kernel frees its reclaim lock, and the waiter tries again.
+          evicter.child.kill('SIGKILL');
+          await evicter.closed;
+          caller.child.send('again');
+          await waitUntil(
+            t,
+            () => caller.has('tried again'),
+            () =>
+              `The ${release.version} waiter must try again.\n${caller.stderr}`,
+            newProcessTimeout,
+          );
 
-        // Assert: the waiter evicts once the lock is free, so its first "busy" came from the reclaim lock.
-        const tried = caller.find('tried');
-        const again = caller.find('tried again');
-        assert.ok(
-          isRecord(tried) &&
-            isRecord(tried.whileHeld) &&
-            isRecord(again) &&
-            isRecord(again.afterRelease),
-          `The ${release.version} waiter must report both tries, got ${JSON.stringify([tried, again])}`,
-        );
-        assert.equal(
-          tried.whileHeld.acquired,
-          false,
-          `A waiter on ${release.version} must not take the key while this source's evicter holds the reclaim lock`,
-        );
-        assert.equal(
-          heldAfterTry,
-          false,
-          `A waiter on ${release.version} must leave the dead holder in place while this source's evicter holds the reclaim lock`,
-        );
-        assert.equal(
-          again.afterRelease.acquired,
-          true,
-          `A waiter on ${release.version} must evict the dead holder once this source's evicter is gone`,
-        );
-      },
-    );
+          // Assert: the waiter evicts once the lock is free, so its first "busy" came from the reclaim lock.
+          const tried = caller.find('tried');
+          const again = caller.find('tried again');
+          assert.ok(
+            isRecord(tried) &&
+              isRecord(tried.whileHeld) &&
+              isRecord(again) &&
+              isRecord(again.afterRelease),
+            `The ${release.version} waiter must report both tries, got ${JSON.stringify([tried, again])}`,
+          );
+          assert.equal(
+            tried.whileHeld.acquired,
+            false,
+            `A waiter on ${release.version} must not take the key while this source's evicter holds the reclaim lock`,
+          );
+          assert.equal(
+            heldAfterTry,
+            false,
+            `A waiter on ${release.version} must leave the dead holder in place while this source's evicter holds the reclaim lock`,
+          );
+          assert.equal(
+            again.afterRelease.acquired,
+            true,
+            `A waiter on ${release.version} must evict the dead holder once this source's evicter is gone`,
+          );
+        },
+      );
 
-    test(
-      `${store}, ${label(key)}: when this source's evicter finishes and holds the key, a waiter on the release leaves it alone`,
-      { timeout: 30000 },
-      async (t) => {
-        // Arrange: a holder on the release is killed, and an evicter on this source stops inside its eviction.
-        await using directory = await scratchDirectory();
-        await using holder = startWorker(
-          releaseHolder(store, directory.path, key),
-          'holder',
-        );
-        await waitUntil(
-          t,
-          () => holder.has('entered'),
-          () => `The ${release.version} holder must enter.\n${holder.stderr}`,
-          newProcessTimeout,
-        );
-        holder.child.kill('SIGKILL');
-        await holder.closed;
-        await using evicter = startWorker(
-          pausedEvicter(thisSource, store, directory.path, key),
-          'evicter',
-        );
-        await waitUntil(
-          t,
-          () => evicter.has('evicting'),
-          () => `This source's evicter must start to evict.\n${evicter.stderr}`,
-          newProcessTimeout,
-        );
-        await using caller = startWorker(
-          releaseCaller(store, directory.path, key),
-          'caller',
-        );
-        await waitUntil(
-          t,
-          () => caller.has('tried'),
-          () => `The ${release.version} waiter must try.\n${caller.stderr}`,
-          newProcessTimeout,
-        );
+      return test(
+        `${store}, ${label(key)}: when this source's evicter finishes and holds the key, a waiter on the release leaves it alone`,
+        { timeout: 30000 },
+        async (t) => {
+          // Arrange: a holder on the release is killed, and an evicter on this source stops inside its eviction.
+          await using directory = await scratchDirectory();
+          await using holder = startWorker(
+            releaseHolder(store, directory.path, key),
+            'holder',
+          );
+          await waitUntil(
+            t,
+            () => holder.has('entered'),
+            () => `The ${release.version} holder must enter.\n${holder.stderr}`,
+            newProcessTimeout,
+          );
+          holder.child.kill('SIGKILL');
+          await holder.closed;
+          await using evicter = startWorker(
+            pausedEvicter(thisSource, store, directory.path, key),
+            'evicter',
+          );
+          await waitUntil(
+            t,
+            () => evicter.has('evicting'),
+            () =>
+              `This source's evicter must start to evict.\n${evicter.stderr}`,
+            newProcessTimeout,
+          );
+          await using caller = startWorker(
+            releaseCaller(store, directory.path, key),
+            'caller',
+          );
+          await waitUntil(
+            t,
+            () => caller.has('tried'),
+            () => `The ${release.version} waiter must try.\n${caller.stderr}`,
+            newProcessTimeout,
+          );
 
-        // Act: this source's evicter finishes and takes the key, and the waiter on the release tries again.
-        evicter.child.send('resume');
-        await waitUntil(
-          t,
-          () => evicter.has('holding'),
-          () =>
-            `This source's evicter must finish and take the key.\n${evicter.stderr}`,
-          newProcessTimeout,
-        );
-        caller.child.send('again');
-        await waitUntil(
-          t,
-          () => caller.has('tried again'),
-          () =>
-            `The ${release.version} waiter must try again.\n${caller.stderr}`,
-          newProcessTimeout,
-        );
+          // Act: this source's evicter finishes and takes the key, and the waiter on the release tries again.
+          evicter.child.send('resume');
+          await waitUntil(
+            t,
+            () => evicter.has('holding'),
+            () =>
+              `This source's evicter must finish and take the key.\n${evicter.stderr}`,
+            newProcessTimeout,
+          );
+          caller.child.send('again');
+          await waitUntil(
+            t,
+            () => caller.has('tried again'),
+            () =>
+              `The ${release.version} waiter must try again.\n${caller.stderr}`,
+            newProcessTimeout,
+          );
 
-        // Assert: the release reads the holder that this source's evicter became as present.
-        const again = caller.find('tried again');
-        assert.ok(
-          isRecord(again) && isRecord(again.afterRelease),
-          `The ${release.version} waiter must report its second try, got ${JSON.stringify(again)}`,
-        );
-        assert.equal(
-          again.afterRelease.acquired,
-          false,
-          `A waiter on ${release.version} must see this source's evicter hold the key once it finished, and not evict it`,
-        );
-      },
-    );
-  }
+          // Assert: the release reads the holder that this source's evicter became as present.
+          const again = caller.find('tried again');
+          assert.ok(
+            isRecord(again) && isRecord(again.afterRelease),
+            `The ${release.version} waiter must report its second try, got ${JSON.stringify(again)}`,
+          );
+          assert.equal(
+            again.afterRelease.acquired,
+            false,
+            `A waiter on ${release.version} must see this source's evicter hold the key once it finished, and not evict it`,
+          );
+        },
+      );
+    },
+  );
 });

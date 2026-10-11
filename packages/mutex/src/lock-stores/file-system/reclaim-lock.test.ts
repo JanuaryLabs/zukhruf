@@ -4,7 +4,9 @@ import assert from 'node:assert/strict';
 import fsPromises, { readdir, writeFile } from 'node:fs/promises';
 import { syncBuiltinESMExports } from 'node:module';
 import { join } from 'node:path';
-import { describe, mock, test } from 'node:test';
+import { describe, mock } from 'node:test';
+
+import { test } from '@zukhruf/testing/node';
 
 import { scratchDirectory } from '../../testing/scratch-directory.ts';
 import { waitUntil } from '../../testing/wait-until.ts';
@@ -101,7 +103,7 @@ const journals = async (directory: string) =>
   (await readdir(directory)).filter((file) => file.endsWith('-journal'));
 
 describe('A waiter that dies while it evicts a dead holder', () => {
-  for (const store of stores) {
+  void test.each(stores, (store) =>
     test(
       `${store.name}: later waiters still evict the dead holder, one at a time`,
       { timeout: 20_000 },
@@ -201,10 +203,10 @@ describe('A waiter that dies while it evicts a dead holder', () => {
         );
         await lost.value[Symbol.asyncDispose]();
       },
-    );
-  }
+    ),
+  );
 
-  for (const store of stores) {
+  void test.each(stores, (store) =>
     test(
       `${store.name}: a reclaim file left by an older version fails the acquire with its name`,
       { timeout: 20_000 },
@@ -251,6 +253,6 @@ describe('A waiter that dies while it evicts a dead holder', () => {
           return true;
         });
       },
-    );
-  }
+    ),
+  );
 });
