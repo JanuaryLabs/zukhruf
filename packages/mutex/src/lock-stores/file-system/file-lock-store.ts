@@ -1,8 +1,7 @@
 import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
-import { setTimeout as delay } from 'node:timers/promises';
 
-import { untilAborted } from '@zukhruf/async';
+import { poll } from '@zukhruf/async';
 import { FileTokenSource, type TokenSource } from '@zukhruf/fencing';
 import { FileLock, assertLocalDirectory, safeFileName } from '@zukhruf/fs';
 
@@ -76,18 +75,11 @@ export abstract class FileLockStore implements LockStore {
   protected abstract isHeldAt(path: string): Promise<boolean>;
 
   /** Stops between attempts once `signal` aborts, and then rejects with `signal.reason`. */
-  protected async poll<T>(
+  protected poll<T>(
     attempt: () => Promise<T | undefined>,
     signal: AbortSignal | undefined,
   ): Promise<T> {
-    for (;;) {
-      const result = await attempt();
-      if (result !== undefined) return result;
-      await untilAborted(
-        delay(this.#pollInterval, undefined, { signal }),
-        signal,
-      );
-    }
+    return poll(attempt, { interval: this.#pollInterval, signal });
   }
 
   /**

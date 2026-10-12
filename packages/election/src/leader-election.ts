@@ -1,6 +1,4 @@
-import { setTimeout as delay } from 'node:timers/promises';
-
-import { untilAborted } from '@zukhruf/async';
+import { poll } from '@zukhruf/async';
 
 import { Term } from './term.ts';
 
@@ -91,15 +89,11 @@ export abstract class LeaderElection<Claim> {
     const claim = await this.open(signal);
     let won: Pick<Term, 'epoch' | 'afterCleanShutdown'> | undefined;
     try {
-      for (;;) {
-        won = await this.tryClaim(claim, signal);
-        if (won !== undefined) break;
-        if (performance.now() >= deadline) break;
-        await untilAborted(
-          delay(this.#pollInterval, undefined, { signal }),
-          signal,
-        );
-      }
+      won = await poll(() => this.tryClaim(claim, signal), {
+        interval: this.#pollInterval,
+        signal,
+        deadline,
+      });
     } catch (error) {
       await this.close(claim).catch(() => {});
       throw error;

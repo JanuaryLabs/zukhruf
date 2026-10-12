@@ -1,7 +1,7 @@
 {
   "name": "@zukhruf/async",
   "version": "0.3.19",
-  "description": "Helpers for code that waits for promises: cancel a wait when an AbortSignal aborts, and hold callers on a one-shot latch that never rejects.",
+  "description": "Helpers for code that waits for promises: cancel a wait when an AbortSignal aborts, hold callers on a one-shot latch that never rejects, and poll an attempt until it gives a value.",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -18,7 +18,9 @@
     "abortable",
     "promise",
     "async",
-    "latch"
+    "latch",
+    "poll",
+    "polling"
   ],
   "type": "module",
   "types": "./dist/index.d.ts",
