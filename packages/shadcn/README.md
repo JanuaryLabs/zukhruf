@@ -16,8 +16,6 @@ This package keeps one copy. A fix goes into the package one time, and each app 
 npm i @zukhruf/shadcn
 ```
 
-The package is private for now. It is not on npm until its first release.
-
 The peer dependencies are `react` 19, `react-dom` 19 and `tailwindcss` 4. The other dependencies, for example `@base-ui/react` and `lucide-react`, install with the package.
 
 ## Use it
