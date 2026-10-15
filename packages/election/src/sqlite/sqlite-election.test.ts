@@ -300,6 +300,49 @@ describe('The files of a SQLite election', () => {
       );
     },
   );
+
+  // The empty file is what an unsynced write of @zukhruf/mutex 0.2.0 can leave
+  // after a power loss. BigInt reads both texts as a number. No operation of
+  // this version writes either one.
+  for (const { kind, text } of [
+    { kind: 'an empty', text: '' },
+    { kind: 'a padded', text: '   41 ' },
+  ]) {
+    test(
+      `${kind} epoch file fails the campaign with a SyntaxError that names the file, stays as it was, and lets the claim go`,
+      { timeout: 10_000 },
+      async () => {
+        // Arrange
+        await using directory = await scratchDirectory();
+        const epochFile = join(directory.path, 'term.epoch');
+        await fsPromises.writeFile(epochFile, text);
+        const failsOnTheEpochFile = (error: unknown) =>
+          error instanceof SyntaxError && error.message.includes(epochFile);
+
+        // Act
+        const campaigning = electionIn(directory.path).campaign();
+        await assert.rejects(
+          campaigning,
+          failsOnTheEpochFile,
+          'The campaign must fail with a SyntaxError that names the epoch file',
+        );
+        // A claim that is still held makes this campaign wait out its timeout and resolve undefined.
+        const next = electionIn(directory.path).campaign({ timeout: 1_000 });
+
+        // Assert
+        await assert.rejects(
+          next,
+          failsOnTheEpochFile,
+          'The next campaign must take the claim that the failed campaign let go, and fail on the same epoch file',
+        );
+        assert.equal(
+          await fsPromises.readFile(epochFile, 'utf8'),
+          text,
+          'The epoch file must stay as it was',
+        );
+      },
+    );
+  }
 });
 
 describe('A clean shutdown in a SQLite election', () => {

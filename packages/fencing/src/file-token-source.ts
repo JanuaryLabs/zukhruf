@@ -34,10 +34,17 @@ export class FileTokenSource implements TokenSource {
 }
 
 async function readCounter(path: string): Promise<bigint> {
+  let text: string;
   try {
-    return BigInt(await readFile(path, 'utf8'));
+    text = await readFile(path, 'utf8');
   } catch (error) {
     if (isErrno(error, 'ENOENT')) return 0n;
     throw error;
   }
+  const counter = FencingToken.parse(text);
+  if (counter === null)
+    throw new SyntaxError(
+      `The fencing counter ${path} holds ${JSON.stringify(text)}, not decimal digits.`,
+    );
+  return counter.value;
 }

@@ -1,18 +1,21 @@
 # Code copied into this package
 
-This package keeps a few small files that other packages also have. Each one is listed here with its source and what changed, so that a fix in one copy goes into each copy, and the commit names all of them.
+This package keeps a few small files and checks that other packages also have. Each one is listed here with its source and what changed, so that a fix in one copy goes into each copy, and the commit names all of them.
 
-| Copy                               | Source                                            | What changed                                                                            | Backlog |
-| ---------------------------------- | ------------------------------------------------- | --------------------------------------------------------------------------------------- | ------- |
-| `src/testing/wait-until.ts`        | `packages/mutex/src/testing/wait-until.ts`        | Nothing.                                                                                | #2509   |
-| `src/testing/scratch-directory.ts` | `packages/mutex/src/testing/scratch-directory.ts` | The folder name starts with `election-test-`.                                           | #2509   |
-| `src/testing/worker-process.ts`    | `packages/mutex/src/testing/worker-process.ts`    | No `host` and no `nodeOptions` option. The message check is inline, with no `isRecord`. | #2509   |
+| Copy                                                                | Source                                                          | What changed                                                                               | Backlog                                              |
+| ------------------------------------------------------------------- | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------ | ---------------------------------------------------- |
+| `src/testing/wait-until.ts`                                         | `packages/mutex/src/testing/wait-until.ts`                      | Nothing.                                                                                   | #2509                                                |
+| `src/testing/scratch-directory.ts`                                  | `packages/mutex/src/testing/scratch-directory.ts`               | The folder name starts with `election-test-`.                                              | #2509                                                |
+| `src/testing/worker-process.ts`                                     | `packages/mutex/src/testing/worker-process.ts`                  | No `host` and no `nodeOptions` option. The message check is inline, with no `isRecord`.    | #2509                                                |
+| The decimal check in `readEpoch` of `src/sqlite/sqlite-election.ts` | `FencingToken.parse` in `packages/fencing/src/fencing-token.ts` | The check is inline in `readEpoch`. It throws a `SyntaxError` instead of returning `null`. | — (root ADR 0001 rule 4: a tiny helper stays a copy) |
 
 The test helpers are in three packages now: the mutex, the single flight and this one. The maintainer chose a third copy for them, and backlog #2509 records it. The claim of `SqliteElection` is a `FileLock` of `@zukhruf/fs`, so this package keeps no copy of the SQLite result-code checks.
 
+The epoch file holds decimal digits, as each counter file of `@zukhruf/fencing` does. ADR 0001 of `@zukhruf/fencing` says that an election does not depend on that package, so this package keeps a copy of the decimal check of `FencingToken.parse`. Rule 4 of the root ADR 0001 keeps such a tiny helper as a copy.
+
 ## The election is in one place
 
-This package is the election of the mutex and the single flight, made into one campaign with a subclass for each backend. Both packages use it since 2026-10-10, and their copies are deleted. Thus the election has no copy now.
+This package is the election of the mutex and the single flight, made into one campaign with a subclass for each backend. Both packages use it since 2026-10-10, and their copies are deleted. Thus no other package keeps a copy of the election now.
 
 What changed from the copies that the mutex and the single flight had:
 

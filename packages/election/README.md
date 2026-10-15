@@ -50,6 +50,7 @@ next term: 2n
 
 - `campaign({ timeout, signal })` resolves with a `Term`, or with `undefined` when another candidate still leads after `timeout` milliseconds. Without a `timeout`, it tries once. When `signal` aborts, it rejects with `signal.reason`, and a claim that it won meanwhile is given up.
 - `claimFile` and `epochFile` are files in `directory`. Candidates with the same directory and the same file names are one group. Never delete `claimFile` while candidates run: a new file lets a second leader win.
+- `epochFile` holds the epoch of the last term as decimal digits. When it holds other text, `campaign` rejects with a `SyntaxError` that names the file, gives the claim up, and does not change the file. An example is the empty file that `@zukhruf/mutex` 0.2.0 or earlier can leave after a power loss, because those versions did not sync the file to the disk. Thus the epochs never start again at 1, and each new term has a higher epoch than each earlier term.
 - A term that resigns clean writes a third file, `<claimFile>.clean`, beside `claimFile`. It holds the epoch of that term. The next term reads it and removes it.
 - The directory must be on a local file system. On a network file system, `campaign` rejects with `NetworkDirectoryError`.
 - `pollInterval` is the time between two tries, in milliseconds. It defaults to 10. A try never blocks the process.

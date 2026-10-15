@@ -113,11 +113,22 @@ async function readCleanShutdown(path: string): Promise<string | undefined> {
   }
 }
 
+/**
+ * The epoch of the last term, or 0 when there is no epoch file. Only decimal
+ * digits are an epoch: `BigInt` alone would also read `''` as 0, and the
+ * epochs would start again at 1.
+ */
 async function readEpoch(path: string): Promise<bigint> {
+  let text: string;
   try {
-    return BigInt(await readFile(path, 'utf8'));
+    text = await readFile(path, 'utf8');
   } catch (error) {
     if (isErrno(error, 'ENOENT')) return 0n;
     throw error;
   }
+  if (!/^\d+$/.test(text))
+    throw new SyntaxError(
+      `The epoch file ${path} holds ${JSON.stringify(text)}, not decimal digits.`,
+    );
+  return BigInt(text);
 }

@@ -129,6 +129,38 @@ describe('Token sources', () => {
     assert.equal(await readFile(path, 'utf8'), 'abc');
   });
 
+  // The empty file is what an unsynced write of @zukhruf/mutex 0.2.0 can leave
+  // after a power loss. BigInt reads both texts as a number. No operation of
+  // this version writes either one.
+  for (const { kind, text } of [
+    { kind: 'an empty', text: '' },
+    { kind: 'a padded', text: '   41 ' },
+  ]) {
+    test(`${kind} counter file fails the mint with a SyntaxError that names the file, and stays as it was, so tokens never start again`, async () => {
+      // Arrange
+      await using directory = await mkdtempDisposable(
+        join(tmpdir(), 'zukhruf-fencing-'),
+      );
+      const path = join(directory.path, 'product%3A42.fence');
+      await writeFile(path, text);
+
+      // Act
+      const minting = new FileTokenSource(directory.path).next('product:42');
+
+      // Assert
+      await assert.rejects(
+        minting,
+        (error) => error instanceof SyntaxError && error.message.includes(path),
+        'The mint must fail with a SyntaxError that names the counter file',
+      );
+      assert.equal(
+        await readFile(path, 'utf8'),
+        text,
+        'The counter file must stay as it was',
+      );
+    });
+  }
+
   test('a FileTokenSource counts each key apart, in its own file', async () => {
     // Arrange
     await using directory = await mkdtempDisposable(
