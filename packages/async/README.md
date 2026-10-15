@@ -87,4 +87,19 @@ const job = await poll(() => queue.take(), {
 - One deadline can stop many polls. A campaign of `@zukhruf/election` uses one deadline for all its attempts.
 - Without a deadline, the type of the result has no `undefined`.
 
+### Let the process end during a poll
+
+A Node.js process ends when it has no more work. A timer is work. Thus the wait between two attempts keeps the process alive. Some polls run in the background, and their process must be able to end during the poll. For example, a server that does not keep its process alive must not watch a lock with a poll that does.
+
+For such a poll, give `ref: false`. Then the wait does not keep the process alive. The process can end while the poll is pending, and the poll then never resolves.
+
+```ts
+// The worker takes jobs, but it does not keep the process alive.
+poll(() => queue.take(), { interval: 100, signal, ref: false }).then(run);
+```
+
+- `ref` is the `ref` option of the Node.js timer (`setTimeout` of `node:timers/promises`). `poll` gives it to the timer unchanged.
+- Without `ref`, Node.js keeps its default: the wait keeps the process alive.
+- `ref` changes only the wait between two attempts. An attempt that runs can keep the process alive.
+
 See [ADR 0003](./docs/adr/0003-the-election-and-the-file-lock-stores-poll-through-one-function.md).

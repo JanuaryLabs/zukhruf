@@ -33,3 +33,4 @@ Some parts stay with each consumer:
 - `poll` has no parameter that no consumer uses. A new parameter waits for a consumer that needs it.
 - The loops of the `ElectingConnector` in the mutex and in the single flight do not use `poll`. They have a different shape: they wait only after a lost campaign, and the wait for a hang-up has three exits and throws at its deadline. They are transport copies, and they wait for backlog item #2496.
 - The single flight starts to use `poll` in a later step.
+- The `ref` option came with its first consumer, as the second consequence says. The coordinator of the single flight watches the lock of a parked key with `poll`, and the coordinator must not keep its process alive (backlog item #2573). With `ref: false`, the wait between two attempts does not keep the process alive.

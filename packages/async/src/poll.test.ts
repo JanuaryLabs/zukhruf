@@ -147,6 +147,67 @@ describe('poll', () => {
   );
 
   test(
+    'a process whose only pending work is a poll with ref false ends during the wait, before the poll resolves',
+    { timeout: 10_000 },
+    async () => {
+      // Arrange
+      const program = `
+        import { poll } from ${JSON.stringify(import.meta.resolve('./poll.ts'))};
+        let attempts = 0;
+        poll(async () => (++attempts === 3 ? 'found' : undefined), {
+          interval: 1_000,
+          signal: undefined,
+          ref: false,
+        }).then((value) => console.log(value));
+      `;
+
+      // Act
+      const { stdout } = await execFileAsync(
+        process.execPath,
+        ['--input-type=module', '--eval', program],
+        { timeout: 5_000 },
+      );
+
+      // Assert
+      assert.equal(
+        stdout,
+        '',
+        'A wait with ref false must not keep the process alive until the poll resolves',
+      );
+    },
+  );
+
+  test(
+    'a process whose poll leaves ref out stays alive until the poll resolves',
+    { timeout: 10_000 },
+    async () => {
+      // Arrange
+      const program = `
+        import { poll } from ${JSON.stringify(import.meta.resolve('./poll.ts'))};
+        let attempts = 0;
+        poll(async () => (++attempts === 3 ? 'found' : undefined), {
+          interval: 20,
+          signal: undefined,
+        }).then((value) => console.log(value));
+      `;
+
+      // Act
+      const { stdout } = await execFileAsync(
+        process.execPath,
+        ['--input-type=module', '--eval', program],
+        { timeout: 5_000 },
+      );
+
+      // Assert
+      assert.equal(
+        stdout,
+        'found\n',
+        'Without ref, the wait must keep the process alive until the poll resolves',
+      );
+    },
+  );
+
+  test(
     'the first attempt occurs at once, attempts that give nothing repeat after the interval, and the poll resolves with the first value that is not undefined',
     { timeout: 5_000 },
     async () => {

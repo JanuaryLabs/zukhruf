@@ -12,6 +12,12 @@ export interface PollOptions {
    * resolves the poll with `undefined`. The first attempt always occurs.
    */
   deadline?: number | undefined;
+  /**
+   * The `ref` of the Node.js timer of the wait between two attempts. With
+   * `false`, the wait does not keep the process alive: the process can end
+   * while the poll is pending. Without it, Node.js keeps its default.
+   */
+  ref?: boolean;
 }
 
 /**
@@ -29,7 +35,7 @@ export function poll<T>(
 ): Promise<T>;
 export async function poll<T>(
   attempt: () => Promise<T | undefined>,
-  { interval, signal, deadline }: PollOptions,
+  { interval, signal, deadline, ref }: PollOptions,
 ): Promise<T | undefined> {
   for (;;) {
     const value = await attempt();
@@ -38,6 +44,6 @@ export async function poll<T>(
       return undefined;
     }
     // delay's signal frees the timer; untilAborted rejects with the reason.
-    await untilAborted(delay(interval, undefined, { signal }), signal);
+    await untilAborted(delay(interval, undefined, { signal, ref }), signal);
   }
 }
