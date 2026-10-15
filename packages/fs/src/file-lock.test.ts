@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline';
 import { DatabaseSync } from 'node:sqlite';
+import { text } from 'node:stream/consumers';
 import { describe, test } from 'node:test';
 
 import { FileLock } from './file-lock.ts';
@@ -71,6 +72,34 @@ async function startHolder(source: string) {
     exited,
     kill: () => holder.kill('SIGKILL'),
   };
+}
+
+/**
+ * Opens the file in a new process, tries the lock once, and exits. Only
+ * another process sees a lock that the kernel dropped: in this process,
+ * SQLite's own bookkeeping refuses a second handle either way.
+ */
+async function tryLockInAnotherProcess(path: string): Promise<boolean> {
+  const contender = spawn(
+    process.execPath,
+    [
+      '--input-type=module',
+      '--eval',
+      `
+        ${importFileLock}
+        const lock = FileLock.open(${JSON.stringify(path)});
+        console.log(lock.tryLock() ? 'locked' : 'refused');
+      `,
+    ],
+    { stdio: ['ignore', 'pipe', 'inherit'] },
+  );
+  const [output, [code]] = await Promise.all([
+    text(contender.stdout),
+    once(contender, 'close'),
+  ]);
+  assert.equal(code, 0, 'The other process must exit cleanly');
+  assert.match(output, /^(locked|refused)\n$/);
+  return output === 'locked\n';
 }
 
 describe('FileLock', () => {
@@ -283,6 +312,87 @@ describe('FileLock', () => {
       } finally {
         holder.kill();
       }
+    },
+  );
+
+  // The single flight's coordinator checks the lock of a key in the process
+  // that can hold it. A check closes its connection, and on Unix closing any
+  // descriptor of the file drops the process's lock on it.
+  test(
+    'a check in the process that holds the lock answers locked, and the lock stays held for other processes',
+    { timeout: 10_000 },
+    async () => {
+      // Arrange
+      await using directory = await mkdtempDisposable(
+        join(tmpdir(), 'zukhruf-fs-'),
+      );
+      const path = join(directory.path, 'job.lock');
+      using lock = FileLock.open(path);
+      assert.equal(lock.tryLock(), true, 'The holder must get the lock');
+
+      // Act
+      const checked = FileLock.check(path);
+      const lockedElsewhereAfterCheck = await tryLockInAnotherProcess(path);
+      lock.unlock();
+      const lockedElsewhereAfterUnlock = await tryLockInAnotherProcess(path);
+
+      // Assert
+      assert.equal(
+        checked,
+        'locked',
+        'A check in the holding process must see the lock',
+      );
+      assert.equal(
+        lockedElsewhereAfterCheck,
+        false,
+        'The in-process check dropped the kernel lock: another process took it',
+      );
+      assert.equal(
+        lockedElsewhereAfterUnlock,
+        true,
+        'Another process must get the lock after unlock',
+      );
+    },
+  );
+
+  test(
+    'a second handle in the process that holds the lock is refused, and disposing it keeps the lock for other processes',
+    { timeout: 10_000 },
+    async () => {
+      // Arrange
+      await using directory = await mkdtempDisposable(
+        join(tmpdir(), 'zukhruf-fs-'),
+      );
+      const path = join(directory.path, 'job.lock');
+      using lock = FileLock.open(path);
+      assert.equal(lock.tryLock(), true, 'The holder must get the lock');
+
+      // Act
+      let lockedByOther: boolean;
+      {
+        using other = FileLock.open(path);
+        lockedByOther = other.tryLock();
+      }
+      const lockedElsewhereAfterDispose = await tryLockInAnotherProcess(path);
+      lock.unlock();
+      const lockedElsewhereAfterUnlock = await tryLockInAnotherProcess(path);
+
+      // Assert
+      assert.equal(
+        lockedByOther,
+        false,
+        'A second handle in the holding process must be refused',
+      );
+      assert.equal(
+        lockedElsewhereAfterDispose,
+        false,
+        'Disposing the refused handle dropped the kernel lock: another process took it',
+      );
+      assert.equal(
+        lockedElsewhereAfterUnlock,
+        true,
+        'Another process must get the lock after unlock',
+      );
     },
   );
 
