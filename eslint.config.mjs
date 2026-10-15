@@ -35,10 +35,11 @@ const LAYERS = [
     tests: ['std:base', 'std:coordination', 'std:domain', 'std:tool'],
   },
   { sourceTag: 'std:tool', shipped: ['std:tool'], tests: ['std:tool'] },
+  { sourceTag: 'std:ui', shipped: [], tests: ['std:tool'] },
   {
     sourceTag: 'std:host',
-    shipped: ['std:base', 'std:coordination', 'std:domain'],
-    tests: ['std:base', 'std:coordination', 'std:domain', 'std:tool'],
+    shipped: ['std:base', 'std:coordination', 'std:domain', 'std:ui'],
+    tests: ['std:base', 'std:coordination', 'std:domain', 'std:ui', 'std:tool'],
   },
 ];
 
@@ -55,10 +56,17 @@ export default defineConfig(
       'island/recommended',
       'manifest/recommended',
     ],
-    settings: { island: { libraries: ['packages/**/*.ts'] } },
+    settings: {
+      island: { libraries: ['packages/**/*.ts', 'packages/**/*.tsx'] },
+    },
   },
   {
-    files: ['**/*.ts', '**/*.js'],
+    files: ['packages/shadcn/**'],
+    plugins: { zukhruf },
+    extends: ['zukhruf/react', 'zukhruf/tailwind'],
+  },
+  {
+    files: ['**/*.ts', '**/*.tsx', '**/*.js'],
     rules: {
       '@nx/enforce-module-boundaries': moduleBoundaryRule('shipped'),
     },
@@ -69,6 +77,30 @@ export default defineConfig(
       '@nx/enforce-module-boundaries': moduleBoundaryRule('tests'),
     },
   },
+  // The shadcn CLI writes these files (`nx run shadcn:sync`), and nobody edits
+  // them by hand, so the rules that the stock code fails are off here only.
+  {
+    files: [
+      'packages/shadcn/src/components/**',
+      'packages/shadcn/src/hooks/**',
+      'packages/shadcn/src/lib/**',
+      'packages/shadcn/src/index.ts',
+    ],
+    rules: {
+      // `#components/*` and the like are the package's private imports
+      // (package.json `imports`); the layer check stays on.
+      '@nx/enforce-module-boundaries': moduleBoundaryRule('shipped', [
+        '#components/*',
+        '#lib/*',
+        '#hooks/*',
+      ]),
+      '@typescript-eslint/consistent-type-assertions': 'off',
+      'zukhruf/no-fabricated-fallback': 'off',
+      'zukhruf/no-will-change': 'off',
+      'zukhruf/no-arbitrary-z-index': 'off',
+      'functional/no-let': 'off',
+    },
+  },
 );
 
 /**
@@ -76,10 +108,11 @@ export default defineConfig(
  * replaces the rule's options (packages/eslint/docs/adr/0004), so each block
  * carries the island constraint and the whole table.
  */
-function moduleBoundaryRule(files) {
+function moduleBoundaryRule(files, allow = []) {
   return [
     'error',
     moduleBoundaries({
+      allow,
       depConstraints: [
         islandConstraint([]),
         ...LAYERS.map((layer) => ({

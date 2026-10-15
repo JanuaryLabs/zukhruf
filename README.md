@@ -1,6 +1,6 @@
 # zukhruf
 
-زخرف. A workspace of small Node.js libraries.
+زخرف. A workspace of small Node.js libraries and one library of React components.
 
 ## Packages
 
@@ -14,6 +14,7 @@
 | [`@zukhruf/fs`](./packages/fs)                       | File writes that a reader never sees half done: replace a file in one step, with or without a sync to the disk, or create it only when it is absent. A lock on a file that the kernel frees when its holder dies. Also refuses a directory on a network file system, and retries the short refusals of Windows.                                                                                                  |
 | [`@zukhruf/election`](./packages/election)           | Elects one leader among candidates, with a term that ends when the leader resigns or dies, and an epoch that grows with each term. `SqliteElection` elects among the processes of one host; other backends are subclasses of one campaign.                                                                                                                                                                       |
 | [`@zukhruf/lease`](./packages/lease)                 | A lease and its loss: the holder gets a signal that aborts once, with `LeaseLostError`, when another holder may have the right. An issuer gives out leases with `LeaseController`. A lease lasts for a session, not for a time.                                                                                                                                                                                  |
+| [`@zukhruf/shadcn`](./packages/shadcn)               | Each shadcn/ui component for Base UI with the nova preset, in one package. An app imports the components from one entry and the styles from one stylesheet. The shadcn CLI writes the source, and nobody edits it by hand. The package stays private until its first release.                                                                                                                                    |
 | [`@zukhruf/fencing`](./packages/fencing)             | Fencing tokens: an integer that grows with each grant, so a resource refuses the writes of a holder that lost its lease. Token sources that count in memory, in files, or by the epoch of a leader, and the fenced lease that carries a token.                                                                                                                                                                   |
 
 ## Apps
@@ -26,7 +27,7 @@ Each package has its own glossary. [CONTEXT-MAP.md](./CONTEXT-MAP.md) lists them
 
 ## How the packages fit together
 
-The packages import each other in layers: base, coordination, domain, tool and host. Each layer imports only the layers that the ADR lists for it, and `nx lint` refuses each other import. [ADR 0001](./docs/adr/0001-zukhruf-is-a-layered-standard-library.md) gives the layers and the rules that put code into a package.
+The packages import each other in layers: base, coordination, domain, UI, tool and host. Each layer imports only the layers that the ADR lists for it, and `nx lint` refuses each other import. [ADR 0001](./docs/adr/0001-zukhruf-is-a-layered-standard-library.md) gives the layers and the rules that put code into a package.
 
 ## Development
 

@@ -1,0 +1,27 @@
+{
+  "name": "shadcn",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "packages/shadcn/src",
+  "projectType": "library",
+  "tags": ["layer:island", "std:ui", "test:node"],
+  "targets": {
+    "format": {},
+    "test": {},
+    "sync": {
+      "executor": "nx:run-commands",
+      "cache": false,
+      "options": {
+        "cwd": "packages/shadcn",
+        "parallel": false,
+        "commands": [
+          "echo '@import \"tw-animate-css\";' > theme.css",
+          "npx -y shadcn@4.21.5 add index --yes --overwrite",
+          "npx -y shadcn@4.21.5 add --all --yes --overwrite",
+          "node ../../node_modules/shadcn/dist/index.js eject --yes",
+          "{ for f in src/components/*.tsx; do echo \"export * from './components/$(basename \"$f\")';\"; done; for f in src/hooks/*.ts; do echo \"export * from './hooks/$(basename \"$f\")';\"; done; } | LC_ALL=C sort > src/index.ts",
+          "prettier --write src theme.css"
+        ]
+      }
+    }
+  }
+}
