@@ -22,7 +22,7 @@ The stylesheet also holds two patches: the pointer cursor on enabled buttons, an
 
 A rule outside of a layer wins over each rule in a layer (MDN, `@layer`). Tailwind CSS puts its utility classes in `@layer utilities`. Thus a patch outside of a layer would win over each utility class of the app. In `base` and `components`, a patch comes before `utilities`, and a utility class of the app still wins.
 
-An app must import the stylesheet with a plain `@import`. `@import '@zukhruf/shadcn/styles.css' layer(components)` puts all of the file into a layer, also its `@source`. Tailwind CSS then stops with the error "`@source` cannot be nested."
+An app must import the stylesheet with a plain `@import`. `@import '@zukhruf/shadcn/styles.css' layer(components)` puts all of the file into a layer, also its `@utility` and `@source` rules. Tailwind CSS refuses these rules in a layer. A build of an app on 2026-10-15 stopped with the error "`@utility` cannot be nested."
 
 ## Considered Options
 

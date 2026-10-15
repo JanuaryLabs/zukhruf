@@ -37,7 +37,7 @@ import { Button, Dialog, DialogContent } from '@zukhruf/shadcn';
 
 Obey two rules:
 
-- **Use a plain `@import`.** Do not write `@import '@zukhruf/shadcn/styles.css' layer(components);`. A `layer()` puts all of the stylesheet into a layer, also its `@source`. Tailwind CSS refuses an `@source` in a layer, and stops with the error "`@source` cannot be nested."
+- **Use a plain `@import`.** Do not write `@import '@zukhruf/shadcn/styles.css' layer(components);`. A `layer()` puts all of the stylesheet into a layer, also its `@utility` and `@source` rules. Tailwind CSS refuses these rules in a layer. The build stops with the error "`@utility` cannot be nested."
 - **Do not add an `@source` for the package.** The stylesheet registers its own `dist` folder. Tailwind CSS then finds the classes of the components. See [ADR 0003](./docs/adr/0003-the-stylesheet-registers-its-own-source-and-keeps-its-patches-in-layers.md).
 
 ## Theme
@@ -106,6 +106,8 @@ The package has one entry, `@zukhruf/shadcn`. It exports all components and hook
 
 - A development server and plain Node.js load all components and their dependencies.
 - A production bundle has only the components that the app uses. The `sideEffects` field of `package.json` lets the bundler remove the others.
+- The bundler resolves each import of the entry before it removes code. Thus the app needs the peers of all dependencies, also when it does not use the component. The package lists `react-is`, a peer of `recharts`, as its own dependency. Then an app builds also when npm does not install peers, for example with `legacy-peer-deps=true`.
+- The stylesheet gives the classes of all components, also of the components that the app does not use. An app that uses only `Button` and `Dialog` got 212 kB of CSS (31 kB with gzip) on 2026-10-15.
 
 See [ADR 0002](./docs/adr/0002-one-entry-and-private-imports-between-the-components.md).
 
