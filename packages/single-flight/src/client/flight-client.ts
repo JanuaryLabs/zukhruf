@@ -5,6 +5,8 @@ import { FencingToken } from '@zukhruf/fencing';
 import { LeaseController } from '@zukhruf/lease';
 
 import type { ConnectionSupervisor } from '../connection/connection-supervisor.ts';
+import { KeyHold } from '../key-lock/key-hold.ts';
+import type { KeyLocks } from '../key-lock/key-locks.ts';
 import {
   type FlightRequest,
   type FlightResponse,
@@ -19,6 +21,8 @@ export interface Lead {
   readonly signal: AbortSignal;
   /** Ends the flight with `outcome` for every joiner. Kept and sent again until a coordinator acknowledges it. */
   land(outcome: Outcome): void;
+  /** The work settled. The key's lock waits for this, so call it on every path, also when the work never landed. */
+  ended(): void;
 }
 
 /** How the coordinator answered a run for good. */
@@ -26,6 +30,12 @@ export type Answer =
   | { kind: 'lead'; lead: Lead }
   | { kind: 'landed'; outcome: Outcome }
   | { kind: 'interrupted' };
+
+export interface FlightClientOptions {
+  locks: KeyLocks;
+  /** Whether no coordinator of a newer term than the one that minted `token` has been elected. */
+  isCurrentTerm(token: FencingToken): Promise<boolean>;
+}
 
 export interface RunRequest {
   signal?: AbortSignal | undefined;
@@ -39,16 +49,26 @@ interface Pending extends Pick<
 > {
   key: string;
   onJoin: (() => void) | undefined;
-  /** `queued` waits for a connection, and `sent` went out on the open one. */
-  delivery: 'queued' | 'sent';
+  delivery: Delivery;
   /** The flight that the coordinator said this run joined, so after a lost connection it rejoins that flight only. */
   flight: string | undefined;
 }
+
+/**
+ * `queued` waits for a connection, and `sent` went out on the open one.
+ * `locking` was told to lead, and waits for its key's lock: it leads only once
+ * it holds the lock, so until then it is still a run that waits.
+ */
+type Delivery =
+  | { kind: 'queued' }
+  | { kind: 'sent' }
+  | { kind: 'locking'; stop: AbortController };
 
 interface Held {
   key: string;
   token: FencingToken;
   lease: LeaseController;
+  hold: KeyHold;
   /** The outcome this leader landed, kept until a coordinator acknowledges it. */
   landing: Outcome | undefined;
 }
@@ -62,13 +82,20 @@ interface Held {
  */
 export class FlightClient {
   readonly #link: ConnectionSupervisor<FlightRequest>;
+  readonly #locks: KeyLocks;
+  readonly #isCurrentTerm: (token: FencingToken) => Promise<boolean>;
   readonly #pending = new Map<string, Pending>();
   readonly #held = new Map<string, Held>();
   /** Wakes `close` each time a flight this process leads is acknowledged or lost. */
   readonly #released = new Set<() => void>();
 
-  constructor(link: ConnectionSupervisor<FlightRequest>) {
+  constructor(
+    link: ConnectionSupervisor<FlightRequest>,
+    { locks, isCurrentTerm }: FlightClientOptions,
+  ) {
     this.#link = link;
+    this.#locks = locks;
+    this.#isCurrentTerm = isCurrentTerm;
     link.on('connected', () => this.#resume());
     // A message this client cannot read answers nothing it waits for.
     link.on('message', (message) => {
@@ -88,7 +115,7 @@ export class FlightClient {
     const pending: Pending = {
       key,
       onJoin,
-      delivery: 'queued',
+      delivery: { kind: 'queued' },
       flight: undefined,
       resolve,
       reject,
@@ -100,7 +127,10 @@ export class FlightClient {
     try {
       return await untilAborted(promise, signal);
     } catch (error) {
-      if (signal?.aborted) this.#withdraw(id);
+      if (signal?.aborted) {
+        this.#withdraw(id);
+        this.#abandon(id);
+      }
       throw error;
     }
   }
@@ -118,6 +148,8 @@ export class FlightClient {
     for (const id of [...this.#pending.keys()]) {
       this.#take(id)?.reject(new Error('This single flight is closed.'));
     }
+    // The coordinator interrupts the flights of a closed connection, so they need nothing more from this process.
+    for (const id of [...this.#held.keys()]) this.#release(id);
     await closing;
   }
 
@@ -127,23 +159,77 @@ export class FlightClient {
       flight === undefined
         ? { op: 'run', id, key }
         : { op: 'run', id, key, flight };
-    if (this.#link.send(request)) pending.delivery = 'sent';
+    if (this.#link.send(request)) pending.delivery = { kind: 'sent' };
   }
 
   /**
    * The caller gave up. A run the coordinator may have heard is withdrawn;
    * one that already leads is not pending any more, so its flight runs on.
+   * A run that waits for its key's lock leads at the coordinator, so the
+   * cancel interrupts that flight: its work never started.
    */
   #withdraw(id: string) {
     const pending = this.#take(id);
-    if (pending?.delivery === 'sent') this.#link.send({ op: 'cancel', id });
+    if (pending && pending.delivery.kind !== 'queued') {
+      this.#link.send({ op: 'cancel', id });
+    }
   }
 
-  #hold(id: string, key: string, token: FencingToken): Lead {
+  /**
+   * The caller gave up although its run had led: the abort won the race with
+   * the answer, so nobody runs the work. The flight is interrupted, and the
+   * key's lock goes, instead of leading for the life of the process.
+   */
+  #abandon(id: string) {
+    const held = this.#held.get(id);
+    if (!held) return;
+    this.#link.send({ op: 'cancel', id });
+    this.#release(id);
+    held.hold.workEnded();
+  }
+
+  /**
+   * Told to lead: the run leads only once it holds its key's lock, so no
+   * other process runs the key's work beside it. A grant of an older term is
+   * stale: the coordinator that minted it is gone, and its successor may have
+   * let another run lead. That run goes again as a plain run.
+   */
+  async #lock(
+    id: string,
+    pending: Pending,
+    token: FencingToken,
+    stop: AbortSignal,
+  ) {
+    try {
+      using locked = new DisposableStack();
+      locked.use(await this.#locks.acquire(pending.key, stop));
+      const current = await this.#isCurrentTerm(token);
+      if (stop.aborted) return;
+      if (!current) {
+        locked.dispose();
+        pending.delivery = { kind: 'queued' };
+        this.#dispatch(id, pending);
+        return;
+      }
+      this.#take(id);
+      pending.resolve({
+        kind: 'lead',
+        lead: this.#hold(id, pending.key, token, new KeyHold(locked.move())),
+      });
+    } catch (error) {
+      // An abort is the run's own end: it was answered, withdrawn or sent again.
+      if (stop.aborted) return;
+      this.#take(id)?.reject(error);
+      this.#link.send({ op: 'cancel', id });
+    }
+  }
+
+  #hold(id: string, key: string, token: FencingToken, hold: KeyHold): Lead {
     const held: Held = {
       key,
       token,
       lease: new LeaseController(key),
+      hold,
       landing: undefined,
     };
     this.#held.set(id, held);
@@ -157,6 +243,7 @@ export class FlightClient {
         this.#updateRef();
         this.#link.send({ op: 'land', id, outcome });
       },
+      ended: () => hold.workEnded(),
     };
   }
 
@@ -170,6 +257,7 @@ export class FlightClient {
 
   /** The flight of `id` needs nothing more from this process. */
   #release(id: string) {
+    this.#held.get(id)?.hold.flightEnded();
     this.#held.delete(id);
     this.#updateRef();
     const waiting = [...this.#released];
@@ -181,13 +269,17 @@ export class FlightClient {
     switch (response.op) {
       case 'lead': {
         // A run withdrawn meanwhile sent `cancel`, which interrupts the flight at the coordinator.
-        const pending = this.#take(response.id);
+        const pending = this.#pending.get(response.id);
         if (!pending) return;
-        const token = FencingToken.parse(response.token)!;
-        pending.resolve({
-          kind: 'lead',
-          lead: this.#hold(response.id, pending.key, token),
-        });
+        const stop = new AbortController();
+        pending.delivery = { kind: 'locking', stop };
+        // The first try of the lock is synchronous, here: only microtasks separate it from the work.
+        void this.#lock(
+          response.id,
+          pending,
+          FencingToken.parse(response.token)!,
+          stop.signal,
+        );
         return;
       }
       case 'joined': {
@@ -245,13 +337,20 @@ export class FlightClient {
       if (landing) this.#link.send({ op: 'land', id, outcome: landing });
     }
     for (const [id, pending] of this.#pending) {
-      if (pending.delivery === 'queued') this.#dispatch(id, pending);
+      if (pending.delivery.kind === 'queued') this.#dispatch(id, pending);
     }
   }
 
-  /** Nothing sent on the lost connection will be answered, so every run goes again on the next one. */
+  /**
+   * Nothing sent on the lost connection will be answered, so every run goes
+   * again on the next one. A run that waits for its key's lock had not led
+   * yet: the next coordinator may not know its flight, so it goes again too.
+   */
   #interrupt() {
-    for (const pending of this.#pending.values()) pending.delivery = 'queued';
+    for (const pending of this.#pending.values()) {
+      if (pending.delivery.kind === 'locking') pending.delivery.stop.abort();
+      pending.delivery = { kind: 'queued' };
+    }
   }
 
   /** No coordinator heard the reassertions, so the flights this process leads may be interrupted already. */
@@ -264,6 +363,7 @@ export class FlightClient {
   #take(id: string): Pending | undefined {
     const pending = this.#pending.get(id);
     if (!pending) return undefined;
+    if (pending.delivery.kind === 'locking') pending.delivery.stop.abort();
     this.#pending.delete(id);
     this.#updateRef();
     return pending;

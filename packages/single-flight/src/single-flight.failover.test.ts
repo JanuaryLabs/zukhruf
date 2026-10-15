@@ -207,10 +207,7 @@ describe('A single flight across processes when a leader stops', () => {
 
   test(
     'a fresh run of a key whose leader disposed its single flight while the work runs starts the work only once that work ended',
-    {
-      todo: '#2573: the disposed leader drops its flight at once, so the fresh run leads beside the running work',
-      timeout: 30_000,
-    },
+    { timeout: 30_000 },
     async (t) => {
       // Arrange
       await using directory = await scratchDirectory();
@@ -944,7 +941,7 @@ describe('A single flight across processes when a leader is frozen past a failov
     'a fresh run after the coordinator stops never starts the work beside the frozen leader, and joins its flight once the leader resumes',
     {
       ...onUnix,
-      todo: '#2573: the fresh run leads once the grace window is over, beside the frozen work',
+      todo: "#2573: the fresh run waits for the frozen leader's key lock, but the next coordinator drops the leader's flight once the grace window is over, so the fresh run never joins it",
       timeout: 30_000,
     },
     async (t) => {
@@ -1016,7 +1013,7 @@ describe('A single flight across processes when a leader is frozen past a failov
     'a fresh run after the coordinator disposes with a flight in progress never starts the work beside the frozen leader, and joins its flight once the leader resumes',
     {
       ...onUnix,
-      todo: '#2573: the fresh run leads once the grace window is over, beside the frozen work',
+      todo: "#2573: the fresh run waits for the frozen leader's key lock, but the next coordinator drops the leader's flight once the grace window is over, so the fresh run never joins it",
       timeout: 30_000,
     },
     async (t) => {
@@ -1219,7 +1216,7 @@ describe('A single flight across processes when a leader is frozen past a failov
     'a leader whose caller cancelled before the freeze still owns its flight, so a fresh run joins it and never starts the work beside it',
     {
       ...onUnix,
-      todo: '#2573: the fresh run leads once the grace window is over, beside the frozen work',
+      todo: "#2573: the fresh run waits for the frozen leader's key lock, but the next coordinator drops the leader's flight once the grace window is over, so the fresh run never joins it",
       timeout: 30_000,
     },
     async (t) => {

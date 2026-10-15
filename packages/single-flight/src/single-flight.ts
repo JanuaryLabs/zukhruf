@@ -15,16 +15,20 @@ import {
   FlightInterruptedError,
   failureOf,
 } from './errors.ts';
+import { KeyLocks } from './key-lock/key-locks.ts';
 import type { Outcome } from './protocol/flight-protocol.ts';
 
-/** Milliseconds between two attempts to reach the coordinator or to win its term. */
+/** Milliseconds between two attempts to reach the coordinator, to win its term, or to take a key's lock. */
 const POLL_INTERVAL = 10;
+
+/** The low bits of a token count grants within a term; the high bits are the term's epoch (`EpochTokenSource`). */
+const SEQUENCE_BITS = 32n;
 
 export interface SingleFlightOptions<T> {
   /**
    * The local folder where the processes that share flights meet. They keep
-   * `flight.lock`, `flight.epoch`, `flight.lock.clean` and `flight.sock`
-   * there, so every process
+   * `flight.lock`, `flight.epoch`, `flight.lock.clean`, `flight.sock` and the
+   * folder `execution-locks` there, so every process
    * that names the same folder is in one group, and callers of one key share
    * a flight across that group. There is no default: one shared default would
    * put every application on the host into one group, and unrelated
@@ -75,13 +79,14 @@ export class SingleFlight<T> implements AsyncDisposable {
   constructor({ directory, codec, graceWindow = 500 }: SingleFlightOptions<T>) {
     this.#codec = codec;
     const socketPath = socketPathFor(directory);
+    const election = flightElection(directory, POLL_INTERVAL);
     this.#client = new FlightClient(
       new ConnectionSupervisor(
         new LocalDirectoryConnector(
           directory,
           new ElectingConnector({
             socketPath,
-            election: flightElection(directory, POLL_INTERVAL),
+            election,
             pollInterval: POLL_INTERVAL,
             serve: async (term) => {
               // Until serving has fully started, a failure closes the new server, so no server outlives its term.
@@ -103,6 +108,12 @@ export class SingleFlight<T> implements AsyncDisposable {
           }),
         ),
       ),
+      {
+        locks: new KeyLocks(directory, POLL_INTERVAL),
+        // The election writes a new term's epoch before its coordinator answers anything.
+        isCurrentTerm: async (token) =>
+          (await election.lastEpoch()) <= token.value >> SEQUENCE_BITS,
+      },
     );
   }
 
@@ -151,22 +162,26 @@ export class SingleFlight<T> implements AsyncDisposable {
     lead: Lead,
   ): Promise<Settled<T>> {
     const { token, signal: lost } = lead;
-    let text: string;
     try {
-      text = this.#codec.encode(await work({ token, signal: lost }));
-    } catch (error) {
-      lead.land({ failure: failureOf(error) });
-      // After a loss, every failure rejects with LeaseLostError: the work did not run alone (ADR 0007).
-      if (!lost.aborted || error === lost.reason) return { error };
-      return { error: new LeaseLostError(key, { cause: error }) };
-    }
-    // A lost flight's joiners were told that it is interrupted, so this value reaches nobody.
-    if (lost.aborted) return { error: lost.reason };
-    lead.land({ value: text });
-    try {
-      return { value: this.#codec.decode(text) };
-    } catch (error) {
-      return { error };
+      let text: string;
+      try {
+        text = this.#codec.encode(await work({ token, signal: lost }));
+      } catch (error) {
+        lead.land({ failure: failureOf(error) });
+        // After a loss, every failure rejects with LeaseLostError: the work did not run alone (ADR 0007).
+        if (!lost.aborted || error === lost.reason) return { error };
+        return { error: new LeaseLostError(key, { cause: error }) };
+      }
+      // A lost flight's joiners were told that it is interrupted, so this value reaches nobody.
+      if (lost.aborted) return { error: lost.reason };
+      lead.land({ value: text });
+      try {
+        return { value: this.#codec.decode(text) };
+      } catch (error) {
+        return { error };
+      }
+    } finally {
+      lead.ended();
     }
   }
 
