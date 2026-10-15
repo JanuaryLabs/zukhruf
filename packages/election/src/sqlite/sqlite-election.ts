@@ -53,6 +53,16 @@ export class SqliteElection extends LeaderElection<FileLock> {
     this.#cleanShutdownPath = `${this.#claimPath}.clean`;
   }
 
+  /**
+   * The epoch of the last term on disk, or 0 when no term was won yet. It
+   * only reads the epoch file: it does not campaign, take the claim, or
+   * create a file. A new term can begin as soon as it returns, so the answer
+   * can already be stale.
+   */
+  lastEpoch(): Promise<bigint> {
+    return readEpoch(this.#epochPath);
+  }
+
   protected async open(): Promise<FileLock> {
     await assertLocalDirectory(this.#directory);
     await mkdir(this.#directory, { recursive: true });

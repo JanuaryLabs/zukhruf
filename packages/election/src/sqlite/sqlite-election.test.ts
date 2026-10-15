@@ -345,6 +345,132 @@ describe('The files of a SQLite election', () => {
   }
 });
 
+describe('The last epoch of a SQLite election', () => {
+  // No operation of this version writes either text: see the campaign tests above.
+  for (const { kind, text } of [
+    { kind: 'an empty', text: '' },
+    { kind: 'a padded', text: '   41 ' },
+  ]) {
+    test(
+      `${kind} epoch file fails the read with a SyntaxError that names the file, and stays as it was`,
+      { timeout: 10_000 },
+      async () => {
+        // Arrange
+        await using directory = await scratchDirectory();
+        const epochFile = join(directory.path, 'term.epoch');
+        await fsPromises.writeFile(epochFile, text);
+
+        // Act
+        const reading = electionIn(directory.path).lastEpoch();
+
+        // Assert
+        await assert.rejects(
+          reading,
+          (error) =>
+            error instanceof SyntaxError && error.message.includes(epochFile),
+          'The read must fail with a SyntaxError that names the epoch file',
+        );
+        assert.equal(
+          await fsPromises.readFile(epochFile, 'utf8'),
+          text,
+          'The epoch file must stay as it was',
+        );
+      },
+    );
+  }
+
+  for (const { kind, at } of [
+    { kind: 'an empty directory', at: [] },
+    { kind: 'a directory not yet created', at: ['not', 'yet'] },
+  ]) {
+    test(
+      `in ${kind}, where no term was won, the read answers 0 and creates nothing`,
+      { timeout: 10_000 },
+      async () => {
+        // Arrange
+        await using directory = await scratchDirectory();
+
+        // Act
+        const epoch = await electionIn(join(directory.path, ...at)).lastEpoch();
+
+        // Assert
+        assert.equal(epoch, 0n);
+        assert.deepEqual(await fsPromises.readdir(directory.path), []);
+      },
+    );
+  }
+
+  test(
+    'a read that fails for another reason than a missing file fails the read: it never answers 0',
+    { timeout: 10_000 },
+    async () => {
+      // Arrange: a directory at the path of the epoch file. This is platform
+      // setup that no operation exposes: it stands for any read error.
+      await using directory = await scratchDirectory();
+      await fsPromises.mkdir(join(directory.path, 'term.epoch'));
+
+      // Act
+      const reading = electionIn(directory.path).lastEpoch();
+
+      // Assert
+      await assert.rejects(reading);
+    },
+  );
+
+  test(
+    'another election on the directory reads the epoch of the last term without campaigning, while the term lasts and after it ends',
+    { timeout: 10_000 },
+    async () => {
+      // Arrange
+      await using directory = await scratchDirectory();
+      const epochFile = join(directory.path, 'term.epoch');
+      /** The identity and last change of the epoch file: a write changes one of them. */
+      const versionOfEpochFile = async () => {
+        const { ino, mtimeNs } = await fsPromises.stat(epochFile, {
+          bigint: true,
+        });
+        return { ino, mtimeNs };
+      };
+      const reader = electionIn(directory.path);
+      await using first = await electionIn(directory.path).campaign();
+      assert.ok(first, 'The first campaign in an empty directory must win');
+
+      // Act
+      const beforeFirstRead = await versionOfEpochFile();
+      const duringFirst = await reader.lastEpoch();
+      const afterFirstRead = await versionOfEpochFile();
+      await using rivalOfFirst = await electionIn(directory.path).campaign();
+      await first.resign();
+      await using second = await electionIn(directory.path).campaign();
+      assert.ok(second, 'The next campaign must win after the leader resigns');
+      await second.resign();
+      const beforeSecondRead = await versionOfEpochFile();
+      const afterSecond = await reader.lastEpoch();
+      const afterSecondRead = await versionOfEpochFile();
+      await using third = await electionIn(directory.path).campaign();
+
+      // Assert
+      assert.equal(duringFirst, 1n);
+      assert.equal(
+        rivalOfFirst,
+        undefined,
+        'The first leader must still hold its claim after the read',
+      );
+      assert.equal(afterSecond, 2n);
+      assert.deepEqual(
+        [afterFirstRead, afterSecondRead],
+        [beforeFirstRead, beforeSecondRead],
+        'The read must not write the epoch file',
+      );
+      assert.equal(
+        third?.epoch,
+        3n,
+        'The read must leave the claim free and the epoch as it was',
+      );
+    },
+  );
+});
+
 describe('A clean shutdown in a SQLite election', () => {
   test(
     'a term that resigns without saying it is clean leaves its successor nothing: the next term is not after a clean shutdown',
