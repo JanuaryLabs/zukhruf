@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { describe, test } from 'node:test';
 import type { TestContext } from 'node:test';
+import { setTimeout } from 'node:timers/promises';
 
 import { SingleFlight } from './index.ts';
 import {
@@ -85,6 +86,33 @@ function led(worker: WorkerProcess, call: string) {
   return worker.messages.some(
     (message) => message.type === 'leading' && message.call === call,
   );
+}
+
+/**
+ * Waits until `worker` reported one of `types` for `call`, and returns the
+ * first such report, so a test sees a wrong answer at once instead of waiting
+ * out the one it expects.
+ */
+async function firstOf(
+  t: TestContext,
+  worker: WorkerProcess,
+  call: string,
+  types: readonly string[],
+) {
+  const find = () =>
+    worker.messages.find(
+      (message) => message.call === call && types.includes(message.type),
+    );
+  await waitUntil(
+    t,
+    () => find() !== undefined,
+    () =>
+      `No ${types.join(' or ')} for ${call}; got ${JSON.stringify(worker.messages)} ${worker.stderr}`,
+    newProcessTimeout,
+  );
+  const message = find();
+  assert.ok(message);
+  return message;
 }
 
 /** Runs `key` in `worker` as the call `call`. */
@@ -174,6 +202,83 @@ describe('A single flight across processes when a leader stops', () => {
       assert.deepEqual(await journal(directory.path), [
         'coordinator:work:sync',
       ]);
+    },
+  );
+
+  test(
+    'a fresh run of a key whose leader disposed its single flight while the work runs starts the work only once that work ended',
+    {
+      todo: '#2573: the disposed leader drops its flight at once, so the fresh run leads beside the running work',
+      timeout: 30_000,
+    },
+    async (t) => {
+      // Arrange
+      await using directory = await scratchDirectory();
+      await using _coordinator = await coordinatorOf(t, directory.path);
+      await using leader = await caller(t, directory.path, 'leader');
+      run(leader, 'l', 'sync');
+      await heard(t, leader, 'leading', 'l');
+      await using probe = await caller(t, directory.path, 'probe');
+
+      // Act: the coordinator decides one connection's requests in order, so
+      // once the probe's run of another key, sent after the fresh run, has its
+      // answer, the fresh run had its chance to lead.
+      leader.child.send({ type: 'dispose' });
+      await waitUntil(
+        t,
+        () => leader.has('disposed'),
+        () => leader.stderr,
+        newProcessTimeout,
+      );
+      run(probe, 'fresh', 'sync');
+      await heard(t, probe, 'called', 'fresh');
+      run(probe, 'other', 'other');
+      await heard(t, probe, 'leading', 'other');
+      probe.child.send({ type: 'finish', call: 'other', value: 'other' });
+      await heard(t, probe, 'value', 'other');
+      const ledBesideWork = led(probe, 'fresh');
+
+      // Assert
+      assert.equal(
+        ledBesideWork,
+        false,
+        "The fresh run led while the disposed leader's work still ran",
+      );
+
+      // Act: the work ends. A disposed leader cannot deliver its outcome, so
+      // the fresh run cannot join it.
+      leader.child.send({ type: 'finish', call: 'l', value: 'unheard' });
+      const first = await firstOf(t, probe, 'fresh', ['leading', 'joined']);
+
+      // Assert
+      assert.equal(
+        first.type,
+        'leading',
+        'The fresh run joined a flight whose disposed leader cannot deliver its outcome',
+      );
+
+      // Act
+      probe.child.send({ type: 'finish', call: 'fresh', value: 'second' });
+      const fresh = await heard(t, probe, 'value', 'fresh');
+
+      // Assert
+      assert.equal(
+        fresh.value,
+        'second',
+        'The fresh run did not get the value of its own work',
+      );
+      assert.equal(
+        fresh.joined,
+        false,
+        'The fresh run joined instead of leading',
+      );
+      assert.deepEqual(
+        (await journal(directory.path)).filter((line) =>
+          line.endsWith(':sync'),
+        ),
+        ['leader:work:sync', 'probe:work:sync'],
+        'The work of the key did not run once after the other',
+      );
     },
   );
 });
@@ -829,6 +934,454 @@ describe('A single flight across processes in the gaps of a failover', () => {
           line.endsWith(':sync'),
         ),
         ['leader:work:sync'],
+      );
+    },
+  );
+});
+
+describe('A single flight across processes when a leader is frozen past a failover', () => {
+  test(
+    'a fresh run after the coordinator stops never starts the work beside the frozen leader, and joins its flight once the leader resumes',
+    {
+      ...onUnix,
+      todo: '#2573: the fresh run leads once the grace window is over, beside the frozen work',
+      timeout: 30_000,
+    },
+    async (t) => {
+      // Arrange
+      await using directory = await scratchDirectory();
+      const options = { graceWindow: 300 };
+      await using coordinator = await coordinatorOf(t, directory.path, options);
+      await using leader = await caller(t, directory.path, 'leader', options);
+      run(leader, 'l', 'sync');
+      await heard(t, leader, 'leading', 'l');
+      await using probe = await connected(t, directory.path, 'probe', options);
+
+      // Act: the leader stays frozen until the next coordinator answered a run
+      // of another key, and for at least `frozenFor` since the handoff began.
+      // The freeze length is this test's input, four default grace windows, so
+      // a timer that outlasts a short freeze cannot stand in for the lock.
+      const frozenFor = 2000;
+      leader.child.kill('SIGSTOP');
+      let ledBesideLeader: boolean;
+      try {
+        const handoffBegan = performance.now();
+        await handOver(t, directory.path, coordinator, []);
+        run(probe, 'fresh', 'sync');
+        await heard(t, probe, 'called', 'fresh');
+        await windowEnd(t, probe, 'window');
+        await setTimeout(
+          Math.max(0, frozenFor - (performance.now() - handoffBegan)),
+        );
+        ledBesideLeader = led(probe, 'fresh');
+      } finally {
+        leader.child.kill('SIGCONT');
+      }
+      const first = await firstOf(t, probe, 'fresh', ['leading', 'joined']);
+
+      // Assert
+      assert.equal(
+        ledBesideLeader,
+        false,
+        'The fresh run led while the frozen leader ran its work',
+      );
+      assert.equal(
+        first.type,
+        'joined',
+        'The fresh run started the work beside the frozen leader instead of joining its flight',
+      );
+
+      // Act
+      leader.child.send({ type: 'finish', call: 'l', value: 'once' });
+      const fresh = await heard(t, probe, 'value', 'fresh');
+
+      // Assert
+      assert.equal(
+        fresh.value,
+        'once',
+        "The fresh run did not get the leader's value",
+      );
+      assert.equal(fresh.joined, true, 'The fresh run did not join the leader');
+      assert.deepEqual(
+        (await journal(directory.path)).filter((line) =>
+          line.endsWith(':sync'),
+        ),
+        ['leader:work:sync'],
+        'A second run of the work was journaled',
+      );
+    },
+  );
+
+  test(
+    'a fresh run after the coordinator disposes with a flight in progress never starts the work beside the frozen leader, and joins its flight once the leader resumes',
+    {
+      ...onUnix,
+      todo: '#2573: the fresh run leads once the grace window is over, beside the frozen work',
+      timeout: 30_000,
+    },
+    async (t) => {
+      // Arrange
+      await using directory = await scratchDirectory();
+      const options = { graceWindow: 300 };
+      await using coordinator = await coordinatorOf(t, directory.path, options);
+      await using leader = await caller(t, directory.path, 'leader', options);
+      run(leader, 'l', 'sync');
+      await heard(t, leader, 'leading', 'l');
+      await using probe = await connected(t, directory.path, 'probe', options);
+
+      // Act: the leader stays frozen until the next coordinator answered a run of another key.
+      leader.child.kill('SIGSTOP');
+      let ledBesideLeader: boolean;
+      try {
+        coordinator.child.send({ type: 'dispose' });
+        await waitUntil(
+          t,
+          () => coordinator.has('disposed'),
+          () => coordinator.stderr,
+          newProcessTimeout,
+        );
+        await newTerm(t, directory.path, '2');
+        run(probe, 'fresh', 'sync');
+        await heard(t, probe, 'called', 'fresh');
+        await windowEnd(t, probe, 'window');
+        ledBesideLeader = led(probe, 'fresh');
+      } finally {
+        leader.child.kill('SIGCONT');
+      }
+      const first = await firstOf(t, probe, 'fresh', ['leading', 'joined']);
+
+      // Assert
+      assert.equal(
+        ledBesideLeader,
+        false,
+        'The fresh run led while the frozen leader ran its work',
+      );
+      assert.equal(
+        first.type,
+        'joined',
+        'The fresh run started the work beside the frozen leader instead of joining its flight',
+      );
+
+      // Act
+      leader.child.send({ type: 'finish', call: 'l', value: 'once' });
+      const fresh = await heard(t, probe, 'value', 'fresh');
+
+      // Assert
+      assert.equal(
+        fresh.value,
+        'once',
+        "The fresh run did not get the leader's value",
+      );
+      assert.equal(fresh.joined, true, 'The fresh run did not join the leader');
+      assert.deepEqual(
+        (await journal(directory.path)).filter((line) =>
+          line.endsWith(':sync'),
+        ),
+        ['leader:work:sync'],
+        'A second run of the work was journaled',
+      );
+    },
+  );
+
+  test(
+    'joiners of a frozen leader get its value once it resumes, and the work never runs again',
+    {
+      ...onUnix,
+      todo: '#2573: the frozen leader loses its flight, so its joiners get FlightInterruptedError',
+      timeout: 30_000,
+    },
+    async (t) => {
+      // Arrange
+      await using directory = await scratchDirectory();
+      const options = { graceWindow: 300 };
+      await using coordinator = await coordinatorOf(t, directory.path, options);
+      await using leader = await caller(t, directory.path, 'leader', options);
+      run(leader, 'l', 'sync');
+      await heard(t, leader, 'leading', 'l');
+      await using joiner = await caller(t, directory.path, 'joiner', options);
+      run(joiner, 'j', 'sync');
+      await heard(t, joiner, 'joined', 'j');
+      await using probe = await connected(t, directory.path, 'probe', options);
+
+      // Act: the leader stays frozen until the next coordinator answered a run of another key.
+      leader.child.kill('SIGSTOP');
+      try {
+        await handOver(t, directory.path, coordinator, [joiner]);
+        await windowEnd(t, probe, 'window');
+      } finally {
+        leader.child.kill('SIGCONT');
+      }
+      // A client sends its reassertions before any new run on a connection,
+      // so once this run leads, the reassertion of `l` went out first.
+      run(leader, 'after', 'after');
+      await heard(t, leader, 'leading', 'after');
+      leader.child.send({ type: 'finish', call: 'after', value: 'after' });
+      await heard(t, leader, 'value', 'after');
+      leader.child.send({ type: 'finish', call: 'l', value: 'kept' });
+      const ledEnd = await firstOf(t, leader, 'l', ['value', 'error']);
+      const joinedEnd = await firstOf(t, joiner, 'j', ['value', 'error']);
+
+      // Assert
+      assert.equal(
+        joinedEnd.type,
+        'value',
+        `The joiner got ${String(joinedEnd.name)} instead of the frozen leader's value`,
+      );
+      assert.equal(
+        joinedEnd.value,
+        'kept',
+        "The joiner did not get the leader's value",
+      );
+      assert.equal(
+        joinedEnd.joined,
+        true,
+        'The joiner did not join the leader',
+      );
+      assert.equal(
+        ledEnd.value,
+        'kept',
+        `The leader got ${String(ledEnd.name)} instead of its own value`,
+      );
+      assert.deepEqual(
+        (await journal(directory.path)).filter((line) =>
+          line.endsWith(':sync'),
+        ),
+        ['leader:work:sync'],
+        'A second run of the work was journaled',
+      );
+    },
+  );
+
+  test(
+    'joiners of a frozen leader whose work fails once it resumes get FlightFailedError that describes the failure',
+    {
+      ...onUnix,
+      todo: '#2573: the frozen leader loses its flight, so its joiners get FlightInterruptedError',
+      timeout: 30_000,
+    },
+    async (t) => {
+      // Arrange
+      await using directory = await scratchDirectory();
+      const options = { graceWindow: 300 };
+      await using coordinator = await coordinatorOf(t, directory.path, options);
+      await using leader = await caller(t, directory.path, 'leader', options);
+      run(leader, 'l', 'sync');
+      await heard(t, leader, 'leading', 'l');
+      await using joiner = await caller(t, directory.path, 'joiner', options);
+      run(joiner, 'j', 'sync');
+      await heard(t, joiner, 'joined', 'j');
+      await using probe = await connected(t, directory.path, 'probe', options);
+
+      // Act: the leader stays frozen until the next coordinator answered a run of another key.
+      leader.child.kill('SIGSTOP');
+      try {
+        await handOver(t, directory.path, coordinator, [joiner]);
+        await windowEnd(t, probe, 'window');
+      } finally {
+        leader.child.kill('SIGCONT');
+      }
+      // A client sends its reassertions before any new run on a connection,
+      // so once this run leads, the reassertion of `l` went out first.
+      run(leader, 'after', 'after');
+      await heard(t, leader, 'leading', 'after');
+      leader.child.send({ type: 'finish', call: 'after', value: 'after' });
+      await heard(t, leader, 'value', 'after');
+      leader.child.send({
+        type: 'fail',
+        call: 'l',
+        message: 'The disk is full',
+        code: 'ENOSPC',
+      });
+      const joined = await firstOf(t, joiner, 'j', ['value', 'error']);
+
+      // Assert
+      assert.equal(
+        joined.name,
+        'FlightFailedError',
+        `The joiner got ${String(joined.name ?? joined.type)} instead of FlightFailedError`,
+      );
+      assert.deepEqual(
+        joined.failure,
+        { name: 'Error', message: 'The disk is full', code: 'ENOSPC' },
+        "The joiner did not get the failure of the leader's work",
+      );
+      assert.deepEqual(
+        (await journal(directory.path)).filter((line) =>
+          line.endsWith(':sync'),
+        ),
+        ['leader:work:sync'],
+        'A second run of the work was journaled',
+      );
+    },
+  );
+
+  test(
+    'a leader whose caller cancelled before the freeze still owns its flight, so a fresh run joins it and never starts the work beside it',
+    {
+      ...onUnix,
+      todo: '#2573: the fresh run leads once the grace window is over, beside the frozen work',
+      timeout: 30_000,
+    },
+    async (t) => {
+      // Arrange: the leader's caller stops waiting, and the work runs on.
+      await using directory = await scratchDirectory();
+      const options = { graceWindow: 300 };
+      await using coordinator = await coordinatorOf(t, directory.path, options);
+      await using leader = await caller(t, directory.path, 'leader', options);
+      run(leader, 'l', 'sync');
+      await heard(t, leader, 'leading', 'l');
+      leader.child.send({ type: 'cancel', call: 'l' });
+      await heard(t, leader, 'error', 'l');
+      await using probe = await connected(t, directory.path, 'probe', options);
+
+      // Act: the leader stays frozen until the next coordinator answered a run of another key.
+      leader.child.kill('SIGSTOP');
+      let ledBesideLeader: boolean;
+      try {
+        await handOver(t, directory.path, coordinator, []);
+        run(probe, 'fresh', 'sync');
+        await heard(t, probe, 'called', 'fresh');
+        await windowEnd(t, probe, 'window');
+        ledBesideLeader = led(probe, 'fresh');
+      } finally {
+        leader.child.kill('SIGCONT');
+      }
+      const first = await firstOf(t, probe, 'fresh', ['leading', 'joined']);
+
+      // Assert
+      assert.equal(
+        ledBesideLeader,
+        false,
+        'The fresh run led while the frozen leader ran its work',
+      );
+      assert.equal(
+        first.type,
+        'joined',
+        'The fresh run started the work beside the frozen leader instead of joining its flight',
+      );
+
+      // Act
+      leader.child.send({ type: 'finish', call: 'l', value: 'once' });
+      const fresh = await heard(t, probe, 'value', 'fresh');
+
+      // Assert
+      assert.equal(
+        fresh.value,
+        'once',
+        "The fresh run did not get the leader's value",
+      );
+      assert.equal(fresh.joined, true, 'The fresh run did not join the leader');
+      assert.deepEqual(
+        (await journal(directory.path)).filter((line) =>
+          line.endsWith(':sync'),
+        ),
+        ['leader:work:sync'],
+        'A second run of the work was journaled',
+      );
+    },
+  );
+
+  test(
+    'a frozen leader whose process stops after the next coordinator serves frees its key: a fresh run leads, and its joiners get FlightInterruptedError',
+    { ...onUnix, timeout: 30_000 },
+    async (t) => {
+      // Arrange
+      await using directory = await scratchDirectory();
+      const options = { graceWindow: 300 };
+      await using coordinator = await coordinatorOf(t, directory.path, options);
+      await using leader = await caller(t, directory.path, 'leader', options);
+      run(leader, 'l', 'sync');
+      await heard(t, leader, 'leading', 'l');
+      await using joiner = await caller(t, directory.path, 'joiner', options);
+      run(joiner, 'j', 'sync');
+      await heard(t, joiner, 'joined', 'j');
+      await using probe = await connected(t, directory.path, 'probe', options);
+
+      // Act: the leader never resumes; it stops while frozen.
+      leader.child.kill('SIGSTOP');
+      try {
+        await handOver(t, directory.path, coordinator, [joiner]);
+        await windowEnd(t, probe, 'window');
+        leader.child.kill('SIGKILL');
+        await leader.closed;
+      } finally {
+        leader.child.kill('SIGCONT');
+      }
+      run(probe, 'fresh', 'sync');
+      await heard(t, probe, 'leading', 'fresh');
+      probe.child.send({ type: 'finish', call: 'fresh', value: 'again' });
+      const fresh = await heard(t, probe, 'value', 'fresh');
+      const joined = await heard(t, joiner, 'error', 'j');
+
+      // Assert: the current contract for a flight whose leader died.
+      assert.equal(fresh.value, 'again');
+      assert.equal(fresh.joined, false);
+      assert.equal(joined.name, 'FlightInterruptedError');
+    },
+  );
+
+  test(
+    'a run of another key leads and gets its value while the leader of a key is frozen',
+    { ...onUnix, timeout: 30_000 },
+    async (t) => {
+      // Arrange
+      await using directory = await scratchDirectory();
+      const options = { graceWindow: 300 };
+      await using coordinator = await coordinatorOf(t, directory.path, options);
+      await using leader = await caller(t, directory.path, 'leader', options);
+      run(leader, 'l', 'sync');
+      await heard(t, leader, 'leading', 'l');
+      await using probe = await connected(t, directory.path, 'probe', options);
+
+      // Act
+      leader.child.kill('SIGSTOP');
+      let other: Awaited<ReturnType<typeof heard>>;
+      try {
+        await handOver(t, directory.path, coordinator, []);
+        run(probe, 'other', 'other');
+        await heard(t, probe, 'leading', 'other');
+        probe.child.send({ type: 'finish', call: 'other', value: 'served' });
+        other = await heard(t, probe, 'value', 'other');
+      } finally {
+        leader.child.kill('SIGCONT');
+      }
+
+      // Assert
+      assert.equal(other.value, 'served');
+      assert.equal(other.joined, false);
+    },
+  );
+});
+
+describe('A single flight across processes after a flight lands', () => {
+  test(
+    'a run in another process after the flight landed leads a new flight, and the work runs again',
+    { timeout: 30_000 },
+    async (t) => {
+      // Arrange
+      await using directory = await scratchDirectory();
+      await using _coordinator = await coordinatorOf(t, directory.path);
+      await using leader = await caller(t, directory.path, 'leader');
+      run(leader, 'l', 'sync');
+      await heard(t, leader, 'leading', 'l');
+      leader.child.send({ type: 'finish', call: 'l', value: 'first' });
+      await heard(t, leader, 'value', 'l');
+      await using next = await caller(t, directory.path, 'next');
+
+      // Act
+      run(next, 'n', 'sync');
+      await heard(t, next, 'leading', 'n');
+      next.child.send({ type: 'finish', call: 'n', value: 'second' });
+      const second = await heard(t, next, 'value', 'n');
+
+      // Assert
+      assert.equal(second.value, 'second');
+      assert.equal(second.joined, false);
+      assert.deepEqual(
+        (await journal(directory.path)).filter((line) =>
+          line.endsWith(':sync'),
+        ),
+        ['leader:work:sync', 'next:work:sync'],
       );
     },
   );
