@@ -18,6 +18,7 @@
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
+    "@happy-dom/global-registrator": "20.14.5",
     "@nx/devkit": "23.2.1",
     "@nx/eslint": "23.2.1",
     "@nx/eslint-plugin": "23.2.1",
@@ -32,6 +33,7 @@
     "eslint-plugin-es-x": "10.0.1",
     "eslint-plugin-functional": "10.0.1",
     "eslint-plugin-import-x": "4.17.1",
+    "happy-dom": "20.14.5",
     "jsonc-eslint-parser": "3.3.0",
     "lint-staged": "17.6.0",
     "nx": "23.2.1",

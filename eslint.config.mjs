@@ -77,6 +77,16 @@ export default defineConfig(
       '@nx/enforce-module-boundaries': moduleBoundaryRule('tests'),
     },
   },
+  // The tests of the shadcn package import it by its name, as an app does,
+  // so they check the published entry and not the source files.
+  {
+    files: ['packages/shadcn/src/**/*.test.ts'],
+    rules: {
+      '@nx/enforce-module-boundaries': moduleBoundaryRule('tests', [
+        '@zukhruf/shadcn',
+      ]),
+    },
+  },
   // The shadcn CLI writes these files (`nx run shadcn:sync`), and nobody edits
   // them by hand, so the rules that the stock code fails are off here only.
   {
