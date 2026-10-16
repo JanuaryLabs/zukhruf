@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtempDisposable, writeFile } from 'node:fs/promises';
+import { mkdtempDisposable, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
@@ -32,10 +32,13 @@ esac
 `;
 
 /**
- * Stands in for OpenSSH's `ssh -N -L <socket>:127.0.0.1:<port>`. `ssh-mode`
- * picks its behavior: `serve` opens the socket, `refused` fails to connect,
- * `silent` never opens the socket, `stubborn` ignores SIGTERM. A `lose` file
- * ends the forward the way a dead connection does. Messages are OpenSSH's.
+ * Stands in for OpenSSH's `ssh -L <socket>:127.0.0.1:<port> <host> 'cat >/dev/null'`.
+ * With that remote command it exits when its stdin ends, as the remote `cat`
+ * does; without it (`-N`) it ignores stdin. `ssh-mode` picks its behavior:
+ * `serve` opens the socket, `refused` fails to connect, `silent` never opens
+ * the socket, `stubborn` stays up after its stdin ends. A `lose` file ends
+ * the forward the way a dead connection does, and a `stdin-ended` file
+ * records that its stdin ended. Messages are OpenSSH's.
  */
 const sshStandIn = `#!${process.execPath}
 const { createServer } = require('node:net');
@@ -47,8 +50,13 @@ if (mode === 'refused') {
   process.stderr.write('ssh: connect to host sshhost port 22: Connection refused\\n');
   process.exit(255);
 }
-// An ssh -N session exits 0 on SIGTERM (OpenSSH clientloop.c).
-process.on('SIGTERM', () => { if (mode !== 'stubborn') process.exit(0); });
+if (process.argv.at(-1) === 'cat >/dev/null') {
+  process.stdin.resume();
+  process.stdin.on('end', () => {
+    writeFileSync(join(__dirname, 'stdin-ended'), '');
+    if (mode !== 'stubborn') process.exit(0);
+  });
+}
 if (mode !== 'silent') {
   const spec = process.argv[process.argv.indexOf('-L') + 1];
   createServer().listen(spec.slice(0, spec.lastIndexOf(':127.0.0.1:')));
@@ -267,10 +275,10 @@ test(
 );
 
 test(
-  'an ssh that ignores SIGTERM is killed on disconnect, which still resolves',
+  'an ssh that stays up after its stdin ends is killed on disconnect, which still resolves',
   { skip, timeout: 30_000 },
   async () => {
-    // Arrange: ssh does not stop on SIGTERM, so disconnect falls back to SIGKILL.
+    // Arrange: ssh does not exit when disconnect ends its stdin, so disconnect falls back to SIGKILL.
     await using directory = await standIns('stubborn');
 
     // Act
@@ -300,12 +308,45 @@ test(
       directory.path,
       `const server = await new Docker().serve({ image: 'standin', internalPort: 5432 });
       const disconnect = await settled(server.disconnect());
-      console.log(JSON.stringify({ disconnect, sshAlive: sshAlive() }));`,
+      console.log(JSON.stringify({ disconnect, sshAlive: sshAlive(), stdinEnded: existsSync(directory + '/stdin-ended') }));`,
     );
 
-    // Assert
+    // Assert: ssh stopped because disconnect ended its stdin, not by the SIGKILL fallback.
     assert.equal(result.disconnect, 'resolved', JSON.stringify(result));
     assert.equal(result.sshAlive, false);
+    assert.equal(result.stdinEnded, true);
     assert.equal(stderr, '');
+  },
+);
+
+test(
+  'an ssh forward ends by itself when the process that opened it is killed',
+  { skip, timeout: 30_000 },
+  async (t) => {
+    // Arrange
+    await using directory = await standIns('serve');
+
+    // Act: the process that opened the forward dies without closing it.
+    await assert.rejects(
+      scenario(
+        directory.path,
+        `await new Docker().serve({ image: 'standin', internalPort: 5432 });
+        process.kill(process.pid, 'SIGKILL');`,
+      ),
+      { signalName: 'SIGKILL' },
+    );
+
+    // Assert: ssh, orphaned, sees its stdin end and exits.
+    const pid = Number(await readFile(join(directory.path, 'ssh.pid'), 'utf8'));
+    try {
+      await t.waitFor(
+        () => assert.throws(() => process.kill(pid, 0), { code: 'ESRCH' }),
+        { timeout: 5_000, interval: 20 },
+      );
+    } finally {
+      try {
+        process.kill(pid, 'SIGKILL');
+      } catch {}
+    }
   },
 );

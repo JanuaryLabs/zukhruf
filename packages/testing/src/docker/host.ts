@@ -111,22 +111,29 @@ export class DockerHost {
       // OpenSSH multiplexes client streams over one authenticated connection.
       // Node owns the ephemeral TCP listener, so no port-reservation race or
       // fresh SSH login is added to each database client's connect timeout.
+      // A remote `cat` on a stdin pipe this process holds, not -N: when this
+      // process dies, even by SIGKILL, the OS closes the pipe, `cat` reads
+      // EOF and ssh exits instead of staying connected under PID 1. The
+      // command needs a remote shell, which the Docker CLI over ssh already
+      // uses to run `docker system dial-stdio`.
       const ssh = command(
         'ssh',
-        this.sshArgs([
-          '-N',
-          '-S',
-          'none',
-          '-o',
-          'ControlMaster=no',
-          '-o',
-          'ControlPersist=no',
-          '-o',
-          'ExitOnForwardFailure=yes',
-          '-L',
-          `${path}:127.0.0.1:${port}`,
-        ]),
-        { stdin: 'ignore', stdout: 'ignore' },
+        [
+          ...this.sshArgs([
+            '-S',
+            'none',
+            '-o',
+            'ControlMaster=no',
+            '-o',
+            'ControlPersist=no',
+            '-o',
+            'ExitOnForwardFailure=yes',
+            '-L',
+            `${path}:127.0.0.1:${port}`,
+          ]),
+          'cat >/dev/null',
+        ],
+        { stdin: 'pipe', stdout: 'ignore' },
       );
       // How ssh ended, with what it printed: a Result for exit 0, or the
       // SubprocessError for a failure or a signal.
@@ -143,7 +150,7 @@ export class DockerHost {
       });
       const child = await ssh.nodeChildProcess;
       resources.defer(async () => {
-        child.kill('SIGTERM');
+        child.stdin!.end();
         const deadline = setTimeout(() => child.kill('SIGKILL'), 1_000);
         try {
           await exit;
