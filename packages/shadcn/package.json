@@ -22,7 +22,6 @@
     "ui"
   ],
   "type": "module",
-  "types": "./dist/index.d.ts",
   "imports": {
     "#components/*": {
       "@zukhruf/source": "./src/components/*.tsx",

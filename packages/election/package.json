@@ -21,7 +21,6 @@
     "sqlite"
   ],
   "type": "module",
-  "types": "./dist/index.d.ts",
   "exports": {
     "./package.json": "./package.json",
     ".": {
