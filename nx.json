@@ -95,6 +95,7 @@
     "version": {
       "preVersionCommand": "nx run-many -t build --projects=tag:npm:public",
       "conventionalCommits": true,
+      "preserveMatchingDependencyRanges": false,
       "git": {
         "commit": true,
         "tag": true,
