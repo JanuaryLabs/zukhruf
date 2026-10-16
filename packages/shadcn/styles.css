@@ -16,3 +16,14 @@
     overflow-y: auto;
   }
 }
+
+/*
+ * the mobile sidebar is a Sheet, whose data-[side=…]:w-3/4 (0,2,0) beats the
+ * sidebar's w-(--sidebar-width) (0,1,0). Only a utilities-layer rule can beat
+ * a utility; (0,3,0) wins without relying on source order.
+ */
+@layer utilities {
+  [data-slot='sidebar'][data-mobile='true'][data-side] {
+    width: var(--sidebar-width);
+  }
+}
