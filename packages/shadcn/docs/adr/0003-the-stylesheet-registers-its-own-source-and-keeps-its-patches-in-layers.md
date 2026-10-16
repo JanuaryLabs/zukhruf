@@ -15,12 +15,15 @@ Tailwind CSS 4.3.3 gives this evidence:
 - Tailwind CSS scans a base under `node_modules` as External, and it does not obey `.gitignore` there (changelog 4.1.0, #17255, and 4.3.1, #20214).
 - `./styles.css` is in the `exports` of `package.json`. Vite stops with an error for a subpath that `exports` does not list.
 
-The stylesheet also holds two patches: the pointer cursor on enabled buttons, and the cap on the height of a dialog. The base-nova button has no `cursor-pointer` class. The base-nova dialog has `data-slot="dialog-content"`, but no `max-h` or `overflow` class. Each patch is in a layer:
+The stylesheet also holds three patches: the pointer cursor on enabled buttons, the cap on the height of a dialog, and the width of the mobile sidebar. The base-nova button has no `cursor-pointer` class. The base-nova dialog has `data-slot="dialog-content"`, but no `max-h` or `overflow` class. On a small screen, the sidebar is in a `Sheet`, and the class `data-[side=left]:w-3/4` of the `Sheet` wins over the class `w-(--sidebar-width)` of the sidebar. Each patch is in a layer:
 
 - The cursor is in `@layer base`.
 - The cap is in `@layer components`.
+- The width is in `@layer utilities`, with the selector `[data-slot="sidebar"][data-mobile="true"][data-side]`.
 
 A rule outside of a layer wins over each rule in a layer (MDN, `@layer`). Tailwind CSS puts its utility classes in `@layer utilities`. Thus a patch outside of a layer would win over each utility class of the app. In `base` and `components`, a patch comes before `utilities`, and a utility class of the app still wins.
+
+The width patch must win over a utility class of the `Sheet`. A rule in `@layer components` cannot do this, because `utilities` comes after `components`. Thus the width patch is in `@layer utilities`. In one layer, the rule with the higher specificity wins. When the specificity is the same, the later rule wins. `data-[side=left]:w-3/4` has the specificity of two attributes. The patch has three attributes, so it wins also when a bundler changes the order of the rules. The sidebar does not give its `className` to the mobile `Sheet`, so no utility class of the app gets to that element. An app changes the mobile width with a rule outside of a layer.
 
 An app must import the stylesheet with a plain `@import`. `@import '@zukhruf/shadcn/styles.css' layer(components)` puts all of the file into a layer, also its `@utility` and `@source` rules. Tailwind CSS refuses these rules in a layer. A build of an app on 2026-10-15 stopped with the error "`@utility` cannot be nested."
 

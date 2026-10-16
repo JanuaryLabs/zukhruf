@@ -81,12 +81,36 @@ Base UI:
 
 ## What the stylesheet adds to stock shadcn/ui
 
-The stylesheet has two patches:
+The stylesheet has three patches:
 
 - **A pointer cursor on enabled buttons.** In Tailwind CSS 4, a button has the default cursor of the browser, not the pointer. The upgrade guide of Tailwind CSS gives a rule that sets the pointer again. The patch is that rule, in `@layer base`.
 - **A cap on the height of a dialog.** A dialog is never taller than the window minus `2rem`, and it scrolls when its content is taller. Thus the buttons at the bottom of a tall dialog stay on the screen. The rule is `max-height: calc(100dvh - 2rem); overflow-y: auto` on `[data-slot="dialog-content"]`. The patch is in `@layer components`.
+- **The width of the mobile sidebar.** On a small screen, the sidebar is in a `Sheet`. The class `data-[side=left]:w-3/4` of the `Sheet` wins over the class `w-(--sidebar-width)` of the sidebar. Thus the sidebar was 3/4 of the window: 292.5px, not 288px, in a window of 390px. The patch sets `width: var(--sidebar-width)` on `[data-slot="sidebar"][data-mobile="true"][data-side]`.
 
-Both patches are in layers. Thus a utility class of the app, for example `cursor-wait` or `max-h-none`, still changes them.
+The cursor and the cap are in layers before `utilities`. Thus a utility class of the app, for example `cursor-wait` or `max-h-none`, still changes them.
+
+The width patch is in `@layer utilities`, because only a rule in that layer wins over a utility class. Its selector has three attributes, so it wins over the two parts of `data-[side=left]:w-3/4`. The sidebar does not give its `className` to the mobile `Sheet`, so a utility class of the app cannot get to that element. To change the mobile width, write a rule outside of a layer.
+
+## Links that look like buttons
+
+A control that goes to a different page must stay a link. Do not write `<Button render={<Link />} nativeButton={false}>`. This makes an `<a>` with `role="button"`. A screen reader then calls the link a button, and the Space key activates it.
+
+Put the classes of the button on the link:
+
+```tsx
+import { cn } from 'cn';
+
+import { buttonVariants } from '@zukhruf/shadcn';
+
+<Link
+  href="/settings"
+  className={cn(buttonVariants({ variant: 'outline', size: 'sm' }))}
+>
+  Settings
+</Link>;
+```
+
+Use `cn` around `buttonVariants`. `Button` merges the classes that conflict through `cn`, which uses tailwind-merge. Without `cn`, the classes that conflict stay on the link, and the link looks different from a button. In one app, the link had a radius of 10px, not 8px, and it was 2px wider than the button.
 
 ## Your own components
 

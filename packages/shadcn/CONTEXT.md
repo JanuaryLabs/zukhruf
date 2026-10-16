@@ -33,7 +33,7 @@ The run of `nx run shadcn:sync`. It writes the generated source again from the r
 _Avoid_: Update (npm updates dependencies), build (the build compiles the generated source), regenerate
 
 **Patch**:
-A CSS rule in `styles.css`, in a layer, that changes what stock shadcn/ui does. There are two patches: the pointer cursor on buttons and the cap on the height of a dialog. A utility class of an app still wins over a patch.
+A CSS rule in `styles.css`, in a layer, that changes what stock shadcn/ui does. There are three patches: the pointer cursor on buttons, the cap on the height of a dialog, and the width of the mobile sidebar. A utility class of an app still wins over the cursor and the cap. The width patch is in `@layer utilities`, because it must win over a utility class of the `Sheet`.
 _Avoid_: Override, hack
 
 **Private import**:
