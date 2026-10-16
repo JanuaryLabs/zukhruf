@@ -12,7 +12,6 @@ export type CallerCodec = 'json' | 'dates' | 'encode-throws' | 'decode-throws';
 
 export interface CallerOptions {
   codec?: CallerCodec;
-  graceWindow?: number;
 }
 
 /** Where each caller process appends `<name>:work:<key>` when its work runs, so a test counts the runs of the work. */
@@ -37,7 +36,7 @@ export function journalOf(directory: string) {
  */
 export function callerSource(
   directory: string,
-  { codec = 'json', graceWindow = 500 }: CallerOptions = {},
+  { codec = 'json' }: CallerOptions = {},
 ) {
   return `
     import { appendFileSync } from 'node:fs';
@@ -64,7 +63,6 @@ export function callerSource(
     const flights = new SingleFlight({
       directory: ${JSON.stringify(directory)},
       codec: codecs[${JSON.stringify(codec)}],
-      graceWindow: ${graceWindow},
     });
     const finishes = new Map();
     const cancels = new Map();

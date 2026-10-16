@@ -27,10 +27,9 @@ const SEQUENCE_BITS = 32n;
 export interface SingleFlightOptions<T> {
   /**
    * The local folder where the processes that share flights meet. They keep
-   * `flight.lock`, `flight.epoch`, `flight.lock.clean`, `flight.sock` and the
-   * folder `execution-locks` there, so every process
-   * that names the same folder is in one group, and callers of one key share
-   * a flight across that group. There is no default: one shared default would
+   * `flight.lock`, `flight.epoch`, `flight.sock` and the folder
+   * `execution-locks` there, so every process that names the same folder is
+   * in one group, and callers of one key share a flight across that group. There is no default: one shared default would
    * put every application on the host into one group, and unrelated
    * applications that use the same key would join each other's flights. It
    * must be on a local file system.
@@ -38,13 +37,6 @@ export interface SingleFlightOptions<T> {
   directory: string;
   /** Turns the flight's value into text for the processes that joined it, and back. */
   codec: Codec<T>;
-  /**
-   * Milliseconds that a new coordinator starts no flight after the previous
-   * one stopped, so the leaders of flights in progress can claim them again.
-   * A coordinator after a clean shutdown of the one before has none. Must
-   * exceed how long a process takes to reconnect. Defaults to 500.
-   */
-  graceWindow?: number;
 }
 
 export interface RunOptions {
@@ -76,7 +68,7 @@ export class SingleFlight<T> implements AsyncDisposable {
   /** The flight servers this process started; disposing closes them. */
   readonly #servers = new AsyncDisposableStack();
 
-  constructor({ directory, codec, graceWindow = 500 }: SingleFlightOptions<T>) {
+  constructor({ directory, codec }: SingleFlightOptions<T>) {
     this.#codec = codec;
     const socketPath = socketPathFor(directory);
     const election = flightElection(directory, POLL_INTERVAL);
@@ -93,16 +85,7 @@ export class SingleFlight<T> implements AsyncDisposable {
               // Until serving has fully started, a failure closes the new server, so no server outlives its term.
               await using starting = new AsyncDisposableStack();
               starting.adopt(
-                await FlightServer.start(socketPath, term, {
-                  // The first term of a directory has no flights to wait for,
-                  // and neither has a term after a clean shutdown: the
-                  // coordinator before it left no flight in progress.
-                  graceWindow:
-                    term.epoch > 1n && !term.afterCleanShutdown
-                      ? graceWindow
-                      : 0,
-                  locks,
-                }),
+                await FlightServer.start(socketPath, term, { locks }),
                 (started) => started.close(),
               );
               this.#servers.use(starting.move());

@@ -293,7 +293,6 @@ describe('The wire of a single flight', () => {
       await using flights = new SingleFlight({
         directory: directory.path,
         codec: asText,
-        graceWindow: 50,
       });
       const tokens: bigint[] = [];
 
@@ -395,18 +394,17 @@ describe('The wire of a single flight', () => {
   );
 
   test(
-    'a rejoin during the grace window gets the outcome only of its own ended flight: a rejoin that names another flight of the key is told interrupted',
+    'a rejoin after a reasserted flight ended gets the outcome only of its own ended flight: a rejoin that names another flight of the key is told interrupted',
     { ...onUnixSockets, timeout: 10_000 },
     async (t) => {
-      // Arrange: the last coordinator, of a published version, recorded term 41, so this one opens a grace window.
+      // Arrange: the last coordinator, of a published version, recorded term 41.
       await using directory = await scratchDirectory();
       await writeFile(join(directory.path, 'flight.epoch'), '41');
       await using flights = new SingleFlight({
         directory: directory.path,
         codec: asText,
-        graceWindow: 1500,
       });
-      // This run starts the coordinator, and then waits for the window to end, as every fresh run does.
+      // This run starts the coordinator.
       const warmUp = settle(flights.run('warm-up', async () => 'warm'));
       await waitUntil(
         t,
@@ -416,7 +414,7 @@ describe('The wire of a single flight', () => {
       using peer = await peerOf(directory.path);
       peer.send('{"op":"hello","protocol":"single-flight","version":1}');
       await linesOf(t, peer, 1);
-      // A leader of term 41 reasserts its flight of `sync` and lands it inside the window.
+      // A leader of term 41 reasserts its flight of `sync` and lands it.
       const ended = (41n << 32n) | 1n;
       peer.send(`{"op":"reassert","id":"a","key":"sync","token":"${ended}"}`);
       peer.send('{"op":"land","id":"a","outcome":{"value":"first"}}');

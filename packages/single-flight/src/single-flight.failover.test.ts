@@ -49,12 +49,8 @@ async function caller(
  * The coordinator, by construction: the first process that makes a call while
  * no other process uses the directory wins the first term.
  */
-async function coordinatorOf(
-  t: TestContext,
-  directory: string,
-  options?: CallerOptions,
-) {
-  const coordinator = await caller(t, directory, 'coordinator', options);
+async function coordinatorOf(t: TestContext, directory: string) {
+  const coordinator = await caller(t, directory, 'coordinator');
   coordinator.child.send({ type: 'run', call: 'warm-up', key: 'warm-up' });
   await heard(t, coordinator, 'leading', 'warm-up');
   coordinator.child.send({ type: 'finish', call: 'warm-up', value: 'warm' });
@@ -178,23 +174,17 @@ describe('A single flight across processes when a leader stops', () => {
     async (t) => {
       // Arrange: the coordinator leads the flight itself, and two processes join it.
       await using directory = await scratchDirectory();
-      await using coordinator = await caller(t, directory.path, 'coordinator', {
-        graceWindow: 300,
-      });
+      await using coordinator = await caller(t, directory.path, 'coordinator');
       run(coordinator, 'l', 'sync');
       await heard(t, coordinator, 'leading', 'l');
-      await using first = await caller(t, directory.path, 'first', {
-        graceWindow: 300,
-      });
+      await using first = await caller(t, directory.path, 'first');
       run(first, 'j', 'sync');
       await heard(t, first, 'joined', 'j');
-      await using second = await caller(t, directory.path, 'second', {
-        graceWindow: 300,
-      });
+      await using second = await caller(t, directory.path, 'second');
       run(second, 'j', 'sync');
       await heard(t, second, 'joined', 'j');
 
-      // Act: a joiner's process takes over, and waits for a reassertion that never comes.
+      // Act: a joiner's process takes over. The leader died with the coordinator, so nobody reasserts its flight.
       coordinator.child.kill('SIGKILL');
       await coordinator.closed;
       const firstEnd = await heard(t, first, 'error', 'j');
@@ -316,22 +306,19 @@ async function handOver(
 }
 
 /** A process with an open connection, ready to campaign when the coordinator stops. */
-async function connected(
-  t: TestContext,
-  directory: string,
-  name: string,
-  options?: CallerOptions,
-) {
-  const worker = await caller(t, directory, name, options);
-  await windowEnd(t, worker, `${name}-warm-up`);
+async function connected(t: TestContext, directory: string, name: string) {
+  const worker = await caller(t, directory, name);
+  await runAlone(t, worker, `${name}-warm-up`);
   return worker;
 }
 
 /**
- * A fresh run of a key nobody else uses leads only once the coordinator's
- * grace window is over, so its `leading` report is the end of the window.
+ * Runs the key `call`, which no other process uses, in `worker` until it has
+ * its value. The coordinator decides the runs of one connection in the order
+ * they arrive, so once this run led, each run that `worker` sent before it
+ * was decided.
  */
-async function windowEnd(t: TestContext, worker: WorkerProcess, call: string) {
+async function runAlone(t: TestContext, worker: WorkerProcess, call: string) {
   run(worker, call, call);
   await heard(t, worker, 'leading', call);
   worker.child.send({ type: 'finish', call, value: call });
@@ -406,19 +393,18 @@ describe('A single flight across processes when the coordinator stops', () => {
     async (t) => {
       // Arrange
       await using directory = await scratchDirectory();
-      const options = { graceWindow: 300 };
-      await using coordinator = await coordinatorOf(t, directory.path, options);
-      await using leader = await caller(t, directory.path, 'leader', options);
+      await using coordinator = await coordinatorOf(t, directory.path);
+      await using leader = await caller(t, directory.path, 'leader');
       run(leader, 'l', 'sync');
       await heard(t, leader, 'leading', 'l');
-      await using joiner = await caller(t, directory.path, 'joiner', options);
+      await using joiner = await caller(t, directory.path, 'joiner');
       run(joiner, 'j', 'sync');
       await heard(t, joiner, 'joined', 'j');
-      await using probe = await connected(t, directory.path, 'probe', options);
+      await using probe = await connected(t, directory.path, 'probe');
 
-      // Act: the probe takes over, and the leader lands after the probe's grace window.
+      // Act: the probe takes over and answers a run of another key, and then the leader lands.
       await handOver(t, directory.path, coordinator, [leader, joiner]);
-      await windowEnd(t, probe, 'window');
+      await runAlone(t, probe, 'other');
       leader.child.send({ type: 'finish', call: 'l', value: { files: 42 } });
       const led = await heard(t, leader, 'value', 'l');
       const joined = await heard(t, joiner, 'value', 'j');
@@ -437,68 +423,26 @@ describe('A single flight across processes when the coordinator stops', () => {
   );
 
   test(
-    'a leader that lands during the next coordinator grace window gets its value to the joiners before the window ends',
-    { timeout: 30_000 },
-    async (t) => {
-      // Arrange: a long window. The leader leads two flights, and the joiner joins both.
-      await using directory = await scratchDirectory();
-      const options = { graceWindow: 3000 };
-      await using coordinator = await coordinatorOf(t, directory.path, options);
-      await using leader = await caller(t, directory.path, 'leader', options);
-      run(leader, 'l', 'sync');
-      await heard(t, leader, 'leading', 'l');
-      run(leader, 'o', 'other');
-      await heard(t, leader, 'leading', 'o');
-      await using joiner = await caller(t, directory.path, 'joiner', options);
-      run(joiner, 'j', 'sync');
-      await heard(t, joiner, 'joined', 'j');
-      run(joiner, 'k', 'other');
-      await heard(t, joiner, 'joined', 'k');
-      await using probe = await connected(t, directory.path, 'probe', options);
-      await handOver(t, directory.path, coordinator, [leader, joiner]);
-      run(probe, 'window', 'window');
-      // The landing of `other` goes out behind the leader's reassertions, so
-      // once it reached the joiner, the probe holds the flight of `sync` again.
-      leader.child.send({ type: 'finish', call: 'o', value: 'other' });
-      await heard(t, joiner, 'value', 'k');
-
-      // Act: the leader lands its reasserted flight inside the probe's window.
-      leader.child.send({ type: 'finish', call: 'l', value: 'landed' });
-      const joined = await heard(t, joiner, 'value', 'j');
-      const windowOpen = !led(probe, 'window');
-
-      // Assert
-      assert.equal(joined.value, 'landed');
-      assert.ok(
-        windowOpen,
-        'The joiner got the value only after the window ended',
-      );
-    },
-  );
-
-  test(
-    'joiners of a flight whose leader stops during the next coordinator grace window get FlightInterruptedError before the window ends',
+    'joiners of a flight whose leader stops after a failover get FlightInterruptedError from the next coordinator',
     { timeout: 30_000 },
     async (t) => {
       // Arrange: the leader leads two flights, and the joiner joins both.
       await using directory = await scratchDirectory();
-      const options = { graceWindow: 3000 };
-      await using coordinator = await coordinatorOf(t, directory.path, options);
-      await using leader = await caller(t, directory.path, 'leader', options);
+      await using coordinator = await coordinatorOf(t, directory.path);
+      await using leader = await caller(t, directory.path, 'leader');
       run(leader, 'l', 'sync');
       await heard(t, leader, 'leading', 'l');
       run(leader, 'o', 'other');
       await heard(t, leader, 'leading', 'o');
-      await using joiner = await caller(t, directory.path, 'joiner', options);
+      await using joiner = await caller(t, directory.path, 'joiner');
       run(joiner, 'j', 'sync');
       await heard(t, joiner, 'joined', 'j');
       run(joiner, 'k', 'other');
       await heard(t, joiner, 'joined', 'k');
-      await using probe = await connected(t, directory.path, 'probe', options);
+      await using _probe = await connected(t, directory.path, 'probe');
 
       // Act: the probe takes over, the leader reasserts its flights to it, and then the leader stops.
       await handOver(t, directory.path, coordinator, [leader, joiner]);
-      run(probe, 'window', 'window');
       // The landing of `other` goes out behind the leader's reassertions, so
       // once it reached the joiner, the next coordinator holds both flights.
       leader.child.send({ type: 'finish', call: 'o', value: 'other' });
@@ -506,31 +450,25 @@ describe('A single flight across processes when the coordinator stops', () => {
       leader.child.kill('SIGKILL');
       await leader.closed;
       const ended = await heard(t, joiner, 'error', 'j');
-      const windowOpen = !led(probe, 'window');
 
       // Assert
       assert.equal(ended.name, 'FlightInterruptedError');
-      assert.ok(
-        windowOpen,
-        'The joiner learned it only after the window ended',
-      );
     },
   );
 });
 
 describe('A single flight across processes when the coordinator disposes', () => {
   test(
-    'a coordinator that disposes while another process leads a flight leaves a grace window to the next coordinator, so the leader keeps its flight and the joiner gets its value',
+    'a leader in another process keeps its flight when the coordinator disposes, and the joiner gets its value',
     { timeout: 30_000 },
     async (t) => {
       // Arrange
       await using directory = await scratchDirectory();
-      const options = { graceWindow: 300 };
-      await using coordinator = await coordinatorOf(t, directory.path, options);
-      await using leader = await caller(t, directory.path, 'leader', options);
+      await using coordinator = await coordinatorOf(t, directory.path);
+      await using leader = await caller(t, directory.path, 'leader');
       run(leader, 'l', 'sync');
       await heard(t, leader, 'leading', 'l');
-      await using joiner = await caller(t, directory.path, 'joiner', options);
+      await using joiner = await caller(t, directory.path, 'joiner');
       run(joiner, 'j', 'sync');
       await heard(t, joiner, 'joined', 'j');
 
@@ -628,9 +566,8 @@ describe('A single flight across processes in the gaps of a failover', () => {
     async (t) => {
       // Arrange: the coordinator is frozen, so it never answers the call.
       await using directory = await scratchDirectory();
-      const options = { graceWindow: 300 };
-      await using coordinator = await coordinatorOf(t, directory.path, options);
-      await using next = await connected(t, directory.path, 'next', options);
+      await using coordinator = await coordinatorOf(t, directory.path);
+      await using next = await connected(t, directory.path, 'next');
       coordinator.child.kill('SIGSTOP');
       run(next, 'fresh', 'sync');
       await heard(t, next, 'called', 'fresh');
@@ -654,15 +591,14 @@ describe('A single flight across processes in the gaps of a failover', () => {
     async (t) => {
       // Arrange
       await using directory = await scratchDirectory();
-      const options = { graceWindow: 3000 };
-      await using coordinator = await coordinatorOf(t, directory.path, options);
-      await using leader = await caller(t, directory.path, 'leader', options);
+      await using coordinator = await coordinatorOf(t, directory.path);
+      await using leader = await caller(t, directory.path, 'leader');
       run(leader, 'l', 'sync');
       await heard(t, leader, 'leading', 'l');
-      await using joiner = await caller(t, directory.path, 'joiner', options);
+      await using joiner = await caller(t, directory.path, 'joiner');
       run(joiner, 'j', 'sync');
       await heard(t, joiner, 'joined', 'j');
-      await using _probe = await connected(t, directory.path, 'probe', options);
+      await using _probe = await connected(t, directory.path, 'probe');
 
       // Act: the work ends while the leader's coordinator is gone. Whichever the
       // leader hears first, the end of its work or the lost connection, its
@@ -698,17 +634,16 @@ describe('A single flight across processes in the gaps of a failover', () => {
   );
 
   test(
-    'a fresh run during the grace window waits for it, and then joins the flight that its leader reasserted meanwhile',
+    'a fresh run that comes before the frozen leader reasserts waits, and then joins the flight that its leader reasserted meanwhile',
     { ...onUnix, timeout: 30_000 },
     async (t) => {
       // Arrange: the leader is frozen, so its flight is not reasserted when the fresh run arrives.
       await using directory = await scratchDirectory();
-      const options = { graceWindow: 3000 };
-      await using coordinator = await coordinatorOf(t, directory.path, options);
-      await using leader = await caller(t, directory.path, 'leader', options);
+      await using coordinator = await coordinatorOf(t, directory.path);
+      await using leader = await caller(t, directory.path, 'leader');
       run(leader, 'l', 'sync');
       await heard(t, leader, 'leading', 'l');
-      await using probe = await connected(t, directory.path, 'probe', options);
+      await using probe = await connected(t, directory.path, 'probe');
       leader.child.kill('SIGSTOP');
       try {
         coordinator.child.kill('SIGKILL');
@@ -737,57 +672,50 @@ describe('A single flight across processes in the gaps of a failover', () => {
   );
 
   test(
-    'a fresh run during the grace window of a key that nobody reasserts leads only once the window is over',
+    'a fresh run of a key that no process holds leads at once after the coordinator stops',
     { timeout: 30_000 },
     async (t) => {
       // Arrange
       await using directory = await scratchDirectory();
-      const graceWindow = 1500;
-      await using coordinator = await coordinatorOf(t, directory.path, {
-        graceWindow,
-      });
-      await using probe = await connected(t, directory.path, 'probe', {
-        graceWindow,
-      });
+      await using coordinator = await coordinatorOf(t, directory.path);
+      await using probe = await connected(t, directory.path, 'probe');
 
       // Act
       coordinator.child.kill('SIGKILL');
       await coordinator.closed;
       await newTerm(t, directory.path, '2');
-      // The window starts after the epoch is on disk, so it ends no earlier than this.
       const termSeen = performance.now();
       run(probe, 'fresh', 'sync');
       await heard(t, probe, 'leading', 'fresh');
       const waited = performance.now() - termSeen;
 
-      // Assert
+      // Assert: a term after a stop used to hold every fresh run for 500 ms (#2549).
       assert.ok(
-        waited >= graceWindow - 100,
-        `The fresh run led after ${Math.round(waited)} ms, inside a window of ${graceWindow} ms`,
+        waited < 400,
+        `The fresh run led ${Math.round(waited)} ms after the next term began`,
       );
     },
   );
 
   test(
-    'a fresh run during the grace window after the reasserted flight landed leads a new flight, and never gets the old value',
+    'a fresh run after the reasserted flight landed leads a new flight, and never gets the old value',
     { ...onUnix, timeout: 30_000 },
     async (t) => {
       // Arrange
       await using directory = await scratchDirectory();
-      const options = { graceWindow: 3000 };
-      await using coordinator = await coordinatorOf(t, directory.path, options);
-      await using leader = await caller(t, directory.path, 'leader', options);
+      await using coordinator = await coordinatorOf(t, directory.path);
+      await using leader = await caller(t, directory.path, 'leader');
       run(leader, 'l', 'sync');
       await heard(t, leader, 'leading', 'l');
-      await using joiner = await caller(t, directory.path, 'joiner', options);
+      await using joiner = await caller(t, directory.path, 'joiner');
       run(joiner, 'j', 'sync');
       await heard(t, joiner, 'joined', 'j');
-      await using probe = await connected(t, directory.path, 'probe', options);
+      await using probe = await connected(t, directory.path, 'probe');
       await handOver(t, directory.path, coordinator, [leader, joiner]);
       leader.child.send({ type: 'finish', call: 'l', value: 'first' });
       await heard(t, joiner, 'value', 'j');
 
-      // Act: the first flight ended inside the window; this run comes after it.
+      // Act: the first flight ended at the next coordinator; this run comes after it.
       run(probe, 'fresh', 'sync');
       await heard(t, probe, 'leading', 'fresh');
       probe.child.send({ type: 'finish', call: 'fresh', value: 'second' });
@@ -938,7 +866,7 @@ describe('A single flight across processes in the gaps of a failover', () => {
       // another key, sent after it, is decided after it.
       run(probe, 'fresh', 'sync');
       await heard(t, probe, 'called', 'fresh');
-      await windowEnd(t, probe, 'after');
+      await runAlone(t, probe, 'after');
       const ledBesideWork = led(probe, 'fresh');
       leader.child.send({ type: 'finish', call: 'l', value: 'stale' });
       const ended = await heard(t, leader, 'error', 'l');
@@ -968,30 +896,29 @@ describe('A single flight across processes in the gaps of a failover', () => {
   );
 
   test(
-    'when the next coordinator stops too, inside its grace window, the flight survives both, and the joiner gets its value',
+    'when the next coordinator stops too, the flight survives both, and the joiner gets its value',
     { ...onUnix, timeout: 30_000 },
     async (t) => {
       // Arrange: the leader leads two flights, and the joiner joins both.
       await using directory = await scratchDirectory();
-      const options = { graceWindow: 3000 };
-      await using coordinator = await coordinatorOf(t, directory.path, options);
-      await using leader = await caller(t, directory.path, 'leader', options);
+      await using coordinator = await coordinatorOf(t, directory.path);
+      await using leader = await caller(t, directory.path, 'leader');
       run(leader, 'l', 'sync');
       await heard(t, leader, 'leading', 'l');
       run(leader, 'o', 'other');
       await heard(t, leader, 'leading', 'o');
-      await using joiner = await caller(t, directory.path, 'joiner', options);
+      await using joiner = await caller(t, directory.path, 'joiner');
       run(joiner, 'j', 'sync');
       await heard(t, joiner, 'joined', 'j');
       run(joiner, 'k', 'other');
       await heard(t, joiner, 'joined', 'k');
-      await using probe = await connected(t, directory.path, 'probe', options);
+      await using probe = await connected(t, directory.path, 'probe');
       await handOver(t, directory.path, coordinator, [leader, joiner]);
       // Both processes re-sent their flights to the probe before the landing of `other` reached the joiner.
       leader.child.send({ type: 'finish', call: 'o', value: 'other' });
       await heard(t, joiner, 'value', 'k');
 
-      // Act: the probe stops inside its window, and a third term begins.
+      // Act: the probe stops too, and a third term begins.
       probe.child.kill('SIGKILL');
       await probe.closed;
       await newTerm(t, directory.path, '3');
@@ -1020,17 +947,16 @@ describe('A single flight across processes when a leader is frozen past a failov
     async (t) => {
       // Arrange
       await using directory = await scratchDirectory();
-      const options = { graceWindow: 300 };
-      await using coordinator = await coordinatorOf(t, directory.path, options);
-      await using leader = await caller(t, directory.path, 'leader', options);
+      await using coordinator = await coordinatorOf(t, directory.path);
+      await using leader = await caller(t, directory.path, 'leader');
       run(leader, 'l', 'sync');
       await heard(t, leader, 'leading', 'l');
-      await using probe = await connected(t, directory.path, 'probe', options);
+      await using probe = await connected(t, directory.path, 'probe');
 
       // Act: the leader stays frozen until the next coordinator answered a run
       // of another key, and for at least `frozenFor` since the handoff began.
-      // The freeze length is this test's input, four default grace windows, so
-      // a timer that outlasts a short freeze cannot stand in for the lock.
+      // The freeze length is this test's input, so a timer that outlasts a
+      // short freeze cannot stand in for the lock.
       const frozenFor = 2000;
       leader.child.kill('SIGSTOP');
       let ledBesideLeader: boolean;
@@ -1039,7 +965,7 @@ describe('A single flight across processes when a leader is frozen past a failov
         await handOver(t, directory.path, coordinator, []);
         run(probe, 'fresh', 'sync');
         await heard(t, probe, 'called', 'fresh');
-        await windowEnd(t, probe, 'window');
+        await runAlone(t, probe, 'other');
         await setTimeout(
           Math.max(0, frozenFor - (performance.now() - handoffBegan)),
         );
@@ -1091,12 +1017,11 @@ describe('A single flight across processes when a leader is frozen past a failov
     async (t) => {
       // Arrange
       await using directory = await scratchDirectory();
-      const options = { graceWindow: 300 };
-      await using coordinator = await coordinatorOf(t, directory.path, options);
-      await using leader = await caller(t, directory.path, 'leader', options);
+      await using coordinator = await coordinatorOf(t, directory.path);
+      await using leader = await caller(t, directory.path, 'leader');
       run(leader, 'l', 'sync');
       await heard(t, leader, 'leading', 'l');
-      await using probe = await connected(t, directory.path, 'probe', options);
+      await using probe = await connected(t, directory.path, 'probe');
 
       // Act: the leader stays frozen until the next coordinator answered a run of another key.
       leader.child.kill('SIGSTOP');
@@ -1112,7 +1037,7 @@ describe('A single flight across processes when a leader is frozen past a failov
         await newTerm(t, directory.path, '2');
         run(probe, 'fresh', 'sync');
         await heard(t, probe, 'called', 'fresh');
-        await windowEnd(t, probe, 'window');
+        await runAlone(t, probe, 'other');
         ledBesideLeader = led(probe, 'fresh');
       } finally {
         leader.child.kill('SIGCONT');
@@ -1161,21 +1086,20 @@ describe('A single flight across processes when a leader is frozen past a failov
     async (t) => {
       // Arrange
       await using directory = await scratchDirectory();
-      const options = { graceWindow: 300 };
-      await using coordinator = await coordinatorOf(t, directory.path, options);
-      await using leader = await caller(t, directory.path, 'leader', options);
+      await using coordinator = await coordinatorOf(t, directory.path);
+      await using leader = await caller(t, directory.path, 'leader');
       run(leader, 'l', 'sync');
       await heard(t, leader, 'leading', 'l');
-      await using joiner = await caller(t, directory.path, 'joiner', options);
+      await using joiner = await caller(t, directory.path, 'joiner');
       run(joiner, 'j', 'sync');
       await heard(t, joiner, 'joined', 'j');
-      await using probe = await connected(t, directory.path, 'probe', options);
+      await using probe = await connected(t, directory.path, 'probe');
 
       // Act: the leader stays frozen until the next coordinator answered a run of another key.
       leader.child.kill('SIGSTOP');
       try {
         await handOver(t, directory.path, coordinator, [joiner]);
-        await windowEnd(t, probe, 'window');
+        await runAlone(t, probe, 'other');
       } finally {
         leader.child.kill('SIGCONT');
       }
@@ -1229,21 +1153,20 @@ describe('A single flight across processes when a leader is frozen past a failov
     async (t) => {
       // Arrange
       await using directory = await scratchDirectory();
-      const options = { graceWindow: 300 };
-      await using coordinator = await coordinatorOf(t, directory.path, options);
-      await using leader = await caller(t, directory.path, 'leader', options);
+      await using coordinator = await coordinatorOf(t, directory.path);
+      await using leader = await caller(t, directory.path, 'leader');
       run(leader, 'l', 'sync');
       await heard(t, leader, 'leading', 'l');
-      await using joiner = await caller(t, directory.path, 'joiner', options);
+      await using joiner = await caller(t, directory.path, 'joiner');
       run(joiner, 'j', 'sync');
       await heard(t, joiner, 'joined', 'j');
-      await using probe = await connected(t, directory.path, 'probe', options);
+      await using probe = await connected(t, directory.path, 'probe');
 
       // Act: the leader stays frozen until the next coordinator answered a run of another key.
       leader.child.kill('SIGSTOP');
       try {
         await handOver(t, directory.path, coordinator, [joiner]);
-        await windowEnd(t, probe, 'window');
+        await runAlone(t, probe, 'other');
       } finally {
         leader.child.kill('SIGCONT');
       }
@@ -1291,14 +1214,13 @@ describe('A single flight across processes when a leader is frozen past a failov
     async (t) => {
       // Arrange: the leader's caller stops waiting, and the work runs on.
       await using directory = await scratchDirectory();
-      const options = { graceWindow: 300 };
-      await using coordinator = await coordinatorOf(t, directory.path, options);
-      await using leader = await caller(t, directory.path, 'leader', options);
+      await using coordinator = await coordinatorOf(t, directory.path);
+      await using leader = await caller(t, directory.path, 'leader');
       run(leader, 'l', 'sync');
       await heard(t, leader, 'leading', 'l');
       leader.child.send({ type: 'cancel', call: 'l' });
       await heard(t, leader, 'error', 'l');
-      await using probe = await connected(t, directory.path, 'probe', options);
+      await using probe = await connected(t, directory.path, 'probe');
 
       // Act: the leader stays frozen until the next coordinator answered a run of another key.
       leader.child.kill('SIGSTOP');
@@ -1307,7 +1229,7 @@ describe('A single flight across processes when a leader is frozen past a failov
         await handOver(t, directory.path, coordinator, []);
         run(probe, 'fresh', 'sync');
         await heard(t, probe, 'called', 'fresh');
-        await windowEnd(t, probe, 'window');
+        await runAlone(t, probe, 'other');
         ledBesideLeader = led(probe, 'fresh');
       } finally {
         leader.child.kill('SIGCONT');
@@ -1353,21 +1275,20 @@ describe('A single flight across processes when a leader is frozen past a failov
     async (t) => {
       // Arrange
       await using directory = await scratchDirectory();
-      const options = { graceWindow: 300 };
-      await using coordinator = await coordinatorOf(t, directory.path, options);
-      await using leader = await caller(t, directory.path, 'leader', options);
+      await using coordinator = await coordinatorOf(t, directory.path);
+      await using leader = await caller(t, directory.path, 'leader');
       run(leader, 'l', 'sync');
       await heard(t, leader, 'leading', 'l');
-      await using joiner = await caller(t, directory.path, 'joiner', options);
+      await using joiner = await caller(t, directory.path, 'joiner');
       run(joiner, 'j', 'sync');
       await heard(t, joiner, 'joined', 'j');
-      await using probe = await connected(t, directory.path, 'probe', options);
+      await using probe = await connected(t, directory.path, 'probe');
 
       // Act: the leader never resumes; it stops while frozen.
       leader.child.kill('SIGSTOP');
       try {
         await handOver(t, directory.path, coordinator, [joiner]);
-        await windowEnd(t, probe, 'window');
+        await runAlone(t, probe, 'other');
         leader.child.kill('SIGKILL');
         await leader.closed;
       } finally {
@@ -1393,12 +1314,11 @@ describe('A single flight across processes when a leader is frozen past a failov
     async (t) => {
       // Arrange
       await using directory = await scratchDirectory();
-      const options = { graceWindow: 300 };
-      await using coordinator = await coordinatorOf(t, directory.path, options);
-      await using leader = await caller(t, directory.path, 'leader', options);
+      await using coordinator = await coordinatorOf(t, directory.path);
+      await using leader = await caller(t, directory.path, 'leader');
       run(leader, 'l', 'sync');
       await heard(t, leader, 'leading', 'l');
-      await using probe = await connected(t, directory.path, 'probe', options);
+      await using probe = await connected(t, directory.path, 'probe');
 
       // Act
       leader.child.kill('SIGSTOP');

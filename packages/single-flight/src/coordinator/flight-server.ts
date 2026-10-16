@@ -12,8 +12,6 @@ import type { FlightResponse } from '../protocol/flight-protocol.ts';
 import { FlightCoordinator } from './flight-coordinator.ts';
 
 export interface FlightServerOptions {
-  /** Milliseconds the new term starts no flight, so leaders from the last term can reassert theirs. */
-  graceWindow: number;
   /** The kernel locks on the keys, which the coordinator checks before a run leads. */
   locks: KeyLocks;
 }
@@ -47,7 +45,7 @@ export class FlightServer {
   static async start(
     socketPath: string,
     term: Term,
-    { graceWindow, locks }: FlightServerOptions,
+    { locks }: FlightServerOptions,
   ): Promise<FlightServer> {
     // Only the coordinator gets here, so removing a dead coordinator's socket file cannot race another server.
     // Windows removes a named pipe when its process stops, so there is no file to remove.
@@ -56,7 +54,6 @@ export class FlightServer {
     }
     const coordinator = new FlightCoordinator({
       tokens: new EpochTokenSource(term.epoch),
-      graceWindow,
       locks,
     });
     const connections = new Set<Socket>();
@@ -85,13 +82,11 @@ export class FlightServer {
 
   /**
    * Hands the term over. Ending every connection tells the other processes to
-   * elect a successor and reassert their flights during its grace window;
-   * `close` alone would wait for clients that never disconnect on their own.
+   * elect a successor and reassert their flights to it; `close` alone would
+   * wait for clients that never disconnect on their own.
    * Each connection ends only after what was written to it, such as an
    * outcome for a joiner, is sent. The term ends only after the socket is
    * gone: in the other order, this close could remove a successor's socket file.
-   * The term resigns clean when the coordinator leaves nothing to recover, so
-   * the successor skips its grace window; a lost term records nothing.
    * The first call removes the file at once, so a second caller finds it gone,
    * and it too resolves only once the term ended as the first call ended it.
    * The coordinator stops watching the locks of the keys whose runs wait.
@@ -100,14 +95,8 @@ export class FlightServer {
     this.#closeOnLoss[Symbol.dispose]();
     this.#coordinator.close();
     const closed = this.#server[Symbol.asyncDispose]();
-    // Read in the step that ends the connections: each session that ends
-    // withdraws its flights, so later there is never a flight in progress.
-    // An answer written after this step, such as the `lead` of a run whose
-    // token is being minted, never reaches its client, which sends the run
-    // again to the successor. So no client knows of a flight this read missed.
-    const clean = this.#coordinator.leavesNothingToRecover;
     for (const socket of this.#connections) socket.destroySoon();
     await closed;
-    await this.#term.resign({ clean });
+    await this.#term.resign();
   }
 }

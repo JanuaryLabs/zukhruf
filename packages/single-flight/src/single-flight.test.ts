@@ -695,16 +695,14 @@ describe('A single flight gives the leader what the joiners get', () => {
 
 describe('A single flight in its directory', () => {
   test(
-    'the first coordinator of a directory has no grace window: its first call leads at once',
+    'the first coordinator of a directory leads its first call at once',
     { timeout: 10_000 },
     async () => {
       // Arrange
       await using directory = await scratchDirectory();
-      const graceWindow = 5000;
       await using flights = new SingleFlight({
         directory: directory.path,
         codec: asText,
-        graceWindow,
       });
       const started = performance.now();
 
@@ -713,59 +711,16 @@ describe('A single flight in its directory', () => {
       const took = performance.now() - started;
 
       // Assert
-      assert.ok(
-        took < graceWindow / 2,
-        `The first call took ${Math.round(took)} ms`,
-      );
+      assert.ok(took < 2500, `The first call took ${Math.round(took)} ms`);
     },
   );
 
   test(
-    'a coordinator after one that disposed with no flight in progress has no grace window: its first call leads at once',
-    { timeout: 10_000 },
-    async () => {
-      // Arrange: the first coordinator runs once and disposes, as a process that runs alone does.
-      await using directory = await scratchDirectory();
-      const graceWindow = 5000;
-      {
-        await using first = new SingleFlight({
-          directory: directory.path,
-          codec: asText,
-          graceWindow,
-        });
-        await first.run('sync', async () => 'done');
-      }
-      await using second = new SingleFlight({
-        directory: directory.path,
-        codec: asText,
-        graceWindow,
-      });
-      const started = performance.now();
-
-      // Act
-      await second.run('sync', async () => 'done again');
-      const took = performance.now() - started;
-
-      // Assert
-      assert.equal(
-        await fsPromises.readFile(join(directory.path, 'flight.epoch'), 'utf8'),
-        '2',
-        'The second call must start the second term',
-      );
-      assert.ok(
-        took < graceWindow / 2,
-        `The first call of the second term took ${Math.round(took)} ms`,
-      );
-    },
-  );
-
-  test(
-    'a coordinator that disposes inside its own grace window leaves a grace window to the next coordinator',
+    'a coordinator after terms that ended without a clean shutdown leads its first call at once',
     { timeout: 10_000 },
     async (t) => {
       // Arrange: the first term resigns without a clean shutdown, as a coordinator of a published version does.
       await using directory = await scratchDirectory();
-      const graceWindow = 1000;
       const earlier = await new SqliteElection({
         directory: directory.path,
         claimFile: 'flight.lock',
@@ -775,13 +730,12 @@ describe('A single flight in its directory', () => {
       assert.ok(earlier, 'The first campaign in an empty directory must win');
       await earlier.resign();
       {
-        // So it is still in its grace window when it disposes.
-        await using inWindow = new SingleFlight({
+        // The second term disposes as soon as it serves, with a run of its own.
+        await using second = new SingleFlight({
           directory: directory.path,
           codec: asText,
-          graceWindow: 60_000,
         });
-        void settle(inWindow.run('sync', async () => 'never'));
+        void settle(second.run('sync', async () => 'second'));
         await waitUntil(
           t,
           () => existsSync(join(directory.path, 'flight.sock')),
@@ -791,7 +745,6 @@ describe('A single flight in its directory', () => {
       await using next = new SingleFlight({
         directory: directory.path,
         codec: asText,
-        graceWindow,
       });
       const started = performance.now();
 
@@ -805,9 +758,10 @@ describe('A single flight in its directory', () => {
         '3',
         'The call must start the third term',
       );
+      // A term after an unclean shutdown used to hold every fresh run for 500 ms (#2549).
       assert.ok(
-        took >= graceWindow - 100,
-        `The first call of the third term led after ${Math.round(took)} ms, inside a window of ${graceWindow} ms`,
+        took < 400,
+        `The first call of the third term took ${Math.round(took)} ms`,
       );
     },
   );

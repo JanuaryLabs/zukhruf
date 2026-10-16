@@ -1,4 +1,3 @@
-import { Latch } from '@zukhruf/async';
 import type { FencingToken, TokenSource } from '@zukhruf/fencing';
 
 import type { Connection } from '../connection/connection.ts';
@@ -13,88 +12,10 @@ export interface FlightCoordinatorOptions {
   /** Mints the lease token of each flight this coordinator starts. */
   tokens: TokenSource;
   /**
-   * Milliseconds after start during which no fresh run decides, so leaders
-   * from a previous coordinator can reassert their flights first. Zero when no
-   * earlier coordinator can have left a flight in progress.
-   */
-  graceWindow: number;
-  /**
    * The kernel locks on the keys. A process that holds a key's lock runs its
    * work, whether this coordinator knows that flight or not.
    */
   locks: KeyLocks;
-}
-
-interface Phase {
-  readonly leavesNothingToRecover: boolean;
-  run(party: Party, key: string): Promise<void>;
-}
-
-/**
- * Coordinates the flights of one term. A run leads a new flight of its key, or
- * joins the flight of that key in progress, in one step, so two runs never
- * both lead. The outcome is pushed to every joiner as soon as it lands.
- */
-export class FlightCoordinator {
-  readonly #coordinating: Coordinating;
-  readonly #closing = new AbortController();
-  #phase: Phase;
-
-  constructor({ tokens, graceWindow, locks }: FlightCoordinatorOptions) {
-    const coordinating = new Coordinating(tokens, locks, this.#closing.signal);
-    this.#coordinating = coordinating;
-    if (graceWindow > 0) {
-      const over = new Latch();
-      this.#phase = new GraceWindow(over, coordinating);
-      setTimeout(() => {
-        // Coordinating is current before the latch lets the waiting runs resume.
-        this.#phase = coordinating;
-        over.open();
-      }, graceWindow).unref();
-    } else {
-      this.#phase = coordinating;
-    }
-  }
-
-  /**
-   * Whether the next coordinator would find nothing to recover: no flight is
-   * in progress, and the grace window is over or there was none.
-   */
-  get leavesNothingToRecover(): boolean {
-    return this.#phase.leavesNothingToRecover;
-  }
-
-  serve(connection: Connection<FlightResponse>): void {
-    new Session(this, connection);
-  }
-
-  /** Rejects only when no token can be minted. */
-  run(party: Party, key: string): Promise<void> {
-    return this.#phase.run(party, key);
-  }
-
-  /** A joiner that lost its connection, back for the flight it joined: it never leads, so its work never runs twice. */
-  rejoin(party: Party, key: string, flight: string): void {
-    this.#coordinating.rejoin(party, key, flight);
-  }
-
-  reassert(party: Party, key: string, token: FencingToken): void {
-    this.#coordinating.reassert(party, key, token);
-  }
-
-  land(flight: Flight, outcome: Outcome): void {
-    this.#coordinating.land(flight, outcome);
-  }
-
-  /** The leader withdrew or its connection is gone. */
-  interrupt(flight: Flight): void {
-    this.#coordinating.interrupt(flight);
-  }
-
-  /** Stops watching the locks of the keys whose runs wait. */
-  close(): void {
-    this.#closing.abort();
-  }
 }
 
 /** How a reasserted flight ended, for a rejoin of it that comes after its end. */
@@ -104,47 +25,50 @@ interface Ending {
 }
 
 /**
- * Starts, joins and ends flights. A key whose lock another process holds,
- * while no flight of it is known here, runs the work of a leader that has not
- * reasserted its flight yet, so its runs and rejoins wait for that flight or
- * for the lock to free. A leader keeps its flight while its process lives.
+ * Coordinates the flights of one term. A run leads a new flight of its key, or
+ * joins the flight of that key in progress, in one step, so two runs never
+ * both lead. The outcome is pushed to every joiner as soon as it lands.
+ *
+ * A key whose lock another process holds, while no flight of it is known
+ * here, runs the work of a leader that has not reasserted its flight yet, so
+ * its runs and rejoins wait for that flight or for the lock to free. A leader
+ * keeps its flight while its process lives.
  */
-class Coordinating implements Phase {
+export class FlightCoordinator {
   readonly #flights = new Map<string, Flight>();
   /** The latest ending of a reasserted flight, per key. */
   readonly #endings = new Map<string, Ending>();
   readonly #tokens: TokenSource;
   readonly #locks: KeyLocks;
   readonly #parked: ParkedRuns;
+  readonly #closing = new AbortController();
 
-  constructor(tokens: TokenSource, locks: KeyLocks, closed: AbortSignal) {
+  constructor({ tokens, locks }: FlightCoordinatorOptions) {
     this.#tokens = tokens;
     this.#locks = locks;
-    this.#parked = new ParkedRuns(locks, closed);
+    this.#parked = new ParkedRuns(locks, this.#closing.signal);
   }
 
-  get leavesNothingToRecover() {
-    return this.#flights.size === 0;
+  serve(connection: Connection<FlightResponse>): void {
+    new Session(this, connection);
   }
 
+  /** Stops watching the locks of the keys whose runs wait. */
+  close(): void {
+    this.#closing.abort();
+  }
+
+  /** Rejects only when no token can be minted. */
   async run(party: Party, key: string) {
-    for (;;) {
-      // A token that goes unused is harmless: tokens only need to grow. A run
-      // that waited mints again, so it never leads with a token older than a
-      // flight it waited behind.
-      const token = await this.#tokens.next(key);
-      // The client may have withdrawn the run while the token was minted.
-      if (!party.waiting || this.#join(party, key)) return;
-      if (!this.#held(key)) {
-        return this.#start(new Flight(key, token, party), (flight) =>
-          party.lead(flight),
-        );
-      }
-      if (!(await this.#untilFree(party, key))) return;
-    }
+    // A token that goes unused is harmless: tokens only need to grow.
+    this.#decide(party, key, await this.#tokens.next(key));
   }
 
-  /** A rejoin joins only its own flight; any other answer could be a second run of the work. */
+  /**
+   * A joiner that lost its connection, back for the flight it joined: it never
+   * leads, so its work never runs twice. A rejoin joins only its own flight;
+   * any other answer could be a second run of the work.
+   */
   rejoin(party: Party, key: string, flight: string): void {
     if (!party.waiting) return;
     const inProgress = this.#flights.get(key);
@@ -185,6 +109,7 @@ class Coordinating implements Phase {
     flight.land(outcome);
   }
 
+  /** The leader withdrew or its connection is gone. */
   interrupt(flight: Flight) {
     this.#end(flight, { op: 'interrupted' });
     flight.interrupt();
@@ -204,29 +129,29 @@ class Coordinating implements Phase {
     if (flight.reasserted) this.#endings.set(flight.key, { flight, answer });
   }
 
+  /**
+   * Joins the flight of `key` in progress, waits while another process holds
+   * the key, or leads. A flight of the key that starts while the run waits
+   * takes it in the step that starts it, so a landing read right behind a
+   * reassertion reaches it.
+   */
+  #decide(party: Party, key: string, token: FencingToken) {
+    // The client may have withdrawn the run while the token was minted or while it waited.
+    if (!party.waiting || this.#join(party, key)) return;
+    if (this.#held(key)) {
+      return this.#parked.park(key, party, () =>
+        this.#decide(party, key, token),
+      );
+    }
+    // No flight of the key started while the run waited, so its token is still newer than every flight of the key.
+    this.#start(new Flight(key, token, party), (flight) => party.lead(flight));
+  }
+
   /** Joins `party` to the flight of `key` in progress, if there is one. */
   #join(party: Party, key: string): boolean {
     const inProgress = this.#flights.get(key);
     inProgress?.add(party);
     return inProgress !== undefined;
-  }
-
-  /**
-   * Parks a run while another process holds its key. A flight of the key that
-   * starts meanwhile takes it in the step that starts it, so a landing read
-   * right behind a reassertion reaches it. Resolves `true` once the key may be
-   * free and no flight took the run, and `false` once the run is answered or
-   * gone.
-   */
-  #untilFree(party: Party, key: string): Promise<boolean> {
-    const { promise, resolve } = Promise.withResolvers<boolean>();
-    const retry = () => {
-      if (!party.waiting || this.#join(party, key)) return resolve(false);
-      if (this.#held(key)) return this.#parked.park(key, party, retry);
-      resolve(true);
-    };
-    this.#parked.park(key, party, retry);
-    return promise;
   }
 
   /**
@@ -240,26 +165,5 @@ class Coordinating implements Phase {
     } catch {
       return false;
     }
-  }
-}
-
-/** No fresh run decides yet, so leaders from a previous coordinator can reassert theirs first. */
-class GraceWindow implements Phase {
-  readonly #over: Latch;
-  readonly #next: Coordinating;
-
-  constructor(over: Latch, next: Coordinating) {
-    this.#over = over;
-    this.#next = next;
-  }
-
-  /** A leader of the previous term may not have reasserted its flight yet, so this coordinator cannot know. */
-  get leavesNothingToRecover() {
-    return false;
-  }
-
-  async run(party: Party, key: string) {
-    await this.#over.wait();
-    return this.#next.run(party, key);
   }
 }

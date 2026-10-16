@@ -94,7 +94,6 @@ describe('Flight server', () => {
 
       // Act
       const starting = FlightServer.start(socketPath, term, {
-        graceWindow: 0,
         locks: new KeyLocks(directory.path, 10),
       });
 
@@ -123,13 +122,12 @@ describe('Flight server', () => {
       const server = await FlightServer.start(
         join(directory.path, 'flight.sock'),
         term,
-        { graceWindow: 0, locks: new KeyLocks(directory.path, 10) },
+        { locks: new KeyLocks(directory.path, 10) },
       );
       try {
         await using flights = new SingleFlight({
           directory: directory.path,
           codec: asText,
-          graceWindow: 50,
         });
         await flights.run('warm-up', async () => 'warm');
 
