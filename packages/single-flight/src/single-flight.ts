@@ -153,7 +153,7 @@ export class SingleFlight<T> implements AsyncDisposable {
         text = this.#codec.encode(await work({ token, signal: lost }));
       } catch (error) {
         lead.land({ failure: failureOf(error) });
-        // After a loss, every failure rejects with LeaseLostError: the work did not run alone (ADR 0007).
+        // After a loss, every failure rejects with LeaseLostError: the outcome reaches no joiner (ADR 0007, as ADR 0010 amends it).
         if (!lost.aborted || error === lost.reason) return { error };
         return { error: new LeaseLostError(key, { cause: error }) };
       }
