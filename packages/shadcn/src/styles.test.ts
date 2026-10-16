@@ -86,4 +86,21 @@ describe('the stylesheet of @zukhruf/shadcn', () => {
       'components',
     );
   });
+
+  test('a dark: utility of the components applies under a .dark ancestor, not under the dark color scheme of the system', async () => {
+    // Act
+    const css = await buildAppStylesheet();
+
+    // Assert
+    assert.match(
+      css,
+      /\.dark\\:bg-input\\\/30:is\(\.dark \*\)\s*\{\s*background-color:\s*var\(--input\);?/,
+      'Input uses dark:bg-input/30, which must apply inside an element with the .dark class',
+    );
+    assert.doesNotMatch(
+      css,
+      /prefers-color-scheme/,
+      'Tailwind keys dark: on prefers-color-scheme by default; the .dark class must replace that',
+    );
+  });
 });
