@@ -126,7 +126,9 @@ async function leadingCoordinator(directory: string) {
     peer.on('error', () => {});
     const requests: string[] = [];
     connections.push(requests);
-    createInterface({ input: peer }).on('line', (line) => {
+    // readline emits the socket's errors again, e.g. a reset on Linux when the client closes with unread data.
+    const lines = createInterface({ input: peer }).on('error', () => {});
+    lines.on('line', (line) => {
       requests.push(line);
       const request: unknown = JSON.parse(line);
       if (typeof request !== 'object' || request === null) return;

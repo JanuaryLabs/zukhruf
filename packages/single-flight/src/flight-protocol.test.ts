@@ -165,10 +165,15 @@ describe('The wire of a single flight', () => {
       const server = createServer((peer) => {
         peers.add(peer);
         peer.on('error', () => {});
-        createInterface({ input: peer }).once('line', (line) => {
-          hellos.push(line);
-          peer.end('{"op":"refused","protocol":"single-flight","version":2}\n');
-        });
+        // readline emits the socket's errors again, e.g. a reset on Linux when the client closes with unread data.
+        createInterface({ input: peer })
+          .on('error', () => {})
+          .once('line', (line) => {
+            hellos.push(line);
+            peer.end(
+              '{"op":"refused","protocol":"single-flight","version":2}\n',
+            );
+          });
       });
       server.listen(join(directory.path, 'flight.sock'));
       await once(server, 'listening');

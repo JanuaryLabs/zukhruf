@@ -120,7 +120,10 @@ describe('Electing connector', () => {
       const coordinator = createServer((peer) => {
         peers.add(peer);
         peer.on('error', () => {});
-        createInterface({ input: peer }).once('line', () => peer.destroy());
+        // readline emits the socket's errors again, e.g. a reset on Linux when the client closes with unread data.
+        createInterface({ input: peer })
+          .on('error', () => {})
+          .once('line', () => peer.destroy());
       });
       coordinator.listen(socketPath);
       await once(coordinator, 'listening');

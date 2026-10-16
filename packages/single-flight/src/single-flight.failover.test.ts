@@ -356,7 +356,9 @@ async function rejectingSuccessor(
     const server = createServer((peer) => {
       peers.add(peer);
       peer.on('error', () => {});
-      createInterface({ input: peer }).on('line', (line) => {
+      // readline emits the socket's errors again, e.g. a reset on Linux when the client closes with unread data.
+      const lines = createInterface({ input: peer }).on('error', () => {});
+      lines.on('line', (line) => {
         const request: unknown = JSON.parse(line);
         if (typeof request !== 'object' || request === null) return;
         if (!('op' in request)) return;
