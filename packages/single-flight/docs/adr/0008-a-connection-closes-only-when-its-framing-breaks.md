@@ -21,3 +21,4 @@ The first line is a different case. Before the welcome, the coordinator reads on
 - A first line that is not a hello still closes the connection.
 - `Connection<Outgoing>` gives each message as `unknown`. A new reader of flight messages must check each message before it reads it.
 - A coordinator of an earlier version still closes the connection for such a line. A process of this version never sends one.
+- Since [ADR 0010](./0010-a-leader-holds-a-kernel-lock-on-its-key-until-its-outcome-is-handed-over.md), the coordinator checks the kernel lock on a key before a run of the key leads. That check is advice only. When it fails, the key counts as not held, and the leader's own lock decides. Thus a fault of the check never refuses a run or a rejoin, and it never closes a connection.

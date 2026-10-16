@@ -70,7 +70,7 @@ The lease that the work gets comes from `@zukhruf/lease`, and its token comes fr
 
 ## The directory
 
-The directory is the local folder where the processes that share flights meet. Each process that uses a `SingleFlight` keeps four files there: `flight.lock`, `flight.epoch`, `flight.lock.clean` and `flight.sock`. The election of [`@zukhruf/election`](../election/README.md) claims `flight.lock` with a file lock, and records the epoch of the last term in `flight.epoch`. After a clean shutdown of a coordinator, `flight.lock.clean` holds the epoch of its term until the next term starts. The journal of the claim is in memory, so a coordinator that stops leaves no `flight.lock-journal` file. All the processes that name the same directory are one group, and the callers of one key share a flight in that group only.
+The directory is the local folder where the processes that share flights meet. Each process that uses a `SingleFlight` keeps three files and a folder there: `flight.lock`, `flight.epoch`, `flight.sock` and `execution-locks/`. The election of [`@zukhruf/election`](../election/README.md) claims `flight.lock` with a file lock, and records the epoch of the last term in `flight.epoch`. The folder `execution-locks/` has one file for each key that ever led: the key lock of that key, named by the SHA-256 of the key. The process that runs the work of a key holds a file lock on that file (see [When a process stops](#when-a-process-stops)). The files stay after the flights, so do not remove them while a process uses the directory. The journal of the claim is in memory, so a coordinator that stops leaves no `flight.lock-journal` file. All the processes that name the same directory are one group, and the callers of one key share a flight in that group only.
 
 There is no default directory. One default would put each application on the host into one group, and unrelated applications that use the same key would join each other's flights. Give each group its own directory, for example a folder of your application's data.
 
@@ -87,15 +87,14 @@ All the processes of the directory take part in one election. The winner is the 
 The work gets the lease of the flight:
 
 - `token`: a `FencingToken`. Its high 32 bits are the epoch of the coordinator's term, so a newer term always gives higher tokens.
-- `signal`: it aborts with `LeaseLostError` when the flight is no longer the leader's. The `subject` of the error is the key. This occurs when the leader misses the grace window of a new coordinator.
+- `signal`: it aborts with `LeaseLostError` when the flight is no longer the leader's, so its outcome reaches no joiner. The `subject` of the error is the key. This occurs when a new coordinator refuses the reassert of the leader, because it knows a newer flight of the key, or when this process cannot connect to a coordinator again.
 
-| Option        | What it does                                                                                                                                                                                                                                  |
-| ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `directory`   | The local folder where the processes of one group meet. See [The directory](#the-directory).                                                                                                                                                  |
-| `codec`       | Turns the value of a flight into text for the joiners, and back. See [The codec](#the-codec).                                                                                                                                                 |
-| `graceWindow` | Milliseconds that a new coordinator starts no flight, so the leaders of the flights in progress can reassert them. It must be longer than a process takes to connect again. A coordinator after a clean shutdown has none. Defaults to `500`. |
+| Option      | What it does                                                                                  |
+| ----------- | --------------------------------------------------------------------------------------------- |
+| `directory` | The local folder where the processes of one group meet. See [The directory](#the-directory).  |
+| `codec`     | Turns the value of a flight into text for the joiners, and back. See [The codec](#the-codec). |
 
-`flights[Symbol.asyncDispose]()` waits until each landing of this process reached a coordinator, and then it disconnects. When this process is the coordinator, the other processes elect a new one.
+`flights[Symbol.asyncDispose]()` waits until each landing of this process reached a coordinator, and then it disconnects. When this process is the coordinator, the other processes elect a new one. The work of a flight that this process leads continues, and this process keeps the key lock of that key until the work ends.
 
 ## The codec
 
@@ -165,16 +164,25 @@ Give a signal to stop the wait of one caller: `flights.run(key, work, { signal: 
 
 ## When a process stops
 
-- **The process of a leader stops.** The coordinator tells each joiner that the flight is interrupted, and each joiner rejects with `FlightInterruptedError` at once. No joiner runs the work again. The next call of the key leads a new flight.
-- **The coordinator disposes with nothing in progress.** This is a clean shutdown: no flight is in progress, and the grace window of the coordinator is over, or it had none. The next coordinator then has no grace window, and each call leads or joins at once. [ADR 0009](./docs/adr/0009-the-next-coordinator-skips-the-grace-window-after-a-clean-shutdown.md) tells why.
-- **The coordinator stops in another way.** For example, its process stops, or it disposes while a flight is in progress. The other processes elect a new coordinator. Its term starts with a grace window. In the grace window:
+A leader keeps its flight while its process lives. Before its work starts, the leader takes a kernel lock on its key, the key lock. It frees the key lock only when its work settled and its flight needs nothing more from it: the coordinator acknowledged its landing, its lease was lost, or its `SingleFlight` closed. The kernel keeps the key lock while the process lives, also while the process is frozen, and it frees the key lock when the process dies. Thus no other process starts the work of the key beside it. [ADR 0010](./docs/adr/0010-a-leader-holds-a-kernel-lock-on-its-key-until-its-outcome-is-handed-over.md) tells why.
+
+- **The process of a leader stops.** The coordinator tells each joiner that the flight is interrupted, and each joiner rejects with `FlightInterruptedError` at once. No joiner runs the work again. The kernel frees the key lock, and the next call of the key leads a new flight.
+- **A leader disposes its `SingleFlight` while its work runs.** The coordinator interrupts the flight, because a disposed leader cannot send its outcome. Each joiner rejects with `FlightInterruptedError`. The work continues, and the leader keeps the key lock until the work ends. A call of the key in another process waits until then, and then it leads a new flight.
+- **The coordinator stops or disposes.** The other processes elect a new coordinator, and it answers at once:
   - Each leader reasserts its flight, and sends its landing again when it has one.
   - Each joiner rejoins its flight by the flight's token, and it gets the outcome of that flight.
-  - A new call waits for the grace window to end. Then it leads or joins.
-- **A leader misses the grace window**, for example because its process was frozen. Its lease is lost: the signal of the lease aborts with `LeaseLostError`, and its call rejects with that error. When the work throws its own error after the loss, the call rejects with a new `LeaseLostError`, and the error of the work is its `cause`. Thus `LeaseLostError` always tells the leader that its work did not run alone. Its joiners get `FlightInterruptedError`. [ADR 0007](./docs/adr/0007-a-work-error-after-a-lost-lease-rejects-with-leaselosterror.md) tells why.
-- **A joiner's leader and the coordinator stop together.** The joiner gets `FlightInterruptedError` at the end of the grace window. It never runs the work again.
+  - A new call of a key that no process holds leads or joins at once.
+  - A new call or a rejoin of a key whose key lock another process holds, while the new coordinator knows no flight of the key, waits. When the leader reasserts its flight, the call or the rejoin joins it. When the key lock frees first, the call leads, and the rejoin gets `FlightInterruptedError`.
+- **A leader is frozen or busy, for example stopped by a debugger or in a long synchronous step.** It keeps its flight and its key lock. When the coordinator stops in that time, the calls of the key wait. When the leader continues, it reasserts its flight, and the calls that waited join it. When its process dies instead, the kernel frees the key lock, the joiners get `FlightInterruptedError`, and the next call leads.
+- **A leader loses its lease.** This occurs only when a new coordinator refuses its reassert, because it knows a newer flight of the key, or when this process cannot connect to a coordinator again. The signal of the lease aborts with `LeaseLostError`, and the call of the leader rejects with that error. When the work throws its own error after the loss, the call rejects with a new `LeaseLostError`, and the error of the work is its `cause`. Thus `LeaseLostError` tells the leader that its outcome reached no joiner. Its joiners get `FlightInterruptedError`. The leader keeps the key lock until its work ends, so the next flight of the key runs after it, not beside it. [ADR 0007](./docs/adr/0007-a-work-error-after-a-lost-lease-rejects-with-leaselosterror.md) tells why.
+- **A joiner's leader and the coordinator stop together.** The joiner gets `FlightInterruptedError` from the new coordinator. It never runs the work again.
 
 A call that was on its way to a coordinator that stopped joined nothing. It goes again to the next coordinator as a new call. [ADR 0005](./docs/adr/0005-a-joiner-rejoins-its-flight-by-its-token.md) tells why.
+
+### How long a call waits
+
+- A call of a key waits with no limit while a process that lives holds the key lock, for example a frozen leader, or a leader whose work does not end. To set a limit, give a `signal`. A call of another key does not wait for it.
+- Two flights of one key that follow each other wait about 10 ms between them. The leader frees the key lock only when it reads the acknowledgment of its landing, so the next call of the key waits for one more check of the key lock.
 
 ## Changes from 0.3.x
 
@@ -197,9 +205,9 @@ Version 0.3.13 to 0.3.15 had a pull design. These parts changed:
 - [ADR 0006: The election and the connection are a copy of the mutex code](./docs/adr/0006-the-election-and-the-connection-are-a-copy-of-the-mutex-code.md)
 - [ADR 0007: A work error after a lost lease rejects with LeaseLostError](./docs/adr/0007-a-work-error-after-a-lost-lease-rejects-with-leaselosterror.md)
 - [ADR 0008: A connection closes only when its framing breaks](./docs/adr/0008-a-connection-closes-only-when-its-framing-breaks.md)
-- [ADR 0009: The next coordinator skips the grace window after a clean shutdown](./docs/adr/0009-the-next-coordinator-skips-the-grace-window-after-a-clean-shutdown.md)
+- [ADR 0010: A leader holds a kernel lock on its key until its outcome is handed over](./docs/adr/0010-a-leader-holds-a-kernel-lock-on-its-key-until-its-outcome-is-handed-over.md)
 - [Code copied from the mutex](./docs/copied-from-mutex.md): each copied file, what changed, and why; the rules that the single flight shares with the mutex; and the code that is in two places inside the single flight.
-- Superseded: [ADR 0001](./docs/adr/0001-a-joiner-follows-its-flight-record-without-acquiring-the-key.md) and [ADR 0002](./docs/adr/0002-a-flight-that-all-callers-left-is-abandoned.md).
+- Superseded: [ADR 0001](./docs/adr/0001-a-joiner-follows-its-flight-record-without-acquiring-the-key.md), [ADR 0002](./docs/adr/0002-a-flight-that-all-callers-left-is-abandoned.md) and [ADR 0009](./docs/adr/0009-the-next-coordinator-skips-the-grace-window-after-a-clean-shutdown.md).
 
 ## Development
 
@@ -220,7 +228,8 @@ src/
   codec.ts              the Codec interface
   errors.ts             FlightFailedError, FlightInterruptedError
   client/               the requests of one process: runs, leads, landings
-  coordinator/          the coordinator of one term: flights, sessions, its server
+  coordinator/          the coordinator of one term: flights, sessions, parked runs, its server
+  key-lock/             the key locks: the kernel lock on each key that a leader holds
   protocol/             the messages between a process and its coordinator
   connection/           the socket, the handshake and the supervisor (a copy); the election of the directory (@zukhruf/election)
   shared/               the record check (a copy); file writes and the network directory check are in @zukhruf/fs

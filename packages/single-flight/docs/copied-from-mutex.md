@@ -71,7 +71,8 @@ Note: on macOS 27 with Node.js 26, a probe listened and connected on socket path
 
 - It serves a `FlightCoordinator`, not a `LockCoordinator`. `EpochTokenSource` comes from `@zukhruf/fencing`.
 - `close` ends each connection with `destroySoon`, not `destroy`.
-- `close` resigns the term clean when the coordinator leaves nothing to recover, so the next coordinator skips its grace window ([ADR 0009](./adr/0009-the-next-coordinator-skips-the-grace-window-after-a-clean-shutdown.md)). The lock server always resigns without `clean`.
+- It gets the key locks, and gives them to the coordinator. `close` first stops the watches of the coordinator on the key locks of parked runs.
+- `close` resigns the term without options, as the lock server does. From [ADR 0009](./adr/0009-the-next-coordinator-skips-the-grace-window-after-a-clean-shutdown.md) to [ADR 0010](./adr/0010-a-leader-holds-a-kernel-lock-on-its-key-until-its-outcome-is-handed-over.md), it resigned clean when the coordinator left nothing to recover. Now no coordinator has a grace window, so there is nothing to skip.
 
 Why: a coordinator process can also lead a flight. When it lands the flight and stops at once, `destroy` can drop a `landed` answer that is still on its way to a joiner. `destroySoon` sends what was written first, and then closes.
 
@@ -112,7 +113,11 @@ These helpers do not belong in `@zukhruf/coordinator`. A third package that copi
 
 - `lock-stores/socket/advertised-ops-connection.ts`: the welcome lists no requests yet.
 - `lock-stores/remote/envelope.ts` and `queries.ts`: this package uses no IPC channel and no look requests.
+- `lock-stores/file-system/file-lock-store.ts`. The mutex holds a `FileLock` for each key too, but the key locks are this package's own code (see the next paragraph). Both take `FileLock` from `@zukhruf/fs`. The single flight names each file by the SHA-256 of the key, so two keys that differ only in case never share a file on APFS or NTFS. The mutex names it with `safeFileName`, which keeps the case (backlog #2645). The names differ in kind, so they are not one piece of knowledge.
 - `lock-stores/remote/lock-coordinator.ts` and `remote-lock-client.ts`. `FlightCoordinator`, its sessions and `FlightClient` are this package's own code: one request leads or joins, and an outcome goes to every joiner. But they repeat rules of the mutex code. The next section lists them.
+
+**This package's own code since ADR 0010.**
+The key locks (`key-lock/`: `KeyLocks` and `KeyHold`) and the parked runs (`coordinator/parked-runs.ts`) have no original in the mutex. A leader holds a kernel lock on its key until its work settled and its flight needs nothing more, and the coordinator parks the runs and rejoins of a key that another process holds while it knows no flight of the key. The mutex has no such rule: its lock coordinator answers "busy" during its grace window.
 
 ## Knowledge shared with the mutex
 
@@ -123,19 +128,21 @@ The rules below are not file copies. Each package writes them in its own code, s
 - Places: `#fly` of `SingleFlight` (`single-flight.ts`), and `#run` of `Mutex` (`mutex/mutex.ts`).
 - Same: the work gets only the token and the signal of the lease. When the work throws after the loss, the call rejects with a new `LeaseLostError`, and the error of the work is its `cause`. When that error is the reason of the signal, the call rejects with it as it is. When the work gives a value after the loss, the call rejects with the reason of the signal.
 - Differs: the single flight lands each failure before it decides, so its joiners get the failure. It lands no value after the loss, because its joiners were told that the flight is interrupted. `#fly` gives its result as a value and never rejects, so a caller that stopped waiting leaves no rejection behind. ([ADR 0007](./adr/0007-a-work-error-after-a-lost-lease-rejects-with-leaselosterror.md) tells why.)
-- A third place moves this rule to `@zukhruf/lease`.
+- Differs since [ADR 0010](./adr/0010-a-leader-holds-a-kernel-lock-on-its-key-until-its-outcome-is-handed-over.md): the meaning of the error. In the mutex, `LeaseLostError` tells the caller that it did not have the key alone. In the single flight, it tells the leader that its outcome reaches no joiner: the leader keeps the kernel lock on its key until its work ends, so no other run of the key runs beside it. The rule that picks the error is still the same, so a fix to it still goes into both places.
+- A third place moves this rule to `@zukhruf/lease`. That step must first check that the two places still change for the same reason, because their meanings now differ.
 
 **The wiring of an electing client.**
 
 - Places: the constructor and `[Symbol.asyncDispose]` of `SingleFlight` (`single-flight.ts`), and of `SocketStore` (`lock-stores/socket/socket-store.ts`).
 - Same: the client talks through a `ConnectionSupervisor`, a `LocalDirectoryConnector` and an `ElectingConnector`. `serve` starts the server through an `AsyncDisposableStack`, so a failure before the server fully started closes it. The servers of this process are in one stack. The disposal closes the client first, and then the servers.
-- Differs: the flight server gets a grace window only when the epoch of its term is higher than 1 and the term before it did not shut down clean ([ADR 0009](./adr/0009-the-next-coordinator-skips-the-grace-window-after-a-clean-shutdown.md)). The lock server gets one in each term after the first, until the mutex takes the same step (#2549). `SocketStore` emits its role events: `leader` in `serve`, and `follower` from `connected`. Its poll interval is an option. The single flight has no role event, and its poll interval is a constant of 10 milliseconds.
+- Differs: the flight server gets no grace window. It gets the key locks, and the client gets them too, with a read of the epoch on disk (`lastEpoch` of the election) to find a stale lead ([ADR 0010](./adr/0010-a-leader-holds-a-kernel-lock-on-its-key-until-its-outcome-is-handed-over.md)). The lock server gets a grace window in each term after the first (backlog #2647). `SocketStore` emits its role events: `leader` in `serve`, and `follower` from `connected`. Its poll interval is an option. The single flight has no role event, and its poll interval is a constant of 10 milliseconds.
 
-**The grace window and the reassertion with a newer token.**
+**The reassertion with a newer token.**
 
-- Places: the constructor, `GraceWindow` and the reassertion of `Coordinating` in `FlightCoordinator` (`coordinator/flight-coordinator.ts`), and the constructor, `GraceWindow` and the reassertion of `Granting` in `LockCoordinator` (`lock-stores/remote/lock-coordinator.ts`).
-- Same: a `Latch` and a timer that does not keep the process alive. The next phase is current before the latch opens, so a request that the latch lets through uses the next phase. A window of zero starts in the next phase. During the window, for two claims on one key, the newer token wins (`isNewerThan`), and the older claim is lost. After the window, each reassertion is refused.
-- Differs: the coordinator of the single flight keeps a `Flight` for each claim, and it keeps how each claimed flight ended, for a rejoin that comes after the end. A reassertion wakes the rejoins of its key. The lock coordinator gets a lease from its `MemoryStore` for each claim, and it calls the `lose` callback of the older claim. A lock request waits for the window with its signal. A run waits without one, and the coordinator then ignores a run that was withdrawn (`Party.waiting`). The lock coordinator's `graceWindow` is optional, with a default of 0. The flight coordinator's `graceWindow` is necessary.
+- Places: `reassert` of `FlightCoordinator` (`coordinator/flight-coordinator.ts`), and `GraceWindow.reassert` in `LockCoordinator` (`lock-stores/remote/lock-coordinator.ts`).
+- Same: for two claims on one key, the newer token wins (`isNewerThan`), and the older claim is lost.
+- Differs: the single flight has no grace window since [ADR 0010](./adr/0010-a-leader-holds-a-kernel-lock-on-its-key-until-its-outcome-is-handed-over.md). Its coordinator accepts a reassertion at any time, and a reassertion with the token of the flight in progress hands that flight to the new connection. The lock coordinator accepts a reassertion only in its grace window, and refuses each one after it. The single flight keeps a `Flight` for each claim, and how the latest reasserted flight of each key ended, for a rejoin that comes after the end. The lock coordinator gets a lease from its `MemoryStore` for each claim, and it calls the `lose` callback of the older claim.
+- The grace window of the mutex is no longer a copy. It is the mutex's own code now: a `Latch` and a timer that does not keep the process alive.
 
 **How a session answers.**
 
@@ -158,7 +165,7 @@ The rules below are not file copies. Each package writes them in its own code, s
   - `#resume` sets `ref` or `unref` first. Then it reasserts each held entry, and then it sends each request that waits for a connection.
   - `#interrupt`: a request that went out on the lost connection goes again on the next one.
   - A message that is not an answer of the protocol answers nothing that the client waits for, so the client ignores it. Before `a12029c`, the single flight closed the connection for such a message, and the client connected again.
-- Differs: the single flight sends each landing again after its reassertion. A run that joined a flight goes again as a rejoin of that flight. A try of the mutex is one attempt, so it has a `stranded` state. The single flight has no `unavailable` listener. Its `#lose` also wakes `close`.
+- Differs: the single flight sends each landing again after its reassertion. A run that joined a flight goes again as a rejoin of that flight. A try of the mutex is one attempt, so it has a `stranded` state. The single flight has no `unavailable` listener. Its `#lose` also wakes `close`. Since [ADR 0010](./adr/0010-a-leader-holds-a-kernel-lock-on-its-key-until-its-outcome-is-handed-over.md), a run that the single flight's coordinator tells to lead first takes the key lock and reads the epoch, and `#interrupt` also stops that wait and sends the run again. `ack`, `#lose` and `close` tell the key hold that the flight needs nothing more from this process.
 
 **The map of the requests that wait for an answer.**
 
@@ -179,9 +186,9 @@ The paths are in `packages/single-flight/src`.
 
 **A joiner told that its flight ended.**
 
-- Places: `land` and `interrupt` of `Flight` (`coordinator/flight.ts`), and the answer to a rejoin from an ending in `GraceWindow.rejoin` (`coordinator/flight-coordinator.ts`).
+- Places: `land` and `interrupt` of `Flight` (`coordinator/flight.ts`), and `land` and `interrupt` of `FlightCoordinator`, which keep the answer of an ending for `rejoin` (`coordinator/flight-coordinator.ts`).
 - Same: a joiner of a flight that landed gets `{ op: 'landed', outcome }`. A joiner of a flight that was interrupted gets `{ op: 'interrupted' }`.
-- Differs: `Flight` tells each joiner when the flight ends, and on a landing it then tells the leader `ack`. `GraceWindow` tells a rejoin that comes after its reasserted flight ended during the window.
+- Differs: `Flight` tells each joiner when the flight ends, and on a landing it then tells the leader `ack`. `FlightCoordinator` keeps the answer of the latest reasserted flight of each key, and `rejoin` gives it to a rejoin that comes after that flight ended.
 
 **A landing that still waits.**
 
@@ -195,23 +202,11 @@ The paths are in `packages/single-flight/src`.
 - Same: the text `'This single flight is closed.'`.
 - Differs: `run` throws it for a call after `close`. `close` rejects each run that waits for its answer with it.
 
-**A rejoin joins only its own flight.**
-
-- Places: `rejoin` of `Coordinating` and of `GraceWindow` (`coordinator/flight-coordinator.ts`).
-- Same: when the flight of the key in progress is the flight that the rejoin names (`Flight.is`), the party joins it.
-- Differs: `Coordinating` answers `interrupted` for each other case. `GraceWindow` then looks for how that flight ended, and else waits for a reassertion of the key or for the end of the window.
-
-**The registration of a flight.**
-
-- Places: `run` of `Coordinating` and `reassert` of `GraceWindow` (`coordinator/flight-coordinator.ts`).
-- Same: `new Flight(key, token, party)`, and the coordinator keeps it as the flight of its key.
-- Differs: a run tells its party that it leads (`Party.lead`). A reassertion only resumes its party (`Party.resume`), because a leader from before a failover already knows that it leads.
-
 **The wake sets.**
 
-- Places: `#released` of `FlightClient` (`close` and `#release` in `client/flight-client.ts`), and `#wakers` of `GraceWindow` (`#reassertionOf` and `reassert` in `coordinator/flight-coordinator.ts`).
-- Same: a set of functions that resolve a wait. The waker takes the set, clears it, and calls each function.
-- Differs: the client has one set, and each release wakes `close`, which checks its condition again. The coordinator has one set for each key, and a woken rejoin looks at the flights again.
+- Places: `#released` of `FlightClient` (`close` and `#release` in `client/flight-client.ts`), and `park` and `wake` of `ParkedRuns` (`coordinator/parked-runs.ts`).
+- Same: a set of functions that end a wait. The waker takes the set, clears it, and calls each function.
+- Differs: the client has one set, and each release wakes `close`, which checks its condition again. `ParkedRuns` has one set for each key, with the party of each function, and one watch of the key lock for each set. A woken run or rejoin is decided again in the same step.
 
 **The read of one JSON line.**
 
@@ -219,6 +214,9 @@ The paths are in `packages/single-flight/src`.
 - Same: `JSON.parse` of one line of the socket's newline-delimited JSON. The write side is in one place already: `jsonLine` (`connection/json-line.ts`).
 - Differs: a line that is not JSON. `SocketConnection` closes the connection, because the framing is broken ([ADR 0008](./adr/0008-a-connection-closes-only-when-its-framing-breaks.md)). `parse` gives `undefined`, and the handshake reads that as no `hello` or no answer.
 - Both files are copies of the mutex files, and the mutex note records the same two places. Thus this code goes with the files to `@zukhruf/coordinator` (backlog #2496).
+
+**No longer in two places.**
+`FlightCoordinator` had two phases, `Coordinating` and `GraceWindow`, each with its own `rejoin` and its own registration of a flight. Since [ADR 0010](./adr/0010-a-leader-holds-a-kernel-lock-on-its-key-until-its-outcome-is-handed-over.md), the coordinator has no phases. `rejoin` is one method, and each new flight is registered in `#start`, for a run (`Party.lead`) and for a reassertion (`Party.resume`).
 
 **Not counted.**
 `Party.lead` sends the token as text, and `Flight.id` is the token as text too. The `lead` answer carries the token of the lease, and `Flight.id` is the name of the flight on the wire. They change for different reasons, so they are not one piece of knowledge (`261b8b4`).
