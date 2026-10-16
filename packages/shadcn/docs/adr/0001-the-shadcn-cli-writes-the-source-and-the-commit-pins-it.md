@@ -12,6 +12,8 @@ Nobody edits the generated source by hand. The sync runs `shadcn add --overwrite
 - A lint rule or a TypeScript flag that the stock code fails is off, but only for the generated source.
 - Prettier formats the generated source as the last step of the sync.
 
+The sync does not copy the CSS of the `shadcn` package. `theme.css` imports it with `@import "shadcn/tailwind.css";`, and `shadcn` is a dependency of this package. Before 2026-10-16, the sync ran `shadcn eject`, which copied that CSS into `theme.css`. A copy does not change when `shadcn` changes, and it drifts. A dependency gets each fix of `shadcn` through npm. The `shadcn` package is a CLI with many dependencies, and each app installs them. The fixes are worth this cost.
+
 ## Considered Options
 
 - **Ship a registry, and let each app run the CLI.** Each app then has a copy of the source again. The copies drift, and a fix in one copy does not go into the others. That is the problem that this package solves.

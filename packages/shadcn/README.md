@@ -160,7 +160,7 @@ src/
   hooks/        generated: the hooks that the components use
   lib/          generated: the helpers that the components use
   index.ts      generated: the entry
-theme.css       generated: the CSS variables, the variants and the ejected shadcn CSS
+theme.css       generated: the CSS variables and the dark variant; imports shadcn/tailwind.css
 styles.css      written by hand: imports theme.css, registers dist, holds the patches
 components.json the configuration of the shadcn CLI
 ```
@@ -180,12 +180,11 @@ The sync does these steps, in this order:
 
 1. It resets `theme.css` to one line: `@import "tw-animate-css";`.
 2. It runs `shadcn add index`, then `shadcn add --all`.
-3. It runs `shadcn eject`. This step runs the CLI through `node`, because `npx` cannot find the `shadcn` package that npm hoisted to the workspace root.
-4. It writes `src/index.ts`: one `export *` line for each component and each hook.
-5. It formats the generated source with Prettier.
+3. It writes `src/index.ts`: one `export *` line for each component and each hook.
+4. It formats the generated source with Prettier.
 
 Known facts about the sync:
 
-- The ejected CSS comes from the newest `shadcn` package, not always from 4.21.5. The first lines of `theme.css` record its version.
+- `theme.css` keeps the line `@import "shadcn/tailwind.css";`. That file holds the variants and the animations of the components, for example `data-open`. The sync does not copy it. The `shadcn` package is a dependency of this package, so npm installs the file with it, and a new version of `shadcn` gets to each app through npm.
 - `src` does not import `date-fns`, but `date-fns` stays a dependency. The `calendar` item of the registry declares it.
 - One sync in four failed one time, and the cause is not known. A second run passed.
