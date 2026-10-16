@@ -112,6 +112,14 @@ import { buttonVariants } from '@zukhruf/shadcn';
 
 Use `cn` around `buttonVariants`. `Button` merges the classes that conflict through `cn`, which uses tailwind-merge. Without `cn`, the classes that conflict stay on the link, and the link looks different from a button. In one app, the link had a radius of 10px, not 8px, and it was 2px wider than the button.
 
+## Use the components well
+
+- **Use a component of the package first.** Before you write a new component, look for one in this package. Use it when it does the job.
+- **Keep your own components in the app.** A component that you make from the components of this package belongs to the app. Do not add it to this package. The sync writes over the generated source, and the package holds only the components of shadcn/ui.
+- **Remove the outline of a `Card` with `ring-0`.** `Card` draws its outline with `ring-1`, not with a border. Thus `border-0` does not remove the outline.
+- **Use the standard names of the theme variables.** Set `--primary`, `--background` and the other variables of the [theme](#theme). Do not add a brand prefix, for example `--acme-primary`. The components read only the standard names.
+- **Show an error at the place where it occurs.** Show a form error or a field error next to the field or the action that failed, for example with `FieldError`. Show the error of a background task or of a mutation as a toast. Use `toast` and `Toaster` of this package, which use the toast of Base UI.
+
 ## Your own components
 
 An app that writes its own components often needs `cn`, the function that joins class names. Import it from the `cn` package:
