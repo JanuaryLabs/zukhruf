@@ -52,11 +52,12 @@ export class Session implements Inbox {
       case 'run': {
         const party = this.#open(request.id);
         if (!party) return;
-        void (
-          request.flight === undefined
-            ? this.#coordinator.run(party, request.key)
-            : this.#coordinator.rejoin(party, request.key, request.flight)
-        ).catch(() => this.#phase.close());
+        if (request.flight !== undefined) {
+          return this.#coordinator.rejoin(party, request.key, request.flight);
+        }
+        void this.#coordinator
+          .run(party, request.key)
+          .catch(() => this.#phase.close());
         return;
       }
       case 'land': {

@@ -7,12 +7,15 @@ import { EpochTokenSource } from '@zukhruf/fencing';
 
 import { welcome } from '../connection/handshake.ts';
 import { SocketConnection } from '../connection/socket-connection.ts';
+import type { KeyLocks } from '../key-lock/key-locks.ts';
 import type { FlightResponse } from '../protocol/flight-protocol.ts';
 import { FlightCoordinator } from './flight-coordinator.ts';
 
 export interface FlightServerOptions {
   /** Milliseconds the new term starts no flight, so leaders from the last term can reassert theirs. */
   graceWindow: number;
+  /** The kernel locks on the keys, which the coordinator checks before a run leads. */
+  locks: KeyLocks;
 }
 
 /**
@@ -44,7 +47,7 @@ export class FlightServer {
   static async start(
     socketPath: string,
     term: Term,
-    { graceWindow }: FlightServerOptions,
+    { graceWindow, locks }: FlightServerOptions,
   ): Promise<FlightServer> {
     // Only the coordinator gets here, so removing a dead coordinator's socket file cannot race another server.
     // Windows removes a named pipe when its process stops, so there is no file to remove.
@@ -54,6 +57,7 @@ export class FlightServer {
     const coordinator = new FlightCoordinator({
       tokens: new EpochTokenSource(term.epoch),
       graceWindow,
+      locks,
     });
     const connections = new Set<Socket>();
     // Serving others never keeps the coordinator alive: when its own work ends, it exits and another process takes over.
@@ -90,9 +94,11 @@ export class FlightServer {
    * the successor skips its grace window; a lost term records nothing.
    * The first call removes the file at once, so a second caller finds it gone,
    * and it too resolves only once the term ended as the first call ended it.
+   * The coordinator stops watching the locks of the keys whose runs wait.
    */
   async close() {
     this.#closeOnLoss[Symbol.dispose]();
+    this.#coordinator.close();
     const closed = this.#server[Symbol.asyncDispose]();
     // Read in the step that ends the connections: each session that ends
     // withdraws its flights, so later there is never a flight in progress.

@@ -15,7 +15,7 @@ export interface Inbox {
 
 /** What a party is to the coordinator now. */
 export type Role =
-  /** A run that waits for the grace window, a token, or the reassertion of its flight. */
+  /** A run that waits for the grace window, a token, or its key's lock: for a flight of the key or for the lock to free. */
   | { kind: 'waiting' }
   | { kind: 'leading'; flight: Flight }
   | { kind: 'joining'; flight: Flight }

@@ -1,10 +1,15 @@
 import assert from 'node:assert/strict';
+import { once } from 'node:events';
 import { existsSync } from 'node:fs';
-import { readFile } from 'node:fs/promises';
+import { readFile, rm } from 'node:fs/promises';
+import { type Socket, createServer } from 'node:net';
 import { join } from 'node:path';
+import { createInterface } from 'node:readline';
 import { describe, test } from 'node:test';
 import type { TestContext } from 'node:test';
 import { setTimeout } from 'node:timers/promises';
+
+import { SqliteElection } from '@zukhruf/election';
 
 import { SingleFlight } from './index.ts';
 import {
@@ -331,6 +336,67 @@ async function windowEnd(t: TestContext, worker: WorkerProcess, call: string) {
   await heard(t, worker, 'leading', call);
   worker.child.send({ type: 'finish', call, value: call });
   await heard(t, worker, 'value', call);
+}
+
+/**
+ * Stops `coordinator`, and serves the next term from this test process as a
+ * coordinator that knows no flight: it wins `flight.lock` as the election
+ * does, welcomes every process, answers each reassertion `rejected` and each
+ * rejoin `interrupted`, and answers nothing else. The `frozen` processes
+ * cannot campaign until it serves.
+ */
+async function rejectingSuccessor(
+  directory: string,
+  coordinator: WorkerProcess,
+  frozen: WorkerProcess[],
+) {
+  await using serving = new AsyncDisposableStack();
+  for (const worker of frozen) worker.child.kill('SIGSTOP');
+  try {
+    coordinator.child.kill('SIGKILL');
+    await coordinator.closed;
+    const term = await new SqliteElection({
+      directory,
+      claimFile: 'flight.lock',
+      epochFile: 'flight.epoch',
+    }).campaign({ timeout: newProcessTimeout });
+    assert.ok(term, 'The test process must win the next term');
+    serving.defer(() => term.resign());
+    const socketPath = join(directory, 'flight.sock');
+    // The dead coordinator left its socket file behind.
+    await rm(socketPath, { force: true });
+    const peers = new Set<Socket>();
+    const server = createServer((peer) => {
+      peers.add(peer);
+      peer.on('error', () => {});
+      createInterface({ input: peer }).on('line', (line) => {
+        const request: unknown = JSON.parse(line);
+        if (typeof request !== 'object' || request === null) return;
+        if (!('op' in request)) return;
+        if (request.op === 'hello') {
+          peer.write('{"op":"welcome"}\n');
+          return;
+        }
+        if (!('id' in request) || typeof request.id !== 'string') return;
+        const id = JSON.stringify(request.id);
+        if (request.op === 'reassert') {
+          peer.write(`{"op":"rejected","id":${id}}\n`);
+        }
+        if (request.op === 'run' && 'flight' in request) {
+          peer.write(`{"op":"interrupted","id":${id}}\n`);
+        }
+      });
+    });
+    serving.defer(async () => {
+      for (const peer of peers) peer.destroy();
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    });
+    server.listen(socketPath);
+    await once(server, 'listening');
+  } finally {
+    for (const worker of frozen) worker.child.kill('SIGCONT');
+  }
+  return serving.move();
 }
 
 describe('A single flight across processes when the coordinator stops', () => {
@@ -740,64 +806,24 @@ describe('A single flight across processes in the gaps of a failover', () => {
   );
 
   test(
-    'a leader that misses the grace window loses its lease with LeaseLostError, and its joiners get FlightInterruptedError',
-    { ...onUnix, timeout: 30_000 },
-    async (t) => {
-      // Arrange
-      await using directory = await scratchDirectory();
-      const options = { graceWindow: 300 };
-      await using coordinator = await coordinatorOf(t, directory.path, options);
-      await using leader = await caller(t, directory.path, 'leader', options);
-      run(leader, 'l', 'sync');
-      await heard(t, leader, 'leading', 'l');
-      await using joiner = await caller(t, directory.path, 'joiner', options);
-      run(joiner, 'j', 'sync');
-      await heard(t, joiner, 'joined', 'j');
-      await using probe = await connected(t, directory.path, 'probe', options);
-
-      // Act: the leader stays frozen until the probe's window is over.
-      leader.child.kill('SIGSTOP');
-      try {
-        await handOver(t, directory.path, coordinator, [joiner]);
-        await windowEnd(t, probe, 'window');
-      } finally {
-        leader.child.kill('SIGCONT');
-      }
-      const lost = await heard(t, leader, 'lost', 'l');
-      leader.child.send({ type: 'finish', call: 'l', value: 'stale' });
-      const led = await heard(t, leader, 'error', 'l');
-      const joined = await heard(t, joiner, 'error', 'j');
-
-      // Assert
-      assert.equal(lost.reason, 'LeaseLostError');
-      assert.equal(led.name, 'LeaseLostError');
-      assert.equal(joined.name, 'FlightInterruptedError');
-    },
-  );
-
-  test(
     'a leader whose work throws after its lease is lost rejects with LeaseLostError that carries the error, and its joiners get FlightInterruptedError',
     { ...onUnix, timeout: 30_000 },
     async (t) => {
-      // Arrange
+      // Arrange: the next coordinator knows no flight, so it rejects the leader's reassertion.
       await using directory = await scratchDirectory();
-      const options = { graceWindow: 300 };
-      await using coordinator = await coordinatorOf(t, directory.path, options);
-      await using leader = await caller(t, directory.path, 'leader', options);
+      await using coordinator = await coordinatorOf(t, directory.path);
+      await using leader = await caller(t, directory.path, 'leader');
       run(leader, 'l', 'sync');
       await heard(t, leader, 'leading', 'l');
-      await using joiner = await caller(t, directory.path, 'joiner', options);
+      await using joiner = await caller(t, directory.path, 'joiner');
       run(joiner, 'j', 'sync');
       await heard(t, joiner, 'joined', 'j');
-      await using probe = await connected(t, directory.path, 'probe', options);
-      leader.child.kill('SIGSTOP');
-      try {
-        await handOver(t, directory.path, coordinator, [joiner]);
-        await windowEnd(t, probe, 'window');
-      } finally {
-        leader.child.kill('SIGCONT');
-      }
-      await heard(t, leader, 'lost', 'l');
+      await using _next = await rejectingSuccessor(
+        directory.path,
+        coordinator,
+        [leader, joiner],
+      );
+      const lost = await heard(t, leader, 'lost', 'l');
 
       // Act: the work fails with its own error, not with the reason of the lost lease.
       leader.child.send({
@@ -810,6 +836,7 @@ describe('A single flight across processes in the gaps of a failover', () => {
       const joined = await heard(t, joiner, 'error', 'j');
 
       // Assert
+      assert.equal(lost.reason, 'LeaseLostError');
       assert.equal(led.name, 'LeaseLostError');
       assert.equal(led.subject, 'sync');
       assert.deepEqual(led.cause, {
@@ -824,24 +851,20 @@ describe('A single flight across processes in the gaps of a failover', () => {
     'a leader whose work throws the reason of its lost lease rejects with that LeaseLostError, not with a second one around it',
     { ...onUnix, timeout: 30_000 },
     async (t) => {
-      // Arrange
+      // Arrange: the next coordinator knows no flight, so it rejects the leader's reassertion.
       await using directory = await scratchDirectory();
-      const options = { graceWindow: 300 };
-      await using coordinator = await coordinatorOf(t, directory.path, options);
-      await using leader = await caller(t, directory.path, 'leader', options);
+      await using coordinator = await coordinatorOf(t, directory.path);
+      await using leader = await caller(t, directory.path, 'leader');
       run(leader, 'l', 'sync');
       await heard(t, leader, 'leading', 'l');
-      await using joiner = await caller(t, directory.path, 'joiner', options);
+      await using joiner = await caller(t, directory.path, 'joiner');
       run(joiner, 'j', 'sync');
       await heard(t, joiner, 'joined', 'j');
-      await using probe = await connected(t, directory.path, 'probe', options);
-      leader.child.kill('SIGSTOP');
-      try {
-        await handOver(t, directory.path, coordinator, [joiner]);
-        await windowEnd(t, probe, 'window');
-      } finally {
-        leader.child.kill('SIGCONT');
-      }
+      await using _next = await rejectingSuccessor(
+        directory.path,
+        coordinator,
+        [leader, joiner],
+      );
       await heard(t, leader, 'lost', 'l');
 
       // Act: the work stops with signal.throwIfAborted().
@@ -859,27 +882,22 @@ describe('A single flight across processes in the gaps of a failover', () => {
     'a leader whose codec cannot encode the value after its lease is lost rejects with LeaseLostError that carries the codec error',
     { ...onUnix, timeout: 30_000 },
     async (t) => {
-      // Arrange
+      // Arrange: the next coordinator knows no flight, so it rejects the leader's reassertion.
       await using directory = await scratchDirectory();
-      const options = { graceWindow: 300 };
-      await using coordinator = await coordinatorOf(t, directory.path, options);
+      await using coordinator = await coordinatorOf(t, directory.path);
       await using leader = await caller(t, directory.path, 'leader', {
-        ...options,
         codec: 'encode-throws',
       });
       run(leader, 'l', 'sync');
       await heard(t, leader, 'leading', 'l');
-      await using joiner = await caller(t, directory.path, 'joiner', options);
+      await using joiner = await caller(t, directory.path, 'joiner');
       run(joiner, 'j', 'sync');
       await heard(t, joiner, 'joined', 'j');
-      await using probe = await connected(t, directory.path, 'probe', options);
-      leader.child.kill('SIGSTOP');
-      try {
-        await handOver(t, directory.path, coordinator, [joiner]);
-        await windowEnd(t, probe, 'window');
-      } finally {
-        leader.child.kill('SIGCONT');
-      }
+      await using _next = await rejectingSuccessor(
+        directory.path,
+        coordinator,
+        [leader, joiner],
+      );
       await heard(t, leader, 'lost', 'l');
 
       // Act
@@ -890,6 +908,62 @@ describe('A single flight across processes in the gaps of a failover', () => {
       assert.equal(led.name, 'LeaseLostError');
       assert.equal(led.subject, 'sync');
       assert.deepEqual(led.cause, { message: 'This value cannot be encoded' });
+    },
+  );
+
+  test(
+    'a leader whose reassertion is rejected keeps its key until its work ends, so a run in another process leads only after that work ended',
+    { ...onUnix, timeout: 30_000 },
+    async (t) => {
+      // Arrange: the next coordinator knows no flight, so it rejects the
+      // leader's reassertion; then it stops, and a process of the group
+      // coordinates the term after it.
+      await using directory = await scratchDirectory();
+      await using coordinator = await coordinatorOf(t, directory.path);
+      await using leader = await caller(t, directory.path, 'leader');
+      run(leader, 'l', 'sync');
+      await heard(t, leader, 'leading', 'l');
+      await using probe = await connected(t, directory.path, 'probe');
+      {
+        await using _next = await rejectingSuccessor(
+          directory.path,
+          coordinator,
+          [leader, probe],
+        );
+        await heard(t, leader, 'lost', 'l');
+      }
+      await newTerm(t, directory.path, '3');
+
+      // Act: a run of the key while the leader's work runs on. A run of
+      // another key, sent after it, is decided after it.
+      run(probe, 'fresh', 'sync');
+      await heard(t, probe, 'called', 'fresh');
+      await windowEnd(t, probe, 'after');
+      const ledBesideWork = led(probe, 'fresh');
+      leader.child.send({ type: 'finish', call: 'l', value: 'stale' });
+      const ended = await heard(t, leader, 'error', 'l');
+      const first = await firstOf(t, probe, 'fresh', ['leading', 'joined']);
+      probe.child.send({ type: 'finish', call: 'fresh', value: 'second' });
+      await heard(t, probe, 'value', 'fresh');
+
+      // Assert
+      assert.equal(
+        ledBesideWork,
+        false,
+        "The fresh run led while the lost leader's work still ran",
+      );
+      assert.equal(ended.name, 'LeaseLostError');
+      assert.equal(
+        first.type,
+        'leading',
+        'The key was not free once the work ended',
+      );
+      assert.deepEqual(
+        (await journal(directory.path)).filter((line) =>
+          line.endsWith(':sync'),
+        ),
+        ['leader:work:sync', 'probe:work:sync'],
+      );
     },
   );
 
@@ -941,7 +1015,6 @@ describe('A single flight across processes when a leader is frozen past a failov
     'a fresh run after the coordinator stops never starts the work beside the frozen leader, and joins its flight once the leader resumes',
     {
       ...onUnix,
-      todo: "#2573: the fresh run waits for the frozen leader's key lock, but the next coordinator drops the leader's flight once the grace window is over, so the fresh run never joins it",
       timeout: 30_000,
     },
     async (t) => {
@@ -1013,7 +1086,6 @@ describe('A single flight across processes when a leader is frozen past a failov
     'a fresh run after the coordinator disposes with a flight in progress never starts the work beside the frozen leader, and joins its flight once the leader resumes',
     {
       ...onUnix,
-      todo: "#2573: the fresh run waits for the frozen leader's key lock, but the next coordinator drops the leader's flight once the grace window is over, so the fresh run never joins it",
       timeout: 30_000,
     },
     async (t) => {
@@ -1084,7 +1156,6 @@ describe('A single flight across processes when a leader is frozen past a failov
     'joiners of a frozen leader get its value once it resumes, and the work never runs again',
     {
       ...onUnix,
-      todo: '#2573: the frozen leader loses its flight, so its joiners get FlightInterruptedError',
       timeout: 30_000,
     },
     async (t) => {
@@ -1153,7 +1224,6 @@ describe('A single flight across processes when a leader is frozen past a failov
     'joiners of a frozen leader whose work fails once it resumes get FlightFailedError that describes the failure',
     {
       ...onUnix,
-      todo: '#2573: the frozen leader loses its flight, so its joiners get FlightInterruptedError',
       timeout: 30_000,
     },
     async (t) => {
@@ -1216,7 +1286,6 @@ describe('A single flight across processes when a leader is frozen past a failov
     'a leader whose caller cancelled before the freeze still owns its flight, so a fresh run joins it and never starts the work beside it',
     {
       ...onUnix,
-      todo: "#2573: the fresh run waits for the frozen leader's key lock, but the next coordinator drops the leader's flight once the grace window is over, so the fresh run never joins it",
       timeout: 30_000,
     },
     async (t) => {
@@ -1304,11 +1373,12 @@ describe('A single flight across processes when a leader is frozen past a failov
       } finally {
         leader.child.kill('SIGCONT');
       }
+      // The joiner waits for no other run: the kernel frees the dead leader's key.
+      const joined = await heard(t, joiner, 'error', 'j');
       run(probe, 'fresh', 'sync');
       await heard(t, probe, 'leading', 'fresh');
       probe.child.send({ type: 'finish', call: 'fresh', value: 'again' });
       const fresh = await heard(t, probe, 'value', 'fresh');
-      const joined = await heard(t, joiner, 'error', 'j');
 
       // Assert: the current contract for a flight whose leader died.
       assert.equal(fresh.value, 'again');

@@ -9,6 +9,7 @@ import { SqliteElection } from '@zukhruf/election';
 import type { FileLock } from '@zukhruf/fs';
 
 import { LeaseLostError, SingleFlight } from '../index.ts';
+import { KeyLocks } from '../key-lock/key-locks.ts';
 import { scratchDirectory } from '../testing/scratch-directory.ts';
 import { waitUntil } from '../testing/wait-until.ts';
 import { FlightServer } from './flight-server.ts';
@@ -92,7 +93,10 @@ describe('Flight server', () => {
       loss.abort();
 
       // Act
-      const starting = FlightServer.start(socketPath, term, { graceWindow: 0 });
+      const starting = FlightServer.start(socketPath, term, {
+        graceWindow: 0,
+        locks: new KeyLocks(directory.path, 10),
+      });
 
       // Assert
       await assert.rejects(starting, LeaseLostError);
@@ -119,7 +123,7 @@ describe('Flight server', () => {
       const server = await FlightServer.start(
         join(directory.path, 'flight.sock'),
         term,
-        { graceWindow: 0 },
+        { graceWindow: 0, locks: new KeyLocks(directory.path, 10) },
       );
       try {
         await using flights = new SingleFlight({

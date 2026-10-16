@@ -28,7 +28,7 @@ export type FlightRequest =
   | { op: 'land'; id: string; outcome: Outcome }
   /** Withdraws a run that is not answered yet, or a joiner from its flight. */
   | { op: 'cancel'; id: string }
-  /** A leader from before a failover claims its flight again, during the new coordinator's grace window. */
+  /** A leader claims its flight again after its connection was lost, at any time while its process lives. */
   | { op: 'reassert'; id: string; key: string; token: string };
 
 export type FlightResponse =
@@ -41,7 +41,7 @@ export type FlightResponse =
   | { op: 'interrupted'; id: string }
   /** The coordinator handed a landing to the joiners. */
   | { op: 'ack'; id: string }
-  /** The flight of `id` is no longer its leader's: a reassertion or a landing came too late. */
+  /** The flight of `id` is no longer its leader's: a flight of the key with a newer token took it, or it ended. */
   | { op: 'rejected'; id: string }
   /** The coordinator does not know the request: it runs an older version. */
   | { op: 'unsupported'; id: string };

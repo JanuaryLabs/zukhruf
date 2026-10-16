@@ -80,6 +80,7 @@ export class SingleFlight<T> implements AsyncDisposable {
     this.#codec = codec;
     const socketPath = socketPathFor(directory);
     const election = flightElection(directory, POLL_INTERVAL);
+    const locks = new KeyLocks(directory, POLL_INTERVAL);
     this.#client = new FlightClient(
       new ConnectionSupervisor(
         new LocalDirectoryConnector(
@@ -100,6 +101,7 @@ export class SingleFlight<T> implements AsyncDisposable {
                     term.epoch > 1n && !term.afterCleanShutdown
                       ? graceWindow
                       : 0,
+                  locks,
                 }),
                 (started) => started.close(),
               );
@@ -109,7 +111,7 @@ export class SingleFlight<T> implements AsyncDisposable {
         ),
       ),
       {
-        locks: new KeyLocks(directory, POLL_INTERVAL),
+        locks,
         // The election writes a new term's epoch before its coordinator answers anything.
         isCurrentTerm: async (token) =>
           (await election.lastEpoch()) <= token.value >> SEQUENCE_BITS,

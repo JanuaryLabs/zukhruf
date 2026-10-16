@@ -33,16 +33,47 @@ export class KeyLocks {
   async acquire(key: string, signal: AbortSignal): Promise<Disposable> {
     // A lead answer comes only after a connection, so the directory passed the local check.
     mkdirSync(this.#folder, { recursive: true });
-    const digest = createHash('sha256').update(key).digest('hex');
     using opened = new DisposableStack();
-    const lock = opened.use(
-      FileLock.open(join(this.#folder, `${digest}.lock`)),
-    );
+    const lock = opened.use(FileLock.open(this.#pathOf(key)));
     await poll(async () => (lock.tryLock() ? lock : undefined), {
       interval: this.#pollInterval,
       signal,
     });
     opened.move();
     return lock;
+  }
+
+  /**
+   * Whether a process holds the lock of `key` now. The answer can be stale as
+   * soon as it returns, and the check briefly takes a shared lock, so a
+   * `tryLock` at that moment fails once. A file fault throws.
+   */
+  isHeld(key: string): boolean {
+    return FileLock.check(this.#pathOf(key)) === 'locked';
+  }
+
+  /**
+   * Resolves `true` once no process holds the lock of `key`, and `false` once
+   * `wanted` answers false. Both are checked every poll interval, on a timer
+   * that never keeps the process alive. An abort rejects with
+   * `signal.reason`, and a file fault rejects.
+   */
+  whenFree(
+    key: string,
+    wanted: () => boolean,
+    signal: AbortSignal,
+  ): Promise<boolean> {
+    return poll(
+      async () => {
+        if (!wanted()) return false;
+        return this.isHeld(key) ? undefined : true;
+      },
+      { interval: this.#pollInterval, signal, ref: false },
+    );
+  }
+
+  #pathOf(key: string): string {
+    const digest = createHash('sha256').update(key).digest('hex');
+    return join(this.#folder, `${digest}.lock`);
   }
 }

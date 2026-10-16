@@ -1,13 +1,16 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { once } from 'node:events';
-import { existsSync } from 'node:fs';
-import { readFile, writeFile } from 'node:fs/promises';
+import { existsSync, mkdirSync, rmSync } from 'node:fs';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { type Socket, connect, createServer } from 'node:net';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline';
 import { DatabaseSync } from 'node:sqlite';
 import { describe, test } from 'node:test';
 import type { TestContext } from 'node:test';
+
+import { FileLock } from '@zukhruf/fs';
 
 import { ProtocolVersionError, SingleFlight } from './index.ts';
 import { scratchDirectory } from './testing/scratch-directory.ts';
@@ -42,11 +45,27 @@ async function peerOf(directory: string) {
   let received = '';
   let closed = false;
   socket.setEncoding('utf8');
-  socket.on('data', (chunk: string) => (received += chunk));
+  const readers = new Set<() => void>();
+  socket.on('data', (chunk: string) => {
+    received += chunk;
+    for (const read of readers) read();
+  });
   socket.once('close', () => (closed = true));
   await once(socket, 'connect');
   return {
     send: (line: string) => socket.write(`${line}\n`),
+    /** Resolves in the step that reads what makes `done` hold, so the caller acts before any timer of this process runs. */
+    until(done: () => boolean) {
+      const { promise, resolve } = Promise.withResolvers<void>();
+      const read = () => {
+        if (!done()) return;
+        readers.delete(read);
+        resolve();
+      };
+      readers.add(read);
+      read();
+      return promise;
+    },
     get received() {
       return received;
     },
@@ -74,6 +93,60 @@ function linesOf(
     () => peer.received.split('\n').length - 1 >= count,
     () => `Got ${JSON.stringify(peer.received)}`,
   );
+}
+
+/** A welcomed process of another version on `<directory>/flight.sock`. */
+async function welcomedPeerOf(t: TestContext, directory: string) {
+  const peer = await peerOf(directory);
+  peer.send('{"op":"hello","protocol":"single-flight","version":1}');
+  await linesOf(t, peer, 1);
+  return peer;
+}
+
+/** The lines `peer` got for its request `id`, in order. */
+function answersTo(peer: { readonly received: string }, id: string) {
+  return peer.received
+    .split('\n')
+    .filter((line) => line.includes(`"id":${JSON.stringify(id)}`));
+}
+
+/** Waits until `peer` got an answer to `id` that matches `pattern`, and returns it. */
+async function answerOf(
+  t: TestContext,
+  peer: { readonly received: string },
+  id: string,
+  pattern: RegExp,
+) {
+  const find = () => answersTo(peer, id).find((line) => pattern.test(line));
+  await waitUntil(
+    t,
+    () => find() !== undefined,
+    () => `No ${pattern} for ${id}; got ${JSON.stringify(peer.received)}`,
+  );
+  const answer = find();
+  assert.ok(answer);
+  return answer;
+}
+
+/** The token of a `lead` answer. */
+function tokenIn(lead: string) {
+  const token = /"token":"(\d+)"/.exec(lead)?.[1];
+  assert.ok(token, `No token in ${lead}`);
+  return BigInt(token);
+}
+
+/** Where a process of this protocol holds the kernel lock of `key` while it runs the key's work. */
+function keyLockPath(directory: string, key: string) {
+  const digest = createHash('sha256').update(key).digest('hex');
+  return join(directory, 'execution-locks', `${digest}.lock`);
+}
+
+/** Holds the lock of `key`, as a leader process of this protocol does from before its work starts until its landing is acknowledged. */
+function holdKey(directory: string, key: string) {
+  mkdirSync(join(directory, 'execution-locks'), { recursive: true });
+  const lock = FileLock.open(keyLockPath(directory, key));
+  assert.ok(lock.tryLock(), `The lock of ${key} is held already`);
+  return lock;
 }
 
 describe('The wire of a single flight', () => {
@@ -354,11 +427,11 @@ describe('The wire of a single flight', () => {
       peer.send(`{"op":"run","id":"c","key":"sync","flight":"${ended}"}`);
       await linesOf(t, peer, 4);
 
-      // Assert: only a rejoin inside the window gets an ended flight's outcome, so `c` shows that `b` came inside it too.
+      // Assert: no process holds the key, so neither rejoin waits.
       assert.deepEqual(peer.received.split('\n').slice(1, 4), [
         '{"op":"ack","id":"a"}',
-        '{"op":"landed","id":"c","outcome":{"value":"first"}}',
         '{"op":"interrupted","id":"b"}',
+        '{"op":"landed","id":"c","outcome":{"value":"first"}}',
       ]);
       await warmUp;
     },
@@ -522,6 +595,331 @@ describe('The wire of a single flight', () => {
       // Assert
       await waitUntil(t, () => peer.closed, 'The coordinator must hang up');
       assert.equal(peer.received, '{"op":"welcome"}\n');
+    },
+  );
+});
+
+describe('The wire of a single flight while a process holds a key', () => {
+  test(
+    'a reassertion and its landing in one write reach a run that waits for the key: it joins, gets the landing, and nobody leads again',
+    { ...onUnixSockets, timeout: 10_000 },
+    async (t) => {
+      // Arrange: a process leads `sync` and holds its key; its connection is
+      // lost, so the coordinator ends the flight, and the joiner learns it.
+      await using directory = await scratchDirectory();
+      await using _coordinator = await coordinatorOf(directory.path);
+      using first = await welcomedPeerOf(t, directory.path);
+      first.send('{"op":"run","id":"a","key":"sync"}');
+      const token = tokenIn(await answerOf(t, first, 'a', /"op":"lead"/));
+      using key = holdKey(directory.path, 'sync');
+      using joiner = await welcomedPeerOf(t, directory.path);
+      joiner.send('{"op":"run","id":"j","key":"sync"}');
+      await answerOf(t, joiner, 'j', /"op":"joined"/);
+      first[Symbol.dispose]();
+      await answerOf(t, joiner, 'j', /"op":"interrupted"/);
+      // A run of another key, sent after the fresh run, is answered after the fresh run was decided.
+      using fresh = await welcomedPeerOf(t, directory.path);
+      fresh.send('{"op":"run","id":"p","key":"sync"}');
+      fresh.send('{"op":"run","id":"q","key":"other"}');
+      await answerOf(t, fresh, 'q', /"op":"lead"/);
+      const waited = answersTo(fresh, 'p');
+
+      // Act: the leader comes back with its reassertion and its landing in one
+      // write, and lets its key go once the landing is acknowledged.
+      using back = await welcomedPeerOf(t, directory.path);
+      back.send(
+        `{"op":"reassert","id":"a","key":"sync","token":"${token}"}\n{"op":"land","id":"a","outcome":{"value":"once"}}`,
+      );
+      await answerOf(t, back, 'a', /"op":"ack"/);
+      key.unlock();
+      await answerOf(t, fresh, 'p', /"op":"(landed|lead)"/);
+
+      // Assert
+      assert.deepEqual(waited, [], 'The run did not wait for the held key');
+      assert.deepEqual(answersTo(fresh, 'p'), [
+        `{"op":"joined","id":"p","flight":"${token}"}`,
+        '{"op":"landed","id":"p","outcome":{"value":"once"}}',
+      ]);
+    },
+  );
+
+  test(
+    'a run of a key whose lock cannot be checked leads, a rejoin of it is told interrupted, and the connection stays open',
+    { ...onUnixSockets, timeout: 10_000 },
+    async (t) => {
+      // Arrange: platform setup that no operation exposes. A folder where the
+      // key's lock file belongs makes every check of that lock fail.
+      await using directory = await scratchDirectory();
+      await using _coordinator = await coordinatorOf(directory.path);
+      await mkdir(keyLockPath(directory.path, 'sync'), { recursive: true });
+      using peer = await welcomedPeerOf(t, directory.path);
+
+      // Act: a rejoin of a flight this coordinator never knew, a run, and a run of another key.
+      peer.send('{"op":"run","id":"r","key":"sync","flight":"7"}');
+      peer.send('{"op":"run","id":"a","key":"sync"}');
+      peer.send('{"op":"run","id":"b","key":"other"}');
+      await linesOf(t, peer, 4);
+
+      // Assert
+      assert.deepEqual(answersTo(peer, 'r'), ['{"op":"interrupted","id":"r"}']);
+      assert.match(
+        answersTo(peer, 'a').join('\n'),
+        /^\{"op":"lead","id":"a","token":"\d+"\}$/,
+      );
+      assert.match(
+        answersTo(peer, 'b').join('\n'),
+        /^\{"op":"lead","id":"b","token":"\d+"\}$/,
+      );
+      assert.equal(peer.closed, false, 'The connection must stay open');
+    },
+  );
+
+  test(
+    'a run that waits for a held key leads once the lock can no longer be checked',
+    { ...onUnixSockets, timeout: 10_000 },
+    async (t) => {
+      // Arrange: a process holds `sync`, and a run waits for it.
+      await using directory = await scratchDirectory();
+      await using _coordinator = await coordinatorOf(directory.path);
+      using key = holdKey(directory.path, 'sync');
+      using peer = await welcomedPeerOf(t, directory.path);
+      peer.send('{"op":"run","id":"p","key":"sync"}');
+      peer.send('{"op":"run","id":"q","key":"other"}');
+      await answerOf(t, peer, 'q', /"op":"lead"/);
+      const waited = answersTo(peer, 'p');
+
+      // Act: platform setup that no operation exposes. In one step, the
+      // holder lets the key go, and a folder takes the place of the lock file,
+      // so no check of the lock sees it free: each check fails.
+      key[Symbol.dispose]();
+      rmSync(keyLockPath(directory.path, 'sync'));
+      mkdirSync(keyLockPath(directory.path, 'sync'));
+      const answer = await answerOf(t, peer, 'p', /./);
+
+      // Assert
+      assert.deepEqual(waited, [], 'The run did not wait for the held key');
+      assert.match(answer, /^\{"op":"lead","id":"p","token":"\d+"\}$/);
+      assert.equal(peer.closed, false, 'The connection must stay open');
+    },
+  );
+
+  test(
+    'for two reassertions of one key the newer token wins: the older leader is rejected, its joiner is told interrupted, and an older reassertion after it is rejected',
+    { ...onUnixSockets, timeout: 10_000 },
+    async (t) => {
+      // Arrange: a leader of an earlier term reasserts its flight of `sync`, and a joiner rejoins it.
+      await using directory = await scratchDirectory();
+      await using _coordinator = await coordinatorOf(directory.path);
+      const older = (1n << 32n) | 100n;
+      using first = await welcomedPeerOf(t, directory.path);
+      first.send(`{"op":"reassert","id":"a","key":"sync","token":"${older}"}`);
+      using joiner = await welcomedPeerOf(t, directory.path);
+      joiner.send(`{"op":"run","id":"j","key":"sync","flight":"${older}"}`);
+      await answerOf(t, joiner, 'j', /"op":"joined"/);
+
+      // Act: a leader with a newer token of the key reasserts, and then the older one again.
+      using second = await welcomedPeerOf(t, directory.path);
+      second.send(
+        `{"op":"reassert","id":"b","key":"sync","token":"${older + 1n}"}`,
+      );
+      await answerOf(t, first, 'a', /"op":"rejected"/);
+      using third = await welcomedPeerOf(t, directory.path);
+      third.send(`{"op":"reassert","id":"c","key":"sync","token":"${older}"}`);
+      await answerOf(t, third, 'c', /./);
+      second.send('{"op":"land","id":"b","outcome":{"value":"newer"}}');
+      await answerOf(t, second, 'b', /./);
+
+      // Assert
+      assert.deepEqual(answersTo(first, 'a'), ['{"op":"rejected","id":"a"}']);
+      assert.deepEqual(answersTo(joiner, 'j'), [
+        `{"op":"joined","id":"j","flight":"${older}"}`,
+        '{"op":"interrupted","id":"j"}',
+      ]);
+      assert.deepEqual(answersTo(third, 'c'), ['{"op":"rejected","id":"c"}']);
+      assert.deepEqual(answersTo(second, 'b'), ['{"op":"ack","id":"b"}']);
+    },
+  );
+
+  test(
+    'a rejoin of a flight that was led here and has ended is told interrupted',
+    { ...onUnixSockets, timeout: 10_000 },
+    async (t) => {
+      // Arrange: a flight of `sync` led on this coordinator lands.
+      await using directory = await scratchDirectory();
+      await using _coordinator = await coordinatorOf(directory.path);
+      using leader = await welcomedPeerOf(t, directory.path);
+      leader.send('{"op":"run","id":"a","key":"sync"}');
+      const token = tokenIn(await answerOf(t, leader, 'a', /"op":"lead"/));
+      leader.send('{"op":"land","id":"a","outcome":{"value":"first"}}');
+      await answerOf(t, leader, 'a', /"op":"ack"/);
+      using joiner = await welcomedPeerOf(t, directory.path);
+
+      // Act: a joiner whose connection was lost comes back for it.
+      joiner.send(`{"op":"run","id":"j","key":"sync","flight":"${token}"}`);
+      await answerOf(t, joiner, 'j', /./);
+
+      // Assert: only an ending of a reasserted flight is kept for a late rejoin.
+      assert.deepEqual(answersTo(joiner, 'j'), [
+        '{"op":"interrupted","id":"j"}',
+      ]);
+    },
+  );
+
+  test(
+    'a run withdrawn while it waits for a held key is never answered, and a run of the key leads once the key is free',
+    { ...onUnixSockets, timeout: 10_000 },
+    async (t) => {
+      // Arrange: a process holds `sync`, and a run waits for it.
+      await using directory = await scratchDirectory();
+      await using _coordinator = await coordinatorOf(directory.path);
+      using key = holdKey(directory.path, 'sync');
+      using peer = await welcomedPeerOf(t, directory.path);
+      peer.send('{"op":"run","id":"p","key":"sync"}');
+      peer.send('{"op":"run","id":"q","key":"other"}');
+      await answerOf(t, peer, 'q', /"op":"lead"/);
+      const waited = answersTo(peer, 'p');
+
+      // Act: the run is withdrawn, the key goes, and a run of the key comes;
+      // a run of another key, sent last, is answered after both.
+      peer.send('{"op":"cancel","id":"p"}');
+      key.unlock();
+      peer.send('{"op":"run","id":"r","key":"sync"}');
+      peer.send('{"op":"run","id":"s","key":"another"}');
+      await answerOf(t, peer, 's', /"op":"lead"/);
+
+      // Assert
+      assert.deepEqual(waited, [], 'The run did not wait for the held key');
+      assert.deepEqual(answersTo(peer, 'p'), []);
+      assert.match(
+        answersTo(peer, 'r').join('\n'),
+        /^\{"op":"lead","id":"r","token":"\d+"\}$/,
+      );
+    },
+  );
+
+  test(
+    'a leader that reasserts its own token on a new connection keeps its flight: the close of its first connection interrupts nothing, and the joiner gets the landing',
+    { ...onUnixSockets, timeout: 10_000 },
+    async (t) => {
+      // Arrange: a process leads `sync` and `other` on its first connection, and the joiner joins both.
+      await using directory = await scratchDirectory();
+      await using _coordinator = await coordinatorOf(directory.path);
+      using first = await welcomedPeerOf(t, directory.path);
+      first.send('{"op":"run","id":"a","key":"sync"}');
+      first.send('{"op":"run","id":"o","key":"other"}');
+      const token = tokenIn(await answerOf(t, first, 'a', /"op":"lead"/));
+      await answerOf(t, first, 'o', /"op":"lead"/);
+      using joiner = await welcomedPeerOf(t, directory.path);
+      joiner.send('{"op":"run","id":"j","key":"sync"}');
+      joiner.send('{"op":"run","id":"k","key":"other"}');
+      await answerOf(t, joiner, 'k', /"op":"joined"/);
+
+      // Act: the flight of `sync` goes on through a second connection; the
+      // first one closes, which ends `other`, which was not reasserted.
+      using second = await welcomedPeerOf(t, directory.path);
+      second.send(`{"op":"reassert","id":"a","key":"sync","token":"${token}"}`);
+      second.send('{"op":"run","id":"after","key":"after"}');
+      await answerOf(t, second, 'after', /"op":"lead"/);
+      first[Symbol.dispose]();
+      await answerOf(t, joiner, 'k', /"op":"interrupted"/);
+      second.send('{"op":"land","id":"a","outcome":{"value":"kept"}}');
+      await answerOf(t, joiner, 'j', /"op":"(landed|interrupted)"/);
+
+      // Assert
+      assert.deepEqual(answersTo(joiner, 'j'), [
+        `{"op":"joined","id":"j","flight":"${token}"}`,
+        '{"op":"landed","id":"j","outcome":{"value":"kept"}}',
+      ]);
+      assert.deepEqual(answersTo(second, 'a'), ['{"op":"ack","id":"a"}']);
+    },
+  );
+
+  test(
+    'a run that waits for a held key and a run that comes once the key is free share one flight, whose token is newer than the flight before it',
+    { ...onUnixSockets, timeout: 10_000 },
+    async (t) => {
+      // Arrange
+      await using directory = await scratchDirectory();
+      await using _coordinator = await coordinatorOf(directory.path);
+      using first = await welcomedPeerOf(t, directory.path);
+      using waiter = await welcomedPeerOf(t, directory.path);
+      using late = await welcomedPeerOf(t, directory.path);
+      const isLead = (line: string) => line.includes('"op":"lead"');
+      const rounds = [];
+
+      // Which run leads depends on whether the key's lock watch sees the key
+      // free before the late run comes. Only when the late run leads first
+      // must its flight take the waiting run, so the late run comes in the
+      // step that reads the waiting run's barrier, and each key is one more
+      // chance.
+      for (const key of ['k1', 'k2', 'k3', 'k4']) {
+        // Arrange: a process led the key and landed it, and still holds the
+        // key, as a leader does until it reads the acknowledgement; a run
+        // waits for it, and a run of another key, sent after it, leads.
+        const [a, p, q, x] = [`a-${key}`, `p-${key}`, `q-${key}`, `x-${key}`];
+        first.send(`{"op":"run","id":"${a}","key":"${key}"}`);
+        const before = tokenIn(await answerOf(t, first, a, /"op":"lead"/));
+        using held = holdKey(directory.path, key);
+        first.send(`{"op":"land","id":"${a}","outcome":{"value":"first"}}`);
+        await answerOf(t, first, a, /"op":"ack"/);
+        waiter.send(`{"op":"run","id":"${p}","key":"${key}"}`);
+        waiter.send(`{"op":"run","id":"${q}","key":"other-${key}"}`);
+        // The watch of the key checked its lock when the run waited, just
+        // before this answer, so its next check is a poll interval away.
+        await waiter.until(() => answersTo(waiter, q).some(isLead));
+        const waited = answersTo(waiter, p);
+
+        // Act: the key goes, and another run comes at once. Whichever leads
+        // takes the key, as a leader does, lands, and lets the key go.
+        held.unlock();
+        late.send(`{"op":"run","id":"${x}","key":"${key}"}`);
+        await waitUntil(
+          t,
+          () =>
+            answersTo(waiter, p).some(isLead) ||
+            answersTo(late, x).some(isLead),
+          () =>
+            `Nobody leads: ${JSON.stringify(waiter.received)} ${JSON.stringify(late.received)}`,
+        );
+        const [leader, id, joiner, joinerId] = answersTo(waiter, p).some(isLead)
+          ? [waiter, p, late, x]
+          : [late, x, waiter, p];
+        const token = tokenIn(answersTo(leader, id).find(isLead) ?? '');
+        using retaken = holdKey(directory.path, key);
+        leader.send(`{"op":"land","id":"${id}","outcome":{"value":"second"}}`);
+        await answerOf(t, leader, id, /"op":"ack"/);
+        retaken.unlock();
+        await answerOf(t, joiner, joinerId, /"op":"(landed|lead)"/);
+        rounds.push({
+          key,
+          waited,
+          before,
+          token,
+          joined: answersTo(joiner, joinerId),
+          expected: [
+            `{"op":"joined","id":"${joinerId}","flight":"${token}"}`,
+            `{"op":"landed","id":"${joinerId}","outcome":{"value":"second"}}`,
+          ],
+        });
+      }
+
+      // Assert
+      for (const { key, waited, before, token, joined, expected } of rounds) {
+        assert.deepEqual(
+          waited,
+          [],
+          `The run of ${key} did not wait for the held key`,
+        );
+        assert.deepEqual(
+          joined,
+          expected,
+          `The runs of ${key} did not share one flight`,
+        );
+        assert.ok(
+          token > before,
+          `The flight ${token} of ${key} has a token not newer than the flight ${before} before it`,
+        );
+      }
     },
   );
 });

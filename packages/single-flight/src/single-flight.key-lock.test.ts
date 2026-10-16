@@ -1,13 +1,33 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
+import { once } from 'node:events';
 import { readFile, rm, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { type Socket, createServer } from 'node:net';
+import { join, resolve } from 'node:path';
+import { createInterface } from 'node:readline';
 import { describe, test } from 'node:test';
 import type { TestContext } from 'node:test';
+
+import { SqliteElection } from '@zukhruf/election';
 
 import { callerSource, journalOf } from './testing/caller.ts';
 import { scratchDirectory } from './testing/scratch-directory.ts';
 import { newProcessTimeout, waitUntil } from './testing/wait-until.ts';
 import { type WorkerProcess, startWorker } from './testing/worker-process.ts';
+
+/**
+ * Where the processes on `directory` meet their coordinator: a socket file in
+ * the directory, or on Windows a named pipe whose name comes from the
+ * directory, as this protocol names it.
+ */
+function socketPathOf(directory: string) {
+  if (process.platform !== 'win32') return join(directory, 'flight.sock');
+  const id = createHash('sha256')
+    .update(resolve(directory).toLowerCase())
+    .digest('hex')
+    .slice(0, 32);
+  return `\\\\.\\pipe\\single-flight-${id}`;
+}
 
 /** A caller process on `directory`, ready for orders. */
 async function caller(t: TestContext, directory: string, name: string) {
@@ -82,33 +102,86 @@ async function coordinatorOf(t: TestContext, directory: string) {
 }
 
 /**
- * A process whose work of `sync` runs on after it disposed its single flight.
- * The coordinator drops the flight of a closed connection at once, so the
- * next run of `sync` is told to lead while this work still runs.
+ * A coordinator served from this test process for the first term, which tells
+ * every run to lead and acknowledges every landing, as a coordinator that
+ * missed a key's lock would. This package's coordinator makes a run wait while
+ * another process holds its key, so only such a coordinator puts a run in the
+ * wait for its key's lock in the client. It keeps the requests of each
+ * connection, as lines.
  */
-async function disposedLeader(t: TestContext, directory: string) {
-  const holder = await caller(t, directory, 'holder');
-  run(holder, 'l', 'sync');
-  await heard(t, holder, 'leading', 'l');
-  holder.child.send({ type: 'dispose' });
-  await waitUntil(
-    t,
-    () => holder.has('disposed'),
-    () => holder.stderr,
-    newProcessTimeout,
-  );
-  return holder;
+async function leadingCoordinator(directory: string) {
+  await using serving = new AsyncDisposableStack();
+  const term = await new SqliteElection({
+    directory,
+    claimFile: 'flight.lock',
+    epochFile: 'flight.epoch',
+  }).campaign();
+  assert.ok(term, 'The first campaign in an empty directory must win');
+  serving.defer(() => term.resign());
+  const connections: string[][] = [];
+  const peers = new Set<Socket>();
+  let sequence = 0n;
+  const server = createServer((peer) => {
+    peers.add(peer);
+    peer.on('error', () => {});
+    const requests: string[] = [];
+    connections.push(requests);
+    createInterface({ input: peer }).on('line', (line) => {
+      requests.push(line);
+      const request: unknown = JSON.parse(line);
+      if (typeof request !== 'object' || request === null) return;
+      if (!('op' in request)) return;
+      if (request.op === 'hello') {
+        peer.write('{"op":"welcome"}\n');
+        return;
+      }
+      if (!('id' in request) || typeof request.id !== 'string') return;
+      const id = JSON.stringify(request.id);
+      if (request.op === 'run' && !('flight' in request)) {
+        const token = (term.epoch << 32n) | ++sequence;
+        peer.write(`{"op":"lead","id":${id},"token":"${token}"}\n`);
+      }
+      if (request.op === 'land') peer.write(`{"op":"ack","id":${id}}\n`);
+    });
+  });
+  serving.defer(async () => {
+    for (const peer of peers) peer.destroy();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  });
+  server.listen(socketPathOf(directory));
+  await once(server, 'listening');
+  const served = serving.move();
+  return {
+    connections,
+    [Symbol.asyncDispose]: () => served.disposeAsync(),
+  };
 }
 
 /**
- * Runs `sync` in `worker` as `call`, and returns once the coordinator
- * answered it: the coordinator decides one connection's requests in order, so
- * a run of another key sent after it has its answer later.
+ * Runs `sync` in `worker` as `call`, and returns once its lead answer was
+ * read, so the run waits for the key's lock: the answers of one connection
+ * are read in order, and a run of another key, sent after it, leads later.
  */
-async function answered(t: TestContext, worker: WorkerProcess, call: string) {
+async function waitsForKey(
+  t: TestContext,
+  worker: WorkerProcess,
+  call: string,
+) {
   run(worker, call, 'sync');
   await heard(t, worker, 'called', call);
   await lead(t, worker, `${call}-after`);
+}
+
+/** The id under which `requests` ran `key`. */
+function idOfRun(requests: readonly string[], key: string) {
+  const pattern = new RegExp(
+    `^\\{"op":"run","id":("[^"]+"),"key":${JSON.stringify(key)}\\}$`,
+  );
+  const id = requests
+    .map((line) => pattern.exec(line)?.[1])
+    .find((match) => match !== undefined);
+  assert.ok(id, `No run of ${key} in ${JSON.stringify(requests)}`);
+  return id;
 }
 
 /** The runs of the work of `sync`, as `<process>:work:sync`, in order. */
@@ -119,37 +192,45 @@ async function runsOfSync(directory: string) {
 
 describe('A single flight across processes while a run waits for its key', () => {
   test(
-    'a caller that stops waiting while its run waits for the key ends that flight: its joiner gets FlightInterruptedError, its work never runs, and the key is free once the running work ended',
+    'a caller that stops waiting while its run waits for the key cancels that flight, its work never runs, and the key is free once the running work ended',
     { timeout: 30_000 },
     async (t) => {
-      // Arrange: the runner is told to lead while the holder's work still runs, and the joiner joins its flight.
+      // Arrange: the runner is told to lead while the holder's work still runs.
       await using directory = await scratchDirectory();
-      await using _coordinator = await coordinatorOf(t, directory.path);
-      await using holder = await disposedLeader(t, directory.path);
+      await using coordinator = await leadingCoordinator(directory.path);
+      await using holder = await caller(t, directory.path, 'holder');
+      run(holder, 'l', 'sync');
+      await heard(t, holder, 'leading', 'l');
       await using runner = await caller(t, directory.path, 'runner');
-      await answered(t, runner, 'fresh');
-      await using joiner = await caller(t, directory.path, 'joiner');
-      run(joiner, 'j', 'sync');
-      await heard(t, joiner, 'joined', 'j');
+      await waitsForKey(t, runner, 'fresh');
 
       // Act
       runner.child.send({ type: 'cancel', call: 'fresh' });
       const stopped = await firstOf(t, runner, 'fresh', ['error', 'value']);
-      const interrupted = await firstOf(t, joiner, 'j', ['error', 'value']);
-      holder.child.send({ type: 'finish', call: 'l', value: 'unheard' });
+      const requests = coordinator.connections.find((lines) =>
+        lines.some((line) => line.includes('"key":"fresh-after"')),
+      );
+      assert.ok(requests, 'The runner never reached the coordinator');
+      const fresh = idOfRun(requests, 'sync');
+      await waitUntil(
+        t,
+        () => requests.includes(`{"op":"cancel","id":${fresh}}`),
+        () => `No cancel of ${fresh}: ${JSON.stringify(requests)}`,
+      );
+      holder.child.send({ type: 'finish', call: 'l', value: 'first' });
       await heard(t, holder, 'value', 'l');
-      run(joiner, 'next', 'sync');
-      const next = await firstOf(t, joiner, 'next', ['leading', 'joined']);
-      joiner.child.send({ type: 'finish', call: 'next', value: 'next' });
-      await heard(t, joiner, 'value', 'next');
+      await using next = await caller(t, directory.path, 'next');
+      run(next, 'n', 'sync');
+      const first = await firstOf(t, next, 'n', ['leading', 'error']);
+      next.child.send({ type: 'finish', call: 'n', value: 'next' });
+      await heard(t, next, 'value', 'n');
 
       // Assert
       assert.equal(stopped.message, 'cancelled by runner');
-      assert.equal(interrupted.name, 'FlightInterruptedError');
-      assert.equal(next.type, 'leading', 'The key was not free for a new run');
+      assert.equal(first.type, 'leading', 'The key was not free for a new run');
       assert.deepEqual(await runsOfSync(directory.path), [
         'holder:work:sync',
-        'joiner:work:sync',
+        'next:work:sync',
       ]);
     },
   );
@@ -158,21 +239,23 @@ describe('A single flight across processes while a run waits for its key', () =>
     'a single flight disposed while its run waits for the key rejects that run as closed, and the key is free once the running work ended',
     { timeout: 30_000 },
     async (t) => {
-      // Arrange
+      // Arrange: the runner is told to lead while the holder's work still runs.
       await using directory = await scratchDirectory();
-      await using _coordinator = await coordinatorOf(t, directory.path);
-      await using holder = await disposedLeader(t, directory.path);
+      await using _coordinator = await leadingCoordinator(directory.path);
+      await using holder = await caller(t, directory.path, 'holder');
+      run(holder, 'l', 'sync');
+      await heard(t, holder, 'leading', 'l');
       await using runner = await caller(t, directory.path, 'runner');
-      await answered(t, runner, 'fresh');
+      await waitsForKey(t, runner, 'fresh');
 
       // Act
       runner.child.send({ type: 'dispose' });
       const closed = await firstOf(t, runner, 'fresh', ['error', 'value']);
-      holder.child.send({ type: 'finish', call: 'l', value: 'unheard' });
+      holder.child.send({ type: 'finish', call: 'l', value: 'first' });
       await heard(t, holder, 'value', 'l');
       await using next = await caller(t, directory.path, 'next');
       run(next, 'n', 'sync');
-      const first = await firstOf(t, next, 'n', ['leading', 'joined']);
+      const first = await firstOf(t, next, 'n', ['leading', 'error']);
       next.child.send({ type: 'finish', call: 'n', value: 'next' });
       await heard(t, next, 'value', 'n');
 
