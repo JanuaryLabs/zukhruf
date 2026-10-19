@@ -506,6 +506,50 @@ void describe.each(storeCases, (store) =>
         }),
     );
 
+    // On a case-sensitive file system (Linux) this passes whatever the stores
+    // name their files; macOS and Windows fold case and so show the break.
+    test(
+      'resource names that differ only in letter case are separate locks',
+      {
+        todo: ['SqliteStore', 'LockFileStore', 'TicketQueueFileStore'].includes(
+          store.name,
+        )
+          ? '#2645: case-twin keys share one lock file on a case-insensitive file system'
+          : false,
+      },
+      async (t) => {
+        // Arrange: one caller holds 'Sync'.
+        await using directory = await scratchDirectory();
+        await using host = store.open(directory.path);
+        const mutex = new Mutex(host.store);
+        const finishHolder = Promise.withResolvers<void>();
+        let holding = false;
+        const holder = mutex.acquire('Sync', async () => {
+          holding = true;
+          await finishHolder.promise;
+        });
+
+        try {
+          await waitUntil(t, () => holding, "The holder of 'Sync' must start");
+
+          // Act: another caller asks for 'sync' and does not wait.
+          const result = await mutex.acquire('sync', async () => 'ran', {
+            mode: Modes.skipIfBusy(),
+          });
+
+          // Assert
+          assert.deepEqual(
+            result,
+            { acquired: true, value: 'ran' },
+            "'sync' must be free while 'Sync' is held",
+          );
+        } finally {
+          finishHolder.resolve();
+          await holder;
+        }
+      },
+    );
+
     test(
       'two HTTP reservations cannot both buy the last item across an async storage step',
       { timeout: 2000 },
