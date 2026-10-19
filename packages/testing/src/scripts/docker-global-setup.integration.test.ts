@@ -739,3 +739,42 @@ test(
     }
   },
 );
+
+test(
+  'recovery leaves a dead run on another engine alone',
+  { timeout: 120_000 },
+  async () => {
+    await using directory = await mkdtempDisposable(
+      join(tmpdir(), 'zukhruf-testing-other-engine-'),
+    );
+    const id = randomUUID();
+    const record = join(
+      directory.path,
+      'state',
+      'zukhruf-testing',
+      'docker-runs',
+      id,
+    );
+    await mkdir(record, { recursive: true });
+    // Only a global setup writes run.json: this one is of a run on another
+    // engine whose runner and test process died.
+    await writeFile(
+      join(record, 'run.json'),
+      JSON.stringify({
+        id,
+        endpoint: 'ssh://elsewhere.invalid',
+        pid: await endedPid(),
+      }),
+    );
+    await new TestRun(id, record).recordProcess(await endedPid());
+    const file = join(directory.path, 'plain.test.ts');
+    await writeFile(
+      file,
+      "import { test } from 'node:test';\ntest('no Docker', () => {});\n",
+    );
+
+    await emptyRun(file, runEnvironment(join(directory.path, 'state')));
+
+    await access(join(record, 'run.json'));
+  },
+);
