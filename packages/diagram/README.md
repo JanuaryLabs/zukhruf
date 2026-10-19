@@ -136,7 +136,7 @@ The SVG text uses the font `ui-monospace, 'Geist Mono', monospace`. The layout c
 
 An edge with no arrowhead (`Wire`, `headless`, or `direction="none"`) gets no pulse.
 
-The effects draw with WebGPU, on a canvas above the SVG. The package loads `vgpu` with a dynamic `import()` only when a diagram has `effects`. Thus a diagram with no `effects` adds no WebGPU code to the bundle.
+The effects draw with WebGPU, on a canvas above the SVG. The package loads `vgpu` and `@vgpu/wgsl` with a dynamic `import()` only when a diagram has `effects`. Thus a diagram with no `effects` adds no WebGPU code to the bundle.
 
 The SVG drawing is always there. The effects only add to it:
 

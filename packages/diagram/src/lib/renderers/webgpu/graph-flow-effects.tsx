@@ -199,7 +199,8 @@ function GraphFlowEffectsCanvas({
         return;
       }
       // Import only for opted-in diagrams; the browser entry never loads Dawn.
-      const { init, surface, storage, draw, frame } = await import('vgpu');
+      const [{ init, surface, storage, draw, frame }, { prepareShader }] =
+        await Promise.all([import('vgpu'), import('@vgpu/wgsl/prepare')]);
       if (cancelled) return;
       gpu = await init({ powerPreference: 'low-power', label: 'diagram-flow' });
       if (cancelled) {
@@ -208,9 +209,8 @@ function GraphFlowEffectsCanvas({
       }
       const context = gpu;
       context.onError(fail);
-      void context.gpu.lost.then((info) => {
-        if (!cancelled && info.reason !== 'destroyed')
-          fail(new Error(info.message));
+      void context.lost.then((info) => {
+        if (!cancelled) fail(new Error(info.message));
       });
       const target = surface(context, canvas, {
         autoResize: false,
@@ -250,7 +250,7 @@ function GraphFlowEffectsCanvas({
         );
       };
       const flow = draw(context, {
-        shader: flowShader,
+        shader: prepareShader(flowShader, 'flow.wgsl'),
         vertices: 6,
         instances: data.length / 12,
         blend: 'premultiplied',
