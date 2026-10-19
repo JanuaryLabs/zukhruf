@@ -10,7 +10,7 @@ import { Mutex } from '../../mutex/mutex.ts';
 import { FencedRegister } from '../../testing/fenced-register.ts';
 import { scratchDirectory } from '../../testing/scratch-directory.ts';
 import { graceWindow, settle } from '../../testing/store-cases.ts';
-import { waitUntil } from '../../testing/wait-until.ts';
+import { newProcessTimeout, waitUntil } from '../../testing/wait-until.ts';
 import { watch } from '../../testing/watch.ts';
 import { startWorker } from '../../testing/worker-process.ts';
 import { socketElection } from './socket-election.ts';
@@ -576,6 +576,76 @@ describe('Socket store follower failure', () => {
       } finally {
         leader.close();
       }
+    },
+  );
+});
+
+/**
+ * A process that is the only user of the directory: it takes one lock with
+ * the default grace window, reports how long that took, and shuts down cleanly.
+ */
+const loneProcess = (directory: string) => `
+	import { Mutex } from ${JSON.stringify(mutexUrl.href)};
+	import { SocketStore } from ${JSON.stringify(socketStoreUrl.href)};
+
+	const store = new SocketStore(${JSON.stringify(directory)});
+	const mutex = new Mutex(store);
+	const started = performance.now();
+	await mutex.acquire('report:daily', async () => {});
+	const took = performance.now() - started;
+	await store[Symbol.asyncDispose]();
+	process.send({ type: 'done', took }, () => process.disconnect());
+`;
+
+describe('Socket store after a clean shutdown', () => {
+  test(
+    'a lone process after one that shut down cleanly acquires at once, without the grace window',
+    {
+      timeout: 30_000,
+      todo: '#2647: every term after the first waits its grace window, also after a clean shutdown',
+    },
+    async (t) => {
+      // Arrange: the first process takes and releases a lock, then disposes its store and exits.
+      await using directory = await scratchDirectory();
+      await using first = startWorker(loneProcess(directory.path), 'first');
+      await waitUntil(
+        t,
+        () => first.exit !== null,
+        () => `The first process must exit.\n${first.stderr}`,
+        newProcessTimeout,
+      );
+      assert.deepEqual(
+        { exit: first.exit, done: first.has('done') },
+        { exit: { code: 0, signal: null }, done: true },
+        `The first process must shut down cleanly.\n${first.stderr}`,
+      );
+
+      // Act
+      await using next = startWorker(loneProcess(directory.path), 'next');
+      await waitUntil(
+        t,
+        () => next.exit !== null,
+        () => `The next process must exit.\n${next.stderr}`,
+        newProcessTimeout,
+      );
+
+      // Assert
+      assert.equal(
+        await readFile(join(directory.path, 'leader.epoch'), 'utf8'),
+        '2',
+        'The next process must lead the second term',
+      );
+      const took = next.find('done')?.took;
+      assert.equal(
+        typeof took,
+        'number',
+        `The next process must lock.\n${next.stderr}`,
+      );
+      // The default grace window is 500 ms.
+      assert.ok(
+        Number(took) < 400,
+        `The lone process after a clean shutdown took ${Math.round(Number(took))} ms to lock`,
+      );
     },
   );
 });
