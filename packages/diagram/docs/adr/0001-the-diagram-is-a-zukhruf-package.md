@@ -1,5 +1,7 @@
 # The diagram is a zukhruf package
 
+Superseded on 2026-10-19 for the examples by [ADR 0002](./0002-the-examples-are-a-playground-app-in-zukhruf.md). The examples are now a playground app in zukhruf. The decision below stays true for the rest.
+
 The diagram was `@stdlib/diagram`, a private package in the text2sql repository. Its blog and its playground were the only users. The maintainer wants the diagram on npm, and the diagram has no concept of text2sql: it is a standard library for drawings. Thus the diagram moves to zukhruf.
 
 The blog and the playground import the diagram. They do not copy it. A move of a module that other modules import is a question of cohesion, and it can occur at any time ([workspace ADR 0001](../../../../docs/adr/0001-zukhruf-is-a-layered-standard-library.md), rule 3). The Rule of Three does not apply, because there are no copies.

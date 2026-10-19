@@ -126,6 +126,8 @@ assert.equal(withMarker.length, 1);
 
 These checks stay green when a cosmetic value changes. They fail only when the topology changes.
 
+To see the pixels, run `nx run diagram-playground:dev`. The playground shows the five example diagrams, and it reads the source of the package, so an edit shows with no build.
+
 Do not test private functions of a layout from a renderer test. The rendered markup is the public contract. The pure functions of a layout have their own tests.
 
 ## Throw when the content does not fit

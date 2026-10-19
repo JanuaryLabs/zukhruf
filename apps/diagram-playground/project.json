@@ -1,0 +1,27 @@
+{
+  "name": "diagram-playground",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "apps/diagram-playground/src",
+  "projectType": "application",
+  "tags": ["std:host"],
+  "targets": {
+    "format": {},
+    "dev": {
+      "executor": "nx:run-commands",
+      "continuous": true,
+      "options": {
+        "cwd": "{projectRoot}",
+        "command": "vite"
+      }
+    },
+    "build": {
+      "executor": "nx:run-commands",
+      "cache": true,
+      "outputs": ["{projectRoot}/dist"],
+      "options": {
+        "cwd": "{projectRoot}",
+        "command": "vite build"
+      }
+    }
+  }
+}

@@ -63,9 +63,20 @@ export default defineConfig(
     },
   },
   {
-    files: ['packages/shadcn/**', 'packages/diagram/**'],
+    files: [
+      'packages/shadcn/**',
+      'packages/diagram/**',
+      'apps/diagram-playground/**',
+    ],
     plugins: { zukhruf },
     extends: ['zukhruf/react', 'zukhruf/tailwind'],
+  },
+  // A stylesheet import loads the styles; it has no binding to assign.
+  {
+    files: ['apps/diagram-playground/src/**/*.tsx'],
+    rules: {
+      'import-x/no-unassigned-import': ['error', { allow: ['**/*.css'] }],
+    },
   },
   {
     files: ['**/*.ts', '**/*.tsx', '**/*.js'],

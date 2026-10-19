@@ -23,9 +23,10 @@
 
 ## Apps
 
-| App                                         | What it does                                                                                    |
-| ------------------------------------------- | ----------------------------------------------------------------------------------------------- |
-| [`reservation-app`](./apps/reservation-app) | An HTTP app that sells the last item once, with a fenced stock table. It uses `@zukhruf/mutex`. |
+| App                                               | What it does                                                                                                                                                                           |
+| ------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`reservation-app`](./apps/reservation-app)       | An HTTP app that sells the last item once, with a fenced stock table. It uses `@zukhruf/mutex`.                                                                                        |
+| [`diagram-playground`](./apps/diagram-playground) | A local page that shows the example diagrams of `@zukhruf/diagram`. It reads the source of the package, so an edit shows with no build. Start it with `nx run diagram-playground:dev`. |
 
 Each package has its own glossary. [CONTEXT-MAP.md](./CONTEXT-MAP.md) lists them.
 

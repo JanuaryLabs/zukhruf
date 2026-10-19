@@ -153,3 +153,6 @@ vite.config.ts.timestamp-*
 # Test reporter output
 test-results.xml
 .playwright-mcp
+
+# TypeScript output of the Vite apps (Vite builds to dist)
+out-tsc

@@ -1,0 +1,5 @@
+@import 'tailwindcss';
+@import '@zukhruf/shadcn/styles.css';
+@import '@zukhruf/diagram/styles.css';
+@source '../../../packages/diagram/src';
+@source '../../../packages/shadcn/src';

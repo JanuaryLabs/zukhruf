@@ -13,7 +13,7 @@ Without a check, the layers decay: each import that crosses a layer looks harmle
 | Domain       | `std:domain`       | `mutex`, `single-flight`                                                                        | Base, coordination             | Tool, domain               |
 | Tool         | `std:tool`         | `testing`, `eslint`                                                                             | Tool                           | Nothing more               |
 | UI           | `std:ui`           | `shadcn`, `diagram`                                                                             | Nothing                        | Tool                       |
-| Host         | `std:host`         | `apps/reservation-app`                                                                          | Base, coordination, domain, UI | Tool                       |
+| Host         | `std:host`         | `apps/reservation-app`, `apps/diagram-playground`                                               | Base, coordination, domain, UI | Tool                       |
 
 A base package imports Node.js and other base packages only. For example, `fencing` imports `fs` and `lease`. The election is a layer of its own, because the domain packages build on it, and it builds on the base packages.
 

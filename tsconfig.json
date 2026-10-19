@@ -46,6 +46,9 @@
     },
     {
       "path": "./packages/sqlite/federation"
+    },
+    {
+      "path": "./apps/diagram-playground"
     }
   ]
 }
