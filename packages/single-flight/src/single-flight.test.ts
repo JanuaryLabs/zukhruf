@@ -510,6 +510,9 @@ describe('A single flight shares the run in progress', () => {
   // Timing is the only observable: a run that waits for the key's lock still
   // leads in the end. One poll of the lock is 10 ms, so 20 runs that each wait
   // one poll lose about 200 ms; the test allows half a poll a run for noise.
+  // A poll shorter than that would pass the test and still wait, so a shorter
+  // poll is not the fix. The one-key loop goes first, so warm-up favours the
+  // other loop and never hides a wait.
   test(
     'back-to-back runs of one key lead as fast as back-to-back runs of different keys',
     {
@@ -528,16 +531,16 @@ describe('A single flight shares the run in progress', () => {
 
       // Act
       let started = performance.now();
-      for (let run = 0; run < runs; run++) {
-        await flights.run(`report:${run}`, async () => 'report');
-      }
-      const differentKeys = performance.now() - started;
-      started = performance.now();
       const joined: boolean[] = [];
       for (let run = 0; run < runs; run++) {
         joined.push((await flights.run('sync', async () => 'sync')).joined);
       }
       const oneKey = performance.now() - started;
+      started = performance.now();
+      for (let run = 0; run < runs; run++) {
+        await flights.run(`report:${run}`, async () => 'report');
+      }
+      const differentKeys = performance.now() - started;
 
       // Assert
       assert.deepEqual(

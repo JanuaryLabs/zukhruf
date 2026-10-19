@@ -198,10 +198,15 @@ describe('Token sources', () => {
       await tokens.next('Sync');
 
       // Act
-      const twin = await tokens.next('sync');
+      const lower = await tokens.next('sync');
+      const upper = await tokens.next('SYNC');
 
       // Assert
-      assert.equal(twin.value, 1n, "'sync' must start its own counter at 1");
+      assert.deepEqual(
+        { lower: lower.value, upper: upper.value },
+        { lower: 1n, upper: 1n },
+        "'sync' and 'SYNC' must each start their own counter at 1",
+      );
     },
   );
 

@@ -532,16 +532,22 @@ void describe.each(storeCases, (store) =>
         try {
           await waitUntil(t, () => holding, "The holder of 'Sync' must start");
 
-          // Act: another caller asks for 'sync' and does not wait.
-          const result = await mutex.acquire('sync', async () => 'ran', {
+          // Act: other callers ask for 'sync' and 'SYNC' and do not wait.
+          const lower = await mutex.acquire('sync', async () => 'ran', {
+            mode: Modes.skipIfBusy(),
+          });
+          const upper = await mutex.acquire('SYNC', async () => 'ran', {
             mode: Modes.skipIfBusy(),
           });
 
           // Assert
           assert.deepEqual(
-            result,
-            { acquired: true, value: 'ran' },
-            "'sync' must be free while 'Sync' is held",
+            { lower, upper },
+            {
+              lower: { acquired: true, value: 'ran' },
+              upper: { acquired: true, value: 'ran' },
+            },
+            "'sync' and 'SYNC' must be free while 'Sync' is held",
           );
         } finally {
           finishHolder.resolve();
