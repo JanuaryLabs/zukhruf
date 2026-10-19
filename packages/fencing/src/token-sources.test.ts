@@ -183,32 +183,26 @@ describe('Token sources', () => {
 
   // On a case-sensitive file system (Linux) this passes whatever the file
   // names are; macOS and Windows fold case and so show the break.
-  test(
-    'a FileTokenSource counts keys that differ only in letter case apart',
-    {
-      todo: '#2645: case-twin keys share one .fence counter on a case-insensitive file system',
-    },
-    async () => {
-      // Arrange
-      await using directory = await mkdtempDisposable(
-        join(tmpdir(), 'zukhruf-fencing-'),
-      );
-      const tokens = new FileTokenSource(directory.path);
-      await tokens.next('Sync');
-      await tokens.next('Sync');
+  test('a FileTokenSource counts keys that differ only in letter case apart', async () => {
+    // Arrange
+    await using directory = await mkdtempDisposable(
+      join(tmpdir(), 'zukhruf-fencing-'),
+    );
+    const tokens = new FileTokenSource(directory.path);
+    await tokens.next('Sync');
+    await tokens.next('Sync');
 
-      // Act
-      const lower = await tokens.next('sync');
-      const upper = await tokens.next('SYNC');
+    // Act
+    const lower = await tokens.next('sync');
+    const upper = await tokens.next('SYNC');
 
-      // Assert
-      assert.deepEqual(
-        { lower: lower.value, upper: upper.value },
-        { lower: 1n, upper: 1n },
-        "'sync' and 'SYNC' must each start their own counter at 1",
-      );
-    },
-  );
+    // Assert
+    assert.deepEqual(
+      { lower: lower.value, upper: upper.value },
+      { lower: 1n, upper: 1n },
+      "'sync' and 'SYNC' must each start their own counter at 1",
+    );
+  });
 
   test('a FileTokenSource continues the counter file that an earlier version wrote', async () => {
     // Arrange: published @zukhruf/mutex versions keep the counter as decimal text in <encoded key>.fence.

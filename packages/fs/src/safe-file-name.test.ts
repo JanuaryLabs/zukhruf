@@ -36,7 +36,7 @@ describe('safeFileName', () => {
   });
 
   test('a key that fits keeps its encoded name with each dot encoded', () => {
-    // Arrange: earlier versions gave these names, and their processes share the files.
+    // Arrange: a slash, an Arabic word and dots, each of which a name must encode.
     const keys = ['orders/حساب.v2', '.', '..'];
 
     // Act
@@ -48,6 +48,23 @@ describe('safeFileName', () => {
       '%2E',
       '%2E%2E',
     ]);
+  });
+
+  test('keys that differ only in letter case get names that differ in more than letter case', () => {
+    // Arrange: APFS and NTFS compare file names without case, so names equal in lowercase are one file there. Each letter is a key in both cases.
+    const upper = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+    const keys = ['Sync', 'sync', 'SYNC', ...upper, ...upper.toLowerCase()];
+
+    // Act
+    const names = keys.map((key) => safeFileName(key, '.lock'.length));
+
+    // Assert
+    const folded = new Set(names.map((name) => name.toLowerCase()));
+    assert.equal(
+      folded.size,
+      keys.length,
+      `Each key must get its own name on a case-insensitive file system, got ${names.join(', ')}`,
+    );
   });
 
   test('a key that ends with a suffix never gets the name of a shorter key plus that suffix', () => {

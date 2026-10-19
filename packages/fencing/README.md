@@ -110,7 +110,7 @@ const tokens = new FileTokenSource('/var/lib/my-app/fences');
 const token = await tokens.next('product:42');
 ```
 
-`FileTokenSource` makes the directory if it is absent. It keeps the counter of each key as decimal text, and it replaces the file in one step and syncs it to the disk before it gives the token. On Linux and macOS, a power loss cannot make it give one token two times. The name of the file comes from the key with `safeFileName` of `@zukhruf/fs`. Processes that use earlier versions of `@zukhruf/mutex` find the same files.
+`FileTokenSource` makes the directory if it is absent. It keeps the counter of each key as decimal text, and it replaces the file in one step and syncs it to the disk before it gives the token. On Linux and macOS, a power loss cannot make it give one token two times. The name of the file comes from the key with `safeFileName` of `@zukhruf/fs`, so keys that differ only in case have separate counters on every file system.
 
 A counter file can hold text that is not decimal digits. An example is the empty file that `@zukhruf/mutex` 0.2.0 or earlier can leave after a power loss, because those versions did not sync the file to the disk. Then `next` rejects with a `SyntaxError` that names the file, and the file stays as it is. Thus the tokens of a key never start again at 1, and the fenced resource never accepts the writes of a stale holder.
 

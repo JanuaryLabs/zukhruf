@@ -124,7 +124,7 @@ These helpers do not belong in `@zukhruf/coordinator`. A third package that copi
 
 - `lock-stores/socket/advertised-ops-connection.ts`: the welcome lists no requests yet.
 - `lock-stores/remote/envelope.ts` and `queries.ts`: this package uses no IPC channel and no look requests.
-- `lock-stores/file-system/file-lock-store.ts`. The mutex holds a `FileLock` for each key too, but the key locks are this package's own code (see the next paragraph). Both take `FileLock` from `@zukhruf/fs`. The single flight names each file by the SHA-256 of the key, so two keys that differ only in case never share a file on APFS or NTFS. The mutex names it with `safeFileName`, which keeps the case (backlog #2645). The names differ in kind, so they are not one piece of knowledge.
+- `lock-stores/file-system/file-lock-store.ts`. The mutex holds a `FileLock` for each key too, but the key locks are this package's own code (see the next paragraph). Both take `FileLock` from `@zukhruf/fs`. The single flight names each file by the SHA-256 of the key, so two keys that differ only in case never share a file on APFS or NTFS. The mutex names it with `safeFileName`, which encodes each uppercase letter for the same reason. The names differ in kind, so they are not one piece of knowledge.
 - `lock-stores/remote/lock-coordinator.ts` and `remote-lock-client.ts`. `FlightCoordinator`, its sessions and `FlightClient` are this package's own code: one request leads or joins, and an outcome goes to every joiner. But they repeat rules of the mutex code. The next section lists them.
 
 **This package's own code since ADR 0010.**
