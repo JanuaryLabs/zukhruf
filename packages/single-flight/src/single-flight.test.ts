@@ -515,10 +515,7 @@ describe('A single flight shares the run in progress', () => {
   // other loop and never hides a wait.
   test(
     'back-to-back runs of one key lead as fast as back-to-back runs of different keys',
-    {
-      timeout: 10_000,
-      todo: "#2646: the leader keeps the key's lock until the coordinator acknowledges the landing, so the next run of the key waits one poll",
-    },
+    { timeout: 10_000 },
     async () => {
       // Arrange: a first run elects the coordinator, so neither loop pays for the election.
       await using directory = await scratchDirectory();

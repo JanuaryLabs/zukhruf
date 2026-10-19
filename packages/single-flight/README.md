@@ -182,7 +182,7 @@ A call that was on its way to a coordinator that stopped joined nothing. It goes
 ### How long a call waits
 
 - A call of a key waits with no limit while a process that lives holds the key lock, for example a frozen leader, or a leader whose work does not end. To set a limit, give a `signal`. A call of another key does not wait for it.
-- Two flights of one key that follow each other wait about 10 ms between them. The leader frees the key lock only when it reads the acknowledgment of its landing, so the next call of the key waits for one more check of the key lock.
+- A leader frees the key lock only when it reads the acknowledgment of its landing. A new call of the same key in the process of the leader waits in that process until the key lock frees, and then goes to the coordinator. Thus two flights of one key in one process follow each other with no wait. A call of the key from another process that comes before the key lock frees waits for one more check of the key lock, about 10 ms.
 
 ## Changes from 0.3.x
 

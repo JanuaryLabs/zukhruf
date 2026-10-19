@@ -10,10 +10,19 @@ import { Latch } from '@zukhruf/async';
 export class KeyHold {
   readonly #workEnded = new Latch();
   readonly #flightEnded = new Latch();
+  readonly #released = new Latch();
 
   constructor(lock: Disposable) {
     void Promise.all([this.#workEnded.wait(), this.#flightEnded.wait()]).then(
-      () => lock[Symbol.dispose](),
+      () => {
+        try {
+          lock[Symbol.dispose]();
+        } finally {
+          // Even when the dispose throws, a run that waits for this key must go
+          // on: the coordinator's check of the lock decides whether it leads.
+          this.#released.open();
+        }
+      },
     );
   }
 
@@ -25,5 +34,10 @@ export class KeyHold {
   /** The flight needs nothing more from this process. */
   flightEnded(): void {
     this.#flightEnded.open();
+  }
+
+  /** Resolves once the lock is let go. */
+  released(): Promise<void> {
+    return this.#released.wait();
   }
 }

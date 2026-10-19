@@ -86,6 +86,8 @@ export class FlightClient {
   readonly #isCurrentTerm: (token: FencingToken) => Promise<boolean>;
   readonly #pending = new Map<string, Pending>();
   readonly #held = new Map<string, Held>();
+  /** By key, the hold of the latest flight this process landed, until it lets its key's lock go. */
+  readonly #landed = new Map<string, KeyHold>();
   /** Wakes `close` each time a flight this process leads is acknowledged or lost. */
   readonly #released = new Set<() => void>();
 
@@ -107,6 +109,11 @@ export class FlightClient {
 
   async run(key: string, { signal, onJoin }: RunRequest): Promise<Answer> {
     signal?.throwIfAborted();
+    // This process still holds the key's lock for a flight it landed. The
+    // coordinator would see the lock and park the run for one check of its
+    // watch, so the run goes only once the lock is let go.
+    const landed = this.#landed.get(key);
+    if (landed) await untilAborted(landed.released(), signal);
     if (this.#link.status === 'closed') {
       throw new Error('This single flight is closed.');
     }
@@ -240,6 +247,10 @@ export class FlightClient {
         // A lost flight is no longer this leader's to land.
         if (this.#held.get(id) !== held || held.landing) return;
         held.landing = outcome;
+        this.#landed.set(key, hold);
+        void hold.released().then(() => {
+          if (this.#landed.get(key) === hold) this.#landed.delete(key);
+        });
         this.#updateRef();
         this.#link.send({ op: 'land', id, outcome });
       },
