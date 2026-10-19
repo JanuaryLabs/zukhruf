@@ -16,3 +16,4 @@ Each context has its own glossary and its own architecture decision records.
 | Fencing               | [packages/fencing/CONTEXT.md](./packages/fencing/CONTEXT.md)                             | [packages/fencing/docs/adr](./packages/fencing/docs/adr)                             |
 | Shadcn                | [packages/shadcn/CONTEXT.md](./packages/shadcn/CONTEXT.md)                               | [packages/shadcn/docs/adr](./packages/shadcn/docs/adr)                               |
 | Snapshot differential | [packages/snapshot-differential/CONTEXT.md](./packages/snapshot-differential/CONTEXT.md) | [packages/snapshot-differential/docs/adr](./packages/snapshot-differential/docs/adr) |
+| Diagram               | [packages/diagram/CONTEXT.md](./packages/diagram/CONTEXT.md)                             | [packages/diagram/docs/adr](./packages/diagram/docs/adr)                             |

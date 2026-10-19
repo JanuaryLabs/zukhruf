@@ -1,0 +1,12 @@
+{
+  "plugins": [
+    "babel-plugin-react-compiler",
+    ["@babel/plugin-transform-react-jsx", { "runtime": "automatic" }]
+  ],
+  "presets": [
+    [
+      "@babel/preset-typescript",
+      { "onlyRemoveTypeImports": true, "rewriteImportExtensions": true }
+    ]
+  ]
+}

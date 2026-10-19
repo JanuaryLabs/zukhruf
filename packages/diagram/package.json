@@ -1,0 +1,55 @@
+{
+  "name": "@zukhruf/diagram",
+  "version": "0.3.26",
+  "description": "Architecture and sequence diagrams as React components: declare nodes, edges, lanes and signals, and render them as SVG, HTML or canvas.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/JanuaryLabs/zukhruf",
+    "directory": "packages/diagram"
+  },
+  "bugs": {
+    "url": "https://github.com/JanuaryLabs/zukhruf/issues"
+  },
+  "homepage": "https://github.com/JanuaryLabs/zukhruf/tree/main/packages/diagram#readme",
+  "keywords": [
+    "diagram",
+    "architecture-diagram",
+    "sequence-diagram",
+    "svg",
+    "react",
+    "tailwindcss"
+  ],
+  "type": "module",
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "@zukhruf/source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./styles.css": "./styles.css"
+  },
+  "sideEffects": [
+    "**/*.css"
+  ],
+  "files": [
+    "dist",
+    "styles.css",
+    "!dist/spec/**",
+    "!**/*.tsbuildinfo",
+    "!**/*.test.*"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "cn": "^0.4.0",
+    "vgpu": "^0.5.0"
+  },
+  "peerDependencies": {
+    "motion": "^12.38.0",
+    "react": "^19.0.0",
+    "tailwindcss": "^4.0.0"
+  }
+}

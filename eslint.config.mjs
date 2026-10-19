@@ -43,6 +43,8 @@ const LAYERS = [
   },
 ];
 
+const DIAGRAM_OUTPUTS = ['svg', 'canvas', 'html'];
+
 export default defineConfig(
   nx.configs['flat/base'],
   {
@@ -61,7 +63,7 @@ export default defineConfig(
     },
   },
   {
-    files: ['packages/shadcn/**'],
+    files: ['packages/shadcn/**', 'packages/diagram/**'],
     plugins: { zukhruf },
     extends: ['zukhruf/react', 'zukhruf/tailwind'],
   },
@@ -77,7 +79,7 @@ export default defineConfig(
       '@nx/enforce-module-boundaries': moduleBoundaryRule('tests'),
     },
   },
-  // The tests of the shadcn package import it by its name, as an app does,
+  // The tests of the UI packages import them by their names, as an app does,
   // so they check the published entry and not the source files.
   {
     files: ['packages/shadcn/src/**/*.test.ts'],
@@ -85,6 +87,43 @@ export default defineConfig(
       '@nx/enforce-module-boundaries': moduleBoundaryRule('tests', [
         '@zukhruf/shadcn',
       ]),
+    },
+  },
+  {
+    files: ['packages/diagram/src/**/*.test.ts'],
+    rules: {
+      '@nx/enforce-module-boundaries': moduleBoundaryRule('tests', [
+        '@zukhruf/diagram',
+      ]),
+    },
+  },
+  // The diagram outputs (svg, canvas, html) never import each other, and
+  // renderers/shared/, which every output uses, imports none of them.
+  {
+    files: ['packages/diagram/src/**'],
+    rules: {
+      'import-x/no-restricted-paths': [
+        'error',
+        {
+          basePath: `${import.meta.dirname}/packages/diagram/src/lib/renderers`,
+          zones: [
+            ...DIAGRAM_OUTPUTS.map((output) => ({
+              target: `./${output}`,
+              from: DIAGRAM_OUTPUTS.filter((other) => other !== output).map(
+                (other) => `./${other}`,
+              ),
+              message:
+                'Diagram outputs never import each other; share code through renderers/shared/, compiler/, layouts/ or react/chrome/.',
+            })),
+            {
+              target: './shared',
+              from: DIAGRAM_OUTPUTS.map((output) => `./${output}`),
+              message:
+                'renderers/shared/ is used by every output and imports none of them.',
+            },
+          ],
+        },
+      ],
     },
   },
   // The shadcn CLI writes these files (`nx run shadcn:sync`), and nobody edits

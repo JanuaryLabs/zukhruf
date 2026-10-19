@@ -12,12 +12,12 @@ Without a check, the layers decay: each import that crosses a layer looks harmle
 | Coordination | `std:coordination` | `election`                                                 | Base                           | Tool                       |
 | Domain       | `std:domain`       | `mutex`, `single-flight`                                   | Base, coordination             | Tool, domain               |
 | Tool         | `std:tool`         | `testing`, `eslint`                                        | Tool                           | Nothing more               |
-| UI           | `std:ui`           | `shadcn`                                                   | Nothing                        | Tool                       |
+| UI           | `std:ui`           | `shadcn`, `diagram`                                        | Nothing                        | Tool                       |
 | Host         | `std:host`         | `apps/reservation-app`                                     | Base, coordination, domain, UI | Tool                       |
 
 A base package imports Node.js and other base packages only. For example, `fencing` imports `fs` and `lease`. The election is a layer of its own, because the domain packages build on it, and it builds on the base packages.
 
-The UI layer holds React components for an app. Its shipped code imports no zukhruf package: the components need only React, Base UI and Tailwind CSS. A host can import the UI layer.
+The UI layer holds React components for an app. The shipped code of a UI package imports no zukhruf package. Each UI package has its own third-party dependencies: `shadcn` uses Base UI, and `diagram` uses `motion` and `vgpu`. A host can import the UI layer.
 
 A test file is a `*.test.*` or `*.spec.*` file, or a file in `src/testing`, which holds the test helpers. The build does not ship these files. Thus a test file may also import the tools, and the test of a domain package may run another domain package. For example, a test of the single flight runs the socket lock store of the mutex.
 

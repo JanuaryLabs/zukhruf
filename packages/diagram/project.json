@@ -1,0 +1,40 @@
+{
+  "name": "diagram",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "packages/diagram/src",
+  "projectType": "library",
+  "tags": ["layer:island", "std:ui", "test:node"],
+  "targets": {
+    "format": {},
+    "test": {},
+    "build": {
+      "dependsOn": ["^build", "compile"]
+    },
+    "compile": {
+      "description": "Compiles the source to JavaScript with the React Compiler; tsc (build) emits only the declarations.",
+      "executor": "nx:run-commands",
+      "cache": true,
+      "inputs": [
+        "{projectRoot}/babel.config.json",
+        "{projectRoot}/src/**/*.ts",
+        "{projectRoot}/src/**/*.tsx",
+        "!{projectRoot}/src/**/*.test.ts",
+        "!{projectRoot}/src/testing/**",
+        {
+          "externalDependencies": [
+            "@babel/cli",
+            "@babel/core",
+            "@babel/preset-typescript",
+            "@babel/plugin-transform-react-jsx",
+            "babel-plugin-react-compiler"
+          ]
+        }
+      ],
+      "outputs": ["{projectRoot}/dist/**/*.js{,.map}"],
+      "options": {
+        "cwd": "{projectRoot}",
+        "command": "babel src --out-dir dist --extensions .ts,.tsx --ignore \"src/**/*.test.ts\",\"src/testing/**\" --source-maps"
+      }
+    }
+  }
+}
