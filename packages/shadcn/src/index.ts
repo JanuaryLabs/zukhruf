@@ -61,5 +61,6 @@ export * from './components/toggle-group.tsx';
 export * from './components/toggle.tsx';
 export * from './components/tooltip.tsx';
 export * from './components/trace.tsx';
+export * from './hand-written/sidebar-cookie.ts';
 export * from './hooks/use-highlighted-code.ts';
 export * from './hooks/use-mobile.ts';

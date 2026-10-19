@@ -17,7 +17,7 @@
           "echo '@import \"tw-animate-css\";' > theme.css",
           "npx -y shadcn@4.21.5 add index --yes --overwrite",
           "npx -y shadcn@4.21.5 add --all --yes --overwrite",
-          "{ for f in src/components/*.tsx; do echo \"export * from './components/$(basename \"$f\")';\"; done; for f in src/hooks/*.ts; do echo \"export * from './hooks/$(basename \"$f\")';\"; done; } | LC_ALL=C sort > src/index.ts",
+          "{ for f in src/components/*.tsx; do echo \"export * from './components/$(basename \"$f\")';\"; done; for f in src/hooks/*.ts; do echo \"export * from './hooks/$(basename \"$f\")';\"; done; for f in src/hand-written/*.ts; do echo \"export * from './hand-written/$(basename \"$f\")';\"; done; } | LC_ALL=C sort > src/index.ts",
           "prettier --write src theme.css"
         ]
       }

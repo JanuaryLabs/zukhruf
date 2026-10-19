@@ -4,6 +4,8 @@ An app imports the components of this package. The components also import each o
 
 The package has one entry, `@zukhruf/shadcn`. The sync writes `src/index.ts` with one `export * from './components/<name>.tsx';` line for each component, and one line for each hook. The maintainer selected one entry: an app writes one import path for all components.
 
+Some values are in the generated source, but the generated source does not export them. For example, `sidebar.tsx` writes its open state in the cookie `sidebar_state`, but it does not export `SIDEBAR_COOKIE_NAME`. An app needs the name to read the cookie on the server. A hand edit of `sidebar.tsx` is lost at the next sync ([ADR 0001](./0001-the-shadcn-cli-writes-the-source-and-the-commit-pins-it.md)). Thus a person writes the value in a hand-written module in `src/hand-written`. The sync writes one `export * from './hand-written/<name>.ts';` line for each file in that folder. Each hand-written module has a test. The test fails when the value is not the same as the value in the generated source. For example, `sidebar-cookie.test.ts` clicks `SidebarTrigger` and finds a cookie with the name `SIDEBAR_COOKIE_NAME`.
+
 The components import each other through private imports. The `imports` field of `package.json` maps `#components/*`, `#lib/*` and `#hooks/*` to files, with one condition for each target:
 
 - `@zukhruf/source` gives the file in `src`, for the tools of this workspace.

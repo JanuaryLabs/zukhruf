@@ -40,6 +40,10 @@ _Avoid_: Override, hack
 An import specifier that starts with `#`, for example `#components/button`. The `imports` field of `package.json` maps it to a file. Only files in this package can resolve it, so it is not public API. Node.js calls this feature subpath imports. The components use private imports to import each other.
 _Avoid_: Alias (the `aliases` of `components.json` give the CLI these specifiers), internal import, self-reference (a self-reference uses the package name and needs a public subpath)
 
+**Hand-written module**:
+A file in `src/hand-written` that a person writes. It exports a value that the generated source has but does not export, for example `SIDEBAR_COOKIE_NAME`. The sync never changes it, and it adds one `export *` line for it to the entry. A test makes sure that the value is the same as the value in the generated source.
+_Avoid_: Patch (a patch is a CSS rule), own code, custom component (custom components belong to the app)
+
 **Entry**:
 The one public module of the package: `@zukhruf/shadcn`. It exports each component and each hook. The `exports` field of `package.json` also has `./styles.css`, which is the stylesheet, not an entry.
 _Avoid_: Barrel, subpath, index (`src/index.ts` is the file of the entry)

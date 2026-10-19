@@ -36,13 +36,13 @@ describe('the entry of @zukhruf/shadcn', () => {
     assert.match(stylesheet, /\/styles\.css$/);
   });
 
-  test('exports each export of each shipped component and hook', async () => {
+  test('exports each export of each shipped component, hook and hand-written module', async () => {
     // Arrange: the shipped modules sit beside the entry in dist.
     const distDirectory = dirname(
       fileURLToPath(import.meta.resolve('@zukhruf/shadcn')),
     );
     const modules = [];
-    for (const folder of ['components', 'hooks']) {
+    for (const folder of ['components', 'hooks', 'hand-written']) {
       for (const file of await readdir(join(distDirectory, folder))) {
         if (file.endsWith('.js'))
           modules.push(join(distDirectory, folder, file));

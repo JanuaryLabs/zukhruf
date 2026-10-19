@@ -61,6 +61,18 @@ The theme is the values of a set of CSS variables, for example `--primary`, `--b
 
 The preset is fixed. The class strings of each component contain the preset, for example the rounded corners and the spacing of the dialog. Thus an app cannot change the preset. An app changes only the theme. See [ADR 0004](./docs/adr/0004-the-components-use-base-ui-and-the-nova-preset.md).
 
+## The open state of the sidebar
+
+`SidebarProvider` keeps its open state in a cookie. `SIDEBAR_COOKIE_NAME` is the name of that cookie. Use it to read the open state of the sidebar on the server, and give the value to `defaultOpen`:
+
+```tsx
+import { SIDEBAR_COOKIE_NAME, SidebarProvider } from '@zukhruf/shadcn';
+
+const defaultOpen = cookies.get(SIDEBAR_COOKIE_NAME)?.value !== 'false';
+
+<SidebarProvider defaultOpen={defaultOpen}>{children}</SidebarProvider>;
+```
+
 ## Composition
 
 Base UI uses the `render` prop where Radix UI uses `asChild`. The `render` prop sets the element that the component renders.
@@ -132,7 +144,7 @@ This package does not export `cn`. Each symbol has one home ([zukhruf ADR 0001](
 
 ## One entry
 
-The package has one entry, `@zukhruf/shadcn`. It exports all components and hooks. There are no subpaths such as `@zukhruf/shadcn/button`.
+The package has one entry, `@zukhruf/shadcn`. It exports all components, all hooks and the hand-written modules, for example `SIDEBAR_COOKIE_NAME`. There are no subpaths such as `@zukhruf/shadcn/button`.
 
 - A development server and plain Node.js load all components and their dependencies.
 - A production bundle has only the components that the app uses. The `sideEffects` field of `package.json` lets the bundler remove the others.
@@ -168,6 +180,7 @@ src/
   hooks/        generated: the hooks that the components use
   lib/          generated: the helpers that the components use
   index.ts      generated: the entry
+  hand-written/ written by hand: the exports that the generated source does not give
 theme.css       generated: the CSS variables and the dark variant; imports shadcn/tailwind.css
 styles.css      written by hand: imports theme.css, registers dist, holds the patches
 components.json the configuration of the shadcn CLI
@@ -188,7 +201,7 @@ The sync does these steps, in this order:
 
 1. It resets `theme.css` to one line: `@import "tw-animate-css";`.
 2. It runs `shadcn add index`, then `shadcn add --all`.
-3. It writes `src/index.ts`: one `export *` line for each component and each hook.
+3. It writes `src/index.ts`: one `export *` line for each component, each hook and each hand-written module.
 4. It formats the generated source with Prettier.
 
 Known facts about the sync:
