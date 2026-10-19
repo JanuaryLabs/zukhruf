@@ -1,0 +1,44 @@
+{
+  "name": "@zukhruf/snapshot-differential",
+  "version": "0.3.24",
+  "description": "Change data capture for an upstream with no change log: compare each scan with the last snapshot, get the new and changed records, and let a deletion policy judge each key that the scan no longer lists.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/JanuaryLabs/zukhruf",
+    "directory": "packages/snapshot-differential"
+  },
+  "bugs": {
+    "url": "https://github.com/JanuaryLabs/zukhruf/issues"
+  },
+  "homepage": "https://github.com/JanuaryLabs/zukhruf/tree/main/packages/snapshot-differential#readme",
+  "keywords": [
+    "snapshot-differential",
+    "change-data-capture",
+    "cdc",
+    "diff",
+    "snapshot",
+    "incremental",
+    "etl",
+    "elt"
+  ],
+  "type": "module",
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "@zukhruf/source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "!dist/spec/**",
+    "!**/*.tsbuildinfo",
+    "!**/*.test.*"
+  ],
+  "publishConfig": {
+    "access": "public"
+  }
+}
