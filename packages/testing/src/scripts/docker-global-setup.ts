@@ -70,7 +70,7 @@ function readRecordedPath(file: string): string {
 /** The pids in the run's process records. */
 function recordedProcesses(directory: string): number[] {
   return readdirSync(directory).flatMap((file) => {
-    const pid = /^process-(\d+)\.json$/.exec(file)?.[1];
+    const pid = /^process-(\d+)-[\da-f-]{36}\.json$/.exec(file)?.[1];
     return pid === undefined ? [] : [Number(pid)];
   });
 }

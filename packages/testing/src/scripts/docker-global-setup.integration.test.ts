@@ -3,6 +3,7 @@ import { spawn as spawnProcess } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import {
   access,
+  mkdir,
   mkdtempDisposable,
   readFile,
   readdir,
@@ -160,7 +161,7 @@ async function readState<T>(t: TestContext, statePath: string): Promise<T> {
 /** The pids in a run's process records. */
 async function recordedProcesses(record: string): Promise<number[]> {
   return (await readdir(record)).flatMap((name) => {
-    const pid = /^process-(\d+)\.json$/.exec(name)?.[1];
+    const pid = /^process-(\d+)-[\da-f-]{36}\.json$/.exec(name)?.[1];
     return pid === undefined ? [] : [Number(pid)];
   });
 }
@@ -175,6 +176,14 @@ async function removeLeftovers(state: State | undefined): Promise<void> {
     ...state.generalVolumes,
   ])
     await docker.command(['volume', 'rm', '--force', name]).catch(() => {});
+}
+
+/** The pid of a process that has ended. */
+async function endedPid(): Promise<number> {
+  const { child, exited } = started(['--eval', ''], process.env);
+  await exited;
+  assert.ok(child.pid !== undefined);
+  return child.pid;
 }
 
 /** A child process with its output collected and its exit awaited. */
@@ -674,6 +683,59 @@ test(
       await assertRecovered(results, state, root);
     } finally {
       await removeLeftovers(state);
+    }
+  },
+);
+
+test(
+  'recovery keeps a dead run while a command lives whose pid an ended command of the run had',
+  { timeout: 120_000 },
+  async () => {
+    await using directory = await mkdtempDisposable(
+      join(tmpdir(), 'zukhruf-testing-reused-pid-'),
+    );
+    const id = randomUUID();
+    const record = join(
+      directory.path,
+      'state',
+      'zukhruf-testing',
+      'docker-runs',
+      id,
+    );
+    await mkdir(record, { recursive: true });
+    // Only a global setup writes run.json: this one is of a run whose runner died.
+    await writeFile(
+      join(record, 'run.json'),
+      JSON.stringify({
+        id,
+        endpoint: (await docker.info()).endpoint,
+        pid: await endedPid(),
+      }),
+    );
+    const command = started(
+      ['--eval', 'setTimeout(() => {}, 600_000)'],
+      process.env,
+    );
+    try {
+      assert.ok(command.child.pid !== undefined);
+      const run = new TestRun(id, record);
+      // The OS gave the pid of a command that ended to the next command
+      // before the record of the first one was removed.
+      const ended = await run.recordProcess(command.child.pid);
+      await run.recordProcess(command.child.pid);
+      await ended[Symbol.asyncDispose]();
+      const file = join(directory.path, 'plain.test.ts');
+      await writeFile(
+        file,
+        "import { test } from 'node:test';\ntest('no Docker', () => {});\n",
+      );
+
+      await emptyRun(file, runEnvironment(join(directory.path, 'state')));
+
+      await access(join(record, 'run.json'));
+    } finally {
+      command.child.kill('SIGKILL');
+      await command.exited.catch(() => null);
     }
   },
 );

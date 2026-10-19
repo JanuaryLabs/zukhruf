@@ -48,10 +48,11 @@ export class TestRun {
   /**
    * Writes a process record for `pid`, a test process or a command it
    * started. While a recorded process lives, the run's records stay.
-   * Disposing the record forgets a command that ended.
+   * Disposing the record forgets a command that ended. The random id keeps
+   * a reused pid from deleting the record of the next command that has it.
    */
   async recordProcess(pid: number): Promise<AsyncDisposable> {
-    const file = join(this.directory, `process-${pid}.json`);
+    const file = join(this.directory, `process-${pid}-${randomUUID()}.json`);
     await writeFile(file, JSON.stringify({ pid }));
     return { [Symbol.asyncDispose]: () => rm(file, { force: true }) };
   }
