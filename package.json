@@ -6,6 +6,7 @@
   "repository": "https://github.com/JanuaryLabs/zukhruf",
   "workspaces": [
     "packages/*",
+    "packages/sqlite/*",
     "apps/*"
   ],
   "scripts": {

@@ -1,0 +1,43 @@
+{
+  "name": "@zukhruf/sqlite-federation",
+  "version": "0.3.28",
+  "description": "One read-only handle over many SQLite databases. Each statement attaches the databases that it names and detaches them when it ends. Thus a host can keep more databases than the attach limit of SQLite, and one statement can read up to 10 of them in addition to the primary database.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/JanuaryLabs/zukhruf",
+    "directory": "packages/sqlite/federation"
+  },
+  "bugs": {
+    "url": "https://github.com/JanuaryLabs/zukhruf/issues"
+  },
+  "homepage": "https://github.com/JanuaryLabs/zukhruf/tree/main/packages/sqlite/federation#readme",
+  "keywords": [
+    "sqlite",
+    "node-sqlite",
+    "attach",
+    "federation",
+    "federated-query",
+    "multi-database",
+    "read-only"
+  ],
+  "type": "module",
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "@zukhruf/source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "!dist/spec/**",
+    "!**/*.tsbuildinfo",
+    "!**/*.test.*"
+  ],
+  "publishConfig": {
+    "access": "public"
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "name": "sqlite-drift",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "packages/sqlite/drift/src",
+  "projectType": "library",
+  "tags": ["layer:island", "std:base", "test:node"],
+  "targets": {
+    "format": {},
+    "test": {}
+  }
+}

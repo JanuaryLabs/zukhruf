@@ -40,6 +40,12 @@
     },
     {
       "path": "./packages/diagram"
+    },
+    {
+      "path": "./packages/sqlite/drift"
+    },
+    {
+      "path": "./packages/sqlite/federation"
     }
   ]
 }

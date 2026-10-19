@@ -17,3 +17,5 @@ Each context has its own glossary and its own architecture decision records.
 | Shadcn                | [packages/shadcn/CONTEXT.md](./packages/shadcn/CONTEXT.md)                               | [packages/shadcn/docs/adr](./packages/shadcn/docs/adr)                               |
 | Snapshot differential | [packages/snapshot-differential/CONTEXT.md](./packages/snapshot-differential/CONTEXT.md) | [packages/snapshot-differential/docs/adr](./packages/snapshot-differential/docs/adr) |
 | Diagram               | [packages/diagram/CONTEXT.md](./packages/diagram/CONTEXT.md)                             | [packages/diagram/docs/adr](./packages/diagram/docs/adr)                             |
+| SQLite drift          | [packages/sqlite/drift/CONTEXT.md](./packages/sqlite/drift/CONTEXT.md)                   | [packages/sqlite/drift/docs/adr](./packages/sqlite/drift/docs/adr)                   |
+| SQLite federation     | [packages/sqlite/federation/CONTEXT.md](./packages/sqlite/federation/CONTEXT.md)         | [packages/sqlite/federation/docs/adr](./packages/sqlite/federation/docs/adr)         |

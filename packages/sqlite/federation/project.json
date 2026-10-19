@@ -1,0 +1,11 @@
+{
+  "name": "sqlite-federation",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "packages/sqlite/federation/src",
+  "projectType": "library",
+  "tags": ["layer:island", "std:base", "test:node"],
+  "targets": {
+    "format": {},
+    "test": {}
+  }
+}
