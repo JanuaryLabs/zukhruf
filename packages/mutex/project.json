@@ -3,7 +3,7 @@
   "$schema": "../../node_modules/nx/schemas/project-schema.json",
   "sourceRoot": "packages/mutex/src",
   "projectType": "library",
-  "tags": ["layer:island", "std:domain", "test:node"],
+  "tags": ["layer:island", "std:domain", "test:node", "test:docker"],
   "targets": {
     "format": {},
     "test": {},
