@@ -1,6 +1,6 @@
 {
   "name": "@zukhruf/testing",
-  "version": "0.3.24",
+  "version": "0.3.25",
   "description": "Disposable fixtures for integration tests: Docker containers and database servers, SQLite and DuckDB databases, HTTP servers and streams. Node's global setup and global teardown remove what a killed test run left behind.",
   "license": "MIT",
   "repository": {

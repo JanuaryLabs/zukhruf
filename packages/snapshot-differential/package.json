@@ -1,6 +1,6 @@
 {
   "name": "@zukhruf/snapshot-differential",
-  "version": "0.3.24",
+  "version": "0.3.25",
   "description": "Change data capture for an upstream with no change log: compare each scan with the last snapshot, get the new and changed records, and let a deletion policy judge each key that the scan no longer lists.",
   "license": "MIT",
   "repository": {
