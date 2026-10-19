@@ -32,7 +32,7 @@ export class ProcessChannelConnection extends SharedChannelConnection<LockReques
     this.stopListening();
   }
 
-  close() {
+  async close() {
     this.unref();
   }
 }

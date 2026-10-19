@@ -51,4 +51,9 @@ export class MemoryStore implements LockStore {
   async isHeld(key: string): Promise<boolean> {
     return this.#lines.has(key);
   }
+
+  /** True while a caller holds a key. A caller waits only behind a holder, so `false` also means that nobody waits. */
+  get holdsAnyKey(): boolean {
+    return this.#lines.size > 0;
+  }
 }

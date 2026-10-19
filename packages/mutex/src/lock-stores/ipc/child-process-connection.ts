@@ -28,7 +28,7 @@ export class ChildProcessConnection extends SharedChannelConnection<LockResponse
 
   unref() {}
 
-  close() {
+  async close() {
     this.stopListening();
   }
 }

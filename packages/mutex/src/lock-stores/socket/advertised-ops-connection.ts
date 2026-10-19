@@ -50,7 +50,7 @@ export class AdvertisedOpsConnection
     this.#leader.unref();
   }
 
-  close() {
-    this.#leader.close();
+  close(): Promise<void> {
+    return this.#leader.close();
   }
 }

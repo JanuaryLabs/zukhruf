@@ -34,7 +34,7 @@ The leader is a normal app process. You do not start or watch a separate server.
 
 - One process does all the writes. Use [MemoryStore](./memory-store.md).
 - On macOS and Linux, the directory path is long. The socket path `<directory>/lock.sock` must be 103 bytes or less. (Windows has no such limit.)
-- Your processes start and stop very often. Each stop of the leader causes a failover and a grace window.
+- Your processes start and stop very often while other processes hold keys. Each stop of the leader causes a failover, and the new leader waits a grace window when the old leader did not shut down cleanly.
 
 ## How it works
 
@@ -56,6 +56,8 @@ The grace window prevents a waiter from getting a key that a holder still has. F
 
 The first leader of a directory (epoch 1) has no grace window, because no earlier leader had holders.
 
+**Clean shutdown.** A new leader also has no grace window after a clean shutdown of the leader before it. A leader shuts down cleanly when it disposes its store, no process holds a key, and its own grace window is over. Its lock server then resigns the term with `clean`, and the next term reads `afterCleanShutdown` ([`@zukhruf/election`](../../../election/README.md)). A waiter is not a holder: it sends its request again to the new leader. Thus a process that runs alone after another process disposed its store gets its first key at once. See [ADR 0018](../adr/0018-the-next-leader-skips-the-grace-window-after-a-clean-shutdown.md).
+
 **A lost term.** The leader stops its server when the signal of its term aborts, because another process can lead then. `SqliteElection` never takes the term from a living leader, so this occurs only with a backend that can take the claim away.
 
 **Rules for the directory.**
@@ -64,7 +66,7 @@ The first leader of a directory (epoch 1) has no grace window, because no earlie
 - Do not use `leader.lock` or `leader.epoch` in the directory for another election. That election and the lock store would be one election.
 - The leader closes its socket first and ends its term second. In the other order, the old leader can delete the socket file of the new leader.
 
-**Shutdown.** `await store[Symbol.asyncDispose]()` (or `await using`) closes the connection of this process. Each waiter in this process gets an error. If a campaign of this process is in progress, the campaign stops, and the process does not start the server. If this process is the leader, it closes all connections, stops the server, and ends its term. Followers then elect a new leader and keep their keys.
+**Shutdown.** `await store[Symbol.asyncDispose]()` (or `await using`) closes the connection of this process. Each waiter in this process gets an error. If a campaign of this process is in progress, the campaign stops, and the process does not start the server. If this process is the leader, it first waits until its own server read its last requests, such as the release of its last key. Then it closes all connections, stops the server, and ends its term. Followers then elect a new leader and keep their keys. When no process held a key, the term ends with a clean shutdown, and the new leader has no grace window.
 
 Messages are lines of JSON. A socket does not keep message boundaries: in a test, two small messages arrived in one piece, and one large message arrived in 25 pieces of 8,192 bytes.
 
@@ -83,7 +85,7 @@ A leader of version 0.3.9 or earlier does not know the `isHeld` request, and it 
 | Event                                            | Result                                                                                                                                                                                                                                  |
 | ------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | A holder stops                                   | The leader releases its keys in approximately 2 ms.                                                                                                                                                                                     |
-| The leader stops                                 | A failover occurs. Holders reassert their keys during the grace window.                                                                                                                                                                 |
+| The leader stops                                 | A failover occurs. Holders reassert their keys during the grace window. After a clean shutdown, there is no grace window, because no process held a key.                                                                                |
 | The leader loses its term                        | The leader closes its server, and a failover occurs. This needs a backend that can take the claim away; `SqliteElection` never does.                                                                                                    |
 | A holder is frozen during the whole grace window | Its reassert is refused. A newer holder can get the key. When the frozen holder continues, the signal of its lease aborts with `LeaseLostError`, and the call rejects with `LeaseLostError`. A fenced resource refuses its late writes. |
 | A holder thread stops                            | Its connection closes, and the key is released.                                                                                                                                                                                         |
@@ -132,6 +134,8 @@ The `'role'` event tells you each time this process starts to lead, or starts to
   - A holder keeps its key when the leader stops, and a waiter gets the key only after the release.
   - A holder that is frozen past the grace window sees the signal of its lease abort before it writes. A fenced resource refuses its write (`'stale'`), and the call rejects with `LeaseLostError`.
   - A leader that shuts down does not wait for its followers, and a follower keeps its key.
+  - A leader that shuts down while a follower holds a key leaves a grace window to the next leader. The holder reasserts its key, and a waiter gets the key only after the release. When the lock server resigns clean on each close, this test fails 3 of 3 runs.
+  - A process that runs alone after a process that disposed its store with no key held gets its key in less than 400 ms. The default grace window is 500 ms. Before the clean shutdown, it took about 515 ms.
 - A mutation test removed the grace window, the reassert, and the epoch. The tests found each change.
 - A test with real processes of the published package versions 0.3.0, 0.3.1 and 0.3.5 on macOS:
   - A process of 0.3.5 and a leader of 0.3.0: the acquire failed with `ProtocolVersionError` after 1,007 ms.

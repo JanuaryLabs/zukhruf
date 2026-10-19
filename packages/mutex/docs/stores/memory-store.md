@@ -48,6 +48,8 @@ A task that fails does not stop the queue. The next waiter gets the key, and the
 
 `isHeld(key)` reads the queue of the key. The first caller in the queue holds the key, so a key with a queue has a holder. A holder check does not join the queue. See [ADR 0015](../adr/0015-a-holder-check-never-acquires-the-key.md).
 
+`holdsAnyKey` is `true` while a caller holds any key. A caller waits only behind a holder, so `false` also tells that nobody waits. The socket lock store reads it to decide on a clean shutdown ([ADR 0018](../adr/0018-the-next-leader-skips-the-grace-window-after-a-clean-shutdown.md)).
+
 ## Failure modes
 
 The locks are in memory, so they stop with the process. No other process can wait for them. See [failure modes](../concepts/failure-modes.md).

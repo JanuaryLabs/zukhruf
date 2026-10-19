@@ -33,7 +33,7 @@ export class ParentPortConnection extends SharedChannelConnection<LockRequest> {
     this.stopListening();
   }
 
-  close() {
+  async close() {
     this.unref();
   }
 }

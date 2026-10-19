@@ -24,12 +24,19 @@ export interface LockServerOptions {
 export class LockServer {
   readonly #server: Server;
   readonly #connections: Set<Socket>;
+  readonly #coordinator: LockCoordinator;
   readonly #term: Term;
   readonly #closeOnLoss: Disposable;
 
-  private constructor(server: Server, connections: Set<Socket>, term: Term) {
+  private constructor(
+    server: Server,
+    connections: Set<Socket>,
+    coordinator: LockCoordinator,
+    term: Term,
+  ) {
     this.#server = server;
     this.#connections = connections;
+    this.#coordinator = coordinator;
     this.#term = term;
     this.#closeOnLoss = addAbortListener(term.signal, () => void this.close());
   }
@@ -63,7 +70,7 @@ export class LockServer {
     server.listen(socketPath);
     await once(server, 'listening');
     server.unref();
-    const started = new LockServer(server, connections, term);
+    const started = new LockServer(server, connections, coordinator, term);
     // The term may have been lost while the server started.
     if (term.signal.aborted) {
       await started.close();
@@ -77,14 +84,21 @@ export class LockServer {
    * a successor and reassert their keys during its grace window; `close` alone
    * would wait for followers that never disconnect on their own. The term ends
    * only after the socket is gone: in the other order, this close could remove
-   * a successor's socket file. The first call removes the file at once, so a
-   * second caller finds it gone, and it too resolves only once the term ended.
+   * a successor's socket file. The term resigns clean when the coordinator
+   * leaves nothing to recover, so the successor skips its grace window; a lost
+   * term records nothing. The first call removes the file at once, so a second
+   * caller finds it gone, and it too resolves only once the term ended as the
+   * first call ended it.
    */
   async close() {
     this.#closeOnLoss[Symbol.dispose]();
     const closed = this.#server[Symbol.asyncDispose]();
+    // Read in the step that drops the connections: each session that ends
+    // releases its keys, so later no key is ever held. A grant written after
+    // this step never reaches its process, which asks the successor again.
+    const clean = this.#coordinator.leavesNothingToRecover;
     for (const socket of this.#connections) socket.destroy();
     await closed;
-    await this.#term.resign();
+    await this.#term.resign({ clean });
   }
 }

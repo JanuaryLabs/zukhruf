@@ -63,8 +63,12 @@ export class SocketStore
               await using starting = new AsyncDisposableStack();
               starting.adopt(
                 await LockServer.start(socketPath, term, {
-                  // The first term of a directory has no predecessor to wait for.
-                  graceWindow: term.epoch > 1n ? graceWindow : 0,
+                  // The first term of a directory has no predecessor to wait for,
+                  // and a term after a clean shutdown has no holder to wait for.
+                  graceWindow:
+                    term.epoch > 1n && !term.afterCleanShutdown
+                      ? graceWindow
+                      : 0,
                 }),
                 (started) => started.close(),
               );

@@ -159,7 +159,7 @@ class Connecting<Outgoing> implements State<Outgoing> {
       return;
     }
     if (!supervision.isCurrent(this)) {
-      connection?.close();
+      void connection?.close();
       return;
     }
     supervision.become(
@@ -222,14 +222,14 @@ class Connected<Outgoing> implements State<Outgoing> {
 
   async close() {
     this.#supervision.become(new Closed());
-    this.#connection.close();
+    await this.#connection.close();
   }
 
   /** A close event and a failed send can both report one loss; only the first counts. */
   #lose() {
     const supervision = this.#supervision;
     if (!supervision.isCurrent(this)) return;
-    this.#connection.close();
+    void this.#connection.close();
     // Leave this state before the listener hears of the loss, so its sends wait for the replacement.
     supervision.become(new Connecting(supervision));
     supervision.events.emit('disconnected');

@@ -9,6 +9,7 @@ import type { ClientConnection, ClientConnector } from '../remote/connector.ts';
 import type { LockRequest } from '../remote/protocol.ts';
 import { AdvertisedOpsConnection } from './advertised-ops-connection.ts';
 import { type Greeting, PROTOCOL_VERSION, greet } from './handshake.ts';
+import { OwnServerConnection } from './own-server-connection.ts';
 import { ProtocolVersionError } from './protocol-version-error.ts';
 import { SocketConnection } from './socket-connection.ts';
 
@@ -116,7 +117,12 @@ export class ElectingConnector implements ClientConnector {
     const own = await reachUnlessAborted(this.#options.socketPath, signal);
     if (!own) return undefined;
     const greeting = await greetUnlessAborted(own, signal);
-    if (greeting.kind === 'welcome') return leaderConnection(own, greeting.ops);
+    if (greeting.kind === 'welcome') {
+      return new AdvertisedOpsConnection(
+        new OwnServerConnection<LockRequest>(own),
+        greeting.ops,
+      );
+    }
     own.destroy();
     return undefined;
   }

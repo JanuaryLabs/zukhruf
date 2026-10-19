@@ -151,7 +151,7 @@ A new leader replaces a leader that stopped or lost its term.
 _Avoid_: Switchover, handover
 
 **Grace window**:
-The time after a failover when the new leader grants no keys.
+The time after a failover when the new leader grants no keys. A new leader after a clean shutdown (see `@zukhruf/election`) has no grace window.
 _Avoid_: Cooldown, quiet period
 
 **Reassert**:

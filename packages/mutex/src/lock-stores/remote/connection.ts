@@ -19,5 +19,6 @@ export interface Connection<Outgoing> extends EventEmitter<ConnectionEvents> {
   ref(): void;
   /** Lets the process exit; messages and closure are still reported while it runs. */
   unref(): void;
-  close(): void;
+  /** Resolves once this end let the connection go. */
+  close(): Promise<void>;
 }

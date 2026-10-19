@@ -25,7 +25,7 @@ export function scriptedPeer<Outgoing, Incoming>(
       unref() {
         refs.push('unref');
       },
-      close() {
+      async close() {
         closes++;
       },
     },

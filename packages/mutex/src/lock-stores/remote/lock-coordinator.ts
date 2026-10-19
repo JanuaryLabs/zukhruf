@@ -16,8 +16,8 @@ export interface LockCoordinatorOptions {
   tokens: TokenSource;
   /**
    * Milliseconds after start during which nothing is granted, so holders from a
-   * previous coordinator can reassert their keys first. Zero for a coordinator
-   * that never replaces another.
+   * previous coordinator can reassert their keys first. Zero when no earlier
+   * coordinator can have left a holder.
    */
   graceWindow?: number;
 }
@@ -28,6 +28,7 @@ interface Reassertion {
 }
 
 interface CoordinatorPhase {
+  readonly leavesNothingToRecover: boolean;
   acquire(key: string, options: AcquireOptions): Promise<LockHandle>;
   tryAcquire(key: string): Promise<LockHandle | undefined>;
   isHeld(key: string): Promise<boolean>;
@@ -78,6 +79,14 @@ export class LockCoordinator implements LockStore {
     return this.#phase.isHeld(key);
   }
 
+  /**
+   * Whether the next coordinator would find nothing to recover: no key is
+   * held, and the grace window is over or there was none.
+   */
+  get leavesNothingToRecover(): boolean {
+    return this.#phase.leavesNothingToRecover;
+  }
+
   serve(connection: Connection<LockResponse>): void {
     new Session(this, connection);
   }
@@ -102,6 +111,11 @@ class Granting implements CoordinatorPhase {
 
   constructor(store: MemoryStore) {
     this.#store = store;
+  }
+
+  /** A waiter has no key yet, so it asks the next coordinator again; only a holder needs a grace window. */
+  get leavesNothingToRecover() {
+    return !this.#store.holdsAnyKey;
   }
 
   acquire(key: string, { signal }: AcquireOptions): Promise<LockHandle> {
@@ -132,6 +146,11 @@ class GraceWindow implements CoordinatorPhase {
     this.#store = store;
     this.#over = over;
     this.#next = next;
+  }
+
+  /** A holder from the previous coordinator may not have reasserted its key yet, so this coordinator cannot know. */
+  get leavesNothingToRecover() {
+    return false;
   }
 
   async acquire(key: string, { signal }: AcquireOptions): Promise<LockHandle> {

@@ -34,7 +34,7 @@ export class SocketConnection<Outgoing>
       try {
         this.emit('message', JSON.parse(line));
       } catch {
-        this.close();
+        socket.destroy();
       }
     });
     // readline re-emits the socket's errors (e.g. EPIPE when the peer died).
@@ -54,7 +54,23 @@ export class SocketConnection<Outgoing>
     this.#socket.unref();
   }
 
-  close() {
+  async close() {
     this.#socket.destroy();
+  }
+
+  /**
+   * Closes after the peer read every message sent before: half-closes, and
+   * resolves once the peer closed its side too. It keeps the process alive
+   * until then, so it suits only a peer that answers, such as a lock server
+   * in this process.
+   */
+  async end() {
+    if (this.#socket.destroyed) return;
+    const closed = new Promise((resolve) =>
+      this.#socket.once('close', resolve),
+    );
+    this.#socket.ref();
+    this.#socket.end();
+    await closed;
   }
 }

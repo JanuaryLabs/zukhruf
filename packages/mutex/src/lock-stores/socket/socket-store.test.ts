@@ -707,10 +707,7 @@ const loneProcess = (directory: string) => `
 describe('Socket store after a clean shutdown', () => {
   test(
     'a lone process after one that shut down cleanly acquires at once, without the grace window',
-    {
-      timeout: 30_000,
-      todo: '#2647: every term after the first waits its grace window, also after a clean shutdown',
-    },
+    { timeout: 30_000 },
     async (t) => {
       // Arrange: the first process takes and releases a lock, then disposes its store and exits.
       await using directory = await scratchDirectory();

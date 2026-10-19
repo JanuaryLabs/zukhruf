@@ -31,7 +31,7 @@ export class WorkerConnection extends SharedChannelConnection<LockResponse> {
 
   unref() {}
 
-  close() {
+  async close() {
     this.stopListening();
   }
 }

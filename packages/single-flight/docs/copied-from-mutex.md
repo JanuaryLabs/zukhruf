@@ -25,8 +25,6 @@ The election is no longer a copy. `@zukhruf/election` holds it, made into one ca
 | `shared/is-record.ts`                         | `shared/is-record.ts`                 |
 | `lock-stores/socket/leave-errors-to-close.ts` | `connection/leave-errors-to-close.ts` |
 | `lock-stores/socket/json-line.ts`             | `connection/json-line.ts`             |
-| `lock-stores/remote/connection.ts`            | `connection/connection.ts`            |
-| `lock-stores/remote/connection-supervisor.ts` | `connection/connection-supervisor.ts` |
 
 The supervisor's `Unavailable` state cannot occur in this package: `ElectingConnector.connect` never gives `undefined`, and `FlightClient` has no `unavailable` listener. In the mutex, the IPC and thread connectors use it. The state stays, so the two copies stay the same until the extraction (backlog #2520).
 
@@ -40,7 +38,19 @@ Why: a single flight and a socket lock store can use one directory. With the sam
 The lock aliases `ClientConnection` and `ClientConnector` become `FlightConnection` and `FlightConnector`. The comment on `connect` does not name keys.
 
 **`lock-stores/socket/socket-connection.ts` → `connection/socket-connection.ts`.**
-Only the path of its import of `connection.ts` differs.
+
+- The path of its import of `connection.ts` differs.
+- In the mutex, `close()` is `async`, and an `end()` method half-closes the socket and waits until the peer closes its side too. A line that is not JSON destroys the socket directly, so a subclass that changes `close()` does not change this.
+
+Why: the mutex's `OwnServerConnection` (`lock-stores/socket/own-server-connection.ts`) closes with `end()` ([mutex ADR 0018](../../mutex/docs/adr/0018-the-next-leader-skips-the-grace-window-after-a-clean-shutdown.md)). The single flight has no such connection.
+
+**`lock-stores/remote/connection.ts` → `connection/connection.ts`.**
+In the mutex, `close()` returns a promise that resolves once this end let the connection go. Here, `close()` returns nothing.
+Why: the leader of the mutex waits until its own lock server read its last release before the server judges a clean shutdown ([mutex ADR 0018](../../mutex/docs/adr/0018-the-next-leader-skips-the-grace-window-after-a-clean-shutdown.md)). The single flight has no grace window to skip, so it needs no wait.
+
+**`lock-stores/remote/connection-supervisor.ts` → `connection/connection-supervisor.ts`.**
+In the mutex, `close` of the `Connected` state waits for the `close()` of its connection. The other calls of `close()` mark the promise with `void`. Here, `close` does not wait.
+Why: the same as for `connection.ts`.
 
 **`lock-stores/socket/local-directory-connector.ts` → `connection/local-directory-connector.ts`.**
 Only its types and comments change.
@@ -62,6 +72,7 @@ The messages name the single flight's coordinator, not the socket store's leader
 - It has no `connected` callback. In the mutex, that callback only emits the `follower` role event. This package has no role event. Thus `#follow` needs no stack that destroys the socket when the callback throws.
 - It does not wrap the connection in `AdvertisedOpsConnection`, because the welcome lists no requests.
 - `#lead` is `#coordinate`. The comments do not name a process from before the handshake, because no such process of this package exists.
+- In the mutex, `#lead` wraps its own socket in `OwnServerConnection`, so its close waits until the own lock server read the last release ([mutex ADR 0018](../../mutex/docs/adr/0018-the-next-leader-skips-the-grace-window-after-a-clean-shutdown.md)). `#coordinate` uses a plain `SocketConnection`.
 
 **`lock-stores/socket/socket-store.ts` (`socketPathFor`, `SOCKET_PATH_LIMIT`) → `connection/socket-path.ts`.**
 The socket file is `flight.sock`. The Windows pipe is `\\.\pipe\single-flight-<hash>`. The 103-byte limit stays.
@@ -72,7 +83,7 @@ Note: on macOS 27 with Node.js 26, a probe listened and connected on socket path
 - It serves a `FlightCoordinator`, not a `LockCoordinator`. `EpochTokenSource` comes from `@zukhruf/fencing`.
 - `close` ends each connection with `destroySoon`, not `destroy`.
 - It gets the key locks, and gives them to the coordinator. `close` first stops the watches of the coordinator on the key locks of parked runs.
-- `close` resigns the term without options, as the lock server does. From [ADR 0009](./adr/0009-the-next-coordinator-skips-the-grace-window-after-a-clean-shutdown.md) to [ADR 0010](./adr/0010-a-leader-holds-a-kernel-lock-on-its-key-until-its-outcome-is-handed-over.md), it resigned clean when the coordinator left nothing to recover. Now no coordinator has a grace window, so there is nothing to skip.
+- `close` resigns the term without options. The lock server resigns clean when its coordinator leaves nothing to recover ([mutex ADR 0018](../../mutex/docs/adr/0018-the-next-leader-skips-the-grace-window-after-a-clean-shutdown.md)). From [ADR 0009](./adr/0009-the-next-coordinator-skips-the-grace-window-after-a-clean-shutdown.md) to [ADR 0010](./adr/0010-a-leader-holds-a-kernel-lock-on-its-key-until-its-outcome-is-handed-over.md), it resigned clean when the coordinator left nothing to recover. Now no coordinator has a grace window, so there is nothing to skip.
 
 Why: a coordinator process can also lead a flight. When it lands the flight and stops at once, `destroy` can drop a `landed` answer that is still on its way to a joiner. `destroySoon` sends what was written first, and then closes.
 
@@ -135,7 +146,7 @@ The rules below are not file copies. Each package writes them in its own code, s
 
 - Places: the constructor and `[Symbol.asyncDispose]` of `SingleFlight` (`single-flight.ts`), and of `SocketStore` (`lock-stores/socket/socket-store.ts`).
 - Same: the client talks through a `ConnectionSupervisor`, a `LocalDirectoryConnector` and an `ElectingConnector`. `serve` starts the server through an `AsyncDisposableStack`, so a failure before the server fully started closes it. The servers of this process are in one stack. The disposal closes the client first, and then the servers.
-- Differs: the flight server gets no grace window. It gets the key locks, and the client gets them too, with a read of the epoch on disk (`lastEpoch` of the election) to find a stale lead ([ADR 0010](./adr/0010-a-leader-holds-a-kernel-lock-on-its-key-until-its-outcome-is-handed-over.md)). The lock server gets a grace window in each term after the first (backlog #2647). `SocketStore` emits its role events: `leader` in `serve`, and `follower` from `connected`. Its poll interval is an option. The single flight has no role event, and its poll interval is a constant of 10 milliseconds.
+- Differs: the flight server gets no grace window. It gets the key locks, and the client gets them too, with a read of the epoch on disk (`lastEpoch` of the election) to find a stale lead ([ADR 0010](./adr/0010-a-leader-holds-a-kernel-lock-on-its-key-until-its-outcome-is-handed-over.md)). The lock server gets a grace window in each term after the first, except after a clean shutdown (mutex ADR 0018). `SocketStore` emits its role events: `leader` in `serve`, and `follower` from `connected`. Its poll interval is an option. The single flight has no role event, and its poll interval is a constant of 10 milliseconds.
 
 **The reassertion with a newer token.**
 

@@ -47,7 +47,7 @@ export abstract class SharedChannelConnection<Outgoing>
 
   abstract unref(): void;
 
-  abstract close(): void;
+  abstract close(): Promise<void>;
 
   protected listen() {
     this.#channel.on('message', this.#onMessage);
