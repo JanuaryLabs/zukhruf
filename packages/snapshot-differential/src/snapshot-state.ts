@@ -44,7 +44,8 @@ export function readSnapshot(
 }
 
 // The previous groups, unknown keys and the groups the open scan's earlier
-// parts listed, as diffGroups wrote them.
+// parts listed, as diffGroups wrote them. Each group keeps the snapshot
+// object the state holds, so a state as large as a mailbox is not copied.
 export function readGroups(
   name: string,
   state: unknown,
@@ -61,12 +62,13 @@ export function readGroups(
   for (const [key, group] of Object.entries(state.groups)) {
     if (
       !isPlainObject(group) ||
-      (group.fingerprint !== null && typeof group.fingerprint !== 'string')
+      (group.fingerprint !== null && typeof group.fingerprint !== 'string') ||
+      !isSnapshot(group.snapshot)
     )
       throw invalid(name);
     groups.set(key, {
       fingerprint: group.fingerprint,
-      snapshot: Object.fromEntries(entries(name, group.snapshot)),
+      snapshot: group.snapshot,
     });
   }
   return {
@@ -105,6 +107,10 @@ function entries(name: string, snapshot: unknown): Map<string, SavedEntry> {
     saved.set(key, entry);
   }
   return saved;
+}
+
+function isSnapshot(value: unknown): value is Record<string, SavedEntry> {
+  return isPlainObject(value) && Object.values(value).every(isSavedEntry);
 }
 
 function listedKeys(name: string, listed: unknown): Set<string> {

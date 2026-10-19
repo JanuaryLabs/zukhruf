@@ -131,12 +131,11 @@ export class SnapshotDifferential<Data extends Record<string, unknown>> {
     const previous = readGroups(this.name, state);
     // Every saved entry by key, so a record that moves between groups or
     // comes back from unknown is compared with its previous fingerprint.
-    const saved = new Map([
-      ...[...previous.groups.values()].flatMap(({ snapshot }) =>
-        Object.entries(snapshot),
-      ),
-      ...previous.unknown,
-    ]);
+    const saved = new Map<string, SavedEntry>();
+    for (const { snapshot } of previous.groups.values())
+      for (const [key, entry] of Object.entries(snapshot))
+        saved.set(key, entry);
+    for (const [key, entry] of previous.unknown) saved.set(key, entry);
     const seen = new Set<string>();
     const current = new Map<string, SavedGroup>();
     for await (const group of groups) {

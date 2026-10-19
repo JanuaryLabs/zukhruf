@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict';
+import { execFile } from 'node:child_process';
 import { test } from 'node:test';
+import { promisify } from 'node:util';
 
 import {
   ClosedWorld,
@@ -10,6 +12,8 @@ import {
   SnapshotDifferential,
   type SnapshotGroup,
 } from './index.ts';
+
+const execFileAsync = promisify(execFile);
 
 type Item = { readonly id: string; readonly value: string };
 
@@ -592,4 +596,54 @@ test('a scan that lists a key or a group twice, holds a record JSON cannot hold,
 
   for (const [diff, message] of failures)
     await assert.rejects(Array.fromAsync(diff), message);
+});
+
+test('a grouped scan reads its saved snapshot where it lies, so a large snapshot diffs in a heap a few times its size', async () => {
+  // A mailbox of 50,000 messages with 10 headers each saves about 41 MB of
+  // state. The second scan lists every message but the first unchanged and
+  // one new message, as a mailbox does between two syncs, in a process whose
+  // heap the test caps. Diffing it takes about 160 MB when the scan reads
+  // the state the caller parsed where it lies, and over 192 MB when it
+  // copies that state. Each scan runs in a function, since a top-level
+  // for await keeps its finished generator, and with it a whole scan.
+  const program = `
+    import { ClosedWorld, SnapshotDifferential } from ${JSON.stringify(import.meta.resolve('./index.ts'))};
+    const headers = new SnapshotDifferential({
+      name: 'headers',
+      primaryKey: ['id'],
+      key: (record) => JSON.stringify([record.id]),
+      policy: new ClosedWorld(),
+    });
+    function* mailbox(first, last) {
+      for (let message = first; message <= last; message++)
+        yield {
+          key: 'message-' + message,
+          fingerprint: 'v1',
+          *records() {
+            for (let header = 0; header < 10; header++)
+              yield { id: '<' + message + '.' + header + '@mail.example.com>', value: 'value ' + header + ' of ' + message };
+          },
+        };
+    }
+    async function saved() {
+      for await (const change of headers.diffGroups(mailbox(0, 49_999), null))
+        if (change.type === 'state') return JSON.stringify(change.state);
+    }
+    async function changes(state) {
+      const counts = { upserts: 0, deletes: 0 };
+      for await (const change of headers.diffGroups(mailbox(1, 50_000), state))
+        if (change.type === 'upsert') counts.upserts++;
+        else if (change.type === 'delete') counts.deletes++;
+      return counts;
+    }
+    process.stdout.write(JSON.stringify(await changes(JSON.parse(await saved()))));
+  `;
+
+  const { stdout } = await execFileAsync(
+    process.execPath,
+    ['--max-old-space-size=176', '--input-type=module', '--eval', program],
+    { timeout: 50_000 },
+  );
+
+  assert.deepEqual(JSON.parse(stdout), { upserts: 10, deletes: 10 });
 });
