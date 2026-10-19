@@ -507,6 +507,50 @@ describe('A single flight shares the run in progress', () => {
     },
   );
 
+  // Timing is the only observable: a run that waits for the key's lock still
+  // leads in the end. One poll of the lock is 10 ms, so 20 runs that each wait
+  // one poll lose about 200 ms; the test allows half a poll a run for noise.
+  test(
+    'back-to-back runs of one key lead as fast as back-to-back runs of different keys',
+    {
+      timeout: 10_000,
+      todo: "#2646: the leader keeps the key's lock until the coordinator acknowledges the landing, so the next run of the key waits one poll",
+    },
+    async () => {
+      // Arrange: a first run elects the coordinator, so neither loop pays for the election.
+      await using directory = await scratchDirectory();
+      await using flights = new SingleFlight({
+        directory: directory.path,
+        codec: asText,
+      });
+      await flights.run('warm-up', async () => 'ready');
+      const runs = 20;
+
+      // Act
+      let started = performance.now();
+      for (let run = 0; run < runs; run++) {
+        await flights.run(`report:${run}`, async () => 'report');
+      }
+      const differentKeys = performance.now() - started;
+      started = performance.now();
+      const joined: boolean[] = [];
+      for (let run = 0; run < runs; run++) {
+        joined.push((await flights.run('sync', async () => 'sync')).joined);
+      }
+      const oneKey = performance.now() - started;
+
+      // Assert
+      assert.deepEqual(
+        joined,
+        Array.from({ length: runs }, () => false),
+      );
+      assert.ok(
+        oneKey < differentKeys + runs * 5,
+        `${runs} runs of one key took ${oneKey.toFixed(0)} ms, ${runs} runs of different keys ${differentKeys.toFixed(0)} ms`,
+      );
+    },
+  );
+
   test(
     'different keys fly side by side, and directories never share a flight',
     { timeout: 10_000 },
