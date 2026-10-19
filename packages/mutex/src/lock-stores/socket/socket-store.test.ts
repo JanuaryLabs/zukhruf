@@ -219,6 +219,113 @@ describe('Socket lock server failover', () => {
   );
 
   test(
+    'a leader that shuts down while a follower holds a key still lets a waiter enter only after the holder releases',
+    { timeout: 15000 },
+    async (t) => {
+      // Arrange: a leader, a holder inside its callback, and a waiter behind it.
+      await using directory = await scratchDirectory();
+      await using leader = startWorker(
+        participant(
+          directory.path,
+          `${leaderBody}
+					await command('dispose');
+					await store[Symbol.asyncDispose]();
+					process.send({ type: 'disposed' });`,
+        ),
+        'leader',
+      );
+      await waitUntil(
+        t,
+        () => leader.has('ready'),
+        () => `The leader must start.\n${leader.stderr}`,
+        5000,
+      );
+      await using holder = startWorker(
+        participant(
+          directory.path,
+          `const outcome = await mutex.acquire('product:42', async () => {
+						journal('enter');
+						process.send({ type: 'entered' });
+						await command('finish');
+						journal('leave');
+					}).then(() => 'ok', (error) => error.name);
+					process.send({ type: 'done', outcome });`,
+        ),
+        'holder',
+      );
+      await waitUntil(
+        t,
+        () => holder.has('entered'),
+        () => `The holder must enter.\n${holder.stderr}`,
+        5000,
+      );
+      await using waiter = startWorker(
+        participant(
+          directory.path,
+          `await mutex.acquire('product:42', async () => journal('enter'));
+					process.send({ type: 'done' });`,
+        ),
+        'waiter',
+      );
+      await waitUntil(
+        t,
+        () => waiter.has('role'),
+        () => `The waiter must reach the leader.\n${waiter.stderr}`,
+        5000,
+      );
+      const journal = async () =>
+        (await readFile(join(directory.path, 'journal.log'), 'utf8'))
+          .trim()
+          .split('\n');
+      const roles = (worker: typeof holder) =>
+        worker.messages.filter((message) => message.type === 'role').length;
+
+      // Act: the leader shuts down while the holder is inside its callback.
+      leader.child.send('dispose');
+      await waitUntil(
+        t,
+        () => leader.has('disposed'),
+        () => `The leader must shut down.\n${leader.stderr}`,
+        5000,
+      );
+      await waitUntil(
+        t,
+        () => roles(holder) >= 2 && roles(waiter) >= 2,
+        () =>
+          `The holder and the waiter must reach the next leader.\n${holder.stderr}${waiter.stderr}`,
+        5000,
+      );
+      // Nothing happens while the holder keeps its key, so only time can show that the waiter stays out.
+      await delay(graceWindow * 2);
+      const duringFailover = await journal();
+      holder.child.send('finish');
+
+      // Assert: the holder reasserted its key, so the waiter waited for the release.
+      assert.deepEqual(
+        duringFailover,
+        ['holder:enter'],
+        'No one may enter while the holder still runs, even when the leader shuts down',
+      );
+      await waitUntil(
+        t,
+        () => holder.has('done') && waiter.has('done'),
+        () => `Both must finish.\n${holder.stderr}${waiter.stderr}`,
+        5000,
+      );
+      assert.equal(
+        holder.find('done')?.outcome,
+        'ok',
+        'The holder must keep its lease through the failover',
+      );
+      assert.deepEqual(await journal(), [
+        'holder:enter',
+        'holder:leave',
+        'waiter:enter',
+      ]);
+    },
+  );
+
+  test(
     'a holder frozen past the grace window is fenced off and learns its lock was lost',
     {
       timeout: 15000,
