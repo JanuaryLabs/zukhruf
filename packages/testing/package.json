@@ -1,7 +1,7 @@
 {
   "name": "@zukhruf/testing",
   "version": "0.3.22",
-  "description": "Disposable fixtures for integration tests: Docker containers and database servers, SQLite and DuckDB databases, HTTP servers and streams. A supervisor removes what a killed test run left behind.",
+  "description": "Disposable fixtures for integration tests: Docker containers and database servers, SQLite and DuckDB databases, HTTP servers and streams. Node's global setup and global teardown remove what a killed test run left behind.",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -24,9 +24,6 @@
     "disposable"
   ],
   "type": "module",
-  "bin": {
-    "zukhruf-docker-tests": "./dist/scripts/run-docker-tests.js"
-  },
   "exports": {
     "./package.json": "./package.json",
     "./node": {
@@ -106,6 +103,12 @@
       "types": "./dist/streams/stream-harness.d.ts",
       "import": "./dist/streams/stream-harness.js",
       "default": "./dist/streams/stream-harness.js"
+    },
+    "./docker-global-setup": {
+      "@zukhruf/source": "./src/scripts/docker-global-setup.ts",
+      "types": "./dist/scripts/docker-global-setup.d.ts",
+      "import": "./dist/scripts/docker-global-setup.js",
+      "default": "./dist/scripts/docker-global-setup.js"
     }
   },
   "files": [

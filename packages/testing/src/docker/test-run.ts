@@ -2,17 +2,18 @@ import { randomUUID } from 'node:crypto';
 import { rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
-/** Set by the supervisor for the test processes it starts: the run's id. */
+/** Set by the global setup for the run's test processes: the run's id. */
 export const TEST_RUN_ID = 'ZUKHRUF_TESTING_RUN_ID';
-/** Set by the supervisor for the test processes it starts: the run's records. */
+/** Set by the global setup for the run's test processes: the run's records. */
 export const TEST_RUN_DIRECTORY = 'ZUKHRUF_TESTING_RUN_DIR';
 /** The label that ties a container or volume to the run that created it. */
 export const TEST_RUN_LABEL = 'dev.zukhruf.testing.run';
 
 /**
- * One supervised `node --test` invocation. What its test processes create
- * carries the run's label or a record in the run's directory, so the
- * supervisor removes it after a process that was killed before it could.
+ * One `node --test` invocation with the Docker global setup. What its test
+ * processes create carries the run's label or a record in the run's
+ * directory, so the global teardown, or the recovery of a later run, removes
+ * it after a process that was killed before it could.
  */
 export class TestRun {
   readonly id: string;
@@ -24,8 +25,8 @@ export class TestRun {
   }
 
   /**
-   * The run the supervisor started this process in, read from the environment
-   * the host passes (`process.env`). Undefined outside a supervisor.
+   * The run the global setup started this process in, read from the
+   * environment the host passes (`process.env`). Undefined outside a run.
    */
   static fromEnvironment(
     environment: Readonly<Record<string, string | undefined>>,
@@ -35,7 +36,7 @@ export class TestRun {
     if (id === undefined && directory === undefined) return undefined;
     if (!id || !directory)
       throw new Error(
-        `The supervisor sets ${TEST_RUN_ID} and ${TEST_RUN_DIRECTORY} together, but only one of them is set`,
+        `The global setup sets ${TEST_RUN_ID} and ${TEST_RUN_DIRECTORY} together, but only one of them is set`,
       );
     return new TestRun(id, directory);
   }
@@ -45,7 +46,18 @@ export class TestRun {
   }
 
   /**
-   * Records a path that the supervisor removes if this process dies first.
+   * Writes a process record for `pid`, a test process or a command it
+   * started. While a recorded process lives, the run's records stay.
+   * Disposing the record forgets a command that ended.
+   */
+  async recordProcess(pid: number): Promise<AsyncDisposable> {
+    const file = join(this.directory, `process-${pid}.json`);
+    await writeFile(file, JSON.stringify({ pid }));
+    return { [Symbol.asyncDispose]: () => rm(file, { force: true }) };
+  }
+
+  /**
+   * Records a path that the global teardown removes if this process dies first.
    * Disposing the record forgets the path once the process removed it itself.
    */
   async record(

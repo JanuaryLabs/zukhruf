@@ -3,7 +3,7 @@ import { test } from 'node:test';
 
 import { Docker, TestRun } from './index.ts';
 
-test('a supervisor environment with only one of the two run variables is refused', () => {
+test('an environment with only one of the two run variables is refused', () => {
   assert.throws(
     () => TestRun.fromEnvironment({ ZUKHRUF_TESTING_RUN_ID: 'run-1' }),
     /ZUKHRUF_TESTING_RUN_ID and ZUKHRUF_TESTING_RUN_DIR together/,
@@ -14,14 +14,14 @@ test('a supervisor environment with only one of the two run variables is refused
   );
 });
 
-test('a process outside a supervisor has no run, and its containers carry no run label', () => {
+test('a process outside a run has no run, and its containers carry no run label', () => {
   const run = TestRun.fromEnvironment({ PATH: '/usr/bin' });
 
   assert.equal(run, undefined);
   assert.deepEqual(new Docker({ testRun: run }).defaults.labels, {});
 });
 
-test('a supervised process gets its run, and Docker labels what it creates with the run', () => {
+test('a process in a run gets its run, and Docker labels what it creates with the run', () => {
   const run = TestRun.fromEnvironment({
     ZUKHRUF_TESTING_RUN_ID: 'run-1',
     ZUKHRUF_TESTING_RUN_DIR: '/tmp/run-1',

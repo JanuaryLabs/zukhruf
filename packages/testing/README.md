@@ -1,6 +1,6 @@
 # @zukhruf/testing
 
-Disposable fixtures for integration tests on Node.js: Docker containers and database servers, SQLite and DuckDB databases, BigQuery datasets, HTTP servers and controlled streams. Each acquisition returns a handle that `await using` cleans up, also when the test fails. A background server has no handle: it lives until the process exits. A supervisor removes what a killed test run left behind.
+Disposable fixtures for integration tests on Node.js: Docker containers and database servers, SQLite and DuckDB databases, BigQuery datasets, HTTP servers and controlled streams. Each acquisition returns a handle that `await using` cleans up, also when the test fails. A background server has no handle: it lives until the process exits. Node's global setup and global teardown remove what a killed test run left behind.
 
 The words in these documents have one meaning each. See the glossary in [CONTEXT.md](./CONTEXT.md).
 
@@ -118,19 +118,33 @@ docker stop <container-id>
 
 They run with `--rm`, so stopping also removes them. The image tag is part of the configuration: stop the server to pick up a newer image behind the same tag.
 
-## The supervisor
+## A killed run
 
-Disposal cleans up after a test that ends. A test process that is killed (a timeout, Ctrl-C, `--test-force-exit`) never disposes its handles, and a running container does not stop by itself. The `zukhruf-docker-tests` command runs `node --test` as one supervised run:
+Disposal cleans up after a test that ends. A test process that is killed (a timeout with `--test-force-exit`, Ctrl-C, an out-of-memory kill) does not dispose its handles. A running container does not stop by itself. Thus Node's global setup and global teardown make the test processes of one `node --test` invocation into one run. Re-export the two functions from one file in your project:
 
-```sh
-zukhruf-docker-tests --test-force-exit "src/**/*.test.ts"
+```ts
+// src/testing/docker-global-setup.ts
+export {
+  globalSetup,
+  globalTeardown,
+} from '@zukhruf/testing/docker-global-setup';
 ```
 
-It passes its arguments to `node --test`, and sets `ZUKHRUF_TESTING_RUN_ID` and `ZUKHRUF_TESTING_RUN_DIR` for the test processes. A `Docker` built with `TestRun.fromEnvironment(process.env)` labels what it creates with the run, and records SSH forwards and host directories in the run's directory. When the test processes exit, the supervisor stops their process group and removes the labeled containers with their anonymous volumes, the labeled volumes and the recorded paths. It never removes shared servers.
+Then give the file to `node --test`. The value is a path relative to the working directory. Node does not accept a package name there.
 
-If cleanup fails, for example because the engine is unreachable, the supervisor exits with an error and keeps the run's record. The next run on the same engine removes what it left, from any project of this user. The records are in `$XDG_STATE_HOME/zukhruf-testing/docker-runs` (`~/.local/state/zukhruf-testing/docker-runs` by default). Never delete a record to hide a cleanup failure.
+```sh
+node --test --test-force-exit --test-global-setup=src/testing/docker-global-setup.ts "src/**/*.test.ts"
+```
 
-On an SSH engine the supervisor runs one test file at a time, unless you pass `--test-concurrency`. It runs on Linux and macOS: it stops a run as a process group, which Windows does not have.
+The global setup sets `ZUKHRUF_TESTING_RUN_ID` and `ZUKHRUF_TESTING_RUN_DIR` for the test processes. A `Docker` built with `TestRun.fromEnvironment(process.env)` labels what it creates with the run. It records SSH forwards and host directories in the run's directory. It also writes a process record for its test process, and for each Docker or SSH command that it starts, while that command runs.
+
+The global teardown removes the labeled containers with their anonymous volumes, the labeled volumes and the recorded paths. It never removes shared servers. The teardown is synchronous, because Node does not wait for an asynchronous teardown under `--test-force-exit`. When every recorded process has ended, the teardown deletes the run's records. A recorded process that still runs can still create a container, for example a `docker run` that a killed test process started. Then the teardown keeps the records, and a later run removes what is left after that process ends.
+
+If cleanup fails, for example because the engine is unreachable, the global teardown prints the error, keeps the run's records, and sets exit code 1. The next run on the same engine removes what the run left, from any project of this user. This is recovery. Recovery does not touch a run while its runner or one of its recorded processes lives. The records are in `$XDG_STATE_HOME/zukhruf-testing/docker-runs` (`~/.local/state/zukhruf-testing/docker-runs` by default). Do not delete a record to hide a cleanup failure.
+
+The global setup reads the engine with `docker context inspect`, so the Docker CLI must be installed. It calls the engine only when a dead run on that engine has records of processes to sweep.
+
+On an SSH engine, run one test file at a time with `--test-concurrency=1` if the engine cannot take more. An SSH forward runs `cat` in a remote shell, so the SSH user needs a shell on the engine's host. The forward ends when the process that opened it ends, also when that process is killed.
 
 To pass the run to another container API, spread `docker.defaults`: it holds the default `resources` and the run's `labels`.
 

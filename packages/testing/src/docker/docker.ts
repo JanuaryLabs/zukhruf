@@ -51,7 +51,7 @@ export interface ServiceOptions extends ContainerOptions {
 }
 
 export interface DockerOptions {
-  /** The supervised run that owns what this process creates: `TestRun.fromEnvironment(process.env)`. */
+  /** The run that owns what this process creates: `TestRun.fromEnvironment(process.env)`. */
   testRun?: TestRun | undefined;
 }
 
@@ -83,8 +83,9 @@ const byKey = ([a]: [string, string], [b]: [string, string]): number => {
 /** The engine the Docker CLI selects. Docker owns cross-process coordination; this instance holds no server cache. */
 export class Docker {
   readonly #testRun: TestRun | undefined;
-  // The first resolution pins the engine: handles keep the engine they were made on.
-  readonly #connection = pMemoize(() => DockerHost.resolve());
+  // The first resolution pins the engine: handles keep the engine they were
+  // made on. It records this process in the run before any command runs.
+  readonly #connection = pMemoize(() => DockerHost.resolve(this.#testRun));
   readonly #probe = pMemoize(async (): Promise<Probe> => {
     try {
       await this.command(['info']);
@@ -123,7 +124,7 @@ export class Docker {
     return DockerDirectory.create(await this.#connection(), this.#testRun);
   }
 
-  /** Creates a named volume. The supervisor removes it with its run if this process dies first. */
+  /** Creates a named volume. Its run's cleanup removes it if this process dies first. */
   async volume(): Promise<DockerVolume> {
     const host = await this.#require();
     const name = `zukhruf-testing-${randomUUID()}`;
@@ -359,10 +360,7 @@ export class Docker {
       throw new Error(
         `Failed to get mapped port for container ${id}: ${stdout}`,
       );
-    const connection = await host.forward(
-      Number.parseInt(port, 10),
-      this.#testRun,
-    );
+    const connection = await host.forward(Number.parseInt(port, 10));
     const container = new ServiceContainer(
       id,
       connection.port,

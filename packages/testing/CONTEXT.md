@@ -39,15 +39,26 @@ An HTTP server whose scope is the process. It serves until the process exits and
 _Avoid_: Daemon, global server, unref'd server
 
 **Run**:
-One supervised `node --test` invocation. What its test processes create carries the run's label, or a record in the run's directory.
+One `node --test` invocation with the Docker global setup. What its test processes create carries the run's label, or a record in the run's directory.
 _Avoid_: Session, scope
 
-**Supervisor**:
-The `zukhruf-docker-tests` process that starts a run, and removes what the run created after its test processes exit.
-_Avoid_: Runner, wrapper
+**Global setup**:
+Node's hook that starts a run before the test processes start. It does recovery first.
+_Avoid_: Wrapper
+
+**Global teardown**:
+Node's hook that removes what the run created after its test processes end. It is synchronous.
+_Avoid_: Cleanup hook
+
+**Runner**:
+The `node --test` process that runs the global setup, starts the test processes and runs the global teardown.
+
+**Process record**:
+A record in the run's directory that names a process that can create something for the run: a test process, or a Docker or SSH command that it started. While a recorded process lives, the run's records stay.
+_Avoid_: Worker record, PID file
 
 **Recovery**:
-A supervisor removing what an earlier run left, because that run's supervisor died before it could.
+A later run removing what an earlier run left, because the earlier run's global teardown did not run, failed, or kept the records for a process that still lived. Recovery waits until that run's runner and recorded processes have ended.
 _Avoid_: Garbage collection, prune
 
 **Area**:
