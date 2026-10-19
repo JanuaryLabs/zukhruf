@@ -15,6 +15,7 @@ import type {
   GraphLayoutSpec,
   Point,
 } from '../../model/diagram-ir.ts';
+import { parseEndpointRef } from '../../model/endpoint-ref.ts';
 import {
   centeredBaselineOffset,
   textAscent,
@@ -492,8 +493,8 @@ export function resolveGraphLayout(spec: GraphLayoutSpec): GraphLayoutSpec {
     }
 
     for (const edge of spec.edges) {
-      const from = endpointNodeId(edge.from);
-      const to = endpointNodeId(edge.to);
+      const from = parseEndpointRef(edge.from).nodeId;
+      const to = parseEndpointRef(edge.to).nodeId;
       if (!nodeIds.has(from) || !nodeIds.has(to) || from === to) continue;
       adjacency.get(from)?.push(to);
       indegree.set(to, (indegree.get(to) ?? 0) + 1);
@@ -2572,8 +2573,10 @@ function hasReciprocalEdge(spec: GraphLayoutSpec, edge: DiagramEdge) {
   if (edge.from === edge.to) return false;
   return spec.edges.some((candidate) => {
     return (
-      endpointNodeId(candidate.from) === endpointNodeId(edge.to) &&
-      endpointNodeId(candidate.to) === endpointNodeId(edge.from)
+      parseEndpointRef(candidate.from).nodeId ===
+        parseEndpointRef(edge.to).nodeId &&
+      parseEndpointRef(candidate.to).nodeId ===
+        parseEndpointRef(edge.from).nodeId
     );
   });
 }
@@ -2741,8 +2744,8 @@ function nodeCornerInset(node: DiagramNode) {
 }
 
 function edgeGridSpan(edge: DiagramEdge, nodesById: Map<string, DiagramNode>) {
-  const source = nodesById.get(endpointNodeId(edge.from));
-  const target = nodesById.get(endpointNodeId(edge.to));
+  const source = nodesById.get(parseEndpointRef(edge.from).nodeId);
+  const target = nodesById.get(parseEndpointRef(edge.to).nodeId);
   if (!source || !target) {
     return 0;
   }
@@ -2885,23 +2888,11 @@ export function computePaths(spec: GraphLayoutSpec): RoutedEdge[] {
   return deconflictLabelPlacements(routedEdges);
 }
 
-function endpointNodeId(ref: string) {
-  const separator = ref.indexOf(':');
-  if (separator === -1) return ref;
-  return ref.slice(0, separator);
-}
-
-function endpointPortId(ref: string) {
-  const separator = ref.indexOf(':');
-  if (separator === -1) return undefined;
-  return ref.slice(separator + 1);
-}
-
 function resolveEndpoint(
   ref: string,
   lookup: EndpointLookup,
 ): EndpointRef | null {
-  const id = endpointNodeId(ref);
+  const { nodeId: id, portId } = parseEndpointRef(ref);
   const node = lookup.nodesById.get(id);
   const group = lookup.groupsById.get(id);
   const box = node ? lookup.nodeBoxes.get(id) : lookup.groupBoxes.get(id);
@@ -2912,7 +2903,6 @@ function resolveEndpoint(
     return null;
   }
 
-  const portId = endpointPortId(ref);
   const ports = node?.ports ?? group?.ports;
   const port = portId
     ? ports?.find((candidate) => candidate.id === portId)

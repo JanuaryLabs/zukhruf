@@ -21,6 +21,7 @@ import type {
   DiagramTimelineSpec,
   DiagramWaypoint,
 } from '../model/diagram-ir.ts';
+import { parseEndpointRef } from '../model/endpoint-ref.ts';
 import type {
   DiagramApplianceProps,
   DiagramConnectorProps,
@@ -874,8 +875,12 @@ export function validateGraph(ir: DiagramGraphIR) {
         `Diagram edge stubDistance must be a non-negative finite number, got ${edge.stubDistance}.`,
       );
     }
-    const sourceNodeId = endpointNodeId(edge.from);
-    const targetNodeId = endpointNodeId(edge.to);
+    const { nodeId: sourceNodeId, portId: sourcePortId } = parseEndpointRef(
+      edge.from,
+    );
+    const { nodeId: targetNodeId, portId: targetPortId } = parseEndpointRef(
+      edge.to,
+    );
     if (!nodeIds.has(sourceNodeId) && !groupsById.has(sourceNodeId)) {
       throw new Error(
         `Diagram edge ${edge.from}->${edge.to} references missing source "${sourceNodeId}".`,
@@ -886,12 +891,6 @@ export function validateGraph(ir: DiagramGraphIR) {
         `Diagram edge ${edge.from}->${edge.to} references missing target "${targetNodeId}".`,
       );
     }
-    const sourcePortId = edge.from.includes(':')
-      ? edge.from.slice(edge.from.indexOf(':') + 1)
-      : undefined;
-    const targetPortId = edge.to.includes(':')
-      ? edge.to.slice(edge.to.indexOf(':') + 1)
-      : undefined;
     if (
       sourcePortId &&
       !(
@@ -955,10 +954,4 @@ export function validateTimeline(ir: DiagramTimelineSpec) {
       );
     }
   }
-}
-
-function endpointNodeId(ref: string) {
-  const separator = ref.indexOf(':');
-  if (separator === -1) return ref;
-  return ref.slice(0, separator);
 }

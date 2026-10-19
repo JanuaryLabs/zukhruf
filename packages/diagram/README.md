@@ -298,7 +298,6 @@ The package does not set the width of a diagram on a page. Give the classes of y
 ## Documentation
 
 - **Internals**: [docs/internals.md](./docs/internals.md) tells how the compiler, the layouts and the renderers divide the work, and which mistakes the code had before.
-- **Copied code**: [docs/copied-code.md](./docs/copied-code.md) lists the code that is in two places, and where each fix must go.
 - **Decisions**: the [architecture decision records](./docs/adr) tell why the design is as it is.
   1. [The diagram is a zukhruf package](./docs/adr/0001-the-diagram-is-a-zukhruf-package.md)
 
@@ -316,7 +315,7 @@ npx nx run diagram:lint        # lints the code
 
 ```
 src/
-  lib/model/        the IR types
+  lib/model/        the IR types, and parseEndpointRef, which reads the from and to of an edge
   lib/compiler/     reads the primitives, and makes the IR
   lib/layouts/      the pure geometry of the graph and the timeline
   lib/renderers/    svg/, canvas/, html/ and webgpu/ draw the layouts; shared/ holds the parts that they share
