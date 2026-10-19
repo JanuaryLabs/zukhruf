@@ -130,6 +130,17 @@ Use `cn` around `buttonVariants`. `Button` merges the classes that conflict thro
 - **Keep your own components in the app.** A component that you make from the components of this package belongs to the app. Do not add it to this package. The sync writes over the generated source, and the package holds only the components of shadcn/ui.
 - **Remove the outline of a `Card` with `ring-0`.** `Card` draws its outline with `ring-1`, not with a border. Thus `border-0` does not remove the outline.
 - **Use the standard names of the theme variables.** Set `--primary`, `--background` and the other variables of the [theme](#theme). Do not add a brand prefix, for example `--acme-primary`. The components read only the standard names.
+- **Put a `DropdownMenuLabel` in a `DropdownMenuGroup`.** `DropdownMenuLabel` uses `Menu.GroupLabel` of Base UI, and that component reads the context of a group. A label outside a group throws Base UI error #31, and the full menu stops. Radix UI accepted a label outside a group, thus an app that moves from Radix UI must find these labels. text2sql found one when it moved.
+
+  ```tsx
+  <DropdownMenuContent>
+    <DropdownMenuGroup>
+      <DropdownMenuLabel>Account</DropdownMenuLabel>
+      <DropdownMenuItem>Profile</DropdownMenuItem>
+    </DropdownMenuGroup>
+  </DropdownMenuContent>
+  ```
+
 - **Show an error at the place where it occurs.** Show a form error or a field error next to the field or the action that failed, for example with `FieldError`. Show the error of a background task or of a mutation as a toast. Use `toast` and `Toaster` of this package, which use the toast of Base UI.
 
 ## Your own components
