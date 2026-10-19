@@ -769,29 +769,79 @@ describe('The wire of a single flight while a process holds a key', () => {
   );
 
   test(
-    'a run withdrawn while it waits for a held key is never answered, and a run of the key leads once the key is free',
+    'a run withdrawn while it waits for a held key is never answered, also when a flight of the key starts after the withdrawal',
     { ...onUnixSockets, timeout: 10_000 },
     async (t) => {
-      // Arrange: a process holds `sync`, and a run waits for it.
+      // Arrange: a process leads `sync` and holds its key; its connection is
+      // lost, so the coordinator ends the flight, and the joiner learns it.
+      await using directory = await scratchDirectory();
+      await using _coordinator = await coordinatorOf(directory.path);
+      using first = await welcomedPeerOf(t, directory.path);
+      first.send('{"op":"run","id":"a","key":"sync"}');
+      const token = tokenIn(await answerOf(t, first, 'a', /"op":"lead"/));
+      using _key = holdKey(directory.path, 'sync');
+      using joiner = await welcomedPeerOf(t, directory.path);
+      joiner.send('{"op":"run","id":"j","key":"sync"}');
+      await answerOf(t, joiner, 'j', /"op":"joined"/);
+      first[Symbol.dispose]();
+      await answerOf(t, joiner, 'j', /"op":"interrupted"/);
+      // The leader comes back, and two runs of its process wait for the key.
+      // A run of another key, sent after them, is answered after both were decided.
+      using back = await welcomedPeerOf(t, directory.path);
+      back.send('{"op":"run","id":"p","key":"sync"}');
+      back.send('{"op":"run","id":"r","key":"sync"}');
+      back.send('{"op":"run","id":"q","key":"other"}');
+      await answerOf(t, back, 'q', /"op":"lead"/);
+      const waited = [...answersTo(back, 'p'), ...answersTo(back, 'r')];
+
+      // Act: `p` is withdrawn, and then the leader reasserts its flight, which
+      // takes the runs of the key that wait. The key stays held, so only that
+      // flight wakes them. A run of another key, sent last, is answered after both.
+      back.send('{"op":"cancel","id":"p"}');
+      back.send(`{"op":"reassert","id":"a","key":"sync","token":"${token}"}`);
+      back.send('{"op":"run","id":"s","key":"another"}');
+      await answerOf(t, back, 's', /"op":"lead"/);
+
+      // Assert: the run that still waited joined the reasserted flight.
+      assert.deepEqual(waited, [], 'The runs did not wait for the held key');
+      assert.deepEqual(answersTo(back, 'p'), []);
+      assert.deepEqual(answersTo(back, 'r'), [
+        `{"op":"joined","id":"r","flight":"${token}"}`,
+      ]);
+    },
+  );
+
+  test(
+    'a run withdrawn while it waits for a held key is never answered, and a run that waits with it leads once the key is free',
+    { ...onUnixSockets, timeout: 10_000 },
+    async (t) => {
+      // Arrange: a process holds `sync`, and two runs wait for it. A run of
+      // another key, sent after them, is answered after both were decided.
       await using directory = await scratchDirectory();
       await using _coordinator = await coordinatorOf(directory.path);
       using key = holdKey(directory.path, 'sync');
       using peer = await welcomedPeerOf(t, directory.path);
       peer.send('{"op":"run","id":"p","key":"sync"}');
+      peer.send('{"op":"run","id":"r","key":"sync"}');
       peer.send('{"op":"run","id":"q","key":"other"}');
       await answerOf(t, peer, 'q', /"op":"lead"/);
-      const waited = answersTo(peer, 'p');
+      const waited = [...answersTo(peer, 'p'), ...answersTo(peer, 'r')];
 
-      // Act: the run is withdrawn, the key goes, and a run of the key comes;
-      // a run of another key, sent last, is answered after both.
+      // Act: `p` is withdrawn, and the key goes only once the coordinator read
+      // that: the lead of a run sent right behind the cancel shows it. The
+      // protocol does not order a cancel against a free key that the watch of
+      // the key sees first; then `p` leads, and its cancel interrupts that
+      // flight. A run of another key, sent last, is answered after `r`.
       peer.send('{"op":"cancel","id":"p"}');
+      peer.send('{"op":"run","id":"c","key":"cancelled"}');
+      await answerOf(t, peer, 'c', /"op":"lead"/);
       key.unlock();
-      peer.send('{"op":"run","id":"r","key":"sync"}');
+      await answerOf(t, peer, 'r', /./);
       peer.send('{"op":"run","id":"s","key":"another"}');
       await answerOf(t, peer, 's', /"op":"lead"/);
 
       // Assert
-      assert.deepEqual(waited, [], 'The run did not wait for the held key');
+      assert.deepEqual(waited, [], 'The runs did not wait for the held key');
       assert.deepEqual(answersTo(peer, 'p'), []);
       assert.match(
         answersTo(peer, 'r').join('\n'),
