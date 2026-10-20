@@ -1,0 +1,42 @@
+{
+  "name": "@zukhruf/sqlite-data-version",
+  "version": "0.3.30",
+  "description": "The data version of a SQLite database that another process owns and writes. It polls PRAGMA data_version on its own read-only connection, which changes on each commit by another connection, also while the owner keeps the file open.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/JanuaryLabs/zukhruf",
+    "directory": "packages/sqlite/data-version"
+  },
+  "bugs": {
+    "url": "https://github.com/JanuaryLabs/zukhruf/issues"
+  },
+  "homepage": "https://github.com/JanuaryLabs/zukhruf/tree/main/packages/sqlite/data-version#readme",
+  "keywords": [
+    "sqlite",
+    "node-sqlite",
+    "data-version",
+    "pragma",
+    "wal",
+    "change-detection"
+  ],
+  "type": "module",
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "@zukhruf/source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "!dist/spec/**",
+    "!**/*.tsbuildinfo",
+    "!**/*.test.*"
+  ],
+  "publishConfig": {
+    "access": "public"
+  }
+}

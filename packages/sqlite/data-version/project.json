@@ -1,0 +1,11 @@
+{
+  "name": "sqlite-data-version",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "packages/sqlite/data-version/src",
+  "projectType": "library",
+  "tags": ["layer:island", "std:base", "test:node"],
+  "targets": {
+    "format": {},
+    "test": {}
+  }
+}

@@ -52,6 +52,12 @@
     },
     {
       "path": "./packages/sqlite/transaction"
+    },
+    {
+      "path": "./packages/sqlite/snapshot"
+    },
+    {
+      "path": "./packages/sqlite/data-version"
     }
   ]
 }

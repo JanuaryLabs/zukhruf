@@ -1,0 +1,42 @@
+{
+  "name": "@zukhruf/sqlite-snapshot",
+  "version": "0.3.30",
+  "description": "A read-only snapshot of a SQLite database that another process owns and writes. It pins one moment with a read transaction, so the tables agree, and it never opens the file immutable, so it sees the newest rows in the WAL. It checks the columns that a reader needs, and gives the caller's own errors for a missing file or a missing column.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/JanuaryLabs/zukhruf",
+    "directory": "packages/sqlite/snapshot"
+  },
+  "bugs": {
+    "url": "https://github.com/JanuaryLabs/zukhruf/issues"
+  },
+  "homepage": "https://github.com/JanuaryLabs/zukhruf/tree/main/packages/sqlite/snapshot#readme",
+  "keywords": [
+    "sqlite",
+    "node-sqlite",
+    "snapshot",
+    "read-transaction",
+    "wal",
+    "read-only"
+  ],
+  "type": "module",
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "@zukhruf/source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "!dist/spec/**",
+    "!**/*.tsbuildinfo",
+    "!**/*.test.*"
+  ],
+  "publishConfig": {
+    "access": "public"
+  }
+}
