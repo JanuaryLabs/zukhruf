@@ -76,4 +76,3 @@ export type {
   DiagramViewportFit,
   Point,
 } from './lib/model/diagram-ir.ts';
-export type { DiagramFontFace } from './lib/layouts/text-metrics.ts';

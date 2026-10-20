@@ -3,7 +3,8 @@ import type {
   DiagramSignalBox,
   DiagramTimelineSpec,
 } from '../../model/diagram-ir.ts';
-import { textAscent, widestLine } from '../text-metrics.ts';
+import type { Font } from '../text/font.ts';
+import { fontAscent, measureText } from '../text/measure-text.ts';
 
 export type {
   DiagramFrameElement,
@@ -27,7 +28,7 @@ export const FRAME_HEADER_H = 22;
 export const FRAME_PAD = 12;
 export const BOTTOM_ACTOR_GAP = 50;
 export const DEFAULT_BOXED_STUB = 12;
-export const SIGNAL_LABEL_FONT_SIZE = 12;
+export const SIGNAL_LABEL_FONT: Font = { face: 'mono', size: 12, weight: 400 };
 export const SIGNAL_LABEL_PAD_X = 14;
 export const SIGNAL_LABEL_PAD_Y = 10;
 export const SIGNAL_LABEL_LINE_H = 18;
@@ -100,10 +101,12 @@ export function measureSignalLabel(label: string[]): {
   boxW: number;
   boxH: number;
 } {
+  const widestLineW = Math.max(
+    0,
+    ...label.map((line) => measureText(line, SIGNAL_LABEL_FONT)),
+  );
   return {
-    boxW:
-      Math.ceil(widestLine(label, SIGNAL_LABEL_FONT_SIZE, 'mono')) +
-      SIGNAL_LABEL_PAD_X * 2,
+    boxW: Math.ceil(widestLineW) + SIGNAL_LABEL_PAD_X * 2,
     boxH: label.length * SIGNAL_LABEL_LINE_H + SIGNAL_LABEL_PAD_Y * 2,
   };
 }
@@ -116,7 +119,7 @@ export function signalLabelHeadroom(
   return (
     SIGNAL_LABEL_BASELINE_GAP +
     (signal.label.length - 1) * SIGNAL_LABEL_LINE_STEP +
-    textAscent(SIGNAL_LABEL_FONT_SIZE, 'mono')
+    fontAscent(SIGNAL_LABEL_FONT)
   );
 }
 

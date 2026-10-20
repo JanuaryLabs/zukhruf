@@ -14,7 +14,7 @@ import {
   type FramePlacement,
   type LanePlacement,
   SIGNAL_LABEL_BASELINE_GAP,
-  SIGNAL_LABEL_FONT_SIZE,
+  SIGNAL_LABEL_FONT,
   SIGNAL_LABEL_LINE_STEP,
   type SignalPlacement,
   type DiagramSignal as TimelineSignal,
@@ -44,8 +44,8 @@ import { svgViewportProps } from './viewport.ts';
 
 // Measured in Chrome against StreamingTimelineDiagram: these land lane and
 // boxed-signal text within 0.4px of centred. Unlike the graph renderer, every
-// timeline text is mono at SIGNAL_LABEL_FONT_SIZE, so a fixed nudge stays
-// correct here; derive from text-metrics.ts only if the size becomes variable.
+// timeline text is mono at SIGNAL_LABEL_FONT.size, so a fixed nudge stays
+// correct here; derive from measure-text.ts only if the size becomes variable.
 function verticalTextOffset(lineCount: number): number {
   return lineCount === 1 ? 4 : -3;
 }
@@ -218,7 +218,8 @@ function SignalMessage({
             y={boxTextY}
             textAnchor="middle"
             fontFamily={FONT_FAMILY.mono}
-            fontSize={SIGNAL_LABEL_FONT_SIZE}
+            fontSize={SIGNAL_LABEL_FONT.size}
+            fontWeight={SIGNAL_LABEL_FONT.weight}
             fill={labelFill}
           >
             {signal.label.map((line, i) => (
@@ -256,7 +257,8 @@ function SignalMessage({
         y={labelBaseY}
         textAnchor={labelAnchor}
         fontFamily={FONT_FAMILY.mono}
-        fontSize={SIGNAL_LABEL_FONT_SIZE}
+        fontSize={SIGNAL_LABEL_FONT.size}
+        fontWeight={SIGNAL_LABEL_FONT.weight}
         fill={labelFill}
       >
         {signal.label.map((line, i) => (
