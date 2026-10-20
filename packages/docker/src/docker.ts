@@ -1,4 +1,5 @@
 import { negotiateApiVersion } from './api-version.ts';
+import { Containers } from './containers.ts';
 import {
   type DockerContext,
   type Environment,
@@ -8,6 +9,7 @@ import {
 import type * as EngineApi from './engine-api.ts';
 import { EngineClient } from './engine-client.ts';
 import { parseHost } from './host.ts';
+import { Images } from './images.ts';
 import type { CancelOptions } from './options.ts';
 import { SshTransport } from './ssh-connection.ts';
 import { SocketTransport, type Transport } from './transport.ts';
@@ -25,6 +27,8 @@ export class Docker implements AsyncDisposable {
   readonly apiVersion: string;
   /** Sends the Docker CLI to this engine: { DOCKER_HOST, DOCKER_CONTEXT: undefined }. */
   readonly cliEnvironment: Readonly<Record<string, string | undefined>>;
+  readonly containers: Containers;
+  readonly images: Images;
   readonly #client: EngineClient;
   readonly #transport: Transport;
 
@@ -44,6 +48,8 @@ export class Docker implements AsyncDisposable {
     });
     this.#client = client;
     this.#transport = transport;
+    this.images = new Images(client);
+    this.containers = new Containers(client, this.images);
   }
 
   /** Selects the engine in the order of the Docker CLI, pings it and negotiates the API version. */

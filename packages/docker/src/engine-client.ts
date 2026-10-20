@@ -1,4 +1,4 @@
-import type { IncomingHttpHeaders } from 'node:http';
+import type { IncomingHttpHeaders, IncomingMessage } from 'node:http';
 
 import { ConnectionFailedError, DockerEngineError } from './errors.ts';
 import type { Filters } from './options.ts';
@@ -13,6 +13,9 @@ export type Query = Record<
 
 export interface EngineRequestOptions {
   query?: Query | undefined;
+  /** Goes to the engine as JSON. */
+  body?: unknown;
+  headers?: Record<string, string> | undefined;
   signal?: AbortSignal | undefined;
 }
 
@@ -64,6 +67,23 @@ function engineMessage(response: EngineResponse): string {
   return text.trim();
 }
 
+/** True for a 2xx status. */
+export function isSuccess(response: EngineResponse): boolean {
+  return response.status >= 200 && response.status <= 299;
+}
+
+/** The JSON body of an answer. */
+export function parseBody<T>(response: EngineResponse): T {
+  const body: T = JSON.parse(response.body.toString('utf8'));
+  return body;
+}
+
+async function readAll(response: IncomingMessage): Promise<Buffer> {
+  const chunks: Buffer[] = [];
+  for await (const chunk of response) chunks.push(Buffer.from(chunk));
+  return Buffer.concat(chunks);
+}
+
 /** Sends requests of the Engine API to one engine. */
 export class EngineClient {
   readonly #host: string;
@@ -87,14 +107,8 @@ export class EngineClient {
     path: string,
     options: EngineRequestOptions = {},
   ): Promise<EngineResponse> {
-    const response = await this.#send(method, path, options);
-    if (response.status < 200 || response.status > 299) {
-      throw new DockerEngineError(engineMessage(response), {
-        status: response.status,
-        method,
-        path,
-      });
-    }
+    const response = await this.exchange(method, path, options);
+    if (!isSuccess(response)) throw this.error(response, method, path);
     return response;
   }
 
@@ -104,35 +118,89 @@ export class EngineClient {
     path: string,
     options: EngineRequestOptions = {},
   ): Promise<T> {
-    const response = await this.request(method, path, options);
-    const body: T = JSON.parse(response.body.toString('utf8'));
-    return body;
+    return parseBody<T>(await this.request(method, path, options));
   }
 
-  async #send(
+  /** Sends a request and gives the answer with each status. */
+  async exchange(
     method: string,
     path: string,
-    { query, signal }: EngineRequestOptions,
+    options: EngineRequestOptions = {},
   ): Promise<EngineResponse> {
+    const response = await this.#open(method, path, options);
+    return {
+      status: response.statusCode ?? 0,
+      headers: response.headers,
+      body: await readAll(response),
+    };
+  }
+
+  /**
+   * Sends a request and gives the body of a 2xx answer as it comes. An abort
+   * of the signal rejects the read of the body with its reason. Each other
+   * status rejects with DockerEngineError.
+   */
+  async stream(
+    method: string,
+    path: string,
+    options: EngineRequestOptions = {},
+  ): Promise<IncomingMessage> {
+    const response = await this.#open(method, path, options);
+    const status = response.statusCode ?? 0;
+    if (status >= 200 && status <= 299) return response;
+    const body = await readAll(response);
+    throw this.error({ status, headers: response.headers, body }, method, path);
+  }
+
+  /** The DockerEngineError of an answer that is not 2xx. */
+  error(
+    response: EngineResponse,
+    method: string,
+    path: string,
+  ): DockerEngineError {
+    return new DockerEngineError(engineMessage(response), {
+      status: response.status,
+      method,
+      path,
+    });
+  }
+
+  async #open(
+    method: string,
+    path: string,
+    { query, body, headers, signal }: EngineRequestOptions,
+  ): Promise<IncomingMessage> {
     signal?.throwIfAborted();
     const prefix =
       this.#apiVersion === undefined ? '' : `/v${this.#apiVersion}`;
+    const payload = body === undefined ? undefined : JSON.stringify(body);
     const { promise, resolve, reject } =
-      Promise.withResolvers<EngineResponse>();
+      Promise.withResolvers<IncomingMessage>();
     const request = this.#transport.request({
       method,
       path: `${prefix}${path}${search(query)}`,
+      headers: {
+        ...headers,
+        ...(payload === undefined
+          ? {}
+          : {
+              'Content-Type': 'application/json',
+              'Content-Length': Buffer.byteLength(payload),
+            }),
+      },
     });
+    const responses: IncomingMessage[] = [];
     const abort = () => {
       reject(signal?.reason);
       request.destroy();
+      for (const response of responses) response.destroy(signal?.reason);
     };
     signal?.addEventListener('abort', abort, { once: true });
-    let answered = false;
+    const release = () => signal?.removeEventListener('abort', abort);
     request.on('error', (error) => {
       // An error after the answer started is not a connection failure.
       reject(
-        !answered &&
+        responses.length === 0 &&
           (error instanceof SshExitError ||
             CONNECTION_FAILURES.has(errorCode(error) ?? ''))
           ? new ConnectionFailedError(this.#host, { cause: error })
@@ -140,23 +208,16 @@ export class EngineClient {
       );
     });
     request.on('response', (response) => {
-      answered = true;
-      response.on('error', reject);
-      const chunks: Buffer[] = [];
-      response.on('data', (chunk: Buffer) => chunks.push(chunk));
-      response.on('end', () => {
-        resolve({
-          status: response.statusCode ?? 0,
-          headers: response.headers,
-          body: Buffer.concat(chunks),
-        });
-      });
+      responses.push(response);
+      response.once('close', release);
+      resolve(response);
     });
-    request.end();
+    request.end(payload);
     try {
       return await promise;
-    } finally {
-      signal?.removeEventListener('abort', abort);
+    } catch (error) {
+      release();
+      throw error;
     }
   }
 }

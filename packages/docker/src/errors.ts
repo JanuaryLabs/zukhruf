@@ -85,3 +85,110 @@ export class DockerEngineError extends DockerError {
     this.path = request.path;
   }
 }
+
+/** A request about a container got 404. */
+export class ContainerNotFoundError extends DockerEngineError {
+  readonly container: string;
+
+  constructor(
+    message: string,
+    request: EngineRequest,
+    container: string,
+    options?: ErrorOptions,
+  ) {
+    super(message, request, options);
+    this.name = 'ContainerNotFoundError';
+    this.container = container;
+  }
+}
+
+/** An exec or a kill got 409, or an attach found the container exited or paused. */
+export class ContainerNotRunningError extends DockerEngineError {
+  readonly container: string;
+  /** From an inspect after the 409: 'created', 'exited', 'paused', 'restarting', 'removing' or 'dead'. */
+  readonly state: string;
+
+  constructor(
+    message: string,
+    request: EngineRequest,
+    container: string,
+    state: string,
+    options?: ErrorOptions,
+  ) {
+    super(message, request, options);
+    this.name = 'ContainerNotRunningError';
+    this.container = container;
+    this.state = state;
+  }
+}
+
+/**
+ * A create of a container, network or volume found the name taken. Its `name`
+ * is the taken name, so it replaces the class name of Error.
+ */
+export class NameConflictError extends DockerEngineError {
+  readonly kind: 'container' | 'network' | 'volume';
+  /** The taken name. */
+  override readonly name: string;
+
+  constructor(
+    message: string,
+    request: EngineRequest,
+    kind: 'container' | 'network' | 'volume',
+    name: string,
+    options?: ErrorOptions,
+  ) {
+    super(message, request, options);
+    this.kind = kind;
+    this.name = name;
+  }
+}
+
+/** A create got 404 and the image is not on the engine, or a pull got 404. */
+export class ImageNotFoundError extends DockerEngineError {
+  readonly image: string;
+
+  constructor(
+    message: string,
+    request: EngineRequest,
+    image: string,
+    options?: ErrorOptions,
+  ) {
+    super(message, request, options);
+    this.name = 'ImageNotFoundError';
+    this.image = image;
+  }
+}
+
+/** A request needs a network that the engine does not have. */
+export class NetworkNotFoundError extends DockerEngineError {
+  readonly network: string;
+
+  constructor(
+    message: string,
+    request: EngineRequest,
+    network: string,
+    options?: ErrorOptions,
+  ) {
+    super(message, request, options);
+    this.name = 'NetworkNotFoundError';
+    this.network = network;
+  }
+}
+
+/** A create or a start refused a bind mount whose source does not exist on the host of the engine. */
+export class BindSourceNotFoundError extends DockerEngineError {
+  /** The path on the host of the engine. */
+  readonly source: string;
+
+  constructor(
+    message: string,
+    request: EngineRequest,
+    source: string,
+    options?: ErrorOptions,
+  ) {
+    super(message, request, options);
+    this.name = 'BindSourceNotFoundError';
+    this.source = source;
+  }
+}
