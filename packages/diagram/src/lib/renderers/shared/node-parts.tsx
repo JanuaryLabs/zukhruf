@@ -1,31 +1,33 @@
 import { type MotionValue, motion, useTransform } from 'motion/react';
 
-import {
-  type ResolvedDiagramAnnotation,
-  nodeCaptionBounds,
-  nodeCaptionPlacement,
-  nodePortPlacements,
-  nodeStackCount,
-  nodeStackFrameBox,
-} from '../../layouts/graph/graph-layout.ts';
+import type {
+  LeaderLayout,
+  NodeLayout,
+  TextRun,
+} from '../../layouts/graph/graph-layout-result.ts';
+import { ANNOTATION_NOTE_PREFIX } from '../../layouts/graph/legacy-graph-layout.ts';
 import { FONT_FAMILY } from '../../layouts/text/font.ts';
-import type { DiagramNode, Box as SvgBox } from '../../model/diagram-ir.ts';
+import type {
+  DiagramAnnotation,
+  DiagramNode,
+  DiagramTextColor,
+} from '../../model/diagram-ir.ts';
 import {
   DIAGRAM_BG,
   DIAGRAM_DIM,
   DIAGRAM_NEUTRAL,
   DIAGRAM_TEXT,
   resolveDiagramToneFill,
-  resolveDiagramToneStroke,
   useDiagramTheme,
 } from '../../react/chrome/index.ts';
 import {
   DiagramNodeIcon,
   PortMarkers,
-  labelLineFill,
+  accentToneStroke,
   nodeTextFill,
   textureFill,
 } from './graph-parts.tsx';
+import { RunSpans } from './run-spans.tsx';
 
 export const ANNOTATION_REVEAL_START = 0.85;
 
@@ -33,15 +35,42 @@ export function isSpecialNode(node: DiagramNode) {
   return node.kind !== undefined && node.kind !== 'node';
 }
 
+function isNote(layout: NodeLayout) {
+  return layout.node.kind === 'note';
+}
+
+/** Splits the graph's own nodes from the notes that stand for annotations. */
+export function splitNotes(nodes: NodeLayout[]) {
+  return {
+    graphNodes: nodes.filter((layout) => !isNote(layout)),
+    notes: nodes.filter(isNote),
+  };
+}
+
+function textAttrs(first: TextRun) {
+  return {
+    x: first.x,
+    y: first.y,
+    textAnchor: first.anchor,
+    fontFamily: FONT_FAMILY[first.font.face],
+    fontSize: first.font.size,
+    fontWeight: first.font.weight,
+  };
+}
+
+function junctionFillColor(node: DiagramNode, themeAccent: string) {
+  if (node.accent) return themeAccent;
+  if (node.tone) return resolveDiagramToneFill(node.tone);
+  return DIAGRAM_BG;
+}
+
 export function SpecialNode({
-  node,
-  box,
+  layout,
   progress,
   start,
   end,
 }: {
-  node: DiagramNode;
-  box: SvgBox;
+  layout: NodeLayout;
   progress: MotionValue<number>;
   start: number;
   end: number;
@@ -53,71 +82,49 @@ export function SpecialNode({
   const translateY = useTransform(progress, [start, end], [-10, 0], {
     clamp: true,
   });
+  const { node, box, radius, icon, text, appliance } = layout;
   const fill = nodeTextFill(node, node.frame ?? 'solid', themeAccent);
-  const lines = Array.isArray(node.label) ? node.label : [node.label];
-  const fontSize = node.fontSize ?? 12;
-  const lineHeight = Math.max(12, fontSize + 2);
-  const centerY = box.y + box.h / 2;
-  const cx = box.x + box.w / 2;
-  if (node.kind === 'appliance') {
-    const applianceStroke = node.accent
-      ? themeAccent
-      : node.tone
-        ? resolveDiagramToneStroke(node.tone)
-        : DIAGRAM_NEUTRAL;
+  const [first] = text;
+  if (node.kind === 'appliance' && appliance) {
+    const applianceStroke = accentToneStroke(
+      node,
+      themeAccent,
+      DIAGRAM_NEUTRAL,
+    );
     const applianceFill = node.tone
       ? resolveDiagramToneFill(node.tone)
       : DIAGRAM_BG;
     const applianceTexture = textureFill(node.texture ?? 'none', ids);
-    const bodyX = box.x + 4;
-    const bodyY = box.y + Math.max(12, Math.min(22, box.h * 0.28));
-    const bodyW = Math.max(36, box.w - 8);
-    const bodyH = Math.max(24, box.h - (bodyY - box.y) - 12);
-    const slant = Math.max(
-      4,
-      Math.min(node.slant ?? 16, bodyW * 0.28, bodyH * 0.75),
-    );
     const bodyPath = [
-      `M ${bodyX + slant} ${bodyY}`,
-      `L ${bodyX + bodyW} ${bodyY + 6}`,
-      `L ${bodyX + bodyW - slant} ${bodyY + bodyH}`,
-      `L ${bodyX} ${bodyY + bodyH - 6}`,
+      ...appliance.body.map(
+        (point, i) => `${i === 0 ? 'M' : 'L'} ${point.x} ${point.y}`,
+      ),
       'Z',
     ].join(' ');
-    const showAntenna = node.antenna ?? true;
-    const visualPortCount = Math.max(0, Math.floor(node.appliancePorts ?? 4));
-    const portY = bodyY + bodyH - 15;
-    const portStartX = bodyX + slant + 16;
-    const portSpacing = Math.min(
-      13,
-      Math.max(8, (bodyW - slant - 42) / Math.max(visualPortCount, 1)),
-    );
-    const labelLines = lines.filter((line) =>
-      typeof line === 'string' ? line.length > 0 : line.text.length > 0,
-    );
-    const labelY = bodyY + bodyH + Math.max(12, fontSize + 2);
+    const [faceFrom, faceTo] = appliance.face;
+    const [rod, mast] = appliance.antenna;
 
     return (
       <motion.g
         data-diagram-appliance={node.id}
         style={{ opacity, y: translateY }}
       >
-        {showAntenna && (
+        {rod && mast && (
           <g data-diagram-appliance-antenna={node.id}>
             <line
-              x1={bodyX + slant + bodyW * 0.18}
-              y1={bodyY + 1}
-              x2={bodyX + slant + bodyW * 0.2 - 3}
-              y2={box.y + 3}
+              x1={rod[0].x}
+              y1={rod[0].y}
+              x2={rod[1].x}
+              y2={rod[1].y}
               stroke={applianceStroke}
               strokeWidth={1.5}
               strokeLinecap="round"
             />
             <line
-              x1={bodyX + slant + bodyW * 0.2 + 1}
-              y1={bodyY + 2}
-              x2={bodyX + slant + bodyW * 0.2 + 1}
-              y2={box.y + 8}
+              x1={mast[0].x}
+              y1={mast[0].y}
+              x2={mast[1].x}
+              y2={mast[1].y}
               stroke={applianceStroke}
               strokeWidth={1}
               strokeLinecap="round"
@@ -144,72 +151,49 @@ export function SpecialNode({
         )}
         <line
           data-diagram-appliance-face={node.id}
-          x1={bodyX + slant}
-          y1={bodyY + bodyH - 1}
-          x2={bodyX + bodyW - slant}
-          y2={bodyY + bodyH + 3}
+          x1={faceFrom.x}
+          y1={faceFrom.y}
+          x2={faceTo.x}
+          y2={faceTo.y}
           stroke={applianceStroke}
           strokeWidth={1}
           strokeLinecap="round"
           opacity={0.85}
         />
-        {Array.from({ length: visualPortCount }, (_, i) => (
+        {appliance.jacks.map((jack, i) => (
           <rect
             key={i}
             data-diagram-appliance-port={`${node.id}:${i}`}
-            x={portStartX + i * portSpacing}
-            y={portY}
-            width={5}
-            height={12}
+            x={jack.x}
+            y={jack.y}
+            width={jack.w}
+            height={jack.h}
             rx={1}
             fill={DIAGRAM_BG}
             stroke={applianceStroke}
             strokeWidth={1}
           />
         ))}
-        {labelLines.length > 0 && (
+        {first && (
           <text
             data-diagram-appliance-label={node.id}
-            x={cx}
-            y={labelY}
-            textAnchor="middle"
-            fontFamily={FONT_FAMILY.sans}
-            fontSize={fontSize}
-            fontWeight={node.fontWeight ?? 600}
+            {...textAttrs(first)}
             fill={fill}
           >
-            {labelLines.map((line, i) => {
-              const lineText = typeof line === 'string' ? line : line.text;
-              const lineFill = labelLineFill(line, fill, themeAccent);
-              return (
-                <tspan
-                  key={i}
-                  x={cx}
-                  dy={i === 0 ? 0 : lineHeight}
-                  fill={lineFill}
-                  fontWeight={
-                    typeof line === 'string'
-                      ? (node.fontWeight ?? 600)
-                      : (line.fontWeight ?? node.fontWeight ?? 600)
-                  }
-                >
-                  {lineText}
-                </tspan>
-              );
-            })}
+            <RunSpans runs={text} fill={fill} accent={themeAccent} />
           </text>
         )}
-        <NodePorts node={node} box={box} />
-        <NodeCaption node={node} box={box} />
+        <NodePorts layout={layout} />
+        <NodeCaption layout={layout} />
       </motion.g>
     );
   }
   if (node.kind === 'connector') {
-    const connectorStroke = node.accent
-      ? themeAccent
-      : node.tone
-        ? resolveDiagramToneStroke(node.tone)
-        : DIAGRAM_NEUTRAL;
+    const connectorStroke = accentToneStroke(
+      node,
+      themeAccent,
+      DIAGRAM_NEUTRAL,
+    );
     const connectorFill = node.tone
       ? resolveDiagramToneFill(node.tone)
       : DIAGRAM_BG;
@@ -217,22 +201,6 @@ export function SpecialNode({
       node.texture ?? (node.tone ? 'dots' : 'none'),
       ids,
     );
-    const connectorRx = node.rx ?? Math.min(12, box.h / 2);
-    const connectorIconSize = node.iconSize ?? 18;
-    const connectorFontSize = node.fontSize ?? 10;
-    const connectorLineHeight = Math.max(12, connectorFontSize + 2);
-    const connectorLines = lines.filter((line) =>
-      typeof line === 'string' ? line.length > 0 : line.text.length > 0,
-    );
-    const hasConnectorText = connectorLines.length > 0;
-    const iconX = box.x + 10;
-    const iconY = centerY - connectorIconSize / 2;
-    const textX = node.icon ? iconX + connectorIconSize + 8 : box.x + box.w / 2;
-    const textAnchor = node.icon ? ('start' as const) : ('middle' as const);
-    const textY =
-      centerY -
-      ((connectorLines.length - 1) * connectorLineHeight) / 2 +
-      connectorFontSize * 0.35;
 
     return (
       <motion.g style={{ opacity, y: translateY }}>
@@ -244,7 +212,7 @@ export function SpecialNode({
           y={box.y}
           width={box.w}
           height={box.h}
-          rx={connectorRx}
+          rx={radius}
           fill={connectorFill}
           stroke={connectorStroke}
           strokeWidth={1.25}
@@ -256,75 +224,36 @@ export function SpecialNode({
             y={box.y}
             width={box.w}
             height={box.h}
-            rx={connectorRx}
+            rx={radius}
             fill={connectorTexture}
             pointerEvents="none"
           />
         )}
-        {node.icon && (
+        {node.icon && icon && (
           <DiagramNodeIcon
             icon={node.icon}
-            x={iconX}
-            y={iconY}
-            size={connectorIconSize}
+            x={icon.x}
+            y={icon.y}
+            size={icon.size}
             color={fill}
           />
         )}
-        {hasConnectorText && (
+        {first && (
           <text
             data-diagram-connector-label={node.id}
-            x={textX}
-            y={textY}
-            textAnchor={textAnchor}
-            fontFamily={FONT_FAMILY.sans}
-            fontSize={connectorFontSize}
-            fontWeight={node.fontWeight ?? 700}
+            {...textAttrs(first)}
             fill={fill}
           >
-            {connectorLines.map((line, i) => {
-              const lineText = typeof line === 'string' ? line : line.text;
-              const lineFill = labelLineFill(line, fill, themeAccent);
-              return (
-                <tspan
-                  key={i}
-                  x={textX}
-                  dy={i === 0 ? 0 : connectorLineHeight}
-                  fill={lineFill}
-                  fontWeight={
-                    typeof line === 'string'
-                      ? (node.fontWeight ?? 700)
-                      : (line.fontWeight ?? node.fontWeight ?? 700)
-                  }
-                >
-                  {lineText}
-                </tspan>
-              );
-            })}
+            <RunSpans runs={text} fill={fill} accent={themeAccent} />
           </text>
         )}
-        <NodePorts node={node} box={box} />
-        <NodeCaption node={node} box={box} />
+        <NodePorts layout={layout} />
+        <NodeCaption layout={layout} />
       </motion.g>
     );
   }
-  if (node.kind === 'marker') {
-    const markerIconSize = node.iconSize ?? 34;
-    const markerFontSize = node.fontSize ?? 11;
-    const markerLineHeight = Math.max(12, markerFontSize + 2);
-    const markerLines = lines.filter((line) =>
-      typeof line === 'string' ? line.length > 0 : line.text.length > 0,
-    );
-    const labelGap = markerLines.length > 0 ? 8 : 0;
-    const labelBlockHeight = markerLines.length * markerLineHeight;
-    const totalHeight = markerIconSize + labelGap + labelBlockHeight;
-    const iconX = Math.round(cx - markerIconSize / 2);
-    const iconY = Math.round(box.y + (box.h - totalHeight) / 2);
-    const markerLabelY = iconY + markerIconSize + labelGap + markerFontSize;
-    const markerStroke = node.accent
-      ? themeAccent
-      : node.tone
-        ? resolveDiagramToneStroke(node.tone)
-        : fill;
+  if (node.kind === 'marker' && icon) {
+    const markerStroke = accentToneStroke(node, themeAccent, fill);
 
     return (
       <motion.g
@@ -338,98 +267,55 @@ export function SpecialNode({
           y={box.y}
           width={box.w}
           height={box.h}
-          rx={node.rx ?? 0}
+          rx={radius}
           fill="transparent"
           stroke="none"
         />
         <DiagramNodeIcon
           icon={node.icon ?? 'ellipsis'}
-          x={iconX}
-          y={iconY}
-          size={markerIconSize}
+          x={icon.x}
+          y={icon.y}
+          size={icon.size}
           color={markerStroke}
         />
-        {markerLines.length > 0 && (
+        {first && (
           <text
             data-diagram-marker-label={node.id}
-            x={cx}
-            y={markerLabelY}
-            textAnchor="middle"
-            fontFamily={FONT_FAMILY.sans}
-            fontSize={markerFontSize}
-            fontWeight={node.fontWeight ?? 700}
+            {...textAttrs(first)}
             fill={fill}
           >
-            {markerLines.map((line, i) => {
-              const lineText = typeof line === 'string' ? line : line.text;
-              const lineFill = labelLineFill(line, fill, themeAccent);
-              return (
-                <tspan
-                  key={i}
-                  x={cx}
-                  dy={i === 0 ? 0 : markerLineHeight}
-                  fill={lineFill}
-                  fontWeight={
-                    typeof line === 'string'
-                      ? (node.fontWeight ?? 700)
-                      : (line.fontWeight ?? node.fontWeight ?? 700)
-                  }
-                >
-                  {lineText}
-                </tspan>
-              );
-            })}
+            <RunSpans runs={text} fill={fill} accent={themeAccent} />
           </text>
         )}
-        <NodePorts node={node} box={box} />
-        <NodeCaption node={node} box={box} />
+        <NodePorts layout={layout} />
+        <NodeCaption layout={layout} />
       </motion.g>
     );
   }
   if (node.kind === 'junction') {
-    const junctionStroke = node.accent
-      ? themeAccent
-      : node.tone
-        ? resolveDiagramToneStroke(node.tone)
-        : DIAGRAM_NEUTRAL;
-    const junctionFill = node.accent
-      ? themeAccent
-      : node.tone
-        ? resolveDiagramToneFill(node.tone)
-        : DIAGRAM_BG;
+    const junctionStroke = accentToneStroke(node, themeAccent, DIAGRAM_NEUTRAL);
+    const junctionFill = junctionFillColor(node, themeAccent);
     return (
       <motion.g style={{ opacity, y: translateY }}>
         <circle
           data-diagram-junction={node.id}
-          cx={cx}
-          cy={centerY}
-          r={Math.max(4, Math.min(box.w, box.h) / 2)}
+          cx={box.x + box.w / 2}
+          cy={box.y + box.h / 2}
+          r={radius}
           fill={junctionFill}
           stroke={junctionStroke}
           strokeWidth={1.5}
         />
-        {lines.some(Boolean) && (
+        {first && (
           <text
             data-diagram-junction-label={node.id}
-            x={cx}
-            y={centerY - Math.max(8, box.h / 2 + 6)}
-            textAnchor="middle"
-            fontFamily={FONT_FAMILY.mono}
-            fontSize={node.fontSize ?? 10}
-            fontWeight={node.fontWeight ?? 600}
+            {...textAttrs(first)}
             fill={fill}
           >
-            {lines.map((line, i) => {
-              const lineText = typeof line === 'string' ? line : line.text;
-              return (
-                <tspan key={i} x={cx} dy={i === 0 ? 0 : lineHeight}>
-                  {lineText}
-                </tspan>
-              );
-            })}
+            <RunSpans runs={text} />
           </text>
         )}
-        <NodeCaption node={node} box={box} />
+        <NodeCaption layout={layout} />
       </motion.g>
     );
   }
@@ -437,58 +323,59 @@ export function SpecialNode({
 }
 
 export function NodeStackFrames({
-  node,
-  box,
-  rx,
+  layout,
   fill,
   stroke,
   strokeWidth,
 }: {
-  node: DiagramNode;
-  box: SvgBox;
-  rx: number;
+  layout: NodeLayout;
   fill: string;
   stroke: string;
   strokeWidth: number;
 }) {
-  const stackCount = nodeStackCount(node);
-  return Array.from({ length: stackCount - 1 }, (_, i) => {
-    const level = stackCount - 1 - i;
-    const stackBox = nodeStackFrameBox(node, box, level);
-    return (
+  const { node, frames, radius } = layout;
+  return frames
+    .map((frame, i) => ({ frame, level: i + 1 }))
+    .reverse()
+    .map(({ frame, level }) => (
       <rect
         key={`stack-${level}`}
         data-diagram-node-stack={`${node.id}:${level}`}
-        x={stackBox.x}
-        y={stackBox.y}
-        width={stackBox.w}
-        height={stackBox.h}
-        rx={rx}
+        x={frame.x}
+        y={frame.y}
+        width={frame.w}
+        height={frame.h}
+        rx={radius}
         fill={fill}
         stroke={stroke}
         strokeWidth={strokeWidth}
       />
-    );
-  });
+    ));
 }
 
-export function NodePorts({ node, box }: { node: DiagramNode; box: SvgBox }) {
+export function NodePorts({ layout }: { layout: NodeLayout }) {
   return (
-    <PortMarkers ownerId={node.id} placements={nodePortPlacements(node, box)} />
+    <PortMarkers
+      ownerId={layout.node.id}
+      ports={layout.ports}
+      declared={layout.node.ports}
+    />
   );
 }
 
-export function NodeCaption({ node, box }: { node: DiagramNode; box: SvgBox }) {
+function textColorFill(color: DiagramTextColor | undefined, accent: string) {
+  if (color === 'accent') return accent;
+  if (color === 'dim') return DIAGRAM_DIM;
+  return DIAGRAM_TEXT;
+}
+
+export function NodeCaption({ layout }: { layout: NodeLayout }) {
   const { accent: themeAccent } = useDiagramTheme();
-  const placement = nodeCaptionPlacement(node, box);
-  if (!placement) return null;
-  const fill =
-    node.captionColor === 'accent'
-      ? themeAccent
-      : node.captionColor === 'dim'
-        ? DIAGRAM_DIM
-        : DIAGRAM_TEXT;
-  const frame = node.captionFrame ? nodeCaptionBounds(node, box) : null;
+  const { node, caption } = layout;
+  const [first] = caption?.text ?? [];
+  if (!caption || !first) return null;
+  const fill = textColorFill(node.captionColor, themeAccent);
+  const frame = caption.framed ? caption.box : null;
   return (
     <>
       {frame && (
@@ -506,135 +393,99 @@ export function NodeCaption({ node, box }: { node: DiagramNode; box: SvgBox }) {
       )}
       <text
         data-diagram-node-caption={node.id}
-        x={placement.x}
-        y={placement.y}
-        textAnchor={placement.align}
-        fontFamily={FONT_FAMILY.sans}
-        fontSize={placement.fontSize}
-        fontWeight={node.captionFontWeight ?? 600}
+        {...textAttrs(first)}
         fill={fill}
       >
-        {placement.lines.map((line, i) => (
-          <tspan
-            key={i}
-            x={placement.x}
-            dy={i === 0 ? 0 : placement.lineHeight}
-          >
-            {line}
-          </tspan>
-        ))}
+        <RunSpans runs={caption.text} />
       </text>
     </>
   );
 }
 
 export function AnnotationText({
-  annotation,
+  note,
+  annotations,
+  leaders,
   progress,
   start,
   end,
-  index,
 }: {
-  annotation: ResolvedDiagramAnnotation;
+  note: NodeLayout;
+  annotations: DiagramAnnotation[];
+  leaders: LeaderLayout[];
   progress: MotionValue<number>;
   start: number;
   end: number;
-  index: number;
 }) {
   const { accent: themeAccent } = useDiagramTheme();
   const opacity = useTransform(progress, [start, end], [0, 1], { clamp: true });
-  const fill =
-    annotation.color === 'accent'
-      ? themeAccent
-      : annotation.color === 'dim'
-        ? DIAGRAM_DIM
-        : DIAGRAM_TEXT;
-  const align = annotation.align ?? 'middle';
-  const fontSize = annotation.fontSize ?? 11;
-  const fontWeight = annotation.fontWeight ?? 500;
-  const lineGap = annotation.lineGap ?? 4;
+  const index = Number(note.node.id.slice(ANNOTATION_NOTE_PREFIX.length));
+  const annotation = annotations[index];
+  if (!annotation) return null;
+  const fill = textColorFill(annotation.color, themeAccent);
+  const anchor = annotation.anchor ?? 'top';
+  const route = annotation.leaderRoute ?? 'straight';
   const annotationTargets = annotation.targets?.join('+');
   const annotationId =
     annotation.target || annotationTargets
-      ? `${annotation.target ?? annotationTargets}:${annotation.anchor ?? 'top'}`
+      ? `${annotation.target ?? annotationTargets}:${anchor}`
       : `free:${index}`;
-  const leaders =
-    annotation.leaders ??
-    (annotation.leaderFrom && annotation.leaderTo
-      ? [
-          {
-            target: annotation.target,
-            anchor: annotation.anchor,
-            route: 'straight',
-            from: annotation.leaderFrom,
-            to: annotation.leaderTo,
-            points: [annotation.leaderFrom, annotation.leaderTo],
-          },
-        ]
-      : []);
+  const noteLeaders = leaders.filter((leader) => leader.note === note.node.id);
+  const [first] = note.text;
   return (
     <motion.g style={{ opacity }}>
-      {leaders.map((leader, leaderIndex) =>
-        leader.route === 'elbow' && leader.points.length > 2 ? (
-          <path
-            key={`${leader.target ?? 'free'}:${leaderIndex}`}
-            data-diagram-annotation-leader={annotationId}
-            data-diagram-annotation-leader-target={leader.target}
-            data-diagram-annotation-leader-anchor={leader.anchor}
-            data-diagram-annotation-leader-index={leaderIndex}
-            data-diagram-annotation-leader-route={leader.route}
-            d={annotationLeaderPath(leader.points)}
-            fill="none"
-            stroke={DIAGRAM_NEUTRAL}
-            strokeWidth={1}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        ) : (
+      {noteLeaders.map((leader, leaderIndex) => {
+        const attrs = {
+          'data-diagram-annotation-leader': annotationId,
+          'data-diagram-annotation-leader-target': leader.target,
+          'data-diagram-annotation-leader-anchor': anchor,
+          'data-diagram-annotation-leader-index': leaderIndex,
+          'data-diagram-annotation-leader-route': route,
+        };
+        const from = leader.points.at(0);
+        const to = leader.points.at(-1);
+        if (leader.points.length > 2 || !from || !to) {
+          return (
+            <path
+              key={`${leader.target}:${leaderIndex}`}
+              {...attrs}
+              d={leader.d}
+              fill="none"
+              stroke={DIAGRAM_NEUTRAL}
+              strokeWidth={1}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          );
+        }
+        return (
           <line
-            key={`${leader.target ?? 'free'}:${leaderIndex}`}
-            data-diagram-annotation-leader={annotationId}
-            data-diagram-annotation-leader-target={leader.target}
-            data-diagram-annotation-leader-anchor={leader.anchor}
-            data-diagram-annotation-leader-index={leaderIndex}
-            data-diagram-annotation-leader-route={leader.route}
-            x1={leader.from.x}
-            y1={leader.from.y}
-            x2={leader.to.x}
-            y2={leader.to.y}
+            key={`${leader.target}:${leaderIndex}`}
+            {...attrs}
+            x1={from.x}
+            y1={from.y}
+            x2={to.x}
+            y2={to.y}
             stroke={DIAGRAM_NEUTRAL}
             strokeWidth={1}
             strokeLinecap="round"
           />
-        ),
+        );
+      })}
+      {first && (
+        <text
+          data-diagram-annotation={annotationId}
+          data-diagram-annotation-target={annotation.target}
+          data-diagram-annotation-targets={annotation.targets?.join(' ')}
+          data-diagram-annotation-anchor={annotation.anchor}
+          data-diagram-annotation-guide={annotation.guide}
+          data-diagram-annotation-line-gap={annotation.lineGap}
+          {...textAttrs(first)}
+          fill={fill}
+        >
+          <RunSpans runs={note.text} />
+        </text>
       )}
-      <text
-        data-diagram-annotation={annotationId}
-        data-diagram-annotation-target={annotation.target}
-        data-diagram-annotation-targets={annotation.targets?.join(' ')}
-        data-diagram-annotation-anchor={annotation.anchor}
-        data-diagram-annotation-guide={annotation.guide}
-        data-diagram-annotation-line-gap={annotation.lineGap}
-        x={annotation.x}
-        y={annotation.y}
-        textAnchor={align}
-        fontFamily={FONT_FAMILY.sans}
-        fontSize={fontSize}
-        fontWeight={fontWeight}
-        fill={fill}
-      >
-        {annotation.text.map((line, i) => (
-          <tspan key={i} x={annotation.x} dy={i === 0 ? 0 : fontSize + lineGap}>
-            {line}
-          </tspan>
-        ))}
-      </text>
     </motion.g>
   );
-}
-
-function annotationLeaderPath(points: { x: number; y: number }[]) {
-  return points
-    .map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x} ${point.y}`)
-    .join(' ');
 }

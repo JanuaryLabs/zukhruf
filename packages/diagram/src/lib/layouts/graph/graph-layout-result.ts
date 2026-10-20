@@ -23,6 +23,13 @@ export type TextRun = {
   bounds: Box;
 };
 
+export type PortLayout = {
+  id: string;
+  side: DiagramSide;
+  point: Point;
+  label?: TextRun;
+};
+
 export type NodeLayout = {
   node: DiagramNode;
   /** The frame. */
@@ -36,8 +43,14 @@ export type NodeLayout = {
   text: TextRun[];
   bullets: Point[];
   caption?: { box: Box; framed: boolean; text: TextRun[] };
-  ports: { id: string; side: DiagramSide; point: Point; label?: TextRun }[];
-  appliance?: { body: Point[]; antenna: [Point, Point][]; jacks: Box[] };
+  ports: PortLayout[];
+  appliance?: {
+    body: Point[];
+    /** The line under the front edge of the body. */
+    face: [Point, Point];
+    antenna: [Point, Point][];
+    jacks: Box[];
+  };
 };
 
 export type GroupLayout = {
@@ -48,9 +61,15 @@ export type GroupLayout = {
   band?: Box;
   label: TextRun[];
   dividers: [Point, Point][];
+  ports?: PortLayout[];
 };
 
-export type EdgeLabelLayout = { box: Box; text: TextRun[] };
+export type EdgeLabelLayout = {
+  box: Box;
+  text: TextRun[];
+  /** The index of the route segment that the label sits beside. */
+  segment?: number;
+};
 
 export type EdgeLayout = {
   edge: DiagramEdge;

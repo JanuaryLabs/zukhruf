@@ -12,6 +12,8 @@ import type {
   Box,
   DiagramEdge,
   DiagramGraphLayout,
+  DiagramGroup,
+  DiagramNode,
   DiagramPaper,
   DiagramTexture,
 } from '../../model/diagram-ir.ts';
@@ -142,6 +144,38 @@ function drawEdgeArrow(
   ctx.restore();
 }
 
+type CanvasPalette = {
+  accent: string;
+  text: string;
+  dim: string;
+  neutral: string;
+};
+
+function groupStrokeColor(
+  canvas: HTMLCanvasElement,
+  group: DiagramGroup,
+  palette: CanvasPalette,
+) {
+  if (group.frame === 'dashed') return palette.dim;
+  if (group.accent) return palette.accent;
+  if (group.tone) {
+    return resolveCssColor(canvas, resolveDiagramToneStroke(group.tone));
+  }
+  return palette.neutral;
+}
+
+function edgeColor(edge: DiagramEdge, palette: CanvasPalette) {
+  if (edge.accent) return palette.accent;
+  if (edge.dim) return palette.dim;
+  return palette.neutral;
+}
+
+function nodeTextColor(node: DiagramNode, palette: CanvasPalette) {
+  if (node.textColor === 'accent') return palette.accent;
+  if (node.textColor === 'dim') return palette.dim;
+  return palette.text;
+}
+
 function drawGraphCanvas(
   canvas: HTMLCanvasElement,
   layout: GraphLayout,
@@ -170,6 +204,7 @@ function drawGraphCanvas(
     DIAGRAM_NEUTRAL,
     'rgba(17,24,39,0.82)',
   );
+  const palette: CanvasPalette = { accent, text, dim, neutral };
 
   if (options.paper) {
     ctx.fillStyle = bg;
@@ -177,14 +212,7 @@ function drawGraphCanvas(
   }
 
   for (const { group, rect, label } of layout.groups) {
-    const stroke =
-      group.frame === 'dashed'
-        ? dim
-        : group.accent
-          ? accent
-          : group.tone
-            ? resolveCssColor(canvas, resolveDiagramToneStroke(group.tone))
-            : neutral;
+    const stroke = groupStrokeColor(canvas, group, palette);
     const fill = group.tone
       ? resolveCssColor(canvas, resolveDiagramToneFill(group.tone))
       : 'transparent';
@@ -207,7 +235,7 @@ function drawGraphCanvas(
     const from = points.at(-2);
     const to = points.at(-1);
     if (!first || !second || !from || !to) continue;
-    const color = edge.accent ? accent : edge.dim ? dim : neutral;
+    const color = edgeColor(edge, palette);
     ctx.save();
     ctx.strokeStyle = color;
     ctx.lineWidth = edge.strokeWidth ?? 1.5;
@@ -254,12 +282,7 @@ function drawGraphCanvas(
       ctx.stroke();
       applyTexture(ctx, box, node.texture);
     }
-    ctx.fillStyle =
-      node.textColor === 'accent'
-        ? accent
-        : node.textColor === 'dim'
-          ? dim
-          : text;
+    ctx.fillStyle = nodeTextColor(node, palette);
     drawTextRuns(ctx, runs);
     ctx.restore();
   }

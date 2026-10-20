@@ -1,26 +1,10 @@
 import { type MotionValue, motion, useTransform } from 'motion/react';
 
-import { compileGraph, validateGraph } from '../../compiler/diagram-compile.ts';
-import {
-  type RoutedEdge,
-  computePaths,
-  graphContentViewBox,
-  groupBox,
-  groupDividerLines,
-  nodeBox,
-  nodeFrameRadius,
-  nodeFrameStrokeWidth,
-  resolveGraphAnnotations,
-  resolveGraphLayout,
-} from '../../layouts/graph/graph-layout.ts';
-import { centeredBaselineOffset } from '../../layouts/text-metrics.ts';
+import { compileGraph } from '../../compiler/diagram-compile.ts';
+import type { NodeLayout } from '../../layouts/graph/graph-layout-result.ts';
+import { legacyGraphLayout } from '../../layouts/graph/legacy-graph-layout.ts';
 import { FONT_FAMILY, TEXT_SHAPING } from '../../layouts/text/font.ts';
-import type {
-  DiagramGraphLayout,
-  DiagramLabelLine,
-  DiagramNode,
-  Box as SvgBox,
-} from '../../model/diagram-ir.ts';
+import type { DiagramGraphLayout } from '../../model/diagram-ir.ts';
 import {
   DiagramFrame,
   type DiagramMode,
@@ -35,9 +19,9 @@ import {
   GroupRect,
   type SegmentKind,
   buildSegments,
-  labelLineFill,
   nodeFrameFill,
   nodeFrameStroke,
+  nodeFrameStrokeWidth,
   nodeTextFill,
   nodeTexture,
   textureFill,
@@ -51,21 +35,22 @@ import {
   NodeStackFrames,
   SpecialNode,
   isSpecialNode,
+  splitNotes,
 } from '../shared/node-parts.tsx';
 import { DiagramPaperRect } from '../shared/paper.tsx';
+import { RunSpans } from '../shared/run-spans.tsx';
+import { nodeTextParts } from '../shared/text-runs.ts';
 import type { DiagramEffects, GraphRendererProps } from '../types.ts';
 import { GraphFlowEffects } from '../webgpu/graph-flow-effects.tsx';
 import { svgViewportProps } from './viewport.ts';
 
 function NodeRect({
-  node,
-  box,
+  layout,
   progress,
   start,
   end,
 }: {
-  node: DiagramNode;
-  box: SvgBox;
+  layout: NodeLayout;
   progress: MotionValue<number>;
   start: number;
   end: number;
@@ -77,39 +62,19 @@ function NodeRect({
   const translateY = useTransform(progress, [start, end], [-10, 0], {
     clamp: true,
   });
+  const { node, box, radius } = layout;
   const frame = node.frame ?? 'solid';
-  const rx = nodeFrameRadius(node);
   const strokeWidth = nodeFrameStrokeWidth(node);
   const stroke = nodeFrameStroke(node, frame, themeAccent);
   const boxFill = nodeFrameFill(node, frame);
   const texture = nodeTexture(node, frame);
   const texturePattern = textureFill(texture, ids);
   const fill = nodeTextFill(node, frame, themeAccent);
-  const lines = Array.isArray(node.label) ? node.label : [node.label];
-  const descriptionLines =
-    node.description === undefined
-      ? []
-      : Array.isArray(node.description)
-        ? node.description
-        : [node.description];
-  const itemLines = node.items ?? [];
-  const fontSize = node.fontSize ?? 12;
-  const lineHeight = Math.max(12, fontSize + 2);
-  const centerY = box.y + box.h / 2;
-  const firstLineY =
-    centerY -
-    ((lines.length - 1) * lineHeight) / 2 +
-    centeredBaselineOffset(fontSize, 'mono');
-  const cx = box.x + box.w / 2;
-  const textAlign = node.textAlign ?? 'center';
-  const hasBodyLayout =
-    textAlign === 'start' || Boolean(node.icon) || descriptionLines.length > 0;
   if (node.hidden) return null;
   if (isSpecialNode(node)) {
     return (
       <SpecialNode
-        node={node}
-        box={box}
+        layout={layout}
         progress={progress}
         start={start}
         end={end}
@@ -121,9 +86,7 @@ function NodeRect({
       {frame !== 'none' && (
         <>
           <NodeStackFrames
-            node={node}
-            box={box}
-            rx={rx}
+            layout={layout}
             fill={boxFill}
             stroke={stroke}
             strokeWidth={strokeWidth}
@@ -135,7 +98,7 @@ function NodeRect({
             y={box.y}
             width={box.w}
             height={box.h}
-            rx={rx}
+            rx={radius}
             fill={boxFill}
             stroke={stroke}
             strokeWidth={strokeWidth}
@@ -147,199 +110,99 @@ function NodeRect({
               y={box.y}
               width={box.w}
               height={box.h}
-              rx={rx}
+              rx={radius}
               fill={texturePattern}
               pointerEvents="none"
             />
           )}
         </>
       )}
-      {hasBodyLayout ? (
-        <NodeBodyLayout
-          node={node}
-          box={box}
-          titleLines={lines}
-          descriptionLines={descriptionLines}
-          itemLines={itemLines}
-          fill={fill}
-          accent={themeAccent}
-        />
-      ) : (
-        <text
-          x={cx}
-          y={firstLineY}
-          textAnchor="middle"
-          fontFamily={FONT_FAMILY.mono}
-          fontSize={fontSize}
-          fontWeight={node.fontWeight ?? 500}
-          fill={fill}
-          letterSpacing={0.6}
-        >
-          {lines.map((line, i) => {
-            const lineText = typeof line === 'string' ? line : line.text;
-            const lineFill = labelLineFill(line, fill, themeAccent);
-            return (
-              <tspan
-                key={i}
-                x={cx}
-                dy={i === 0 ? 0 : lineHeight}
-                fill={lineFill}
-                fontWeight={
-                  typeof line === 'string'
-                    ? (node.fontWeight ?? 500)
-                    : (line.fontWeight ?? node.fontWeight ?? 500)
-                }
-              >
-                {lineText}
-              </tspan>
-            );
-          })}
-        </text>
-      )}
-      <NodePorts node={node} box={box} />
-      <NodeCaption node={node} box={box} />
+      <NodeBody layout={layout} fill={fill} accent={themeAccent} />
+      <NodePorts layout={layout} />
+      <NodeCaption layout={layout} />
     </motion.g>
   );
 }
 
-function NodeBodyLayout({
-  node,
-  box,
-  titleLines,
-  descriptionLines,
-  itemLines,
+function NodeBody({
+  layout,
   fill,
   accent,
 }: {
-  node: DiagramNode;
-  box: SvgBox;
-  titleLines: DiagramLabelLine[];
-  descriptionLines: string[];
-  itemLines: string[];
+  layout: NodeLayout;
   fill: string;
   accent: string;
 }) {
-  const hasText = titleLines.some((line) =>
-    typeof line === 'string' ? line.length > 0 : line.text.length > 0,
-  );
-  const iconSize = node.iconSize ?? (node.icon === 'ellipsis' ? 34 : 42);
-  const cardPadX = 28;
-  const headerGap = 22;
-  const hasBody = descriptionLines.length > 0 || itemLines.length > 0;
-  const hasHeaderIcon = Boolean(node.icon && hasText && hasBody);
-  const iconX =
-    hasText || hasBody ? box.x + cardPadX : box.x + box.w / 2 - iconSize / 2;
-  const iconY =
-    hasText || hasBody ? box.y + 28 : box.y + box.h / 2 - iconSize / 2;
-  const titleX = node.icon ? iconX + iconSize + headerGap : box.x + cardPadX;
-  const bodyX = hasHeaderIcon ? box.x + cardPadX : titleX;
-  const titleSize = node.fontSize ?? 15;
-  const titleLineHeight = titleSize + 4;
-  const titleY = hasBody
-    ? box.y + 44
-    : box.y +
-      box.h / 2 -
-      ((titleLines.length - 1) * titleLineHeight) / 2 +
-      titleSize * 0.35;
-  const bodySize = node.bodyFontSize ?? Math.max(11, titleSize - 2);
-  const bodyY = titleY + titleLines.length * titleLineHeight + 8;
-  const bodyLineGap = node.bodyLineGap ?? 3;
-  const bodyLineHeight = bodySize + bodyLineGap;
-  const itemY =
-    bodyY +
-    (descriptionLines.length > 0
-      ? descriptionLines.length * bodyLineHeight + 6
-      : 0);
+  const { node, icon } = layout;
+  const { title, description, items } = nodeTextParts(layout);
+  const [firstTitle] = title;
+  const [firstDescription] = description;
 
   return (
     <>
-      {node.icon && (
+      {node.icon && icon && (
         <DiagramNodeIcon
           icon={node.icon}
-          x={iconX}
-          y={iconY}
-          size={iconSize}
+          x={icon.x}
+          y={icon.y}
+          size={icon.size}
           color={node.textColor === 'accent' ? accent : fill}
         />
       )}
-      {hasText && (
+      {firstTitle && (
         <text
-          x={titleX}
-          y={titleY}
-          textAnchor="start"
-          fontFamily={FONT_FAMILY.sans}
-          fontSize={titleSize}
-          fontWeight={node.fontWeight ?? 700}
+          x={firstTitle.x}
+          y={firstTitle.y}
+          textAnchor={firstTitle.anchor}
+          fontFamily={FONT_FAMILY[firstTitle.font.face]}
+          fontSize={firstTitle.font.size}
+          fontWeight={firstTitle.font.weight}
           fill={fill}
+          letterSpacing={firstTitle.font.face === 'mono' ? 0.6 : undefined}
         >
-          {titleLines.map((line, i) => {
-            const lineText = typeof line === 'string' ? line : line.text;
-            const lineFill = labelLineFill(line, fill, accent);
-            return (
-              <tspan
-                key={i}
-                x={titleX}
-                dy={i === 0 ? 0 : titleLineHeight}
-                fill={lineFill}
-                fontWeight={
-                  typeof line === 'string'
-                    ? (node.fontWeight ?? 700)
-                    : (line.fontWeight ?? node.fontWeight ?? 700)
-                }
-              >
-                {lineText}
-              </tspan>
-            );
-          })}
+          <RunSpans runs={title} fill={fill} accent={accent} />
         </text>
       )}
-      {descriptionLines.length > 0 && (
+      {firstDescription && (
         <text
           data-diagram-node-description={node.id}
           data-diagram-node-body-font-size={node.bodyFontSize}
           data-diagram-node-body-line-gap={node.bodyLineGap}
-          x={bodyX}
-          y={bodyY}
+          x={firstDescription.x}
+          y={firstDescription.y}
           textAnchor="start"
-          fontFamily={FONT_FAMILY.sans}
-          fontSize={bodySize}
-          fontWeight={400}
+          fontFamily={FONT_FAMILY[firstDescription.font.face]}
+          fontSize={firstDescription.font.size}
+          fontWeight={firstDescription.font.weight}
           fill={fill}
         >
-          {descriptionLines.map((line, i) => (
-            <tspan key={i} x={bodyX} dy={i === 0 ? 0 : bodyLineHeight}>
-              {line}
-            </tspan>
-          ))}
+          <RunSpans runs={description} />
         </text>
       )}
-      {itemLines.length > 0 && (
+      {items.length > 0 && (
         <g>
-          {itemLines.map((line, i) => {
-            const y = itemY + i * bodyLineHeight;
-            return (
-              <g
-                key={i}
-                data-diagram-node-item={`${node.id}:${i}`}
-                data-diagram-node-body-font-size={node.bodyFontSize}
-                data-diagram-node-body-line-gap={node.bodyLineGap}
-                transform={`translate(0 ${y})`}
+          {items.map(({ run, bullet }, i) => (
+            <g
+              key={i}
+              data-diagram-node-item={`${node.id}:${i}`}
+              data-diagram-node-body-font-size={node.bodyFontSize}
+              data-diagram-node-body-line-gap={node.bodyLineGap}
+              transform={`translate(0 ${run.y})`}
+            >
+              <circle cx={bullet.x} cy={bullet.y - run.y} r={2.2} fill={fill} />
+              <text
+                x={run.x}
+                y={0}
+                textAnchor="start"
+                fontFamily={FONT_FAMILY[run.font.face]}
+                fontSize={run.font.size}
+                fontWeight={run.font.weight}
+                fill={fill}
               >
-                <circle cx={bodyX + 3} cy={-3} r={2.2} fill={fill} />
-                <text
-                  x={bodyX + 12}
-                  y={0}
-                  textAnchor="start"
-                  fontFamily={FONT_FAMILY.sans}
-                  fontSize={bodySize}
-                  fontWeight={400}
-                  fill={fill}
-                >
-                  {line}
-                </text>
-              </g>
-            );
-          })}
+                {run.text}
+              </text>
+            </g>
+          ))}
         </g>
       )}
     </>
@@ -394,19 +257,9 @@ function GraphSVG({
   mode: DiagramMode;
 }) {
   const { stylePreset } = useDiagramTheme();
-  validateGraph(ir);
-  const graph = resolveGraphLayout(ir);
-  const layout = graph.layout;
-
-  const nodeBoxes = new Map<string, SvgBox>();
-  for (const n of graph.nodes) nodeBoxes.set(n.id, nodeBox(n, layout));
-
-  const groupBoxes = new Map<string, SvgBox>();
-  for (const g of graph.groups ?? [])
-    groupBoxes.set(g.id, groupBox(g, graph.nodes, layout, graph.groups));
-  const annotations = resolveGraphAnnotations(graph);
-
-  const segments = buildSegments(graph.nodes.length, graph.edges.length);
+  const layout = legacyGraphLayout(ir);
+  const { viewBox } = layout;
+  const segments = buildSegments(ir.nodes.length, ir.edges.length);
   const seg = (kind: SegmentKind, index = 0) => {
     const segment = segments.find(
       (candidate) => candidate.kind === kind && candidate.index === index,
@@ -416,16 +269,15 @@ function GraphSVG({
   };
 
   const groupsSeg = seg('groups');
-  const routedEdges: RoutedEdge[] = computePaths(graph);
-  const indexedEdges = routedEdges
-    .map((routedEdge, index) => ({
-      ...routedEdge,
+  const indexedEdges = layout.edges
+    .map((edgeLayout, index) => ({
+      ...edgeLayout,
       index,
       segment: seg('edge', index),
-      layer: routedEdge.edge.layer ?? 'foreground',
+      layer: edgeLayout.edge.layer ?? 'foreground',
     }))
     .filter(({ d }) => Boolean(d));
-  const viewBox = graphContentViewBox(graph, routedEdges);
+  const { graphNodes, notes } = splitNotes(layout.nodes);
   const viewportProps = svgViewportProps(viewBox, viewport);
 
   return (
@@ -449,21 +301,15 @@ function GraphSVG({
         height={viewBox.h}
       />
 
-      {(graph.groups ?? []).map((g) => {
-        const box = groupBoxes.get(g.id);
-        if (!box) return null;
-        return (
-          <GroupRect
-            key={`group-${g.id}`}
-            group={g}
-            box={box}
-            dividers={groupDividerLines(g, graph.nodes, layout, graph.groups)}
-            progress={progress}
-            start={groupsSeg.start}
-            end={groupsSeg.end}
-          />
-        );
-      })}
+      {layout.groups.map((groupLayout) => (
+        <GroupRect
+          key={`group-${groupLayout.group.id}`}
+          layout={groupLayout}
+          progress={progress}
+          start={groupsSeg.start}
+          end={groupsSeg.end}
+        />
+      ))}
 
       {indexedEdges
         .filter(({ layer }) => layer === 'background')
@@ -478,15 +324,12 @@ function GraphSVG({
           />
         ))}
 
-      {graph.nodes.map((node, i) => {
-        const box = nodeBoxes.get(node.id);
-        if (!box) return null;
+      {graphNodes.map((nodeLayout, i) => {
         const segNode = seg('node', i);
         return (
           <NodeRect
-            key={`node-${node.id}`}
-            node={node}
-            box={box}
+            key={`node-${nodeLayout.node.id}`}
+            layout={nodeLayout}
             progress={progress}
             start={segNode.start}
             end={segNode.end}
@@ -517,28 +360,25 @@ function GraphSVG({
         />
       )}
 
-      {indexedEdges.map(
-        ({ edge, labelPlacement, badgePlacement, index, segment }) => (
-          <EdgeOverlay
-            key={`edge-overlay-${index}`}
-            edge={edge}
-            labelPlacement={labelPlacement}
-            badgePlacement={badgePlacement}
-            progress={progress}
-            start={segment.start}
-            end={segment.end}
-          />
-        ),
-      )}
+      {indexedEdges.map((edgeLayout) => (
+        <EdgeOverlay
+          key={`edge-overlay-${edgeLayout.index}`}
+          layout={edgeLayout}
+          progress={progress}
+          start={edgeLayout.segment.start}
+          end={edgeLayout.segment.end}
+        />
+      ))}
 
-      {annotations.map((annotation, i) => (
+      {notes.map((note) => (
         <AnnotationText
-          key={`annot-${i}`}
-          annotation={annotation}
+          key={note.node.id}
+          note={note}
+          annotations={ir.annotations}
+          leaders={layout.leaders}
           progress={progress}
           start={ANNOTATION_REVEAL_START}
           end={1}
-          index={i}
         />
       ))}
     </svg>

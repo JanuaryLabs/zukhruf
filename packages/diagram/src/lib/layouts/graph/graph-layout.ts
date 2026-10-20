@@ -86,10 +86,6 @@ export function nodeFrameRadius(node: DiagramNode) {
   return node.rx ?? (node.frame === 'flat' ? 4 : NODE_RX);
 }
 
-export function nodeFrameStrokeWidth(node: DiagramNode) {
-  return node.frame === 'flat' ? 0 : 1.5;
-}
-
 type Axis = 'col' | 'row';
 
 function graphLayout(
@@ -2510,6 +2506,8 @@ function routeSelfLoop(
 
 export type RoutedEdge = {
   edge: DiagramEdge;
+  exitSide: DiagramSide;
+  entrySide: DiagramSide;
   d: string;
   entry: Point;
   points: Point[];
@@ -2843,6 +2841,8 @@ export function computePaths(spec: GraphLayoutSpec): RoutedEdge[] {
     ) {
       return {
         edge,
+        exitSide: sides?.exitSide ?? 'right',
+        entrySide: sides?.entrySide ?? 'left',
         d: '',
         entry: { x: 0, y: 0 },
         points: [],
@@ -2862,7 +2862,7 @@ export function computePaths(spec: GraphLayoutSpec): RoutedEdge[] {
         edge.entryGap,
       );
       reserveRoutedEdge(blocked, result.points, gridW, gridH);
-      return { edge, ...result };
+      return { edge, exitSide: side, entrySide: side, ...result };
     }
     const result = routeEdge(
       edge,
@@ -2882,7 +2882,7 @@ export function computePaths(spec: GraphLayoutSpec): RoutedEdge[] {
       routeOffsets[i],
     );
     reserveRoutedEdge(blocked, result.points, gridW, gridH);
-    return { edge, ...result };
+    return { edge, ...sides, ...result };
   });
 
   return deconflictLabelPlacements(routedEdges);

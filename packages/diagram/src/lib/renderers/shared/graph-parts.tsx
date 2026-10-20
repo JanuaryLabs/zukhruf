@@ -1,30 +1,18 @@
 import { type MotionValue, motion, useTransform } from 'motion/react';
 
-import {
-  type BadgePlacement,
-  EDGE_BADGE_ICON,
-  GROUP_LABEL_H,
-  type GroupDividerLine,
-  type LabelPlacement,
-  type PortPlacement,
-  edgeBadgeSize,
-  edgeLabelFontSize,
-  edgeLabelFrameBox,
-  edgeLabelLineHeight,
-  groupLabelHeight,
-  groupLabelLines,
-  groupPortPlacements,
-  groupTitleGutterHeight,
-} from '../../layouts/graph/graph-layout.ts';
+import type {
+  EdgeLayout,
+  GroupLayout,
+  PortLayout,
+} from '../../layouts/graph/graph-layout-result.ts';
 import { FONT_FAMILY } from '../../layouts/text/font.ts';
 import type {
   DiagramEdge,
-  DiagramGraphIR,
-  DiagramLabelLine,
   DiagramNode,
   DiagramNodeIcon as DiagramNodeIconName,
+  DiagramNodePort,
   DiagramTexture,
-  Box as SvgBox,
+  DiagramTone,
 } from '../../model/diagram-ir.ts';
 import {
   DIAGRAM_BG,
@@ -38,6 +26,7 @@ import {
   resolveDiagramToneStroke,
   useDiagramTheme,
 } from '../../react/chrome/index.ts';
+import { RunSpans } from './run-spans.tsx';
 
 export function nodeFrameFill(node: DiagramNode, frame: DiagramNode['frame']) {
   if (frame === 'transparent') return 'transparent';
@@ -54,9 +43,18 @@ export function nodeFrameStroke(
 ) {
   if (frame === 'transparent' || frame === 'flat') return 'transparent';
   if (frame === 'filled') return DIAGRAM_TEXT;
-  if (node.accent) return themeAccent;
-  if (node.tone) return resolveDiagramToneStroke(node.tone);
-  return DIAGRAM_NEUTRAL;
+  return accentToneStroke(node, themeAccent, DIAGRAM_NEUTRAL);
+}
+
+/** The theme accent, else the tone's stroke, else the fallback. */
+export function accentToneStroke(
+  subject: { accent?: boolean | undefined; tone?: DiagramTone | undefined },
+  themeAccent: string,
+  fallback: string,
+) {
+  if (subject.accent) return themeAccent;
+  if (subject.tone) return resolveDiagramToneStroke(subject.tone);
+  return fallback;
 }
 
 export function nodeTextFill(
@@ -69,15 +67,8 @@ export function nodeTextFill(
   return frame === 'filled' ? DIAGRAM_ON_ACCENT : DIAGRAM_TEXT;
 }
 
-export function labelLineFill(
-  line: DiagramLabelLine,
-  fill: string,
-  themeAccent: string,
-) {
-  if (typeof line === 'string') return fill;
-  if (line.textColor === 'accent') return themeAccent;
-  if (line.textColor === 'dim') return DIAGRAM_DIM;
-  return fill;
+export function nodeFrameStrokeWidth(node: DiagramNode) {
+  return node.frame === 'flat' ? 0 : 1.5;
 }
 
 export function nodeTexture(node: DiagramNode, frame: DiagramNode['frame']) {
@@ -94,6 +85,24 @@ function edgeDasharray(edge: DiagramEdge) {
   if (edge.lineStyle === 'dashed') return '6 6';
   if (edge.lineStyle === 'dotted') return '1 6';
   return undefined;
+}
+
+function edgeStroke(edge: DiagramEdge, themeAccent: string) {
+  if (edge.accent) return themeAccent;
+  if (edge.dim) return DIAGRAM_DIM;
+  return DIAGRAM_NEUTRAL;
+}
+
+function edgeMarkerId(edge: DiagramEdge, ids: DiagramIds) {
+  if (edge.accent) return ids.arrowAccent;
+  if (edge.dim) return ids.arrowDim;
+  return ids.arrowNeutral;
+}
+
+function edgeLabelFill(edge: DiagramEdge, themeAccent: string) {
+  if (edge.accent) return themeAccent;
+  if (edge.dim) return DIAGRAM_DIM;
+  return DIAGRAM_TEXT;
 }
 
 export type SegmentKind = 'groups' | 'node' | 'edge';
@@ -360,16 +369,12 @@ export function DiagramNodeIcon({
 }
 
 export function GroupRect({
-  group,
-  box,
-  dividers,
+  layout,
   progress,
   start,
   end,
 }: {
-  group: DiagramGraphIR['groups'][number];
-  box: SvgBox;
-  dividers: GroupDividerLine[];
+  layout: GroupLayout;
   progress: MotionValue<number>;
   start: number;
   end: number;
@@ -378,32 +383,23 @@ export function GroupRect({
   const opacity = useTransform(progress, [start, end], [0, 1], {
     clamp: true,
   });
+  const { group, rect: box, band, label } = layout;
   const rx = group.rx ?? 12;
   const frame = group.frame ?? 'solid';
   const fill = group.fill ?? 'surface';
-  const stroke = group.accent
-    ? themeAccent
-    : group.tone
-      ? resolveDiagramToneStroke(group.tone)
-      : DIAGRAM_NEUTRAL;
+  const stroke = accentToneStroke(group, themeAccent, DIAGRAM_NEUTRAL);
+  const dasharray = frame === 'dashed' ? '6 6' : undefined;
   const hasFrame = frame !== 'none';
   const hasFill = fill !== 'none';
   const surfaceFill =
     hasFill && group.tone ? resolveDiagramToneFill(group.tone) : DIAGRAM_BG;
   const texture = group.texture ?? (hasFill ? 'dots' : 'none');
   const texturePattern = hasFill ? textureFill(texture, ids) : null;
-  const labelLines = groupLabelLines(group);
-  const titleBandHeight = group.titleBand ? groupTitleGutterHeight(group) : 0;
-  const labelAlign = group.labelAlign ?? 'center';
-  const labelInset = 16;
-  const labelX =
-    labelAlign === 'start'
-      ? box.x + labelInset
-      : labelAlign === 'end'
-        ? box.x + box.w - labelInset
-        : box.x + box.w / 2;
-  const labelAnchor =
-    labelAlign === 'center' ? ('middle' as const) : labelAlign;
+  const dividerKeys = [
+    ...(group.dividers?.rows ?? []).map((value) => `row:${value}`),
+    ...(group.dividers?.cols ?? []).map((value) => `col:${value}`),
+  ];
+  const [firstLabel] = label;
   return (
     <motion.g style={{ opacity }}>
       <rect
@@ -417,7 +413,7 @@ export function GroupRect({
         fill={hasFill ? surfaceFill : 'none'}
         stroke={hasFrame ? stroke : 'none'}
         strokeWidth={hasFrame ? 1 : 0}
-        strokeDasharray={frame === 'dashed' ? '6 6' : undefined}
+        strokeDasharray={dasharray}
       />
       {texturePattern && (
         <rect
@@ -431,67 +427,63 @@ export function GroupRect({
           pointerEvents="none"
         />
       )}
-      {titleBandHeight > 0 && (
+      {band && (
         <>
           <rect
             data-diagram-group-title-band={group.id}
-            x={box.x}
-            y={box.y}
-            width={box.w}
-            height={titleBandHeight}
+            x={band.x}
+            y={band.y}
+            width={band.w}
+            height={band.h}
             fill={hasFill ? surfaceFill : DIAGRAM_BG}
             pointerEvents="none"
           />
           <line
             data-diagram-group-title-separator={group.id}
-            x1={box.x}
-            y1={box.y + titleBandHeight}
-            x2={box.x + box.w}
-            y2={box.y + titleBandHeight}
+            x1={band.x}
+            y1={band.y + band.h}
+            x2={band.x + band.w}
+            y2={band.y + band.h}
             stroke={stroke}
             strokeWidth={1}
-            strokeDasharray={frame === 'dashed' ? '6 6' : undefined}
+            strokeDasharray={dasharray}
           />
         </>
       )}
-      {dividers.map((line) => (
-        <line
-          key={`${line.axis}-${line.value}`}
-          x1={line.x1}
-          y1={line.y1}
-          x2={line.x2}
-          y2={line.y2}
-          stroke={line.accent ? themeAccent : DIAGRAM_NEUTRAL}
-          strokeWidth={1}
-          strokeDasharray={frame === 'dashed' ? '6 6' : undefined}
-          data-diagram-group-divider={`${group.id}:${line.axis}:${line.value}`}
-        />
-      ))}
-      {labelLines.length > 0 && (
+      {layout.dividers.map(([from, to], i) => {
+        const key = dividerKeys[i] ?? `${i}`;
+        return (
+          <line
+            key={key}
+            x1={from.x}
+            y1={from.y}
+            x2={to.x}
+            y2={to.y}
+            stroke={group.accent ? themeAccent : DIAGRAM_NEUTRAL}
+            strokeWidth={1}
+            strokeDasharray={dasharray}
+            data-diagram-group-divider={`${group.id}:${key}`}
+          />
+        );
+      })}
+      {firstLabel && (
         <text
           data-diagram-group-label={group.id}
-          x={labelX}
-          y={
-            group.labelSide === 'bottom'
-              ? box.y + box.h - groupLabelHeight(group) + GROUP_LABEL_H - 14
-              : box.y + GROUP_LABEL_H
-          }
-          textAnchor={labelAnchor}
-          fontFamily={FONT_FAMILY.sans}
-          fontSize={12}
-          fontWeight={600}
+          x={firstLabel.x}
+          y={firstLabel.y}
+          textAnchor={firstLabel.anchor}
+          fontFamily={FONT_FAMILY[firstLabel.font.face]}
+          fontSize={firstLabel.font.size}
+          fontWeight={firstLabel.font.weight}
           fill={DIAGRAM_TEXT}
         >
-          {labelLines.map((line, i) => (
-            <tspan key={i} x={labelX} dy={i === 0 ? 0 : 14}>
-              {line}
-            </tspan>
-          ))}
+          <RunSpans runs={label} />
         </text>
       )}
       <PortMarkers
         ownerId={group.id}
-        placements={groupPortPlacements(group, box)}
+        ports={layout.ports ?? []}
+        declared={group.ports}
       />
     </motion.g>
   );
@@ -511,16 +503,8 @@ export function EdgeStroke({
   end: number;
 }) {
   const { accent: themeAccent, ids } = useDiagramTheme();
-  const stroke = edge.accent
-    ? themeAccent
-    : edge.dim
-      ? DIAGRAM_DIM
-      : DIAGRAM_NEUTRAL;
-  const markerId = edge.accent
-    ? ids.arrowAccent
-    : edge.dim
-      ? ids.arrowDim
-      : ids.arrowNeutral;
+  const stroke = edgeStroke(edge, themeAccent);
+  const markerId = edgeMarkerId(edge, ids);
   const direction = edge.headless ? 'none' : (edge.direction ?? 'forward');
   const markerUrl = `url(#${markerId})`;
   const strokeWidth = edge.strokeWidth ?? 1.5;
@@ -563,26 +547,19 @@ export function EdgeStroke({
 }
 
 export function EdgeOverlay({
-  edge,
-  labelPlacement,
-  badgePlacement,
+  layout,
   progress,
   start,
   end,
 }: {
-  edge: DiagramEdge;
-  labelPlacement: LabelPlacement | null;
-  badgePlacement: BadgePlacement | null;
+  layout: EdgeLayout;
   progress: MotionValue<number>;
   start: number;
   end: number;
 }) {
   const { accent: themeAccent } = useDiagramTheme();
-  const labelFill = edge.accent
-    ? themeAccent
-    : edge.dim
-      ? DIAGRAM_DIM
-      : DIAGRAM_TEXT;
+  const { edge, label, badge } = layout;
+  const labelFill = edgeLabelFill(edge, themeAccent);
   const drawEnd = start + (end - start) * 0.85;
   const labelOpacity = useTransform(progress, [drawEnd, end], [0, 1], {
     clamp: true,
@@ -590,18 +567,18 @@ export function EdgeOverlay({
 
   return (
     <>
-      {edge.label && labelPlacement && (
+      {label && (
         <EdgeLabel
           edge={edge}
-          placement={labelPlacement}
+          label={label}
           fill={labelFill}
           opacity={labelOpacity}
         />
       )}
-      {(edge.badgeIcon || edge.badgeLabel?.length) && badgePlacement && (
+      {badge && (
         <EdgeBadge
           edge={edge}
-          placement={badgePlacement}
+          badge={badge}
           fill={labelFill}
           opacity={labelOpacity}
         />
@@ -612,32 +589,31 @@ export function EdgeOverlay({
 
 function EdgeLabel({
   edge,
-  placement,
+  label,
   fill,
   opacity,
 }: {
   edge: DiagramEdge;
-  placement: LabelPlacement;
+  label: NonNullable<EdgeLayout['label']>;
   fill: string;
   opacity: MotionValue<number>;
 }) {
-  const label = edge.label ?? [];
-  const fontSize = edgeLabelFontSize(edge);
-  const lineHeight = edgeLabelLineHeight(edge);
-  const { x, y, w: width, h: height } = edgeLabelFrameBox(edge, placement);
+  const { box } = label;
+  const [first] = label.text;
+  if (!first) return null;
 
   return (
     <motion.g style={{ opacity }}>
       {edge.labelFrame && (
         <rect
           data-diagram-edge-label-frame={`${edge.from}->${edge.to}`}
-          data-diagram-edge-label-segment={placement.segmentIndex}
+          data-diagram-edge-label-segment={label.segment}
           data-diagram-edge-label-line-gap={edge.labelLineGap}
-          x={x}
-          y={y}
-          width={width}
-          height={height}
-          rx={height / 2}
+          x={box.x}
+          y={box.y}
+          width={box.w}
+          height={box.h}
+          rx={box.h / 2}
           fill={DIAGRAM_BG}
           stroke={fill}
           strokeWidth={0.75}
@@ -645,89 +621,81 @@ function EdgeLabel({
       )}
       <text
         data-diagram-edge-label={`${edge.from}->${edge.to}`}
-        data-diagram-edge-label-segment={placement.segmentIndex}
+        data-diagram-edge-label-segment={label.segment}
         data-diagram-edge-label-line-gap={edge.labelLineGap}
-        x={placement.x}
-        y={placement.y}
-        textAnchor={placement.align}
-        fontFamily={FONT_FAMILY.mono}
-        fontSize={fontSize}
+        x={first.x}
+        y={first.y}
+        textAnchor={first.anchor}
+        fontFamily={FONT_FAMILY[first.font.face]}
+        fontSize={first.font.size}
         fill={fill}
       >
-        {label.map((line, i) => (
-          <tspan key={i} x={placement.x} dy={i === 0 ? 0 : lineHeight}>
-            {line}
-          </tspan>
-        ))}
+        <RunSpans runs={label.text} />
       </text>
     </motion.g>
   );
 }
 
+/**
+ * The badge draws in its own frame, centred on the badge, so that it can move
+ * as one piece.
+ */
 function EdgeBadge({
   edge,
-  placement,
+  badge,
   fill,
   opacity,
 }: {
   edge: DiagramEdge;
-  placement: BadgePlacement;
+  badge: NonNullable<EdgeLayout['badge']>;
   fill: string;
   opacity: MotionValue<number>;
 }) {
-  const label = edge.badgeLabel ?? [];
-  const fontSize = 10;
-  const lineHeight = 12;
-  const iconSize = edge.badgeIcon ? EDGE_BADGE_ICON : 0;
-  const iconGap = edge.badgeIcon && label.length > 0 ? 8 : 0;
-  const { w: width, h: height } = edgeBadgeSize(edge);
-  const left = -width / 2;
-  const top = -height / 2;
-  const iconX = left + 8;
-  const iconY = -iconSize / 2;
-  const textX = left + 8 + iconSize + iconGap;
-  const firstLineY = -((label.length - 1) * lineHeight) / 2 + 4;
+  const { box, icon, text } = badge;
+  const origin = { x: box.x + box.w / 2, y: box.y + box.h / 2 };
+  const local = text.map((run) => ({
+    ...run,
+    x: run.x - origin.x,
+    y: run.y - origin.y,
+  }));
+  const [first] = local;
 
   return (
     <motion.g
       data-diagram-edge-badge={`${edge.from}->${edge.to}`}
-      transform={`translate(${placement.x} ${placement.y})`}
+      transform={`translate(${origin.x} ${origin.y})`}
       style={{ opacity }}
     >
       <rect
-        x={left}
-        y={top}
-        width={width}
-        height={height}
+        x={box.x - origin.x}
+        y={box.y - origin.y}
+        width={box.w}
+        height={box.h}
         rx={10}
         fill={DIAGRAM_BG}
         stroke={fill}
         strokeWidth={1}
       />
-      {edge.badgeIcon && (
+      {edge.badgeIcon && icon && (
         <DiagramNodeIcon
           icon={edge.badgeIcon}
-          x={iconX}
-          y={iconY}
-          size={iconSize}
+          x={icon.x - origin.x}
+          y={icon.y - origin.y}
+          size={icon.w}
           color={fill}
         />
       )}
-      {label.length > 0 && (
+      {first && (
         <text
-          x={textX}
-          y={firstLineY}
-          textAnchor="start"
-          fontFamily={FONT_FAMILY.sans}
-          fontSize={fontSize}
-          fontWeight={600}
+          x={first.x}
+          y={first.y}
+          textAnchor={first.anchor}
+          fontFamily={FONT_FAMILY[first.font.face]}
+          fontSize={first.font.size}
+          fontWeight={first.font.weight}
           fill={fill}
         >
-          {label.map((line, i) => (
-            <tspan key={i} x={textX} dy={i === 0 ? 0 : lineHeight}>
-              {line}
-            </tspan>
-          ))}
+          <RunSpans runs={local} />
         </text>
       )}
     </motion.g>
@@ -736,18 +704,21 @@ function EdgeBadge({
 
 export function PortMarkers({
   ownerId,
-  placements,
+  ports,
+  declared,
 }: {
   ownerId: string;
-  placements: PortPlacement[];
+  ports: PortLayout[];
+  declared: DiagramNodePort[] | undefined;
 }) {
   const { accent: themeAccent } = useDiagramTheme();
-  if (placements.length === 0) return null;
+  if (ports.length === 0) return null;
   return (
     <>
-      {placements.map((port) => {
-        const stroke = port.accent ? themeAccent : DIAGRAM_NEUTRAL;
-        const fill = port.accent ? themeAccent : DIAGRAM_BG;
+      {ports.map((port) => {
+        const accent = declared?.find(({ id }) => id === port.id)?.accent;
+        const stroke = accent ? themeAccent : DIAGRAM_NEUTRAL;
+        const fill = accent ? themeAccent : DIAGRAM_BG;
         return (
           <g
             key={port.id}
@@ -755,8 +726,8 @@ export function PortMarkers({
             data-diagram-port-side={port.side}
           >
             <circle
-              cx={port.x}
-              cy={port.y}
+              cx={port.point.x}
+              cy={port.point.y}
               r={4}
               fill={fill}
               stroke={stroke}
@@ -764,15 +735,15 @@ export function PortMarkers({
             />
             {port.label && (
               <text
-                x={port.labelX}
-                y={port.labelY}
-                textAnchor={port.labelAlign}
-                fontFamily={FONT_FAMILY.mono}
-                fontSize={9}
-                fontWeight={600}
+                x={port.label.x}
+                y={port.label.y}
+                textAnchor={port.label.anchor}
+                fontFamily={FONT_FAMILY[port.label.font.face]}
+                fontSize={port.label.font.size}
+                fontWeight={port.label.font.weight}
                 fill={stroke}
               >
-                {port.label}
+                {port.label.text}
               </text>
             )}
           </g>

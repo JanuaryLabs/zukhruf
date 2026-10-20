@@ -1,26 +1,16 @@
 import { type MotionValue, motion, useTransform } from 'motion/react';
 import type { CSSProperties, ReactNode } from 'react';
 
-import { compileGraph, validateGraph } from '../../compiler/diagram-compile.ts';
-import {
-  type RoutedEdge,
-  computePaths,
-  graphContentViewBox,
-  groupBox,
-  groupDividerLines,
-  nodeBox,
-  nodeFrameRadius,
-  nodeFrameStrokeWidth,
-  nodeStackCount,
-  resolveGraphAnnotations,
-  resolveGraphLayout,
-} from '../../layouts/graph/graph-layout.ts';
+import { compileGraph } from '../../compiler/diagram-compile.ts';
+import type {
+  NodeLayout,
+  TextRun,
+} from '../../layouts/graph/graph-layout-result.ts';
+import { legacyGraphLayout } from '../../layouts/graph/legacy-graph-layout.ts';
 import { FONT_FAMILY, TEXT_SHAPING } from '../../layouts/text/font.ts';
 import type {
   Box,
   DiagramGraphLayout,
-  DiagramLabelLine,
-  DiagramNode,
   DiagramTexture,
   DiagramViewport,
 } from '../../model/diagram-ir.ts';
@@ -39,9 +29,9 @@ import {
   GroupRect,
   type SegmentKind,
   buildSegments,
-  labelLineFill,
   nodeFrameFill,
   nodeFrameStroke,
+  nodeFrameStrokeWidth,
   nodeTextFill,
   nodeTexture,
 } from '../shared/graph-parts.tsx';
@@ -53,8 +43,10 @@ import {
   NodeStackFrames,
   SpecialNode,
   isSpecialNode,
+  splitNotes,
 } from '../shared/node-parts.tsx';
 import { DiagramPaperRect } from '../shared/paper.tsx';
+import { nodeTextParts, runFill } from '../shared/text-runs.ts';
 import { formatZoom, normalizeZoom } from '../shared/viewport-zoom.ts';
 import type { GraphRendererProps } from '../types.ts';
 
@@ -97,10 +89,9 @@ function GraphHTML({
   paper,
 }: Omit<GraphRendererProps, 'viewport'> & { zoom: number }) {
   const { stylePreset } = useDiagramTheme();
-  validateGraph(ir);
-  const graph = resolveGraphLayout(ir);
-  const layout = graph.layout;
-  const segments = buildSegments(graph.nodes.length, graph.edges.length);
+  const layout = legacyGraphLayout(ir);
+  const { viewBox } = layout;
+  const segments = buildSegments(ir.nodes.length, ir.edges.length);
   const seg = (kind: SegmentKind, index = 0) => {
     const segment = segments.find(
       (candidate) => candidate.kind === kind && candidate.index === index,
@@ -109,25 +100,19 @@ function GraphHTML({
     return segment;
   };
   const groupsSeg = seg('groups');
-  const routedEdges: RoutedEdge[] = computePaths(graph);
-  const indexedEdges = routedEdges
-    .map((routedEdge, index) => ({
-      ...routedEdge,
+  const indexedEdges = layout.edges
+    .map((edgeLayout, index) => ({
+      ...edgeLayout,
       index,
       segment: seg('edge', index),
-      layer: routedEdge.edge.layer ?? 'foreground',
+      layer: edgeLayout.edge.layer ?? 'foreground',
     }))
     .filter(({ d }) => Boolean(d));
-  const viewBox = graphContentViewBox(graph, routedEdges);
-  const nodes = graph.nodes
-    .map((node, i) => ({
-      node,
-      box: nodeBox(node, layout),
-      segment: seg('node', i),
-    }))
-    .filter(({ node }) => !node.hidden);
-  const boxNodes = nodes.filter(({ node }) => !isSpecialNode(node));
-  const annotations = resolveGraphAnnotations(graph);
+  const { graphNodes, notes } = splitNotes(layout.nodes);
+  const nodes = graphNodes
+    .map((nodeLayout, i) => ({ layout: nodeLayout, segment: seg('node', i) }))
+    .filter(({ layout: { node } }) => !node.hidden);
+  const boxNodes = nodes.filter(({ layout: { node } }) => !isSpecialNode(node));
   const svgLayer = {
     className: 'pointer-events-none absolute inset-0 overflow-visible',
     width: viewBox.w,
@@ -160,17 +145,10 @@ function GraphHTML({
             width={viewBox.w}
             height={viewBox.h}
           />
-          {graph.groups?.map((group) => (
+          {layout.groups.map((groupLayout) => (
             <GroupRect
-              key={`group-${group.id}`}
-              group={group}
-              box={groupBox(group, graph.nodes, layout, graph.groups)}
-              dividers={groupDividerLines(
-                group,
-                graph.nodes,
-                layout,
-                graph.groups,
-              )}
+              key={`group-${groupLayout.group.id}`}
+              layout={groupLayout}
               progress={progress}
               start={groupsSeg.start}
               end={groupsSeg.end}
@@ -188,21 +166,19 @@ function GraphHTML({
                 end={segment.end}
               />
             ))}
-          {nodes.map(({ node, box, segment }) =>
-            isSpecialNode(node) ? (
+          {nodes.map(({ layout: nodeLayout, segment }) =>
+            isSpecialNode(nodeLayout.node) ? (
               <SpecialNode
-                key={`node-${node.id}`}
-                node={node}
-                box={box}
+                key={`node-${nodeLayout.node.id}`}
+                layout={nodeLayout}
                 progress={progress}
                 start={segment.start}
                 end={segment.end}
               />
             ) : (
               <NodeStack
-                key={`stack-${node.id}`}
-                node={node}
-                box={box}
+                key={`stack-${nodeLayout.node.id}`}
+                layout={nodeLayout}
                 progress={progress}
                 start={segment.start}
                 end={segment.end}
@@ -210,11 +186,10 @@ function GraphHTML({
             ),
           )}
         </svg>
-        {boxNodes.map(({ node, box, segment }) => (
+        {boxNodes.map(({ layout: nodeLayout, segment }) => (
           <NodeBox
-            key={`node-${node.id}`}
-            node={node}
-            box={box}
+            key={`node-${nodeLayout.node.id}`}
+            layout={nodeLayout}
             origin={viewBox}
             progress={progress}
             start={segment.start}
@@ -222,15 +197,15 @@ function GraphHTML({
           />
         ))}
         <svg {...svgLayer}>
-          {boxNodes.map(({ node, box, segment }) => (
+          {boxNodes.map(({ layout: nodeLayout, segment }) => (
             <NodeReveal
-              key={`node-marks-${node.id}`}
+              key={`node-marks-${nodeLayout.node.id}`}
               progress={progress}
               start={segment.start}
               end={segment.end}
             >
-              <NodePorts node={node} box={box} />
-              <NodeCaption node={node} box={box} />
+              <NodePorts layout={nodeLayout} />
+              <NodeCaption layout={nodeLayout} />
             </NodeReveal>
           ))}
           {indexedEdges
@@ -245,27 +220,24 @@ function GraphHTML({
                 end={segment.end}
               />
             ))}
-          {indexedEdges.map(
-            ({ edge, labelPlacement, badgePlacement, index, segment }) => (
-              <EdgeOverlay
-                key={`edge-overlay-${index}`}
-                edge={edge}
-                labelPlacement={labelPlacement}
-                badgePlacement={badgePlacement}
-                progress={progress}
-                start={segment.start}
-                end={segment.end}
-              />
-            ),
-          )}
-          {annotations.map((annotation, i) => (
+          {indexedEdges.map((edgeLayout) => (
+            <EdgeOverlay
+              key={`edge-overlay-${edgeLayout.index}`}
+              layout={edgeLayout}
+              progress={progress}
+              start={edgeLayout.segment.start}
+              end={edgeLayout.segment.end}
+            />
+          ))}
+          {notes.map((note) => (
             <AnnotationText
-              key={`annot-${i}`}
-              annotation={annotation}
+              key={note.node.id}
+              note={note}
+              annotations={ir.annotations}
+              leaders={layout.leaders}
               progress={progress}
               start={ANNOTATION_REVEAL_START}
               end={1}
-              index={i}
             />
           ))}
         </svg>
@@ -293,27 +265,24 @@ function NodeReveal({
 }
 
 function NodeStack({
-  node,
-  box,
+  layout,
   progress,
   start,
   end,
 }: {
-  node: DiagramNode;
-  box: Box;
+  layout: NodeLayout;
   progress: MotionValue<number>;
   start: number;
   end: number;
 }) {
   const { accent: themeAccent } = useDiagramTheme();
+  const { node } = layout;
   const frame = node.frame ?? 'solid';
-  if (frame === 'none' || nodeStackCount(node) < 2) return null;
+  if (layout.frames.length === 0) return null;
   return (
     <NodeReveal progress={progress} start={start} end={end}>
       <NodeStackFrames
-        node={node}
-        box={box}
-        rx={nodeFrameRadius(node)}
+        layout={layout}
         fill={nodeFrameFill(node, frame)}
         stroke={nodeFrameStroke(node, frame, themeAccent)}
         strokeWidth={nodeFrameStrokeWidth(node)}
@@ -339,16 +308,19 @@ function textureImage(
   return {};
 }
 
+/**
+ * A node frame with its text drawn as absolutely placed runs, at the positions
+ * the SVG output draws them. The frame is an inset shadow, not a border, so the
+ * runs share the frame's origin.
+ */
 function NodeBox({
-  node,
-  box,
+  layout,
   origin,
   progress,
   start,
   end,
 }: {
-  node: DiagramNode;
-  box: Box;
+  layout: NodeLayout;
   origin: Box;
   progress: MotionValue<number>;
   start: number;
@@ -359,38 +331,29 @@ function NodeBox({
   const translateY = useTransform(progress, [start, end], [-10, 0], {
     clamp: true,
   });
+  const { node, box, icon, text } = layout;
   const frame = node.frame ?? 'solid';
   const fill = nodeTextFill(node, frame, themeAccent);
-  const lines = Array.isArray(node.label) ? node.label : [node.label];
-  const descriptionLines = [node.description ?? []].flat();
-  const itemLines = node.items ?? [];
-  const startAligned =
-    (node.textAlign ?? 'center') === 'start' ||
-    Boolean(node.icon) ||
-    descriptionLines.length > 0;
-  const iconSize = node.iconSize ?? 42;
+  const { title, description, items } = nodeTextParts(layout);
+  const lastRun = text.at(-1);
 
   return (
     <motion.div
       data-diagram-node={node.id}
       data-diagram-node-tone={node.tone}
-      className={
-        startAligned
-          ? 'absolute flex items-start gap-[22px] px-7 py-6'
-          : 'absolute flex flex-col items-center justify-center gap-2 px-3 text-center'
-      }
+      className="absolute"
       style={{
         left: box.x - origin.x,
         top: box.y - origin.y,
         width: box.w,
         height: box.h,
         boxSizing: 'border-box',
-        borderRadius: nodeFrameRadius(node),
+        borderRadius: layout.radius,
         ...(frame === 'none'
           ? {}
           : {
               backgroundColor: nodeFrameFill(node, frame),
-              border: `${nodeFrameStrokeWidth(node)}px solid ${nodeFrameStroke(node, frame, themeAccent)}`,
+              boxShadow: `inset 0 0 0 ${nodeFrameStrokeWidth(node)}px ${nodeFrameStroke(node, frame, themeAccent)}`,
               ...textureImage(nodeTexture(node, frame)),
             }),
         color: fill,
@@ -398,107 +361,90 @@ function NodeBox({
         y: translateY,
       }}
     >
-      {node.icon && (
+      {node.icon && icon && (
         <svg
-          width={iconSize}
-          height={iconSize}
-          className="shrink-0"
+          width={icon.size}
+          height={icon.size}
+          className="absolute"
+          style={{ left: icon.x - box.x, top: icon.y - box.y }}
           aria-hidden
         >
           <DiagramNodeIcon
             icon={node.icon}
             x={0}
             y={0}
-            size={iconSize}
+            size={icon.size}
             color={node.textColor === 'accent' ? themeAccent : fill}
           />
         </svg>
       )}
-      <div
-        className={startAligned ? 'flex min-w-0 flex-col gap-2' : 'contents'}
-      >
-        <NodeLabel
-          node={node}
-          lines={lines}
-          fill={fill}
-          themeAccent={themeAccent}
-          startAligned={startAligned}
+      {title.map((run, i) => (
+        <RunText
+          key={i}
+          run={run}
+          origin={box}
+          color={runFill(run, fill, themeAccent)}
         />
-        {descriptionLines.length > 0 && (
-          <p
-            data-diagram-node-description={node.id}
-            className="text-pretty"
+      ))}
+      {description.length > 0 && (
+        <div data-diagram-node-description={node.id}>
+          {description.map((run, i) => (
+            <RunText key={i} run={run} origin={box} />
+          ))}
+        </div>
+      )}
+      {items.map(({ run, bullet }, i) => (
+        <div key={i} data-diagram-node-item={`${node.id}:${i}`}>
+          <span
+            className="absolute rounded-full bg-current"
             style={{
-              fontFamily: FONT_FAMILY.sans,
-              fontSize: node.bodyFontSize ?? 13,
-              lineHeight: 1.35,
+              left: bullet.x - box.x - 2.2,
+              top: bullet.y - box.y - 2.2,
+              width: 4.4,
+              height: 4.4,
             }}
-          >
-            {descriptionLines.join(' ')}
-          </p>
-        )}
-        {itemLines.length > 0 && (
-          <ul
-            className="flex list-disc flex-col gap-1 pl-4"
-            style={{
-              fontFamily: FONT_FAMILY.sans,
-              fontSize: node.bodyFontSize ?? 13,
-            }}
-          >
-            {itemLines.map((item, i) => (
-              <li key={i} data-diagram-node-item={`${node.id}:${i}`}>
-                {item}
-              </li>
-            ))}
-          </ul>
-        )}
-        {node.content !== undefined && (
+          />
+          <RunText run={run} origin={box} />
+        </div>
+      ))}
+      {node.content !== undefined && (
+        <div
+          className="absolute inset-x-0 bottom-0 flex flex-col items-center justify-center"
+          style={{
+            top: lastRun ? lastRun.bounds.y + lastRun.bounds.h - box.y : 0,
+          }}
+        >
           <div data-diagram-node-content={node.id}>{node.content}</div>
-        )}
-      </div>
+        </div>
+      )}
     </motion.div>
   );
 }
 
-function NodeLabel({
-  node,
-  lines,
-  fill,
-  themeAccent,
-  startAligned,
+function RunText({
+  run,
+  origin,
+  color,
 }: {
-  node: DiagramNode;
-  lines: DiagramLabelLine[];
-  fill: string;
-  themeAccent: string;
-  startAligned: boolean;
+  run: TextRun;
+  origin: Box;
+  color?: string;
 }) {
-  const fontSize = node.fontSize ?? (startAligned ? 15 : 12);
-  const defaultWeight = startAligned ? 700 : 500;
   return (
-    <div
-      className="text-balance"
+    <span
+      className="absolute whitespace-pre"
       style={{
-        fontFamily: startAligned ? FONT_FAMILY.sans : FONT_FAMILY.mono,
-        fontSize,
-        lineHeight: `${startAligned ? fontSize + 4 : Math.max(12, fontSize + 2)}px`,
-        letterSpacing: startAligned ? undefined : 0.6,
+        left: run.bounds.x - origin.x,
+        top: run.bounds.y - origin.y,
+        fontFamily: FONT_FAMILY[run.font.face],
+        fontSize: run.font.size,
+        fontWeight: run.font.weight,
+        lineHeight: `${run.bounds.h}px`,
+        letterSpacing: run.font.face === 'mono' ? 0.6 : undefined,
+        color,
       }}
     >
-      {lines.map((line, i) => (
-        <div
-          key={i}
-          style={{
-            color: labelLineFill(line, fill, themeAccent),
-            fontWeight:
-              typeof line === 'string'
-                ? (node.fontWeight ?? defaultWeight)
-                : (line.fontWeight ?? node.fontWeight ?? defaultWeight),
-          }}
-        >
-          {typeof line === 'string' ? line : line.text}
-        </div>
-      ))}
-    </div>
+      {run.text}
+    </span>
   );
 }

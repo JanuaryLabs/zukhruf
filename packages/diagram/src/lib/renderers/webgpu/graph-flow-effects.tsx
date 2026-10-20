@@ -6,12 +6,12 @@ import {
 import { memo, useEffect, useRef, useState } from 'react';
 import type { Gpu } from 'vgpu';
 
-import type { RoutedEdge } from '../../layouts/graph/graph-layout.ts';
+import type { EdgeLayout } from '../../layouts/graph/graph-layout-result.ts';
 import type { Box } from '../../model/diagram-ir.ts';
 import { type DiagramMode, useDiagramTheme } from '../../react/chrome/theme.ts';
 import { flowShader } from './flow-shader.ts';
 
-type FlowEdge = RoutedEdge & {
+type FlowEdge = EdgeLayout & {
   index: number;
   segment: { start: number; end: number };
 };
