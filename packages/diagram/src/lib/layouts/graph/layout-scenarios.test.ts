@@ -2639,6 +2639,83 @@ function noisyNumbers(layout: GraphLayout): string[] {
   return numbers.filter((number) => !/^-?\d+(\.\d{1,2})?$/.test(number));
 }
 
+describe('layoutGraph places the separator of a title band on the band edge that faces the content', () => {
+  test('t1 a top title band has its separator on its bottom edge, inside the group', () => {
+    // Arrange
+    const ir = graph({
+      nodes: [cell('longhorn', 0, 0, { label: 'Longhorn', group: 'storage' })],
+      groups: [{ id: 'storage', label: 'Storage', titleBand: true }],
+    });
+
+    // Act
+    const layout = layoutGraph(ir);
+
+    // Assert
+    assertSoundLayout(layout);
+    const { rect: storage, band, separator } = groupOf(layout, 'storage');
+    assert.ok(band, 'the group has a title band');
+    assert.ok(separator, 'the band has a separator');
+    const [from, to] = separator;
+    close(from.x, band.x, 'separator start x');
+    close(to.x, band.x + band.w, 'separator end x');
+    close(from.y, band.y + band.h, 'separator start y');
+    close(to.y, band.y + band.h, 'separator end y');
+    assert.ok(from.y > storage.y && from.y < storage.y + storage.h);
+  });
+
+  test('t2 a bottom title band has its separator on its top edge, between the content and the band, not on the group border', () => {
+    // Arrange
+    const ir = graph({
+      nodes: [cell('longhorn', 0, 0, { label: 'Longhorn', group: 'storage' })],
+      groups: [
+        {
+          id: 'storage',
+          label: 'Storage',
+          titleBand: true,
+          labelSide: 'bottom',
+        },
+      ],
+    });
+
+    // Act
+    const layout = layoutGraph(ir);
+
+    // Assert
+    assertSoundLayout(layout);
+    const { rect: storage, band, separator } = groupOf(layout, 'storage');
+    assert.ok(band, 'the group has a title band');
+    assert.ok(separator, 'the band has a separator');
+    const [from, to] = separator;
+    close(from.x, band.x, 'separator start x');
+    close(to.x, band.x + band.w, 'separator end x');
+    close(from.y, band.y, 'separator start y');
+    close(to.y, band.y, 'separator end y');
+    const longhorn = box(layout, 'longhorn');
+    assert.ok(from.y >= longhorn.y + longhorn.h, 'below the content');
+    assert.ok(
+      from.y < storage.y + storage.h,
+      'above the bottom border of the group',
+    );
+  });
+
+  test('t3 a group without a title band has no separator', () => {
+    // Arrange
+    const ir = graph({
+      nodes: [cell('longhorn', 0, 0, { label: 'Longhorn', group: 'storage' })],
+      groups: [{ id: 'storage', label: 'Storage' }],
+    });
+
+    // Act
+    const layout = layoutGraph(ir);
+
+    // Assert
+    assertSoundLayout(layout);
+    const storage = groupOf(layout, 'storage');
+    assert.equal(storage.band, undefined);
+    assert.equal(storage.separator, undefined);
+  });
+});
+
 describe('layoutGraph rounds the coordinates it returns', () => {
   test('f1 a node centred under a wider framed caption, whose raw left edge is float noise, comes out with at most two decimals in every number', () => {
     // Arrange

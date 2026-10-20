@@ -84,6 +84,10 @@ function soundLayout(): GraphLayout {
         depth: 0,
         rect: { x: 20, y: 20, w: 260, h: 200 },
         band: { x: 20, y: 20, w: 260, h: 24 },
+        separator: [
+          { x: 20, y: 44 },
+          { x: 280, y: 44 },
+        ],
         label: [run('Cloud', { x: 30, y: 24, w: 60, h: 14 })],
         dividers: [],
         ports: [],
@@ -687,6 +691,22 @@ describe('assertSoundLayout', () => {
       layout,
       { invariant: 'G1', ids: ['cloud'] },
       /G1 the title band of group "cloud" lies outside its rect/,
+    );
+  });
+
+  test('G1: a title separator on the band edge that faces away from the content', () => {
+    // Arrange
+    const layout = soundLayout();
+    groupIn(layout, 'cloud').separator = [
+      { x: 20, y: 20 },
+      { x: 280, y: 20 },
+    ];
+
+    // Assert
+    assertOnlyViolation(
+      layout,
+      { invariant: 'G1', ids: ['cloud'] },
+      /G1 the title separator of group "cloud" is off the band edge that faces its content/,
     );
   });
 

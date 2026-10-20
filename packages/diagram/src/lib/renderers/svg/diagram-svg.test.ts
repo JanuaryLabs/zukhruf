@@ -1851,6 +1851,42 @@ test('a group title band spans the top of the group, holds the label, and sits a
   );
 });
 
+test('a bottom group title band draws its separator on the band top edge, between the members and the band', () => {
+  // Arrange
+  const children = createElement(
+    Diagram.Group,
+    { id: 'cluster', label: 'Cluster', titleBand: true, labelSide: 'bottom' },
+    createElement(
+      Diagram.Box,
+      { key: 's', id: 'service', row: 0, col: 0 },
+      'Service',
+    ),
+  );
+
+  // Act
+  const markup = render(
+    createElement(SvgGraphDiagram, {
+      title: 'group-bottom-title-band-test',
+      defaultMode: 'static',
+      children,
+    }),
+  );
+
+  // Assert
+  const group = renderedRect(markup, 'data-diagram-group', 'cluster');
+  const band = renderedRect(markup, 'data-diagram-group-title-band', 'cluster');
+  assert.ok(
+    Math.abs(band.y + band.h - (group.y + group.h)) < 0.01,
+    'the band should sit at the bottom of the group',
+  );
+  assert.match(
+    markup,
+    new RegExp(
+      `<line data-diagram-group-title-separator="cluster" x1="${band.x}" y1="${band.y}" x2="[^"]*" y2="${band.y}"`,
+    ),
+  );
+});
+
 test('routes edges to named node ports, starting and ending at the port points', () => {
   // Arrange
   const children = [

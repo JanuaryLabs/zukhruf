@@ -6,7 +6,11 @@ import type {
   DiagramNodePort,
   DiagramSide,
 } from '../../model/diagram-ir.ts';
-import type { NodeLayout, TextRun } from './graph-layout-result.ts';
+import type {
+  GroupLayout,
+  NodeLayout,
+  TextRun,
+} from './graph-layout-result.ts';
 import { nodeContent } from './node-content.ts';
 import { type TextBlock, labelLines, textBlock } from './text-block.ts';
 import { LAYOUT_TOKENS } from './tokens.ts';
@@ -308,7 +312,7 @@ function placeCaption(node: DiagramNode, box: Box): NodeLayout['caption'] {
 export type MeasuredGroupTitle = {
   /** The height the title reserves on its side, BAND_PAD above and below included; 0 without a label. */
   height: number;
-  place(rect: Box): { band?: Box; label: TextRun[] };
+  place(rect: Box): Pick<GroupLayout, 'band' | 'separator' | 'label'>;
 };
 
 export function measureGroupTitle(group: DiagramGroup): MeasuredGroupTitle {
@@ -333,9 +337,16 @@ export function measureGroupTitle(group: DiagramGroup): MeasuredGroupTitle {
       } else {
         label = lines.place(rect.x + rect.w / 2, top, 'middle');
       }
-      return group.titleBand
-        ? { band: { x: rect.x, y, w: rect.w, h: height }, label }
-        : { label };
+      if (!group.titleBand) return { label };
+      const edge = group.labelSide === 'bottom' ? y : y + height;
+      return {
+        band: { x: rect.x, y, w: rect.w, h: height },
+        separator: [
+          { x: rect.x, y: edge },
+          { x: rect.x + rect.w, y: edge },
+        ],
+        label,
+      };
     },
   };
 }

@@ -61,6 +61,8 @@ export type GroupLayout = {
   rect: Box;
   /** The title band, inside `rect`. */
   band?: Box;
+  /** The line on the band edge that faces the content; present exactly when `band` is. */
+  separator?: [Point, Point];
   label: TextRun[];
   dividers: [Point, Point][];
   ports: PortLayout[];

@@ -93,7 +93,7 @@ test('r2 an edge with a framed label, and an edge with an icon badge of two line
   assert.deepEqual(noisyNumbers(svg), []);
 });
 
-test('r3 every node kind, with captions, stacks, ports, a note and its leader, and nested groups with title bands and dividers, draws every coordinate with at most two decimals', () => {
+test('r3 every node kind, with captions, stacks, ports, a note and its leader, nested groups with title bands and dividers, and a bottom title band, draws every coordinate with at most two decimals', () => {
   // Arrange
   const children = [
     createElement(
@@ -156,13 +156,23 @@ test('r3 every node kind, with captions, stacks, ports, a note and its leader, a
         ),
       ),
     ),
-    createElement(Diagram.Appliance, {
-      key: 'router',
-      id: 'router',
-      row: 2,
-      col: 0,
-      caption: 'Router',
-    }),
+    createElement(
+      Diagram.Group,
+      {
+        key: 'lan',
+        id: 'lan',
+        label: 'Home LAN',
+        titleBand: true,
+        labelSide: 'bottom',
+      },
+      createElement(Diagram.Appliance, {
+        key: 'router',
+        id: 'router',
+        row: 2,
+        col: 0,
+        caption: 'Router',
+      }),
+    ),
     createElement(
       Diagram.Connector,
       { key: 'tunnel', id: 'tunnel', row: 2, col: 1, icon: 'tunnel' },

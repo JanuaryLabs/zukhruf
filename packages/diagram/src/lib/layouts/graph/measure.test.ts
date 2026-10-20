@@ -546,15 +546,15 @@ describe('measureGroupTitle', () => {
     for (const labelAlign of ['start', 'center', 'end'] as const) {
       test(`a ${labelAlign}-aligned title band on the ${labelSide} holds its label`, () => {
         // Arrange
-        const title = measureGroupTitle(
-          group({ titleBand: true, labelSide, labelAlign }),
-        );
+        const titled = group({ titleBand: true, labelSide, labelAlign });
+        const title = measureGroupTitle(titled);
         const rect = { x: 20, y: 20, w: 400, h: 300 };
 
         // Act
-        const { band, label } = title.place(rect);
+        const placed = title.place(rect);
 
         // Assert
+        const { band, label } = placed;
         assert.equal(band!.h, title.height);
         assert.equal(
           labelSide === 'top' ? band!.y : band!.y + band!.h,
@@ -564,11 +564,10 @@ describe('measureGroupTitle', () => {
           nodes: [],
           groups: [
             {
-              group: group({}),
+              group: titled,
               depth: 0,
               rect,
-              band: band!,
-              label,
+              ...placed,
               dividers: [],
               ports: [],
             },

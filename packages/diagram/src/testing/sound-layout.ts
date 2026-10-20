@@ -138,7 +138,7 @@ function checkGroups(
   membership: Membership,
   report: Report,
 ) {
-  for (const { group, rect, band, label } of layout.groups) {
+  for (const { group, rect, band, separator, label } of layout.groups) {
     const id = group.id;
     for (const member of layout.nodes) {
       if (!geometry.hasArea(member.box)) continue;
@@ -172,6 +172,20 @@ function checkGroups(
         [id],
         `the title band of group "${id}" lies outside its rect`,
       );
+    }
+    if (band) {
+      const edge = group.labelSide === 'bottom' ? band.y : band.y + band.h;
+      if (
+        !separator ||
+        !geometry.samePoint(separator[0], { x: band.x, y: edge }) ||
+        !geometry.samePoint(separator[1], { x: band.x + band.w, y: edge })
+      ) {
+        report(
+          'G1',
+          [id],
+          `the title separator of group "${id}" is off the band edge that faces its content`,
+        );
+      }
     }
     for (const run of label) {
       if (!geometry.contains(band ?? rect, run.bounds)) {

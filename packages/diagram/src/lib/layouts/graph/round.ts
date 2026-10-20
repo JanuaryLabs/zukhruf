@@ -115,6 +115,7 @@ function roundNode({
 function roundGroup({
   rect,
   band,
+  separator,
   label,
   dividers,
   ports,
@@ -124,6 +125,7 @@ function roundGroup({
     ...group,
     rect: roundBox(rect),
     ...(band && { band: roundBox(band) }),
+    ...(separator && { separator: roundLine(separator) }),
     label: label.map(roundRun),
     dividers: dividers.map(roundLine),
     ports: ports.map(roundPort),

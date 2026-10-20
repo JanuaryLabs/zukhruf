@@ -397,7 +397,7 @@ export function GroupRect({
   const opacity = useTransform(progress, [start, end], [0, 1], {
     clamp: true,
   });
-  const { group, rect: box, band, label } = layout;
+  const { group, rect: box, band, separator, label } = layout;
   const frame = group.frame ?? 'solid';
   const fill = group.fill ?? 'surface';
   const stroke = accentToneStroke(group, themeAccent, DIAGRAM_NEUTRAL);
@@ -437,27 +437,27 @@ export function GroupRect({
         />
       )}
       {band && (
-        <>
-          <rect
-            data-diagram-group-title-band={group.id}
-            x={band.x}
-            y={band.y}
-            width={band.w}
-            height={band.h}
-            fill={hasFill ? surfaceFill : DIAGRAM_BG}
-            pointerEvents="none"
-          />
-          <line
-            data-diagram-group-title-separator={group.id}
-            x1={band.x}
-            y1={band.y + band.h}
-            x2={band.x + band.w}
-            y2={band.y + band.h}
-            stroke={stroke}
-            strokeWidth={1}
-            strokeDasharray={dasharray}
-          />
-        </>
+        <rect
+          data-diagram-group-title-band={group.id}
+          x={band.x}
+          y={band.y}
+          width={band.w}
+          height={band.h}
+          fill={hasFill ? surfaceFill : DIAGRAM_BG}
+          pointerEvents="none"
+        />
+      )}
+      {separator && (
+        <line
+          data-diagram-group-title-separator={group.id}
+          x1={separator[0].x}
+          y1={separator[0].y}
+          x2={separator[1].x}
+          y2={separator[1].y}
+          stroke={stroke}
+          strokeWidth={1}
+          strokeDasharray={dasharray}
+        />
       )}
       {layout.dividers.map(([from, to], i) => (
         <line
