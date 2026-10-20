@@ -21,16 +21,22 @@ export function isVertical(side: DiagramSide): boolean {
   return side === 'top' || side === 'bottom';
 }
 
+/** The side a connection leaves by, and the side it enters by. */
+export type SidePair = [DiagramSide, DiagramSide];
+
 /**
- * The sides a connection leaves and enters by, read from the cells: areas
- * that share rows face left and right, areas that share columns face top
- * and bottom, and otherwise the axis with the larger cell delta wins, the
- * vertical one on a tie.
+ * The pairs of sides a connection may leave and enter by, read from the
+ * cells, in order of preference. First the facing pair: areas that share
+ * rows face left and right, areas that share columns face top and bottom,
+ * and otherwise the axis with the larger cell delta wins, the vertical one
+ * on a tie. Then the facing pair on the other axis, then the first pair's
+ * exit with the other pair's entry, then the other pair's exit with the
+ * first pair's entry.
  */
-export function facingSides(
+export function sidePairs(
   from: CellArea,
   to: CellArea,
-): [DiagramSide, DiagramSide] {
+): [SidePair, ...SidePair[]] {
   const shareRows =
     Math.max(from.row, to.row) <
     Math.min(from.row + from.rowSpan, to.row + to.rowSpan);
@@ -39,10 +45,12 @@ export function facingSides(
     Math.min(from.col + from.colSpan, to.col + to.colSpan);
   const dr = to.row + to.rowSpan / 2 - (from.row + from.rowSpan / 2);
   const dc = to.col + to.colSpan / 2 - (from.col + from.colSpan / 2);
+  const across: SidePair = dc > 0 ? ['right', 'left'] : ['left', 'right'];
+  const down: SidePair = dr >= 0 ? ['bottom', 'top'] : ['top', 'bottom'];
   const horizontal =
     shareRows !== shareCols ? shareRows : Math.abs(dc) > Math.abs(dr);
-  if (horizontal) return dc > 0 ? ['right', 'left'] : ['left', 'right'];
-  return dr >= 0 ? ['bottom', 'top'] : ['top', 'bottom'];
+  const [first, other] = horizontal ? [across, down] : [down, across];
+  return [first, other, [first[0], other[1]], [other[0], first[1]]];
 }
 
 /** The coordinate of the side's line: x for left and right, y for top and bottom. */

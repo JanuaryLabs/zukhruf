@@ -2105,64 +2105,58 @@ test('routes edges to a group boundary and from a named group port', () => {
   );
 });
 
-test(
-  'dense crossing edges keep separate corridors',
-  {
-    todo: '#2802 the default sides top->bottom find no route; exitSide right/entrySide left routes',
-  },
-  () => {
-    // Arrange
-    const children = [
-      createElement(
-        Diagram.Box,
-        { key: 'tl', id: 'top-left', row: 0, col: 0 },
-        'Top left',
-      ),
-      createElement(
-        Diagram.Box,
-        { key: 'bl', id: 'bottom-left', row: 2, col: 0 },
-        'Bottom left',
-      ),
-      createElement(
-        Diagram.Box,
-        { key: 'tr', id: 'top-right', row: 0, col: 2 },
-        'Top right',
-      ),
-      createElement(
-        Diagram.Box,
-        { key: 'br', id: 'bottom-right', row: 2, col: 2 },
-        'Bottom right',
-      ),
-      createElement(
-        Diagram.Box,
-        { key: 'c', id: 'center', row: 1, col: 1 },
-        'Center',
-      ),
-      createElement(Diagram.Arrow, {
-        key: 'e1',
-        from: 'top-left',
-        to: 'bottom-right',
-      }),
-      createElement(Diagram.Arrow, {
-        key: 'e2',
-        from: 'bottom-left',
-        to: 'top-right',
-      }),
-    ];
+test('dense crossing edges keep separate corridors', () => {
+  // Arrange
+  const children = [
+    createElement(
+      Diagram.Box,
+      { key: 'tl', id: 'top-left', row: 0, col: 0 },
+      'Top left',
+    ),
+    createElement(
+      Diagram.Box,
+      { key: 'bl', id: 'bottom-left', row: 2, col: 0 },
+      'Bottom left',
+    ),
+    createElement(
+      Diagram.Box,
+      { key: 'tr', id: 'top-right', row: 0, col: 2 },
+      'Top right',
+    ),
+    createElement(
+      Diagram.Box,
+      { key: 'br', id: 'bottom-right', row: 2, col: 2 },
+      'Bottom right',
+    ),
+    createElement(
+      Diagram.Box,
+      { key: 'c', id: 'center', row: 1, col: 1 },
+      'Center',
+    ),
+    createElement(Diagram.Arrow, {
+      key: 'e1',
+      from: 'top-left',
+      to: 'bottom-right',
+    }),
+    createElement(Diagram.Arrow, {
+      key: 'e2',
+      from: 'bottom-left',
+      to: 'top-right',
+    }),
+  ];
 
-    // Act
-    const layout = soundLayout(children);
+  // Act
+  const layout = soundLayout(children);
 
-    // Assert
-    assert.deepEqual(
-      sharedSegments(
-        edgeOf(layout, 'top-left', 'bottom-right').points,
-        edgeOf(layout, 'bottom-left', 'top-right').points,
-      ),
-      [],
-    );
-  },
-);
+  // Assert
+  assert.deepEqual(
+    sharedSegments(
+      edgeOf(layout, 'top-left', 'bottom-right').points,
+      edgeOf(layout, 'bottom-left', 'top-right').points,
+    ),
+    [],
+  );
+});
 
 test('labels on parallel edges in one gutter never cover each other or a node', () => {
   // Arrange

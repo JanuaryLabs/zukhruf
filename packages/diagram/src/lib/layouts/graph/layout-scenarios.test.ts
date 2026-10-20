@@ -2582,6 +2582,50 @@ describe('layoutGraph routes edges to a stack as one visual unit', () => {
   });
 });
 
+function crossing(hints: Partial<DiagramEdge>): DiagramGraphIR {
+  return graph({
+    nodes: [
+      cell('top-left', 0, 0, { label: 'Top left' }),
+      cell('top-right', 0, 2, { label: 'Top right' }),
+      cell('centre', 1, 1, { label: 'Centre' }),
+      cell('bottom-left', 2, 0, { label: 'Bottom left' }),
+      cell('bottom-right', 2, 2, { label: 'Bottom right' }),
+    ],
+    edges: [
+      { from: 'top-left', to: 'bottom-right' },
+      { from: 'bottom-left', to: 'top-right', ...hints },
+    ],
+  });
+}
+
+describe('layoutGraph tries other sides for an edge without side hints', () => {
+  test('h1 two edges that cross around a centre node both route, though the sides the cells pick for the second have no route', () => {
+    // Arrange
+    const ir = crossing({});
+
+    // Act
+    const layout = layoutGraph(ir);
+
+    // Assert
+    assertSoundLayout(layout);
+    const first = edgeOf(layout, 'top-left', 'bottom-right');
+    assert.deepEqual([first.exitSide, first.entrySide], ['bottom', 'top']);
+    const second = edgeOf(layout, 'bottom-left', 'top-right');
+    assert.notDeepEqual([second.exitSide, second.entrySide], ['top', 'bottom']);
+  });
+
+  test('h2 an edge whose hinted sides have no route still throws, naming the hinted sides', () => {
+    // Arrange
+    const ir = crossing({ exitSide: 'top', entrySide: 'bottom' });
+
+    // Act + Assert
+    assert.throws(() => layoutGraph(ir), {
+      message:
+        'Diagram edge bottom-left→top-right: no orthogonal route from top of "bottom-left" to bottom of "top-right" avoids the nodes and labels. Change exitSide/entrySide or move a node.',
+    });
+  });
+});
+
 describe('layoutGraph throws when an edge has no room', () => {
   test('a node ringed by four U-turn edges has no route out, and the error names the edge, its ends and the fix', () => {
     // Arrange

@@ -33,8 +33,10 @@ type Routed = {
 /**
  * Routes every edge and note leader orthogonally, nearest cells first, and
  * places each edge's label and badge before the next edge routes around
- * them. It throws when a route or a label has no room; it never draws a
- * diagonal or straight line through what is in the way.
+ * them. A connection with no route takes its next choice of sides, and
+ * everything routes again. It throws when a connection has no choice left,
+ * or a label has no room; it never draws a diagonal or straight line
+ * through what is in the way.
  */
 export function routeGraph(
   ir: DiagramGraphIR,
@@ -44,7 +46,35 @@ export function routeGraph(
   /** How far beyond the bounding box of its two shapes a route first searches. */
   searchMargin: number,
 ): { edges: EdgeLayout[]; leaders: LeaderLayout[] } {
-  const connections = graphConnections(ir, nodes, groups, areas);
+  const candidates = graphConnections(ir, nodes, groups, areas);
+  const choices = candidates.map(() => 0);
+  for (;;) {
+    const routed = routeConnections(
+      ir,
+      candidates.map((options, index) => options[choices[index]!]!),
+      nodes,
+      groups,
+      searchMargin,
+    );
+    if (!('unrouted' in routed)) return routed;
+    const options = candidates[routed.unrouted]!;
+    const next = choices[routed.unrouted]! + 1;
+    if (next === options.length) throw noRoute(options[0]!);
+    choices[routed.unrouted] = next;
+  }
+}
+
+/**
+ * Routes one choice of sides for every connection, or names the first
+ * connection, in routing order, that has no route.
+ */
+function routeConnections(
+  ir: DiagramGraphIR,
+  connections: Connection[],
+  nodes: NodeLayout[],
+  groups: GroupLayout[],
+  searchMargin: number,
+): { edges: EdgeLayout[]; leaders: LeaderLayout[] } | { unrouted: number } {
   if (connections.length === 0) return { edges: [], leaders: [] };
   const groupLabels = groups.flatMap(({ group, label }) =>
     label.map((run) => ({
@@ -132,15 +162,7 @@ export function routeGraph(
       bounds,
     );
     const found = stubsClear ? (search(near) ?? search(bounds)) : undefined;
-    if (!found) {
-      const advice =
-        connection.edge === undefined
-          ? 'Move the note or its target.'
-          : 'Change exitSide/entrySide or move a node.';
-      throw new Error(
-        `Diagram ${connection.name}: no orthogonal route from ${endName(from)} to ${endName(to)} avoids the nodes and labels. ${advice}`,
-      );
-    }
+    if (!found) return { unrouted: index };
     const points = simplifyPath([start, ...found, end]);
     paths.set(connection, points);
 
@@ -219,6 +241,16 @@ export function routeGraph(
     });
   }
   return { edges, leaders };
+}
+
+function noRoute({ name, edge, from, to }: Connection): Error {
+  const advice =
+    edge === undefined
+      ? 'Move the note or its target.'
+      : 'Change exitSide/entrySide or move a node.';
+  return new Error(
+    `Diagram ${name}: no orthogonal route from ${endName(from)} to ${endName(to)} avoids the nodes and labels. ${advice}`,
+  );
 }
 
 function endName({ shape, side, port }: ConnectionEnd): string {

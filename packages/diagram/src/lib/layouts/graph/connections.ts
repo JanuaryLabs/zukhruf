@@ -10,7 +10,7 @@ import type {
   NodeLayout,
   PortLayout,
 } from './graph-layout-result.ts';
-import { facingSides, sideLine } from './sides.ts';
+import { type SidePair, sideLine, sidePairs } from './sides.ts';
 import { LAYOUT_TOKENS } from './tokens.ts';
 
 /** A node or group that a connection starts or ends at. */
@@ -49,16 +49,19 @@ export type Connection = {
 };
 
 /**
- * Resolves every edge and every note leader to the shapes and sides it
- * joins. A side hint wins over the cells; a port fixes the side; a side that
- * declares ports takes no edge without one.
+ * Resolves every edge and every note leader to the shapes and sides it may
+ * join, in order of preference. A side hint wins over the cells; a port
+ * fixes the side; a side that declares ports takes no edge without one. A
+ * connection between two shapes with no hint and no port on either end may
+ * also take the other side pairs the cells allow, whose sides declare no
+ * ports; any other connection has one choice.
  */
 export function graphConnections(
   ir: DiagramGraphIR,
   nodes: NodeLayout[],
   groups: GroupLayout[],
   areas: GridAreas,
-): Connection[] {
+): Connection[][] {
   const shapes = new Map<string, Shape>();
   for (const { node, box, frames, radius, ports, caption } of nodes) {
     shapes.set(node.id, {
@@ -94,7 +97,7 @@ export function graphConnections(
       exitSide?: DiagramSide | undefined;
       entrySide?: DiagramSide | undefined;
     },
-  ): Connection => {
+  ): Connection[] => {
     const resolve = (ref: string) => {
       const { nodeId, portId } = parseEndpointRef(ref);
       const shape = shapes.get(nodeId);
@@ -114,11 +117,21 @@ export function graphConnections(
     };
     const from = resolve(fromRef);
     const to = resolve(toRef);
-    const [exitByCells, entryByCells] =
+    const a = from.shape.area;
+    const b = to.shape.area;
+    const [[exitByCells, entryByCells], ...others]: [SidePair, ...SidePair[]] =
       from.shape === to.shape
         ? // A loop has no cell delta to read; it leaves and re-enters the right side.
-          (['right', 'right'] as const)
-        : facingSides(from.shape.area, to.shape.area);
+          [['right', 'right']]
+        : sidePairs(a, b);
+    const declaresPorts = (shape: Shape, side: DiagramSide) =>
+      shape.ports.some((port) => port.side === side);
+    const sideEnd = (shape: Shape, side: DiagramSide): ConnectionEnd => ({
+      shape,
+      side,
+      port: undefined,
+      face: outermostFace(shape, side),
+    });
     const end = (
       { shape, port }: { shape: Shape; port: PortLayout | undefined },
       hint: DiagramSide | undefined,
@@ -135,24 +148,44 @@ export function graphConnections(
         return { shape, side: port.side, port, face: shape.box };
       }
       const side = hint ?? byCells;
-      if (shape.ports.some((candidate) => candidate.side === side)) {
+      if (declaresPorts(shape, side)) {
         throw new Error(
           `Diagram ${shape.kind === 'group' ? 'group' : 'node'} "${shape.id}" side ${side} declares ports; ${name} must use "${shape.id}:<port>".`,
         );
       }
-      return { shape, side, port: undefined, face: outermostFace(shape, side) };
+      return sideEnd(shape, side);
     };
-    const a = from.shape.area;
-    const b = to.shape.area;
-    return {
+    const cellDistance =
+      Math.abs(b.row + b.rowSpan / 2 - (a.row + a.rowSpan / 2)) +
+      Math.abs(b.col + b.colSpan / 2 - (a.col + a.colSpan / 2));
+    const chosen = {
       name,
       edge,
       from: end(from, hints.exitSide, exitByCells, 'exitSide', fromRef),
       to: end(to, hints.entrySide, entryByCells, 'entrySide', toRef),
-      cellDistance:
-        Math.abs(b.row + b.rowSpan / 2 - (a.row + a.rowSpan / 2)) +
-        Math.abs(b.col + b.colSpan / 2 - (a.col + a.colSpan / 2)),
+      cellDistance,
     };
+    const free =
+      hints.exitSide === undefined &&
+      hints.entrySide === undefined &&
+      !from.port &&
+      !to.port;
+    if (!free) return [chosen];
+    return [
+      chosen,
+      ...others
+        .filter(
+          ([exit, entry]) =>
+            !declaresPorts(from.shape, exit) && !declaresPorts(to.shape, entry),
+        )
+        .map(([exit, entry]) => ({
+          name,
+          edge,
+          from: sideEnd(from.shape, exit),
+          to: sideEnd(to.shape, entry),
+          cellDistance,
+        })),
+    ];
   };
 
   return [
