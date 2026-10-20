@@ -2626,6 +2626,19 @@ describe('layoutGraph tries other sides for an edge without side hints', () => {
   });
 });
 
+/** Every number in the layout, and in its path strings, with more than two decimals. */
+function noisyNumbers(layout: GraphLayout): string[] {
+  const numbers: string[] = [];
+  JSON.stringify(layout, (key, value: unknown) => {
+    if (typeof value === 'number') numbers.push(String(value));
+    if (key === 'd' && typeof value === 'string') {
+      numbers.push(...(value.match(/-?[\d.]+(?:e[-+]?\d+)?/g) ?? []));
+    }
+    return value;
+  });
+  return numbers.filter((number) => !/^-?\d+(\.\d{1,2})?$/.test(number));
+}
+
 describe('layoutGraph rounds the coordinates it returns', () => {
   test('f1 a node centred under a wider framed caption, whose raw left edge is float noise, comes out with at most two decimals in every number', () => {
     // Arrange
@@ -2655,18 +2668,29 @@ describe('layoutGraph rounds the coordinates it returns', () => {
 
     // Assert
     assertSoundLayout(layout);
-    const numbers: string[] = [];
-    JSON.stringify(layout, (key, value: unknown) => {
-      if (typeof value === 'number') numbers.push(String(value));
-      if (key === 'd' && typeof value === 'string') {
-        numbers.push(...(value.match(/-?[\d.]+(?:e[-+]?\d+)?/g) ?? []));
-      }
-      return value;
-    });
-    assert.deepEqual(
-      numbers.filter((number) => !/^-?\d+(\.\d{1,2})?$/.test(number)),
-      [],
-    );
+    assert.deepEqual(noisyNumbers(layout), []);
+  });
+
+  test('f2 the homelab hardware, whose rounded bends come out of the path arithmetic with float noise, draws every path with at most two decimals', () => {
+    // Arrange
+    const ir = homelabPart([
+      'isp',
+      'router',
+      'adguard',
+      'laptop',
+      'external-ssd',
+      'longhorn',
+      'istio',
+      'proxmox-vm',
+      'k3s-master',
+    ]);
+
+    // Act
+    const layout = layoutGraph(ir);
+
+    // Assert
+    assertSoundLayout(layout);
+    assert.deepEqual(noisyNumbers(layout), []);
   });
 });
 
