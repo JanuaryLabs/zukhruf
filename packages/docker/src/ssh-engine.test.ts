@@ -260,6 +260,39 @@ console.log('{}');
   );
 
   test(
+    '20 requests in sequence on one ssh process give no MaxListenersExceededWarning',
+    {
+      skip: needsLocalEngine,
+    },
+    async () => {
+      // Arrange
+      await using home = await scratchDirectory();
+      await using standIn = await sshStandIn({
+        kind: 'engine',
+        socketPath: String(engineSocket),
+      });
+      const scenario = `
+const warnings = [];
+process.on('warning', (warning) => warnings.push(warning.name + ': ' + warning.message));
+${withClient(`
+for (let request = 0; request < 20; request++) await docker.info();
+await docker[Symbol.asyncDispose]();
+console.log(JSON.stringify({ warnings }));
+`)}`;
+
+      // Act
+      const result = await runScenario(
+        scenario,
+        scenarioEnvironment(standIn.path, home.path),
+      );
+
+      // Assert
+      assert.deepEqual(lastJson(result), { warnings: [] }, result.stderr);
+      assert.equal((await standIn.runs()).length, 1, 'one ssh process');
+    },
+  );
+
+  test(
     'disposal ends each ssh process and waits until it exited',
     {
       skip: needsLocalEngine,

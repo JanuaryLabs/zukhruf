@@ -187,13 +187,14 @@ class SshAgent extends Agent {
     return connection;
   }
 
+  /**
+   * The keepSocketAlive of Node sets a timeout and TCP keep-alive, which a
+   * connection through `ssh` does not have. The reuseSocket of Node stays: it
+   * removes the error listener of the idle connection and calls ref().
+   */
   override keepSocketAlive(socket: Duplex): boolean {
     if (socket instanceof SshConnection) socket.unref();
     return true;
-  }
-
-  override reuseSocket(socket: Duplex): void {
-    if (socket instanceof SshConnection) socket.ref();
   }
 
   /** Ends each `ssh` process and resolves when each one exited. */

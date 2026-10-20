@@ -1,7 +1,11 @@
 import type { IncomingHttpHeaders, IncomingMessage } from 'node:http';
-import type { Duplex } from 'node:stream';
+import type { Duplex, Readable } from 'node:stream';
 
-import { ConnectionFailedError, DockerEngineError } from './errors.ts';
+import {
+  ConnectionFailedError,
+  DockerEngineError,
+  DockerError,
+} from './errors.ts';
 import type { Filters } from './options.ts';
 import { SshExitError } from './ssh-connection.ts';
 import type { Transport } from './transport.ts';
@@ -107,16 +111,51 @@ export class EngineClient {
   readonly #host: string;
   readonly #transport: Transport;
   readonly #apiVersion: string | undefined;
+  /**
+   * The bodies of streamed answers and the hijacked connections that are
+   * open. After an upgrade, the agent of the transport no longer has the
+   * socket, so only this set lets close() reach it.
+   */
+  readonly #streams: Set<Readable>;
 
-  constructor(host: string, transport: Transport, apiVersion?: string) {
+  constructor(
+    host: string,
+    transport: Transport,
+    apiVersion?: string,
+    streams = new Set<Readable>(),
+  ) {
     this.#host = host;
     this.#transport = transport;
     this.#apiVersion = apiVersion;
+    this.#streams = streams;
   }
 
   /** The same engine and connections, with the API version in the path of each request. */
   versioned(apiVersion: string): EngineClient {
-    return new EngineClient(this.#host, this.#transport, apiVersion);
+    return new EngineClient(
+      this.#host,
+      this.#transport,
+      apiVersion,
+      this.#streams,
+    );
+  }
+
+  /**
+   * Closes each connection. An iteration of a stream that is open at that
+   * time rejects with a DockerError that says that the client was disposed.
+   */
+  async close(): Promise<void> {
+    const error = new DockerError(
+      'The client was disposed, so it closed this connection to the engine.',
+    );
+    for (const stream of this.#streams) stream.destroy(error);
+    this.#streams.clear();
+    await this.#transport.close();
+  }
+
+  #hold(stream: Readable): void {
+    this.#streams.add(stream);
+    stream.once('close', () => this.#streams.delete(stream));
   }
 
   /** Sends a request. A status that is not 2xx rejects with DockerEngineError. */
@@ -165,7 +204,10 @@ export class EngineClient {
   ): Promise<IncomingMessage> {
     const { response } = await this.#open(method, path, options);
     const status = response.statusCode ?? 0;
-    if (status >= 200 && status <= 299) return response;
+    if (status >= 200 && status <= 299) {
+      this.#hold(response);
+      return response;
+    }
     const body = await readAll(response);
     throw this.error({ status, headers: response.headers, body }, method, path);
   }
@@ -198,6 +240,7 @@ export class EngineClient {
       );
     }
     const { socket, head } = upgrade;
+    this.#hold(socket);
     const transport = this.#transport;
     return {
       socket,

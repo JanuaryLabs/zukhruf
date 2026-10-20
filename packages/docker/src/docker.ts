@@ -13,7 +13,7 @@ import { Images } from './images.ts';
 import { ndjson } from './ndjson.ts';
 import type { CancelOptions, Filters } from './options.ts';
 import { SshTransport } from './ssh-connection.ts';
-import { SocketTransport, type Transport } from './transport.ts';
+import { SocketTransport } from './transport.ts';
 
 function isEventMessage(value: unknown): value is EngineApi.EventMessage {
   return typeof value === 'object' && value !== null;
@@ -35,14 +35,12 @@ export class Docker implements AsyncDisposable {
   readonly containers: Containers;
   readonly images: Images;
   readonly #client: EngineClient;
-  readonly #transport: Transport;
 
   private constructor(
     context: string,
     host: string,
     apiVersion: string,
     client: EngineClient,
-    transport: Transport,
   ) {
     this.context = context;
     this.host = host;
@@ -52,7 +50,6 @@ export class Docker implements AsyncDisposable {
       DOCKER_CONTEXT: undefined,
     });
     this.#client = client;
-    this.#transport = transport;
     this.images = new Images(client);
     this.containers = new Containers(client, this.images);
   }
@@ -79,7 +76,6 @@ export class Docker implements AsyncDisposable {
         engine.host,
         apiVersion,
         unversioned.versioned(apiVersion),
-        transport,
       );
     } catch (error) {
       await transport.close();
@@ -116,8 +112,12 @@ export class Docker implements AsyncDisposable {
     }
   }
 
-  /** Closes the connections of the client. For an SSH engine, it resolves when each `ssh` process exited. */
+  /**
+   * Closes the connections of the client, also each attach, exec, followed
+   * logs and events: an iteration of one of them rejects with a DockerError.
+   * For an SSH engine, it resolves when each `ssh` process exited.
+   */
   async [Symbol.asyncDispose](): Promise<void> {
-    await this.#transport.close();
+    await this.#client.close();
   }
 }
