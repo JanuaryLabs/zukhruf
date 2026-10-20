@@ -19,7 +19,6 @@ export function FlowEffectsDiagram({
       defaultMode="reveal"
       className={className}
       viewport={viewport}
-      graph={{ colWidth: 260, rowHeight: 160 }}
     >
       <Diagram.Box id="question" row={1} col={0} accent texture="none">
         Question
@@ -30,14 +29,14 @@ export function FlowEffectsDiagram({
       <Diagram.Box id="data" row={0} col={2} texture="none">
         Database
       </Diagram.Box>
+      <Diagram.Arrow from="question" to="agent" accent />
+      <Diagram.Arrow from="agent" to="data" accent />
       <Diagram.Box id="context" row={2} col={2} texture="none">
         Business context
       </Diagram.Box>
       <Diagram.Box id="answer" row={1} col={3} accent texture="none">
         Answer
       </Diagram.Box>
-      <Diagram.Arrow from="question" to="agent" accent />
-      <Diagram.Arrow from="agent" to="data" accent />
       <Diagram.Arrow from="agent" to="context" accent />
       <Diagram.Arrow from="data" to="answer" accent />
       <Diagram.Arrow from="context" to="answer" accent />

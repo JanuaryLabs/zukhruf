@@ -418,7 +418,6 @@ describe('measureNode', () => {
       stackDirection: 'down-right',
     });
     const marker = measureNode({ id: 'n', kind: 'marker', label: 'Laptop' });
-    const pinned = measureNode({ id: 'n', label: 'VM', stretch: false });
 
     // Assert
     assert.deepEqual(stacked.overhang, {
@@ -429,7 +428,6 @@ describe('measureNode', () => {
     });
     assert.equal(stacked.stretch, true);
     assert.equal(marker.stretch, false);
-    assert.equal(pinned.stretch, false);
   });
 
   test('a hidden node measures to nothing, and a hidden junction still holds its square', () => {
@@ -450,6 +448,41 @@ describe('measureNode', () => {
       w: LAYOUT_TOKENS.JUNCTION,
       h: LAYOUT_TOKENS.JUNCTION,
     });
+  });
+
+  test('React content gets a box of its given size under the text, inside the frame, intrinsic or stretched', () => {
+    // Arrange
+    const size = { w: 180, h: 64 };
+    const plain = measureNode({ id: 'n', label: 'Tools' });
+    const withContent = measureNode({
+      id: 'n',
+      label: 'Tools',
+      content: { element: null, size },
+    });
+
+    // Act
+    const placed = [
+      withContent.place(intrinsicBox(withContent)),
+      withContent.place(stretchedBox(withContent)),
+    ];
+
+    // Assert
+    assert.ok(withContent.frame.w >= size.w + 2 * LAYOUT_TOKENS.PAD_X);
+    assert.equal(
+      withContent.frame.h,
+      plain.frame.h + LAYOUT_TOKENS.BLOCK_GAP + size.h,
+    );
+    for (const { box, text, contentBox } of placed) {
+      assert.ok(contentBox, 'the layout reserves a content box');
+      assert.deepEqual({ w: contentBox.w, h: contentBox.h }, size);
+      assert.ok(inside(box, contentBox), 'the content box is inside the frame');
+      for (const run of text) {
+        assert.ok(
+          run.bounds.y + run.bounds.h <= contentBox.y,
+          `"${run.text}" ends above the content box`,
+        );
+      }
+    }
   });
 
   test('a line carries its own colour and the nearest font weight', () => {

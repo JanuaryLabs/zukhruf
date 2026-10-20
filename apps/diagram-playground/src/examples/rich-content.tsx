@@ -17,7 +17,6 @@ export function RichContentDiagram({
       defaultMode="static"
       className={className}
       viewport={{ zoom }}
-      graph={{ colWidth: 260, rowHeight: 170 }}
     >
       <Diagram.Box id="question" row={0} col={0} accent>
         Question
@@ -25,9 +24,9 @@ export function RichContentDiagram({
       <Diagram.Box id="agent" row={0} col={1}>
         Analysis agent
       </Diagram.Box>
-      <Diagram.Box id="database" row={0} col={2} height={124} accent>
+      <Diagram.Box id="database" row={0} col={2} accent>
         Database
-        <Diagram.Content>
+        <Diagram.Content size={{ w: 96, h: 56 }}>
           <div className="flex flex-col items-center gap-1.5">
             <Button size="sm" onClick={() => setRuns((count) => count + 1)}>
               Run query

@@ -544,6 +544,19 @@ describe('assertSoundLayout', () => {
     );
   });
 
+  test('E4: an edge that ends on the front frame of a stack, under a back frame that reaches farther out on that side', () => {
+    // Arrange
+    const layout = soundLayout();
+    nodeIn(layout, 'db').frames = [{ x: 200, y: 92, w: 60, h: 40 }];
+
+    // Assert
+    assertOnlyViolation(
+      layout,
+      { invariant: 'E4', ids: ['web->db#1', 'db'] },
+      /E4 edge "web->db#1" ends off the right side of "db"/,
+    );
+  });
+
   test('E4: an edge that leaves its port along the exit side, not out of it', () => {
     // Arrange
     const layout = soundLayout();

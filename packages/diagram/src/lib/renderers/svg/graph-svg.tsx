@@ -2,9 +2,8 @@ import { type MotionValue, motion, useTransform } from 'motion/react';
 
 import { compileGraph } from '../../compiler/diagram-compile.ts';
 import type { NodeLayout } from '../../layouts/graph/graph-layout-result.ts';
-import { legacyGraphLayout } from '../../layouts/graph/legacy-graph-layout.ts';
+import { layoutGraph } from '../../layouts/graph/layout.ts';
 import { FONT_FAMILY, TEXT_SHAPING } from '../../layouts/text/font.ts';
-import type { DiagramGraphLayout } from '../../model/diagram-ir.ts';
 import {
   DiagramFrame,
   type DiagramMode,
@@ -28,11 +27,11 @@ import {
 } from '../shared/graph-parts.tsx';
 import { rejectNodeContent } from '../shared/node-content.ts';
 import {
-  ANNOTATION_REVEAL_START,
-  AnnotationText,
+  NOTE_REVEAL_START,
   NodeCaption,
   NodePorts,
   NodeStackFrames,
+  NoteText,
   SpecialNode,
   isSpecialNode,
   splitNotes,
@@ -158,7 +157,6 @@ function NodeBody({
           fontSize={firstTitle.font.size}
           fontWeight={firstTitle.font.weight}
           fill={fill}
-          letterSpacing={firstTitle.font.face === 'mono' ? 0.6 : undefined}
         >
           <RunSpans runs={title} fill={fill} accent={accent} />
         </text>
@@ -166,8 +164,6 @@ function NodeBody({
       {firstDescription && (
         <text
           data-diagram-node-description={node.id}
-          data-diagram-node-body-font-size={node.bodyFontSize}
-          data-diagram-node-body-line-gap={node.bodyLineGap}
           x={firstDescription.x}
           y={firstDescription.y}
           textAnchor="start"
@@ -185,8 +181,6 @@ function NodeBody({
             <g
               key={i}
               data-diagram-node-item={`${node.id}:${i}`}
-              data-diagram-node-body-font-size={node.bodyFontSize}
-              data-diagram-node-body-line-gap={node.bodyLineGap}
               transform={`translate(0 ${run.y})`}
             >
               <circle cx={bullet.x} cy={bullet.y - run.y} r={2.2} fill={fill} />
@@ -210,7 +204,6 @@ function NodeBody({
 }
 
 export type SvgGraphDiagramProps = DiagramProps & {
-  graph?: DiagramGraphLayout;
   /** Moving signals over the graph edges, rendered with WebGPU. */
   effects?: DiagramEffects;
 };
@@ -218,13 +211,12 @@ export type SvgGraphDiagramProps = DiagramProps & {
 export function SvgGraphDiagram({
   title,
   children,
-  graph,
   viewport,
   paper,
   effects,
   ...chrome
 }: SvgGraphDiagramProps) {
-  const ir = compileGraph(children, graph);
+  const ir = compileGraph(children);
   rejectNodeContent(ir, 'SvgGraphDiagram');
   const lines = [title].flat();
   return (
@@ -257,7 +249,7 @@ function GraphSVG({
   mode: DiagramMode;
 }) {
   const { stylePreset } = useDiagramTheme();
-  const layout = legacyGraphLayout(ir);
+  const layout = layoutGraph(ir);
   const { viewBox } = layout;
   const segments = buildSegments(ir.nodes.length, ir.edges.length);
   const seg = (kind: SegmentKind, index = 0) => {
@@ -371,13 +363,12 @@ function GraphSVG({
       ))}
 
       {notes.map((note) => (
-        <AnnotationText
+        <NoteText
           key={note.node.id}
           note={note}
-          annotations={ir.annotations}
           leaders={layout.leaders}
           progress={progress}
-          start={ANNOTATION_REVEAL_START}
+          start={NOTE_REVEAL_START}
           end={1}
         />
       ))}

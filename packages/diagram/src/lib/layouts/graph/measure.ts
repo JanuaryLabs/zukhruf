@@ -70,16 +70,29 @@ export function measureNode(node: DiagramNode): MeasuredNode {
     };
   };
 
-  const { visual } = place({ x: 0, y: 0, w, h });
+  const { visual, frames } = place({ x: 0, y: 0, w, h });
+  const outside = (outer: Box): Sides => ({
+    top: 0 - outer.y,
+    left: 0 - outer.x,
+    bottom: outer.y + outer.h - h,
+    right: outer.x + outer.w - w,
+  });
+  const stack = outside(union([{ x: 0, y: 0, w, h }, ...frames]));
+  const all = outside(visual);
+  // A caption reserves its room on both sides of the frame, so the frames of a row (or column) stay on one centre line whichever side their captions hang.
+  const caption = (a: DiagramSide, b: DiagramSide) =>
+    Math.max(all[a] - stack[a], all[b] - stack[b]);
+  const vertical = caption('top', 'bottom');
+  const horizontal = caption('left', 'right');
   return {
     frame: { w, h },
     overhang: {
-      top: 0 - visual.y,
-      left: 0 - visual.x,
-      bottom: visual.y + visual.h - h,
-      right: visual.x + visual.w - w,
+      top: stack.top + vertical,
+      bottom: stack.bottom + vertical,
+      left: stack.left + horizontal,
+      right: stack.right + horizontal,
     },
-    stretch: kind === 'node' && (node.stretch ?? true),
+    stretch: kind === 'node',
     place,
   };
 }

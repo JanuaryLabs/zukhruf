@@ -42,6 +42,8 @@ export type NodeLayout = {
   icon?: { x: number; y: number; size: number };
   text: TextRun[];
   bullets: Point[];
+  /** The box reserved for the node's React content, under its text. */
+  contentBox?: Box;
   caption?: { box: Box; framed: boolean; text: TextRun[] };
   ports: PortLayout[];
   appliance?: {
@@ -67,8 +69,6 @@ export type GroupLayout = {
 export type EdgeLabelLayout = {
   box: Box;
   text: TextRun[];
-  /** The index of the route segment that the label sits beside. */
-  segment?: number;
 };
 
 export type EdgeLayout = {

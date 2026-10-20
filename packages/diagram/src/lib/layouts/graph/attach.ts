@@ -97,11 +97,46 @@ export function attachConnections(
       .map((slot, order) => ({ slot, order, at: otherAt(slot) }))
       .sort((a, b) => a.at - b.at || a.order - b.order);
     const alongs = spread(end, ordered.length);
+    const free = freeIntervals(end, ordered.length);
+    for (const [index, { slot, at }] of ordered.entries()) {
+      // A slot whose other end is a fixed point on the facing side moves in line with it, when it stays in order and SLOT_PITCH clear.
+      const { from, to } = connections[slot.connection]!;
+      const other = slot.role === 'from' ? to : from;
+      if (to.side !== OPPOSITE[from.side] || !fixed(other)) continue;
+      const before = alongs[index - 1] ?? -Infinity;
+      const after = alongs[index + 1] ?? Infinity;
+      const fits =
+        at - before >= SLOT_PITCH &&
+        after - at >= SLOT_PITCH &&
+        free.some(([low, high]) => at >= low && at <= high);
+      if (fits) alongs[index] = at;
+    }
     for (const [index, { slot }] of ordered.entries()) {
       touches.set(
         touchKey(slot.connection, slot.role),
-        pointOnSide(end.shape.box, end.side, alongs[index]!),
+        pointOnSide(end.face, end.side, alongs[index]!),
       );
+    }
+  }
+
+  // An end alone on a side that faces a shared side lines up with its slot there, so the connection runs straight.
+  for (const [index, { from, to }] of connections.entries()) {
+    if (fixed(from) || fixed(to)) continue;
+    const ends = [
+      { lone: from, loneRole: 'from', shared: to, sharedRole: 'to' },
+      { lone: to, loneRole: 'to', shared: from, sharedRole: 'from' },
+    ] as const;
+    for (const { lone, loneRole, shared, sharedRole } of ends) {
+      if (crowd(lone) !== 1 || crowd(shared) === 1) continue;
+      const slot = touches.get(touchKey(index, sharedRole))!;
+      const between = groupLabels.flatMap(({ group, box }) =>
+        group === from.shape.id || group === to.shape.id ? [] : [box],
+      );
+      const aligned =
+        loneRole === 'from'
+          ? facingAlignment(lone, shared, undefined, slot, crowd, between)?.from
+          : facingAlignment(shared, lone, slot, undefined, crowd, between)?.to;
+      if (aligned) touches.set(touchKey(index, loneRole), aligned);
     }
   }
 
@@ -125,14 +160,14 @@ export function attachConnections(
  * its corner inset before its slots come closer than SLOT_PITCH.
  */
 function freeIntervals(end: ConnectionEnd, count: number): Interval[] {
-  const { shape, side } = end;
-  const [from, to] = sideSpan(shape.box, side);
+  const { shape, side, face } = end;
+  const [from, to] = sideSpan(face, side);
   const inset = Math.max(
     0,
     Math.min(shape.radius, (to - from - (count + 1) * SLOT_PITCH) / 2),
   );
   const vertical = isVertical(side);
-  const line = sideLine(shape.box, side);
+  const line = sideLine(face, side);
   const outward = side === 'bottom' || side === 'right';
   const behind = shape.clear.flatMap((box): Interval[] => {
     const [near, far] = vertical
@@ -220,10 +255,7 @@ function facingAlignment(
     const along = vertical ? at.x : at.y;
     return [[along, along]];
   };
-  const lines = [
-    sideLine(from.shape.box, from.side),
-    sideLine(to.shape.box, to.side),
-  ];
+  const lines = [sideLine(from.face, from.side), sideLine(to.face, to.side)];
   const [gapStart, gapEnd] = [Math.min(...lines), Math.max(...lines)];
   const inGap = labels.flatMap(({ x, y, w, h }): Interval[] => {
     const [across, acrossEnd, along, alongEnd] = vertical
@@ -242,8 +274,8 @@ function facingAlignment(
   if (!widest) return;
   const along = (widest[0] + widest[1]) / 2;
   return {
-    from: fromFixed ?? pointOnSide(from.shape.box, from.side, along),
-    to: toFixed ?? pointOnSide(to.shape.box, to.side, along),
+    from: fromFixed ?? pointOnSide(from.face, from.side, along),
+    to: toFixed ?? pointOnSide(to.face, to.side, along),
   };
 }
 

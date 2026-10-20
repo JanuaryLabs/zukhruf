@@ -40,61 +40,23 @@ export type DiagramLabelLine =
     };
 
 export type DiagramSide = 'top' | 'bottom' | 'left' | 'right';
-export type DiagramAnchor = DiagramSide | 'center';
 export type DiagramLabelAlign = 'start' | 'center' | 'end';
-export type DiagramTextAlign = 'start' | 'middle' | 'end';
-export type DiagramEdgeLabelSide =
-  'auto' | 'above' | 'below' | 'left' | 'right';
 export type DiagramEdgeLineStyle = 'solid' | 'dashed' | 'dotted';
 export type DiagramEdgeDirection = 'forward' | 'both' | 'none';
 export type DiagramEdgeLayer = 'background' | 'foreground';
-export type DiagramEdgeRoute = 'orthogonal' | 'straight';
-export type DiagramGuideOrientation = 'vertical' | 'horizontal';
+export type DiagramEdgeWeight = 'regular' | 'bold';
 export type DiagramStackDirection =
   'up-left' | 'up-right' | 'down-left' | 'down-right';
 
 export type DiagramNodePort = {
   id: string;
   side: DiagramSide;
-  offset?: number;
   label?: string;
   accent?: boolean;
 };
 
 export type Point = { x: number; y: number };
-export type DiagramWaypoint =
-  | Point
-  | { row: number; col: number; dx?: number; dy?: number }
-  | {
-      guide: string;
-      target?: string;
-      anchor?: DiagramAnchor;
-      gap?: number;
-      row?: number;
-      col?: number;
-      x?: number;
-      y?: number;
-      dx?: number;
-      dy?: number;
-    }
-  | {
-      target: string;
-      anchor?: DiagramAnchor;
-      gap?: number;
-      dx?: number;
-      dy?: number;
-    };
 export type Box = { x: number; y: number; w: number; h: number };
-
-export type DiagramGraphLayout = {
-  colWidth?: number;
-  rowHeight?: number;
-  columns?: number[];
-  rows?: number[];
-  padX?: number;
-  padY?: number;
-  titleTopPad?: number;
-};
 
 export type DiagramViewportFit = 'width' | 'contain' | 'natural';
 
@@ -113,58 +75,48 @@ export type DiagramPaper =
       rx?: number;
     };
 
+/** React content drawn inside a node, in a box of the size its author gives. */
+export type DiagramNodeContent = {
+  element: ReactNode;
+  size: { w: number; h: number };
+};
+
 export type DiagramNode = {
   id: string;
   label: string | DiagramLabelLine[];
-  /** React content drawn inside the box; only HtmlGraphDiagram draws it. */
-  content?: ReactNode;
+  /** Only HtmlGraphDiagram draws it. */
+  content?: DiagramNodeContent;
   kind?: 'node' | 'appliance' | 'connector' | 'junction' | 'marker' | 'note';
   row?: number | undefined;
   col?: number | undefined;
   colSpan?: number | undefined;
   rowSpan?: number | undefined;
-  /** Whether a Box or Card fills its grid area; other kinds keep their measured size. */
-  stretch?: boolean | undefined;
   /** The id of the node or group a note explains. */
   target?: string | undefined;
-  width?: number;
-  height?: number;
   frame?: 'solid' | 'transparent' | 'flat' | 'filled' | 'none';
   textColor?: DiagramTextColor | undefined;
   tone?: DiagramTone | undefined;
   texture?: DiagramTexture | undefined;
-  fontWeight?: number | undefined;
-  fontSize?: number | undefined;
-  bodyFontSize?: number;
-  bodyLineGap?: number;
   accent?: boolean | undefined;
   description?: string | string[];
   items?: string[];
   caption?: string | string[] | undefined;
   captionSide?: DiagramSide | undefined;
   captionFrame?: boolean;
-  captionOffset?: number | undefined;
   captionColor?: DiagramTextColor | undefined;
-  captionFontSize?: number | undefined;
-  captionFontWeight?: number | undefined;
+  /** The group the node is nested in. */
   group?: string;
   icon?: DiagramNodeIcon | undefined;
-  iconSize?: number | undefined;
   ports?: DiagramNodePort[] | undefined;
-  rx?: number;
+  /** Set for a Card: its text starts at the left edge under a title. */
   textAlign?: 'center' | 'start' | undefined;
   hidden?: boolean | undefined;
+  /** False for a Float, which no edge may start or end at. */
   connectable?: boolean | undefined;
   stack?: number;
-  stackOffset?: number;
   stackDirection?: DiagramStackDirection;
-  stackDx?: number;
-  stackDy?: number;
-  stackWidthStep?: number;
-  stackHeightStep?: number;
   appliancePorts?: number | undefined;
   antenna?: boolean | undefined;
-  slant?: number | undefined;
 };
 
 export type DiagramEdge = {
@@ -173,35 +125,14 @@ export type DiagramEdge = {
   label?: string[];
   badgeIcon?: DiagramNodeIcon;
   badgeLabel?: string[];
-  badgeSide?: DiagramEdgeLabelSide;
-  badgeOffset?: number;
-  badgeDx?: number;
-  badgeDy?: number;
-  badgeT?: number;
-  labelSide?: DiagramEdgeLabelSide;
-  labelFontSize?: number;
-  labelOffset?: number;
-  labelT?: number;
-  labelSegment?: number;
-  labelDx?: number;
-  labelDy?: number;
-  labelAlign?: DiagramTextAlign;
   labelFrame?: boolean;
-  labelFramePadding?: number;
-  labelLineGap?: number;
   channel?: string;
   lineStyle?: DiagramEdgeLineStyle;
   direction?: DiagramEdgeDirection;
   layer?: DiagramEdgeLayer;
-  route?: DiagramEdgeRoute;
-  strokeWidth?: number;
-  waypoints?: DiagramWaypoint[];
+  weight?: DiagramEdgeWeight;
   exitSide?: DiagramSide;
-  exitOffset?: number;
   entrySide?: DiagramSide;
-  entryOffset?: number;
-  entryGap?: number;
-  stubDistance?: number;
   accent?: boolean;
   dim?: boolean;
   headless?: boolean | undefined;
@@ -215,7 +146,6 @@ export type DiagramGroup = {
   accent?: boolean | undefined;
   tone?: DiagramTone | undefined;
   texture?: DiagramTexture | undefined;
-  rx?: number | undefined;
   frame?: 'solid' | 'dashed' | 'none' | undefined;
   fill?: 'surface' | 'none' | undefined;
   ports?: DiagramNodePort[] | undefined;
@@ -225,58 +155,9 @@ export type DiagramGroup = {
   col?: number | undefined;
   rowSpan?: number | undefined;
   colSpan?: number | undefined;
-  tight?: boolean | undefined;
-  tightX?: boolean | undefined;
-  tightY?: boolean | undefined;
   titleBand?: boolean | undefined;
-  titleGap?: number | undefined;
-  padding?: number | Partial<Record<DiagramSide, number>> | undefined;
-  dividers?:
-    | {
-        rows?: number[];
-        cols?: number[];
-      }
-    | undefined;
-  bounds?:
-    | {
-        rowStart: number;
-        rowEnd: number;
-        colStart: number;
-        colEnd: number;
-      }
-    | undefined;
-};
-
-export type DiagramAnnotationLeaderRoute = 'straight' | 'elbow';
-
-export type DiagramAnnotationLeader = {
-  target: string;
-  anchor: DiagramAnchor;
-  route: DiagramAnnotationLeaderRoute;
-  from: Point;
-  to: Point;
-  points: Point[];
-};
-
-export type DiagramAnnotation = {
-  x?: number;
-  y?: number;
-  target?: string;
-  targets?: string[];
-  anchor?: DiagramAnchor;
-  guide?: string;
-  offset?: number;
-  dx?: number;
-  dy?: number;
-  text: string[];
-  align?: DiagramTextAlign;
-  color?: DiagramTextColor;
-  fontWeight?: number;
-  fontSize?: number;
-  lineGap?: number;
-  leader?: boolean;
-  leaderGap?: number;
-  leaderRoute?: DiagramAnnotationLeaderRoute;
+  /** A line through every gutter inside the group. */
+  dividers?: boolean | undefined;
 };
 
 export type DiagramLane = {
@@ -304,45 +185,16 @@ export type DiagramFrameElement = {
   signals: DiagramSignal[];
 };
 
-export type DiagramGuide = {
-  id?: string;
-  orientation?: DiagramGuideOrientation;
-  lane?: string;
-  x?: number;
-  y?: number;
-  row?: number;
-  col?: number;
-  target?: string;
-  anchor?: DiagramAnchor;
-  gap?: number;
-  dx?: number;
-  dy?: number;
-  yStart?: number;
-  yEnd?: number;
-  accent?: boolean;
-};
-
 export type DiagramMarker = DiagramNode;
 
-export type DiagramGraphSpec = {
+export type DiagramGraphIR = {
   nodes: DiagramNode[];
   edges: DiagramEdge[];
-  groups?: DiagramGroup[] | undefined;
-  annotations?: DiagramAnnotation[];
-  guides?: DiagramGuide[];
-  layout?: DiagramGraphLayout | undefined;
+  groups: DiagramGroup[];
 };
-
-export type GraphLayoutSpec = DiagramGraphSpec & { title?: string[] };
 
 export type DiagramTimelineSpec = {
   lanes: DiagramLane[];
   signals: DiagramSignal[];
   frame?: DiagramFrameElement | undefined;
-};
-
-export type DiagramGraphIR = DiagramGraphSpec & {
-  groups: DiagramGroup[];
-  annotations: DiagramAnnotation[];
-  guides: DiagramGuide[];
 };

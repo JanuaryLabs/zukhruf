@@ -1,22 +1,19 @@
 import type { ReactNode } from 'react';
 
 import type {
-  DiagramAnnotation,
   DiagramEdge,
   DiagramGroup,
-  DiagramGuide,
   DiagramLane,
   DiagramNode,
+  DiagramNodeContent,
   DiagramNodeIcon as DiagramNodeIconName,
   DiagramPaper,
-  DiagramSide,
   DiagramSignal,
   DiagramSignalBox,
   DiagramTextColor,
   DiagramTexture,
   DiagramTone,
   DiagramViewport,
-  DiagramWaypoint,
 } from '../model/diagram-ir.ts';
 import type {
   DiagramAccent,
@@ -40,149 +37,100 @@ export type DiagramProps = {
   paper?: DiagramPaper;
 };
 
-export type DiagramNodeProps = ChildrenProp &
-  Omit<DiagramNode, 'label' | 'frame' | 'hidden' | 'connectable'> & {
-    frame?: DiagramNode['frame'];
-    connectable?: boolean;
-    hidden?: boolean;
-  };
+/** The grid area every node primitive takes: whole cells, with spans of at least 1. */
+type CellProps = Pick<DiagramNode, 'id' | 'rowSpan' | 'colSpan'> & {
+  row: number;
+  col: number;
+};
 
-export type DiagramPhantomProps = ChildrenProp &
+type CaptionProps = Pick<
+  DiagramNode,
+  'caption' | 'captionSide' | 'captionFrame' | 'captionColor'
+>;
+
+export type DiagramNodeProps = ChildrenProp &
+  CellProps &
+  CaptionProps &
   Pick<
     DiagramNode,
-    | 'id'
-    | 'row'
-    | 'col'
-    | 'group'
-    | 'width'
-    | 'height'
-    | 'fontSize'
-    | 'fontWeight'
+    | 'frame'
     | 'textColor'
+    | 'tone'
+    | 'texture'
     | 'accent'
-    | 'textAlign'
-    | 'connectable'
+    | 'description'
+    | 'items'
+    | 'icon'
+    | 'ports'
     | 'hidden'
+    | 'stack'
+    | 'stackDirection'
   >;
 
 export type DiagramJunctionProps = ChildrenProp &
-  Pick<
-    DiagramNode,
-    | 'id'
-    | 'row'
-    | 'col'
-    | 'group'
-    | 'width'
-    | 'height'
-    | 'fontSize'
-    | 'fontWeight'
-    | 'textColor'
-    | 'accent'
-    | 'tone'
-    | 'hidden'
-    | 'caption'
-    | 'captionSide'
-    | 'captionFrame'
-    | 'captionOffset'
-    | 'captionColor'
-    | 'captionFontSize'
-    | 'captionFontWeight'
-  >;
+  CellProps &
+  CaptionProps &
+  Pick<DiagramNode, 'textColor' | 'accent' | 'tone' | 'hidden'>;
 
 export type DiagramConnectorProps = ChildrenProp &
+  CellProps &
+  CaptionProps &
   Pick<
     DiagramNode,
-    | 'id'
-    | 'row'
-    | 'col'
-    | 'colSpan'
-    | 'group'
-    | 'width'
-    | 'height'
-    | 'fontSize'
-    | 'fontWeight'
-    | 'textColor'
-    | 'accent'
-    | 'tone'
-    | 'texture'
-    | 'icon'
-    | 'iconSize'
-    | 'ports'
-    | 'rx'
-    | 'caption'
-    | 'captionSide'
-    | 'captionFrame'
-    | 'captionOffset'
-    | 'captionColor'
-    | 'captionFontSize'
-    | 'captionFontWeight'
+    'textColor' | 'accent' | 'tone' | 'texture' | 'icon' | 'ports'
   >;
 
 export type DiagramApplianceProps = ChildrenProp &
+  CellProps &
+  CaptionProps &
   Pick<
     DiagramNode,
-    | 'id'
-    | 'row'
-    | 'col'
-    | 'group'
-    | 'width'
-    | 'height'
-    | 'fontSize'
-    | 'fontWeight'
     | 'textColor'
     | 'accent'
     | 'tone'
     | 'texture'
     | 'ports'
-    | 'caption'
-    | 'captionSide'
-    | 'captionFrame'
-    | 'captionOffset'
-    | 'captionColor'
-    | 'captionFontSize'
-    | 'captionFontWeight'
     | 'appliancePorts'
     | 'antenna'
-    | 'slant'
   >;
 
+/** A frameless text in a cell; with a target, a leader runs from it to that node or group. */
+export type DiagramNoteProps = ChildrenProp &
+  CellProps &
+  Pick<DiagramNode, 'target'>;
+
 export type DiagramEdgeProps = ChildrenProp &
-  Omit<DiagramEdge, 'label' | 'waypoints' | 'badgeLabel'> & {
-    waypoints?: DiagramWaypoint[];
+  Omit<DiagramEdge, 'label' | 'badgeLabel'> & {
     badgeLabel?: string | string[];
   };
 
-export type DiagramGroupProps = ChildrenProp & {
-  id: string;
-  label?: string | string[];
-  labelAlign?: DiagramGroup['labelAlign'];
-  labelSide?: DiagramGroup['labelSide'];
-  accent?: boolean;
-  tone?: DiagramTone;
-  texture?: DiagramTexture;
-  rx?: number;
-  frame?: DiagramGroup['frame'];
-  fill?: DiagramGroup['fill'];
-  ports?: DiagramGroup['ports'];
-  tight?: boolean;
-  tightX?: boolean;
-  tightY?: boolean;
-  titleBand?: boolean;
-  titleGap?: number;
-  padding?: DiagramGroup['padding'];
-  dividers?: DiagramGroup['dividers'];
-  rowStart?: number;
-  rowEnd?: number;
-  colStart?: number;
-  colEnd?: number;
-};
-
-export type DiagramTextProps = ChildrenProp &
-  Omit<DiagramAnnotation, 'text'> & {
-    guide?: string;
+export type DiagramGroupProps = ChildrenProp &
+  Pick<
+    DiagramGroup,
+    | 'id'
+    | 'labelAlign'
+    | 'labelSide'
+    | 'accent'
+    | 'tone'
+    | 'texture'
+    | 'frame'
+    | 'fill'
+    | 'ports'
+    | 'row'
+    | 'col'
+    | 'rowSpan'
+    | 'colSpan'
+    | 'titleBand'
+    | 'dividers'
+  > & {
+    label?: string | string[];
   };
 
-export type DiagramContentProps = { children: ReactNode };
+/** The engine cannot measure React content, so the author gives the size of the box it reserves. */
+export type DiagramContentProps = {
+  size: DiagramNodeContent['size'];
+  children: ReactNode;
+};
 
 export type DiagramLineProps = ChildrenProp & {
   textColor?: DiagramTextColor;
@@ -203,17 +151,4 @@ export type DiagramFrameProps = ChildrenProp & {
 
 export type DiagramMarkerProps = DiagramNodeProps & {
   icon: DiagramNodeIconName;
-};
-
-export type DiagramGuideProps = DiagramGuide;
-
-export type DiagramWaypointProps = DiagramWaypoint;
-
-export type DiagramEntryProps = {
-  side: DiagramSide;
-  gap?: number;
-};
-
-export type DiagramExitProps = {
-  side: DiagramSide;
 };

@@ -307,7 +307,12 @@ function checkEdges(
         }
         continue;
       }
-      const anchor = endpointAnchor(ref, node, membership.group(ref.nodeId));
+      const anchor = endpointAnchor(
+        ref,
+        side,
+        node,
+        membership.group(ref.nodeId),
+      );
       if (!anchor) {
         const name =
           ref.portId === undefined ? ref.nodeId : `${ref.nodeId}:${ref.portId}`;
@@ -345,12 +350,28 @@ function checkEdges(
   }
 }
 
+/**
+ * The box whose side an edge end must lie on. A stack draws as one unit, so
+ * its side is the side of the frame that reaches farthest out there.
+ */
 function endpointAnchor(
   ref: { nodeId: string; portId: string | undefined },
+  side: DiagramSide,
   node: NodeLayout | undefined,
   group: GroupLayout | undefined,
 ): Box | undefined {
-  if (ref.portId === undefined) return node?.box ?? group?.rect;
+  if (ref.portId === undefined) {
+    if (!node) return group?.rect;
+    const outward = side === 'bottom' || side === 'right' ? 1 : -1;
+    return node.frames.reduce(
+      (best, frame) =>
+        sideCoordinate(frame, side) * outward >
+        sideCoordinate(best, side) * outward
+          ? frame
+          : best,
+      node.box,
+    );
+  }
   const port = (node ?? group)?.ports.find((port) => port.id === ref.portId);
   return port && { ...port.point, w: 0, h: 0 };
 }

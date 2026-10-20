@@ -4,7 +4,7 @@ import { labelLines, textBlock } from './text-block.ts';
 import { LAYOUT_TOKENS } from './tokens.ts';
 
 export type ContentPlacement = Pick<NodeLayout, 'text' | 'bullets'> &
-  Partial<Pick<NodeLayout, 'icon' | 'appliance'>>;
+  Partial<Pick<NodeLayout, 'icon' | 'appliance' | 'contentBox'>>;
 
 /** What a node draws inside its frame: its measured size, the padding around it, and where it goes. */
 export type NodeContent = {
@@ -46,8 +46,17 @@ function boxContent(node: DiagramNode): NodeContent {
     node.textAlign === 'start' ||
     node.description !== undefined ||
     (node.items?.length ?? 0) > 0;
-  if (isCard) return { ...cardContent(node), pad };
-  if (node.icon) return { ...iconRowContent(node), pad };
+  let text: Omit<NodeContent, 'pad'>;
+  if (isCard) text = cardContent(node);
+  else if (node.icon) text = iconRowContent(node);
+  else text = labelContent(node);
+  return {
+    ...(node.content ? withReactContent(text, node.content.size) : text),
+    pad,
+  };
+}
+
+function labelContent(node: DiagramNode): Omit<NodeContent, 'pad'> {
   const lines = textBlock(
     labelLines(node.label, node.textColor),
     LAYOUT_TOKENS.fonts.boxLabel,
@@ -55,10 +64,29 @@ function boxContent(node: DiagramNode): NodeContent {
   return {
     w: lines.w,
     h: lines.h,
-    pad,
     place: (inner) => ({
       text: lines.place(centreX(inner), centredTop(inner, lines.h), 'middle'),
       bullets: [],
+    }),
+  };
+}
+
+/** The author's React content goes under the text, centred, in a box of the size the author gives. */
+function withReactContent(
+  text: Omit<NodeContent, 'pad'>,
+  size: { w: number; h: number },
+): Omit<NodeContent, 'pad'> {
+  const gap = text.h > 0 ? LAYOUT_TOKENS.BLOCK_GAP : 0;
+  return {
+    w: Math.max(text.w, size.w),
+    h: text.h + gap + size.h,
+    place: (inner) => ({
+      ...text.place({ ...inner, h: inner.h - gap - size.h }),
+      contentBox: {
+        x: centreX(inner) - size.w / 2,
+        y: inner.y + inner.h - size.h,
+        ...size,
+      },
     }),
   };
 }

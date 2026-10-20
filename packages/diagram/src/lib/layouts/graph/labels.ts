@@ -4,8 +4,6 @@ import { LAYOUT_TOKENS } from './tokens.ts';
 /** Where along a segment a tag is tried, in order. */
 const FRACTIONS = [0.5, 0.3, 0.7, 0.15, 0.85];
 
-export type TagPosition = { box: Box; segment: number };
-
 /**
  * The first free position for a tag of `size` on the route: the longest
  * segment first, and on each segment the fractions in FRACTIONS order. A
@@ -17,7 +15,7 @@ export function tagPosition(
   points: Point[],
   placement: 'beside' | 'on',
   isFree: (box: Box) => boolean,
-): TagPosition | undefined {
+): Box | undefined {
   const segments = points
     .slice(1)
     .map((to, segment) => ({ from: points[segment]!, to, segment }))
@@ -32,7 +30,7 @@ export function tagPosition(
         y: from.y + (to.y - from.y) * t,
       };
       for (const box of candidates(size, at, from.y === to.y, placement)) {
-        if (isFree(box)) return { box, segment };
+        if (isFree(box)) return box;
       }
     }
   }

@@ -1,4 +1,5 @@
 import type { Box, DiagramGraphIR, Point } from '../../model/diagram-ir.ts';
+import { validateGraph } from '../../model/validate-graph.ts';
 import { type CellArea, type GroupArea, gridAreas } from './areas.ts';
 import type {
   EdgeLayout,
@@ -23,9 +24,10 @@ import { type TrackLine, sizeTracks } from './tracks.ts';
  * Lays out a graph on a content-sized grid: it measures every node, sizes
  * each row and column to the content in it, and reserves the chrome of the
  * groups in the gutters between them. It throws when the grid cannot be
- * drawn without overlap.
+ * drawn without overlap, or when an id or an edge end is wrong.
  */
 export function layoutGraph(ir: DiagramGraphIR): GraphLayout {
+  validateGraph(ir);
   const measured = new Map(
     ir.nodes.map((node) => [node.id, measureNode(node)] as const),
   );

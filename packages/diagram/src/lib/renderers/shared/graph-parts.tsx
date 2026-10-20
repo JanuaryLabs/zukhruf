@@ -8,6 +8,7 @@ import type {
 import { FONT_FAMILY } from '../../layouts/text/font.ts';
 import type {
   DiagramEdge,
+  DiagramEdgeWeight,
   DiagramNode,
   DiagramNodeIcon as DiagramNodeIconName,
   DiagramNodePort,
@@ -86,6 +87,15 @@ function edgeDasharray(edge: DiagramEdge) {
   if (edge.lineStyle === 'dotted') return '1 6';
   return undefined;
 }
+
+/** The stroke width of an edge of each weight. */
+export const EDGE_STROKE_WIDTH: Record<DiagramEdgeWeight, number> = {
+  regular: 1.5,
+  bold: 3,
+};
+
+/** The corner radius a group frame is drawn with. */
+const GROUP_RADIUS = 12;
 
 function edgeStroke(edge: DiagramEdge, themeAccent: string) {
   if (edge.accent) return themeAccent;
@@ -384,7 +394,6 @@ export function GroupRect({
     clamp: true,
   });
   const { group, rect: box, band, label } = layout;
-  const rx = group.rx ?? 12;
   const frame = group.frame ?? 'solid';
   const fill = group.fill ?? 'surface';
   const stroke = accentToneStroke(group, themeAccent, DIAGRAM_NEUTRAL);
@@ -395,10 +404,6 @@ export function GroupRect({
     hasFill && group.tone ? resolveDiagramToneFill(group.tone) : DIAGRAM_BG;
   const texture = group.texture ?? (hasFill ? 'dots' : 'none');
   const texturePattern = hasFill ? textureFill(texture, ids) : null;
-  const dividerKeys = [
-    ...(group.dividers?.rows ?? []).map((value) => `row:${value}`),
-    ...(group.dividers?.cols ?? []).map((value) => `col:${value}`),
-  ];
   const [firstLabel] = label;
   return (
     <motion.g style={{ opacity }}>
@@ -409,7 +414,7 @@ export function GroupRect({
         y={box.y}
         width={box.w}
         height={box.h}
-        rx={rx}
+        rx={GROUP_RADIUS}
         fill={hasFill ? surfaceFill : 'none'}
         stroke={hasFrame ? stroke : 'none'}
         strokeWidth={hasFrame ? 1 : 0}
@@ -422,7 +427,7 @@ export function GroupRect({
           y={box.y}
           width={box.w}
           height={box.h}
-          rx={rx}
+          rx={GROUP_RADIUS}
           fill={texturePattern}
           pointerEvents="none"
         />
@@ -450,22 +455,19 @@ export function GroupRect({
           />
         </>
       )}
-      {layout.dividers.map(([from, to], i) => {
-        const key = dividerKeys[i] ?? `${i}`;
-        return (
-          <line
-            key={key}
-            x1={from.x}
-            y1={from.y}
-            x2={to.x}
-            y2={to.y}
-            stroke={group.accent ? themeAccent : DIAGRAM_NEUTRAL}
-            strokeWidth={1}
-            strokeDasharray={dasharray}
-            data-diagram-group-divider={`${group.id}:${key}`}
-          />
-        );
-      })}
+      {layout.dividers.map(([from, to], i) => (
+        <line
+          key={i}
+          x1={from.x}
+          y1={from.y}
+          x2={to.x}
+          y2={to.y}
+          stroke={group.accent ? themeAccent : DIAGRAM_NEUTRAL}
+          strokeWidth={1}
+          strokeDasharray={dasharray}
+          data-diagram-group-divider={`${group.id}:${i}`}
+        />
+      ))}
       {firstLabel && (
         <text
           data-diagram-group-label={group.id}
@@ -482,7 +484,7 @@ export function GroupRect({
       )}
       <PortMarkers
         ownerId={group.id}
-        ports={layout.ports ?? []}
+        ports={layout.ports}
         declared={group.ports}
       />
     </motion.g>
@@ -507,7 +509,7 @@ export function EdgeStroke({
   const markerId = edgeMarkerId(edge, ids);
   const direction = edge.headless ? 'none' : (edge.direction ?? 'forward');
   const markerUrl = `url(#${markerId})`;
-  const strokeWidth = edge.strokeWidth ?? 1.5;
+  const strokeWidth = EDGE_STROKE_WIDTH[edge.weight ?? 'regular'];
   const dasharray = edgeDasharray(edge);
 
   const drawEnd = start + (end - start) * 0.85;
@@ -525,7 +527,6 @@ export function EdgeStroke({
       data-diagram-edge-line-style={edge.lineStyle}
       data-diagram-edge-direction={direction}
       data-diagram-edge-layer={edge.layer ?? 'foreground'}
-      data-diagram-edge-route={edge.route}
       d={d}
       fill="none"
       stroke={stroke}
@@ -607,8 +608,6 @@ function EdgeLabel({
       {edge.labelFrame && (
         <rect
           data-diagram-edge-label-frame={`${edge.from}->${edge.to}`}
-          data-diagram-edge-label-segment={label.segment}
-          data-diagram-edge-label-line-gap={edge.labelLineGap}
           x={box.x}
           y={box.y}
           width={box.w}
@@ -621,8 +620,6 @@ function EdgeLabel({
       )}
       <text
         data-diagram-edge-label={`${edge.from}->${edge.to}`}
-        data-diagram-edge-label-segment={label.segment}
-        data-diagram-edge-label-line-gap={edge.labelLineGap}
         x={first.x}
         y={first.y}
         textAnchor={first.anchor}

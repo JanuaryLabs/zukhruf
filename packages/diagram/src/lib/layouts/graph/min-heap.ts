@@ -1,8 +1,4 @@
-/**
- * A binary min-heap of items by priority.
- *
- * Moved from graph-layout.ts, whose copy step 6 deletes with the old engine.
- */
+/** A binary min-heap of items by priority. */
 export class MinHeap<T> {
   readonly #data: { item: T; priority: number }[] = [];
 

@@ -6,11 +6,10 @@ import type {
   NodeLayout,
   TextRun,
 } from '../../layouts/graph/graph-layout-result.ts';
-import { legacyGraphLayout } from '../../layouts/graph/legacy-graph-layout.ts';
+import { layoutGraph } from '../../layouts/graph/layout.ts';
 import { FONT_FAMILY, TEXT_SHAPING } from '../../layouts/text/font.ts';
 import type {
   Box,
-  DiagramGraphLayout,
   DiagramTexture,
   DiagramViewport,
 } from '../../model/diagram-ir.ts';
@@ -36,11 +35,11 @@ import {
   nodeTexture,
 } from '../shared/graph-parts.tsx';
 import {
-  ANNOTATION_REVEAL_START,
-  AnnotationText,
+  NOTE_REVEAL_START,
   NodeCaption,
   NodePorts,
   NodeStackFrames,
+  NoteText,
   SpecialNode,
   isSpecialNode,
   splitNotes,
@@ -51,19 +50,17 @@ import { formatZoom, normalizeZoom } from '../shared/viewport-zoom.ts';
 import type { GraphRendererProps } from '../types.ts';
 
 export type HtmlGraphDiagramProps = Omit<DiagramProps, 'viewport'> & {
-  graph?: DiagramGraphLayout;
   viewport?: Omit<DiagramViewport, 'fit'>;
 };
 
 export function HtmlGraphDiagram({
   title,
   children,
-  graph,
   viewport,
   paper,
   ...chrome
 }: HtmlGraphDiagramProps) {
-  const ir = compileGraph(children, graph);
+  const ir = compileGraph(children);
   const lines = [title].flat();
   const zoom = normalizeZoom(viewport?.zoom);
   return (
@@ -89,7 +86,7 @@ function GraphHTML({
   paper,
 }: Omit<GraphRendererProps, 'viewport'> & { zoom: number }) {
   const { stylePreset } = useDiagramTheme();
-  const layout = legacyGraphLayout(ir);
+  const layout = layoutGraph(ir);
   const { viewBox } = layout;
   const segments = buildSegments(ir.nodes.length, ir.edges.length);
   const seg = (kind: SegmentKind, index = 0) => {
@@ -230,13 +227,12 @@ function GraphHTML({
             />
           ))}
           {notes.map((note) => (
-            <AnnotationText
+            <NoteText
               key={note.node.id}
               note={note}
-              annotations={ir.annotations}
               leaders={layout.leaders}
               progress={progress}
-              start={ANNOTATION_REVEAL_START}
+              start={NOTE_REVEAL_START}
               end={1}
             />
           ))}
@@ -331,11 +327,10 @@ function NodeBox({
   const translateY = useTransform(progress, [start, end], [-10, 0], {
     clamp: true,
   });
-  const { node, box, icon, text } = layout;
+  const { node, box, icon, contentBox } = layout;
   const frame = node.frame ?? 'solid';
   const fill = nodeTextFill(node, frame, themeAccent);
   const { title, description, items } = nodeTextParts(layout);
-  const lastRun = text.at(-1);
 
   return (
     <motion.div
@@ -407,14 +402,18 @@ function NodeBox({
           <RunText run={run} origin={box} />
         </div>
       ))}
-      {node.content !== undefined && (
+      {node.content && contentBox && (
         <div
-          className="absolute inset-x-0 bottom-0 flex flex-col items-center justify-center"
+          data-diagram-node-content={node.id}
+          className="absolute"
           style={{
-            top: lastRun ? lastRun.bounds.y + lastRun.bounds.h - box.y : 0,
+            left: contentBox.x - box.x,
+            top: contentBox.y - box.y,
+            width: contentBox.w,
+            height: contentBox.h,
           }}
         >
-          <div data-diagram-node-content={node.id}>{node.content}</div>
+          {node.content.element}
         </div>
       )}
     </motion.div>
@@ -440,7 +439,6 @@ function RunText({
         fontSize: run.font.size,
         fontWeight: run.font.weight,
         lineHeight: `${run.bounds.h}px`,
-        letterSpacing: run.font.face === 'mono' ? 0.6 : undefined,
         color,
       }}
     >

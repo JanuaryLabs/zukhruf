@@ -38,18 +38,12 @@ export function HomelabReferenceDiagram({
       className={className}
       viewport={viewport}
       paper={paper}
-      graph={{
-        columns: [160, 176, 188, 188, 256, 188, 216, 160],
-        rows: [280, 112, 120, 120, 120, 112],
-        titleTopPad: 0,
-      }}
     >
       <Diagram.Box
         id="cloudflare-dns"
         row={0}
         col={3}
         icon="cloudflare"
-        iconSize={28}
         tone="amber"
         texture="hatch"
       >
@@ -62,43 +56,41 @@ export function HomelabReferenceDiagram({
         row={0}
         col={4}
         icon="internet"
-        iconSize={30}
         tone="blue"
       >
         Public Internet
       </Diagram.Box>
+      <Diagram.Arrow
+        from="cloudflare-dns"
+        to="public-internet"
+        layer="background"
+      />
       <Diagram.Connector
         id="cloudflare-tunnel"
-        row={0.17}
+        row={1}
         col={4}
-        width={148}
-        height={28}
         icon="tunnel"
-        iconSize={16}
-        fontSize={9}
         tone="blue"
         texture="none"
       >
         <Diagram.Line>Cloudflare Tunnel</Diagram.Line>
         <Diagram.Line textColor="dim">(Zero Trust)</Diagram.Line>
       </Diagram.Connector>
-      <Diagram.Box
-        id="isp"
-        row={2}
-        col={0}
-        icon="internet"
-        iconSize={30}
-        tone="slate"
-      >
+      <Diagram.Wire
+        from="public-internet"
+        to="cloudflare-tunnel"
+        layer="background"
+        channel="tunnel"
+        weight="bold"
+      />
+      <Diagram.Box id="isp" row={3} col={0} icon="internet" tone="slate">
         <Diagram.Line>ISP Connection</Diagram.Line>
         <Diagram.Line>(1 Gbps)</Diagram.Line>
       </Diagram.Box>
       <Diagram.Appliance
         id="router"
-        row={2}
+        row={3}
         col={1}
-        width={116}
-        height={72}
         tone="slate"
         texture="hatch"
         appliancePorts={5}
@@ -106,18 +98,26 @@ export function HomelabReferenceDiagram({
         caption="Fritzbox Router"
         captionSide="bottom"
       />
+      <Diagram.Box
+        id="adguard"
+        row={2}
+        col={2}
+        icon="shield"
+        tone="green"
+        texture="hatch"
+        caption="DNS Forwarder"
+        captionSide="bottom"
+      >
+        AdGuard Home
+      </Diagram.Box>
       <Diagram.Card
         id="laptop"
-        row={4}
-        col={0.7}
-        width={208}
-        height={184}
+        row={7}
+        col={0}
+        colSpan={2}
         icon="server"
-        iconSize={28}
         tone="slate"
         texture="hatch"
-        bodyFontSize={10}
-        bodyLineGap={2}
         items={[
           '32GB RAM',
           '500GB SSD (Internal)',
@@ -128,85 +128,41 @@ export function HomelabReferenceDiagram({
         Dell Laptop
       </Diagram.Card>
       <Diagram.Box
-        id="adguard"
-        row={1}
-        col={2}
-        icon="shield"
-        iconSize={28}
-        tone="green"
-        texture="hatch"
-        caption="DNS Forwarder"
-        captionSide="bottom"
-      >
-        AdGuard Home
-      </Diagram.Box>
-      <Diagram.Group
-        id="proxmox"
-        label={['Proxmox VE', '(Hypervisor)']}
-        rowStart={3}
-        rowEnd={4}
-        colStart={2}
-        colEnd={2}
-        tight
-        tightX
-        titleBand
-        padding={{ top: 46, right: 6, bottom: 18, left: 8 }}
-        tone="amber"
-        texture="hatch"
-      >
-        <Diagram.Card
-          id="proxmox-vm"
-          row={3.5}
-          col={2}
-          width={120}
-          height={56}
-          stack={4}
-          stackDirection="up-left"
-          stackDx={15}
-          stackDy={10}
-          stackWidthStep={12}
-          stackHeightStep={8}
-          icon="server"
-          iconSize={26}
-          tone="amber"
-          caption="VM"
-          captionSide="top"
-        >
-          VM
-        </Diagram.Card>
-      </Diagram.Group>
-      <Diagram.Box
         id="external-ssd"
-        row={5}
+        row={7}
         col={2}
         icon="storage"
-        iconSize={30}
         tone="slate"
         texture="hatch"
       >
         <Diagram.Line>4TB</Diagram.Line>
         <Diagram.Line>External SSD</Diagram.Line>
       </Diagram.Box>
-      <Diagram.Marker
-        id="git-repo"
-        row={3}
-        col={7}
-        icon="git"
-        iconSize={34}
-        width={72}
-        height={76}
-        tone="slate"
+      <Diagram.Group
+        id="proxmox"
+        label={['Proxmox VE', '(Hypervisor)']}
+        titleBand
+        tone="amber"
+        texture="hatch"
       >
-        Git Repo
-      </Diagram.Marker>
-
+        <Diagram.Card
+          id="proxmox-vm"
+          row={3}
+          col={2}
+          rowSpan={2}
+          stack={4}
+          stackDirection="up-left"
+          icon="server"
+          tone="amber"
+        >
+          VM
+        </Diagram.Card>
+      </Diagram.Group>
       <Diagram.Group
         id="cluster"
         label="K3s Kubernetes Cluster"
         labelAlign="start"
         titleBand
-        titleGap={10}
-        padding={{ top: 34, right: 28, bottom: 24, left: 28 }}
         tone="blue"
         texture="hatch"
       >
@@ -214,49 +170,46 @@ export function HomelabReferenceDiagram({
           id="ingress"
           label="Networking & Ingress"
           labelAlign="start"
-          tone="blue"
           titleBand
-          padding={{ top: 18, right: 16, bottom: 18, left: 16 }}
+          tone="blue"
         >
-          <Diagram.Box
-            id="metallb"
-            row={1}
-            col={3}
-            icon="router"
-            iconSize={28}
-            tone="blue"
-          >
+          <Diagram.Box id="metallb" row={2} col={3} icon="router" tone="blue">
             <Diagram.Line>MetalLB</Diagram.Line>
             <Diagram.Line>(Load Balancer)</Diagram.Line>
           </Diagram.Box>
-          <Diagram.Box
-            id="gateway"
-            row={1}
-            col={4}
-            icon="shield"
-            iconSize={28}
-            tone="blue"
-          >
+          <Diagram.Box id="gateway" row={2} col={4} icon="shield" tone="blue">
             <Diagram.Line>Istio Ingress Gateway</Diagram.Line>
             <Diagram.Line>(North-South Gateway)</Diagram.Line>
           </Diagram.Box>
         </Diagram.Group>
-
+        <Diagram.Group
+          id="certificates"
+          label="Certificates"
+          titleBand
+          tone="slate"
+        >
+          <Diagram.Box
+            id="cert-manager"
+            row={2}
+            col={5}
+            icon="certificate"
+            tone="slate"
+          >
+            Cert-Manager
+          </Diagram.Box>
+        </Diagram.Group>
         <Diagram.Group
           id="k3s-vms"
           label="K3s"
-          tight
           titleBand
-          padding={{ top: 34, right: 14, bottom: 14, left: 14 }}
           tone="green"
           texture="hatch"
         >
           <Diagram.Card
             id="k3s-master"
-            row={2}
+            row={3}
             col={3}
             icon="kubernetes"
-            iconSize={28}
             tone="green"
             texture="hatch"
           >
@@ -264,112 +217,50 @@ export function HomelabReferenceDiagram({
             <Diagram.Line>Pods</Diagram.Line>
           </Diagram.Card>
         </Diagram.Group>
-
-        <Diagram.Group
-          id="mesh"
-          label="Service Mesh"
-          tight
-          titleBand
-          padding={{ top: 34, right: 14, bottom: 14, left: 14 }}
-          tone="blue"
-        >
+        <Diagram.Group id="mesh" label="Service Mesh" titleBand tone="blue">
           <Diagram.Card
             id="istio"
-            row={2}
+            row={3}
             col={4}
             colSpan={2}
-            height={112}
             icon="istio"
-            iconSize={36}
             tone="blue"
           >
             <Diagram.Line>Istio Service Mesh</Diagram.Line>
             <Diagram.Line textColor="dim">mTLS Enabled</Diagram.Line>
           </Diagram.Card>
         </Diagram.Group>
-
-        <Diagram.Group
-          id="certificates"
-          label="Certificates"
-          tight
-          titleBand
-          padding={{ top: 34, right: 14, bottom: 14, left: 14 }}
-          tone="slate"
-        >
-          <Diagram.Box
-            id="cert-manager"
-            row={1}
-            col={5}
-            icon="certificate"
-            iconSize={26}
-            tone="slate"
-          >
-            Cert-Manager
-          </Diagram.Box>
-        </Diagram.Group>
-
-        <Diagram.Box
-          id="authentik"
-          row={2}
-          col={6}
-          icon="shield"
-          iconSize={28}
-          tone="rose"
-        >
-          <Diagram.Line>Authentik</Diagram.Line>
-          <Diagram.Line>(SSO)</Diagram.Line>
-        </Diagram.Box>
-        <Diagram.Box
-          id="argocd"
-          row={3}
-          col={6}
-          icon="git"
-          iconSize={28}
-          tone="amber"
-        >
-          <Diagram.Line>ArgoCD</Diagram.Line>
-          <Diagram.Line>(GitOps Deployment)</Diagram.Line>
-        </Diagram.Box>
-
         <Diagram.Group
           id="storage"
           label="Storage"
           labelAlign="start"
-          tight
           titleBand
-          padding={{ top: 34, right: 14, bottom: 14, left: 14 }}
           tone="slate"
         >
           <Diagram.Box
             id="longhorn"
-            row={4}
+            row={5}
             col={3}
             icon="storage"
-            iconSize={28}
             tone="slate"
           >
             <Diagram.Line>Longhorn</Diagram.Line>
             <Diagram.Line>(Storage Class)</Diagram.Line>
           </Diagram.Box>
         </Diagram.Group>
-
         <Diagram.Group
           id="monitoring"
           label="Monitoring"
-          dividers={{ rows: [5], cols: [5] }}
-          tightX
-          tightY
+          dividers
           titleBand
-          padding={{ top: 34, right: 8, bottom: 16, left: 16 }}
           tone="amber"
           texture="hatch"
         >
           <Diagram.Box
             id="grafana"
-            row={4}
+            row={5}
             col={4}
             icon="dashboard"
-            iconSize={28}
             tone="amber"
           >
             <Diagram.Line>Grafana</Diagram.Line>
@@ -377,10 +268,9 @@ export function HomelabReferenceDiagram({
           </Diagram.Box>
           <Diagram.Box
             id="victoria-metrics"
-            row={4}
+            row={5}
             col={5}
             icon="metrics"
-            iconSize={28}
             tone="amber"
           >
             <Diagram.Line>VictoriaMetrics</Diagram.Line>
@@ -388,212 +278,80 @@ export function HomelabReferenceDiagram({
           </Diagram.Box>
           <Diagram.Box
             id="victoria-logs"
-            row={5}
+            row={6}
             col={4}
             icon="logs"
-            iconSize={28}
             tone="amber"
           >
             <Diagram.Line>VictoriaLogs</Diagram.Line>
             <Diagram.Line>(Logs)</Diagram.Line>
           </Diagram.Box>
-          <Diagram.Box
-            id="jaeger"
-            row={5}
-            col={5}
-            icon="trace"
-            iconSize={28}
-            tone="amber"
-          >
+          <Diagram.Box id="jaeger" row={6} col={5} icon="trace" tone="amber">
             <Diagram.Line>Jaeger</Diagram.Line>
             <Diagram.Line>(Traces)</Diagram.Line>
           </Diagram.Box>
         </Diagram.Group>
-
         <Diagram.Junction
           id="observability-bus"
-          row={3.5}
-          col={4.5}
+          row={4}
+          col={4}
+          colSpan={2}
           hidden
           tone="blue"
         />
-
+        <Diagram.Box id="argocd" row={4} col={6} icon="git" tone="amber">
+          <Diagram.Line>ArgoCD</Diagram.Line>
+          <Diagram.Line>(GitOps Deployment)</Diagram.Line>
+        </Diagram.Box>
+        <Diagram.Note id="argocd-note" row={5} col={6} target="argocd">
+          <Diagram.Line>Deploys applications</Diagram.Line>
+          <Diagram.Line>into k3s</Diagram.Line>
+        </Diagram.Note>
         <Diagram.Group
           id="gpu-scheduling"
           label="GPU Scheduling"
           labelAlign="start"
+          titleBand
           tone="green"
           texture="hatch"
-          titleBand
-          tight
-          padding={{ top: 14, right: 4, bottom: 12, left: 4 }}
         >
           <Diagram.Card
             id="gpu-workflow"
-            group="gpu-scheduling"
-            row={5}
-            col={6.07}
-            width={204}
-            height={112}
+            row={7}
+            col={6}
             icon="gpu"
-            iconSize={26}
             tone="green"
             texture="hatch"
-            bodyFontSize={10}
-            bodyLineGap={2}
-            description={['GPU Workflow', 'NVIDIA RTX 3050']}
+            description="NVIDIA RTX 3050"
             items={['K3s Node Affinity', 'Automatic GPU Scheduling']}
           >
             GPU Workflow
           </Diagram.Card>
         </Diagram.Group>
+        <Diagram.Box id="authentik" row={3} col={6} icon="shield" tone="rose">
+          <Diagram.Line>Authentik</Diagram.Line>
+          <Diagram.Line>(SSO)</Diagram.Line>
+        </Diagram.Box>
       </Diagram.Group>
-
-      <Diagram.Note
-        target="cert-manager"
-        anchor="right"
-        guide="right-callout-lane"
-        dy={-18}
-        align="start"
-        fontSize={10}
-        fontWeight={600}
-        lineGap={1}
-        leader
-        leaderRoute="elbow"
-      >
+      <Diagram.Note id="cert-note" row={2} col={7} target="cert-manager">
         <Diagram.Line>Manages</Diagram.Line>
         <Diagram.Line>Let&apos;s Encrypt</Diagram.Line>
         <Diagram.Line>certificates</Diagram.Line>
       </Diagram.Note>
-      <Diagram.Note
-        target="authentik"
-        anchor="right"
-        guide="right-callout-lane"
-        dy={34}
-        fontSize={10}
-        fontWeight={600}
-        lineGap={1}
-        leader
-        leaderRoute="elbow"
-      >
+      <Diagram.Marker id="git-repo" row={4} col={7} icon="git" tone="slate">
+        Git Repo
+      </Diagram.Marker>
+      <Diagram.Note id="authentik-note" row={3} col={7} target="authentik">
         <Diagram.Line>Authentication</Diagram.Line>
         <Diagram.Line>for services</Diagram.Line>
         <Diagram.Line>in mesh</Diagram.Line>
       </Diagram.Note>
-      <Diagram.Note
-        target="argocd"
-        anchor="bottom"
-        offset={16}
-        dx={-72}
-        align="start"
-        fontSize={10}
-        fontWeight={600}
-        lineGap={1}
-      >
-        <Diagram.Line>Deploys applications</Diagram.Line>
-        <Diagram.Line>into k3s</Diagram.Line>
-      </Diagram.Note>
-      <Diagram.Guide
-        id="storage-backup-rail"
-        orientation="horizontal"
-        target="longhorn"
-        anchor="bottom"
-        gap={58}
-      />
-      <Diagram.Guide
-        id="storage-mesh-rail"
-        orientation="horizontal"
-        target="storage"
-        anchor="top"
-        gap={36}
-      />
-      <Diagram.Guide
-        id="left-cluster-handoff-rail"
-        orientation="vertical"
-        target="k3s-vms"
-        anchor="left"
-        dx={-2}
-      />
-      <Diagram.Guide
-        id="control-plane-rail"
-        orientation="vertical"
-        target="cert-manager"
-        anchor="left"
-        gap={34}
-      />
-      <Diagram.Guide
-        id="service-control-entry-rail"
-        orientation="vertical"
-        target="istio"
-        anchor="right"
-        gap={22}
-      />
-      <Diagram.Guide
-        id="right-callout-lane"
-        orientation="vertical"
-        target="git-repo"
-        anchor="right"
-        gap={12}
-      />
-      <Diagram.Guide
-        id="observability-header-rail"
-        orientation="horizontal"
-        target="monitoring"
-        anchor="top"
-        dy={12}
-      />
-      <Diagram.Guide
-        id="observability-branch-rail"
-        orientation="vertical"
-        target="monitoring"
-        anchor="center"
-        dx={-6}
-      />
-      <Diagram.Guide
-        id="observability-bottom-row-rail"
-        orientation="horizontal"
-        target="victoria-logs"
-        anchor="top"
-        gap={28}
-      />
-      <Diagram.Guide
-        id="gpu-top-rail"
-        orientation="horizontal"
-        target="monitoring"
-        anchor="top"
-        gap={58}
-      />
-      <Diagram.Arrow
-        from="cloudflare-dns"
-        to="public-internet"
-        layer="background"
-      />
-      <Diagram.Wire
-        from="public-internet"
-        to="cloudflare-tunnel"
-        layer="background"
-        channel="tunnel"
-        strokeWidth={3}
-        exitSide="bottom"
-        entrySide="top"
-        entryGap={0}
-      />
-      <Diagram.Arrow
-        from="cloudflare-tunnel"
-        to="gateway"
-        layer="background"
-        channel="tunnel"
-        strokeWidth={3}
-        exitSide="bottom"
-        entrySide="top"
-        entryGap={0}
-      />
       <Diagram.Arrow from="isp" to="router" layer="background" />
+      {/* The router's caption hangs under it, so its edges leave by the sides. */}
       <Diagram.Arrow
         from="router"
         to="adguard"
         layer="background"
-        route="straight"
         exitSide="right"
         entrySide="left"
       />
@@ -601,168 +359,27 @@ export function HomelabReferenceDiagram({
         from="router"
         to="laptop"
         layer="background"
-        route="straight"
-        exitSide="bottom"
-        exitOffset={-52}
-        entrySide="top"
+        exitSide="left"
       />
       <Diagram.Arrow from="router" to="proxmox" layer="background" />
-      <Diagram.Arrow
-        from="laptop"
-        to="external-ssd"
-        layer="background"
-        route="straight"
-        exitSide="bottom"
-        exitOffset={40}
-        entrySide="left"
-      />
+      <Diagram.Arrow from="laptop" to="external-ssd" layer="background" />
       <Diagram.Arrow
         from="external-ssd"
         to="longhorn"
         layer="background"
         channel="storage"
         lineStyle="dashed"
-        labelT={0.68}
-        labelSide="below"
-        labelOffset={22}
-        stubDistance={18}
-        exitSide="right"
-        entrySide="bottom"
       >
         Distributed Storage &amp; Backups
-        <Diagram.Waypoint
-          guide="storage-backup-rail"
-          target="external-ssd"
-          anchor="right"
-          gap={18}
-        />
-        <Diagram.Waypoint
-          guide="storage-backup-rail"
-          target="longhorn"
-          anchor="bottom"
-        />
-      </Diagram.Arrow>
-      <Diagram.Arrow
-        from="proxmox"
-        to="k3s-master"
-        layer="background"
-        exitSide="right"
-        entrySide="left"
-        entryGap={0}
-        stubDistance={12}
-      >
-        <Diagram.Waypoint
-          guide="left-cluster-handoff-rail"
-          target="proxmox"
-          anchor="right"
-        />
-        <Diagram.Waypoint
-          guide="left-cluster-handoff-rail"
-          target="k3s-master"
-          anchor="left"
-        />
-      </Diagram.Arrow>
-      <Diagram.Arrow
-        from="metallb"
-        to="gateway"
-        layer="background"
-        labelSide="above"
-        labelDy={-31}
-        labelFrame
-      >
-        External IPs
-      </Diagram.Arrow>
-      <Diagram.Arrow
-        from="gateway"
-        to="istio"
-        layer="background"
-        channel="mtls"
-        route="straight"
-        direction="both"
-        exitSide="bottom"
-        entrySide="top"
-        entryGap={0}
-        entryOffset={-96}
-      />
-      <Diagram.Arrow
-        from="k3s-master"
-        to="istio"
-        layer="background"
-        channel="mtls"
-        route="straight"
-        exitSide="right"
-        entrySide="left"
-        entryGap={0}
-      />
-      <Diagram.Arrow
-        from="cert-manager"
-        to="gateway"
-        layer="background"
-        channel="certificates"
-        labelT={0.42}
-        labelSide="below"
-        labelOffset={58}
-        labelDx={252}
-        lineStyle="dashed"
-        route="straight"
-        exitSide="left"
-        entrySide="right"
-        entryGap={0}
-        labelFrame
-        labelLineGap={1}
-      >
-        <Diagram.Line>Let&apos;s Encrypt</Diagram.Line>
-        <Diagram.Line>certificates</Diagram.Line>
-      </Diagram.Arrow>
-      <Diagram.Arrow
-        from="authentik"
-        to="istio"
-        layer="background"
-        channel="auth"
-        exitSide="left"
-        entrySide="right"
-        entryGap={0}
-        entryOffset={-2}
-        labelSide="right"
-        labelOffset={22}
-        labelDy={-8}
-        labelFrame
-      >
-        <Diagram.Waypoint
-          guide="service-control-entry-rail"
-          target="authentik"
-          anchor="left"
-        />
-        <Diagram.Waypoint
-          guide="service-control-entry-rail"
-          target="istio"
-          anchor="right"
-        />
       </Diagram.Arrow>
       <Diagram.Arrow
         from="argocd"
         to="istio"
         layer="background"
         channel="deploy"
-        exitSide="left"
-        entrySide="right"
-        entryGap={0}
-        labelSide="right"
-        labelOffset={24}
-        labelDy={10}
         labelFrame
       >
-        <Diagram.Waypoint
-          guide="service-control-entry-rail"
-          target="argocd"
-          anchor="left"
-        />
-        <Diagram.Waypoint
-          guide="service-control-entry-rail"
-          target="istio"
-          anchor="right"
-          dy={16}
-        />
+        Deploys
       </Diagram.Arrow>
       <Diagram.Arrow
         from="git-repo"
@@ -770,14 +387,6 @@ export function HomelabReferenceDiagram({
         layer="background"
         channel="gitops"
         lineStyle="dashed"
-        exitSide="left"
-        entrySide="right"
-        labelSide="above"
-        labelOffset={64}
-        labelDx={-50}
-        labelSegment={0}
-        labelAlign="middle"
-        labelLineGap={1}
       >
         <Diagram.Line>Continuous deployment</Diagram.Line>
         <Diagram.Line>requests</Diagram.Line>
@@ -787,157 +396,89 @@ export function HomelabReferenceDiagram({
         to="istio"
         layer="background"
         channel="storage"
-        exitSide="top"
-        entrySide="bottom"
-        entryOffset={-60}
-        entryGap={0}
-      >
-        <Diagram.Waypoint
-          guide="storage-mesh-rail"
-          target="longhorn"
-          anchor="top"
-        />
-        <Diagram.Waypoint
-          guide="storage-mesh-rail"
-          target="istio"
-          anchor="bottom"
-          dx={-60}
-        />
-      </Diagram.Arrow>
+      />
       <Diagram.Arrow
         from="grafana"
         to="observability-bus"
         layer="background"
         channel="observability"
-        exitSide="top"
-        entrySide="left"
         headless
-      >
-        <Diagram.Waypoint
-          guide="observability-header-rail"
-          target="grafana"
-          anchor="top"
-        />
-        <Diagram.Waypoint
-          guide="observability-header-rail"
-          target="observability-bus"
-          anchor="center"
-        />
-      </Diagram.Arrow>
+      />
       <Diagram.Arrow
         from="victoria-metrics"
         to="observability-bus"
         layer="background"
         channel="observability"
-        exitSide="top"
-        entrySide="right"
         headless
-      >
-        <Diagram.Waypoint
-          guide="observability-header-rail"
-          target="victoria-metrics"
-          anchor="top"
-        />
-        <Diagram.Waypoint
-          guide="observability-header-rail"
-          target="observability-bus"
-          anchor="center"
-        />
-      </Diagram.Arrow>
+      />
       <Diagram.Arrow
         from="victoria-logs"
         to="observability-bus"
         layer="background"
         channel="observability"
-        exitSide="top"
-        entrySide="left"
         headless
-      >
-        <Diagram.Waypoint
-          guide="observability-bottom-row-rail"
-          target="victoria-logs"
-          anchor="top"
-        />
-        <Diagram.Waypoint
-          guide="observability-bottom-row-rail"
-          target="monitoring"
-          anchor="center"
-          dx={-6}
-        />
-        <Diagram.Waypoint
-          guide="observability-branch-rail"
-          target="monitoring"
-          anchor="top"
-          dy={12}
-        />
-        <Diagram.Waypoint
-          guide="observability-header-rail"
-          target="observability-bus"
-          anchor="center"
-        />
-      </Diagram.Arrow>
+      />
       <Diagram.Arrow
         from="jaeger"
         to="observability-bus"
         layer="background"
         channel="observability"
-        exitSide="top"
-        entrySide="right"
         headless
-      >
-        <Diagram.Waypoint
-          guide="observability-bottom-row-rail"
-          target="jaeger"
-          anchor="top"
-        />
-        <Diagram.Waypoint
-          guide="observability-bottom-row-rail"
-          target="monitoring"
-          anchor="center"
-          dx={-6}
-        />
-        <Diagram.Waypoint
-          guide="observability-branch-rail"
-          target="monitoring"
-          anchor="top"
-          dy={12}
-        />
-        <Diagram.Waypoint
-          guide="observability-header-rail"
-          target="observability-bus"
-          anchor="center"
-        />
-      </Diagram.Arrow>
+      />
       <Diagram.Arrow
         from="observability-bus"
         to="istio"
         layer="background"
         channel="observability"
-        exitSide="top"
-        entrySide="bottom"
-        entryGap={0}
       />
       <Diagram.Arrow
         from="gpu-scheduling"
         to="istio"
         layer="background"
         channel="gpu"
-        exitSide="top"
-        entrySide="bottom"
-        entryOffset={60}
-        entryGap={0}
+      />
+      <Diagram.Arrow from="proxmox" to="k3s-master" layer="background" />
+      <Diagram.Arrow
+        from="cloudflare-tunnel"
+        to="gateway"
+        layer="background"
+        channel="tunnel"
+        weight="bold"
+      />
+      <Diagram.Arrow from="metallb" to="gateway" layer="background" labelFrame>
+        External IPs
+      </Diagram.Arrow>
+      <Diagram.Arrow
+        from="cert-manager"
+        to="gateway"
+        layer="background"
+        channel="certificates"
+        lineStyle="dashed"
+        labelFrame
       >
-        <Diagram.Waypoint
-          guide="gpu-top-rail"
-          target="gpu-scheduling"
-          anchor="top"
-        />
-        <Diagram.Waypoint
-          guide="gpu-top-rail"
-          target="istio"
-          anchor="bottom"
-          dx={60}
-        />
+        certificates
+      </Diagram.Arrow>
+      <Diagram.Arrow
+        from="gateway"
+        to="istio"
+        layer="background"
+        channel="mtls"
+        direction="both"
+      />
+      <Diagram.Arrow
+        from="k3s-master"
+        to="istio"
+        layer="background"
+        channel="mtls"
+      />
+      <Diagram.Arrow
+        from="authentik"
+        to="istio"
+        layer="background"
+        channel="auth"
+        labelFrame
+      >
+        SSO
       </Diagram.Arrow>
     </SvgGraphDiagram>
   );

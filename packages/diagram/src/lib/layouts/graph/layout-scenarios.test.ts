@@ -23,8 +23,6 @@ function graph(spec: {
     nodes: spec.nodes,
     edges: spec.edges ?? [],
     groups: spec.groups ?? [],
-    annotations: [],
-    guides: [],
   };
 }
 
@@ -240,7 +238,7 @@ describe('layoutGraph rejects a grid it cannot draw', () => {
           group: 'monitoring',
         },
       ],
-      groups: [{ id: 'monitoring', label: 'Monitoring', dividers: {} }],
+      groups: [{ id: 'monitoring', label: 'Monitoring', dividers: true }],
     });
 
     // Act + Assert
@@ -592,7 +590,7 @@ describe('layoutGraph, one rung at a time from one box to the homelab', () => {
           col: 0,
           colSpan: 4,
           titleBand: true,
-          dividers: {},
+          dividers: true,
         },
       ],
     });
@@ -743,7 +741,7 @@ describe('layoutGraph, one rung at a time from one box to the homelab', () => {
           id: 'monitoring',
           label: 'Monitoring',
           titleBand: true,
-          dividers: { rows: [6], cols: [5] },
+          dividers: true,
         },
         {
           id: 'gpu-scheduling',
@@ -970,7 +968,7 @@ describe('layoutGraph, one rung at a time from one box to the homelab', () => {
           id: 'monitoring',
           label: 'Monitoring',
           titleBand: true,
-          dividers: { rows: [6], cols: [5] },
+          dividers: true,
           parent: 'cluster',
         },
         {
@@ -1085,7 +1083,7 @@ function edgeOf(layout: GraphLayout, from: string, to: string) {
 }
 
 /**
- * The homelab example remapped onto a 7×8 grid, with its 24 edges and three
+ * The homelab example remapped onto an 8×8 grid, with its 24 edges and three
  * note leaders. Only the router's edges carry side hints.
  */
 function homelab(): DiagramGraphIR {
@@ -1169,7 +1167,7 @@ function homelab(): DiagramGraphIR {
         target: 'authentik',
         label: ['Authentication', 'for services', 'in mesh'],
       }),
-      cell('proxmox-vm', 4, 2, {
+      cell('proxmox-vm', 3, 2, {
         rowSpan: 2,
         icon: 'server',
         textAlign: 'start',
@@ -1193,19 +1191,6 @@ function homelab(): DiagramGraphIR {
         icon: 'git',
         label: 'Git Repo',
       }),
-      cell('laptop', 5, 0, {
-        colSpan: 2,
-        rowSpan: 2,
-        icon: 'server',
-        textAlign: 'start',
-        label: 'Dell Laptop',
-        items: [
-          '32GB RAM',
-          '500GB SSD (Internal)',
-          'NVIDIA RTX 3050 4GB GPU',
-          'CPU 24 Logical Cores',
-        ],
-      }),
       cell('longhorn', 5, 3, {
         icon: 'storage',
         label: ['Longhorn', '(Storage Class)'],
@@ -1227,10 +1212,6 @@ function homelab(): DiagramGraphIR {
         label: ['Deploys applications', 'into k3s'],
         group: 'cluster',
       }),
-      cell('external-ssd', 6, 2, {
-        icon: 'storage',
-        label: ['4TB', 'External SSD'],
-      }),
       cell('victoria-logs', 6, 4, {
         icon: 'logs',
         label: ['VictoriaLogs', '(Logs)'],
@@ -1241,7 +1222,23 @@ function homelab(): DiagramGraphIR {
         label: ['Jaeger', '(Traces)'],
         group: 'monitoring',
       }),
-      cell('gpu-workflow', 6, 6, {
+      cell('laptop', 7, 0, {
+        colSpan: 2,
+        icon: 'server',
+        textAlign: 'start',
+        label: 'Dell Laptop',
+        items: [
+          '32GB RAM',
+          '500GB SSD (Internal)',
+          'NVIDIA RTX 3050 4GB GPU',
+          'CPU 24 Logical Cores',
+        ],
+      }),
+      cell('external-ssd', 7, 2, {
+        icon: 'storage',
+        label: ['4TB', 'External SSD'],
+      }),
+      cell('gpu-workflow', 7, 6, {
         icon: 'gpu',
         textAlign: 'start',
         label: 'GPU Workflow',
@@ -1293,7 +1290,7 @@ function homelab(): DiagramGraphIR {
         id: 'monitoring',
         label: 'Monitoring',
         titleBand: true,
-        dividers: { rows: [6], cols: [5] },
+        dividers: true,
         parent: 'cluster',
       },
       {
@@ -1312,7 +1309,7 @@ function homelab(): DiagramGraphIR {
       // The router's caption hangs under it, so its edges leave by the sides.
       { from: 'router', to: 'adguard', exitSide: 'right', entrySide: 'left' },
       { from: 'router', to: 'laptop', exitSide: 'left' },
-      { from: 'router', to: 'proxmox', exitSide: 'right' },
+      { from: 'router', to: 'proxmox' },
       { from: 'laptop', to: 'external-ssd' },
       {
         from: 'external-ssd',
@@ -1333,7 +1330,7 @@ function homelab(): DiagramGraphIR {
         from: 'cert-manager',
         to: 'gateway',
         lineStyle: 'dashed',
-        label: ["Let's Encrypt", 'certificates'],
+        label: ['certificates'],
         labelFrame: true,
       },
       { from: 'authentik', to: 'istio', label: ['SSO'], labelFrame: true },
@@ -1477,6 +1474,39 @@ describe('layoutGraph routes edges, one rung at a time from one edge to the home
     close(second! - first!, third! - second!, 'the gaps between the slots');
   });
 
+  test('e4b an edge from a shared side to a facing side it has alone runs straight from its slot', () => {
+    // Arrange
+    const ir = graph({
+      nodes: [
+        cell('router', 1, 0, { label: 'Router' }),
+        cell('adguard', 0, 1, { label: 'AdGuard' }),
+        cell('vm', 1, 1, { icon: 'server', label: 'VM', rowSpan: 2 }),
+      ],
+      edges: [
+        {
+          from: 'router',
+          to: 'adguard',
+          exitSide: 'right',
+          entrySide: 'left',
+        },
+        { from: 'router', to: 'vm' },
+      ],
+    });
+
+    // Act
+    const layout = layoutGraph(ir);
+
+    // Assert
+    assertSoundLayout(layout);
+    const { points } = edgeOf(layout, 'router', 'vm');
+    assert.equal(
+      points.length,
+      2,
+      'no jog between the slot and the facing side',
+    );
+    assert.equal(points[0]!.y, points[1]!.y);
+  });
+
   test('e5 the label of an edge between adjacent cells sits beside it in the gutter', () => {
     // Arrange
     const ir = graph({
@@ -1533,10 +1563,29 @@ describe('layoutGraph routes edges, one rung at a time from one edge to the home
     assertSoundLayout(layout);
     const { label, points } = edgeOf(layout, 'ssd', 'longhorn');
     assert.ok(points.length >= 3, 'the edge bends');
-    assert.ok(
-      label && label.segment !== undefined,
-      'the label names its segment',
-    );
+    assert.ok(label, 'the edge has a label');
+    const gap = LAYOUT_TOKENS.LABEL_GAP;
+    const { x, y, w, h } = label.box;
+    const beside = points.slice(1).some((to, index) => {
+      const from = points[index]!;
+      if (from.y === to.y) {
+        const centre = x + w / 2;
+        return (
+          centre >= Math.min(from.x, to.x) &&
+          centre <= Math.max(from.x, to.x) &&
+          (Math.abs(y + h + gap - from.y) < 0.01 ||
+            Math.abs(y - gap - from.y) < 0.01)
+        );
+      }
+      const centre = y + h / 2;
+      return (
+        centre >= Math.min(from.y, to.y) &&
+        centre <= Math.max(from.y, to.y) &&
+        (Math.abs(x - gap - from.x) < 0.01 ||
+          Math.abs(x + w + gap - from.x) < 0.01)
+      );
+    });
+    assert.ok(beside, 'the label sits LABEL_GAP beside one of the segments');
   });
 
   test('e6b a label skips the positions where it would straddle a group border', () => {
@@ -1615,6 +1664,60 @@ describe('layoutGraph routes edges, one rung at a time from one edge to the home
 
     // Assert
     assertSoundLayout(layout);
+  });
+
+  test('e9b an edge from a junction runs straight up into a side it shares with another edge', () => {
+    // Arrange
+    const ir = graph({
+      nodes: [
+        cell('istio', 0, 0, { label: 'Istio', colSpan: 3 }),
+        cell('longhorn', 1, 0, { label: 'Longhorn' }),
+        cell('bus', 1, 1, { kind: 'junction', hidden: true, colSpan: 2 }),
+        cell('grafana', 2, 1, { label: 'Grafana' }),
+      ],
+      edges: [
+        { from: 'longhorn', to: 'istio' },
+        { from: 'grafana', to: 'bus', headless: true },
+        { from: 'bus', to: 'istio' },
+      ],
+    });
+
+    // Act
+    const layout = layoutGraph(ir);
+
+    // Assert
+    assertSoundLayout(layout);
+    const { points } = edgeOf(layout, 'bus', 'istio');
+    assert.equal(points.length, 2, 'no jog between the junction and its slot');
+    assert.equal(points[0]!.x, points[1]!.x);
+  });
+
+  test('e9c an edge from a box with a caption on top runs straight into a junction beside it', () => {
+    // Arrange
+    const ir = graph({
+      nodes: [
+        cell('identify', 0, 0, {
+          label: 'Identify type',
+          caption: 'LLM Call',
+          captionSide: 'top',
+          captionFrame: true,
+        }),
+        cell('trunk', 0, 1, { kind: 'junction', hidden: true }),
+      ],
+      edges: [{ from: 'identify', to: 'trunk', headless: true }],
+    });
+
+    // Act
+    const layout = layoutGraph(ir);
+
+    // Assert
+    assertSoundLayout(layout);
+    const { points } = edgeOf(layout, 'identify', 'trunk');
+    assert.equal(
+      points.length,
+      2,
+      'the frame and the junction share a centre line',
+    );
   });
 
   test('e9 four edges merge into a junction at its centre, and one edge leaves it from there', () => {
@@ -2131,7 +2234,6 @@ describe('layoutGraph routes the shapes of the shipped diagrams', () => {
         step('create-fix', 0, 4, ['Create fix'], 'Workspace agent', {
           group: 'bug',
           colSpan: 2,
-          stretch: false,
         }),
         step('review-fix', 0, 6, ['Review fix'], 'Workspace agent', {
           group: 'bug',
@@ -2261,6 +2363,82 @@ describe('layoutGraph routes the shapes of the shipped diagrams', () => {
     // Assert
     assertSoundLayout(layout);
     for (const { points } of layout.edges) assert.equal(points.length, 2);
+  });
+});
+
+describe('layoutGraph routes edges to a stack as one visual unit', () => {
+  function stackLayout(layout: GraphLayout, id: string) {
+    const found = layout.nodes.find((nodeLayout) => nodeLayout.node.id === id);
+    assert.ok(found, `node "${id}" is in the layout`);
+    return found;
+  }
+
+  test('s1 an edge into the left side of an up-left stack ends on the left side of its farthest back frame', () => {
+    // Arrange
+    const ir = graph({
+      nodes: [
+        cell('laptop', 0, 0, { label: 'Laptop' }),
+        cell('vm', 0, 1, { icon: 'server', label: 'VM', stack: 4 }),
+      ],
+      edges: [{ from: 'laptop', to: 'vm' }],
+    });
+
+    // Act
+    const layout = layoutGraph(ir);
+
+    // Assert
+    assertSoundLayout(layout);
+    const { points, entrySide } = edgeOf(layout, 'laptop', 'vm');
+    const farthest = stackLayout(layout, 'vm').frames[0]!;
+    assert.equal(entrySide, 'left');
+    close(points.at(-1)!.x, farthest.x, 'end on the farthest frame');
+    const endY = points.at(-1)!.y;
+    assert.ok(
+      endY > farthest.y && endY < farthest.y + farthest.h,
+      `end y ${endY} lies along the farthest frame`,
+    );
+  });
+
+  test('s2 an edge into the top side of an up-left stack ends on the top side of its farthest back frame', () => {
+    // Arrange
+    const ir = graph({
+      nodes: [
+        cell('git', 0, 0, { label: 'Git' }),
+        cell('vm', 1, 0, { icon: 'server', label: 'VM', stack: 4 }),
+      ],
+      edges: [{ from: 'git', to: 'vm' }],
+    });
+
+    // Act
+    const layout = layoutGraph(ir);
+
+    // Assert
+    assertSoundLayout(layout);
+    const { points, entrySide } = edgeOf(layout, 'git', 'vm');
+    const farthest = stackLayout(layout, 'vm').frames[0]!;
+    assert.equal(entrySide, 'top');
+    close(points.at(-1)!.y, farthest.y, 'end on the farthest frame');
+  });
+
+  test('s3 an edge out of the right side of an up-left stack leaves its front frame', () => {
+    // Arrange
+    const ir = graph({
+      nodes: [
+        cell('vm', 0, 0, { icon: 'server', label: 'VM', stack: 4 }),
+        cell('k3s', 0, 1, { label: 'K3s' }),
+      ],
+      edges: [{ from: 'vm', to: 'k3s' }],
+    });
+
+    // Act
+    const layout = layoutGraph(ir);
+
+    // Assert
+    assertSoundLayout(layout);
+    const { points, exitSide } = edgeOf(layout, 'vm', 'k3s');
+    const front = box(layout, 'vm');
+    assert.equal(exitSide, 'right');
+    close(points[0]!.x, front.x + front.w, 'start on the front frame');
   });
 });
 

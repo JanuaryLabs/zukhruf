@@ -5,13 +5,8 @@ import type {
   NodeLayout,
   TextRun,
 } from '../../layouts/graph/graph-layout-result.ts';
-import { ANNOTATION_NOTE_PREFIX } from '../../layouts/graph/legacy-graph-layout.ts';
 import { FONT_FAMILY } from '../../layouts/text/font.ts';
-import type {
-  DiagramAnnotation,
-  DiagramNode,
-  DiagramTextColor,
-} from '../../model/diagram-ir.ts';
+import type { DiagramNode, DiagramTextColor } from '../../model/diagram-ir.ts';
 import {
   DIAGRAM_BG,
   DIAGRAM_DIM,
@@ -29,7 +24,7 @@ import {
 } from './graph-parts.tsx';
 import { RunSpans } from './run-spans.tsx';
 
-export const ANNOTATION_REVEAL_START = 0.85;
+export const NOTE_REVEAL_START = 0.85;
 
 export function isSpecialNode(node: DiagramNode) {
   return node.kind !== undefined && node.kind !== 'node';
@@ -39,7 +34,7 @@ function isNote(layout: NodeLayout) {
   return layout.node.kind === 'note';
 }
 
-/** Splits the graph's own nodes from the notes that stand for annotations. */
+/** Splits the framed nodes from the notes, which draw last, over the edges. */
 export function splitNotes(nodes: NodeLayout[]) {
   return {
     graphNodes: nodes.filter((layout) => !isNote(layout)),
@@ -402,16 +397,14 @@ export function NodeCaption({ layout }: { layout: NodeLayout }) {
   );
 }
 
-export function AnnotationText({
+export function NoteText({
   note,
-  annotations,
   leaders,
   progress,
   start,
   end,
 }: {
   note: NodeLayout;
-  annotations: DiagramAnnotation[];
   leaders: LeaderLayout[];
   progress: MotionValue<number>;
   start: number;
@@ -419,71 +412,33 @@ export function AnnotationText({
 }) {
   const { accent: themeAccent } = useDiagramTheme();
   const opacity = useTransform(progress, [start, end], [0, 1], { clamp: true });
-  const index = Number(note.node.id.slice(ANNOTATION_NOTE_PREFIX.length));
-  const annotation = annotations[index];
-  if (!annotation) return null;
-  const fill = textColorFill(annotation.color, themeAccent);
-  const anchor = annotation.anchor ?? 'top';
-  const route = annotation.leaderRoute ?? 'straight';
-  const annotationTargets = annotation.targets?.join('+');
-  const annotationId =
-    annotation.target || annotationTargets
-      ? `${annotation.target ?? annotationTargets}:${anchor}`
-      : `free:${index}`;
-  const noteLeaders = leaders.filter((leader) => leader.note === note.node.id);
-  const [first] = note.text;
+  const { node, text } = note;
+  const [first] = text;
   return (
     <motion.g style={{ opacity }}>
-      {noteLeaders.map((leader, leaderIndex) => {
-        const attrs = {
-          'data-diagram-annotation-leader': annotationId,
-          'data-diagram-annotation-leader-target': leader.target,
-          'data-diagram-annotation-leader-anchor': anchor,
-          'data-diagram-annotation-leader-index': leaderIndex,
-          'data-diagram-annotation-leader-route': route,
-        };
-        const from = leader.points.at(0);
-        const to = leader.points.at(-1);
-        if (leader.points.length > 2 || !from || !to) {
-          return (
-            <path
-              key={`${leader.target}:${leaderIndex}`}
-              {...attrs}
-              d={leader.d}
-              fill="none"
-              stroke={DIAGRAM_NEUTRAL}
-              strokeWidth={1}
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
-          );
-        }
-        return (
-          <line
-            key={`${leader.target}:${leaderIndex}`}
-            {...attrs}
-            x1={from.x}
-            y1={from.y}
-            x2={to.x}
-            y2={to.y}
+      {leaders
+        .filter((leader) => leader.note === node.id)
+        .map((leader) => (
+          <path
+            key={leader.target}
+            data-diagram-note-leader={node.id}
+            data-diagram-note-leader-target={leader.target}
+            d={leader.d}
+            fill="none"
             stroke={DIAGRAM_NEUTRAL}
             strokeWidth={1}
             strokeLinecap="round"
+            strokeLinejoin="round"
           />
-        );
-      })}
+        ))}
       {first && (
         <text
-          data-diagram-annotation={annotationId}
-          data-diagram-annotation-target={annotation.target}
-          data-diagram-annotation-targets={annotation.targets?.join(' ')}
-          data-diagram-annotation-anchor={annotation.anchor}
-          data-diagram-annotation-guide={annotation.guide}
-          data-diagram-annotation-line-gap={annotation.lineGap}
+          data-diagram-note={node.id}
+          data-diagram-note-target={node.target}
           {...textAttrs(first)}
-          fill={fill}
+          fill={DIAGRAM_TEXT}
         >
-          <RunSpans runs={note.text} />
+          <RunSpans runs={text} fill={DIAGRAM_TEXT} accent={themeAccent} />
         </text>
       )}
     </motion.g>

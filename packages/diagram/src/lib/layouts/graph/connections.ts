@@ -10,7 +10,7 @@ import type {
   NodeLayout,
   PortLayout,
 } from './graph-layout-result.ts';
-import { facingSides } from './sides.ts';
+import { facingSides, sideLine } from './sides.ts';
 import { LAYOUT_TOKENS } from './tokens.ts';
 
 /** A node or group that a connection starts or ends at. */
@@ -20,6 +20,8 @@ export type Shape = {
   box: Box;
   /** The corner radius, which slots keep clear of. */
   radius: number;
+  /** A stack's back frames, which draw as one unit with `box`. */
+  frames: Box[];
   ports: PortLayout[];
   /** What a connection may not touch the shape through: its caption. */
   clear: Box[];
@@ -30,6 +32,8 @@ export type ConnectionEnd = {
   shape: Shape;
   side: DiagramSide;
   port: PortLayout | undefined;
+  /** The box whose `side` the end touches: of a stack, the frame that reaches farthest out on that side. */
+  face: Box;
 };
 
 /** An edge, or the leader from a note to its target: anything the router draws between two shapes. */
@@ -56,12 +60,13 @@ export function graphConnections(
   areas: GridAreas,
 ): Connection[] {
   const shapes = new Map<string, Shape>();
-  for (const { node, box, radius, ports, caption } of nodes) {
+  for (const { node, box, frames, radius, ports, caption } of nodes) {
     shapes.set(node.id, {
       id: node.id,
       kind: node.kind === 'junction' ? 'junction' : 'node',
       box,
       radius,
+      frames,
       ports,
       clear: caption ? [caption.box] : [],
       area: areas.nodes.get(node.id)!,
@@ -73,6 +78,7 @@ export function graphConnections(
       kind: 'group',
       box: rect,
       radius: LAYOUT_TOKENS.RADIUS,
+      frames: [],
       ports,
       clear: [],
       area: areas.groups[index]!.area,
@@ -126,7 +132,7 @@ export function graphConnections(
             `Diagram ${name}: ${role} ${hint} contradicts port "${ref}" on side ${port.side}.`,
           );
         }
-        return { shape, side: port.side, port };
+        return { shape, side: port.side, port, face: shape.box };
       }
       const side = hint ?? byCells;
       if (shape.ports.some((candidate) => candidate.side === side)) {
@@ -134,7 +140,7 @@ export function graphConnections(
           `Diagram ${shape.kind === 'group' ? 'group' : 'node'} "${shape.id}" side ${side} declares ports; ${name} must use "${shape.id}:<port>".`,
         );
       }
-      return { shape, side, port: undefined };
+      return { shape, side, port: undefined, face: outermostFace(shape, side) };
     };
     const a = from.shape.area;
     const b = to.shape.area;
@@ -167,4 +173,16 @@ export function graphConnections(
         : [],
     ),
   ];
+}
+
+/** The frame of `shape` whose `side` lies farthest out: the front frame, or a stacked back frame. */
+function outermostFace(shape: Shape, side: DiagramSide): Box {
+  const outward = side === 'bottom' || side === 'right' ? 1 : -1;
+  return shape.frames.reduce(
+    (best, frame) =>
+      sideLine(frame, side) * outward > sideLine(best, side) * outward
+        ? frame
+        : best,
+    shape.box,
+  );
 }

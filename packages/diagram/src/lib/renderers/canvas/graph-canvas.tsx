@@ -6,12 +6,15 @@ import type {
   TextAnchor,
   TextRun,
 } from '../../layouts/graph/graph-layout-result.ts';
-import { legacyGraphLayout } from '../../layouts/graph/legacy-graph-layout.ts';
-import { FONT_FAMILY, TEXT_SHAPING } from '../../layouts/text/font.ts';
+import { layoutGraph } from '../../layouts/graph/layout.ts';
+import {
+  FONT_FAMILY,
+  type Font,
+  TEXT_SHAPING,
+} from '../../layouts/text/font.ts';
 import type {
   Box,
   DiagramEdge,
-  DiagramGraphLayout,
   DiagramGroup,
   DiagramNode,
   DiagramPaper,
@@ -28,7 +31,11 @@ import {
   useDiagramTheme,
 } from '../../react/chrome/index.ts';
 import type { DiagramProps } from '../../react/diagram-types.ts';
-import { nodeFrameFill, nodeFrameStroke } from '../shared/graph-parts.tsx';
+import {
+  EDGE_STROKE_WIDTH,
+  nodeFrameFill,
+  nodeFrameStroke,
+} from '../shared/graph-parts.tsx';
 import { rejectNodeContent } from '../shared/node-content.ts';
 import type { GraphRendererProps } from '../types.ts';
 import { canvasViewportProps } from './canvas-viewport.ts';
@@ -108,16 +115,32 @@ function applyTexture(
   ctx.restore();
 }
 
+const GROUP_RADIUS = 18;
+
 const CANVAS_ALIGN: Record<TextAnchor, CanvasTextAlign> = {
   start: 'left',
   middle: 'center',
   end: 'right',
 };
 
+function canvasFont(font: Font) {
+  return `${font.weight} ${font.size}px ${FONT_FAMILY[font.face]}`;
+}
+
+/** Every font the canvas draws text in; canvas paints in a fallback font until each one has loaded. */
+function canvasFonts(layout: GraphLayout): string[] {
+  const runs = [
+    ...layout.groups.flatMap(({ label }) => label),
+    ...layout.edges.flatMap(({ label }) => label?.text ?? []),
+    ...layout.nodes.flatMap(({ text }) => text),
+  ];
+  return [...new Set(runs.map((run) => canvasFont(run.font)))];
+}
+
 function drawTextRuns(ctx: CanvasRenderingContext2D, runs: TextRun[]) {
   ctx.textBaseline = 'alphabetic';
   for (const run of runs) {
-    ctx.font = `${run.font.weight} ${run.font.size}px ${FONT_FAMILY[run.font.face]}`;
+    ctx.font = canvasFont(run.font);
     ctx.textAlign = CANVAS_ALIGN[run.anchor];
     ctx.fillText(run.text, run.x, run.y);
   }
@@ -221,7 +244,7 @@ function drawGraphCanvas(
     ctx.setLineDash(group.frame === 'dashed' ? [7, 7] : []);
     ctx.strokeStyle = group.frame === 'none' ? 'transparent' : stroke;
     ctx.fillStyle = fill;
-    drawRoundedRect(ctx, rect, group.rx ?? 18);
+    drawRoundedRect(ctx, rect, GROUP_RADIUS);
     ctx.fill();
     ctx.stroke();
     ctx.restore();
@@ -238,7 +261,7 @@ function drawGraphCanvas(
     const color = edgeColor(edge, palette);
     ctx.save();
     ctx.strokeStyle = color;
-    ctx.lineWidth = edge.strokeWidth ?? 1.5;
+    ctx.lineWidth = EDGE_STROKE_WIDTH[edge.weight ?? 'regular'];
     ctx.setLineDash(edgeDash(edge));
     ctx.beginPath();
     ctx.moveTo(first.x, first.y);
@@ -288,19 +311,16 @@ function drawGraphCanvas(
   }
 }
 
-export type CanvasGraphDiagramProps = DiagramProps & {
-  graph?: DiagramGraphLayout;
-};
+export type CanvasGraphDiagramProps = DiagramProps;
 
 export function CanvasGraphDiagram({
   title,
   children,
-  graph,
   viewport,
   paper,
   ...chrome
 }: CanvasGraphDiagramProps) {
-  const ir = compileGraph(children, graph);
+  const ir = compileGraph(children);
   rejectNodeContent(ir, 'CanvasGraphDiagram');
   const lines = [title].flat();
   return (
@@ -327,15 +347,26 @@ function GraphCanvas({
 }: GraphRendererProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const { accent } = useDiagramTheme();
-  const layout = useMemo(() => legacyGraphLayout(ir), [ir]);
+  const layout = useMemo(() => layoutGraph(ir), [ir]);
   const viewportProps = canvasViewportProps(layout.viewBox, viewport);
 
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const draw = () => drawGraphCanvas(canvas, layout, { accent, paper });
-    draw();
-    return progress.on('change', draw);
+    let stopped = false;
+    let unsubscribe: (() => void) | undefined;
+    void Promise.all(
+      canvasFonts(layout).map((font) => document.fonts.load(font)),
+    ).then(() => {
+      if (stopped) return;
+      draw();
+      unsubscribe = progress.on('change', draw);
+    });
+    return () => {
+      stopped = true;
+      unsubscribe?.();
+    };
   }, [accent, layout, paper, progress]);
 
   return (

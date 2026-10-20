@@ -12,84 +12,66 @@ import type {
   NodeLayout,
   TextRun,
 } from '../layouts/graph/graph-layout-result.ts';
-import { legacyGraphLayout } from '../layouts/graph/legacy-graph-layout.ts';
+import { layoutGraph } from '../layouts/graph/layout.ts';
 
 function scene() {
   return [
-    createElement(Diagram.Group, {
-      key: 'edge',
-      id: 'edge',
-      label: 'Edge network',
-      rowStart: 0,
-      rowEnd: 0,
-      colStart: 0,
-      colEnd: 1,
-      ports: [{ id: 'in', side: 'top', label: 'IN' }],
-    }),
     createElement(
-      Diagram.Box,
+      Diagram.Group,
       {
-        key: 'api',
-        id: 'api',
+        key: 'edge',
+        id: 'edge',
+        label: 'Edge network',
         row: 0,
         col: 0,
-        group: 'edge',
-        caption: 'Public API',
-        captionFrame: true,
-        ports: [{ id: 'http', side: 'left', label: 'HTTP' }],
+        rowSpan: 1,
+        colSpan: 2,
+        ports: [{ id: 'in', side: 'top', label: 'IN' }],
       },
-      'API',
-    ),
-    createElement(
-      Diagram.Card,
-      {
-        key: 'vm',
-        id: 'vm',
-        row: 0,
-        col: 1,
-        group: 'edge',
-        width: 232,
-        height: 176,
-        icon: 'server',
-        stack: 3,
-        description: 'Runs jobs',
-        items: ['32GB RAM', '4 cores'],
-      },
-      'VM',
+      createElement(
+        Diagram.Box,
+        {
+          key: 'api',
+          id: 'api',
+          row: 0,
+          col: 0,
+          caption: 'Public API',
+          captionFrame: true,
+          ports: [{ id: 'http', side: 'left', label: 'HTTP' }],
+        },
+        'API',
+      ),
+      createElement(
+        Diagram.Card,
+        {
+          key: 'vm',
+          id: 'vm',
+          row: 0,
+          col: 1,
+          icon: 'server',
+          stack: 3,
+          stackDirection: 'up-right',
+          description: 'Runs jobs',
+          items: ['32GB RAM', '4 cores'],
+        },
+        'VM',
+      ),
     ),
     createElement(Diagram.Appliance, {
       key: 'router',
       id: 'router',
       row: 1,
       col: 0,
-      width: 116,
-      height: 72,
       caption: 'Router',
     }),
     createElement(
       Diagram.Connector,
-      {
-        key: 'tunnel',
-        id: 'tunnel',
-        row: 1,
-        col: 1,
-        width: 152,
-        height: 40,
-        icon: 'tunnel',
-      },
+      { key: 'tunnel', id: 'tunnel', row: 1, col: 1, icon: 'tunnel' },
       'Tunnel',
     ),
     createElement(
       Diagram.Marker,
-      {
-        key: 'repo',
-        id: 'repo',
-        row: 0,
-        col: 2,
-        icon: 'git',
-        width: 72,
-        height: 76,
-      },
+      { key: 'repo', id: 'repo', row: 0, col: 2, icon: 'git' },
       'Git Repo',
     ),
     createElement(Diagram.Junction, { key: 'bus', id: 'bus', row: 1, col: 2 }),
@@ -112,7 +94,7 @@ function scene() {
     }),
     createElement(
       Diagram.Note,
-      { key: 'note', target: 'repo', anchor: 'right', leader: true },
+      { key: 'note', id: 'note', row: 0, col: 3, target: 'repo' },
       'Owned by data',
     ),
   ];
@@ -176,7 +158,7 @@ function textPoint(tag: Map<string, string>) {
 test('the svg output paints every box, text run and edge path at the position its GraphLayout holds', () => {
   // Arrange
   const children = scene();
-  const layout = legacyGraphLayout(compileGraph(children, undefined));
+  const layout = layoutGraph(compileGraph(children));
 
   // Act
   const svg = render(
@@ -294,22 +276,13 @@ test('the svg output paints every box, text run and edge path at the position it
   }
   const [leader] = layout.leaders;
   assert.ok(leader, 'the note should have a leader');
-  const line = openingTag(
-    svg,
-    'line',
-    'data-diagram-annotation-leader',
-    'repo:right',
+  assert.equal(
+    openingTag(svg, 'path', 'data-diagram-note-leader', 'note').get('d'),
+    leader.d,
   );
+  const note = firstRun(nodeLayout(layout, 'note').text, 'the note');
   assert.deepEqual(
-    [
-      { x: numberAttr(line, 'x1'), y: numberAttr(line, 'y1') },
-      { x: numberAttr(line, 'x2'), y: numberAttr(line, 'y2') },
-    ],
-    leader.points,
-  );
-  const note = firstRun(nodeLayout(layout, leader.note).text, 'the note');
-  assert.deepEqual(
-    textPoint(openingTag(svg, 'text', 'data-diagram-annotation', 'repo:right')),
+    textPoint(openingTag(svg, 'text', 'data-diagram-note', 'note')),
     { x: note.x, y: note.y },
   );
 });
@@ -317,7 +290,7 @@ test('the svg output paints every box, text run and edge path at the position it
 test('the html output places each node box and text run at the position its GraphLayout holds, as the svg output does', () => {
   // Arrange
   const children = scene();
-  const layout = legacyGraphLayout(compileGraph(children, undefined));
+  const layout = layoutGraph(compileGraph(children));
 
   // Act
   const html = render(

@@ -3,11 +3,7 @@ import type { Point } from '../../model/diagram-ir.ts';
 /** The radius of the rounded corner the SVG path draws at each bend. */
 const CORNER_RADIUS = 8;
 
-/**
- * Drops every point that lies on the straight line through its neighbours.
- *
- * Moved from graph-layout.ts, whose copy step 6 deletes with the old engine.
- */
+/** Drops every point that lies on the straight line through its neighbours. */
 export function simplifyPath(path: Point[]): Point[] {
   if (path.length < 3) return path;
   const result: Point[] = [path[0]!];
@@ -23,11 +19,7 @@ export function simplifyPath(path: Point[]): Point[] {
   return result;
 }
 
-/**
- * An SVG path through the points, with each bend rounded.
- *
- * Moved from graph-layout.ts, whose copy step 6 deletes with the old engine.
- */
+/** An SVG path through the points, with each bend rounded. */
 export function pathToSvg(points: Point[]): string {
   const [first, ...rest] = points;
   if (!first) return '';
