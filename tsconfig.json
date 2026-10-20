@@ -58,6 +58,9 @@
     },
     {
       "path": "./packages/sqlite/data-version"
+    },
+    {
+      "path": "./packages/ui"
     }
   ]
 }
