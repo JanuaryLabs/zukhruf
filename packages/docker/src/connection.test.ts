@@ -196,8 +196,7 @@ describe('a request that the engine answers with an error', () => {
       assert.ok(error instanceof DockerEngineError);
       assert.ok(error instanceof DockerError);
       assert.equal(error.status, 500);
-      assert.equal(error.method, 'GET');
-      assert.equal(error.path, '/info');
+      assert.deepEqual(error.request, { method: 'GET', path: '/info' });
       assert.equal(error.message, 'the daemon is shutting down');
       return true;
     });

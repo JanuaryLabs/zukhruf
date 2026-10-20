@@ -262,8 +262,7 @@ export class EngineClient {
   ): DockerEngineError {
     return new DockerEngineError(engineMessage(response), {
       status: response.status,
-      method,
-      path,
+      request: { method, path },
     });
   }
 

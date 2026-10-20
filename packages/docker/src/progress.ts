@@ -24,7 +24,7 @@ export async function readProgress(
     if (!isProgressMessage(message)) continue;
     const text = message.errorDetail?.message ?? message.error;
     if (text !== undefined) {
-      throw new DockerEngineError(text, { status: undefined, ...request });
+      throw new DockerEngineError(text, { status: undefined, request });
     }
   }
 }

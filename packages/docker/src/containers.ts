@@ -132,12 +132,9 @@ const BIND_SOURCE_NOT_FOUND = /bind source path does not exist: (.+)$/;
 function bindSourceOr(error: DockerEngineError): DockerEngineError {
   const source = BIND_SOURCE_NOT_FOUND.exec(error.message)?.[1];
   if (source === undefined) return error;
-  return new BindSourceNotFoundError(
-    error.message,
-    { status: error.status, method: error.method, path: error.path },
-    source,
-    { cause: error },
-  );
+  return new BindSourceNotFoundError(error.message, error, source, {
+    cause: error,
+  });
 }
 
 /** The address of the loopback interface of the same family, for an address that binds each interface. */
@@ -231,7 +228,7 @@ export class Container {
       if (lookup.status === 404) {
         throw new NetworkNotFoundError(
           error.message,
-          { status: response.status, method, path },
+          { status: response.status, request: { method, path } },
           network,
           { cause: error },
         );
@@ -329,7 +326,7 @@ export class Container {
     if (force !== true && runs) {
       throw new ContainerRunningError(
         error.message,
-        { status: 409, method, path },
+        { status: 409, request: { method, path } },
         this.id,
         { cause: error },
       );
@@ -492,7 +489,7 @@ export class Container {
     if (state !== 'created' && state !== 'running') {
       throw new ContainerNotRunningError(
         `The container ${this.id} is ${state}.`,
-        { status: undefined, method, path },
+        { status: undefined, request: { method, path } },
         this.id,
         state,
       );
@@ -545,12 +542,15 @@ export class Container {
       query: { path },
       signal: options.signal,
     });
-    const request = { status: response.status, method, path: requestPath };
+    const answer = {
+      status: response.status,
+      request: { method, path: requestPath },
+    };
     // An answer to HEAD has no body, so the message is written here.
     const message = `The engine answered ${response.status} to the stat of ${path} in the container ${this.id}.`;
     if (response.status === 404) {
       const error = await this.#fileNotFound(
-        new DockerEngineError(message, request),
+        new DockerEngineError(message, answer),
         path,
         options,
       );
@@ -558,7 +558,7 @@ export class Container {
       throw error;
     }
     const stat = isSuccess(response) ? pathStat(response.headers) : undefined;
-    if (stat === undefined) throw new DockerEngineError(message, request);
+    if (stat === undefined) throw new DockerEngineError(message, answer);
     return stat;
   }
 
@@ -575,7 +575,7 @@ export class Container {
       if (entry.type === 'file') return entry.data;
       throw new NotAFileError(
         `${path} in the container ${this.id} is a ${entry.type}, not a regular file.`,
-        { status: response.statusCode, method, path: requestPath },
+        { status: response.statusCode, request: { method, path: requestPath } },
         this.id,
         path,
         entry.type,
@@ -714,13 +714,12 @@ export class Container {
     const inspect = await this.#client.exchange('GET', `${this.#path}/json`, {
       signal: options.signal,
     });
-    const request = { status: 404, method: error.method, path: error.path };
     if (inspect.status === 404) {
-      return new ContainerNotFoundError(error.message, request, this.id, {
+      return new ContainerNotFoundError(error.message, error, this.id, {
         cause: error,
       });
     }
-    return new PathNotFoundError(error.message, request, this.id, path, {
+    return new PathNotFoundError(error.message, error, this.id, path, {
       cause: error,
     });
   }
@@ -732,7 +731,7 @@ export class Container {
     }
     return new ContainerNotFoundError(
       error.message,
-      { status: 404, method, path },
+      { status: 404, request: { method, path } },
       this.id,
       { cause: error },
     );
@@ -744,10 +743,9 @@ export class Container {
     options: CancelOptions,
   ): Promise<ContainerNotRunningError> {
     const state = (await this.inspect(options)).State?.Status ?? '';
-    const { method, path } = error;
     return new ContainerNotRunningError(
       error.message,
-      { status: 409, method, path },
+      { status: 409, request: error.request },
       this.id,
       state,
       { cause: error },
@@ -775,7 +773,7 @@ export class Container {
     if (response.status === 404) {
       throw new ContainerNotFoundError(
         error.message,
-        { status: 404, method, path },
+        { status: 404, request: { method, path } },
         this.id,
         { cause: error },
       );
@@ -819,16 +817,16 @@ export class Containers {
       return new OwnedContainer(this.#client, Id);
     }
     const error = this.#client.error(response, method, path);
-    const request = { status: response.status, method, path };
+    const answer = { status: response.status, request: { method, path } };
     if (response.status === 409 && name !== undefined) {
-      throw new NameConflictError(error.message, request, 'container', name, {
+      throw new NameConflictError(error.message, answer, 'container', name, {
         cause: error,
       });
     }
     if (response.status === 404 && body.Image !== undefined) {
       const image = await this.#images.inspect(body.Image, options);
       if (image === undefined) {
-        throw new ImageNotFoundError(error.message, request, body.Image, {
+        throw new ImageNotFoundError(error.message, answer, body.Image, {
           cause: error,
         });
       }

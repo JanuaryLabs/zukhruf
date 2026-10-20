@@ -63,26 +63,34 @@ export class UnsupportedEngineError extends DockerError {
   }
 }
 
+/** The method and the path of a request of the Engine API, without the API version and the query. */
 export interface EngineRequest {
+  readonly method: string;
+  readonly path: string;
+}
+
+/** The answer that is an error: its status and the request that got it. A DockerEngineError is one too. */
+export interface EngineAnswer {
   /** The HTTP status; undefined for an error in the progress of a pull, a push or a load. */
-  status: number | undefined;
-  method: string;
-  path: string;
+  readonly status: number | undefined;
+  readonly request: EngineRequest;
 }
 
 /** The base of every answer of the engine that is an error. Its message is the message of the engine. */
 export class DockerEngineError extends DockerError {
   /** The HTTP status; undefined for an error in the progress of a pull, a push or a load. */
   readonly status: number | undefined;
-  readonly method: string;
-  readonly path: string;
+  /** The request that got the error. */
+  readonly request: EngineRequest;
 
-  constructor(message: string, request: EngineRequest, options?: ErrorOptions) {
+  constructor(message: string, answer: EngineAnswer, options?: ErrorOptions) {
     super(message, options);
     this.name = 'DockerEngineError';
-    this.status = request.status;
-    this.method = request.method;
-    this.path = request.path;
+    this.status = answer.status;
+    this.request = Object.freeze({
+      method: answer.request.method,
+      path: answer.request.path,
+    });
   }
 }
 
@@ -92,11 +100,11 @@ export class ContainerNotFoundError extends DockerEngineError {
 
   constructor(
     message: string,
-    request: EngineRequest,
+    answer: EngineAnswer,
     container: string,
     options?: ErrorOptions,
   ) {
-    super(message, request, options);
+    super(message, answer, options);
     this.name = 'ContainerNotFoundError';
     this.container = container;
   }
@@ -110,12 +118,12 @@ export class ContainerNotRunningError extends DockerEngineError {
 
   constructor(
     message: string,
-    request: EngineRequest,
+    answer: EngineAnswer,
     container: string,
     state: string,
     options?: ErrorOptions,
   ) {
-    super(message, request, options);
+    super(message, answer, options);
     this.name = 'ContainerNotRunningError';
     this.container = container;
     this.state = state;
@@ -130,12 +138,12 @@ export class NameConflictError extends DockerEngineError {
 
   constructor(
     message: string,
-    request: EngineRequest,
+    answer: EngineAnswer,
     kind: 'container' | 'network' | 'volume',
     takenName: string,
     options?: ErrorOptions,
   ) {
-    super(message, request, options);
+    super(message, answer, options);
     this.name = 'NameConflictError';
     this.kind = kind;
     this.takenName = takenName;
@@ -148,11 +156,11 @@ export class ContainerRunningError extends DockerEngineError {
 
   constructor(
     message: string,
-    request: EngineRequest,
+    answer: EngineAnswer,
     container: string,
     options?: ErrorOptions,
   ) {
-    super(message, request, options);
+    super(message, answer, options);
     this.name = 'ContainerRunningError';
     this.container = container;
   }
@@ -164,11 +172,11 @@ export class ImageNotFoundError extends DockerEngineError {
 
   constructor(
     message: string,
-    request: EngineRequest,
+    answer: EngineAnswer,
     image: string,
     options?: ErrorOptions,
   ) {
-    super(message, request, options);
+    super(message, answer, options);
     this.name = 'ImageNotFoundError';
     this.image = image;
   }
@@ -180,11 +188,11 @@ export class NetworkNotFoundError extends DockerEngineError {
 
   constructor(
     message: string,
-    request: EngineRequest,
+    answer: EngineAnswer,
     network: string,
     options?: ErrorOptions,
   ) {
-    super(message, request, options);
+    super(message, answer, options);
     this.name = 'NetworkNotFoundError';
     this.network = network;
   }
@@ -197,11 +205,11 @@ export class BindSourceNotFoundError extends DockerEngineError {
 
   constructor(
     message: string,
-    request: EngineRequest,
+    answer: EngineAnswer,
     source: string,
     options?: ErrorOptions,
   ) {
-    super(message, request, options);
+    super(message, answer, options);
     this.name = 'BindSourceNotFoundError';
     this.source = source;
   }
@@ -210,17 +218,17 @@ export class BindSourceNotFoundError extends DockerEngineError {
 /** A file request got 404, and the container exists. */
 export class PathNotFoundError extends DockerEngineError {
   readonly container: string;
-  /** The path in the container. It takes the place of the path of the request. */
-  override readonly path: string;
+  /** The path in the container. */
+  readonly path: string;
 
   constructor(
     message: string,
-    request: EngineRequest,
+    answer: EngineAnswer,
     container: string,
     path: string,
     options?: ErrorOptions,
   ) {
-    super(message, request, options);
+    super(message, answer, options);
     this.name = 'PathNotFoundError';
     this.container = container;
     this.path = path;
@@ -230,20 +238,20 @@ export class PathNotFoundError extends DockerEngineError {
 /** readFile() found a directory, a link or another kind of entry. */
 export class NotAFileError extends DockerEngineError {
   readonly container: string;
-  /** The path in the container. It takes the place of the path of the request. */
-  override readonly path: string;
+  /** The path in the container. */
+  readonly path: string;
   /** The kind of the entry: 'directory', 'symlink', 'link' or 'other'. */
   readonly kind: 'directory' | 'symlink' | 'link' | 'other';
 
   constructor(
     message: string,
-    request: EngineRequest,
+    answer: EngineAnswer,
     container: string,
     path: string,
     kind: 'directory' | 'symlink' | 'link' | 'other',
     options?: ErrorOptions,
   ) {
-    super(message, request, options);
+    super(message, answer, options);
     this.name = 'NotAFileError';
     this.container = container;
     this.path = path;
@@ -254,17 +262,17 @@ export class NotAFileError extends DockerEngineError {
 /** The engine refused an extraction, and an inspect showed that the directory is on a read-only root filesystem or in a read-only mount. */
 export class ReadOnlyPathError extends DockerEngineError {
   readonly container: string;
-  /** The path in the container. It takes the place of the path of the request. */
-  override readonly path: string;
+  /** The path in the container. */
+  readonly path: string;
 
   constructor(
     message: string,
-    request: EngineRequest,
+    answer: EngineAnswer,
     container: string,
     path: string,
     options?: ErrorOptions,
   ) {
-    super(message, request, options);
+    super(message, answer, options);
     this.name = 'ReadOnlyPathError';
     this.container = container;
     this.path = path;

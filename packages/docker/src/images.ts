@@ -63,7 +63,7 @@ export class Images {
         if (error instanceof DockerEngineError && error.status === 404) {
           throw new ImageNotFoundError(
             error.message,
-            { status: 404, method, path },
+            { status: 404, request: { method, path } },
             reference,
             { cause: error },
           );

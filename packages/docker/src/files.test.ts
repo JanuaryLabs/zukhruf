@@ -276,12 +276,17 @@ describe('the files of a container', () => {
         assert.ok(error instanceof PathNotFoundError);
         assert.equal(error.container, container.id);
         assert.equal(error.path, '/etc/missing.conf');
+        assert.deepEqual(error.request, {
+          method: 'GET',
+          path: `/containers/${container.id}/archive`,
+        });
         return true;
       });
       await assert.rejects(directory, (error) => {
         assert.ok(error instanceof NotAFileError);
         assert.equal(error.kind, 'directory');
         assert.equal(error.path, '/etc');
+        assert.equal(error.request.path, `/containers/${container.id}/archive`);
         return true;
       });
       await assert.rejects(symlink, (error) => {
@@ -335,6 +340,10 @@ describe('the files of a container', () => {
         assert.ok(error instanceof ReadOnlyPathError);
         assert.equal(error.container, container.id);
         assert.equal(error.path, '/etc');
+        assert.deepEqual(error.request, {
+          method: 'PUT',
+          path: `/containers/${container.id}/archive`,
+        });
         return true;
       });
     } finally {

@@ -55,8 +55,10 @@ describe('docker.images', () => {
       assert.ok(error instanceof ImageNotFoundError);
       assert.equal(error.image, reference);
       assert.equal(error.status, 404);
-      assert.equal(error.method, 'POST');
-      assert.equal(error.path, '/images/create');
+      assert.deepEqual(error.request, {
+        method: 'POST',
+        path: '/images/create',
+      });
       return true;
     });
   });
@@ -94,8 +96,10 @@ describe('docker.images', () => {
       assert.ok(!(error instanceof ImageNotFoundError));
       assert.equal(error.status, undefined);
       assert.equal(error.message, 'unexpected EOF é');
-      assert.equal(error.method, 'POST');
-      assert.equal(error.path, '/images/create');
+      assert.deepEqual(error.request, {
+        method: 'POST',
+        path: '/images/create',
+      });
       return true;
     });
     const query = new URL(engine.paths.at(-1) ?? '', 'http://engine')
