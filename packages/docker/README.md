@@ -2,7 +2,7 @@
 
 > **Status: implemented.** Each call of the `## API` block works, and the tests run it on Docker Desktop (API 1.56) and on an SSH engine (API 1.51). A Windows named pipe is not proved yet (backlog #2753). The decisions are in the [ADRs](./docs/adr/). The package leads, and the repositories that use Docker change to fit it ([ADR 0003](./docs/adr/0003-the-package-leads-and-the-repositories-change.md)).
 
-A client for the Docker Engine API on Node.js. It selects the engine that the Docker CLI selects, and it sends HTTP requests to that engine with `node:http`: through a Unix socket, a Windows named pipe, or SSH. It needs no Docker CLI on the `PATH`, and it has no dependencies. Thus a desktop app that starts from the macOS Dock can use it, and so can a test, a sandbox or a deploy tool.
+A client for the Docker Engine API on Node.js. It selects the engine that the Docker CLI selects, and it sends HTTP requests to that engine with `node:http`: through a Unix socket, a Windows named pipe, or SSH. It needs no Docker CLI on the `PATH`, and it has no third-party dependencies; it uses `@zukhruf/async`. Thus a desktop app that starts from the macOS Dock can use it, and so can a test, a sandbox or a deploy tool.
 
 The package covers the containers of one engine and the resources around them: their images, volumes, networks, files, processes, output and events.
 

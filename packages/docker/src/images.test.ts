@@ -350,30 +350,99 @@ describe('docker.images', () => {
     });
   });
 
-  test('push() of an image that is on the engine to a registry that does not answer rejects with a DockerEngineError, not ImageNotFoundError', async () => {
-    // Arrange
-    await using docker = await connectWithHello();
-    const run = randomUUID();
-    // Nothing listens on port 1 of the engine's host, so the push fails in its progress.
-    const name = `localhost:1/zukhruf-test-${run}:x`;
-    try {
-      await docker.images.tag(HELLO, name);
+  test('an error in the progress of a push of an image that is on the engine is a DockerEngineError with no status, not ImageNotFoundError', async () => {
+    // Arrange: the engine answers 200, reports the error of the registry in the progress, and has the image.
+    await using scratch = await scratchDirectory();
+    await using engine = await fakeEngine({
+      directory: scratch.path,
+      apiVersion: '1.51',
+      answer: (request, response) => {
+        const { pathname } = new URL(request.url ?? '', 'http://engine');
+        if (
+          request.method === 'POST' &&
+          pathname === '/v1.51/images/registry.test%2Fapp/push'
+        ) {
+          response.writeHead(200, { 'Content-Type': 'application/json' });
+          response.end(
+            '{"status":"The push refers to repository [registry.test/app]"}\n{"errorDetail":{"message":"connection refused"},"error":"connection refused"}\n',
+          );
+        } else if (
+          request.method === 'GET' &&
+          pathname === '/v1.51/images/registry.test%2Fapp%3A1/json'
+        ) {
+          response.writeHead(200, { 'Content-Type': 'application/json' });
+          response.end(JSON.stringify({ Id: 'sha256:1' }));
+        } else {
+          response.writeHead(500, { 'Content-Type': 'application/json' });
+          response.end(JSON.stringify({ message: 'unexpected request' }));
+        }
+      },
+    });
+    await using docker = await Docker.connect({ host: engine.host });
 
-      // Act
-      const pushing = docker.images.push(name, {
-        auth: { username: 'nobody', password: 'none' },
-      });
+    // Act
+    const pushing = docker.images.push('registry.test/app:1', {
+      auth: { username: 'nobody', password: 'none' },
+    });
 
-      // Assert
-      await assert.rejects(pushing, (error) => {
-        assert.ok(error instanceof DockerEngineError);
-        assert.equal(error instanceof ImageNotFoundError, false);
-        assert.equal(error.status, undefined);
-        return true;
+    // Assert
+    await assert.rejects(pushing, (error: unknown) => {
+      assert.ok(error instanceof DockerEngineError);
+      assert.ok(!(error instanceof ImageNotFoundError));
+      assert.equal(error.status, undefined);
+      assert.equal(error.message, 'connection refused');
+      assert.deepEqual(error.request, {
+        method: 'POST',
+        path: '/images/registry.test%2Fapp/push',
       });
-    } finally {
-      await removeOwn(docker, run, name);
-    }
+      return true;
+    });
+  });
+
+  test('an error in the progress of a push of an image that is not on the engine is an ImageNotFoundError with the reference', async () => {
+    // Arrange: the engine answers 200, reports the error in the progress, and an inspect of the reference gets 404.
+    await using scratch = await scratchDirectory();
+    await using engine = await fakeEngine({
+      directory: scratch.path,
+      apiVersion: '1.51',
+      answer: (request, response) => {
+        const { pathname } = new URL(request.url ?? '', 'http://engine');
+        if (
+          request.method === 'POST' &&
+          pathname === '/v1.51/images/registry.test%2Fapp/push'
+        ) {
+          response.writeHead(200, { 'Content-Type': 'application/json' });
+          response.end(
+            '{"errorDetail":{"message":"An image does not exist locally with the tag: registry.test/app"},"error":"An image does not exist locally with the tag: registry.test/app"}\n',
+          );
+        } else if (
+          request.method === 'GET' &&
+          pathname === '/v1.51/images/registry.test%2Fapp%3A1/json'
+        ) {
+          response.writeHead(404, { 'Content-Type': 'application/json' });
+          response.end(
+            JSON.stringify({ message: 'No such image: registry.test/app:1' }),
+          );
+        } else {
+          response.writeHead(500, { 'Content-Type': 'application/json' });
+          response.end(JSON.stringify({ message: 'unexpected request' }));
+        }
+      },
+    });
+    await using docker = await Docker.connect({ host: engine.host });
+
+    // Act
+    const pushing = docker.images.push('registry.test/app:1', {
+      auth: { username: 'nobody', password: 'none' },
+    });
+
+    // Assert
+    await assert.rejects(pushing, (error: unknown) => {
+      assert.ok(error instanceof ImageNotFoundError);
+      assert.equal(error.image, 'registry.test/app:1');
+      assert.equal(error.status, undefined);
+      return true;
+    });
   });
 
   test('remove() of an image that a container uses rejects with ImageInUseError', async () => {

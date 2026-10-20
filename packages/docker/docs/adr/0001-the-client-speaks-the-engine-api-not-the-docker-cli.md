@@ -32,7 +32,7 @@ The CLI also adds work that a request does not need:
 
 ## Consequences
 
-- The package is in the base layer and has no dependencies. `node:http` reaches a Unix socket and a Windows named pipe through `socketPath`. For an SSH engine, a connection helper gives `node:http` a stream through `createConnection` (see [ADR 0002](./0002-the-engine-is-the-one-that-the-docker-cli-selects.md)).
+- The package is in the base layer and has no third-party dependencies; it uses `@zukhruf/async`. `node:http` reaches a Unix socket and a Windows named pipe through `socketPath`. For an SSH engine, a connection helper gives `node:http` a stream through `createConnection` (see [ADR 0002](./0002-the-engine-is-the-one-that-the-docker-cli-selects.md)).
 - The options of each request are the fields of the Engine API, with the names that the Engine API reference gives them: `Image`, `Env`, `HostConfig.PortBindings`. The Go client of Moby uses the same names, and so does dockerode. The package adds no second name for a field. A consumer with its own options, such as the sandbox of `@deepagents/context`, maps them to these fields one time.
 - An error carries the HTTP status. A lookup of a missing container, volume or image gives `undefined`. A start of a running container, a stop of a stopped container, and a removal of a missing container do nothing. Each error that a caller handles differently has its own class, chosen by the request and its status ([ADR 0007](./0007-an-error-has-its-own-class-when-the-caller-handles-it-differently.md)).
 - An exec gives back its exit code. A non-zero exit code is data, not an error: three copies in `@deepagents/context` and one in text2sql turn the error of the CLI back into an exit code.

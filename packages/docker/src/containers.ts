@@ -2,6 +2,8 @@ import type { IncomingHttpHeaders, IncomingMessage } from 'node:http';
 import { posix } from 'node:path';
 import { setTimeout } from 'node:timers/promises';
 
+import { poll } from '@zukhruf/async';
+
 import { ContainerProcess } from './container-process.ts';
 import type * as EngineApi from './engine-api.ts';
 import {
@@ -338,33 +340,29 @@ export class Container {
     }
     // A wait for 'removed' never returns when the other removal fails and
     // leaves the container dead, so inspects tell when the container is gone.
-    for (;;) {
-      // The timer rejects with an AbortError; the caller gets the reason of its signal.
-      await setTimeout(REMOVAL_POLL_MS, undefined, { signal }).catch(
-        (timerError: unknown) => {
-          signal?.throwIfAborted();
-          throw timerError;
-        },
-      );
-      const current = await this.#client.exchange('GET', `${path}/json`, {
-        signal,
-      });
-      if (current.status === 404) return;
-      if (!isSuccess(current)) {
-        throw this.#client.error(current, 'GET', `${path}/json`);
-      }
-      const status =
-        parseBody<EngineApi.ContainerInspectResponse>(current).State?.Status;
-      if (status === 'removing') continue;
-      // The other removal ended and the container stays: remove it again.
-      const again = await this.#client.exchange(method, path, {
-        query: { force: true, v: options.v },
-        signal,
-      });
-      if (!isSuccess(again) && again.status !== 404 && again.status !== 409) {
+    await poll(
+      async () => {
+        const current = await this.#client.exchange('GET', `${path}/json`, {
+          signal,
+        });
+        if (current.status === 404) return true;
+        if (!isSuccess(current)) {
+          throw this.#client.error(current, 'GET', `${path}/json`);
+        }
+        const status =
+          parseBody<EngineApi.ContainerInspectResponse>(current).State?.Status;
+        if (status === 'removing') return undefined;
+        // The other removal ended and the container stays: remove it again.
+        const again = await this.#client.exchange(method, path, {
+          query: { force: true, v: options.v },
+          signal,
+        });
+        if (isSuccess(again) || again.status === 404) return true;
+        if (again.status === 409) return undefined;
         throw this.#client.error(again, method, path);
-      }
-    }
+      },
+      { interval: REMOVAL_POLL_MS, signal },
+    );
   }
 
   /** The published binding of a port of the container; undefined when it is not published. The IPv4 binding comes first. */
