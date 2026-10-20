@@ -2,7 +2,8 @@ import type { IncomingHttpHeaders } from 'node:http';
 
 import { ConnectionFailedError, DockerEngineError } from './errors.ts';
 import type { Filters } from './options.ts';
-import type { SocketTransport } from './transport.ts';
+import { SshExitError } from './ssh-connection.ts';
+import type { Transport } from './transport.ts';
 
 /** The query of a request. `filters` goes to the engine as JSON. */
 export type Query = Record<
@@ -21,7 +22,7 @@ export interface EngineResponse {
   body: Buffer;
 }
 
-/** The socket errors that mean the engine did not accept the connection. */
+/** The socket errors that mean the engine did not accept the connection. ENOENT is also an absent `ssh`. */
 const CONNECTION_FAILURES = new Set([
   'ENOENT',
   'ECONNREFUSED',
@@ -66,10 +67,10 @@ function engineMessage(response: EngineResponse): string {
 /** Sends requests of the Engine API to one engine. */
 export class EngineClient {
   readonly #host: string;
-  readonly #transport: SocketTransport;
+  readonly #transport: Transport;
   readonly #apiVersion: string | undefined;
 
-  constructor(host: string, transport: SocketTransport, apiVersion?: string) {
+  constructor(host: string, transport: Transport, apiVersion?: string) {
     this.#host = host;
     this.#transport = transport;
     this.#apiVersion = apiVersion;
@@ -131,7 +132,9 @@ export class EngineClient {
     request.on('error', (error) => {
       // An error after the answer started is not a connection failure.
       reject(
-        !answered && CONNECTION_FAILURES.has(errorCode(error) ?? '')
+        !answered &&
+          (error instanceof SshExitError ||
+            CONNECTION_FAILURES.has(errorCode(error) ?? ''))
           ? new ConnectionFailedError(this.#host, { cause: error })
           : error,
       );

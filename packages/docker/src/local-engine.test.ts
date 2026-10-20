@@ -3,7 +3,7 @@ import { describe, test } from 'node:test';
 
 import { Docker } from './index.ts';
 
-describe('the local engine that the Docker CLI selects', () => {
+describe('the engine that the environment of the test run selects', () => {
   test('connect() gives its host and a supported API version, and info() answers', async () => {
     // Arrange
     const signal = AbortSignal.timeout(10_000);
@@ -16,7 +16,7 @@ describe('the local engine that the Docker CLI selects', () => {
     const info = await docker.info({ signal });
 
     // Assert
-    assert.match(docker.host, /^(unix|npipe):\/\/./);
+    assert.match(docker.host, /^(unix|npipe|ssh):\/\/./);
     assert.match(docker.apiVersion, /^1\.\d+$/);
     const minor = Number(docker.apiVersion.split('.')[1]);
     assert.ok(minor >= 44 && minor <= 56, docker.apiVersion);

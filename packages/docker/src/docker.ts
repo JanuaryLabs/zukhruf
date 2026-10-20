@@ -9,7 +9,8 @@ import type * as EngineApi from './engine-api.ts';
 import { EngineClient } from './engine-client.ts';
 import { parseHost } from './host.ts';
 import type { CancelOptions } from './options.ts';
-import { SocketTransport } from './transport.ts';
+import { SshTransport } from './ssh-connection.ts';
+import { SocketTransport, type Transport } from './transport.ts';
 
 /** A context or a host, never both. */
 export type ConnectOptions = CancelOptions & { environment?: Environment } & (
@@ -25,14 +26,14 @@ export class Docker implements AsyncDisposable {
   /** Sends the Docker CLI to this engine: { DOCKER_HOST, DOCKER_CONTEXT: undefined }. */
   readonly cliEnvironment: Readonly<Record<string, string | undefined>>;
   readonly #client: EngineClient;
-  readonly #transport: SocketTransport;
+  readonly #transport: Transport;
 
   private constructor(
     context: string,
     host: string,
     apiVersion: string,
     client: EngineClient,
-    transport: SocketTransport,
+    transport: Transport,
   ) {
     this.context = context;
     this.host = host;
@@ -50,12 +51,10 @@ export class Docker implements AsyncDisposable {
     const { signal } = options;
     const engine = await selectEngine(options);
     const parsed = parseHost(engine.host);
-    if (parsed.kind === 'ssh') {
-      throw new Error(
-        `The connection helper for ${engine.host} is not implemented until step 2 of the package.`,
-      );
-    }
-    const transport = new SocketTransport(parsed.socketPath);
+    const transport =
+      parsed.kind === 'ssh'
+        ? new SshTransport(parsed.url)
+        : new SocketTransport(parsed.socketPath);
     try {
       const unversioned = new EngineClient(engine.host, transport);
       const ping = await unversioned.request('GET', '/_ping', { signal });
@@ -72,7 +71,7 @@ export class Docker implements AsyncDisposable {
         transport,
       );
     } catch (error) {
-      transport.close();
+      await transport.close();
       throw error;
     }
   }
@@ -88,8 +87,8 @@ export class Docker implements AsyncDisposable {
     return this.#client.json<EngineApi.SystemInfo>('GET', '/info', options);
   }
 
-  /** Closes the connections of the client. */
+  /** Closes the connections of the client. For an SSH engine, it resolves when each `ssh` process exited. */
   async [Symbol.asyncDispose](): Promise<void> {
-    this.#transport.close();
+    await this.#transport.close();
   }
 }
