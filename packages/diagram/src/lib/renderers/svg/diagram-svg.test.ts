@@ -2209,67 +2209,61 @@ test('labels on parallel edges in one gutter never cover each other or a node', 
   );
 });
 
-test(
-  'edge badges draw their icon and lines beside the routed edge, inside the viewBox',
-  {
-    todo: '#2801 gutters reserve no room for a badge, so a badge with no label beside it throws',
-  },
-  () => {
-    // Arrange
-    const children = [
-      createElement(
-        Diagram.Box,
-        { key: 'pi', id: 'public-internet', row: 0, col: 0, icon: 'internet' },
-        'Public Internet',
-      ),
-      createElement(
-        Diagram.Box,
-        { key: 'k', id: 'cluster', row: 2, col: 0, icon: 'kubernetes' },
-        'K3s Cluster',
-      ),
-      createElement(Diagram.Arrow, {
-        key: 'e',
-        from: 'public-internet',
-        to: 'cluster',
-        badgeIcon: 'tunnel',
-        badgeLabel: [
-          'Cloudflare Tunnel',
-          '(Zero Trust)',
-          'encrypted tunnel to the private cluster',
-        ],
-      }),
-    ];
-
-    // Act
-    const layout = soundLayout(children);
-    const markup = render(
-      createElement(SvgGraphDiagram, {
-        title: 'edge-badge-test',
-        defaultMode: 'static',
-        children,
-      }),
-    );
-
-    // Assert
-    const badge = edgeOf(layout, 'public-internet', 'cluster').badge;
-    assert.ok(badge?.icon, 'the badge should hold an icon');
-    assert.deepEqual(
-      badge.text.map(({ text }) => text),
-      [
+test('edge badges draw their icon and lines beside the routed edge, inside the viewBox', () => {
+  // Arrange
+  const children = [
+    createElement(
+      Diagram.Box,
+      { key: 'pi', id: 'public-internet', row: 0, col: 0, icon: 'internet' },
+      'Public Internet',
+    ),
+    createElement(
+      Diagram.Box,
+      { key: 'k', id: 'cluster', row: 2, col: 0, icon: 'kubernetes' },
+      'K3s Cluster',
+    ),
+    createElement(Diagram.Arrow, {
+      key: 'e',
+      from: 'public-internet',
+      to: 'cluster',
+      badgeIcon: 'tunnel',
+      badgeLabel: [
         'Cloudflare Tunnel',
         '(Zero Trust)',
         'encrypted tunnel to the private cluster',
       ],
-    );
-    assert.ok(contains(layout.viewBox, badge.box));
-    assert.match(
-      markup,
-      /<g data-diagram-edge-badge="public-internet-&gt;cluster"[\s\S]*data-diagram-node-icon="tunnel"/,
-    );
-    assert.match(markup, /Cloudflare Tunnel/);
-    assert.match(markup, /\(Zero Trust\)/);
-  },
-);
+    }),
+  ];
+
+  // Act
+  const layout = soundLayout(children);
+  const markup = render(
+    createElement(SvgGraphDiagram, {
+      title: 'edge-badge-test',
+      defaultMode: 'static',
+      children,
+    }),
+  );
+
+  // Assert
+  const badge = edgeOf(layout, 'public-internet', 'cluster').badge;
+  assert.ok(badge?.icon, 'the badge should hold an icon');
+  assert.deepEqual(
+    badge.text.map(({ text }) => text),
+    [
+      'Cloudflare Tunnel',
+      '(Zero Trust)',
+      'encrypted tunnel to the private cluster',
+    ],
+  );
+  assert.ok(contains(layout.viewBox, badge.box));
+  assert.match(
+    markup,
+    /<g data-diagram-edge-badge="public-internet-&gt;cluster"[\s\S]*data-diagram-node-icon="tunnel"/,
+  );
+  assert.match(markup, /Cloudflare Tunnel/);
+  assert.match(markup, /\(Zero Trust\)/);
+});
 
 test('the viewBox holds the drawn frame of every edge label', () => {
   // Arrange

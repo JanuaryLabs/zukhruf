@@ -442,49 +442,43 @@ test('the html output draws text in Geist with kerning on and ligatures off, the
   }
 });
 
-test(
-  'html output draws edge badges as the svg output does',
-  {
-    todo: '#2801 gutters reserve no room for a badge, so a badge with no label beside it throws',
-  },
-  () => {
-    const shapes = [
-      createElement(
-        Diagram.Box,
-        { key: 'edge', id: 'edge', row: 0, col: 0 },
-        'Edge',
-      ),
-      createElement(
-        Diagram.Box,
-        { key: 'cluster', id: 'cluster', row: 1, col: 0 },
-        'Cluster',
-      ),
-      createElement(Diagram.Arrow, {
-        key: 'tunnel',
-        from: 'edge',
-        to: 'cluster',
-        badgeIcon: 'tunnel',
-        badgeLabel: 'Badge',
-      }),
-    ];
+test('html output draws edge badges as the svg output does', () => {
+  const shapes = [
+    createElement(
+      Diagram.Box,
+      { key: 'edge', id: 'edge', row: 0, col: 0 },
+      'Edge',
+    ),
+    createElement(
+      Diagram.Box,
+      { key: 'cluster', id: 'cluster', row: 1, col: 0 },
+      'Cluster',
+    ),
+    createElement(Diagram.Arrow, {
+      key: 'tunnel',
+      from: 'edge',
+      to: 'cluster',
+      badgeIcon: 'tunnel',
+      badgeLabel: 'Badge',
+    }),
+  ];
 
-    const svg = render(
-      createElement(SvgGraphDiagram, {
-        title: 'badges',
-        defaultMode: 'static',
-        children: shapes,
-      }),
-    );
-    const html = render(
-      createElement(HtmlGraphDiagram, {
-        title: 'badges',
-        defaultMode: 'static',
-        children: shapes,
-      }),
-    );
+  const svg = render(
+    createElement(SvgGraphDiagram, {
+      title: 'badges',
+      defaultMode: 'static',
+      children: shapes,
+    }),
+  );
+  const html = render(
+    createElement(HtmlGraphDiagram, {
+      title: 'badges',
+      defaultMode: 'static',
+      children: shapes,
+    }),
+  );
 
-    const drawn = elementsWith(svg, 'data-diagram-edge-badge');
-    assert.notEqual(drawn.length, 0, 'svg should draw the badge');
-    assert.deepEqual(elementsWith(html, 'data-diagram-edge-badge'), drawn);
-  },
-);
+  const drawn = elementsWith(svg, 'data-diagram-edge-badge');
+  assert.notEqual(drawn.length, 0, 'svg should draw the badge');
+  assert.deepEqual(elementsWith(html, 'data-diagram-edge-badge'), drawn);
+});

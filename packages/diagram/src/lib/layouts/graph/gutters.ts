@@ -1,7 +1,7 @@
 import type { DiagramEdge } from '../../model/diagram-ir.ts';
 import { parseEndpointRef } from '../../model/endpoint-ref.ts';
 import type { CellArea, GridAreas } from './areas.ts';
-import { measureEdgeLabel } from './measure.ts';
+import { measureEdgeTags } from './measure.ts';
 import { LAYOUT_TOKENS } from './tokens.ts';
 
 export type Axis = 'row' | 'col';
@@ -44,7 +44,7 @@ export function gridGutters(
   titleHeights: Map<string, number>,
   edges: DiagramEdge[],
 ): GridGutters {
-  const minimums = labelMinimums(edges, areas.nodes);
+  const minimums = tagMinimums(edges, areas.nodes);
   const chrome = LAYOUT_TOKENS.GROUP_PAD + STROKE;
   const spans = (axis: Axis): GroupSpan[] =>
     areas.groups.map(({ group, depth, area }) => {
@@ -116,12 +116,14 @@ function slotWidths(
 }
 
 /**
- * A labelled edge between two neighbouring cells has only the gutter between
- * them for its label. The label must not straddle the border of a group that
- * opens or closes there, so the middle of that gutter, outside all their
- * chrome, must hold the label and a stub on each side of it.
+ * A tagged edge between two facing cells, with no node between them, runs
+ * straight across the gutters between them, and the tracks between them may
+ * be empty. Its label and its badge sit in a row along it, LABEL_GAP apart.
+ * The tags must not straddle the border of a group that opens or closes
+ * there, so the middles of those gutters, outside all their chrome, share
+ * the row and a stub on each side of it.
  */
-function labelMinimums(
+function tagMinimums(
   edges: DiagramEdge[],
   nodes: Map<string, CellArea>,
 ): Record<Axis, Map<number, number>> {
@@ -129,33 +131,60 @@ function labelMinimums(
     row: new Map(),
     col: new Map(),
   };
-  const raise = (axis: Axis, boundary: number, need: number) =>
-    minimums[axis].set(
-      boundary,
-      Math.max(minimums[axis].get(boundary) ?? 0, need),
-    );
+  const raise = (axis: Axis, boundaries: number[], need: number) => {
+    for (const boundary of boundaries) {
+      minimums[axis].set(
+        boundary,
+        Math.max(minimums[axis].get(boundary) ?? 0, need / boundaries.length),
+      );
+    }
+  };
+  const areas = [...nodes.values()];
   for (const edge of edges) {
-    if (!edge.label?.length) continue;
+    const { label, badge } = measureEdgeTags(edge);
+    const tags = [label, badge].filter((tag) => tag !== undefined);
+    if (tags.length === 0) continue;
     const from = nodes.get(parseEndpointRef(edge.from).nodeId);
     const to = nodes.get(parseEndpointRef(edge.to).nodeId);
     if (!from || !to) continue;
-    const label = measureEdgeLabel(edge);
-    const side = sideBySide(from, to);
-    if (side) raise('col', side, label.w + 2 * LAYOUT_TOKENS.STUB);
-    const stacked = sideBySide(transpose(from), transpose(to));
-    if (stacked) raise('row', stacked, label.h + 2 * LAYOUT_TOKENS.STUB);
+    const rowLength = (along: 'w' | 'h') =>
+      tags.reduce((sum, tag) => sum + tag[along], 0) +
+      (tags.length - 1) * LAYOUT_TOKENS.LABEL_GAP +
+      2 * LAYOUT_TOKENS.STUB;
+    raise('col', facingBoundaries(from, to, areas), rowLength('w'));
+    raise(
+      'row',
+      facingBoundaries(transpose(from), transpose(to), areas.map(transpose)),
+      rowLength('h'),
+    );
   }
   return minimums;
 }
 
-/** The column boundary between two areas that share rows and touch across it. */
-function sideBySide(a: CellArea, b: CellArea): number | undefined {
-  const shareRows =
-    Math.max(a.row, b.row) < Math.min(a.row + a.rowSpan, b.row + b.rowSpan);
-  if (!shareRows) return undefined;
-  if (a.col + a.colSpan === b.col) return b.col;
-  if (b.col + b.colSpan === a.col) return a.col;
-  return undefined;
+/**
+ * The column boundaries between two areas that share rows and face each
+ * other across them, with no other area between them in the rows they share.
+ */
+function facingBoundaries(
+  a: CellArea,
+  b: CellArea,
+  areas: CellArea[],
+): number[] {
+  const top = Math.max(a.row, b.row);
+  const bottom = Math.min(a.row + a.rowSpan, b.row + b.rowSpan);
+  const [left, right] = a.col < b.col ? [a, b] : [b, a];
+  const start = left.col + left.colSpan;
+  const end = right.col;
+  if (top >= bottom || start > end) return [];
+  const blocked = areas.some(
+    (area) =>
+      area.col < end &&
+      area.col + area.colSpan > start &&
+      area.row < bottom &&
+      area.row + area.rowSpan > top,
+  );
+  if (blocked) return [];
+  return Array.from({ length: end - start + 1 }, (_, index) => start + index);
 }
 
 function transpose(area: CellArea): CellArea {

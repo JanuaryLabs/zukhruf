@@ -11,7 +11,7 @@ import type {
 } from '../../model/diagram-ir.ts';
 import type { GraphLayout, GroupLayout } from './graph-layout-result.ts';
 import { layoutGraph } from './layout.ts';
-import { measureEdgeLabel, measureNode } from './measure.ts';
+import { measureEdgeBadge, measureEdgeLabel, measureNode } from './measure.ts';
 import { LAYOUT_TOKENS } from './tokens.ts';
 
 function graph(spec: {
@@ -1070,6 +1070,146 @@ describe('layoutGraph keeps room for the labels of edges between neighbouring ce
       box(layout, 'b').y - (a.y + a.h),
       measureEdgeLabel(edge).h + 2 * LAYOUT_TOKENS.STUB,
       'gutter',
+    );
+  });
+});
+
+describe('layoutGraph keeps room for the badges of edges between neighbouring cells', () => {
+  test('g1 a badge between stacked cells sits on its edge, in a gutter as tall as the badge plus two stubs', () => {
+    // Arrange
+    const edge: DiagramEdge = {
+      from: 'a',
+      to: 'b',
+      badgeIcon: 'tunnel',
+      badgeLabel: ['Badge'],
+    };
+    const ir = graph({
+      nodes: [
+        { id: 'a', label: 'A', row: 0, col: 0 },
+        { id: 'b', label: 'B', row: 1, col: 0 },
+      ],
+      edges: [edge],
+    });
+
+    // Act
+    const layout = layoutGraph(ir);
+
+    // Assert
+    assertSoundLayout(layout);
+    const a = box(layout, 'a');
+    close(
+      box(layout, 'b').y - (a.y + a.h),
+      measureEdgeBadge(edge).h + 2 * LAYOUT_TOKENS.STUB,
+      'gutter',
+    );
+    assert.ok(edgeOf(layout, 'a', 'b').badge, 'the edge carries its badge');
+  });
+
+  test('g1b a badge between cells with an empty row between them shares the two gutters it crosses', () => {
+    // Arrange
+    const edge: DiagramEdge = {
+      from: 'a',
+      to: 'b',
+      badgeIcon: 'tunnel',
+      badgeLabel: ['Cloudflare Tunnel', '(Zero Trust)'],
+    };
+    const ir = graph({
+      nodes: [
+        { id: 'a', label: 'A', row: 0, col: 0 },
+        { id: 'b', label: 'B', row: 2, col: 0 },
+      ],
+      edges: [edge],
+    });
+
+    // Act
+    const layout = layoutGraph(ir);
+
+    // Assert
+    assertSoundLayout(layout);
+    const a = box(layout, 'a');
+    close(
+      box(layout, 'b').y - (a.y + a.h),
+      measureEdgeBadge(edge).h + 2 * LAYOUT_TOKENS.STUB,
+      'the two gutters and the empty row',
+    );
+    assert.ok(edgeOf(layout, 'a', 'b').badge, 'the edge carries its badge');
+  });
+
+  test('g2 a label and a badge on one edge between side-by-side cells sit in a row, in a gutter as wide as both plus LABEL_GAP and two stubs', () => {
+    // Arrange
+    const edge: DiagramEdge = {
+      from: 'a',
+      to: 'b',
+      label: ['calls'],
+      badgeIcon: 'tunnel',
+      badgeLabel: ['Badge'],
+    };
+    const ir = graph({
+      nodes: [
+        { id: 'a', label: 'A', row: 0, col: 0 },
+        { id: 'b', label: 'B', row: 0, col: 1 },
+      ],
+      edges: [edge],
+    });
+
+    // Act
+    const layout = layoutGraph(ir);
+
+    // Assert
+    assertSoundLayout(layout);
+    const a = box(layout, 'a');
+    close(
+      box(layout, 'b').x - (a.x + a.w),
+      measureEdgeLabel(edge).w +
+        LAYOUT_TOKENS.LABEL_GAP +
+        measureEdgeBadge(edge).w +
+        2 * LAYOUT_TOKENS.STUB,
+      'gutter',
+    );
+    const { label, badge } = edgeOf(layout, 'a', 'b');
+    assert.ok(label && badge, 'the edge carries its label and its badge');
+  });
+
+  test('g3 a badge on an edge with a bend sits on one of its segments', () => {
+    // Arrange
+    const ir = graph({
+      nodes: [
+        { id: 'a', label: 'A', row: 0, col: 0 },
+        { id: 'b', label: 'B', row: 1, col: 1 },
+      ],
+      edges: [
+        {
+          from: 'a',
+          to: 'b',
+          exitSide: 'right',
+          entrySide: 'top',
+          badgeIcon: 'tunnel',
+          badgeLabel: ['Badge'],
+        },
+      ],
+    });
+
+    // Act
+    const layout = layoutGraph(ir);
+
+    // Assert
+    assertSoundLayout(layout);
+    const { points, badge } = edgeOf(layout, 'a', 'b');
+    assert.equal(points.length, 3);
+    assert.ok(badge, 'the edge carries its badge');
+    const centre = {
+      x: badge.box.x + badge.box.w / 2,
+      y: badge.box.y + badge.box.h / 2,
+    };
+    assert.ok(
+      points
+        .slice(1)
+        .some(
+          (to, index) =>
+            (to.x === points[index]!.x && Math.abs(centre.x - to.x) < 0.01) ||
+            (to.y === points[index]!.y && Math.abs(centre.y - to.y) < 0.01),
+        ),
+      'the badge is centred on a segment of its edge',
     );
   });
 });

@@ -13,7 +13,7 @@ import type {
   NodeLayout,
 } from './graph-layout-result.ts';
 import { tagPosition } from './labels.ts';
-import { measureEdgeBadge, measureEdgeLabel } from './measure.ts';
+import { measureEdgeTags } from './measure.ts';
 import { pathToSvg, simplifyPath } from './path.ts';
 import { searchRoute } from './route-search.ts';
 import { OPPOSITE, OUTWARD } from './sides.ts';
@@ -159,32 +159,37 @@ export function routeGraph(
           ...routed.flatMap((route) => segments(route.points)),
           ...(ownSegments ? segments(points) : []),
         ].every(([a, b]) => !crosses(a, b, box));
+      const measured = measureEdgeTags(edge);
+      const { label, badge } = measured;
       const placed: Pick<EdgeLayout, 'label' | 'badge'> = {};
-      if (edge.label?.length) {
-        const measured = measureEdgeLabel(edge);
-        const box = tagPosition(measured, points, 'beside', (candidate) =>
-          isFree(candidate, true),
+      if (label || badge) {
+        const boxes = tagPosition(measured, points, (candidate, kind) =>
+          isFree(candidate, kind === 'label'),
         );
-        if (!box) {
+        if (!boxes) {
+          const named: string[] = [];
+          if (label) {
+            named.push(
+              `label "${edge.label!.join(' / ')}" (${Math.ceil(label.w)}×${Math.ceil(label.h)})`,
+            );
+          }
+          if (badge) {
+            named.push(
+              `badge "${(edge.badgeLabel ?? []).join(' / ')}" (${Math.ceil(badge.w)}×${Math.ceil(badge.h)})`,
+            );
+          }
           throw new Error(
-            `Diagram ${connection.name}: label "${edge.label.join(' / ')}" (${Math.ceil(measured.w)}×${Math.ceil(measured.h)}) has no free position beside its route.`,
+            `Diagram ${connection.name}: ${named.join(' and ')} ${named.length > 1 ? 'have' : 'has'} no free position ${badge ? 'on' : 'beside'} its route.`,
           );
         }
-        placed.label = { box, text: measured.place(box) };
-        tags.push(box);
-      }
-      if (edge.badgeIcon || edge.badgeLabel?.length) {
-        const measured = measureEdgeBadge(edge);
-        const box = tagPosition(measured, points, 'on', (candidate) =>
-          isFree(candidate, false),
-        );
-        if (!box) {
-          throw new Error(
-            `Diagram ${connection.name}: badge "${(edge.badgeLabel ?? []).join(' / ')}" (${Math.ceil(measured.w)}×${Math.ceil(measured.h)}) has no free position on its route.`,
-          );
+        if (label && boxes.label) {
+          placed.label = { box: boxes.label, text: label.place(boxes.label) };
+          tags.push(boxes.label);
         }
-        placed.badge = { box, ...measured.place(box) };
-        tags.push(box);
+        if (badge && boxes.badge) {
+          placed.badge = { box: boxes.badge, ...badge.place(boxes.badge) };
+          tags.push(boxes.badge);
+        }
       }
       labels.set(connection, placed);
     }

@@ -387,6 +387,21 @@ export function measureEdgeBadge(edge: DiagramEdge): MeasuredEdgeBadge {
   };
 }
 
+export type MeasuredEdgeTags = {
+  label?: MeasuredEdgeLabel;
+  badge?: MeasuredEdgeBadge;
+};
+
+/** What an edge carries along its route: a label beside it and a badge on it, each only when the edge has one. */
+export function measureEdgeTags(edge: DiagramEdge): MeasuredEdgeTags {
+  return {
+    ...(edge.label?.length ? { label: measureEdgeLabel(edge) } : {}),
+    ...(edge.badgeIcon || edge.badgeLabel?.length
+      ? { badge: measureEdgeBadge(edge) }
+      : {}),
+  };
+}
+
 function sidesOf(value: (side: DiagramSide) => number): Sides {
   return {
     top: value('top'),
