@@ -25,8 +25,8 @@ The contexts are plain files ([the context store of docker/cli](https://github.c
 
 ## Consequences
 
-- `Docker.connect()` selects the engine in the order above, from the environment of the process and from the context store. It starts no program for a local engine.
-- `Docker.connect()` also takes a context name or a host. Then it uses that engine and ignores the environment.
+- `Docker.connect()` selects the engine in the order above, from the context store and from the environment that the host program gives it (`environment: process.env`). The package itself reads no `process.env`: a zukhruf island takes such a value as an option, and the host reads its environment (the rule `island/no-process-env` of `@zukhruf/eslint`, as `TestRun.fromEnvironment(process.env)` of `@zukhruf/testing`). It starts no program for a local engine.
+- `Docker.connect()` also takes a context name or a host. A context name ignores `DOCKER_CONTEXT` and `currentContext`. The `default` context still takes its host from `DOCKER_HOST`, because the Docker CLI defines the default context as the configuration of `DOCKER_HOST`. A host ignores the environment.
 - `Docker.contexts()` lists each context, with its host. A product with its own rule chooses from the list. For example, the finders of text2sql want the engines of this machine only, because a container's published port on an SSH engine is on another machine.
 - The package accepts three kinds of host: `unix://`, `npipe://` and `ssh://`. It refuses `tcp://`. An engine on TCP needs TLS files to be safe, and no consumer uses one. `@zukhruf/testing` refuses `tcp://` for the same reason today.
 - For an SSH engine, the connection helper is `ssh -T -o BatchMode=yes <machine> docker system dial-stdio`, as in [the connhelper of docker/cli](https://github.com/docker/cli/blob/master/cli/connhelper/connhelper.go). `ssh` reads `~/.ssh/config`, so jump hosts, keys and agents work as they work for the CLI. The remote machine must have `docker` on the `PATH` of its SSH shell. The CLI needs that too.

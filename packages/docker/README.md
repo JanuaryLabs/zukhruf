@@ -15,24 +15,30 @@ The words in these documents have one meaning each. See the glossary in [CONTEXT
 1. `DOCKER_HOST`.
 2. `DOCKER_CONTEXT`.
 3. `currentContext` in `config.json` of `DOCKER_CONFIG`, or of `~/.docker`.
-4. The `default` context: `unix:///var/run/docker.sock`, or `npipe:////./pipe/docker_engine` on Windows.
+4. The `default` context. Its host is `DOCKER_HOST`, or `unix:///var/run/docker.sock`, or `npipe:////./pipe/docker_engine` on Windows.
 
-Then it sends `GET /_ping` and negotiates the API version. Dispose the client to close its connections. An idle connection does not keep the process running.
+The package does not read `process.env`. The host program gives its environment as `environment`, and the package reads `DOCKER_HOST`, `DOCKER_CONTEXT` and `DOCKER_CONFIG` from it. Without `environment`, no variable applies, and the selection reads only the context store.
+
+Then `connect()` sends `GET /_ping` and negotiates the API version. Dispose the client to close its connections. An idle connection does not keep the process running.
 
 ```ts
 import { Docker } from '@zukhruf/docker';
 
 await using docker = await Docker.connect({
+  environment: process.env,
   signal: AbortSignal.timeout(5_000),
 });
 console.log(docker.context, docker.host, docker.apiVersion);
 // desktop-linux unix:///Users/me/.docker/run/docker.sock 1.51
 ```
 
-A client keeps its engine. To use another engine, connect again with a context name or a host. Then the client ignores `DOCKER_HOST` and `DOCKER_CONTEXT`:
+A client keeps its engine. To use another engine, connect again with a context name or a host. A `context` ignores `DOCKER_CONTEXT` and `currentContext`. The `default` context still takes its host from `DOCKER_HOST`, as in the Docker CLI. A `host` ignores the environment:
 
 ```ts
-await using remote = await Docker.connect({ context: 'limerence-dokploy' });
+await using remote = await Docker.connect({
+  context: 'limerence-dokploy',
+  environment: process.env,
+});
 await using local = await Docker.connect({
   host: 'unix:///var/run/docker.sock',
 });
@@ -42,10 +48,10 @@ The package accepts `unix://`, `npipe://` and `ssh://` hosts. It refuses `tcp://
 
 ## List the contexts
 
-`Docker.contexts()` reads the context store and gives each context with its host. The `default` context is in the list too. `current` marks the context that `Docker.connect()` selects with no options.
+`Docker.contexts()` reads the context store and gives each context with its host. The `default` context is in the list too. `current` marks the context that `Docker.connect()` selects with the same `environment` and no `context` or `host`.
 
 ```ts
-const local = (await Docker.contexts()).filter(
+const local = (await Docker.contexts({ environment: process.env })).filter(
   ({ host }) => !host.startsWith('ssh://'),
 );
 // [{ name: 'default', host: 'unix:///var/run/docker.sock', current: false },
@@ -89,7 +95,10 @@ import {
 } from '@zukhruf/docker';
 
 try {
-  await using docker = await Docker.connect({ context: 'desktop-linux' });
+  await using docker = await Docker.connect({
+    context: 'desktop-linux',
+    environment: process.env,
+  });
   return await docker.containers.list();
 } catch (error) {
   if (error instanceof ConnectionFailedError) return [];
@@ -451,7 +460,9 @@ export class Docker implements AsyncDisposable {
   /** Selects the engine in the order of the Docker CLI, pings it and negotiates the API version. */
   static connect(options?: ConnectOptions): Promise<Docker>;
   /** Each context of the context store, and the default context. */
-  static contexts(): Promise<DockerContext[]>;
+  static contexts(options?: {
+    environment?: Environment;
+  }): Promise<DockerContext[]>;
 
   /** The context that selected the engine: 'default' for DOCKER_HOST or a host option. */
   readonly context: string;
@@ -472,14 +483,18 @@ export class Docker implements AsyncDisposable {
   [Symbol.asyncDispose](): Promise<void>;
 }
 
+/** The environment of the host program, such as process.env. The package reads only DOCKER_HOST, DOCKER_CONTEXT and DOCKER_CONFIG. */
+export type Environment = Readonly<Record<string, string | undefined>>;
+
 /** A context or a host, never both. */
-export type ConnectOptions = CancelOptions &
-  ({ context?: string; host?: never } | { host?: string; context?: never });
+export type ConnectOptions = CancelOptions & { environment?: Environment } & (
+    { context?: string; host?: never } | { host?: string; context?: never }
+  );
 
 export interface DockerContext {
   name: string;
   host: string;
-  /** The context that connect() selects with no options. */
+  /** The context that connect() selects with the same environment and no context or host. */
   current: boolean;
 }
 
