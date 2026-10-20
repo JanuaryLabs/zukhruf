@@ -27,4 +27,47 @@ if [ -n "$synced" ]; then
   printf '%s\n' "$synced" | tr '\n' '\0' | xargs -0 git add --
 fi
 
-npx lint-staged
+# Check the staged blobs, never rewrite files. lint-staged ran
+# `prettier --write`, then `git add`ed every file whose unstaged diff changed
+# while its tasks ran. In a tree shared by concurrent agents, that included a
+# file another agent was saving at that moment, so the commit (and, for
+# `git commit --only`, the shared index) took a file it never named. A hook
+# that only reads cannot stage anything. It reads each file from the index
+# (`git cat-file blob :path`, under the commit's GIT_INDEX_FILE), so a
+# partially staged file is checked as it will be committed, and its unstaged
+# hunks stay unstaged.
+node --input-type=module <<'EOF'
+import { execFileSync } from 'node:child_process';
+import * as prettier from 'prettier';
+
+const extension = /\.(ts|tsx|mts|cts|js|mjs|cjs|json|md|yml|yaml|css)$/;
+const files = execFileSync(
+  'git',
+  ['diff', '--cached', '--name-only', '-z', '--diff-filter=ACMR'],
+  { encoding: 'utf8' },
+)
+  .split('\0')
+  .filter((file) => extension.test(file));
+const unformatted = [];
+for (const file of files) {
+  const info = await prettier.getFileInfo(file, {
+    ignorePath: '.prettierignore',
+  });
+  if (info.ignored || !info.inferredParser) continue;
+  const source = execFileSync('git', ['cat-file', 'blob', `:${file}`], {
+    encoding: 'utf8',
+  });
+  const options = await prettier.resolveConfig(file);
+  if (!(await prettier.check(source, { ...options, filepath: file }))) {
+    unformatted.push(file);
+  }
+}
+if (unformatted.length > 0) {
+  console.error('Prettier would reformat these staged files:');
+  for (const file of unformatted) console.error(`  ${file}`);
+  console.error(
+    `Run \`npx prettier --write ${unformatted.join(' ')}\`, stage the result, and commit again.`,
+  );
+  process.exit(1);
+}
+EOF
