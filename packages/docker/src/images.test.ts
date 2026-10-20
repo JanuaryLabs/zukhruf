@@ -3,9 +3,49 @@ import { randomUUID } from 'node:crypto';
 import { describe, test } from 'node:test';
 import { setTimeout } from 'node:timers/promises';
 
-import { Docker, DockerEngineError, ImageNotFoundError } from './index.ts';
+import {
+  Docker,
+  DockerEngineError,
+  ImageInUseError,
+  ImageNotFoundError,
+} from './index.ts';
 import { fakeEngine } from './testing/fake-engine.ts';
 import { scratchDirectory } from './testing/scratch-directory.ts';
+
+const TEST_LABEL = 'dev.zukhruf.docker.test';
+const HELLO = 'hello-world';
+
+/** The engine that the environment of the test run selects, with hello-world on it. */
+async function connectWithHello(): Promise<Docker> {
+  const docker = await Docker.connect({
+    environment: process.env,
+    signal: AbortSignal.timeout(15_000),
+  });
+  if (!(await docker.images.inspect(HELLO))) await docker.images.pull(HELLO);
+  return docker;
+}
+
+/** Removes each container with the label of this test run, then the dedicated names of hello-world. */
+async function removeOwn(
+  docker: Docker,
+  run: string,
+  ...names: string[]
+): Promise<void> {
+  const filters = { label: [`${TEST_LABEL}=${run}`] };
+  for (const summary of await docker.containers.list({ all: true, filters })) {
+    const container = await docker.containers.find(summary.Id);
+    await container?.remove({ force: true, v: true });
+  }
+  for (const name of names) await docker.images.remove(name);
+}
+
+async function bytesOf(
+  stream: ReadableStream<Uint8Array>,
+): Promise<Uint8Array> {
+  const chunks: Uint8Array[] = [];
+  for await (const chunk of stream) chunks.push(chunk);
+  return Buffer.concat(chunks);
+}
 
 describe('docker.images', () => {
   test('inspect() gives the image by a short or a full reference, or undefined for an image that is not on the engine', async () => {
@@ -152,5 +192,185 @@ describe('docker.images', () => {
       JSON.parse(Buffer.from(header, 'base64url').toString()),
       auth,
     );
+  });
+
+  test('tag() gives the image a second name that inspect() and list() find, tag() of a missing image is an ImageNotFoundError, and remove() of the name resolves twice', async () => {
+    // Arrange
+    await using docker = await connectWithHello();
+    const run = randomUUID();
+    const name = `zukhruf-test-${run}:x`;
+    const missing = `zukhruf-missing-${run}:1`;
+    try {
+      const hello = await docker.images.inspect(HELLO);
+      // A second image on the engine, so a list that ignores the filter gives more than one ID.
+      if (!(await docker.images.inspect('alpine:3'))) {
+        await docker.images.pull('alpine:3');
+      }
+
+      // Act
+      await docker.images.tag(HELLO, name);
+      const tagged = await docker.images.inspect(name);
+      const listed = await docker.images.list({
+        filters: { reference: [name] },
+      });
+      const tagMissing = docker.images.tag(missing, `zukhruf-test-${run}:y`);
+      await Promise.allSettled([tagMissing]);
+      await docker.images.remove(name);
+      const removed = await docker.images.inspect(name);
+      await docker.images.remove(name);
+
+      // Assert
+      assert.equal(tagged?.Id, hello?.Id);
+      assert.deepEqual(
+        listed.map(({ Id }) => Id),
+        [hello?.Id],
+      );
+      await assert.rejects(tagMissing, (error) => {
+        assert.ok(error instanceof ImageNotFoundError);
+        assert.equal(error.image, missing);
+        assert.equal(error.status, 404);
+        return true;
+      });
+      assert.equal(removed, undefined);
+      assert.equal(
+        await docker.images.inspect(HELLO).then((image) => image?.Id),
+        hello?.Id,
+      );
+    } finally {
+      await removeOwn(docker, run, name);
+    }
+  });
+
+  test('save() and load() carry images: two removed names come back with the same ID', async () => {
+    // Arrange
+    await using docker = await connectWithHello();
+    const run = randomUUID();
+    const first = `zukhruf-test-${run}:x`;
+    const second = `zukhruf-test-${run}:y`;
+    try {
+      await docker.images.tag(HELLO, first);
+      await docker.images.tag(HELLO, second);
+      const saved = await docker.images.inspect(first);
+
+      // Act
+      const archive = await bytesOf(await docker.images.save([first, second]));
+      await docker.images.remove(first);
+      await docker.images.remove(second);
+      const removed = await Promise.all([
+        docker.images.inspect(first),
+        docker.images.inspect(second),
+      ]);
+      await docker.images.load(ReadableStream.from([archive]));
+      const loaded = await Promise.all([
+        docker.images.inspect(first),
+        docker.images.inspect(second),
+      ]);
+
+      // Assert
+      assert.deepEqual(removed, [undefined, undefined]);
+      assert.deepEqual(
+        loaded.map((image) => image?.Id),
+        [saved?.Id, saved?.Id],
+      );
+    } finally {
+      await removeOwn(docker, run, first, second);
+    }
+  });
+
+  test('load() of bytes that are not an image archive rejects with a DockerEngineError with no status', async () => {
+    // Arrange
+    await using docker = await Docker.connect({ environment: process.env });
+
+    // Act
+    const loading = docker.images.load(new Uint8Array(1024));
+
+    // Assert
+    await assert.rejects(loading, (error) => {
+      assert.ok(error instanceof DockerEngineError);
+      assert.equal(error.status, undefined);
+      assert.deepEqual(error.request, {
+        method: 'POST',
+        path: '/images/load',
+      });
+      return true;
+    });
+  });
+
+  test('push() of an image that is not on the engine rejects with ImageNotFoundError: the engine reports it in the progress after 200', async () => {
+    // Arrange
+    await using docker = await Docker.connect({ environment: process.env });
+    const missing = `zukhruf-missing-${randomUUID()}:1`;
+
+    // Act
+    const pushing = docker.images.push(missing, {
+      auth: { username: 'nobody', password: 'none' },
+    });
+
+    // Assert
+    await assert.rejects(pushing, (error) => {
+      assert.ok(error instanceof ImageNotFoundError);
+      assert.equal(error.image, missing);
+      assert.equal(error.status, undefined);
+      return true;
+    });
+  });
+
+  test('push() of an image that is on the engine to a registry that does not answer rejects with a DockerEngineError, not ImageNotFoundError', async () => {
+    // Arrange
+    await using docker = await connectWithHello();
+    const run = randomUUID();
+    // Nothing listens on port 1 of the engine's host, so the push fails in its progress.
+    const name = `localhost:1/zukhruf-test-${run}:x`;
+    try {
+      await docker.images.tag(HELLO, name);
+
+      // Act
+      const pushing = docker.images.push(name, {
+        auth: { username: 'nobody', password: 'none' },
+      });
+
+      // Assert
+      await assert.rejects(pushing, (error) => {
+        assert.ok(error instanceof DockerEngineError);
+        assert.equal(error instanceof ImageNotFoundError, false);
+        assert.equal(error.status, undefined);
+        return true;
+      });
+    } finally {
+      await removeOwn(docker, run, name);
+    }
+  });
+
+  test('remove() of an image that a container uses rejects with ImageInUseError', async () => {
+    // Arrange
+    await using docker = await connectWithHello();
+    const run = randomUUID();
+    const name = `zukhruf-test-${run}:x`;
+    try {
+      await docker.images.tag(HELLO, name);
+      await docker.containers.create({
+        Image: name,
+        Labels: { [TEST_LABEL]: run },
+      });
+      const image = await docker.images.inspect(name);
+      assert.ok(image);
+      // A name that another name shares only loses its tag, so the removal by ID meets the container.
+      await docker.images.remove(name);
+
+      // Act: without force, the engine refuses this removal, so the shared hello-world stays.
+      const removing = docker.images.remove(image.Id);
+
+      // Assert
+      await assert.rejects(removing, (error) => {
+        assert.ok(error instanceof ImageInUseError);
+        assert.equal(error.image, image.Id);
+        assert.equal(error.status, 409);
+        assert.match(error.message, /container/);
+        return true;
+      });
+      assert.equal((await docker.images.inspect(HELLO))?.Id, image.Id);
+    } finally {
+      await removeOwn(docker, run, name);
+    }
   });
 });

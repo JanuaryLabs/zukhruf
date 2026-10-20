@@ -1,6 +1,6 @@
 # @zukhruf/docker
 
-> **Status: in progress.** Engine selection (`Docker.connect()`, `Docker.contexts()`), `docker.info()`, the API version, the connections over a Unix socket, a Windows named pipe and SSH, the containers and their handles (`create()`, `createOrGet()`, `find()`, `list()`, `run()`, and `Container` and `OwnedContainer`), container processes (`exec()`, `spawn()` and `attach()`), the logs (`logs()` and `followLogs()`), the files (`stat()`, `readFile()`, `writeFiles()`, `getArchive()` and `putArchive()`), `docker.events()`, `images.inspect()`, `images.pull()`, and the errors `ContainerNotFoundError`, `ContainerNotRunningError`, `ContainerRunningError`, `NameConflictError`, `ImageNotFoundError`, `NetworkNotFoundError`, `BindSourceNotFoundError`, `PathNotFoundError`, `NotAFileError` and `ReadOnlyPathError` work. The rest of this README is the designed API, and the next releases add it. A Windows named pipe is not proved yet (backlog #2753). The decisions are in the [ADRs](./docs/adr/). The package leads, and the repositories that use Docker change to fit it ([ADR 0003](./docs/adr/0003-the-package-leads-and-the-repositories-change.md)).
+> **Status: implemented.** Each call of the `## API` block works, and the tests run it on Docker Desktop (API 1.56) and on an SSH engine (API 1.51). A Windows named pipe is not proved yet (backlog #2753). The decisions are in the [ADRs](./docs/adr/). The package leads, and the repositories that use Docker change to fit it ([ADR 0003](./docs/adr/0003-the-package-leads-and-the-repositories-change.md)).
 
 A client for the Docker Engine API on Node.js. It selects the engine that the Docker CLI selects, and it sends HTTP requests to that engine with `node:http`: through a Unix socket, a Windows named pipe, or SSH. It needs no Docker CLI on the `PATH`, and it has no dependencies. Thus a desktop app that starts from the macOS Dock can use it, and so can a test, a sandbox or a deploy tool.
 
@@ -64,26 +64,26 @@ A product with its own rule selects from this list. For example, a scan for data
 
 An error has its own class when a caller does something different after it: start the engine, pull the image, start the container, pick another name ([ADR 0007](./docs/adr/0007-an-error-has-its-own-class-when-the-caller-handles-it-differently.md)). Each class comes from the request and its HTTP status. When one status has two meanings, the package sends one more request to tell them apart.
 
-| Class                      | When                                                                                                                                                             | What the caller does next                          |
-| -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
-| `ConnectionFailedError`    | The socket does not exist, the engine refuses the connection, or `ssh` cannot log in                                                                             | Treat the engine as absent, or ask to start Docker |
-| `UnsupportedEngineError`   | The engine's highest API version is lower than the lowest one that the package supports                                                                          | Ask to update Docker                               |
-| `UnsupportedHostError`     | The host is not `unix://`, `npipe://` or `ssh://`, for example `tcp://`                                                                                          | Skip that context, or give another host            |
-| `ContextNotFoundError`     | `Docker.connect({ context })` names a context that the context store does not have                                                                               | Pick another context from `Docker.contexts()`      |
-| `ContainerNotFoundError`   | A request about a container gets 404                                                                                                                             | Create the container again                         |
-| `ContainerNotRunningError` | An exec or a kill gets 409, or an attach finds the container exited or paused. `state` comes from an inspect: `created`, `exited`, `paused` …                    | Start or unpause it, then try again                |
-| `ContainerRunningError`    | A removal without `force` gets 409, and an inspect shows that the container runs                                                                                 | Stop it first, or remove it with `force`           |
-| `NameConflictError`        | A create of a container, network or volume finds the name taken                                                                                                  | Use `createOrGet()`, or another name               |
-| `ImageNotFoundError`       | A create, a pull or a push gets 404                                                                                                                              | Pull or build the image; check the name or `auth`  |
-| `NetworkNotFoundError`     | A start gets 404 (500 on an engine in swarm mode) while the container exists, and a lookup of its networks finds one missing; a request about a network gets 404 | Create the network first                           |
-| `VolumeNotFoundError`      | A request about a volume gets 404                                                                                                                                | Create the volume again                            |
-| `BindSourceNotFoundError`  | A create or a start refuses a bind mount whose `source` does not exist on the engine's host                                                                      | Tell the user which host path is missing           |
-| `VolumeInUseError`         | A volume removal gets 409                                                                                                                                        | Remove its containers first, or wait and try again |
-| `NetworkInUseError`        | A network removal gets 403 while containers are connected                                                                                                        | Disconnect them first                              |
-| `ImageInUseError`          | An image removal gets 409                                                                                                                                        | Remove its containers first, or use `force`        |
-| `PathNotFoundError`        | A file request gets 404 and the container exists                                                                                                                 | Use a default, or create the file                  |
-| `NotAFileError`            | `readFile()` finds a directory, a link or another kind of entry. `kind` names it                                                                                 | Use `getArchive()` for the tree                    |
-| `ReadOnlyPathError`        | The engine refuses an extraction, and an inspect shows that the directory is on a read-only root filesystem or in a read-only mount                              | Write under a writable mount, or use `exec()`      |
+| Class                      | When                                                                                                                                          | What the caller does next                          |
+| -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
+| `ConnectionFailedError`    | The socket does not exist, the engine refuses the connection, or `ssh` cannot log in                                                          | Treat the engine as absent, or ask to start Docker |
+| `UnsupportedEngineError`   | The engine's highest API version is lower than the lowest one that the package supports                                                       | Ask to update Docker                               |
+| `UnsupportedHostError`     | The host is not `unix://`, `npipe://` or `ssh://`, for example `tcp://`                                                                       | Skip that context, or give another host            |
+| `ContextNotFoundError`     | `Docker.connect({ context })` names a context that the context store does not have                                                            | Pick another context from `Docker.contexts()`      |
+| `ContainerNotFoundError`   | A request about a container gets 404                                                                                                          | Create the container again                         |
+| `ContainerNotRunningError` | An exec or a kill gets 409, or an attach finds the container exited or paused. `state` comes from an inspect: `created`, `exited`, `paused` … | Start or unpause it, then try again                |
+| `ContainerRunningError`    | A removal without `force` gets 409, and an inspect shows that the container runs                                                              | Stop it first, or remove it with `force`           |
+| `NameConflictError`        | A create of a container, network or volume finds the name taken                                                                               | Use `createOrGet()`, or another name               |
+| `ImageNotFoundError`       | A create, a pull or a tag gets 404, or a push reports an error in its progress and an inspect does not find the image                         | Pull or build the image; check the name or `auth`  |
+| `NetworkNotFoundError`     | A start or a connect gets 404 (500 on an engine in swarm mode), and a lookup finds the network missing; a request about a network gets 404    | Create the network first                           |
+| `VolumeNotFoundError`      | A request about a volume gets 404                                                                                                             | Create the volume again                            |
+| `BindSourceNotFoundError`  | A create or a start refuses a bind mount whose `source` does not exist on the engine's host                                                   | Tell the user which host path is missing           |
+| `VolumeInUseError`         | A volume removal gets 409                                                                                                                     | Remove its containers first, or wait and try again |
+| `NetworkInUseError`        | A network removal gets 403 while running containers are connected                                                                             | Disconnect them first                              |
+| `ImageInUseError`          | An image removal gets 409                                                                                                                     | Remove its containers first, or use `force`        |
+| `PathNotFoundError`        | A file request gets 404 and the container exists                                                                                              | Use a default, or create the file                  |
+| `NotAFileError`            | `readFile()` finds a directory, a link or another kind of entry. `kind` names it                                                              | Use `getArchive()` for the tree                    |
+| `ReadOnlyPathError`        | The engine refuses an extraction, and an inspect shows that the directory is on a read-only root filesystem or in a read-only mount           | Write under a writable mount, or use `exec()`      |
 
 Each class extends a base class, so a broad catch still works. `DockerError` is the base of every error of the package. `DockerEngineError` is the base of every answer of the engine that is an error. It has `status` and `request` (the `method` and `path` of the request), and its `message` is the message of the engine. The base keeps the request apart in `request`, so `path` on `PathNotFoundError`, `NotAFileError` and `ReadOnlyPathError` is the path in the container. An error with no class of its own, such as an error in the progress of a pull, is a `DockerEngineError`.
 
@@ -359,6 +359,11 @@ await network.connect(postgres, { Aliases: ['db'] });
 await network.disconnect(postgres);
 ```
 
+- From API 1.44, the engine refuses a create with a taken name. Thus `networks.create()` rejects with `NameConflictError`, and `networks.createOrGet()` gives `{ created: false, network }` with the network that exists.
+- Only a running container has an endpoint on a network. Thus only a running container keeps a network from its removal, and `NetworkInUseError` gives the IDs of the running containers.
+- The engine keeps the network of a created container for its start. Thus a connect of a created container to a missing network resolves, and `start()` then rejects with `NetworkNotFoundError`.
+- `remove()` of `bridge`, `host` or `none` rejects with `DockerEngineError` and 403: the engine never removes a pre-defined network.
+
 ## Images
 
 Images have no owner: an image is a cache that each container on the engine shares, so no handle removes one on disposal.
@@ -385,7 +390,9 @@ await docker.images.load(Readable.toWeb(createReadStream('alpine.tar')));
 await docker.images.remove('alpine:3');
 ```
 
-`pull()`, `push()` and `load()` read the progress of the engine until the end. They reject with `DockerEngineError` when the engine reports an error in the progress. Then `status` is `undefined`, because the HTTP status was 200. `auth` holds explicit credentials. The package runs no credential helper, because a helper is a program on the `PATH`.
+`pull()`, `push()` and `load()` read the progress of the engine until the end. They reject with `DockerEngineError` when the engine reports an error in the progress. Then `status` is `undefined`, because the HTTP status was 200. The engine answers a push of an image that it does not have with 200 too, and reports the error in the progress. Thus `push()` inspects the image after an error in the progress: when the engine does not have the image, `push()` rejects with `ImageNotFoundError`.
+
+`images.remove()` of one name of an image that has more names removes only that name. A removal of an image that a container uses, or a removal by ID of an image with more than one name, rejects with `ImageInUseError`. `auth` holds explicit credentials. The package runs no credential helper, because a helper is a program on the `PATH`.
 
 ## Events
 

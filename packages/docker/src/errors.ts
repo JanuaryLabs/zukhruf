@@ -166,7 +166,7 @@ export class ContainerRunningError extends DockerEngineError {
   }
 }
 
-/** A create got 404 and the image is not on the engine, or a pull got 404. */
+/** A create got 404 and the image is not on the engine, a pull got 404, or a push found no image of the reference on the engine. */
 export class ImageNotFoundError extends DockerEngineError {
   readonly image: string;
 
@@ -182,7 +182,7 @@ export class ImageNotFoundError extends DockerEngineError {
   }
 }
 
-/** A start got 404 while the container exists, and a lookup of its networks found one missing. */
+/** A start got 404 while the container exists, and a lookup of its networks found one missing; or a request about a network got 404. */
 export class NetworkNotFoundError extends DockerEngineError {
   readonly network: string;
 
@@ -195,6 +195,74 @@ export class NetworkNotFoundError extends DockerEngineError {
     super(message, answer, options);
     this.name = 'NetworkNotFoundError';
     this.network = network;
+  }
+}
+
+/** A request about a volume got 404. */
+export class VolumeNotFoundError extends DockerEngineError {
+  readonly volume: string;
+
+  constructor(
+    message: string,
+    answer: EngineAnswer,
+    volume: string,
+    options?: ErrorOptions,
+  ) {
+    super(message, answer, options);
+    this.name = 'VolumeNotFoundError';
+    this.volume = volume;
+  }
+}
+
+/** A volume removal got 409: a container uses the volume. */
+export class VolumeInUseError extends DockerEngineError {
+  readonly volume: string;
+
+  constructor(
+    message: string,
+    answer: EngineAnswer,
+    volume: string,
+    options?: ErrorOptions,
+  ) {
+    super(message, answer, options);
+    this.name = 'VolumeInUseError';
+    this.volume = volume;
+  }
+}
+
+/** A network removal got 403 while containers are connected. */
+export class NetworkInUseError extends DockerEngineError {
+  readonly network: string;
+  /** The IDs of the connected containers, from an inspect after the 403. */
+  readonly containers: string[];
+
+  constructor(
+    message: string,
+    answer: EngineAnswer,
+    network: string,
+    containers: string[],
+    options?: ErrorOptions,
+  ) {
+    super(message, answer, options);
+    this.name = 'NetworkInUseError';
+    this.network = network;
+    this.containers = containers;
+  }
+}
+
+/** An image removal got 409. */
+export class ImageInUseError extends DockerEngineError {
+  readonly image: string;
+
+  constructor(
+    message: string,
+    answer: EngineAnswer,
+    image: string,
+    options?: ErrorOptions,
+  ) {
+    super(message, answer, options);
+    this.name = 'ImageInUseError';
+    this.image = image;
   }
 }
 

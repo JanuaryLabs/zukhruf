@@ -304,6 +304,9 @@ describe('the files of a container', () => {
     // Arrange
     await using docker = await connect();
     const run = randomUUID();
+    await using data = await docker.volumes.create({
+      Labels: { [TEST_LABEL]: run },
+    });
     try {
       const container = await docker.containers.create({
         Image: IMAGE,
@@ -311,13 +314,7 @@ describe('the files of a container', () => {
         Labels: { [TEST_LABEL]: run },
         HostConfig: {
           ReadonlyRootfs: true,
-          Mounts: [
-            {
-              Type: 'volume',
-              Target: '/data',
-              VolumeOptions: { Labels: { [TEST_LABEL]: run } },
-            },
-          ],
+          Mounts: [{ Type: 'volume', Source: data.name, Target: '/data' }],
         },
       });
 

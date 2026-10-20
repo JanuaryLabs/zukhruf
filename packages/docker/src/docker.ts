@@ -11,9 +11,11 @@ import { EngineClient } from './engine-client.ts';
 import { parseHost } from './host.ts';
 import { Images } from './images.ts';
 import { ndjson } from './ndjson.ts';
+import { Networks } from './networks.ts';
 import type { CancelOptions, Filters } from './options.ts';
 import { SshTransport } from './ssh-connection.ts';
 import { SocketTransport } from './transport.ts';
+import { Volumes } from './volumes.ts';
 
 function isEventMessage(value: unknown): value is EngineApi.EventMessage {
   return typeof value === 'object' && value !== null;
@@ -33,6 +35,8 @@ export class Docker implements AsyncDisposable {
   /** Sends the Docker CLI to this engine: { DOCKER_HOST, DOCKER_CONTEXT: undefined }. */
   readonly cliEnvironment: Readonly<Record<string, string | undefined>>;
   readonly containers: Containers;
+  readonly volumes: Volumes;
+  readonly networks: Networks;
   readonly images: Images;
   readonly #client: EngineClient;
 
@@ -52,6 +56,8 @@ export class Docker implements AsyncDisposable {
     this.#client = client;
     this.images = new Images(client);
     this.containers = new Containers(client, this.images);
+    this.volumes = new Volumes(client);
+    this.networks = new Networks(client);
   }
 
   /** Selects the engine in the order of the Docker CLI, pings it and negotiates the API version. */
@@ -101,7 +107,7 @@ export class Docker implements AsyncDisposable {
    */
   async *events(
     options: CancelOptions & { since?: number; filters?: Filters } = {},
-  ): AsyncGenerator<EngineApi.EventMessage> {
+  ): AsyncIterable<EngineApi.EventMessage> {
     const { since, filters, signal } = options;
     const response = await this.#client.stream('GET', '/events', {
       query: { since, filters },

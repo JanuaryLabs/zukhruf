@@ -11,10 +11,10 @@ import type { Filters } from './options.ts';
 import { SshExitError } from './ssh-connection.ts';
 import type { Transport } from './transport.ts';
 
-/** The query of a request. `filters` goes to the engine as JSON. */
+/** The query of a request. An array repeats the parameter; `filters` goes to the engine as JSON. */
 export type Query = Record<
   string,
-  string | number | boolean | Filters | undefined
+  string | number | boolean | string[] | Filters | undefined
 >;
 
 export interface EngineRequestOptions {
@@ -71,6 +71,10 @@ function search(query: Query | undefined): string {
   const parameters = new URLSearchParams();
   for (const [key, value] of Object.entries(query ?? {})) {
     if (value === undefined) continue;
+    if (Array.isArray(value)) {
+      for (const each of value) parameters.append(key, each);
+      continue;
+    }
     parameters.set(
       key,
       typeof value === 'object' ? JSON.stringify(value) : String(value),

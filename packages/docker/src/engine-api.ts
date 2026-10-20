@@ -309,3 +309,112 @@ export interface ContainerPathStat {
   /** The target of a symlink; '' for each other entry. */
   linkTarget: string;
 }
+
+/** A volume, as GET /volumes/{name} gives it. */
+export interface Volume {
+  Name: string;
+  Driver: string;
+  Mountpoint: string;
+  CreatedAt?: string;
+  Status?: Record<string, unknown>;
+  Labels: Record<string, string> | null;
+  Scope: 'local' | 'global';
+  Options: Record<string, string> | null;
+  UsageData?: { Size: number; RefCount: number } | null;
+}
+
+/** The body of POST /volumes/create. The engine gives the volume a name when it has none. */
+export interface VolumeCreateRequest {
+  Name?: string;
+  Driver?: string;
+  DriverOpts?: Record<string, string>;
+  Labels?: Record<string, string>;
+}
+
+/** The answer of GET /volumes. */
+export interface VolumeListResponse {
+  Volumes: Volume[] | null;
+  Warnings: string[] | null;
+}
+
+/** The address management of a network. */
+export interface IPAM {
+  Driver?: string;
+  Config?: {
+    Subnet?: string;
+    IPRange?: string;
+    Gateway?: string;
+    AuxiliaryAddresses?: Record<string, string>;
+  }[];
+  Options?: Record<string, string>;
+}
+
+/** The body of POST /networks/create. */
+export interface NetworkCreateRequest {
+  Name: string;
+  Driver?: string;
+  Scope?: string;
+  Internal?: boolean;
+  Attachable?: boolean;
+  Ingress?: boolean;
+  ConfigOnly?: boolean;
+  ConfigFrom?: { Network?: string };
+  IPAM?: IPAM;
+  EnableIPv4?: boolean;
+  EnableIPv6?: boolean;
+  Options?: Record<string, string>;
+  Labels?: Record<string, string>;
+}
+
+/** A network, as GET /networks gives each one. */
+export interface NetworkSummary {
+  Name: string;
+  Id: string;
+  Created?: string;
+  Scope?: string;
+  Driver?: string;
+  EnableIPv4?: boolean;
+  EnableIPv6?: boolean;
+  IPAM?: IPAM;
+  Internal?: boolean;
+  Attachable?: boolean;
+  Ingress?: boolean;
+  ConfigFrom?: { Network?: string };
+  ConfigOnly?: boolean;
+  Options?: Record<string, string>;
+  Labels?: Record<string, string>;
+}
+
+/** A network, as GET /networks/{id} gives it: the summary and the containers that are connected. */
+export interface NetworkInspect extends NetworkSummary {
+  /** The connected containers, by their IDs. Only a running container has an endpoint. */
+  Containers?: Record<
+    string,
+    {
+      Name?: string;
+      EndpointID?: string;
+      MacAddress?: string;
+      IPv4Address?: string;
+      IPv6Address?: string;
+    }
+  >;
+}
+
+/** The body of POST /networks/{id}/connect. */
+export interface NetworkConnectRequest {
+  Container: string;
+  EndpointConfig?: EndpointSettings;
+}
+
+/** One image of GET /images/json. */
+export interface ImageSummary {
+  Id: string;
+  ParentId: string;
+  RepoTags: string[];
+  RepoDigests: string[];
+  Created: number;
+  Size: number;
+  SharedSize: number;
+  Labels: Record<string, string> | null;
+  Containers: number;
+}
