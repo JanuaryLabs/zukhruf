@@ -1,5 +1,6 @@
 import { setTimeout } from 'node:timers/promises';
 
+import { ContainerProcess } from './container-process.ts';
 import type * as EngineApi from './engine-api.ts';
 import {
   type EngineClient,
@@ -12,13 +13,26 @@ import {
   ContainerNotFoundError,
   ContainerNotRunningError,
   ContainerRunningError,
-  type DockerEngineError,
+  DockerEngineError,
   ImageNotFoundError,
   NameConflictError,
   NetworkNotFoundError,
 } from './errors.ts';
 import type { Images } from './images.ts';
+import { type OutputChunk, outputChunks } from './multiplexed-stream.ts';
 import type { CancelOptions, Filters } from './options.ts';
+import { type ExecResult, type Output, readOutput } from './output.ts';
+
+/** The query of the logs, as the Engine API takes it. */
+export interface LogQuery {
+  tail?: number | 'all';
+  /** Seconds since the Unix epoch. */
+  since?: number;
+  timestamps?: boolean;
+}
+
+/** The time between two inspects of an exec whose output ended while the engine still reports it running. */
+const EXEC_EXIT_DELAY_MS = 10;
 
 /** The result of createOrGet(): an owned handle when this call created the resource. */
 export type Created<Key extends string, Owned, Found> =
@@ -175,14 +189,9 @@ export class Container {
       signal: options.signal,
     });
     if (response.status === 409) {
-      const state = (await this.inspect(options)).State?.Status ?? '';
-      const error = this.#client.error(response, method, path);
-      throw new ContainerNotRunningError(
-        error.message,
-        { status: 409, method, path },
-        this.id,
-        state,
-        { cause: error },
+      throw await this.#notRunning(
+        this.#client.error(response, method, path),
+        options,
       );
     }
     this.#throwUnless(response, method, path);
@@ -273,6 +282,208 @@ export class Container {
     };
   }
 
+  /** The logs until now. */
+  async logs(options: CancelOptions & LogQuery = {}): Promise<Output> {
+    return readOutput(this.#logs(false, options));
+  }
+
+  /** The logs as the container writes them. The iteration ends when the container stops. */
+  followLogs(
+    options: CancelOptions & LogQuery = {},
+  ): AsyncIterable<OutputChunk> {
+    return this.#logs(true, options);
+  }
+
+  async *#logs(
+    follow: boolean,
+    options: CancelOptions & LogQuery,
+  ): AsyncGenerator<OutputChunk> {
+    const { signal, tail, since, timestamps } = options;
+    const method = 'GET';
+    const path = `${this.#path}/logs`;
+    const response = await this.#client
+      .stream(method, path, {
+        query: {
+          stdout: 1,
+          stderr: 1,
+          follow: follow ? 1 : 0,
+          tail,
+          since,
+          timestamps,
+        },
+        signal,
+      })
+      .catch((error: unknown) => {
+        throw this.#notFoundOr(error, method, path);
+      });
+    yield* outputChunks(response, response.headers['content-type'] ?? '');
+  }
+
+  /** Runs a command in the container and reads its output to the end. stdin is sent, and then the input ends. */
+  async exec(
+    body: EngineApi.ExecConfig,
+    options: CancelOptions & { stdin?: string | Uint8Array } = {},
+  ): Promise<ExecResult> {
+    const { stdin, signal } = options;
+    const process = await this.spawn(body, {
+      ...options,
+      stdin: stdin !== undefined,
+    });
+    const input = process.stdin;
+    if (input === undefined || stdin === undefined) return process.collect();
+    const bytes =
+      typeof stdin === 'string' ? new TextEncoder().encode(stdin) : stdin;
+    const writing = (async () => {
+      const writer = input.getWriter();
+      await writer.write(bytes);
+      await writer.close();
+    })();
+    const [result] = await Promise.all([process.collect(), writing]);
+    return result;
+  }
+
+  /** Runs a command in the container and gives its container process while it runs. */
+  async spawn(
+    body: EngineApi.ExecConfig,
+    options: CancelOptions & { stdin?: boolean } = {},
+  ): Promise<ContainerProcess> {
+    const { signal } = options;
+    const stdin = options.stdin === true;
+    const method = 'POST';
+    const path = `${this.#path}/exec`;
+    const created = await this.#client.exchange(method, path, {
+      body: {
+        ...body,
+        AttachStdin: stdin,
+        AttachStdout: true,
+        AttachStderr: true,
+      },
+      signal,
+    });
+    if (created.status === 409) {
+      throw await this.#notRunning(
+        this.#client.error(created, method, path),
+        options,
+      );
+    }
+    this.#throwUnless(created, method, path);
+    const { Id } = parseBody<{ Id: string }>(created);
+    const exec = `/exec/${encodeURIComponent(Id)}`;
+    const connection = await this.#client.hijack('POST', `${exec}/start`, {
+      body: { Detach: false, Tty: body.Tty ?? false },
+      signal,
+    });
+    return new ContainerProcess(connection, {
+      stdin,
+      signal,
+      exitCode: async (outputEnded) => {
+        await outputEnded;
+        for (;;) {
+          const inspect =
+            await this.#client.json<EngineApi.ExecInspectResponse>(
+              'GET',
+              `${exec}/json`,
+              { signal },
+            );
+          if (!inspect.Running && inspect.ExitCode !== null) {
+            return inspect.ExitCode;
+          }
+          await setTimeout(EXEC_EXIT_DELAY_MS, undefined, { signal });
+        }
+      },
+    });
+  }
+
+  /**
+   * Attaches to the output of the container. For a created container, the
+   * exit code is the code of its next exit, so attach before start(). For a
+   * running container, it is the code when the container stops. An exited or
+   * a paused container rejects with ContainerNotRunningError: Moby gives no
+   * 409 for an attach to an exited container, so the state of an inspect
+   * decides.
+   */
+  async attach(
+    options: CancelOptions & { stdin?: boolean } = {},
+  ): Promise<ContainerProcess> {
+    const { signal } = options;
+    const stdin = options.stdin === true;
+    const method = 'POST';
+    const path = `${this.#path}/attach`;
+    const state = (await this.inspect(options)).State?.Status ?? '';
+    if (state !== 'created' && state !== 'running') {
+      throw new ContainerNotRunningError(
+        `The container ${this.id} is ${state}.`,
+        { status: undefined, method, path },
+        this.id,
+        state,
+      );
+    }
+    // The engine sends the headers of a wait when the wait is in place, so a
+    // start() after attach() resolves cannot pass before it.
+    const waiting = await this.#client
+      .stream('POST', `${this.#path}/wait`, {
+        query: { condition: state === 'created' ? 'next-exit' : 'not-running' },
+        signal,
+      })
+      .catch((error: unknown) => {
+        throw this.#notFoundOr(error, 'POST', `${this.#path}/wait`);
+      });
+    const connection = await this.#client
+      .hijack(method, path, {
+        query: { stream: 1, stdout: 1, stderr: 1, stdin: stdin ? 1 : 0 },
+        signal,
+      })
+      .catch(async (error: unknown) => {
+        waiting.destroy();
+        if (error instanceof DockerEngineError && error.status === 409) {
+          throw await this.#notRunning(error, options);
+        }
+        throw this.#notFoundOr(error, method, path);
+      });
+    return new ContainerProcess(connection, {
+      stdin,
+      signal,
+      exitCode: async (outputEnded) => {
+        outputEnded.catch(() => waiting.destroy());
+        const chunks: Buffer[] = [];
+        for await (const chunk of waiting) chunks.push(Buffer.from(chunk));
+        const answer: EngineApi.ContainerWaitResponse = JSON.parse(
+          Buffer.concat(chunks).toString('utf8'),
+        );
+        return answer.StatusCode;
+      },
+    });
+  }
+
+  /** A DockerEngineError with 404 as a ContainerNotFoundError; each other error as it is. */
+  #notFoundOr(error: unknown, method: string, path: string): unknown {
+    if (!(error instanceof DockerEngineError) || error.status !== 404) {
+      return error;
+    }
+    return new ContainerNotFoundError(
+      error.message,
+      { status: 404, method, path },
+      this.id,
+      { cause: error },
+    );
+  }
+
+  /** The ContainerNotRunningError of a 409, with the state of an inspect. */
+  async #notRunning(
+    error: DockerEngineError,
+    options: CancelOptions,
+  ): Promise<ContainerNotRunningError> {
+    const state = (await this.inspect(options)).State?.Status ?? '';
+    const { method, path } = error;
+    return new ContainerNotRunningError(
+      error.message,
+      { status: 409, method, path },
+      this.id,
+      state,
+      { cause: error },
+    );
+  }
+
   async #post(
     action: string,
     query: Record<string, number | undefined>,
@@ -353,6 +564,25 @@ export class Containers {
       }
     }
     throw bindSourceOr(error);
+  }
+
+  /**
+   * Creates the container, attaches to its output, starts it, waits for its
+   * end, and removes it. A non-zero exit code is data. A failure and a cancel
+   * also remove the container.
+   */
+  async run(
+    body: EngineApi.ContainerCreateRequest,
+    options: CancelOptions & { name?: string; platform?: string } = {},
+  ): Promise<ExecResult> {
+    const container = await this.create(body, options);
+    try {
+      const process = await container.attach(options);
+      await container.start(options);
+      return await process.collect();
+    } finally {
+      await container.remove({ force: true, v: true });
+    }
   }
 
   /** Creates the container, or gives the one that has the name. The container that exists wins. */

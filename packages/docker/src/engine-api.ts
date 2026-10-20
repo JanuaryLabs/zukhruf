@@ -236,3 +236,65 @@ export type AuthConfig =
       email?: string;
     }
   | { identitytoken: string; serveraddress?: string };
+
+/**
+ * The body of POST /containers/{id}/exec, without the fields that the package
+ * sets: AttachStdin, AttachStdout, AttachStderr and Detach.
+ */
+export interface ExecConfig {
+  Cmd: string[];
+  Tty?: boolean;
+  /** [height, width] of the TTY. */
+  ConsoleSize?: [number, number] | null;
+  DetachKeys?: string;
+  Env?: string[];
+  Privileged?: boolean;
+  User?: string;
+  WorkingDir?: string;
+}
+
+/** The answer of GET /exec/{id}/json. */
+export interface ExecInspectResponse {
+  ID: string;
+  ContainerID?: string;
+  Running: boolean;
+  /** null while the command runs. */
+  ExitCode: number | null;
+  Pid?: number;
+  OpenStdin?: boolean;
+  OpenStdout?: boolean;
+  OpenStderr?: boolean;
+  CanRemove?: boolean;
+  DetachKeys?: string;
+  ProcessConfig?: {
+    privileged?: boolean;
+    user?: string;
+    tty?: boolean;
+    entrypoint?: string;
+    arguments?: string[];
+  };
+}
+
+/** One message of GET /events. */
+export interface EventMessage {
+  Type?:
+    | 'builder'
+    | 'config'
+    | 'container'
+    | 'daemon'
+    | 'image'
+    | 'network'
+    | 'node'
+    | 'plugin'
+    | 'secret'
+    | 'service'
+    | 'volume';
+  /** Such as 'create', 'start', 'die' or 'health_status: healthy'. */
+  Action?: string;
+  Actor?: { ID?: string; Attributes?: Record<string, string> };
+  scope?: 'local' | 'swarm';
+  /** Seconds since the Unix epoch. */
+  time?: number;
+  /** Nanoseconds since the Unix epoch. */
+  timeNano?: number;
+}

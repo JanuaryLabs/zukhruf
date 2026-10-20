@@ -1,4 +1,5 @@
 import type { IncomingHttpHeaders, IncomingMessage } from 'node:http';
+import type { Duplex } from 'node:stream';
 
 import { ConnectionFailedError, DockerEngineError } from './errors.ts';
 import type { Filters } from './options.ts';
@@ -24,6 +25,23 @@ export interface EngineResponse {
   headers: IncomingHttpHeaders;
   body: Buffer;
 }
+
+/** A connection that the engine upgraded to a two-way stream of bytes. */
+export interface HijackedConnection {
+  /** The output of the engine, then the input to the engine. */
+  readonly socket: Duplex;
+  /** The bytes of the output that came with the answer, before the first read of the socket. */
+  readonly head: Buffer;
+  /** The Content-Type of the answer: application/vnd.docker.multiplexed-stream or application/vnd.docker.raw-stream. */
+  readonly contentType: string;
+  /** Ends the input through the end of input of the transport. The output stays open. */
+  endInput(): void;
+}
+
+/** What #open gives: an answer, or an answer that upgraded the connection. */
+type Opened =
+  | { response: IncomingMessage; upgrade?: never }
+  | { response: IncomingMessage; upgrade: { socket: Duplex; head: Buffer } };
 
 /** The socket errors that mean the engine did not accept the connection. ENOENT is also an absent `ssh`. */
 const CONNECTION_FAILURES = new Set([
@@ -127,7 +145,7 @@ export class EngineClient {
     path: string,
     options: EngineRequestOptions = {},
   ): Promise<EngineResponse> {
-    const response = await this.#open(method, path, options);
+    const { response } = await this.#open(method, path, options);
     return {
       status: response.statusCode ?? 0,
       headers: response.headers,
@@ -145,11 +163,48 @@ export class EngineClient {
     path: string,
     options: EngineRequestOptions = {},
   ): Promise<IncomingMessage> {
-    const response = await this.#open(method, path, options);
+    const { response } = await this.#open(method, path, options);
     const status = response.statusCode ?? 0;
     if (status >= 200 && status <= 299) return response;
     const body = await readAll(response);
     throw this.error({ status, headers: response.headers, body }, method, path);
+  }
+
+  /**
+   * Sends a request that the engine upgrades to a hijacked connection, for an
+   * attach and for the start of an exec. An answer without an upgrade
+   * rejects with DockerEngineError.
+   */
+  async hijack(
+    method: string,
+    path: string,
+    options: EngineRequestOptions = {},
+  ): Promise<HijackedConnection> {
+    const { response, upgrade } = await this.#open(
+      method,
+      path,
+      {
+        ...options,
+        headers: { ...options.headers, Connection: 'Upgrade', Upgrade: 'tcp' },
+      },
+      true,
+    );
+    if (upgrade === undefined) {
+      const body = await readAll(response);
+      throw this.error(
+        { status: response.statusCode ?? 0, headers: response.headers, body },
+        method,
+        path,
+      );
+    }
+    const { socket, head } = upgrade;
+    const transport = this.#transport;
+    return {
+      socket,
+      head,
+      contentType: response.headers['content-type'] ?? '',
+      endInput: () => transport.endInput(socket),
+    };
   }
 
   /** The DockerEngineError of an answer that is not 2xx. */
@@ -169,13 +224,13 @@ export class EngineClient {
     method: string,
     path: string,
     { query, body, headers, signal }: EngineRequestOptions,
-  ): Promise<IncomingMessage> {
+    upgrades = false,
+  ): Promise<Opened> {
     signal?.throwIfAborted();
     const prefix =
       this.#apiVersion === undefined ? '' : `/v${this.#apiVersion}`;
     const payload = body === undefined ? undefined : JSON.stringify(body);
-    const { promise, resolve, reject } =
-      Promise.withResolvers<IncomingMessage>();
+    const { promise, resolve, reject } = Promise.withResolvers<Opened>();
     const request = this.#transport.request({
       method,
       path: `${prefix}${path}${search(query)}`,
@@ -210,8 +265,15 @@ export class EngineClient {
     request.on('response', (response) => {
       responses.push(response);
       response.once('close', release);
-      resolve(response);
+      resolve({ response });
     });
+    if (upgrades) {
+      // The caller owns the socket after the upgrade, and its signal too.
+      request.on('upgrade', (response, socket, head) => {
+        release();
+        resolve({ response, upgrade: { socket, head } });
+      });
+    }
     request.end(payload);
     try {
       return await promise;

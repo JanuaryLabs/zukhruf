@@ -10,9 +10,14 @@ import type * as EngineApi from './engine-api.ts';
 import { EngineClient } from './engine-client.ts';
 import { parseHost } from './host.ts';
 import { Images } from './images.ts';
-import type { CancelOptions } from './options.ts';
+import { ndjson } from './ndjson.ts';
+import type { CancelOptions, Filters } from './options.ts';
 import { SshTransport } from './ssh-connection.ts';
 import { SocketTransport, type Transport } from './transport.ts';
+
+function isEventMessage(value: unknown): value is EngineApi.EventMessage {
+  return typeof value === 'object' && value !== null;
+}
 
 /** A context or a host, never both. */
 export type ConnectOptions = CancelOptions & { environment?: Environment } & (
@@ -60,7 +65,7 @@ export class Docker implements AsyncDisposable {
     const transport =
       parsed.kind === 'ssh'
         ? new SshTransport(parsed.url)
-        : new SocketTransport(parsed.socketPath);
+        : new SocketTransport(parsed.kind, parsed.socketPath);
     try {
       const unversioned = new EngineClient(engine.host, transport);
       const ping = await unversioned.request('GET', '/_ping', { signal });
@@ -91,6 +96,24 @@ export class Docker implements AsyncDisposable {
 
   async info(options: CancelOptions = {}): Promise<EngineApi.SystemInfo> {
     return this.#client.json<EngineApi.SystemInfo>('GET', '/info', options);
+  }
+
+  /**
+   * The events of the engine as they happen, on a connection of their own.
+   * The iteration ends only when the signal aborts, and then it rejects with
+   * the reason of the signal.
+   */
+  async *events(
+    options: CancelOptions & { since?: number; filters?: Filters } = {},
+  ): AsyncGenerator<EngineApi.EventMessage> {
+    const { since, filters, signal } = options;
+    const response = await this.#client.stream('GET', '/events', {
+      query: { since, filters },
+      signal,
+    });
+    for await (const event of ndjson(response)) {
+      if (isEventMessage(event)) yield event;
+    }
   }
 
   /** Closes the connections of the client. For an SSH engine, it resolves when each `ssh` process exited. */

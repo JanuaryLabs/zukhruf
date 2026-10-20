@@ -217,6 +217,11 @@ export class SshTransport implements Transport {
     return request({ ...options, agent: this.#agent });
   }
 
+  /** Ends the standard input of `ssh`: `docker system dial-stdio` then closes the write side to the engine. */
+  endInput(socket: Duplex): void {
+    socket.end();
+  }
+
   async close(): Promise<void> {
     await this.#agent.close();
   }
