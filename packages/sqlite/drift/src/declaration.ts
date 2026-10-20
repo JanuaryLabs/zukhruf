@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
 
 import { transaction } from '@zukhruf/sqlite-transaction';
@@ -6,11 +7,18 @@ import { transaction } from '@zukhruf/sqlite-transaction';
 // as declared, or anything else.
 export type Drift = 'missing' | 'stale' | 'fits';
 
+// What apply does with the rows of a stale table: drop them with the whole
+// declaration, or keep them in a table made again from its declaration.
+export type Rows = 'replace' | 'keep';
+
 type SchemaObject = {
   readonly type: string;
   readonly name: string;
   readonly sql: string;
 };
+
+// A declared object and the stored object of the same name, whose text differs.
+type Stale = { readonly object: SchemaObject; readonly found: SchemaObject };
 
 // The tables, indexes, views and triggers a caller owns in a SQLite database,
 // by the CREATE statements that make them. SQLite keeps the text of each
@@ -19,8 +27,9 @@ type SchemaObject = {
 // SQLite, and they compare as they are.
 export class Declaration {
   readonly #objects: readonly SchemaObject[];
+  readonly #rows: Rows;
 
-  constructor(statements: readonly string[]) {
+  constructor(statements: readonly string[], options: { readonly rows: Rows }) {
     using blank = new DatabaseSync(':memory:');
     for (const statement of statements) blank.exec(statement);
     this.#objects = blank
@@ -33,6 +42,7 @@ export class Declaration {
         name: String(name),
         sql: String(sql),
       }));
+    this.#rows = options.rows;
   }
 
   drift(database: DatabaseSync): Drift {
@@ -47,33 +57,130 @@ export class Declaration {
   }
 
   // Creates the objects the database does not store. When any stored object
-  // differs from its declaration, replaces every object of the declaration,
-  // with its rows: a table can refer to another, and SQLite drops a table only
-  // after nothing refers to its rows. Works inside the caller's transaction,
-  // or in a write of its own. Objects the declaration does not name stay.
+  // differs from its declaration, rows 'replace' replaces every object of the
+  // declaration, with its rows: a table can refer to another, and SQLite drops
+  // a table only after nothing refers to its rows. Rows 'keep' makes each stale
+  // object again, and moves the rows of a stale table into the new one (ADR
+  // 0003). Works inside the caller's transaction, or in a write of its own.
+  // Objects the declaration does not name stay.
   apply(database: DatabaseSync): void {
     if (this.drift(database) === 'fits') return;
-    transaction(
-      database,
-      () => {
-        const stale = this.#objects.some((object) => {
-          const found = stored(database, object.name);
-          return found !== undefined && found.sql !== object.sql;
-        });
-        if (stale)
-          for (const object of this.#objects.toReversed()) {
-            const found = stored(database, object.name);
-            if (found !== undefined)
-              database.exec(
-                `DROP ${found.type.toUpperCase()} ${quote(found.name)}`,
-              );
-          }
-        for (const object of this.#objects)
-          if (stored(database, object.name) === undefined)
-            database.exec(object.sql);
-      },
-      { mode: 'immediate' },
+    // SQLite ignores PRAGMA foreign_keys in a transaction. With foreign keys
+    // on, the rename of a referenced table changes the references to the old
+    // table, and its drop then deletes the rows that refer to it.
+    const unchecked =
+      this.#rows === 'keep' &&
+      Number(database.prepare('PRAGMA foreign_keys').get()?.foreign_keys) ===
+        1 &&
+      this.#stale(database).some(
+        ({ object, found }) =>
+          object.type === 'table' &&
+          found.type === 'table' &&
+          referenced(database, found.name),
+      );
+    if (unchecked) {
+      if (database.isTransaction)
+        throw new Error(
+          'Keeping the rows of a table that other tables reference needs foreign keys off, which SQLite cannot change inside a transaction. Call apply outside a transaction, or turn foreign keys off before it.',
+        );
+      database.exec('PRAGMA foreign_keys = OFF');
+    }
+    try {
+      transaction(
+        database,
+        () => {
+          const stale = this.#stale(database);
+          if (this.#rows === 'keep') this.#keep(database, stale);
+          else if (stale.length > 0)
+            for (const object of this.#objects.toReversed()) {
+              const found = stored(database, object.name);
+              if (found !== undefined) drop(database, found);
+            }
+          for (const object of this.#objects)
+            if (stored(database, object.name) === undefined)
+              database.exec(object.sql);
+        },
+        { mode: 'immediate' },
+      );
+    } finally {
+      if (unchecked) database.exec('PRAGMA foreign_keys = ON');
+    }
+  }
+
+  #stale(database: DatabaseSync): Stale[] {
+    return this.#objects.flatMap((object) => {
+      const found = stored(database, object.name);
+      return found !== undefined && found.sql !== object.sql
+        ? [{ object, found }]
+        : [];
+    });
+  }
+
+  // Drops each stale index, trigger and view, and rebuilds each stale table.
+  // SQLite keeps PRAGMA legacy_alter_table after a rollback, so the old value
+  // comes back in any case.
+  #keep(database: DatabaseSync, stale: readonly Stale[]): void {
+    const tables = stale.filter(
+      ({ object, found }) => object.type === 'table' && found.type === 'table',
     );
+    for (const entry of stale)
+      if (!tables.includes(entry)) drop(database, entry.found);
+    if (tables.length === 0) return;
+    const legacy = Number(
+      database.prepare('PRAGMA legacy_alter_table').get()?.legacy_alter_table,
+    );
+    database.exec('PRAGMA legacy_alter_table = ON');
+    try {
+      for (const { object, found } of tables)
+        this.#rebuild(database, object, found);
+    } finally {
+      database.exec(`PRAGMA legacy_alter_table = ${legacy}`);
+    }
+    const broken = database.prepare('PRAGMA foreign_key_check').get();
+    if (broken !== undefined)
+      throw new Error(
+        `The kept rows break a foreign key: row ${String(broken.rowid)} of ${String(broken.table)} refers to a row of ${String(broken.parent)} that does not exist.`,
+      );
+  }
+
+  // Renames the stored table away, makes it from its declared text, and copies
+  // the columns that both have, by name. With legacy_alter_table on, the
+  // rename leaves the references of other tables, views and triggers to the
+  // name. A column only the declaration has gets its default, and a column
+  // only the stored table has is discarded. The indexes and triggers on the
+  // table go with the old table, so those the declaration does not name are
+  // made again here, and the others when apply makes the missing objects.
+  #rebuild(
+    database: DatabaseSync,
+    object: SchemaObject,
+    found: SchemaObject,
+  ): void {
+    const declared = new Set(
+      this.#objects.map(({ name }) => name.toLowerCase()),
+    );
+    const undeclared = database
+      .prepare(
+        `SELECT "name", "sql" FROM sqlite_schema WHERE lower("tbl_name") = lower(?) AND "type" IN ('index', 'trigger') AND "sql" IS NOT NULL`,
+      )
+      .all(found.name)
+      .filter(({ name }) => !declared.has(String(name).toLowerCase()))
+      .map(({ sql }) => String(sql));
+    const old = `${found.name}_${randomUUID().replaceAll('-', '')}`;
+    database.exec(`ALTER TABLE ${quote(found.name)} RENAME TO ${quote(old)}`);
+    database.exec(object.sql);
+    const columns = new Set(
+      names(database, object.name).map((name) => name.toLowerCase()),
+    );
+    const shared = names(database, old)
+      .filter((name) => columns.has(name.toLowerCase()))
+      .map(quote)
+      .join(', ');
+    if (shared !== '')
+      database.exec(
+        `INSERT INTO ${quote(object.name)} (${shared}) SELECT ${shared} FROM ${quote(old)}`,
+      );
+    database.exec(`DROP TABLE ${quote(old)}`);
+    for (const sql of undeclared) database.exec(sql);
   }
 }
 
@@ -94,4 +201,26 @@ function stored(
 
 function quote(name: string): string {
   return `"${name.replaceAll('"', '""')}"`;
+}
+
+function drop(database: DatabaseSync, object: SchemaObject): void {
+  database.exec(`DROP ${object.type.toUpperCase()} ${quote(object.name)}`);
+}
+
+function names(database: DatabaseSync, table: string): string[] {
+  return database
+    .prepare('SELECT "name" FROM pragma_table_info(?)')
+    .all(table)
+    .map(({ name }) => String(name));
+}
+
+// Whether a table, the same one too, has a foreign key to the table.
+function referenced(database: DatabaseSync, table: string): boolean {
+  return (
+    database
+      .prepare(
+        `SELECT 1 FROM sqlite_schema AS "s", pragma_foreign_key_list("s"."name") AS "f" WHERE "s"."type" = 'table' AND lower("f"."table") = lower(?)`,
+      )
+      .get(table) !== undefined
+  );
 }

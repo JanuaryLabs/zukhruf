@@ -1,5 +1,7 @@
 # A stale object replaces the whole declaration
 
+`rows: 'keep'` changes this decision for a caller that asks for it. See [ADR 0003](./0003-keep-rows-rebuilds-a-table-and-keeps-its-references.md).
+
 When a stored object is not as declared, `apply` must make it as declared. Röthlisberger's migrator keeps the rows: it does the 12 steps of SQLite to change a table, and it copies the rows into the new table. The first callers of this package keep data that they can make again: a new run makes the stored data again, and they have no migrations. A caller that must keep its rows asks `drift` and changes its tables itself.
 
 `node:sqlite` turns on foreign keys by default. SQLite cannot drop a table while rows of another table refer to its rows. Thus `apply` cannot replace only the stale table when another table refers to it. For example, a table of results can refer to a table of runs.

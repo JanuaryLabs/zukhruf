@@ -22,4 +22,12 @@ _Avoid_: Migrate (apply converts no rows), sync, install
 
 **Replace**:
 To drop a stored object and make it again from its declaration. The rows of a replaced table are gone.
-_Avoid_: Rebuild, reset, recreate
+_Avoid_: Reset, recreate (a rebuild keeps the rows)
+
+**Keep**:
+The `rows` option of a declaration that makes `apply` rebuild each stale table and not replace it.
+_Avoid_: Migrate (keep converts no values), preserve
+
+**Rebuild**:
+To rename a stored table away, make it from its declaration, copy the rows of the columns that both have, and drop the old table. The references of other tables to the name stay.
+_Avoid_: Replace (a replaced table loses its rows), transform, recreate
