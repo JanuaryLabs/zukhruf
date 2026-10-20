@@ -49,6 +49,9 @@
     },
     {
       "path": "./apps/diagram-playground"
+    },
+    {
+      "path": "./packages/sqlite/transaction"
     }
   ]
 }

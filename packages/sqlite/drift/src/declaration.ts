@@ -1,5 +1,7 @@
 import { DatabaseSync } from 'node:sqlite';
 
+import { transaction } from '@zukhruf/sqlite-transaction';
+
 // How a database stores the objects of a declaration: none of them, each one
 // as declared, or anything else.
 export type Drift = 'missing' | 'stale' | 'fits';
@@ -51,36 +53,27 @@ export class Declaration {
   // or in a write of its own. Objects the declaration does not name stay.
   apply(database: DatabaseSync): void {
     if (this.drift(database) === 'fits') return;
-    const ownsTransaction = !database.isTransaction;
-    database.exec(
-      ownsTransaction ? 'BEGIN IMMEDIATE' : 'SAVEPOINT sqlite_drift',
-    );
-    try {
-      const stale = this.#objects.some((object) => {
-        const found = stored(database, object.name);
-        return found !== undefined && found.sql !== object.sql;
-      });
-      if (stale)
-        for (const object of this.#objects.toReversed()) {
+    transaction(
+      database,
+      () => {
+        const stale = this.#objects.some((object) => {
           const found = stored(database, object.name);
-          if (found !== undefined)
-            database.exec(
-              `DROP ${found.type.toUpperCase()} ${quote(found.name)}`,
-            );
-        }
-      for (const object of this.#objects)
-        if (stored(database, object.name) === undefined)
-          database.exec(object.sql);
-      database.exec(ownsTransaction ? 'COMMIT' : 'RELEASE sqlite_drift');
-    } catch (error) {
-      if (!ownsTransaction) {
-        database.exec('ROLLBACK TO sqlite_drift');
-        database.exec('RELEASE sqlite_drift');
-      } else if (database.isTransaction) {
-        database.exec('ROLLBACK');
-      }
-      throw error;
-    }
+          return found !== undefined && found.sql !== object.sql;
+        });
+        if (stale)
+          for (const object of this.#objects.toReversed()) {
+            const found = stored(database, object.name);
+            if (found !== undefined)
+              database.exec(
+                `DROP ${found.type.toUpperCase()} ${quote(found.name)}`,
+              );
+          }
+        for (const object of this.#objects)
+          if (stored(database, object.name) === undefined)
+            database.exec(object.sql);
+      },
+      { mode: 'immediate' },
+    );
   }
 }
 

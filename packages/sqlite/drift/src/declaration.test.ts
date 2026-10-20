@@ -189,3 +189,26 @@ test('a declaration that cannot stand alone in an empty database fails when it i
     /no such table: main\.events/,
   );
 });
+
+test("apply inside the caller's transaction fails with the error that made SQLite end that transaction", async () => {
+  await using scratch = await mkdtempDisposable(join(tmpdir(), 'drift-'));
+  using database = new DatabaseSync(join(scratch.path, 'data.sqlite'));
+  // Dropping the stale parents table deletes its rows first. The cascade
+  // reaches children, and its trigger ends the transaction.
+  database.exec(`CREATE TABLE parents (id INTEGER PRIMARY KEY) STRICT;
+    CREATE TABLE children (parent INTEGER REFERENCES parents (id) ON DELETE CASCADE) STRICT;
+    CREATE TRIGGER children_kept BEFORE DELETE ON children BEGIN SELECT RAISE(ROLLBACK, 'children are kept'); END;
+    INSERT INTO parents VALUES (1);
+    INSERT INTO children VALUES (1)`);
+  const declaration = new Declaration([
+    'CREATE TABLE parents (id INTEGER PRIMARY KEY, name TEXT) STRICT',
+  ]);
+
+  database.exec('BEGIN IMMEDIATE');
+  assert.throws(() => declaration.apply(database), {
+    message: 'children are kept',
+  });
+
+  assert.equal(database.isTransaction, false);
+  assert.equal(declaration.drift(database), 'stale');
+});

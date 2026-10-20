@@ -1,0 +1,42 @@
+{
+  "name": "@zukhruf/sqlite-transaction",
+  "version": "0.3.30",
+  "description": "A transaction function for node:sqlite. It runs a function in a transaction, commits when the function returns, and rolls back when it throws. A call inside a transaction works in a savepoint. After SQLite ends the transaction itself, the caller gets the original error, not \"cannot rollback\".",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/JanuaryLabs/zukhruf",
+    "directory": "packages/sqlite/transaction"
+  },
+  "bugs": {
+    "url": "https://github.com/JanuaryLabs/zukhruf/issues"
+  },
+  "homepage": "https://github.com/JanuaryLabs/zukhruf/tree/main/packages/sqlite/transaction#readme",
+  "keywords": [
+    "sqlite",
+    "node-sqlite",
+    "transaction",
+    "savepoint",
+    "rollback",
+    "nested-transaction"
+  ],
+  "type": "module",
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "@zukhruf/source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "!dist/spec/**",
+    "!**/*.tsbuildinfo",
+    "!**/*.test.*"
+  ],
+  "publishConfig": {
+    "access": "public"
+  }
+}

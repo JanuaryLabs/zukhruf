@@ -57,7 +57,7 @@ fits
 - When no stored object is stale, `apply` makes each missing object, and the other objects keep their rows.
 - When one stored object is stale, `apply` replaces every object of the declaration, and their rows are gone. [ADR 0002](./docs/adr/0002-a-stale-object-replaces-the-whole-declaration.md) tells why.
 - `apply` does not drop an object that the declaration does not name.
-- In a transaction of the caller, `apply` works in a savepoint, and a rollback of the caller removes its changes. With no transaction, `apply` writes in its own `BEGIN IMMEDIATE` transaction.
+- In a transaction of the caller, `apply` works in a savepoint, and a rollback of the caller removes its changes. With no transaction, `apply` writes in its own `BEGIN IMMEDIATE` transaction. [`@zukhruf/sqlite-transaction`](../transaction) does this work, so when SQLite ends the transaction itself, `apply` throws the original error.
 - A caller that must keep the rows of a stale table asks `drift`, and changes the table itself.
 
 ## Write a declaration

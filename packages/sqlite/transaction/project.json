@@ -1,0 +1,11 @@
+{
+  "name": "sqlite-transaction",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "packages/sqlite/transaction/src",
+  "projectType": "library",
+  "tags": ["layer:island", "std:base", "test:node"],
+  "targets": {
+    "format": {},
+    "test": {}
+  }
+}

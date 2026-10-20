@@ -19,3 +19,4 @@ Each context has its own glossary and its own architecture decision records.
 | Diagram               | [packages/diagram/CONTEXT.md](./packages/diagram/CONTEXT.md)                             | [packages/diagram/docs/adr](./packages/diagram/docs/adr)                             |
 | SQLite drift          | [packages/sqlite/drift/CONTEXT.md](./packages/sqlite/drift/CONTEXT.md)                   | [packages/sqlite/drift/docs/adr](./packages/sqlite/drift/docs/adr)                   |
 | SQLite federation     | [packages/sqlite/federation/CONTEXT.md](./packages/sqlite/federation/CONTEXT.md)         | [packages/sqlite/federation/docs/adr](./packages/sqlite/federation/docs/adr)         |
+| SQLite transaction    | [packages/sqlite/transaction/CONTEXT.md](./packages/sqlite/transaction/CONTEXT.md)       | [packages/sqlite/transaction/docs/adr](./packages/sqlite/transaction/docs/adr)       |
