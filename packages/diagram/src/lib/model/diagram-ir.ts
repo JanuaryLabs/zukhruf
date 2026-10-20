@@ -103,6 +103,9 @@ export type DiagramViewport = {
   zoom?: number;
 };
 
+/** How much space the graph engine leaves between elements. */
+export type DiagramDensity = 'compact' | 'regular' | 'spacious';
+
 export type DiagramPaperFill = 'background' | 'surface';
 
 export type DiagramPaper =
@@ -220,6 +223,11 @@ export type DiagramGroup = {
   fill?: 'surface' | 'none' | undefined;
   ports?: DiagramNodePort[] | undefined;
   parent?: string | undefined;
+  /** An explicit grid area; without one the group covers the bounding box of its members. */
+  row?: number | undefined;
+  col?: number | undefined;
+  rowSpan?: number | undefined;
+  colSpan?: number | undefined;
   tight?: boolean | undefined;
   tightX?: boolean | undefined;
   tightY?: boolean | undefined;
@@ -326,6 +334,7 @@ export type DiagramGraphSpec = {
   annotations?: DiagramAnnotation[];
   guides?: DiagramGuide[];
   layout?: DiagramGraphLayout | undefined;
+  density?: DiagramDensity | undefined;
 };
 
 export type GraphLayoutSpec = DiagramGraphSpec & { title?: string[] };

@@ -1,6 +1,5 @@
+import type { DiagramDensity } from '../../model/diagram-ir.ts';
 import type { Font } from '../text/font.ts';
-
-export type Density = 'compact' | 'regular' | 'spacious';
 
 export type LayoutFonts = {
   /** The title of a Card, or of a Box with an icon. */
@@ -47,7 +46,7 @@ export type LayoutTokens = {
   fonts: LayoutFonts;
 };
 
-const SPACING_SCALE: Record<Density, number> = {
+const SPACING_SCALE: Record<DiagramDensity, number> = {
   compact: 0.75,
   regular: 1,
   spacious: 1.5,
@@ -58,7 +57,9 @@ const SPACING_SCALE: Record<Density, number> = {
  * elements (gaps, channels, group and diagram padding); node content and
  * fonts keep their size, so text never shrinks to fit.
  */
-export function layoutTokens(density: Density = 'regular'): LayoutTokens {
+export function layoutTokens(
+  density: DiagramDensity = 'regular',
+): LayoutTokens {
   const scale = SPACING_SCALE[density];
   return {
     PAD_X: 16,
