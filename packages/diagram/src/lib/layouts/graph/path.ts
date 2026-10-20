@@ -1,4 +1,5 @@
 import type { Point } from '../../model/diagram-ir.ts';
+import { round } from './round.ts';
 
 /** The radius of the rounded corner the SVG path draws at each bend. */
 const CORNER_RADIUS = 8;
@@ -19,11 +20,12 @@ export function simplifyPath(path: Point[]): Point[] {
   return result;
 }
 
-/** An SVG path through the points, with each bend rounded. */
+/** An SVG path through the points, with each bend rounded, and each number to the layout's precision. */
 export function pathToSvg(points: Point[]): string {
   const [first, ...rest] = points;
   if (!first) return '';
-  const parts = [`M ${first.x} ${first.y}`];
+  const at = ({ x, y }: Point) => `${round(x)} ${round(y)}`;
+  const parts = [`M ${at(first)}`];
   for (const [index, current] of rest.slice(0, -1).entries()) {
     const previous = points[index]!;
     const next = points[index + 2]!;
@@ -36,12 +38,9 @@ export function pathToSvg(points: Point[]): string {
     const r = Math.min(CORNER_RADIUS, lp / 2, ln / 2);
     const cs = { x: current.x - (dpx / lp) * r, y: current.y - (dpy / lp) * r };
     const ce = { x: current.x + (dnx / ln) * r, y: current.y + (dny / ln) * r };
-    parts.push(
-      `L ${cs.x} ${cs.y}`,
-      `Q ${current.x} ${current.y} ${ce.x} ${ce.y}`,
-    );
+    parts.push(`L ${at(cs)}`, `Q ${at(current)} ${at(ce)}`);
   }
   const last = rest.at(-1);
-  if (last) parts.push(`L ${last.x} ${last.y}`);
+  if (last) parts.push(`L ${at(last)}`);
   return parts.join(' ');
 }

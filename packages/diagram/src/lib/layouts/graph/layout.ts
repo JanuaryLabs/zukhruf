@@ -2,10 +2,8 @@ import type { Box, DiagramGraphIR, Point } from '../../model/diagram-ir.ts';
 import { validateGraph } from '../../model/validate-graph.ts';
 import { type CellArea, type GroupArea, gridAreas } from './areas.ts';
 import type {
-  EdgeLayout,
   GraphLayout,
   GroupLayout,
-  LeaderLayout,
   NodeLayout,
 } from './graph-layout-result.ts';
 import { type Axis, type GridGutters, gridGutters } from './gutters.ts';
@@ -16,7 +14,8 @@ import {
   measureNode,
   placeGroupPorts,
 } from './measure.ts';
-import { routeGraph } from './route.ts';
+import { roundLayout } from './round.ts';
+import { type RoutedGraph, routeGraph } from './route.ts';
 import { LAYOUT_TOKENS } from './tokens.ts';
 import { type TrackLine, sizeTracks } from './tracks.ts';
 
@@ -88,13 +87,13 @@ export function layoutGraph(ir: DiagramGraphIR): GraphLayout {
     2 * widestGutter,
   );
 
-  return {
+  return roundLayout({
     nodes,
     groups,
     edges,
     leaders,
     viewBox: viewBoxOf(nodes, groups, edges, leaders),
-  };
+  });
 }
 
 function areaBox(area: CellArea, lines: Record<Axis, TrackLine>): Box {
@@ -195,8 +194,8 @@ function dividers(
 function viewBoxOf(
   nodes: NodeLayout[],
   groups: GroupLayout[],
-  edges: EdgeLayout[],
-  leaders: LeaderLayout[],
+  edges: RoutedGraph['edges'],
+  leaders: RoutedGraph['leaders'],
 ): Box {
   const pointBox = ({ x, y }: Point): Box => ({ x, y, w: 0, h: 0 });
   const boxes = [

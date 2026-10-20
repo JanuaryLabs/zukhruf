@@ -14,7 +14,7 @@ import type {
 } from './graph-layout-result.ts';
 import { tagPosition } from './labels.ts';
 import { measureEdgeTags } from './measure.ts';
-import { pathToSvg, simplifyPath } from './path.ts';
+import { simplifyPath } from './path.ts';
 import { searchRoute } from './route-search.ts';
 import { OPPOSITE, OUTWARD } from './sides.ts';
 import { LAYOUT_TOKENS } from './tokens.ts';
@@ -23,6 +23,12 @@ import { LAYOUT_TOKENS } from './tokens.ts';
 const ROUTING_MARGIN = 64;
 /** How far a route keeps from a node that it does not connect. */
 const NODE_CLEARANCE = 8;
+
+/** The routes, before the layout rounds them and draws their paths. */
+export type RoutedGraph = {
+  edges: Omit<EdgeLayout, 'd'>[];
+  leaders: Omit<LeaderLayout, 'd'>[];
+};
 
 type Routed = {
   points: Point[];
@@ -45,7 +51,7 @@ export function routeGraph(
   areas: GridAreas,
   /** How far beyond the bounding box of its two shapes a route first searches. */
   searchMargin: number,
-): { edges: EdgeLayout[]; leaders: LeaderLayout[] } {
+): RoutedGraph {
   const candidates = graphConnections(ir, nodes, groups, areas);
   const choices = candidates.map(() => 0);
   for (;;) {
@@ -74,7 +80,7 @@ function routeConnections(
   nodes: NodeLayout[],
   groups: GroupLayout[],
   searchMargin: number,
-): { edges: EdgeLayout[]; leaders: LeaderLayout[] } | { unrouted: number } {
+): RoutedGraph | { unrouted: number } {
   if (connections.length === 0) return { edges: [], leaders: [] };
   const groupLabels = groups.flatMap(({ group, label }) =>
     label.map((run) => ({
@@ -218,8 +224,8 @@ function routeConnections(
     routed.push({ points, junctions });
   }
 
-  const edges: EdgeLayout[] = [];
-  const leaders: LeaderLayout[] = [];
+  const edges: RoutedGraph['edges'] = [];
+  const leaders: RoutedGraph['leaders'] = [];
   for (const connection of connections) {
     const points = paths.get(connection)!;
     if (connection.edge === undefined) {
@@ -227,7 +233,6 @@ function routeConnections(
         note: connection.from.shape.id,
         target: connection.to.shape.id,
         points,
-        d: pathToSvg(points),
       });
       continue;
     }
@@ -236,7 +241,6 @@ function routeConnections(
       exitSide: connection.from.side,
       entrySide: connection.to.side,
       points,
-      d: pathToSvg(points),
       ...labels.get(connection),
     });
   }

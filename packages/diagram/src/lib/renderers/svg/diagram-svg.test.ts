@@ -167,7 +167,7 @@ function svgNumberAttr(markup: string, attr: string) {
 function renderedRect(markup: string, attr: string, id: string) {
   const match = markup.match(
     new RegExp(
-      `<rect ${attr}="${escapeRegExp(id)}"[^>]*\\bx="(?<x>-?\\d+(?:\\.\\d+)?(?:e[-+]?\\d+)?)"[^>]*\\by="(?<y>-?\\d+(?:\\.\\d+)?(?:e[-+]?\\d+)?)"[^>]*\\bwidth="(?<w>-?\\d+(?:\\.\\d+)?(?:e[-+]?\\d+)?)"[^>]*\\bheight="(?<h>-?\\d+(?:\\.\\d+)?(?:e[-+]?\\d+)?)"`,
+      `<rect ${attr}="${escapeRegExp(id)}"[^>]*\\bx="(?<x>-?\\d+(?:\\.\\d+)?)"[^>]*\\by="(?<y>-?\\d+(?:\\.\\d+)?)"[^>]*\\bwidth="(?<w>-?\\d+(?:\\.\\d+)?)"[^>]*\\bheight="(?<h>-?\\d+(?:\\.\\d+)?)"`,
     ),
   );
   if (!match?.groups) throw new Error(`${attr}="${id}" rect not found`);

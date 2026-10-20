@@ -2626,6 +2626,50 @@ describe('layoutGraph tries other sides for an edge without side hints', () => {
   });
 });
 
+describe('layoutGraph rounds the coordinates it returns', () => {
+  test('f1 a node centred under a wider framed caption, whose raw left edge is float noise, comes out with at most two decimals in every number', () => {
+    // Arrange
+    const ir = graph({
+      nodes: [
+        cell('badged', 0, 0, {
+          label: 'Reproduce',
+          caption: 'Workspace agent',
+          captionSide: 'top',
+          captionFrame: true,
+        }),
+        cell('bare', 0, 1, {
+          label: 'Analyze',
+          caption: 'Agent',
+          captionSide: 'top',
+        }),
+        cell('below', 1, 0, { label: 'Ship' }),
+      ],
+      edges: [
+        { from: 'badged', to: 'bare', label: ['hands off'] },
+        { from: 'bare', to: 'below' },
+      ],
+    });
+
+    // Act
+    const layout = layoutGraph(ir);
+
+    // Assert
+    assertSoundLayout(layout);
+    const numbers: string[] = [];
+    JSON.stringify(layout, (key, value: unknown) => {
+      if (typeof value === 'number') numbers.push(String(value));
+      if (key === 'd' && typeof value === 'string') {
+        numbers.push(...(value.match(/-?[\d.]+(?:e[-+]?\d+)?/g) ?? []));
+      }
+      return value;
+    });
+    assert.deepEqual(
+      numbers.filter((number) => !/^-?\d+(\.\d{1,2})?$/.test(number)),
+      [],
+    );
+  });
+});
+
 describe('layoutGraph throws when an edge has no room', () => {
   test('a node ringed by four U-turn edges has no route out, and the error names the edge, its ends and the fix', () => {
     // Arrange
