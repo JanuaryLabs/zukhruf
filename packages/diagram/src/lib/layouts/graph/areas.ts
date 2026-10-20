@@ -96,7 +96,10 @@ export function gridAreas(ir: DiagramGraphIR): GridAreas {
 }
 
 function explicitArea(group: DiagramGroup): CellArea | undefined {
-  if (group.row === undefined && group.col === undefined) return undefined;
+  const { row, col, rowSpan, colSpan } = group;
+  if ([row, col, rowSpan, colSpan].every((value) => value === undefined)) {
+    return undefined;
+  }
   return checkedArea(`group "${group.id}"`, group);
 }
 
@@ -117,20 +120,21 @@ function checkedArea(
       );
     }
   }
-  for (const key of ['rowSpan', 'colSpan'] as const) {
-    const value = cell[key] ?? 1;
-    if (!Number.isInteger(value) || value < 1) {
-      throw new Error(
-        `Diagram ${what} ${key} ${value} must be an integer of at least 1.`,
-      );
-    }
-  }
-  return {
+  // An area without a span covers one track, as a CSS Grid item does.
+  const area: CellArea = {
     row: cell.row!,
     col: cell.col!,
     rowSpan: cell.rowSpan ?? 1,
     colSpan: cell.colSpan ?? 1,
   };
+  for (const key of ['rowSpan', 'colSpan'] as const) {
+    if (!Number.isInteger(area[key]) || area[key] < 1) {
+      throw new Error(
+        `Diagram ${what} ${key} ${area[key]} must be an integer of at least 1.`,
+      );
+    }
+  }
+  return area;
 }
 
 function boundingArea(

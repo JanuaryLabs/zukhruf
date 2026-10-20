@@ -54,15 +54,36 @@ const local = (await Docker.contexts()).filter(
 
 A product with its own rule selects from this list. For example, a scan for databases on this machine connects to each local context and skips SSH engines: a container's published port on an SSH engine is on another machine.
 
-## Tell a connection failure from an error of the engine
+## Catch the errors that change what you do next
 
-The package gives two error classes:
+An error has its own class when a caller does something different after it: start the engine, pull the image, start the container, pick another name ([ADR 0007](./docs/adr/0007-an-error-has-its-own-class-when-the-caller-handles-it-differently.md)). Each class comes from the request and its HTTP status. When one status has two meanings, the package sends one more request to tell them apart.
 
-- `ConnectionFailedError`: the engine did not accept the connection. Its socket does not exist, it refuses the connection, or `ssh` cannot log in. A stopped Docker Desktop leaves its socket file behind and refuses each connection. `host` names the engine, and `cause` is the error of the socket or of `ssh`.
-- `DockerEngineError`: the engine answered with an error. `status` is the HTTP status, and `message` is the message of the engine.
+| Class                      | When                                                                                                  | What the caller does next                          |
+| -------------------------- | ----------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
+| `ConnectionFailedError`    | The socket does not exist, the engine refuses the connection, or `ssh` cannot log in                  | Treat the engine as absent, or ask to start Docker |
+| `UnsupportedEngineError`   | The engine's highest API version is lower than the lowest one that the package supports               | Ask to update Docker                               |
+| `ContainerNotFoundError`   | A request about a container gets 404                                                                  | Create the container again                         |
+| `ContainerNotRunningError` | An exec, an attach or a kill gets 409. `state` comes from an inspect: `created`, `exited`, `paused` … | Start or unpause it, then try again                |
+| `NameConflictError`        | A create of a container, network or volume finds the name taken                                       | Use `createOrGet()`, or another name               |
+| `ImageNotFoundError`       | A create gets 404 and the image is not on the engine; a pull or a push gets 404                       | Pull or build the image; check the name or `auth`  |
+| `NetworkNotFoundError`     | A create gets 404 and the image is on the engine; a request about a network gets 404                  | Create the network first                           |
+| `VolumeNotFoundError`      | A request about a volume gets 404                                                                     | Create the volume again                            |
+| `BindSourceNotFoundError`  | A create or a start refuses a bind mount whose `source` does not exist on the engine's host           | Tell the user which host path is missing           |
+| `VolumeInUseError`         | A volume removal gets 409                                                                             | Remove its containers first, or wait and try again |
+| `NetworkInUseError`        | A network removal gets 403 while containers are connected                                             | Disconnect them first                              |
+| `ImageInUseError`          | An image removal gets 409                                                                             | Remove its containers first, or use `force`        |
+| `PathNotFoundError`        | A file request gets 404 and the container exists                                                      | Use a default, or create the file                  |
+| `ReadOnlyPathError`        | `writeFiles()` or `putArchive()` gets 403                                                             | Write under a writable mount, or use `exec()`      |
+
+Each class extends a base class, so a broad catch still works. `DockerError` is the base of every error of the package. `DockerEngineError` is the base of every answer of the engine that is an error. It has `status`, `method` and `path`, and its `message` is the message of the engine. An error with no class of its own, such as an error in the progress of a pull, is a `DockerEngineError`.
 
 ```ts
-import { ConnectionFailedError, Docker } from '@zukhruf/docker';
+import {
+  ConnectionFailedError,
+  ContainerNotRunningError,
+  Docker,
+  ImageNotFoundError,
+} from '@zukhruf/docker';
 
 try {
   await using docker = await Docker.connect({ context: 'desktop-linux' });
@@ -71,6 +92,20 @@ try {
   if (error instanceof ConnectionFailedError) return [];
   throw error;
 }
+
+const create = () => docker.containers.create({ Image: 'postgres:18' });
+await using postgres = await create().catch(async (error) => {
+  if (!(error instanceof ImageNotFoundError)) throw error;
+  await docker.images.pull('postgres:18');
+  return create();
+});
+
+await postgres.exec({ Cmd: ['pg_isready'] }).catch(async (error) => {
+  if (!(error instanceof ContainerNotRunningError)) throw error;
+  if (error.state === 'paused') await postgres.unpause();
+  else await postgres.start();
+  return postgres.exec({ Cmd: ['pg_isready'] });
+});
 ```
 
 Some answers of the engine are not errors here:
@@ -81,7 +116,7 @@ Some answers of the engine are not errors here:
 | `container.start()` of a running container, `container.stop()` of a stopped one                  | 304           | resolves    |
 | `remove()` of a missing container, volume or network                                             | 404           | resolves    |
 
-Other answers reject with `DockerEngineError`. For example, `containers.create()` with a name that another container has rejects with status 409.
+A removal of a container whose removal is already in progress (409) waits until the container is gone, and then resolves.
 
 ## Create a container that you own
 
@@ -261,7 +296,7 @@ const stat = await postgres.stat('/srv/run.sh');
 - `readFile()` gives the bytes of one regular file. It rejects for a directory.
 - `getArchive(path)` and `putArchive(directory, archive)` give the tar streams themselves, for a directory or a large tree.
 - The engine cannot reach `/proc`, `/sys`, `/dev`, a tmpfs mount, or a mount made inside the container. For such a path, use `exec()`.
-- A read-only root filesystem or volume makes `writeFiles()` reject with status 403.
+- A read-only root filesystem or volume makes `writeFiles()` reject with `ReadOnlyPathError`. A missing path makes `readFile()` reject with `PathNotFoundError`.
 
 ## Control a container
 
@@ -294,7 +329,7 @@ await docker.containers.run({
 });
 ```
 
-The engine gives the volume a name when the body has none. The Engine API answers a create with a taken name with the existing volume, not with an error. Thus the package adds a creation label with a random value, and it compares the label of the answer: `volumes.create()` rejects with status 409 for a taken name, and `volumes.createOrGet()` gives `{ created: false, volume }`. `volumes.find()` and `volumes.list()` work as they do for containers.
+The engine gives the volume a name when the body has none. The Engine API answers a create with a taken name with the existing volume, not with an error. Thus the package adds a creation label with a random value, and it compares the label of the answer: `volumes.create()` rejects with `NameConflictError` for a taken name, and `volumes.createOrGet()` gives `{ created: false, volume }`. `volumes.find()` and `volumes.list()` work as they do for containers.
 
 ## Networks
 
@@ -595,7 +630,7 @@ export interface ContainerProcess extends AsyncIterable<OutputChunk> {
 }
 
 export interface Volumes {
-  /** Rejects with status 409 when the name is taken. */
+  /** Rejects with NameConflictError when the name is taken. */
   create(
     body?: EngineApi.VolumeCreateRequest,
     options?: CancelOptions,
@@ -613,7 +648,7 @@ export interface Volumes {
 export class Volume {
   readonly name: string;
   inspect(options?: CancelOptions): Promise<EngineApi.Volume>;
-  /** Resolves for 404. Rejects with status 409 while a container uses the volume. */
+  /** Resolves for 404. Rejects with VolumeInUseError while a container uses the volume. */
   remove(options?: CancelOptions & { force?: boolean }): Promise<void>;
 }
 
@@ -693,14 +728,71 @@ export interface Images {
   ): Promise<void>;
 }
 
-export class ConnectionFailedError extends Error {
+/** The base of every error of the package. */
+export class DockerError extends Error {}
+
+export class ConnectionFailedError extends DockerError {
   readonly host: string;
 }
 
-export class DockerEngineError extends Error {
+export class UnsupportedEngineError extends DockerError {
+  readonly host: string;
+  /** The highest API version of the engine. */
+  readonly engineVersion: string;
+  /** The lowest API version that the package supports. */
+  readonly minimumVersion: string;
+}
+
+/** The base of every answer of the engine that is an error. */
+export class DockerEngineError extends DockerError {
   /** The HTTP status; undefined for an error in the progress of a pull, a push or a load. */
   readonly status: number | undefined;
   readonly method: string;
+  readonly path: string;
+}
+
+export class ContainerNotFoundError extends DockerEngineError {
+  readonly container: string;
+}
+export class ContainerNotRunningError extends DockerEngineError {
+  readonly container: string;
+  /** From an inspect after the 409: 'created', 'exited', 'paused', 'restarting', 'removing' or 'dead'. */
+  readonly state: string;
+}
+export class NameConflictError extends DockerEngineError {
+  readonly kind: 'container' | 'network' | 'volume';
+  readonly name: string;
+}
+export class ImageNotFoundError extends DockerEngineError {
+  readonly image: string;
+}
+export class NetworkNotFoundError extends DockerEngineError {
+  readonly network: string;
+}
+export class VolumeNotFoundError extends DockerEngineError {
+  readonly volume: string;
+}
+export class BindSourceNotFoundError extends DockerEngineError {
+  /** The path on the engine's host. */
+  readonly source: string;
+}
+export class VolumeInUseError extends DockerEngineError {
+  readonly volume: string;
+}
+export class NetworkInUseError extends DockerEngineError {
+  readonly network: string;
+  /** The IDs of the connected containers, from an inspect after the 403. */
+  readonly containers: string[];
+}
+export class ImageInUseError extends DockerEngineError {
+  readonly image: string;
+}
+export class PathNotFoundError extends DockerEngineError {
+  readonly container: string;
+  readonly path: string;
+}
+export class ReadOnlyPathError extends DockerEngineError {
+  readonly container: string;
   readonly path: string;
 }
 
