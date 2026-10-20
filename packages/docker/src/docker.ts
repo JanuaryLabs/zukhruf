@@ -1,6 +1,7 @@
 import { negotiateApiVersion } from './api-version.ts';
 import {
   type DockerContext,
+  type Environment,
   listContexts,
   selectEngine,
 } from './context-store.ts';
@@ -11,8 +12,9 @@ import type { CancelOptions } from './options.ts';
 import { SocketTransport } from './transport.ts';
 
 /** A context or a host, never both. */
-export type ConnectOptions = CancelOptions &
-  ({ context?: string; host?: never } | { host?: string; context?: never });
+export type ConnectOptions = CancelOptions & { environment?: Environment } & (
+    { context?: string; host?: never } | { host?: string; context?: never }
+  );
 
 /** A client of one engine. Dispose it to close its connections. */
 export class Docker implements AsyncDisposable {
@@ -76,8 +78,10 @@ export class Docker implements AsyncDisposable {
   }
 
   /** Each context of the context store, and the default context. */
-  static async contexts(): Promise<DockerContext[]> {
-    return listContexts();
+  static async contexts(
+    options: { environment?: Environment } = {},
+  ): Promise<DockerContext[]> {
+    return listContexts(options.environment);
   }
 
   async info(options: CancelOptions = {}): Promise<EngineApi.SystemInfo> {

@@ -27,16 +27,23 @@ function platformHost(): string {
     : 'unix:///var/run/docker.sock';
 }
 
+/** The environment of the host program, such as process.env. The package reads only DOCKER_HOST, DOCKER_CONTEXT and DOCKER_CONFIG. */
+export type Environment = Readonly<Record<string, string | undefined>>;
+
+type Variable = 'DOCKER_HOST' | 'DOCKER_CONTEXT' | 'DOCKER_CONFIG';
+
 /** An empty variable is the same as an unset one, as in the Docker CLI. */
-function variable(name: string): string | undefined {
-  // eslint-disable-next-line island/no-process-env -- The package selects the engine as the Docker CLI does, and the CLI reads DOCKER_HOST, DOCKER_CONTEXT and DOCKER_CONFIG from the environment (ADR 0002).
-  const value = process.env[name];
+function variable(
+  environment: Environment,
+  name: Variable,
+): string | undefined {
+  const value = environment[name];
   return value === '' ? undefined : value;
 }
 
 /** The Docker configuration directory: DOCKER_CONFIG, or ~/.docker. */
-function configDirectory(): string {
-  return variable('DOCKER_CONFIG') ?? join(homedir(), '.docker');
+function configDirectory(environment: Environment): string {
+  return variable(environment, 'DOCKER_CONFIG') ?? join(homedir(), '.docker');
 }
 
 function isMissingFile(error: unknown): boolean {
@@ -56,10 +63,12 @@ function stringField(value: unknown, key: string): string | undefined {
 }
 
 /** currentContext in config.json, or undefined when the file or the field is absent. */
-async function configuredContext(): Promise<string | undefined> {
+async function configuredContext(
+  environment: Environment,
+): Promise<string | undefined> {
   try {
     const config: unknown = JSON.parse(
-      await readFile(join(configDirectory(), 'config.json'), 'utf8'),
+      await readFile(join(configDirectory(environment), 'config.json'), 'utf8'),
     );
     return stringField(config, 'currentContext');
   } catch (error) {
@@ -69,20 +78,22 @@ async function configuredContext(): Promise<string | undefined> {
 }
 
 /** The context that the Docker CLI selects when a command names none. */
-async function currentContext(): Promise<string> {
-  if (variable('DOCKER_HOST')) return DEFAULT_CONTEXT;
+async function currentContext(environment: Environment): Promise<string> {
+  if (variable(environment, 'DOCKER_HOST')) return DEFAULT_CONTEXT;
   return (
-    variable('DOCKER_CONTEXT') ?? (await configuredContext()) ?? DEFAULT_CONTEXT
+    variable(environment, 'DOCKER_CONTEXT') ??
+    (await configuredContext(environment)) ??
+    DEFAULT_CONTEXT
   );
 }
 
 /** The host of the default context: DOCKER_HOST, or the default host of the platform. */
-function defaultHost(): string {
-  return variable('DOCKER_HOST') ?? platformHost();
+function defaultHost(environment: Environment): string {
+  return variable(environment, 'DOCKER_HOST') ?? platformHost();
 }
 
-function metaDirectory(): string {
-  return join(configDirectory(), 'contexts', 'meta');
+function metaDirectory(environment: Environment): string {
+  return join(configDirectory(environment), 'contexts', 'meta');
 }
 
 /** Endpoints.docker.Host of meta.json, or undefined when the context has no docker endpoint. */
@@ -93,11 +104,14 @@ function hostOfMeta(meta: unknown): string | undefined {
 }
 
 /** The host of a context of the context store. */
-async function storedHost(name: string): Promise<string> {
+async function storedHost(
+  environment: Environment,
+  name: string,
+): Promise<string> {
   const id = createHash('sha256').update(name).digest('hex');
   try {
     const meta: unknown = JSON.parse(
-      await readFile(join(metaDirectory(), id, 'meta.json'), 'utf8'),
+      await readFile(join(metaDirectory(environment), id, 'meta.json'), 'utf8'),
     );
     const host = hostOfMeta(meta);
     if (host === undefined) throw new ContextNotFoundError(name);
@@ -109,50 +123,54 @@ async function storedHost(name: string): Promise<string> {
   }
 }
 
-async function hostOfContext(name: string): Promise<string> {
-  return name === DEFAULT_CONTEXT ? defaultHost() : storedHost(name);
+/** The host of a context: the default context takes it from DOCKER_HOST, as the Docker CLI defines it. */
+async function hostOfContext(
+  environment: Environment,
+  name: string,
+): Promise<string> {
+  return name === DEFAULT_CONTEXT
+    ? defaultHost(environment)
+    : storedHost(environment, name);
 }
 
 /** Selects the engine in the order of the Docker CLI, or the engine that the options name. */
 export async function selectEngine(options: {
   context?: string | undefined;
   host?: string | undefined;
+  environment?: Environment | undefined;
 }): Promise<SelectedEngine> {
   if (options.host !== undefined) {
     return { context: DEFAULT_CONTEXT, host: options.host };
   }
-  if (options.context !== undefined) {
-    return {
-      context: options.context,
-      host:
-        options.context === DEFAULT_CONTEXT
-          ? platformHost()
-          : await storedHost(options.context),
-    };
-  }
-  const context = await currentContext();
-  return { context, host: await hostOfContext(context) };
+  const environment = options.environment ?? {};
+  const context = options.context ?? (await currentContext(environment));
+  return { context, host: await hostOfContext(environment, context) };
 }
 
 /** Each context of the context store, and the default context. */
-export async function listContexts(): Promise<DockerContext[]> {
-  const current = await currentContext();
-  const stored = await storedContexts();
+export async function listContexts(
+  environment: Environment = {},
+): Promise<DockerContext[]> {
+  const current = await currentContext(environment);
+  const stored = await storedContexts(environment);
   return [
-    { name: DEFAULT_CONTEXT, host: defaultHost() },
+    { name: DEFAULT_CONTEXT, host: defaultHost(environment) },
     ...stored.toSorted((left, right) => left.name.localeCompare(right.name)),
   ].map(({ name, host }) => ({ name, host, current: name === current }));
 }
 
-async function storedContexts(): Promise<{ name: string; host: string }[]> {
-  const ids = await readdir(metaDirectory()).catch((error: unknown) => {
+async function storedContexts(
+  environment: Environment,
+): Promise<{ name: string; host: string }[]> {
+  const directory = metaDirectory(environment);
+  const ids = await readdir(directory).catch((error: unknown) => {
     if (isMissingFile(error)) return [];
     throw error;
   });
   const contexts = await Promise.all(
     ids.map(async (id) => {
       const meta: unknown = JSON.parse(
-        await readFile(join(metaDirectory(), id, 'meta.json'), 'utf8').catch(
+        await readFile(join(directory, id, 'meta.json'), 'utf8').catch(
           (error: unknown) => {
             if (isMissingFile(error)) return 'null';
             throw error;

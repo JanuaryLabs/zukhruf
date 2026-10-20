@@ -9,7 +9,10 @@ describe('the local engine that the Docker CLI selects', () => {
     const signal = AbortSignal.timeout(10_000);
 
     // Act
-    await using docker = await Docker.connect({ signal });
+    await using docker = await Docker.connect({
+      environment: process.env,
+      signal,
+    });
     const info = await docker.info({ signal });
 
     // Assert

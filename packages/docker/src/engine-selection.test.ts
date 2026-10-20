@@ -3,21 +3,36 @@ import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { describe, test } from 'node:test';
 
+import { type ConnectOptions, Docker } from './index.ts';
 import { writeContextStore } from './testing/context-store-files.ts';
 import { fakeEngine } from './testing/fake-engine.ts';
 import { ENTRY, lastJson, runScenario } from './testing/scenario.ts';
 import { scratchDirectory } from './testing/scratch-directory.ts';
 
-/** Connects with the given options and prints the context and host of the client, or the error. */
-const connectScenario = (options: object) => `
-import { Docker } from ${JSON.stringify(ENTRY)};
-try {
-  const docker = await Docker.connect(${JSON.stringify(options)});
-  console.log(JSON.stringify({ context: docker.context, host: docker.host }));
-  await docker[Symbol.asyncDispose]();
-} catch (error) {
-  console.log(JSON.stringify({ error: error.name, host: error.host, context: error.context }));
+const platformHost =
+  process.platform === 'win32'
+    ? 'npipe:////./pipe/docker_engine'
+    : 'unix:///var/run/docker.sock';
+
+/** Connects with the options and gives the context and host of the client, or the error. */
+async function selected(options: ConnectOptions): Promise<object> {
+  try {
+    await using docker = await Docker.connect(options);
+    return { context: docker.context, host: docker.host };
+  } catch (error) {
+    const name: unknown = Reflect.get(Object(error), 'name');
+    const host: unknown = Reflect.get(Object(error), 'host');
+    const context: unknown = Reflect.get(Object(error), 'context');
+    return { error: name, host, context };
+  }
 }
+
+/** In a child process, connects with `options` (source text) and prints the context and host of the client. */
+const connectScenario = (options: string) => `
+import { Docker } from ${JSON.stringify(ENTRY)};
+const docker = await Docker.connect(${options});
+console.log(JSON.stringify({ context: docker.context, host: docker.host }));
+await docker[Symbol.asyncDispose]();
 `;
 
 describe('Docker.connect() selects the engine in the order of the Docker CLI', () => {
@@ -46,18 +61,16 @@ describe('Docker.connect() selects the engine in the order of the Docker CLI', (
     });
 
     // Act
-    const result = await runScenario(connectScenario({}), {
-      HOME: scratch.path,
-      DOCKER_CONFIG: config,
-      DOCKER_HOST: fromHost.host,
-      DOCKER_CONTEXT: 'from-variable',
+    const result = await selected({
+      environment: {
+        DOCKER_CONFIG: config,
+        DOCKER_HOST: fromHost.host,
+        DOCKER_CONTEXT: 'from-variable',
+      },
     });
 
     // Assert
-    assert.deepEqual(lastJson(result), {
-      context: 'default',
-      host: fromHost.host,
-    });
+    assert.deepEqual(result, { context: 'default', host: fromHost.host });
     assert.deepEqual(fromHost.paths, ['/_ping']);
   });
 
@@ -82,14 +95,12 @@ describe('Docker.connect() selects the engine in the order of the Docker CLI', (
     });
 
     // Act
-    const result = await runScenario(connectScenario({}), {
-      HOME: scratch.path,
-      DOCKER_CONFIG: config,
-      DOCKER_CONTEXT: 'from-variable',
+    const result = await selected({
+      environment: { DOCKER_CONFIG: config, DOCKER_CONTEXT: 'from-variable' },
     });
 
     // Assert
-    assert.deepEqual(lastJson(result), {
+    assert.deepEqual(result, {
       context: 'from-variable',
       host: fromVariable.host,
     });
@@ -109,20 +120,14 @@ describe('Docker.connect() selects the engine in the order of the Docker CLI', (
     });
 
     // Act
-    const result = await runScenario(connectScenario({}), {
-      HOME: scratch.path,
-      DOCKER_CONFIG: config,
-    });
+    const result = await selected({ environment: { DOCKER_CONFIG: config } });
 
     // Assert
-    assert.deepEqual(lastJson(result), {
-      context: 'from-config',
-      host: fromConfig.host,
-    });
+    assert.deepEqual(result, { context: 'from-config', host: fromConfig.host });
   });
 
   test('~/.docker is the configuration directory when DOCKER_CONFIG is not set', async () => {
-    // Arrange
+    // Arrange: a child process, because HOME is the home directory of the process.
     await using scratch = await scratchDirectory();
     await using fromConfig = await fakeEngine({
       directory: await mkdirIn(scratch.path, 'config'),
@@ -134,9 +139,10 @@ describe('Docker.connect() selects the engine in the order of the Docker CLI', (
     });
 
     // Act
-    const result = await runScenario(connectScenario({}), {
-      HOME: scratch.path,
-    });
+    const result = await runScenario(
+      connectScenario('{ environment: process.env }'),
+      { HOME: scratch.path },
+    );
 
     // Assert
     assert.deepEqual(lastJson(result), {
@@ -145,29 +151,57 @@ describe('Docker.connect() selects the engine in the order of the Docker CLI', (
     });
   });
 
+  test('without an environment, no variable applies and only the context store selects the engine', async () => {
+    // Arrange: a child process, because the variables must be in the environment of the process.
+    await using scratch = await scratchDirectory();
+    await using fromConfig = await fakeEngine({
+      directory: await mkdirIn(scratch.path, 'config'),
+      apiVersion: '1.51',
+    });
+    await using fromHost = await fakeEngine({
+      directory: await mkdirIn(scratch.path, 'host'),
+      apiVersion: '1.51',
+    });
+    await writeContextStore(join(scratch.path, '.docker'), {
+      currentContext: 'from-home',
+      contexts: { 'from-home': fromConfig.host, other: fromHost.host },
+    });
+
+    // Act
+    const result = await runScenario(connectScenario(''), {
+      HOME: scratch.path,
+      DOCKER_HOST: fromHost.host,
+      DOCKER_CONTEXT: 'other',
+      DOCKER_CONFIG: join(scratch.path, 'absent'),
+    });
+
+    // Assert
+    assert.deepEqual(lastJson(result), {
+      context: 'from-home',
+      host: fromConfig.host,
+    });
+    assert.deepEqual(fromHost.paths, []);
+  });
+
   test('the default context and the default host of the platform when nothing selects an engine', async () => {
     // Arrange
     await using scratch = await scratchDirectory();
 
     // Act
-    const result = await runScenario(connectScenario({}), {
-      HOME: scratch.path,
+    const result = await selected({
+      environment: { DOCKER_CONFIG: join(scratch.path, 'absent') },
     });
 
     // Assert
-    const defaultHost =
-      process.platform === 'win32'
-        ? 'npipe:////./pipe/docker_engine'
-        : 'unix:///var/run/docker.sock';
-    const selected = lastJson(result);
     // The machine may or may not run an engine on the default host.
     assert.ok(
-      isDeepEqual(selected, { context: 'default', host: defaultHost }) ||
-        isDeepEqual(selected, {
+      isDeepEqual(result, { context: 'default', host: platformHost }) ||
+        isDeepEqual(result, {
           error: 'ConnectionFailedError',
-          host: defaultHost,
+          host: platformHost,
+          context: undefined,
         }),
-      JSON.stringify(selected),
+      JSON.stringify(result),
     );
   });
 
@@ -188,19 +222,43 @@ describe('Docker.connect() selects the engine in the order of the Docker CLI', (
     });
 
     // Act
-    const result = await runScenario(connectScenario({ context: 'named' }), {
-      HOME: scratch.path,
-      DOCKER_CONFIG: config,
-      DOCKER_HOST: fromHost.host,
-      DOCKER_CONTEXT: 'other',
+    const result = await selected({
+      context: 'named',
+      environment: {
+        DOCKER_CONFIG: config,
+        DOCKER_HOST: fromHost.host,
+        DOCKER_CONTEXT: 'other',
+      },
     });
 
     // Assert
-    assert.deepEqual(lastJson(result), { context: 'named', host: named.host });
+    assert.deepEqual(result, { context: 'named', host: named.host });
     assert.deepEqual(fromHost.paths, []);
   });
 
-  test('a host option ignores DOCKER_HOST and DOCKER_CONTEXT', async () => {
+  test('the context option default takes its host from DOCKER_HOST, as in the Docker CLI', async () => {
+    // Arrange
+    await using scratch = await scratchDirectory();
+    await using fromHost = await fakeEngine({
+      directory: await mkdirIn(scratch.path, 'host'),
+      apiVersion: '1.51',
+    });
+
+    // Act
+    const result = await selected({
+      context: 'default',
+      environment: {
+        DOCKER_CONFIG: join(scratch.path, 'absent'),
+        DOCKER_HOST: fromHost.host,
+      },
+    });
+
+    // Assert
+    assert.deepEqual(result, { context: 'default', host: fromHost.host });
+    assert.deepEqual(fromHost.paths, ['/_ping']);
+  });
+
+  test('a host option ignores the environment', async () => {
     // Arrange
     await using scratch = await scratchDirectory();
     await using given = await fakeEngine({
@@ -215,18 +273,17 @@ describe('Docker.connect() selects the engine in the order of the Docker CLI', (
     await writeContextStore(config, { contexts: { other: fromHost.host } });
 
     // Act
-    const result = await runScenario(connectScenario({ host: given.host }), {
-      HOME: scratch.path,
-      DOCKER_CONFIG: config,
-      DOCKER_HOST: fromHost.host,
-      DOCKER_CONTEXT: 'other',
+    const result = await selected({
+      host: given.host,
+      environment: {
+        DOCKER_CONFIG: config,
+        DOCKER_HOST: fromHost.host,
+        DOCKER_CONTEXT: 'other',
+      },
     });
 
     // Assert
-    assert.deepEqual(lastJson(result), {
-      context: 'default',
-      host: given.host,
-    });
+    assert.deepEqual(result, { context: 'default', host: given.host });
     assert.deepEqual(fromHost.paths, []);
   });
 
@@ -235,22 +292,24 @@ describe('Docker.connect() selects the engine in the order of the Docker CLI', (
     await using scratch = await scratchDirectory();
     const config = join(scratch.path, 'docker-config');
     await writeContextStore(config, { contexts: {} });
-    const env = { HOME: scratch.path, DOCKER_CONFIG: config };
 
     // Act
-    const fromOption = await runScenario(
-      connectScenario({ context: 'absent' }),
-      env,
-    );
-    const fromVariable = await runScenario(connectScenario({}), {
-      ...env,
-      DOCKER_CONTEXT: 'absent',
+    const fromOption = await selected({
+      context: 'absent',
+      environment: { DOCKER_CONFIG: config },
+    });
+    const fromVariable = await selected({
+      environment: { DOCKER_CONFIG: config, DOCKER_CONTEXT: 'absent' },
     });
 
     // Assert
-    const expected = { error: 'ContextNotFoundError', context: 'absent' };
-    assert.deepEqual(lastJson(fromOption), expected);
-    assert.deepEqual(lastJson(fromVariable), expected);
+    const expected = {
+      error: 'ContextNotFoundError',
+      host: undefined,
+      context: 'absent',
+    };
+    assert.deepEqual(fromOption, expected);
+    assert.deepEqual(fromVariable, expected);
   });
 
   test('a tcp:// host is an UnsupportedHostError, from the option, from DOCKER_HOST or from a context', async () => {
@@ -264,58 +323,26 @@ describe('Docker.connect() selects the engine in the order of the Docker CLI', (
       currentContext: 'remote',
       contexts: { remote: fromContext },
     });
-    const env = { HOME: scratch.path, DOCKER_CONFIG: config };
+    const environment = { DOCKER_CONFIG: config };
 
     // Act
     const results = [
-      await runScenario(connectScenario({ host: fromOption }), env),
-      await runScenario(connectScenario({}), {
-        ...env,
-        DOCKER_HOST: fromVariable,
+      await selected({ host: fromOption, environment }),
+      await selected({
+        environment: { ...environment, DOCKER_HOST: fromVariable },
       }),
-      await runScenario(connectScenario({}), env),
+      await selected({ environment }),
     ];
 
     // Assert
     assert.deepEqual(
-      results.map((result) => lastJson(result)),
+      results,
       [fromOption, fromVariable, fromContext].map((host) => ({
         error: 'UnsupportedHostError',
         host,
+        context: undefined,
       })),
     );
-  });
-
-  test('the context option default is the default host of the platform, whatever DOCKER_HOST is', async () => {
-    // Arrange
-    await using scratch = await scratchDirectory();
-    await using fromHost = await fakeEngine({
-      directory: await mkdirIn(scratch.path, 'host'),
-      apiVersion: '1.51',
-    });
-
-    // Act
-    const result = await runScenario(connectScenario({ context: 'default' }), {
-      HOME: scratch.path,
-      DOCKER_HOST: fromHost.host,
-    });
-
-    // Assert
-    const defaultHost =
-      process.platform === 'win32'
-        ? 'npipe:////./pipe/docker_engine'
-        : 'unix:///var/run/docker.sock';
-    const selected = lastJson(result);
-    // The machine may or may not run an engine on the default host.
-    assert.ok(
-      isDeepEqual(selected, { context: 'default', host: defaultHost }) ||
-        isDeepEqual(selected, {
-          error: 'ConnectionFailedError',
-          host: defaultHost,
-        }),
-      JSON.stringify(selected),
-    );
-    assert.deepEqual(fromHost.paths, []);
   });
 
   test('an empty DOCKER_HOST or DOCKER_CONTEXT is the same as an unset one', async () => {
@@ -332,18 +359,16 @@ describe('Docker.connect() selects the engine in the order of the Docker CLI', (
     });
 
     // Act
-    const result = await runScenario(connectScenario({}), {
-      HOME: scratch.path,
-      DOCKER_CONFIG: config,
-      DOCKER_HOST: '',
-      DOCKER_CONTEXT: '',
+    const result = await selected({
+      environment: {
+        DOCKER_CONFIG: config,
+        DOCKER_HOST: '',
+        DOCKER_CONTEXT: '',
+      },
     });
 
     // Assert
-    assert.deepEqual(lastJson(result), {
-      context: 'from-config',
-      host: fromConfig.host,
-    });
+    assert.deepEqual(result, { context: 'from-config', host: fromConfig.host });
   });
 });
 
@@ -359,30 +384,24 @@ describe('Docker.contexts()', () => {
         'remote-box': 'ssh://root@remote.example',
       },
     });
-    const scenario = `
-import { Docker } from ${JSON.stringify(ENTRY)};
-console.log(JSON.stringify(await Docker.contexts()));
-`;
-    const env = { HOME: scratch.path, DOCKER_CONFIG: config };
 
     // Act
-    const fromConfig = await runScenario(scenario, env);
-    const fromVariable = await runScenario(scenario, {
-      ...env,
-      DOCKER_CONTEXT: 'remote-box',
+    const fromConfig = await Docker.contexts({
+      environment: { DOCKER_CONFIG: config },
     });
-    const fromHost = await runScenario(scenario, {
-      ...env,
-      DOCKER_HOST: 'unix:///tmp/other.sock',
+    const fromVariable = await Docker.contexts({
+      environment: { DOCKER_CONFIG: config, DOCKER_CONTEXT: 'remote-box' },
+    });
+    const fromHost = await Docker.contexts({
+      environment: {
+        DOCKER_CONFIG: config,
+        DOCKER_HOST: 'unix:///tmp/other.sock',
+      },
     });
 
     // Assert
-    const defaultHost =
-      process.platform === 'win32'
-        ? 'npipe:////./pipe/docker_engine'
-        : 'unix:///var/run/docker.sock';
-    assert.deepEqual(lastJson(fromConfig), [
-      { name: 'default', host: defaultHost, current: false },
+    assert.deepEqual(fromConfig, [
+      { name: 'default', host: platformHost, current: false },
       {
         name: 'desktop-linux',
         host: 'unix:///Users/me/.docker/run/docker.sock',
@@ -395,12 +414,12 @@ console.log(JSON.stringify(await Docker.contexts()));
       },
     ]);
     assert.deepEqual(
-      currentNames(lastJson(fromVariable)),
+      fromVariable.filter(({ current }) => current).map(({ name }) => name),
       ['remote-box'],
       'DOCKER_CONTEXT makes its context current',
     );
     assert.deepEqual(
-      lastJson(fromHost),
+      fromHost,
       [
         { name: 'default', host: 'unix:///tmp/other.sock', current: true },
         {
@@ -418,30 +437,43 @@ console.log(JSON.stringify(await Docker.contexts()));
     );
   });
 
+  test('gives the same host for the default context as connect() with the same environment', async () => {
+    // Arrange
+    await using scratch = await scratchDirectory();
+    await using fromHost = await fakeEngine({
+      directory: await mkdirIn(scratch.path, 'host'),
+      apiVersion: '1.51',
+    });
+    const environment = {
+      DOCKER_CONFIG: join(scratch.path, 'absent'),
+      DOCKER_HOST: fromHost.host,
+    };
+
+    // Act
+    const contexts = await Docker.contexts({ environment });
+    const named = await selected({ context: 'default', environment });
+    const current = await selected({ environment });
+
+    // Assert
+    assert.deepEqual(contexts, [
+      { name: 'default', host: fromHost.host, current: true },
+    ]);
+    assert.deepEqual(named, { context: 'default', host: fromHost.host });
+    assert.deepEqual(current, { context: 'default', host: fromHost.host });
+  });
+
   test('gives only the default context when the configuration directory does not exist', async () => {
     // Arrange
     await using scratch = await scratchDirectory();
-    const scenario = `
-import { Docker } from ${JSON.stringify(ENTRY)};
-console.log(JSON.stringify(await Docker.contexts()));
-`;
 
     // Act
-    const result = await runScenario(scenario, {
-      HOME: scratch.path,
-      DOCKER_CONFIG: join(scratch.path, 'absent'),
+    const result = await Docker.contexts({
+      environment: { DOCKER_CONFIG: join(scratch.path, 'absent') },
     });
 
     // Assert
-    assert.deepEqual(lastJson(result), [
-      {
-        name: 'default',
-        host:
-          process.platform === 'win32'
-            ? 'npipe:////./pipe/docker_engine'
-            : 'unix:///var/run/docker.sock',
-        current: true,
-      },
+    assert.deepEqual(result, [
+      { name: 'default', host: platformHost, current: true },
     ]);
   });
 });
@@ -459,13 +491,4 @@ function isDeepEqual(actual: unknown, expected: unknown): boolean {
   } catch {
     return false;
   }
-}
-
-function currentNames(contexts: unknown): string[] {
-  assert.ok(Array.isArray(contexts));
-  return contexts.flatMap((context: unknown) =>
-    Reflect.get(Object(context), 'current') === true
-      ? [String(Reflect.get(Object(context), 'name'))]
-      : [],
-  );
 }

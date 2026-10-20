@@ -1,4 +1,4 @@
-export type { DockerContext } from './context-store.ts';
+export type { DockerContext, Environment } from './context-store.ts';
 export { type ConnectOptions, Docker } from './docker.ts';
 export {
   ConnectionFailedError,
