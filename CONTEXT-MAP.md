@@ -22,4 +22,5 @@ Each context has its own glossary and its own architecture decision records.
 | SQLite transaction    | [packages/sqlite/transaction/CONTEXT.md](./packages/sqlite/transaction/CONTEXT.md)       | [packages/sqlite/transaction/docs/adr](./packages/sqlite/transaction/docs/adr)                   |
 | SQLite snapshot       | [packages/sqlite/snapshot/CONTEXT.md](./packages/sqlite/snapshot/CONTEXT.md)             | [packages/sqlite/snapshot/docs/adr](./packages/sqlite/snapshot/docs/adr)                         |
 | SQLite data version   | [packages/sqlite/data-version/CONTEXT.md](./packages/sqlite/data-version/CONTEXT.md)     | [packages/sqlite/data-version/docs/adr](./packages/sqlite/data-version/docs/adr)                 |
+| Docker                | [packages/docker/CONTEXT.md](./packages/docker/CONTEXT.md)                               | [packages/docker/docs/adr](./packages/docker/docs/adr)                                           |
 | UI                    | [packages/ui/CONTEXT.md](./packages/ui/CONTEXT.md)                                       | The layer table of the [workspace ADR](./docs/adr/0001-zukhruf-is-a-layered-standard-library.md) |
