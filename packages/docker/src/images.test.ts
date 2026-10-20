@@ -28,21 +28,35 @@ describe('docker.images', () => {
     assert.equal(missing, undefined);
   });
 
-  test('a pull of a repository that does not exist is an ImageNotFoundError with the reference', async () => {
-    // Arrange
-    await using docker = await Docker.connect({ environment: process.env });
-    const reference = `zukhruf-missing-${randomUUID()}/none:1`;
+  test('a pull that the engine answers with 404 is an ImageNotFoundError with the reference', async () => {
+    // Arrange: the answer of an engine for a repository that the registry does not have.
+    await using scratch = await scratchDirectory();
+    await using engine = await fakeEngine({
+      directory: scratch.path,
+      apiVersion: '1.51',
+      answer: (_request, response) => {
+        response.writeHead(404, { 'Content-Type': 'application/json' });
+        response.end(
+          JSON.stringify({
+            message:
+              "pull access denied for zukhruf-missing/none, repository does not exist or may require 'docker login'",
+          }),
+        );
+      },
+    });
+    await using docker = await Docker.connect({ host: engine.host });
+    const reference = 'zukhruf-missing/none:1';
 
     // Act
-    const pulling = docker.images.pull(reference, {
-      signal: AbortSignal.timeout(30_000),
-    });
+    const pulling = docker.images.pull(reference);
 
     // Assert
     await assert.rejects(pulling, (error: unknown) => {
       assert.ok(error instanceof ImageNotFoundError);
       assert.equal(error.image, reference);
       assert.equal(error.status, 404);
+      assert.equal(error.method, 'POST');
+      assert.equal(error.path, '/images/create');
       return true;
     });
   });

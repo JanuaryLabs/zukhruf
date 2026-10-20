@@ -11,9 +11,11 @@ import {
   BindSourceNotFoundError,
   ContainerNotFoundError,
   ContainerNotRunningError,
+  ContainerRunningError,
   type DockerEngineError,
   ImageNotFoundError,
   NameConflictError,
+  NetworkNotFoundError,
 } from './errors.ts';
 import type { Images } from './images.ts';
 import type { CancelOptions, Filters } from './options.ts';
@@ -54,6 +56,30 @@ function reachableHost(hostIp: string | undefined): string {
   return hostIp;
 }
 
+/** The network modes that name no network of the caller. */
+const PREDEFINED_NETWORK_MODES = new Set(['default', 'bridge', 'host', 'none']);
+
+/**
+ * The names of the networks of a container: its network mode, when it names a
+ * network, and each network of its endpoints.
+ */
+function networksOf(container: EngineApi.ContainerInspectResponse): string[] {
+  const mode = container.HostConfig?.NetworkMode;
+  const networks = new Set<string>();
+  if (
+    mode !== undefined &&
+    mode !== '' &&
+    !PREDEFINED_NETWORK_MODES.has(mode) &&
+    !mode.startsWith('container:')
+  ) {
+    networks.add(mode);
+  }
+  for (const name of Object.keys(container.NetworkSettings?.Networks ?? {})) {
+    networks.add(name);
+  }
+  return [...networks];
+}
+
 /** A container, by the ID that the engine gave it. It has no disposal. */
 export class Container {
   readonly id: string;
@@ -79,22 +105,46 @@ export class Container {
   }
 
   /**
-   * Resolves for 304 (already running). A 404 is also a missing network: it
-   * is a ContainerNotFoundError only when an inspect does not find the
-   * container.
+   * Resolves for 304 (already running). A 404 is a missing container or a
+   * missing network: an inspect of the container tells which, and a lookup of
+   * each of its networks names the missing one. An engine in swarm mode
+   * answers a missing network with 500 ("Could not attach to network", probed
+   * at API 1.51), so a 500 gets the same lookup.
    */
   async start(options: CancelOptions = {}): Promise<void> {
+    const { signal } = options;
     const method = 'POST';
     const path = `${this.#path}/start`;
-    const response = await this.#client.exchange(method, path, options);
+    const response = await this.#client.exchange(method, path, { signal });
     if (response.status === 304 || isSuccess(response)) return;
-    if (response.status === 404) {
-      const inspect = await this.#client.exchange('GET', `${this.#path}/json`, {
-        signal: options.signal,
-      });
-      if (inspect.status === 404) this.#throwUnless(response, method, path);
+    const error = this.#client.error(response, method, path);
+    if (response.status !== 404 && response.status !== 500) {
+      throw bindSourceOr(error);
     }
-    throw bindSourceOr(this.#client.error(response, method, path));
+    const inspect = await this.#client.exchange('GET', `${this.#path}/json`, {
+      signal,
+    });
+    if (inspect.status === 404 && response.status === 404) {
+      this.#throwUnless(response, method, path);
+    }
+    if (!isSuccess(inspect)) throw bindSourceOr(error);
+    const container = parseBody<EngineApi.ContainerInspectResponse>(inspect);
+    for (const network of networksOf(container)) {
+      const lookup = await this.#client.exchange(
+        'GET',
+        `/networks/${encodeURIComponent(network)}`,
+        { signal },
+      );
+      if (lookup.status === 404) {
+        throw new NetworkNotFoundError(
+          error.message,
+          { status: response.status, method, path },
+          network,
+          { cause: error },
+        );
+      }
+    }
+    throw bindSourceOr(error);
   }
 
   /** Resolves for 304 (already stopped). t: seconds before the engine kills the main process. */
@@ -164,9 +214,10 @@ export class Container {
   /**
    * Resolves for 404. A 409 is a removal that is already in progress, or,
    * without `force`, a container that runs: an inspect tells which. For a
-   * removal in progress, it waits until the container is gone. The engine
+   * removal in progress, it waits until the container is gone. A container
+   * that runs or is paused rejects with ContainerRunningError. The engine
    * gives the state 'running' while it kills the container for a forced
-   * removal, so the state alone does not tell.
+   * removal, so with `force` the state alone does not tell: it waits.
    */
   async remove(
     options: CancelOptions & { force?: boolean; v?: boolean } = {},
@@ -179,23 +230,28 @@ export class Container {
       signal,
     });
     if (isSuccess(response) || response.status === 404) return;
-    if (response.status === 409) {
-      const inspect = await this.#client.exchange('GET', `${path}/json`, {
-        signal,
-      });
-      if (inspect.status === 404) return;
-      const state =
-        parseBody<EngineApi.ContainerInspectResponse>(inspect).State;
-      const runs = state?.Running === true || state?.Paused === true;
-      if (force === true || !runs) {
-        const gone = await this.#client.exchange('POST', `${path}/wait`, {
-          query: { condition: 'removed' },
-          signal,
-        });
-        if (isSuccess(gone) || gone.status === 404) return;
-      }
+    const error = this.#client.error(response, method, path);
+    if (response.status !== 409) throw error;
+    const inspect = await this.#client.exchange('GET', `${path}/json`, {
+      signal,
+    });
+    if (inspect.status === 404) return;
+    const state = parseBody<EngineApi.ContainerInspectResponse>(inspect).State;
+    const runs = state?.Running === true || state?.Paused === true;
+    if (force !== true && runs) {
+      throw new ContainerRunningError(
+        error.message,
+        { status: 409, method, path },
+        this.id,
+        { cause: error },
+      );
     }
-    throw this.#client.error(response, method, path);
+    const gone = await this.#client.exchange('POST', `${path}/wait`, {
+      query: { condition: 'removed' },
+      signal,
+    });
+    if (isSuccess(gone) || gone.status === 404) return;
+    throw error;
   }
 
   /** The published binding of a port of the container; undefined when it is not published. The IPv4 binding comes first. */

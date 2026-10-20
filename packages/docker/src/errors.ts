@@ -122,25 +122,39 @@ export class ContainerNotRunningError extends DockerEngineError {
   }
 }
 
-/**
- * A create of a container, network or volume found the name taken. Its `name`
- * is the taken name, so it replaces the class name of Error.
- */
+/** A create of a container, network or volume found the name taken. */
 export class NameConflictError extends DockerEngineError {
   readonly kind: 'container' | 'network' | 'volume';
-  /** The taken name. */
-  override readonly name: string;
+  /** The name that another resource has. Not `name`: that is the name of the error class. */
+  readonly takenName: string;
 
   constructor(
     message: string,
     request: EngineRequest,
     kind: 'container' | 'network' | 'volume',
-    name: string,
+    takenName: string,
     options?: ErrorOptions,
   ) {
     super(message, request, options);
+    this.name = 'NameConflictError';
     this.kind = kind;
-    this.name = name;
+    this.takenName = takenName;
+  }
+}
+
+/** A removal without `force` got 409, and an inspect showed that the container runs. */
+export class ContainerRunningError extends DockerEngineError {
+  readonly container: string;
+
+  constructor(
+    message: string,
+    request: EngineRequest,
+    container: string,
+    options?: ErrorOptions,
+  ) {
+    super(message, request, options);
+    this.name = 'ContainerRunningError';
+    this.container = container;
   }
 }
 
@@ -160,7 +174,7 @@ export class ImageNotFoundError extends DockerEngineError {
   }
 }
 
-/** A request needs a network that the engine does not have. */
+/** A start got 404 while the container exists, and a lookup of its networks found one missing. */
 export class NetworkNotFoundError extends DockerEngineError {
   readonly network: string;
 

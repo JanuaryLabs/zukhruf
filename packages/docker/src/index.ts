@@ -11,6 +11,7 @@ export {
   ConnectionFailedError,
   ContainerNotFoundError,
   ContainerNotRunningError,
+  ContainerRunningError,
   ContextNotFoundError,
   DockerEngineError,
   DockerError,

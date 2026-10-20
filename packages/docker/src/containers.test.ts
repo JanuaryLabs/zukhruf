@@ -6,6 +6,7 @@ import {
   BindSourceNotFoundError,
   ContainerNotFoundError,
   ContainerNotRunningError,
+  ContainerRunningError,
   Docker,
   DockerEngineError,
   ImageNotFoundError,
@@ -194,7 +195,7 @@ describe('containers.createOrGet()', () => {
 });
 
 describe('a create that the engine refuses', () => {
-  test('a taken name is a NameConflictError with the name', async () => {
+  test('a taken name is a NameConflictError with the taken name', async () => {
     // Arrange
     await using docker = await connect();
     const run = randomUUID();
@@ -210,7 +211,8 @@ describe('a create that the engine refuses', () => {
         assert.ok(error instanceof NameConflictError);
         assert.ok(error instanceof DockerEngineError);
         assert.equal(error.kind, 'container');
-        assert.equal(error.name, name);
+        assert.equal(error.takenName, name);
+        assert.equal(error.name, 'NameConflictError');
         assert.equal(error.status, 409);
         return true;
       });
@@ -268,37 +270,35 @@ describe('a create that the engine refuses', () => {
     }
   });
 
-  test(
-    'a container on a network that does not exist is a NetworkNotFoundError with the network',
-    {
-      todo: 'both engines create the container (201) and answer 404 to start; README says the create gets 404',
-    },
-    async () => {
-      // Arrange
-      await using docker = await connect();
-      const run = randomUUID();
-      const network = `zukhruf-missing-${run}`;
-      try {
-        // Act
-        const starting = docker.containers
-          .create({ ...sleeper(run), HostConfig: { NetworkMode: network } })
-          .then(async (container) => container.start());
+  test('start() of a container on a network that does not exist is a NetworkNotFoundError with the network', async () => {
+    // Arrange: the engine creates the container (201) and refuses the start.
+    await using docker = await connect();
+    const run = randomUUID();
+    const network = `zukhruf-missing-${run}`;
+    try {
+      const container = await docker.containers.create({
+        ...sleeper(run),
+        HostConfig: { NetworkMode: network },
+      });
 
-        // Assert
-        await assert.rejects(starting, (error: unknown) => {
-          assert.ok(error instanceof NetworkNotFoundError);
-          assert.equal(error.network, network);
-          return true;
-        });
-      } finally {
-        await removeLabeled(docker, run);
-      }
-    },
-  );
+      // Act
+      const starting = container.start();
+
+      // Assert
+      await assert.rejects(starting, (error: unknown) => {
+        assert.ok(error instanceof NetworkNotFoundError);
+        assert.ok(!(error instanceof ContainerNotFoundError));
+        assert.equal(error.network, network);
+        return true;
+      });
+    } finally {
+      await removeLabeled(docker, run);
+    }
+  });
 });
 
 describe('a request that the engine refuses for one container', () => {
-  test('remove() without force of a running container rejects with 409 and keeps the container', async () => {
+  test('remove() without force of a running container is a ContainerRunningError and keeps the container', async () => {
     // Arrange
     await using docker = await connect();
     const run = randomUUID();
@@ -313,7 +313,10 @@ describe('a request that the engine refuses for one container', () => {
 
       // Assert
       await assert.rejects(removing, (error: unknown) => {
+        assert.ok(error instanceof ContainerRunningError);
         assert.ok(error instanceof DockerEngineError);
+        assert.equal(error.container, container.id);
+        assert.equal(error.name, 'ContainerRunningError');
         assert.equal(error.status, 409);
         return true;
       });
