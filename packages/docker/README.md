@@ -1,6 +1,6 @@
 # @zukhruf/docker
 
-> **Status: design for review.** This README is the API on paper. No code exists yet. The decisions are in the [ADRs](./docs/adr/). The package leads, and the repositories that use Docker change to fit it ([ADR 0003](./docs/adr/0003-the-package-leads-and-the-repositories-change.md)).
+> **Status: in progress.** Engine selection (`Docker.connect()`, `Docker.contexts()`), `docker.info()`, the API version, and the connections over a Unix socket, a Windows named pipe and SSH work. The rest of this README is the designed API, and the next releases add it. A Windows named pipe is not proved yet (backlog #2753). The decisions are in the [ADRs](./docs/adr/). The package leads, and the repositories that use Docker change to fit it ([ADR 0003](./docs/adr/0003-the-package-leads-and-the-repositories-change.md)).
 
 A client for the Docker Engine API on Node.js. It selects the engine that the Docker CLI selects, and it sends HTTP requests to that engine with `node:http`: through a Unix socket, a Windows named pipe, or SSH. It needs no Docker CLI on the `PATH`, and it has no dependencies. Thus a desktop app that starts from the macOS Dock can use it, and so can a test, a sandbox or a deploy tool.
 
