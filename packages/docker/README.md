@@ -85,7 +85,7 @@ An error has its own class when a caller does something different after it: star
 | `NotAFileError`            | `readFile()` finds a directory, a link or another kind of entry. `kind` names it                                                                                 | Use `getArchive()` for the tree                    |
 | `ReadOnlyPathError`        | The engine refuses an extraction, and an inspect shows that the directory is on a read-only root filesystem or in a read-only mount                              | Write under a writable mount, or use `exec()`      |
 
-Each class extends a base class, so a broad catch still works. `DockerError` is the base of every error of the package. `DockerEngineError` is the base of every answer of the engine that is an error. It has `status`, `method` and `path`, and its `message` is the message of the engine. An error with no class of its own, such as an error in the progress of a pull, is a `DockerEngineError`.
+Each class extends a base class, so a broad catch still works. `DockerError` is the base of every error of the package. `DockerEngineError` is the base of every answer of the engine that is an error. It has `status` and `request` (the `method` and `path` of the request), and its `message` is the message of the engine. The base keeps the request apart in `request`, so `path` on `PathNotFoundError`, `NotAFileError` and `ReadOnlyPathError` is the path in the container. An error with no class of its own, such as an error in the progress of a pull, is a `DockerEngineError`.
 
 ```ts
 import {
@@ -789,8 +789,8 @@ export class UnsupportedEngineError extends DockerError {
 export class DockerEngineError extends DockerError {
   /** The HTTP status; undefined for an error in the progress of a pull, a push or a load. */
   readonly status: number | undefined;
-  readonly method: string;
-  readonly path: string;
+  /** The request that got the error. */
+  readonly request: { readonly method: string; readonly path: string };
 }
 
 export class ContainerNotFoundError extends DockerEngineError {
