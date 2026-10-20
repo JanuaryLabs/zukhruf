@@ -72,9 +72,10 @@ An error has its own class when a caller does something different after it: star
 | `ContextNotFoundError`     | `Docker.connect({ context })` names a context that the context store does not have                                                            | Pick another context from `Docker.contexts()`      |
 | `ContainerNotFoundError`   | A request about a container gets 404                                                                                                          | Create the container again                         |
 | `ContainerNotRunningError` | An exec or a kill gets 409, or an attach finds the container exited or paused. `state` comes from an inspect: `created`, `exited`, `paused` … | Start or unpause it, then try again                |
+| `ContainerRunningError`    | A removal without `force` gets 409, and an inspect shows that the container runs                                                              | Stop it first, or remove it with `force`           |
 | `NameConflictError`        | A create of a container, network or volume finds the name taken                                                                               | Use `createOrGet()`, or another name               |
-| `ImageNotFoundError`       | A create gets 404 and the image is not on the engine; a pull or a push gets 404                                                               | Pull or build the image; check the name or `auth`  |
-| `NetworkNotFoundError`     | A create gets 404 and the image is on the engine; a request about a network gets 404                                                          | Create the network first                           |
+| `ImageNotFoundError`       | A create, a pull or a push gets 404                                                                                                           | Pull or build the image; check the name or `auth`  |
+| `NetworkNotFoundError`     | A start gets 404 while the container exists, and a lookup of its networks finds one missing; a request about a network gets 404               | Create the network first                           |
 | `VolumeNotFoundError`      | A request about a volume gets 404                                                                                                             | Create the volume again                            |
 | `BindSourceNotFoundError`  | A create or a start refuses a bind mount whose `source` does not exist on the engine's host                                                   | Tell the user which host path is missing           |
 | `VolumeInUseError`         | A volume removal gets 409                                                                                                                     | Remove its containers first, or wait and try again |
@@ -800,9 +801,13 @@ export class ContainerNotRunningError extends DockerEngineError {
   /** From an inspect after the 409: 'created', 'exited', 'paused', 'restarting', 'removing' or 'dead'. */
   readonly state: string;
 }
+export class ContainerRunningError extends DockerEngineError {
+  readonly container: string;
+}
 export class NameConflictError extends DockerEngineError {
   readonly kind: 'container' | 'network' | 'volume';
-  readonly name: string;
+  /** The name that another resource has. Not `name`: that is the name of the error class. */
+  readonly takenName: string;
 }
 export class ImageNotFoundError extends DockerEngineError {
   readonly image: string;
