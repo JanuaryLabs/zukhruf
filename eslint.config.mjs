@@ -37,9 +37,27 @@ const LAYERS = [
   { sourceTag: 'std:tool', shipped: ['std:tool'], tests: ['std:tool'] },
   { sourceTag: 'std:ui', shipped: [], tests: ['std:tool'] },
   {
+    sourceTag: 'std:ui-extension',
+    shipped: ['std:ui'],
+    tests: ['std:ui', 'std:tool'],
+  },
+  {
     sourceTag: 'std:host',
-    shipped: ['std:base', 'std:coordination', 'std:domain', 'std:ui'],
-    tests: ['std:base', 'std:coordination', 'std:domain', 'std:ui', 'std:tool'],
+    shipped: [
+      'std:base',
+      'std:coordination',
+      'std:domain',
+      'std:ui',
+      'std:ui-extension',
+    ],
+    tests: [
+      'std:base',
+      'std:coordination',
+      'std:domain',
+      'std:ui',
+      'std:ui-extension',
+      'std:tool',
+    ],
   },
 ];
 
@@ -66,6 +84,7 @@ export default defineConfig(
     files: [
       'packages/shadcn/**',
       'packages/diagram/**',
+      'packages/ui/**',
       'apps/diagram-playground/**',
     ],
     plugins: { zukhruf },
@@ -105,6 +124,14 @@ export default defineConfig(
     rules: {
       '@nx/enforce-module-boundaries': moduleBoundaryRule('tests', [
         '@zukhruf/diagram',
+      ]),
+    },
+  },
+  {
+    files: ['packages/ui/src/**/*.test.ts'],
+    rules: {
+      '@nx/enforce-module-boundaries': moduleBoundaryRule('tests', [
+        '@zukhruf/ui',
       ]),
     },
   },

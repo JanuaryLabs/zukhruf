@@ -1,6 +1,6 @@
 # zukhruf
 
-زخرف. A workspace of small Node.js libraries and one library of React components.
+زخرف. A workspace of small Node.js libraries and libraries of React components.
 
 ## Packages
 
@@ -23,6 +23,7 @@
 | [`@zukhruf/sqlite-transaction`](./packages/sqlite/transaction)       | A transaction function for `node:sqlite`. It runs work in a transaction, commits when the work returns, and rolls back when it throws. A call inside a transaction works in a savepoint. When SQLite ends the transaction itself, the caller gets the original error.                                                                                                                                            |
 | [`@zukhruf/sqlite-snapshot`](./packages/sqlite/snapshot)             | A read-only snapshot of a SQLite database that another process owns and writes. A read transaction holds one moment, so the tables agree. The file is never opened immutable, so the snapshot sees the newest rows in the WAL. It checks the columns that a reader needs.                                                                                                                                        |
 | [`@zukhruf/sqlite-data-version`](./packages/sqlite/data-version)     | The data version of a SQLite database that another process owns and writes. It polls `PRAGMA data_version` on its own connection. The value changes on each commit by another connection, also while the owner keeps the file open.                                                                                                                                                                              |
+| [`@zukhruf/ui`](./packages/ui)                                       | React components that an app builds from the components of `@zukhruf/shadcn`. `TheButton` is a button that shows a loading spinner after a delay, an icon, and a tooltip. `@zukhruf/shadcn` is a peer dependency.                                                                                                                                                                                                |
 
 ## Apps
 
@@ -35,7 +36,7 @@ Each package has its own glossary. [CONTEXT-MAP.md](./CONTEXT-MAP.md) lists them
 
 ## How the packages fit together
 
-The packages import each other in layers: base, coordination, domain, UI, tool and host. Each layer imports only the layers that the ADR lists for it, and `nx lint` refuses each other import. [ADR 0001](./docs/adr/0001-zukhruf-is-a-layered-standard-library.md) gives the layers and the rules that put code into a package.
+The packages import each other in layers: base, coordination, domain, UI, UI extension, tool and host. Each layer imports only the layers that the ADR lists for it, and `nx lint` refuses each other import. [ADR 0001](./docs/adr/0001-zukhruf-is-a-layered-standard-library.md) gives the layers and the rules that put code into a package.
 
 ## Development
 
