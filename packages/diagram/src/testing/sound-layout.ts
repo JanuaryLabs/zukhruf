@@ -5,6 +5,7 @@ import type {
   NodeLayout,
   TextRun,
 } from '../lib/layouts/graph/graph-layout-result.ts';
+import { LAYOUT_TOKENS } from '../lib/layouts/graph/tokens.ts';
 import type { Box, DiagramSide, Point } from '../lib/model/diagram-ir.ts';
 import { parseEndpointRef } from '../lib/model/endpoint-ref.ts';
 
@@ -254,6 +255,23 @@ function checkEdges(
           );
         }
       }
+      for (const { group, label } of layout.groups) {
+        if (endpoints.has(group.id)) continue;
+        const crossesLabel = label.some((run) =>
+          geometry.segmentCrosses(
+            a,
+            b,
+            geometry.inset(run.bounds, -LAYOUT_TOKENS.LABEL_GAP),
+          ),
+        );
+        if (crossesLabel) {
+          report(
+            'E3',
+            [id, group.id],
+            `${what} passes through the label of group "${group.id}"`,
+          );
+        }
+      }
     }
   };
 
@@ -263,19 +281,6 @@ function checkEdges(
     const source = parseEndpointRef(edge.edge.from);
     const target = parseEndpointRef(edge.edge.to);
     checkPath(id, what, edge.points, new Set([source.nodeId, target.nodeId]));
-    for (const [a, b] of segments(edge.points)) {
-      for (const { group, band } of layout.groups) {
-        if (!band || group.id === source.nodeId || group.id === target.nodeId)
-          continue;
-        if (geometry.segmentCrosses(a, b, band)) {
-          report(
-            'E3',
-            [id, group.id],
-            `${what} passes through the title band of group "${group.id}"`,
-          );
-        }
-      }
-    }
     if (edge.points.length < 2) continue;
 
     const ends = [

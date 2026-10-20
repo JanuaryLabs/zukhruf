@@ -459,7 +459,46 @@ describe('assertSoundLayout', () => {
     );
   });
 
-  test('E3: an edge that passes through the title band of a group', () => {
+  test('E3: an edge that passes within LABEL_GAP of the label of a group', () => {
+    // Arrange
+    const layout = soundLayout();
+    const edge = edgeIn(layout, 'db', 'hub');
+    edge.exitSide = 'top';
+    edge.points = [
+      { x: 210, y: 100 },
+      { x: 210, y: 50 },
+      { x: 92, y: 50 },
+      { x: 92, y: 10 },
+      { x: 300, y: 10 },
+      { x: 300, y: 300 },
+      { x: 420, y: 300 },
+    ];
+
+    // Assert
+    assertOnlyViolation(
+      layout,
+      { invariant: 'E3', ids: ['db->hub#2', 'cloud'] },
+      /E3 edge "db->hub#2" passes through the label of group "cloud"/,
+    );
+  });
+
+  test('E3: a leader that passes through the label of a group', () => {
+    // Arrange
+    const layout = soundLayout();
+    layout.leaders[0]!.points = [
+      { x: 380, y: 31 },
+      { x: 60, y: 31 },
+    ];
+
+    // Assert
+    assertOnlyViolation(
+      layout,
+      { invariant: 'E3', ids: ['note->web', 'cloud'] },
+      /E3 leader "note->web" passes through the label of group "cloud"/,
+    );
+  });
+
+  test('E3: an edge may cross the title band of a group beside its label', () => {
     // Arrange
     const layout = soundLayout();
     const edge = edgeIn(layout, 'db', 'hub');
@@ -472,12 +511,11 @@ describe('assertSoundLayout', () => {
       { x: 420, y: 300 },
     ];
 
+    // Act
+    const violations = layoutViolations(layout);
+
     // Assert
-    assertOnlyViolation(
-      layout,
-      { invariant: 'E3', ids: ['db->hub#2', 'cloud'] },
-      /E3 edge "db->hub#2" passes through the title band of group "cloud"/,
-    );
+    assert.deepEqual(violations, []);
   });
 
   test('E4: an edge that starts off its exit side', () => {
@@ -590,7 +628,7 @@ describe('assertSoundLayout', () => {
       /V1 node "cache" lies outside the viewBox/,
     );
   });
-  test('E3: an edge may cross the title band of the group it connects to', () => {
+  test('E3: an edge may cross the label of the group it connects to', () => {
     // Arrange
     const layout = soundLayout();
     edgeIn(layout, 'note', 'cloud').points = [

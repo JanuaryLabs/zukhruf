@@ -31,9 +31,14 @@ type Interval = [number, number];
  * shape split the free part of it, clear of the corners and of a caption on
  * that side, into even slots, ordered by where their other ends lie, so they
  * do not cross. A connection alone on two facing sides that overlap runs
- * straight across the middle of the overlap.
+ * straight across the middle of the widest part of the overlap that no
+ * group label text lies on.
  */
-export function attachConnections(connections: Connection[]): Attachment[] {
+export function attachConnections(
+  connections: Connection[],
+  /** Group label text, by group id: a straight line between two facing sides passes beside it. */
+  groupLabels: { group: string; box: Box }[],
+): Attachment[] {
   const fixed = (end: ConnectionEnd): Point | undefined => {
     if (end.port) return end.port.point;
     if (end.shape.kind === 'junction') return centre(end.shape.box);
@@ -59,7 +64,17 @@ export function attachConnections(connections: Connection[]): Attachment[] {
   const touchKey = (connection: number, role: 'from' | 'to') =>
     `${connection}:${role}`;
   for (const [index, { from, to }] of connections.entries()) {
-    const aligned = facingAlignment(from, to, fixed(from), fixed(to), crowd);
+    const between = groupLabels.flatMap(({ group, box }) =>
+      group === from.shape.id || group === to.shape.id ? [] : [box],
+    );
+    const aligned = facingAlignment(
+      from,
+      to,
+      fixed(from),
+      fixed(to),
+      crowd,
+      between,
+    );
     if (aligned) {
       touches.set(touchKey(index, 'from'), aligned.from);
       touches.set(touchKey(index, 'to'), aligned.to);
@@ -128,8 +143,13 @@ function freeIntervals(end: ConnectionEnd, count: number): Interval[] {
       ? [[box.x - SLOT_PITCH, box.x + box.w + SLOT_PITCH]]
       : [[box.y - SLOT_PITCH, box.y + box.h + SLOT_PITCH]];
   });
-  let free: Interval[] = [[from + inset, to - inset]];
-  for (const [cutStart, cutEnd] of behind) {
+  return cut([[from + inset, to - inset]], behind);
+}
+
+/** The parts of `intervals` outside every one of `cuts`. */
+function cut(intervals: Interval[], cuts: Interval[]): Interval[] {
+  let free = intervals;
+  for (const [cutStart, cutEnd] of cuts) {
     free = free
       .flatMap(([a, b]): Interval[] => [
         [a, Math.min(b, cutStart)],
@@ -178,13 +198,18 @@ function spread(end: ConnectionEnd, count: number): number[] {
   return alongs;
 }
 
-/** Both ends on the middle of the overlap of two facing sides, when the connection is alone on each. */
+/**
+ * Both ends on the middle of the widest part of the overlap of two facing
+ * sides that no label in `labels` between the sides lies on, when the
+ * connection is alone on each.
+ */
 function facingAlignment(
   from: ConnectionEnd,
   to: ConnectionEnd,
   fromFixed: Point | undefined,
   toFixed: Point | undefined,
   crowd: (end: ConnectionEnd) => number,
+  labels: Box[],
 ): { from: Point; to: Point } | undefined {
   if (to.side !== OPPOSITE[from.side] || (fromFixed && toFixed)) return;
   if (!fromFixed && crowd(from) !== 1) return;
@@ -195,12 +220,22 @@ function facingAlignment(
     const along = vertical ? at.x : at.y;
     return [[along, along]];
   };
+  const lines = [
+    sideLine(from.shape.box, from.side),
+    sideLine(to.shape.box, to.side),
+  ];
+  const [gapStart, gapEnd] = [Math.min(...lines), Math.max(...lines)];
+  const inGap = labels.flatMap(({ x, y, w, h }): Interval[] => {
+    const [across, acrossEnd, along, alongEnd] = vertical
+      ? [y, y + h, x, x + w]
+      : [x, x + w, y, y + h];
+    return across < gapEnd && acrossEnd > gapStart ? [[along, alongEnd]] : [];
+  });
   const widest = free(from, fromFixed)
     .flatMap(([a0, a1]) =>
-      free(to, toFixed).map(([b0, b1]): Interval => [
-        Math.max(a0, b0),
-        Math.min(a1, b1),
-      ]),
+      free(to, toFixed).flatMap(([b0, b1]) =>
+        cut([[Math.max(a0, b0), Math.min(a1, b1)]], inGap),
+      ),
     )
     .filter(([low, high]) => low <= high)
     .sort((a, b) => b[1] - b[0] - (a[1] - a[0]))[0];

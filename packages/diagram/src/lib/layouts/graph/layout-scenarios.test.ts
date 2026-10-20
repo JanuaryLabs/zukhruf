@@ -9,7 +9,7 @@ import type {
   DiagramGroup,
   DiagramNode,
 } from '../../model/diagram-ir.ts';
-import type { GraphLayout } from './graph-layout-result.ts';
+import type { GraphLayout, GroupLayout } from './graph-layout-result.ts';
 import { layoutGraph } from './layout.ts';
 import { measureEdgeLabel, measureNode } from './measure.ts';
 import { LAYOUT_TOKENS } from './tokens.ts';
@@ -34,12 +34,16 @@ function box(layout: GraphLayout, id: string): Box {
   return found.box;
 }
 
-function rect(layout: GraphLayout, id: string): Box {
+function groupOf(layout: GraphLayout, id: string): GroupLayout {
   const found = layout.groups.find(
     (groupLayout) => groupLayout.group.id === id,
   );
   assert.ok(found, `group "${id}" is in the layout`);
-  return found.rect;
+  return found;
+}
+
+function rect(layout: GraphLayout, id: string): Box {
+  return groupOf(layout, id).rect;
 }
 
 function close(actual: number, expected: number, what: string) {
@@ -1589,7 +1593,7 @@ describe('layoutGraph routes edges, one rung at a time from one edge to the home
     );
   });
 
-  test('e8 edges into and out of a group cross its border, not its title band', () => {
+  test('e8 edges into and out of a group cross its border', () => {
     // Arrange
     const ir = graph({
       nodes: [
@@ -1950,6 +1954,139 @@ describe('layoutGraph routes edges, one rung at a time from one edge to the home
       );
     }
   });
+
+  test('b1 an edge drops straight through the title band of a group beside its start-aligned label', () => {
+    // Arrange
+    const ir = graph({
+      nodes: [
+        cell('client', 0, 0, { label: 'Client' }),
+        cell('api', 1, 0, { label: 'Payments API service', group: 'cloud' }),
+      ],
+      groups: [
+        { id: 'cloud', label: 'Cloud', titleBand: true, labelAlign: 'start' },
+      ],
+      edges: [{ from: 'client', to: 'api' }],
+    });
+
+    // Act
+    const layout = layoutGraph(ir);
+
+    // Assert
+    assertSoundLayout(layout);
+    const { band } = groupOf(layout, 'cloud');
+    const { points } = edgeOf(layout, 'client', 'api');
+    assert.equal(points.length, 2);
+    assert.equal(points[0]!.x, points[1]!.x);
+    assert.ok(points[0]!.y < band!.y && points[1]!.y > band!.y + band!.h);
+  });
+
+  test('b2 an edge drops straight through the title band beside a centred label right above its target', () => {
+    // Arrange
+    const ir = graph({
+      nodes: [
+        cell('client', 0, 0, { label: 'Client' }),
+        cell('api', 1, 0, { label: 'Payments API service', group: 'cloud' }),
+      ],
+      groups: [
+        { id: 'cloud', label: 'Cloud', titleBand: true, labelAlign: 'center' },
+      ],
+      edges: [{ from: 'client', to: 'api' }],
+    });
+
+    // Act
+    const layout = layoutGraph(ir);
+
+    // Assert
+    assertSoundLayout(layout);
+    const { band, label } = groupOf(layout, 'cloud');
+    const api = box(layout, 'api');
+    assert.ok(
+      label[0]!.bounds.x < api.x + api.w / 2 &&
+        label[0]!.bounds.x + label[0]!.bounds.w > api.x + api.w / 2,
+      'the label lies right above the centre of the target',
+    );
+    const { points } = edgeOf(layout, 'client', 'api');
+    assert.equal(points.length, 2);
+    assert.equal(points[0]!.x, points[1]!.x);
+    assert.ok(points[0]!.y < band!.y && points[1]!.y > band!.y + band!.h);
+  });
+
+  test('b2b a centred label wider than the source leaves no straight line, so the edge jogs around it LABEL_GAP clear', () => {
+    // Arrange
+    const ir = graph({
+      nodes: [
+        cell('client', 0, 0, { label: 'DB' }),
+        cell('api', 1, 0, { label: 'Payments API service', group: 'cloud' }),
+      ],
+      groups: [
+        {
+          id: 'cloud',
+          label: 'Cloud platform services',
+          titleBand: true,
+          labelAlign: 'center',
+        },
+      ],
+      edges: [{ from: 'client', to: 'api' }],
+    });
+
+    // Act
+    const layout = layoutGraph(ir);
+
+    // Assert
+    assertSoundLayout(layout);
+    const { points } = edgeOf(layout, 'client', 'api');
+    assert.ok(points.length <= 6, `${points.length} points`);
+  });
+
+  test('b3 an edge leaves a group downward straight through the title band of the group below', () => {
+    // Arrange
+    const ir = graph({
+      nodes: [
+        cell('api', 0, 0, { label: 'Payments API service', group: 'cloud' }),
+        cell('db', 1, 0, { label: 'Ledger database', group: 'store' }),
+      ],
+      groups: [
+        { id: 'cloud', label: 'Cloud', titleBand: true },
+        { id: 'store', label: 'Storage', titleBand: true },
+      ],
+      edges: [{ from: 'api', to: 'db' }],
+    });
+
+    // Act
+    const layout = layoutGraph(ir);
+
+    // Assert
+    assertSoundLayout(layout);
+    const { band } = groupOf(layout, 'store');
+    const { points } = edgeOf(layout, 'api', 'db');
+    assert.equal(points.length, 2);
+    assert.equal(points[0]!.x, points[1]!.x);
+    assert.ok(points[0]!.y < band!.y && points[1]!.y > band!.y + band!.h);
+  });
+
+  test('b4 the homelab tunnel drops straight into the gateway, and the gateway reaches istio with at most one jog inside the cluster', () => {
+    // Arrange
+    const ir = homelab();
+
+    // Act
+    const layout = layoutGraph(ir);
+
+    // Assert
+    assertSoundLayout(layout);
+    assert.equal(
+      edgeOf(layout, 'cloudflare-tunnel', 'gateway').points.length,
+      2,
+    );
+    const { points } = edgeOf(layout, 'gateway', 'istio');
+    assert.ok(points.length <= 4, `${points.length} points`);
+    const cluster = rect(layout, 'cluster');
+    for (const { x, y } of points) {
+      assert.ok(
+        x > cluster.x && x < cluster.x + cluster.w && y > cluster.y,
+        `(${x}, ${y}) lies inside the cluster`,
+      );
+    }
+  });
 });
 
 describe('layoutGraph routes the shapes of the shipped diagrams', () => {
@@ -2151,7 +2288,7 @@ describe('layoutGraph throws when an edge has no room', () => {
     // Act + Assert
     assert.throws(() => layoutGraph(ir), {
       message:
-        'Diagram edge island→far: no orthogonal route from bottom of "island" to top of "far" avoids the nodes, labels and title bands. Change exitSide/entrySide or move a node.',
+        'Diagram edge island→far: no orthogonal route from bottom of "island" to top of "far" avoids the nodes and labels. Change exitSide/entrySide or move a node.',
     });
   });
 

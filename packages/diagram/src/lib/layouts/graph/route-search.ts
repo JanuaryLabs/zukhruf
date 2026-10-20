@@ -42,7 +42,7 @@ export type RouteSearch = {
   walls: Box[];
   /** Segments of routes already drawn: a route may cross them at a cost, never run along them. */
   runs: [Point, Point][];
-  /** Group rects: crossing or hugging their borders costs extra. */
+  /** Group rects and title bands: crossing or hugging their borders costs extra. */
   borders: Box[];
   start: Point;
   /** The heading of the stub that reaches `start`. */

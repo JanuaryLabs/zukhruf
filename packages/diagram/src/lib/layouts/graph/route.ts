@@ -46,7 +46,13 @@ export function routeGraph(
 ): { edges: EdgeLayout[]; leaders: LeaderLayout[] } {
   const connections = graphConnections(ir, nodes, groups, areas);
   if (connections.length === 0) return { edges: [], leaders: [] };
-  const attachments = attachConnections(connections);
+  const groupLabels = groups.flatMap(({ group, label }) =>
+    label.map((run) => ({
+      group: group.id,
+      box: inflate(run.bounds, LAYOUT_TOKENS.LABEL_GAP),
+    })),
+  );
+  const attachments = attachConnections(connections, groupLabels);
   const content = union([
     ...nodes.map((nodeLayout) => nodeLayout.visual),
     ...groups.map((groupLayout) => groupLayout.rect),
@@ -84,10 +90,8 @@ export function routeGraph(
         // Its own parts, not their bounding box: a caption wider than the frame leaves room beside the frame.
         return [box, ...frames, ...(caption ? [caption.box] : [])];
       }),
-      ...groups.flatMap(({ group, band, label }) =>
-        ends.has(group.id)
-          ? []
-          : [...(band ? [band] : []), ...label.map((run) => run.bounds)],
+      ...groupLabels.flatMap(({ group, box }) =>
+        ends.has(group) ? [] : [box],
       ),
       ...tags.map((tag) => inflate(tag, LAYOUT_TOKENS.LABEL_GAP)),
     ];
@@ -112,7 +116,9 @@ export function routeGraph(
         },
         walls,
         runs,
-        borders: groups.map((groupLayout) => groupLayout.rect),
+        borders: groups.flatMap(({ rect, band }) =>
+          band ? [rect, band] : [rect],
+        ),
         start: startStub,
         startHeading: OUTWARD[from.side],
         goal: endStub,
@@ -132,7 +138,7 @@ export function routeGraph(
           ? 'Move the note or its target.'
           : 'Change exitSide/entrySide or move a node.';
       throw new Error(
-        `Diagram ${connection.name}: no orthogonal route from ${endName(from)} to ${endName(to)} avoids the nodes, labels and title bands. ${advice}`,
+        `Diagram ${connection.name}: no orthogonal route from ${endName(from)} to ${endName(to)} avoids the nodes and labels. ${advice}`,
       );
     }
     const points = simplifyPath([start, ...found, end]);
