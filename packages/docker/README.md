@@ -184,6 +184,12 @@ await postgres.exec(
 );
 ```
 
+The close depends on the host:
+
+- On a Unix socket, the package shuts down the write side of the socket.
+- Over SSH, the package closes the standard input of `ssh`. Then `docker system dial-stdio` closes the write side to the engine.
+- On a Windows named pipe, the package writes a message of zero bytes. A pipe has no shutdown of one side, and `end()` of Node.js only flushes it. The engine listens on its pipe in message mode, and it reads a message of zero bytes as the end of the input. `CloseWrite` of go-winio, which the Docker CLI uses, sends the same message.
+
 `container.spawn()` gives the streams of the command while it runs, as a container process. With `stdin: true`, the container process has a writable `stdin`. Close it to end the input.
 
 ```ts
