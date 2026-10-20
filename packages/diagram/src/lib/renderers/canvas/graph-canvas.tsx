@@ -1,24 +1,19 @@
 import { useEffect, useMemo, useRef } from 'react';
 
-import { compileGraph, validateGraph } from '../../compiler/diagram-compile.ts';
-import {
-  computePaths,
-  graphContentViewBox,
-  groupBox,
-  groupLabelLines,
-  nodeBox,
-  nodeFrameRadius,
-  resolveGraphLayout,
-} from '../../layouts/graph/graph-layout.ts';
+import { compileGraph } from '../../compiler/diagram-compile.ts';
+import type {
+  GraphLayout,
+  TextAnchor,
+  TextRun,
+} from '../../layouts/graph/graph-layout-result.ts';
+import { legacyGraphLayout } from '../../layouts/graph/legacy-graph-layout.ts';
 import { FONT_FAMILY, TEXT_SHAPING } from '../../layouts/text/font.ts';
 import type {
   Box,
   DiagramEdge,
   DiagramGraphLayout,
-  DiagramLabelLine,
   DiagramPaper,
   DiagramTexture,
-  GraphLayoutSpec,
 } from '../../model/diagram-ir.ts';
 import {
   DIAGRAM_BG,
@@ -35,12 +30,6 @@ import { nodeFrameFill, nodeFrameStroke } from '../shared/graph-parts.tsx';
 import { rejectNodeContent } from '../shared/node-content.ts';
 import type { GraphRendererProps } from '../types.ts';
 import { canvasViewportProps } from './canvas-viewport.ts';
-
-type CanvasGraphModel = {
-  graph: GraphLayoutSpec;
-  routedEdges: ReturnType<typeof computePaths>;
-  viewBox: Box;
-};
 
 function resolveCssColor(
   element: HTMLElement,
@@ -61,12 +50,6 @@ function edgeDash(edge: DiagramEdge) {
   if (edge.lineStyle === 'dashed') return [6, 6];
   if (edge.lineStyle === 'dotted') return [1, 6];
   return [];
-}
-
-function linesForLabel(label: string | DiagramLabelLine[]) {
-  return (Array.isArray(label) ? label : [label]).map((line) =>
-    typeof line === 'string' ? line : line.text,
-  );
 }
 
 function drawRoundedRect(
@@ -123,19 +106,19 @@ function applyTexture(
   ctx.restore();
 }
 
-function drawTextLines(
-  ctx: CanvasRenderingContext2D,
-  lines: string[],
-  x: number,
-  firstY: number,
-  lineHeight: number,
-  align: CanvasTextAlign,
-) {
-  ctx.textAlign = align;
+const CANVAS_ALIGN: Record<TextAnchor, CanvasTextAlign> = {
+  start: 'left',
+  middle: 'center',
+  end: 'right',
+};
+
+function drawTextRuns(ctx: CanvasRenderingContext2D, runs: TextRun[]) {
   ctx.textBaseline = 'alphabetic';
-  lines.forEach((line, index) => {
-    ctx.fillText(line, x, firstY + index * lineHeight);
-  });
+  for (const run of runs) {
+    ctx.font = `${run.font.weight} ${run.font.size}px ${FONT_FAMILY[run.font.face]}`;
+    ctx.textAlign = CANVAS_ALIGN[run.anchor];
+    ctx.fillText(run.text, run.x, run.y);
+  }
 }
 
 function drawEdgeArrow(
@@ -161,7 +144,7 @@ function drawEdgeArrow(
 
 function drawGraphCanvas(
   canvas: HTMLCanvasElement,
-  model: CanvasGraphModel,
+  layout: GraphLayout,
   options: {
     accent: string;
     paper?: DiagramPaper | undefined;
@@ -169,13 +152,14 @@ function drawGraphCanvas(
 ) {
   const ctx = canvas.getContext('2d');
   if (!ctx) return;
+  const { viewBox } = layout;
   const dpr = window.devicePixelRatio || 1;
-  canvas.width = Math.round(model.viewBox.w * dpr);
-  canvas.height = Math.round(model.viewBox.h * dpr);
+  canvas.width = Math.round(viewBox.w * dpr);
+  canvas.height = Math.round(viewBox.h * dpr);
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.fontKerning = TEXT_SHAPING.fontKerning;
-  ctx.clearRect(0, 0, model.viewBox.w, model.viewBox.h);
-  ctx.translate(-model.viewBox.x, -model.viewBox.y);
+  ctx.clearRect(0, 0, viewBox.w, viewBox.h);
+  ctx.translate(-viewBox.x, -viewBox.y);
 
   const accent = resolveCssColor(canvas, options.accent, '#111827');
   const bg = resolveCssColor(canvas, DIAGRAM_BG, '#ffffff');
@@ -189,21 +173,10 @@ function drawGraphCanvas(
 
   if (options.paper) {
     ctx.fillStyle = bg;
-    ctx.fillRect(
-      model.viewBox.x,
-      model.viewBox.y,
-      model.viewBox.w,
-      model.viewBox.h,
-    );
+    ctx.fillRect(viewBox.x, viewBox.y, viewBox.w, viewBox.h);
   }
 
-  for (const group of model.graph.groups ?? []) {
-    const box = groupBox(
-      group,
-      model.graph.nodes,
-      model.graph.layout,
-      model.graph.groups,
-    );
+  for (const { group, rect, label } of layout.groups) {
     const stroke =
       group.frame === 'dashed'
         ? dim
@@ -220,104 +193,74 @@ function drawGraphCanvas(
     ctx.setLineDash(group.frame === 'dashed' ? [7, 7] : []);
     ctx.strokeStyle = group.frame === 'none' ? 'transparent' : stroke;
     ctx.fillStyle = fill;
-    drawRoundedRect(ctx, box, group.rx ?? 18);
+    drawRoundedRect(ctx, rect, group.rx ?? 18);
     ctx.fill();
     ctx.stroke();
     ctx.restore();
-    applyTexture(ctx, box, group.texture);
+    applyTexture(ctx, rect, group.texture);
     ctx.fillStyle = text;
-    ctx.font = `600 14px ${FONT_FAMILY.sans}`;
-    drawTextLines(
-      ctx,
-      groupLabelLines(group),
-      box.x + box.w / 2,
-      box.y + 20,
-      15,
-      'center',
-    );
+    drawTextRuns(ctx, label);
   }
 
-  for (const routed of model.routedEdges) {
-    const [first, second] = routed.points;
-    const from = routed.points.at(-2);
-    const to = routed.points.at(-1);
+  for (const { edge, points, label } of layout.edges) {
+    const [first, second] = points;
+    const from = points.at(-2);
+    const to = points.at(-1);
     if (!first || !second || !from || !to) continue;
-    const color = routed.edge.accent ? accent : routed.edge.dim ? dim : neutral;
+    const color = edge.accent ? accent : edge.dim ? dim : neutral;
     ctx.save();
     ctx.strokeStyle = color;
-    ctx.lineWidth = routed.edge.strokeWidth ?? 1.5;
-    ctx.setLineDash(edgeDash(routed.edge));
+    ctx.lineWidth = edge.strokeWidth ?? 1.5;
+    ctx.setLineDash(edgeDash(edge));
     ctx.beginPath();
     ctx.moveTo(first.x, first.y);
-    for (const point of routed.points.slice(1)) {
+    for (const point of points.slice(1)) {
       ctx.lineTo(point.x, point.y);
     }
     ctx.stroke();
     ctx.restore();
-    if ((routed.edge.direction ?? 'forward') !== 'none') {
+    if ((edge.direction ?? 'forward') !== 'none') {
       drawEdgeArrow(ctx, from, to, color);
     }
-    if (routed.edge.direction === 'both') {
+    if (edge.direction === 'both') {
       drawEdgeArrow(ctx, second, first, color);
     }
-    if (routed.edge.label?.length && routed.labelPlacement) {
+    if (label) {
       ctx.save();
       ctx.fillStyle = text;
-      ctx.font = `10px ${FONT_FAMILY.sans}`;
-      drawTextLines(
-        ctx,
-        routed.edge.label,
-        routed.labelPlacement.x,
-        routed.labelPlacement.y,
-        12,
-        routed.labelPlacement.align === 'middle'
-          ? 'center'
-          : routed.labelPlacement.align,
-      );
+      drawTextRuns(ctx, label.text);
       ctx.restore();
     }
   }
 
-  for (const node of model.graph.nodes) {
+  for (const { node, box, radius, text: runs } of layout.nodes) {
     if (node.hidden) continue;
-    const box = nodeBox(node, model.graph.layout);
     const frame = node.frame ?? 'solid';
-    const fill = resolveCssColor(canvas, nodeFrameFill(node, frame), '#ffffff');
-    const stroke = resolveCssColor(
-      canvas,
-      nodeFrameStroke(node, frame, accent),
-      '#111827',
-    );
     ctx.save();
-    ctx.lineWidth = 1.5;
-    ctx.fillStyle = fill;
-    ctx.strokeStyle = stroke;
-    drawRoundedRect(ctx, box, nodeFrameRadius(node));
-    ctx.fill();
-    ctx.stroke();
-    applyTexture(ctx, box, node.texture);
+    if (frame !== 'none') {
+      ctx.lineWidth = 1.5;
+      ctx.fillStyle = resolveCssColor(
+        canvas,
+        nodeFrameFill(node, frame),
+        '#ffffff',
+      );
+      ctx.strokeStyle = resolveCssColor(
+        canvas,
+        nodeFrameStroke(node, frame, accent),
+        '#111827',
+      );
+      drawRoundedRect(ctx, box, radius);
+      ctx.fill();
+      ctx.stroke();
+      applyTexture(ctx, box, node.texture);
+    }
     ctx.fillStyle =
       node.textColor === 'accent'
         ? accent
         : node.textColor === 'dim'
           ? dim
           : text;
-    const fontSize = node.fontSize ?? 12;
-    const lineHeight = Math.max(12, fontSize + 2);
-    const lines = linesForLabel(node.label);
-    ctx.font = `${node.fontWeight ?? 600} ${fontSize}px ${FONT_FAMILY.sans}`;
-    const textAlign = node.textAlign ?? 'center';
-    const x = textAlign === 'start' ? box.x + 16 : box.x + box.w / 2;
-    const y =
-      box.y + box.h / 2 - ((lines.length - 1) * lineHeight) / 2 + fontSize / 2;
-    drawTextLines(
-      ctx,
-      lines,
-      x,
-      y,
-      lineHeight,
-      textAlign === 'start' ? 'left' : 'center',
-    );
+    drawTextRuns(ctx, runs);
     ctx.restore();
   }
 }
@@ -361,30 +304,24 @@ function GraphCanvas({
 }: GraphRendererProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const { accent } = useDiagramTheme();
-  validateGraph(ir);
-  const model = useMemo<CanvasGraphModel>(() => {
-    const graph = resolveGraphLayout(ir);
-    const routedEdges = computePaths(graph);
-    const viewBox = graphContentViewBox(graph, routedEdges);
-    return { graph, routedEdges, viewBox };
-  }, [ir]);
-  const viewportProps = canvasViewportProps(model.viewBox, viewport);
+  const layout = useMemo(() => legacyGraphLayout(ir), [ir]);
+  const viewportProps = canvasViewportProps(layout.viewBox, viewport);
 
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const draw = () => drawGraphCanvas(canvas, model, { accent, paper });
+    const draw = () => drawGraphCanvas(canvas, layout, { accent, paper });
     draw();
     return progress.on('change', draw);
-  }, [accent, model, paper, progress]);
+  }, [accent, layout, paper, progress]);
 
   return (
     <canvas
       ref={canvasRef}
       data-diagram-canvas="graph"
-      data-diagram-canvas-viewbox={`${model.viewBox.x} ${model.viewBox.y} ${model.viewBox.w} ${model.viewBox.h}`}
-      width={Math.round(model.viewBox.w)}
-      height={Math.round(model.viewBox.h)}
+      data-diagram-canvas-viewbox={`${layout.viewBox.x} ${layout.viewBox.y} ${layout.viewBox.w} ${layout.viewBox.h}`}
+      width={Math.round(layout.viewBox.w)}
+      height={Math.round(layout.viewBox.h)}
       aria-label={title.join(' ')}
       role="img"
       {...viewportProps}

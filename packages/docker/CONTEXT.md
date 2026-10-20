@@ -37,8 +37,15 @@ The engine did not accept the connection: its socket does not exist, it refuses 
 _Avoid_: Engine down, offline, unavailable
 
 **Handle**:
-An object that names one container or one volume on one engine. Disposal of a handle removes the container or the volume.
+An object that names one container, volume or network on one engine. A container handle and a network handle name it by the ID that the engine gave it, never by a name. A volume has no ID, so its handle names it by its name.
 _Avoid_: Instance, reference, wrapper
+
+**Owned handle**:
+A handle from the call that created its container, volume or network. Only an owned handle has a disposal, and its disposal removes what it names. A handle from `find()`, or from `createOrGet()` that found the resource, is not owned.
+_Avoid_: Managed, attached
+
+**Creation label**:
+A label with a random value that `volumes.create()` adds. The Engine API answers a create with a taken volume name with the existing volume, so the label of the answer tells a new volume from an existing one.
 
 **Hijacked connection**:
 An HTTP connection that the engine upgrades to a two-way stream of bytes, for attach and for the start of an exec.
@@ -55,5 +62,21 @@ A command that the engine runs in a running container, next to its main process.
 _Avoid_: Docker exec (the CLI command), job
 
 **Container process**:
-The streams of an exec or of an attached container: standard input, standard output, standard error, and the exit code when it ends.
+An exec or an attached container, as the client sees it: one stream of output chunks, a writable standard input when it has one, and the exit code when it ends.
 _Avoid_: Subprocess, child process (both run on this machine)
+
+**Output chunk**:
+One piece of output of a container process: its stream (`stdout` or `stderr`) and its bytes. The chunks come in the order of the engine, and each chunk comes once.
+_Avoid_: Event (an event is a message of `GET /events`), frame (the unit of the multiplexed stream on the connection)
+
+**End of input**:
+The close of the standard input of a container process. The command then reads the end of its input. Only a close ends the input: the client drops an empty write.
+_Avoid_: EOF write, half-close (one way to make the end on one kind of host)
+
+**Archive**:
+A tar stream of files that the engine reads from a container or writes into it, through `/containers/{id}/archive`. `docker cp` uses the same requests.
+_Avoid_: Tarball, copy
+
+**Event**:
+A message of `GET /events`: an action of the engine on a container, image, volume or network, such as `start` or `health_status: healthy`.
+_Avoid_: Notification

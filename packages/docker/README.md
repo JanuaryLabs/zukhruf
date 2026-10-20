@@ -1,14 +1,16 @@
 # @zukhruf/docker
 
-> **Status: design for review.** This README is the API on paper. No code exists yet. The decisions are in [ADR 0001](./docs/adr/0001-the-client-speaks-the-engine-api-not-the-docker-cli.md) and [ADR 0002](./docs/adr/0002-the-engine-is-the-one-that-the-docker-cli-selects.md).
+> **Status: design for review.** This README is the API on paper. No code exists yet. The decisions are in the [ADRs](./docs/adr/). The package leads, and the repositories that use Docker change to fit it ([ADR 0003](./docs/adr/0003-the-package-leads-and-the-repositories-change.md)).
 
 A client for the Docker Engine API on Node.js. It selects the engine that the Docker CLI selects, and it sends HTTP requests to that engine with `node:http`: through a Unix socket, a Windows named pipe, or SSH. It needs no Docker CLI on the `PATH`, and it has no dependencies. Thus a desktop app that starts from the macOS Dock can use it, and so can a test, a sandbox or a deploy tool.
+
+The package covers the containers of one engine and the resources around them: their images, volumes, networks, files, processes, output and events.
 
 The words in these documents have one meaning each. See the glossary in [CONTEXT.md](./CONTEXT.md).
 
 ## Connect to the engine
 
-`Docker.connect()` selects the engine in the order of the Docker CLI:
+`Docker.connect()` selects the engine in the order of the Docker CLI ([ADR 0002](./docs/adr/0002-the-engine-is-the-one-that-the-docker-cli-selects.md)):
 
 1. `DOCKER_HOST`.
 2. `DOCKER_CONTEXT`.
@@ -36,7 +38,7 @@ await using local = await Docker.connect({
 });
 ```
 
-The package accepts `unix://`, `npipe://` and `ssh://` hosts. It refuses `tcp://`, because an engine on TCP needs TLS files, and no consumer uses one.
+The package accepts `unix://`, `npipe://` and `ssh://` hosts. It refuses `tcp://` ([ADR 0003](./docs/adr/0003-the-package-leads-and-the-repositories-change.md) gives the reason).
 
 ## List the contexts
 
@@ -73,20 +75,19 @@ try {
 
 Some answers of the engine are not errors here:
 
-| Call                                                            | Engine answer | Result      |
-| --------------------------------------------------------------- | ------------- | ----------- |
-| `containers.inspect()`, `volumes.inspect()`, `images.inspect()` | 404           | `undefined` |
-| `container.start()` of a running container                      | 304           | resolves    |
-| `container.stop()` of a stopped container                       | 304           | resolves    |
-| `container.remove()`, `volume.remove()` of a missing one        | 404           | resolves    |
+| Call                                                                                             | Engine answer | Result      |
+| ------------------------------------------------------------------------------------------------ | ------------- | ----------- |
+| `containers.find()`, `volumes.find()`, `networks.find()`, `images.inspect()`, `container.stat()` | 404           | `undefined` |
+| `container.start()` of a running container, `container.stop()` of a stopped one                  | 304           | resolves    |
+| `remove()` of a missing container, volume or network                                             | 404           | resolves    |
 
-Other answers reject with `DockerEngineError`. For example, `containers.create()` with a name that another container has rejects with status 409, and `volume.remove()` of a volume in use rejects with status 409.
+Other answers reject with `DockerEngineError`. For example, `containers.create()` with a name that another container has rejects with status 409.
 
-## Start a container
+## Create a container that you own
 
 The first argument of a request is the body that the [Engine API reference](https://docs.docker.com/reference/api/engine/) documents, with its field names. The second argument holds what the client adds: the query, such as `name`, and a `signal`. The types of the bodies are in the type namespace `EngineApi`, with the names of the reference.
 
-`containers.create()` gives a handle. Disposal of the handle removes the container with its anonymous volumes.
+`containers.create()` gives an `OwnedContainer`. Disposal of an owned container removes it with its anonymous volumes ([ADR 0004](./docs/adr/0004-a-handle-owns-its-container-only-when-it-created-it.md)).
 
 ```ts
 await using postgres = await docker.containers.create(
@@ -111,17 +112,33 @@ const published = await postgres.port(5432);
 
 ## Find a container
 
-`containers.inspect()` sends one request and gives `undefined` for a missing container. `containers.get()` sends no request: it gives a handle for a name or an ID, and a later call on a missing container rejects with status 404. `containers.list()` takes the `filters` of the Engine API.
+`containers.find()` sends one inspect. It gives a `Container` with the ID of the engine, or `undefined`. A `Container` names its container by that ID, never by a name: when another container takes the name later, the handle still acts on the first one. A `Container` has no disposal, so `await using` on it is a type error. A found container belongs to whoever created it.
 
 ```ts
-const state = await docker.containers.inspect('example-postgres');
-if (state?.State?.Running === false)
-  await docker.containers.get(state.Id).start();
+const db = await docker.containers.find('shared-db');
+if (db && !(await db.inspect()).State?.Running) await db.start();
 
 const owned = await docker.containers.list({
   all: true,
   filters: { label: ['com.example.owner=tests'] },
 });
+```
+
+## Create a container, or get the one that has the name
+
+`containers.createOrGet()` creates the container. When another container has the name, it gives that container. It handles the 409 of the engine and the short time in which the name is taken but an inspect does not find it yet.
+
+The container that exists wins: the package does not compare its configuration. A product that needs the same configuration compares it itself, for example with a label that holds a fingerprint.
+
+```ts
+const result = await docker.containers.createOrGet(
+  { Image: 'postgres:18', Env: ['POSTGRES_PASSWORD=postgres'] },
+  { name: 'shared-db' },
+);
+if (result.created) console.log('created', result.container.id);
+await result.container.start();
+// result.created === true:  result.container is an OwnedContainer
+// result.created === false: result.container is a Container
 ```
 
 ## Run a container to its end
@@ -140,23 +157,20 @@ const { exitCode, stdout } = await docker.containers.run(
 );
 ```
 
-For output while the container runs, use `container.attach()` before `container.start()`:
+For output while the container runs, attach before the start. A container process is one stream of chunks, in the order of the engine. Each chunk names its stream ([ADR 0005](./docs/adr/0005-output-is-one-stream-of-chunks-and-only-a-close-ends-the-input.md)):
 
 ```ts
-import { Writable } from 'node:stream';
-
-await using build = await docker.containers.create({
+await using tests = await docker.containers.create({
   Image: 'node:lts-alpine',
   Cmd: ['npm', 'test'],
   WorkingDir: '/app',
   HostConfig: { Binds: [`${process.cwd()}:/app`] },
 });
-const output = await build.attach();
-await build.start();
-await Promise.all([
-  output.stdout.pipeTo(Writable.toWeb(process.stdout)),
-  output.stderr.pipeTo(Writable.toWeb(process.stderr)),
-]);
+const output = await tests.attach();
+await tests.start();
+for await (const { stream, data } of output) {
+  (stream === 'stdout' ? process.stdout : process.stderr).write(data);
+}
 if ((await output.exitCode) !== 0) throw new Error('The tests failed');
 ```
 
@@ -172,61 +186,103 @@ const result = await postgres.exec({
 // { exitCode: 0, stdout: '1\n', stderr: '', output: '1\n' }
 ```
 
-`stdin` sends input to the command. The package closes the write side of the hijacked connection after the input, so the command reads the end of its input:
+`stdin` sends input to the command, and the package then ends the input:
 
 ```ts
-import { readFile } from 'node:fs/promises';
-
-const bytes = await readFile('report.bin');
 await postgres.exec(
-  { Cmd: ['sh', '-c', 'cat > /tmp/report.bin'] },
-  { stdin: bytes },
+  { Cmd: ['psql', '-U', 'postgres'] },
+  { stdin: 'create table notes (body text);' },
 );
 ```
 
-The close depends on the host:
-
-- On a Unix socket, the package shuts down the write side of the socket.
-- Over SSH, the package closes the standard input of `ssh`. Then `docker system dial-stdio` closes the write side to the engine.
-- On a Windows named pipe, the package writes a message of zero bytes. A pipe has no shutdown of one side, and `end()` of Node.js only flushes it. The engine listens on its pipe in message mode, and it reads a message of zero bytes as the end of the input. `CloseWrite` of go-winio, which the Docker CLI uses, sends the same message.
-
-`container.spawn()` gives the streams of the command while it runs, as a container process. With `stdin: true`, the container process has a writable `stdin`. Close it to end the input.
+`container.spawn()` gives the container process while the command runs. With `stdin: true`, the container process has a writable `stdin`. Only `stdin.close()` ends the input. The package drops an empty write, so an empty write never ends the input.
 
 ```ts
-const tail = await postgres.spawn({
-  Cmd: ['tail', '-f', '/var/lib/postgresql/data/log/postgresql.log'],
-});
-for await (const chunk of tail.stdout) process.stdout.write(chunk);
+const psql = await postgres.spawn(
+  { Cmd: ['psql', '-U', 'postgres', '-tA'] },
+  { stdin: true },
+);
+const input = psql.stdin!.getWriter();
+await input.write(new TextEncoder().encode('select now();\n'));
+await input.close();
+const { stdout } = await psql.collect();
 ```
+
+The end of the input depends on the host. On a Unix socket, the package shuts down the write side of the socket. Over SSH, it closes the standard input of `ssh`, and `docker system dial-stdio` then closes the write side to the engine. On a Windows named pipe, it writes a message of zero bytes, because a pipe has no shutdown of one side: the engine listens on its pipe in message mode and reads that message as the end. `CloseWrite` of go-winio, which the Docker CLI uses, sends the same message.
 
 A signal cancels the wait. It does not stop the command: the Engine API has no request that stops an exec. To stop a command, kill the container, or run the command under `timeout` in the container.
 
-A container with a TTY (`Tty: true`) gives a raw stream. Then all output is on `stdout`, and `stderr` is empty.
+A container or an exec with a TTY (`Tty: true`) gives a raw stream. Then each chunk is `stdout`.
 
 ## Read the logs
 
-`container.logs()` gives standard output, standard error and `output`, as `exec()` does. It takes the query of the Engine API: `tail`, `since` and `timestamps`.
+`container.logs()` gives the logs until now: standard output, standard error and `output`, as `exec()` does. `container.followLogs()` gives chunks as the container writes them, until the container stops or the signal aborts. Both take the query of the Engine API: `tail`, `since` and `timestamps`.
 
 ```ts
 const { output } = await postgres.logs({ tail: 50 });
+
+for await (const { data } of postgres.followLogs({
+  signal: AbortSignal.timeout(30_000),
+})) {
+  if (new TextDecoder().decode(data).includes('ready to accept connections'))
+    break;
+}
 ```
 
-## Stop, kill, wait, remove
+## Read and write files
+
+The package moves files through the archive requests of the engine, not through exec ([ADR 0006](./docs/adr/0006-files-move-through-the-archive-requests-not-through-exec.md)). Thus the requests work on a stopped container, and on an image with no shell.
 
 ```ts
-await postgres.stop({ t: 10 }); // SIGTERM, then SIGKILL after 10 seconds
+await postgres.writeFiles([
+  {
+    path: '/docker-entrypoint-initdb.d/schema.sql',
+    data: 'create table notes (body text);',
+  },
+  {
+    path: '/srv/run.sh',
+    data: '#!/bin/sh\npg_isready\n',
+    mode: 0o755,
+    uid: 999,
+    gid: 999,
+  },
+  { path: '/srv/cache', directory: true },
+]);
+
+const config = await postgres.readFile(
+  '/var/lib/postgresql/data/postgresql.conf',
+);
+const stat = await postgres.stat('/srv/run.sh');
+// { name: 'run.sh', size: 120, mode: 493, mtime: '…', linkTarget: '' }
+```
+
+- `writeFiles()` sends one archive and extracts it at `/`. The engine creates each parent directory that an entry implies.
+- A written file belongs to root, as with `docker cp`. An entry with `uid` and `gid` keeps them.
+- `readFile()` gives the bytes of one regular file. It rejects for a directory.
+- `getArchive(path)` and `putArchive(directory, archive)` give the tar streams themselves, for a directory or a large tree.
+- The engine cannot reach `/proc`, `/sys`, `/dev`, a tmpfs mount, or a mount made inside the container. For such a path, use `exec()`.
+- A read-only root filesystem or volume makes `writeFiles()` reject with status 403.
+
+## Control a container
+
+```ts
+await postgres.stop({ t: 10 }); // SIGTERM, then the engine sends SIGKILL after 10 seconds
+await postgres.restart({ t: 10 });
 await postgres.kill('SIGINT');
+await postgres.pause();
+await postgres.unpause();
 const { StatusCode } = await postgres.wait({ condition: 'not-running' });
 await postgres.remove({ force: true, v: true });
 ```
 
+`stop()` and `restart()` keep the meaning of the engine: after `t` seconds, the engine kills the main process.
+
 ## Volumes
 
-`volumes.create()` gives a handle. Disposal of the handle removes the volume. The engine gives the volume a name when the body has none.
+`volumes.create()` gives an `OwnedVolume`. Disposal of an owned volume removes it. A volume has no ID, so its name names it.
 
 ```ts
 await using data = await docker.volumes.create({
-  Name: 'example-data',
   Labels: { 'com.example.owner': 'tests' },
 });
 await docker.containers.run({
@@ -238,22 +294,57 @@ await docker.containers.run({
 });
 ```
 
-`volumes.inspect()`, `volumes.get()` and `volumes.list()` work as they do for containers.
+The engine gives the volume a name when the body has none. The Engine API answers a create with a taken name with the existing volume, not with an error. Thus the package adds a creation label with a random value, and it compares the label of the answer: `volumes.create()` rejects with status 409 for a taken name, and `volumes.createOrGet()` gives `{ created: false, volume }`. `volumes.find()` and `volumes.list()` work as they do for containers.
+
+## Networks
+
+`networks.create()` gives an `OwnedNetwork`. Disposal removes the network. `networks.find()`, `networks.createOrGet()` and `networks.list()` work as they do for containers.
+
+```ts
+await using network = await docker.networks.create({ Name: 'example-net' });
+await network.connect(postgres, { Aliases: ['db'] });
+await network.disconnect(postgres);
+```
 
 ## Images
 
+Images have no owner: an image is a cache that each container on the engine shares, so no handle removes one on disposal.
+
 ```ts
-import { createWriteStream } from 'node:fs';
-import { Writable } from 'node:stream';
+import { createReadStream, createWriteStream } from 'node:fs';
+import { Readable, Writable } from 'node:stream';
 
 if (!(await docker.images.inspect('alpine:3')))
   await docker.images.pull('alpine:3', { platform: 'linux/amd64' });
 
+const ghcr = {
+  username: 'me',
+  password: process.env.GHCR_TOKEN!,
+  serveraddress: 'ghcr.io',
+};
+await docker.images.pull('ghcr.io/example/private:1', { auth: ghcr });
+await docker.images.push('ghcr.io/example/app:1', { auth: ghcr });
+
 const archive = await docker.images.save(['alpine:3']);
 await archive.pipeTo(Writable.toWeb(createWriteStream('alpine.tar')));
+await docker.images.load(Readable.toWeb(createReadStream('alpine.tar')));
+await docker.images.remove('alpine:3');
 ```
 
-`images.pull()` reads the progress of the engine until the end. It rejects with `DockerEngineError` when the engine reports an error in the progress. Then `status` is `undefined`, because the HTTP status was 200. A pull sends no registry credentials, so it pulls public images only.
+`pull()`, `push()` and `load()` read the progress of the engine until the end. They reject with `DockerEngineError` when the engine reports an error in the progress. Then `status` is `undefined`, because the HTTP status was 200. `auth` holds explicit credentials. The package runs no credential helper, because a helper is a program on the `PATH`.
+
+## Events
+
+`docker.events()` gives the events of the engine as they happen, until the signal aborts. It takes the `since` and `filters` of the Engine API.
+
+```ts
+for await (const event of docker.events({
+  filters: { container: [postgres.id], event: ['health_status'] },
+  signal: AbortSignal.timeout(60_000),
+})) {
+  if (event.Action === 'health_status: healthy') break;
+}
+```
 
 ## Send the Docker CLI to the same engine
 
@@ -274,7 +365,7 @@ await spawn(
 
 For an `ssh://` host, the connection helper is `ssh -T -o BatchMode=yes <machine> docker system dial-stdio`, as the Docker CLI uses it. `ssh` reads `~/.ssh/config`, so jump hosts, keys, agents and connection sharing work as they work for the CLI. The remote machine must have `docker` on the `PATH` of its SSH shell.
 
-Each connection of the client is one `ssh` process. The client keeps idle connections for the next request. An attach and an exec each use their own connection, because the engine hijacks it. Disposal of the client ends the `ssh` processes.
+Each connection of the client is one `ssh` process. The client keeps idle connections for the next request. An attach, an exec, followed logs and events each use their own connection. Disposal of the client ends the `ssh` processes.
 
 ## The API version
 
@@ -282,14 +373,14 @@ The path of each request starts with the API version, as in `/v1.51/containers/j
 
 ## What the package does not do
 
-Each of these gets a request in the package when a consumer needs it, together with that consumer:
+[ADR 0003](./docs/adr/0003-the-package-leads-and-the-repositories-change.md) gives the reason for each:
 
 - Image builds and Compose. Use the CLI with `docker.cliEnvironment`.
-- Engines on TCP, and TLS.
-- Registry credentials and credential helpers.
-- Networks, events, and copies of files in and out of a container (`/containers/{id}/archive`).
-- Logs that follow a running container.
-- A selection of the engine by its own rule. `Docker.contexts()` gives the list, and the product chooses.
+- Engines on TCP.
+- Credential helpers. Give `auth` instead.
+- A stop or a time limit for one exec.
+- The output of an exec after a detach.
+- Swarm: services, tasks, nodes, secrets and configs.
 
 ## The same concepts in other systems
 
@@ -299,7 +390,11 @@ Each of these gets a request in the package when a consumer needs it, together w
 | The selection of the engine | `resolveContextName` of [docker/cli](https://github.com/docker/cli/blob/master/cli/command/cli.go); the master branch of bollard                                                               |
 | Fixed socket paths          | The client strategies of Testcontainers, and docker-modem. They do not read contexts.                                                                                                          |
 | The connection helper       | [connhelper of docker/cli](https://github.com/docker/cli/blob/master/cli/connhelper/connhelper.go)                                                                                             |
-| The multiplexed stream      | "Stream format" in the Engine API reference; `stdcopy.StdCopy` of Moby; `demuxStream` of docker-modem                                                                                          |
+| An owned handle             | `ownsLifecycle` of microsandbox, which stops a sandbox on disposal only when the handle owns it                                                                                                |
+| A handle by its ID          | The stable `id` of a microsandbox handle, which refuses to act on a replacement that reused the name                                                                                           |
+| Create, or get by name      | `connectOrCreate` of microsandbox: the existing sandbox wins                                                                                                                                   |
+| One stream of chunks        | `ExecEvent` of microsandbox; "Stream format" in the Engine API reference; `stdcopy.StdCopy` of Moby                                                                                            |
+| Files through archives      | `docker cp`; `copyFilesToContainer` of Testcontainers; `fs()` of microsandbox                                                                                                                  |
 | Errors by HTTP status       | `errdefs` of Moby: `NotFound` for 404, `Conflict` for 409, `NotModified` for 304                                                                                                               |
 | API version negotiation     | The Go client of Moby, which negotiates by default                                                                                                                                             |
 
@@ -320,14 +415,19 @@ export class Docker implements AsyncDisposable {
   readonly cliEnvironment: Readonly<Record<string, string | undefined>>;
   readonly containers: Containers;
   readonly volumes: Volumes;
+  readonly networks: Networks;
   readonly images: Images;
 
-  info(options?: Signal): Promise<EngineApi.SystemInfo>;
+  info(options?: CancelOptions): Promise<EngineApi.SystemInfo>;
+  /** The events of the engine as they happen, until the signal aborts. */
+  events(
+    options?: CancelOptions & { since?: number; filters?: Filters },
+  ): AsyncIterable<EngineApi.EventMessage>;
   [Symbol.asyncDispose](): Promise<void>;
 }
 
 /** A context or a host, never both. */
-export type ConnectOptions = Signal &
+export type ConnectOptions = CancelOptions &
   ({ context?: string; host?: never } | { host?: string; context?: never });
 
 export interface DockerContext {
@@ -337,75 +437,141 @@ export interface DockerContext {
   current: boolean;
 }
 
-export interface Signal {
+export interface CancelOptions {
   /** Cancels the wait for the engine. */
   signal?: AbortSignal;
 }
 
+/** The filters of a list or of the events, as the Engine API takes them. */
+export type Filters = Record<string, string[]>;
+
+/** The result of createOrGet(): an owned handle when this call created the resource. */
+export type Created<Key extends string, Owned, Found> =
+  | ({ created: true } & Record<Key, Owned>)
+  | ({ created: false } & Record<Key, Found>);
+
 export interface Containers {
   create(
     body: EngineApi.ContainerCreateRequest,
-    options?: Signal & { name?: string; platform?: string },
-  ): Promise<Container>;
+    options?: CancelOptions & { name?: string; platform?: string },
+  ): Promise<OwnedContainer>;
+  /** Creates the container, or gives the one that has the name. The container that exists wins. */
+  createOrGet(
+    body: EngineApi.ContainerCreateRequest,
+    options: CancelOptions & { name: string; platform?: string },
+  ): Promise<Created<'container', OwnedContainer, Container>>;
   /** Create, attach, start, wait, remove. A cancel also removes the container. */
   run(
     body: EngineApi.ContainerCreateRequest,
-    options?: Signal & { name?: string; platform?: string },
+    options?: CancelOptions & { name?: string; platform?: string },
   ): Promise<ExecResult>;
-  /** No request: a handle for a name or an ID. */
-  get(nameOrId: string): Container;
-  /** undefined for 404. */
-  inspect(
+  /** One inspect: a handle with the ID of the engine, or undefined for 404. */
+  find(
     nameOrId: string,
-    options?: Signal,
-  ): Promise<EngineApi.ContainerInspectResponse | undefined>;
+    options?: CancelOptions,
+  ): Promise<Container | undefined>;
   list(
-    options?: Signal & { all?: boolean; filters?: Record<string, string[]> },
+    options?: CancelOptions & { all?: boolean; filters?: Filters },
   ): Promise<EngineApi.ContainerSummary[]>;
 }
 
-export class Container implements AsyncDisposable {
-  /** The ID that the engine gave, or the name or ID that get() took. */
+/** A container, by the ID that the engine gave it. It has no disposal. */
+export class Container {
   readonly id: string;
-  inspect(options?: Signal): Promise<EngineApi.ContainerInspectResponse>;
+  inspect(options?: CancelOptions): Promise<EngineApi.ContainerInspectResponse>;
   /** Resolves for 304 (already running). */
-  start(options?: Signal): Promise<void>;
-  /** Resolves for 304 (already stopped). t: seconds before SIGKILL. */
-  stop(options?: Signal & { t?: number }): Promise<void>;
+  start(options?: CancelOptions): Promise<void>;
+  /** Resolves for 304 (already stopped). t: seconds before the engine kills the main process. */
+  stop(options?: CancelOptions & { t?: number }): Promise<void>;
+  restart(options?: CancelOptions & { t?: number }): Promise<void>;
   kill(
     processSignal?: string /* default 'SIGKILL' */,
-    options?: Signal,
+    options?: CancelOptions,
   ): Promise<void>;
+  pause(options?: CancelOptions): Promise<void>;
+  unpause(options?: CancelOptions): Promise<void>;
   wait(
-    options?: Signal & { condition?: 'not-running' | 'next-exit' | 'removed' },
+    options?: CancelOptions & {
+      condition?: 'not-running' | 'next-exit' | 'removed';
+    },
   ): Promise<EngineApi.ContainerWaitResponse>;
   /** Resolves for 404. */
-  remove(options?: Signal & { force?: boolean; v?: boolean }): Promise<void>;
+  remove(
+    options?: CancelOptions & { force?: boolean; v?: boolean },
+  ): Promise<void>;
   /** The published binding of a port of the container; undefined when it is not published. */
   port(
     containerPort: number,
     protocol?: 'tcp' | 'udp',
-    options?: Signal,
+    options?: CancelOptions,
   ): Promise<{ host: string; port: number } | undefined>;
-  logs(
-    options?: Signal & {
-      tail?: number | 'all';
-      since?: number;
-      timestamps?: boolean;
-    },
-  ): Promise<Output>;
+
+  logs(options?: CancelOptions & LogQuery): Promise<Output>;
+  followLogs(options?: CancelOptions & LogQuery): AsyncIterable<OutputChunk>;
   exec(
     body: EngineApi.ExecConfig,
-    options?: Signal & { stdin?: string | Uint8Array },
+    options?: CancelOptions & { stdin?: string | Uint8Array },
   ): Promise<ExecResult>;
   spawn(
     body: EngineApi.ExecConfig,
-    options?: Signal & { stdin?: boolean },
+    options?: CancelOptions & { stdin?: boolean },
   ): Promise<ContainerProcess>;
   /** Attach before start() to get all output. */
-  attach(options?: Signal & { stdin?: boolean }): Promise<ContainerProcess>;
+  attach(
+    options?: CancelOptions & { stdin?: boolean },
+  ): Promise<ContainerProcess>;
+
+  /** undefined for 404. */
+  stat(
+    path: string,
+    options?: CancelOptions,
+  ): Promise<EngineApi.ContainerPathStat | undefined>;
+  /** The bytes of one regular file. */
+  readFile(path: string, options?: CancelOptions): Promise<Uint8Array>;
+  /** One archive, extracted at '/'. */
+  writeFiles(files: ContainerFile[], options?: CancelOptions): Promise<void>;
+  getArchive(
+    path: string,
+    options?: CancelOptions,
+  ): Promise<ReadableStream<Uint8Array>>;
+  putArchive(
+    directory: string,
+    archive: ReadableStream<Uint8Array> | Uint8Array,
+    options?: CancelOptions & { copyUIDGID?: boolean },
+  ): Promise<void>;
+}
+
+/** A container that this handle created. Disposal removes it with its anonymous volumes. */
+export class OwnedContainer extends Container implements AsyncDisposable {
   /** remove({ force: true, v: true }) */
   [Symbol.asyncDispose](): Promise<void>;
+}
+
+export interface LogQuery {
+  tail?: number | 'all';
+  since?: number;
+  timestamps?: boolean;
+}
+
+export type ContainerFile =
+  | {
+      path: string;
+      data: string | Uint8Array;
+      mode?: number;
+      uid?: number;
+      gid?: number;
+    }
+  | {
+      path: string;
+      directory: true;
+      mode?: number;
+      uid?: number;
+      gid?: number;
+    };
+
+export interface OutputChunk {
+  stream: 'stdout' | 'stderr';
+  data: Uint8Array;
 }
 
 export interface Output {
@@ -419,36 +585,75 @@ export interface ExecResult extends Output {
   exitCode: number;
 }
 
-/** The streams of an exec or of an attached container. */
-export interface ContainerProcess {
-  /** Present with { stdin: true }. Close it to end the input. */
+/** The output of an exec or of an attached container: chunks in the order of the engine, given once. */
+export interface ContainerProcess extends AsyncIterable<OutputChunk> {
+  /** Present with { stdin: true }. Only close() ends the input; an empty write is dropped. */
   readonly stdin: WritableStream<Uint8Array> | undefined;
-  readonly stdout: ReadableStream<Uint8Array>;
-  /** Empty for a container or an exec with a TTY. */
-  readonly stderr: ReadableStream<Uint8Array>;
   readonly exitCode: Promise<number>;
+  /** Reads each chunk and gives the result. */
+  collect(): Promise<ExecResult>;
 }
 
 export interface Volumes {
+  /** Rejects with status 409 when the name is taken. */
   create(
-    body?: EngineApi.VolumeCreateOptions,
-    options?: Signal,
-  ): Promise<Volume>;
-  get(name: string): Volume;
-  /** undefined for 404. */
-  inspect(
-    name: string,
-    options?: Signal,
-  ): Promise<EngineApi.Volume | undefined>;
+    body?: EngineApi.VolumeCreateRequest,
+    options?: CancelOptions,
+  ): Promise<OwnedVolume>;
+  createOrGet(
+    body: EngineApi.VolumeCreateRequest & { Name: string },
+    options?: CancelOptions,
+  ): Promise<Created<'volume', OwnedVolume, Volume>>;
+  find(name: string, options?: CancelOptions): Promise<Volume | undefined>;
   list(
-    options?: Signal & { filters?: Record<string, string[]> },
+    options?: CancelOptions & { filters?: Filters },
   ): Promise<EngineApi.Volume[]>;
 }
 
-export class Volume implements AsyncDisposable {
+export class Volume {
   readonly name: string;
+  inspect(options?: CancelOptions): Promise<EngineApi.Volume>;
   /** Resolves for 404. Rejects with status 409 while a container uses the volume. */
-  remove(options?: Signal & { force?: boolean }): Promise<void>;
+  remove(options?: CancelOptions & { force?: boolean }): Promise<void>;
+}
+
+export class OwnedVolume extends Volume implements AsyncDisposable {
+  /** remove() */
+  [Symbol.asyncDispose](): Promise<void>;
+}
+
+export interface Networks {
+  create(
+    body: EngineApi.NetworkCreateRequest,
+    options?: CancelOptions,
+  ): Promise<OwnedNetwork>;
+  createOrGet(
+    body: EngineApi.NetworkCreateRequest,
+    options?: CancelOptions,
+  ): Promise<Created<'network', OwnedNetwork, Network>>;
+  find(nameOrId: string, options?: CancelOptions): Promise<Network | undefined>;
+  list(
+    options?: CancelOptions & { filters?: Filters },
+  ): Promise<EngineApi.NetworkSummary[]>;
+}
+
+export class Network {
+  readonly id: string;
+  inspect(options?: CancelOptions): Promise<EngineApi.NetworkInspect>;
+  connect(
+    container: Container,
+    endpoint?: EngineApi.NetworkConnectRequest['EndpointConfig'],
+    options?: CancelOptions,
+  ): Promise<void>;
+  disconnect(
+    container: Container,
+    options?: CancelOptions & { force?: boolean },
+  ): Promise<void>;
+  /** Resolves for 404. */
+  remove(options?: CancelOptions): Promise<void>;
+}
+
+export class OwnedNetwork extends Network implements AsyncDisposable {
   /** remove() */
   [Symbol.asyncDispose](): Promise<void>;
 }
@@ -457,18 +662,35 @@ export interface Images {
   /** undefined for 404. */
   inspect(
     reference: string,
-    options?: Signal,
+    options?: CancelOptions,
   ): Promise<EngineApi.ImageInspect | undefined>;
-  /** Public images only: the pull sends no credentials. */
+  list(
+    options?: CancelOptions & { all?: boolean; filters?: Filters },
+  ): Promise<EngineApi.ImageSummary[]>;
   pull(
     reference: string,
-    options?: Signal & { platform?: string },
+    options?: CancelOptions & {
+      platform?: string;
+      auth?: EngineApi.AuthConfig;
+    },
+  ): Promise<void>;
+  push(
+    reference: string,
+    options: CancelOptions & { auth: EngineApi.AuthConfig },
   ): Promise<void>;
   /** A tar archive of the images, as `docker save` writes it. */
   save(
     references: string[],
-    options?: Signal,
+    options?: CancelOptions,
   ): Promise<ReadableStream<Uint8Array>>;
+  load(
+    archive: ReadableStream<Uint8Array> | Uint8Array,
+    options?: CancelOptions,
+  ): Promise<void>;
+  remove(
+    reference: string,
+    options?: CancelOptions & { force?: boolean; noprune?: boolean },
+  ): Promise<void>;
 }
 
 export class ConnectionFailedError extends Error {
@@ -476,7 +698,7 @@ export class ConnectionFailedError extends Error {
 }
 
 export class DockerEngineError extends Error {
-  /** The HTTP status; undefined for an error in the progress of a pull. */
+  /** The HTTP status; undefined for an error in the progress of a pull, a push or a load. */
   readonly status: number | undefined;
   readonly method: string;
   readonly path: string;
@@ -486,35 +708,43 @@ export class DockerEngineError extends Error {
 export type * as EngineApi from './engine-api.ts';
 ```
 
-The table below maps each call to its request of the Engine API:
+`EngineApi.ContainerCreateRequest` is the body of `POST /containers/create`: `ContainerConfig` with `HostConfig` and `NetworkingConfig`, as `container.CreateRequest` of Moby names it. `EngineApi.ContainerPathStat` is the JSON of the header `X-Docker-Container-Path-Stat`, as `container.PathStat` of Moby names it.
 
-| Call                                                              | Request                                                                                 |
-| ----------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
-| `Docker.connect()`                                                | `GET /_ping`                                                                            |
-| `docker.info()`                                                   | `GET /info`                                                                             |
-| `containers.create()`                                             | `POST /containers/create`                                                               |
-| `containers.run()`                                                | `create`, `attach`, `start`, `wait`, `DELETE /containers/{id}`                          |
-| `containers.inspect()`, `container.inspect()`, `container.port()` | `GET /containers/{id}/json`                                                             |
-| `containers.list()`                                               | `GET /containers/json`                                                                  |
-| `container.start()`, `stop()`, `kill()`, `wait()`                 | `POST /containers/{id}/start`, `/stop`, `/kill`, `/wait`                                |
-| `container.remove()`                                              | `DELETE /containers/{id}`                                                               |
-| `container.logs()`                                                | `GET /containers/{id}/logs`                                                             |
-| `container.attach()`                                              | `POST /containers/{id}/attach` (hijacked)                                               |
-| `container.exec()`, `container.spawn()`                           | `POST /containers/{id}/exec`, `POST /exec/{id}/start` (hijacked), `GET /exec/{id}/json` |
-| `volumes.create()`, `inspect()`, `list()`, `volume.remove()`      | `POST /volumes/create`, `GET /volumes/{name}`, `GET /volumes`, `DELETE /volumes/{name}` |
-| `images.inspect()`, `pull()`, `save()`                            | `GET /images/{name}/json`, `POST /images/create`, `GET /images/get`                     |
+Each call sends these requests of the Engine API:
 
-## Who uses each part
+| Call                                                                         | Request                                                                                                                                                           |
+| ---------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Docker.connect()`                                                           | `GET /_ping`                                                                                                                                                      |
+| `docker.info()`, `docker.events()`                                           | `GET /info`, `GET /events`                                                                                                                                        |
+| `containers.create()`, `createOrGet()`                                       | `POST /containers/create`, and `GET /containers/{id}/json` after a 409                                                                                            |
+| `containers.run()`                                                           | `create`, `attach`, `start`, `wait`, `DELETE /containers/{id}`                                                                                                    |
+| `containers.find()`, `container.inspect()`, `container.port()`               | `GET /containers/{id}/json`                                                                                                                                       |
+| `containers.list()`                                                          | `GET /containers/json`                                                                                                                                            |
+| `start()`, `stop()`, `restart()`, `kill()`, `pause()`, `unpause()`, `wait()` | `POST /containers/{id}/start`, `/stop`, `/restart`, `/kill`, `/pause`, `/unpause`, `/wait`                                                                        |
+| `container.remove()`                                                         | `DELETE /containers/{id}`                                                                                                                                         |
+| `container.logs()`, `followLogs()`                                           | `GET /containers/{id}/logs`                                                                                                                                       |
+| `container.attach()`                                                         | `POST /containers/{id}/attach` (hijacked)                                                                                                                         |
+| `container.exec()`, `spawn()`                                                | `POST /containers/{id}/exec`, `POST /exec/{id}/start` (hijacked), `GET /exec/{id}/json`                                                                           |
+| `container.stat()`, `readFile()`, `getArchive()`                             | `HEAD`, `GET /containers/{id}/archive`                                                                                                                            |
+| `container.writeFiles()`, `putArchive()`                                     | `PUT /containers/{id}/archive`                                                                                                                                    |
+| `volumes.*`, `volume.*`                                                      | `POST /volumes/create`, `GET /volumes/{name}`, `GET /volumes`, `DELETE /volumes/{name}`                                                                           |
+| `networks.*`, `network.*`                                                    | `POST /networks/create`, `GET /networks/{id}`, `GET /networks`, `POST /networks/{id}/connect`, `/disconnect`, `DELETE /networks/{id}`                             |
+| `images.*`                                                                   | `GET /images/{name}/json`, `GET /images/json`, `POST /images/create`, `POST /images/{name}/push`, `GET /images/get`, `POST /images/load`, `DELETE /images/{name}` |
 
-The consumers below come from the search of 2026-10-20. Each part ships with its first consumer.
+## What each repository changes
 
-| Consumer                                 | Uses                                                                                                  | Backlog             |
-| ---------------------------------------- | ----------------------------------------------------------------------------------------------------- | ------------------- |
-| `@zukhruf/testing/docker`                | connect, create, run, inspect, list, start, kill, remove, port, exec, logs, volumes, `cliEnvironment` | #2752               |
-| text2sql finders                         | contexts, connect, list, inspect, `ConnectionFailedError`                                             | #2754               |
-| text2sql desktop tests                   | images inspect, pull, save                                                                            | #2756               |
-| text2sql artifacts volume adapter        | inspect, start, exec with `stdin`, spawn                                                              | #2757               |
-| `@deepagents/context` sandbox            | create, start, stop, inspect, exec, spawn, volumes, images inspect, `cliEnvironment`                  | #2760               |
-| `@deepagents/toolbox`, `convert-to-gguf` | exec, run                                                                                             | #2761               |
-| sdk-it `e2e/docker.ts`                   | create, attach, start                                                                                 | #2764               |
-| finetuning, april, serverize             | create, start, port, logs, inspect, remove, exec                                                      | #2765, #2766, #2769 |
+The package leads. Each repository below changes to fit it, with no adapter. Each change is a backlog item in that repository.
+
+| Repository                               | Change                                                                                                                                                                  | Backlog |
+| ---------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- |
+| `@zukhruf/testing/docker`                | Rebuilt on the package. `reuse()` uses `createOrGet()` and compares its fingerprint label. Handles become owned or found.                                               | #2752   |
+| text2sql finders                         | `Docker.contexts()`, `containers.list()` and `find()`, `ConnectionFailedError` in place of the fixed sockets                                                            | #2754   |
+| text2sql daemon tests                    | `@zukhruf/testing/docker` in place of the CLI by hand                                                                                                                   | #2755   |
+| text2sql desktop tests                   | `images.inspect()`, `pull()`, `save()`                                                                                                                                  | #2756   |
+| text2sql artifacts volume adapter        | `writeFiles()`, `readFile()` and `stat()` in place of base64 through exec                                                                                               | #2757   |
+| `@deepagents/context` sandbox            | `createOrGet()` for named sandboxes, the files API in place of base64 in arguments, container processes in place of two streams, status codes in place of stderr checks | #2760   |
+| `@deepagents/toolbox`, `convert-to-gguf` | `find()` and `exec()`, `containers.run()`                                                                                                                               | #2761   |
+| sdk-it `e2e/docker.ts`                   | `attach()` and its chunks, or removal                                                                                                                                   | #2764   |
+| finetuning                               | `create()`, `port()`, `logs()`; test cleanup through `@zukhruf/testing`                                                                                                 | #2765   |
+| april                                    | `createOrGet()` and `docker.events()` for the health of the container                                                                                                   | #2766   |
+| serverize                                | Networks, `images.load()`, `pull()` and `push()` with `auth`, `writeFiles()`, `followLogs()`                                                                            | #2769   |
