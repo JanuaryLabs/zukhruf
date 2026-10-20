@@ -14,7 +14,7 @@ import {
   measureGroupTitle,
   measureNode,
 } from './measure.ts';
-import { layoutTokens } from './tokens.ts';
+import { LAYOUT_TOKENS } from './tokens.ts';
 
 /** One node placed at `box`, in a viewBox that is the box grown by the node's measured overhang. */
 function placedAlone(measured: MeasuredNode, box: Box): GraphLayout {
@@ -222,7 +222,7 @@ describe('measureNode', () => {
   for (const { name, inset, node } of variants) {
     test(`${name} keeps its text inside its padding, at its measured size`, () => {
       // Arrange
-      const measured = measureNode(node, layoutTokens());
+      const measured = measureNode(node, LAYOUT_TOKENS);
 
       // Act
       const layout = placedAlone(measured, intrinsicBox(measured));
@@ -233,7 +233,7 @@ describe('measureNode', () => {
 
     test(`${name} keeps its text inside its padding and its drawing inside the overhang it measured, in a larger area`, () => {
       // Arrange
-      const measured = measureNode(node, layoutTokens());
+      const measured = measureNode(node, LAYOUT_TOKENS);
 
       // Act
       const layout = placedAlone(measured, stretchedBox(measured));
@@ -246,7 +246,7 @@ describe('measureNode', () => {
   for (const side of ['top', 'right', 'bottom', 'left'] as const) {
     test(`a caption on the ${side} sits CAPTION_GAP outside the frame, and the overhang on that side reaches its far edge`, () => {
       // Arrange
-      const tokens = layoutTokens();
+      const tokens = LAYOUT_TOKENS;
       const measured = measureNode(
         {
           id: 'n',
@@ -280,7 +280,7 @@ describe('measureNode', () => {
 
   test('a Box grows wider with its longest line', () => {
     // Arrange
-    const tokens = layoutTokens();
+    const tokens = LAYOUT_TOKENS;
 
     // Act
     const short = measureNode(
@@ -305,7 +305,7 @@ describe('measureNode', () => {
 
   test('a Card places its title, then its description, then its items, top to bottom, all above the bottom padding', () => {
     // Arrange
-    const tokens = layoutTokens();
+    const tokens = LAYOUT_TOKENS;
     const measured = measureNode(
       {
         id: 'n',
@@ -350,7 +350,7 @@ describe('measureNode', () => {
 
   test('a Card keeps its content at the top-left padding when it fills a larger area', () => {
     // Arrange
-    const tokens = layoutTokens();
+    const tokens = LAYOUT_TOKENS;
     const measured = measureNode(
       {
         id: 'n',
@@ -374,7 +374,7 @@ describe('measureNode', () => {
     // Arrange
     const measured = measureNode(
       { id: 'n', icon: 'shield', label: 'Istio Ingress Gateway' },
-      layoutTokens(),
+      LAYOUT_TOKENS,
     );
     const box = stretchedBox(measured);
 
@@ -389,7 +389,7 @@ describe('measureNode', () => {
 
   test('a side with more ports than fit makes the frame longer on that side, and spreads the ports evenly', () => {
     // Arrange
-    const tokens = layoutTokens();
+    const tokens = LAYOUT_TOKENS;
     const ports = ['a', 'b', 'c', 'd', 'e', 'f'].map((id) => ({
       id,
       side: 'left' as const,
@@ -412,7 +412,7 @@ describe('measureNode', () => {
 
   test('labelled ports on a side widen the frame by their labels', () => {
     // Arrange
-    const tokens = layoutTokens();
+    const tokens = LAYOUT_TOKENS;
 
     // Act
     const plain = measureNode({ id: 'n', label: 'Switch' }, tokens);
@@ -431,7 +431,7 @@ describe('measureNode', () => {
 
   test('a stack and a caption reach outside the frame by the overhang, and only Box-like nodes stretch', () => {
     // Arrange
-    const tokens = layoutTokens();
+    const tokens = LAYOUT_TOKENS;
 
     // Act
     const stacked = measureNode(
@@ -461,7 +461,7 @@ describe('measureNode', () => {
 
   test('a hidden node measures to nothing, and a hidden junction still holds its square', () => {
     // Arrange
-    const tokens = layoutTokens();
+    const tokens = LAYOUT_TOKENS;
 
     // Act
     const phantom = measureNode({ id: 'n', label: '', hidden: true }, tokens);
@@ -490,7 +490,7 @@ describe('measureNode', () => {
           'metrics',
         ],
       },
-      layoutTokens(),
+      LAYOUT_TOKENS,
     );
 
     // Act
@@ -511,7 +511,7 @@ describe('measureNode', () => {
     // Arrange
     const measured = measureNode(
       { id: 'n', kind: 'note', label: 'Issues the TLS certificates' },
-      layoutTokens(),
+      LAYOUT_TOKENS,
     );
 
     // Act
@@ -524,7 +524,7 @@ describe('measureNode', () => {
   test('a glyph the font has no width for throws the measuring error', () => {
     // Act & Assert
     assert.throws(
-      () => measureNode({ id: 'n', label: 'Tokyo 東京' }, layoutTokens()),
+      () => measureNode({ id: 'n', label: 'Tokyo 東京' }, LAYOUT_TOKENS),
       {
         message:
           'Cannot measure "Tokyo 東京": U+6771 has no glyph in the mono face at weight 500',
@@ -546,7 +546,7 @@ describe('measureGroupTitle', () => {
         // Arrange
         const title = measureGroupTitle(
           group({ titleBand: true, labelSide, labelAlign }),
-          layoutTokens(),
+          LAYOUT_TOKENS,
         );
         const rect = { x: 20, y: 20, w: 400, h: 300 };
 
@@ -590,7 +590,7 @@ describe('measureGroupTitle', () => {
 
   test('a title without a band reserves the same height and draws no band', () => {
     // Arrange
-    const tokens = layoutTokens();
+    const tokens = LAYOUT_TOKENS;
     const banded = measureGroupTitle(group({ titleBand: true }), tokens);
     const plain = measureGroupTitle(group({}), tokens);
 
@@ -605,7 +605,7 @@ describe('measureGroupTitle', () => {
 
   test('a group without a label reserves no height', () => {
     // Act
-    const title = measureGroupTitle(group({ label: [] }), layoutTokens());
+    const title = measureGroupTitle(group({ label: [] }), LAYOUT_TOKENS);
 
     // Assert
     assert.equal(title.height, 0);
@@ -616,7 +616,7 @@ describe('measureGroupTitle', () => {
 describe('measureEdgeLabel', () => {
   test('a label box holds its lines, and a frame adds its padding on every side', () => {
     // Arrange
-    const tokens = layoutTokens();
+    const tokens = LAYOUT_TOKENS;
     const edge = { from: 'a', to: 'b', label: ['HTTPS 443', 'mTLS'] };
 
     // Act
@@ -642,7 +642,7 @@ describe('measureEdgeLabel', () => {
     // Arrange
     const measured = measureEdgeBadge(
       { from: 'a', to: 'b', badgeIcon: 'certificate', badgeLabel: ['TLS'] },
-      layoutTokens(),
+      LAYOUT_TOKENS,
     );
     const box = { x: 10, y: 10, w: measured.w, h: measured.h };
 
@@ -653,25 +653,5 @@ describe('measureEdgeLabel', () => {
     assert.ok(inside(box, icon!));
     assert.ok(inside(box, text[0]!.bounds));
     assert.ok(text[0]!.bounds.x >= icon!.x + icon!.w);
-  });
-});
-
-describe('layoutTokens', () => {
-  test('density scales the spacing between elements and never the fonts', () => {
-    // Act
-    const compact = layoutTokens('compact');
-    const regular = layoutTokens();
-    const spacious = layoutTokens('spacious');
-
-    // Assert
-    for (const key of ['GAP', 'CHANNEL', 'GROUP_PAD'] as const) {
-      assert.deepEqual(
-        [compact[key] / regular[key], spacious[key] / regular[key]],
-        [0.75, 1.5],
-        key,
-      );
-    }
-    assert.deepEqual(compact.fonts, spacious.fonts);
-    assert.deepEqual(compact.PAD_X, spacious.PAD_X);
   });
 });

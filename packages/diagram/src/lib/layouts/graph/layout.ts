@@ -12,7 +12,7 @@ import {
   measureGroupTitle,
   measureNode,
 } from './measure.ts';
-import { type LayoutTokens, layoutTokens } from './tokens.ts';
+import { LAYOUT_TOKENS } from './tokens.ts';
 import { type TrackLine, sizeTracks } from './tracks.ts';
 
 /**
@@ -22,13 +22,14 @@ import { type TrackLine, sizeTracks } from './tracks.ts';
  * drawn without overlap.
  */
 export function layoutGraph(ir: DiagramGraphIR): GraphLayout {
-  const tokens = layoutTokens(ir.density);
   const measured = new Map(
-    ir.nodes.map((node) => [node.id, measureNode(node, tokens)] as const),
+    ir.nodes.map(
+      (node) => [node.id, measureNode(node, LAYOUT_TOKENS)] as const,
+    ),
   );
   const titles = new Map(
     ir.groups.map(
-      (group) => [group.id, measureGroupTitle(group, tokens)] as const,
+      (group) => [group.id, measureGroupTitle(group, LAYOUT_TOKENS)] as const,
     ),
   );
   const areas = gridAreas(ir);
@@ -36,7 +37,6 @@ export function layoutGraph(ir: DiagramGraphIR): GraphLayout {
     areas,
     new Map([...titles].map(([id, title]) => [id, title.height])),
     ir.edges,
-    tokens,
   );
 
   const items = (axis: Axis) =>
@@ -80,7 +80,7 @@ export function layoutGraph(ir: DiagramGraphIR): GraphLayout {
     groups,
     edges: [],
     leaders: [],
-    viewBox: viewBoxOf(nodes, groups, tokens),
+    viewBox: viewBoxOf(nodes, groups),
   };
 }
 
@@ -178,16 +178,12 @@ function dividers(
   ];
 }
 
-function viewBoxOf(
-  nodes: NodeLayout[],
-  groups: GroupLayout[],
-  tokens: LayoutTokens,
-): Box {
+function viewBoxOf(nodes: NodeLayout[], groups: GroupLayout[]): Box {
   const boxes = [
     ...nodes.map((nodeLayout) => nodeLayout.visual),
     ...groups.map((groupLayout) => groupLayout.rect),
   ];
-  const pad = tokens.CONTENT_PAD;
+  const pad = LAYOUT_TOKENS.CONTENT_PAD;
   if (boxes.length === 0) return { x: -pad, y: -pad, w: 2 * pad, h: 2 * pad };
   const left = Math.min(...boxes.map((box) => box.x));
   const top = Math.min(...boxes.map((box) => box.y));

@@ -103,9 +103,6 @@ export type DiagramViewport = {
   zoom?: number;
 };
 
-/** How much space the graph engine leaves between elements. */
-export type DiagramDensity = 'compact' | 'regular' | 'spacious';
-
 export type DiagramPaperFill = 'background' | 'surface';
 
 export type DiagramPaper =
@@ -334,7 +331,6 @@ export type DiagramGraphSpec = {
   annotations?: DiagramAnnotation[];
   guides?: DiagramGuide[];
   layout?: DiagramGraphLayout | undefined;
-  density?: DiagramDensity | undefined;
 };
 
 export type GraphLayoutSpec = DiagramGraphSpec & { title?: string[] };

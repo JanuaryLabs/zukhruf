@@ -12,13 +12,12 @@ import type {
 import type { GraphLayout } from './graph-layout-result.ts';
 import { layoutGraph } from './layout.ts';
 import { measureEdgeLabel, measureNode } from './measure.ts';
-import { layoutTokens } from './tokens.ts';
+import { LAYOUT_TOKENS } from './tokens.ts';
 
 function graph(spec: {
   nodes: DiagramNode[];
   groups?: DiagramGroup[];
   edges?: DiagramEdge[];
-  density?: DiagramGraphIR['density'];
 }): DiagramGraphIR {
   return {
     nodes: spec.nodes,
@@ -26,7 +25,6 @@ function graph(spec: {
     groups: spec.groups ?? [],
     annotations: [],
     guides: [],
-    ...(spec.density ? { density: spec.density } : {}),
   };
 }
 
@@ -49,6 +47,15 @@ function close(actual: number, expected: number, what: string) {
     Math.abs(actual - expected) < 0.01,
     `${what}: expected ${expected}, got ${actual}`,
   );
+}
+
+function cell(
+  id: string,
+  row: number,
+  col: number,
+  rest: Partial<DiagramNode>,
+): DiagramNode {
+  return { id, label: '', row, col, ...rest };
 }
 
 describe('layoutGraph rejects a grid it cannot draw', () => {
@@ -84,6 +91,20 @@ describe('layoutGraph rejects a grid it cannot draw', () => {
     assert.throws(() => layoutGraph(ir), {
       message:
         'Diagram node "istio" colSpan 0 must be an integer of at least 1.',
+    });
+  });
+
+  test('a group with a span but no cell names the group', () => {
+    // Arrange
+    const ir = graph({
+      nodes: [{ id: 'plan', label: 'Plan', row: 0, col: 3, group: 'lane' }],
+      groups: [{ id: 'lane', label: 'Lane', colSpan: 5 }],
+    });
+
+    // Act + Assert
+    assert.throws(() => layoutGraph(ir), {
+      message:
+        'Diagram group "lane" row undefined must be a non-negative integer.',
     });
   });
 
@@ -226,8 +247,73 @@ describe('layoutGraph rejects a grid it cannot draw', () => {
   });
 });
 
-describe('layoutGraph sizes tracks to the measured content', () => {
-  test('in a 3×3 grid every column is as wide as its widest node and every row as tall as its tallest', () => {
+describe('layoutGraph, one rung at a time from one box to the homelab', () => {
+  test('r1 one box alone is as large as its measured frame', () => {
+    // Arrange
+    const alone: DiagramNode = { id: 'dns', label: 'DNS', row: 0, col: 0 };
+
+    // Act
+    const layout = layoutGraph(graph({ nodes: [alone] }));
+
+    // Assert
+    assertSoundLayout(layout);
+    const { frame } = measureNode(alone, LAYOUT_TOKENS);
+    assert.deepEqual(box(layout, 'dns'), { x: 0, y: 0, ...frame });
+  });
+
+  test('r2 one box with an icon and a long two-line label holds its text', () => {
+    // Arrange
+    const gateway: DiagramNode = {
+      id: 'gateway',
+      icon: 'shield',
+      label: ['Istio Ingress Gateway', '(North-South Gateway)'],
+      row: 0,
+      col: 0,
+    };
+
+    // Act
+    const layout = layoutGraph(graph({ nodes: [gateway] }));
+
+    // Assert
+    assertSoundLayout(layout);
+    const { frame } = measureNode(gateway, LAYOUT_TOKENS);
+    assert.deepEqual(box(layout, 'gateway'), { x: 0, y: 0, ...frame });
+  });
+
+  test('r3 in a row of boxes each column is as wide as its box, and the gutters are GAP wide', () => {
+    // Arrange
+    const nodes: DiagramNode[] = [
+      { id: 'a', label: 'DNS', row: 0, col: 0 },
+      {
+        id: 'b',
+        icon: 'shield',
+        label: ['Istio Ingress Gateway', '(North-South Gateway)'],
+        row: 0,
+        col: 1,
+      },
+      { id: 'c', label: 'Longhorn', row: 0, col: 2 },
+    ];
+
+    // Act
+    const layout = layoutGraph(graph({ nodes }));
+
+    // Assert
+    assertSoundLayout(layout);
+    for (const node of nodes) {
+      close(
+        box(layout, node.id).w,
+        measureNode(node, LAYOUT_TOKENS).frame.w,
+        `${node.id} width`,
+      );
+    }
+    const [a, b, c] = ['a', 'b', 'c'].map((id) => box(layout, id));
+    assert.deepEqual(
+      [b!.x - (a!.x + a!.w), c!.x - (b!.x + b!.w)],
+      [LAYOUT_TOKENS.GAP, LAYOUT_TOKENS.GAP],
+    );
+  });
+
+  test('r4 in a 3×3 grid every column is as wide as its widest box and every row as tall as its tallest', () => {
     // Arrange
     const labels = [
       ['DNS', 'Istio Ingress Gateway (North-South)', 'A'],
@@ -238,11 +324,10 @@ describe('layoutGraph sizes tracks to the measured content', () => {
       row.map((label, c) => ({ id: `n${r}${c}`, label, row: r, col: c })),
     );
     nodes[4] = { ...nodes[4]!, label: ['B', 'second line', 'third line'] };
-    const tokens = layoutTokens();
     const frame = (id: string) =>
       measureNode(
         nodes.find((node) => node.id === id)!,
-        tokens,
+        LAYOUT_TOKENS,
       ).frame;
 
     // Act
@@ -263,14 +348,14 @@ describe('layoutGraph sizes tracks to the measured content', () => {
     const first = box(layout, 'n00');
     const last = box(layout, 'n22');
     assert.deepEqual(layout.viewBox, {
-      x: first.x - tokens.CONTENT_PAD,
-      y: first.y - tokens.CONTENT_PAD,
-      w: last.x + last.w - first.x + 2 * tokens.CONTENT_PAD,
-      h: last.y + last.h - first.y + 2 * tokens.CONTENT_PAD,
+      x: first.x - LAYOUT_TOKENS.CONTENT_PAD,
+      y: first.y - LAYOUT_TOKENS.CONTENT_PAD,
+      w: last.x + last.w - first.x + 2 * LAYOUT_TOKENS.CONTENT_PAD,
+      h: last.y + last.h - first.y + 2 * LAYOUT_TOKENS.CONTENT_PAD,
     });
   });
 
-  test('a wide node spanning two narrow columns widens both columns equally', () => {
+  test('r5 a wide box spanning two narrow columns widens both columns equally', () => {
     // Arrange
     const wide: DiagramNode = {
       id: 'wide',
@@ -284,7 +369,6 @@ describe('layoutGraph sizes tracks to the measured content', () => {
       { id: 'left', label: 'A', row: 1, col: 0 },
       { id: 'right', label: 'B', row: 1, col: 1 },
     ];
-    const tokens = layoutTokens();
 
     // Act
     const layout = layoutGraph(graph({ nodes }));
@@ -295,7 +379,7 @@ describe('layoutGraph sizes tracks to the measured content', () => {
     const right = box(layout, 'right');
     close(
       box(layout, 'wide').w,
-      measureNode(wide, tokens).frame.w,
+      measureNode(wide, LAYOUT_TOKENS).frame.w,
       'spanning width',
     );
     close(left.w, right.w, 'the spanned columns share the deficit');
@@ -307,7 +391,7 @@ describe('layoutGraph sizes tracks to the measured content', () => {
     );
   });
 
-  test('a rowSpan 2 card spans two rows, and a tall card grows both rows', () => {
+  test('r5 a rowSpan 2 card spans two rows, and a tall card grows both rows', () => {
     // Arrange
     const card: DiagramNode = {
       id: 'laptop',
@@ -329,7 +413,6 @@ describe('layoutGraph sizes tracks to the measured content', () => {
       { id: 'top', label: 'A', row: 0, col: 1 },
       { id: 'bottom', label: 'B', row: 1, col: 1 },
     ];
-    const tokens = layoutTokens();
 
     // Act
     const layout = layoutGraph(graph({ nodes }));
@@ -339,47 +422,112 @@ describe('layoutGraph sizes tracks to the measured content', () => {
     const top = box(layout, 'top');
     const bottom = box(layout, 'bottom');
     const laptop = box(layout, 'laptop');
-    close(laptop.h, measureNode(card, tokens).frame.h, 'card height');
+    close(laptop.h, measureNode(card, LAYOUT_TOKENS).frame.h, 'card height');
     close(laptop.y, top.y, 'top edge');
     close(laptop.y + laptop.h, bottom.y + bottom.h, 'bottom edge');
     close(top.h, bottom.h, 'the spanned rows share the deficit');
   });
 
-  test('an unlabelled gutter is GAP wide, and density scales it without breaking soundness', () => {
+  test('r6 one group around one box holds the box below its title band', () => {
     // Arrange
-    const nodes: DiagramNode[] = [
-      { id: 'a', label: 'Alpha', row: 0, col: 0, group: 'g' },
-      { id: 'b', label: 'Beta', row: 0, col: 1, group: 'g' },
-      { id: 'c', label: 'Gamma', row: 1, col: 0 },
-    ];
-    const groups: DiagramGroup[] = [
-      { id: 'g', label: 'Group', titleBand: true },
-    ];
-    const gap = (layout: GraphLayout) =>
-      box(layout, 'b').x - (box(layout, 'a').x + box(layout, 'a').w);
+    const ir = graph({
+      nodes: [
+        { id: 'longhorn', label: 'Longhorn', row: 0, col: 0, group: 'storage' },
+      ],
+      groups: [{ id: 'storage', label: 'Storage', titleBand: true }],
+    });
 
     // Act
-    const compact = layoutGraph(graph({ nodes, groups, density: 'compact' }));
-    const regular = layoutGraph(graph({ nodes, groups }));
-    const spacious = layoutGraph(graph({ nodes, groups, density: 'spacious' }));
+    const layout = layoutGraph(ir);
 
     // Assert
-    assertSoundLayout(compact);
-    assertSoundLayout(regular);
-    assertSoundLayout(spacious);
-    assert.deepEqual(
-      [gap(compact), gap(regular), gap(spacious)],
-      [
-        layoutTokens('compact').GAP,
-        layoutTokens().GAP,
-        layoutTokens('spacious').GAP,
+    assertSoundLayout(layout);
+    const storage = layout.groups[0]!;
+    const longhorn = box(layout, 'longhorn');
+    assert.ok(
+      longhorn.y >= storage.band!.y + storage.band!.h + LAYOUT_TOKENS.GROUP_PAD,
+    );
+    assert.ok(longhorn.x >= storage.rect.x + LAYOUT_TOKENS.GROUP_PAD);
+  });
+
+  test('r7 one group around a row of boxes holds every box', () => {
+    // Arrange
+    const ir = graph({
+      nodes: [
+        {
+          id: 'grafana',
+          label: ['Grafana', '(Dashboards)'],
+          icon: 'dashboard',
+          row: 0,
+          col: 0,
+          group: 'monitoring',
+        },
+        {
+          id: 'metrics',
+          label: ['VictoriaMetrics', '(Metrics)'],
+          icon: 'metrics',
+          row: 0,
+          col: 1,
+          group: 'monitoring',
+        },
+        { id: 'jaeger', label: 'Jaeger', row: 0, col: 2, group: 'monitoring' },
       ],
+      groups: [{ id: 'monitoring', label: 'Monitoring', titleBand: true }],
+    });
+
+    // Act
+    const layout = layoutGraph(ir);
+
+    // Assert
+    assertSoundLayout(layout);
+    const monitoring = rect(layout, 'monitoring');
+    const jaeger = box(layout, 'jaeger');
+    assert.ok(
+      monitoring.x + monitoring.w >=
+        jaeger.x + jaeger.w + LAYOUT_TOKENS.GROUP_PAD,
     );
   });
-});
 
-describe('layoutGraph reserves group chrome in the gutters', () => {
-  test('three levels of nested groups with title bands nest without covering a band', () => {
+  test('r8 sibling groups in adjacent cells keep a gap between their borders', () => {
+    // Arrange
+    const ir = graph({
+      nodes: [
+        { id: 'metallb', label: 'MetalLB', row: 0, col: 0, group: 'ingress' },
+        {
+          id: 'cert',
+          label: 'Cert-Manager',
+          row: 0,
+          col: 1,
+          group: 'certificates',
+        },
+        { id: 'master', label: 'K3s master', row: 1, col: 0, group: 'k3s' },
+      ],
+      groups: [
+        {
+          id: 'ingress',
+          label: ['Networking', '& Ingress', 'Gateways'],
+          titleBand: true,
+        },
+        { id: 'certificates', label: 'Certificates', titleBand: true },
+        { id: 'k3s', label: 'K3s', titleBand: true },
+      ],
+    });
+
+    // Act
+    const layout = layoutGraph(ir);
+
+    // Assert
+    assertSoundLayout(layout);
+    const ingress = rect(layout, 'ingress');
+    const k3s = rect(layout, 'k3s');
+    assert.ok(
+      rect(layout, 'certificates').x - (ingress.x + ingress.w) >=
+        LAYOUT_TOKENS.GAP,
+    );
+    assert.ok(k3s.y - (ingress.y + ingress.h) >= LAYOUT_TOKENS.GAP);
+  });
+
+  test('r9 three levels of nested groups with title bands nest without covering a band', () => {
     // Arrange
     const ir = graph({
       nodes: [
@@ -431,46 +579,7 @@ describe('layoutGraph reserves group chrome in the gutters', () => {
     assert.deepEqual(depths, { home: 0, cluster: 1, monitoring: 2 });
   });
 
-  test('sibling groups in adjacent cells keep a gap between their borders', () => {
-    // Arrange
-    const ir = graph({
-      nodes: [
-        { id: 'metallb', label: 'MetalLB', row: 0, col: 0, group: 'ingress' },
-        {
-          id: 'cert',
-          label: 'Cert-Manager',
-          row: 0,
-          col: 1,
-          group: 'certificates',
-        },
-        { id: 'master', label: 'K3s master', row: 1, col: 0, group: 'k3s' },
-      ],
-      groups: [
-        {
-          id: 'ingress',
-          label: ['Networking', '& Ingress', 'Gateways'],
-          titleBand: true,
-        },
-        { id: 'certificates', label: 'Certificates', titleBand: true },
-        { id: 'k3s', label: 'K3s', titleBand: true },
-      ],
-    });
-
-    // Act
-    const layout = layoutGraph(ir);
-
-    // Assert
-    assertSoundLayout(layout);
-    const ingress = rect(layout, 'ingress');
-    const k3s = rect(layout, 'k3s');
-    assert.ok(
-      rect(layout, 'certificates').x - (ingress.x + ingress.w) >=
-        layoutTokens().GAP,
-    );
-    assert.ok(k3s.y - (ingress.y + ingress.h) >= layoutTokens().GAP);
-  });
-
-  test('an explicit group area covers its empty cells, and its dividers run through every inner gutter', () => {
+  test('r10 an explicit group area covers its empty cells, and its dividers run through every inner gutter', () => {
     // Arrange
     const ir = graph({
       nodes: [
@@ -520,7 +629,7 @@ describe('layoutGraph reserves group chrome in the gutters', () => {
     );
   });
 
-  test('a note in a cell keeps its measured size, centred in a wider column', () => {
+  test('r11 a note in a cell keeps its measured size, centred in a wider column', () => {
     // Arrange
     const note: DiagramNode = {
       id: 'why',
@@ -544,150 +653,36 @@ describe('layoutGraph reserves group chrome in the gutters', () => {
     assertSoundLayout(layout);
     const wide = box(layout, 'wide');
     const placed = box(layout, 'why');
-    close(placed.w, measureNode(note, layoutTokens()).frame.w, 'note width');
+    close(placed.w, measureNode(note, LAYOUT_TOKENS).frame.w, 'note width');
     close(placed.x + placed.w / 2, wide.x + wide.w / 2, 'note centre');
   });
-});
 
-describe('layoutGraph keeps room for the labels of edges between neighbouring cells', () => {
-  test('a labelled edge between side-by-side cells widens their gutter to the label plus two stubs', () => {
+  test('r12 the homelab cluster interior nests its seven groups soundly', () => {
     // Arrange
-    const edge: DiagramEdge = {
-      from: 'a',
-      to: 'b',
-      label: ['HTTPS 443 / mTLS'],
-    };
     const ir = graph({
       nodes: [
-        { id: 'a', label: 'A', row: 0, col: 0 },
-        { id: 'b', label: 'B', row: 0, col: 1 },
-      ],
-      edges: [edge],
-    });
-    const tokens = layoutTokens();
-
-    // Act
-    const layout = layoutGraph(ir);
-
-    // Assert
-    const a = box(layout, 'a');
-    close(
-      box(layout, 'b').x - (a.x + a.w),
-      measureEdgeLabel(edge, tokens).w + 2 * tokens.STUB,
-      'gutter',
-    );
-  });
-
-  test('a labelled edge between stacked cells heightens their gutter to the label plus two stubs', () => {
-    // Arrange
-    const edge: DiagramEdge = {
-      from: 'b',
-      to: 'a',
-      label: ['sync', 'every 5 min', 'over SSH'],
-    };
-    const ir = graph({
-      nodes: [
-        { id: 'a', label: 'A', row: 0, col: 0 },
-        { id: 'b', label: 'B', row: 1, col: 0 },
-      ],
-      edges: [edge],
-    });
-    const tokens = layoutTokens();
-
-    // Act
-    const layout = layoutGraph(ir);
-
-    // Assert
-    const a = box(layout, 'a');
-    close(
-      box(layout, 'b').y - (a.y + a.h),
-      measureEdgeLabel(edge, tokens).h + 2 * tokens.STUB,
-      'gutter',
-    );
-  });
-
-  void test.todo(
-    '#step3 edges route orthogonally around nodes and bands, and their labels sit beside them',
-  );
-  void test.todo('#step3 notes with a target get a leader to it');
-});
-
-describe('layoutGraph lays out the homelab', () => {
-  test('the homelab remapped onto a 7×8 grid is sound', () => {
-    // Arrange
-    const node = (
-      id: string,
-      row: number,
-      col: number,
-      rest: Partial<DiagramNode>,
-    ): DiagramNode => ({
-      id,
-      label: '',
-      row,
-      col,
-      ...rest,
-    });
-    const ir = graph({
-      nodes: [
-        node('cloudflare-dns', 0, 3, {
-          icon: 'cloudflare',
-          label: ['Cloudflare', 'DNS & Domain', 'Management'],
-        }),
-        node('public-internet', 0, 4, {
-          icon: 'internet',
-          label: 'Public Internet',
-        }),
-        node('cloudflare-tunnel', 1, 4, {
-          kind: 'connector',
-          icon: 'tunnel',
-          label: [
-            'Cloudflare Tunnel',
-            { text: '(Zero Trust)', textColor: 'dim' },
-          ],
-        }),
-        node('adguard', 2, 2, {
-          icon: 'shield',
-          label: 'AdGuard Home',
-          caption: 'DNS Forwarder',
-        }),
-        node('metallb', 2, 3, {
+        cell('metallb', 2, 3, {
           icon: 'router',
           label: ['MetalLB', '(Load Balancer)'],
           group: 'ingress',
         }),
-        node('gateway', 2, 4, {
+        cell('gateway', 2, 4, {
           icon: 'shield',
           label: ['Istio Ingress Gateway', '(North-South Gateway)'],
           group: 'ingress',
         }),
-        node('cert-manager', 2, 5, {
+        cell('cert-manager', 2, 5, {
           icon: 'certificate',
           label: 'Cert-Manager',
           group: 'certificates',
         }),
-        node('cert-note', 2, 7, {
-          kind: 'note',
-          target: 'cert-manager',
-          label: ['Manages', "Let's Encrypt", 'certificates'],
-        }),
-        node('isp', 3, 0, {
-          icon: 'internet',
-          label: ['ISP Connection', '(1 Gbps)'],
-        }),
-        node('router', 3, 1, {
-          kind: 'appliance',
-          appliancePorts: 5,
-          antenna: true,
-          label: '',
-          caption: 'Fritzbox Router',
-        }),
-        node('k3s-master', 3, 3, {
+        cell('k3s-master', 3, 3, {
           icon: 'kubernetes',
           textAlign: 'start',
           label: ['K3s master', 'Pods'],
           group: 'k3s-vms',
         }),
-        node('istio', 3, 4, {
+        cell('istio', 3, 4, {
           colSpan: 2,
           icon: 'istio',
           textAlign: 'start',
@@ -697,17 +692,164 @@ describe('layoutGraph lays out the homelab', () => {
           ],
           group: 'mesh',
         }),
-        node('authentik', 3, 6, {
+        cell('longhorn', 5, 3, {
+          icon: 'storage',
+          label: ['Longhorn', '(Storage Class)'],
+          group: 'storage',
+        }),
+        cell('grafana', 5, 4, {
+          icon: 'dashboard',
+          label: ['Grafana', '(Dashboards)'],
+          group: 'monitoring',
+        }),
+        cell('victoria-metrics', 5, 5, {
+          icon: 'metrics',
+          label: ['VictoriaMetrics', '(Metrics)'],
+          group: 'monitoring',
+        }),
+        cell('victoria-logs', 6, 4, {
+          icon: 'logs',
+          label: ['VictoriaLogs', '(Logs)'],
+          group: 'monitoring',
+        }),
+        cell('jaeger', 6, 5, {
+          icon: 'trace',
+          label: ['Jaeger', '(Traces)'],
+          group: 'monitoring',
+        }),
+        cell('gpu-workflow', 6, 6, {
+          icon: 'gpu',
+          textAlign: 'start',
+          label: 'GPU Workflow',
+          description: 'NVIDIA RTX 3050',
+          items: ['K3s Node Affinity', 'Automatic GPU Scheduling'],
+          group: 'gpu-scheduling',
+        }),
+      ],
+      groups: [
+        {
+          id: 'ingress',
+          label: 'Networking & Ingress',
+          labelAlign: 'start',
+          titleBand: true,
+        },
+        { id: 'k3s-vms', label: 'K3s', titleBand: true },
+        { id: 'mesh', label: 'Service Mesh', titleBand: true },
+        { id: 'certificates', label: 'Certificates', titleBand: true },
+        {
+          id: 'storage',
+          label: 'Storage',
+          labelAlign: 'start',
+          titleBand: true,
+        },
+        {
+          id: 'monitoring',
+          label: 'Monitoring',
+          titleBand: true,
+          dividers: { rows: [6], cols: [5] },
+        },
+        {
+          id: 'gpu-scheduling',
+          label: 'GPU Scheduling',
+          labelAlign: 'start',
+          titleBand: true,
+        },
+      ],
+    });
+
+    // Act
+    const layout = layoutGraph(ir);
+
+    // Assert
+    assertSoundLayout(layout);
+    const mesh = rect(layout, 'mesh');
+    const certificates = rect(layout, 'certificates');
+    assert.ok(mesh.y >= certificates.y + certificates.h + LAYOUT_TOKENS.GAP);
+  });
+
+  test('r13 the full homelab remapped onto a 7×8 grid is sound', () => {
+    // Arrange
+    const ir = graph({
+      nodes: [
+        cell('cloudflare-dns', 0, 3, {
+          icon: 'cloudflare',
+          label: ['Cloudflare', 'DNS & Domain', 'Management'],
+        }),
+        cell('public-internet', 0, 4, {
+          icon: 'internet',
+          label: 'Public Internet',
+        }),
+        cell('cloudflare-tunnel', 1, 4, {
+          kind: 'connector',
+          icon: 'tunnel',
+          label: [
+            'Cloudflare Tunnel',
+            { text: '(Zero Trust)', textColor: 'dim' },
+          ],
+        }),
+        cell('adguard', 2, 2, {
+          icon: 'shield',
+          label: 'AdGuard Home',
+          caption: 'DNS Forwarder',
+        }),
+        cell('metallb', 2, 3, {
+          icon: 'router',
+          label: ['MetalLB', '(Load Balancer)'],
+          group: 'ingress',
+        }),
+        cell('gateway', 2, 4, {
+          icon: 'shield',
+          label: ['Istio Ingress Gateway', '(North-South Gateway)'],
+          group: 'ingress',
+        }),
+        cell('cert-manager', 2, 5, {
+          icon: 'certificate',
+          label: 'Cert-Manager',
+          group: 'certificates',
+        }),
+        cell('cert-note', 2, 7, {
+          kind: 'note',
+          target: 'cert-manager',
+          label: ['Manages', "Let's Encrypt", 'certificates'],
+        }),
+        cell('isp', 3, 0, {
+          icon: 'internet',
+          label: ['ISP Connection', '(1 Gbps)'],
+        }),
+        cell('router', 3, 1, {
+          kind: 'appliance',
+          appliancePorts: 5,
+          antenna: true,
+          label: '',
+          caption: 'Fritzbox Router',
+        }),
+        cell('k3s-master', 3, 3, {
+          icon: 'kubernetes',
+          textAlign: 'start',
+          label: ['K3s master', 'Pods'],
+          group: 'k3s-vms',
+        }),
+        cell('istio', 3, 4, {
+          colSpan: 2,
+          icon: 'istio',
+          textAlign: 'start',
+          label: [
+            'Istio Service Mesh',
+            { text: 'mTLS Enabled', textColor: 'dim' },
+          ],
+          group: 'mesh',
+        }),
+        cell('authentik', 3, 6, {
           icon: 'shield',
           label: ['Authentik', '(SSO)'],
           group: 'cluster',
         }),
-        node('authentik-note', 3, 7, {
+        cell('authentik-note', 3, 7, {
           kind: 'note',
           target: 'authentik',
           label: ['Authentication', 'for services', 'in mesh'],
         }),
-        node('proxmox-vm', 4, 2, {
+        cell('proxmox-vm', 4, 2, {
           rowSpan: 2,
           icon: 'server',
           textAlign: 'start',
@@ -715,23 +857,23 @@ describe('layoutGraph lays out the homelab', () => {
           label: 'VM',
           group: 'proxmox',
         }),
-        node('observability-bus', 4, 4, {
+        cell('observability-bus', 4, 4, {
           colSpan: 2,
           kind: 'junction',
           hidden: true,
           group: 'cluster',
         }),
-        node('argocd', 4, 6, {
+        cell('argocd', 4, 6, {
           icon: 'git',
           label: ['ArgoCD', '(GitOps Deployment)'],
           group: 'cluster',
         }),
-        node('git-repo', 4, 7, {
+        cell('git-repo', 4, 7, {
           kind: 'marker',
           icon: 'git',
           label: 'Git Repo',
         }),
-        node('laptop', 5, 0, {
+        cell('laptop', 5, 0, {
           colSpan: 2,
           rowSpan: 2,
           icon: 'server',
@@ -744,42 +886,42 @@ describe('layoutGraph lays out the homelab', () => {
             'CPU 24 Logical Cores',
           ],
         }),
-        node('longhorn', 5, 3, {
+        cell('longhorn', 5, 3, {
           icon: 'storage',
           label: ['Longhorn', '(Storage Class)'],
           group: 'storage',
         }),
-        node('grafana', 5, 4, {
+        cell('grafana', 5, 4, {
           icon: 'dashboard',
           label: ['Grafana', '(Dashboards)'],
           group: 'monitoring',
         }),
-        node('victoria-metrics', 5, 5, {
+        cell('victoria-metrics', 5, 5, {
           icon: 'metrics',
           label: ['VictoriaMetrics', '(Metrics)'],
           group: 'monitoring',
         }),
-        node('argocd-note', 5, 6, {
+        cell('argocd-note', 5, 6, {
           kind: 'note',
           target: 'argocd',
           label: ['Deploys applications', 'into k3s'],
           group: 'cluster',
         }),
-        node('external-ssd', 6, 2, {
+        cell('external-ssd', 6, 2, {
           icon: 'storage',
           label: ['4TB', 'External SSD'],
         }),
-        node('victoria-logs', 6, 4, {
+        cell('victoria-logs', 6, 4, {
           icon: 'logs',
           label: ['VictoriaLogs', '(Logs)'],
           group: 'monitoring',
         }),
-        node('jaeger', 6, 5, {
+        cell('jaeger', 6, 5, {
           icon: 'trace',
           label: ['Jaeger', '(Traces)'],
           group: 'monitoring',
         }),
-        node('gpu-workflow', 6, 6, {
+        cell('gpu-workflow', 6, 6, {
           icon: 'gpu',
           textAlign: 'start',
           label: 'GPU Workflow',
@@ -879,4 +1021,65 @@ describe('layoutGraph lays out the homelab', () => {
       2,
     );
   });
+});
+
+describe('layoutGraph keeps room for the labels of edges between neighbouring cells', () => {
+  test('a labelled edge between side-by-side cells widens their gutter to the label plus two stubs', () => {
+    // Arrange
+    const edge: DiagramEdge = {
+      from: 'a',
+      to: 'b',
+      label: ['HTTPS 443 / mTLS'],
+    };
+    const ir = graph({
+      nodes: [
+        { id: 'a', label: 'A', row: 0, col: 0 },
+        { id: 'b', label: 'B', row: 0, col: 1 },
+      ],
+      edges: [edge],
+    });
+
+    // Act
+    const layout = layoutGraph(ir);
+
+    // Assert
+    const a = box(layout, 'a');
+    close(
+      box(layout, 'b').x - (a.x + a.w),
+      measureEdgeLabel(edge, LAYOUT_TOKENS).w + 2 * LAYOUT_TOKENS.STUB,
+      'gutter',
+    );
+  });
+
+  test('a labelled edge between stacked cells heightens their gutter to the label plus two stubs', () => {
+    // Arrange
+    const edge: DiagramEdge = {
+      from: 'b',
+      to: 'a',
+      label: ['sync', 'every 5 min', 'over SSH'],
+    };
+    const ir = graph({
+      nodes: [
+        { id: 'a', label: 'A', row: 0, col: 0 },
+        { id: 'b', label: 'B', row: 1, col: 0 },
+      ],
+      edges: [edge],
+    });
+
+    // Act
+    const layout = layoutGraph(ir);
+
+    // Assert
+    const a = box(layout, 'a');
+    close(
+      box(layout, 'b').y - (a.y + a.h),
+      measureEdgeLabel(edge, LAYOUT_TOKENS).h + 2 * LAYOUT_TOKENS.STUB,
+      'gutter',
+    );
+  });
+
+  void test.todo(
+    '#step3 edges route orthogonally around nodes and bands, and their labels sit beside them',
+  );
+  void test.todo('#step3 notes with a target get a leader to it');
 });

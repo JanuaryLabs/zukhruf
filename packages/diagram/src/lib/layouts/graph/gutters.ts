@@ -2,7 +2,7 @@ import type { DiagramEdge } from '../../model/diagram-ir.ts';
 import { parseEndpointRef } from '../../model/endpoint-ref.ts';
 import type { CellArea, GridAreas } from './areas.ts';
 import { measureEdgeLabel } from './measure.ts';
-import type { LayoutTokens } from './tokens.ts';
+import { LAYOUT_TOKENS } from './tokens.ts';
 
 export type Axis = 'row' | 'col';
 
@@ -43,15 +43,14 @@ export function gridGutters(
   areas: GridAreas,
   titleHeights: Map<string, number>,
   edges: DiagramEdge[],
-  tokens: LayoutTokens,
 ): GridGutters {
-  const minimums = labelMinimums(edges, areas.nodes, tokens);
-  const chrome = tokens.GROUP_PAD + STROKE;
+  const minimums = labelMinimums(edges, areas.nodes);
+  const chrome = LAYOUT_TOKENS.GROUP_PAD + STROKE;
   const spans = (axis: Axis): GroupSpan[] =>
     areas.groups.map(({ group, depth, area }) => {
       const [start, span] =
         axis === 'row' ? [area.row, area.rowSpan] : [area.col, area.colSpan];
-      const title = axis === 'row' ? (titleHeights.get(group.id) ?? 0) : 0;
+      const title = axis === 'row' ? titleHeights.get(group.id)! : 0;
       const titleAtEnd = group.labelSide === 'bottom';
       return {
         depth,
@@ -62,8 +61,8 @@ export function gridGutters(
       };
     });
   return {
-    row: axisGutters(areas.rows, spans('row'), minimums.row, tokens),
-    col: axisGutters(areas.cols, spans('col'), minimums.col, tokens),
+    row: axisGutters(areas.rows, spans('row'), minimums.row),
+    col: axisGutters(areas.cols, spans('col'), minimums.col),
   };
 }
 
@@ -71,18 +70,15 @@ function axisGutters(
   count: number,
   spans: GroupSpan[],
   minimums: Map<number, number>,
-  tokens: LayoutTokens,
 ): Gutter[] {
   return Array.from({ length: count + 1 }, (_, boundary) => {
     const closing = slotWidths(
       spans.filter((span) => span.end === boundary),
       (span) => span.closingChrome,
-      tokens,
     );
     const opening = slotWidths(
       spans.filter((span) => span.start === boundary),
       (span) => span.openingChrome,
-      tokens,
     );
     const slots = [...closing.values(), ...opening.values()].reduce(
       (total, width) => total + width,
@@ -90,7 +86,7 @@ function axisGutters(
     );
     const outer = boundary === 0 || boundary === count;
     const middle = Math.max(
-      outer ? 0 : tokens.GAP,
+      outer ? 0 : LAYOUT_TOKENS.GAP,
       (minimums.get(boundary) ?? 0) - slots,
     );
 
@@ -114,11 +110,10 @@ function axisGutters(
 function slotWidths(
   spans: GroupSpan[],
   chromeOf: (span: GroupSpan) => number,
-  tokens: LayoutTokens,
 ): Map<number, number> {
   const widths = new Map<number, number>();
   for (const span of spans) {
-    const width = chromeOf(span) + tokens.CHANNEL;
+    const width = chromeOf(span) + LAYOUT_TOKENS.CHANNEL;
     widths.set(span.depth, Math.max(widths.get(span.depth) ?? 0, width));
   }
   return widths;
@@ -132,7 +127,6 @@ function slotWidths(
 function labelMinimums(
   edges: DiagramEdge[],
   nodes: Map<string, CellArea>,
-  tokens: LayoutTokens,
 ): Record<Axis, Map<number, number>> {
   const minimums: Record<Axis, Map<number, number>> = {
     row: new Map(),
@@ -148,11 +142,11 @@ function labelMinimums(
     const from = nodes.get(parseEndpointRef(edge.from).nodeId);
     const to = nodes.get(parseEndpointRef(edge.to).nodeId);
     if (!from || !to) continue;
-    const label = measureEdgeLabel(edge, tokens);
+    const label = measureEdgeLabel(edge, LAYOUT_TOKENS);
     const side = sideBySide(from, to);
-    if (side) raise('col', side, label.w + 2 * tokens.STUB);
+    if (side) raise('col', side, label.w + 2 * LAYOUT_TOKENS.STUB);
     const stacked = sideBySide(transpose(from), transpose(to));
-    if (stacked) raise('row', stacked, label.h + 2 * tokens.STUB);
+    if (stacked) raise('row', stacked, label.h + 2 * LAYOUT_TOKENS.STUB);
   }
   return minimums;
 }
