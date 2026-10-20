@@ -10,6 +10,7 @@ import {
   nodeFrameRadius,
   resolveGraphLayout,
 } from '../../layouts/graph/graph-layout.ts';
+import { FONT_FAMILY, TEXT_SHAPING } from '../../layouts/text/font.ts';
 import type {
   Box,
   DiagramEdge,
@@ -172,6 +173,7 @@ function drawGraphCanvas(
   canvas.width = Math.round(model.viewBox.w * dpr);
   canvas.height = Math.round(model.viewBox.h * dpr);
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.fontKerning = TEXT_SHAPING.fontKerning;
   ctx.clearRect(0, 0, model.viewBox.w, model.viewBox.h);
   ctx.translate(-model.viewBox.x, -model.viewBox.y);
 
@@ -224,7 +226,7 @@ function drawGraphCanvas(
     ctx.restore();
     applyTexture(ctx, box, group.texture);
     ctx.fillStyle = text;
-    ctx.font = '600 14px ui-sans-serif, system-ui, sans-serif';
+    ctx.font = `600 14px ${FONT_FAMILY.sans}`;
     drawTextLines(
       ctx,
       groupLabelLines(group),
@@ -261,7 +263,7 @@ function drawGraphCanvas(
     if (routed.edge.label?.length && routed.labelPlacement) {
       ctx.save();
       ctx.fillStyle = text;
-      ctx.font = '10px ui-sans-serif, system-ui, sans-serif';
+      ctx.font = `10px ${FONT_FAMILY.sans}`;
       drawTextLines(
         ctx,
         routed.edge.label,
@@ -303,7 +305,7 @@ function drawGraphCanvas(
     const fontSize = node.fontSize ?? 12;
     const lineHeight = Math.max(12, fontSize + 2);
     const lines = linesForLabel(node.label);
-    ctx.font = `${node.fontWeight ?? 600} ${fontSize}px ui-sans-serif, system-ui, sans-serif`;
+    ctx.font = `${node.fontWeight ?? 600} ${fontSize}px ${FONT_FAMILY.sans}`;
     const textAlign = node.textAlign ?? 'center';
     const x = textAlign === 'start' ? box.x + 16 : box.x + box.w / 2;
     const y =

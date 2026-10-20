@@ -440,3 +440,39 @@ test('html output keeps natural size and applies viewport zoom', () => {
   );
   assert.match(markup, /class="w-full overflow-x-auto"/);
 });
+
+test('the html output draws text in Geist with kerning on and ligatures off, the shaping its text is measured with', () => {
+  // Act
+  const markup = render(
+    createElement(HtmlGraphDiagram, {
+      title: 'font-html-test',
+      defaultMode: 'static',
+      children: [
+        createElement(Diagram.Box, { id: 'router', row: 0, col: 0 }, 'Router'),
+        createElement(
+          Diagram.Box,
+          { id: 'service', row: 0, col: 1 },
+          'Service',
+        ),
+        createElement(
+          Diagram.Arrow,
+          { from: 'router', to: 'service' },
+          'calls',
+        ),
+      ],
+    }),
+  ).replaceAll('&#x27;', "'");
+
+  // Assert
+  assert.match(
+    markup,
+    /<div role="group"[^>]*style="font-kerning:normal;font-variant-ligatures:none"/,
+  );
+  const families = [...markup.matchAll(/font-family(?:="|:)([^";]*)/g)].map(
+    ([, family]) => family,
+  );
+  assert.ok(families.length > 0, 'the diagram draws text');
+  for (const family of families) {
+    assert.match(family ?? '', /^'Geist (Sans|Mono)',/);
+  }
+});

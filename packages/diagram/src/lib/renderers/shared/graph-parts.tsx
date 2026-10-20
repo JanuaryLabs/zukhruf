@@ -16,6 +16,7 @@ import {
   groupPortPlacements,
   groupTitleGutterHeight,
 } from '../../layouts/graph/graph-layout.ts';
+import { FONT_FAMILY } from '../../layouts/text/font.ts';
 import type {
   DiagramEdge,
   DiagramGraphIR,
@@ -476,7 +477,7 @@ export function GroupRect({
               : box.y + GROUP_LABEL_H
           }
           textAnchor={labelAnchor}
-          fontFamily="ui-sans-serif, system-ui, sans-serif"
+          fontFamily={FONT_FAMILY.sans}
           fontSize={12}
           fontWeight={600}
           fill={DIAGRAM_TEXT}
@@ -649,7 +650,7 @@ function EdgeLabel({
         x={placement.x}
         y={placement.y}
         textAnchor={placement.align}
-        fontFamily="ui-monospace, 'Geist Mono', monospace"
+        fontFamily={FONT_FAMILY.mono}
         fontSize={fontSize}
         fill={fill}
       >
@@ -717,7 +718,7 @@ function EdgeBadge({
           x={textX}
           y={firstLineY}
           textAnchor="start"
-          fontFamily="ui-sans-serif, system-ui, sans-serif"
+          fontFamily={FONT_FAMILY.sans}
           fontSize={fontSize}
           fontWeight={600}
           fill={fill}
@@ -766,7 +767,7 @@ export function PortMarkers({
                 x={port.labelX}
                 y={port.labelY}
                 textAnchor={port.labelAlign}
-                fontFamily="ui-monospace, 'Geist Mono', monospace"
+                fontFamily={FONT_FAMILY.mono}
                 fontSize={9}
                 fontWeight={600}
                 fill={stroke}

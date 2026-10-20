@@ -10,6 +10,19 @@
     "build": {
       "dependsOn": ["^build", "compile"]
     },
+    "generate-font-metrics": {
+      "description": "Writes src/lib/layouts/text/font-metrics.generated.ts from the installed Geist woff2 files; run it after an @fontsource upgrade.",
+      "executor": "nx:run-commands",
+      "cache": false,
+      "options": {
+        "cwd": "{projectRoot}",
+        "parallel": false,
+        "commands": [
+          "node src/testing/scripts/generate-font-metrics.ts",
+          "prettier --write src/lib/layouts/text/font-metrics.generated.ts"
+        ]
+      }
+    },
     "compile": {
       "description": "Compiles the source to JavaScript with the React Compiler; tsc (build) emits only the declarations.",
       "executor": "nx:run-commands",

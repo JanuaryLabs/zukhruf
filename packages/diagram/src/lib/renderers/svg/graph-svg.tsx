@@ -14,6 +14,7 @@ import {
   resolveGraphLayout,
 } from '../../layouts/graph/graph-layout.ts';
 import { centeredBaselineOffset } from '../../layouts/text-metrics.ts';
+import { FONT_FAMILY, TEXT_SHAPING } from '../../layouts/text/font.ts';
 import type {
   DiagramGraphLayout,
   DiagramLabelLine,
@@ -168,7 +169,7 @@ function NodeRect({
           x={cx}
           y={firstLineY}
           textAnchor="middle"
-          fontFamily="ui-monospace, 'Geist Mono', monospace"
+          fontFamily={FONT_FAMILY.mono}
           fontSize={fontSize}
           fontWeight={node.fontWeight ?? 500}
           fill={fill}
@@ -266,7 +267,7 @@ function NodeBodyLayout({
           x={titleX}
           y={titleY}
           textAnchor="start"
-          fontFamily="ui-sans-serif, system-ui, sans-serif"
+          fontFamily={FONT_FAMILY.sans}
           fontSize={titleSize}
           fontWeight={node.fontWeight ?? 700}
           fill={fill}
@@ -300,7 +301,7 @@ function NodeBodyLayout({
           x={bodyX}
           y={bodyY}
           textAnchor="start"
-          fontFamily="ui-sans-serif, system-ui, sans-serif"
+          fontFamily={FONT_FAMILY.sans}
           fontSize={bodySize}
           fontWeight={400}
           fill={fill}
@@ -329,7 +330,7 @@ function NodeBodyLayout({
                   x={bodyX + 12}
                   y={0}
                   textAnchor="start"
-                  fontFamily="ui-sans-serif, system-ui, sans-serif"
+                  fontFamily={FONT_FAMILY.sans}
                   fontSize={bodySize}
                   fontWeight={400}
                   fill={fill}
@@ -431,6 +432,7 @@ function GraphSVG({
     <svg
       data-diagram-style-preset={stylePreset}
       {...viewportProps}
+      style={{ ...viewportProps.style, ...TEXT_SHAPING }}
       viewBox={`${viewBox.x} ${viewBox.y} ${viewBox.w} ${viewBox.h}`}
       preserveAspectRatio="xMidYMid meet"
       role="img"

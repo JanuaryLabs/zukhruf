@@ -4,6 +4,7 @@ import {
   compileTimeline,
   validateTimeline,
 } from '../../compiler/diagram-compile.ts';
+import { FONT_FAMILY, TEXT_SHAPING } from '../../layouts/text/font.ts';
 import {
   ACTOR_H,
   ACTOR_RX,
@@ -98,7 +99,7 @@ function LaneBox({
         x={placement.centerX}
         y={y + ACTOR_H / 2 + verticalTextOffset(label.length)}
         textAnchor="middle"
-        fontFamily="ui-monospace, 'Geist Mono', monospace"
+        fontFamily={FONT_FAMILY.mono}
         fontSize={12}
         fontWeight={500}
         fill={DIAGRAM_TEXT}
@@ -216,7 +217,7 @@ function SignalMessage({
             x={boxTextX}
             y={boxTextY}
             textAnchor="middle"
-            fontFamily="ui-monospace, 'Geist Mono', monospace"
+            fontFamily={FONT_FAMILY.mono}
             fontSize={SIGNAL_LABEL_FONT_SIZE}
             fill={labelFill}
           >
@@ -254,7 +255,7 @@ function SignalMessage({
         x={labelStartX}
         y={labelBaseY}
         textAnchor={labelAnchor}
-        fontFamily="ui-monospace, 'Geist Mono', monospace"
+        fontFamily={FONT_FAMILY.mono}
         fontSize={SIGNAL_LABEL_FONT_SIZE}
         fill={labelFill}
       >
@@ -352,7 +353,7 @@ function FrameBox({
         x={frame.x + 32}
         y={frame.y + 16}
         textAnchor="middle"
-        fontFamily="ui-monospace, 'Geist Mono', monospace"
+        fontFamily={FONT_FAMILY.mono}
         fontSize={10}
         fontWeight={600}
         fill={DIAGRAM_ON_ACCENT}
@@ -364,7 +365,7 @@ function FrameBox({
         x={frame.x + frame.width / 2}
         y={frame.y + 16}
         textAnchor="middle"
-        fontFamily="ui-monospace, 'Geist Mono', monospace"
+        fontFamily={FONT_FAMILY.mono}
         fontSize={10}
         fontWeight={500}
         fill={DIAGRAM_TEXT}
@@ -429,6 +430,7 @@ function TimelineSVG({
     <svg
       data-diagram-style-preset={stylePreset}
       {...viewportProps}
+      style={{ ...viewportProps.style, ...TEXT_SHAPING }}
       viewBox={`0 0 ${layout.width} ${layout.height}`}
       preserveAspectRatio="xMidYMid meet"
       role="img"

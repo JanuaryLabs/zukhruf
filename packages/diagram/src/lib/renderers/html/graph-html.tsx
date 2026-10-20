@@ -15,6 +15,7 @@ import {
   resolveGraphAnnotations,
   resolveGraphLayout,
 } from '../../layouts/graph/graph-layout.ts';
+import { FONT_FAMILY, TEXT_SHAPING } from '../../layouts/text/font.ts';
 import type {
   Box,
   DiagramGraphLayout,
@@ -56,9 +57,6 @@ import {
 import { DiagramPaperRect } from '../shared/paper.tsx';
 import { formatZoom, normalizeZoom } from '../shared/viewport-zoom.ts';
 import type { GraphRendererProps } from '../types.ts';
-
-const MONO = "ui-monospace, 'Geist Mono', monospace";
-const SANS = 'ui-sans-serif, system-ui, sans-serif';
 
 export type HtmlGraphDiagramProps = Omit<DiagramProps, 'viewport'> & {
   graph?: DiagramGraphLayout;
@@ -143,6 +141,7 @@ function GraphHTML({
       role="group"
       aria-label={title.join(' ')}
       className="w-full overflow-x-auto"
+      style={TEXT_SHAPING}
       data-diagram-style-preset={stylePreset}
       data-diagram-viewport-zoom={formatZoom(zoom)}
     >
@@ -430,7 +429,7 @@ function NodeBox({
             data-diagram-node-description={node.id}
             className="text-pretty"
             style={{
-              fontFamily: SANS,
+              fontFamily: FONT_FAMILY.sans,
               fontSize: node.bodyFontSize ?? 13,
               lineHeight: 1.35,
             }}
@@ -441,7 +440,10 @@ function NodeBox({
         {itemLines.length > 0 && (
           <ul
             className="flex list-disc flex-col gap-1 pl-4"
-            style={{ fontFamily: SANS, fontSize: node.bodyFontSize ?? 13 }}
+            style={{
+              fontFamily: FONT_FAMILY.sans,
+              fontSize: node.bodyFontSize ?? 13,
+            }}
           >
             {itemLines.map((item, i) => (
               <li key={i} data-diagram-node-item={`${node.id}:${i}`}>
@@ -477,7 +479,7 @@ function NodeLabel({
     <div
       className="text-balance"
       style={{
-        fontFamily: startAligned ? SANS : MONO,
+        fontFamily: startAligned ? FONT_FAMILY.sans : FONT_FAMILY.mono,
         fontSize,
         lineHeight: `${startAligned ? fontSize + 4 : Math.max(12, fontSize + 2)}px`,
         letterSpacing: startAligned ? undefined : 0.6,

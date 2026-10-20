@@ -8,6 +8,7 @@ import {
   nodeStackCount,
   nodeStackFrameBox,
 } from '../../layouts/graph/graph-layout.ts';
+import { FONT_FAMILY } from '../../layouts/text/font.ts';
 import type { DiagramNode, Box as SvgBox } from '../../model/diagram-ir.ts';
 import {
   DIAGRAM_BG,
@@ -172,7 +173,7 @@ export function SpecialNode({
             x={cx}
             y={labelY}
             textAnchor="middle"
-            fontFamily="ui-sans-serif, system-ui, sans-serif"
+            fontFamily={FONT_FAMILY.sans}
             fontSize={fontSize}
             fontWeight={node.fontWeight ?? 600}
             fill={fill}
@@ -275,7 +276,7 @@ export function SpecialNode({
             x={textX}
             y={textY}
             textAnchor={textAnchor}
-            fontFamily="ui-sans-serif, system-ui, sans-serif"
+            fontFamily={FONT_FAMILY.sans}
             fontSize={connectorFontSize}
             fontWeight={node.fontWeight ?? 700}
             fill={fill}
@@ -354,7 +355,7 @@ export function SpecialNode({
             x={cx}
             y={markerLabelY}
             textAnchor="middle"
-            fontFamily="ui-sans-serif, system-ui, sans-serif"
+            fontFamily={FONT_FAMILY.sans}
             fontSize={markerFontSize}
             fontWeight={node.fontWeight ?? 700}
             fill={fill}
@@ -413,7 +414,7 @@ export function SpecialNode({
             x={cx}
             y={centerY - Math.max(8, box.h / 2 + 6)}
             textAnchor="middle"
-            fontFamily="ui-monospace, 'Geist Mono', monospace"
+            fontFamily={FONT_FAMILY.mono}
             fontSize={node.fontSize ?? 10}
             fontWeight={node.fontWeight ?? 600}
             fill={fill}
@@ -508,7 +509,7 @@ export function NodeCaption({ node, box }: { node: DiagramNode; box: SvgBox }) {
         x={placement.x}
         y={placement.y}
         textAnchor={placement.align}
-        fontFamily="ui-sans-serif, system-ui, sans-serif"
+        fontFamily={FONT_FAMILY.sans}
         fontSize={placement.fontSize}
         fontWeight={node.captionFontWeight ?? 600}
         fill={fill}
@@ -617,7 +618,7 @@ export function AnnotationText({
         x={annotation.x}
         y={annotation.y}
         textAnchor={align}
-        fontFamily="ui-sans-serif, system-ui, sans-serif"
+        fontFamily={FONT_FAMILY.sans}
         fontSize={fontSize}
         fontWeight={fontWeight}
         fill={fill}

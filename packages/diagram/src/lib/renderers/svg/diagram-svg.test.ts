@@ -623,7 +623,7 @@ test('contained graph viewport fills its parent box without intrinsic dimensions
   assert.match(markup, /data-diagram-viewport-fit="contain"/);
   assert.match(markup, /data-diagram-viewport-zoom="1"/);
   assert.match(markup, /class="block min-h-0 min-w-0 max-h-full max-w-full"/);
-  assert.match(markup, /style="width:100%;height:100%"/);
+  assert.match(markup, /style="width:100%;height:100%[;"]/);
   assert.doesNotMatch(markup, /<svg[^>]*\swidth="/);
   assert.doesNotMatch(markup, /<svg[^>]*\sheight="/);
   assert.ok(viewBox.w > 0);
@@ -757,7 +757,7 @@ test('contained timeline viewport supports zoomed parent-relative sizing', () =>
   );
   assert.match(
     markup,
-    /style="width:125%;height:125%;max-width:none;max-height:none"/,
+    /style="width:125%;height:125%;max-width:none;max-height:none[;"]/,
   );
   assert.doesNotMatch(markup, /<svg[^>]*\swidth="/);
   assert.doesNotMatch(markup, /<svg[^>]*\sheight="/);
@@ -9456,4 +9456,63 @@ test('rejects automatic layout for cyclic graphs', () => {
       ),
     /automatic graph layout requires an acyclic graph/,
   );
+});
+
+test('svg outputs draw text in Geist with kerning on and ligatures off, the shaping their text is measured with', () => {
+  // Arrange
+  const outputs = [
+    createElement(SvgGraphDiagram, {
+      title: 'font-graph-test',
+      defaultMode: 'static',
+      children: [
+        createElement(Diagram.Group, {
+          id: 'backend',
+          label: 'Backend',
+          rowStart: 0,
+          rowEnd: 0,
+          colStart: 1,
+          colEnd: 2,
+        }),
+        createElement(Diagram.Junction, { id: 'bus', row: 1, col: 1 }, 'Bus'),
+        createElement(Diagram.Box, { id: 'router', row: 0, col: 0 }, 'Router'),
+        createElement(
+          Diagram.Box,
+          { id: 'service', row: 0, col: 1 },
+          'Service',
+        ),
+        createElement(
+          Diagram.Arrow,
+          { from: 'router', to: 'service' },
+          'calls',
+        ),
+      ],
+    }),
+    createElement(SvgTimelineDiagram, {
+      title: 'font-timeline-test',
+      defaultMode: 'static',
+      children: [
+        createElement(Diagram.Lane, { id: 'user' }, 'User'),
+        createElement(Diagram.Lane, { id: 'api' }, 'API'),
+        createElement(Diagram.Signal, { from: 'user', to: 'api' }, 'Request'),
+      ],
+    }),
+  ];
+
+  for (const output of outputs) {
+    // Act
+    const markup = render(output).replaceAll('&#x27;', "'");
+
+    // Assert
+    assert.match(
+      markup,
+      /<svg[^>]*style="[^"]*font-kerning:normal;font-variant-ligatures:none/,
+    );
+    const families = [...markup.matchAll(/font-family="([^"]*)"/g)].map(
+      ([, family]) => family,
+    );
+    assert.ok(families.length > 0, 'the diagram draws text');
+    for (const family of families) {
+      assert.match(family ?? '', /^'Geist (Sans|Mono)',/);
+    }
+  }
 });
