@@ -118,10 +118,15 @@ export type DiagramNode = {
   label: string | DiagramLabelLine[];
   /** React content drawn inside the box; only HtmlGraphDiagram draws it. */
   content?: ReactNode;
-  kind?: 'node' | 'appliance' | 'connector' | 'junction' | 'marker';
+  kind?: 'node' | 'appliance' | 'connector' | 'junction' | 'marker' | 'note';
   row?: number | undefined;
   col?: number | undefined;
   colSpan?: number | undefined;
+  rowSpan?: number | undefined;
+  /** Whether a Box or Card fills its grid area; other kinds keep their measured size. */
+  stretch?: boolean | undefined;
+  /** The id of the node or group a note explains. */
+  target?: string | undefined;
   width?: number;
   height?: number;
   frame?: 'solid' | 'transparent' | 'flat' | 'filled' | 'none';
