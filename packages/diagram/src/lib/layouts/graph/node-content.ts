@@ -1,7 +1,7 @@
 import type { Box, DiagramNode, Point } from '../../model/diagram-ir.ts';
 import type { NodeLayout } from './graph-layout-result.ts';
 import { labelLines, textBlock } from './text-block.ts';
-import type { LayoutTokens } from './tokens.ts';
+import { LAYOUT_TOKENS } from './tokens.ts';
 
 export type ContentPlacement = Pick<NodeLayout, 'text' | 'bullets'> &
   Partial<Pick<NodeLayout, 'icon' | 'appliance'>>;
@@ -20,40 +20,37 @@ const CONNECTOR_MIN_HEIGHT = 28;
 
 const NOTHING: ContentPlacement = { text: [], bullets: [] };
 
-export function nodeContent(
-  node: DiagramNode,
-  tokens: LayoutTokens,
-): NodeContent {
+export function nodeContent(node: DiagramNode): NodeContent {
   switch (node.kind) {
     case 'junction':
-      return junctionContent(tokens);
+      return junctionContent();
     case 'marker':
-      return markerContent(node, tokens);
+      return markerContent(node);
     case 'connector':
-      return connectorContent(node, tokens);
+      return connectorContent(node);
     case 'appliance':
-      return applianceContent(node, tokens);
+      return applianceContent(node);
     case 'note':
-      return noteContent(node, tokens);
+      return noteContent(node);
     default:
-      return boxContent(node, tokens);
+      return boxContent(node);
   }
 }
 
-function boxContent(node: DiagramNode, tokens: LayoutTokens): NodeContent {
+function boxContent(node: DiagramNode): NodeContent {
   const pad =
     node.frame === 'none'
-      ? { x: tokens.LABEL_GAP, y: tokens.LABEL_GAP }
-      : { x: tokens.PAD_X, y: tokens.PAD_Y };
+      ? { x: LAYOUT_TOKENS.LABEL_GAP, y: LAYOUT_TOKENS.LABEL_GAP }
+      : { x: LAYOUT_TOKENS.PAD_X, y: LAYOUT_TOKENS.PAD_Y };
   const isCard =
     node.textAlign === 'start' ||
     node.description !== undefined ||
     (node.items?.length ?? 0) > 0;
-  if (isCard) return { ...cardContent(node, tokens), pad };
-  if (node.icon) return { ...iconRowContent(node, tokens), pad };
+  if (isCard) return { ...cardContent(node), pad };
+  if (node.icon) return { ...iconRowContent(node), pad };
   const lines = textBlock(
     labelLines(node.label, node.textColor),
-    tokens.fonts.boxLabel,
+    LAYOUT_TOKENS.fonts.boxLabel,
   );
   return {
     w: lines.w,
@@ -66,14 +63,11 @@ function boxContent(node: DiagramNode, tokens: LayoutTokens): NodeContent {
   };
 }
 
-function iconRowContent(
-  node: DiagramNode,
-  tokens: LayoutTokens,
-): Omit<NodeContent, 'pad'> {
-  const { ICON, ICON_GAP } = tokens;
+function iconRowContent(node: DiagramNode): Omit<NodeContent, 'pad'> {
+  const { ICON, ICON_GAP } = LAYOUT_TOKENS;
   const title = textBlock(
     labelLines(node.label, node.textColor),
-    tokens.fonts.title,
+    LAYOUT_TOKENS.fonts.title,
   );
   const w = title.w > 0 ? ICON + ICON_GAP + title.w : ICON;
   const h = Math.max(ICON, title.h);
@@ -92,22 +86,19 @@ function iconRowContent(
   };
 }
 
-function cardContent(
-  node: DiagramNode,
-  tokens: LayoutTokens,
-): Omit<NodeContent, 'pad'> {
-  const { ICON, ICON_GAP, BLOCK_GAP, BULLET_INDENT } = tokens;
+function cardContent(node: DiagramNode): Omit<NodeContent, 'pad'> {
+  const { ICON, ICON_GAP, BLOCK_GAP, BULLET_INDENT } = LAYOUT_TOKENS;
   const title = textBlock(
     labelLines(node.label, node.textColor),
-    tokens.fonts.title,
+    LAYOUT_TOKENS.fonts.title,
   );
   const description = textBlock(
     labelLines(node.description, node.textColor),
-    tokens.fonts.body,
+    LAYOUT_TOKENS.fonts.body,
   );
   const items = textBlock(
     labelLines(node.items, node.textColor),
-    tokens.fonts.body,
+    LAYOUT_TOKENS.fonts.body,
   );
   let iconW = 0;
   if (node.icon) iconW = title.w > 0 ? ICON + ICON_GAP : ICON;
@@ -117,7 +108,7 @@ function cardContent(
     { h: description.h, w: description.w },
     { h: items.h, w: items.h > 0 ? BULLET_INDENT + items.w : 0 },
   ].filter((section) => section.h > 0);
-  const bulletRise = tokens.fonts.body.size * 0.3;
+  const bulletRise = LAYOUT_TOKENS.fonts.body.size * 0.3;
   return {
     w: Math.max(0, ...sections.map((section) => section.w)),
     h:
@@ -162,15 +153,15 @@ function cardContent(
   };
 }
 
-function noteContent(node: DiagramNode, tokens: LayoutTokens): NodeContent {
+function noteContent(node: DiagramNode): NodeContent {
   const lines = textBlock(
     labelLines(node.label, node.textColor ?? 'dim'),
-    tokens.fonts.note,
+    LAYOUT_TOKENS.fonts.note,
   );
   return {
     w: lines.w,
     h: lines.h,
-    pad: { x: tokens.LABEL_GAP, y: tokens.LABEL_GAP },
+    pad: { x: LAYOUT_TOKENS.LABEL_GAP, y: LAYOUT_TOKENS.LABEL_GAP },
     place: (inner) => ({
       text: lines.place(inner.x, inner.y, 'start'),
       bullets: [],
@@ -178,18 +169,18 @@ function noteContent(node: DiagramNode, tokens: LayoutTokens): NodeContent {
   };
 }
 
-function markerContent(node: DiagramNode, tokens: LayoutTokens): NodeContent {
-  const { MARKER_ICON, BLOCK_GAP } = tokens;
+function markerContent(node: DiagramNode): NodeContent {
+  const { MARKER_ICON, BLOCK_GAP } = LAYOUT_TOKENS;
   const lines = textBlock(
     labelLines(node.label, node.textColor),
-    tokens.fonts.marker,
+    LAYOUT_TOKENS.fonts.marker,
   );
   const gap = lines.h > 0 ? BLOCK_GAP : 0;
   const h = MARKER_ICON + gap + lines.h;
   return {
     w: Math.max(MARKER_ICON, lines.w),
     h,
-    pad: { x: tokens.LABEL_GAP, y: tokens.LABEL_GAP },
+    pad: { x: LAYOUT_TOKENS.LABEL_GAP, y: LAYOUT_TOKENS.LABEL_GAP },
     place: (inner) => {
       const top = centredTop(inner, h);
       const cx = centreX(inner);
@@ -202,14 +193,11 @@ function markerContent(node: DiagramNode, tokens: LayoutTokens): NodeContent {
   };
 }
 
-function connectorContent(
-  node: DiagramNode,
-  tokens: LayoutTokens,
-): NodeContent {
-  const { CONNECTOR_ICON, BLOCK_GAP } = tokens;
+function connectorContent(node: DiagramNode): NodeContent {
+  const { CONNECTOR_ICON, BLOCK_GAP } = LAYOUT_TOKENS;
   const lines = textBlock(
     labelLines(node.label, node.textColor),
-    tokens.fonts.connector,
+    LAYOUT_TOKENS.fonts.connector,
   );
   const iconW = node.icon ? CONNECTOR_ICON + (lines.w > 0 ? BLOCK_GAP : 0) : 0;
   const h = Math.max(CONNECTOR_MIN_HEIGHT - 2 * CONNECTOR_PAD.y, lines.h);
@@ -235,23 +223,20 @@ function connectorContent(
   };
 }
 
-function junctionContent(tokens: LayoutTokens): NodeContent {
+function junctionContent(): NodeContent {
   return {
-    w: tokens.JUNCTION,
-    h: tokens.JUNCTION,
+    w: LAYOUT_TOKENS.JUNCTION,
+    h: LAYOUT_TOKENS.JUNCTION,
     pad: { x: 0, y: 0 },
     place: () => NOTHING,
   };
 }
 
-function applianceContent(
-  node: DiagramNode,
-  tokens: LayoutTokens,
-): NodeContent {
-  const { APPLIANCE, LABEL_GAP } = tokens;
+function applianceContent(node: DiagramNode): NodeContent {
+  const { APPLIANCE, LABEL_GAP } = LAYOUT_TOKENS;
   const lines = textBlock(
     labelLines(node.label, node.textColor),
-    tokens.fonts.appliance,
+    LAYOUT_TOKENS.fonts.appliance,
   );
   return {
     w: Math.max(APPLIANCE.w, lines.w + 2 * LABEL_GAP),

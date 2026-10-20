@@ -61,7 +61,7 @@ export type GroupLayout = {
   band?: Box;
   label: TextRun[];
   dividers: [Point, Point][];
-  ports?: PortLayout[];
+  ports: PortLayout[];
 };
 
 export type EdgeLabelLayout = {

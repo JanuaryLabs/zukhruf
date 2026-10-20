@@ -86,6 +86,7 @@ function soundLayout(): GraphLayout {
         band: { x: 20, y: 20, w: 260, h: 24 },
         label: [run('Cloud', { x: 30, y: 24, w: 60, h: 14 })],
         dividers: [],
+        ports: [],
       },
       {
         group: { id: 'vpc', label: 'VPC', parent: 'cloud' },
@@ -93,6 +94,7 @@ function soundLayout(): GraphLayout {
         rect: { x: 40, y: 60, w: 220, h: 140 },
         label: [run('VPC', { x: 44, y: 64, w: 40, h: 12 })],
         dividers: [],
+        ports: [],
       },
     ],
     nodes: [
@@ -370,6 +372,7 @@ describe('assertSoundLayout', () => {
       rect: { x: 260, y: 200, w: 100, h: 50 },
       label: [],
       dividers: [],
+      ports: [],
     });
 
     // Assert
@@ -408,8 +411,8 @@ describe('assertSoundLayout', () => {
     // Assert
     assertOnlyViolation(
       layout,
-      { invariant: 'E1', ids: ['db->hub'] },
-      /E1 edge "db->hub" has a diagonal segment \(210,280\)→\(230,300\)/,
+      { invariant: 'E1', ids: ['db->hub#2'] },
+      /E1 edge "db->hub#2" has a diagonal segment \(210,280\)→\(230,300\)/,
     );
   });
 
@@ -436,8 +439,8 @@ describe('assertSoundLayout', () => {
     // Assert
     assertOnlyViolation(
       layout,
-      { invariant: 'E2', ids: ['db->hub', 'cache'] },
-      /E2 edge "db->hub" passes through node "cache"/,
+      { invariant: 'E2', ids: ['db->hub#2', 'cache'] },
+      /E2 edge "db->hub#2" passes through node "cache"/,
     );
   });
 
@@ -472,8 +475,8 @@ describe('assertSoundLayout', () => {
     // Assert
     assertOnlyViolation(
       layout,
-      { invariant: 'E3', ids: ['db->hub', 'cloud'] },
-      /E3 edge "db->hub" passes through the title band of group "cloud"/,
+      { invariant: 'E3', ids: ['db->hub#2', 'cloud'] },
+      /E3 edge "db->hub#2" passes through the title band of group "cloud"/,
     );
   });
 
@@ -485,8 +488,8 @@ describe('assertSoundLayout', () => {
     // Assert
     assertOnlyViolation(
       layout,
-      { invariant: 'E4', ids: ['web->db', 'web'] },
-      /E4 edge "web->db" starts off the left side of "web"/,
+      { invariant: 'E4', ids: ['web->db#1', 'web'] },
+      /E4 edge "web->db#1" starts off the left side of "web"/,
     );
   });
 
@@ -498,8 +501,8 @@ describe('assertSoundLayout', () => {
     // Assert
     assertOnlyViolation(
       layout,
-      { invariant: 'E4', ids: ['web->db', 'db'] },
-      /E4 edge "web->db" ends off the right side of "db"/,
+      { invariant: 'E4', ids: ['web->db#1', 'db'] },
+      /E4 edge "web->db#1" ends off the right side of "db"/,
     );
   });
 
@@ -511,8 +514,8 @@ describe('assertSoundLayout', () => {
     // Assert
     assertOnlyViolation(
       layout,
-      { invariant: 'E4', ids: ['api:out->db', 'api'] },
-      /E4 edge "api:out->db" starts at an angle to the top side of "api"/,
+      { invariant: 'E4', ids: ['api:out->db#0', 'api'] },
+      /E4 edge "api:out->db#0" starts at an angle to the top side of "api"/,
     );
   });
 
@@ -524,8 +527,8 @@ describe('assertSoundLayout', () => {
     // Assert
     assertOnlyViolation(
       layout,
-      { invariant: 'E5', ids: ['db->hub', 'hub'] },
-      /E5 edge "db->hub" ends off the centre of junction "hub"/,
+      { invariant: 'E5', ids: ['db->hub#2', 'hub'] },
+      /E5 edge "db->hub#2" ends off the centre of junction "hub"/,
     );
   });
 
@@ -542,8 +545,8 @@ describe('assertSoundLayout', () => {
     // Assert
     assertOnlyViolation(
       layout,
-      { invariant: 'L1', ids: ['api:out->db', 'db'] },
-      /L1 the label of edge "api:out->db" covers node "db"/,
+      { invariant: 'L1', ids: ['api:out->db#0', 'db'] },
+      /L1 the label of edge "api:out->db#0" covers node "db"/,
     );
   });
 
@@ -555,8 +558,8 @@ describe('assertSoundLayout', () => {
     // Assert
     assertOnlyViolation(
       layout,
-      { invariant: 'L1', ids: ['web->db', 'web->db'] },
-      /L1 the label of edge "web->db" covers the badge of edge "web->db"/,
+      { invariant: 'L1', ids: ['web->db#1', 'web->db#1'] },
+      /L1 the label of edge "web->db#1" covers the badge of edge "web->db#1"/,
     );
   });
 
@@ -568,8 +571,8 @@ describe('assertSoundLayout', () => {
     // Assert
     assertOnlyViolation(
       layout,
-      { invariant: 'L2', ids: ['web->db'] },
-      /L2 the label of edge "web->db" sits 50px from its edge/,
+      { invariant: 'L2', ids: ['web->db#1'] },
+      /L2 the label of edge "web->db#1" sits 50px from its edge/,
     );
   });
 
@@ -587,41 +590,6 @@ describe('assertSoundLayout', () => {
       /V1 node "cache" lies outside the viewBox/,
     );
   });
-  test('options: a wider maxLabelDistance and a narrower textInset accept what the defaults reject', () => {
-    // Arrange
-    const layout = soundLayout();
-    edgeIn(layout, 'web', 'db').label!.box = { x: 300, y: 60, w: 30, h: 10 };
-    nodeIn(layout, 'api').text = [run('API', { x: 62, y: 112, w: 40, h: 14 })];
-
-    // Act
-    const violations = layoutViolations(layout, {
-      maxLabelDistance: 60,
-      textInset: 2,
-    });
-
-    // Assert
-    assert.deepEqual(violations, []);
-  });
-
-  test('epsilon: an overlap narrower than epsilon is rounding, not overlap', () => {
-    // Arrange
-    const layout = soundLayout();
-    layout.nodes.push(
-      nodeLayout({ id: 'cache' }, { x: 459.6, y: 100, w: 40, h: 20 }),
-    );
-
-    // Act
-    const tolerated = layoutViolations(layout);
-    const strict = layoutViolations(layout, { epsilon: 0.1 });
-
-    // Assert
-    assert.deepEqual(tolerated, []);
-    assert.deepEqual(
-      strict.map(({ invariant, ids }) => ({ invariant, ids })),
-      [{ invariant: 'N1', ids: ['web', 'cache'] }],
-    );
-  });
-
   test('E3: an edge may cross the title band of the group it connects to', () => {
     // Arrange
     const layout = soundLayout();
@@ -696,8 +664,8 @@ describe('assertSoundLayout', () => {
     // Assert
     assertOnlyViolation(
       layout,
-      { invariant: 'E4', ids: ['db->hub', 'db'] },
-      /E4 edge "db->hub" starts off the bottom side of "db"/,
+      { invariant: 'E4', ids: ['db->hub#2', 'db'] },
+      /E4 edge "db->hub#2" starts off the bottom side of "db"/,
     );
   });
 
@@ -709,8 +677,8 @@ describe('assertSoundLayout', () => {
     // Assert
     assertOnlyViolation(
       layout,
-      { invariant: 'E4', ids: ['web->db', 'web'] },
-      /E4 edge "web->db" starts off the left side of "web"/,
+      { invariant: 'E4', ids: ['web->db#1', 'web'] },
+      /E4 edge "web->db#1" starts off the left side of "web"/,
     );
   });
 
@@ -722,8 +690,8 @@ describe('assertSoundLayout', () => {
     // Assert
     assertOnlyViolation(
       layout,
-      { invariant: 'E4', ids: ['api:in->db', 'api'] },
-      /E4 edge "api:in->db" starts at "api:in", which the layout does not hold/,
+      { invariant: 'E4', ids: ['api:in->db#0', 'api'] },
+      /E4 edge "api:in->db#0" starts at "api:in", which the layout does not hold/,
     );
   });
 
@@ -735,8 +703,8 @@ describe('assertSoundLayout', () => {
     // Assert
     assertOnlyViolation(
       layout,
-      { invariant: 'E4', ids: ['web->ghost', 'ghost'] },
-      /E4 edge "web->ghost" ends at "ghost", which the layout does not hold/,
+      { invariant: 'E4', ids: ['web->ghost#1', 'ghost'] },
+      /E4 edge "web->ghost#1" ends at "ghost", which the layout does not hold/,
     );
   });
 
@@ -759,8 +727,8 @@ describe('assertSoundLayout', () => {
     // Assert
     assertOnlyViolation(
       layout,
-      { invariant: 'E5', ids: ['hub->web', 'hub'] },
-      /E5 edge "hub->web" starts off the centre of junction "hub"/,
+      { invariant: 'E5', ids: ['hub->web#5', 'hub'] },
+      /E5 edge "hub->web#5" starts off the centre of junction "hub"/,
     );
   });
 
@@ -777,8 +745,8 @@ describe('assertSoundLayout', () => {
     // Assert
     assertOnlyViolation(
       layout,
-      { invariant: 'L1', ids: ['web->hub', 'web'] },
-      /L1 the label of edge "web->hub" covers the caption of node "web"/,
+      { invariant: 'L1', ids: ['web->hub#4', 'web'] },
+      /L1 the label of edge "web->hub#4" covers the caption of node "web"/,
     );
   });
 
@@ -793,8 +761,8 @@ describe('assertSoundLayout', () => {
     // Assert
     assertOnlyViolation(
       layout,
-      { invariant: 'L1', ids: ['note->cloud', 'cloud'] },
-      /L1 the label of edge "note->cloud" covers the title band of group "cloud"/,
+      { invariant: 'L1', ids: ['note->cloud#3', 'cloud'] },
+      /L1 the label of edge "note->cloud#3" covers the title band of group "cloud"/,
     );
   });
 
@@ -808,8 +776,8 @@ describe('assertSoundLayout', () => {
     // Assert
     assertOnlyViolation(
       layout,
-      { invariant: 'L1', ids: ['api:out->db', 'vpc'] },
-      /L1 the label of edge "api:out->db" covers the label of group "vpc"/,
+      { invariant: 'L1', ids: ['api:out->db#0', 'vpc'] },
+      /L1 the label of edge "api:out->db#0" covers the label of group "vpc"/,
     );
   });
 
@@ -822,6 +790,7 @@ describe('assertSoundLayout', () => {
       rect: { x: 500, y: 300, w: 120, h: 50 },
       label: [],
       dividers: [],
+      ports: [],
     });
 
     // Assert
@@ -847,10 +816,10 @@ describe('assertSoundLayout', () => {
     assertViolations(
       layout,
       [
-        { invariant: 'V1', ids: ['db->hub'] },
-        { invariant: 'V1', ids: ['db->hub'] },
+        { invariant: 'V1', ids: ['db->hub#2'] },
+        { invariant: 'V1', ids: ['db->hub#2'] },
       ],
-      /V1 a point of edge "db->hub" lies outside the viewBox/,
+      /V1 a point of edge "db->hub#2" lies outside the viewBox/,
     );
   });
 
@@ -892,10 +861,10 @@ describe('assertSoundLayout', () => {
     assertViolations(
       layout,
       [
-        { invariant: 'V1', ids: ['db->hub'] },
-        { invariant: 'V1', ids: ['db->hub'] },
+        { invariant: 'V1', ids: ['db->hub#2'] },
+        { invariant: 'V1', ids: ['db->hub#2'] },
       ],
-      /V1 the label of edge "db->hub" lies outside the viewBox\n.*V1 the badge of edge "db->hub" lies outside the viewBox/,
+      /V1 the label of edge "db->hub#2" lies outside the viewBox\n.*V1 the badge of edge "db->hub#2" lies outside the viewBox/,
     );
   });
 
@@ -915,6 +884,76 @@ describe('assertSoundLayout', () => {
       layout,
       { invariant: 'V1', ids: ['web'] },
       /V1 the caption of node "web" lies outside the viewBox/,
+    );
+  });
+
+  test('E4: an edge to a group port may end at that port', () => {
+    // Arrange
+    const layout = soundLayout();
+    groupIn(layout, 'cloud').ports = [
+      { id: 'in', side: 'right', point: { x: 280, y: 100 } },
+    ];
+    const edge = edgeIn(layout, 'note', 'cloud');
+    edge.edge.to = 'cloud:in';
+    edge.points = [
+      { x: 380, y: 35 },
+      { x: 330, y: 35 },
+      { x: 330, y: 100 },
+      { x: 280, y: 100 },
+    ];
+
+    // Act
+    const violations = layoutViolations(layout);
+
+    // Assert
+    assert.deepEqual(violations, []);
+  });
+
+  test('E4: an edge that ends beside the group port it names', () => {
+    // Arrange
+    const layout = soundLayout();
+    groupIn(layout, 'cloud').ports = [
+      { id: 'in', side: 'right', point: { x: 280, y: 140 } },
+    ];
+    const edge = edgeIn(layout, 'note', 'cloud');
+    edge.edge.to = 'cloud:in';
+    edge.points = [
+      { x: 380, y: 35 },
+      { x: 330, y: 35 },
+      { x: 330, y: 100 },
+      { x: 280, y: 100 },
+    ];
+
+    // Assert
+    assertOnlyViolation(
+      layout,
+      { invariant: 'E4', ids: ['note->cloud:in#3', 'cloud'] },
+      /E4 edge "note->cloud:in#3" ends off the right side of "cloud"/,
+    );
+  });
+
+  test('E1: of two edges with the same ends, only the broken one is named, by its index', () => {
+    // Arrange
+    const layout = soundLayout();
+    layout.edges.push(
+      edgeLayout(
+        'web',
+        'db',
+        ['left', 'right'],
+        [
+          { x: 380, y: 130 },
+          { x: 300, y: 130 },
+          { x: 260, y: 124 },
+          { x: 240, y: 124 },
+        ],
+      ),
+    );
+
+    // Assert
+    assertOnlyViolation(
+      layout,
+      { invariant: 'E1', ids: ['web->db#5'] },
+      /E1 edge "web->db#5" has a diagonal segment/,
     );
   });
 });

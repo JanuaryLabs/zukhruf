@@ -30,10 +30,13 @@ export type LayoutViolation = {
 };
 
 export type SoundLayoutOptions = {
-  epsilon?: number;
   textInset?: number;
-  maxLabelDistance?: number;
 };
+
+/** How many pixels of rounding every comparison forgives. */
+const EPSILON = 0.5;
+/** How far from its route an edge label may sit. */
+const MAX_LABEL_DISTANCE = 12;
 
 /** How far outside its entry side an edge may stop, so its arrow tip ends on the border. */
 const ARROW_TIP_GAP = 12;
@@ -63,8 +66,8 @@ export function layoutViolations(
   layout: GraphLayout,
   options: SoundLayoutOptions = {},
 ): LayoutViolation[] {
-  const { epsilon = 0.5, textInset = 4, maxLabelDistance = 12 } = options;
-  const geometry = new Geometry(epsilon);
+  const { textInset = 4 } = options;
+  const geometry = new Geometry(EPSILON);
   const membership = new Membership(layout);
   const violations: LayoutViolation[] = [];
   const report = (invariant: InvariantCode, ids: string[], message: string) =>
@@ -73,7 +76,7 @@ export function layoutViolations(
   checkNodes(layout, geometry, textInset, report);
   checkGroups(layout, geometry, membership, report);
   checkEdges(layout, geometry, membership, report);
-  checkLabels(layout, geometry, maxLabelDistance, report);
+  checkLabels(layout, geometry, report);
   checkViewBox(layout, geometry, report);
   return violations;
 }
@@ -254,8 +257,8 @@ function checkEdges(
     }
   };
 
-  for (const edge of layout.edges) {
-    const id = edgeId(edge.edge);
+  for (const [index, edge] of layout.edges.entries()) {
+    const id = edgeId(edge.edge, index);
     const what = `edge "${id}"`;
     const source = parseEndpointRef(edge.edge.from);
     const target = parseEndpointRef(edge.edge.to);
@@ -343,24 +346,19 @@ function endpointAnchor(
   group: GroupLayout | undefined,
 ): Box | undefined {
   if (ref.portId === undefined) return node?.box ?? group?.rect;
-  const port = node?.ports.find((port) => port.id === ref.portId);
+  const port = (node ?? group)?.ports.find((port) => port.id === ref.portId);
   return port && { ...port.point, w: 0, h: 0 };
 }
 
-function checkLabels(
-  layout: GraphLayout,
-  geometry: Geometry,
-  maxLabelDistance: number,
-  report: Report,
-) {
+function checkLabels(layout: GraphLayout, geometry: Geometry, report: Report) {
   const tags: {
     edge: EdgeLayout;
     id: string;
     kind: 'label' | 'badge';
     box: Box;
   }[] = [];
-  for (const edge of layout.edges) {
-    const id = edgeId(edge.edge);
+  for (const [index, edge] of layout.edges.entries()) {
+    const id = edgeId(edge.edge, index);
     if (edge.label) tags.push({ edge, id, kind: 'label', box: edge.label.box });
     if (edge.badge) tags.push({ edge, id, kind: 'badge', box: edge.badge.box });
   }
@@ -418,7 +416,7 @@ function checkLabels(
         geometry.distance(tag.box, spanOf(a, b)),
       ),
     );
-    if (distance > maxLabelDistance) {
+    if (distance > MAX_LABEL_DISTANCE) {
       report(
         'L2',
         [tag.id],
@@ -443,8 +441,11 @@ function checkViewBox(layout: GraphLayout, geometry: Geometry, report: Report) {
   for (const { group, rect } of layout.groups) {
     outside(group.id, `group "${group.id}"`, rect);
   }
-  for (const { edge, points, label, badge } of layout.edges) {
-    const id = edgeId(edge);
+  for (const [
+    index,
+    { edge, points, label, badge },
+  ] of layout.edges.entries()) {
+    const id = edgeId(edge, index);
     for (const point of points)
       outside(id, `a point of edge "${id}"`, spanOf(point, point));
     if (label) outside(id, `the label of edge "${id}"`, label.box);
@@ -484,7 +485,7 @@ class Membership {
   }
 }
 
-/** Box arithmetic where every comparison forgives `epsilon` pixels of rounding. */
+/** Box arithmetic where every comparison forgives EPSILON pixels of rounding. */
 class Geometry {
   readonly #epsilon: number;
 
@@ -623,8 +624,9 @@ function segments(points: Point[]): [Point, Point][] {
   return points.slice(1).map((point, index) => [points[index]!, point]);
 }
 
-function edgeId(edge: { from: string; to: string }): string {
-  return `${edge.from}->${edge.to}`;
+/** Two edges with the same ends stay apart by their index in the layout. */
+function edgeId(edge: { from: string; to: string }, index: number): string {
+  return `${edge.from}->${edge.to}#${index}`;
 }
 
 function leaderId(leader: { note: string; target: string }): string {

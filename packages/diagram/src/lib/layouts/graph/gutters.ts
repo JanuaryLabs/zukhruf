@@ -80,14 +80,10 @@ function axisGutters(
       spans.filter((span) => span.start === boundary),
       (span) => span.openingChrome,
     );
-    const slots = [...closing.values(), ...opening.values()].reduce(
-      (total, width) => total + width,
-      0,
-    );
     const outer = boundary === 0 || boundary === count;
     const middle = Math.max(
       outer ? 0 : LAYOUT_TOKENS.GAP,
-      (minimums.get(boundary) ?? 0) - slots,
+      minimums.get(boundary) ?? 0,
     );
 
     const closingEdges = new Map<number, number>();
@@ -121,8 +117,9 @@ function slotWidths(
 
 /**
  * A labelled edge between two neighbouring cells has only the gutter between
- * them for its label, so that gutter must hold the label and a stub on each
- * side of it.
+ * them for its label. The label must not straddle the border of a group that
+ * opens or closes there, so the middle of that gutter, outside all their
+ * chrome, must hold the label and a stub on each side of it.
  */
 function labelMinimums(
   edges: DiagramEdge[],
@@ -142,7 +139,7 @@ function labelMinimums(
     const from = nodes.get(parseEndpointRef(edge.from).nodeId);
     const to = nodes.get(parseEndpointRef(edge.to).nodeId);
     if (!from || !to) continue;
-    const label = measureEdgeLabel(edge, LAYOUT_TOKENS);
+    const label = measureEdgeLabel(edge);
     const side = sideBySide(from, to);
     if (side) raise('col', side, label.w + 2 * LAYOUT_TOKENS.STUB);
     const stacked = sideBySide(transpose(from), transpose(to));

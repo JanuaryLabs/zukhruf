@@ -9,7 +9,7 @@ import type {
 import type { NodeLayout, TextRun } from './graph-layout-result.ts';
 import { nodeContent } from './node-content.ts';
 import { type TextBlock, labelLines, textBlock } from './text-block.ts';
-import type { LayoutTokens } from './tokens.ts';
+import { LAYOUT_TOKENS } from './tokens.ts';
 
 type Sides = Record<DiagramSide, number>;
 
@@ -33,15 +33,12 @@ const BADGE_MIN_CONTENT = 24;
 
 const SIDES: DiagramSide[] = ['top', 'right', 'bottom', 'left'];
 
-export function measureNode(
-  node: DiagramNode,
-  tokens: LayoutTokens,
-): MeasuredNode {
+export function measureNode(node: DiagramNode): MeasuredNode {
   const kind = node.kind ?? 'node';
   if (node.hidden && kind === 'node') return hiddenNode();
 
-  const content = nodeContent(node, tokens);
-  const ports = portGeometry(node.ports ?? [], tokens);
+  const content = nodeContent(node);
+  const ports = portGeometry(node.ports ?? []);
   const w = Math.max(
     content.w + 2 * content.pad.x + ports.inset.left + ports.inset.right,
     ports.minLength.top,
@@ -60,13 +57,13 @@ export function measureNode(
       left: content.pad.x,
       right: content.pad.x,
     });
-    const frames = stackFrames(node, box, tokens);
-    const caption = placeCaption(node, union([box, ...frames]), tokens);
+    const frames = stackFrames(node, box);
+    const caption = placeCaption(node, union([box, ...frames]));
     return {
       box,
       visual: union([box, ...frames, ...(caption ? [caption.box] : [])]),
       frames,
-      radius: frameRadius(node, box, tokens),
+      radius: frameRadius(node, box),
       ...content.place(inner),
       ...(caption ? { caption } : {}),
       ports: ports.place(box),
@@ -104,11 +101,7 @@ function hiddenNode(): MeasuredNode {
   };
 }
 
-function frameRadius(
-  node: DiagramNode,
-  box: Box,
-  tokens: LayoutTokens,
-): number {
+function frameRadius(node: DiagramNode, box: Box): number {
   switch (node.kind) {
     case 'connector':
       return box.h / 2;
@@ -120,7 +113,9 @@ function frameRadius(
       return 0;
     default:
       if (node.frame === 'none') return 0;
-      return node.frame === 'flat' ? tokens.FLAT_RADIUS : tokens.RADIUS;
+      return node.frame === 'flat'
+        ? LAYOUT_TOKENS.FLAT_RADIUS
+        : LAYOUT_TOKENS.RADIUS;
   }
 }
 
@@ -129,8 +124,8 @@ function frameRadius(
  * side's labels push the content inward, and a side with k ports is long
  * enough for k + 1 port spacings.
  */
-function portGeometry(ports: DiagramNodePort[], tokens: LayoutTokens) {
-  const font = tokens.fonts.portLabel;
+function portGeometry(ports: DiagramNodePort[]) {
+  const font = LAYOUT_TOKENS.fonts.portLabel;
   const bySide = new Map(
     SIDES.map((side) => [
       side,
@@ -161,7 +156,10 @@ function portGeometry(ports: DiagramNodePort[], tokens: LayoutTokens) {
     if (count === 0) return 0;
     const labelLength =
       side === 'top' || side === 'bottom' ? widest(side) : tallest(side);
-    const pitch = Math.max(tokens.PORT_SPACING, labelLength + tokens.LABEL_GAP);
+    const pitch = Math.max(
+      LAYOUT_TOKENS.PORT_SPACING,
+      labelLength + LAYOUT_TOKENS.LABEL_GAP,
+    );
     return (count + 1) * pitch;
   };
 
@@ -184,6 +182,14 @@ function portGeometry(ports: DiagramNodePort[], tokens: LayoutTokens) {
         });
       }),
   };
+}
+
+/** A group's ports sit evenly along their side of its rect, like a node's ports along its frame. */
+export function placeGroupPorts(
+  ports: DiagramNodePort[],
+  rect: Box,
+): NodeLayout['ports'] {
+  return portGeometry(ports).place(rect);
 }
 
 /** The point `fraction` of the way along `side` of `box`. */
@@ -234,13 +240,13 @@ function placePortLabel(
 }
 
 /** The back frames of a stack, farthest first, each one STACK_STEP further in the stack direction. */
-function stackFrames(node: DiagramNode, box: Box, tokens: LayoutTokens): Box[] {
+function stackFrames(node: DiagramNode, box: Box): Box[] {
   const count = Math.max(1, Math.floor(node.stack ?? 1));
   const kind = node.kind ?? 'node';
   if (count === 1 || kind !== 'node' || node.frame === 'none') return [];
   const direction = node.stackDirection ?? 'up-left';
-  const dx = (direction.endsWith('left') ? -1 : 1) * tokens.STACK_STEP.x;
-  const dy = (direction.startsWith('up') ? -1 : 1) * tokens.STACK_STEP.y;
+  const dx = (direction.endsWith('left') ? -1 : 1) * LAYOUT_TOKENS.STACK_STEP.x;
+  const dy = (direction.startsWith('up') ? -1 : 1) * LAYOUT_TOKENS.STACK_STEP.y;
   return Array.from({ length: count - 1 }, (_, index) => {
     const level = count - 1 - index;
     return { ...box, x: box.x + level * dx, y: box.y + level * dy };
@@ -248,12 +254,8 @@ function stackFrames(node: DiagramNode, box: Box, tokens: LayoutTokens): Box[] {
 }
 
 /** The caption sits beside `box`, the frame together with its stacked back frames. */
-function placeCaption(
-  node: DiagramNode,
-  box: Box,
-  tokens: LayoutTokens,
-): NodeLayout['caption'] {
-  const font = tokens.fonts.caption;
+function placeCaption(node: DiagramNode, box: Box): NodeLayout['caption'] {
+  const font = LAYOUT_TOKENS.fonts.caption;
   const lines = textBlock(
     labelLines(
       [node.caption ?? []].flat().map((line) => line.trim()),
@@ -268,7 +270,7 @@ function placeCaption(
     : { x: 0, y: 0 };
   const w = lines.w + 2 * pad.x;
   const h = lines.h + 2 * pad.y;
-  const gap = tokens.CAPTION_GAP;
+  const gap = LAYOUT_TOKENS.CAPTION_GAP;
   const side = node.captionSide ?? 'bottom';
   const centreX = box.x + (box.w - w) / 2;
   const centreY = box.y + (box.h - h) / 2;
@@ -296,25 +298,25 @@ export type MeasuredGroupTitle = {
   place(rect: Box): { band?: Box; label: TextRun[] };
 };
 
-export function measureGroupTitle(
-  group: DiagramGroup,
-  tokens: LayoutTokens,
-): MeasuredGroupTitle {
-  const lines = textBlock(labelLines(group.label), tokens.fonts.groupLabel);
-  const height = lines.h > 0 ? lines.h + 2 * tokens.BAND_PAD : 0;
+export function measureGroupTitle(group: DiagramGroup): MeasuredGroupTitle {
+  const lines = textBlock(
+    labelLines(group.label),
+    LAYOUT_TOKENS.fonts.groupLabel,
+  );
+  const height = lines.h > 0 ? lines.h + 2 * LAYOUT_TOKENS.BAND_PAD : 0;
   return {
     height,
     place(rect) {
       if (height === 0) return { label: [] };
       const y =
         group.labelSide === 'bottom' ? rect.y + rect.h - height : rect.y;
-      const top = y + tokens.BAND_PAD;
+      const top = y + LAYOUT_TOKENS.BAND_PAD;
       const align = group.labelAlign ?? 'center';
       let label: TextRun[];
       if (align === 'start') {
-        label = lines.place(rect.x + tokens.PAD_X, top, 'start');
+        label = lines.place(rect.x + LAYOUT_TOKENS.PAD_X, top, 'start');
       } else if (align === 'end') {
-        label = lines.place(rect.x + rect.w - tokens.PAD_X, top, 'end');
+        label = lines.place(rect.x + rect.w - LAYOUT_TOKENS.PAD_X, top, 'end');
       } else {
         label = lines.place(rect.x + rect.w / 2, top, 'middle');
       }
@@ -331,11 +333,11 @@ export type MeasuredEdgeLabel = {
   place(box: Box): TextRun[];
 };
 
-export function measureEdgeLabel(
-  edge: DiagramEdge,
-  tokens: LayoutTokens,
-): MeasuredEdgeLabel {
-  const lines = textBlock(labelLines(edge.label), tokens.fonts.edgeLabel);
+export function measureEdgeLabel(edge: DiagramEdge): MeasuredEdgeLabel {
+  const lines = textBlock(
+    labelLines(edge.label),
+    LAYOUT_TOKENS.fonts.edgeLabel,
+  );
   const pad = edge.labelFrame ? EDGE_LABEL_FRAME_PAD : 0;
   return {
     w: lines.w + 2 * pad,
@@ -350,13 +352,13 @@ export type MeasuredEdgeBadge = {
   place(box: Box): { icon?: Box; text: TextRun[] };
 };
 
-export function measureEdgeBadge(
-  edge: DiagramEdge,
-  tokens: LayoutTokens,
-): MeasuredEdgeBadge {
-  const lines = textBlock(labelLines(edge.badgeLabel), tokens.fonts.badge);
-  const icon = edge.badgeIcon ? tokens.BADGE_ICON : 0;
-  const gap = icon > 0 && lines.w > 0 ? tokens.BLOCK_GAP : 0;
+export function measureEdgeBadge(edge: DiagramEdge): MeasuredEdgeBadge {
+  const lines = textBlock(
+    labelLines(edge.badgeLabel),
+    LAYOUT_TOKENS.fonts.badge,
+  );
+  const icon = edge.badgeIcon ? LAYOUT_TOKENS.BADGE_ICON : 0;
+  const gap = icon > 0 && lines.w > 0 ? LAYOUT_TOKENS.BLOCK_GAP : 0;
   const rowW = icon + gap + lines.w;
   return {
     w: Math.max(BADGE_MIN_CONTENT, rowW) + 2 * BADGE_PAD.x,

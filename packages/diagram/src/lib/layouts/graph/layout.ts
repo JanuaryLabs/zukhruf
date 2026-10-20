@@ -1,8 +1,10 @@
 import type { Box, DiagramGraphIR, Point } from '../../model/diagram-ir.ts';
 import { type CellArea, type GroupArea, gridAreas } from './areas.ts';
 import type {
+  EdgeLayout,
   GraphLayout,
   GroupLayout,
+  LeaderLayout,
   NodeLayout,
 } from './graph-layout-result.ts';
 import { type Axis, type GridGutters, gridGutters } from './gutters.ts';
@@ -11,7 +13,9 @@ import {
   type MeasuredNode,
   measureGroupTitle,
   measureNode,
+  placeGroupPorts,
 } from './measure.ts';
+import { routeGraph } from './route.ts';
 import { LAYOUT_TOKENS } from './tokens.ts';
 import { type TrackLine, sizeTracks } from './tracks.ts';
 
@@ -23,14 +27,10 @@ import { type TrackLine, sizeTracks } from './tracks.ts';
  */
 export function layoutGraph(ir: DiagramGraphIR): GraphLayout {
   const measured = new Map(
-    ir.nodes.map(
-      (node) => [node.id, measureNode(node, LAYOUT_TOKENS)] as const,
-    ),
+    ir.nodes.map((node) => [node.id, measureNode(node)] as const),
   );
   const titles = new Map(
-    ir.groups.map(
-      (group) => [group.id, measureGroupTitle(group, LAYOUT_TOKENS)] as const,
-    ),
+    ir.groups.map((group) => [group.id, measureGroupTitle(group)] as const),
   );
   const areas = gridAreas(ir);
   const gutters = gridGutters(
@@ -75,12 +75,23 @@ export function layoutGraph(ir: DiagramGraphIR): GraphLayout {
     placeGroup(groupArea, titles.get(groupArea.group.id)!, lines, gutters),
   );
 
+  const widestGutter = Math.max(
+    ...[...gutters.row, ...gutters.col].map((gutter) => gutter.size),
+  );
+  const { edges, leaders } = routeGraph(
+    ir,
+    nodes,
+    groups,
+    areas,
+    2 * widestGutter,
+  );
+
   return {
     nodes,
     groups,
-    edges: [],
-    leaders: [],
-    viewBox: viewBoxOf(nodes, groups),
+    edges,
+    leaders,
+    viewBox: viewBoxOf(nodes, groups, edges, leaders),
   };
 }
 
@@ -141,6 +152,7 @@ function placeGroup(
     dividers: group.dividers
       ? dividers(rect, area, title, group.labelSide, lines, gutters)
       : [],
+    ports: placeGroupPorts(group.ports ?? [], rect),
   };
 }
 
@@ -178,10 +190,22 @@ function dividers(
   ];
 }
 
-function viewBoxOf(nodes: NodeLayout[], groups: GroupLayout[]): Box {
+function viewBoxOf(
+  nodes: NodeLayout[],
+  groups: GroupLayout[],
+  edges: EdgeLayout[],
+  leaders: LeaderLayout[],
+): Box {
+  const pointBox = ({ x, y }: Point): Box => ({ x, y, w: 0, h: 0 });
   const boxes = [
     ...nodes.map((nodeLayout) => nodeLayout.visual),
     ...groups.map((groupLayout) => groupLayout.rect),
+    ...edges.flatMap(({ points, label, badge }) => [
+      ...points.map(pointBox),
+      ...(label ? [label.box] : []),
+      ...(badge ? [badge.box] : []),
+    ]),
+    ...leaders.flatMap(({ points }) => points.map(pointBox)),
   ];
   const pad = LAYOUT_TOKENS.CONTENT_PAD;
   if (boxes.length === 0) return { x: -pad, y: -pad, w: 2 * pad, h: 2 * pad };

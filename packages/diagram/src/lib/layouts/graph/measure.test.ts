@@ -222,7 +222,7 @@ describe('measureNode', () => {
   for (const { name, inset, node } of variants) {
     test(`${name} keeps its text inside its padding, at its measured size`, () => {
       // Arrange
-      const measured = measureNode(node, LAYOUT_TOKENS);
+      const measured = measureNode(node);
 
       // Act
       const layout = placedAlone(measured, intrinsicBox(measured));
@@ -233,7 +233,7 @@ describe('measureNode', () => {
 
     test(`${name} keeps its text inside its padding and its drawing inside the overhang it measured, in a larger area`, () => {
       // Arrange
-      const measured = measureNode(node, LAYOUT_TOKENS);
+      const measured = measureNode(node);
 
       // Act
       const layout = placedAlone(measured, stretchedBox(measured));
@@ -246,16 +246,12 @@ describe('measureNode', () => {
   for (const side of ['top', 'right', 'bottom', 'left'] as const) {
     test(`a caption on the ${side} sits CAPTION_GAP outside the frame, and the overhang on that side reaches its far edge`, () => {
       // Arrange
-      const tokens = LAYOUT_TOKENS;
-      const measured = measureNode(
-        {
-          id: 'n',
-          label: 'AdGuard Home',
-          caption: ['DNS Forwarder', 'port 53'],
-          captionSide: side,
-        },
-        tokens,
-      );
+      const measured = measureNode({
+        id: 'n',
+        label: 'AdGuard Home',
+        caption: ['DNS Forwarder', 'port 53'],
+        captionSide: side,
+      });
       const box = intrinsicBox(measured);
 
       // Act
@@ -270,9 +266,14 @@ describe('measureNode', () => {
       }[side];
       const depth =
         side === 'top' || side === 'bottom' ? caption!.box.h : caption!.box.w;
-      assert.ok(Math.abs(near - tokens.CAPTION_GAP) < 0.01, `gap ${near}`);
       assert.ok(
-        Math.abs(measured.overhang[side] - (tokens.CAPTION_GAP + depth)) < 0.01,
+        Math.abs(near - LAYOUT_TOKENS.CAPTION_GAP) < 0.01,
+        `gap ${near}`,
+      );
+      assert.ok(
+        Math.abs(
+          measured.overhang[side] - (LAYOUT_TOKENS.CAPTION_GAP + depth),
+        ) < 0.01,
         `overhang ${measured.overhang[side]}`,
       );
     });
@@ -280,21 +281,14 @@ describe('measureNode', () => {
 
   test('a Box grows wider with its longest line', () => {
     // Arrange
-    const tokens = LAYOUT_TOKENS;
 
     // Act
-    const short = measureNode(
-      { id: 'n', icon: 'shield', label: 'Gateway' },
-      tokens,
-    );
-    const long = measureNode(
-      {
-        id: 'n',
-        icon: 'shield',
-        label: ['Gateway', 'Istio Ingress Gateway', '(North-South Gateway)'],
-      },
-      tokens,
-    );
+    const short = measureNode({ id: 'n', icon: 'shield', label: 'Gateway' });
+    const long = measureNode({
+      id: 'n',
+      icon: 'shield',
+      label: ['Gateway', 'Istio Ingress Gateway', '(North-South Gateway)'],
+    });
 
     // Assert
     assert.ok(
@@ -305,22 +299,14 @@ describe('measureNode', () => {
 
   test('a Card places its title, then its description, then its items, top to bottom, all above the bottom padding', () => {
     // Arrange
-    const tokens = LAYOUT_TOKENS;
-    const measured = measureNode(
-      {
-        id: 'n',
-        icon: 'gpu',
-        textAlign: 'start',
-        label: 'GPU Workflow',
-        description: 'NVIDIA RTX 3050',
-        items: [
-          'K3s Node Affinity',
-          'Automatic GPU Scheduling',
-          'Time slicing',
-        ],
-      },
-      tokens,
-    );
+    const measured = measureNode({
+      id: 'n',
+      icon: 'gpu',
+      textAlign: 'start',
+      label: 'GPU Workflow',
+      description: 'NVIDIA RTX 3050',
+      items: ['K3s Node Affinity', 'Automatic GPU Scheduling', 'Time slicing'],
+    });
     const box = intrinsicBox(measured);
 
     // Act
@@ -344,38 +330,35 @@ describe('measureNode', () => {
       );
     }
     const last = text.at(-1)!.bounds;
-    assert.ok(last.y + last.h <= box.y + box.h - tokens.PAD_Y + 0.01);
+    assert.ok(last.y + last.h <= box.y + box.h - LAYOUT_TOKENS.PAD_Y + 0.01);
     assert.equal(bullets.length, 3);
   });
 
   test('a Card keeps its content at the top-left padding when it fills a larger area', () => {
     // Arrange
-    const tokens = LAYOUT_TOKENS;
-    const measured = measureNode(
-      {
-        id: 'n',
-        textAlign: 'start',
-        label: 'Authentik',
-        description: 'Identity provider',
-      },
-      tokens,
-    );
+    const measured = measureNode({
+      id: 'n',
+      textAlign: 'start',
+      label: 'Authentik',
+      description: 'Identity provider',
+    });
     const box = stretchedBox(measured);
 
     // Act
     const { text } = measured.place(box);
 
     // Assert
-    assert.equal(text[0]!.bounds.x, box.x + tokens.PAD_X);
-    assert.ok(text[0]!.bounds.y < box.y + tokens.PAD_Y + 4);
+    assert.equal(text[0]!.bounds.x, box.x + LAYOUT_TOKENS.PAD_X);
+    assert.ok(text[0]!.bounds.y < box.y + LAYOUT_TOKENS.PAD_Y + 4);
   });
 
   test('a Box with an icon centres its icon and lines together when it fills a larger area', () => {
     // Arrange
-    const measured = measureNode(
-      { id: 'n', icon: 'shield', label: 'Istio Ingress Gateway' },
-      LAYOUT_TOKENS,
-    );
+    const measured = measureNode({
+      id: 'n',
+      icon: 'shield',
+      label: 'Istio Ingress Gateway',
+    });
     const box = stretchedBox(measured);
 
     // Act
@@ -389,41 +372,36 @@ describe('measureNode', () => {
 
   test('a side with more ports than fit makes the frame longer on that side, and spreads the ports evenly', () => {
     // Arrange
-    const tokens = LAYOUT_TOKENS;
     const ports = ['a', 'b', 'c', 'd', 'e', 'f'].map((id) => ({
       id,
       side: 'left' as const,
     }));
 
     // Act
-    const plain = measureNode({ id: 'n', label: 'Switch' }, tokens);
-    const measured = measureNode({ id: 'n', label: 'Switch', ports }, tokens);
+    const plain = measureNode({ id: 'n', label: 'Switch' });
+    const measured = measureNode({ id: 'n', label: 'Switch', ports });
     const placed = measured.place(intrinsicBox(measured));
 
     // Assert
-    assert.ok(plain.frame.h < 7 * tokens.PORT_SPACING);
-    assert.ok(measured.frame.h >= 7 * tokens.PORT_SPACING);
+    assert.ok(plain.frame.h < 7 * LAYOUT_TOKENS.PORT_SPACING);
+    assert.ok(measured.frame.h >= 7 * LAYOUT_TOKENS.PORT_SPACING);
     const ys = placed.ports.map((port) => port.point.y);
     const gaps = ys.slice(1).map((y, index) => y - ys[index]!);
     assert.ok(gaps.every((gap) => Math.abs(gap - gaps[0]!) < 0.01));
-    assert.ok(gaps[0]! >= tokens.PORT_SPACING);
+    assert.ok(gaps[0]! >= LAYOUT_TOKENS.PORT_SPACING);
     assert.ok(placed.ports.every((port) => port.point.x === placed.box.x));
   });
 
   test('labelled ports on a side widen the frame by their labels', () => {
     // Arrange
-    const tokens = LAYOUT_TOKENS;
 
     // Act
-    const plain = measureNode({ id: 'n', label: 'Switch' }, tokens);
-    const labelled = measureNode(
-      {
-        id: 'n',
-        label: 'Switch',
-        ports: [{ id: 'a', side: 'left', label: 'management-uplink' }],
-      },
-      tokens,
-    );
+    const plain = measureNode({ id: 'n', label: 'Switch' });
+    const labelled = measureNode({
+      id: 'n',
+      label: 'Switch',
+      ports: [{ id: 'a', side: 'left', label: 'management-uplink' }],
+    });
 
     // Assert
     assert.ok(labelled.frame.w > plain.frame.w + 60);
@@ -431,28 +409,23 @@ describe('measureNode', () => {
 
   test('a stack and a caption reach outside the frame by the overhang, and only Box-like nodes stretch', () => {
     // Arrange
-    const tokens = LAYOUT_TOKENS;
 
     // Act
-    const stacked = measureNode(
-      { id: 'n', label: 'VM', stack: 3, stackDirection: 'down-right' },
-      tokens,
-    );
-    const marker = measureNode(
-      { id: 'n', kind: 'marker', label: 'Laptop' },
-      tokens,
-    );
-    const pinned = measureNode(
-      { id: 'n', label: 'VM', stretch: false },
-      tokens,
-    );
+    const stacked = measureNode({
+      id: 'n',
+      label: 'VM',
+      stack: 3,
+      stackDirection: 'down-right',
+    });
+    const marker = measureNode({ id: 'n', kind: 'marker', label: 'Laptop' });
+    const pinned = measureNode({ id: 'n', label: 'VM', stretch: false });
 
     // Assert
     assert.deepEqual(stacked.overhang, {
       top: 0,
       left: 0,
-      right: 2 * tokens.STACK_STEP.x,
-      bottom: 2 * tokens.STACK_STEP.y,
+      right: 2 * LAYOUT_TOKENS.STACK_STEP.x,
+      bottom: 2 * LAYOUT_TOKENS.STACK_STEP.y,
     });
     assert.equal(stacked.stretch, true);
     assert.equal(marker.stretch, false);
@@ -461,37 +434,35 @@ describe('measureNode', () => {
 
   test('a hidden node measures to nothing, and a hidden junction still holds its square', () => {
     // Arrange
-    const tokens = LAYOUT_TOKENS;
 
     // Act
-    const phantom = measureNode({ id: 'n', label: '', hidden: true }, tokens);
-    const junction = measureNode(
-      { id: 'n', kind: 'junction', label: '', hidden: true },
-      tokens,
-    );
+    const phantom = measureNode({ id: 'n', label: '', hidden: true });
+    const junction = measureNode({
+      id: 'n',
+      kind: 'junction',
+      label: '',
+      hidden: true,
+    });
 
     // Assert
     assert.deepEqual(phantom.frame, { w: 0, h: 0 });
     assert.deepEqual(junction.frame, {
-      w: tokens.JUNCTION,
-      h: tokens.JUNCTION,
+      w: LAYOUT_TOKENS.JUNCTION,
+      h: LAYOUT_TOKENS.JUNCTION,
     });
   });
 
   test('a line carries its own colour and the nearest font weight', () => {
     // Arrange
-    const measured = measureNode(
-      {
-        id: 'n',
-        textColor: 'neutral',
-        label: [
-          { text: 'Grafana', fontWeight: 680 },
-          { text: 'dashboards', textColor: 'dim', fontWeight: 420 },
-          'metrics',
-        ],
-      },
-      LAYOUT_TOKENS,
-    );
+    const measured = measureNode({
+      id: 'n',
+      textColor: 'neutral',
+      label: [
+        { text: 'Grafana', fontWeight: 680 },
+        { text: 'dashboards', textColor: 'dim', fontWeight: 420 },
+        'metrics',
+      ],
+    });
 
     // Act
     const { text } = measured.place(intrinsicBox(measured));
@@ -509,10 +480,11 @@ describe('measureNode', () => {
 
   test('a note draws its lines dim by default', () => {
     // Arrange
-    const measured = measureNode(
-      { id: 'n', kind: 'note', label: 'Issues the TLS certificates' },
-      LAYOUT_TOKENS,
-    );
+    const measured = measureNode({
+      id: 'n',
+      kind: 'note',
+      label: 'Issues the TLS certificates',
+    });
 
     // Act
     const { text } = measured.place(intrinsicBox(measured));
@@ -523,13 +495,10 @@ describe('measureNode', () => {
 
   test('a glyph the font has no width for throws the measuring error', () => {
     // Act & Assert
-    assert.throws(
-      () => measureNode({ id: 'n', label: 'Tokyo 東京' }, LAYOUT_TOKENS),
-      {
-        message:
-          'Cannot measure "Tokyo 東京": U+6771 has no glyph in the mono face at weight 500',
-      },
-    );
+    assert.throws(() => measureNode({ id: 'n', label: 'Tokyo 東京' }), {
+      message:
+        'Cannot measure "Tokyo 東京": U+6771 has no glyph in the mono face at weight 500',
+    });
   });
 });
 
@@ -546,7 +515,6 @@ describe('measureGroupTitle', () => {
         // Arrange
         const title = measureGroupTitle(
           group({ titleBand: true, labelSide, labelAlign }),
-          LAYOUT_TOKENS,
         );
         const rect = { x: 20, y: 20, w: 400, h: 300 };
 
@@ -569,6 +537,7 @@ describe('measureGroupTitle', () => {
               band: band!,
               label,
               dividers: [],
+              ports: [],
             },
           ],
           edges: [],
@@ -590,9 +559,8 @@ describe('measureGroupTitle', () => {
 
   test('a title without a band reserves the same height and draws no band', () => {
     // Arrange
-    const tokens = LAYOUT_TOKENS;
-    const banded = measureGroupTitle(group({ titleBand: true }), tokens);
-    const plain = measureGroupTitle(group({}), tokens);
+    const banded = measureGroupTitle(group({ titleBand: true }));
+    const plain = measureGroupTitle(group({}));
 
     // Act
     const placed = plain.place({ x: 0, y: 0, w: 300, h: 200 });
@@ -605,7 +573,7 @@ describe('measureGroupTitle', () => {
 
   test('a group without a label reserves no height', () => {
     // Act
-    const title = measureGroupTitle(group({ label: [] }), LAYOUT_TOKENS);
+    const title = measureGroupTitle(group({ label: [] }));
 
     // Assert
     assert.equal(title.height, 0);
@@ -616,12 +584,11 @@ describe('measureGroupTitle', () => {
 describe('measureEdgeLabel', () => {
   test('a label box holds its lines, and a frame adds its padding on every side', () => {
     // Arrange
-    const tokens = LAYOUT_TOKENS;
     const edge = { from: 'a', to: 'b', label: ['HTTPS 443', 'mTLS'] };
 
     // Act
-    const plain = measureEdgeLabel(edge, tokens);
-    const framed = measureEdgeLabel({ ...edge, labelFrame: true }, tokens);
+    const plain = measureEdgeLabel(edge);
+    const framed = measureEdgeLabel({ ...edge, labelFrame: true });
     const box = { x: 100, y: 50, w: framed.w, h: framed.h };
     const runs = framed.place(box);
 
@@ -640,10 +607,12 @@ describe('measureEdgeLabel', () => {
 
   test('a badge holds its icon and its lines', () => {
     // Arrange
-    const measured = measureEdgeBadge(
-      { from: 'a', to: 'b', badgeIcon: 'certificate', badgeLabel: ['TLS'] },
-      LAYOUT_TOKENS,
-    );
+    const measured = measureEdgeBadge({
+      from: 'a',
+      to: 'b',
+      badgeIcon: 'certificate',
+      badgeLabel: ['TLS'],
+    });
     const box = { x: 10, y: 10, w: measured.w, h: measured.h };
 
     // Act
