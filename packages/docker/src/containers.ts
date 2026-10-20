@@ -1,3 +1,5 @@
+import type { IncomingHttpHeaders, IncomingMessage } from 'node:http';
+import { posix } from 'node:path';
 import { setTimeout } from 'node:timers/promises';
 
 import { ContainerProcess } from './container-process.ts';
@@ -14,14 +16,91 @@ import {
   ContainerNotRunningError,
   ContainerRunningError,
   DockerEngineError,
+  DockerError,
   ImageNotFoundError,
   NameConflictError,
   NetworkNotFoundError,
+  NotAFileError,
+  PathNotFoundError,
+  ReadOnlyPathError,
 } from './errors.ts';
 import type { Images } from './images.ts';
 import { type OutputChunk, outputChunks } from './multiplexed-stream.ts';
 import type { CancelOptions, Filters } from './options.ts';
 import { type ExecResult, type Output, readOutput } from './output.ts';
+import { tarEntries } from './tar-reader.ts';
+import { type TarWriterEntry, tarArchive } from './tar-writer.ts';
+
+/** A file or a directory for writeFiles(). It belongs to uid:gid, or to 0:0. */
+export type ContainerFile =
+  | {
+      path: string;
+      data: string | Uint8Array;
+      mode?: number;
+      uid?: number;
+      gid?: number;
+    }
+  | {
+      path: string;
+      directory: true;
+      mode?: number;
+      uid?: number;
+      gid?: number;
+    };
+
+/** The path stat in the header of an archive answer: base64 of JSON. */
+function pathStat(
+  headers: IncomingHttpHeaders,
+): EngineApi.ContainerPathStat | undefined {
+  const header = headers['x-docker-container-path-stat'];
+  if (typeof header !== 'string') return undefined;
+  const stat: EngineApi.ContainerPathStat = JSON.parse(
+    Buffer.from(header, 'base64').toString('utf8'),
+  );
+  return stat;
+}
+
+/** The deepest directory that holds each of the paths. */
+function commonDirectory(paths: string[]): string {
+  const [first = [], ...rest] = paths.map((path) =>
+    path.split('/').filter(Boolean),
+  );
+  const common: string[] = [];
+  for (const [index, part] of first.entries()) {
+    if (!rest.every((other) => other[index] === part)) break;
+    common.push(part);
+  }
+  return `/${common.join('/')}`;
+}
+
+/** True when the directory is in a read-only mount, or on a read-only root filesystem outside each mount. */
+function isReadOnly(
+  container: EngineApi.ContainerInspectResponse,
+  directory: string,
+): boolean {
+  const holding = (container.Mounts ?? [])
+    .filter(({ Destination }) => {
+      if (Destination === undefined) return false;
+      return (
+        directory === Destination ||
+        directory.startsWith(
+          Destination.endsWith('/') ? Destination : `${Destination}/`,
+        )
+      );
+    })
+    .toSorted(
+      (left, right) =>
+        (right.Destination?.length ?? 0) - (left.Destination?.length ?? 0),
+    )[0];
+  if (holding !== undefined) return holding.RW === false;
+  return container.HostConfig?.ReadonlyRootfs === true;
+}
+
+async function* bytesOf(response: IncomingMessage): AsyncGenerator<Uint8Array> {
+  for await (const chunk of response) {
+    if (chunk instanceof Uint8Array) yield chunk;
+  }
+}
 
 /** The query of the logs, as the Engine API takes it. */
 export interface LogQuery {
@@ -452,6 +531,197 @@ export class Container {
         );
         return answer.StatusCode;
       },
+    });
+  }
+
+  /** The path stat of a path in the container: HEAD of the archive. undefined for 404 when the container exists. */
+  async stat(
+    path: string,
+    options: CancelOptions = {},
+  ): Promise<EngineApi.ContainerPathStat | undefined> {
+    const method = 'HEAD';
+    const requestPath = `${this.#path}/archive`;
+    const response = await this.#client.exchange(method, requestPath, {
+      query: { path },
+      signal: options.signal,
+    });
+    const request = { status: response.status, method, path: requestPath };
+    // An answer to HEAD has no body, so the message is written here.
+    const message = `The engine answered ${response.status} to the stat of ${path} in the container ${this.id}.`;
+    if (response.status === 404) {
+      const error = await this.#fileNotFound(
+        new DockerEngineError(message, request),
+        path,
+        options,
+      );
+      if (error instanceof PathNotFoundError) return undefined;
+      throw error;
+    }
+    const stat = isSuccess(response) ? pathStat(response.headers) : undefined;
+    if (stat === undefined) throw new DockerEngineError(message, request);
+    return stat;
+  }
+
+  /** The bytes of one regular file. A directory, a link and each other kind of entry reject with NotAFileError. */
+  async readFile(
+    path: string,
+    options: CancelOptions = {},
+  ): Promise<Uint8Array> {
+    const method = 'GET';
+    const requestPath = `${this.#path}/archive`;
+    const response = await this.#archive(path, options);
+    // The first entry of the archive is the path itself, so a directory fails before its tree comes.
+    for await (const entry of tarEntries(bytesOf(response))) {
+      if (entry.type === 'file') return entry.data;
+      throw new NotAFileError(
+        `${path} in the container ${this.id} is a ${entry.type}, not a regular file.`,
+        { status: response.statusCode, method, path: requestPath },
+        this.id,
+        path,
+        entry.type,
+      );
+    }
+    throw new DockerError(
+      `The archive of ${path} in the container ${this.id} has no entry.`,
+    );
+  }
+
+  /**
+   * Sends one archive of the files. It extracts the archive in the deepest
+   * directory that holds each entry and that exists, which stat() finds. The
+   * engine creates each parent directory that an entry implies below it.
+   */
+  async writeFiles(
+    files: ContainerFile[],
+    options: CancelOptions = {},
+  ): Promise<void> {
+    if (files.length === 0) return;
+    const mtime = Math.floor(Date.now() / 1000);
+    const absolute = files.map((file) => ({
+      file,
+      path: posix.resolve('/', file.path),
+    }));
+    let directory = commonDirectory(
+      absolute.map(({ path }) => posix.dirname(path)),
+    );
+    while (
+      directory !== '/' &&
+      (await this.stat(directory, options)) === undefined
+    ) {
+      directory = posix.dirname(directory);
+    }
+    const entries = absolute.map(({ file, path }): TarWriterEntry => {
+      const isDirectory = 'directory' in file;
+      return {
+        path: posix.relative(directory, path),
+        type: isDirectory ? 'directory' : 'file',
+        data: isDirectory
+          ? new Uint8Array(0)
+          : typeof file.data === 'string'
+            ? new TextEncoder().encode(file.data)
+            : file.data,
+        mode: file.mode ?? (isDirectory ? 0o755 : 0o644),
+        uid: file.uid ?? 0,
+        gid: file.gid ?? 0,
+        mtime,
+      };
+    });
+    await this.putArchive(directory, tarArchive(entries), options);
+  }
+
+  /** The tar stream of a path in the container: a file, or a directory with its tree. */
+  async getArchive(
+    path: string,
+    options: CancelOptions = {},
+  ): Promise<ReadableStream<Uint8Array>> {
+    return ReadableStream.from(bytesOf(await this.#archive(path, options)));
+  }
+
+  /**
+   * Extracts a tar archive in a directory of the container. With copyUIDGID,
+   * each entry belongs to the user of the container (Config.User), not to
+   * the owner in the archive.
+   */
+  async putArchive(
+    directory: string,
+    archive: ReadableStream<Uint8Array> | Uint8Array,
+    options: CancelOptions & { copyUIDGID?: boolean } = {},
+  ): Promise<void> {
+    const { signal } = options;
+    const method = 'PUT';
+    const requestPath = `${this.#path}/archive`;
+    const response = await this.#client.exchange(method, requestPath, {
+      query: {
+        path: directory,
+        copyUIDGID: options.copyUIDGID === true ? 1 : undefined,
+      },
+      content: { type: 'application/x-tar', data: archive },
+      signal,
+    });
+    if (isSuccess(response)) return;
+    const error = this.#client.error(response, method, requestPath);
+    if (response.status === 404) {
+      throw await this.#fileNotFound(error, directory, options);
+    }
+    // Moby answers a refused extraction with 400; the reference says 403.
+    if (response.status !== 400 && response.status !== 403) throw error;
+    const inspect = await this.#client.exchange('GET', `${this.#path}/json`, {
+      signal,
+    });
+    if (inspect.status === 404) {
+      throw new ContainerNotFoundError(error.message, error, this.id, {
+        cause: error,
+      });
+    }
+    if (
+      isSuccess(inspect) &&
+      isReadOnly(
+        parseBody<EngineApi.ContainerInspectResponse>(inspect),
+        directory,
+      )
+    ) {
+      throw new ReadOnlyPathError(error.message, error, this.id, directory, {
+        cause: error,
+      });
+    }
+    throw error;
+  }
+
+  /** The answer of GET of the archive of a path, with 404 as ContainerNotFoundError or PathNotFoundError. */
+  async #archive(
+    path: string,
+    options: CancelOptions,
+  ): Promise<IncomingMessage> {
+    try {
+      return await this.#client.stream('GET', `${this.#path}/archive`, {
+        query: { path },
+        signal: options.signal,
+      });
+    } catch (error) {
+      if (error instanceof DockerEngineError && error.status === 404) {
+        throw await this.#fileNotFound(error, path, options);
+      }
+      throw error;
+    }
+  }
+
+  /** A 404 of a file request: an inspect tells a missing container from a missing path. */
+  async #fileNotFound(
+    error: DockerEngineError,
+    path: string,
+    options: CancelOptions,
+  ): Promise<DockerEngineError> {
+    const inspect = await this.#client.exchange('GET', `${this.#path}/json`, {
+      signal: options.signal,
+    });
+    const request = { status: 404, method: error.method, path: error.path };
+    if (inspect.status === 404) {
+      return new ContainerNotFoundError(error.message, request, this.id, {
+        cause: error,
+      });
+    }
+    return new PathNotFoundError(error.message, request, this.id, path, {
+      cause: error,
     });
   }
 

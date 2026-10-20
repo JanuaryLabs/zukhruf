@@ -1,6 +1,7 @@
 export type { ContainerProcess } from './container-process.ts';
 export {
   Container,
+  type ContainerFile,
   type Containers,
   type Created,
   type LogQuery,
@@ -20,6 +21,9 @@ export {
   ImageNotFoundError,
   NameConflictError,
   NetworkNotFoundError,
+  NotAFileError,
+  PathNotFoundError,
+  ReadOnlyPathError,
   UnsupportedEngineError,
   UnsupportedHostError,
 } from './errors.ts';

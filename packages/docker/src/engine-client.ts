@@ -1,5 +1,6 @@
 import type { IncomingHttpHeaders, IncomingMessage } from 'node:http';
-import type { Duplex, Readable } from 'node:stream';
+import { type Duplex, Readable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
 
 import {
   ConnectionFailedError,
@@ -20,6 +21,9 @@ export interface EngineRequestOptions {
   query?: Query | undefined;
   /** Goes to the engine as JSON. */
   body?: unknown;
+  /** Goes to the engine as it is, with its media type, in place of a JSON body. */
+  content?:
+    { type: string; data: Uint8Array | AsyncIterable<Uint8Array> } | undefined;
   headers?: Record<string, string> | undefined;
   signal?: AbortSignal | undefined;
 }
@@ -266,25 +270,27 @@ export class EngineClient {
   async #open(
     method: string,
     path: string,
-    { query, body, headers, signal }: EngineRequestOptions,
+    { query, body, content, headers, signal }: EngineRequestOptions,
     upgrades = false,
   ): Promise<Opened> {
     signal?.throwIfAborted();
     const prefix =
       this.#apiVersion === undefined ? '' : `/v${this.#apiVersion}`;
-    const payload = body === undefined ? undefined : JSON.stringify(body);
+    const payload =
+      body === undefined
+        ? content?.data
+        : new TextEncoder().encode(JSON.stringify(body));
+    const contentType = body === undefined ? content?.type : 'application/json';
     const { promise, resolve, reject } = Promise.withResolvers<Opened>();
     const request = this.#transport.request({
       method,
       path: `${prefix}${path}${search(query)}`,
       headers: {
         ...headers,
-        ...(payload === undefined
-          ? {}
-          : {
-              'Content-Type': 'application/json',
-              'Content-Length': Buffer.byteLength(payload),
-            }),
+        ...(contentType === undefined ? {} : { 'Content-Type': contentType }),
+        ...(payload instanceof Uint8Array
+          ? { 'Content-Length': payload.byteLength }
+          : {}),
       },
     });
     const responses: IncomingMessage[] = [];
@@ -317,7 +323,14 @@ export class EngineClient {
         resolve({ response, upgrade: { socket, head } });
       });
     }
-    request.end(payload);
+    if (payload === undefined || payload instanceof Uint8Array) {
+      request.end(payload);
+    } else {
+      // A body that comes as a stream goes with chunked encoding, at the pace of the connection.
+      pipeline(Readable.from(payload), request).catch((error: unknown) => {
+        request.destroy(error instanceof Error ? error : undefined);
+      });
+    }
     try {
       return await promise;
     } catch (error) {

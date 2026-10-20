@@ -206,3 +206,67 @@ export class BindSourceNotFoundError extends DockerEngineError {
     this.source = source;
   }
 }
+
+/** A file request got 404, and the container exists. */
+export class PathNotFoundError extends DockerEngineError {
+  readonly container: string;
+  /** The path in the container. It takes the place of the path of the request. */
+  override readonly path: string;
+
+  constructor(
+    message: string,
+    request: EngineRequest,
+    container: string,
+    path: string,
+    options?: ErrorOptions,
+  ) {
+    super(message, request, options);
+    this.name = 'PathNotFoundError';
+    this.container = container;
+    this.path = path;
+  }
+}
+
+/** readFile() found a directory, a link or another kind of entry. */
+export class NotAFileError extends DockerEngineError {
+  readonly container: string;
+  /** The path in the container. It takes the place of the path of the request. */
+  override readonly path: string;
+  /** The kind of the entry: 'directory', 'symlink', 'link' or 'other'. */
+  readonly kind: 'directory' | 'symlink' | 'link' | 'other';
+
+  constructor(
+    message: string,
+    request: EngineRequest,
+    container: string,
+    path: string,
+    kind: 'directory' | 'symlink' | 'link' | 'other',
+    options?: ErrorOptions,
+  ) {
+    super(message, request, options);
+    this.name = 'NotAFileError';
+    this.container = container;
+    this.path = path;
+    this.kind = kind;
+  }
+}
+
+/** The engine refused an extraction, and an inspect showed that the directory is on a read-only root filesystem or in a read-only mount. */
+export class ReadOnlyPathError extends DockerEngineError {
+  readonly container: string;
+  /** The path in the container. It takes the place of the path of the request. */
+  override readonly path: string;
+
+  constructor(
+    message: string,
+    request: EngineRequest,
+    container: string,
+    path: string,
+    options?: ErrorOptions,
+  ) {
+    super(message, request, options);
+    this.name = 'ReadOnlyPathError';
+    this.container = container;
+    this.path = path;
+  }
+}

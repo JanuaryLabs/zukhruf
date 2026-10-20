@@ -298,3 +298,14 @@ export interface EventMessage {
   /** Nanoseconds since the Unix epoch. */
   timeNano?: number;
 }
+
+/** The JSON of the header X-Docker-Container-Path-Stat, as container.PathStat of Moby names it. */
+export interface ContainerPathStat {
+  name: string;
+  size: number;
+  /** The FileMode of Go: the permission bits, and high bits for the kind of the entry. */
+  mode: number;
+  mtime: string;
+  /** The target of a symlink; '' for each other entry. */
+  linkTarget: string;
+}
