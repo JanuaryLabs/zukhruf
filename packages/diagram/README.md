@@ -125,7 +125,7 @@ Two props also change the look:
 - `accent`: the highlight color. It is `green` (the default), `primary`, `neutral`, or a CSS color.
 - `stylePreset`: `default`, or `sketch`. The `sketch` preset draws black ink on white, and makes each tone the same gray.
 
-The SVG text uses the font `ui-monospace, 'Geist Mono', monospace`. The layout calculates the width of a label from the widths of a monospace font.
+The text uses the fonts Geist Sans and Geist Mono. The stylesheet loads them from `@fontsource/geist-sans` and `@fontsource/geist-mono`, which install with the package. The graph layout measures each text with a table of the glyph widths of these fonts. Thus the text fits its box on each operating system and in server rendering. See [ADR 0003](./docs/adr/0003-the-graph-layout-is-a-content-sized-grid.md).
 
 ## Effects
 
@@ -154,10 +154,10 @@ The source of truth is `src/lib/react/Diagram.tsx`, `src/lib/react/diagram-types
 
 The renderer sets the layout. `SvgGraphDiagram`, `CanvasGraphDiagram` and `HtmlGraphDiagram` draw a **graph**. `SvgTimelineDiagram` draws a **timeline**.
 
-- **Graph primitives:** `Node`, `Box`, `Card`, `Port`, `Label`, `Float`, `Phantom`, `Marker`, `Appliance`, `Connector`, `Junction`, `Edge`, `Arrow`, `Wire`, `Group`, `Guide`, `Text`, `Note`.
+- **Graph primitives:** `Node`, `Box`, `Card`, `Port`, `Label`, `Float`, `Marker`, `Appliance`, `Connector`, `Junction`, `Note`, `Edge`, `Arrow`, `Wire`, `Group`, `Content`.
 - **Timeline primitives:** `Lane`, `Signal`, `Frame`.
 
-`Line` makes a label with more than one line, in both layouts. `Content` goes into a `Box`, a `Card` or a `Node`, one time. `Waypoint`, `Entry` and `Exit` go into an edge.
+`Line` makes a label with more than one line, in both layouts. `Content` goes into a `Box`, a `Card` or a `Node`, one time.
 
 ### Timeline primitives
 
@@ -182,28 +182,44 @@ The layout splits the line into two stubs. The stub at the source has no arrowhe
 
 ### Graph primitives
 
-Each node has an `id`, and a `row` and a `col` in the grid. `colSpan`, `width` and `height` change its size.
+A graph is a grid of cells. Give each node an `id`, and a `row` and a `col`: integers from 0. `rowSpan` and `colSpan` let a node cover more cells. One node at most is in a cell. You do not give sizes in pixels. The layout measures the content of each node, and gives each row and each column the size of its largest content.
 
-| Primitive           | What it is                                                  | Default frame | Notes                                                                 |
-| ------------------- | ----------------------------------------------------------- | ------------- | --------------------------------------------------------------------- |
-| `Diagram.Node`      | The general node                                            | `solid`       | Prefer `Box` or `Card`.                                               |
-| `Diagram.Box`       | A node with a solid border and centered text                | `solid`       | The usual node.                                                       |
-| `Diagram.Card`      | A node with a solid border and text that starts at the left | `solid`       | For a node with a `description` or `items`.                           |
-| `Diagram.Port`      | A node with no header                                       | `transparent` | Often holds a set of labels under a box.                              |
-| `Diagram.Label`     | Text at a grid position                                     | `none`        | For a section title or the label of an axis.                          |
-| `Diagram.Float`     | A flat node                                                 | `flat`        | An edge cannot attach to it.                                          |
-| `Diagram.Phantom`   | A node that is not visible                                  | `none`        | An edge can attach to it. Use it to make an edge go through one cell. |
-| `Diagram.Marker`    | A node with an `icon`, for example `server` or `user`       | `none`        | The icon is required.                                                 |
-| `Diagram.Appliance` | A hardware device                                           | `none`        | `appliancePorts`, `antenna` and `slant` change the drawing.           |
-| `Diagram.Connector` | A small node with round corners and an optional `icon`      | `solid`       | The default size is 148 × 40.                                         |
-| `Diagram.Junction`  | A small circle where edges meet                             | `none`        | The default size is 16 × 16.                                          |
+| Primitive           | What it is                                                  | Default frame | Size                                    |
+| ------------------- | ----------------------------------------------------------- | ------------- | --------------------------------------- |
+| `Diagram.Node`      | The general node                                            | `solid`       | Fills its area. Prefer `Box` or `Card`. |
+| `Diagram.Box`       | A node with a solid border and centered text                | `solid`       | Fills its area. The usual node.         |
+| `Diagram.Card`      | A node with a solid border and text that starts at the left | `solid`       | Fills its area.                         |
+| `Diagram.Port`      | A node with no header                                       | `transparent` | Fills its area.                         |
+| `Diagram.Label`     | Text at a grid position                                     | `none`        | Fills its area.                         |
+| `Diagram.Float`     | A flat node. An edge cannot attach to it.                   | `flat`        | Fills its area.                         |
+| `Diagram.Marker`    | A node with an `icon`, for example `server` or `user`       | `none`        | Its own size. The icon is required.     |
+| `Diagram.Appliance` | A hardware device                                           | `none`        | Its own size.                           |
+| `Diagram.Connector` | A small node with round corners and an optional `icon`      | `solid`       | Its own size.                           |
+| `Diagram.Junction`  | A small circle where edges meet                             | `none`        | Its own size.                           |
+| `Diagram.Note`      | Text with no frame, with an optional leader to a `target`   | `none`        | Its own size.                           |
+
+A node that keeps its own size goes at the center of its area.
 
 Other props of a node:
 
-- `tone`, `texture` and `accent` set its colors.
+- `tone`, `texture` and `accent` set its colors. `frame` sets its border.
+- `description` and `items` add text under the title of a card.
 - `caption` puts text next to the node, on the side that `captionSide` sets.
-- `ports` gives node ports: named points on a side, where an edge can attach.
-- `stack` draws copies of the frame behind the node, for a set of equal items.
+- `ports` gives node ports: named points on a side, where an edge can attach. When a side has ports, each edge to that side must name a port.
+- `stack` draws copies of the frame behind the node, for a set of equal items. `stackDirection` sets where the copies go.
+- `appliancePorts` and `antenna` change the drawing of an appliance.
+
+A note explains a node or a group. With a `target`, the layout draws a leader from the note to it:
+
+```tsx
+<Diagram.Box id="cert-manager" row={2} col={5}>
+  cert-manager
+</Diagram.Box>
+<Diagram.Note id="cert-note" row={2} col={7} target="cert-manager">
+  <Diagram.Line>Manages</Diagram.Line>
+  <Diagram.Line>certificates</Diagram.Line>
+</Diagram.Note>
+```
 
 ### Edges
 
@@ -213,45 +229,72 @@ Other props of a node:
 | `Diagram.Wire`  | An edge with no arrowhead                 | No            | When the direction is clear or the same both ways. |
 | `Diagram.Edge`  | The general edge; set `headless` yourself | You select it | Prefer `Arrow` or `Wire`.                          |
 
-The required props are `from` and `to`. Other props: `lineStyle` (`solid`, `dashed`, `dotted`), `direction` (`forward`, `both`, `none`), `route` (`orthogonal`, `straight`), `dim`, `accent`, the `label*` props, and the `badge*` props for an icon on the edge.
+The required props are `from` and `to`. Each is the id of a node or a group, or `id:port` for a node port. The other props are:
 
-An edge accepts these children: text and `Diagram.Line` for its label, and `Diagram.Entry`, `Diagram.Exit` and `Diagram.Waypoint`.
+- `lineStyle` (`solid`, `dashed`, `dotted`), `direction` (`forward`, `both`, `none`), `weight` (`regular`, `bold`), `dim`, `accent`, and `headless`.
+- `exitSide` and `entrySide` (`top`, `right`, `bottom`, `left`): the side of the source where the edge goes out, and the side of the target where it goes in.
+- `layer` (`background`, `foreground`): whether the edge draws below or above the nodes.
+- `labelFrame`: a box around the label.
+- `badgeIcon` and `badgeLabel`: an icon on the edge.
+- `channel`: a name that the layout copies to the `data-diagram-edge-channel` attribute.
+
+The text children and the `Diagram.Line` children of an edge are its label.
+
+The router in `src/lib/layouts/graph/route.ts` selects each path:
+
+- Each path is orthogonal. The router finds it with A\*, and it goes around the nodes, the captions, the group labels, and the labels of the edges that routed before it.
+- The router routes the nearest edges first.
+- When you do not give `exitSide` and `entrySide`, the router selects the sides from the cells of the two ends.
+- The edges on one side of a node divide that side into equal slots, in the order of their other ends, so they do not cross.
+- The router puts each label beside the longest segment of its edge, at the first free position.
+
+The layout throws when an edge has no route, or when a label has no free position. Each error names the edge. Then give `exitSide` or `entrySide`, move a node to a different cell, or split the diagram. When the problem is general, fix the router. See [the internals](./docs/internals.md).
 
 ### Groups
 
-`Diagram.Group` draws a rectangle around a set of nodes. Put the nodes in it as children, or give each node a `group` prop.
+`Diagram.Group` draws a rectangle around a set of nodes. Put the nodes in it as children. A group can be in a group.
 
-The required prop is `id`. The optional props are `label`, `accent`, `tone`, `texture`, `rx` (the corner radius), `tight` (bounds that fit the nodes closely), `padding`, `dividers`, `frame` (`solid`, `dashed`, `none`), and `rowStart`, `rowEnd`, `colStart`, `colEnd` (the bounds). When you do not give the bounds, the compiler calculates them from the rows and columns of the nodes.
+The required prop is `id`. The optional props are `label`, `labelAlign`, `labelSide` (`top`, `bottom`), `titleBand` (a band behind the label), `accent`, `tone`, `texture`, `fill`, `frame` (`solid`, `dashed`, `none`), `ports`, and `dividers` (a line through each gutter in the group).
 
-### Edge routing
+The area of a group is the smallest area that holds its members. To give a larger area, set `row`, `col`, `rowSpan` and `colSpan`:
 
-| Primitive          | What it does                                                                            |
-| ------------------ | --------------------------------------------------------------------------------------- |
-| `Diagram.Entry`    | Sets the side of the target where the edge goes in: `top`, `right`, `bottom` or `left`. |
-| `Diagram.Exit`     | Sets the side of the source where the edge goes out.                                    |
-| `Diagram.Waypoint` | Gives a point that the edge goes through: `{ x, y }`, a grid cell, a guide, or a node.  |
+```tsx
+<Diagram.Group id="bug" row={0} col={3} colSpan={5} label="BUG">
+  <Diagram.Box id="reproduce" row={0} col={3}>
+    Reproduce
+  </Diagram.Box>
+  <Diagram.Box id="review-fix" row={0} col={6}>
+    Review fix
+  </Diagram.Box>
+</Diagram.Group>
+```
 
-Use them when the router draws a crossing, or draws an edge around a node.
-
-The router in `src/lib/layouts/graph/graph-layout.ts` does these things:
-
-- A self-edge (`from` is the same as `to`) is a loop around the node. The default loop is above the node. `Exit` and `Entry` can select a different side.
-- Two edges in the same row that go in opposite directions get two lanes. For example, `running → paused` stays direct, and `paused → running` goes below the nodes.
-- An edge in the same row that goes from right to left goes below the row, not across the top of the row.
-- Return edges from the same source to the same side get different corridors. A longer return, for example `paused → idle`, goes deeper than a shorter return, for example `paused → running`.
-- The router puts each edge label from the geometry of its path.
-
-When the default paths still cross, use `Entry`, `Exit` and `Waypoint`. When the problem is general, fix the router instead. See [the internals](./docs/internals.md).
+The border, the padding and the title band of a group go in the gutters between the rows and the columns. Thus a group never covers a node. The layout throws when two sibling groups overlap, when a node is in the area of a group that it is not a member of, and when an explicit area does not hold all of the members.
 
 ### Primitives for both layouts
 
-| Primitive         | What it is                                                                                     |
-| ----------------- | ---------------------------------------------------------------------------------------------- |
-| `Diagram.Text`    | A free annotation: `{ x, y }`, or next to a `target` node, with an optional leader line.       |
-| `Diagram.Note`    | The same as `Diagram.Text`.                                                                    |
-| `Diagram.Line`    | One line of a label with more than one line. It goes into a lane, a signal, a node or an edge. |
-| `Diagram.Guide`   | A vertical or horizontal line that helps to align things.                                      |
-| `Diagram.Content` | Real React content in a `Box`, a `Card` or a `Node`. Only `HtmlGraphDiagram` draws it.         |
+| Primitive      | What it is                                                                                     |
+| -------------- | ---------------------------------------------------------------------------------------------- |
+| `Diagram.Line` | One line of a label with more than one line. It goes into a lane, a signal, a node or an edge. |
+
+### Content
+
+`Diagram.Content` holds real React content in a `Box`, a `Card` or a `Node`. Only `HtmlGraphDiagram` draws it. The layout cannot measure React content, so give its size in pixels with `size`. The layout keeps a space of that size under the label:
+
+```tsx
+<HtmlGraphDiagram title="Query">
+  <Diagram.Box id="database" row={0} col={0}>
+    Database
+    <Diagram.Content size={{ w: 96, h: 56 }}>
+      <button type="button">Run query</button>
+    </Diagram.Content>
+  </Diagram.Box>
+</HtmlGraphDiagram>
+```
+
+### The layout without React
+
+`layoutGraph(ir)` calculates the layout of a graph and returns a `GraphLayout`: the boxes of the nodes, the rectangles of the groups, the paths of the edges and the leaders, the positions of each text, and the `viewBox`. It is a pure, synchronous function. The renderers call it, and only copy its values. The package exports it and its types.
 
 ### Labels
 
@@ -269,8 +312,8 @@ The compiler checks the children, and it throws with a clear message:
 - A renderer accepts only primitives as children.
 - A React fragment (`<>…</>`) throws. Write the primitives directly, or give an array of primitives.
 - A different component, for example `<MyHelper />`, throws with the name of the component.
-- A lane, a signal, an edge and a frame accept only their own children: text, `Line`, `Entry`, `Exit` and `Waypoint`, and `Signal` in a frame.
-- A duplicate `id` of a node, a group, a guide or a lane throws, with the id in the message.
+- A lane, a signal, an edge and a frame accept only their own children: text and `Line`, and `Signal` in a frame.
+- A duplicate `id` of a node, a group or a lane throws, with the id in the message.
 - An edge to a missing `from` or `to` throws, with both ends in the message.
 
 ### Renderer props
@@ -291,7 +334,7 @@ Each renderer takes these props:
 | `viewport`    | `{ fit?, zoom? }`                    | `fit: 'width'` | How the drawing fits its container: `width`, `contain` or `natural`. `zoom` scales it. |
 | `paper`       | `boolean \| { fill?, stroke?, rx? }` |                | A rectangle behind the drawing. `fill` is `background` or `surface`.                   |
 
-The graph renderers also take `graph`: the size of the columns and rows, and the padding. `HtmlGraphDiagram` takes `viewport.zoom`, but not `viewport.fit`. Only `SvgGraphDiagram` takes `effects`.
+`HtmlGraphDiagram` takes `viewport.zoom`, but not `viewport.fit`. Only `SvgGraphDiagram` takes `effects`.
 
 The package does not set the width of a diagram on a page. Give the classes of your page layout with `className`.
 
@@ -300,6 +343,8 @@ The package does not set the width of a diagram on a page. Give the classes of y
 - **Internals**: [docs/internals.md](./docs/internals.md) tells how the compiler, the layouts and the renderers divide the work, and which mistakes the code had before.
 - **Decisions**: the [architecture decision records](./docs/adr) tell why the design is as it is.
   1. [The diagram is a zukhruf package](./docs/adr/0001-the-diagram-is-a-zukhruf-package.md)
+  2. [The examples are a playground app in zukhruf](./docs/adr/0002-the-examples-are-a-playground-app-in-zukhruf.md)
+  3. [The graph layout is a content-sized grid](./docs/adr/0003-the-graph-layout-is-a-content-sized-grid.md)
 
 ## Development
 
@@ -317,9 +362,10 @@ npx nx run diagram:lint        # lints the code
 src/
   lib/model/        the IR types, and parseEndpointRef, which reads the from and to of an edge
   lib/compiler/     reads the primitives, and makes the IR
-  lib/layouts/      the pure geometry of the graph and the timeline
+  lib/layouts/      the pure geometry of the graph and the timeline; text/ measures text with the glyph table
   lib/renderers/    svg/, canvas/, html/ and webgpu/ draw the layouts; shared/ holds the parts that they share
   lib/react/        the Diagram primitives and the chrome
+  testing/          the oracle (assertSoundLayout), and the script that writes the glyph table; the build does not ship them
   index.ts          the entry
-styles.css          registers dist with @source
+styles.css          loads the Geist fonts, and registers dist with @source
 ```

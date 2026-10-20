@@ -23,11 +23,11 @@ The plain data that the compiler makes from the primitives: `DiagramGraphIR` for
 _Avoid_: Model, AST, spec (`DiagramTimelineSpec` is the name of a type, not a second concept)
 
 **Layout**:
-The kind of diagram, and the pure functions that calculate its geometry. There are two layouts: the graph and the timeline. The functions are in `src/lib/layouts/`.
+The kind of diagram, and the pure functions that calculate its geometry. There are two layouts: the graph and the timeline. The functions are in `src/lib/layouts/`. `layoutGraph(ir)` calculates the layout of a graph and returns a `GraphLayout`. The package exports both.
 _Avoid_: Mode (the mode is the animation), template
 
 **Graph**:
-The layout that puts nodes in a grid of rows and columns, and connects them with edges. It shows structure: what depends on what.
+The layout that puts nodes in the cells of a content-sized grid, and connects them with edges. It shows structure: what depends on what. See [ADR 0003](./docs/adr/0003-the-graph-layout-is-a-content-sized-grid.md).
 _Avoid_: Architecture diagram (a graph can also show a state machine), network
 
 **Timeline**:
@@ -35,8 +35,38 @@ The layout that puts lanes on the x-axis and signals on the y-axis, in order. It
 _Avoid_: Sequence (use it only for the UML name), gantt (a gantt chart shows clock time)
 
 **Router**:
-The part of the graph layout that selects the path of each edge, the corridor of each return, and the position of each edge label. `computePaths()` in `src/lib/layouts/graph/graph-layout.ts` is its entry.
+The part of the graph layout that selects the path of each edge and of each leader, and the position of each edge label and badge. All paths are orthogonal. `routeGraph()` in `src/lib/layouts/graph/route.ts` is its entry. `attach.ts` selects where a path touches its node, and `labels.ts` selects the position of a label.
 _Avoid_: Compiler
+
+**Measure**:
+The first step of the graph layout. It calculates the size of each node from its text, its icon, its items, its stack and its caption. `measureText()` in `src/lib/layouts/text/measure-text.ts` gives the width of one text run, from a table of the glyph widths of the Geist fonts. It throws on a character that the table does not have.
+_Avoid_: Estimate, guess (the table gives the real widths of the pinned fonts)
+
+**Oracle**:
+`assertSoundLayout()` in `src/testing/sound-layout.ts`. It checks the invariants of a `GraphLayout`, for example "no two nodes intersect" and "no edge goes through a node that is not its end". It throws one error that lists each violation, with the ids. Tests use it. The package does not export it.
+_Avoid_: Validator (the compiler and the layout validate the input; the oracle checks the output), snapshot
+
+### The grid of a graph
+
+**Cell**:
+One row and one column of the grid of a graph. `row` and `col` are integers from 0. One node at most is in a cell.
+_Avoid_: Slot, position (a position is in pixels)
+
+**Area**:
+The rectangle of cells that a node or a group covers: `row`, `col`, `rowSpan` and `colSpan`. A span is an integer of 1 or more.
+_Avoid_: Bounds (the bounds are the pixel rectangle), region
+
+**Track**:
+One row or one column of the grid. Each track gets the size of its largest content, as CSS Grid sizes an `auto` track. An empty track is 0.
+_Avoid_: Lane (that is a timeline primitive), band
+
+**Gutter**:
+The space between two tracks, and before the first track and after the last track. It holds the group chrome and the paths of the edges. Each group border along a gutter is a straight line.
+_Avoid_: Gap (`GAP` is only the middle part of a gutter), margin, padding
+
+**Group chrome**:
+The parts of a group around its members: the padding, the border, and the title band with the label. The layout puts the group chrome in the gutters, not in the tracks. An edge can go through a title band, but not through the label text.
+_Avoid_: Chrome alone (the chrome is the header and the control panel), frame
 
 ### Timeline primitives
 
@@ -55,7 +85,7 @@ _Avoid_: Fragment (React uses this word), box. Also, do not use frame for the ch
 ### Graph primitives
 
 **Node**:
-`Diagram.Node`. The general primitive for one item in the grid of a graph. Each other node primitive is a node with different defaults.
+`Diagram.Node`. The general primitive for one item in the grid of a graph. Each other node primitive is a node with different defaults. A node has an area of cells. A node, a box, a card, a port, a label and a float fill their area. The other nodes keep their measured size, at the center of their area.
 _Avoid_: Vertex, item
 
 **Box**:
@@ -82,16 +112,12 @@ _Avoid_: Caption (a caption is text next to a node), heading
 `Diagram.Float`. A node with a flat frame. An edge cannot attach to it.
 _Avoid_: Decoration, sticker
 
-**Phantom**:
-`Diagram.Phantom`. A node that is not visible. An edge can attach to it. Use it to make an edge go through one cell of the grid.
-_Avoid_: Ghost, dummy, spacer
-
 **Marker**:
 `Diagram.Marker`. A node that shows an icon, for example `server` or `user`, and has no frame by default.
 _Avoid_: Icon (the icon is the picture in the marker), badge (a badge is the icon on an edge)
 
 **Appliance**:
-`Diagram.Appliance`. A node drawn as a hardware device: a body with a face, a row of ports, and an optional antenna. Its `appliancePorts`, `antenna` and `slant` props change the drawing.
+`Diagram.Appliance`. A node drawn as a hardware device: a body with a face, a row of ports, and an optional antenna. Its `appliancePorts` and `antenna` props change the drawing.
 _Avoid_: Device, server (`server` is an icon name)
 
 **Connector**:
@@ -103,7 +129,7 @@ _Avoid_: Edge (an edge is a line), adapter
 _Avoid_: Dot, hub, joint
 
 **Edge**:
-`Diagram.Edge`. A line from one node to another node. The props of the edge set its arrowheads, its line style and its label.
+`Diagram.Edge`. A line from one node or group to another node or group. The props of the edge set its arrowheads, its line style, its weight and its label. `exitSide` and `entrySide` select the sides where it goes out and goes in. The router selects its path.
 _Avoid_: Link, connection, connector (that is a node)
 
 **Arrow**:
@@ -114,45 +140,33 @@ _Avoid_: Pointer
 `Diagram.Wire`. An edge with no arrowhead. Use it when the direction is clear or the same both ways.
 _Avoid_: Line (`Diagram.Line` is a line of a label), cable
 
-**Entry**:
-`Diagram.Entry`, in an edge. It sets the side of the target where the edge goes in.
-_Avoid_: Target side
-
-**Exit**:
-`Diagram.Exit`, in an edge. It sets the side of the source where the edge goes out.
-_Avoid_: Source side
-
-**Waypoint**:
-`Diagram.Waypoint`, in an edge. A point that the edge goes through. It is an `{ x, y }` point, a grid cell, a guide, or a node.
-_Avoid_: Bend, control point (a control point is part of a Bézier curve)
-
 **Group**:
-`Diagram.Group`. A rectangle around a set of nodes, with a label. The compiler calculates its bounds from the rows and columns of its nodes, when the caller does not give them. A group can be in a group.
+`Diagram.Group`. A rectangle around a set of nodes, with a label. Its members are the primitives in it, in the JSX. Its area is the smallest area that holds the areas of its members, or the explicit area of its `row`, `col`, `rowSpan` and `colSpan`. A group can be in a group. Sibling groups cannot overlap.
 _Avoid_: Cluster, container, subgraph
 
-**Guide**:
-`Diagram.Guide`. A vertical or horizontal line that helps to align things. A waypoint or a text can refer to a guide by its id.
-_Avoid_: Ruler, grid line
+**Note**:
+`Diagram.Note`. A node with no frame that holds text in a cell. With a `target`, the router draws a leader from the note to that node or group. An edge can attach to a note.
+_Avoid_: Text, comment, tooltip
+
+**Leader**:
+The thin line with no arrowhead from a note to its target. The router selects its path, as for an edge.
+_Avoid_: Edge (an edge is a primitive), pointer
 
 ### Primitives for both layouts
-
-**Text**:
-`Diagram.Text`, and its alias `Diagram.Note`. A free annotation at a position, or next to a target node, with an optional leader line to it.
-_Avoid_: Comment, tooltip
 
 **Line**:
 `Diagram.Line`. One line of a label with more than one line. It can set the color and the weight of that line.
 _Avoid_: Row, Wire (that is an edge)
 
 **Content**:
-`Diagram.Content`, in a box, a card or a node. It holds real React content, for example a button. Only `HtmlGraphDiagram` draws it. The SVG and canvas renderers refuse it.
+`Diagram.Content`, in a box, a card or a node. It holds real React content, for example a button. Its `size` prop gives the width and the height of the content, because the layout cannot measure React content. Only `HtmlGraphDiagram` draws it. The SVG and canvas renderers refuse it.
 _Avoid_: Children (the children of a primitive are its label), slot
 
 ### Look and behavior
 
 **Chrome**:
 The parts around the drawing: the header with the title and the corner, the control panel of the mode, and the wrapper element that holds the theme classes. The code is in `src/lib/react/chrome/`.
-_Avoid_: Frame (that is a timeline primitive), shell, card
+_Avoid_: Frame (that is a timeline primitive), shell, card. Do not use chrome alone for the border and the title band of a group: that is the group chrome.
 
 **Theme**:
 The values of the `--dgm-*` CSS variables. The chrome sets a light set, and a dark set with the `dark:` variant. An app changes the theme when it sets the variables on the diagram.

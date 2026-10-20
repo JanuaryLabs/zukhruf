@@ -57,23 +57,36 @@ A boxed signal is a segment with a hole in it. Calculate the hole. Do not make i
 
 When a renderer has expressions such as `fromX + 6`, `toX - direction * headInset` or `maxLineLen * LABEL_CHAR_W`, the layout is in the wrong place.
 
-Put the calculation into a pure function in `src/lib/layouts/timeline/timeline-layout.ts` or `src/lib/layouts/graph/graph-layout.ts`. The function takes inputs and returns a layout. The renderer reads the layout, and only writes attributes from it.
+Put the calculation into a pure function in `src/lib/layouts/timeline/timeline-layout.ts` or in `src/lib/layouts/graph/`. The function takes inputs and returns a layout. The renderer reads the layout, and only writes attributes from it.
 
 A pure function is easy to test without React. Thus the tests of the geometry are fast, and they do most of the work. The tests of a renderer only check that the parts are connected: the number of paths, and the attributes that must be there.
 
+## The renderers paint one GraphLayout
+
+`layoutGraph(ir)` in `src/lib/layouts/graph/layout.ts` calculates all of the geometry of a graph, and returns one `GraphLayout`. Its type is in `graph-layout-result.ts`. It holds the box of each node, the position and the font of each text run, the rectangle of each group, the points and the SVG path of each edge, the position of each label, and the `viewBox`.
+
+`SvgGraphDiagram`, `CanvasGraphDiagram` and `HtmlGraphDiagram` call `layoutGraph` one time. They only copy its values into SVG attributes, canvas calls or CSS positions. They do not add a padding, measure a text, or move a label. The flow effects read the same `d` of each edge. Thus the three outputs and the effects show the same geometry.
+
+`src/lib/renderers/paint-contract.test.ts` checks this. It renders one scene, and it checks that each box, each text run and each edge path in the SVG and in the HTML is at the position that the `GraphLayout` holds.
+
+When an output is wrong but the `GraphLayout` is correct, fix the renderer. When the `GraphLayout` is wrong, fix the layout. Do not correct the layout in a renderer.
+
 ## When an edge or a label is in the wrong place, look at the router first
 
-The compiler makes the IR: the nodes, the edges, the labels, the groups, the lanes and the signals. It does not select the corridor of an edge, the position of a label, the bends of an arrow, or the shape of a self-loop. The router does that.
+The compiler makes the IR: the nodes, the edges, the labels and the groups. It does not select the path of an edge or the position of a label. The router does that, in three modules of `src/lib/layouts/graph/`:
 
-Debug `src/lib/layouts/graph/graph-layout.ts` first when a graph shows one of these problems:
+- `attach.ts` selects where each edge touches its node: the side, and the slot on that side. The edges on one side divide it into equal slots, in the order of their other ends, so they do not cross.
+- `route.ts` routes each edge and each leader. It routes the nearest edges first. It calls the A\* search in `route-search.ts`, which goes around the nodes, the captions, the group labels and the labels that are already placed.
+- `labels.ts` selects the position of each label and each badge: the longest segment first, at the first free position.
 
-- A label is on a line.
-- The end of an edge touches a different path.
-- Two edges in opposite directions use the same lane.
-- A self-loop is only a short stub.
-- Two nested return edges use the same corridor.
+Debug these modules first when a graph shows one of these problems:
 
-Call `computePaths()`, and read the `points` and the `labelPlacement` of the edge that fails. Add a test to `src/lib/layouts/graph/graph-layout.test.ts` that checks the topology: different corridors, a label above its own lane, an arrowhead outside the side of the target.
+- A label is on a line, or far from its edge.
+- Two edges touch a node at the same point, or cross near the node.
+- An edge goes around a group when a straight line is free.
+- The layout throws "no orthogonal route" or "has no free position", but there is space in the drawing.
+
+Call `layoutGraph()`, and read the `points` and the `label` of the edge that fails. Add a scenario to `src/lib/layouts/graph/layout-scenarios.test.ts` that checks the topology, for example "the edge has two points" or "the label is above the edge", and call the oracle on the layout.
 
 The compiler is the cause when the diagram throws about a child that is not valid, a primitive of the other layout, a duplicate id, or a missing end of an edge.
 
@@ -130,6 +143,46 @@ To see the pixels, run `nx run diagram-playground:dev`. The playground shows the
 
 Do not test private functions of a layout from a renderer test. The rendered markup is the public contract. The pure functions of a layout have their own tests.
 
+## Test layouts with the oracle
+
+`assertSoundLayout(layout)` in `src/testing/sound-layout.ts` is the oracle. It checks the invariants that each correct `GraphLayout` obeys:
+
+- **N1, N2:** no two nodes intersect, and each text run is in its node.
+- **G1, G2, G3:** a group holds its members and its label is clear, sibling groups do not overlap, and a node that is not a member is outside the group.
+- **E1 to E5:** each edge is orthogonal, does not go through a node that is not its end, does not go through the label of a group, ends on its side, and touches a junction at its center.
+- **L1, L2:** a label is clear of the nodes, the other labels and the group labels, and it is near its edge.
+- **V1:** the `viewBox` holds all of the parts.
+
+The oracle throws one error that lists each violation with its ids. Thus one run shows all of the defects of a diagram, not only the first.
+
+Call the oracle in each layout test, and then check the one fact that the test is about. The oracle checks that the diagram is correct. The assert checks that the diagram is the one that the test wants.
+
+```ts
+const layout = layoutGraph(graph({ nodes: [gateway] }));
+
+assertSoundLayout(layout);
+assert.deepEqual(box(layout, 'gateway'), { x: 0, y: 0, ...frame });
+```
+
+The oracle is in `src/testing/`, so the build does not ship it.
+
+## Fix the lowest level first
+
+A large diagram with defects shows many symptoms of a few causes. A fix in the full diagram often moves the defect to a different part. Do not start with the full diagram.
+
+Make the diagram again as a ladder, one level at a time:
+
+1. One text run. Is the measured width the same as the width that the browser draws?
+2. One box. Does its text fit in it?
+3. Two boxes and one edge. Then one group. Then a group in a group.
+4. Add one part at a time, until you have the full diagram.
+
+Each level must pass the oracle, and a browser check, before you add the next part. When a level fails, fix the cause at that level, in the engine. Then go up again from that level.
+
+The homelab example was made again in this way. The level of one text run proved the measurement first: on 73 text runs, the measured width was never smaller than the drawn width. Thus a defect at a higher level was never a text measurement.
+
+Fix the engine, not the example. When the example must change to pass, the next diagram gets the same defect.
+
 ## Throw when the content does not fit
 
 When a boxed signal does not fit between its lanes (`boxW + 2 × stub > distance`), the layout throws. It does not draw a box that goes past the lanes, and it does not put the box on the middle of the line.
@@ -137,6 +190,19 @@ When a boxed signal does not fit between its lanes (`boxW + 2 × stub > distance
 The author sees the error during development. Then the author makes the label shorter, or splits the diagram.
 
 A long label in `Diagram.Line` makes a wide box, and causes this error. Do not add a fallback that cuts the box or makes the text smaller. The diagram has too much in it, and the correct fix is to split it.
+
+The graph obeys the same rule. The layout throws when:
+
+- a `row`, a `col` or a span is not an integer, or a span is less than 1;
+- two nodes are in one cell;
+- a node is in the area of a group that it is not a member of;
+- two sibling groups overlap, or an explicit area of a group does not hold all of its members;
+- an edge has no orthogonal route, or a label or a badge has no free position;
+- a side of a node has more edges than it has room for;
+- a side has ports, and an edge to that side does not name a port;
+- a text has a character that the glyph table does not have.
+
+Each error names the elements. The layout never draws a diagonal line, a text outside its box, or a group on top of a node. A fallback hides the defect until a reader sees it. An error shows it to the author during development.
 
 ## Add a primitive, not raw SVG
 
