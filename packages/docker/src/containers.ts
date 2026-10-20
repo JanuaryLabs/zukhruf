@@ -118,6 +118,9 @@ export type Created<Key extends string, Owned, Found> =
   | ({ created: true } & Record<Key, Owned>)
   | ({ created: false } & Record<Key, Found>);
 
+/** The time between two inspects of a container whose removal is in progress. */
+const REMOVAL_POLL_MS = 50;
+
 /** The time between two tries of createOrGet() while the name is taken but an inspect does not find it. */
 const NAME_RACE_DELAY_MS = 20;
 
@@ -299,7 +302,9 @@ export class Container {
   /**
    * Resolves for 404. A 409 is a removal that is already in progress, or,
    * without `force`, a container that runs: an inspect tells which. For a
-   * removal in progress, it waits until the container is gone. A container
+   * removal in progress, it inspects the container until it is gone, and
+   * when the other removal ends and leaves the container, it sends a forced
+   * removal again. A container
    * that runs or is paused rejects with ContainerRunningError. The engine
    * gives the state 'running' while it kills the container for a forced
    * removal, so with `force` the state alone does not tell: it waits.
@@ -331,12 +336,35 @@ export class Container {
         { cause: error },
       );
     }
-    const gone = await this.#client.exchange('POST', `${path}/wait`, {
-      query: { condition: 'removed' },
-      signal,
-    });
-    if (isSuccess(gone) || gone.status === 404) return;
-    throw error;
+    // A wait for 'removed' never returns when the other removal fails and
+    // leaves the container dead, so inspects tell when the container is gone.
+    for (;;) {
+      // The timer rejects with an AbortError; the caller gets the reason of its signal.
+      await setTimeout(REMOVAL_POLL_MS, undefined, { signal }).catch(
+        (timerError: unknown) => {
+          signal?.throwIfAborted();
+          throw timerError;
+        },
+      );
+      const current = await this.#client.exchange('GET', `${path}/json`, {
+        signal,
+      });
+      if (current.status === 404) return;
+      if (!isSuccess(current)) {
+        throw this.#client.error(current, 'GET', `${path}/json`);
+      }
+      const status =
+        parseBody<EngineApi.ContainerInspectResponse>(current).State?.Status;
+      if (status === 'removing') continue;
+      // The other removal ended and the container stays: remove it again.
+      const again = await this.#client.exchange(method, path, {
+        query: { force: true, v: options.v },
+        signal,
+      });
+      if (!isSuccess(again) && again.status !== 404 && again.status !== 409) {
+        throw this.#client.error(again, method, path);
+      }
+    }
   }
 
   /** The published binding of a port of the container; undefined when it is not published. The IPv4 binding comes first. */
@@ -414,8 +442,12 @@ export class Container {
       await writer.write(bytes);
       await writer.close();
     })();
-    const [result] = await Promise.all([process.collect(), writing]);
-    return result;
+    // A command can end before it reads all of its input, such as `true` or
+    // `head -c1`. The write then fails, but the output and the exit code are
+    // complete: the result stands.
+    const [result] = await Promise.allSettled([process.collect(), writing]);
+    if (result.status === 'rejected') throw result.reason;
+    return result.value;
   }
 
   /** Runs a command in the container and gives its container process while it runs. */
@@ -445,10 +477,18 @@ export class Container {
     this.#throwUnless(created, method, path);
     const { Id } = parseBody<{ Id: string }>(created);
     const exec = `/exec/${encodeURIComponent(Id)}`;
-    const connection = await this.#client.hijack('POST', `${exec}/start`, {
-      body: { Detach: false, Tty: body.Tty ?? false },
-      signal,
-    });
+    // The container can stop between the create and the start of the exec: the start then gets 409.
+    const connection = await this.#client
+      .hijack('POST', `${exec}/start`, {
+        body: { Detach: false, Tty: body.Tty ?? false },
+        signal,
+      })
+      .catch(async (error: unknown) => {
+        if (error instanceof DockerEngineError && error.status === 409) {
+          throw await this.#notRunning(error, options);
+        }
+        throw error;
+      });
     return new ContainerProcess(connection, {
       stdin,
       signal,

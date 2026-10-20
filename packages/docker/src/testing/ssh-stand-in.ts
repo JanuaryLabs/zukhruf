@@ -12,6 +12,8 @@ export type SshStandInMode =
       socketPath: string;
       /** Keeps the socket open and keeps running when its standard input ends, as a hung `ssh` does. */
       ignoreInputEnd?: boolean;
+      /** Closes the socket and exits with 0 after the first answer, as `docker system dial-stdio` does when the engine restarts. */
+      exitAfterFirstAnswer?: boolean;
     }
   /** Exits with 255 and the message of OpenSSH for a key that the machine refuses. */
   | { kind: 'permission-denied' };
@@ -32,7 +34,8 @@ export interface SshRun {
  * pid and arguments in runs/<pid>.json. In the engine mode it pipes its
  * standard input to the engine socket and the socket to its standard output.
  * When its standard input ends, it ends the write side of the socket. When
- * the socket closes, it exits. With ignoreInputEnd, it does neither.
+ * the socket closes, it exits. With ignoreInputEnd, it does neither. With
+ * exitAfterFirstAnswer, it closes the socket after the first answer.
  */
 const script = `#!${process.execPath}
 const { connect } = require('node:net');
@@ -56,6 +59,9 @@ socket.on('error', (error) => {
 process.stdin.pipe(socket, { end: !mode.ignoreInputEnd });
 socket.pipe(process.stdout);
 socket.on('close', () => process.stdin.destroy());
+if (mode.exitAfterFirstAnswer) {
+  socket.once('data', () => setImmediate(() => socket.destroy()));
+}
 `;
 
 /**

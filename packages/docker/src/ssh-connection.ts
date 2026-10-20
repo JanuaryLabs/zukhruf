@@ -7,6 +7,7 @@ import {
 } from 'node:http';
 import { Socket } from 'node:net';
 import { Duplex } from 'node:stream';
+import { finished } from 'node:stream/promises';
 
 import type { Transport } from './transport.ts';
 
@@ -44,7 +45,8 @@ export function sshArguments(url: URL): string[] {
     ...(url.username ? ['-l', decodeURIComponent(url.username)] : []),
     ...(url.port ? ['-p', url.port] : []),
     '--',
-    url.hostname,
+    // An IPv6 address keeps its brackets in a URL; ssh takes it without them, as URL.Hostname() of Go gives it.
+    url.hostname.replace(/^\[(.*)\]$/, '$1'),
     'docker',
     'system',
     'dial-stdio',
@@ -96,6 +98,11 @@ class SshConnection extends Duplex {
     child.stdin.on('error', () => undefined);
   }
 
+  /** True until `ssh` exits. */
+  get running(): boolean {
+    return this.#child.exitCode === null && this.#child.signalCode === null;
+  }
+
   /** The exit of `ssh` as an error, or undefined while it runs or when it exited with 0. */
   #exitError(): SshExitError | undefined {
     const { exitCode, signalCode } = this.#child;
@@ -105,9 +112,20 @@ class SshConnection extends Duplex {
     return new SshExitError(exitCode, signalCode, this.#stderr);
   }
 
-  /** Gives the exit of `ssh` in place of an error of its pipes, when `ssh` exited. */
+  /**
+   * Gives the exit of `ssh` in place of an error of its pipes, when `ssh`
+   * exited. When `ssh` exited with 0, its output is complete: the reader gets
+   * the end of the output before the error of the write, so a command that
+   * does not read all of its input still gives its output.
+   */
   #fail(error: Error, callback: (error: Error) => void): void {
-    void this.exited().then(() => callback(this.#exitError() ?? error));
+    void this.exited().then(async () => {
+      const exit = this.#exitError();
+      if (exit === undefined) {
+        await finished(this, { writable: false }).catch(() => undefined);
+      }
+      callback(exit ?? error);
+    });
   }
 
   override _read(): void {
@@ -183,17 +201,32 @@ class SshAgent extends Agent {
   override createConnection(): Duplex {
     const connection = new SshConnection(this.#url);
     this.#connections.add(connection);
-    void connection.exited().then(() => this.#connections.delete(connection));
+    void connection.exited().then(() => {
+      this.#connections.delete(connection);
+      // An idle connection whose `ssh` exited, such as after a restart of the
+      // engine, cannot take the next request. Its close removes it from the
+      // free connections of the agent.
+      if (this.#isIdle(connection)) connection.destroy();
+    });
     return connection;
+  }
+
+  #isIdle(connection: SshConnection): boolean {
+    return Object.values(this.freeSockets).some((sockets) =>
+      sockets?.some((socket) => Object.is(socket, connection)),
+    );
   }
 
   /**
    * The keepSocketAlive of Node sets a timeout and TCP keep-alive, which a
    * connection through `ssh` does not have. The reuseSocket of Node stays: it
-   * removes the error listener of the idle connection and calls ref().
+   * removes the error listener of the idle connection and calls ref(). A
+   * connection whose `ssh` exited is not kept.
    */
   override keepSocketAlive(socket: Duplex): boolean {
-    if (socket instanceof SshConnection) socket.unref();
+    if (!(socket instanceof SshConnection)) return true;
+    if (!socket.running) return false;
+    socket.unref();
     return true;
   }
 

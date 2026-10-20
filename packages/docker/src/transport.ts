@@ -1,3 +1,4 @@
+import { once } from 'node:events';
 import {
   Agent,
   type ClientRequest,
@@ -24,6 +25,8 @@ export class SocketTransport implements Transport {
   readonly #kind: 'unix' | 'npipe';
   readonly #socketPath: string;
   readonly #agent = new Agent({ keepAlive: true });
+  /** Each connection until it closes, also after an upgrade takes it from the agent. */
+  readonly #sockets = new Set<Duplex>();
 
   constructor(kind: 'unix' | 'npipe', socketPath: string) {
     this.#kind = kind;
@@ -31,11 +34,19 @@ export class SocketTransport implements Transport {
   }
 
   request(options: RequestOptions): ClientRequest {
-    return request({
+    const sent = request({
       ...options,
       agent: this.#agent,
       socketPath: this.#socketPath,
     });
+    sent.once('socket', (socket) => this.#hold(socket));
+    return sent;
+  }
+
+  #hold(socket: Duplex): void {
+    if (socket.destroyed) return;
+    this.#sockets.add(socket);
+    socket.once('close', () => this.#sockets.delete(socket));
   }
 
   /**
@@ -48,7 +59,17 @@ export class SocketTransport implements Transport {
     socket.end();
   }
 
+  /** Closes each connection, idle, in use or upgraded, and resolves when each one is closed. */
   async close(): Promise<void> {
+    const sockets = [...this.#sockets];
     this.#agent.destroy();
+    await Promise.all(
+      sockets.map(async (socket) => {
+        if (socket.closed) return;
+        const closed = once(socket, 'close');
+        socket.destroy();
+        await closed;
+      }),
+    );
   }
 }

@@ -1,9 +1,12 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { delimiter } from 'node:path';
+import { writeFile } from 'node:fs/promises';
+import { delimiter, join } from 'node:path';
 import { describe, test } from 'node:test';
+import { setTimeout } from 'node:timers/promises';
 
-import { Docker, DockerError } from './index.ts';
+import { ConnectionFailedError, Docker, DockerError } from './index.ts';
+import { fakeEngine } from './testing/fake-engine.ts';
 import { ENTRY, lastJson, runScenario } from './testing/scenario.ts';
 import { scratchDirectory } from './testing/scratch-directory.ts';
 import {
@@ -191,6 +194,106 @@ describe('disposal of a client with open streams', () => {
           if (isAlive(pid)) process.kill(pid, 'SIGKILL');
         }
         await removeLabeled(cleaner, run);
+      }
+    },
+  );
+});
+
+describe('requests during and after disposal', () => {
+  test('through a Unix socket, a request in flight and a request after disposal started reject with the DockerError of disposal, and the second one reaches no engine', async () => {
+    // Arrange: the engine never answers /info.
+    await using scratch = await scratchDirectory();
+    await using engine = await fakeEngine({
+      directory: scratch.path,
+      apiVersion: '1.51',
+      answer: () => undefined,
+    });
+    const docker = await Docker.connect({ host: engine.host });
+    const inFlight = docker.info();
+    inFlight.catch(() => undefined);
+    while (!engine.paths.includes('/v1.51/info')) await setTimeout(10);
+
+    // Act
+    const disposing = docker[Symbol.asyncDispose]();
+    const late = docker.info();
+    late.catch(() => undefined);
+    await disposing;
+
+    // Assert
+    for (const each of [inFlight, late]) {
+      await assert.rejects(each, (error) => {
+        assert.ok(error instanceof DockerError);
+        assert.equal(error instanceof ConnectionFailedError, false);
+        assert.match(error.message, DISPOSED);
+        return true;
+      });
+    }
+    assert.equal(
+      engine.paths.filter((path) => path === '/v1.51/info').length,
+      1,
+    );
+  });
+
+  test(
+    'through ssh, a request in flight and a request after disposal started reject with the DockerError of disposal, and when disposal resolves no ssh process runs and none started after it',
+    { skip: posixOnly },
+    async () => {
+      // Arrange: the engine never answers /info, and marks that it got it.
+      await using home = await scratchDirectory();
+      const seen = join(home.path, 'info-seen');
+      await using engine = await fakeEngine({
+        directory: home.path,
+        apiVersion: '1.51',
+        answer: () => void writeFile(seen, ''),
+      });
+      await using standIn = await sshStandIn({
+        kind: 'engine',
+        socketPath: engine.socketPath,
+      });
+      const scenario = `
+import { existsSync, readdirSync } from 'node:fs';
+import { ConnectionFailedError, Docker, DockerError } from ${JSON.stringify(ENTRY)};
+const describe = (error) =>
+  error instanceof ConnectionFailedError
+    ? 'ConnectionFailedError'
+    : error instanceof DockerError
+      ? error.message
+      : 'other: ' + error;
+const docker = await Docker.connect({ host: 'ssh://tester@machine' });
+const inFlight = docker.info().then(() => 'resolved', describe);
+while (!existsSync(${JSON.stringify(seen)})) await new Promise((resolve) => setTimeout(resolve, 10));
+const disposing = docker[Symbol.asyncDispose]();
+const late = docker.info().then(() => 'resolved', describe);
+await disposing;
+const pids = readdirSync(${JSON.stringify(`${standIn.path}/runs`)}).map((name) => Number.parseInt(name, 10));
+const alive = pids.filter((pid) => { try { process.kill(pid, 0); return true; } catch { return false; } });
+console.log(JSON.stringify({ inFlight: await inFlight, late: await late, started: pids.length, alive }));
+`;
+
+      try {
+        // Act
+        const result = await runScenario(
+          scenario,
+          {
+            PATH: `${standIn.path}${delimiter}${process.env.PATH}`,
+            HOME: home.path,
+          },
+          AbortSignal.timeout(30_000),
+        );
+
+        // Assert
+        const answer = Object(lastJson(result));
+        assert.match(String(answer.inFlight), DISPOSED, result.stderr);
+        assert.match(String(answer.late), DISPOSED);
+        assert.deepEqual(
+          { started: answer.started, alive: answer.alive },
+          { started: 1, alive: [] },
+          'the ping and the request in flight share one ssh process',
+        );
+      } finally {
+        for (const { pid } of await standIn.runs()) {
+          if (isAlive(pid)) process.kill(pid, 'SIGKILL');
+        }
       }
     },
   );

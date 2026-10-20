@@ -1,3 +1,4 @@
+import { setMaxListeners } from 'node:events';
 import type { IncomingHttpHeaders, IncomingMessage } from 'node:http';
 import { type Duplex, Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
@@ -125,17 +126,23 @@ export class EngineClient {
    * socket, so only this set lets close() reach it.
    */
   readonly #streams: Set<Readable>;
+  /** Aborts when close() starts. Its reason is the DockerError of the disposal. */
+  readonly #disposal: AbortController;
 
   constructor(
     host: string,
     transport: Transport,
     apiVersion?: string,
     streams = new Set<Readable>(),
+    disposal = new AbortController(),
   ) {
     this.#host = host;
     this.#transport = transport;
     this.#apiVersion = apiVersion;
     this.#streams = streams;
+    this.#disposal = disposal;
+    // Each request in flight listens to the disposal, so many concurrent requests are not a leak.
+    setMaxListeners(0, disposal.signal);
   }
 
   /** The same engine and connections, with the API version in the path of each request. */
@@ -145,17 +152,21 @@ export class EngineClient {
       this.#transport,
       apiVersion,
       this.#streams,
+      this.#disposal,
     );
   }
 
   /**
-   * Closes each connection. An iteration of a stream that is open at that
-   * time rejects with a DockerError that says that the client was disposed.
+   * Closes each connection, and resolves when each one is closed. A request
+   * in flight, a request that starts after close() started, and an iteration
+   * of a stream that is open reject with a DockerError that says that the
+   * client was disposed.
    */
   async close(): Promise<void> {
     const error = new DockerError(
       'The client was disposed, so it closed this connection to the engine.',
     );
+    this.#disposal.abort(error);
     for (const stream of this.#streams) stream.destroy(error);
     this.#streams.clear();
     await this.#transport.close();
@@ -277,6 +288,8 @@ export class EngineClient {
     upgrades = false,
   ): Promise<Opened> {
     signal?.throwIfAborted();
+    const disposal = this.#disposal.signal;
+    disposal.throwIfAborted();
     const prefix =
       this.#apiVersion === undefined ? '' : `/v${this.#apiVersion}`;
     const payload =
@@ -302,8 +315,18 @@ export class EngineClient {
       request.destroy();
       for (const response of responses) response.destroy(signal?.reason);
     };
+    // The disposal ends the exchange as an abort of the signal does, with the DockerError of the disposal.
+    const dispose = () => {
+      reject(disposal.reason);
+      request.destroy();
+      for (const response of responses) response.destroy(disposal.reason);
+    };
     signal?.addEventListener('abort', abort, { once: true });
-    const release = () => signal?.removeEventListener('abort', abort);
+    disposal.addEventListener('abort', dispose, { once: true });
+    const release = () => {
+      signal?.removeEventListener('abort', abort);
+      disposal.removeEventListener('abort', dispose);
+    };
     request.on('error', (error) => {
       // An error after the answer started is not a connection failure.
       reject(

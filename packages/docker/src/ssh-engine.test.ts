@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { delimiter } from 'node:path';
 import { describe, test } from 'node:test';
 
+import { fakeEngine } from './testing/fake-engine.ts';
 import { ENTRY, lastJson, runScenario } from './testing/scenario.ts';
 import { scratchDirectory } from './testing/scratch-directory.ts';
 import {
@@ -115,6 +116,47 @@ console.log('{}');
       assert.deepEqual(encoded, [
         [...fixed, '-l', 'deploy@ops', '--', 'machine', ...dial],
       ]);
+    },
+  );
+
+  test(
+    'an IPv6 machine goes to ssh without its brackets, as URL.Hostname() of Go gives it',
+    {
+      skip: posixOnly,
+    },
+    async () => {
+      // Arrange
+      await using home = await scratchDirectory();
+      await using standIn = await sshStandIn({ kind: 'permission-denied' });
+      const scenario = `
+import { Docker } from ${JSON.stringify(ENTRY)};
+await Docker.connect({ host: 'ssh://tester@[fd00::1]:2222' }).catch(() => undefined);
+console.log('{}');
+`;
+
+      // Act
+      await runScenario(scenario, scenarioEnvironment(standIn.path, home.path));
+
+      // Assert
+      assert.deepEqual(
+        (await standIn.runs()).map(({ argv }) => argv),
+        [
+          [
+            '-T',
+            '-o',
+            'BatchMode=yes',
+            '-l',
+            'tester',
+            '-p',
+            '2222',
+            '--',
+            'fd00::1',
+            'docker',
+            'system',
+            'dial-stdio',
+          ],
+        ],
+      );
     },
   );
 
@@ -289,6 +331,59 @@ console.log(JSON.stringify({ warnings }));
       // Assert
       assert.deepEqual(lastJson(result), { warnings: [] }, result.stderr);
       assert.equal((await standIn.runs()).length, 1, 'one ssh process');
+    },
+  );
+
+  test(
+    'an idle connection whose ssh exits with 0, as after a restart of the engine, is not used again: the next request starts a new ssh',
+    {
+      skip: posixOnly,
+    },
+    async () => {
+      // Arrange
+      await using home = await scratchDirectory();
+      await using engine = await fakeEngine({
+        directory: home.path,
+        apiVersion: '1.51',
+        answer: (_request, response) => {
+          response.writeHead(200, { 'Content-Type': 'application/json' });
+          response.end(JSON.stringify({ ID: 'engine' }));
+        },
+      });
+      await using standIn = await sshStandIn({
+        kind: 'engine',
+        socketPath: engine.socketPath,
+        exitAfterFirstAnswer: true,
+      });
+      const scenario = withClient(`
+const { readdirSync } = await import('node:fs');
+const runs = ${JSON.stringify(`${standIn.path}/runs`)};
+const [first] = readdirSync(runs).map((name) => Number.parseInt(name, 10));
+const alive = (pid) => { try { process.kill(pid, 0); return true; } catch { return false; } };
+while (alive(first)) await new Promise((resolve) => setTimeout(resolve, 20));
+const info = await docker.info().then((answer) => answer.ID, (error) => error.name + ': ' + error.message);
+console.log(JSON.stringify({ info, started: readdirSync(runs).length }));
+await docker[Symbol.asyncDispose]();
+`);
+
+      try {
+        // Act
+        const result = await runScenario(
+          scenario,
+          scenarioEnvironment(standIn.path, home.path),
+        );
+
+        // Assert
+        assert.deepEqual(
+          lastJson(result),
+          { info: 'engine', started: 2 },
+          result.stderr,
+        );
+      } finally {
+        for (const { pid } of await standIn.runs()) {
+          if (isAlive(pid)) process.kill(pid, 'SIGKILL');
+        }
+      }
     },
   );
 

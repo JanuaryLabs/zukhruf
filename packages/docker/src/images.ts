@@ -74,13 +74,15 @@ export class Images {
       .stream(method, path, {
         query: pullQuery(reference, platform),
         // The same X-Registry-Auth encoding is in push(): mirror a fix in both.
+        // Moby decodes it with the padded URLEncoding of Go, so the '=' stays.
         headers:
           auth === undefined
             ? undefined
             : {
-                'X-Registry-Auth': Buffer.from(JSON.stringify(auth)).toString(
-                  'base64url',
-                ),
+                'X-Registry-Auth': Buffer.from(JSON.stringify(auth))
+                  .toString('base64')
+                  .replaceAll('+', '-')
+                  .replaceAll('/', '_'),
               },
         signal,
       })
@@ -148,10 +150,12 @@ export class Images {
       const progress = await this.#client.stream(method, path, {
         query: { tag },
         // The same X-Registry-Auth encoding is in pull(): mirror a fix in both.
+        // Moby decodes it with the padded URLEncoding of Go, so the '=' stays.
         headers: {
-          'X-Registry-Auth': Buffer.from(JSON.stringify(auth)).toString(
-            'base64url',
-          ),
+          'X-Registry-Auth': Buffer.from(JSON.stringify(auth))
+            .toString('base64')
+            .replaceAll('+', '-')
+            .replaceAll('/', '_'),
         },
         signal,
       });

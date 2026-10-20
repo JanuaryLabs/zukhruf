@@ -19,7 +19,7 @@ The words in these documents have one meaning each. See the glossary in [CONTEXT
 
 The package does not read `process.env`. The host program gives its environment as `environment`, and the package reads `DOCKER_HOST`, `DOCKER_CONTEXT` and `DOCKER_CONFIG` from it. Without `environment`, no variable applies, and the selection reads only the context store.
 
-Then `connect()` sends `GET /_ping` and negotiates the API version. Dispose the client to close its connections. An idle connection does not keep the process running.
+Then `connect()` sends `GET /_ping` and negotiates the API version. Dispose the client to close its connections. After the disposal starts, a request in flight and each new request reject with a `DockerError` that says that the client was disposed. An idle connection does not keep the process running.
 
 ```ts
 import { Docker } from '@zukhruf/docker';
@@ -130,7 +130,7 @@ Some answers of the engine are not errors here:
 | `container.start()` of a running container, `container.stop()` of a stopped one | 304           | resolves    |
 | `remove()` of a missing container, volume, network or image                     | 404           | resolves    |
 
-A removal of a container whose removal is already in progress (409) waits until the container is gone, and then resolves.
+A removal of a container whose removal is already in progress (409) inspects the container until it is gone, and then resolves. When the other removal fails and the container stays, it sends a forced removal again. The signal stops the wait.
 
 ## Create a container that you own
 
@@ -245,6 +245,8 @@ await postgres.exec(
   { stdin: 'create table notes (body text);' },
 );
 ```
+
+A command can end before it reads all of its input, such as `head -c1`. The result of the command then stands: the input that the command did not read is not an error.
 
 `container.spawn()` gives the container process while the command runs. With `stdin: true`, the container process has a writable `stdin`. Only `stdin.close()` ends the input. The package drops an empty write, so an empty write never ends the input.
 

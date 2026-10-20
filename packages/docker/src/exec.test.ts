@@ -8,6 +8,8 @@ import {
   ContainerNotRunningError,
   Docker,
 } from './index.ts';
+import { fakeEngine } from './testing/fake-engine.ts';
+import { scratchDirectory } from './testing/scratch-directory.ts';
 
 const TEST_LABEL = 'dev.zukhruf.docker.test';
 const IMAGE = 'alpine:3';
@@ -65,6 +67,35 @@ describe('container.exec()', () => {
         stdout: 'hello\n',
         stderr: '',
         output: 'hello\n',
+      });
+    } finally {
+      await removeLabeled(docker, run);
+    }
+  });
+
+  test('a command that does not read all of its input still gives its result: true and head -c1 with 10 MB of stdin', async () => {
+    // Arrange
+    await using docker = await connect();
+    const run = randomUUID();
+    try {
+      const container = await startSleeper(docker, run);
+      const stdin = new Uint8Array(10 * 1024 * 1024).fill(0x61);
+      const signal = AbortSignal.timeout(30_000);
+
+      // Act
+      const [ignored, first] = await Promise.allSettled([
+        container.exec({ Cmd: ['true'] }, { stdin, signal }),
+        container.exec({ Cmd: ['head', '-c1'] }, { stdin, signal }),
+      ]);
+
+      // Assert
+      assert.deepEqual(ignored, {
+        status: 'fulfilled',
+        value: { exitCode: 0, stdout: '', stderr: '', output: '' },
+      });
+      assert.deepEqual(first, {
+        status: 'fulfilled',
+        value: { exitCode: 0, stdout: 'a', stderr: '', output: 'a' },
       });
     } finally {
       await removeLabeled(docker, run);
@@ -253,6 +284,56 @@ describe('container.exec()', () => {
     } finally {
       await removeLabeled(docker, run);
     }
+  });
+
+  test('a 409 of the exec start, for a container that stopped after the exec create, is a ContainerNotRunningError with the state of an inspect', async () => {
+    // Arrange
+    await using scratch = await scratchDirectory();
+    await using engine = await fakeEngine({
+      directory: scratch.path,
+      apiVersion: '1.51',
+      answer: (request, response) => {
+        const json = (status: number, body: unknown) => {
+          response.writeHead(status, { 'Content-Type': 'application/json' });
+          response.end(JSON.stringify(body));
+        };
+        const path = new URL(request.url ?? '', 'http://engine').pathname;
+        if (request.method === 'GET' && path === '/v1.51/containers/c1/json') {
+          json(200, { Id: 'c1', State: { Status: 'exited' } });
+        } else if (
+          request.method === 'POST' &&
+          path === '/v1.51/containers/c1/exec'
+        ) {
+          json(201, { Id: 'e1' });
+        } else if (
+          request.method === 'POST' &&
+          path === '/v1.51/exec/e1/start'
+        ) {
+          json(409, { message: 'container c1 is not running' });
+        } else {
+          json(404, { message: 'page not found' });
+        }
+      },
+    });
+    await using docker = await Docker.connect({ host: engine.host });
+    const container = await docker.containers.find('c1');
+    assert.ok(container);
+
+    // Act
+    const executing = container.exec({ Cmd: ['true'] });
+
+    // Assert
+    await assert.rejects(executing, (error: unknown) => {
+      assert.ok(error instanceof ContainerNotRunningError);
+      assert.equal(error.container, 'c1');
+      assert.equal(error.state, 'exited');
+      assert.equal(error.status, 409);
+      assert.deepEqual(error.request, {
+        method: 'POST',
+        path: '/exec/e1/start',
+      });
+      return true;
+    });
   });
 
   test('exec() of a removed container is a ContainerNotFoundError with its ID', async () => {

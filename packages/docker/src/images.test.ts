@@ -187,12 +187,47 @@ describe('docker.images', () => {
     assert.equal(query.get('fromImage'), 'ghcr.io/example/app');
     assert.equal(query.get('tag'), 'latest');
     const header = auths.at(-1) ?? '';
-    assert.match(header, /^[A-Za-z0-9_-]+$/);
+    assert.match(header, /^[A-Za-z0-9_-]+={0,2}$/);
     assert.deepEqual(
       JSON.parse(Buffer.from(header, 'base64url').toString()),
       auth,
     );
   });
+
+  for (const operation of ['pull', 'push'] as const) {
+    test(`${operation}() sends auth as padded base64url, which the URLEncoding of Go decodes: its length is a multiple of 4`, async () => {
+      // Arrange: a JSON of 37 bytes, so base64 of it ends with padding.
+      await using scratch = await scratchDirectory();
+      const auths: string[] = [];
+      await using engine = await fakeEngine({
+        directory: scratch.path,
+        apiVersion: '1.51',
+        answer: (request, response) => {
+          const header = request.headers['x-registry-auth'];
+          if (typeof header === 'string') auths.push(header);
+          response.writeHead(200, { 'Content-Type': 'application/json' });
+          response.end('{"status":"Done"}\n');
+        },
+      });
+      await using docker = await Docker.connect({ host: engine.host });
+      const auth = { username: 'me', password: 'pwd' };
+      assert.notEqual(JSON.stringify(auth).length % 3, 0);
+
+      // Act
+      await docker.images[operation]('ghcr.io/example/app:1', { auth });
+
+      // Assert
+      assert.equal(auths.length, 1);
+      const [header = ''] = auths;
+      assert.match(header, /^[A-Za-z0-9_-]+={1,2}$/);
+      assert.equal(header.length % 4, 0);
+      const standard = header.replaceAll('-', '+').replaceAll('_', '/');
+      assert.deepEqual(
+        JSON.parse(Buffer.from(standard, 'base64').toString('utf8')),
+        auth,
+      );
+    });
+  }
 
   test('tag() gives the image a second name that inspect() and list() find, tag() of a missing image is an ImageNotFoundError, and remove() of the name resolves twice', async () => {
     // Arrange

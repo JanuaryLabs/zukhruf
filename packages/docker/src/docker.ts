@@ -121,7 +121,9 @@ export class Docker implements AsyncDisposable {
   /**
    * Closes the connections of the client, also each attach, exec, followed
    * logs and events: an iteration of one of them rejects with a DockerError.
-   * For an SSH engine, it resolves when each `ssh` process exited.
+   * A request in flight, and each request after the disposal starts, rejects
+   * with the same DockerError. It resolves when each connection is closed;
+   * for an SSH engine, when each `ssh` process exited.
    */
   async [Symbol.asyncDispose](): Promise<void> {
     await this.#client.close();

@@ -14,6 +14,7 @@ import {
   NetworkNotFoundError,
 } from './index.ts';
 import { fakeEngine } from './testing/fake-engine.ts';
+import { ENTRY, lastJson, runScenario } from './testing/scenario.ts';
 import { scratchDirectory } from './testing/scratch-directory.ts';
 
 const TEST_LABEL = 'dev.zukhruf.docker.test';
@@ -160,6 +161,96 @@ describe('answers that are not errors', () => {
   });
 });
 
+describe('a removal that is already in progress', () => {
+  test('when the other removal fails and leaves the container dead, remove() sends a forced removal again and resolves when an inspect gets 404', async () => {
+    // Arrange: the first DELETE meets a removal in progress, which then fails. A wait for removed never answers.
+    await using scratch = await scratchDirectory();
+    const deletes: string[] = [];
+    let inspects = 0;
+    await using engine = await fakeEngine({
+      directory: scratch.path,
+      apiVersion: '1.51',
+      answer: (request, response) => {
+        const url = new URL(request.url ?? '', 'http://engine');
+        const json = (status: number, body: unknown) => {
+          response.writeHead(status, { 'Content-Type': 'application/json' });
+          response.end(JSON.stringify(body));
+        };
+        if (request.method === 'DELETE') {
+          deletes.push(url.search);
+          if (deletes.length === 1) {
+            json(409, {
+              message: 'removal of container c1 is already in progress',
+            });
+          } else {
+            response.writeHead(204).end();
+          }
+        } else if (request.method === 'GET') {
+          inspects += 1;
+          if (deletes.length >= 2) json(404, { message: 'No such container' });
+          else {
+            json(200, {
+              Id: 'c1',
+              State: { Status: inspects <= 2 ? 'removing' : 'dead' },
+            });
+          }
+        }
+        // Each other request, such as a wait, gets no answer.
+      },
+    });
+    await using docker = await Docker.connect({ host: engine.host });
+    const container = await docker.containers.find('c1');
+    assert.ok(container);
+
+    // Act
+    const removing = container.remove({
+      v: true,
+      signal: AbortSignal.timeout(5_000),
+    });
+
+    // Assert
+    await removing;
+    assert.equal(deletes.length, 2);
+    const again = new URLSearchParams(deletes[1]);
+    assert.equal(again.get('force'), 'true');
+    assert.equal(again.get('v'), 'true');
+  });
+
+  test('an abort of the signal ends the wait for a removal in progress with its reason', async () => {
+    // Arrange: the removal in progress never ends.
+    await using scratch = await scratchDirectory();
+    await using engine = await fakeEngine({
+      directory: scratch.path,
+      apiVersion: '1.51',
+      answer: (request, response) => {
+        const json = (status: number, body: unknown) => {
+          response.writeHead(status, { 'Content-Type': 'application/json' });
+          response.end(JSON.stringify(body));
+        };
+        if (request.method === 'DELETE') {
+          json(409, {
+            message: 'removal of container c1 is already in progress',
+          });
+        } else if (request.method === 'GET') {
+          json(200, { Id: 'c1', State: { Status: 'removing' } });
+        }
+      },
+    });
+    await using docker = await Docker.connect({ host: engine.host });
+    const container = await docker.containers.find('c1');
+    assert.ok(container);
+    const controller = new AbortController();
+    const reason = new Error('the caller stopped waiting');
+
+    // Act
+    const removing = container.remove({ signal: controller.signal });
+    setTimeout(() => controller.abort(reason), 300);
+
+    // Assert
+    await assert.rejects(removing, (error: unknown) => error === reason);
+  });
+});
+
 describe('containers.createOrGet()', () => {
   test('eight concurrent calls with one name create one container, and each call gives its ID', async () => {
     // Arrange
@@ -291,6 +382,55 @@ describe('a create that the engine refuses', () => {
         assert.equal(error.network, network);
         return true;
       });
+    } finally {
+      await removeLabeled(docker, run);
+    }
+  });
+});
+
+describe('containers.run()', () => {
+  test('a run whose start fails rejects, removes its container, and leaves no connection open: the process exits by itself', async () => {
+    // Arrange: the client of the scenario is never disposed, so only open connections keep it running.
+    await using docker = await connect();
+    const run = randomUUID();
+    const scenario = `
+import { Docker } from ${JSON.stringify(ENTRY)};
+const docker = await Docker.connect({ environment: process.env });
+try {
+  await docker.containers.run({
+    Image: ${JSON.stringify(IMAGE)},
+    Cmd: ['/no/such/executable'],
+    Labels: { ${JSON.stringify(TEST_LABEL)}: ${JSON.stringify(run)} },
+  });
+  console.log(JSON.stringify({ rejected: false }));
+} catch (error) {
+  console.log(JSON.stringify({ rejected: true, name: error.name }));
+}
+`;
+    const environment = Object.fromEntries(
+      Object.entries(process.env).filter(
+        (entry): entry is [string, string] => entry[1] !== undefined,
+      ),
+    );
+    try {
+      // Act
+      const result = await runScenario(
+        scenario,
+        environment,
+        AbortSignal.timeout(30_000),
+      );
+
+      // Assert
+      assert.equal(result.exitCode, 0, result.stderr);
+      assert.deepEqual(lastJson(result), {
+        rejected: true,
+        name: 'DockerEngineError',
+      });
+      const left = await docker.containers.list({
+        all: true,
+        filters: { label: [`${TEST_LABEL}=${run}`] },
+      });
+      assert.deepEqual(left, []);
     } finally {
       await removeLabeled(docker, run);
     }
