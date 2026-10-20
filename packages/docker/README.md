@@ -58,22 +58,25 @@ A product with its own rule selects from this list. For example, a scan for data
 
 An error has its own class when a caller does something different after it: start the engine, pull the image, start the container, pick another name ([ADR 0007](./docs/adr/0007-an-error-has-its-own-class-when-the-caller-handles-it-differently.md)). Each class comes from the request and its HTTP status. When one status has two meanings, the package sends one more request to tell them apart.
 
-| Class                      | When                                                                                                  | What the caller does next                          |
-| -------------------------- | ----------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
-| `ConnectionFailedError`    | The socket does not exist, the engine refuses the connection, or `ssh` cannot log in                  | Treat the engine as absent, or ask to start Docker |
-| `UnsupportedEngineError`   | The engine's highest API version is lower than the lowest one that the package supports               | Ask to update Docker                               |
-| `ContainerNotFoundError`   | A request about a container gets 404                                                                  | Create the container again                         |
-| `ContainerNotRunningError` | An exec, an attach or a kill gets 409. `state` comes from an inspect: `created`, `exited`, `paused` … | Start or unpause it, then try again                |
-| `NameConflictError`        | A create of a container, network or volume finds the name taken                                       | Use `createOrGet()`, or another name               |
-| `ImageNotFoundError`       | A create gets 404 and the image is not on the engine; a pull or a push gets 404                       | Pull or build the image; check the name or `auth`  |
-| `NetworkNotFoundError`     | A create gets 404 and the image is on the engine; a request about a network gets 404                  | Create the network first                           |
-| `VolumeNotFoundError`      | A request about a volume gets 404                                                                     | Create the volume again                            |
-| `BindSourceNotFoundError`  | A create or a start refuses a bind mount whose `source` does not exist on the engine's host           | Tell the user which host path is missing           |
-| `VolumeInUseError`         | A volume removal gets 409                                                                             | Remove its containers first, or wait and try again |
-| `NetworkInUseError`        | A network removal gets 403 while containers are connected                                             | Disconnect them first                              |
-| `ImageInUseError`          | An image removal gets 409                                                                             | Remove its containers first, or use `force`        |
-| `PathNotFoundError`        | A file request gets 404 and the container exists                                                      | Use a default, or create the file                  |
-| `ReadOnlyPathError`        | `writeFiles()` or `putArchive()` gets 403                                                             | Write under a writable mount, or use `exec()`      |
+| Class                      | When                                                                                                                                          | What the caller does next                          |
+| -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
+| `ConnectionFailedError`    | The socket does not exist, the engine refuses the connection, or `ssh` cannot log in                                                          | Treat the engine as absent, or ask to start Docker |
+| `UnsupportedEngineError`   | The engine's highest API version is lower than the lowest one that the package supports                                                       | Ask to update Docker                               |
+| `UnsupportedHostError`     | The host is not `unix://`, `npipe://` or `ssh://`, for example `tcp://`                                                                       | Skip that context, or give another host            |
+| `ContextNotFoundError`     | `Docker.connect({ context })` names a context that the context store does not have                                                            | Pick another context from `Docker.contexts()`      |
+| `ContainerNotFoundError`   | A request about a container gets 404                                                                                                          | Create the container again                         |
+| `ContainerNotRunningError` | An exec or a kill gets 409, or an attach finds the container exited or paused. `state` comes from an inspect: `created`, `exited`, `paused` … | Start or unpause it, then try again                |
+| `NameConflictError`        | A create of a container, network or volume finds the name taken                                                                               | Use `createOrGet()`, or another name               |
+| `ImageNotFoundError`       | A create gets 404 and the image is not on the engine; a pull or a push gets 404                                                               | Pull or build the image; check the name or `auth`  |
+| `NetworkNotFoundError`     | A create gets 404 and the image is on the engine; a request about a network gets 404                                                          | Create the network first                           |
+| `VolumeNotFoundError`      | A request about a volume gets 404                                                                                                             | Create the volume again                            |
+| `BindSourceNotFoundError`  | A create or a start refuses a bind mount whose `source` does not exist on the engine's host                                                   | Tell the user which host path is missing           |
+| `VolumeInUseError`         | A volume removal gets 409                                                                                                                     | Remove its containers first, or wait and try again |
+| `NetworkInUseError`        | A network removal gets 403 while containers are connected                                                                                     | Disconnect them first                              |
+| `ImageInUseError`          | An image removal gets 409                                                                                                                     | Remove its containers first, or use `force`        |
+| `PathNotFoundError`        | A file request gets 404 and the container exists                                                                                              | Use a default, or create the file                  |
+| `NotAFileError`            | `readFile()` finds a directory, a link or another kind of entry. `kind` names it                                                              | Use `getArchive()` for the tree                    |
+| `ReadOnlyPathError`        | The engine refuses an extraction, and an inspect shows that the directory is on a read-only root filesystem or in a read-only mount           | Write under a writable mount, or use `exec()`      |
 
 Each class extends a base class, so a broad catch still works. `DockerError` is the base of every error of the package. `DockerEngineError` is the base of every answer of the engine that is an error. It has `status`, `method` and `path`, and its `message` is the message of the engine. An error with no class of its own, such as an error in the progress of a pull, is a `DockerEngineError`.
 
@@ -110,11 +113,12 @@ await postgres.exec({ Cmd: ['pg_isready'] }).catch(async (error) => {
 
 Some answers of the engine are not errors here:
 
-| Call                                                                                             | Engine answer | Result      |
-| ------------------------------------------------------------------------------------------------ | ------------- | ----------- |
-| `containers.find()`, `volumes.find()`, `networks.find()`, `images.inspect()`, `container.stat()` | 404           | `undefined` |
-| `container.start()` of a running container, `container.stop()` of a stopped one                  | 304           | resolves    |
-| `remove()` of a missing container, volume or network                                             | 404           | resolves    |
+| Call                                                                            | Engine answer | Result      |
+| ------------------------------------------------------------------------------- | ------------- | ----------- |
+| `containers.find()`, `volumes.find()`, `networks.find()`, `images.inspect()`    | 404           | `undefined` |
+| `container.stat()` of a missing path, when the container exists                 | 404           | `undefined` |
+| `container.start()` of a running container, `container.stop()` of a stopped one | 304           | resolves    |
+| `remove()` of a missing container, volume, network or image                     | 404           | resolves    |
 
 A removal of a container whose removal is already in progress (409) waits until the container is gone, and then resolves.
 
@@ -209,6 +213,8 @@ for await (const { stream, data } of output) {
 if ((await output.exitCode) !== 0) throw new Error('The tests failed');
 ```
 
+`attach()` reads the state of the container first. For a created container, the exit code is the code of its next exit, so attach before `start()`. For a running container, it is the code when the container stops. An exited or a paused container makes `attach()` reject with `ContainerNotRunningError`.
+
 ## Run a command in a container
 
 `container.exec()` runs a command next to the main process of a running container. It gives the exit code, standard output, standard error, and `output`, the two in the order of the engine. The package does not remove the last newline.
@@ -245,13 +251,13 @@ const { stdout } = await psql.collect();
 
 The end of the input depends on the host. On a Unix socket, the package shuts down the write side of the socket. Over SSH, it closes the standard input of `ssh`, and `docker system dial-stdio` then closes the write side to the engine. On a Windows named pipe, it writes a message of zero bytes, because a pipe has no shutdown of one side: the engine listens on its pipe in message mode and reads that message as the end. `CloseWrite` of go-winio, which the Docker CLI uses, sends the same message.
 
-A signal cancels the wait. It does not stop the command: the Engine API has no request that stops an exec. To stop a command, kill the container, or run the command under `timeout` in the container.
+A signal cancels the wait. It does not stop the command: the Engine API has no request that stops an exec. To stop a command, kill the container, or run the command under `timeout` in the container. A signal also cancels an iteration of a container process: the iteration rejects with the reason of the signal, as each cancel does ([the async glossary](../async/CONTEXT.md)).
 
 A container or an exec with a TTY (`Tty: true`) gives a raw stream. Then each chunk is `stdout`.
 
 ## Read the logs
 
-`container.logs()` gives the logs until now: standard output, standard error and `output`, as `exec()` does. `container.followLogs()` gives chunks as the container writes them, until the container stops or the signal aborts. Both take the query of the Engine API: `tail`, `since` and `timestamps`.
+`container.logs()` gives the logs until now: standard output, standard error and `output`, as `exec()` does. `container.followLogs()` gives chunks as the container writes them. The iteration ends when the container stops. When the signal aborts first, the iteration rejects with the reason of the signal. Both take the query of the Engine API: `tail`, `since` and `timestamps`.
 
 ```ts
 const { output } = await postgres.logs({ tail: 50 });
@@ -291,12 +297,14 @@ const stat = await postgres.stat('/srv/run.sh');
 // { name: 'run.sh', size: 120, mode: 493, mtime: '…', linkTarget: '' }
 ```
 
-- `writeFiles()` sends one archive and extracts it at `/`. The engine creates each parent directory that an entry implies.
-- A written file belongs to root, as with `docker cp`. An entry with `uid` and `gid` keeps them.
-- `readFile()` gives the bytes of one regular file. It rejects for a directory.
+- `writeFiles()` sends one archive. It extracts the archive in the deepest directory that holds each entry and that already exists, which it finds with `stat()`. The engine creates each parent directory that an entry implies below that directory. Thus a container with a read-only root filesystem can still get files in a writable volume: the engine checks only the directory of the extraction.
+- A written entry belongs to its `uid` and `gid`, or to root (0:0) when it has none. The package puts them in the archive, and the engine keeps the owner of each entry in the archive.
+- `putArchive(directory, archive, { copyUIDGID: true })` gives each extracted entry to the user of the container (`Config.User`) in place of the owner in the archive.
+- `readFile()` gives the bytes of one regular file. A missing path makes it reject with `PathNotFoundError`, and a directory, a link or another kind of entry with `NotAFileError`.
+- `stat()` gives `undefined` for a missing path. A missing container makes each file request reject with `ContainerNotFoundError`.
 - `getArchive(path)` and `putArchive(directory, archive)` give the tar streams themselves, for a directory or a large tree.
 - The engine cannot reach `/proc`, `/sys`, `/dev`, a tmpfs mount, or a mount made inside the container. For such a path, use `exec()`.
-- A read-only root filesystem or volume makes `writeFiles()` reject with `ReadOnlyPathError`. A missing path makes `readFile()` reject with `PathNotFoundError`.
+- When the directory of the extraction is on a read-only root filesystem or in a read-only mount, `writeFiles()` and `putArchive()` reject with `ReadOnlyPathError`.
 
 ## Control a container
 
@@ -358,6 +366,7 @@ const ghcr = {
   serveraddress: 'ghcr.io',
 };
 await docker.images.pull('ghcr.io/example/private:1', { auth: ghcr });
+await docker.images.tag('app:1', 'ghcr.io/example/app:1');
 await docker.images.push('ghcr.io/example/app:1', { auth: ghcr });
 
 const archive = await docker.images.save(['alpine:3']);
@@ -370,7 +379,7 @@ await docker.images.remove('alpine:3');
 
 ## Events
 
-`docker.events()` gives the events of the engine as they happen, until the signal aborts. It takes the `since` and `filters` of the Engine API.
+`docker.events()` gives the events of the engine as they happen. The iteration ends only when the signal aborts, and then it rejects with the reason of the signal. It takes the `since` and `filters` of the Engine API.
 
 ```ts
 for await (const event of docker.events({
@@ -404,7 +413,9 @@ Each connection of the client is one `ssh` process. The client keeps idle connec
 
 ## The API version
 
-The path of each request starts with the API version, as in `/v1.51/containers/json`. `Docker.connect()` reads the highest version of the engine from `GET /_ping`. The client then uses the lower of that version and its own highest version. It refuses an engine that is older than its own lowest version. `docker.apiVersion` gives the version that the client uses.
+The path of each request starts with the API version, as in `/v1.51/containers/json`. `Docker.connect()` reads the highest version of the engine from `GET /_ping`. The client then uses the lower of that version and its own highest version. It refuses an engine that is older than its own lowest version with `UnsupportedEngineError`. `docker.apiVersion` gives the version that the client uses.
+
+The lowest version is 1.44. From that version on, "`POST /networks/create` with a duplicated name now fails systematically" ([Engine API version history](https://docs.docker.com/reference/api/engine/version-history/)), and `networks.createOrGet()` needs that refusal. The highest version is the highest one that the tests of the package run on.
 
 ## What the package does not do
 
@@ -454,7 +465,7 @@ export class Docker implements AsyncDisposable {
   readonly images: Images;
 
   info(options?: CancelOptions): Promise<EngineApi.SystemInfo>;
-  /** The events of the engine as they happen, until the signal aborts. */
+  /** The events of the engine as they happen. An abort of the signal rejects the iteration with its reason. */
   events(
     options?: CancelOptions & { since?: number; filters?: Filters },
   ): AsyncIterable<EngineApi.EventMessage>;
@@ -709,6 +720,12 @@ export interface Images {
       auth?: EngineApi.AuthConfig;
     },
   ): Promise<void>;
+  /** Gives the image a second name, such as a registry name before a push. target: 'repository:tag'. */
+  tag(
+    reference: string,
+    target: string,
+    options?: CancelOptions,
+  ): Promise<void>;
   push(
     reference: string,
     options: CancelOptions & { auth: EngineApi.AuthConfig },
@@ -722,6 +739,7 @@ export interface Images {
     archive: ReadableStream<Uint8Array> | Uint8Array,
     options?: CancelOptions,
   ): Promise<void>;
+  /** Resolves for 404. */
   remove(
     reference: string,
     options?: CancelOptions & { force?: boolean; noprune?: boolean },
@@ -733,6 +751,14 @@ export class DockerError extends Error {}
 
 export class ConnectionFailedError extends DockerError {
   readonly host: string;
+}
+
+export class UnsupportedHostError extends DockerError {
+  readonly host: string;
+}
+
+export class ContextNotFoundError extends DockerError {
+  readonly context: string;
 }
 
 export class UnsupportedEngineError extends DockerError {
@@ -791,6 +817,12 @@ export class PathNotFoundError extends DockerEngineError {
   readonly container: string;
   readonly path: string;
 }
+export class NotAFileError extends DockerEngineError {
+  readonly container: string;
+  readonly path: string;
+  /** The kind of the entry: 'directory', 'symlink', 'link' or 'other'. */
+  readonly kind: 'directory' | 'symlink' | 'link' | 'other';
+}
 export class ReadOnlyPathError extends DockerEngineError {
   readonly container: string;
   readonly path: string;
@@ -804,24 +836,24 @@ export type * as EngineApi from './engine-api.ts';
 
 Each call sends these requests of the Engine API:
 
-| Call                                                                         | Request                                                                                                                                                           |
-| ---------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Docker.connect()`                                                           | `GET /_ping`                                                                                                                                                      |
-| `docker.info()`, `docker.events()`                                           | `GET /info`, `GET /events`                                                                                                                                        |
-| `containers.create()`, `createOrGet()`                                       | `POST /containers/create`, and `GET /containers/{id}/json` after a 409                                                                                            |
-| `containers.run()`                                                           | `create`, `attach`, `start`, `wait`, `DELETE /containers/{id}`                                                                                                    |
-| `containers.find()`, `container.inspect()`, `container.port()`               | `GET /containers/{id}/json`                                                                                                                                       |
-| `containers.list()`                                                          | `GET /containers/json`                                                                                                                                            |
-| `start()`, `stop()`, `restart()`, `kill()`, `pause()`, `unpause()`, `wait()` | `POST /containers/{id}/start`, `/stop`, `/restart`, `/kill`, `/pause`, `/unpause`, `/wait`                                                                        |
-| `container.remove()`                                                         | `DELETE /containers/{id}`                                                                                                                                         |
-| `container.logs()`, `followLogs()`                                           | `GET /containers/{id}/logs`                                                                                                                                       |
-| `container.attach()`                                                         | `POST /containers/{id}/attach` (hijacked)                                                                                                                         |
-| `container.exec()`, `spawn()`                                                | `POST /containers/{id}/exec`, `POST /exec/{id}/start` (hijacked), `GET /exec/{id}/json`                                                                           |
-| `container.stat()`, `readFile()`, `getArchive()`                             | `HEAD`, `GET /containers/{id}/archive`                                                                                                                            |
-| `container.writeFiles()`, `putArchive()`                                     | `PUT /containers/{id}/archive`                                                                                                                                    |
-| `volumes.*`, `volume.*`                                                      | `POST /volumes/create`, `GET /volumes/{name}`, `GET /volumes`, `DELETE /volumes/{name}`                                                                           |
-| `networks.*`, `network.*`                                                    | `POST /networks/create`, `GET /networks/{id}`, `GET /networks`, `POST /networks/{id}/connect`, `/disconnect`, `DELETE /networks/{id}`                             |
-| `images.*`                                                                   | `GET /images/{name}/json`, `GET /images/json`, `POST /images/create`, `POST /images/{name}/push`, `GET /images/get`, `POST /images/load`, `DELETE /images/{name}` |
+| Call                                                                         | Request                                                                                                                                                                                      |
+| ---------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Docker.connect()`                                                           | `GET /_ping`                                                                                                                                                                                 |
+| `docker.info()`, `docker.events()`                                           | `GET /info`, `GET /events`                                                                                                                                                                   |
+| `containers.create()`, `createOrGet()`                                       | `POST /containers/create`, and `GET /containers/{id}/json` after a 409                                                                                                                       |
+| `containers.run()`                                                           | `create`, `attach`, `start`, `wait`, `DELETE /containers/{id}`                                                                                                                               |
+| `containers.find()`, `container.inspect()`, `container.port()`               | `GET /containers/{id}/json`                                                                                                                                                                  |
+| `containers.list()`                                                          | `GET /containers/json`                                                                                                                                                                       |
+| `start()`, `stop()`, `restart()`, `kill()`, `pause()`, `unpause()`, `wait()` | `POST /containers/{id}/start`, `/stop`, `/restart`, `/kill`, `/pause`, `/unpause`, `/wait`                                                                                                   |
+| `container.remove()`                                                         | `DELETE /containers/{id}`                                                                                                                                                                    |
+| `container.logs()`, `followLogs()`                                           | `GET /containers/{id}/logs`                                                                                                                                                                  |
+| `container.attach()`                                                         | `POST /containers/{id}/attach` (hijacked)                                                                                                                                                    |
+| `container.exec()`, `spawn()`                                                | `POST /containers/{id}/exec`, `POST /exec/{id}/start` (hijacked), `GET /exec/{id}/json`                                                                                                      |
+| `container.stat()`, `readFile()`, `getArchive()`                             | `HEAD`, `GET /containers/{id}/archive`                                                                                                                                                       |
+| `container.writeFiles()`, `putArchive()`                                     | `PUT /containers/{id}/archive`                                                                                                                                                               |
+| `volumes.*`, `volume.*`                                                      | `POST /volumes/create`, `GET /volumes/{name}`, `GET /volumes`, `DELETE /volumes/{name}`                                                                                                      |
+| `networks.*`, `network.*`                                                    | `POST /networks/create`, `GET /networks/{id}`, `GET /networks`, `POST /networks/{id}/connect`, `/disconnect`, `DELETE /networks/{id}`                                                        |
+| `images.*`                                                                   | `GET /images/{name}/json`, `GET /images/json`, `POST /images/create`, `POST /images/{name}/tag`, `POST /images/{name}/push`, `GET /images/get`, `POST /images/load`, `DELETE /images/{name}` |
 
 ## What each repository changes
 

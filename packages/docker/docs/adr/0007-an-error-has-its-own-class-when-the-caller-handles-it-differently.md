@@ -20,7 +20,7 @@ microsandbox, which the same repositories use, has 36 error classes (0.7.8). Som
 
 ## Consequences
 
-- The package has a class for each of these cases, and for no others: `ConnectionFailedError`, `UnsupportedEngineError`, `ContainerNotFoundError`, `ContainerNotRunningError`, `NameConflictError`, `ImageNotFoundError`, `NetworkNotFoundError`, `VolumeNotFoundError`, `BindSourceNotFoundError`, `VolumeInUseError`, `NetworkInUseError`, `ImageInUseError`, `PathNotFoundError` and `ReadOnlyPathError`. The README gives the next step of the caller for each one.
+- The package has a class for each of these cases, and for no others: `ConnectionFailedError`, `UnsupportedHostError`, `ContextNotFoundError`, `UnsupportedEngineError`, `ContainerNotFoundError`, `ContainerNotRunningError`, `NameConflictError`, `ImageNotFoundError`, `NetworkNotFoundError`, `VolumeNotFoundError`, `BindSourceNotFoundError`, `VolumeInUseError`, `NetworkInUseError`, `ImageInUseError`, `PathNotFoundError`, `NotAFileError` and `ReadOnlyPathError`. The README gives the next step of the caller for each one.
 - `DockerError` is the base of every error of the package. `DockerEngineError` extends it, and it is the base of every class that comes from an answer of the engine. A broad catch still works, and an error with no class of its own stays a `DockerEngineError`, for example an error in the progress of a pull.
 - A class carries what its handling needs: the container, the name, the state, the host path.
 - The class comes from the request and its status, not from the text. When one status has two meanings, the package sends one more request:
@@ -28,5 +28,7 @@ microsandbox, which the same repositories use, has 36 error classes (0.7.8). Som
   - A 404 of `/containers/{id}/archive` is a missing container or a missing path ("Container or path does not exist" in the Engine API reference). An inspect of the container tells which.
   - A 409 of an exec, an attach or a kill means the container does not run. An inspect gives its `state`, because the next step for `paused` (unpause) differs from the next step for `exited` (start).
   - A 403 of `DELETE /networks/{id}` is a pre-defined network or a network with connected containers. An inspect of the network tells which.
+  - The engine refuses an extraction into a read-only place with 400, the status of each bad parameter, although the reference documents 403. An inspect of the container tells: `HostConfig.ReadonlyRootfs`, and the `RW` flag of the mount that holds the directory.
+  - Moby gives no 409 for an attach to an exited container. Thus `attach()` inspects the container first, and its state decides.
 - One class needs the text: `BindSourceNotFoundError`. The engine answers a missing bind source with the same status as other bad parameters. Moby builds the text from one fixed format, `"bind source path does not exist: %s"` (`errBindSourceDoesNotExist` in [`daemon/volume/mounts/validate.go`](https://github.com/moby/moby/blob/master/daemon/volume/mounts/validate.go)), and the package reads the path from it.
 - A removal of a container whose removal is already in progress gets 409. The package waits until the container is gone, as the global teardown of `@zukhruf/testing` does today. A caller does nothing different, so it gets no class.

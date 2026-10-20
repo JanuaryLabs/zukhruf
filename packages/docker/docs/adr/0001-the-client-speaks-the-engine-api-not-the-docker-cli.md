@@ -27,7 +27,7 @@ The CLI also adds work that a request does not need:
 
 - **Keep the Docker CLI.** Move the CLI code of `@zukhruf/testing/docker` into a base package. The text2sql desktop app still cannot use it, so the Engine API client of text2sql stays a second copy. The regular expressions stay.
 - **dockerode.** A base package of zukhruf imports only Node.js and other base packages ([ADR 0001 of zukhruf](../../../../docs/adr/0001-zukhruf-is-a-layered-standard-library.md)). dockerode 5.0.1 brings `@grpc/grpc-js`, `protobufjs`, `tar-fs` and docker-modem. docker-modem brings `ssh2`, and `ssh2` has the native optional dependencies `cpu-features` and `nan`, which an Electron app must package. docker-modem reads `DOCKER_HOST` but not Docker contexts. Its types come from DefinitelyTyped, not from the package.
-- **A client generated from the Engine API specification** ([`api/swagger.yaml`](https://github.com/moby/moby/blob/master/api/swagger.yaml), Swagger 2.0). It gives each of the 108 operations of the API (version 1.57), but the package uses 39. A generator does not know the multiplexed stream or the hijacked connection, so attach, exec and logs need code by hand all the same.
+- **A client generated from the Engine API specification** ([`api/swagger.yaml`](https://github.com/moby/moby/blob/master/api/swagger.yaml), Swagger 2.0). It gives each of the 108 operations of the API (version 1.57), but the package uses 40. A generator does not know the multiplexed stream or the hijacked connection, so attach, exec and logs need code by hand all the same.
 - **The Engine API through `node:http`.** This option was selected.
 
 ## Consequences
