@@ -292,11 +292,13 @@ export function SpecialNode({
     const junctionFill = junctionFillColor(node, themeAccent);
     return (
       <motion.g style={{ opacity, y: translateY }}>
-        <circle
+        <rect
           data-diagram-junction={node.id}
-          cx={box.x + box.w / 2}
-          cy={box.y + box.h / 2}
-          r={radius}
+          x={box.x}
+          y={box.y}
+          width={box.w}
+          height={box.h}
+          rx={radius}
           fill={junctionFill}
           stroke={junctionStroke}
           strokeWidth={1.5}

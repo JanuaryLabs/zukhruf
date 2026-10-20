@@ -137,7 +137,7 @@ function firstRun(runs: TextRun[] | undefined, what: string): TextRun {
 }
 
 function px(source: string, property: string): number {
-  const value = source.match(new RegExp(`[;"]${property}:(-?[\\d.]+)px`));
+  const value = source.match(new RegExp(`[;"]${property}:(-?[\\d.]+)(?:px)?`));
   assert.ok(value?.[1], `${source} should set ${property}`);
   return Number(value[1]);
 }
@@ -302,30 +302,24 @@ test('the html output places each node box and text run at the position its Grap
   );
 
   // Assert
-  const { viewBox } = layout;
   for (const id of ['api', 'vm']) {
     const { box, text } = nodeLayout(layout, id);
-    const div = html.match(
-      new RegExp(
-        `<div data-diagram-node="${id}"[^>]*>([\\s\\S]*?)</div>(?=<div data-diagram-node=|<svg)`,
-      ),
-    );
+    const div = html.match(new RegExp(`<div data-diagram-node="${id}"[^>]*>`));
     assert.ok(div, `html node ${id} should render`);
-    const style = div[0].slice(0, div[0].indexOf('>'));
     assert.deepEqual(
       {
-        x: px(style, 'left'),
-        y: px(style, 'top'),
-        w: px(style, 'width'),
-        h: px(style, 'height'),
+        x: px(div[0], 'left'),
+        y: px(div[0], 'top'),
+        w: px(div[0], 'width'),
+        h: px(div[0], 'height'),
       },
-      { x: box.x - viewBox.x, y: box.y - viewBox.y, w: box.w, h: box.h },
+      box,
       id,
     );
     for (const run of text) {
       assert.deepEqual(
-        htmlRunPosition(div[0], run.text),
-        { x: run.bounds.x - box.x, y: run.bounds.y - box.y },
+        htmlRunPosition(html, run.text),
+        { x: run.bounds.x, y: run.bounds.y },
         `${id} "${run.text}"`,
       );
     }

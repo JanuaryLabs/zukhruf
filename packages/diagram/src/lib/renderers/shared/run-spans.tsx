@@ -1,5 +1,5 @@
 import type { TextRun } from '../../layouts/graph/graph-layout-result.ts';
-import { baselineStep, runFill } from './text-runs.ts';
+import { runFill } from './text-runs.ts';
 
 export function RunSpans({
   runs,
@@ -15,7 +15,7 @@ export function RunSpans({
     <tspan
       key={i}
       x={run.x}
-      dy={baselineStep(runs, i)}
+      y={run.y}
       {...(fill === undefined
         ? {}
         : {

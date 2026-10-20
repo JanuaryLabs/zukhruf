@@ -178,15 +178,11 @@ function NodeBody({
       {items.length > 0 && (
         <g>
           {items.map(({ run, bullet }, i) => (
-            <g
-              key={i}
-              data-diagram-node-item={`${node.id}:${i}`}
-              transform={`translate(0 ${run.y})`}
-            >
-              <circle cx={bullet.x} cy={bullet.y - run.y} r={2.2} fill={fill} />
+            <g key={i} data-diagram-node-item={`${node.id}:${i}`}>
+              <circle cx={bullet.x} cy={bullet.y} r={2.2} fill={fill} />
               <text
                 x={run.x}
-                y={0}
+                y={run.y}
                 textAnchor="start"
                 fontFamily={FONT_FAMILY[run.font.face]}
                 fontSize={run.font.size}

@@ -21,7 +21,9 @@ function htmlNodeBox(markup: string, id: string) {
   const tag = markup.match(new RegExp(`<div data-diagram-node="${id}"[^>]*>`));
   assert.ok(tag, `html node ${id} should render`);
   const px = (property: string) => {
-    const value = tag[0].match(new RegExp(`[;"]${property}:(-?[\\d.]+)px`));
+    const value = tag[0].match(
+      new RegExp(`[;"]${property}:(-?[\\d.]+)(?:px)?`),
+    );
     assert.ok(value, `html node ${id} should set ${property}`);
     return Number(value[1]);
   };
@@ -34,12 +36,10 @@ function svgNodeBox(markup: string, id: string) {
       `<rect data-diagram-node="${id}"[^>]*\\bx="([\\d.-]+)"[^>]*\\by="([\\d.-]+)"[^>]*\\bwidth="([\\d.]+)"[^>]*\\bheight="([\\d.]+)"`,
     ),
   );
-  const viewBox = markup.match(/<svg[^>]*viewBox="([\d.-]+) ([\d.-]+) /);
   assert.ok(rect, `svg node ${id} should render`);
-  assert.ok(viewBox, 'svg viewBox should render');
   return {
-    x: Number(rect[1]) - Number(viewBox[1]),
-    y: Number(rect[2]) - Number(viewBox[2]),
+    x: Number(rect[1]),
+    y: Number(rect[2]),
     w: Number(rect[3]),
     h: Number(rect[4]),
   };

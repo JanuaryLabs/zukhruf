@@ -164,7 +164,6 @@ export function DiagramNodeIcon({
   size: number;
   color: string;
 }) {
-  const scale = size / 64;
   const common = {
     fill: 'none',
     stroke: color,
@@ -174,9 +173,14 @@ export function DiagramNodeIcon({
   };
 
   return (
-    <g
+    <svg
       data-diagram-node-icon={icon}
-      transform={`translate(${x} ${y}) scale(${scale})`}
+      x={x}
+      y={y}
+      width={size}
+      height={size}
+      viewBox="0 0 64 64"
+      overflow="visible"
     >
       {icon === 'certificate' && (
         <>
@@ -374,7 +378,7 @@ export function DiagramNodeIcon({
           <circle cx="48" cy="32" r="4.8" fill={color} />
         </>
       )}
-    </g>
+    </svg>
   );
 }
 
@@ -633,10 +637,6 @@ function EdgeLabel({
   );
 }
 
-/**
- * The badge draws in its own frame, centred on the badge, so that it can move
- * as one piece.
- */
 function EdgeBadge({
   edge,
   badge,
@@ -649,23 +649,16 @@ function EdgeBadge({
   opacity: MotionValue<number>;
 }) {
   const { box, icon, text } = badge;
-  const origin = { x: box.x + box.w / 2, y: box.y + box.h / 2 };
-  const local = text.map((run) => ({
-    ...run,
-    x: run.x - origin.x,
-    y: run.y - origin.y,
-  }));
-  const [first] = local;
+  const [first] = text;
 
   return (
     <motion.g
       data-diagram-edge-badge={`${edge.from}->${edge.to}`}
-      transform={`translate(${origin.x} ${origin.y})`}
       style={{ opacity }}
     >
       <rect
-        x={box.x - origin.x}
-        y={box.y - origin.y}
+        x={box.x}
+        y={box.y}
         width={box.w}
         height={box.h}
         rx={10}
@@ -676,8 +669,8 @@ function EdgeBadge({
       {edge.badgeIcon && icon && (
         <DiagramNodeIcon
           icon={edge.badgeIcon}
-          x={icon.x - origin.x}
-          y={icon.y - origin.y}
+          x={icon.x}
+          y={icon.y}
           size={icon.w}
           color={fill}
         />
@@ -692,7 +685,7 @@ function EdgeBadge({
           fontWeight={first.font.weight}
           fill={fill}
         >
-          <RunSpans runs={local} />
+          <RunSpans runs={text} />
         </text>
       )}
     </motion.g>

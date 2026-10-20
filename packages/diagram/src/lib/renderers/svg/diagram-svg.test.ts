@@ -1726,7 +1726,7 @@ test('renders node body item lists and descriptions as rows inside the card', ()
     for (const [i, item] of items.entries()) {
       const row = markup.match(
         new RegExp(
-          `<g data-diagram-node-item="${nodeId}:${i}" transform="translate\\(0 (-?[\\d.]+)\\)"[\\s\\S]*?${escapeRegExp(item)}`,
+          `<g data-diagram-node-item="${nodeId}:${i}">[\\s\\S]*?<text[^>]* y="(-?[\\d.]+)"[^>]*>${escapeRegExp(item)}`,
         ),
       );
       assert.ok(row?.[1], `${nodeId} item ${i} should render as a row`);
@@ -1976,15 +1976,12 @@ test('junction nodes merge bundled branches into one trunk at the junction', () 
   );
 
   // Assert
-  const junction = nodeOf(layout, 'obs-bus').box;
-  const centre = {
-    x: junction.x + junction.w / 2,
-    y: junction.y + junction.h / 2,
-  };
+  const { box: junction, radius } = nodeOf(layout, 'obs-bus');
+  assert.equal(radius, junction.w / 2, 'the junction should draw as a circle');
   assert.match(
     markup,
     new RegExp(
-      `<circle data-diagram-junction="obs-bus" cx="${centre.x}" cy="${centre.y}"[^>]*stroke="var\\(--dgm-tone-blue-stroke`,
+      `<rect data-diagram-junction="obs-bus" x="${junction.x}" y="${junction.y}" width="${junction.w}" height="${junction.h}" rx="${radius}"[^>]*stroke="var\\(--dgm-tone-blue-stroke`,
     ),
   );
   const branch = markup.match(

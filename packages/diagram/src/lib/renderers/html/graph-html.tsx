@@ -9,7 +9,6 @@ import type {
 import { layoutGraph } from '../../layouts/graph/layout.ts';
 import { FONT_FAMILY, TEXT_SHAPING } from '../../layouts/text/font.ts';
 import type {
-  Box,
   DiagramTexture,
   DiagramViewport,
 } from '../../model/diagram-ir.ts';
@@ -183,16 +182,17 @@ function GraphHTML({
             ),
           )}
         </svg>
-        {boxNodes.map(({ layout: nodeLayout, segment }) => (
-          <NodeBox
-            key={`node-${nodeLayout.node.id}`}
-            layout={nodeLayout}
-            origin={viewBox}
-            progress={progress}
-            start={segment.start}
-            end={segment.end}
-          />
-        ))}
+        <div className="absolute" style={{ left: -viewBox.x, top: -viewBox.y }}>
+          {boxNodes.map(({ layout: nodeLayout, segment }) => (
+            <NodeBox
+              key={`node-${nodeLayout.node.id}`}
+              layout={nodeLayout}
+              progress={progress}
+              start={segment.start}
+              end={segment.end}
+            />
+          ))}
+        </div>
         <svg {...svgLayer}>
           {boxNodes.map(({ layout: nodeLayout, segment }) => (
             <NodeReveal
@@ -305,19 +305,17 @@ function textureImage(
 }
 
 /**
- * A node frame with its text drawn as absolutely placed runs, at the positions
- * the SVG output draws them. The frame is an inset shadow, not a border, so the
- * runs share the frame's origin.
+ * A node frame and its text, each at the layout's own coordinates, in the
+ * layer that GraphHTML moves to the viewBox origin. The runs are siblings of
+ * the frame, so no position is relative to the frame.
  */
 function NodeBox({
   layout,
-  origin,
   progress,
   start,
   end,
 }: {
   layout: NodeLayout;
-  origin: Box;
   progress: MotionValue<number>;
   start: number;
   end: number;
@@ -334,34 +332,35 @@ function NodeBox({
 
   return (
     <motion.div
-      data-diagram-node={node.id}
-      data-diagram-node-tone={node.tone}
-      className="absolute"
-      style={{
-        left: box.x - origin.x,
-        top: box.y - origin.y,
-        width: box.w,
-        height: box.h,
-        boxSizing: 'border-box',
-        borderRadius: layout.radius,
-        ...(frame === 'none'
-          ? {}
-          : {
-              backgroundColor: nodeFrameFill(node, frame),
-              boxShadow: `inset 0 0 0 ${nodeFrameStrokeWidth(node)}px ${nodeFrameStroke(node, frame, themeAccent)}`,
-              ...textureImage(nodeTexture(node, frame)),
-            }),
-        color: fill,
-        opacity,
-        y: translateY,
-      }}
+      className="absolute top-0 left-0"
+      style={{ color: fill, opacity, y: translateY }}
     >
+      <div
+        data-diagram-node={node.id}
+        data-diagram-node-tone={node.tone}
+        className="absolute"
+        style={{
+          left: box.x,
+          top: box.y,
+          width: box.w,
+          height: box.h,
+          boxSizing: 'border-box',
+          borderRadius: layout.radius,
+          ...(frame === 'none'
+            ? {}
+            : {
+                backgroundColor: nodeFrameFill(node, frame),
+                boxShadow: `inset 0 0 0 ${nodeFrameStrokeWidth(node)}px ${nodeFrameStroke(node, frame, themeAccent)}`,
+                ...textureImage(nodeTexture(node, frame)),
+              }),
+        }}
+      />
       {node.icon && icon && (
         <svg
           width={icon.size}
           height={icon.size}
           className="absolute"
-          style={{ left: icon.x - box.x, top: icon.y - box.y }}
+          style={{ left: icon.x, top: icon.y }}
           aria-hidden
         >
           <DiagramNodeIcon
@@ -374,17 +373,12 @@ function NodeBox({
         </svg>
       )}
       {title.map((run, i) => (
-        <RunText
-          key={i}
-          run={run}
-          origin={box}
-          color={runFill(run, fill, themeAccent)}
-        />
+        <RunText key={i} run={run} color={runFill(run, fill, themeAccent)} />
       ))}
       {description.length > 0 && (
         <div data-diagram-node-description={node.id}>
           {description.map((run, i) => (
-            <RunText key={i} run={run} origin={box} />
+            <RunText key={i} run={run} />
           ))}
         </div>
       )}
@@ -393,13 +387,14 @@ function NodeBox({
           <span
             className="absolute rounded-full bg-current"
             style={{
-              left: bullet.x - box.x - 2.2,
-              top: bullet.y - box.y - 2.2,
+              left: bullet.x,
+              top: bullet.y,
               width: 4.4,
               height: 4.4,
+              translate: '-50% -50%',
             }}
           />
-          <RunText run={run} origin={box} />
+          <RunText run={run} />
         </div>
       ))}
       {node.content && contentBox && (
@@ -407,8 +402,8 @@ function NodeBox({
           data-diagram-node-content={node.id}
           className="absolute"
           style={{
-            left: contentBox.x - box.x,
-            top: contentBox.y - box.y,
+            left: contentBox.x,
+            top: contentBox.y,
             width: contentBox.w,
             height: contentBox.h,
           }}
@@ -420,21 +415,13 @@ function NodeBox({
   );
 }
 
-function RunText({
-  run,
-  origin,
-  color,
-}: {
-  run: TextRun;
-  origin: Box;
-  color?: string;
-}) {
+function RunText({ run, color }: { run: TextRun; color?: string }) {
   return (
     <span
       className="absolute whitespace-pre"
       style={{
-        left: run.bounds.x - origin.x,
-        top: run.bounds.y - origin.y,
+        left: run.bounds.x,
+        top: run.bounds.y,
         fontFamily: FONT_FAMILY[run.font.face],
         fontSize: run.font.size,
         fontWeight: run.font.weight,

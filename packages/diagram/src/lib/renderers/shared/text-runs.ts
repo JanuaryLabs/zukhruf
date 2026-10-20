@@ -4,18 +4,6 @@ import type {
 } from '../../layouts/graph/graph-layout-result.ts';
 import { DIAGRAM_DIM } from '../../react/chrome/index.ts';
 
-/**
- * The distance from the previous run's baseline, which an SVG tspan carries as
- * `dy`. Rounded so that a float error in the subtraction does not leak into
- * the markup.
- */
-export function baselineStep(runs: TextRun[], index: number): number {
-  const run = runs[index];
-  const previous = runs[index - 1];
-  if (!run || !previous) return 0;
-  return Number((run.y - previous.y).toFixed(6));
-}
-
 export function runFill(run: TextRun, fill: string, themeAccent: string) {
   if (run.color === 'accent') return themeAccent;
   if (run.color === 'dim') return DIAGRAM_DIM;
