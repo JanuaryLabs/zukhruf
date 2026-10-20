@@ -64,10 +64,10 @@ no change
 
 ## Errors
 
-| Error                          | When                                                                                                                                                                                                                                                                                             |
-| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `new unavailable(path, cause)` | SQLite cannot open the file: `SQLITE_CANTOPEN` (14), for a missing file or a file that the system denies. `SQLITE_AUTH` (23) also gives this error. The tests do not cover 23: SQLite gives it when an authorizer callback denies an action, and the connection has no authorizer when it opens. |
-| The error of SQLite            | All other failures.                                                                                                                                                                                                                                                                              |
+| Error                          | When                                                                                                                            |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------- |
+| `new unavailable(path, cause)` | SQLite cannot open the file: `SQLITE_CANTOPEN` (14), for a missing file or a file that the system denies, a privacy denial too. |
+| The error of SQLite            | All other failures.                                                                                                             |
 
 ## The same concepts in other systems
 

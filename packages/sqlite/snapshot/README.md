@@ -81,11 +81,11 @@ true
 
 ## Errors
 
-| Error                          | When                                                                                                                                                                                                                                                                                             |
-| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `new unavailable(path, cause)` | SQLite cannot open the file: `SQLITE_CANTOPEN` (14), for a missing file or a file that the system denies. `SQLITE_AUTH` (23) also gives this error. The tests do not cover 23: SQLite gives it when an authorizer callback denies an action, and the connection has no authorizer when it opens. |
-| `new schema(path, missing)`    | `requireColumns` finds a missing column. The snapshot is closed.                                                                                                                                                                                                                                 |
-| The error of SQLite            | All other failures, for example a file that is not a database. The constructor closes the connection before it throws.                                                                                                                                                                           |
+| Error                          | When                                                                                                                            |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------- |
+| `new unavailable(path, cause)` | SQLite cannot open the file: `SQLITE_CANTOPEN` (14), for a missing file or a file that the system denies, a privacy denial too. |
+| `new schema(path, missing)`    | `requireColumns` finds a missing column. The snapshot is closed.                                                                |
+| The error of SQLite            | All other failures, for example a file that is not a database. The constructor closes the connection before it throws.          |
 
 ## The same concepts in other systems
 

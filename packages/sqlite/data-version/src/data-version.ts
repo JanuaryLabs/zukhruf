@@ -4,10 +4,6 @@ import { DatabaseSync, type StatementSync } from 'node:sqlite';
 // access, naming what the caller needs to read it.
 export type UnavailableError = new (path: string, cause: unknown) => Error;
 
-// SQLite's CANTOPEN, for a missing file or one the system denies, and AUTH.
-// Any other failure is not one that access can fix.
-const unavailableCodes = new Set([14, 23]);
-
 function open(path: string, unavailable: UnavailableError): DatabaseSync {
   try {
     return new DatabaseSync(path, { readOnly: true });
@@ -15,7 +11,11 @@ function open(path: string, unavailable: UnavailableError): DatabaseSync {
     if (
       cause instanceof Error &&
       'errcode' in cause &&
-      unavailableCodes.has(Number(cause.errcode))
+      // SQLite's CANTOPEN (14). A missing or denied file fails the open()
+      // syscall, and SQLite reports that as CANTOPEN, a privacy denial too.
+      // SQLite gives AUTH only for an authorizer, and this private connection
+      // has none. Any other failure is not one that access can fix.
+      cause.errcode === 14
     )
       throw new unavailable(path, cause);
     throw cause;

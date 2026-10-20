@@ -18,10 +18,6 @@ export type SchemaError = new (
 // The columns a reader depends on, by table.
 export type SnapshotColumns = Readonly<Record<string, readonly string[]>>;
 
-// SQLite's CANTOPEN, for a missing file or one the system denies, and AUTH.
-// Any other failure is not one that access can fix.
-const unavailableCodes = new Set([14, 23]);
-
 function open(path: string, unavailable: UnavailableError): DatabaseSync {
   try {
     return new DatabaseSync(path, { readOnly: true });
@@ -29,7 +25,11 @@ function open(path: string, unavailable: UnavailableError): DatabaseSync {
     if (
       cause instanceof Error &&
       'errcode' in cause &&
-      unavailableCodes.has(Number(cause.errcode))
+      // SQLite's CANTOPEN (14). A missing or denied file fails the open()
+      // syscall, and SQLite reports that as CANTOPEN, a privacy denial too.
+      // SQLite gives AUTH only for an authorizer, and this private connection
+      // has none. Any other failure is not one that access can fix.
+      cause.errcode === 14
     )
       throw new unavailable(path, cause);
     throw cause;
