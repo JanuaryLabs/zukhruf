@@ -2330,6 +2330,42 @@ describe('layoutGraph routes edges, one rung at a time from one edge to the home
       );
     }
   });
+
+  test('a fan-out that fits exactly at the minimum spacing routes', () => {
+    // Arrange
+    const card = (
+      id: string,
+      row: number,
+      col: number,
+      title: string,
+      detail: string,
+    ): DiagramNode =>
+      cell(id, row, col, {
+        label: [{ text: title }, { text: detail }],
+        frame: 'solid',
+        textAlign: 'start',
+      });
+    const ir = graph({
+      nodes: [
+        card('registry', 1, 0, 'Registry entry', 'needsApproval: true'),
+        card('handler', 0, 2, 'Tool handler', 'skips auto-resolution'),
+        card('pending', 1, 2, 'Pending detector', 'shows wizard'),
+        card('timeline', 2, 2, 'Timeline', 'renders label only'),
+        card('continue', 3, 2, 'Auto-continue', 'waits for output'),
+      ],
+      edges: [
+        { from: 'registry', to: 'handler' },
+        { from: 'registry', to: 'pending' },
+        { from: 'registry', to: 'timeline' },
+      ],
+    });
+
+    // Act
+    const layout = layoutGraph(ir);
+
+    // Assert
+    assertSoundLayout(layout);
+  });
 });
 
 describe('layoutGraph routes the shapes of the shipped diagrams', () => {

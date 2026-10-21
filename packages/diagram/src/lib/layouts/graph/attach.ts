@@ -1,5 +1,6 @@
 import type { Box, Point } from '../../model/diagram-ir.ts';
 import type { Connection, ConnectionEnd } from './connections.ts';
+import { round } from './round.ts';
 import { GRID } from './route-search.ts';
 import {
   OPPOSITE,
@@ -219,9 +220,14 @@ function spread(end: ConnectionEnd, count: number): number[] {
       (_, slot) => a + ((slot + 1) / (counts[index]! + 1)) * (b - a),
     ),
   );
-  const closest = Math.min(
-    ...intervals.flatMap(([a, b], index) =>
-      counts[index]! > 1 ? [(b - a) / (counts[index]! + 1)] : [],
+  // Rounded to the layout's output precision: when freeIntervals shrinks a
+  // side to fit its slots exactly SLOT_PITCH apart, float drift lands just
+  // under SLOT_PITCH.
+  const closest = round(
+    Math.min(
+      ...intervals.flatMap(([a, b], index) =>
+        counts[index]! > 1 ? [(b - a) / (counts[index]! + 1)] : [],
+      ),
     ),
   );
   if (alongs.length < count || closest < SLOT_PITCH) {
