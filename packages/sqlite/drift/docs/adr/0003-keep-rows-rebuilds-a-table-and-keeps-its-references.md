@@ -44,4 +44,5 @@ The foreign-key rule: when foreign keys are on, and a table (the stale table too
 - A renamed column reads as one column dropped and one column added. The values of the old column are discarded.
 - A stored row that does not fit the declaration makes `apply` fail with the error of SQLite. The caller changes or removes the row before `apply`.
 - In a transaction of the caller, with foreign keys on, `apply` fails when a table refers to a stale table.
+- SQLite does not examine the body of a trigger or a view at `CREATE`, so a rebuild can leave a trigger or a view that names a dropped column. `apply` compiles a `DELETE`, an `INSERT` and an `UPDATE` of each rebuilt table, and each view. When a trigger does not compile, or a view compiled before the rebuild and does not compile after it, `apply` fails and the transaction rolls back.
 - `apply` with `rows: 'replace'` does what ADR 0002 tells.

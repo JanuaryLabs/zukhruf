@@ -90,21 +90,31 @@ export class Declaration {
         database,
         () => {
           const stale = this.#stale(database);
-          if (this.#rows === 'keep') this.#keep(database, stale);
-          else if (stale.length > 0)
-            for (const object of this.#objects.toReversed()) {
-              const found = stored(database, object.name);
-              if (found !== undefined) drop(database, found);
-            }
-          for (const object of this.#objects)
-            if (stored(database, object.name) === undefined)
-              database.exec(object.sql);
+          if (this.#rows === 'keep') {
+            const views = compiled(database);
+            const rebuilt = this.#keep(database, stale);
+            this.#create(database);
+            verify(database, rebuilt, views);
+          } else {
+            if (stale.length > 0)
+              for (const object of this.#objects.toReversed()) {
+                const found = stored(database, object.name);
+                if (found !== undefined) drop(database, found);
+              }
+            this.#create(database);
+          }
         },
         { mode: 'immediate' },
       );
     } finally {
       if (unchecked) database.exec('PRAGMA foreign_keys = ON');
     }
+  }
+
+  #create(database: DatabaseSync): void {
+    for (const object of this.#objects)
+      if (stored(database, object.name) === undefined)
+        database.exec(object.sql);
   }
 
   #stale(database: DatabaseSync): Stale[] {
@@ -116,16 +126,17 @@ export class Declaration {
     });
   }
 
-  // Drops each stale index, trigger and view, and rebuilds each stale table.
-  // SQLite keeps PRAGMA legacy_alter_table after a rollback, so the old value
-  // comes back in any case.
-  #keep(database: DatabaseSync, stale: readonly Stale[]): void {
+  // Drops each stale index, trigger and view, rebuilds each stale table, and
+  // gives the names of the rebuilt tables. SQLite keeps PRAGMA
+  // legacy_alter_table after a rollback, so the old value comes back in any
+  // case.
+  #keep(database: DatabaseSync, stale: readonly Stale[]): string[] {
     const tables = stale.filter(
       ({ object, found }) => object.type === 'table' && found.type === 'table',
     );
     for (const entry of stale)
       if (!tables.includes(entry)) drop(database, entry.found);
-    if (tables.length === 0) return;
+    if (tables.length === 0) return [];
     const legacy = Number(
       database.prepare('PRAGMA legacy_alter_table').get()?.legacy_alter_table,
     );
@@ -141,6 +152,7 @@ export class Declaration {
       throw new Error(
         `The kept rows break a foreign key: row ${String(broken.rowid)} of ${String(broken.table)} refers to a row of ${String(broken.parent)} that does not exist.`,
       );
+    return tables.map(({ object }) => object.name);
   }
 
   // Renames the stored table away, makes it from its declared text, and copies
@@ -212,6 +224,57 @@ function names(database: DatabaseSync, table: string): string[] {
     .prepare('SELECT "name" FROM pragma_table_info(?)')
     .all(table)
     .map(({ name }) => String(name));
+}
+
+// The names of the views that SQLite can compile now.
+function compiled(database: DatabaseSync): Set<string> {
+  return new Set(
+    database
+      .prepare(`SELECT "name" FROM sqlite_schema WHERE "type" = 'view'`)
+      .all()
+      .map(({ name }) => String(name))
+      .filter((name) => {
+        try {
+          database.prepare(`SELECT * FROM ${quote(name)} WHERE 0`);
+          return true;
+        } catch {
+          // The view was broken before apply.
+          return false;
+        }
+      }),
+  );
+}
+
+// SQLite checks the columns of a trigger or a view only when it compiles a
+// statement that uses it, not at CREATE. Each statement here compiles every
+// trigger on a rebuilt table for its event, and runs no row: an UPDATE trigger
+// OF a column compiles only when SET names that column. A view that compiled
+// before the rebuilds and does not compile now fails apply; a view that was
+// already broken does not.
+function verify(
+  database: DatabaseSync,
+  tables: readonly string[],
+  views: ReadonlySet<string>,
+): void {
+  for (const table of tables) {
+    const columns = names(database, table).map(quote);
+    const name = quote(table);
+    database.prepare(`DELETE FROM ${name} WHERE 0`);
+    database.prepare(
+      `INSERT INTO ${name} (${columns.join(', ')}) SELECT ${columns.join(', ')} FROM ${name} WHERE 0`,
+    );
+    database.prepare(
+      `UPDATE ${name} SET ${columns.map((column) => `${column} = ${column}`).join(', ')} WHERE 0`,
+    );
+  }
+  for (const view of views)
+    try {
+      database.prepare(`SELECT * FROM ${quote(view)} WHERE 0`);
+    } catch (error) {
+      throw new Error(`The rebuild breaks the view ${view}.`, {
+        cause: error,
+      });
+    }
 }
 
 // Whether a table, the same one too, has a foreign key to the table.

@@ -73,6 +73,8 @@ With `rows: 'keep'`, `apply` keeps the rows of each stale table. It replaces a s
 3. It copies the columns that both tables have, by name. SQLite takes names that are different only in ASCII case as one name.
 4. It drops the old table, and makes again the indexes and triggers on the table that the declaration does not name.
 5. It runs `PRAGMA foreign_key_check`. When a kept row breaks a foreign key, `apply` fails.
+6. After it makes the missing objects, it compiles a `DELETE`, an `INSERT` and an `UPDATE` of each rebuilt table, and runs no row. SQLite does not examine the body of a trigger at `CREATE`. It examines the body when it compiles a statement that fires the trigger. When a trigger on the table names a dropped column, `apply` fails with the error of SQLite.
+7. It compiles each view. Before the rebuilds, it records which views compile. When a view compiled before and does not compile now, `apply` fails. A view that did not compile before does not make `apply` fail.
 
 [ADR 0003](./docs/adr/0003-keep-rows-rebuilds-a-table-and-keeps-its-references.md) tells why.
 
@@ -130,14 +132,16 @@ fits
 
 ## Errors
 
-| Error                                                                               | When                                                                                                                              |
-| ----------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| The error of SQLite                                                                 | `new Declaration` fails when a statement does not run in an empty database.                                                       |
-| `database is locked`                                                                | `apply` with no transaction waits for the busy timeout of the connection, then fails.                                             |
-| The error of a statement                                                            | `apply` fails, and the database stays as it was.                                                                                  |
-| `Keeping the rows of a table that other tables reference needs foreign keys off, …` | `rows: 'keep'`, in a transaction of the caller, with foreign keys on, and another table refers to a stale table. Nothing changes. |
-| The error of SQLite, for example `NOT NULL constraint failed: runs.name`            | `rows: 'keep'`, and a stored row does not fit the declared table. The table and its rows stay as they were.                       |
-| `The kept rows break a foreign key: …`                                              | `rows: 'keep'`, and `PRAGMA foreign_key_check` finds a kept row that refers to no row. The database stays as it was.              |
+| Error                                                                               | When                                                                                                                                                     |
+| ----------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| The error of SQLite                                                                 | `new Declaration` fails when a statement does not run in an empty database.                                                                              |
+| `database is locked`                                                                | `apply` with no transaction waits for the busy timeout of the connection, then fails.                                                                    |
+| The error of a statement                                                            | `apply` fails, and the database stays as it was.                                                                                                         |
+| `Keeping the rows of a table that other tables reference needs foreign keys off, …` | `rows: 'keep'`, in a transaction of the caller, with foreign keys on, and another table refers to a stale table. Nothing changes.                        |
+| The error of SQLite, for example `NOT NULL constraint failed: runs.name`            | `rows: 'keep'`, and a stored row does not fit the declared table. The table and its rows stay as they were.                                              |
+| `The kept rows break a foreign key: …`                                              | `rows: 'keep'`, and `PRAGMA foreign_key_check` finds a kept row that refers to no row. The database stays as it was.                                     |
+| The error of SQLite, for example `no such column: old.note`                         | `rows: 'keep'`, and a trigger on a rebuilt table names a column that the declaration does not have. The database stays as it was.                        |
+| `The rebuild breaks the view …`                                                     | `rows: 'keep'`, and a view compiled before the rebuild and does not compile after it. The `cause` has the error of SQLite. The database stays as it was. |
 
 ## The same concepts in other systems
 

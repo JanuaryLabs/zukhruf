@@ -484,3 +484,104 @@ test("with rows keep, a table that refers to itself counts as referenced inside 
     database.exec('ROLLBACK');
   }
 });
+
+test('with rows keep, a trigger on a rebuilt table that names a dropped column fails apply with the error of SQLite, and the table and its rows stay as they were', async () => {
+  await using scratch = await mkdtempDisposable(join(tmpdir(), 'drift-'));
+  using database = new DatabaseSync(join(scratch.path, 'data.sqlite'));
+  database.exec(`CREATE TABLE runs (id INTEGER PRIMARY KEY, note TEXT) STRICT;
+    CREATE TABLE log (note TEXT) STRICT;
+    CREATE TRIGGER runs_gone AFTER DELETE ON runs BEGIN INSERT INTO log VALUES (old.note); END;
+    INSERT INTO runs VALUES (1, 'first')`);
+  const before = stored(database);
+  const declaration = new Declaration(
+    ['CREATE TABLE runs (id INTEGER PRIMARY KEY) STRICT'],
+    { rows: 'keep' },
+  );
+
+  assert.throws(() => declaration.apply(database), {
+    message: 'no such column: old.note',
+  });
+
+  assert.deepEqual(stored(database), before);
+  assert.deepEqual(rows(database, 'SELECT * FROM runs'), [
+    { id: 1, note: 'first' },
+  ]);
+});
+
+test('with rows keep, a view that names a dropped column of a rebuilt table fails apply, and the table and its rows stay as they were', async () => {
+  await using scratch = await mkdtempDisposable(join(tmpdir(), 'drift-'));
+  using database = new DatabaseSync(join(scratch.path, 'data.sqlite'));
+  database.exec(`CREATE TABLE runs (id INTEGER PRIMARY KEY, note TEXT) STRICT;
+    CREATE VIEW notes AS SELECT note FROM runs;
+    INSERT INTO runs VALUES (1, 'first')`);
+  const before = stored(database);
+  const declaration = new Declaration(
+    ['CREATE TABLE runs (id INTEGER PRIMARY KEY) STRICT'],
+    { rows: 'keep' },
+  );
+
+  assert.throws(
+    () => declaration.apply(database),
+    (error: Error) => {
+      assert.equal(error.message, 'The rebuild breaks the view notes.');
+      assert.match(String(error.cause), /no such column: note/);
+      return true;
+    },
+  );
+
+  assert.deepEqual(stored(database), before);
+  assert.deepEqual(rows(database, 'SELECT * FROM runs'), [
+    { id: 1, note: 'first' },
+  ]);
+});
+
+test('with rows keep, the triggers and views on a rebuilt table that do not name a dropped column work after apply', async () => {
+  await using scratch = await mkdtempDisposable(join(tmpdir(), 'drift-'));
+  using database = new DatabaseSync(join(scratch.path, 'data.sqlite'));
+  database.exec(`CREATE TABLE runs (id INTEGER PRIMARY KEY, name TEXT, note TEXT) STRICT;
+    CREATE TABLE log (kind TEXT, id INTEGER) STRICT;
+    CREATE TRIGGER runs_added AFTER INSERT ON runs BEGIN INSERT INTO log VALUES ('insert', new.id); END;
+    CREATE TRIGGER runs_named AFTER UPDATE OF name ON runs BEGIN INSERT INTO log VALUES ('update', new.id); END;
+    CREATE TRIGGER runs_gone AFTER DELETE ON runs BEGIN INSERT INTO log VALUES ('delete', old.id); END;
+    CREATE VIEW named AS SELECT id, name FROM runs;
+    INSERT INTO runs VALUES (1, 'first', 'gone')`);
+  const declaration = new Declaration(
+    ['CREATE TABLE runs (id INTEGER PRIMARY KEY, name TEXT) STRICT'],
+    { rows: 'keep' },
+  );
+
+  declaration.apply(database);
+
+  assert.equal(declaration.drift(database), 'fits');
+  database.exec(`INSERT INTO runs VALUES (2, 'second');
+    UPDATE runs SET name = 'renamed' WHERE id = 1;
+    DELETE FROM runs WHERE id = 2`);
+  assert.deepEqual(rows(database, 'SELECT * FROM log'), [
+    { kind: 'insert', id: 1 },
+    { kind: 'insert', id: 2 },
+    { kind: 'update', id: 1 },
+    { kind: 'delete', id: 2 },
+  ]);
+  assert.deepEqual(rows(database, 'SELECT * FROM named'), [
+    { id: 1, name: 'renamed' },
+  ]);
+});
+
+test('with rows keep, a view that was broken before apply does not fail it', async () => {
+  await using scratch = await mkdtempDisposable(join(tmpdir(), 'drift-'));
+  using database = new DatabaseSync(join(scratch.path, 'data.sqlite'));
+  database.exec(`CREATE TABLE runs (id INTEGER PRIMARY KEY) STRICT;
+    CREATE VIEW lost AS SELECT missing FROM runs;
+    INSERT INTO runs VALUES (1)`);
+  const declaration = new Declaration(
+    ['CREATE TABLE runs (id INTEGER PRIMARY KEY, name TEXT) STRICT'],
+    { rows: 'keep' },
+  );
+
+  declaration.apply(database);
+
+  assert.equal(declaration.drift(database), 'fits');
+  assert.deepEqual(rows(database, 'SELECT * FROM runs'), [
+    { id: 1, name: null },
+  ]);
+});
