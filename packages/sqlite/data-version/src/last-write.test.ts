@@ -32,14 +32,18 @@ function owning(path: string): DatabaseSync {
   return owner;
 }
 
+// A reader reads a file after the owner writes it, so a file's access time is
+// later than the time it was last written.
+const readLater = 100_000;
+
 // Gives each file the time it was last written, in seconds since the epoch.
 async function writtenAt(
   path: string,
   times: { file: number; wal: number; shm: number },
 ) {
-  await utimes(path, times.file, times.file);
-  await utimes(`${path}-wal`, times.wal, times.wal);
-  await utimes(`${path}-shm`, times.shm, times.shm);
+  await utimes(path, times.file + readLater, times.file);
+  await utimes(`${path}-wal`, times.wal + readLater, times.wal);
+  await utimes(`${path}-shm`, times.shm + readLater, times.shm);
 }
 
 test('the last write is the later of the database file and its WAL', async () => {
@@ -77,7 +81,7 @@ test('a database whose owner closed it, which removes the WAL, was last written 
   const path = join(dir.path, 'source.sqlite');
   owning(path).close();
   // A time in the past: a WAL left behind would carry the time of now and win.
-  await utimes(path, 1_000_000_000, 1_000_000_000);
+  await utimes(path, 1_000_000_000 + readLater, 1_000_000_000);
 
   const written = lastWrite(path, SourceUnavailableError);
 
