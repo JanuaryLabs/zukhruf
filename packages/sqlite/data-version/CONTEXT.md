@@ -16,6 +16,10 @@ _Avoid_: Revision, counter, schema version (`PRAGMA schema_version` is a differe
 A commit that a different connection to the same database makes, for example a commit of the owner. Only such a commit changes the data version.
 _Avoid_: Change event, file change
 
+**Last write**:
+The time when the owner last wrote the database: the later of the modification times of the file and its WAL. The shared-memory index does not count, because a reader writes it too.
+_Avoid_: Modified time, mtime, last update
+
 **Unavailable**:
-SQLite cannot open the file: the file is missing, or the system denies access. The caller can fix it, for example with a grant of access. Other failures are not unavailable.
+SQLite cannot open the file, or the file system cannot give its times: the file is missing, or the system denies access. The caller can fix it, for example with a grant of access. Other failures are not unavailable.
 _Avoid_: Not found, permission error

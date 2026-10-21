@@ -62,12 +62,33 @@ no change
 - Dispose closes the connection. Use `using`, or call `[Symbol.dispose]()`.
 - The caller gives the error class. Thus the error names what the caller needs, for example the access that the user must give.
 
+## The last write
+
+The data version tells that the owner committed after you read it before. It does not tell when. A new process has no earlier value, so it cannot use the data version to find how old the data is.
+
+`lastWrite(path, unavailable)` gives the time when the owner last wrote the database. Use it when the owner writes only while it runs: a time in the past tells that the data has not changed since then.
+
+```ts
+import { lastWrite } from '@zukhruf/sqlite-data-version';
+
+const written = lastWrite(path, Unavailable);
+console.log(`The owner last wrote at ${written.toISOString()}`);
+```
+
+- The owner writes through the file and its WAL (`-wal`). The last write is the later of their modification times.
+- The shared-memory index (`-shm`) does not count. A read-only reader writes it too, so its time can be later than the last write of the owner.
+- The owner can remove the WAL when it closes. Then the last write is the time of the file.
+- The function reads only the file system. It does not open the database.
+- The macOS privacy controls do not stop it. They stop a process that has no access from reading the file, but not from reading the times of the file.
+
 ## Errors
 
 | Error                          | When                                                                                                                            |
 | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------- |
 | `new unavailable(path, cause)` | SQLite cannot open the file: `SQLITE_CANTOPEN` (14), for a missing file or a file that the system denies, a privacy denial too. |
 | The error of SQLite            | All other failures.                                                                                                             |
+
+`lastWrite` gives `new unavailable(path, cause)` when the file is missing (`ENOENT`) or the mode of its folder denies this process (`EACCES`). It gives the error of the file system for all other failures.
 
 ## The same concepts in other systems
 
@@ -98,4 +119,6 @@ src/
   index.ts                the exports
   data-version.ts         DataVersion and UnavailableError
   data-version.test.ts    the tests, on real SQLite files
+  last-write.ts           lastWrite
+  last-write.test.ts      the tests, on real SQLite files
 ```
