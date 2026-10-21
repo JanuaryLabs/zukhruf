@@ -5,7 +5,7 @@ import { promisify } from 'node:util';
 
 import { Docker } from '@zukhruf/docker';
 
-import { SHARED_SERVER_LABEL } from '../docker/docker.ts';
+import { SHARED_SERVER_LABEL } from '../docker/fixtures.ts';
 import { DockerHost, SHELL_TIMEOUT, quote } from '../docker/host.ts';
 import {
   TEST_RUN_LABEL,

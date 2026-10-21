@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 
-import { SubprocessError } from 'nano-spawn';
+import command, { type Result, SubprocessError } from 'nano-spawn';
 import pMemoize from 'p-memoize';
 
 import { timebox } from '../async/timebox.ts';
@@ -10,37 +10,49 @@ import {
   ServiceContainer,
 } from './container.ts';
 import { DockerDirectory } from './directory.ts';
-import { DockerHost } from './host.ts';
+import {
+  CONFIG_LABEL,
+  type ContainerOptions,
+  SHARED_SERVER_LABEL,
+} from './fixtures.ts';
+import { DockerHost, recorded } from './host.ts';
 import type { TestRun } from './test-run.ts';
 import { DockerVolume } from './volume.ts';
 
-/** Marks a server that `reuse()` shares across processes and runs. */
-export const SHARED_SERVER_LABEL = 'dev.zukhruf.testing.shared';
-const CONFIG_LABEL = 'dev.zukhruf.testing.config';
+/** How long one Docker CLI call may take before this process stops it. */
+const DOCKER_COMMAND_TIMEOUT = 240_000;
 
-/** A volume or a path on the engine's host, mounted into a container. */
-export interface Mount {
-  /** A volume's name, or an absolute path on the engine's host. */
-  source: string;
-  target: string;
-  readOnly?: boolean;
+/** The engine the Docker CLI selects, with the CLI bound to it. */
+interface CliEngine {
+  host: DockerHost;
+  command: DockerCommand;
 }
 
-export interface ContainerOptions {
-  image: string;
-  /** Replaces the image's command. */
-  command?: string[];
-  /** A dedicated container gets a generated name; a reused server's name comes from its configuration. */
-  name?: string;
-  hostname?: string;
-  env?: Record<string, string>;
-  labels?: Record<string, string> | undefined;
-  mounts?: Mount[];
-  tmpfs?: string[];
-  ipcHost?: boolean;
-  memory?: string;
-  cpus?: number;
-  memorySwappiness?: number;
+/**
+ * Resolves the engine with the Docker CLI so its native context/environment
+ * precedence wins. A run gets this process's process record, and each CLI
+ * command a process record while it runs.
+ */
+async function resolve(run: TestRun | undefined): Promise<CliEngine> {
+  const { stdout } = await command('docker', [
+    'context',
+    'inspect',
+    '--format',
+    '{{.Endpoints.docker.Host}}',
+  ]);
+  const host = new DockerHost(stdout.trim(), run);
+  await run?.recordProcess(process.pid);
+  return {
+    host,
+    command: (args): Promise<Result> =>
+      recorded(
+        run,
+        command('docker', args, {
+          env: { DOCKER_CONTEXT: undefined, DOCKER_HOST: host.endpoint },
+          timeout: DOCKER_COMMAND_TIMEOUT,
+        }),
+      ),
+  };
 }
 
 export interface ServiceOptions extends ContainerOptions {
@@ -85,7 +97,7 @@ export class Docker {
   readonly #testRun: TestRun | undefined;
   // The first resolution pins the engine: handles keep the engine they were
   // made on. It records this process in the run before any command runs.
-  readonly #connection = pMemoize(() => DockerHost.resolve(this.#testRun));
+  readonly #connection = pMemoize(() => resolve(this.#testRun));
   readonly #probe = pMemoize(async (): Promise<Probe> => {
     try {
       await this.command(['info']);
@@ -122,11 +134,14 @@ export class Docker {
       '--format',
       '{{.Architecture}}',
     ]);
-    return { architecture: stdout.trim(), endpoint: host.endpoint };
+    return { architecture: stdout.trim(), endpoint: host.host.endpoint };
   }
 
   async directory(): Promise<DockerDirectory> {
-    return DockerDirectory.create(await this.#connection(), this.#testRun);
+    return DockerDirectory.create(
+      (await this.#connection()).host,
+      this.#testRun,
+    );
   }
 
   /** Creates a named volume. Its run's cleanup removes it if this process dies first. */
@@ -149,7 +164,7 @@ export class Docker {
     return (await this.#probe()).available;
   }
 
-  async #require(): Promise<DockerHost> {
+  async #require(): Promise<CliEngine> {
     const probe = await this.#probe();
     if (!probe.available)
       throw new Error('Docker is required for container-backed tests', {
@@ -213,7 +228,7 @@ export class Docker {
   }
 
   async #create(
-    host: DockerHost,
+    host: CliEngine,
     name: string,
     fingerprint: string,
     options: ServiceOptions,
@@ -256,7 +271,7 @@ export class Docker {
   }
 
   async #detach(
-    host: DockerHost,
+    host: CliEngine,
     flags: string[],
     options: ContainerOptions,
   ): Promise<string> {
@@ -269,7 +284,7 @@ export class Docker {
   }
 
   async #launch(
-    host: DockerHost,
+    host: CliEngine,
     verb: string[],
     options: ContainerOptions,
   ): Promise<string> {
@@ -337,7 +352,7 @@ export class Docker {
   }
 
   async #inspect(
-    host: DockerHost,
+    host: CliEngine,
     name: string,
   ): Promise<InspectedContainer | undefined> {
     try {
@@ -355,7 +370,7 @@ export class Docker {
   }
 
   async #ready(
-    host: DockerHost,
+    host: CliEngine,
     id: string,
     { internalPort, healthy }: ServiceOptions,
   ): Promise<ServiceContainer> {
@@ -365,7 +380,7 @@ export class Docker {
       throw new Error(
         `Failed to get mapped port for container ${id}: ${stdout}`,
       );
-    const connection = await host.forward(Number.parseInt(port, 10));
+    const connection = await host.host.forward(Number.parseInt(port, 10));
     const container = new ServiceContainer(
       id,
       connection.port,

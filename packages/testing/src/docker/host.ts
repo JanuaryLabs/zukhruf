@@ -15,26 +15,35 @@ import { type TestRun, forwardPrefix } from './test-run.ts';
 export const quote = (value: string): string =>
   `'${value.replaceAll("'", "'\\''")}'`;
 
-/** How long one Docker CLI call may take before this process stops it. */
-export const DOCKER_COMMAND_TIMEOUT = 240_000;
 /** How long one command in the SSH engine's remote shell may take. */
 export const SHELL_TIMEOUT = 30_000;
-
-/** The environment that points the Docker CLI at `endpoint`, whatever context is selected. */
-export const dockerEnvironment = (
-  endpoint: string,
-): Record<string, string | undefined> => ({
-  DOCKER_CONTEXT: undefined,
-  DOCKER_HOST: endpoint,
-});
 
 /** Local Unix sockets, Docker Desktop's named pipe on Windows, and SSH engines. A `tcp://` engine may be on another machine. */
 const supportedEndpoints = ['unix://', 'npipe://', 'ssh://'];
 
 /**
- * An engine endpoint. Resolve it with the Docker CLI so its native
- * context/environment precedence wins. With a run, each command it starts
- * has a process record while it runs.
+ * A command this process started. A killed process leaves its commands
+ * running; their process records keep its run until they end.
+ */
+export async function recorded(
+  run: TestRun | undefined,
+  subprocess: Subprocess,
+): Promise<Result> {
+  if (!run) return subprocess;
+  // Awaited below; a command that fails while its record is written must
+  // not count as an unhandled rejection.
+  subprocess.catch(() => {});
+  const { pid } = await subprocess.nodeChildProcess;
+  // Node leaves pid undefined when the spawn failed: no process to record.
+  if (pid === undefined) return subprocess;
+  await using _record = await run.recordProcess(pid);
+  return await subprocess;
+}
+
+/**
+ * The endpoint of an engine, for what the Engine API does not do: a shell
+ * on the host of an SSH engine and port forwards from it. With a run, each
+ * command it starts has a process record while it runs.
  */
 export class DockerHost {
   readonly endpoint: string;
@@ -50,42 +59,8 @@ export class DockerHost {
     this.#run = run;
   }
 
-  /** The engine the Docker CLI selects. A run gets this process's process record. */
-  static async resolve(run: TestRun | undefined): Promise<DockerHost> {
-    const { stdout } = await command('docker', [
-      'context',
-      'inspect',
-      '--format',
-      '{{.Endpoints.docker.Host}}',
-    ]);
-    const host = new DockerHost(stdout.trim(), run);
-    await run?.recordProcess(process.pid);
-    return host;
-  }
-
   get remote(): boolean {
     return this.endpoint.startsWith('ssh://');
-  }
-
-  readonly command = (args: string[]): Promise<Result> =>
-    this.#recorded(
-      command('docker', args, {
-        env: dockerEnvironment(this.endpoint),
-        timeout: DOCKER_COMMAND_TIMEOUT,
-      }),
-    );
-
-  /** A killed process leaves its commands running; their records keep its run until they end. */
-  async #recorded(subprocess: Subprocess): Promise<Result> {
-    if (!this.#run) return subprocess;
-    // Awaited below; a command that fails while its record is written must
-    // not count as an unhandled rejection.
-    subprocess.catch(() => {});
-    const { pid } = await subprocess.nodeChildProcess;
-    // Node leaves pid undefined when the spawn failed: no process to record.
-    if (pid === undefined) return subprocess;
-    await using _record = await this.#run.recordProcess(pid);
-    return await subprocess;
   }
 
   sshArgs(options: string[] = []): string[] {
@@ -110,7 +85,8 @@ export class DockerHost {
   }
 
   shell(script: string, input?: string): Promise<Result> {
-    return this.#recorded(
+    return recorded(
+      this.#run,
       command('ssh', [...this.sshArgs(), script], {
         stdin: input === undefined ? 'ignore' : { string: input },
         timeout: SHELL_TIMEOUT,
