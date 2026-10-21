@@ -8,6 +8,7 @@ import type { LockHandle } from '../../mutex/lease.ts';
 import type { AcquireOptions, LockStore } from '../../mutex/lock-store.ts';
 import type { ConnectionSupervisor } from './connection-supervisor.ts';
 import { CoordinatorUnavailableError } from './coordinator-unavailable-error.ts';
+import { GrantFailedError } from './grant-failed-error.ts';
 import {
   type LockRequest,
   type LockResponse,
@@ -189,6 +190,11 @@ export class RemoteLockClient implements LockStore {
       case 'busy':
         this.#take(response.id)?.resolve(undefined);
         return;
+      case 'failed': {
+        const pending = this.#take(response.id);
+        pending?.reject(new GrantFailedError(pending.key, response.message));
+        return;
+      }
       case 'rejected':
         this.#lose(response.id);
         return;

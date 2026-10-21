@@ -52,6 +52,7 @@ Start with the [project README](../README.md). The glossary is in [CONTEXT.md](.
 16. [A leader lists the requests that it added](./adr/0016-a-leader-lists-the-requests-that-it-added.md)
 17. [A connection closes only when its framing breaks](./adr/0017-a-connection-closes-only-when-its-framing-breaks.md)
 18. [The next leader skips the grace window after a clean shutdown](./adr/0018-the-next-leader-skips-the-grace-window-after-a-clean-shutdown.md)
+19. [A failed token mint answers the request](./adr/0019-a-failed-token-mint-answers-the-request-and-an-exhausted-epoch-ends-the-term.md)
 
 ## Copied code
 

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
 
-import { CounterTokenSource } from '@zukhruf/fencing';
+import { CounterTokenSource, type TokenSource } from '@zukhruf/fencing';
 
 import {
   scriptedConnector,
@@ -133,5 +133,101 @@ describe('Remote lock client connection lifecycle', () => {
     } finally {
       await client.close();
     }
+  });
+});
+
+/** Counts tokens like CounterTokenSource, but its first mint fails, as a token file on a full disk would. */
+function tokensThatFailOnce(failure: Error): TokenSource {
+  const counter = new CounterTokenSource();
+  let failed = false;
+  return {
+    async next(key) {
+      if (failed) return counter.next(key);
+      failed = true;
+      throw failure;
+    },
+  };
+}
+
+describe('A request whose token cannot be minted', () => {
+  // Kept as a double: only a scripted peer shows that the coordinator never closes the connection.
+  test('an acquire is answered failed, the connection stays, and the same request is granted when it is sent again', async (t) => {
+    // Arrange
+    const coordinator = new LockCoordinator({
+      tokens: tokensThatFailOnce(
+        new Error('The token file could not be written.'),
+      ),
+    });
+    const peer = scriptedPeer<LockResponse, LockRequest>();
+    coordinator.serve(peer.connection);
+
+    // Act
+    peer.deliver({ op: 'acquire', id: 'a', key: 'product:42' });
+    await waitUntil(
+      t,
+      () => peer.sent.length === 1,
+      'The coordinator must answer the acquire',
+    );
+    peer.deliver({ op: 'acquire', id: 'a', key: 'product:42' });
+    await waitUntil(
+      t,
+      () => peer.sent.length === 2,
+      'The coordinator must answer the acquire that is sent again',
+    );
+
+    // Assert: the peer learns why, keeps its connection, and gets the free key on the next try.
+    assert.deepEqual(peer.sent, [
+      {
+        op: 'failed',
+        id: 'a',
+        message: 'The token file could not be written.',
+      },
+      { op: 'granted', id: 'a', token: '1' },
+    ]);
+    assert.equal(peer.closes, 0, 'A failed mint must not close the connection');
+  });
+
+  test('a reassertion is rejected, and a later claim of the same key is accepted', async () => {
+    // Arrange
+    const graceWindow = 150;
+    const coordinator = new LockCoordinator({
+      tokens: tokensThatFailOnce(
+        new Error('The token file could not be written.'),
+      ),
+      graceWindow,
+    });
+    const connect = () => {
+      const peer = scriptedPeer<LockResponse, LockRequest>();
+      coordinator.serve(peer.connection);
+      return peer;
+    };
+    const failed = connect();
+    const later = connect();
+
+    // Act: the newer claim fails to mint, then an older claim of the same key arrives.
+    failed.deliver({ op: 'reassert', id: 'f', key: 'product:42', token: '9' });
+    await delay(settle);
+    later.deliver({ op: 'reassert', id: 'l', key: 'product:42', token: '5' });
+    const waiter = coordinator.acquire('product:42');
+
+    // Assert: the failed holder is told it lost the key, and the later claim keeps it.
+    assert.deepEqual(failed.sent, [{ op: 'rejected', id: 'f' }]);
+    assert.equal(
+      failed.closes,
+      0,
+      'A failed mint must not close the connection',
+    );
+    assert.equal(
+      await grantedWithin(waiter, graceWindow + 2 * settle),
+      'waiting',
+      'The later claim must hold the key after the grace window',
+    );
+    assert.deepEqual(later.sent, [], 'The later claim must not be refused');
+    later.deliver({ op: 'release', id: 'l' });
+    assert.equal(
+      await grantedWithin(waiter, 1000),
+      'granted',
+      'The key must pass on once the later claim releases it',
+    );
   });
 });

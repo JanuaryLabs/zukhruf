@@ -180,7 +180,12 @@ class GraceWindow implements CoordinatorPhase {
     // claim it outranks gives the key back, even if that claim already let it go.
     const lease = this.#store.acquire(key);
     existing?.lose();
-    this.#reassertions.set(key, { token, lose });
+    const claim = { token, lose };
+    this.#reassertions.set(key, claim);
+    // A claim whose token cannot be minted holds nothing, so it outranks no later claim.
+    lease.catch(() => {
+      if (this.#reassertions.get(key) === claim) this.#reassertions.delete(key);
+    });
     return lease;
   }
 }
@@ -199,7 +204,9 @@ class Session {
     connection.on('message', (message) => {
       // A message with no op or no id cannot be answered, so it is ignored, and the peer keeps its keys (ADR 0017).
       if (!isRequestEnvelope(message)) return;
-      this.#handle(message).catch(() => connection.close());
+      this.#handle(message).catch((error: unknown) =>
+        this.#fail(message, error),
+      );
     });
     connection.once('close', () => {
       void this.#end();
@@ -259,6 +266,24 @@ class Session {
         }
         return this.#phase.keep(lease, request.id);
       }
+    }
+  }
+
+  /**
+   * Only a token that cannot be minted makes a request fail, and only an
+   * acquire, a try or a reassert mints one. The key is free again, and the
+   * peer keeps its connection and every other key (ADR 0017, ADR 0019).
+   */
+  #fail(request: RequestEnvelope, error: unknown) {
+    this.#requested.delete(request.id);
+    const message = error instanceof Error ? error.message : String(error);
+    switch (request.op) {
+      case 'acquire':
+      case 'try':
+        return this.#phase.reply({ op: 'failed', id: request.id, message });
+      // Each version of the client reads `rejected` as a lost lease.
+      case 'reassert':
+        return this.#phase.reply({ op: 'rejected', id: request.id });
     }
   }
 

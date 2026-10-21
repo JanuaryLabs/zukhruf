@@ -33,6 +33,7 @@ export {
 } from './lock-stores/ipc/ipc-lock-coordinator.ts';
 export { IpcStore } from './lock-stores/ipc/ipc-store.ts';
 export { CoordinatorUnavailableError } from './lock-stores/remote/coordinator-unavailable-error.ts';
+export { GrantFailedError } from './lock-stores/remote/grant-failed-error.ts';
 export { UnsupportedRequestError } from './lock-stores/remote/unsupported-request-error.ts';
 export { NetworkDirectoryError } from '@zukhruf/fs';
 export {

@@ -72,11 +72,12 @@ The coordinator grants keys first come, first served. When a worker stops for an
 
 ## Failure modes
 
-| Event                               | Result                                                                                    |
-| ----------------------------------- | ----------------------------------------------------------------------------------------- |
-| A worker stops while it holds a key | The coordinator releases the key when the worker emits `exit`.                            |
-| The coordinator's thread is busy    | Waiters wait until it is free. In a test, 50 ms of CPU work delayed an answer by 50.2 ms. |
-| The process stops                   | All threads stop. No coordinator or holder is left.                                       |
+| Event                               | Result                                                                                                                                                                                                                                                              |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| A worker stops while it holds a key | The coordinator releases the key when the worker emits `exit`.                                                                                                                                                                                                      |
+| The coordinator's thread is busy    | Waiters wait until it is free. In a test, 50 ms of CPU work delayed an answer by 50.2 ms.                                                                                                                                                                           |
+| The token source fails              | The request of the worker rejects with `GrantFailedError`, and the key is not held. The worker keeps its other keys, and its later requests are answered ([ADR 0019](../adr/0019-a-failed-token-mint-answers-the-request-and-an-exhausted-epoch-ends-the-term.md)). |
+| The process stops                   | All threads stop. No coordinator or holder is left.                                                                                                                                                                                                                 |
 
 See [failure modes](../concepts/failure-modes.md).
 
@@ -100,4 +101,5 @@ The token sources come from `@zukhruf/fencing`, for example `import { CounterTok
   - A thread that stops while it holds the key does not block the next caller.
   - A thread whose only work is to wait for a key stays alive and gets it.
   - Four threads add 1 to a shared counter 20 times each. The counter is 80, and no two holders overlap.
+- `A worker or child whose token cannot be minted`: a worker gets `GrantFailedError` for a failed token, takes another key, and that key is free after the worker stops.
 - Mutation tests: when the coordinator ignores `exit`, when the worker does not listen while it waits, or when the worker grants itself a key, a test fails.

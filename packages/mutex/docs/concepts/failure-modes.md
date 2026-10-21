@@ -36,6 +36,7 @@ The file lock stores identify a holder by its [presence](../adr/0012-a-file-stor
 
 - **`LeaseLostError`** of `@zukhruf/lease`: another holder may have your key now. Its `subject` is the key. While the task runs, the signal of the lease aborts with this error. When the task ends, the call rejects with this error, also when the task returned a value. If the task threw a different error, that error is the `cause`. See [ADR 0013](../adr/0013-a-lost-lease-aborts-the-signal-of-the-lease.md).
 - **`CoordinatorUnavailableError`**: no coordinator is left that can grant the key. The request did not run.
+- **`GrantFailedError`**: the coordinator of a `ThreadStore` or an `IpcStore` could not make a fencing token for the key, for example because its token file could not be written. Its `key` is the key, and its message contains the error of the token source. The request did not run, and the key is not held. The connection and the other keys stay. See [ADR 0019](../adr/0019-a-failed-token-mint-answers-the-request-and-an-exhausted-epoch-ends-the-term.md).
 - **`ProtocolVersionError`**: the leader of a `SocketStore` speaks another protocol version, so this process cannot use it. The request did not run. Run one protocol version in each directory. See [SocketStore](../stores/socket-store.md#two-package-versions-in-one-directory).
 
 If the task throws an error and the release also throws, you get a `SuppressedError` that contains both errors. A lost key is not a release error: the release of a lost key does not throw.

@@ -69,6 +69,7 @@ On macOS and Linux, the IPC channel between a parent and a child is a pair of co
 
 | Event                              | Result                                                                                                                                                                                                                                                                                   |
 | ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| The token source fails             | The request of the child rejects with `GrantFailedError`, and the key is not held. The child keeps its other keys, and its later requests are answered ([ADR 0019](../adr/0019-a-failed-token-mint-answers-the-request-and-an-exhausted-epoch-ends-the-term.md)).                        |
 | A child stops while it holds a key | The coordinator releases the key in approximately 2 ms.                                                                                                                                                                                                                                  |
 | The parent stops                   | Children that wait get `CoordinatorUnavailableError`. Children that hold a key keep it, because no coordinator is left to grant it ([ADR 0004](../adr/0004-parent-stops-held-keys-stay.md)). On Windows, Node.js stops the children too, unless they were started with `detached: true`. |
 
@@ -91,4 +92,5 @@ The token sources come from `@zukhruf/fencing`, for example `import { CounterTok
 - The parent saw the channel close 0.96 ms after a child got `SIGKILL`. The next waiter got the key 1.7 ms after the `SIGKILL`.
 - The single-process and cross-process tests in `src/mutex/mutex.test.ts` run against `IpcStore`.
 - `Process-tree mutex with IpcStore`: a child that waits gets `CoordinatorUnavailableError` when its parent stops.
+- `A worker or child whose token cannot be minted`: a child gets `GrantFailedError` for a failed token, takes another key, and that key is free after the child exits.
 - A child that uses `IpcStore` stops by itself after its work, with exit code 0.

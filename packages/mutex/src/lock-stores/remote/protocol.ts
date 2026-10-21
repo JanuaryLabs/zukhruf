@@ -16,6 +16,8 @@ export type LockResponse =
   | { op: 'busy'; id: string }
   | { op: 'rejected'; id: string }
   | { op: 'held'; id: string; held: boolean }
+  /** The coordinator could not mint a token for an acquire or a try, so nothing is held. Sent only on IPC channels and worker ports (ADR 0019). */
+  | { op: 'failed'; id: string; message: string }
   /** The coordinator does not know the request: it runs an older version. */
   | { op: 'unsupported'; id: string };
 
@@ -83,6 +85,8 @@ export function isLockResponse(message: unknown): message is LockResponse {
       return isToken(message.token);
     case 'held':
       return typeof message.held === 'boolean';
+    case 'failed':
+      return typeof message.message === 'string';
     case 'busy':
     case 'rejected':
     case 'unsupported':

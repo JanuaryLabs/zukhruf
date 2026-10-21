@@ -10,10 +10,14 @@ import { Worker } from 'node:worker_threads';
 
 import { Hono } from 'hono';
 
-import type { FencingToken } from '@zukhruf/fencing';
+import {
+  CounterTokenSource,
+  type FencingToken,
+  type TokenSource,
+} from '@zukhruf/fencing';
 import { describe, test } from '@zukhruf/testing/node';
 
-import { IpcLockCoordinator } from '../index.ts';
+import { IpcLockCoordinator, ThreadLockCoordinator } from '../index.ts';
 import { isRecord } from '../shared/is-record.ts';
 import { scratchDirectory } from '../testing/scratch-directory.ts';
 import {
@@ -1623,6 +1627,159 @@ describe('Process-tree mutex with IpcStore', () => {
         'later look:rejected:CoordinatorUnavailableError',
         'try:rejected:CoordinatorUnavailableError',
       ]);
+    },
+  );
+});
+
+/** Counts tokens like CounterTokenSource, but its first mint fails, as a token file on a full disk would. */
+function tokensThatFailOnce(): TokenSource {
+  const counter = new CounterTokenSource();
+  let failed = false;
+  return {
+    async next(key) {
+      if (failed) return counter.next(key);
+      failed = true;
+      throw new Error('The token file could not be written.');
+    },
+  };
+}
+
+describe('A worker or child whose token cannot be minted', () => {
+  test(
+    'a worker thread learns that its acquire failed, takes another key, and that key is free once the thread stops',
+    { timeout: 15000 },
+    async () => {
+      // Arrange: the parent's token source fails for the first grant.
+      const coordinator = new ThreadLockCoordinator({
+        tokens: tokensThatFailOnce(),
+      });
+      const mutex = new Mutex(coordinator);
+      const threadStoreUrl = new URL(
+        '../lock-stores/thread/thread-store.ts',
+        import.meta.url,
+      );
+      const thread = new Worker(
+        `
+          (async () => {
+            const { parentPort } = await import('node:worker_threads');
+            const { Mutex } = await import(${JSON.stringify(mutexUrl.href)});
+            const { ThreadStore } = await import(${JSON.stringify(threadStoreUrl.href)});
+            const mutex = new Mutex(new ThreadStore());
+            const failure = await mutex.acquire('product:42', async () => 'granted').then(
+              (result) => result,
+              (error) => error.name + ': ' + error.message,
+            );
+            setInterval(() => {}, 1000);
+            await mutex.acquire('product:43', async () => {
+              parentPort.postMessage({ type: 'holding', failure });
+              await new Promise(() => {});
+            });
+          })();
+        `,
+        { eval: true },
+      );
+      coordinator.adopt(thread);
+
+      try {
+        // Act: the thread reports while it holds the second key, and then stops.
+        // The port also carries the lock messages, so only the report is read.
+        const report = new Promise<unknown>((resolve) => {
+          thread.on('message', (message) => {
+            if (isRecord(message) && message.type === 'holding')
+              resolve(message.failure);
+          });
+        });
+        const failure = await Promise.race([
+          report,
+          delay(newProcessTimeout, 'the thread never reported', {
+            ref: false,
+          }),
+        ]);
+        await thread.terminate();
+        const next = await mutex.acquire(
+          'product:43',
+          async () => 'granted' as const,
+          { mode: Modes.skipIfBusy({ waitAtMost: 2000 }) },
+        );
+
+        // Assert
+        assert.equal(
+          failure,
+          'GrantFailedError: The lock coordinator could not grant "product:42": The token file could not be written.',
+        );
+        assert.equal(
+          next.acquired,
+          true,
+          'The key of a thread that stopped must be free',
+        );
+      } finally {
+        await thread.terminate();
+      }
+    },
+  );
+
+  test(
+    'a child learns that its try failed, takes another key, and that key is free once the child exits',
+    { timeout: 15000 },
+    async (t) => {
+      // Arrange: the parent's token source fails for the first grant.
+      const coordinator = new IpcLockCoordinator({
+        tokens: tokensThatFailOnce(),
+      });
+      const mutex = new Mutex(coordinator);
+      const ipcStoreUrl = new URL(
+        '../lock-stores/ipc/ipc-store.ts',
+        import.meta.url,
+      );
+      const modesUrl = new URL('./acquire-modes/modes.ts', import.meta.url);
+      await using child = startWorker(
+        `
+          import { Mutex } from ${JSON.stringify(mutexUrl.href)};
+          import { Modes } from ${JSON.stringify(modesUrl.href)};
+          import { IpcStore } from ${JSON.stringify(ipcStoreUrl.href)};
+
+          const mutex = new Mutex(new IpcStore());
+          const failure = await mutex
+            .acquire('product:42', async () => 'granted', { mode: Modes.skipIfBusy() })
+            .then(
+              (result) => JSON.stringify(result),
+              (error) => error.name + ': ' + error.message,
+            );
+          setInterval(() => {}, 1000);
+          await mutex.acquire('product:43', async () => {
+            process.send({ type: 'holding', failure });
+            await new Promise(() => {});
+          });
+        `,
+        'child',
+        { host: { adoptProcess: (process) => coordinator.adopt(process) } },
+      );
+
+      // Act: the child reports while it holds the second key, and then exits.
+      await waitUntil(
+        t,
+        () => child.has('holding'),
+        () => `The child must report while it holds a key.\n${child.stderr}`,
+        newProcessTimeout,
+      );
+      child.child.kill('SIGKILL');
+      await child.closed;
+      const next = await mutex.acquire(
+        'product:43',
+        async () => 'granted' as const,
+        { mode: Modes.skipIfBusy({ waitAtMost: 2000 }) },
+      );
+
+      // Assert
+      assert.equal(
+        child.find('holding')?.failure,
+        'GrantFailedError: The lock coordinator could not grant "product:42": The token file could not be written.',
+      );
+      assert.equal(
+        next.acquired,
+        true,
+        'The key of a child that exited must be free',
+      );
     },
   );
 });
