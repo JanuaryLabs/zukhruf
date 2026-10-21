@@ -1,4 +1,5 @@
 export { CounterTokenSource } from './counter-token-source.ts';
+export { EpochExhaustedError } from './epoch-exhausted-error.ts';
 export { EpochTokenSource } from './epoch-token-source.ts';
 export type { FencedLease } from './fenced-lease.ts';
 export { FencingToken } from './fencing-token.ts';

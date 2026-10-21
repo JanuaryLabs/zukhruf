@@ -114,7 +114,7 @@ const token = await tokens.next('product:42');
 
 A counter file can hold text that is not decimal digits. An example is the empty file that `@zukhruf/mutex` 0.2.0 or earlier can leave after a power loss, because those versions did not sync the file to the disk. Then `next` rejects with a `SyntaxError` that names the file, and the file stays as it is. Thus the tokens of a key never start again at 1, and the fenced resource never accepts the writes of a stale holder.
 
-`EpochTokenSource` puts the epoch in the high 32 bits and the counter in the low 32 bits, as ZooKeeper does in its `zxid`. Each token of a newer epoch is higher than each token of an older epoch. A new leader thus outranks all grants of the leader before it. The epoch must be from 0 to 2^31 − 1, so that each token fits a signed 64-bit integer. One epoch gives at most 2^32 − 1 tokens. After that, `next` throws a `RangeError`.
+`EpochTokenSource` puts the epoch in the high 32 bits and the counter in the low 32 bits, as ZooKeeper does in its `zxid`. Each token of a newer epoch is higher than each token of an older epoch. A new leader thus outranks all grants of the leader before it. The epoch must be from 0 to 2^31 − 1, so that each token fits a signed 64-bit integer. One epoch gives at most 2^32 − 1 tokens. After that, `next` throws an `EpochExhaustedError`, which is a `RangeError` with the `epoch`. Only a new term, with a higher epoch, gives more tokens. Thus a leader that gets this error must end its term.
 
 ## A fenced lease
 

@@ -1,3 +1,4 @@
+import { EpochExhaustedError } from './epoch-exhausted-error.ts';
 import { FencingToken } from './fencing-token.ts';
 import type { TokenSource } from './token-source.ts';
 
@@ -24,7 +25,7 @@ export class EpochTokenSource implements TokenSource {
   async next(_key: string): Promise<FencingToken> {
     this.#sequence++;
     if (this.#sequence >= SEQUENCE_LIMIT) {
-      throw new RangeError(`Epoch ${this.#epoch} has no tokens left.`);
+      throw new EpochExhaustedError(this.#epoch);
     }
     return new FencingToken((this.#epoch << SEQUENCE_BITS) | this.#sequence);
   }
