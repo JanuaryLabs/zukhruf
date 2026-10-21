@@ -47,15 +47,18 @@ Node's hook that starts a run before the test processes start. It does recovery 
 _Avoid_: Wrapper
 
 **Global teardown**:
-Node's hook that removes what the run created after its test processes end. It is synchronous.
+Node's hook that removes what the run created after its test processes end. It is synchronous: it starts a worker thread that sends the requests to the engine, and it waits for that worker.
 _Avoid_: Cleanup hook
 
 **Runner**:
 The `node --test` process that runs the global setup, starts the test processes and runs the global teardown.
 
 **Process record**:
-A record in the run's directory that names a process that can create something for the run: a test process, or a Docker or SSH command that it started. While a recorded process lives, the run's records stay.
+A record in the run's directory that names a process that can create something for the run: a test process, or an SSH command that it started. A test process records itself when it reads `defaults`, because another Docker client can create with those labels. While a recorded process lives, the run's records stay.
 _Avoid_: Worker record, PID file
+
+**Creating record**:
+A record in the run's directory that a test process writes while it asks the engine to create a container. The engine can finish the create after the process died. While a creating record remains, the global teardown keeps the run's records, and the recovery of a later run sweeps the run again.
 
 **Recovery**:
 A later run removing what an earlier run left, because the earlier run's global teardown did not run, failed, or kept the records for a process that still lived. Recovery waits until that run's runner and recorded processes have ended.

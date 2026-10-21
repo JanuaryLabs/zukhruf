@@ -131,6 +131,7 @@
     "pg": "^8.23.1"
   },
   "dependencies": {
+    "@zukhruf/docker": "^0.3.34",
     "nano-spawn": "^2.1.0",
     "p-memoize": "^8.0.0",
     "p-retry": "^8.0.1"

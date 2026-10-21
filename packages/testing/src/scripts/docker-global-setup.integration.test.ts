@@ -7,23 +7,30 @@ import {
   mkdtempDisposable,
   readFile,
   readdir,
-  rm,
   writeFile,
 } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { type TestContext, test } from 'node:test';
+import { setTimeout } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 
 import spawn, { SubprocessError } from 'nano-spawn';
 
+import { Docker as DockerClient } from '@zukhruf/docker';
+
 import { Docker, TestRun } from '../docker/index.ts';
+import { EngineProxy } from '../testing/engine-proxy.ts';
 
 const docker = new Docker();
-const standIn =
-  process.platform === 'win32'
-    ? 'the Docker CLI stand-in is a POSIX shell script'
-    : false;
+/** The host of the engine that this process's context selects. */
+const engine =
+  (await DockerClient.contexts({ environment: process.env })).find(
+    (context) => context.current,
+  )?.host ?? '';
+const proxyless = engine.startsWith('unix://')
+  ? false
+  : `the engine proxy forwards to a local unix:// engine only, not ${engine}`;
 const signals =
   process.platform === 'win32'
     ? 'Windows ends a process on a signal, so it runs no global teardown'
@@ -34,7 +41,6 @@ const setup = fileURLToPath(
 const library = JSON.stringify(
   new URL('../docker/index.ts', import.meta.url).href,
 );
-const quote = (value: string) => `'${value.replaceAll("'", "'\\''")}'`;
 
 /** What a worker of a run created, written where the test can read it. */
 interface State {
@@ -59,6 +65,7 @@ interface State {
  */
 const workerSource = (statePath: string, ending: string, timeout: number) => `
   import { test } from 'node:test';
+  import { existsSync } from 'node:fs';
   import { readFile, readdir, writeFile } from 'node:fs/promises';
   import { setTimeout } from 'node:timers/promises';
   import { Docker, TestRun } from ${library};
@@ -119,6 +126,17 @@ const runEnvironment = (
   ZUKHRUF_TESTING_RUN_DIR: undefined,
 });
 
+/** The environment of a runner whose engine is `proxy`. */
+const proxiedEnvironment = (
+  state: string,
+  proxy: EngineProxy,
+): Record<string, string | undefined> => ({
+  ...runEnvironment(state),
+  // A selected context wins over DOCKER_HOST.
+  DOCKER_CONTEXT: undefined,
+  DOCKER_HOST: proxy.host,
+});
+
 /** `node --test` with the Docker global setup. */
 const runnerArgs = (...args: string[]) => [
   '--test',
@@ -156,14 +174,6 @@ async function readState<T>(t: TestContext, statePath: string): Promise<T> {
     { timeout: 60_000, interval: 250 },
   );
   return JSON.parse(await readFile(statePath, 'utf8'));
-}
-
-/** The pids in a run's process records. */
-async function recordedProcesses(record: string): Promise<number[]> {
-  return (await readdir(record)).flatMap((name) => {
-    const pid = /^process-(\d+)-[\da-f-]{36}\.json$/.exec(name)?.[1];
-    return pid === undefined ? [] : [Number(pid)];
-  });
 }
 
 async function removeLeftovers(state: State | undefined): Promise<void> {
@@ -218,7 +228,7 @@ for (const mode of [
     {
       skip:
         mode === 'recovery'
-          ? standIn
+          ? proxyless
           : mode === 'SIGINT' || mode === 'SIGTERM'
             ? signals
             : false,
@@ -240,22 +250,18 @@ for (const mode of [
       await using sentinelVolume = await unrelated.volume();
       const statePath = join(directory.path, 'state.json');
       const file = join(directory.path, 'worker.test.ts');
-      const disconnected = join(directory.path, 'disconnected');
-      if (mode === 'recovery') {
-        const { stdout: dockerPath } = await spawn('which', ['docker']);
-        await writeFile(
-          join(directory.path, 'docker'),
-          `#!/bin/sh\nif [ -f ${quote(disconnected)} ]; then echo 'Cannot connect to Docker daemon (injected transport failure)' >&2; exit 1; fi\nexec ${quote(dockerPath)} "$@"\n`,
-          { mode: 0o755 },
-        );
-      }
+      // In recovery mode the run's engine is a proxy, which stops before the
+      // global teardown and listens again before the next run.
+      await using proxy =
+        mode === 'recovery' ? await EngineProxy.start(engine) : undefined;
+      const stopped = join(directory.path, 'stopped');
       await writeFile(
         file,
         workerSource(
           statePath,
           [
             mode === 'recovery'
-              ? `await writeFile(${JSON.stringify(disconnected)}, 'offline');`
+              ? `while (!existsSync(${JSON.stringify(stopped)})) await setTimeout(100);`
               : '',
             mode === 'failure'
               ? "throw new Error('intentional assertion failure');"
@@ -266,12 +272,9 @@ for (const mode of [
           mode === 'timeout' ? 30_000 : 90_000,
         ),
       );
-      const env = runEnvironment(
-        join(directory.path, 'state'),
-        mode === 'recovery'
-          ? `${directory.path}:${process.env.PATH}`
-          : process.env.PATH,
-      );
+      const env = proxy
+        ? proxiedEnvironment(join(directory.path, 'state'), proxy)
+        : runEnvironment(join(directory.path, 'state'));
       const run = started(
         runnerArgs('--test-timeout=90000', '--test-force-exit', file),
         env,
@@ -282,15 +285,19 @@ for (const mode of [
         assert.ok(state.anonymousVolumes.length > 0);
         assert.ok(state.generalVolumes.length > 0);
         if (mode === 'SIGINT' || mode === 'SIGTERM') run.child.kill(mode);
+        if (proxy) {
+          await proxy.close();
+          await writeFile(stopped, '');
+        }
         const code = await run.exited;
-        if (mode === 'recovery') {
+        if (proxy) {
           // The test passed, so only the failed cleanup sets the exit code.
           assert.equal(code, 1, run.output());
           assert.match(run.output(), /retained ownership record/);
           const record = JSON.parse(
             await readFile(join(state.record, 'run.json'), 'utf8'),
           );
-          assert.equal(record.endpoint, (await docker.info()).endpoint);
+          assert.equal(record.endpoint, proxy.host);
           assert.equal(
             await listed([
               'inspect',
@@ -300,7 +307,7 @@ for (const mode of [
             ]),
             'true',
           );
-          await rm(disconnected);
+          await proxy.listen();
           await emptyRun(file, env);
         } else assert.notEqual(code, 0, run.output());
         for (const id of [state.id, state.general])
@@ -380,75 +387,69 @@ for (const mode of [
 }
 
 test(
-  'a Docker command that outlives its killed test process keeps the run until it ends, and the next run removes what it created',
-  { skip: standIn, timeout: 180_000 },
+  'a create that the engine finishes after its test process was killed keeps the run, and the next run removes what it created',
+  { skip: proxyless, timeout: 180_000 },
   async (t) => {
     await using directory = await mkdtempDisposable(
-      join(tmpdir(), 'zukhruf-testing-orphan-command-'),
+      join(tmpdir(), 'zukhruf-testing-orphan-create-'),
     );
     const statePath = join(directory.path, 'state.json');
     const file = join(directory.path, 'worker.test.ts');
-    const { stdout: dockerPath } = await spawn('which', ['docker']);
-    // A slow `docker run`, such as one that pulls a large image: it waits
-    // until the test removes the gate.
-    const gate = join(directory.path, 'gate');
-    await writeFile(gate, '');
-    await writeFile(
-      join(directory.path, 'docker'),
-      `#!/bin/sh\nif [ "$1" = run ]; then while [ -f ${quote(gate)} ]; do sleep 0.1; done; fi\nexec ${quote(dockerPath)} "$@"\n`,
-      { mode: 0o755 },
-    );
+    // The image must not be pulled behind the held create.
+    await docker.run({ image: 'alpine:latest', command: ['true'] });
+    // A slow create, such as one on a busy engine: the engine has the
+    // request, and it creates the container after the test removes the gate.
+    // Disposed after the proxy, which waits until the engine answered the
+    // held create: then its container is listed.
+    await using leftovers = new AsyncDisposableStack();
+    await using proxy = await EngineProxy.start(engine);
+    const gate = Promise.withResolvers<void>();
+    proxy.intercept('POST', '/containers/create', () => gate.promise);
     await writeFile(
       file,
       `
       import { test } from 'node:test';
       import { writeFile } from 'node:fs/promises';
-      import { Docker, TestRun } from ${library};
-      test('a slow start', { timeout: 3000 }, async () => {
-        const docker = new Docker({ testRun: TestRun.fromEnvironment(process.env) });
-        await docker.isAvailable();
-        await writeFile(${JSON.stringify(statePath)}, JSON.stringify({ run: process.env.ZUKHRUF_TESTING_RUN_ID, record: process.env.ZUKHRUF_TESTING_RUN_DIR, pid: process.pid }));
-        await docker.start({ image: 'alpine:latest', command: ['sleep', '600'] });
+      import { Docker } from ${JSON.stringify(import.meta.resolve('@zukhruf/docker'))};
+      import { TestRun } from ${library};
+      test('a slow create', { timeout: 3000 }, async () => {
+        const run = TestRun.fromEnvironment(process.env);
+        const docker = await Docker.connect({ environment: process.env });
+        await writeFile(${JSON.stringify(statePath)}, JSON.stringify({ run: run.id, record: run.directory, pid: process.pid }));
+        await using _creating = await run.recordCreating();
+        await docker.containers.create({ Image: 'alpine:latest', Cmd: ['sleep', '600'], Labels: run.labels });
       });
     `,
     );
-    const env = runEnvironment(join(directory.path, 'state'));
+    const env = proxiedEnvironment(join(directory.path, 'state'), proxy);
     let run: string | undefined;
     try {
       // The test times out, and --test-force-exit ends its process while
-      // its `docker run` still runs.
-      await assert.rejects(
-        spawn(process.execPath, runnerArgs('--test-force-exit', file), {
-          env: runEnvironment(
-            join(directory.path, 'state'),
-            `${directory.path}:${process.env.PATH}`,
-          ),
-          timeout: 60_000,
-        }),
-      );
+      // the engine still has its create.
+      const killed = started(runnerArgs('--test-force-exit', file), env);
+      assert.notEqual(await killed.exited, 0, killed.output());
+      // The teardown kept the run on purpose: it did not fail.
+      assert.doesNotMatch(killed.output(), /retained ownership record/);
       const state = await readState<Omit<SmallState, 'id'>>(t, statePath);
       run = state.run;
-      const commands = (await recordedProcesses(state.record)).filter(
-        (pid) => pid !== state.pid,
-      );
-      assert.ok(commands.some(alive), 'the docker run outlives its test');
-      await access(join(state.record, 'run.json'));
-      await rm(gate);
-      await t.waitFor(() => assert.equal(commands.some(alive), false), {
-        timeout: 60_000,
-        interval: 250,
-      });
       const label = ['--filter', `label=dev.zukhruf.testing.run=${state.run}`];
-      assert.notEqual(await listed(['ps', '-aq', ...label]), '');
+      assert.equal(await listed(['ps', '-aq', ...label]), '');
+      await access(join(state.record, 'run.json'));
+      gate.resolve();
+      await t.waitFor(
+        async () => assert.notEqual(await listed(['ps', '-aq', ...label]), ''),
+        { timeout: 60_000, interval: 250 },
+      );
 
       await emptyRun(file, env);
 
       assert.equal(await listed(['ps', '-aq', ...label]), '');
       await assert.rejects(access(state.record), { code: 'ENOENT' });
     } finally {
-      // Never leave the stand-in waiting.
-      await rm(gate, { force: true });
-      if (run !== undefined) {
+      // Never leave the create held.
+      gate.resolve();
+      leftovers.defer(async () => {
+        if (run === undefined) return;
         const ids = await listed([
           'ps',
           '-aq',
@@ -457,7 +458,7 @@ test(
         ]);
         for (const id of ids.split('\n').filter(Boolean))
           await docker.command(['rm', '--force', id]).catch(() => {});
-      }
+      });
     }
   },
 );
@@ -509,20 +510,12 @@ test(
 
 test(
   'a run whose tests never touch Docker leaves no record and makes no daemon call',
-  { skip: standIn, timeout: 120_000 },
+  { skip: proxyless, timeout: 120_000 },
   async () => {
     await using directory = await mkdtempDisposable(
       join(tmpdir(), 'zukhruf-testing-untouched-'),
     );
-    const log = join(directory.path, 'docker.log');
-    const { stdout: dockerPath } = await spawn('which', ['docker']);
-    // Only `docker context inspect` reads the CLI's configuration; every
-    // other command needs the daemon, which this stand-in refuses.
-    await writeFile(
-      join(directory.path, 'docker'),
-      `#!/bin/sh\necho "$*" >> ${quote(log)}\nif [ "$1" = context ] && [ "$2" = inspect ]; then exec ${quote(dockerPath)} "$@"; fi\necho 'no daemon (injected)' >&2\nexit 1\n`,
-      { mode: 0o755 },
-    );
+    await using proxy = await EngineProxy.start(engine);
     const file = join(directory.path, 'plain.test.ts');
     await writeFile(
       file,
@@ -531,7 +524,7 @@ test(
     const state = join(directory.path, 'state');
 
     await spawn(process.execPath, runnerArgs(file), {
-      env: runEnvironment(state, `${directory.path}:${process.env.PATH}`),
+      env: proxiedEnvironment(state, proxy),
       timeout: 60_000,
     });
 
@@ -539,23 +532,19 @@ test(
       await readdir(join(state, 'zukhruf-testing', 'docker-runs')),
       [],
     );
-    const calls = (await readFile(log, 'utf8')).trim().split('\n');
-    assert.ok(
-      calls.every((call) => call.startsWith('context inspect')),
-      calls.join('\n'),
-    );
+    assert.deepEqual(proxy.requests, []);
   },
 );
 
 /**
  * Arrange: a run whose runner and test processes were killed, so nothing
- * removed what its worker created. Runners that recover it use a Docker
- * CLI stand-in that runs `standInLine`, a shell line, before the real CLI.
+ * removed what its worker created. Its engine is `proxy`, and so is the
+ * engine of the runners that recover it.
  */
 async function killedRun(
   t: TestContext,
   directory: string,
-  standInLine: string,
+  proxy: EngineProxy,
 ) {
   const statePath = join(directory, 'state.json');
   const file = join(directory, 'worker.test.ts');
@@ -564,15 +553,9 @@ async function killedRun(
     file,
     workerSource(statePath, 'await setTimeout(120_000);', 150_000),
   );
-  const { stdout: dockerPath } = await spawn('which', ['docker']);
-  await writeFile(
-    join(directory, 'docker'),
-    `#!/bin/sh\n${standInLine}\nexec ${quote(dockerPath)} "$@"\n`,
-    { mode: 0o755 },
-  );
   const dead = started(
     runnerArgs('--test-force-exit', file),
-    runEnvironment(stateHome),
+    proxiedEnvironment(stateHome, proxy),
   );
   let worker: number | undefined;
   try {
@@ -593,7 +576,7 @@ async function killedRun(
         {
           // Another project: the runs are per user, not per directory.
           cwd: directory,
-          env: runEnvironment(stateHome, `${directory}:${process.env.PATH}`),
+          env: proxiedEnvironment(stateHome, proxy),
           timeout: 90_000,
         },
       );
@@ -636,19 +619,23 @@ async function assertRecovered(
 
 test(
   'two runs that start together recover a dead run, and both succeed',
-  { skip: standIn, timeout: 180_000 },
+  { skip: proxyless, timeout: 180_000 },
   async (t) => {
     await using directory = await mkdtempDisposable(
       join(tmpdir(), 'zukhruf-testing-recovery-'),
     );
-    // The first `volume ls` passes; every later one waits two seconds, so a
+    await using proxy = await EngineProxy.start(engine);
+    const { state, recover, root } = await killedRun(t, directory.path, proxy);
+    // The first volume list passes; every later one waits two seconds, so a
     // second runner inside the same dead run's cleanup runs after the
     // first one has finished it.
-    const { state, recover, root } = await killedRun(
-      t,
-      directory.path,
-      `if [ "$1" = volume ] && [ "$2" = ls ] && ! mkdir ${quote(join(directory.path, 'first-volume-ls'))} 2>/dev/null; then sleep 2; fi`,
-    );
+    const recovering = proxy.requests.length;
+    proxy.intercept('GET', '/volumes', async () => {
+      const lists = proxy.requests
+        .slice(recovering)
+        .filter(({ method, path }) => method === 'GET' && path === '/volumes');
+      if (lists.length > 1) await setTimeout(2_000);
+    });
     try {
       const results = await Promise.allSettled([recover(), recover()]);
 
@@ -661,20 +648,21 @@ test(
 
 test(
   'a run that starts while another recovers a dead run leaves the run to it',
-  { skip: standIn, timeout: 180_000 },
+  { skip: proxyless, timeout: 180_000 },
   async (t) => {
     await using directory = await mkdtempDisposable(
       join(tmpdir(), 'zukhruf-testing-recovery-'),
     );
-    // Every `ps` marks that a recovery has claimed its run and is removing its
-    // containers, and takes two seconds, so the second runner starts while
-    // the first one is still inside the dead run's cleanup.
+    await using proxy = await EngineProxy.start(engine);
+    const { state, recover, root } = await killedRun(t, directory.path, proxy);
+    // Every container list marks that a recovery has claimed its run and is
+    // removing its containers, and takes two seconds, so the second runner
+    // starts while the first one is still inside the dead run's cleanup.
     const marker = join(directory.path, 'recovering');
-    const { state, recover, root } = await killedRun(
-      t,
-      directory.path,
-      `if [ "$1" = ps ]; then touch ${quote(marker)}; sleep 2; fi`,
-    );
+    proxy.intercept('GET', '/containers/json', async () => {
+      await writeFile(marker, '');
+      await setTimeout(2_000);
+    });
     try {
       const first = recover();
       await t.waitFor(() => access(marker), { interval: 50, timeout: 30_000 });
@@ -870,6 +858,66 @@ test(
 );
 
 test(
+  'the global teardown removes a container and a volume of a test process that only read docker.defaults',
+  { timeout: 180_000 },
+  async (t) => {
+    await using directory = await mkdtempDisposable(
+      join(tmpdir(), 'zukhruf-testing-defaults-'),
+    );
+    const statePath = join(directory.path, 'state.json');
+    const file = join(directory.path, 'worker.test.ts');
+    // A sandbox launcher reads the labels and creates everything through its
+    // own Docker client: the test process makes no other acquisition.
+    await writeFile(
+      file,
+      `
+      import { test } from 'node:test';
+      import { execFileSync } from 'node:child_process';
+      import { writeFile } from 'node:fs/promises';
+      import { Docker, TestRun } from ${library};
+      test('resources of another Docker client', { timeout: 150000 }, async () => {
+        const docker = new Docker({ testRun: TestRun.fromEnvironment(process.env) });
+        const labels = Object.entries(docker.defaults.labels).flatMap(([key, value]) => ['--label', key + '=' + value]);
+        const cli = (args) => execFileSync('docker', args, { encoding: 'utf8' }).trim();
+        const container = cli(['run', '--detach', ...labels, 'alpine:latest', 'sleep', '600']);
+        const volume = cli(['volume', 'create', ...labels]);
+        await writeFile(${JSON.stringify(statePath)}, JSON.stringify({ container, volume }));
+      });
+    `,
+    );
+    let state: Omit<LabelState, 'shared'> | undefined;
+    try {
+      await spawn(process.execPath, runnerArgs(file), {
+        env: runEnvironment(join(directory.path, 'state')),
+        timeout: 150_000,
+      });
+      state = await readState<Omit<LabelState, 'shared'>>(t, statePath);
+
+      assert.equal(await exists(state.container), '');
+      assert.equal(
+        await listed([
+          'volume',
+          'ls',
+          '-q',
+          '--filter',
+          `name=^${state.volume}$`,
+        ]),
+        '',
+      );
+    } finally {
+      if (state) {
+        await docker
+          .command(['rm', '--force', '--volumes', state.container])
+          .catch(() => {});
+        await docker
+          .command(['volume', 'rm', '--force', state.volume])
+          .catch(() => {});
+      }
+    }
+  },
+);
+
+test(
   'start() pulls an image that the engine does not have',
   { timeout: 180_000 },
   async (t) => {
@@ -950,5 +998,65 @@ test(
       await readdir(join(state, 'zukhruf-testing', 'docker-runs')),
       [],
     );
+  },
+);
+
+test(
+  'the global setup and teardown of the built package clean a run',
+  { timeout: 180_000 },
+  async (t) => {
+    await using directory = await mkdtempDisposable(
+      join(tmpdir(), 'zukhruf-testing-dist-'),
+    );
+    const built = import.meta.resolve('@zukhruf/testing/docker-global-setup');
+    assert.match(built, /\/dist\/scripts\/docker-global-setup\.js$/);
+    const setupFile = join(directory.path, 'setup.mjs');
+    await writeFile(
+      setupFile,
+      `export { globalSetup, globalTeardown } from ${JSON.stringify(built)};\n`,
+    );
+    const statePath = join(directory.path, 'state.json');
+    const file = join(directory.path, 'worker.test.ts');
+    await writeFile(
+      file,
+      `
+      import { test } from 'node:test';
+      import { execFileSync } from 'node:child_process';
+      import { writeFile } from 'node:fs/promises';
+      import { Docker, TestRun } from ${JSON.stringify(import.meta.resolve('@zukhruf/testing/docker'))};
+      test('a container of the run', { timeout: 150000 }, async () => {
+        const docker = new Docker({ testRun: TestRun.fromEnvironment(process.env) });
+        const labels = Object.entries(docker.defaults.labels).flatMap(([key, value]) => ['--label', key + '=' + value]);
+        const container = execFileSync('docker', ['run', '--detach', ...labels, 'alpine:latest', 'sleep', '600'], { encoding: 'utf8' }).trim();
+        await writeFile(${JSON.stringify(statePath)}, JSON.stringify({ container }));
+      });
+    `,
+    );
+    const stateHome = join(directory.path, 'state');
+    let state: { container: string } | undefined;
+    try {
+      await spawn(
+        process.execPath,
+        ['--test', `--test-global-setup=${setupFile}`, file],
+        { env: runEnvironment(stateHome), timeout: 150_000 },
+      );
+      state = await readState<{ container: string }>(t, statePath);
+
+      assert.equal(await exists(state.container), '');
+      assert.deepEqual(
+        await readdir(join(stateHome, 'zukhruf-testing', 'docker-runs')),
+        [],
+      );
+    } finally {
+      // A failed teardown leaves the container: the state still names it.
+      state ??= await readFile(statePath, 'utf8').then(
+        (text): { container: string } => JSON.parse(text),
+        () => undefined,
+      );
+      if (state)
+        await docker
+          .command(['rm', '--force', '--volumes', state.container])
+          .catch(() => {});
+    }
   },
 );

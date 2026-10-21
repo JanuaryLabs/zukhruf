@@ -34,7 +34,11 @@ const LAYERS = [
     shipped: ['std:base', 'std:coordination'],
     tests: ['std:base', 'std:coordination', 'std:domain', 'std:tool'],
   },
-  { sourceTag: 'std:tool', shipped: ['std:tool'], tests: ['std:tool'] },
+  {
+    sourceTag: 'std:tool',
+    shipped: ['std:base', 'std:tool'],
+    tests: ['std:base', 'std:tool'],
+  },
   { sourceTag: 'std:ui', shipped: [], tests: ['std:tool'] },
   {
     sourceTag: 'std:ui-extension',

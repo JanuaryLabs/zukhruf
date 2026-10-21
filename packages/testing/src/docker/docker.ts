@@ -99,11 +99,16 @@ export class Docker {
     this.#testRun = testRun;
   }
 
-  /** Defaults for disposable test containers, including external launchers. */
+  /**
+   * Defaults for disposable test containers, including external launchers.
+   * A launcher creates with these labels and no acquisition of this class:
+   * the read records this process, so the global teardown sweeps the run.
+   */
   get defaults(): {
     resources: { memory: string; cpus: number };
     labels: Record<string, string>;
   } {
+    this.#testRun?.recordThisProcess();
     return {
       resources: { memory: '1g', cpus: 1 },
       labels: this.#testRun?.labels ?? {},

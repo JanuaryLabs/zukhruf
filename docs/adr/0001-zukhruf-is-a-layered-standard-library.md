@@ -11,7 +11,7 @@ Without a check, the layers decay: each import that crosses a layer looks harmle
 | Base         | `std:base`         | `async`, `fs`, `lease`, `fencing`, `snapshot-differential`, `sqlite-drift`, `sqlite-federation`, `sqlite-transaction`, `sqlite-snapshot`, `sqlite-data-version`, `docker` | Base                                         | Tool                       |
 | Coordination | `std:coordination` | `election`                                                                                                                                                                | Base                                         | Tool                       |
 | Domain       | `std:domain`       | `mutex`, `single-flight`                                                                                                                                                  | Base, coordination                           | Tool, domain               |
-| Tool         | `std:tool`         | `testing`, `eslint`                                                                                                                                                       | Tool                                         | Nothing more               |
+| Tool         | `std:tool`         | `testing`, `eslint`                                                                                                                                                       | Base, tool                                   | Nothing more               |
 | UI           | `std:ui`           | `shadcn`, `diagram`                                                                                                                                                       | Nothing                                      | Tool                       |
 | UI extension | `std:ui-extension` | `ui`                                                                                                                                                                      | UI                                           | Tool                       |
 | Host         | `std:host`         | `apps/reservation-app`, `apps/diagram-playground`                                                                                                                         | Base, coordination, domain, UI, UI extension | Tool                       |
@@ -25,6 +25,8 @@ The UI extension layer holds React components that an app builds from the compon
 A test file is a `*.test.*` or `*.spec.*` file, or a file in `src/testing`, which holds the test helpers. The build does not ship these files. Thus a test file may also import the tools, and the test of a domain package may run another domain package. For example, a test of the single flight runs the socket lock store of the mutex.
 
 The lint checks direct imports only. A host that imports the mutex does not also need the tools, although the tests of the mutex import them.
+
+The shipped code of a tool can import a base package. For example, `testing` uses `docker` to send requests to the engine, and `docker` uses `async`. A package that `testing` depends on, now `docker` and `async`, never imports `@zukhruf/testing` in its tests. Such an import makes a cycle in the build: `testing` needs the build of `docker`, and the tests of `docker` would need the build of `testing`.
 
 Each package also keeps its `layer:island` tag. That tag answers a different question: the package imports no runtime of a host, such as Hono or Electron.
 

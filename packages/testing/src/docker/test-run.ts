@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { writeFileSync } from 'node:fs';
 import { rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
@@ -8,6 +9,9 @@ export const TEST_RUN_ID = 'ZUKHRUF_TESTING_RUN_ID';
 export const TEST_RUN_DIRECTORY = 'ZUKHRUF_TESTING_RUN_DIR';
 /** The label that ties a container or volume to the run that created it. */
 export const TEST_RUN_LABEL = 'dev.zukhruf.testing.run';
+
+/** The run directories that hold a process record of this process. */
+const recordedRuns = new Set<string>();
 
 /**
  * One `node --test` invocation with the Docker global setup. What its test
@@ -54,6 +58,32 @@ export class TestRun {
   async recordProcess(pid: number): Promise<AsyncDisposable> {
     const file = join(this.directory, `process-${pid}-${randomUUID()}.json`);
     await writeFile(file, JSON.stringify({ pid }));
+    return { [Symbol.asyncDispose]: () => rm(file, { force: true }) };
+  }
+
+  /**
+   * Writes a process record for this process, one time for each run. It is
+   * synchronous, so a getter can call it before it gives the run's labels to
+   * another Docker client.
+   */
+  recordThisProcess(): void {
+    if (recordedRuns.has(this.directory)) return;
+    writeFileSync(
+      join(this.directory, `process-${process.pid}-${randomUUID()}.json`),
+      JSON.stringify({ pid: process.pid }),
+    );
+    recordedRuns.add(this.directory);
+  }
+
+  /**
+   * Writes a creating record while this process asks the engine to create a
+   * container. The engine can finish a create after the process that sent it
+   * died. While a creating record remains, the global teardown keeps the
+   * run's records, and the recovery of a later run sweeps the run again.
+   */
+  async recordCreating(): Promise<AsyncDisposable> {
+    const file = join(this.directory, `creating-${randomUUID()}.json`);
+    await writeFile(file, JSON.stringify({ pid: process.pid }));
     return { [Symbol.asyncDispose]: () => rm(file, { force: true }) };
   }
 
