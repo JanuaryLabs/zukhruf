@@ -2,7 +2,11 @@ import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
 
-import { CounterTokenSource, type TokenSource } from '@zukhruf/fencing';
+import {
+  CounterTokenSource,
+  EpochExhaustedError,
+  type TokenSource,
+} from '@zukhruf/fencing';
 
 import {
   scriptedConnector,
@@ -228,6 +232,42 @@ describe('A request whose token cannot be minted', () => {
       await grantedWithin(waiter, 1000),
       'granted',
       'The key must pass on once the later claim releases it',
+    );
+  });
+});
+
+describe('A request whose epoch has no tokens left', () => {
+  // Kept as a double: no test can mint 2^32 tokens, so the token source throws what EpochTokenSource throws at its end.
+  test('the coordinator reports the exhausted epoch once, answers nothing, and keeps the connection', async () => {
+    // Arrange
+    const exhausted: TokenSource = {
+      async next() {
+        throw new EpochExhaustedError(7n);
+      },
+    };
+    let reports = 0;
+    const coordinator = new LockCoordinator({
+      tokens: exhausted,
+      onTokensExhausted: () => reports++,
+    });
+    const peer = scriptedPeer<LockResponse, LockRequest>();
+    coordinator.serve(peer.connection);
+
+    // Act
+    peer.deliver({ op: 'acquire', id: 'a', key: 'product:42' });
+    await delay(settle);
+
+    // Assert: the leader steps down instead, so the request is answered as on a lost connection.
+    assert.equal(reports, 1, 'The coordinator must report the exhausted epoch');
+    assert.deepEqual(
+      peer.sent,
+      [],
+      'The coordinator must not answer the request',
+    );
+    assert.equal(
+      peer.closes,
+      0,
+      'The step-down closes the connection, not the session',
     );
   });
 });

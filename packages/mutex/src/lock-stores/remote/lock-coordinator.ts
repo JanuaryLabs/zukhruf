@@ -1,5 +1,9 @@
 import { Latch, untilAborted } from '@zukhruf/async';
-import { FencingToken, type TokenSource } from '@zukhruf/fencing';
+import {
+  EpochExhaustedError,
+  FencingToken,
+  type TokenSource,
+} from '@zukhruf/fencing';
 
 import type { LockHandle } from '../../mutex/lease.ts';
 import type { AcquireOptions, LockStore } from '../../mutex/lock-store.ts';
@@ -20,6 +24,13 @@ export interface LockCoordinatorOptions {
    * coordinator can have left a holder.
    */
   graceWindow?: number;
+  /**
+   * Called when the epoch of the token source has no tokens left. The request
+   * that found it gets no answer: only a new term can grant it, so the owner
+   * ends this term, and its peers ask the next leader (ADR 0019). Without it,
+   * the request is answered `failed` like any other failed mint.
+   */
+  onTokensExhausted?: () => void;
 }
 
 interface Reassertion {
@@ -45,8 +56,14 @@ interface CoordinatorPhase {
  */
 export class LockCoordinator implements LockStore {
   #phase: CoordinatorPhase;
+  readonly #onTokensExhausted: (() => void) | undefined;
 
-  constructor({ tokens, graceWindow = 0 }: LockCoordinatorOptions) {
+  constructor({
+    tokens,
+    graceWindow = 0,
+    onTokensExhausted,
+  }: LockCoordinatorOptions) {
+    this.#onTokensExhausted = onTokensExhausted;
     const store = new MemoryStore({ tokens });
     const granting = new Granting(store);
     if (graceWindow > 0) {
@@ -88,7 +105,7 @@ export class LockCoordinator implements LockStore {
   }
 
   serve(connection: Connection<LockResponse>): void {
-    new Session(this, connection);
+    new Session(this, connection, this.#onTokensExhausted);
   }
 
   /**
@@ -192,14 +209,17 @@ class GraceWindow implements CoordinatorPhase {
 
 class Session {
   readonly #coordinator: LockCoordinator;
+  readonly #onTokensExhausted: (() => void) | undefined;
   readonly #requested = new Set<string>();
   #phase: SessionPhase;
 
   constructor(
     coordinator: LockCoordinator,
     connection: Connection<LockResponse>,
+    onTokensExhausted: (() => void) | undefined,
   ) {
     this.#coordinator = coordinator;
+    this.#onTokensExhausted = onTokensExhausted;
     this.#phase = new Serving(connection);
     connection.on('message', (message) => {
       // A message with no op or no id cannot be answered, so it is ignored, and the peer keeps its keys (ADR 0017).
@@ -276,6 +296,9 @@ class Session {
    */
   #fail(request: RequestEnvelope, error: unknown) {
     this.#requested.delete(request.id);
+    if (error instanceof EpochExhaustedError && this.#onTokensExhausted) {
+      return this.#onTokensExhausted();
+    }
     const message = error instanceof Error ? error.message : String(error);
     switch (request.op) {
       case 'acquire':

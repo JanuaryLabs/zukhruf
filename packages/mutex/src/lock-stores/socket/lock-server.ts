@@ -54,6 +54,10 @@ export class LockServer {
     const coordinator = new LockCoordinator({
       tokens: new EpochTokenSource(term.epoch),
       graceWindow,
+      // Only a new term has tokens again, so the leader steps down. Its
+      // followers then reconnect, and a new term grants their requests. The
+      // coordinator mints only for a connection that `started` serves.
+      onTokensExhausted: () => void started.close(),
     });
     const connections = new Set<Socket>();
     // Serving others never keeps the leader alive: when its own work ends, it exits and another process takes over.

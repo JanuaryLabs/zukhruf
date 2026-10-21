@@ -60,6 +60,8 @@ The first leader of a directory (epoch 1) has no grace window, because no earlie
 
 **A lost term.** The leader stops its server when the signal of its term aborts, because another process can lead then. `SqliteElection` never takes the term from a living leader, so this occurs only with a backend that can take the claim away.
 
+**An epoch with no tokens left.** One term gives at most 2^32 − 1 fencing tokens (`EpochTokenSource` of `@zukhruf/fencing`). When the leader needs one more token, it stops its server and ends its term, as on a shutdown. Its followers then elect a new leader, which can be the same process, with a higher epoch. They send their requests again, and they reassert their keys during the grace window. At 1,000 grants each second, a term gives its last token after approximately 50 days. See [ADR 0019](../adr/0019-a-failed-token-mint-answers-the-request-and-an-exhausted-epoch-ends-the-term.md).
+
 **Rules for the directory.**
 
 - Do not delete `leader.lock` while processes use the directory. A new file has no lock on it, so a second process wins, and two leaders grant the same keys.
@@ -88,6 +90,7 @@ A leader of version 0.3.9 or earlier does not know the `isHeld` request, and it 
 | The leader stops                                 | A failover occurs. Holders reassert their keys during the grace window. After a clean shutdown, there is no grace window, because no process held a key.                                                                                |
 | The leader loses its term                        | The leader closes its server, and a failover occurs. This needs a backend that can take the claim away; `SqliteElection` never does.                                                                                                    |
 | A holder is frozen during the whole grace window | Its reassert is refused. A newer holder can get the key. When the frozen holder continues, the signal of its lease aborts with `LeaseLostError`, and the call rejects with `LeaseLostError`. A fenced resource refuses its late writes. |
+| The epoch of the leader has no tokens left       | The leader closes its server and ends its term, and a failover occurs. The request that needed the token goes to the new leader.                                                                                                        |
 | A holder thread stops                            | Its connection closes, and the key is released.                                                                                                                                                                                         |
 | A campaign fails, for example with a disk error  | Each waiter gets that error. For a holder that did not reassert its keys, the signal of the lease aborts with `LeaseLostError`. The next `acquire` connects again.                                                                      |
 
@@ -128,6 +131,7 @@ The `'role'` event tells you each time this process starts to lead, or starts to
 - **A naive takeover is not safe.** Two servers that each did "connect, see `ECONNREFUSED`, delete the socket file, listen" both listened in 11 of 20 races. Clients were split between them. Thus the lock store elects its leader before it removes the socket file.
 - **`ECONNREFUSED` does not mean "no leader".** A live leader with a full connection queue also gave `ECONNREFUSED`.
 - `src/lock-stores/socket/lock-server.test.ts`: a server whose term is lost closes without a call to `close`, and a follower then leads with a higher epoch. A server that starts for a lost term rejects with `LeaseLostError` and serves nobody.
+- `src/lock-stores/remote/remote-locking.test.ts` (`A request whose epoch has no tokens left`): the coordinator reports the exhausted epoch once, answers nothing, and keeps the connection. No test reaches the end of a real epoch, which needs 2^32 grants, so no test runs the step-down of `LockServer` for it.
 - `src/lock-stores/mixed-version.release.test.ts`: a process of the latest release and a process of this source share one directory. In both directions, each one sees the holder of the other, does not get its key, and gets the key after the release. The test downloads the latest release each run, so each change is checked against the version that runs beside it during an upgrade.
 - After `SIGKILL` of a client, the server saw the connection close in 1.25 ms.
 - `src/lock-stores/socket/socket-store.test.ts`:
