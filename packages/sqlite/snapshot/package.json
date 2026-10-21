@@ -1,6 +1,6 @@
 {
   "name": "@zukhruf/sqlite-snapshot",
-  "version": "0.3.34",
+  "version": "0.3.35",
   "description": "A read-only snapshot of a SQLite database that another process owns and writes. It pins one moment with a read transaction, so the tables agree, and it never opens the file immutable, so it sees the newest rows in the WAL. It checks the columns that a reader needs, and gives the caller's own errors for a missing file or a missing column.",
   "license": "MIT",
   "repository": {
