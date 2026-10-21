@@ -191,7 +191,7 @@ describe('A request whose token cannot be minted', () => {
     assert.equal(peer.closes, 0, 'A failed mint must not close the connection');
   });
 
-  test('a reassertion is rejected, and a later claim of the same key is accepted', async () => {
+  test('a reassertion is rejected, and a later claim of the same key is accepted', async (t) => {
     // Arrange
     const graceWindow = 150;
     const coordinator = new LockCoordinator({
@@ -210,7 +210,11 @@ describe('A request whose token cannot be minted', () => {
 
     // Act: the newer claim fails to mint, then an older claim of the same key arrives.
     failed.deliver({ op: 'reassert', id: 'f', key: 'product:42', token: '9' });
-    await delay(settle);
+    await waitUntil(
+      t,
+      () => failed.sent.length === 1,
+      'The coordinator must answer the failed reassertion',
+    );
     later.deliver({ op: 'reassert', id: 'l', key: 'product:42', token: '5' });
     const waiter = coordinator.acquire('product:42');
 
@@ -238,7 +242,7 @@ describe('A request whose token cannot be minted', () => {
 
 describe('A request whose epoch has no tokens left', () => {
   // Kept as a double: no test can mint 2^32 tokens, so the token source throws what EpochTokenSource throws at its end.
-  test('the coordinator reports the exhausted epoch once, answers nothing, and keeps the connection', async () => {
+  test('the coordinator reports the exhausted epoch once, answers nothing, and keeps the connection', async (t) => {
     // Arrange
     const exhausted: TokenSource = {
       async next() {
@@ -255,7 +259,11 @@ describe('A request whose epoch has no tokens left', () => {
 
     // Act
     peer.deliver({ op: 'acquire', id: 'a', key: 'product:42' });
-    await delay(settle);
+    await waitUntil(
+      t,
+      () => reports === 1,
+      'The coordinator must report the exhausted epoch',
+    );
 
     // Assert: the leader steps down instead, so the request is answered as on a lost connection.
     assert.equal(reports, 1, 'The coordinator must report the exhausted epoch');
