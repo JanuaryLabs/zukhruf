@@ -778,3 +778,177 @@ test(
     await access(join(record, 'run.json'));
   },
 );
+
+/** What a worker created that only labels tie to its run, and a shared server. */
+interface LabelState {
+  container: string;
+  volume: string;
+  shared: string;
+}
+
+test(
+  'the global teardown removes a container and a volume that carry only the run’s labels, and keeps a shared server that carries the run’s label',
+  { timeout: 180_000 },
+  async (t) => {
+    await using directory = await mkdtempDisposable(
+      join(tmpdir(), 'zukhruf-testing-labels-'),
+    );
+    const statePath = join(directory.path, 'state.json');
+    const file = join(directory.path, 'worker.test.ts');
+    // The test removes the shared server through this label: the teardown
+    // keeps it.
+    const scope = randomUUID();
+    const verification = `dev.zukhruf.testing.verification=${scope}`;
+    // Another Docker client, such as a sandbox launcher, creates the container
+    // and the volume: only docker.defaults.labels ties them to the run.
+    await writeFile(
+      file,
+      `
+      import { test } from 'node:test';
+      import { execFileSync } from 'node:child_process';
+      import { writeFile } from 'node:fs/promises';
+      import { Docker, TestRun } from ${library};
+      test('resources that the run owns through its labels', { timeout: 150000 }, async () => {
+        const docker = new Docker({ testRun: TestRun.fromEnvironment(process.env) });
+        const shared = await docker.reuse({ image: 'alpine:latest', command: ['sleep', '600'], internalPort: 80, labels: { ...docker.defaults.labels, 'dev.zukhruf.testing.verification': ${JSON.stringify(scope)} } });
+        await shared.disconnect();
+        const labels = Object.entries(docker.defaults.labels).flatMap(([key, value]) => ['--label', key + '=' + value]);
+        const cli = (args) => execFileSync('docker', args, { encoding: 'utf8' }).trim();
+        const container = cli(['run', '--detach', ...labels, 'alpine:latest', 'sleep', '600']);
+        const volume = cli(['volume', 'create', ...labels]);
+        await writeFile(${JSON.stringify(statePath)}, JSON.stringify({ container, volume, shared: shared.containerId }));
+      });
+    `,
+    );
+    let state: LabelState | undefined;
+    try {
+      await spawn(process.execPath, runnerArgs(file), {
+        env: runEnvironment(join(directory.path, 'state')),
+        timeout: 150_000,
+      });
+      state = await readState<LabelState>(t, statePath);
+
+      assert.equal(await exists(state.container), '');
+      assert.equal(
+        await listed([
+          'volume',
+          'ls',
+          '-q',
+          '--filter',
+          `name=^${state.volume}$`,
+        ]),
+        '',
+      );
+      assert.equal(
+        await listed([
+          'inspect',
+          '--format',
+          '{{.State.Running}}',
+          state.shared,
+        ]),
+        'true',
+      );
+    } finally {
+      for (const id of (
+        await listed(['ps', '-aq', '--filter', `label=${verification}`])
+      )
+        .split('\n')
+        .filter(Boolean))
+        await docker
+          .command(['rm', '--force', '--volumes', id])
+          .catch(() => {});
+      if (state) {
+        await docker
+          .command(['rm', '--force', '--volumes', state.container])
+          .catch(() => {});
+        await docker
+          .command(['volume', 'rm', '--force', state.volume])
+          .catch(() => {});
+      }
+    }
+  },
+);
+
+test(
+  'start() pulls an image that the engine does not have',
+  { timeout: 180_000 },
+  async (t) => {
+    await using directory = await mkdtempDisposable(
+      join(tmpdir(), 'zukhruf-testing-pull-'),
+    );
+    // Only this test uses this tag, so it can remove the image.
+    const image = 'busybox:1.37.0-musl';
+    const removeImage = () =>
+      docker.command(['image', 'rm', image]).catch((error: unknown) => {
+        if (
+          !(error instanceof SubprocessError) ||
+          !/No such image/i.test(error.stderr)
+        )
+          throw error;
+      });
+    await removeImage();
+    assert.equal(await listed(['image', 'ls', '-q', image]), '');
+    const statePath = join(directory.path, 'state.json');
+    const file = join(directory.path, 'worker.test.ts');
+    await writeFile(
+      file,
+      `
+      import { test } from 'node:test';
+      import { writeFile } from 'node:fs/promises';
+      import { Docker, TestRun } from ${library};
+      test('an image that the engine does not have', { timeout: 150000 }, async () => {
+        const docker = new Docker({ testRun: TestRun.fromEnvironment(process.env) });
+        await using container = await docker.start({ image: ${JSON.stringify(image)}, command: ['sleep', '600'] });
+        await container.exec(['true']);
+        await writeFile(${JSON.stringify(statePath)}, JSON.stringify({ id: container.containerId }));
+      });
+    `,
+    );
+    try {
+      await spawn(process.execPath, runnerArgs(file), {
+        env: runEnvironment(join(directory.path, 'state')),
+        timeout: 150_000,
+      });
+
+      const state = await readState<{ id: string }>(t, statePath);
+      assert.match(state.id, /^[\da-f]{64}$/);
+      assert.notEqual(await listed(['image', 'ls', '-q', image]), '');
+    } finally {
+      await removeImage();
+    }
+  },
+);
+
+test(
+  'a runner whose DOCKER_HOST names a tcp:// engine fails in the global setup',
+  { timeout: 60_000 },
+  async () => {
+    await using directory = await mkdtempDisposable(
+      join(tmpdir(), 'zukhruf-testing-tcp-'),
+    );
+    const file = join(directory.path, 'plain.test.ts');
+    await writeFile(
+      file,
+      "import { test } from 'node:test';\ntest('no Docker', () => {});\n",
+    );
+    const state = join(directory.path, 'state');
+    const run = started(runnerArgs(file), {
+      ...runEnvironment(state),
+      // A selected context wins over DOCKER_HOST.
+      DOCKER_CONTEXT: undefined,
+      DOCKER_HOST: 'tcp://127.0.0.1:1',
+    });
+
+    const code = await run.exited;
+
+    assert.notEqual(code, 0, run.output());
+    assert.match(
+      run.output(),
+      /Unsupported Docker endpoint tcp:\/\/127\.0\.0\.1:1/,
+    );
+    assert.deepEqual(
+      await readdir(join(state, 'zukhruf-testing', 'docker-runs')),
+      [],
+    );
+  },
+);
