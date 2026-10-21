@@ -3,12 +3,11 @@ import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
 import mysql, { type RowDataPacket } from 'mysql2/promise';
-import command from 'nano-spawn';
 
-import { Docker, TestRun } from '../docker/index.ts';
+import { DockerFixtures } from '../docker/index.ts';
 import { Mysql } from './mysql.ts';
 
-const docker = new Docker({ testRun: TestRun.fromEnvironment(process.env) });
+const docker = new DockerFixtures({ environment: process.env });
 test(
   'a dedicated MySQL server gives a driver its requested database and leaves with its container',
   { timeout: 180_000 },
@@ -18,12 +17,9 @@ test(
     const id = server.containerId;
     {
       await using owned = server;
-      const { stdout: image } = await command('docker', [
-        'inspect',
-        '--format',
-        '{{.Config.Image}}',
-        id,
-      ]);
+      const client = await docker.client();
+      const image = (await (await client.containers.find(id))?.inspect())
+        ?.Config?.Image;
       assert.equal(image, 'mysql:lts');
       assert.equal(owned.image, image);
       assert.equal(new URL(owned.connectionString).protocol, 'mysql:');
@@ -43,13 +39,8 @@ test(
     }
     await t.waitFor(
       async () => {
-        const { stdout } = await command('docker', [
-          'ps',
-          '-aq',
-          '--filter',
-          `id=${id}`,
-        ]);
-        assert.equal(stdout, '');
+        const client = await docker.client();
+        assert.equal(await client.containers.find(id), undefined);
       },
       { timeout: 5_000 },
     );

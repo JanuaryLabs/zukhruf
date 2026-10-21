@@ -890,7 +890,7 @@ The package leads. Each repository below changes to fit it, with no adapter. Eac
 
 | Repository                               | Change                                                                                                                                                                  | Backlog |
 | ---------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- |
-| `@zukhruf/testing/docker`                | Rebuilt on the package. `reuse()` uses `createOrGet()` and compares its fingerprint label. Handles become owned or found.                                               | #2752   |
+| `@zukhruf/testing/docker`                | Done: rebuilt on the package. `reuse()` uses `createOrGet()` and compares its fingerprint label. Handles are owned or found.                                            | #2752   |
 | text2sql finders                         | `Docker.contexts()`, `containers.list()` and `find()`, `ConnectionFailedError` in place of the fixed sockets                                                            | #2754   |
 | text2sql daemon tests                    | `@zukhruf/testing/docker` in place of the CLI by hand                                                                                                                   | #2755   |
 | text2sql desktop tests                   | `images.inspect()`, `pull()`, `save()`                                                                                                                                  | #2756   |

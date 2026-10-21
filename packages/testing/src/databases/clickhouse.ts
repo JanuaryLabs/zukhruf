@@ -1,13 +1,14 @@
 import { timebox } from '../async/timebox.ts';
-import type { ServiceContainer } from '../docker/container.ts';
-import type { Docker } from '../docker/docker.ts';
+import type { DockerFixtures } from '../docker/fixtures.ts';
+import type { ServiceContainer } from '../docker/service-container.ts';
+import { succeeded } from './succeeded.ts';
 
 /** Each start owns a dedicated ClickHouse server and its disposable container. */
 export class ClickHouse {
-  readonly #docker: Docker;
+  readonly #docker: DockerFixtures;
   readonly #image: string;
 
-  constructor({ docker, image }: { docker: Docker; image: string }) {
+  constructor({ docker, image }: { docker: DockerFixtures; image: string }) {
     this.#docker = docker;
     this.#image = image;
   }
@@ -18,10 +19,12 @@ export class ClickHouse {
       internalPort: 8123,
       memory: '2g',
       env: { CLICKHOUSE_SKIP_USER_SETUP: '1' },
-      healthy: ({ exec }) =>
-        timebox(() => exec(['clickhouse-client', '--query', 'SELECT 1']), {
-          maxRetryTime: 60_000,
-        }),
+      healthy: (service) =>
+        timebox(
+          () =>
+            succeeded(service, ['clickhouse-client', '--query', 'SELECT 1']),
+          { maxRetryTime: 60_000 },
+        ),
     });
   }
 }

@@ -4,24 +4,29 @@ import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 import { promisify } from 'node:util';
 
-import command from 'nano-spawn';
-
-import { Docker, TestRun } from '../docker/index.ts';
+import { DockerFixtures } from '../docker/index.ts';
 import { Postgres } from './postgres.ts';
 import { SQL_SERVER_FULL_IMAGE, SqlServer } from './sqlserver.ts';
 
 const execute = promisify(execFile);
-const docker = new Docker({ testRun: TestRun.fromEnvironment(process.env) });
+const docker = new DockerFixtures({ environment: process.env });
 /** Removes the servers a test created under its own verification label. */
 async function removeScope(scope: string): Promise<void> {
-  const { stdout } = await docker.command([
-    'ps',
-    '-aq',
-    '--filter',
-    `label=dev.zukhruf.testing.verification=${scope}`,
-  ]);
-  for (const id of stdout.split('\n').filter(Boolean))
-    await docker.command(['rm', '--force', id]);
+  const client = await docker.client();
+  for (const { Id } of await client.containers.list({
+    all: true,
+    filters: { label: [`dev.zukhruf.testing.verification=${scope}`] },
+  }))
+    await (await client.containers.find(Id))?.remove({ force: true, v: true });
+}
+
+/** Runs `command` in the container `id` and gives its standard output; a non-zero exit code fails. */
+async function execIn(id: string, command: string[]): Promise<string> {
+  const container = await (await docker.client()).containers.find(id);
+  assert.ok(container, `container ${id} exists`);
+  const { exitCode, stdout, output } = await container.exec({ Cmd: command });
+  assert.equal(exitCode, 0, output);
+  return stdout;
 }
 
 test(
@@ -39,20 +44,18 @@ test(
         postgres.database(),
       ]);
       const [first, second] = databases;
-      const count = async (name: string) => {
-        const { stdout } = await command('docker', [
-          'exec',
-          first.containerId,
-          'psql',
-          '-U',
-          first.user,
-          '-d',
-          'postgres',
-          '-Atc',
-          `SELECT COUNT(*) FROM pg_database WHERE datname = '${name}'`,
-        ]);
-        return stdout;
-      };
+      const count = async (name: string) =>
+        (
+          await execIn(first.containerId, [
+            'psql',
+            '-U',
+            first.user,
+            '-d',
+            'postgres',
+            '-Atc',
+            `SELECT COUNT(*) FROM pg_database WHERE datname = '${name}'`,
+          ])
+        ).trimEnd();
       {
         await using outer = first;
         {
@@ -96,13 +99,8 @@ test(
     }
     await t.waitFor(
       async () => {
-        const { stdout } = await command('docker', [
-          'ps',
-          '-aq',
-          '--filter',
-          `id=${id}`,
-        ]);
-        assert.equal(stdout, '');
+        const client = await docker.client();
+        assert.equal(await client.containers.find(id), undefined);
       },
       { timeout: 5_000 },
     );
@@ -121,15 +119,14 @@ interface DatabaseHandle {
 // setup or shared JavaScript module state.
 const worker = `
   import assert from 'node:assert/strict';
-  import command from 'nano-spawn';
   import sql from 'mssql';
-  import { Docker, TestRun } from ${JSON.stringify(new URL('../docker/index.ts', import.meta.url).href)};
+  import { DockerFixtures } from ${JSON.stringify(new URL('../docker/index.ts', import.meta.url).href)};
   import { Mariadb } from ${JSON.stringify(new URL('./mariadb.ts', import.meta.url).href)};
   import { Mysql } from ${JSON.stringify(new URL('./mysql.ts', import.meta.url).href)};
   import { Postgres } from ${JSON.stringify(new URL('./postgres.ts', import.meta.url).href)};
   import { SqlServer } from ${JSON.stringify(new URL('./sqlserver.ts', import.meta.url).href)};
   const helpers = { Mariadb, Mysql, Postgres, SqlServer };
-  const docker = new Docker({ testRun: TestRun.fromEnvironment(process.env) });
+  const docker = new DockerFixtures({ environment: process.env });
   const { helper, config, fail } = JSON.parse(process.argv[1]);
   let handle;
   try {
@@ -137,9 +134,11 @@ const worker = `
       await using container = await new helpers[helper]({ ...config, docker }).database();
       handle = container;
       if (helper === 'Postgres') {
-        await command('docker', ['exec', container.containerId, 'psql',
+        const server = await (await docker.client()).containers.find(container.containerId);
+        const { exitCode, output } = await server.exec({ Cmd: ['psql',
           '-U', container.user, '-d', container.database, '-v', 'ON_ERROR_STOP=1',
-          '-c', 'CREATE TABLE isolated (id INT); INSERT INTO isolated VALUES (1)']);
+          '-c', 'CREATE TABLE isolated (id INT); INSERT INTO isolated VALUES (1)'] });
+        assert.equal(exitCode, 0, output);
       } else if (helper === 'Mysql' || helper === 'Mariadb') {
         assert.deepEqual(await container.query('SHOW TABLES'), []);
         await container.query('CREATE TABLE isolated (id INT)');
@@ -229,9 +228,7 @@ for (const [engine, helper, config] of [
 
         const names = handles.map(({ database }) => `'${database}'`).join(',');
         if (engine === 'postgres') {
-          const { stdout } = await command('docker', [
-            'exec',
-            server.containerId,
+          const stdout = await execIn(server.containerId, [
             'psql',
             '-U',
             server.user,
@@ -242,9 +239,7 @@ for (const [engine, helper, config] of [
           ]);
           assert.equal(stdout.trim(), '0');
         } else if (engine === 'mysql' || engine === 'mariadb') {
-          const { stdout } = await command('docker', [
-            'exec',
-            server.containerId,
+          const stdout = await execIn(server.containerId, [
             engine,
             `-u${server.user}`,
             `-p${server.password}`,
@@ -285,24 +280,16 @@ for (const [engine, helper, config] of [
           }
         }
 
-        const { stdout } = await command('docker', [
-          'inspect',
-          '--format',
-          '{{.State.Running}}',
-          server.containerId,
-        ]);
-        assert.equal(stdout, 'true');
-        await command('docker', ['stop', server.containerId]);
+        const client = await docker.client();
+        const shared = await client.containers.find(server.containerId);
+        assert.equal((await shared?.inspect())?.State?.Running, true);
+        await shared?.stop();
         await t.waitFor(
-          async () => {
-            const { stdout } = await command('docker', [
-              'ps',
-              '-aq',
-              '--filter',
-              `id=${server.containerId}`,
-            ]);
-            assert.equal(stdout, '');
-          },
+          async () =>
+            assert.equal(
+              await client.containers.find(server.containerId),
+              undefined,
+            ),
           { timeout: 5_000 },
         );
         const replacement = await run(false);

@@ -11,9 +11,9 @@ import {
   SQL_SERVER_FULL_IMAGE,
   SqlServer,
 } from '../databases/sqlserver.ts';
-import { Docker, TestRun } from './index.ts';
+import { DockerFixtures } from './index.ts';
 
-const docker = new Docker({ testRun: TestRun.fromEnvironment(process.env) });
+const docker = new DockerFixtures({ environment: process.env });
 test(
   'the selected Docker engine exposes a database to this Node process',
   { timeout: 120_000 },
@@ -38,32 +38,33 @@ test(
   'ports stay private and handles keep their original engine',
   { timeout: 120_000 },
   async () => {
-    const original = await docker.info();
-    await using database = await new Postgres({ docker }).start();
-    const { stdout } = await docker.command(['inspect', database.containerId]);
-    const [container] = JSON.parse(stdout);
+    // Arrange
+    const environment = { ...process.env };
+    const fixtures = new DockerFixtures({ environment });
+    const client = await fixtures.client();
+    const original = await client.info();
+    await using database = await new Postgres({ docker: fixtures }).start();
+
+    // Act: the environment now names an engine that does not exist.
+    environment.DOCKER_HOST = 'unix:///nonexistent/docker-test.sock';
+    delete environment.DOCKER_CONTEXT;
+
+    // Assert
+    const container = await (
+      await client.containers.find(database.containerId)
+    )?.inspect();
     assert.equal(
-      container.NetworkSettings.Ports['5432/tcp'][0].HostIp,
+      container?.NetworkSettings?.Ports?.['5432/tcp']?.[0]?.HostIp,
       '127.0.0.1',
     );
-    assert.equal(container.HostConfig.Memory, 1024 ** 3);
-    assert.equal(container.HostConfig.NanoCpus, 1_000_000_000);
-    assert.notEqual(container.HostConfig.IpcMode, 'host');
-    const previous = {
-      host: process.env.DOCKER_HOST,
-      context: process.env.DOCKER_CONTEXT,
-    };
-    try {
-      process.env.DOCKER_HOST = 'unix:///nonexistent/docker-test.sock';
-      delete process.env.DOCKER_CONTEXT;
-      assert.deepEqual(await docker.info(), original);
-      assert.equal(await new Docker().isAvailable(), false);
-    } finally {
-      if (previous.host === undefined) delete process.env.DOCKER_HOST;
-      else process.env.DOCKER_HOST = previous.host;
-      if (previous.context === undefined) delete process.env.DOCKER_CONTEXT;
-      else process.env.DOCKER_CONTEXT = previous.context;
-    }
+    assert.equal(container?.HostConfig?.Memory, 1024 ** 3);
+    assert.equal(container?.HostConfig?.NanoCpus, 1_000_000_000);
+    assert.notEqual(container?.HostConfig?.IpcMode, 'host');
+    assert.equal((await (await fixtures.client()).info()).ID, original.ID);
+    await assert.rejects(
+      new DockerFixtures({ environment }).client(),
+      /Docker is required for container-backed tests/,
+    );
   },
 );
 
@@ -93,7 +94,10 @@ test(
         await client.end();
       }
     } finally {
-      if (id) await docker.command(['rm', '--force', id]);
+      if (id)
+        await (
+          await (await docker.client()).containers.find(id)
+        )?.remove({ force: true, v: true });
     }
   },
 );
@@ -146,11 +150,11 @@ test(
   { timeout: 240_000 },
   async () => {
     const { default: sql } = await import('mssql');
-    const { architecture } = await docker.info();
+    const { Architecture } = await (await docker.client()).info();
     await using database = await new SqlServer({ docker }).start();
     assert.equal(
       database.image,
-      ['aarch64', 'arm64'].includes(architecture)
+      ['aarch64', 'arm64'].includes(Architecture ?? '')
         ? SQL_SERVER_EDGE_IMAGE
         : SQL_SERVER_FULL_IMAGE,
     );

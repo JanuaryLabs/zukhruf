@@ -8,21 +8,21 @@ The words in these documents have one meaning each. See the glossary in [CONTEXT
 
 Each area has its own import path, so a test loads only the drivers it uses. The three drivers are optional peer dependencies: install the one an area names.
 
-| Import                        | Gives                                                                                   | Needs                    |
-| ----------------------------- | --------------------------------------------------------------------------------------- | ------------------------ |
-| `@zukhruf/testing/node`       | Native `test`, `it`, `suite`, `describe` with `.each`                                   |                          |
-| `@zukhruf/testing/async`      | `timebox`, `settleWithin`                                                               |                          |
-| `@zukhruf/testing/docker`     | `Docker`, `Container`, `ServiceContainer`, `DockerVolume`, `DockerDirectory`, `TestRun` | Docker CLI               |
-| `@zukhruf/testing/postgres`   | `Postgres`                                                                              | Docker CLI               |
-| `@zukhruf/testing/mysql`      | `Mysql`                                                                                 | Docker CLI               |
-| `@zukhruf/testing/mariadb`    | `Mariadb`                                                                               | Docker CLI               |
-| `@zukhruf/testing/sqlserver`  | `SqlServer`, `SQL_SERVER_FULL_IMAGE`, `SQL_SERVER_EDGE_IMAGE`                           | Docker CLI, `mssql`      |
-| `@zukhruf/testing/clickhouse` | `ClickHouse`                                                                            | Docker CLI               |
-| `@zukhruf/testing/sqlite`     | `Sqlite`                                                                                |                          |
-| `@zukhruf/testing/duckdb`     | `DuckDB`                                                                                | `@duckdb/node-api`       |
-| `@zukhruf/testing/bigquery`   | `BigQuery`                                                                              | `@google-cloud/bigquery` |
-| `@zukhruf/testing/http`       | `HttpServer`                                                                            |                          |
-| `@zukhruf/testing/streams`    | `StreamHarness`                                                                         |                          |
+| Import                        | Gives                                                              | Needs                    |
+| ----------------------------- | ------------------------------------------------------------------ | ------------------------ |
+| `@zukhruf/testing/node`       | Native `test`, `it`, `suite`, `describe` with `.each`              |                          |
+| `@zukhruf/testing/async`      | `timebox`, `settleWithin`                                          |                          |
+| `@zukhruf/testing/docker`     | `DockerFixtures`, `ServiceContainer`, `DockerDirectory`, `TestRun` | a Docker engine          |
+| `@zukhruf/testing/postgres`   | `Postgres`                                                         | a Docker engine          |
+| `@zukhruf/testing/mysql`      | `Mysql`                                                            | a Docker engine          |
+| `@zukhruf/testing/mariadb`    | `Mariadb`                                                          | a Docker engine          |
+| `@zukhruf/testing/sqlserver`  | `SqlServer`, `SQL_SERVER_FULL_IMAGE`, `SQL_SERVER_EDGE_IMAGE`      | a Docker engine, `mssql` |
+| `@zukhruf/testing/clickhouse` | `ClickHouse`                                                       | a Docker engine          |
+| `@zukhruf/testing/sqlite`     | `Sqlite`                                                           |                          |
+| `@zukhruf/testing/duckdb`     | `DuckDB`                                                           | `@duckdb/node-api`       |
+| `@zukhruf/testing/bigquery`   | `BigQuery`                                                         | `@google-cloud/bigquery` |
+| `@zukhruf/testing/http`       | `HttpServer`                                                       |                          |
+| `@zukhruf/testing/streams`    | `StreamHarness`                                                    |                          |
 
 ## Parameterized tests
 
@@ -66,14 +66,14 @@ TAP, spec, simultaneous JUnit output, name filtering, skip/TODO reasons, failure
 
 ## Docker
 
-A `Docker` is the engine the Docker CLI selects. It resolves the engine once, on first use, and every handle it returns keeps that engine. It supports local Unix sockets, Docker Desktop's named pipe on Windows (`npipe://`), and SSH engines (`ssh://`).
+A `DockerFixtures` acquires containers, volumes and directories on one engine. The `environment` that you give it, such as `process.env`, selects the engine as the Docker CLI does: `DOCKER_HOST`, `DOCKER_CONTEXT`, or the current context in the Docker config directory. The `@zukhruf/docker` client sends the requests to the Engine API, so no Docker CLI is necessary. The engine is connected on the first acquisition, and every handle keeps that engine. It can be a local Unix socket, the named pipe of Docker Desktop on Windows (`npipe://`), or an SSH engine (`ssh://`).
 
-A test that needs Docker has no skip option. When the engine does not answer, the first acquisition fails with "Docker is required for container-backed tests" and the engine's error as the cause. Start Docker to run these tests.
+A test that needs Docker has no skip option. When the engine does not answer, the first acquisition fails with "Docker is required for container-backed tests" and the connection failure as the cause. Start Docker to run these tests.
 
 ```ts
-import { Docker, TestRun } from '@zukhruf/testing/docker';
+import { DockerFixtures } from '@zukhruf/testing/docker';
 
-const docker = new Docker({ testRun: TestRun.fromEnvironment(process.env) });
+const docker = new DockerFixtures({ environment: process.env });
 
 test('a holder in another container', async () => {
   await using volume = await docker.volume();
@@ -84,7 +84,7 @@ test('a holder in another container', async () => {
     command: ['node', '--eval', 'setInterval(() => {}, 1000)'],
   });
   await holder.kill();
-  const output = await docker.run({
+  const { exitCode, stdout } = await docker.run({
     image: 'node:lts-alpine',
     mounts: [{ source: volume.name, target: '/locks', readOnly: true }],
     command: ['ls', '/locks'],
@@ -92,18 +92,22 @@ test('a holder in another container', async () => {
 });
 ```
 
-| Method           | Starts                                                                                                                                         | Returns            |
-| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- | ------------------ |
-| `start(options)` | A container this process owns. It stays after it stops, so its logs remain, until disposal removes it.                                         | `Container`        |
-| `serve(options)` | A dedicated server whose `internalPort` answers on `127.0.0.1` of this machine. Failure or disposal stops it, and a stopped server is removed. | `ServiceContainer` |
-| `reuse(options)` | One server per configuration on the engine, shared across processes and runs.                                                                  | `ServiceContainer` |
-| `run(options)`   | A container that runs to completion. Returns its standard output and removes it.                                                               | `string`           |
-| `volume()`       | A named volume.                                                                                                                                | `DockerVolume`     |
-| `directory()`    | A directory on the engine's host, for bind mounts. It has `mkdir`, `writeFile`, `readFile`, `chmod` and `symlink`.                             | `DockerDirectory`  |
+| Member           | Gives                                                                                                                                       | Returns                           |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------- |
+| `start(options)` | A container this process owns. It stays after it stops, so its logs remain, until disposal removes it.                                      | `OwnedContainer`                  |
+| `serve(options)` | A dedicated server whose `internalPort` answers on `127.0.0.1` of this machine. Failure or disposal removes it.                             | `ServiceContainer`                |
+| `reuse(options)` | One server per configuration on the engine, shared across processes and runs.                                                               | `ServiceContainer`                |
+| `run(options)`   | A container that runs to completion. It gives the output and the exit code, and removes the container. A non-zero exit code does not throw. | `ExecResult`                      |
+| `volume()`       | A named volume.                                                                                                                             | `OwnedVolume`                     |
+| `directory()`    | A directory on the engine's host, for bind mounts. It has `mkdir`, `writeFile`, `readFile`, `chmod` and `symlink`.                          | `DockerDirectory`                 |
+| `client()`       | The `@zukhruf/docker` client of the engine, for each other Engine API call, such as `info()` or `containers.find(id)`.                      | `Docker` (from `@zukhruf/docker`) |
+| `defaults`       | The default `resources` and the run's `labels`.                                                                                             |                                   |
 
-Options: `image`, `command`, `name`, `hostname`, `env`, `labels`, `mounts`, `tmpfs`, `ipcHost`, `memory` (default `1g`), `cpus` (default `1`), `memorySwappiness`. `serve` and `reuse` also take `internalPort` and `healthy`, a function that throws until the server is ready; it runs on every acquisition. Use `timebox` for polling inside it.
+Options: `image`, `command`, `name`, `hostname`, `env`, `labels`, `mounts`, `tmpfs`, `ipcHost`, `memory` (default `1g`), `cpus` (default `1`), `memorySwappiness`. `serve` and `reuse` also take `internalPort` and `healthy`, a function that throws until the server is ready; it runs on every acquisition. Use `timebox` for polling inside it. When the engine does not have the image, the acquisition pulls it, as `docker run` does.
 
-A `Container` has `containerId`, `exec(command)`, `logs()`, `kill(signal)` and `cleanup()`. Disposal removes it with its anonymous volumes. A `ServiceContainer` also has `host` and `port`; on an SSH engine the port is a local forward that belongs to the acquiring process. `disconnect()` closes that forward and leaves the container running for its other users. If the forward ended before, for example because the SSH connection died, `disconnect()` rejects with what ssh printed. When the removal fails too, `cleanup()` rejects with a `SuppressedError` that holds both errors. Nothing is written to stderr.
+`OwnedContainer`, `OwnedVolume`, `ExecResult` and `Docker` are types of `@zukhruf/docker`. A container has `id`, `exec({ Cmd })`, `logs()`, `kill(signal)` and `inspect()`. `exec` gives `exitCode`, `stdout`, `stderr` and `output`, and it does not throw for a non-zero exit code. The text keeps its last newline. Disposal removes the container with its anonymous volumes.
+
+A `ServiceContainer` has `container`, `host` and `port`. On an SSH engine, the port is a local forward that belongs to the acquiring process. `disconnect()` closes that forward and leaves the container running for its other users. If the forward ended before, for example because the SSH connection died, `disconnect()` rejects with what ssh printed. `cleanup()` and disposal also remove the container of a dedicated server. When the removal fails too, `cleanup()` rejects with a `SuppressedError` that holds both errors. Nothing is written to stderr. A probe in `healthy` gets the `ServiceContainer`: call `container.exec(...)` on it, and do not destructure `exec`.
 
 ### Shared servers
 
@@ -116,7 +120,7 @@ docker ps -a --filter label=dev.zukhruf.testing.shared=1
 docker stop <container-id>
 ```
 
-They run with `--rm`, so stopping also removes them. The image tag is part of the configuration: stop the server to pick up a newer image behind the same tag.
+The engine removes a server when it stops, so stopping also removes it. The image tag is part of the configuration: stop the server to pick up a newer image behind the same tag.
 
 ## A killed run
 
@@ -136,13 +140,13 @@ Then give the file to `node --test`. The value is a path relative to the working
 node --test --test-force-exit --test-global-setup=src/testing/docker-global-setup.ts "src/**/*.test.ts"
 ```
 
-The global setup sets `ZUKHRUF_TESTING_RUN_ID` and `ZUKHRUF_TESTING_RUN_DIR` for the test processes. A `Docker` built with `TestRun.fromEnvironment(process.env)` labels what it creates with the run. It records SSH forwards and host directories in the run's directory. It also writes a process record for its test process, and for each Docker or SSH command that it starts, while that command runs.
+The global setup sets `ZUKHRUF_TESTING_RUN_ID` and `ZUKHRUF_TESTING_RUN_DIR` for the test processes. A `DockerFixtures` reads them from its `environment` and labels what it creates with the run. It records SSH forwards and host directories in the run's directory. It also writes a process record for its test process, and for each SSH command that it starts, while that command runs. While it asks the engine to create a container, it writes a creating record.
 
-The global teardown removes the labeled containers with their anonymous volumes, the labeled volumes and the recorded paths. It never removes shared servers. The teardown is synchronous, because Node does not wait for an asynchronous teardown under `--test-force-exit`. When every recorded process has ended, the teardown deletes the run's records. A recorded process that still runs can still create a container, for example a `docker run` that a killed test process started. Then the teardown keeps the records, and a later run removes what is left after that process ends.
+The global teardown removes the labeled containers with their anonymous volumes, the labeled volumes and the recorded paths. It never removes shared servers. The teardown is synchronous, because Node does not wait for an asynchronous teardown under `--test-force-exit`. When every recorded process has ended, the teardown deletes the run's records. A recorded process that still runs can still create a container. The engine can also finish a create after the test process that sent it was killed. Then the teardown keeps the records, and a later run removes what is left after that process ends.
 
 If cleanup fails, for example because the engine is unreachable, the global teardown prints the error, keeps the run's records, and sets exit code 1. The next run on the same engine removes what the run left, from any project of this user. This is recovery. Recovery does not touch a run while its runner or one of its recorded processes lives. The records are in `$XDG_STATE_HOME/zukhruf-testing/docker-runs` (`~/.local/state/zukhruf-testing/docker-runs` by default). Do not delete a record to hide a cleanup failure.
 
-The global setup reads the engine with `docker context inspect`, so the Docker CLI must be installed. It calls the engine only when a dead run on that engine has records of processes to sweep.
+The global setup selects the engine as the Docker CLI does, through `@zukhruf/docker`, so the Docker CLI is not necessary. It calls the engine only when a dead run on that engine has records to sweep.
 
 On an SSH engine, run one test file at a time with `--test-concurrency=1` if the engine cannot take more. An SSH forward runs `cat` in a remote shell, so the SSH user needs a shell on the engine's host. The forward ends when the process that opened it ends, also when that process is killed.
 
@@ -150,7 +154,7 @@ To pass the run to another container API, spread `docker.defaults`: it holds the
 
 ## Databases
 
-`Postgres`, `Mysql`, `Mariadb` and `SqlServer` take the `docker` to run on. Each `database()` call creates a fresh database on a shared server; disposal drops it. `start()` creates a dedicated server; disposal stops it.
+`Postgres`, `Mysql`, `Mariadb`, `SqlServer` and `ClickHouse` take the `docker`, a `DockerFixtures`, to run on. Each `database()` call creates a fresh database on a shared server; disposal drops it. `start()` creates a dedicated server; disposal stops it.
 
 ```ts
 import { Postgres } from '@zukhruf/testing/postgres';
@@ -163,7 +167,7 @@ test('stores a record', async () => {
 });
 ```
 
-The handle has `connectionString`, `host`, `port`, `user`, `password`, `database`, `image` and `containerId`. `Mysql` and `Mariadb` handles also have `query(sql)`. Without an image, `Mysql` runs `mysql:lts` and `Mariadb` runs `mariadb:lts`. MariaDB 11 and later have no `mysql` client, so use `Mariadb` for a MariaDB image. A `Mariadb` connection string starts with `mariadb://`, because the `mariadb` driver accepts no other scheme. Without an image, `SqlServer` picks Azure SQL Edge on an ARM engine and SQL Server 2022 elsewhere. `ClickHouse` takes an explicit `image` and starts a dedicated server, so a test can create server-wide users and functions.
+The handle has `connectionString`, `host`, `port`, `user`, `password`, `database`, `image` and `containerId`. `Mysql` and `Mariadb` handles also have `query(sql)`. Without an image, `Mysql` runs `mysql:lts` and `Mariadb` runs `mariadb:lts`. MariaDB 11 and later have no `mysql` client, so use `Mariadb` for a MariaDB image. A `Mariadb` connection string starts with `mariadb://`, because the `mariadb` driver accepts no other scheme. Without an image, `SqlServer` picks Azure SQL Edge on an ARM engine and SQL Server 2022 elsewhere. `ClickHouse` takes an explicit `image`, and its `start()` gives a `ServiceContainer` of a dedicated server, so a test can create server-wide users and functions.
 
 `Sqlite` creates a file-backed database in a temporary directory, with a native `DatabaseSync` connection. Disposal closes the connection and removes the directory, including WAL files. `writeLock(path, durationMs)` holds a write lock from another process, which releases it after `durationMs`, even while the caller blocks in a synchronous write.
 

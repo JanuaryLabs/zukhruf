@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 
-import { Docker, TestRun } from './index.ts';
+import { DockerFixtures, TestRun } from './index.ts';
 
 test('an environment with only one of the two run variables is refused', () => {
   assert.throws(
@@ -18,10 +18,12 @@ test('an environment with only one of the two run variables is refused', () => {
 });
 
 test('a process outside a run has no run, and its containers carry no run label', () => {
-  const run = TestRun.fromEnvironment({ PATH: '/usr/bin' });
+  const environment = { PATH: '/usr/bin' };
+
+  const run = TestRun.fromEnvironment(environment);
 
   assert.equal(run, undefined);
-  assert.deepEqual(new Docker({ testRun: run }).defaults.labels, {});
+  assert.deepEqual(new DockerFixtures({ environment }).defaults.labels, {});
 });
 
 test('a process in a run gets its run, and Docker labels what it creates with the run', async () => {
@@ -29,15 +31,17 @@ test('a process in a run gets its run, and Docker labels what it creates with th
   await using directory = await mkdtempDisposable(
     join(tmpdir(), 'zukhruf-testing-run-'),
   );
-  const run = TestRun.fromEnvironment({
+  const environment = {
     ZUKHRUF_TESTING_RUN_ID: 'run-1',
     ZUKHRUF_TESTING_RUN_DIR: directory.path,
-  });
+  };
+
+  const run = TestRun.fromEnvironment(environment);
 
   assert.ok(run);
   assert.equal(run.id, 'run-1');
   assert.equal(run.directory, directory.path);
-  assert.deepEqual(new Docker({ testRun: run }).defaults.labels, {
+  assert.deepEqual(new DockerFixtures({ environment }).defaults.labels, {
     'dev.zukhruf.testing.run': 'run-1',
   });
 });

@@ -2,64 +2,58 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
+import type { Docker } from '@zukhruf/docker';
+
 import { timebox } from '../async/index.ts';
-import { Docker, TestRun } from './index.ts';
+import { DockerFixtures } from './index.ts';
 
-const docker = new Docker({ testRun: TestRun.fromEnvironment(process.env) });
-interface InspectedMounts {
-  Mounts: { Type: string; Name: string }[];
+/** Removes each container that carries `label`, shared servers too. */
+async function removeLabelled(client: Docker, label: string): Promise<void> {
+  for (const { Id } of await client.containers.list({
+    all: true,
+    filters: { label: [label] },
+  }))
+    await (await client.containers.find(Id))?.remove({ force: true, v: true });
 }
-interface InspectedIdentity {
-  Name: string;
-  Config: { Labels: Record<string, string> };
-}
-
-const containersLabelled = async (label: string): Promise<string[]> =>
-  (await docker.command(['ps', '-aq', '--filter', `label=${label}`])).stdout
-    .split('\n')
-    .filter(Boolean);
 
 test(
   'disposing an owned server removes its anonymous volumes',
   { timeout: 120_000 },
   async () => {
-    await using container = await docker.serve({
+    // Arrange
+    const fixtures = new DockerFixtures({ environment: process.env });
+    const client = await fixtures.client();
+    await using server = await fixtures.serve({
       image: 'postgres:18-alpine',
       internalPort: 5432,
       env: { POSTGRES_PASSWORD: 'test' },
     });
-    const [inspected]: InspectedMounts[] = JSON.parse(
-      (await docker.command(['inspect', container.containerId])).stdout,
-    );
-    const volumes = (inspected?.Mounts ?? []).filter(
-      (mount) => mount.Type === 'volume',
-    );
+    const volumes = ((await server.container.inspect()).Mounts ?? [])
+      .filter((mount) => mount.Type === 'volume')
+      .map((mount) => mount.Name ?? '');
     try {
       assert.ok(
         volumes.length > 0,
         'the image declares an anonymous data volume',
       );
 
-      await container.cleanup();
+      // Act
+      await server.cleanup();
 
-      for (const { Name } of volumes) {
-        const { stdout } = await docker.command([
-          'volume',
-          'ls',
-          '-q',
-          '--filter',
-          `name=^${Name}$`,
-        ]);
+      // Assert
+      for (const name of volumes)
         assert.equal(
-          stdout,
-          '',
+          await client.volumes.find(name),
+          undefined,
           'anonymous data must not outlive its container',
         );
-      }
     } finally {
-      for (const { Name } of volumes) {
-        await docker.command(['volume', 'rm', Name]).catch(() => {});
-      }
+      for (const name of volumes)
+        await (
+          await client.volumes.find(name)
+        )
+          ?.remove({ force: true })
+          .catch(() => {});
     }
   },
 );
@@ -68,6 +62,9 @@ test(
   'Docker identity preserves configuration, ownership, and unfinished creation',
   { timeout: 120_000 },
   async (t) => {
+    // Arrange
+    const fixtures = new DockerFixtures({ environment: process.env });
+    const client = await fixtures.client();
     const scope = randomUUID();
     const verification = `dev.zukhruf.testing.verification=${scope}`;
     const labels = {
@@ -81,9 +78,12 @@ test(
       labels,
       tmpfs: ['/var/lib/postgresql:rw,size=512m'],
     };
+    const running = async (id: string) =>
+      (await (await client.containers.find(id))?.inspect())?.State?.Running;
     try {
-      await using first = await docker.reuse(options);
-      await using reordered = await docker.reuse({
+      // Act + Assert: the configuration, not the order of its entries, picks the server.
+      await using first = await fixtures.reuse(options);
+      await using reordered = await fixtures.reuse({
         ...options,
         env: { POSTGRES_DB: 'postgres', POSTGRES_PASSWORD: 'testpassword' },
         labels: {
@@ -91,15 +91,15 @@ test(
           'dev.zukhruf.testing.verification': scope,
         },
       });
-      assert.equal(reordered.containerId, first.containerId);
-      await using different = await docker.reuse({
+      assert.equal(reordered.container.id, first.container.id);
+      await using different = await fixtures.reuse({
         ...options,
         env: { ...options.env, POSTGRES_PASSWORD: 'another-password' },
       });
-      assert.notEqual(different.containerId, first.containerId);
+      assert.notEqual(different.container.id, first.container.id);
 
       await assert.rejects(
-        docker.reuse({
+        fixtures.reuse({
           ...options,
           healthy: () => {
             throw new Error('readiness failed');
@@ -107,46 +107,41 @@ test(
         }),
         /readiness failed/,
       );
-      await using healthy = await docker.reuse({
+      await using healthy = await fixtures.reuse({
         ...options,
-        healthy: ({ exec }) =>
+        healthy: ({ container }) =>
           timebox(
-            () =>
-              exec([
-                'psql',
-                '-h',
-                '127.0.0.1',
-                '-U',
-                'postgres',
-                '-c',
-                'SELECT 1',
-              ]),
+            async () => {
+              const { exitCode, output } = await container.exec({
+                Cmd: [
+                  'psql',
+                  '-h',
+                  '127.0.0.1',
+                  '-U',
+                  'postgres',
+                  '-c',
+                  'SELECT 1',
+                ],
+              });
+              if (exitCode !== 0) throw new Error(output);
+            },
             { maxRetryTime: 60_000 },
           ),
       });
-      assert.equal(healthy.containerId, first.containerId);
+      assert.equal(healthy.container.id, first.container.id);
 
+      // Act + Assert: a dedicated server with the name is not a shared one.
       const name = `zukhruf-testing-owned-${scope}`;
-      await using owned = await docker.serve({ ...options, name });
+      await using owned = await fixtures.serve({ ...options, name });
       await assert.rejects(
-        docker.reuse({ ...options, name }),
+        fixtures.reuse({ ...options, name }),
         /does not match/,
       );
-      assert.equal(
-        (
-          await docker.command([
-            'inspect',
-            '--format',
-            '{{.State.Running}}',
-            owned.containerId,
-          ])
-        ).stdout,
-        'true',
-      );
+      assert.equal(await running(owned.container.id), true);
 
       const failedName = `zukhruf-testing-failed-${scope}`;
       await assert.rejects(
-        docker.serve({
+        fixtures.serve({
           ...options,
           name: failedName,
           healthy: () => {
@@ -155,74 +150,50 @@ test(
         }),
         /owned startup failed/,
       );
-      // Docker stop waits for exit; --rm removal can finish after it returns.
+      // The removal of an auto-removed container can finish after the stop.
       await t.waitFor(
-        async () => {
-          const { stdout } = await docker.command([
-            'ps',
-            '-aq',
-            '--filter',
-            `name=^/${failedName}$`,
-          ]);
-          assert.equal(stdout, '');
-        },
+        async () =>
+          assert.equal(await client.containers.find(failedName), undefined),
         { timeout: 5_000 },
       );
 
-      // Reproduce a creator dying between Docker create and start. Preserve the
-      // actual identity metadata instead of duplicating the library's hash logic.
-      const [inspection]: InspectedIdentity[] = JSON.parse(
-        (await docker.command(['inspect', first.containerId])).stdout,
-      );
-      assert.ok(inspection);
-      await first.cleanup();
+      // Arrange: a creator that died between create and start. The inspected
+      // labels keep the identity, so the test does not repeat the fingerprint.
+      const inspection = await first.container.inspect();
+      await first.container.remove({ force: true, v: true });
       await t.waitFor(
-        async () => {
-          const { stdout } = await docker.command([
-            'ps',
-            '-aq',
-            '--filter',
-            `id=${first.containerId}`,
-          ]);
-          assert.equal(stdout, '');
-        },
+        async () =>
+          assert.equal(
+            await client.containers.find(first.container.id),
+            undefined,
+          ),
         { timeout: 5_000 },
       );
-      const labelArgs = Object.entries(inspection.Config.Labels).flatMap(
-        ([key, value]) => ['--label', `${key}=${value}`],
+      await client.containers.create(
+        {
+          Image: options.image,
+          Labels: inspection.Config?.Labels ?? {},
+          Env: ['POSTGRES_PASSWORD=testpassword', 'POSTGRES_DB=postgres'],
+          ExposedPorts: { '5432/tcp': {} },
+          HostConfig: {
+            AutoRemove: true,
+            Tmpfs: { '/var/lib/postgresql': 'rw,size=512m' },
+            PortBindings: {
+              '5432/tcp': [{ HostIp: '127.0.0.1', HostPort: '' }],
+            },
+          },
+        },
+        { name: (inspection.Name ?? '').slice(1) },
       );
-      await docker.command([
-        'create',
-        '--rm',
-        '--name',
-        inspection.Name.slice(1),
-        ...labelArgs,
-        '-e',
-        'POSTGRES_PASSWORD=testpassword',
-        '-e',
-        'POSTGRES_DB=postgres',
-        '--tmpfs',
-        '/var/lib/postgresql:rw,size=512m',
-        '-P',
-        options.image,
-      ]);
-      await using recovered = await docker.reuse(options);
-      assert.notEqual(recovered.containerId, first.containerId);
-      assert.equal(
-        (
-          await docker.command([
-            'inspect',
-            '--format',
-            '{{.State.Running}}',
-            recovered.containerId,
-          ])
-        ).stdout,
-        'true',
-      );
+
+      // Act
+      await using recovered = await fixtures.reuse(options);
+
+      // Assert
+      assert.notEqual(recovered.container.id, first.container.id);
+      assert.equal(await running(recovered.container.id), true);
     } finally {
-      for (const id of await containersLabelled(verification)) {
-        await docker.command(['rm', '--force', id]);
-      }
+      await removeLabelled(client, verification);
     }
   },
 );

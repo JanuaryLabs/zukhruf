@@ -1,9 +1,10 @@
 import { randomUUID } from 'node:crypto';
 
 import { timebox } from '../async/timebox.ts';
-import type { ServiceContainer } from '../docker/container.ts';
-import type { Docker } from '../docker/docker.ts';
+import type { DockerFixtures } from '../docker/fixtures.ts';
+import type { ServiceContainer } from '../docker/service-container.ts';
 import type { Database, DatabaseOptions } from './database.ts';
+import { succeeded } from './succeeded.ts';
 
 export type { Database, DatabaseOptions } from './database.ts';
 
@@ -13,7 +14,7 @@ export interface PostgresOptions extends DatabaseOptions {
 
 /** PostgreSQL test configuration. Each acquisition returns an independent handle. */
 export class Postgres {
-  readonly #docker: Docker;
+  readonly #docker: DockerFixtures;
   readonly #options;
 
   constructor({
@@ -56,8 +57,8 @@ export class Postgres {
     return this.#handle(container, database, () => container.cleanup());
   }
 
-  #sql(container: ServiceContainer, sql: string) {
-    return container.exec([
+  #sql(container: ServiceContainer, sql: string): Promise<string> {
+    return succeeded(container, [
       'psql',
       '-U',
       this.#options.user,
@@ -93,8 +94,14 @@ export class Postgres {
     // TCP excludes PostgreSQL's temporary, socket-only initialization server.
     return timebox(
       async () => {
-        await container.exec(['pg_isready', '-h', '127.0.0.1', '-U', user]);
-        await container.exec([
+        await succeeded(container, [
+          'pg_isready',
+          '-h',
+          '127.0.0.1',
+          '-U',
+          user,
+        ]);
+        await succeeded(container, [
           'psql',
           '-h',
           '127.0.0.1',
@@ -122,7 +129,7 @@ export class Postgres {
       user,
       password,
       database,
-      containerId: container.containerId,
+      containerId: container.container.id,
       host: container.host,
       port: container.port,
       cleanup,

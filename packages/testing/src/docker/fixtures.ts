@@ -69,12 +69,6 @@ interface Engine {
   host: DockerHost;
 }
 
-/** The host config fields that the docker package's types do not list yet. */
-type FixtureHostConfig = EngineApi.HostConfig & {
-  IpcMode?: string;
-  MemorySwappiness?: number;
-};
-
 const units: Record<string, number> = {
   b: 1,
   k: 1024,
@@ -335,7 +329,7 @@ export class DockerFixtures {
 
   #body(options: ContainerOptions): EngineApi.ContainerCreateRequest {
     const { resources } = this.defaults;
-    const hostConfig: FixtureHostConfig = {
+    const hostConfig: EngineApi.HostConfig = {
       Binds: (options.mounts ?? []).map(
         ({ source, target, readOnly }) =>
           `${source}:${target}${readOnly ? ':ro' : ''}`,

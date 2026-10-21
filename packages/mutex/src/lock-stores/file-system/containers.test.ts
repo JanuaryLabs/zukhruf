@@ -3,12 +3,7 @@ import { readFileSync } from 'node:fs';
 import { type TestContext, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
-import {
-  type Container,
-  Docker,
-  type DockerVolume,
-  TestRun,
-} from '@zukhruf/testing/docker';
+import { DockerFixtures } from '@zukhruf/testing/docker';
 import { describe } from '@zukhruf/testing/node';
 
 import { isRecord } from '../../shared/is-record.ts';
@@ -19,7 +14,9 @@ import { isRecord } from '../../shared/is-record.ts';
  * hostname and its own PID namespace.
  */
 const image = 'node:lts-alpine';
-const docker = new Docker({ testRun: TestRun.fromEnvironment(process.env) });
+const docker = new DockerFixtures({ environment: process.env });
+type Container = Awaited<ReturnType<DockerFixtures['start']>>;
+type OwnedVolume = Awaited<ReturnType<DockerFixtures['volume']>>;
 
 const packageRoot = fileURLToPath(new URL('../../../', import.meta.url));
 const mutexInContainer = 'file:///pkg/src/index.ts';
@@ -65,7 +62,7 @@ const waiterSource = (storeName: string) => `
 
 interface ContainerOptions {
   /** The lock directory that the containers of one test share. */
-  volume: DockerVolume;
+  volume: OwnedVolume;
   hostname?: string;
   /** Passed to the command as `$SOURCE`, so a shell can start it. */
   source?: string;
@@ -93,13 +90,10 @@ function holdingIn(
 ): Promise<{ pid: number; token: string }> {
   return t.waitFor(
     async () => {
-      const line = (await container.logs())
+      const line = (await container.logs()).stdout
         .split('\n')
         .find((candidate) => candidate.includes('"holding"'));
-      assert.ok(
-        line,
-        `The holder in ${container.containerId} must take the key`,
-      );
+      assert.ok(line, `The holder in ${container.id} must take the key`);
       return JSON.parse(line);
     },
     { interval: 100, timeout: 20000 },
@@ -113,11 +107,11 @@ async function waiterIn(
   options: ContainerOptions,
   storeName: string,
 ): Promise<Grant> {
-  const output = await docker.run({
+  const { stdout } = await docker.run({
     ...placement(options),
     command: ['node', '--input-type=module', '--eval', waiterSource(storeName)],
   });
-  return JSON.parse(output.split('\n').at(-1)!);
+  return JSON.parse(stdout.trimEnd().split('\n').at(-1)!);
 }
 
 /** The waiter got the key, with a newer token than the holder it replaced. */
@@ -134,16 +128,18 @@ function assertTakenOver(
 }
 
 /** Every lock file in the volume with its owner record, for failure messages. */
-const lockFiles = (volume: DockerVolume) =>
-  docker.run({
-    image,
-    mounts: [{ source: volume.name, target: '/locks' }],
-    command: [
-      'sh',
-      '-c',
-      'for f in /locks/*.lock; do echo "$f: $(cat "$f")"; done',
-    ],
-  });
+const lockFiles = async (volume: OwnedVolume) =>
+  (
+    await docker.run({
+      image,
+      mounts: [{ source: volume.name, target: '/locks' }],
+      command: [
+        'sh',
+        '-c',
+        'for f in /locks/*.lock; do echo "$f: $(cat "$f")"; done',
+      ],
+    })
+  ).stdout;
 
 void describe.each(stores, (storeName) =>
   describe(`${storeName} shared by containers on one machine`, () => {
@@ -232,19 +228,16 @@ void describe.each(stores, (storeName) =>
         'node --input-type=module --eval "$SOURCE" & wait; sleep infinity',
       );
       const held = await holdingIn(t, box);
-      await box.exec(['kill', '-9', String(held.pid)]);
+      await box.exec({ Cmd: ['kill', '-9', String(held.pid)] });
 
       // Act: the waiter runs in the same container, so it sees the holder's PID namespace.
-      const { stdout: output } = await box.exec([
-        'node',
-        '--input-type=module',
-        '--eval',
-        waiterSource(storeName),
-      ]);
+      const { stdout: output } = await box.exec({
+        Cmd: ['node', '--input-type=module', '--eval', waiterSource(storeName)],
+      });
 
       // Assert: one PID namespace is the case the stores are built for.
       assertTakenOver(
-        JSON.parse(output.split('\n').at(-1)!),
+        JSON.parse(output.trimEnd().split('\n').at(-1)!),
         held,
         'A dead holder in the waiter’s own PID namespace must be evicted',
       );

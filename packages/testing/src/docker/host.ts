@@ -25,7 +25,7 @@ const supportedEndpoints = ['unix://', 'npipe://', 'ssh://'];
  * A command this process started. A killed process leaves its commands
  * running; their process records keep its run until they end.
  */
-export async function recorded(
+async function recorded(
   run: TestRun | undefined,
   subprocess: Subprocess,
 ): Promise<Result> {

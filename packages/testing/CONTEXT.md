@@ -20,7 +20,7 @@ What an acquisition returns. Disposing it cleans up the fixture.
 _Avoid_: Instance, connection
 
 **Engine**:
-The Docker daemon that the Docker CLI selects, local or over SSH. A handle keeps the engine it was created on.
+The Docker daemon that the environment selects as the Docker CLI selects it, local or over SSH. `@zukhruf/docker` does the selection and sends the requests; the package uses no Docker CLI. A handle keeps the engine it was created on.
 _Avoid_: Host, daemon (for the selection)
 
 **Container**:

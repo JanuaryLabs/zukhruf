@@ -4,8 +4,8 @@ import sql from 'mssql';
 import pMemoize from 'p-memoize';
 
 import { timebox } from '../async/timebox.ts';
-import type { ServiceContainer } from '../docker/container.ts';
-import type { Docker } from '../docker/docker.ts';
+import type { DockerFixtures } from '../docker/fixtures.ts';
+import type { ServiceContainer } from '../docker/service-container.ts';
 import type { Database, DatabaseOptions } from './database.ts';
 
 export type { Database, DatabaseOptions } from './database.ts';
@@ -16,14 +16,12 @@ export const SQL_SERVER_EDGE_IMAGE = 'mcr.microsoft.com/azure-sql-edge:latest';
 
 /** SQL Server test configuration. Without an image, the engine's architecture picks one. */
 export class SqlServer {
-  readonly #docker: Docker;
+  readonly #docker: DockerFixtures;
   readonly #options;
   readonly #image = pMemoize(async (): Promise<string> => {
     if (this.#options.image) return this.#options.image;
-    if (!(await this.#docker.isAvailable()))
-      throw new Error('Docker is required for container-backed tests');
-    const { architecture } = await this.#docker.info();
-    return ['arm64', 'aarch64'].includes(architecture)
+    const { Architecture } = await (await this.#docker.client()).info();
+    return ['arm64', 'aarch64'].includes(Architecture ?? '')
       ? SQL_SERVER_EDGE_IMAGE
       : SQL_SERVER_FULL_IMAGE;
   });
@@ -164,7 +162,7 @@ export class SqlServer {
       user: 'sa',
       password,
       database,
-      containerId: container.containerId,
+      containerId: container.container.id,
       host: container.host,
       port: container.port,
       cleanup,

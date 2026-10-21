@@ -1,9 +1,10 @@
 import { randomUUID } from 'node:crypto';
 
 import { timebox } from '../async/timebox.ts';
-import type { ServiceContainer } from '../docker/container.ts';
-import type { Docker } from '../docker/docker.ts';
+import type { DockerFixtures } from '../docker/fixtures.ts';
+import type { ServiceContainer } from '../docker/service-container.ts';
 import type { Database, DatabaseOptions } from './database.ts';
+import { succeeded } from './succeeded.ts';
 
 export interface MysqlFamilyDatabase extends Database {
   query: (sql: string) => Promise<Record<string, string | null>[]>;
@@ -19,7 +20,7 @@ const user = 'root';
  * the environment, and passes its default image to this constructor.
  */
 export abstract class MysqlFamilyServer {
-  readonly #docker: Docker;
+  readonly #docker: DockerFixtures;
   readonly #options;
 
   protected abstract readonly client: string;
@@ -68,9 +69,9 @@ export abstract class MysqlFamilyServer {
     return this.#handle(container, database, () => container.cleanup());
   }
 
-  #sql(container: ServiceContainer, sql: string) {
+  #sql(container: ServiceContainer, sql: string): Promise<string> {
     const { password } = this.#options;
-    return container.exec([
+    return succeeded(container, [
       this.client,
       `-u${user}`,
       `-p${password}`,
@@ -85,7 +86,7 @@ export abstract class MysqlFamilyServer {
     sql: string,
   ): Promise<Record<string, string | null>[]> {
     const { password } = this.#options;
-    const { stdout } = await container.exec([
+    const stdout = await succeeded(container, [
       this.client,
       `-u${user}`,
       `-p${password}`,
@@ -138,7 +139,7 @@ export abstract class MysqlFamilyServer {
     // TCP excludes the entrypoint's temporary, socket-only initialization server.
     return timebox(
       () =>
-        container.exec([
+        succeeded(container, [
           this.client,
           '-h',
           '127.0.0.1',
@@ -163,7 +164,7 @@ export abstract class MysqlFamilyServer {
       user,
       password,
       database,
-      containerId: container.containerId,
+      containerId: container.container.id,
       host: container.host,
       port: container.port,
       query: (sql) => this.#query(container, database, sql),

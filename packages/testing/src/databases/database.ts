@@ -1,4 +1,4 @@
-import type { Docker } from '../docker/docker.ts';
+import type { DockerFixtures } from '../docker/fixtures.ts';
 
 /** Connection and disposal for one server-backed database. */
 export interface Database extends AsyncDisposable {
@@ -16,7 +16,7 @@ export interface Database extends AsyncDisposable {
 
 export interface DatabaseOptions {
   /** The engine the server runs on, with the test run that owns it. */
-  docker: Docker;
+  docker: DockerFixtures;
   labels?: Record<string, string>;
   image?: string;
   password?: string;

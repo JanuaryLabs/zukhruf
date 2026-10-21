@@ -17,15 +17,15 @@ import { fileURLToPath } from 'node:url';
 
 import spawn, { SubprocessError } from 'nano-spawn';
 
-import { Docker as DockerClient } from '@zukhruf/docker';
+import { BindSourceNotFoundError, Docker } from '@zukhruf/docker';
 
-import { Docker, TestRun } from '../docker/index.ts';
+import { DockerFixtures, TestRun } from '../docker/index.ts';
 import { EngineProxy } from '../testing/engine-proxy.ts';
 
-const docker = new Docker();
+const docker = await Docker.connect({ environment: process.env });
 /** The host of the engine that this process's context selects. */
 const engine =
-  (await DockerClient.contexts({ environment: process.env })).find(
+  (await Docker.contexts({ environment: process.env })).find(
     (context) => context.current,
   )?.host ?? '';
 const proxyless = engine.startsWith('unix://')
@@ -41,6 +41,7 @@ const setup = fileURLToPath(
 const library = JSON.stringify(
   new URL('../docker/index.ts', import.meta.url).href,
 );
+const client = JSON.stringify(import.meta.resolve('@zukhruf/docker'));
 
 /** What a worker of a run created, written where the test can read it. */
 interface State {
@@ -68,20 +69,20 @@ const workerSource = (statePath: string, ending: string, timeout: number) => `
   import { existsSync } from 'node:fs';
   import { readFile, readdir, writeFile } from 'node:fs/promises';
   import { setTimeout } from 'node:timers/promises';
-  import { Docker, TestRun } from ${library};
+  import { DockerFixtures } from ${library};
   test('disposable resources before interruption', { timeout: ${timeout} }, async () => {
-    const docker = new Docker({ testRun: TestRun.fromEnvironment(process.env) });
-    const container = await docker.serve({ image: 'postgres:18-alpine', internalPort: 5432, env: { POSTGRES_PASSWORD: 'test' } });
+    const docker = new DockerFixtures({ environment: process.env });
+    const { container } = await docker.serve({ image: 'postgres:18-alpine', internalPort: 5432, env: { POSTGRES_PASSWORD: 'test' } });
     const general = await docker.start({ image: 'postgres:18-alpine', command: ['sleep', '600'] });
     const fixture = await docker.directory();
     await fixture.writeFile('sentinel.txt', 'owned');
     const volume = await docker.volume();
-    const anonymous = async (id) => JSON.parse((await docker.command(['inspect', id])).stdout)[0].Mounts.filter(mount => mount.Type === 'volume').map(mount => mount.Name);
-    const anonymousVolumes = await anonymous(container.containerId);
-    const generalVolumes = await anonymous(general.containerId);
+    const anonymous = async (handle) => (await handle.inspect()).Mounts.filter(mount => mount.Type === 'volume').map(mount => mount.Name);
+    const anonymousVolumes = await anonymous(container);
+    const generalVolumes = await anonymous(general);
     const directory = process.env.ZUKHRUF_TESTING_RUN_DIR;
     const forwards = await Promise.all((await readdir(directory)).filter(name => name.startsWith('forward-')).map(async name => JSON.parse(await readFile(directory + '/' + name, 'utf8')).path));
-    await writeFile(${JSON.stringify(statePath)}, JSON.stringify({ id: container.containerId, general: general.containerId, path: fixture.path, volume: volume.name, anonymousVolumes, generalVolumes, forwards, run: process.env.ZUKHRUF_TESTING_RUN_ID, record: directory, pid: process.pid }));
+    await writeFile(${JSON.stringify(statePath)}, JSON.stringify({ id: container.id, general: general.id, path: fixture.path, volume: volume.name, anonymousVolumes, generalVolumes, forwards, run: process.env.ZUKHRUF_TESTING_RUN_ID, record: directory, pid: process.pid }));
     ${ending}
   });
 `;
@@ -100,11 +101,11 @@ const smallWorkerSource = (statePath: string, ending: string) => `
   import { test } from 'node:test';
   import { writeFile } from 'node:fs/promises';
   import { setTimeout } from 'node:timers/promises';
-  import { Docker, TestRun } from ${library};
+  import { DockerFixtures } from ${library};
   test('one container', { timeout: 150000 }, async () => {
-    const docker = new Docker({ testRun: TestRun.fromEnvironment(process.env) });
+    const docker = new DockerFixtures({ environment: process.env });
     const container = await docker.start({ image: 'alpine:latest', command: ['sleep', '600'] });
-    await writeFile(${JSON.stringify(statePath)}, JSON.stringify({ id: container.containerId, run: process.env.ZUKHRUF_TESTING_RUN_ID, record: process.env.ZUKHRUF_TESTING_RUN_DIR, pid: process.pid }));
+    await writeFile(${JSON.stringify(statePath)}, JSON.stringify({ id: container.id, run: process.env.ZUKHRUF_TESTING_RUN_ID, record: process.env.ZUKHRUF_TESTING_RUN_DIR, pid: process.pid }));
     ${ending}
   });
 `;
@@ -152,10 +153,26 @@ const emptyRun = (file: string, env: Record<string, string | undefined>) =>
     { env, timeout: 90_000 },
   );
 
-const listed = async (args: string[]): Promise<string> =>
-  (await docker.command(args)).stdout;
+const exists = async (id: string): Promise<boolean> =>
+  (await docker.containers.find(id)) !== undefined;
 
-const exists = (id: string) => listed(['ps', '-aq', '--filter', `id=${id}`]);
+const volumeExists = async (name: string): Promise<boolean> =>
+  (await docker.volumes.find(name)) !== undefined;
+
+const running = async (id: string): Promise<boolean | undefined> =>
+  (await (await docker.containers.find(id))?.inspect())?.State?.Running;
+
+/** The containers that carry `label`, as `key=value`. */
+const labelled = async (label: string): Promise<string[]> =>
+  (
+    await docker.containers.list({ all: true, filters: { label: [label] } })
+  ).map(({ Id }) => Id);
+
+const removeContainer = async (id: string): Promise<void> =>
+  (await docker.containers.find(id))?.remove({ force: true, v: true });
+
+const removeVolume = async (name: string): Promise<void> =>
+  (await docker.volumes.find(name))?.remove({ force: true });
 
 function alive(pid: number): boolean {
   try {
@@ -179,13 +196,13 @@ async function readState<T>(t: TestContext, statePath: string): Promise<T> {
 async function removeLeftovers(state: State | undefined): Promise<void> {
   if (!state) return;
   for (const id of [state.id, state.general])
-    await docker.command(['rm', '--force', '--volumes', id]).catch(() => {});
+    await removeContainer(id).catch(() => {});
   for (const name of [
     state.volume,
     ...state.anonymousVolumes,
     ...state.generalVolumes,
   ])
-    await docker.command(['volume', 'rm', '--force', name]).catch(() => {});
+    await removeVolume(name).catch(() => {});
 }
 
 /** The pid of a process that has ended. */
@@ -240,8 +257,12 @@ for (const mode of [
       );
       // Another run's container and volume: the sweep must match the run id,
       // not only the label.
-      const unrelated = new Docker({
-        testRun: new TestRun(`unrelated-${randomUUID()}`, directory.path),
+      const unrelated = new DockerFixtures({
+        environment: {
+          ...process.env,
+          ZUKHRUF_TESTING_RUN_ID: `unrelated-${randomUUID()}`,
+          ZUKHRUF_TESTING_RUN_DIR: directory.path,
+        },
       });
       await using sentinel = await unrelated.start({
         image: 'alpine:latest',
@@ -298,28 +319,20 @@ for (const mode of [
             await readFile(join(state.record, 'run.json'), 'utf8'),
           );
           assert.equal(record.endpoint, proxy.host);
-          assert.equal(
-            await listed([
-              'inspect',
-              '--format',
-              '{{.State.Running}}',
-              state.id,
-            ]),
-            'true',
-          );
+          assert.equal(await running(state.id), true);
           await proxy.listen();
           await emptyRun(file, env);
         } else assert.notEqual(code, 0, run.output());
         for (const id of [state.id, state.general])
-          assert.equal(await exists(id), '', run.output());
+          assert.equal(await exists(id), false, run.output());
         for (const name of [
           state.volume,
           ...state.anonymousVolumes,
           ...state.generalVolumes,
         ]) {
           assert.equal(
-            await listed(['volume', 'ls', '-q', '--filter', `name=^${name}$`]),
-            '',
+            await volumeExists(name),
+            false,
             `the run left volume ${name}: ${run.output()}`,
           );
         }
@@ -328,17 +341,16 @@ for (const mode of [
         }
         // Docker validates the remote path. This probe never creates the source.
         await assert.rejects(
-          docker.command([
-            'run',
-            '--rm',
-            '--mount',
-            `type=bind,src=${state.path},dst=/fixture`,
-            'alpine:latest',
-            'true',
-          ]),
-          (error) =>
-            error instanceof SubprocessError &&
-            /bind source path does not exist/.test(error.stderr),
+          docker.containers.run({
+            Image: 'alpine:latest',
+            Cmd: ['true'],
+            HostConfig: {
+              Mounts: [
+                { Type: 'bind', Source: state.path, Target: '/fixture' },
+              ],
+            },
+          }),
+          BindSourceNotFoundError,
         );
         if (mode === 'SIGINT' || mode === 'SIGTERM') {
           // The runner does not wait for a signalled test process, so the
@@ -357,25 +369,8 @@ for (const mode of [
           ),
           [],
         );
-        assert.equal(
-          await listed([
-            'inspect',
-            '--format',
-            '{{.State.Running}}',
-            sentinel.containerId,
-          ]),
-          'true',
-        );
-        assert.equal(
-          await listed([
-            'volume',
-            'ls',
-            '-q',
-            '--filter',
-            `name=^${sentinelVolume.name}$`,
-          ]),
-          sentinelVolume.name,
-        );
+        assert.equal(await running(sentinel.id), true);
+        assert.equal(await volumeExists(sentinelVolume.name), true);
       } finally {
         if (run.child.exitCode === null && run.child.signalCode === null)
           run.child.kill('SIGKILL');
@@ -396,7 +391,8 @@ test(
     const statePath = join(directory.path, 'state.json');
     const file = join(directory.path, 'worker.test.ts');
     // The image must not be pulled behind the held create.
-    await docker.run({ image: 'alpine:latest', command: ['true'] });
+    if ((await docker.images.inspect('alpine:latest')) === undefined)
+      await docker.images.pull('alpine:latest');
     // A slow create, such as one on a busy engine: the engine has the
     // request, and it creates the container after the test removes the gate.
     // Disposed after the proxy, which waits until the engine answered the
@@ -410,7 +406,7 @@ test(
       `
       import { test } from 'node:test';
       import { writeFile } from 'node:fs/promises';
-      import { Docker } from ${JSON.stringify(import.meta.resolve('@zukhruf/docker'))};
+      import { Docker } from ${client};
       import { TestRun } from ${library};
       test('a slow create', { timeout: 3000 }, async () => {
         const run = TestRun.fromEnvironment(process.env);
@@ -432,32 +428,26 @@ test(
       assert.doesNotMatch(killed.output(), /retained ownership record/);
       const state = await readState<Omit<SmallState, 'id'>>(t, statePath);
       run = state.run;
-      const label = ['--filter', `label=dev.zukhruf.testing.run=${state.run}`];
-      assert.equal(await listed(['ps', '-aq', ...label]), '');
+      const label = `dev.zukhruf.testing.run=${state.run}`;
+      assert.deepEqual(await labelled(label), []);
       await access(join(state.record, 'run.json'));
       gate.resolve();
       await t.waitFor(
-        async () => assert.notEqual(await listed(['ps', '-aq', ...label]), ''),
+        async () => assert.notDeepEqual(await labelled(label), []),
         { timeout: 60_000, interval: 250 },
       );
 
       await emptyRun(file, env);
 
-      assert.equal(await listed(['ps', '-aq', ...label]), '');
+      assert.deepEqual(await labelled(label), []);
       await assert.rejects(access(state.record), { code: 'ENOENT' });
     } finally {
       // Never leave the create held.
       gate.resolve();
       leftovers.defer(async () => {
         if (run === undefined) return;
-        const ids = await listed([
-          'ps',
-          '-aq',
-          '--filter',
-          `label=dev.zukhruf.testing.run=${run}`,
-        ]);
-        for (const id of ids.split('\n').filter(Boolean))
-          await docker.command(['rm', '--force', id]).catch(() => {});
+        for (const id of await labelled(`dev.zukhruf.testing.run=${run}`))
+          await removeContainer(id).catch(() => {});
       });
     }
   },
@@ -489,10 +479,7 @@ test(
 
       await emptyRun(file, env);
 
-      assert.equal(
-        await listed(['inspect', '--format', '{{.State.Running}}', state.id]),
-        'true',
-      );
+      assert.equal(await running(state.id), true);
       await access(join(state.record, 'run.json'));
     } finally {
       if (killed.child.exitCode === null && killed.child.signalCode === null)
@@ -500,10 +487,7 @@ test(
       await killed.exited.catch(() => null);
       if (worker !== undefined && alive(worker))
         process.kill(worker, 'SIGKILL');
-      if (state)
-        await docker
-          .command(['rm', '--force', '--volumes', state.id])
-          .catch(() => {});
+      if (state) await removeContainer(state.id).catch(() => {});
     }
   },
 );
@@ -568,7 +552,7 @@ async function killedRun(
     await t.waitFor(() => assert.equal(alive(pid), false), {
       timeout: 5_000,
     });
-    assert.equal(await exists(state.general), state.general.slice(0, 12));
+    assert.equal(await exists(state.general), true);
     const recover = () =>
       spawn(
         process.execPath,
@@ -609,11 +593,8 @@ async function assertRecovered(
         : '',
     );
   for (const id of [state.id, state.general])
-    assert.equal(await exists(id), '');
-  assert.equal(
-    await listed(['volume', 'ls', '-q', '--filter', `name=^${state.volume}$`]),
-    '',
-  );
+    assert.equal(await exists(id), false);
+  assert.equal(await volumeExists(state.volume), false);
   assert.deepEqual(await readdir(root), []);
 }
 
@@ -696,7 +677,7 @@ test(
       join(record, 'run.json'),
       JSON.stringify({
         id,
-        endpoint: (await docker.info()).endpoint,
+        endpoint: engine,
         pid: await endedPid(),
       }),
     );
@@ -793,18 +774,18 @@ test(
       file,
       `
       import { test } from 'node:test';
-      import { execFileSync } from 'node:child_process';
       import { writeFile } from 'node:fs/promises';
-      import { Docker, TestRun } from ${library};
+      import { Docker } from ${client};
+      import { DockerFixtures } from ${library};
       test('resources that the run owns through its labels', { timeout: 150000 }, async () => {
-        const docker = new Docker({ testRun: TestRun.fromEnvironment(process.env) });
+        const docker = new DockerFixtures({ environment: process.env });
         const shared = await docker.reuse({ image: 'alpine:latest', command: ['sleep', '600'], internalPort: 80, labels: { ...docker.defaults.labels, 'dev.zukhruf.testing.verification': ${JSON.stringify(scope)} } });
         await shared.disconnect();
-        const labels = Object.entries(docker.defaults.labels).flatMap(([key, value]) => ['--label', key + '=' + value]);
-        const cli = (args) => execFileSync('docker', args, { encoding: 'utf8' }).trim();
-        const container = cli(['run', '--detach', ...labels, 'alpine:latest', 'sleep', '600']);
-        const volume = cli(['volume', 'create', ...labels]);
-        await writeFile(${JSON.stringify(statePath)}, JSON.stringify({ container, volume, shared: shared.containerId }));
+        await using other = await Docker.connect({ environment: process.env });
+        const created = await other.containers.create({ Image: 'alpine:latest', Cmd: ['sleep', '600'], Labels: docker.defaults.labels });
+        await created.start();
+        const { name: volume } = await other.volumes.create({ Labels: docker.defaults.labels });
+        await writeFile(${JSON.stringify(statePath)}, JSON.stringify({ container: created.id, volume, shared: shared.container.id }));
       });
     `,
     );
@@ -816,42 +797,15 @@ test(
       });
       state = await readState<LabelState>(t, statePath);
 
-      assert.equal(await exists(state.container), '');
-      assert.equal(
-        await listed([
-          'volume',
-          'ls',
-          '-q',
-          '--filter',
-          `name=^${state.volume}$`,
-        ]),
-        '',
-      );
-      assert.equal(
-        await listed([
-          'inspect',
-          '--format',
-          '{{.State.Running}}',
-          state.shared,
-        ]),
-        'true',
-      );
+      assert.equal(await exists(state.container), false);
+      assert.equal(await volumeExists(state.volume), false);
+      assert.equal(await running(state.shared), true);
     } finally {
-      for (const id of (
-        await listed(['ps', '-aq', '--filter', `label=${verification}`])
-      )
-        .split('\n')
-        .filter(Boolean))
-        await docker
-          .command(['rm', '--force', '--volumes', id])
-          .catch(() => {});
+      for (const id of await labelled(verification))
+        await removeContainer(id).catch(() => {});
       if (state) {
-        await docker
-          .command(['rm', '--force', '--volumes', state.container])
-          .catch(() => {});
-        await docker
-          .command(['volume', 'rm', '--force', state.volume])
-          .catch(() => {});
+        await removeContainer(state.container).catch(() => {});
+        await removeVolume(state.volume).catch(() => {});
       }
     }
   },
@@ -872,16 +826,16 @@ test(
       file,
       `
       import { test } from 'node:test';
-      import { execFileSync } from 'node:child_process';
       import { writeFile } from 'node:fs/promises';
-      import { Docker, TestRun } from ${library};
+      import { Docker } from ${client};
+      import { DockerFixtures } from ${library};
       test('resources of another Docker client', { timeout: 150000 }, async () => {
-        const docker = new Docker({ testRun: TestRun.fromEnvironment(process.env) });
-        const labels = Object.entries(docker.defaults.labels).flatMap(([key, value]) => ['--label', key + '=' + value]);
-        const cli = (args) => execFileSync('docker', args, { encoding: 'utf8' }).trim();
-        const container = cli(['run', '--detach', ...labels, 'alpine:latest', 'sleep', '600']);
-        const volume = cli(['volume', 'create', ...labels]);
-        await writeFile(${JSON.stringify(statePath)}, JSON.stringify({ container, volume }));
+        const { labels } = new DockerFixtures({ environment: process.env }).defaults;
+        await using other = await Docker.connect({ environment: process.env });
+        const created = await other.containers.create({ Image: 'alpine:latest', Cmd: ['sleep', '600'], Labels: labels });
+        await created.start();
+        const { name: volume } = await other.volumes.create({ Labels: labels });
+        await writeFile(${JSON.stringify(statePath)}, JSON.stringify({ container: created.id, volume }));
       });
     `,
     );
@@ -893,25 +847,12 @@ test(
       });
       state = await readState<Omit<LabelState, 'shared'>>(t, statePath);
 
-      assert.equal(await exists(state.container), '');
-      assert.equal(
-        await listed([
-          'volume',
-          'ls',
-          '-q',
-          '--filter',
-          `name=^${state.volume}$`,
-        ]),
-        '',
-      );
+      assert.equal(await exists(state.container), false);
+      assert.equal(await volumeExists(state.volume), false);
     } finally {
       if (state) {
-        await docker
-          .command(['rm', '--force', '--volumes', state.container])
-          .catch(() => {});
-        await docker
-          .command(['volume', 'rm', '--force', state.volume])
-          .catch(() => {});
+        await removeContainer(state.container).catch(() => {});
+        await removeVolume(state.volume).catch(() => {});
       }
     }
   },
@@ -926,16 +867,9 @@ test(
     );
     // Only this test uses this tag, so it can remove the image.
     const image = 'busybox:1.37.0-musl';
-    const removeImage = () =>
-      docker.command(['image', 'rm', image]).catch((error: unknown) => {
-        if (
-          !(error instanceof SubprocessError) ||
-          !/No such image/i.test(error.stderr)
-        )
-          throw error;
-      });
+    const removeImage = () => docker.images.remove(image, { force: true });
     await removeImage();
-    assert.equal(await listed(['image', 'ls', '-q', image]), '');
+    assert.equal(await docker.images.inspect(image), undefined);
     const statePath = join(directory.path, 'state.json');
     const file = join(directory.path, 'worker.test.ts');
     await writeFile(
@@ -943,12 +877,13 @@ test(
       `
       import { test } from 'node:test';
       import { writeFile } from 'node:fs/promises';
-      import { Docker, TestRun } from ${library};
+      import { DockerFixtures } from ${library};
       test('an image that the engine does not have', { timeout: 150000 }, async () => {
-        const docker = new Docker({ testRun: TestRun.fromEnvironment(process.env) });
+        const docker = new DockerFixtures({ environment: process.env });
         await using container = await docker.start({ image: ${JSON.stringify(image)}, command: ['sleep', '600'] });
-        await container.exec(['true']);
-        await writeFile(${JSON.stringify(statePath)}, JSON.stringify({ id: container.containerId }));
+        const { exitCode } = await container.exec({ Cmd: ['true'] });
+        if (exitCode !== 0) throw new Error('true exited with ' + exitCode);
+        await writeFile(${JSON.stringify(statePath)}, JSON.stringify({ id: container.id }));
       });
     `,
     );
@@ -960,7 +895,7 @@ test(
 
       const state = await readState<{ id: string }>(t, statePath);
       assert.match(state.id, /^[\da-f]{64}$/);
-      assert.notEqual(await listed(['image', 'ls', '-q', image]), '');
+      assert.notEqual(await docker.images.inspect(image), undefined);
     } finally {
       await removeImage();
     }
@@ -1021,14 +956,15 @@ test(
       file,
       `
       import { test } from 'node:test';
-      import { execFileSync } from 'node:child_process';
       import { writeFile } from 'node:fs/promises';
-      import { Docker, TestRun } from ${JSON.stringify(import.meta.resolve('@zukhruf/testing/docker'))};
+      import { Docker } from ${client};
+      import { DockerFixtures } from ${JSON.stringify(import.meta.resolve('@zukhruf/testing/docker'))};
       test('a container of the run', { timeout: 150000 }, async () => {
-        const docker = new Docker({ testRun: TestRun.fromEnvironment(process.env) });
-        const labels = Object.entries(docker.defaults.labels).flatMap(([key, value]) => ['--label', key + '=' + value]);
-        const container = execFileSync('docker', ['run', '--detach', ...labels, 'alpine:latest', 'sleep', '600'], { encoding: 'utf8' }).trim();
-        await writeFile(${JSON.stringify(statePath)}, JSON.stringify({ container }));
+        const { labels } = new DockerFixtures({ environment: process.env }).defaults;
+        await using other = await Docker.connect({ environment: process.env });
+        const created = await other.containers.create({ Image: 'alpine:latest', Cmd: ['sleep', '600'], Labels: labels });
+        await created.start();
+        await writeFile(${JSON.stringify(statePath)}, JSON.stringify({ container: created.id }));
       });
     `,
     );
@@ -1042,7 +978,7 @@ test(
       );
       state = await readState<{ container: string }>(t, statePath);
 
-      assert.equal(await exists(state.container), '');
+      assert.equal(await exists(state.container), false);
       assert.deepEqual(
         await readdir(join(stateHome, 'zukhruf-testing', 'docker-runs')),
         [],
@@ -1053,10 +989,7 @@ test(
         (text): { container: string } => JSON.parse(text),
         () => undefined,
       );
-      if (state)
-        await docker
-          .command(['rm', '--force', '--volumes', state.container])
-          .catch(() => {});
+      if (state) await removeContainer(state.container).catch(() => {});
     }
   },
 );

@@ -12,5 +12,5 @@ A test that needs Docker fails when the engine does not answer. It has no skip o
 
 - A developer without Docker sees the Docker tests fail. Start Docker to run them.
 - The first acquisition fails with "Docker is required for container-backed tests", and the engine's error is the cause.
-- A test that cannot run on a platform for another reason still skips with that reason. On Windows, the acquisition tests skip, and so do the global setup tests that use a POSIX shell script in place of the Docker CLI or that send a signal to the runner.
+- A test that cannot run on a platform for another reason still skips with that reason. On Windows, the global setup tests that send a signal to the runner skip.
 - CI runs `nx affected`, so the Docker tests run when a change can break them.
