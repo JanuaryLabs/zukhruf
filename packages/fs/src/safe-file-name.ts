@@ -3,18 +3,29 @@ import { createHash } from 'node:crypto';
 /** The longest file name that ext4, APFS, NTFS and tmpfs accept. */
 const longestFileName = 255;
 
+/**
+ * A file name that Windows maps to a device, before its first dot and in any
+ * case. An encoding is lowercase outside its escapes, and the superscript
+ * digits and the `$` of `conin$` and `conout$` are always escaped.
+ */
+const windowsDevice = /^(?:con|prn|aux|nul|com[0-9]|lpt[0-9])$/;
+
 /** Enough of a long key's start to recognize it in a directory listing. */
 const visibleStart = 32;
 
 /**
  * Maps any key to a single path segment that still fits a file name after the
  * caller adds up to `longestSuffix` characters. The name is the URI encoding of
- * the key, with each dot and each uppercase letter encoded too. A name thus has
+ * the key, with each dot, star and uppercase letter encoded too. A name thus has
  * no dot: a key can never be `.` or `..`, and a suffix such as `.lock` can never
  * make the name of another key. A name is ASCII, and it has no uppercase letter
  * outside an escape, whose hex digits are always uppercase. Thus two keys never
  * get names that are equal without case. APFS and NTFS compare file names
- * without case, and there too each key gets its own file, as on Linux.
+ * without case, and there too each key gets its own file, as on Linux. Windows
+ * refuses a star in a file name, and it maps a file name such as `con` or
+ * `com1.lock` to a device. Thus a name that is a device name has its first
+ * letter encoded: the name of `con` is `%63on`. No other key gets that name,
+ * because an encoding never encodes a lowercase letter.
  *
  * A key whose encoding does not fit, or that is not well-formed Unicode and so
  * has no encoding, gets the start of its encoding, `%%`, and the SHA-256 of its
@@ -37,9 +48,15 @@ export function safeFileName(key: string, longestSuffix: number): string {
 }
 
 function encode(key: string): string {
-  return encodeURIComponent(key).replaceAll(/%[0-9A-F]{2}|[.A-Z]/g, (match) =>
-    match.length === 1
-      ? `%${match.charCodeAt(0).toString(16).toUpperCase()}`
-      : match,
+  const encoded = encodeURIComponent(key).replaceAll(
+    /%[0-9A-F]{2}|[.*A-Z]/g,
+    (match) => (match.length === 1 ? percentEncode(match) : match),
   );
+  return windowsDevice.test(encoded)
+    ? percentEncode(encoded[0]!) + encoded.slice(1)
+    : encoded;
+}
+
+function percentEncode(character: string): string {
+  return `%${character.charCodeAt(0).toString(16).toUpperCase()}`;
 }

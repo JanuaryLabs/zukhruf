@@ -67,6 +67,7 @@ await createExclusive(join('/var/lib/app/locks', `${name}.lock`), 'pid 4242');
 
 - A key that fits gets its URI encoding, with each `.` as `%2E`. Thus a name is never `.` or `..`. The name of `job.lock` is `job%2Elock`, so it is never the name of `job` plus the suffix `.lock`.
 - The encoding also encodes each uppercase letter. The names of `Sync`, `sync` and `SYNC` are `%53ync`, `sync` and `%53%59%4E%43`. APFS and NTFS compare file names without case. On these file systems too, each key gets its own file, as on Linux.
+- Windows refuses `*` in a file name, so the encoding encodes each `*` as `%2A`. Windows also gives some names to devices: `con`, `prn`, `aux`, `nul`, `com0` to `com9` and `lpt0` to `lpt9`. Such a name stays a device name after a suffix, for example `con.lock`. When the encoding of a key is a device name, its first letter is encoded too. The name of `con` is `%63on`. Other names do not change: the name of `console` is `console`.
 - A key that does not fit, or that is not well-formed Unicode, gets a hashed name: the first 32 characters of its encoding, `%%`, and the SHA-256 of its UTF-16 code units in hex. A hashed name has at most 98 characters. An encoding never holds `%%`, so a hashed name is never the name of a key that fits.
 
 ## Try again while Windows refuses a file for a moment

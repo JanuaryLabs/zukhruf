@@ -33,7 +33,7 @@ Some host lock stores do not keep an order. Under heavy load, one waiter can wai
 
 ## How it works
 
-The queue file of a key is `<key>.lock`. In the file names below, `<key>` is the key, percent-encoded. For example, `/` becomes `%2F`, `.` becomes `%2E`, and `S` becomes `%53`. Each uppercase letter is encoded, so keys that differ only in case, such as `Sync` and `sync`, are separate locks on every file system, as on Linux. A key that is too long for a file name, or that is not well-formed Unicode, gets a short name: the first 32 characters of the encoded key, `%%`, and the SHA-256 digest of the key.
+The queue file of a key is `<key>.lock`. In the file names below, `<key>` is the key, percent-encoded. For example, `/` becomes `%2F`, `.` becomes `%2E`, and `S` becomes `%53`. Each uppercase letter is encoded, so keys that differ only in case, such as `Sync` and `sync`, are separate locks on every file system, as on Linux. Each `*` becomes `%2A`, and a key that is a Windows device name, such as `con` or `com1`, gets its first letter encoded (`%63on`). Thus Windows accepts each file name. A key that is too long for a file name, or that is not well-formed Unicode, gets a short name: the first 32 characters of the encoded key, `%%`, and the SHA-256 digest of the key.
 
 A ticket is one line of JSON with a process ID, a host name, and a unique ID. The process ID and the host name are for people. While its ticket is in the queue, each caller keeps a [presence](../adr/0012-a-file-store-holder-is-judged-by-its-presence.md): an exclusive SQLite transaction on `<key>.lock.<id>.presence`. The kernel ends the presence when the process or the thread of the caller stops.
 

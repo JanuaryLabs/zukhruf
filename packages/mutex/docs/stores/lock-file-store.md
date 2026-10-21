@@ -33,7 +33,7 @@ A lock file is the oldest and easiest way to share a lock between processes. Too
 
 ## How it works
 
-In the file names below, `<key>` is the key, percent-encoded. For example, `/` becomes `%2F`, `.` becomes `%2E`, and `S` becomes `%53`. Each uppercase letter is encoded, so keys that differ only in case, such as `Sync` and `sync`, are separate locks on every file system, as on Linux. A key that is too long for a file name, or that is not well-formed Unicode, gets a short name: the first 32 characters of the encoded key, `%%`, and the SHA-256 digest of the key.
+In the file names below, `<key>` is the key, percent-encoded. For example, `/` becomes `%2F`, `.` becomes `%2E`, and `S` becomes `%53`. Each uppercase letter is encoded, so keys that differ only in case, such as `Sync` and `sync`, are separate locks on every file system, as on Linux. Each `*` becomes `%2A`, and a key that is a Windows device name, such as `con` or `com1`, gets its first letter encoded (`%63on`). Thus Windows accepts each file name. A key that is too long for a file name, or that is not well-formed Unicode, gets a short name: the first 32 characters of the encoded key, `%%`, and the SHA-256 digest of the key.
 
 1. If `<key>.lock` does not exist, the caller starts its [presence](../adr/0012-a-file-store-holder-is-judged-by-its-presence.md): an exclusive SQLite transaction on `<key>.lock.<id>.presence`. The kernel ends the presence when the process or the thread of the caller stops.
 2. The caller writes its identity (process ID, host name, unique ID) to a temporary file.

@@ -9,7 +9,132 @@ function digestOf(key: string): string {
   return createHash('sha256').update(Buffer.from(key, 'utf16le')).digest('hex');
 }
 
+/** The device names that Windows reserves, before the first dot of a file name and in any case. */
+const windowsDevices = [
+  'con',
+  'prn',
+  'aux',
+  'nul',
+  'conin$',
+  'conout$',
+  ...['com', 'lpt'].flatMap((port) =>
+    [...'0123456789¹²³'].map((digit) => `${port}${digit}`),
+  ),
+];
+
+/** Whether Windows accepts `name` as the name of an ordinary file. */
+function isWindowsFileName(name: string): boolean {
+  const device = name.split('.')[0]!.trimEnd().toLowerCase();
+  return (
+    !/[<>:"/\\|?*]/.test(name) &&
+    [...name].every((character) => character.charCodeAt(0) >= 0x20) &&
+    !/[ .]$/.test(name) &&
+    !windowsDevices.includes(device)
+  );
+}
+
 describe('safeFileName', () => {
+  test('keys with a star get names that Windows accepts, each its own', () => {
+    // Arrange: Windows refuses '*' in a file name. The other keys are what a star left out, or escaped to another character, could collide with, and a long key with stars gets the hashed name.
+    const keys = [
+      '*',
+      'job*',
+      'job**',
+      'job',
+      'job%2A',
+      'job%2a',
+      '%2A',
+      ...[..."_-~!'()"].map((character) => `job${character}`),
+      '*'.repeat(300),
+    ];
+
+    // Act
+    const names = keys.map(
+      (key) => `${safeFileName(key, '.lock'.length)}.lock`,
+    );
+
+    // Assert
+    const rejected = names.filter((name) => !isWindowsFileName(name));
+    assert.deepEqual(rejected, [], 'Windows must accept each name');
+    assert.ok(
+      names.every((name) => /^[\x20-\x7E]+$/.test(name)),
+      `Each name must be ASCII, got ${names.join(', ')}`,
+    );
+    const folded = new Set(names.map((name) => name.toLowerCase()));
+    assert.equal(
+      folded.size,
+      keys.length,
+      `Each key must get its own name, got ${names.join(', ')}`,
+    );
+  });
+
+  test('keys that are Windows device names, in any case, get names that Windows accepts, each its own', () => {
+    // Arrange: callers append a suffix such as '.lock', and Windows still maps 'con.lock' to the console. A key can carry its own extension too. The other keys are what an escaped device name could collide with.
+    const devices = windowsDevices.flatMap((device) => [
+      device,
+      device.toUpperCase(),
+      device[0]!.toUpperCase() + device.slice(1),
+      device.slice(0, -1) + device.at(-1)!.toUpperCase(),
+      `${device}.txt`,
+      `${device.toUpperCase()}.x`,
+    ]);
+    const others = windowsDevices.flatMap((device) => [
+      `_${device}`,
+      `${device}_`,
+      `%${device.charCodeAt(0).toString(16)}${device.slice(1)}`,
+      `${device[0]}%${device.charCodeAt(1).toString(16)}${device.slice(2)}`,
+    ]);
+    const keys = [...new Set([...devices, ...others])];
+
+    // Act
+    const names = keys.map(
+      (key) => `${safeFileName(key, '.lock'.length)}.lock`,
+    );
+
+    // Assert
+    const rejected = names.filter((name) => !isWindowsFileName(name));
+    assert.deepEqual(rejected, [], 'Windows must accept each name');
+    assert.ok(
+      names.every((name) => /^[\x20-\x7E]+$/.test(name)),
+      `Each name must be ASCII, got ${names.join(', ')}`,
+    );
+    const folded = new Set(names.map((name) => name.toLowerCase()));
+    assert.equal(
+      folded.size,
+      keys.length,
+      `Each key must get its own name, got ${names.join(', ')}`,
+    );
+  });
+
+  test('a key that only starts like a device name keeps its plain name, and a device name changes in its first character only', () => {
+    // Arrange
+    const keys = [
+      'console',
+      'com10',
+      'nul1',
+      'auxiliary',
+      'xcon',
+      'acom1',
+      'con',
+      'lpt9',
+    ];
+
+    // Act
+    const names = keys.map((key) => safeFileName(key, '.lock'.length));
+
+    // Assert
+    assert.deepEqual(names, [
+      'console',
+      'com10',
+      'nul1',
+      'auxiliary',
+      'xcon',
+      'acom1',
+      '%63on',
+      '%6Cpt9',
+    ]);
+  });
+
   test('a short key that is not well-formed Unicode gets the hashed name', () => {
     // Arrange: a lone surrogate has no URI encoding.
     const key = 'job\uD800';
