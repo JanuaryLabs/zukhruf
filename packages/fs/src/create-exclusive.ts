@@ -10,8 +10,8 @@ import { patiently } from './patiently.ts';
  */
 export async function createExclusive(path: string, content: string) {
   const draft = draftOf(path);
-  await writeFile(draft, content);
   try {
+    await writeFile(draft, content);
     await patiently(() => link(draft, path));
     return true;
   } catch (error) {

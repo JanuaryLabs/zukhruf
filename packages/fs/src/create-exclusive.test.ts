@@ -49,7 +49,88 @@ function failLink(code: string) {
   };
 }
 
+/** Makes every `writeFile` put half of its content on the disk and then fail with `code`, as a disk that fills up halfway would. */
+function failWriteHalfway(code: string) {
+  const failure = Object.assign(new Error(`${code}: write failed`), {
+    code,
+    syscall: 'write',
+  });
+  const write = fsPromises.writeFile;
+  mock.method(
+    fsPromises,
+    'writeFile',
+    async (path: string, content: string) => {
+      await write(path, content.slice(0, content.length / 2));
+      throw failure;
+    },
+  );
+  syncBuiltinESMExports();
+  return {
+    failure,
+    [Symbol.dispose]() {
+      mock.restoreAll();
+      syncBuiltinESMExports();
+    },
+  };
+}
+
 describe('createExclusive', () => {
+  for (const before of [undefined, 'pid 1']) {
+    test(
+      `a write of the draft that fails halfway rejects with that error, leaves no draft and ${before === undefined ? 'creates no file' : 'keeps the file that is there'}`,
+      { timeout: 2_000 },
+      async () => {
+        // Arrange
+        await using directory = await mkdtempDisposable(
+          join(tmpdir(), 'zukhruf-fs-'),
+        );
+        const path = join(directory.path, 'job.lock');
+        if (before !== undefined) await writeFile(path, before);
+        using disk = failWriteHalfway('ENOSPC');
+
+        // Act
+        const creating = createExclusive(path, 'pid 4242\n'.repeat(1_000));
+
+        // Assert
+        await assert.rejects(creating, (error) => error === disk.failure);
+        assert.deepEqual(
+          await readdir(directory.path),
+          before === undefined ? [] : ['job.lock'],
+          'A failed create must not create the file nor leave its draft',
+        );
+        if (before !== undefined) {
+          assert.equal(await readFile(path, 'utf8'), before);
+        }
+      },
+    );
+  }
+
+  test(
+    'a write of the draft that fails halfway rejects with that error, also when the draft cannot be removed',
+    { timeout: 2_000 },
+    async () => {
+      // Arrange: a broken disk refuses the removal of the draft too.
+      await using directory = await mkdtempDisposable(
+        join(tmpdir(), 'zukhruf-fs-'),
+      );
+      const path = join(directory.path, 'job.lock');
+      using disk = failWriteHalfway('EIO');
+      mock.method(fsPromises, 'unlink', async () => {
+        throw Object.assign(new Error('EIO: unlink failed'), {
+          code: 'EIO',
+          syscall: 'unlink',
+        });
+      });
+      syncBuiltinESMExports();
+
+      // Act
+      const creating = createExclusive(path, 'pid 4242\n'.repeat(1_000));
+
+      // Assert
+      await assert.rejects(creating, (error) => error === disk.failure);
+    },
+  );
+
   test(
     'a link that fails for a reason other than an existing file rejects with that error and leaves no draft',
     { timeout: 2_000 },
