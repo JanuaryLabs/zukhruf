@@ -89,7 +89,11 @@ export interface HostConfig {
   };
   AutoRemove?: boolean;
   Memory?: number;
+  /** 0 to 100: how much the kernel swaps out the anonymous pages of the container. */
+  MemorySwappiness?: number;
   NanoCpus?: number;
+  /** `none`, `private`, `shareable`, `container:<name|id>` or `host`. */
+  IpcMode?: string;
   CpuShares?: number;
   Privileged?: boolean;
   ReadonlyRootfs?: boolean;
