@@ -1,6 +1,6 @@
 {
   "name": "@zukhruf/single-flight",
-  "version": "0.3.34",
+  "version": "0.3.35",
   "description": "Callers of one key share the run already in flight, in one process or across the processes that use one directory, and get its outcome instead of a busy error.",
   "license": "MIT",
   "repository": {
@@ -40,13 +40,13 @@
     "access": "public"
   },
   "dependencies": {
-    "@zukhruf/async": "^0.3.34",
-    "@zukhruf/election": "^0.3.34",
-    "@zukhruf/fencing": "^0.3.34",
-    "@zukhruf/fs": "^0.3.34",
-    "@zukhruf/lease": "^0.3.34"
+    "@zukhruf/async": "^0.3.35",
+    "@zukhruf/election": "^0.3.35",
+    "@zukhruf/fencing": "^0.3.35",
+    "@zukhruf/fs": "^0.3.35",
+    "@zukhruf/lease": "^0.3.35"
   },
   "devDependencies": {
-    "@zukhruf/mutex": "^0.3.34"
+    "@zukhruf/mutex": "^0.3.35"
   }
 }
