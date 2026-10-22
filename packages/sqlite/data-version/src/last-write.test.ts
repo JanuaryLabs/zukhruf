@@ -1,11 +1,17 @@
 import assert from 'node:assert/strict';
-import { chmod, mkdir, mkdtempDisposable, utimes } from 'node:fs/promises';
+import {
+  chmod,
+  mkdir,
+  mkdtempDisposable,
+  stat,
+  utimes,
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { test } from 'node:test';
 
-import { lastWrite } from './index.ts';
+import { DataVersion, lastWrite } from './index.ts';
 
 // What a caller passes in: its own error, which names what it needs.
 class SourceUnavailableError extends Error {
@@ -80,8 +86,26 @@ test('a database whose owner closed it, which removes the WAL, was last written 
   await using dir = await mkdtempDisposable(join(tmpdir(), 'last-write-'));
   const path = join(dir.path, 'source.sqlite');
   owning(path).close();
-  // A time in the past: a WAL left behind would carry the time of now and win.
+  // A time in the past: a WAL with frames left behind would carry a later one.
   await utimes(path, 1_000_000_000 + readLater, 1_000_000_000);
+
+  const written = lastWrite(path, SourceUnavailableError);
+
+  assert.equal(written.getTime(), 1_000_000_000_000);
+});
+
+test('a WAL that a reader made after the owner removed its own does not count', async () => {
+  await using dir = await mkdtempDisposable(join(tmpdir(), 'last-write-'));
+  const path = join(dir.path, 'source.sqlite');
+  owning(path).close();
+  await utimes(path, 1_000_000_000 + readLater, 1_000_000_000);
+  {
+    // A read-only connection opens the WAL the owner removed, so it makes an
+    // empty one, timed as it reads.
+    using reader = new DataVersion(path, SourceUnavailableError);
+    assert.equal(typeof reader.current, 'number');
+  }
+  assert.equal((await stat(`${path}-wal`)).size, 0);
 
   const written = lastWrite(path, SourceUnavailableError);
 

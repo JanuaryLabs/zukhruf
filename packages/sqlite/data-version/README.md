@@ -78,6 +78,7 @@ console.log(`The owner last wrote at ${written.toISOString()}`);
 - The owner writes through the file and its WAL (`-wal`). The last write is the later of their modification times.
 - The shared-memory index (`-shm`) does not count. A read-only reader writes it too, so its time can be later than the last write of the owner.
 - The owner can remove the WAL when it closes. Then the last write is the time of the file.
+- An empty WAL does not count. A reader that opens the database after the owner removed the WAL makes a new empty WAL, and that WAL has the time of the read. An empty WAL holds no data that the file does not hold.
 - The function reads only the file system. It does not open the database.
 - The macOS privacy controls do not stop it. They stop a process that has no access from reading the file, but not from reading the times of the file.
 

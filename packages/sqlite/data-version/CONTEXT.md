@@ -17,7 +17,7 @@ A commit that a different connection to the same database makes, for example a c
 _Avoid_: Change event, file change
 
 **Last write**:
-The time when the owner last wrote the database: the later of the modification times of the file and its WAL. The shared-memory index does not count, because a reader writes it too.
+The time when the owner last wrote the database: the later of the modification times of the file and its WAL, when the WAL holds frames. An empty WAL does not count, because a reader makes one when the owner removed the WAL. The shared-memory index does not count, because a reader writes it too.
 _Avoid_: Modified time, mtime, last update
 
 **Unavailable**:
