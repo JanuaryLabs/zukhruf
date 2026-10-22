@@ -118,6 +118,7 @@ export interface EndpointSettings {
   IPAddress?: string;
   MacAddress?: string;
   DriverOpts?: Record<string, string>;
+  DNSNames?: string[];
 }
 
 /** The networks that a create connects the container to. */
