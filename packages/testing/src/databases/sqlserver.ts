@@ -4,7 +4,7 @@ import sql from 'mssql';
 import pMemoize from 'p-memoize';
 
 import { timebox } from '../async/timebox.ts';
-import type { DockerFixtures } from '../docker/fixtures.ts';
+import { DockerFixtures } from '../docker/fixtures.ts';
 import type { ServiceContainer } from '../docker/service-container.ts';
 import type { Database, DatabaseOptions } from './database.ts';
 
@@ -27,13 +27,13 @@ export class SqlServer {
   });
 
   constructor({
-    docker,
+    environment,
     image,
     password = 'StrongP@ssw0rd123!',
     database = 'testdb',
     labels,
   }: DatabaseOptions) {
-    this.#docker = docker;
+    this.#docker = new DockerFixtures({ environment });
     this.#options = { image, password, database, labels };
   }
 

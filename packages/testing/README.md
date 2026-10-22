@@ -154,12 +154,12 @@ To pass the run to another container API, spread `docker.defaults`: it holds the
 
 ## Databases
 
-`Postgres`, `Mysql`, `Mariadb`, `SqlServer` and `ClickHouse` take the `docker`, a `DockerFixtures`, to run on. Each `database()` call creates a fresh database on a shared server; disposal drops it. `start()` creates a dedicated server; disposal stops it.
+`Postgres`, `Mysql`, `Mariadb`, `SqlServer` and `ClickHouse` take the `environment`, such as `process.env`. The environment selects the engine and the run. Each instance makes its own `DockerFixtures` from it. Each `database()` call creates a fresh database on a shared server; disposal drops it. `start()` creates a dedicated server; disposal stops it.
 
 ```ts
 import { Postgres } from '@zukhruf/testing/postgres';
 
-const postgres = new Postgres({ docker });
+const postgres = new Postgres({ environment: process.env });
 
 test('stores a record', async () => {
   await using database = await postgres.database();

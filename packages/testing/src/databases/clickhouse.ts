@@ -1,5 +1,8 @@
 import { timebox } from '../async/timebox.ts';
-import type { DockerFixtures } from '../docker/fixtures.ts';
+import {
+  DockerFixtures,
+  type DockerFixturesOptions,
+} from '../docker/fixtures.ts';
 import type { ServiceContainer } from '../docker/service-container.ts';
 import { succeeded } from './succeeded.ts';
 
@@ -8,8 +11,11 @@ export class ClickHouse {
   readonly #docker: DockerFixtures;
   readonly #image: string;
 
-  constructor({ docker, image }: { docker: DockerFixtures; image: string }) {
-    this.#docker = docker;
+  constructor({
+    environment,
+    image,
+  }: DockerFixturesOptions & { image: string }) {
+    this.#docker = new DockerFixtures({ environment });
     this.#image = image;
   }
 

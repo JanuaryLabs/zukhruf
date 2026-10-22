@@ -10,7 +10,7 @@ test(
   { timeout: 180_000 },
   async () => {
     const server = await new ClickHouse({
-      docker,
+      environment: process.env,
       image: 'clickhouse/clickhouse-server:25.8.28.1',
     }).start();
     try {

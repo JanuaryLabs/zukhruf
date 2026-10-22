@@ -13,7 +13,10 @@ test(
   { timeout: 180_000 },
   async (t) => {
     const database = `owned_${randomUUID().replaceAll('-', '')}`;
-    const server = await new Mariadb({ docker, database }).start();
+    const server = await new Mariadb({
+      environment: process.env,
+      database,
+    }).start();
     const id = server.containerId;
     {
       await using owned = server;

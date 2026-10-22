@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 
 import { timebox } from '../async/timebox.ts';
-import type { DockerFixtures } from '../docker/fixtures.ts';
+import { DockerFixtures } from '../docker/fixtures.ts';
 import type { ServiceContainer } from '../docker/service-container.ts';
 import type { Database, DatabaseOptions } from './database.ts';
 import { succeeded } from './succeeded.ts';
@@ -18,14 +18,14 @@ export class Postgres {
   readonly #options;
 
   constructor({
-    docker,
+    environment,
     image = 'postgres:18-alpine',
     password = 'testpassword',
     database = 'testdb',
     user = 'postgres',
     labels,
   }: PostgresOptions) {
-    this.#docker = docker;
+    this.#docker = new DockerFixtures({ environment });
     this.#options = { image, password, database, user, labels };
   }
 

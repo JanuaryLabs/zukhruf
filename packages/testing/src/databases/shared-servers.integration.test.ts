@@ -35,7 +35,7 @@ test(
   async () => {
     const scope = randomUUID();
     const postgres = new Postgres({
-      docker,
+      environment: process.env,
       labels: { 'dev.zukhruf.testing.verification': scope },
     });
     try {
@@ -83,7 +83,10 @@ test(
   { timeout: 240_000 },
   async (t) => {
     const database = `owned_${randomUUID().replaceAll('-', '')}`;
-    const server = await new SqlServer({ docker, database }).start();
+    const server = await new SqlServer({
+      environment: process.env,
+      database,
+    }).start();
     const id = server.containerId;
     {
       await using owned = server;
@@ -131,7 +134,7 @@ const worker = `
   let handle;
   try {
     {
-      await using container = await new helpers[helper]({ ...config, docker }).database();
+      await using container = await new helpers[helper]({ ...config, environment: process.env }).database();
       handle = container;
       if (helper === 'Postgres') {
         const server = await (await docker.client()).containers.find(container.containerId);
@@ -255,7 +258,7 @@ for (const [engine, helper, config] of [
           // connection in this process to inspect the same persistent server.
           await using inspector = await new SqlServer({
             ...config,
-            docker,
+            environment: process.env,
             labels,
           }).database();
           assert.equal(inspector.containerId, server.containerId);

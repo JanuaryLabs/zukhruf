@@ -13,7 +13,10 @@ test(
   { timeout: 180_000 },
   async (t) => {
     const database = `owned_${randomUUID().replaceAll('-', '')}`;
-    const server = await new Mysql({ docker, database }).start();
+    const server = await new Mysql({
+      environment: process.env,
+      database,
+    }).start();
     const id = server.containerId;
     {
       await using owned = server;

@@ -18,7 +18,9 @@ test(
   'the selected Docker engine exposes a database to this Node process',
   { timeout: 120_000 },
   async () => {
-    await using database = await new Postgres({ docker }).start();
+    await using database = await new Postgres({
+      environment: process.env,
+    }).start();
     const client = new pg.Client({
       connectionString: database.connectionString,
       connectionTimeoutMillis: 3_000,
@@ -43,7 +45,7 @@ test(
     const fixtures = new DockerFixtures({ environment });
     const client = await fixtures.client();
     const original = await client.info();
-    await using database = await new Postgres({ docker: fixtures }).start();
+    await using database = await new Postgres({ environment }).start();
 
     // Act: the environment now names an engine that does not exist.
     environment.DOCKER_HOST = 'unix:///nonexistent/docker-test.sock';
@@ -73,7 +75,7 @@ test(
   { timeout: 120_000 },
   async () => {
     const labels = { 'dev.zukhruf.testing.verification': crypto.randomUUID() };
-    const postgres = new Postgres({ docker, labels });
+    const postgres = new Postgres({ environment: process.env, labels });
     let id: string | undefined;
     try {
       await using first = await postgres.database();
@@ -120,7 +122,9 @@ test(
   'MySQL exposes its protocol on the Node host',
   { timeout: 180_000 },
   async () => {
-    await using database = await new Mysql({ docker }).start();
+    await using database = await new Mysql({
+      environment: process.env,
+    }).start();
     const client = connect({ host: database.host, port: database.port });
     client.setTimeout(5_000, () =>
       client.destroy(new Error('MySQL handshake timed out')),
@@ -151,7 +155,9 @@ test(
   async () => {
     const { default: sql } = await import('mssql');
     const { Architecture } = await (await docker.client()).info();
-    await using database = await new SqlServer({ docker }).start();
+    await using database = await new SqlServer({
+      environment: process.env,
+    }).start();
     assert.equal(
       database.image,
       ['aarch64', 'arm64'].includes(Architecture ?? '')

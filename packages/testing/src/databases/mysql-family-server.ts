@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 
 import { timebox } from '../async/timebox.ts';
-import type { DockerFixtures } from '../docker/fixtures.ts';
+import { DockerFixtures } from '../docker/fixtures.ts';
 import type { ServiceContainer } from '../docker/service-container.ts';
 import type { Database, DatabaseOptions } from './database.ts';
 import { succeeded } from './succeeded.ts';
@@ -31,13 +31,13 @@ export abstract class MysqlFamilyServer {
   ): Record<string, string>;
 
   constructor({
-    docker,
+    environment,
     image,
     password = 'testpassword',
     database = 'app',
     labels,
   }: DatabaseOptions & { image: string }) {
-    this.#docker = docker;
+    this.#docker = new DockerFixtures({ environment });
     this.#options = { image, password, database, labels };
   }
 
