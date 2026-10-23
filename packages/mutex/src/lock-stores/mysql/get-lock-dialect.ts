@@ -97,8 +97,13 @@ export function getLockDialect<Session extends GetLockSession>(
         server.server,
       ),
     mint: (session) => server.mint(runOn(session)),
-    heartbeat: async (session) => {
-      await runOn(session)('SELECT 1', []);
+    // `IS_USED_LOCK` never acquires the lock. It gives NULL for a free lock.
+    holds: async (session, { name }) => {
+      const row = await runOn(session)(
+        `SELECT IS_USED_LOCK(${lockName}) = CONNECTION_ID() AS held`,
+        [name],
+      );
+      return Number(row?.['held']) === 1;
     },
     release: async (session, { name }) => {
       const row = await runOn(session)(

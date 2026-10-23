@@ -45,6 +45,9 @@ const heldQuery = `SELECT CASE WHEN EXISTS (
     AND LEFT(resource_description, 36) = N'0:[' + @resource + N']'
 ) THEN 1 ELSE 0 END AS held`;
 
+/** `APPLOCK_MODE` reads the lock mode of this session, and never takes the lock. */
+const holdsQuery = `SELECT CASE WHEN APPLOCK_MODE('public', @resource, 'Session') <> 'NoLock' THEN 1 ELSE 0 END AS held`;
+
 const waitQuery = `DECLARE @result int;
 EXEC @result = sp_getapplock @Resource = @resource, @LockMode = 'Exclusive', @LockOwner = 'Session', @LockTimeout = -1;
 SELECT @result AS result;`;
@@ -131,8 +134,9 @@ function sqlServerDialect(
       }
       return BigInt(row.token);
     },
-    heartbeat: async (session) => {
-      await session.query('SELECT 1', {});
+    holds: async (session, { name }) => {
+      const [row] = await session.query(holdsQuery, { resource: name });
+      return row?.held === 1;
     },
     // Releases the lock on the server before the close: the server sees a closed connection a little later.
     release: async (session, { name }) => {

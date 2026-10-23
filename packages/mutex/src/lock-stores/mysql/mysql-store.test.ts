@@ -10,7 +10,7 @@ import mysql from 'mysql2/promise';
 import { Mysql, type MysqlDatabase } from '@zukhruf/testing/mysql';
 
 import { LeaseLostError, Mutex } from '../../index.ts';
-import { MysqlStore } from './index.ts';
+import { type MysqlSession, MysqlStore } from './index.ts';
 
 /**
  * The first tests are design errors that the probes of MysqlStore found. The
@@ -212,6 +212,73 @@ test(
     } finally {
       await admin.end();
       await pool.end();
+    }
+  },
+);
+
+/**
+ * A session that connects again by itself when the server ends its
+ * connection, and tells the store nothing: no `error`, no `end`. The store's
+ * listeners hear nothing. `reconnected` resolves once the new connection is up.
+ */
+async function silentlyReconnectingSession(database: MysqlDatabase) {
+  const open = async () => {
+    const connection = await mysql.createConnection(database.connectionString);
+    connection.on('error', () => {});
+    return connection;
+  };
+  let current = await open();
+  const id = current.threadId;
+  const reconnected = Promise.withResolvers<void>();
+  current.once('end', () => {
+    open().then((next) => {
+      current = next;
+      reconnected.resolve();
+    }, reconnected.reject);
+  });
+  const session: MysqlSession = {
+    query: (sql, values) => current.query(sql, values),
+    on: () => session,
+    off: () => session,
+    release: () => current.destroy(),
+    destroy: () => current.destroy(),
+  };
+  return { session, id, reconnected: reconnected.promise };
+}
+
+test(
+  'a session that reconnects silently loses its lease',
+  { timeout: 30_000 },
+  async () => {
+    // Arrange: the holder's session hides the end of its connection and connects again.
+    await using database = await mysqlDatabase();
+    const reconnecting = await silentlyReconnectingSession(database);
+    const store = new MysqlStore({
+      connect: async () => reconnecting.session,
+      table,
+      heartbeatInterval,
+    });
+    const admin = await mysql.createConnection(database.connectionString);
+    const handle = await store.acquire(uniqueKey());
+    try {
+      // Act: the server ends the holder's connection, which frees the key.
+      await admin.query(`KILL ${reconnecting.id}`);
+      await reconnecting.reconnected;
+      const lost = await Promise.race([
+        once(handle.signal, 'abort').then(() => 'lost' as const),
+        delay(2 * heartbeatInterval + 500, 'still held' as const),
+      ]);
+
+      // Assert
+      assert.equal(
+        lost,
+        'lost',
+        'A session that answers but no longer holds the lock must lose the lease',
+      );
+      assert.ok(handle.signal.reason instanceof LeaseLostError);
+    } finally {
+      await handle[Symbol.asyncDispose]();
+      await admin.end();
     }
   },
 );

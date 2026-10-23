@@ -10,7 +10,7 @@ import pg from 'pg';
 import { Postgres } from '@zukhruf/testing/postgres';
 
 import { LeaseLostError, Mutex } from '../../index.ts';
-import { PostgresStore } from './index.ts';
+import { type PostgresSession, PostgresStore } from './index.ts';
 
 /**
  * Each test is a design error that the review of PostgresStore found. The
@@ -155,6 +155,78 @@ test(
       `The lease was lost ${after.toFixed(0)} ms after the partition, later than two heartbeat intervals`,
     );
     await assert.rejects(run, LeaseLostError);
+  },
+);
+
+/**
+ * A session that connects again by itself when the server ends its
+ * connection, and tells the store nothing: no `error`, no `end`. The store's
+ * listeners hear nothing. `reconnected` resolves once the new connection is up.
+ */
+async function silentlyReconnectingSession(connectionString: string) {
+  const open = async () => {
+    const client = new pg.Client({ connectionString });
+    client.on('error', () => {});
+    await client.connect();
+    return client;
+  };
+  let current = await open();
+  const { rows } = await current.query('SELECT pg_backend_pid() AS pid');
+  const reconnected = Promise.withResolvers<void>();
+  current.once('end', () => {
+    open().then((next) => {
+      current = next;
+      reconnected.resolve();
+    }, reconnected.reject);
+  });
+  const session: PostgresSession = {
+    query: (text, values) => current.query(text, values),
+    on: () => session,
+    off: () => session,
+    release: () => void current.end(),
+  };
+  return { session, pid: rows[0].pid, reconnected: reconnected.promise };
+}
+
+test(
+  'a session that reconnects silently loses its lease',
+  { timeout: 30_000 },
+  async () => {
+    // Arrange: the holder's session hides the end of its connection and connects again.
+    await using database = await postgresDatabase();
+    const reconnecting = await silentlyReconnectingSession(
+      database.connectionString,
+    );
+    const store = new PostgresStore({
+      connect: async () => reconnecting.session,
+      sequence,
+      heartbeatInterval,
+    });
+    const admin = new pg.Client({
+      connectionString: database.connectionString,
+    });
+    await admin.connect();
+    const handle = await store.acquire('report:daily');
+    try {
+      // Act: the server ends the holder's connection, which frees the key.
+      await admin.query('SELECT pg_terminate_backend($1)', [reconnecting.pid]);
+      await reconnecting.reconnected;
+      const lost = await Promise.race([
+        once(handle.signal, 'abort').then(() => 'lost' as const),
+        delay(2 * heartbeatInterval + 500, 'still held' as const),
+      ]);
+
+      // Assert
+      assert.equal(
+        lost,
+        'lost',
+        'A session that answers but no longer holds the lock must lose the lease',
+      );
+      assert.ok(handle.signal.reason instanceof LeaseLostError);
+    } finally {
+      await handle[Symbol.asyncDispose]();
+      await admin.end();
+    }
   },
 );
 

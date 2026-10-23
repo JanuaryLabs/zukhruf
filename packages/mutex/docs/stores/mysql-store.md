@@ -61,7 +61,7 @@ Two stores in two databases on one server never share a key. Each one has its ow
 2. That caller gets a session from `connect`. The store attaches its own `error` and `end` listeners at once.
 3. The session runs `SELECT /*+ SET_VAR(max_execution_time = 0) */ GET_LOCK(<name>, -1)`. A negative timeout waits with no limit. The hint stops the `max_execution_time` of the session for this statement only, because that limit interrupts a waiting `GET_LOCK`. The query waits in MySQL's lock queue until the server grants the lock. The store does not poll.
 4. After the grant, the session runs the token update. See [The token](#the-token).
-5. While the key is held, the session runs `SELECT 1` each `heartbeatInterval` milliseconds. See [The heartbeat](#the-heartbeat).
+5. While the key is held, the session asks each `heartbeatInterval` milliseconds whether it still holds the lock. See [The heartbeat](#the-heartbeat).
 6. To release the key, the session runs `SELECT RELEASE_LOCK(<name>)`. If the result is `1`, the store gives the session back with `release()`. Then the next caller in the in-process queue continues.
 
 **A cancel.** A caller cancels its wait with a signal. The store then closes the waiting session with `destroy()`, and the call rejects with `signal.reason` at once. The store needs no second session ([ADR 0023](../adr/0023-a-postgres-waiter-is-cancelled-by-closing-its-session.md)). If the server grants the lock just before the close, the end of the session releases it.
@@ -70,7 +70,7 @@ Unlike Postgres, MySQL finds a closed waiter while it waits. `destroy()` of mysq
 
 ### The heartbeat
 
-A holder must know when its session ends. A session that ends with a reset or a close emits `error` or `end`. But a network that stops silently sends nothing. Thus the session of each holder runs `SELECT 1` each `heartbeatInterval` milliseconds. If the query fails, or no answer arrives within `heartbeatInterval`, the store aborts the signal of the lease with `LeaseLostError` and closes the session.
+A holder must know when its session ends. A session that ends with a reset or a close emits `error` or `end`. But a network that stops silently sends nothing. Thus the session of each holder runs `SELECT IS_USED_LOCK(<name>) = CONNECTION_ID()` each `heartbeatInterval` milliseconds. The heartbeat asks about the lock, not about the connection. A session that connects again by itself answers a query, but it does not hold the lock. If the query fails, if the result is not `1`, or if no answer arrives within `heartbeatInterval`, the store aborts the signal of the lease with `LeaseLostError` and closes the session. `IS_USED_LOCK` never acquires the lock.
 
 `heartbeatInterval` is the longest time that a holder can work after its session ended, before its signal aborts. Until then, only the [fencing token](../concepts/fencing-tokens.md) protects the resource.
 
@@ -142,6 +142,7 @@ Each design error that the probes found has a test in [`src/lock-stores/mysql/my
 
 - **A held key is lost within heartbeatInterval when the server stops answering.** Wrong design: no heartbeat.
 - **A killed session loses its lease before the next heartbeat.** The heartbeat is 10 seconds away. Wrong design: no `error` and `end` listeners.
+- **A session that reconnects silently loses its lease.** The session of the holder hides the end of its connection after `KILL`, and connects again. Wrong design: a heartbeat that asks about the connection (`SELECT 1`), not the lock.
 - **The next acquire after a cancel gets the only session of the pool at once.** The pool has one session. Wrong design: a cancel that gets a second session from the pool.
 - **A cancelled waiter that the server grants later gives the key to the next waiter.** Wrong design: a cancel that keeps the waiting session.
 - **A released key leaves no lock on the session that goes back to the pool.** Wrong design: `release()` without `RELEASE_LOCK`.

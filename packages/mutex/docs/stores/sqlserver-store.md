@@ -100,7 +100,7 @@ The host lock stores share a lock only between processes on one machine. When yo
 2. That caller gets a session from `connect`. The store attaches its own `error` and `end` listeners at once.
 3. The session runs `sp_getapplock` with `@LockMode = 'Exclusive'`, `@LockOwner = 'Session'` and `@LockTimeout = -1`. The batch waits in SQL Server's lock queue until the server grants the lock. The store does not poll. A result of `0` or `1` is a grant. A negative result is an error, and the call rejects.
 4. After the grant, the session runs `NEXT VALUE FOR` on the sequence. The store reads the result with `BigInt` and makes the fencing token from it. A later grant always runs `NEXT VALUE FOR` later, so it gets a larger number.
-5. While the key is held, the session runs `SELECT 1` each `heartbeatInterval` milliseconds. See [The heartbeat](#the-heartbeat).
+5. While the key is held, the session asks `APPLOCK_MODE` each `heartbeatInterval` milliseconds whether it still holds the lock. See [The heartbeat](#the-heartbeat).
 6. To release the key, the session runs `sp_releaseapplock`. If the result is `0`, the store closes the session. Then the next caller in the in-process queue continues.
 
 The store runs `sp_releaseapplock` before the close, because the server sees a closed connection a little later than the close. In a test, another session tried the key right after a close, and the key was still busy in 2 of 30 tries (see [Evidence](#evidence)).
@@ -109,7 +109,7 @@ The store runs `sp_releaseapplock` before the close, because the server sees a c
 
 ### The heartbeat
 
-A holder must know when its session ends. A session that ends with a reset or a close emits `end` and `error`. But a network that stops silently sends nothing. Thus the session of each holder runs `SELECT 1` each `heartbeatInterval` milliseconds. If the query fails, or no answer arrives within `heartbeatInterval`, the store aborts the signal of the lease with `LeaseLostError` and closes the session. A late `SELECT 1` acquires nothing, so a heartbeat that timed out leaves no lock behind.
+A holder must know when its session ends. A session that ends with a reset or a close emits `end` and `error`. But a network that stops silently sends nothing. Thus the session of each holder runs `APPLOCK_MODE('public', @resource, 'Session')` each `heartbeatInterval` milliseconds. The heartbeat asks about the lock, not about the connection. A session that connects again by itself answers a query, but it does not hold the lock. If the query fails, if the mode is `NoLock`, or if no answer arrives within `heartbeatInterval`, the store aborts the signal of the lease with `LeaseLostError` and closes the session. `APPLOCK_MODE` only reads the mode of the lock, so it acquires nothing, and a heartbeat that timed out leaves no lock behind.
 
 `heartbeatInterval` is the longest time that a holder can work after its session ended, before its signal aborts. Until then, only the [fencing token](../concepts/fencing-tokens.md) protects the resource.
 
@@ -126,7 +126,7 @@ GRANT UPDATE ON OBJECT::dbo.app_lock_tokens TO app_role;
 
 The store keeps a session for each key that this process holds or waits for. A holder check gets one more session for one query. A cancel needs no session. The store closes each session that it gets, also after a clean release, so `connect` must give a new connection each time. A connection costs one login on the server.
 
-A session must be one connection that never connects again by itself. An mssql `ConnectionPool` with `max: 1` is not a session. After `KILL`, its next query ran on a new connection with the same session ID, and the application lock was gone. The pool emitted no event (see [Evidence](#evidence)). Thus a holder would not see the end of its session.
+A session must be one connection that never connects again by itself. An mssql `ConnectionPool` with `max: 1` is not a session. After `KILL`, its next query ran on a new connection with the same session ID, and the application lock was gone. The pool emitted no event (see [Evidence](#evidence)). Thus a holder would see the end of its session only at its next heartbeat, not at once.
 
 ## Acquire modes
 
@@ -158,7 +158,7 @@ The view needs `VIEW SERVER STATE` on SQL Server 2019 and earlier, and `VIEW SER
 - **A silent partition:** the network stops and sends no reset. The server can release the key, and the holder does not see the end of its session. The [heartbeat](#the-heartbeat) finds it within `heartbeatInterval`, and the signal of the lease aborts. Until then, only the [fencing token](../concepts/fencing-tokens.md) protects the resource. A waiting session has no heartbeat. tedious turns on TCP keep-alive with an idle time of 30 seconds (`KEEP_ALIVE_INITIAL_DELAY` in `tedious/lib/connection.js`), so the operating system finds a dead connection of a waiter after that time and its probes.
 - **A holder machine stops with no reset:** the server sees the end of the session only through its own TCP keep-alive. Until then, the key stays held, and waiters wait.
 - **A holder freezes:** waiters wait. If the server ends the session meanwhile, another holder can get the key. The frozen holder sees the lost lease only when it runs again. A [fenced resource](../concepts/fencing-tokens.md) refuses its late writes.
-- **A session that connects again by itself:** not supported. The new connection does not hold the lock, but its `SELECT 1` succeeds, so the holder keeps a lease on a key that is free. See [Sessions](#sessions).
+- **A session that connects again by itself:** not supported. The new connection does not hold the lock. The next [heartbeat](#the-heartbeat) finds that the session holds no lock, and the signal of the lease aborts. Until then, the holder has a lease on a key that is free. See [Sessions](#sessions).
 - **The request timeout of the driver:** tedious stops each request after `requestTimeout`, 15 seconds by default. Then a wait rejects with `ETIMEOUT`, and the call rejects. Set `requestTimeout: 0` on the connections that `connect` gives. The server removes a waiter that timed out from its lock queue, so the timeout leaves no lock behind.
 - **The sequence does not exist, or the role has no permission on it:** the first grant fails with `The sequence <name> does not exist, or the role has no permission on it.`, and the call rejects. The store releases the key when it cannot make the token.
 - **The tokens after a failover:** with a cache, a new primary can start after the last block that was written to disk. We did not test this. Use `NO CACHE` if your fenced resource must never see a smaller token.
@@ -184,6 +184,7 @@ Each design error that the review found has a test in [`src/lock-stores/sqlserve
 - **Two keys that differ only after 255 characters are two locks.** Wrong design: the key itself as the name of the lock.
 - **A held key is lost within heartbeatInterval when the server stops answering.** A TCP proxy stops forwarding and closes no socket. The signal of the lease aborts with `LeaseLostError` within two intervals. Wrong design: no heartbeat.
 - **A held key is lost at once when the server kills its session.** `KILL` ends the session of the holder, and the heartbeat is 30 seconds away. Wrong design: no `end` or `error` listener.
+- **A session that reconnects silently loses its lease.** The session of the holder hides the end of its connection after `KILL`, and connects again, as an mssql `ConnectionPool` does. The signal of the lease aborts within two intervals. Wrong design: a heartbeat that asks about the connection (`SELECT 1`), not the lock.
 
 The same file has the contract tests of a lock store: two stores never hold one key at the same time, a waiter gets the key after the release, `tryAcquire` gives up on a held key, the holder check answers `true` and `false`, the tokens increase across stores, and a cancelled acquire rejects with the reason of its signal.
 

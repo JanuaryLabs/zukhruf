@@ -105,7 +105,7 @@ The named container that holds a key on a Docker engine. Its name comes from the
 _Avoid_: Lock container, lock file, marker
 
 **Heartbeat**:
-A short query that the session of a holder sends at a fixed interval, with a time limit. For a Docker engine lock store, the heartbeat is an inspect of the claim. A failed or late heartbeat tells the network lock store that the session ended, and the lease is lost.
+A short query that the session of a holder sends at a fixed interval, with a time limit. It asks whether the session still holds the lock of its key. For a Docker engine lock store, the heartbeat is an inspect of the claim. A failed or late heartbeat tells the network lock store that the session ended, and the lease is lost.
 _Avoid_: Ping, keep-alive (TCP keep-alive is a different mechanism), presence
 
 **Presence**:

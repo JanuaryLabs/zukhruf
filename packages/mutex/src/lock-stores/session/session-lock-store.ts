@@ -43,8 +43,8 @@ export interface SessionLockDialect<Session extends SessionEvents> {
   try(session: Session, lock: SessionLock): Promise<boolean>;
   /** Gives the next fencing token. */
   mint(session: Session): Promise<bigint>;
-  /** Sends a short query that acquires nothing. */
-  heartbeat(session: Session): Promise<void>;
+  /** Whether this session holds the lock now. It never acquires the lock. */
+  holds(session: Session, lock: SessionLock): Promise<boolean>;
   /** Releases the lock; `false` when the session did not hold it. */
   release(session: Session, lock: SessionLock): Promise<boolean>;
   /** Whether any session holds the lock now. It never acquires the lock. */
@@ -265,17 +265,26 @@ class KeySession<Session extends SessionEvents> {
     };
   }
 
-  /** Sends a heartbeat each interval. A failed or late answer loses the lease. */
+  /**
+   * Asks the server each interval whether this session still holds the lock.
+   * A session that connected again by itself answers, but holds nothing. A
+   * failed, late or negative answer loses the lease.
+   */
   async #beat(): Promise<void> {
     const interval = this.#heartbeatInterval;
     const done = this.#done.signal;
     try {
       for (;;) {
         await delay(interval, undefined, { signal: done });
-        await untilAborted(
-          this.#dialect.heartbeat(this.#owned.session),
+        const holds = await untilAborted(
+          this.#dialect.holds(this.#owned.session, this.#lock),
           AbortSignal.any([done, AbortSignal.timeout(interval)]),
         );
+        if (!holds) {
+          throw new Error(
+            `The session no longer holds the lock of ${JSON.stringify(this.#lock.key)}.`,
+          );
+        }
       }
     } catch (cause) {
       if (!done.aborted) this.#lose(cause);

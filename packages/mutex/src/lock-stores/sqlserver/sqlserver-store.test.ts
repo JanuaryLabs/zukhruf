@@ -443,3 +443,71 @@ test(
     assert.ok(handle.signal.reason instanceof LeaseLostError);
   },
 );
+
+/**
+ * A session that connects again by itself when the server ends its
+ * connection, and tells the store nothing, as the `ConnectionPool` of mssql
+ * does. The store's listeners hear nothing. `reconnected` resolves once the
+ * new connection is up.
+ */
+async function silentlyReconnectingSession(database: Database) {
+  const open = async () => {
+    const connection = await sessionTo(database, database);
+    connection.on('error', () => {});
+    return connection;
+  };
+  let current = await open();
+  const [first] = await current.query('SELECT @@SPID AS id', {});
+  const reconnected = Promise.withResolvers<void>();
+  current.on('end', () => {
+    open().then((next) => {
+      current = next;
+      reconnected.resolve();
+    }, reconnected.reject);
+  });
+  const session: SqlServerSession = {
+    query: (text, parameters) => current.query(text, parameters),
+    on: () => session,
+    close: () => current.close(),
+  };
+  return {
+    session,
+    id: Number(first?.id),
+    reconnected: reconnected.promise,
+  };
+}
+
+test(
+  'a session that reconnects silently loses its lease',
+  { timeout: 60_000 },
+  async () => {
+    // Arrange: the holder's session hides the end of its connection and connects again.
+    await using database = await sqlServerDatabase();
+    const reconnecting = await silentlyReconnectingSession(database);
+    const store = new SqlServerStore({
+      connect: async () => reconnecting.session,
+      sequence,
+      heartbeatInterval,
+    });
+    const handle = await store.acquire('report:daily');
+    try {
+      // Act: the server ends the holder's connection, which frees the key.
+      await observe(database, `KILL ${reconnecting.id}`);
+      await reconnecting.reconnected;
+      const lost = await Promise.race([
+        once(handle.signal, 'abort').then(() => 'lost' as const),
+        delay(2 * heartbeatInterval + 500, 'still held' as const),
+      ]);
+
+      // Assert
+      assert.equal(
+        lost,
+        'lost',
+        'A session that answers but no longer holds the lock must lose the lease',
+      );
+      assert.ok(handle.signal.reason instanceof LeaseLostError);
+    } finally {
+      await handle[Symbol.asyncDispose]();
+    }
+  },
+);

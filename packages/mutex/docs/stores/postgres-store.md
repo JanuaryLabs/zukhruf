@@ -60,7 +60,7 @@ Two keys can get the same number. Then they are one lock: one key waits for the 
 3. The session sets `statement_timeout` and `lock_timeout` to `0`. Thus a timeout of the pool does not stop the wait.
 4. The session runs `SELECT pg_advisory_lock($1::bigint)`. The query waits in Postgres' lock queue until the server grants the lock. The store does not poll.
 5. After the grant, the session runs `SELECT nextval(<sequence>)`. The store reads the result with `BigInt` and makes the fencing token from it. A later grant always runs `nextval` later, so it gets a larger number.
-6. While the key is held, the session runs `SELECT 1` each `heartbeatInterval` milliseconds. See [The heartbeat](#the-heartbeat).
+6. While the key is held, the session asks `pg_locks` each `heartbeatInterval` milliseconds whether it still holds the lock. See [The heartbeat](#the-heartbeat).
 7. To release the key, the session runs `SELECT pg_advisory_unlock($1::bigint)`. If the result is `true`, the session resets `statement_timeout` and `lock_timeout`, and the store gives it back with `release()`. Thus the pool gets its own settings back. Then the next caller in the in-process queue continues.
 
 **A cancel.** A caller cancels its wait with a signal. The store then closes the waiting session with `release(true)`, and the call rejects with `signal.reason` at once. The store needs no second session. If the server grants the lock just before the close, the end of the session releases it.
@@ -69,7 +69,7 @@ The server does not see the close at once. Its process for that session stays in
 
 ### The heartbeat
 
-A holder must know when its session ends. A session that ends with a reset or a close emits `error` or `end`. But a network that stops silently sends nothing. TCP keep-alive with `keepAlive: true` of node-postgres waits for the idle time of the operating system first, approximately 2 hours on Linux. Thus the session of each holder runs `SELECT 1` each `heartbeatInterval` milliseconds. If the query fails, or no answer arrives within `heartbeatInterval`, the store aborts the signal of the lease with `LeaseLostError` and destroys the session. A late `SELECT 1` acquires nothing, so a heartbeat that timed out leaves no lock behind.
+A holder must know when its session ends. A session that ends with a reset or a close emits `error` or `end`. But a network that stops silently sends nothing. TCP keep-alive with `keepAlive: true` of node-postgres waits for the idle time of the operating system first, approximately 2 hours on Linux. Thus the session of each holder sends a heartbeat each `heartbeatInterval` milliseconds. The heartbeat reads `pg_locks` for the lock of the key, granted to `pg_backend_pid()`: the session itself. It asks about the lock, not about the connection. A session that connects again by itself answers a query, but it does not hold the lock. If the query fails, if it finds no lock, or if no answer arrives within `heartbeatInterval`, the store aborts the signal of the lease with `LeaseLostError` and destroys the session. The heartbeat runs no advisory lock function, so it acquires nothing, and a heartbeat that timed out leaves no lock behind.
 
 `heartbeatInterval` is the longest time that a holder can work after its session ended, before its signal aborts. Until then, only the [fencing token](../concepts/fencing-tokens.md) protects the resource.
 
@@ -143,6 +143,7 @@ All three options are required. No option has a default.
 Each design error that the review found has a test in [`src/lock-stores/postgres/postgres-store.test.ts`](../../src/lock-stores/postgres/postgres-store.test.ts). The name of the test says what the wrong design broke:
 
 - **A held key is lost within heartbeatInterval when the server stops answering.** A TCP proxy stops forwarding and closes no socket. The signal of the lease aborts with `LeaseLostError` within two intervals. Wrong design: no heartbeat.
+- **A session that reconnects silently loses its lease.** The session of the holder hides the end of its connection, and connects again. The server ended the old connection, so the key is free. The signal of the lease aborts within two intervals. Wrong design: a heartbeat that asks about the connection (`SELECT 1`), not the lock.
 - **A cancel ends a wait when every session of the pool is busy.** The pool of the waiter has one session. The cancelled call rejects with the reason of its signal within 1 second. Wrong design: a cancel that gets a second session from the pool.
 - **A cancelled waiter that the server grants later gives the key to the next waiter.** After the holder releases, a caller in another pool gets the key. Wrong design: a cancel that does not close the waiting session.
 - **A role with only USAGE on the sequence can acquire.** The role has no `CREATE` on the schema. Wrong design: `CREATE SEQUENCE IF NOT EXISTS` in the store.

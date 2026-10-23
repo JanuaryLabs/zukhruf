@@ -45,6 +45,9 @@ const lockRows = `FROM pg_catalog.pg_locks
 
 const heldQuery = `SELECT EXISTS (SELECT 1 ${lockRows}) AS held`;
 
+/** Whether the session of the heartbeat holds the lock. */
+const holdsQuery = `SELECT EXISTS (SELECT 1 ${lockRows} AND pid = pg_catalog.pg_backend_pid()) AS held`;
+
 /**
  * Holds a session-level advisory lock of Postgres for each key, on a session
  * of its own. The server releases the lock when the session ends, so a
@@ -114,8 +117,9 @@ function postgresDialect(
       }
       return BigInt(row.token);
     },
-    heartbeat: async (session) => {
-      await session.query('SELECT 1', []);
+    holds: async (session, { name }) => {
+      const [row] = await rowsOf(session, holdsQuery, [name]);
+      return row?.held === true;
     },
     release: async (session, { name }) => {
       const [row] = await rowsOf(
