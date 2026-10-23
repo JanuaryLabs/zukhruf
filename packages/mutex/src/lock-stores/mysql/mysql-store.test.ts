@@ -219,7 +219,8 @@ test(
 /**
  * A session that connects again by itself when the server ends its
  * connection, and tells the store nothing: no `error`, no `end`. The store's
- * listeners hear nothing. `reconnected` resolves once the new connection is up.
+ * listeners hear nothing. A query that fails on the ended connection runs
+ * again on the new one. `reconnected` resolves once the new connection is up.
  */
 async function silentlyReconnectingSession(database: MysqlDatabase) {
   const open = async () => {
@@ -237,7 +238,14 @@ async function silentlyReconnectingSession(database: MysqlDatabase) {
     }, reconnected.reject);
   });
   const session: MysqlSession = {
-    query: (sql, values) => current.query(sql, values),
+    query: async (sql, values) => {
+      try {
+        return await current.query(sql, values);
+      } catch {
+        await reconnected.promise;
+        return current.query(sql, values);
+      }
+    },
     on: () => session,
     off: () => session,
     release: () => current.destroy(),
@@ -259,25 +267,40 @@ test(
       heartbeatInterval,
     });
     const admin = await mysql.createConnection(database.connectionString);
-    const handle = await store.acquire(uniqueKey());
+    const otherPool = poolOf(database);
+    const key = uniqueKey();
+    const handle = await store.acquire(key);
+    await using other = new AsyncDisposableStack();
     try {
-      // Act: the server ends the holder's connection, which frees the key.
+      // Act: the server ends the holder's connection, which frees the key, and another store takes the key.
       await admin.query(`KILL ${reconnecting.id}`);
       await reconnecting.reconnected;
+      const heldAfterReconnect = !handle.signal.aborted;
+      const taken = await storeOver(otherPool).tryAcquire(key);
+      if (taken) other.use(taken);
       const lost = await Promise.race([
         once(handle.signal, 'abort').then(() => 'lost' as const),
         delay(2 * heartbeatInterval + 500, 'still held' as const),
       ]);
 
-      // Assert
+      // Assert: the heartbeat asks whether this session holds the lock, not whether any session does.
+      assert.ok(
+        heldAfterReconnect,
+        'The reconnect itself must not lose the lease',
+      );
+      assert.ok(taken, 'The ended connection must have freed the key');
       assert.equal(
         lost,
         'lost',
         'A session that answers but no longer holds the lock must lose the lease',
       );
-      assert.ok(handle.signal.reason instanceof LeaseLostError);
+      const reason: unknown = handle.signal.reason;
+      assert.ok(reason instanceof LeaseLostError);
+      assert.match(String(reason.cause), /no longer holds the lock/);
     } finally {
+      await other.disposeAsync();
       await handle[Symbol.asyncDispose]();
+      await otherPool.end();
       await admin.end();
     }
   },
