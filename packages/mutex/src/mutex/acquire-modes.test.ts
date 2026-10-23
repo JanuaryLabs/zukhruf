@@ -9,6 +9,7 @@ import { describe } from '@zukhruf/testing/node';
 import { MemoryStore } from '../lock-stores/memory/memory-store.ts';
 import {
   type StoreHost,
+  deadlineFor,
   reaches,
   settle,
   storeCases,
@@ -176,7 +177,10 @@ void describe.each(storeCases, (store) =>
         // Assert
         assert.deepEqual(gaveUp, { acquired: false });
         assert.equal(
-          await within(waiter, 2000),
+          await within(
+            waiter,
+            deadlineFor(store, 2000, { grants: 1, releases: 0 }),
+          ),
           'done',
           'The waiting caller must get the key; the caller that gave up must not keep it',
         );
@@ -245,7 +249,10 @@ void describe.each(storeCases, (store) =>
           await holder.release();
         }
         assert.equal(
-          await within(next, 2000),
+          await within(
+            next,
+            deadlineFor(store, 2000, { grants: 1, releases: 0 }),
+          ),
           'done',
           'The caller that cancelled must not keep the key from the caller after it',
         );
@@ -739,7 +746,7 @@ void describe.each(
           assert.equal(
             await within(
               mutex.acquire('report:daily', async () => 'next'),
-              2000,
+              deadlineFor(store, 2000, { grants: 1, releases: 0 }),
             ),
             'done',
             'The key must be free after the holder releases it; the child that gave up must not keep it',

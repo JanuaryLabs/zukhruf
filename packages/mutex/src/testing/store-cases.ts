@@ -68,6 +68,20 @@ const reachOrder: readonly Reach[] = [
 export const timeoutForGrants = (store: StoreCase, grants: number): number =>
   Math.max(15_000, grants * store.grantLatency * 2);
 
+/**
+ * The deadline of a step that makes `cost.grants` grants and waits for
+ * `cost.releases` releases of a closed holder: `limit` for a fast store, plus
+ * the `grantLatency` of each grant and the `releaseLatency` of each release.
+ */
+export const deadlineFor = (
+  store: StoreCase,
+  limit: number,
+  cost: { grants: number; releases: number },
+): number =>
+  limit +
+  cost.grants * store.grantLatency +
+  cost.releases * store.releaseLatency;
+
 /** Whether the locks of `store` are shared at least as far as `reach`. */
 export const reaches = (store: StoreCase, reach: Reach): boolean =>
   reachOrder.indexOf(store.reach) >= reachOrder.indexOf(reach);

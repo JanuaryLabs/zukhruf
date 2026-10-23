@@ -24,6 +24,7 @@ import { scratchDirectory } from '../testing/scratch-directory.ts';
 import {
   type StoreCase,
   type StoreHost,
+  deadlineFor,
   reaches,
   settle,
   storeCases,
@@ -233,7 +234,8 @@ void describe.each(storeCases, (store) =>
       await using host = store.open(fixture.location);
       const mutex = new Mutex(host.store);
       const finishFirst = Promise.withResolvers<void>();
-      const deadline = delay(2000, null, { ref: false });
+      const limit = deadlineFor(store, 2000, { grants: 3, releases: 0 });
+      const deadline = delay(limit, null, { ref: false });
       let entered = 0;
       let active = 0;
       let peakActive = 0;
@@ -272,7 +274,7 @@ void describe.each(storeCases, (store) =>
         assert.notEqual(
           results,
           null,
-          'All three requests must finish within two seconds after the held callback is released',
+          `All three requests must finish within ${limit} ms after the held callback is released`,
         );
         assert.deepEqual(
           results,
@@ -362,7 +364,8 @@ void describe.each(storeCases, (store) =>
       await using host = store.open(fixture.location);
       const mutex = new Mutex(host.store);
       let stock = 0;
-      const deadline = delay(1000, null, { ref: false });
+      const limit = deadlineFor(store, 1000, { grants: 2, releases: 0 });
+      const deadline = delay(limit, null, { ref: false });
 
       // Act: one request is declined, then stock arrives before the next request.
       const outcomes = Promise.allSettled([
@@ -389,7 +392,7 @@ void describe.each(storeCases, (store) =>
       assert.notEqual(
         results,
         null,
-        'A later request must finish within one second even when the previous callback returned false',
+        `A later request must finish within ${limit} ms even when the previous callback returned false`,
       );
       assert.deepEqual(
         results,
@@ -412,8 +415,7 @@ void describe.each(storeCases, (store) =>
           await using host = store.open(fixture.location);
           const mutex = new Mutex(host.store);
           const finishFirst = Promise.withResolvers<void>();
-          // One second leaves 960 ms after two grants of 20 ms. A slower store keeps that margin after its own two grants.
-          const limit = Math.max(1000, 2 * store.grantLatency + 960);
+          const limit = deadlineFor(store, 1000, { grants: 2, releases: 0 });
           const deadline = delay(limit, null, { ref: false });
           let firstStarted = false;
           let secondStarted = false;
@@ -837,7 +839,8 @@ void describe.each(
               newProcessTimeout,
             );
             const mutex = new Mutex(host.store);
-            const deadline = delay(2000, null, { ref: false });
+            const limit = deadlineFor(store, 2000, { grants: 1, releases: 1 });
+            const deadline = delay(limit, null, { ref: false });
 
             // Act: the holder dies without releasing, then this process asks for the same key.
             holder.child.kill('SIGKILL');
@@ -851,7 +854,7 @@ void describe.each(
             assert.equal(
               acquired,
               true,
-              'A caller must acquire the key within two seconds after its holder process was killed',
+              `A caller must acquire the key within ${limit} ms after its holder process was killed`,
             );
           },
         ),
