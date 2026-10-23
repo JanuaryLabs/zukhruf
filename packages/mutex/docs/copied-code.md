@@ -66,6 +66,14 @@ Backlog #2544 is about this code: `close` stops the listeners, but it does not e
 - Same: `JSON.parse` of one line of the socket's newline-delimited JSON. The write side is in one place already: `jsonLine` (`socket/json-line.ts`).
 - Differs: a line that is not JSON. `SocketConnection` closes the connection, because the framing is broken ([ADR 0017](./adr/0017-a-connection-closes-only-when-its-framing-breaks.md)). `parse` gives `undefined`, and the handshake reads that as no `hello` or no answer.
 
+**The turn in this process.**
+
+- Places: the `#inProcess` queue, `acquire`, `tryAcquire` and `withTurn` of `SqliteStore` (`sqlite/sqlite-store.ts`), and of `PostgresStore` (`postgres/postgres-store.ts`).
+- Same: the callers of one key in this process first line up in a `MemoryStore`. Only the first caller opens a file or gets a session, so one process uses one for each key. `withTurn` gives back the key of the lock store first, and then lets the next caller in this process continue.
+- Differs: what the turn holds after it: the file lock of the key's database file, or the advisory lock of a Postgres session. `PostgresStore.acquire` also passes the caller's signal to the wait of its session.
+
+Backlog #2886 is about this code. A third lock store with an in-process queue is the time to extract it.
+
 ## In more than two places
 
 The Rule of Three asks to extract the code below. It is not extracted yet. Until it is, a fix to one place goes into each place, and the commit names each file.
