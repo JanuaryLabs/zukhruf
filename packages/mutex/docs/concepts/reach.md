@@ -10,7 +10,7 @@ A mutex works only when all callers ask the same lock store. The **reach** of a 
 | **Process**      | All threads of one process                          | [ThreadStore](../stores/thread-store.md)                                                                                                                                                        |
 | **Process tree** | One parent process and the children it started      | [IpcStore](../stores/ipc-store.md)                                                                                                                                                              |
 | **Host**         | All processes on one machine                        | [TicketQueueFileStore](../stores/ticket-queue-file-store.md), [LockFileStore](../stores/lock-file-store.md), [SqliteStore](../stores/sqlite-store.md), [SocketStore](../stores/socket-store.md) |
-| **Network**      | All processes on all machines that reach one server | [PostgresStore](../stores/postgres-store.md)                                                                                                                                                    |
+| **Network**      | All processes on all machines that reach one server | [PostgresStore](../stores/postgres-store.md), [SqlServerStore](../stores/sqlserver-store.md), [MysqlStore](../stores/mysql-store.md), [MariadbStore](../stores/mariadb-store.md)                |
 
 ## How to select a reach
 

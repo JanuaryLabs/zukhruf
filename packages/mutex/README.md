@@ -38,22 +38,28 @@ The full program is in the recipe [Stop two requests from selling the last item]
 
 First find who writes to the resource. Then select the lock store with that [reach](./docs/concepts/reach.md). Each family of lock stores has its own import path. The root `@zukhruf/mutex` gives only `Mutex` and the acquire modes ([ADR 0020](./docs/adr/0020-each-store-family-has-its-own-import-path.md)).
 
-| Lock store                                                       | Import                       | Reach                                   | Order                                   | A holder stops                                | Needs                                        |
-| ---------------------------------------------------------------- | ---------------------------- | --------------------------------------- | --------------------------------------- | --------------------------------------------- | -------------------------------------------- |
-| [MemoryStore](./docs/stores/memory-store.md)                     | `@zukhruf/mutex/memory`      | One object                              | First come, first served                | The locks stop with the process               | Nothing                                      |
-| [ThreadStore](./docs/stores/thread-store.md)                     | `@zukhruf/mutex/thread`      | One process (threads)                   | First come, first served                | Released when the worker exits                | `adopt(worker)`                              |
-| [IpcStore](./docs/stores/ipc-store.md)                           | `@zukhruf/mutex/ipc`         | Parent and its children                 | First come, first served                | Released in approximately 2 ms                | `fork()` and `adopt(child)`                  |
-| [TicketQueueFileStore](./docs/stores/ticket-queue-file-store.md) | `@zukhruf/mutex/file-system` | One host                                | First come, first served                | Released after a waiter finds that it stopped | A shared directory                           |
-| [LockFileStore](./docs/stores/lock-file-store.md)                | `@zukhruf/mutex/file-system` | One host                                | No order                                | Released after a waiter finds that it stopped | A shared directory                           |
-| [SqliteStore](./docs/stores/sqlite-store.md)                     | `@zukhruf/mutex/sqlite`      | One host                                | First come, first served in one process | Released by the kernel                        | A shared directory                           |
-| [SocketStore](./docs/stores/socket-store.md)                     | `@zukhruf/mutex/socket`      | One host                                | First come, first served                | Released in approximately 2 ms                | A shared directory                           |
-| [PostgresStore](./docs/stores/postgres-store.md)                 | `@zukhruf/mutex/postgres`    | Every machine that reaches the database | Postgres' lock queue                    | Released when its session ends                | A Postgres database and a `connect` function |
+| Lock store                                                       | Import                       | Reach                                   | Order                                   | A holder stops                                | Needs                                          |
+| ---------------------------------------------------------------- | ---------------------------- | --------------------------------------- | --------------------------------------- | --------------------------------------------- | ---------------------------------------------- |
+| [MemoryStore](./docs/stores/memory-store.md)                     | `@zukhruf/mutex/memory`      | One object                              | First come, first served                | The locks stop with the process               | Nothing                                        |
+| [ThreadStore](./docs/stores/thread-store.md)                     | `@zukhruf/mutex/thread`      | One process (threads)                   | First come, first served                | Released when the worker exits                | `adopt(worker)`                                |
+| [IpcStore](./docs/stores/ipc-store.md)                           | `@zukhruf/mutex/ipc`         | Parent and its children                 | First come, first served                | Released in approximately 2 ms                | `fork()` and `adopt(child)`                    |
+| [TicketQueueFileStore](./docs/stores/ticket-queue-file-store.md) | `@zukhruf/mutex/file-system` | One host                                | First come, first served                | Released after a waiter finds that it stopped | A shared directory                             |
+| [LockFileStore](./docs/stores/lock-file-store.md)                | `@zukhruf/mutex/file-system` | One host                                | No order                                | Released after a waiter finds that it stopped | A shared directory                             |
+| [SqliteStore](./docs/stores/sqlite-store.md)                     | `@zukhruf/mutex/sqlite`      | One host                                | First come, first served in one process | Released by the kernel                        | A shared directory                             |
+| [SocketStore](./docs/stores/socket-store.md)                     | `@zukhruf/mutex/socket`      | One host                                | First come, first served                | Released in approximately 2 ms                | A shared directory                             |
+| [PostgresStore](./docs/stores/postgres-store.md)                 | `@zukhruf/mutex/postgres`    | Every machine that reaches the database | Postgres' lock queue                    | Released when its session ends                | A Postgres database and a `connect` function   |
+| [SqlServerStore](./docs/stores/sqlserver-store.md)               | `@zukhruf/mutex/sqlserver`   | Every machine that reaches the database | SQL Server's lock queue                 | Released when its session ends                | A SQL Server database and a `connect` function |
+| [MysqlStore](./docs/stores/mysql-store.md)                       | `@zukhruf/mutex/mysql`       | Every machine that reaches the database | MySQL's lock queue                      | Released when its session ends                | A MySQL database and a `connect` function      |
+| [MariadbStore](./docs/stores/mariadb-store.md)                   | `@zukhruf/mutex/mariadb`     | Every machine that reaches the database | MariaDB's lock queue                    | Released when its session ends                | A MariaDB database and a `connect` function    |
 
 If you are not sure:
 
 - **One process:** use `MemoryStore`.
 - **Several processes on one host:** use `SqliteStore`.
 - **Many machines that already use Postgres:** use `PostgresStore`.
+- **Many machines that already use SQL Server:** use `SqlServerStore`.
+- **Many machines that already use MySQL:** use `MysqlStore`.
+- **Many machines that already use MariaDB:** use `MariadbStore`.
 
 ## Acquire modes
 

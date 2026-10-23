@@ -1,18 +1,33 @@
 import type { ChildProcess } from 'node:child_process';
 import type { Worker } from 'node:worker_threads';
 
+import mariadb, { type Pool } from 'mariadb';
+import mysql from 'mysql2/promise';
 import pg from 'pg';
+import { Connection, Request, TYPES } from 'tedious';
 
+import { Mariadb } from '@zukhruf/testing/mariadb';
+import { Mysql } from '@zukhruf/testing/mysql';
 import { type DatabaseOptions, Postgres } from '@zukhruf/testing/postgres';
+import { type Database, SqlServer } from '@zukhruf/testing/sqlserver';
 
 import { LockFileStore } from '../lock-stores/file-system/lock-file-store.ts';
 import { TicketQueueFileStore } from '../lock-stores/file-system/ticket-queue-file-store.ts';
 import { IpcLockCoordinator } from '../lock-stores/ipc/ipc-lock-coordinator.ts';
 import { IpcStore } from '../lock-stores/ipc/ipc-store.ts';
+import { MariadbStore } from '../lock-stores/mariadb/mariadb-store.ts';
 import { MemoryStore } from '../lock-stores/memory/memory-store.ts';
+import {
+  MysqlStore,
+  type MysqlStoreOptions,
+} from '../lock-stores/mysql/mysql-store.ts';
 import { PostgresStore } from '../lock-stores/postgres/postgres-store.ts';
 import { SocketStore } from '../lock-stores/socket/socket-store.ts';
 import { SqliteStore } from '../lock-stores/sqlite/sqlite-store.ts';
+import {
+  type SqlServerSession,
+  SqlServerStore,
+} from '../lock-stores/sqlserver/sqlserver-store.ts';
 import { ThreadLockCoordinator } from '../lock-stores/thread/thread-lock-coordinator.ts';
 import { ThreadStore } from '../lock-stores/thread/thread-store.ts';
 import type { LockStore } from '../mutex/lock-store.ts';
@@ -157,6 +172,191 @@ const postgresPool = (location: string, allowExitOnIdle: boolean) =>
     allowExitOnIdle,
   });
 
+/** How a store of a server case reaches its database. The location of the fixture is this object as JSON. */
+interface Server {
+  host: string;
+  port: number;
+  user: string;
+  password: string;
+  database: string;
+}
+
+const serverOf = ({
+  host,
+  port,
+  user,
+  password,
+  database,
+}: Database): Server => ({
+  host,
+  port,
+  user,
+  password,
+  database,
+});
+
+const serverAt = (location: string): Server => JSON.parse(location);
+
+/**
+ * Makes a new database with `prepare`, which creates what the app creates
+ * before it starts. The fixture drops the database.
+ */
+async function serverFixture(
+  database: Database,
+  prepare: () => Promise<void>,
+): Promise<StoreFixture> {
+  try {
+    await prepare();
+  } catch (error) {
+    await database.cleanup();
+    throw error;
+  }
+  return {
+    location: JSON.stringify(serverOf(database)),
+    [Symbol.asyncDispose]: () => database.cleanup(),
+  };
+}
+
+/** A column of a row that tedious gives with `useColumnNames` off, its default. */
+interface Column {
+  metadata: { colName: string };
+  value: unknown;
+}
+
+/** The caller's wrapper that the SqlServerStore page shows: one tedious connection is one session. */
+async function sqlServerSession(server: Server): Promise<SqlServerSession> {
+  const connection = new Connection({
+    server: server.host,
+    authentication: {
+      type: 'default',
+      options: { userName: server.user, password: server.password },
+    },
+    options: {
+      port: server.port,
+      database: server.database,
+      encrypt: false,
+      trustServerCertificate: true,
+      requestTimeout: 0,
+    },
+  });
+  await new Promise<void>((resolve, reject) =>
+    connection.connect((error) => (error ? reject(error) : resolve())),
+  );
+  // A connection already has `on` and `close`, so the session only adds `query`.
+  return Object.assign(connection, {
+    query: (text: string, parameters: Record<string, string>) =>
+      new Promise<Record<string, unknown>[]>((resolve, reject) => {
+        const rows: Record<string, unknown>[] = [];
+        const request = new Request(text, (error) =>
+          error ? reject(error) : resolve(rows),
+        );
+        for (const [name, value] of Object.entries(parameters)) {
+          request.addParameter(name, TYPES.NVarChar, value);
+        }
+        request.on('row', (columns: Column[]) =>
+          rows.push(
+            Object.fromEntries(
+              columns.map((column) => [column.metadata.colName, column.value]),
+            ),
+          ),
+        );
+        connection.execSql(request);
+      }),
+  });
+}
+
+/** A new database with the token sequence that the app creates before it starts. */
+async function sqlServerFixture(
+  environment: DatabaseOptions['environment'],
+): Promise<StoreFixture> {
+  const database = await new SqlServer({ environment }).database();
+  return serverFixture(database, async () => {
+    const owner = await sqlServerSession(database);
+    try {
+      await owner.query(
+        'CREATE SEQUENCE dbo.mutex_tokens AS bigint START WITH 1 NO CACHE',
+        {},
+      );
+    } finally {
+      owner.close();
+    }
+  });
+}
+
+/** The store gets a new connection for each session and closes each one, so nothing is left to end. */
+const sqlServerStore = (location: string) =>
+  new SqlServerStore({
+    connect: () => sqlServerSession(serverAt(location)),
+    sequence: 'dbo.mutex_tokens',
+    heartbeatInterval: 200,
+  });
+
+/** A new database with the token table that the app creates before it starts. */
+async function mysqlFixture(
+  environment: DatabaseOptions['environment'],
+): Promise<StoreFixture> {
+  const database = await new Mysql({ environment }).database();
+  return serverFixture(database, async () => {
+    const owner = await mysql.createConnection(database.connectionString);
+    try {
+      await owner.query(
+        'CREATE TABLE mutex_tokens (id BIGINT UNSIGNED NOT NULL)',
+      );
+      await owner.query('INSERT INTO mutex_tokens VALUES (0)');
+    } finally {
+      await owner.end();
+    }
+  });
+}
+
+const mysqlStore = (connect: MysqlStoreOptions['connect']) =>
+  new MysqlStore({ connect, table: 'mutex_tokens', heartbeatInterval: 200 });
+
+/**
+ * A mysql2 pool keeps its process alive until `end()`, and a child or a
+ * thread never ends its store. So its store gets one connection per session,
+ * and giving the session back closes the connection.
+ */
+const mysqlStoreThatLetsItsProcessExit = (location: string) =>
+  mysqlStore(async () => {
+    const connection = await mysql.createConnection(serverAt(location));
+    return Object.assign(connection, { release: () => connection.destroy() });
+  });
+
+/** A new database with the token sequence that the app creates before it starts. */
+async function mariadbFixture(
+  environment: DatabaseOptions['environment'],
+): Promise<StoreFixture> {
+  const database = await new Mariadb({ environment }).database();
+  return serverFixture(database, async () => {
+    const owner = await mariadb.createConnection(serverOf(database));
+    try {
+      await owner.query('CREATE SEQUENCE mutex_tokens');
+    } finally {
+      await owner.end();
+    }
+  });
+}
+
+/**
+ * A store over a pool that is configured as the MariadbStore page tells an
+ * app to. A child or a thread never ends its pool, so its pool closes each
+ * idle connection after one second and keeps none, which lets it exit.
+ */
+const mariadbPool = (location: string, exitOnIdle: boolean) =>
+  mariadb.createPool({
+    ...serverAt(location),
+    keepAliveDelay: 10_000,
+    ...(exitOnIdle && { minimumIdle: 0, idleTimeout: 1 }),
+  });
+
+const mariadbStore = (pool: Pool) =>
+  new MariadbStore({
+    connect: () => pool.getConnection(),
+    sequence: 'mutex_tokens',
+    heartbeatInterval: 200,
+  });
+
 export const storeCases: StoreCase[] = [
   {
     name: 'MemoryStore',
@@ -257,6 +457,58 @@ export const storeCases: StoreCase[] = [
     },
     openInChild: (location) => postgresStore(postgresPool(location, true)),
     openInThread: (location) => postgresStore(postgresPool(location, true)),
+  },
+  {
+    name: 'SqlServerStore',
+    reach: 'network',
+    durableTokens: true,
+    fixture: sqlServerFixture,
+    open: (location) => ({
+      store: sqlServerStore(location),
+      adoptProcess() {},
+      adoptThread() {},
+      async [Symbol.asyncDispose]() {},
+    }),
+    openInChild: sqlServerStore,
+    openInThread: sqlServerStore,
+  },
+  {
+    name: 'MysqlStore',
+    reach: 'network',
+    durableTokens: true,
+    fixture: mysqlFixture,
+    open: (location) => {
+      const pool = mysql.createPool({
+        ...serverAt(location),
+        enableKeepAlive: true,
+        keepAliveInitialDelay: 10_000,
+      });
+      return {
+        store: mysqlStore(() => pool.getConnection()),
+        adoptProcess() {},
+        adoptThread() {},
+        [Symbol.asyncDispose]: () => pool.end(),
+      };
+    },
+    openInChild: mysqlStoreThatLetsItsProcessExit,
+    openInThread: mysqlStoreThatLetsItsProcessExit,
+  },
+  {
+    name: 'MariadbStore',
+    reach: 'network',
+    durableTokens: true,
+    fixture: mariadbFixture,
+    open: (location) => {
+      const pool = mariadbPool(location, false);
+      return {
+        store: mariadbStore(pool),
+        adoptProcess() {},
+        adoptThread() {},
+        [Symbol.asyncDispose]: () => pool.end(),
+      };
+    },
+    openInChild: (location) => mariadbStore(mariadbPool(location, true)),
+    openInThread: (location) => mariadbStore(mariadbPool(location, true)),
   },
 ];
 

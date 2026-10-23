@@ -18,7 +18,7 @@ Start with the [project README](../README.md). The glossary is in [CONTEXT.md](.
 | Process      | [ThreadStore and ThreadLockCoordinator](./stores/thread-store.md)                                                                                                                           |
 | Process tree | [IpcStore and IpcLockCoordinator](./stores/ipc-store.md)                                                                                                                                    |
 | Host         | [TicketQueueFileStore](./stores/ticket-queue-file-store.md), [LockFileStore](./stores/lock-file-store.md), [SqliteStore](./stores/sqlite-store.md), [SocketStore](./stores/socket-store.md) |
-| Network      | [PostgresStore](./stores/postgres-store.md)                                                                                                                                                 |
+| Network      | [PostgresStore](./stores/postgres-store.md), [SqlServerStore](./stores/sqlserver-store.md), [MysqlStore](./stores/mysql-store.md), [MariadbStore](./stores/mariadb-store.md)                |
 
 ## Recipes
 
@@ -58,6 +58,8 @@ Start with the [project README](../README.md). The glossary is in [CONTEXT.md](.
 21. [A lock store can reach every machine that reaches one server](./adr/0021-a-lock-store-can-reach-every-machine-that-reaches-one-server.md)
 22. [A database lock store takes its session from the caller](./adr/0022-a-database-lock-store-takes-its-session-from-the-caller.md)
 23. [A Postgres waiter is cancelled by closing its session](./adr/0023-a-postgres-waiter-is-cancelled-by-closing-its-session.md)
+24. [A SQL Server holder check reads the lock view](./adr/0024-a-sql-server-holder-check-reads-the-lock-view.md)
+25. [A MySQL-family lock belongs to one database](./adr/0025-a-mysql-family-lock-belongs-to-one-database.md)
 
 ## Copied code
 
