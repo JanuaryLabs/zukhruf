@@ -1,4 +1,5 @@
 import type { ChildProcess } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import type { Worker } from 'node:worker_threads';
 
 import mariadb, { type Pool } from 'mariadb';
@@ -6,11 +7,13 @@ import mysql from 'mysql2/promise';
 import pg from 'pg';
 import { Connection, Request, TYPES } from 'tedious';
 
+import { Docker } from '@zukhruf/docker';
 import { Mariadb } from '@zukhruf/testing/mariadb';
 import { Mysql } from '@zukhruf/testing/mysql';
 import { type DatabaseOptions, Postgres } from '@zukhruf/testing/postgres';
 import { type Database, SqlServer } from '@zukhruf/testing/sqlserver';
 
+import { DockerEngineStore } from '../lock-stores/docker/docker-engine-store.ts';
 import { LockFileStore } from '../lock-stores/file-system/lock-file-store.ts';
 import { TicketQueueFileStore } from '../lock-stores/file-system/ticket-queue-file-store.ts';
 import { IpcLockCoordinator } from '../lock-stores/ipc/ipc-lock-coordinator.ts';
@@ -57,6 +60,14 @@ const reachOrder: readonly Reach[] = [
   'network',
 ];
 
+/**
+ * The time limit of a test that makes `grants` grants one after another
+ * while other callers wait: twice the `grantLatency` of each grant, and never
+ * less than 15 seconds.
+ */
+export const timeoutForGrants = (store: StoreCase, grants: number): number =>
+  Math.max(15_000, grants * store.grantLatency * 2);
+
 /** Whether the locks of `store` are shared at least as far as `reach`. */
 export const reaches = (store: StoreCase, reach: Reach): boolean =>
   reachOrder.indexOf(store.reach) >= reachOrder.indexOf(reach);
@@ -78,6 +89,10 @@ export interface StoreCase {
   reach: Reach;
   /** Whether a new store over the same fixture keeps issuing newer tokens. */
   durableTokens: boolean;
+  /** Milliseconds: the upper bound of one grant and its release with no contention, on the local server or engine. */
+  grantLatency: number;
+  /** Milliseconds: the upper bound from the close of a holder process until a look sees no holder. */
+  releaseLatency: number;
   /**
    * Makes a new fixture, which the test disposes. A server-backed fixture
    * finds its Docker engine through `environment`.
@@ -357,11 +372,85 @@ const mariadbStore = (pool: Pool) =>
     heartbeatInterval: 200,
   });
 
+const dockerNamespaceLabel = 'zukhruf.mutex.namespace';
+
+/** Where the stores of a Docker engine case meet. The location of the fixture is this object as JSON. */
+interface DockerEngineLocation {
+  host: string;
+  namespace: string;
+}
+
+/**
+ * A new namespace on the engine that `environment` selects. The disposal
+ * removes each container and volume with the label of the namespace, through
+ * a client of its own, so it runs after each store of the test ended its
+ * client.
+ */
+async function dockerEngineFixture(
+  environment: DatabaseOptions['environment'],
+): Promise<StoreFixture> {
+  const { host } = await (async () => {
+    await using docker = await Docker.connect({ environment });
+    return { host: docker.host };
+  })();
+  const location: DockerEngineLocation = {
+    host,
+    namespace: `zukhruf-mutex-test-${randomUUID()}`,
+  };
+  return {
+    location: JSON.stringify(location),
+    [Symbol.asyncDispose]: async () => {
+      await using cleaner = await Docker.connect({ host });
+      const filters = {
+        label: [`${dockerNamespaceLabel}=${location.namespace}`],
+      };
+      for (const { Id } of await cleaner.containers.list({
+        all: true,
+        filters,
+      })) {
+        await (await cleaner.containers.find(Id))?.remove({ force: true });
+      }
+      for (const { Name } of await cleaner.volumes.list({ filters })) {
+        await (await cleaner.volumes.find(Name))?.remove({ force: true });
+      }
+    },
+  };
+}
+
+/**
+ * A DockerEngineStore takes a connected client, and `open` is synchronous. So
+ * this store connects its own client when it opens, and gives each call to a
+ * DockerEngineStore over that client once it is connected. The free sockets
+ * of a client do not keep a process running, so a child or a thread that
+ * never disposes its client can exit.
+ */
+function dockerEngineStore(location: string) {
+  const { host, namespace }: DockerEngineLocation = JSON.parse(location);
+  const docker = Docker.connect({ host });
+  const store = docker.then(
+    (client) =>
+      new DockerEngineStore({
+        docker: client,
+        image: 'node:lts-alpine',
+        namespace,
+        heartbeatInterval: 500,
+      }),
+  );
+  const lockStore: LockStore = {
+    acquire: async (key, options) => (await store).acquire(key, options),
+    tryAcquire: async (key) => (await store).tryAcquire(key),
+    isHeld: async (key) => (await store).isHeld(key),
+  };
+  return { docker, store: lockStore };
+}
+
 export const storeCases: StoreCase[] = [
   {
     name: 'MemoryStore',
     reach: 'instance',
     durableTokens: false,
+    grantLatency: 1,
+    releaseLatency: 1,
     fixture: directoryFixture,
     open: () => ({
       store: new MemoryStore(),
@@ -375,6 +464,8 @@ export const storeCases: StoreCase[] = [
     name: 'ThreadStore',
     reach: 'process',
     durableTokens: false,
+    grantLatency: 1,
+    releaseLatency: 10,
     fixture: directoryFixture,
     open: () => {
       const coordinator = new ThreadLockCoordinator();
@@ -393,6 +484,8 @@ export const storeCases: StoreCase[] = [
     name: 'IpcStore',
     reach: 'process-tree',
     durableTokens: false,
+    grantLatency: 1,
+    releaseLatency: 10,
     fixture: directoryFixture,
     open: () => {
       const coordinator = new IpcLockCoordinator();
@@ -409,6 +502,8 @@ export const storeCases: StoreCase[] = [
     name: 'TicketQueueFileStore',
     reach: 'host',
     durableTokens: true,
+    grantLatency: 20,
+    releaseLatency: 10,
     fixture: directoryFixture,
     ...sharedByDirectory(
       (directory) => new TicketQueueFileStore(directory, { pollInterval }),
@@ -418,6 +513,8 @@ export const storeCases: StoreCase[] = [
     name: 'LockFileStore',
     reach: 'host',
     durableTokens: true,
+    grantLatency: 20,
+    releaseLatency: 10,
     fixture: directoryFixture,
     ...sharedByDirectory(
       (directory) => new LockFileStore(directory, { pollInterval }),
@@ -427,6 +524,8 @@ export const storeCases: StoreCase[] = [
     name: 'SqliteStore',
     reach: 'host',
     durableTokens: true,
+    grantLatency: 20,
+    releaseLatency: 10,
     fixture: directoryFixture,
     ...sharedByDirectory(
       (directory) => new SqliteStore(directory, { pollInterval }),
@@ -436,6 +535,8 @@ export const storeCases: StoreCase[] = [
     name: 'SocketStore',
     reach: 'host',
     durableTokens: true,
+    grantLatency: 20,
+    releaseLatency: 10,
     fixture: directoryFixture,
     ...sharedByDirectory(
       (directory) => new SocketStore(directory, { pollInterval, graceWindow }),
@@ -445,6 +546,8 @@ export const storeCases: StoreCase[] = [
     name: 'PostgresStore',
     reach: 'network',
     durableTokens: true,
+    grantLatency: 10,
+    releaseLatency: 10,
     fixture: postgresFixture,
     open: (location) => {
       const pool = postgresPool(location, false);
@@ -462,6 +565,8 @@ export const storeCases: StoreCase[] = [
     name: 'SqlServerStore',
     reach: 'network',
     durableTokens: true,
+    grantLatency: 20,
+    releaseLatency: 20,
     fixture: sqlServerFixture,
     open: (location) => ({
       store: sqlServerStore(location),
@@ -476,6 +581,8 @@ export const storeCases: StoreCase[] = [
     name: 'MysqlStore',
     reach: 'network',
     durableTokens: true,
+    grantLatency: 10,
+    releaseLatency: 20,
     fixture: mysqlFixture,
     open: (location) => {
       const pool = mysql.createPool({
@@ -497,6 +604,8 @@ export const storeCases: StoreCase[] = [
     name: 'MariadbStore',
     reach: 'network',
     durableTokens: true,
+    grantLatency: 10,
+    releaseLatency: 10,
     fixture: mariadbFixture,
     open: (location) => {
       const pool = mariadbPool(location, false);
@@ -509,6 +618,26 @@ export const storeCases: StoreCase[] = [
     },
     openInChild: (location) => mariadbStore(mariadbPool(location, true)),
     openInThread: (location) => mariadbStore(mariadbPool(location, true)),
+  },
+  {
+    name: 'DockerEngineStore',
+    reach: 'network',
+    durableTokens: true,
+    grantLatency: 300,
+    releaseLatency: 150,
+    fixture: dockerEngineFixture,
+    open: (location) => {
+      const { docker, store } = dockerEngineStore(location);
+      return {
+        store,
+        adoptProcess() {},
+        adoptThread() {},
+        [Symbol.asyncDispose]: async () =>
+          (await docker)[Symbol.asyncDispose](),
+      };
+    },
+    openInChild: (location) => dockerEngineStore(location).store,
+    openInThread: (location) => dockerEngineStore(location).store,
   },
 ];
 

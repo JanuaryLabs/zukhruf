@@ -93,15 +93,19 @@ A reach that includes all processes on one machine.
 _Avoid_: Server, node
 
 **Network**:
-A reach that includes all processes on all machines that reach one server, for example one Postgres database.
+A reach that includes all processes on all machines that reach one server, for example one Postgres database, or one Docker engine.
 _Avoid_: Distributed, global, cluster, remote
 
 **Session**:
-A connection to the server of a network lock store. The server keeps the lock of a key while the session that holds it lasts, and releases the lock when the session ends.
+A connection to the server of a network lock store. The server keeps the lock of a key while the session that holds it lasts, and releases the lock when the session ends. For a Docker engine lock store, the session of a holder is its attach to its claim.
 _Avoid_: Connection pool, client
 
+**Claim**:
+The named container that holds a key on a Docker engine. Its name comes from the namespace and the key, so one key has at most one claim. The claim lasts while the attach of its holder lasts. When the attach ends, the claim stops and the engine removes it.
+_Avoid_: Lock container, lock file, marker
+
 **Heartbeat**:
-A short query that the session of a holder sends at a fixed interval, with a time limit. A failed or late heartbeat tells the network lock store that the session ended, and the lease is lost.
+A short query that the session of a holder sends at a fixed interval, with a time limit. For a Docker engine lock store, the heartbeat is an inspect of the claim. A failed or late heartbeat tells the network lock store that the session ended, and the lease is lost.
 _Avoid_: Ping, keep-alive (TCP keep-alive is a different mechanism), presence
 
 **Presence**:
@@ -119,6 +123,10 @@ _Avoid_: Version, revision, lock ID, UUID
 **Token source**:
 The object that makes the fencing tokens of a lock store. See `@zukhruf/fencing`.
 _Avoid_: Counter, generator
+
+**Ladder**:
+The named volumes that give the fencing tokens of a Docker engine lock store. Each volume is a rung, and the number in its name is a token. To get a token, a holder creates the rung above the highest rung, and then removes the lower rungs.
+_Avoid_: Sequence, counter volume
 
 **Fenced resource**:
 A resource that refuses a write with a fencing token lower than the highest token it has seen. See `@zukhruf/fencing`.

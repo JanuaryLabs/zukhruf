@@ -27,6 +27,7 @@ import {
   reaches,
   settle,
   storeCases,
+  timeoutForGrants,
 } from '../testing/store-cases.ts';
 import { newProcessTimeout, waitUntil } from '../testing/wait-until.ts';
 import { watch } from '../testing/watch.ts';
@@ -411,7 +412,9 @@ void describe.each(storeCases, (store) =>
           await using host = store.open(fixture.location);
           const mutex = new Mutex(host.store);
           const finishFirst = Promise.withResolvers<void>();
-          const deadline = delay(1000, null, { ref: false });
+          // One second leaves 960 ms after two grants of 20 ms. A slower store keeps that margin after its own two grants.
+          const limit = Math.max(1000, 2 * store.grantLatency + 960);
+          const deadline = delay(limit, null, { ref: false });
           let firstStarted = false;
           let secondStarted = false;
           const operations: Array<Promise<boolean>> = [];
@@ -452,7 +455,7 @@ void describe.each(storeCases, (store) =>
             assert.notEqual(
               results,
               null,
-              `Both operations for ${label(key)} must finish within one second`,
+              `Both operations for ${label(key)} must finish within ${limit} ms`,
             );
             assert.deepEqual(
               results,
@@ -856,7 +859,8 @@ void describe.each(
 
       test(
         'four processes incrementing a shared counter never lose an update',
-        { timeout: 15000 },
+        // Four processes make 25 grants each.
+        { timeout: timeoutForGrants(store, 100) },
         async () => {
           // Arrange: each increment reads, yields, then writes, so any overlap loses an update.
           await using fixture = await store.fixture(process.env);
@@ -1322,7 +1326,8 @@ void describe.each(
     describe(`Threads sharing ${store.name}`, () => {
       test(
         'four threads incrementing a shared counter never overlap or lose an update',
-        { timeout: 15000 },
+        // Four threads make 20 grants each.
+        { timeout: timeoutForGrants(store, 80) },
         async () => {
           // Arrange
           await using fixture = await store.fixture(process.env);

@@ -9,7 +9,12 @@ import { describe } from '@zukhruf/testing/node';
 
 import { isRecord } from '../shared/is-record.ts';
 import { scratchDirectory } from '../testing/scratch-directory.ts';
-import { type StoreHost, reaches, storeCases } from '../testing/store-cases.ts';
+import {
+  type StoreHost,
+  reaches,
+  storeCases,
+  timeoutForGrants,
+} from '../testing/store-cases.ts';
 import { newProcessTimeout, waitUntil } from '../testing/wait-until.ts';
 import { startWorker } from '../testing/worker-process.ts';
 import { Modes } from './acquire-modes/modes.ts';
@@ -168,7 +173,8 @@ void describe.each(
     describe(`Holder check from a worker thread with ${store.name}`, () => {
       test(
         'looks from another thread never make a caller that skips if busy give up on a free key',
-        { timeout: 15000 },
+        // At least 50 attempts, each one a grant of the free key.
+        { timeout: timeoutForGrants(store, 50) },
         async (t) => {
           // Arrange: a worker thread looks at the key again and again until it is told to stop.
           await using fixture = await store.fixture(process.env);
@@ -273,7 +279,12 @@ void describe.each(
           const whileAlive = await mutex.isHeld('report:daily');
           holder.child.kill('SIGKILL');
           await holder.closed;
-          const afterKill = await mutex.isHeld('report:daily');
+          // The store sees the end of the holder at most releaseLatency after its process closed.
+          const releasedBy = performance.now() + store.releaseLatency;
+          let afterKill = await mutex.isHeld('report:daily');
+          while (afterKill && performance.now() < releasedBy) {
+            afterKill = await mutex.isHeld('report:daily');
+          }
 
           // Assert
           assert.deepEqual(

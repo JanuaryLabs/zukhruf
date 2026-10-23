@@ -12,13 +12,13 @@ Start with the [project README](../README.md). The glossary is in [CONTEXT.md](.
 
 ## Lock stores
 
-| Reach        | Lock store                                                                                                                                                                                  |
-| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Instance     | [MemoryStore](./stores/memory-store.md)                                                                                                                                                     |
-| Process      | [ThreadStore and ThreadLockCoordinator](./stores/thread-store.md)                                                                                                                           |
-| Process tree | [IpcStore and IpcLockCoordinator](./stores/ipc-store.md)                                                                                                                                    |
-| Host         | [TicketQueueFileStore](./stores/ticket-queue-file-store.md), [LockFileStore](./stores/lock-file-store.md), [SqliteStore](./stores/sqlite-store.md), [SocketStore](./stores/socket-store.md) |
-| Network      | [PostgresStore](./stores/postgres-store.md), [SqlServerStore](./stores/sqlserver-store.md), [MysqlStore](./stores/mysql-store.md), [MariadbStore](./stores/mariadb-store.md)                |
+| Reach        | Lock store                                                                                                                                                                                                                         |
+| ------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Instance     | [MemoryStore](./stores/memory-store.md)                                                                                                                                                                                            |
+| Process      | [ThreadStore and ThreadLockCoordinator](./stores/thread-store.md)                                                                                                                                                                  |
+| Process tree | [IpcStore and IpcLockCoordinator](./stores/ipc-store.md)                                                                                                                                                                           |
+| Host         | [TicketQueueFileStore](./stores/ticket-queue-file-store.md), [LockFileStore](./stores/lock-file-store.md), [SqliteStore](./stores/sqlite-store.md), [SocketStore](./stores/socket-store.md)                                        |
+| Network      | [PostgresStore](./stores/postgres-store.md), [SqlServerStore](./stores/sqlserver-store.md), [MysqlStore](./stores/mysql-store.md), [MariadbStore](./stores/mariadb-store.md), [DockerEngineStore](./stores/docker-engine-store.md) |
 
 ## Recipes
 
@@ -60,6 +60,8 @@ Start with the [project README](../README.md). The glossary is in [CONTEXT.md](.
 23. [A Postgres waiter is cancelled by closing its session](./adr/0023-a-postgres-waiter-is-cancelled-by-closing-its-session.md)
 24. [A SQL Server holder check reads the lock view](./adr/0024-a-sql-server-holder-check-reads-the-lock-view.md)
 25. [A MySQL-family lock belongs to one database](./adr/0025-a-mysql-family-lock-belongs-to-one-database.md)
+26. [A Docker engine key is a named container that lives while its holder attaches](./adr/0026-a-docker-engine-key-is-a-named-container-that-lives-while-its-holder-attaches.md)
+27. [Docker engine tokens come from a ladder of named volumes](./adr/0027-docker-engine-tokens-come-from-a-ladder-of-named-volumes.md)
 
 ## Copied code
 

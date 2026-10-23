@@ -51,8 +51,17 @@
     "@zukhruf/fs": "^0.3.40",
     "@zukhruf/lease": "^0.3.40"
   },
+  "peerDependencies": {
+    "@zukhruf/docker": "^0.3.40"
+  },
+  "peerDependenciesMeta": {
+    "@zukhruf/docker": {
+      "optional": true
+    }
+  },
   "devDependencies": {
     "@types/pg": "^8.23.1",
+    "@zukhruf/docker": "^0.3.40",
     "@zukhruf/testing": "^0.3.40",
     "hono": "^4.13.13",
     "mariadb": "^3.5.4",

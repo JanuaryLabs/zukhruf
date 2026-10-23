@@ -1,7 +1,5 @@
 # DockerEngineStore
 
-This page is a design. The code does not exist yet.
-
 A network lock store that uses a container on one Docker engine as the lock. Each process on each machine that reaches the engine shares the locks. The engine reserves a container name for one container only, so the container of a key is its lock. The container lives only while the attach of its holder lasts.
 
 | Reach   | Order                                                                                                              | Holder stops                  | Token source              |
@@ -124,7 +122,7 @@ The Docker engine has no counter. Thus the tokens come from a ladder of named vo
 
 To mint a token, the holder:
 
-1. Lists the rungs of the key with the label filter `zukhruf.mutex.token=<digest>`, and reads the highest number `n`. With no rung, `n` is 0.
+1. Lists the rungs of the key with two label filters, `zukhruf.mutex.namespace=<namespace>` and `zukhruf.mutex.token=<digest>`, and reads the highest number `n`. With no rung, `n` is 0. The namespace filter is necessary: one key in two namespaces has one digest, and step 3 removes each rung that the list gives.
 2. Creates the volume of rung `n + 1` with `docker.volumes.create()`. If it rejects with `NameConflictError`, the holder tries `n + 2`, and so on.
 3. Removes the rungs that it listed in step 1. Thus each key keeps one rung. A rung is removed only after a higher rung exists, so a list always finds the highest rung.
 
@@ -178,7 +176,7 @@ All four options are required. No option has a default.
 
 ## Changes this design forces in other packages
 
-1. **`@zukhruf/docker`: `start()` of a container whose removal is in progress rejects with `ContainerNotFoundError`.** Today, the engine answers such a start with 409 `container is marked for removal and cannot be started`, and `start()` rejects with a plain `DockerEngineError`. A start after the removal ends gets 404 and `ContainerNotFoundError`. For the store, the two answers mean one thing: the claim is gone, so create it again. In the probe, a start that raced a removal got the 409 in 19 of 20 runs and the 404 in 1. Without the change, the store must read the status and the text of a `DockerEngineError`. With it, the store catches one class. The package already makes a class for each answer that changes the next step of a caller.
+1. **`@zukhruf/docker`: `start()` of a container whose removal is in progress rejects with `ContainerNotFoundError`.** The engine answers such a start with 409 `container is marked for removal and cannot be started`. Before this change, `start()` rejected with a plain `DockerEngineError`. Now `start()` inspects the container after a 409. If the container is gone or in the state `removing`, `start()` rejects with `ContainerNotFoundError`. A start after the removal ends gets 404 and `ContainerNotFoundError`, as before. The test `start() that races a removal without force runs the container or is a ContainerNotFoundError with its ID` in `packages/docker/src/containers.test.ts` shows it. For the store, the two answers mean one thing: the claim is gone, so create it again. In the probe, a start that raced a removal got the 409 in 19 of 20 runs and the 404 in 1. Without the change, the store must read the status and the text of a `DockerEngineError`. With it, the store catches one class. The package already makes a class for each answer that changes the next step of a caller.
 
 These existing parts of `@zukhruf/docker` stay, because a probe showed that each one is the right tool:
 
@@ -193,17 +191,23 @@ These changes are not necessary:
 
 ## Evidence
 
-The code does not exist yet, so no test of the lock-store matrix runs. When the store is built, each design error that the probes found gets a test in `src/lock-stores/docker/docker-engine-store.test.ts`. The name of the test says what the wrong design broke:
+`src/lock-stores/docker/docker-engine-store.test.ts` has one test for each design error that the probes found. The name of each test says what the wrong design broke. Each test uses a new `namespace` on the local engine. Its disposal removes each container and volume with the label of that namespace. A test that must stop a caller at one step uses a Unix socket proxy in front of the socket of the engine. The proxy keeps the requests of that caller from the engine.
 
-- **A killed holder's key goes to the next waiter.** Wrong designs: a claim without `StdinOnce`, and a claim without `AutoRemove`.
-- **A waiter wakes when the holder releases between the create of the waiter and its wait.** Wrong design: a wait with `docker.events()` that subscribes after the failed create.
-- **A key whose caller stopped between the create and the start goes to the next waiter within heartbeatInterval.** Wrong design: a wait for the removal with no time limit on a `created` claim.
-- **A caller whose claim a waiter removed before the start tries again.** Wrong design: a failed start that rejects the acquire.
-- **A holder that lost its claim during the mint gets no token.** Wrong design: a mint with no confirmation of the claim.
-- **A held key is lost within heartbeatInterval when the engine stops answering.** A Unix socket proxy stops forwarding and closes no socket. Wrong design: no heartbeat, only the attach.
-- **The tokens increase after `docker container prune`.** Wrong design: a ladder of created containers.
+| Test                                                                                                        | Wrong design that makes it fail                                                |
+| ----------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| A killed holder's key goes to the next waiter                                                               | A claim without `StdinOnce`; a claim without `AutoRemove`                      |
+| A waiter wakes when the holder releases between the create of the waiter and its wait                       | A wait with `docker.events()` that subscribes after the failed create          |
+| A key whose caller stopped between the create and the start goes to the next waiter after heartbeatInterval | A wait for the removal with no time limit on a `created` claim                 |
+| A caller whose claim a waiter removed before the start tries again                                          | A failed start that rejects the acquire                                        |
+| A holder that lost its claim during the mint gets no token                                                  | A mint with no confirmation of the claim                                       |
+| A held key is lost within heartbeatInterval when the engine stops answering                                 | No heartbeat, only the attach. The proxy stops forwarding and closes no socket |
+| The tokens increase after docker container prune                                                            | A ladder of created containers                                                 |
 
-The case of the store in the matrix (`src/testing/store-cases.ts`) has the reach `network`. Its fixture is a new `namespace` on the local engine, and the disposal of the fixture removes each container and volume with the label of that namespace.
+Each wrong design was put back into a copy of the store, one at a time. Each one made its test fail.
+
+The same file also has the tests of the lock store contract: two stores on one engine never run tasks of one key at the same time, a waiter gets the key when the holder releases it, `tryAcquire` gives up on a held key, `isHeld` creates nothing, the tokens of one key increase, a cancelled acquire rejects with the reason of its signal, and two namespaces do not share a key or its tokens.
+
+`DockerEngineStore` runs in each test of the lock-store matrix (`src/testing/store-cases.ts`) that its reach includes: in one process, across processes, and across threads. Each test gets a new `namespace` on the local engine. A child process or a worker thread connects its own client to the same engine. The tests that read the files of a store do not run, because the store keeps no files.
 
 These facts come from probes with `@zukhruf/docker` (from `packages/docker/dist`) on Node.js 26.10.0, before the design. Each probe used two engines: Docker Desktop 29.8.0 on macOS (API 1.56, a Unix socket, image `node:lts-alpine`), and Docker 28.5.0 on Ubuntu 24.04.4 over SSH (API 1.51, image `alpine:3`). The SSH engine had `ClientAliveInterval 0`, `TCPKeepAlive yes`, and the Linux TCP keep-alive defaults 7200, 75 and 9. The `~/.ssh/config` of the client had `ControlMaster auto` and `ControlPersist 60`.
 

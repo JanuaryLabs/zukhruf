@@ -57,6 +57,7 @@ test('each lock-store family has its own import path with its stores and the err
     ['sqlserver', ['SqlServerStore']],
     ['mysql', ['MysqlStore']],
     ['mariadb', ['MariadbStore']],
+    ['docker', ['DockerEngineStore']],
     [
       'socket',
       [
