@@ -17,7 +17,8 @@ Five cron ticks fire at the same time. Then a sixth tick runs while the admin as
 ```ts title="skip-a-running-job.ts"
 import { setTimeout as delay } from 'node:timers/promises';
 
-import { MemoryStore, Modes, Mutex } from '@zukhruf/mutex';
+import { Modes, Mutex } from '@zukhruf/mutex';
+import { MemoryStore } from '@zukhruf/mutex/memory';
 
 const mutex = new Mutex(new MemoryStore());
 const report = mutex.key('report:daily', { mode: Modes.skipIfBusy() });

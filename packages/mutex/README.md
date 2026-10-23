@@ -19,7 +19,8 @@ if (stock > 0) {
 A mutex lets one holder at a time run this code for a key:
 
 ```ts
-import { MemoryStore, Mutex } from '@zukhruf/mutex';
+import { Mutex } from '@zukhruf/mutex';
+import { MemoryStore } from '@zukhruf/mutex/memory';
 
 const mutex = new Mutex(new MemoryStore());
 
@@ -35,17 +36,17 @@ The full program is in the recipe [Stop two requests from selling the last item]
 
 ## Select a lock store
 
-First find who writes to the resource. Then select the lock store with that [reach](./docs/concepts/reach.md).
+First find who writes to the resource. Then select the lock store with that [reach](./docs/concepts/reach.md). Each family of lock stores has its own import path. The root `@zukhruf/mutex` gives only `Mutex` and the acquire modes ([ADR 0020](./docs/adr/0020-each-store-family-has-its-own-import-path.md)).
 
-| Lock store                                                       | Reach                   | Order                                   | A holder stops                                | Needs                       |
-| ---------------------------------------------------------------- | ----------------------- | --------------------------------------- | --------------------------------------------- | --------------------------- |
-| [MemoryStore](./docs/stores/memory-store.md)                     | One object              | First come, first served                | The locks stop with the process               | Nothing                     |
-| [ThreadStore](./docs/stores/thread-store.md)                     | One process (threads)   | First come, first served                | Released when the worker exits                | `adopt(worker)`             |
-| [IpcStore](./docs/stores/ipc-store.md)                           | Parent and its children | First come, first served                | Released in approximately 2 ms                | `fork()` and `adopt(child)` |
-| [TicketQueueFileStore](./docs/stores/ticket-queue-file-store.md) | One host                | First come, first served                | Released after a waiter finds that it stopped | A shared directory          |
-| [LockFileStore](./docs/stores/lock-file-store.md)                | One host                | No order                                | Released after a waiter finds that it stopped | A shared directory          |
-| [SqliteStore](./docs/stores/sqlite-store.md)                     | One host                | First come, first served in one process | Released by the kernel                        | A shared directory          |
-| [SocketStore](./docs/stores/socket-store.md)                     | One host                | First come, first served                | Released in approximately 2 ms                | A shared directory          |
+| Lock store                                                       | Import                       | Reach                   | Order                                   | A holder stops                                | Needs                       |
+| ---------------------------------------------------------------- | ---------------------------- | ----------------------- | --------------------------------------- | --------------------------------------------- | --------------------------- |
+| [MemoryStore](./docs/stores/memory-store.md)                     | `@zukhruf/mutex/memory`      | One object              | First come, first served                | The locks stop with the process               | Nothing                     |
+| [ThreadStore](./docs/stores/thread-store.md)                     | `@zukhruf/mutex/thread`      | One process (threads)   | First come, first served                | Released when the worker exits                | `adopt(worker)`             |
+| [IpcStore](./docs/stores/ipc-store.md)                           | `@zukhruf/mutex/ipc`         | Parent and its children | First come, first served                | Released in approximately 2 ms                | `fork()` and `adopt(child)` |
+| [TicketQueueFileStore](./docs/stores/ticket-queue-file-store.md) | `@zukhruf/mutex/file-system` | One host                | First come, first served                | Released after a waiter finds that it stopped | A shared directory          |
+| [LockFileStore](./docs/stores/lock-file-store.md)                | `@zukhruf/mutex/file-system` | One host                | No order                                | Released after a waiter finds that it stopped | A shared directory          |
+| [SqliteStore](./docs/stores/sqlite-store.md)                     | `@zukhruf/mutex/sqlite`      | One host                | First come, first served in one process | Released by the kernel                        | A shared directory          |
+| [SocketStore](./docs/stores/socket-store.md)                     | `@zukhruf/mutex/socket`      | One host                | First come, first served                | Released in approximately 2 ms                | A shared directory          |
 
 If you are not sure:
 
@@ -151,7 +152,8 @@ npm install @zukhruf/mutex
 ```
 
 ```ts
-import { Mutex, SqliteStore } from '@zukhruf/mutex';
+import { Mutex } from '@zukhruf/mutex';
+import { SqliteStore } from '@zukhruf/mutex/sqlite';
 ```
 
 ## Development

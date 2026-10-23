@@ -11,7 +11,8 @@ A host lock store with a coordinator. The processes that use it elect one leader
 All processes that use `SocketStore` with the same directory are candidates. The first process that needs a key when no leader exists wins the election ([ADR 0001](../adr/0001-every-process-is-a-candidate.md)). It becomes the coordinator and listens on the socket of the directory: `<directory>/lock.sock` on macOS and Linux, or a named pipe on Windows. All processes, the leader also, ask the leader for keys through that socket.
 
 ```ts
-import { Mutex, SocketStore } from '@zukhruf/mutex';
+import { Mutex } from '@zukhruf/mutex';
+import { SocketStore } from '@zukhruf/mutex/socket';
 
 await using store = new SocketStore('/var/lib/my-app/locks');
 const mutex = new Mutex(store);

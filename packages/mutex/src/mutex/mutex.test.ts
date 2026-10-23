@@ -17,7 +17,8 @@ import {
 } from '@zukhruf/fencing';
 import { describe, test } from '@zukhruf/testing/node';
 
-import { IpcLockCoordinator, ThreadLockCoordinator } from '../index.ts';
+import { IpcLockCoordinator } from '../lock-stores/ipc/index.ts';
+import { ThreadLockCoordinator } from '../lock-stores/thread/index.ts';
 import { isRecord } from '../shared/is-record.ts';
 import { scratchDirectory } from '../testing/scratch-directory.ts';
 import {
@@ -1548,10 +1549,10 @@ describe('Process-tree mutex with IpcStore', () => {
       // The child reports through a journal file, because its only channel is to that parent.
       await using directory = await scratchDirectory();
       const journal = join(directory.path, 'child.log');
-      const indexUrl = new URL('../index.ts', import.meta.url);
+      const ipcUrl = new URL('../lock-stores/ipc/index.ts', import.meta.url);
       const childSource = `
 				import { appendFileSync } from 'node:fs';
-				import { IpcStore } from ${JSON.stringify(indexUrl.href)};
+				import { IpcStore } from ${JSON.stringify(ipcUrl.href)};
 
 				const store = new IpcStore();
 				const log = (line) => appendFileSync(${JSON.stringify(journal)}, line + '\\n');
@@ -1571,7 +1572,7 @@ describe('Process-tree mutex with IpcStore', () => {
         `
 					import { spawn } from 'node:child_process';
 					import { Mutex } from ${JSON.stringify(mutexUrl.href)};
-					import { IpcLockCoordinator } from ${JSON.stringify(indexUrl.href)};
+					import { IpcLockCoordinator } from ${JSON.stringify(ipcUrl.href)};
 
 					const coordinator = new IpcLockCoordinator();
 					const mutex = new Mutex(coordinator);

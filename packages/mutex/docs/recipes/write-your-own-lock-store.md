@@ -42,9 +42,9 @@ import {
   type AcquireOptions,
   type LockHandle,
   type LockStore,
-  MemoryStore,
   Mutex,
 } from '@zukhruf/mutex';
+import { MemoryStore } from '@zukhruf/mutex/memory';
 
 /** Reports how long each caller waited for its key. */
 class WaitTimeStore implements LockStore {
@@ -110,7 +110,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 
-import { FileLockStore, Mutex } from '@zukhruf/mutex';
+import { Mutex } from '@zukhruf/mutex';
+import { FileLockStore } from '@zukhruf/mutex/file-system';
 
 class DirectoryLockStore extends FileLockStore {
   protected readonly longestSuffix = '.d'.length;

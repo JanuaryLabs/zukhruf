@@ -9,11 +9,11 @@ import { setTimeout as delay } from 'node:timers/promises';
 
 import { test } from '@zukhruf/testing/node';
 
-import { SocketStore } from '../../index.ts';
 import { isRecord } from '../../shared/is-record.ts';
 import { scratchDirectory } from '../../testing/scratch-directory.ts';
 import { settle } from '../../testing/store-cases.ts';
 import { waitUntil } from '../../testing/wait-until.ts';
+import { SocketStore } from './index.ts';
 import { socketElection } from './socket-election.ts';
 
 /**

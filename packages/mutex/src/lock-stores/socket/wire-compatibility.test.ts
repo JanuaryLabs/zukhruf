@@ -10,16 +10,16 @@ import { describe } from 'node:test';
 
 import { test } from '@zukhruf/testing/node';
 
+import { Mutex } from '../../index.ts';
+import { scratchDirectory } from '../../testing/scratch-directory.ts';
+import { newProcessTimeout, waitUntil } from '../../testing/wait-until.ts';
+import { startWorker } from '../../testing/worker-process.ts';
 import {
-  Mutex,
   ProtocolVersionError,
   type SocketRole,
   SocketStore,
   UnsupportedRequestError,
-} from '../../index.ts';
-import { scratchDirectory } from '../../testing/scratch-directory.ts';
-import { newProcessTimeout, waitUntil } from '../../testing/wait-until.ts';
-import { startWorker } from '../../testing/worker-process.ts';
+} from './index.ts';
 
 // Every process of every published version that shares a directory meets the
 // others through the names and bytes below. These tests spell them out
@@ -500,7 +500,8 @@ describe('What a socket store shares with other versions in its directory', () =
 });
 
 describe('What a socket store shares with other versions on Windows', () => {
-  const indexUrl = new URL('../../index.ts', import.meta.url);
+  const mutexUrl = new URL('../../index.ts', import.meta.url);
+  const socketUrl = new URL('./index.ts', import.meta.url);
   // A child process runs as on Windows. Outside Windows, `node:net` still
   // makes a Unix socket for a pipe name: a file of that name in the working
   // directory, so the child works in a scratch directory.
@@ -530,7 +531,8 @@ describe('What a socket store shares with other versions on Windows', () => {
         `
         import { createServer } from 'node:net';
         import { createInterface } from 'node:readline';
-        import { Mutex, SocketStore } from ${JSON.stringify(indexUrl.href)};
+        import { Mutex } from ${JSON.stringify(mutexUrl.href)};
+        import { SocketStore } from ${JSON.stringify(socketUrl.href)};
         process.chdir(${JSON.stringify(cwd)});
         const leader = createServer((peer) => {
           peer.on('error', () => {});
@@ -577,7 +579,8 @@ describe('What a socket store shares with other versions on Windows', () => {
       await using leader = startWorker(
         `
         import { connect } from 'node:net';
-        import { Mutex, SocketStore } from ${JSON.stringify(indexUrl.href)};
+        import { Mutex } from ${JSON.stringify(mutexUrl.href)};
+        import { SocketStore } from ${JSON.stringify(socketUrl.href)};
         process.chdir(${JSON.stringify(cwd)});
         const store = new SocketStore(${JSON.stringify(directory)}, { pollInterval: 10 });
         store.on('role', (role) => process.send({ type: 'role', role }));

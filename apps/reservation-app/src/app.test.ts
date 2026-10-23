@@ -8,7 +8,8 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 
-import { Mutex, TicketQueueFileStore } from '@zukhruf/mutex';
+import { Mutex } from '@zukhruf/mutex';
+import { TicketQueueFileStore } from '@zukhruf/mutex/file-system';
 
 import { createApp } from './create-app.ts';
 import { FencedStock } from './fenced-stock.ts';
@@ -26,7 +27,8 @@ async function reserveFromOwnProcess(directory: string): Promise<number> {
       '--eval',
       `
 				import { join } from 'node:path';
-				import { Mutex, TicketQueueFileStore } from '@zukhruf/mutex';
+				import { Mutex } from '@zukhruf/mutex';
+				import { TicketQueueFileStore } from '@zukhruf/mutex/file-system';
 				import { createApp } from ${JSON.stringify(createAppUrl)};
 				import { FencedStock } from ${JSON.stringify(fencedStockUrl)};
 

@@ -10,22 +10,17 @@ import { setTimeout as delay } from 'node:timers/promises';
 import type { FencedLease } from '@zukhruf/fencing';
 import { test } from '@zukhruf/testing/node';
 
-import {
-  LeaseLostError,
-  type LockHandle,
-  Mutex,
-  SocketStore,
-  UnsupportedRequestError,
-} from '../../index.ts';
+import { LeaseLostError, type LockHandle, Mutex } from '../../index.ts';
 import { isRecord } from '../../shared/is-record.ts';
 import { scratchDirectory } from '../../testing/scratch-directory.ts';
 import { settle } from '../../testing/store-cases.ts';
 import { newProcessTimeout, waitUntil } from '../../testing/wait-until.ts';
 import { watch } from '../../testing/watch.ts';
 import { startWorker } from '../../testing/worker-process.ts';
+import { SocketStore, UnsupportedRequestError } from './index.ts';
 import { socketElection } from './socket-election.ts';
 
-const indexUrl = new URL('../../index.ts', import.meta.url);
+const socketUrl = new URL('./index.ts', import.meta.url);
 
 /**
  * Where every published version of a store meets its leader: `lock.sock` in
@@ -787,7 +782,7 @@ describe('A follower process through a reconnect', () => {
       await using leader = await standInLeader(directory.path);
       await using waiter = startWorker(
         `
-					import { SocketStore } from ${JSON.stringify(indexUrl.href)};
+					import { SocketStore } from ${JSON.stringify(socketUrl.href)};
 					const store = new SocketStore(${JSON.stringify(directory.path)}, { pollInterval: 10 });
 					const lease = await store.acquire('product:42');
 					process.send({ type: 'granted' });
@@ -845,7 +840,7 @@ describe('A follower process through a reconnect', () => {
       await using leader = await standInLeader(directory.path);
       await using holder = startWorker(
         `
-					import { SocketStore } from ${JSON.stringify(indexUrl.href)};
+					import { SocketStore } from ${JSON.stringify(socketUrl.href)};
 					process.once('message', () => {});
 					const store = new SocketStore(${JSON.stringify(directory.path)}, { pollInterval: 10 });
 					await store.acquire('product:42');

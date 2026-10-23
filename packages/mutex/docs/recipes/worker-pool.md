@@ -23,12 +23,8 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import {
-  IpcLockCoordinator,
-  IpcStore,
-  type LockStore,
-  Mutex,
-} from '@zukhruf/mutex';
+import { type LockStore, Mutex } from '@zukhruf/mutex';
+import { IpcLockCoordinator, IpcStore } from '@zukhruf/mutex/ipc';
 
 const [role, counter] = process.argv.slice(2);
 

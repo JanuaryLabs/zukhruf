@@ -50,7 +50,8 @@ import { setTimeout as delay } from 'node:timers/promises';
 
 import { Hono } from 'hono';
 
-import { MemoryStore, Mutex } from '@zukhruf/mutex';
+import { Mutex } from '@zukhruf/mutex';
+import { MemoryStore } from '@zukhruf/mutex/memory';
 
 let stock = 1;
 const mutex = new Mutex(new MemoryStore());

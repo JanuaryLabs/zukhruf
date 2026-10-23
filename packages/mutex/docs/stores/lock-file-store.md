@@ -11,7 +11,8 @@ A host lock store that uses one file for each held key. The process that creates
 To get a key, a process creates `<key>.lock` in the shared directory. If the file exists, another process holds the key, and the process tries again later. To release the key, the holder deletes the file.
 
 ```ts
-import { LockFileStore, Mutex } from '@zukhruf/mutex';
+import { Mutex } from '@zukhruf/mutex';
+import { LockFileStore } from '@zukhruf/mutex/file-system';
 
 const mutex = new Mutex(new LockFileStore('/var/lib/my-app/locks'));
 ```

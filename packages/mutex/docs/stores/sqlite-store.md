@@ -11,7 +11,8 @@ A host lock store that uses an exclusive SQLite transaction as the lock. The ope
 Each key has one SQLite database file in the shared directory. To hold a key, a process starts an exclusive transaction on that file. To release the key, it ends the transaction. It uses `node:sqlite`, which is part of Node.js.
 
 ```ts
-import { Mutex, SqliteStore } from '@zukhruf/mutex';
+import { Mutex } from '@zukhruf/mutex';
+import { SqliteStore } from '@zukhruf/mutex/sqlite';
 
 const mutex = new Mutex(new SqliteStore('/var/lib/my-app/locks'));
 ```

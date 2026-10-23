@@ -8,7 +8,8 @@ import { describe, mock, test } from 'node:test';
 import { Worker } from 'node:worker_threads';
 
 import { SqliteElection } from '@zukhruf/election';
-import { Mutex, SocketStore } from '@zukhruf/mutex';
+import { Mutex } from '@zukhruf/mutex';
+import { SocketStore } from '@zukhruf/mutex/socket';
 
 import {
   type Codec,

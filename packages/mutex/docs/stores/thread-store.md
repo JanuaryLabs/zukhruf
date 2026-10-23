@@ -19,7 +19,8 @@ The coordinator must **adopt** each worker after it starts the worker:
 // main.ts
 import { Worker } from 'node:worker_threads';
 
-import { Mutex, ThreadLockCoordinator } from '@zukhruf/mutex';
+import { Mutex } from '@zukhruf/mutex';
+import { ThreadLockCoordinator } from '@zukhruf/mutex/thread';
 
 const coordinator = new ThreadLockCoordinator();
 const worker = new Worker(new URL('./worker.ts', import.meta.url));
@@ -29,7 +30,8 @@ const mutex = new Mutex(coordinator);
 
 ```ts
 // worker.ts
-import { Mutex, ThreadStore } from '@zukhruf/mutex';
+import { Mutex } from '@zukhruf/mutex';
+import { ThreadStore } from '@zukhruf/mutex/thread';
 
 const mutex = new Mutex(new ThreadStore());
 await mutex.acquire('counter', async () => addOne());

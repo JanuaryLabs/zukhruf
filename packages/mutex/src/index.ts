@@ -17,35 +17,3 @@ export {
   SkipIfBusyMode,
   type SkipIfBusyOptions,
 } from './mutex/acquire-modes/skip-if-busy-mode.ts';
-
-export {
-  MemoryStore,
-  type MemoryStoreOptions,
-} from './lock-stores/memory/memory-store.ts';
-export {
-  ThreadLockCoordinator,
-  type ThreadLockCoordinatorOptions,
-} from './lock-stores/thread/thread-lock-coordinator.ts';
-export { ThreadStore } from './lock-stores/thread/thread-store.ts';
-export {
-  IpcLockCoordinator,
-  type IpcLockCoordinatorOptions,
-} from './lock-stores/ipc/ipc-lock-coordinator.ts';
-export { IpcStore } from './lock-stores/ipc/ipc-store.ts';
-export { CoordinatorUnavailableError } from './lock-stores/remote/coordinator-unavailable-error.ts';
-export { GrantFailedError } from './lock-stores/remote/grant-failed-error.ts';
-export { UnsupportedRequestError } from './lock-stores/remote/unsupported-request-error.ts';
-export { NetworkDirectoryError } from '@zukhruf/fs';
-export {
-  FileLockStore,
-  type FileLockStoreOptions,
-} from './lock-stores/file-system/file-lock-store.ts';
-export { TicketQueueFileStore } from './lock-stores/file-system/ticket-queue-file-store.ts';
-export { LockFileStore } from './lock-stores/file-system/lock-file-store.ts';
-export { SqliteStore } from './lock-stores/sqlite/sqlite-store.ts';
-export { ProtocolVersionError } from './lock-stores/socket/protocol-version-error.ts';
-export {
-  SocketStore,
-  type SocketRole,
-  type SocketStoreOptions,
-} from './lock-stores/socket/socket-store.ts';

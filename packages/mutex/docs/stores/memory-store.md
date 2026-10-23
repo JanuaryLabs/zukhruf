@@ -11,7 +11,8 @@ The simplest lock store. It keeps the locks in the memory of one object.
 `MemoryStore` keeps one queue for each key in a `Map`. A waiter waits for the holder before it. Only callers that use the same `MemoryStore` object share its locks.
 
 ```ts
-import { MemoryStore, Mutex } from '@zukhruf/mutex';
+import { Mutex } from '@zukhruf/mutex';
+import { MemoryStore } from '@zukhruf/mutex/memory';
 
 const mutex = new Mutex(new MemoryStore());
 const reserved = await mutex.acquire('product:42', async () =>

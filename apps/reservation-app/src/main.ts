@@ -2,7 +2,8 @@ import { mkdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { Mutex, TicketQueueFileStore } from '@zukhruf/mutex';
+import { Mutex } from '@zukhruf/mutex';
+import { TicketQueueFileStore } from '@zukhruf/mutex/file-system';
 
 import { createApp } from './create-app.ts';
 import { FencedStock } from './fenced-stock.ts';

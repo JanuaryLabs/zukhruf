@@ -8,7 +8,6 @@ import { setTimeout as delay } from 'node:timers/promises';
 
 import { test } from '@zukhruf/testing/node';
 
-import { ProtocolVersionError, UnsupportedRequestError } from '../../index.ts';
 import { Mutex } from '../../mutex/mutex.ts';
 import { isRecord } from '../../shared/is-record.ts';
 import { scratchDirectory } from '../../testing/scratch-directory.ts';
@@ -16,6 +15,7 @@ import { waitUntil } from '../../testing/wait-until.ts';
 import { startWorker } from '../../testing/worker-process.ts';
 import { isLockRequest, isRequestEnvelope } from '../remote/protocol.ts';
 import { PROTOCOL_VERSION } from './handshake.ts';
+import { ProtocolVersionError, UnsupportedRequestError } from './index.ts';
 import { socketElection } from './socket-election.ts';
 import { type SocketRole, SocketStore } from './socket-store.ts';
 

@@ -30,7 +30,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 
-import { Mutex, SqliteStore } from '@zukhruf/mutex';
+import { Mutex } from '@zukhruf/mutex';
+import { SqliteStore } from '@zukhruf/mutex/sqlite';
 
 const [role, shared] = process.argv.slice(2);
 

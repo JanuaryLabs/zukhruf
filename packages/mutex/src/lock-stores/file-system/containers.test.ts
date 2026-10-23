@@ -20,6 +20,8 @@ type OwnedVolume = Awaited<ReturnType<DockerFixtures['volume']>>;
 
 const packageRoot = fileURLToPath(new URL('../../../', import.meta.url));
 const mutexInContainer = 'file:///pkg/src/index.ts';
+const fileStoresInContainer =
+  'file:///pkg/src/lock-stores/file-system/index.ts';
 
 /** Each runtime dependency of the package, where Node.js finds it from /pkg, as an install puts it. */
 const manifest: unknown = JSON.parse(
@@ -41,7 +43,8 @@ const stores = ['LockFileStore', 'TicketQueueFileStore'] as const;
 
 /** Takes the key and keeps it until its container stops. */
 const holderSource = (storeName: string) => `
-	import { Mutex, ${storeName} } from ${JSON.stringify(mutexInContainer)};
+	import { Mutex } from ${JSON.stringify(mutexInContainer)};
+	import { ${storeName} } from ${JSON.stringify(fileStoresInContainer)};
 	setInterval(() => {}, 1000);
 	await new Mutex(new ${storeName}('/locks', { pollInterval: 10 })).acquire('product:42', async (lease) => {
 		console.log(JSON.stringify({ type: 'holding', pid: process.pid, token: String(lease.token) }));
@@ -51,7 +54,8 @@ const holderSource = (storeName: string) => `
 
 /** Asks for the key once, gives up after a second, and prints what it got. */
 const waiterSource = (storeName: string) => `
-	import { Modes, Mutex, ${storeName} } from ${JSON.stringify(mutexInContainer)};
+	import { Modes, Mutex } from ${JSON.stringify(mutexInContainer)};
+	import { ${storeName} } from ${JSON.stringify(fileStoresInContainer)};
 	const result = await new Mutex(new ${storeName}('/locks', { pollInterval: 10 })).acquire(
 		'product:42',
 		async (lease) => String(lease.token),

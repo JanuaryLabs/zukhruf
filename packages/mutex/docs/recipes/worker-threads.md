@@ -21,12 +21,8 @@ import { once } from 'node:events';
 import { setImmediate as nextTurn } from 'node:timers/promises';
 import { Worker, isMainThread, workerData } from 'node:worker_threads';
 
-import {
-  type LockStore,
-  Mutex,
-  ThreadLockCoordinator,
-  ThreadStore,
-} from '@zukhruf/mutex';
+import { type LockStore, Mutex } from '@zukhruf/mutex';
+import { ThreadLockCoordinator, ThreadStore } from '@zukhruf/mutex/thread';
 
 async function addTwenty(store: LockStore, counter: Int32Array) {
   const mutex = new Mutex(store);

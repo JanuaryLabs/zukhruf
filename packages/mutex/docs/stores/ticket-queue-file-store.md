@@ -11,7 +11,8 @@ A host lock store that keeps a queue of waiters in a file. It is the only host l
 Each key has one queue file in the directory that you give. Each waiter adds one line, its ticket, to the end of the file. The waiter whose ticket is first holds the key. All processes that use the same directory share the locks.
 
 ```ts
-import { Mutex, TicketQueueFileStore } from '@zukhruf/mutex';
+import { Mutex } from '@zukhruf/mutex';
+import { TicketQueueFileStore } from '@zukhruf/mutex/file-system';
 
 const mutex = new Mutex(new TicketQueueFileStore('/var/lib/my-app/locks'));
 ```

@@ -190,8 +190,17 @@ const releaseCaller = (store: string, directory: string, key: string) => `
 	process.send({ type: 'tried', looked, whileHeld });
 `;
 
-/** This source, imported the way a process imports the release: from its entry point. */
-const thisSource = new URL('../index.ts', import.meta.url).href;
+/**
+ * Where a process finds `Mutex` and the file stores. The release has both at
+ * its root entry point; this source has the stores at the entry point of their
+ * family.
+ */
+type Version = { mutex: string; stores: string };
+const releaseVersion: Version = { mutex: release.url, stores: release.url };
+const thisVersion: Version = {
+  mutex: new URL('../index.ts', import.meta.url).href,
+  stores: new URL('./file-system/index.ts', import.meta.url).href,
+};
 
 /**
  * A process on `version` that waits for `key` behind a dead holder and starts
@@ -201,7 +210,7 @@ const thisSource = new URL('../index.ts', import.meta.url).href;
  * `resume`, and then holds the key until it is killed.
  */
 const pausedEvicter = (
-  version: string,
+  version: Version,
   store: string,
   directory: string,
   key: string,
@@ -225,7 +234,8 @@ const pausedEvicter = (
 		return real(...args);
 	};
 	syncBuiltinESMExports();
-	const { Mutex, ${store} } = await import(${JSON.stringify(version)});
+	const { Mutex } = await import(${JSON.stringify(version.mutex)});
+	const { ${store} } = await import(${JSON.stringify(version.stores)});
 	await new Mutex(new ${store}(${JSON.stringify(directory)})).acquire(${JSON.stringify(key)}, async ({ token }) => {
 		process.send({ type: 'holding', token: token.value.toString() });
 		await new Promise(() => {});
@@ -440,7 +450,7 @@ describe('Two evicters of one dead holder, one on the latest release and one on 
           holder.child.kill('SIGKILL');
           await holder.closed;
           await using evicter = startWorker(
-            pausedEvicter(release.url, store, directory.path, key),
+            pausedEvicter(releaseVersion, store, directory.path, key),
             'evicter',
           );
           await waitUntil(
@@ -503,7 +513,7 @@ describe('Two evicters of one dead holder, one on the latest release and one on 
           holder.child.kill('SIGKILL');
           await holder.closed;
           await using evicter = startWorker(
-            pausedEvicter(release.url, store, directory.path, key),
+            pausedEvicter(releaseVersion, store, directory.path, key),
             'evicter',
           );
           await waitUntil(
@@ -552,7 +562,7 @@ describe('Two evicters of one dead holder, one on the latest release and one on 
           holder.child.kill('SIGKILL');
           await holder.closed;
           await using evicter = startWorker(
-            pausedEvicter(thisSource, store, directory.path, key),
+            pausedEvicter(thisVersion, store, directory.path, key),
             'evicter',
           );
           await waitUntil(
@@ -637,7 +647,7 @@ describe('Two evicters of one dead holder, one on the latest release and one on 
           holder.child.kill('SIGKILL');
           await holder.closed;
           await using evicter = startWorker(
-            pausedEvicter(thisSource, store, directory.path, key),
+            pausedEvicter(thisVersion, store, directory.path, key),
             'evicter',
           );
           await waitUntil(

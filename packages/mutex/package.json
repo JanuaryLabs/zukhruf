@@ -26,6 +26,13 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "default": "./dist/index.js"
+    },
+    "./remote": null,
+    "./*": {
+      "@zukhruf/source": "./src/lock-stores/*/index.ts",
+      "types": "./dist/lock-stores/*/index.d.ts",
+      "import": "./dist/lock-stores/*/index.js",
+      "default": "./dist/lock-stores/*/index.js"
     }
   },
   "files": [

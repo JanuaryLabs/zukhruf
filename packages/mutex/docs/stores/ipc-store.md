@@ -19,7 +19,8 @@ The parent must **adopt** each child after it starts the child:
 // parent.ts
 import { fork } from 'node:child_process';
 
-import { IpcLockCoordinator, Mutex } from '@zukhruf/mutex';
+import { Mutex } from '@zukhruf/mutex';
+import { IpcLockCoordinator } from '@zukhruf/mutex/ipc';
 
 const coordinator = new IpcLockCoordinator();
 const child = fork('./child.ts');
@@ -29,7 +30,8 @@ const mutex = new Mutex(coordinator);
 
 ```ts
 // child.ts
-import { IpcStore, Mutex } from '@zukhruf/mutex';
+import { Mutex } from '@zukhruf/mutex';
+import { IpcStore } from '@zukhruf/mutex/ipc';
 
 const mutex = new Mutex(new IpcStore());
 await mutex.acquire('product:42', async () => reserveOneItem());

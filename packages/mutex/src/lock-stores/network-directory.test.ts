@@ -8,15 +8,11 @@ import { describe, mock } from 'node:test';
 
 import { test } from '@zukhruf/testing/node';
 
-import {
-  LockFileStore,
-  NetworkDirectoryError,
-  type SocketRole,
-  SocketStore,
-} from '../index.ts';
 import { scratchDirectory } from '../testing/scratch-directory.ts';
 import { storeCases } from '../testing/store-cases.ts';
 import { waitUntil } from '../testing/wait-until.ts';
+import { LockFileStore, NetworkDirectoryError } from './file-system/index.ts';
+import { type SocketRole, SocketStore } from './socket/index.ts';
 
 /** The `f_type` that Linux's statfs reports for each network file system, from the kernel's and Lustre's headers. */
 const networkFileSystems = [

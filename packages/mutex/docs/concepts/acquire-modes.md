@@ -11,7 +11,8 @@ A key is exclusive for every caller: one holder at a time. An **acquire mode** d
 | `Modes.skipIfBusy({ waitAtMost: 500 })` | The caller waits at most 500 ms for the holder, then gives up. | Runs only if granted in time. | `{ acquired: true, value } \| { acquired: false }` |
 
 ```ts
-import { Modes, Mutex, SqliteStore } from '@zukhruf/mutex';
+import { Modes, Mutex } from '@zukhruf/mutex';
+import { SqliteStore } from '@zukhruf/mutex/sqlite';
 
 const mutex = new Mutex(new SqliteStore('/var/lib/my-app/locks'));
 

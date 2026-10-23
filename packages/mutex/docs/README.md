@@ -53,6 +53,7 @@ Start with the [project README](../README.md). The glossary is in [CONTEXT.md](.
 17. [A connection closes only when its framing breaks](./adr/0017-a-connection-closes-only-when-its-framing-breaks.md)
 18. [The next leader skips the grace window after a clean shutdown](./adr/0018-the-next-leader-skips-the-grace-window-after-a-clean-shutdown.md)
 19. [A failed token mint answers the request, and an exhausted epoch ends the term](./adr/0019-a-failed-token-mint-answers-the-request-and-an-exhausted-epoch-ends-the-term.md)
+20. [Each family of lock stores has its own import path](./adr/0020-each-store-family-has-its-own-import-path.md)
 
 ## Copied code
 
