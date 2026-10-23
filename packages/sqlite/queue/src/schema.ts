@@ -1,11 +1,11 @@
-export const SQLITE_BACKGROUND_QUEUE_TABLES = [
-  'pgboss_queue',
-  'pgboss_job',
-  'pgboss_schedule',
-] as const;
+import { Declaration } from '@zukhruf/sqlite-drift';
 
-export const SQLITE_QUEUE_SCHEMA = [
-  `CREATE TABLE IF NOT EXISTS pgboss_queue (
+// The queue's tables and indexes. start() makes a file store them as declared
+// and keeps the rows of each table it rebuilds, so the jobs and schedules of a
+// file an earlier release made survive (docs/adr/0004).
+export const queueSchema = new Declaration(
+  [
+    `CREATE TABLE pgboss_queue (
     name TEXT PRIMARY KEY,
     policy TEXT NOT NULL DEFAULT 'standard',
     retry_limit INTEGER NOT NULL DEFAULT 2 CHECK (retry_limit >= 0),
@@ -36,7 +36,7 @@ export const SQLITE_QUEUE_SCHEMA = [
     created_on TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_on TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   )`,
-  `CREATE TABLE IF NOT EXISTS pgboss_job (
+    `CREATE TABLE pgboss_job (
     id TEXT NOT NULL,
     queue_name TEXT NOT NULL REFERENCES pgboss_queue(name) ON DELETE CASCADE,
     data TEXT NOT NULL DEFAULT '{}',
@@ -80,7 +80,7 @@ export const SQLITE_QUEUE_SCHEMA = [
     -- 871-880), so the same id may live in two queues.
     PRIMARY KEY (queue_name, id)
   )`,
-  `CREATE TABLE IF NOT EXISTS pgboss_schedule (
+    `CREATE TABLE pgboss_schedule (
     -- node_modules/pg-boss/dist/plans.js:358-374, without last_job_id.
     queue_name TEXT NOT NULL REFERENCES pgboss_queue(name) ON DELETE CASCADE,
     key TEXT NOT NULL DEFAULT '',
@@ -93,49 +93,50 @@ export const SQLITE_QUEUE_SCHEMA = [
     updated_on TEXT NOT NULL,
     PRIMARY KEY (queue_name, key)
   )`,
-  // The instance-wide cron claim, one row (node_modules/pg-boss/dist/
-  // plans.js:288-298, 1078-1086): when a pass last ran.
-  `CREATE TABLE IF NOT EXISTS pgboss_version (
+    // The instance-wide cron claim, one row (node_modules/pg-boss/dist/
+    // plans.js:288-298, 1078-1086): when a pass last ran.
+    `CREATE TABLE pgboss_version (
     singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
     cron_on TEXT
   )`,
-  `INSERT OR IGNORE INTO pgboss_version (singleton) VALUES (1)`,
-  `CREATE INDEX IF NOT EXISTS pgboss_job_fetch_i
+    `CREATE INDEX pgboss_job_fetch_i
     ON pgboss_job (queue_name, state, priority DESC, start_after, created_on)`,
-  `CREATE INDEX IF NOT EXISTS pgboss_job_lease_i
+    `CREATE INDEX pgboss_job_lease_i
     ON pgboss_job (lease_expires_on)
     WHERE state = 'active' AND lease_expires_on IS NOT NULL`,
-  // pg-boss's policy and throttle indexes, each cited by its name and line in
-  // node_modules/pg-boss/dist/plans.js. Its `state <= active` compares enum
-  // order, which is created, retry, active.
-  // job_i1, plans.js:882
-  `CREATE UNIQUE INDEX IF NOT EXISTS pgboss_job_short_i
+    // pg-boss's policy and throttle indexes, each cited by its name and line in
+    // node_modules/pg-boss/dist/plans.js. Its `state <= active` compares enum
+    // order, which is created, retry, active.
+    // job_i1, plans.js:882
+    `CREATE UNIQUE INDEX pgboss_job_short_i
     ON pgboss_job (queue_name, COALESCE(singleton_key, ''))
     WHERE state = 'created' AND policy = 'short'`,
-  // job_i2, plans.js:885
-  `CREATE UNIQUE INDEX IF NOT EXISTS pgboss_job_singleton_i
+    // job_i2, plans.js:885
+    `CREATE UNIQUE INDEX pgboss_job_singleton_i
     ON pgboss_job (queue_name, COALESCE(singleton_key, ''))
     WHERE state = 'active' AND policy = 'singleton'`,
-  // job_i3, plans.js:888
-  `CREATE UNIQUE INDEX IF NOT EXISTS pgboss_job_stately_i
+    // job_i3, plans.js:888
+    `CREATE UNIQUE INDEX pgboss_job_stately_i
     ON pgboss_job (queue_name, state, COALESCE(singleton_key, ''))
     WHERE state IN ('created', 'retry', 'active') AND policy = 'stately'`,
-  // job_i4, plans.js:891
-  `CREATE UNIQUE INDEX IF NOT EXISTS pgboss_job_throttle_i
+    // job_i4, plans.js:891
+    `CREATE UNIQUE INDEX pgboss_job_throttle_i
     ON pgboss_job (queue_name, singleton_on, COALESCE(singleton_key, ''))
     WHERE state <> 'cancelled' AND singleton_on IS NOT NULL`,
-  // job_i6, plans.js:921
-  `CREATE UNIQUE INDEX IF NOT EXISTS pgboss_job_exclusive_i
+    // job_i6, plans.js:921
+    `CREATE UNIQUE INDEX pgboss_job_exclusive_i
     ON pgboss_job (queue_name, COALESCE(singleton_key, ''))
     WHERE state IN ('created', 'retry', 'active') AND policy = 'exclusive'`,
-  // job_i8, plans.js:924
-  `CREATE UNIQUE INDEX IF NOT EXISTS pgboss_job_key_strict_fifo_i
+    // job_i8, plans.js:924
+    `CREATE UNIQUE INDEX pgboss_job_key_strict_fifo_i
     ON pgboss_job (queue_name, singleton_key)
     WHERE state IN ('active', 'retry', 'failed') AND policy = 'key_strict_fifo'`,
-  // job_i10, plans.js:940: each key's queued jobs in head order, so a claim
-  // finds a key's head without scanning the queue. SQLite ends every index
-  // with rowid, the head order's tiebreak, where pg-boss's ends with id.
-  `CREATE INDEX IF NOT EXISTS pgboss_job_key_strict_fifo_heads_i
+    // job_i10, plans.js:940: each key's queued jobs in head order, so a claim
+    // finds a key's head without scanning the queue. SQLite ends every index
+    // with rowid, the head order's tiebreak, where pg-boss's ends with id.
+    `CREATE INDEX pgboss_job_key_strict_fifo_heads_i
     ON pgboss_job (queue_name, singleton_key, state DESC, created_on)
     WHERE state IN ('created', 'retry') AND policy = 'key_strict_fifo'`,
-] as const;
+  ],
+  { rows: 'keep' },
+);

@@ -63,3 +63,7 @@ _Avoid_: Bucket, window (the window is the 60 seconds in which an occurrence is 
 **Send-it queue**:
 The queue `__pgboss__send-it`, which the cron pass fills. Its worker sends each job to the queue of its schedule.
 _Avoid_: Internal queue, outbox
+
+**Queue file**:
+The SQLite file that keeps the queues, the jobs and the schedules. A file that an earlier release made keeps its rows: `start()` makes it store the declared schema.
+_Avoid_: Database (also the `database` option), store, old file

@@ -12,6 +12,9 @@
       "path": "../../async/tsconfig.lib.json"
     },
     {
+      "path": "../drift/tsconfig.lib.json"
+    },
+    {
       "path": "../transaction/tsconfig.lib.json"
     }
   ]

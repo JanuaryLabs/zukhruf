@@ -64,6 +64,16 @@ const queue: JobQueue = new PgBoss(process.env.DATABASE_URL);
 - A listener for `error` is necessary. A failure in work that no caller awaits, for example a worker poll, goes to the `error` event. With no listener, `EventEmitter` throws.
 - `useListenNotify` wakes the workers of this `SqliteJobQueue` only. In pg-boss, each listener on the schema hears a `NOTIFY`. Here, another instance on the same file does not hear it.
 
+## Upgrades
+
+A new release can change the tables. A file that an earlier release made keeps its jobs and its schedules ([ADR 0004](./docs/adr/0004-the-schema-is-a-declaration-and-keeps-the-jobs.md)).
+
+- The schema is a declaration of [`@zukhruf/sqlite-drift`](../drift) with `rows: 'keep'`. `start()` compares the tables and the indexes in the file with the declaration.
+- `start()` makes each missing object. It rebuilds each stale table and keeps its rows, and it replaces each stale index.
+- No release writes a migration, and no file keeps a version number.
+- When a kept row does not fit the declared table, `start()` fails with the error of SQLite, and the file stays as it was.
+- When `pgboss_queue` is stale, the rebuild turns foreign keys off around its own transaction. Do not call `start()` in a transaction of your own.
+
 ## Schedules
 
 A schedule sends a job to its queue at each time that its cron or rrule rule gives. The timekeeper of pg-boss does this work, and this package copies it ([ADR 0003](./docs/adr/0003-the-timekeeper-is-ported-literally.md)).
@@ -117,6 +127,7 @@ Code that runs on both engines examines `code`, not the class. On Postgres, the 
 - [0001 pg-boss's API on SQLite](./docs/adr/0001-pg-boss-api-on-sqlite.md)
 - [0002 The parity suite is the contract](./docs/adr/0002-the-parity-suite-is-the-contract.md)
 - [0003 The timekeeper is ported literally](./docs/adr/0003-the-timekeeper-is-ported-literally.md)
+- [0004 The schema is a declaration and keeps the jobs](./docs/adr/0004-the-schema-is-a-declaration-and-keeps-the-jobs.md)
 
 ## Development
 

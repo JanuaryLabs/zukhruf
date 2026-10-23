@@ -48,7 +48,7 @@ import { QueueRows } from './queue-rows.ts';
 import type { QueueRow } from './queue-rows.ts';
 import { Recurrence } from './recurrence.ts';
 import { Row } from './rows.ts';
-import { SQLITE_QUEUE_SCHEMA } from './schema.ts';
+import { queueSchema } from './schema.ts';
 import { SqlValues } from './sql-values.ts';
 import { StartAfter } from './start-after.ts';
 import { Supervisor } from './supervisor.ts';
@@ -1208,9 +1208,9 @@ export class SqliteJobQueue
   private applySchema(): void {
     this.db.exec('PRAGMA foreign_keys = ON');
     this.db.exec('PRAGMA busy_timeout = 5000');
-    for (const statement of SQLITE_QUEUE_SCHEMA) {
-      this.db.exec(statement);
-    }
+    queueSchema.apply(this.db);
+    // The cron claim's one row (plans.js:288-298).
+    this.db.exec('INSERT OR IGNORE INTO pgboss_version (singleton) VALUES (1)');
   }
 
   private mapQueueUpdateOptions(options: UpdateQueueOptions) {

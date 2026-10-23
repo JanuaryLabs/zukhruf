@@ -59,51 +59,44 @@ async function scheduleTableBeforeKinds(path: string, clock: TestClock) {
 }
 
 describe('a queue file an earlier release made', () => {
-  it(
-    'runs the job and fires the schedule that the earlier release stored',
-    { todo: '#2859 start() skips a stale table' },
-    async () => {
-      await using scratch = await mkdtempDisposable(join(tmpdir(), 'queue-'));
-      const path = join(scratch.path, 'queue.sqlite');
-      const clock = new TestClock('2026-01-01T00:00:30.000Z');
-      await scheduleTableBeforeKinds(path, clock);
-      const queue = new SqliteJobQueue({ path, clock, supervise: false });
-      const errors: string[] = [];
-      queue.on('error', (error) => errors.push(error.message));
-      try {
-        await queue.start();
-        const ran: string[] = [];
-        await queue.work('jobs', async (jobs) => {
-          ran.push(...jobs.map((job) => job.id));
-        });
-        await clock.tick(30_000);
-        await clock.tick(2000);
+  it('runs the job and fires the schedule that the earlier release stored', async () => {
+    await using scratch = await mkdtempDisposable(join(tmpdir(), 'queue-'));
+    const path = join(scratch.path, 'queue.sqlite');
+    const clock = new TestClock('2026-01-01T00:00:30.000Z');
+    await scheduleTableBeforeKinds(path, clock);
+    const queue = new SqliteJobQueue({ path, clock, supervise: false });
+    const errors: string[] = [];
+    queue.on('error', (error) => errors.push(error.message));
+    try {
+      await queue.start();
+      const ran: string[] = [];
+      await queue.work('jobs', async (jobs) => {
+        ran.push(...jobs.map((job) => job.id));
+      });
+      await clock.tick(30_000);
+      await clock.tick(2000);
 
-        assert.deepEqual(ran, [id(1)]);
-        // The first occurrence it sends; how many come due is the timekeeper's.
-        const [fired] = await jobData(queue, 'ticks');
-        assert.deepEqual(fired, { from: 'earlier' });
-        assert.deepEqual(errors, []);
-      } finally {
-        await queue.stop({ graceful: false, close: true });
-      }
-    },
-  );
+      assert.deepEqual(ran, [id(1)]);
+      // The first occurrence it sends; how many come due is the timekeeper's.
+      const [fired] = await jobData(queue, 'ticks');
+      assert.deepEqual(fired, { from: 'earlier' });
+      assert.deepEqual(errors, []);
+    } finally {
+      await queue.stop({ graceful: false, close: true });
+    }
+  });
 
-  it(
-    'runs the job that a release before the monitor columns stored, in a queue it made',
-    { todo: '#2859 start() skips a stale table' },
-    async () => {
-      await using scratch = await mkdtempDisposable(join(tmpdir(), 'queue-'));
-      const path = join(scratch.path, 'queue.sqlite');
-      const clock = new TestClock('2026-01-01T00:00:00.000Z');
-      {
-        // The queue and job tables as text2sql 4caf2db1 made them, with a
-        // queue and a job as its createQueue() and send() stored them. No
-        // public operation makes an older shape, so they are written in that
-        // release's SQL.
-        using database = new DatabaseSync(path);
-        database.exec(`CREATE TABLE pgboss_queue (
+  it('runs the job that a release before the monitor columns stored, in a queue it made', async () => {
+    await using scratch = await mkdtempDisposable(join(tmpdir(), 'queue-'));
+    const path = join(scratch.path, 'queue.sqlite');
+    const clock = new TestClock('2026-01-01T00:00:00.000Z');
+    {
+      // The queue and job tables as text2sql 4caf2db1 made them, with a
+      // queue and a job as its createQueue() and send() stored them. No
+      // public operation makes an older shape, so they are written in that
+      // release's SQL.
+      using database = new DatabaseSync(path);
+      database.exec(`CREATE TABLE pgboss_queue (
         name TEXT PRIMARY KEY,
         policy TEXT NOT NULL DEFAULT 'standard',
         retry_limit INTEGER NOT NULL DEFAULT 2 CHECK (retry_limit >= 0),
@@ -166,94 +159,85 @@ describe('a queue file an earlier release made', () => {
         VALUES ('${id(1)}', 'jobs', '{"n":1}', 'standard',
           '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z',
           '2026-01-15T00:00:00.000Z')`);
-      }
-      const queue = new SqliteJobQueue({ path, clock, schedule: false });
-      const errors: string[] = [];
-      queue.on('error', (error) => errors.push(error.message));
-      try {
-        await queue.start();
-        const ran: string[] = [];
-        await queue.work('jobs', async (jobs) => {
-          ran.push(...jobs.map((job) => job.id));
-        });
-        await clock.tick(2000);
+    }
+    const queue = new SqliteJobQueue({ path, clock, schedule: false });
+    const errors: string[] = [];
+    queue.on('error', (error) => errors.push(error.message));
+    try {
+      await queue.start();
+      const ran: string[] = [];
+      await queue.work('jobs', async (jobs) => {
+        ran.push(...jobs.map((job) => job.id));
+      });
+      await clock.tick(2000);
 
-        assert.deepEqual(ran, [id(1)]);
-        assert.deepEqual(errors, []);
-      } finally {
-        await queue.stop({ graceful: false, close: true });
-      }
-    },
-  );
+      assert.deepEqual(ran, [id(1)]);
+      assert.deepEqual(errors, []);
+    } finally {
+      await queue.stop({ graceful: false, close: true });
+    }
+  });
 
-  it(
-    'stores a new schedule and fires it on the clock',
-    { todo: '#2859 start() skips a stale table' },
-    async () => {
-      await using scratch = await mkdtempDisposable(join(tmpdir(), 'queue-'));
-      const path = join(scratch.path, 'queue.sqlite');
-      const clock = new TestClock('2026-01-01T00:00:30.000Z');
-      await scheduleTableBeforeKinds(path, clock);
-      const queue = new SqliteJobQueue({ path, clock, supervise: false });
-      try {
-        await queue.start();
-        await queue.createQueue('reports');
-        await queue.schedule('reports', '* * * * *', { from: 'today' });
-        await clock.tick(30_000);
-        await clock.tick(2000);
+  it('stores a new schedule and fires it on the clock', async () => {
+    await using scratch = await mkdtempDisposable(join(tmpdir(), 'queue-'));
+    const path = join(scratch.path, 'queue.sqlite');
+    const clock = new TestClock('2026-01-01T00:00:30.000Z');
+    await scheduleTableBeforeKinds(path, clock);
+    const queue = new SqliteJobQueue({ path, clock, supervise: false });
+    try {
+      await queue.start();
+      await queue.createQueue('reports');
+      await queue.schedule('reports', '* * * * *', { from: 'today' });
+      await clock.tick(30_000);
+      await clock.tick(2000);
 
-        const [fired] = await jobData(queue, 'reports');
-        assert.deepEqual(fired, { from: 'today' });
-      } finally {
-        await queue.stop({ graceful: false, close: true });
-      }
-    },
-  );
+      const [fired] = await jobData(queue, 'reports');
+      assert.deepEqual(fired, { from: 'today' });
+    } finally {
+      await queue.stop({ graceful: false, close: true });
+    }
+  });
 
-  it(
-    'keeps a job queued while its key runs on a singleton queue whose index an earlier release made without UNIQUE',
-    { todo: '#2271 start() skips a stale index' },
-    async () => {
-      await using scratch = await mkdtempDisposable(join(tmpdir(), 'queue-'));
-      const path = join(scratch.path, 'queue.sqlite');
-      const clock = new TestClock('2026-01-01T00:00:00.000Z');
-      const earlier = new SqliteJobQueue({ path, clock, schedule: false });
-      await earlier.start();
-      await earlier.stop({ graceful: false, close: true });
-      {
-        // The singleton index as text2sql 98d1eda8 made it. No public
-        // operation makes an older shape, so it is written in that release's
-        // SQL.
-        using database = new DatabaseSync(path);
-        database.exec(`DROP INDEX pgboss_job_singleton_i;
+  it('keeps a job queued while its key runs on a singleton queue whose index an earlier release made without UNIQUE', async () => {
+    await using scratch = await mkdtempDisposable(join(tmpdir(), 'queue-'));
+    const path = join(scratch.path, 'queue.sqlite');
+    const clock = new TestClock('2026-01-01T00:00:00.000Z');
+    const earlier = new SqliteJobQueue({ path, clock, schedule: false });
+    await earlier.start();
+    await earlier.stop({ graceful: false, close: true });
+    {
+      // The singleton index as text2sql 98d1eda8 made it. No public
+      // operation makes an older shape, so it is written in that release's
+      // SQL.
+      using database = new DatabaseSync(path);
+      database.exec(`DROP INDEX pgboss_job_singleton_i;
         CREATE INDEX pgboss_job_singleton_i
           ON pgboss_job (queue_name, singleton_key)
           WHERE singleton_key IS NOT NULL`);
-      }
-      const queue = new SqliteJobQueue({ path, clock, schedule: false });
-      const release = Promise.withResolvers<void>();
-      try {
-        await queue.start();
-        await queue.createQueue('singles', { policy: 'singleton' });
-        await queue.send('singles', null, { id: id(1), singletonKey: 'k' });
-        const firstStarted = Promise.withResolvers<void>();
-        await queue.work('singles', { localConcurrency: 2 }, async () => {
-          firstStarted.resolve();
-          await release.promise;
-        });
-        await firstStarted.promise;
-        await queue.send('singles', null, { id: id(2), singletonKey: 'k' });
-        // The idle slot tries to claim the queued job while the key runs.
-        await clock.tick(2000);
+    }
+    const queue = new SqliteJobQueue({ path, clock, schedule: false });
+    const release = Promise.withResolvers<void>();
+    try {
+      await queue.start();
+      await queue.createQueue('singles', { policy: 'singleton' });
+      await queue.send('singles', null, { id: id(1), singletonKey: 'k' });
+      const firstStarted = Promise.withResolvers<void>();
+      await queue.work('singles', { localConcurrency: 2 }, async () => {
+        firstStarted.resolve();
+        await release.promise;
+      });
+      await firstStarted.promise;
+      await queue.send('singles', null, { id: id(2), singletonKey: 'k' });
+      // The idle slot tries to claim the queued job while the key runs.
+      await clock.tick(2000);
 
-        assert.deepEqual(await jobStates(queue, 'singles'), [
-          { id: id(1), state: 'active' },
-          { id: id(2), state: 'created' },
-        ]);
-      } finally {
-        release.resolve();
-        await queue.stop({ graceful: false, close: true });
-      }
-    },
-  );
+      assert.deepEqual(await jobStates(queue, 'singles'), [
+        { id: id(1), state: 'active' },
+        { id: id(2), state: 'created' },
+      ]);
+    } finally {
+      release.resolve();
+      await queue.stop({ graceful: false, close: true });
+    }
+  });
 });
