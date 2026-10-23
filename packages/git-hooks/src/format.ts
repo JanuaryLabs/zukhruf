@@ -12,9 +12,9 @@ export class Format extends Step {
   readonly name = 'format';
 
   async run(commit: Commit): Promise<Outcome> {
-    const unformatted: string[] = [];
+    const unformatted: { path: string; reason?: string }[] = [];
     const ignorePath = join(commit.root, '.prettierignore');
-    for (const path of await commit.staged()) {
+    for (const path of await commit.files()) {
       const file = join(commit.root, path);
       // Prettier gives no parser for a file that .prettierignore names or that
       // it cannot format, so no list of extensions here.
@@ -24,18 +24,22 @@ export class Format extends Step {
       try {
         const source = await commit.blob(path);
         const formatted = await check(source, { ...options, filepath: file });
-        if (!formatted) unformatted.push(path);
+        if (!formatted) unformatted.push({ path });
       } catch (error) {
-        unformatted.push(`${path} (${String(error).split('\n')[0]})`);
+        const [reason = ''] = String(error).split('\n');
+        unformatted.push({ path, reason });
       }
     }
     if (unformatted.length === 0)
       return this.pass('the staged files are formatted');
+    const paths = unformatted.map(({ path }) => path);
     return this.fail(
       [
         `${unformatted.length} staged files are not formatted:`,
-        ...unformatted.map((path) => `  ${path}`),
-        `Run \`npx prettier --write ${unformatted.join(' ')}\`, stage them, and commit again.`,
+        ...unformatted.map(({ path, reason }) =>
+          reason === undefined ? `  ${path}` : `  ${path} (${reason})`,
+        ),
+        `Run \`npx prettier --write ${paths.join(' ')}\`, stage them, and commit again.`,
       ].join('\n'),
     );
   }

@@ -79,12 +79,13 @@ const formatOnly = `import { Format, preCommit } from '@zukhruf/git-hooks';
 await preCommit([new Format()]);
 `;
 
-test('a commit whose staged files are not formatted is stopped, and the hook lists every one of them with the command that formats them', async () => {
+test('a commit whose staged files are not formatted is stopped, and the hook lists every one of them, an executable one too, with the command that formats them', async () => {
   // Arrange
   await using folder = await mkdtempDisposable(join(tmpdir(), 'git-hooks-'));
   const repo = await repository(folder.path, formatOnly);
   await repo.write('a.ts', 'const a=1\n');
   await repo.write('b.ts', 'let b={x:1}\n');
+  await chmod(join(repo.root, 'b.ts'), 0o755);
   await repo.git('add', 'a.ts', 'b.ts');
 
   // Act
@@ -209,6 +210,11 @@ test('a staged file that Prettier cannot parse stops the commit and is listed wi
     result.stderr,
     /\bunformatted\.ts\b/,
     'The hook must still check and list the other staged files',
+  );
+  assert.match(
+    result.stderr,
+    /Run `npx prettier --write broken\.ts unformatted\.ts`/,
+    'The command must name the files, without their errors',
   );
   assert.doesNotMatch(
     result.stderr,
@@ -381,5 +387,25 @@ test('a repo that installs the packed package runs a hook that imports it by nam
     result.stderr,
     /are not formatted:\n\s+a\.ts$/m,
     'The installed package must run the format step and list a.ts',
+  );
+});
+
+test('a staged link is not checked as source: the link to the hook and a CLAUDE.md link to AGENTS.md do not stop the commit', async () => {
+  // Arrange
+  await using folder = await mkdtempDisposable(join(tmpdir(), 'git-hooks-'));
+  const repo = await repository(folder.path, formatOnly);
+  await repo.write('AGENTS.md', '# Agents\n');
+  await symlink('AGENTS.md', join(repo.root, 'CLAUDE.md'));
+  await repo.git('add', '.husky/pre-commit', 'AGENTS.md', 'CLAUDE.md');
+
+  // Act
+  const result = await repo.commit('links');
+
+  // Assert
+  assert.equal(result.code, 0, result.stderr);
+  assert.equal(
+    await repo.git('show', '--name-only', '--format=', 'HEAD'),
+    '.husky/pre-commit\nAGENTS.md\nCLAUDE.md\n',
+    'The commit must hold both links and AGENTS.md',
   );
 });

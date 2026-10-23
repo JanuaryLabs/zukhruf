@@ -32,6 +32,20 @@ export class Commit {
     return output.split('\0').filter((path) => path !== '');
   }
 
+  // The staged paths whose staged copy is the content of a file. The staged
+  // copy of a link is the path that it points to, and that of a submodule is
+  // a commit id, so a check of their content would judge the wrong text.
+  async files(): Promise<string[]> {
+    const entries = await this.#git('ls-files', '--stage', '-z');
+    const files = new Set(
+      entries
+        .split('\0')
+        .filter((entry) => /^100(644|755) /.test(entry))
+        .map((entry) => entry.slice(entry.indexOf('\t') + 1)),
+    );
+    return (await this.staged()).filter((path) => files.has(path));
+  }
+
   // The staged copy of one file.
   blob(path: string): Promise<string> {
     return this.#git('cat-file', 'blob', `:${path}`);

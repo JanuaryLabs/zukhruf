@@ -21,7 +21,7 @@ The content that the next commit holds: the index of the repo. `Commit` is its o
 _Avoid_: Index (the word is correct, but it has other meanings), cache
 
 **Staged copy**:
-The content of one file in the staged commit. It can differ from the file in the working tree when only some changes of the file are staged.
+The content of one file in the staged commit. It can differ from the file in the working tree when only some changes of the file are staged. A link has no staged copy in this sense: the staged commit holds the path that the link points to, so a step that reads content skips links.
 _Avoid_: Blob (git's word for any stored content), version
 
 **Working tree**:

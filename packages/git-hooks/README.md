@@ -36,7 +36,7 @@ Tell git where the hooks are, in the `prepare` script of `package.json`:
 
 ## Check the format of the staged files
 
-`Format` checks the staged copy of each staged file with the Prettier config of the repo. It skips the files that `.prettierignore` names and the files that Prettier has no parser for. When a file is not formatted, or Prettier cannot parse it, the commit stops and the hook names each file:
+`Format` checks the staged copy of each staged file with the Prettier config of the repo. It skips the files that `.prettierignore` names, the files that Prettier has no parser for, and links, because the staged copy of a link is the path that it points to. When a file is not formatted, or Prettier cannot parse it, the commit stops and the hook names each file:
 
 ```text
 format    2 staged files are not formatted:
@@ -85,7 +85,7 @@ The targets run in the order that `run` gives. When a target fails, the commit s
 
 ## Add a step of your own
 
-A step is a subclass of `Step`. It names itself and gives an outcome: `this.pass()`, `this.skip(why)` or `this.fail(why)`. A fail stops the commit. `Commit` reads the staged commit: `staged()`, `blob(path)`, `touches(globs)`, and `inSnapshot(work)`, which runs `work` on a copy of the staged tree in a temporary folder:
+A step is a subclass of `Step`. It names itself and gives an outcome: `this.pass()`, `this.skip(why)` or `this.fail(why)`. A fail stops the commit. `Commit` reads the staged commit: `staged()`, `files()` (the staged paths that hold file content, without links and submodules), `blob(path)`, `touches(globs)`, and `inSnapshot(work)`, which runs `work` on a copy of the staged tree in a temporary folder:
 
 ```ts
 import { type Commit, Step } from '@zukhruf/git-hooks';
