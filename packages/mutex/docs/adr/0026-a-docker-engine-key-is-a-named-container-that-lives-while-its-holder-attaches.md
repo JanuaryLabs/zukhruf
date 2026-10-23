@@ -10,6 +10,8 @@ A holder also sends a heartbeat: an inspect of its claim by ID each `heartbeatIn
 
 A caller that stops between the create and the start leaves a claim in the state `created`, and the engine never removes it. A waiter gives such a claim `heartbeatInterval`, and then removes it without `force`. The engine lets only one of two calls succeed: the start of the caller, or the removal. In probes, a lost start rejected with 404 or with 409 `marked for removal`, and a lost removal rejected with `ContainerRunningError`. Thus a slow caller loses only time.
 
+A claim can also end and stay: if the removal of `AutoRemove` fails, the claim stays `exited` or `dead`, and a wait for its removal never ends. Thus each wait of a waiter lasts at most `heartbeatInterval`, and then the waiter reads the state of the claim again. It removes an `exited` or `dead` claim by its ID, so that it never removes a later claim with the same name. It never removes a `running`, `paused` or `restarting` claim, because that claim can have a live holder.
+
 ## Considered Options
 
 - **`docker.events()` for the wait.** The notes before the design used it. An event stream gives no sign that the engine has added the subscription. In probes on both engines, a release between the failed create and the subscription was lost: no event arrived within 4 seconds. `since` with the creation time of the claim replays the event, but only from a limited buffer of past events. A wait by ID has no gap and no buffer.

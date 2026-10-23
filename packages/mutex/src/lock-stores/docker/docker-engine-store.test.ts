@@ -17,7 +17,7 @@ import { startWorker } from '../../testing/worker-process.ts';
 import { DockerEngineStore } from './index.ts';
 
 /**
- * The first seven tests are the design errors that the probes of
+ * The first eight tests are the design errors that the probes of
  * DockerEngineStore found. The name of each test says what the wrong design
  * broke. The tests after them are the contract of a lock store.
  */
@@ -202,6 +202,16 @@ const outcomeOf = <T>(promise: Promise<T>, within: number) =>
     ),
     delay(within, { settled: 'pending' as const }),
   ]);
+
+/** A signal that aborts after `within` ms with an error that names the step. */
+const step = (name: string, within = 20_000) => {
+  const stalled = new AbortController();
+  setTimeout(
+    () => stalled.abort(new Error(`The step "${name}" took over ${within} ms`)),
+    within,
+  ).unref();
+  return stalled.signal;
+};
 
 test(
   "a killed holder's key goes to the next waiter",
@@ -439,31 +449,84 @@ test(
 
 test(
   'the tokens increase after docker container prune',
-  { timeout: 30_000 },
+  { timeout: 60_000 },
   async () => {
-    // Arrange
+    // Arrange: each step has its own time limit, so a time-out names the step that stalled.
     await using fixture = await engine();
     const mutex = new Mutex(fixture.store());
     const first = await mutex.acquire(
       'report:daily',
       async (lease) => lease.token.value,
+      { signal: step('first acquire') },
     );
 
     // Act: an operator prunes the containers of the namespace that do not run.
-    await promisify(execFile)('docker', [
-      'container',
-      'prune',
-      '--force',
-      '--filter',
-      `label=${namespaceLabel}=${fixture.namespace}`,
-    ]);
+    await promisify(execFile)(
+      'docker',
+      [
+        'container',
+        'prune',
+        '--force',
+        '--filter',
+        `label=${namespaceLabel}=${fixture.namespace}`,
+      ],
+      { signal: step('prune') },
+    );
     const second = await mutex.acquire(
       'report:daily',
       async (lease) => lease.token.value,
+      { signal: step('second acquire') },
     );
 
     // Assert
     assert.ok(second > first, `The token went from ${first} to ${second}`);
+  },
+);
+
+test(
+  'a waiter gets the key when the released claim stays dead after a failed removal',
+  { timeout: 30_000 },
+  async () => {
+    // Arrange: a released claim whose removal failed stays on the engine and does not run.
+    // The test makes it, because no operation of the store makes the removal of the engine fail.
+    await using fixture = await engine();
+    const labelled = { label: [`${namespaceLabel}=${fixture.namespace}`] };
+    const holder = await hold(new Mutex(fixture.store()), 'report:daily');
+    const [claim] = await fixture.docker.containers.list({
+      all: true,
+      filters: labelled,
+    });
+    const name = claim?.Names?.[0]?.slice(1);
+    const labels = claim?.Labels;
+    assert.ok(name && labels);
+    await holder.release();
+    const ended = await fixture.docker.containers.create(
+      {
+        Image: image,
+        Entrypoint: ['true'],
+        Labels: labels,
+        HostConfig: { AutoRemove: false },
+      },
+      { name },
+    );
+    await ended.start();
+    await ended.wait({ condition: 'not-running' });
+
+    // Act
+    const outcome = await outcomeOf(
+      new Mutex(fixture.store()).acquire(
+        'report:daily',
+        async (lease) => lease.token.value,
+      ),
+      heartbeatInterval + engineBound,
+    );
+
+    // Assert
+    assert.deepEqual(
+      outcome,
+      { settled: 'resolved', value: 2n },
+      'A claim that ended must not keep the key from a waiter',
+    );
   },
 );
 

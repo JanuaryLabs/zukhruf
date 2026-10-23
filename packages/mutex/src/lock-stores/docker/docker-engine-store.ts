@@ -28,7 +28,8 @@ export interface DockerEngineStoreOptions {
    * Milliseconds between two heartbeats of a holder, and the time limit of
    * each heartbeat: the longest time that a holder can work after its claim
    * ended, before its signal aborts. It is also the time that a waiter gives
-   * a `created` claim before it removes it.
+   * a `created` claim before it removes it, and the time between two looks of
+   * a waiter at the claim.
    */
   heartbeatInterval: number;
 }
@@ -39,6 +40,9 @@ const tokenLabel = 'zukhruf.mutex.token';
 
 /** The states of a claim that no other caller can take the key from. */
 const holdingStates = new Set(['created', 'running', 'paused', 'restarting']);
+
+/** The states of a claim that ended: no holder can have it, and only a removal makes its name free. */
+const endedStates = new Set(['exited', 'dead']);
 
 /**
  * Holds a key as a named container on one Docker engine: the claim. The claim
@@ -157,49 +161,73 @@ class Claims {
 
   /**
    * Waits by ID for the claim that has the name, so that a release before the
-   * wait is never lost. A `created` claim gets `heartbeatInterval`, and then a
-   * removal without force: the engine lets only one of that removal and the
-   * start of its caller succeed.
+   * wait is never lost. Each wait lasts at most `heartbeatInterval`, and then
+   * the waiter looks at the claim again:
+   *
+   * - An `exited` or `dead` claim has no holder. Its removal failed, so the
+   *   waiter removes it.
+   * - A claim that stays `created` gets a removal without force: the engine
+   *   lets only one of that removal and the start of its caller succeed.
+   * - A `running`, `paused` or `restarting` claim can have a live holder, so
+   *   the waiter never removes it, and waits again.
    */
   async waitForRelease(cancel: CancelOptions): Promise<void> {
-    const { signal } = cancel;
     const claim = await this.#options.docker.containers.find(
       this.#name,
       cancel,
     );
     if (claim === undefined) return;
-    if ((await stateOf(claim, cancel)) !== 'created') {
-      await untilRemoved(claim, cancel);
-      return;
+    let state = await stateOf(claim, cancel);
+    for (;;) {
+      if (state === undefined) return;
+      if (endedStates.has(state)) {
+        await removeUnlessRunning(claim, cancel);
+        return;
+      }
+      const seen = state;
+      if (await this.#removedWithin(claim, cancel)) return;
+      state = await stateOf(claim, cancel);
+      if (seen === 'created' && state === 'created') {
+        await removeUnlessRunning(claim, cancel);
+        return;
+      }
     }
+  }
+
+  /** True when the claim is gone within `heartbeatInterval`, false when it is still there. */
+  async #removedWithin(
+    claim: Container,
+    { signal }: CancelOptions,
+  ): Promise<boolean> {
     const patience = AbortSignal.timeout(this.#options.heartbeatInterval);
     try {
-      await untilRemoved(claim, {
+      await claim.wait({
+        condition: 'removed',
         signal:
           signal === undefined ? patience : AbortSignal.any([signal, patience]),
       });
-      return;
+      return true;
     } catch (error) {
+      if (error instanceof ContainerNotFoundError) return true;
       if (signal?.aborted || !patience.aborted) throw error;
-    }
-    if ((await stateOf(claim, cancel)) !== 'created') return;
-    try {
-      await claim.remove({ force: false, ...cancel });
-    } catch (error) {
-      if (!(error instanceof ContainerRunningError)) throw error;
+      return false;
     }
   }
 }
 
-async function untilRemoved(
+/**
+ * Removes the claim by its ID without force, so that a claim of a later
+ * holder with the same name is never removed. The engine lets only one of
+ * this removal and the start of a `created` claim succeed.
+ */
+async function removeUnlessRunning(
   claim: Container,
   cancel: CancelOptions,
 ): Promise<void> {
   try {
-    await claim.wait({ condition: 'removed', ...cancel });
+    await claim.remove({ force: false, ...cancel });
   } catch (error) {
-    if (error instanceof ContainerNotFoundError) return;
-    throw error;
+    if (!(error instanceof ContainerRunningError)) throw error;
   }
 }
 

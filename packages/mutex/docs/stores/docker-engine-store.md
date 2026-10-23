@@ -87,7 +87,9 @@ Each field has a reason:
 A waiter must not miss the release. The release can come between the failed create of the waiter and the start of its wait. Thus the waiter waits on the claim that it found, by its ID:
 
 1. The waiter finds the claim by name with `containers.find(name)`. If it gets `undefined`, the claim is gone, and the waiter goes back to the create.
-2. If the claim is `running`, the waiter calls `wait({ condition: 'removed' })` on it. The engine answers when the claim is removed. If the claim was removed before the wait arrived, the engine answers 404 at once, and the waiter goes back to the create.
+2. The waiter reads the state of the claim with an inspect. If the claim is `running`, `paused`, `restarting` or `removing`, the waiter calls `wait({ condition: 'removed' })` on it, with a time limit of `heartbeatInterval`. The engine answers when the claim is removed. If the claim was removed before the wait arrived, the engine answers 404 at once. In both cases, the waiter goes back to the create.
+3. If the wait reaches its time limit, the waiter does step 2 again. The waiter never removes a claim in these states: the claim can have a live holder.
+4. If the claim is `exited` or `dead`, it has no holder, but the engine did not remove it (see [An ended claim](#an-ended-claim)). The waiter removes it by its ID, and goes back to the create.
 
 The store does not use `docker.events()` for this. An event stream gives no sign that the engine has added the subscription. A release that comes before the subscription is lost, and the waiter waits forever. A probe showed this on both engines (see [Evidence](#evidence)). A wait by ID has no such gap: the engine answers it at once when the claim is gone.
 
@@ -101,10 +103,18 @@ A caller that stops between the create and the start leaves a claim in the state
 
 The waiter cannot tell a stopped caller from a slow one. Thus a waiter that finds a `created` claim waits for its removal for at most `heartbeatInterval`. If the claim with the same ID is still `created` after that time, the waiter removes it with `remove({ force: false })`. The engine does one of these two things, and never both:
 
-- The start of the caller came first. The claim runs, the removal rejects with `ContainerRunningError`, and the waiter waits for the removal of the claim with no time limit.
+- The start of the caller came first. The claim runs, the removal rejects with `ContainerRunningError`, and the waiter waits for a running claim (see [Waiting](#waiting)).
 - The removal came first. The claim is gone, and the start of the caller rejects. The caller then goes back to the create.
 
 Thus a slow caller loses only time, never the key to two holders. Over SSH, a create, an attach and a start took 1.0 to 2.9 seconds in the probes. Give a `heartbeatInterval` that is larger than that time, for example 5 seconds.
+
+### An ended claim
+
+`AutoRemove` makes the engine remove the claim when `cat` exits. If that removal fails, the claim stays on the engine in the state `exited` or `dead`. Its name stays taken, and a wait for its removal never ends. `@zukhruf/docker` has the same warning on `remove()`.
+
+Thus a waiter does not wait for the removal of a claim for more than `heartbeatInterval`. Then it reads the state of the claim again. If the claim is `exited` or `dead`, the waiter removes it by its ID, not by its name. A removal by ID never removes a later claim with the same name. If the claim is already gone, the removal succeeds. Then the waiter creates the claim again.
+
+`isHeld` gives `false` for such a claim, and `acquire` gets the key within one `heartbeatInterval`.
 
 ### The heartbeat
 
@@ -140,7 +150,7 @@ The ladder uses volumes, not containers. `docker container prune` removes each c
 
 - No claim: `false`.
 - `created`, `running`, `paused` or `restarting`: `true`. A `created` claim is a caller in the middle of an acquire, or an abandoned claim. No other caller can get the key while it exists.
-- `exited`, `dead` or `removing`: `false`. The engine removes such a claim soon.
+- `exited`, `dead` or `removing`: `false`. The engine removes such a claim soon. If the removal of the engine fails, a waiter removes it (see [An ended claim](#an-ended-claim)).
 
 The holder can change before the answer arrives. Show the answer, but do not acquire a key because of it.
 
@@ -151,8 +161,9 @@ The holder can change before the answer arrives. Show the answer, but do not acq
 - **The engine restarts:** each attach ends, so each claim ends and each holder gets a lost lease. The volumes of the ladder stay, so the tokens continue to increase.
 - **A silent partition between the holder and the engine:** nothing reaches the engine, so `cat` continues to run and the key stays held. The [heartbeat](#the-heartbeat) of the holder fails within `heartbeatInterval`, and the signal of the lease aborts. The store tries to remove its claim, but the removal also cannot reach the engine. Waiters then wait until the engine host sees the end of the connection: see the next item.
 - **A holder machine stops with no reset:** the engine sees the end of the attach only when the connection ends on the engine host. On a Unix socket, the engine and the holder are on one machine, so this case does not occur. Over SSH, `sshd` on the engine host ends the connection after `ClientAliveInterval` × `ClientAliveCountMax` seconds. With `ClientAliveInterval 0`, the default, only TCP keep-alive of the engine host ends it: 7200 + 9 × 75 seconds, approximately 2 hours and 11 minutes, with the Linux defaults. Until then, the key stays held, and waiters wait. Set `ClientAliveInterval` on the engine host, for example `ClientAliveInterval 10` with `ClientAliveCountMax 3`.
-- **A waiter behind a silent partition:** its wait by ID does not end. The store sets no time limit on a wait. Set `ServerAliveInterval` for the engine host in `~/.ssh/config` of the waiter machine, so that `ssh` ends a dead connection within seconds.
+- **A waiter behind a silent partition:** its wait by ID ends after `heartbeatInterval`, but its next inspect of the claim does not end. The store sets no time limit on the requests of a waiter. The signal of the caller limits them. Set `ServerAliveInterval` for the engine host in `~/.ssh/config` of the waiter machine, so that `ssh` ends a dead connection within seconds.
 - **A caller stops between the create and the start:** its claim stays `created`. A waiter removes it after `heartbeatInterval`. See [An abandoned claim](#an-abandoned-claim).
+- **The engine does not remove an ended claim:** the claim stays `exited` or `dead`. A waiter removes it within `heartbeatInterval`. See [An ended claim](#an-ended-claim).
 - **A holder freezes:** waiters wait while the attach lasts. If the connection ends meanwhile, another holder can get the key. The frozen holder sees the lost lease only when it runs again. A [fenced resource](../concepts/fencing-tokens.md) refuses its late writes.
 - **Somebody removes a claim:** for example `docker rm -f` or `docker container prune`. Another caller can get the key at once. The attach of the holder ends, and the holder gets a lost lease.
 - **Somebody removes the ladder:** `docker volume prune -a` or `docker system prune -a --volumes` removes the named volumes that no container uses. The tokens of the key then start again at 1, and a fenced resource refuses each write until the tokens pass its highest token. Do not run these commands on the engine of the store, or exclude the label `zukhruf.mutex.namespace` with `--filter`.
@@ -165,12 +176,12 @@ See [failure modes](../concepts/failure-modes.md).
 
 ## Options
 
-| Option              | Default | Description                                                                                                                                                                                                                                              |
-| ------------------- | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `docker`            | —       | A `Docker` client of `@zukhruf/docker`. It selects the engine. The caller owns it and disposes of it; a disposal ends each attach, and each held key is lost.                                                                                            |
-| `image`             | —       | The image of each claim. It must be on the engine, and it must have `cat` on its `PATH`. The store never pulls it. A small image, for example `alpine:3` (8.4 MB), is enough.                                                                            |
-| `namespace`         | —       | The first part of each name and the value of the label `zukhruf.mutex.namespace`. Stores with the same namespace on one engine share their locks. It must match `[a-zA-Z0-9][a-zA-Z0-9_.-]*`.                                                            |
-| `heartbeatInterval` | —       | Milliseconds between two heartbeats of a holder, and the time limit of each heartbeat. It is also the time that a waiter gives a `created` claim before it removes it. Make it larger than a create, an attach and a start: over SSH, 5 seconds or more. |
+| Option              | Default | Description                                                                                                                                                                                                                                                                                                       |
+| ------------------- | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `docker`            | —       | A `Docker` client of `@zukhruf/docker`. It selects the engine. The caller owns it and disposes of it; a disposal ends each attach, and each held key is lost.                                                                                                                                                     |
+| `image`             | —       | The image of each claim. It must be on the engine, and it must have `cat` on its `PATH`. The store never pulls it. A small image, for example `alpine:3` (8.4 MB), is enough.                                                                                                                                     |
+| `namespace`         | —       | The first part of each name and the value of the label `zukhruf.mutex.namespace`. Stores with the same namespace on one engine share their locks. It must match `[a-zA-Z0-9][a-zA-Z0-9_.-]*`.                                                                                                                     |
+| `heartbeatInterval` | —       | Milliseconds between two heartbeats of a holder, and the time limit of each heartbeat. It is also the time that a waiter gives a `created` claim before it removes it, and the time between two looks of a waiter at the claim. Make it larger than a create, an attach and a start: over SSH, 5 seconds or more. |
 
 All four options are required. No option has a default.
 
@@ -202,6 +213,7 @@ These changes are not necessary:
 | A holder that lost its claim during the mint gets no token                                                  | A mint with no confirmation of the claim                                       |
 | A held key is lost within heartbeatInterval when the engine stops answering                                 | No heartbeat, only the attach. The proxy stops forwarding and closes no socket |
 | The tokens increase after docker container prune                                                            | A ladder of created containers                                                 |
+| A waiter gets the key when the released claim stays dead after a failed removal                             | A wait for the removal with no time limit on an `exited` claim                 |
 
 Each wrong design was put back into a copy of the store, one at a time. Each one made its test fail.
 
