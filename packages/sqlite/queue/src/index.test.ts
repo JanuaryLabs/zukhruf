@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { DatabaseSync } from 'node:sqlite';
 import { describe, it } from 'node:test';
+import { setImmediate } from 'node:timers/promises';
 
 import { type Job, TestClock } from 'pg-boss';
 
@@ -27,7 +28,7 @@ async function waitFor(
 // Lets what a tick fired finish: SQLite's fetch waits one event-loop turn.
 async function settle(clock: TestClock) {
   await clock.tick(0);
-  await new Promise((resolve) => setTimeout(resolve, 20));
+  await setImmediate();
 }
 
 // Job data is unknown to the queue; a test reads back a field it sent.
