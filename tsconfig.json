@@ -67,6 +67,9 @@
     },
     {
       "path": "./packages/sqlite/queue"
+    },
+    {
+      "path": "./packages/git-hooks"
     }
   ]
 }

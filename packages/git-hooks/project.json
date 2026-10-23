@@ -1,0 +1,11 @@
+{
+  "name": "git-hooks",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "packages/git-hooks/src",
+  "projectType": "library",
+  "tags": ["layer:island", "std:tool", "test:node"],
+  "targets": {
+    "format": {},
+    "test": {}
+  }
+}
