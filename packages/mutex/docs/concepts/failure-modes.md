@@ -1,24 +1,26 @@
 # Failure modes
 
-A lock store must also work when something stops. This page tells you what each lock store does when a holder or a coordinator stops or freezes.
+A lock store must also work when something stops. This page tells you what each lock store does when a holder or a coordinator stops or freezes, and when the session of a network lock store ends.
 
-## Three kinds of failure
+## Four kinds of failure
 
 - **A holder stops.** Its process or thread ends before it releases the key, for example after a crash or `SIGKILL`.
 - **A holder freezes.** Its process stays alive but does not run, for example during `SIGSTOP` or a long pause. To other processes, a frozen holder looks the same as a slow holder.
 - **A coordinator stops.** This applies only to the lock stores that use a coordinator: `ThreadStore`, `IpcStore`, and `SocketStore`. For `ThreadStore`, the coordinator's thread stops only together with the workers that it started, so no holder or waiter is left.
+- **A session ends.** This applies only to a network lock store: `PostgresStore`. The server releases the key of a session that ends, also when its holder still runs.
 
 ## What each lock store does
 
-| Lock store             | A holder process stops                                                                    | A holder thread stops                        | A holder freezes                                                                                  |
-| ---------------------- | ----------------------------------------------------------------------------------------- | -------------------------------------------- | ------------------------------------------------------------------------------------------------- |
-| `MemoryStore`          | The lock stops with the process.                                                          | — (one instance cannot be shared by threads) | Waiters wait.                                                                                     |
-| `ThreadStore`          | The lock stops with the process.                                                          | Released when the worker emits `exit`.       | Waiters wait.                                                                                     |
-| `IpcStore`             | Released in approximately 2 ms. The parent sees the connection close.                     | —                                            | Waiters wait.                                                                                     |
-| `TicketQueueFileStore` | Released. The kernel ends the presence of the holder, and a waiter removes its ticket.    | Released.                                    | Waiters wait.                                                                                     |
-| `LockFileStore`        | Released. The kernel ends the presence of the holder, and a waiter removes its lock file. | Released.                                    | Waiters wait.                                                                                     |
-| `SqliteStore`          | Released. The kernel removes the file lock.                                               | Released.                                    | Waiters wait.                                                                                     |
-| `SocketStore`          | Released in approximately 2 ms. The leader sees the connection close.                     | Released.                                    | Waiters wait. After a failover, the holder gets a lost lease, and the signal of its lease aborts. |
+| Lock store             | A holder process stops                                                                    | A holder thread stops                        | A holder freezes                                                                                                                          |
+| ---------------------- | ----------------------------------------------------------------------------------------- | -------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `MemoryStore`          | The lock stops with the process.                                                          | — (one instance cannot be shared by threads) | Waiters wait.                                                                                                                             |
+| `ThreadStore`          | The lock stops with the process.                                                          | Released when the worker emits `exit`.       | Waiters wait.                                                                                                                             |
+| `IpcStore`             | Released in approximately 2 ms. The parent sees the connection close.                     | —                                            | Waiters wait.                                                                                                                             |
+| `TicketQueueFileStore` | Released. The kernel ends the presence of the holder, and a waiter removes its ticket.    | Released.                                    | Waiters wait.                                                                                                                             |
+| `LockFileStore`        | Released. The kernel ends the presence of the holder, and a waiter removes its lock file. | Released.                                    | Waiters wait.                                                                                                                             |
+| `SqliteStore`          | Released. The kernel removes the file lock.                                               | Released.                                    | Waiters wait.                                                                                                                             |
+| `SocketStore`          | Released in approximately 2 ms. The leader sees the connection close.                     | Released.                                    | Waiters wait. After a failover, the holder gets a lost lease, and the signal of its lease aborts.                                         |
+| `PostgresStore`        | Released when its session ends. The kernel of the holder closes the connection.           | Released when its session ends.              | Waiters wait. If the server ends the session, another holder can get the key, and the frozen holder gets a lost lease when it runs again. |
 
 The file lock stores identify a holder by its [presence](../adr/0012-a-file-store-holder-is-judged-by-its-presence.md), not by its process ID. The kernel ends the presence when the process or the thread stops. This is also true for a zombie process, and for containers that share one lock directory on one machine.
 
@@ -31,6 +33,19 @@ The file lock stores identify a holder by its [presence](../adr/0012-a-file-stor
 | `IpcStore` (the parent stops)    | Get `CoordinatorUnavailableError`. On Windows, Node.js stops the children too, unless they were started with `detached: true`. | Keep the key. No coordinator is left to grant it to another holder ([ADR 0004](../adr/0004-parent-stops-held-keys-stay.md)). |
 | `SocketStore` (the leader stops) | Send their request to the new leader.                                                                                          | Reassert during the grace window. A refused reassert gives a lost lease.                                                     |
 | `SocketStore` (a campaign fails) | Get the error of the campaign, for example a disk error. The next request connects again.                                      | The signal of their lease aborts with `LeaseLostError`. No leader got their reassert, so another holder may have the key.    |
+
+## When the session of a network lock store ends
+
+A network lock store holds each key through a session with its server. The server releases the key when the session ends. The holder can still run at that time.
+
+| Cause                                                            | Holders                                                                                                                                                                                       | Waiters                                                               |
+| ---------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| The network drops the connection, or the server ends the session | The session emits `error` or `end`. The signal of the lease aborts with `LeaseLostError`.                                                                                                     | The wait rejects with the error of the session.                       |
+| The server restarts, or a standby is promoted                    | Each session ends, so each holder gets a lost lease. A promoted standby has none of the locks of the old server.                                                                              | Each wait rejects with the error of its session.                      |
+| A silent partition: the network stops and sends no reset         | The holder sees the end only when TCP keep-alive finds the dead connection. Until then, only the fencing token protects the resource. For `PostgresStore`, set `keepAlive: true` on the pool. | The wait continues until TCP keep-alive finds the dead connection.    |
+| The holder machine stops and sends no reset                      | —                                                                                                                                                                                             | Waiters wait until the TCP keep-alive of the server ends the session. |
+
+See [PostgresStore](../stores/postgres-store.md#failure-modes) and [ADR 0021](../adr/0021-a-lock-store-can-reach-every-machine-that-reaches-one-server.md).
 
 ## Errors
 
@@ -45,7 +60,7 @@ The signal tells the task about a loss that the lock store saw. A holder that co
 
 ## Known limits
 
-- **Holders on other machines.** A presence is a kernel lock, so it works only between callers on one machine. On Linux and Windows, the lock stores refuse a directory on a network file system. On macOS they cannot find the type of the file system, so do not share a lock directory between machines.
+- **Holders on other machines.** A presence is a kernel lock, so it works only between callers on one machine. On Linux and Windows, the file lock stores refuse a directory on a network file system. On macOS they cannot find the type of the file system, so do not share a lock directory between machines. For callers on many machines, use a network lock store, for example `PostgresStore`.
 - **A lock record of an older version.** An older version of the file lock stores kept no presence. If a waiter finds a lock record without a presence file, the acquire fails with an error that gives the names of both files. Stop the processes that use the older version. Then delete the record.
 - **A reclaim file of an older version.** An older version wrote `<key>.lock.reclaim` as JSON. The acquire fails with an error that gives the name of the file. Stop the processes that use the older version. Then delete the file.
 - **An empty presence file.** A caller that stops between two steps of a release can leave a `.presence` file. The file has no lock, so it blocks no key. You can delete it.

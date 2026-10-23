@@ -73,7 +73,7 @@ The place that keeps the locks for a mutex. Each lock store has a reach.
 _Avoid_: Backend, driver, adapter
 
 **Reach**:
-The set of callers that can share a lock. The reach is one of: instance, process, process tree, host.
+The set of callers that can share a lock. The reach is one of: instance, process, process tree, host, network.
 _Avoid_: Scope, visibility
 
 **Instance**:
@@ -91,6 +91,14 @@ _Avoid_: Cluster, worker pool
 **Host**:
 A reach that includes all processes on one machine.
 _Avoid_: Server, node
+
+**Network**:
+A reach that includes all processes on all machines that reach one server, for example one Postgres database.
+_Avoid_: Distributed, global, cluster, remote
+
+**Session**:
+A connection to the server of a network lock store. The server keeps the lock of a key while the session that holds it lasts, and releases the lock when the session ends.
+_Avoid_: Connection pool, client
 
 **Presence**:
 The kernel lock that a holder or a waiter of a file lock store keeps while it runs. A waiter that can take the presence of another caller knows that the caller stopped.

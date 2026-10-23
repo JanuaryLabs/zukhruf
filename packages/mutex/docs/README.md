@@ -18,6 +18,7 @@ Start with the [project README](../README.md). The glossary is in [CONTEXT.md](.
 | Process      | [ThreadStore and ThreadLockCoordinator](./stores/thread-store.md)                                                                                                                           |
 | Process tree | [IpcStore and IpcLockCoordinator](./stores/ipc-store.md)                                                                                                                                    |
 | Host         | [TicketQueueFileStore](./stores/ticket-queue-file-store.md), [LockFileStore](./stores/lock-file-store.md), [SqliteStore](./stores/sqlite-store.md), [SocketStore](./stores/socket-store.md) |
+| Network      | [PostgresStore](./stores/postgres-store.md)                                                                                                                                                 |
 
 ## Recipes
 
@@ -54,6 +55,9 @@ Start with the [project README](../README.md). The glossary is in [CONTEXT.md](.
 18. [The next leader skips the grace window after a clean shutdown](./adr/0018-the-next-leader-skips-the-grace-window-after-a-clean-shutdown.md)
 19. [A failed token mint answers the request, and an exhausted epoch ends the term](./adr/0019-a-failed-token-mint-answers-the-request-and-an-exhausted-epoch-ends-the-term.md)
 20. [Each family of lock stores has its own import path](./adr/0020-each-store-family-has-its-own-import-path.md)
+21. [A lock store can reach every machine that reaches one server](./adr/0021-a-lock-store-can-reach-every-machine-that-reaches-one-server.md)
+22. [A database lock store takes its session from the caller](./adr/0022-a-database-lock-store-takes-its-session-from-the-caller.md)
+23. [A Postgres waiter is cancelled from a second session](./adr/0023-a-postgres-waiter-is-cancelled-from-a-second-session.md)
 
 ## Copied code
 

@@ -1,0 +1,25 @@
+# A lock store can reach every machine that reaches one server
+
+The largest reach was host: all processes on one machine. An app that runs on many machines had no lock store, and the docs told it to use a lock service. Many of these apps already reach one database server, and Postgres has advisory locks. Thus a fifth reach exists: **network**. It includes all processes on all machines that reach one server. The first lock store with this reach is [PostgresStore](../stores/postgres-store.md). "Distributed lock" is the industry name of such a lock. The reach names who shares the lock, as the other reaches do: instance, process, process tree, host, network.
+
+A network lock store is different from a host lock store in three ways:
+
+1. **It can lose a key while the holder runs.** The server keeps the lock only while the session of the holder lasts. The network can drop the connection, and the server can restart or end the session. A host lock store never loses a held key, so `leaseFor` gives it a signal that never aborts. A network lock store does not use `leaseFor`. It makes its own `LeaseController`, and it calls `lose(cause)` when the session ends. Then the signal of the lease aborts with `LeaseLostError` ([ADR 0013](./0013-a-lost-lease-aborts-the-signal-of-the-lease.md)). `SocketStore` already loses leases in this way.
+2. **Its fencing tokens come from the server.** Each token source of `@zukhruf/fencing` keeps its counter in one process or on one host. Two machines with their own counters can give the same token. Thus a network lock store makes its tokens on its server, for example with a Postgres sequence, and the tokens increase across all machines.
+3. **It uses no mechanism of one host.** A [presence](./0012-a-file-store-holder-is-judged-by-its-presence.md) is a kernel lock, and a process ID has a meaning only on one machine. A network lock store knows a holder only through its session on the server.
+
+## Considered Options
+
+- **No reach larger than host.** This was the state before. Each app on many machines had to add a lock service, also when it already had a database with locks.
+- **A lock service, for example Redis with Redlock, etcd or ZooKeeper.** These are good choices, but each one is another server to run. A database that the app already has adds no server. A lock store for one of them can come later with the same reach.
+- **A lease that ends unless the holder renews it.** A store could then keep the lock in a table with an end time. [ADR 0012](./0012-a-file-store-holder-is-judged-by-its-presence.md) rejected this for the file lock stores: a frozen holder loses its key while it can still continue. A session lock ends only when the session ends, so a slow holder keeps its key.
+- **The name "distributed" or "cluster" for the reach.** "Distributed" names the kind of lock, not who shares it. "Cluster" is also a Postgres word for one server with its databases. The other reaches are nouns of what callers share: an instance, a process, a host. Callers of a network lock store share one server through the network.
+- **A token source of `@zukhruf/fencing` on each machine.** Two machines would give tokens from two counters. A fenced resource would then accept a late write from a stale holder.
+
+## Consequences
+
+- The glossary has the reach **network** and the term **session**. The reach page has a row for it, and the sentence "No lock store has a reach larger than one host" is removed.
+- A network lock store costs more than a host lock store: a round trip for each acquire, a server to run, and a lease that can be lost. See [Reach](../concepts/reach.md#why-not-always-use-the-largest-reach).
+- ADR 0013 said that only `SocketStore` can lose a key while the holder runs. Network lock stores can also lose a key in this way.
+- A frozen holder or a holder behind a silent partition can write after the server released its key. The signal is a warning, and the fencing token is the protection.
+- How the store will be tested: the matrix of lock stores in `src/testing/store-cases.ts` gets the reach `network` (`Reach` gets `'network'`). Today `StoreCase.open(directory)` takes a scratch directory. It will become `open(medium)`: each case tells how to make its shared medium. A host lock store makes a scratch directory, as today. `PostgresStore` makes a new database with `@zukhruf/testing/postgres` (`new Postgres({ environment: process.env }).database()`) and gives its connection string. The tests change from `scratchDirectory()` and `store.open(directory.path)` to `store.medium()` and `store.open(medium)`. Then each test across processes and threads also runs for `PostgresStore`. `pg` becomes a dev dependency for the tests only. The package itself has no Postgres driver.
