@@ -24,6 +24,7 @@ import { scratchDirectory } from '../testing/scratch-directory.ts';
 import {
   type StoreCase,
   type StoreHost,
+  reaches,
   settle,
   storeCases,
 } from '../testing/store-cases.ts';
@@ -52,8 +53,8 @@ void describe.each(storeCases, (store) =>
       { timeout: 2000 },
       async (t) => {
         // Arrange: the first operation holds the product until it encounters a storage failure.
-        await using directory = await scratchDirectory();
-        await using host = store.open(directory.path);
+        await using fixture = await store.fixture();
+        await using host = store.open(fixture.location);
         const mutex = new Mutex(host.store);
         const failure = new Error('Storage unavailable');
         const failFirst = Promise.withResolvers<void>();
@@ -112,8 +113,8 @@ void describe.each(storeCases, (store) =>
       async (t) => {
         // Arrange: isolate process-level rejection handling from the test runner.
         // All mutex operations still happen inside ONE process and ONE Mutex instance.
-        await using directory = await scratchDirectory();
-        await using host = store.open(directory.path);
+        await using fixture = await store.fixture();
+        await using host = store.open(fixture.location);
 
         // Act: the application catches a failure, then processes another request later.
         await using application = startWorker(
@@ -123,7 +124,7 @@ void describe.each(storeCases, (store) =>
 					import { Mutex } from ${JSON.stringify(mutexUrl.href)};
 					import { createChildStore } from ${JSON.stringify(storeCasesUrl.href)};
 
-					const mutex = new Mutex(createChildStore(${JSON.stringify(store.name)}, ${JSON.stringify(directory.path)}));
+					const mutex = new Mutex(createChildStore(${JSON.stringify(store.name)}, ${JSON.stringify(fixture.location)}));
 					const failure = new Error('Storage unavailable');
 
 					await assert.rejects(
@@ -167,8 +168,8 @@ void describe.each(storeCases, (store) =>
       { timeout: 2000 },
       async (t) => {
         // Arrange: hold the first operation open until the test releases it.
-        await using directory = await scratchDirectory();
-        await using host = store.open(directory.path);
+        await using fixture = await store.fixture();
+        await using host = store.open(fixture.location);
         const mutex = new Mutex(host.store);
         const finishFirst = Promise.withResolvers<void>();
         let firstStarted = false;
@@ -227,8 +228,8 @@ void describe.each(storeCases, (store) =>
 
     test('three overlapping requests for one product all finish without overlapping callbacks', async (t) => {
       // Arrange: whichever callback enters first stays active while the other requests queue.
-      await using directory = await scratchDirectory();
-      await using host = store.open(directory.path);
+      await using fixture = await store.fixture();
+      await using host = store.open(fixture.location);
       const mutex = new Mutex(host.store);
       const finishFirst = Promise.withResolvers<void>();
       const deadline = delay(2000, null, { ref: false });
@@ -302,8 +303,8 @@ void describe.each(storeCases, (store) =>
       { timeout: 2000 },
       async (t) => {
         // Arrange: keep product 42 busy before product 99 is requested.
-        await using directory = await scratchDirectory();
-        await using host = store.open(directory.path);
+        await using fixture = await store.fixture();
+        await using host = store.open(fixture.location);
         const mutex = new Mutex(host.store);
         const finishFirst = Promise.withResolvers<void>();
         let firstStarted = false;
@@ -356,8 +357,8 @@ void describe.each(storeCases, (store) =>
 
     test('an out-of-stock result does not prevent a later reservation for the same product', async () => {
       // Arrange: initially there is nothing to reserve.
-      await using directory = await scratchDirectory();
-      await using host = store.open(directory.path);
+      await using fixture = await store.fixture();
+      await using host = store.open(fixture.location);
       const mutex = new Mutex(host.store);
       let stock = 0;
       const deadline = delay(1000, null, { ref: false });
@@ -406,8 +407,8 @@ void describe.each(storeCases, (store) =>
       (key) =>
         test(`resource name ${label(key)} supports ordinary mutex operations`, async (t) => {
           // Arrange: resource names may come directly from user-supplied names or slugs.
-          await using directory = await scratchDirectory();
-          await using host = store.open(directory.path);
+          await using fixture = await store.fixture();
+          await using host = store.open(fixture.location);
           const mutex = new Mutex(host.store);
           const finishFirst = Promise.withResolvers<void>();
           const deadline = delay(1000, null, { ref: false });
@@ -476,8 +477,8 @@ void describe.each(storeCases, (store) =>
       ([held, other]) =>
         test(`resource names ${label(held)} and ${label(other)} are separate locks`, async (t) => {
           // Arrange: one caller holds the first name.
-          await using directory = await scratchDirectory();
-          await using host = store.open(directory.path);
+          await using fixture = await store.fixture();
+          await using host = store.open(fixture.location);
           const mutex = new Mutex(host.store);
           const finishHolder = Promise.withResolvers<void>();
           let holding = false;
@@ -515,8 +516,8 @@ void describe.each(storeCases, (store) =>
     // name their files; macOS and Windows fold case and so show the break.
     test('resource names that differ only in letter case are separate locks', async (t) => {
       // Arrange: one caller holds 'Sync'.
-      await using directory = await scratchDirectory();
-      await using host = store.open(directory.path);
+      await using fixture = await store.fixture();
+      await using host = store.open(fixture.location);
       const mutex = new Mutex(host.store);
       const finishHolder = Promise.withResolvers<void>();
       let holding = false;
@@ -556,9 +557,9 @@ void describe.each(storeCases, (store) =>
       { timeout: 2000 },
       async () => {
         // Arrange: this app and its inventory belong only to this test.
-        await using directory = await scratchDirectory();
+        await using fixture = await store.fixture();
         const app = new Hono();
-        await using host = store.open(directory.path);
+        await using host = store.open(fixture.location);
         const mutex = new Mutex(host.store);
         let stock = 1;
 
@@ -616,8 +617,8 @@ void describe.each(storeCases, (store) =>
 
     test('concurrent requests receive fencing tokens that grow in the order the lock was granted', async () => {
       // Arrange: a burst of requests competes for one key.
-      await using directory = await scratchDirectory();
-      await using host = store.open(directory.path);
+      await using fixture = await store.fixture();
+      await using host = store.open(fixture.location);
       const mutex = new Mutex(host.store);
       const grantedTokens: FencingToken[] = [];
 
@@ -644,7 +645,7 @@ void describe.each(storeCases, (store) =>
 
     void test.each(['product:42', longKey], (key) =>
       test(
-        `a new store over the same directory keeps issuing newer tokens for resource name ${label(key)}`,
+        `a new store over the same fixture keeps issuing newer tokens for resource name ${label(key)}`,
         {
           skip: store.durableTokens
             ? false
@@ -652,18 +653,18 @@ void describe.each(storeCases, (store) =>
         },
         async () => {
           // Arrange: one store instance holds the key once, then goes away (e.g. a restart).
-          await using directory = await scratchDirectory();
+          await using fixture = await store.fixture();
           let before: FencingToken;
           {
-            await using previous = store.open(directory.path);
+            await using previous = store.open(fixture.location);
             before = await new Mutex(previous.store).acquire(
               key,
               async (lease) => lease.token,
             );
           }
 
-          // Act: a fresh instance over the same directory holds the key again.
-          await using restarted = store.open(directory.path);
+          // Act: a fresh instance over the same fixture holds the key again.
+          await using restarted = store.open(fixture.location);
           const after = await new Mutex(restarted.store).acquire(
             key,
             async (lease) => lease.token,
@@ -681,18 +682,15 @@ void describe.each(storeCases, (store) =>
 );
 
 void describe.each(
-  storeCases.filter(
-    (candidate) =>
-      candidate.reach === 'host' || candidate.reach === 'process-tree',
-  ),
+  storeCases.filter((candidate) => reaches(candidate, 'process-tree')),
   (store) =>
     describe(`Cross-process mutex with ${store.name}`, () => {
-      const workerPrelude = (directory: string) => `
+      const workerPrelude = (location: string) => `
 			import { Mutex } from ${JSON.stringify(mutexUrl.href)};
 			import { createChildStore } from ${JSON.stringify(storeCasesUrl.href)};
 
 			const name = process.argv[1];
-			const mutex = new Mutex(createChildStore(${JSON.stringify(store.name)}, ${JSON.stringify(directory)}));
+			const mutex = new Mutex(createChildStore(${JSON.stringify(store.name)}, ${JSON.stringify(location)}));
 		`;
 
       void test.each(['product:42', longKey], (key) =>
@@ -701,14 +699,15 @@ void describe.each(
           { timeout: 15000 },
           async (t) => {
             // Arrange: the callers have separate memory but share a resource key.
-            await using directory = await scratchDirectory();
-            await using host = store.open(directory.path);
-            const journal = join(directory.path, 'callbacks.log');
+            await using fixture = await store.fixture();
+            await using host = store.open(fixture.location);
+            await using journals = await scratchDirectory();
+            const journal = join(journals.path, 'callbacks.log');
 
             // The log records real callback boundaries; it never grants or blocks a lock.
             const workerSource = `
 					import { appendFileSync } from 'node:fs';
-					${workerPrelude(directory.path)}
+					${workerPrelude(fixture.location)}
 					const finish = Promise.withResolvers();
 					const journal = ${JSON.stringify(journal)};
 
@@ -813,11 +812,11 @@ void describe.each(
           { timeout: 15000 },
           async (t) => {
             // Arrange: another process enters the callback and never leaves it.
-            await using directory = await scratchDirectory();
-            await using host = store.open(directory.path);
+            await using fixture = await store.fixture();
+            await using host = store.open(fixture.location);
             await using holder = startWorker(
               `
-						${workerPrelude(directory.path)}
+						${workerPrelude(fixture.location)}
 						setInterval(() => {}, 1000);
 						await mutex.acquire(${JSON.stringify(key)}, async () => {
 							process.send({ type: 'entered' });
@@ -860,16 +859,17 @@ void describe.each(
         { timeout: 15000 },
         async () => {
           // Arrange: each increment reads, yields, then writes, so any overlap loses an update.
-          await using directory = await scratchDirectory();
-          await using host = store.open(directory.path);
-          const counter = join(directory.path, 'counter');
-          const tokenJournal = join(directory.path, 'tokens.log');
+          await using fixture = await store.fixture();
+          await using host = store.open(fixture.location);
+          await using journals = await scratchDirectory();
+          const counter = join(journals.path, 'counter');
+          const tokenJournal = join(journals.path, 'tokens.log');
           await writeFile(counter, '0');
           const increments = 25;
           const source = `
 					import { appendFile, readFile, writeFile } from 'node:fs/promises';
 					import { setImmediate as nextTurn } from 'node:timers/promises';
-					${workerPrelude(directory.path)}
+					${workerPrelude(fixture.location)}
 					const counter = ${JSON.stringify(counter)};
 
 					for (let i = 0; i < ${increments}; i++) {
@@ -926,12 +926,12 @@ void describe.each(
         async (t) => {
           // Arrange: this process asks first, so a SocketStore leads from here and
           // freezing the holder never freezes the coordinator.
-          await using directory = await scratchDirectory();
-          await using host = store.open(directory.path);
+          await using fixture = await store.fixture();
+          await using host = store.open(fixture.location);
           const mutex = new Mutex(host.store);
           await mutex.acquire('warm-up', async () => {});
           const holderSource = `
-					${workerPrelude(directory.path)}
+					${workerPrelude(fixture.location)}
 					const release = Promise.withResolvers();
 					process.on('message', (command) => {
 						if (command === 'release') release.resolve();
@@ -981,12 +981,12 @@ void describe.each(
  * `mutex`, `parentPort` and `workerData` in scope. Only dynamic imports, because
  * an eval worker is CommonJS or ESM depending on the process that starts it.
  */
-const threadSource = (storeName: string, directory: string, body: string) => `
+const threadSource = (storeName: string, location: string, body: string) => `
 	(async () => {
 		const { parentPort, workerData } = await import('node:worker_threads');
 		const { Mutex } = await import(${JSON.stringify(mutexUrl.href)});
 		const { createThreadStore } = await import(${JSON.stringify(storeCasesUrl.href)});
-		const mutex = new Mutex(createThreadStore(${JSON.stringify(storeName)}, ${JSON.stringify(directory)}));
+		const mutex = new Mutex(createThreadStore(${JSON.stringify(storeName)}, ${JSON.stringify(location)}));
 		${body}
 	})();
 `;
@@ -999,8 +999,8 @@ function startThread(host: StoreHost, source: string, workerData?: unknown) {
 }
 
 /** Four threads add 1 to a shared counter 20 times each, reading and writing around an `await`. */
-async function incrementFromFourThreads(store: StoreCase, directory: string) {
-  await using host = store.open(directory);
+async function incrementFromFourThreads(store: StoreCase, location: string) {
+  await using host = store.open(location);
   const mutex = new Mutex(host.store);
   // [counter, holders inside the critical section, overlaps seen]
   const shared = new Int32Array(new SharedArrayBuffer(12));
@@ -1025,7 +1025,7 @@ async function incrementFromFourThreads(store: StoreCase, directory: string) {
 	`;
   const exits = [1, 2, 3].map(() =>
     once(
-      startThread(host, threadSource(store.name, directory, body), shared),
+      startThread(host, threadSource(store.name, location, body), shared),
       'exit',
     ),
   );
@@ -1043,8 +1043,8 @@ void describe.each(
         { timeout: 15000 },
         async (t) => {
           // Arrange: the main thread holds the key.
-          await using directory = await scratchDirectory();
-          await using host = store.open(directory.path);
+          await using fixture = await store.fixture();
+          await using host = store.open(fixture.location);
           const mutex = new Mutex(host.store);
           const finishMain = Promise.withResolvers<void>();
           const held = mutex.acquire('product:42', () => finishMain.promise);
@@ -1053,7 +1053,7 @@ void describe.each(
             host,
             threadSource(
               store.name,
-              directory.path,
+              fixture.location,
               `parentPort.postMessage('requested');
 						 await mutex.acquire('product:42', async () => parentPort.postMessage('entered'));`,
             ),
@@ -1098,13 +1098,13 @@ void describe.each(
         { timeout: 5000 },
         async () => {
           // Arrange: a worker thread enters and stays inside its callback.
-          await using directory = await scratchDirectory();
-          await using host = store.open(directory.path);
+          await using fixture = await store.fixture();
+          await using host = store.open(fixture.location);
           const holder = startThread(
             host,
             threadSource(
               store.name,
-              directory.path,
+              fixture.location,
               `setInterval(() => {}, 1000);
 						 await mutex.acquire('product:42', async () => {
 							 parentPort.postMessage('held');
@@ -1140,8 +1140,8 @@ void describe.each(
         { timeout: 5000 },
         async () => {
           // Arrange: the main thread holds the key, and the worker thread has nothing to do but wait.
-          await using directory = await scratchDirectory();
-          await using host = store.open(directory.path);
+          await using fixture = await store.fixture();
+          await using host = store.open(fixture.location);
           const mutex = new Mutex(host.store);
           const release = Promise.withResolvers<void>();
           const held = mutex.acquire('product:42', () => release.promise);
@@ -1149,7 +1149,7 @@ void describe.each(
             host,
             threadSource(
               store.name,
-              directory.path,
+              fixture.location,
               `await mutex.acquire('product:42', async () => parentPort.postMessage('entered'));`,
             ),
           );
@@ -1184,14 +1184,14 @@ void describe.each(
         { timeout: 15000 },
         async (t) => {
           // Arrange: the thread posts its own messages to the main thread, and lock envelopes that hold no request.
-          await using directory = await scratchDirectory();
-          await using host = store.open(directory.path);
+          await using fixture = await store.fixture();
+          await using host = store.open(fixture.location);
           const mutex = new Mutex(host.store);
           const thread = startThread(
             host,
             threadSource(
               store.name,
-              directory.path,
+              fixture.location,
               `parentPort.postMessage({ type: 'app' });
 						 parentPort.postMessage({ '@lock': 42 });
 						 parentPort.postMessage({ '@lock': null });
@@ -1235,8 +1235,8 @@ void describe.each(
         { timeout: 15000 },
         async (t) => {
           // Arrange: the main thread holds the key, and the thread asks for it.
-          await using directory = await scratchDirectory();
-          await using host = store.open(directory.path);
+          await using fixture = await store.fixture();
+          await using host = store.open(fixture.location);
           const mutex = new Mutex(host.store);
           const finishMain = Promise.withResolvers<void>();
           const held = mutex.acquire('product:42', () => finishMain.promise);
@@ -1244,7 +1244,7 @@ void describe.each(
             host,
             threadSource(
               store.name,
-              directory.path,
+              fixture.location,
               `await mutex.acquire('product:42', async () => parentPort.postMessage('entered'));`,
             ),
           );
@@ -1297,10 +1297,13 @@ void describe.each(
         { timeout: 10000 },
         async () => {
           // Arrange
-          await using directory = await scratchDirectory();
+          await using fixture = await store.fixture();
 
           // Act
-          const result = await incrementFromFourThreads(store, directory.path);
+          const result = await incrementFromFourThreads(
+            store,
+            fixture.location,
+          );
 
           // Assert: one holder at a time, so every increment survives.
           assert.deepEqual(
@@ -1314,7 +1317,7 @@ void describe.each(
 );
 
 void describe.each(
-  storeCases.filter((candidate) => candidate.reach === 'host'),
+  storeCases.filter((candidate) => reaches(candidate, 'host')),
   (store) =>
     describe(`Threads sharing ${store.name}`, () => {
       test(
@@ -1322,10 +1325,13 @@ void describe.each(
         { timeout: 15000 },
         async () => {
           // Arrange
-          await using directory = await scratchDirectory();
+          await using fixture = await store.fixture();
 
-          // Act: each thread builds its own store over the same directory.
-          const result = await incrementFromFourThreads(store, directory.path);
+          // Act: each thread builds its own store over the same fixture.
+          const result = await incrementFromFourThreads(
+            store,
+            fixture.location,
+          );
 
           // Assert
           assert.deepEqual(
@@ -1342,15 +1348,15 @@ void describe.each(
         async () => {
           // Arrange: this thread asks first, so a SocketStore leads from here and
           // terminating the holder never ends the leader's term.
-          await using directory = await scratchDirectory();
-          await using host = store.open(directory.path);
+          await using fixture = await store.fixture();
+          await using host = store.open(fixture.location);
           const mutex = new Mutex(host.store);
           await mutex.acquire('warm-up', async () => {});
           const thread = startThread(
             host,
             threadSource(
               store.name,
-              directory.path,
+              fixture.location,
               `
 						setInterval(() => {}, 1000);
 						await mutex.acquire('product:42', async () => {

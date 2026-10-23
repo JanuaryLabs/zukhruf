@@ -9,7 +9,7 @@ import { describe } from '@zukhruf/testing/node';
 
 import { isRecord } from '../shared/is-record.ts';
 import { scratchDirectory } from '../testing/scratch-directory.ts';
-import { type StoreHost, storeCases } from '../testing/store-cases.ts';
+import { type StoreHost, reaches, storeCases } from '../testing/store-cases.ts';
 import { newProcessTimeout, waitUntil } from '../testing/wait-until.ts';
 import { startWorker } from '../testing/worker-process.ts';
 import { Modes } from './acquire-modes/modes.ts';
@@ -22,8 +22,8 @@ void describe.each(storeCases, (store) =>
   describe(`Holder check with ${store.name}`, () => {
     test('a key reads as held only while a task holds it', async () => {
       // Arrange
-      await using directory = await scratchDirectory();
-      await using host = store.open(directory.path);
+      await using fixture = await store.fixture();
+      await using host = store.open(fixture.location);
       const mutex = new Mutex(host.store);
 
       // Act
@@ -42,8 +42,8 @@ void describe.each(storeCases, (store) =>
 
     test('a key answers for its own name, not for another key', async () => {
       // Arrange
-      await using directory = await scratchDirectory();
-      await using host = store.open(directory.path);
+      await using fixture = await store.fixture();
+      await using host = store.open(fixture.location);
       const mutex = new Mutex(host.store);
       const daily = mutex.key('report:daily');
       const weekly = mutex.key('report:weekly');
@@ -60,8 +60,8 @@ void describe.each(storeCases, (store) =>
 
     test('looks take no fencing token and change no file', async () => {
       // Arrange
-      await using directory = await scratchDirectory();
-      await using host = store.open(directory.path);
+      await using fixture = await store.fixture();
+      await using host = store.open(fixture.location);
       const mutex = new Mutex(host.store);
       const lookTwenty = async () => {
         for (let look = 0; look < 20; look++) {
@@ -71,13 +71,17 @@ void describe.each(storeCases, (store) =>
 
       // Act: look while the key is held, then while it is free, between two grants.
       const held = await mutex.acquire('report:daily', async ({ token }) => {
-        const files = await filesIn(directory.path);
+        const files = await filesIn(fixture.location);
         await lookTwenty();
-        return { token, files, filesAfterLooks: await filesIn(directory.path) };
+        return {
+          token,
+          files,
+          filesAfterLooks: await filesIn(fixture.location),
+        };
       });
-      const files = await filesIn(directory.path);
+      const files = await filesIn(fixture.location);
       await lookTwenty();
-      const filesAfterLooks = await filesIn(directory.path);
+      const filesAfterLooks = await filesIn(fixture.location);
       const next = await mutex.acquire(
         'report:daily',
         async ({ token }) => token,
@@ -142,8 +146,8 @@ void describe.each(
         { timeout: 15000 },
         async (t) => {
           // Arrange: a worker thread looks at the key again and again until it is told to stop.
-          await using directory = await scratchDirectory();
-          await using host = store.open(directory.path);
+          await using fixture = await store.fixture();
+          await using host = store.open(fixture.location);
           const mutex = new Mutex(host.store);
           // [stop, looks made]
           const shared = new Int32Array(new SharedArrayBuffer(8));
@@ -151,7 +155,7 @@ void describe.each(
             host,
             threadSource(
               store.name,
-              directory.path,
+              fixture.location,
               `
 						const shared = workerData;
 						while (Atomics.load(shared, 0) === 0) {
@@ -202,20 +206,17 @@ void describe.each(
 );
 
 void describe.each(
-  storeCases.filter(
-    (candidate) =>
-      candidate.reach === 'host' || candidate.reach === 'process-tree',
-  ),
+  storeCases.filter((candidate) => reaches(candidate, 'process-tree')),
   (store) =>
     describe(`Holder check across processes with ${store.name}`, () => {
-      const childPrelude = (directory: string) => `
+      const childPrelude = (location: string) => `
 			import { Mutex } from ${JSON.stringify(mutexUrl.href)};
 			import { createChildStore } from ${JSON.stringify(storeCasesUrl.href)};
 
-			const mutex = new Mutex(createChildStore(${JSON.stringify(store.name)}, ${JSON.stringify(directory)}));
+			const mutex = new Mutex(createChildStore(${JSON.stringify(store.name)}, ${JSON.stringify(location)}));
 		`;
-      const holderSource = (directory: string) => `
-			${childPrelude(directory)}
+      const holderSource = (location: string) => `
+			${childPrelude(location)}
 			setInterval(() => {}, 1000);
 			await mutex.acquire('report:daily', async () => {
 				process.send({ type: 'entered' });
@@ -228,10 +229,10 @@ void describe.each(
         { timeout: 30000 },
         async (t) => {
           // Arrange: another process holds the key and never lets it go.
-          await using directory = await scratchDirectory();
-          await using host = store.open(directory.path);
+          await using fixture = await store.fixture();
+          await using host = store.open(fixture.location);
           await using holder = startWorker(
-            holderSource(directory.path),
+            holderSource(fixture.location),
             'holder',
             { host },
           );
@@ -262,10 +263,10 @@ void describe.each(
         { timeout: 30000 },
         async (t) => {
           // Arrange: a holder process dies while it holds the key.
-          await using directory = await scratchDirectory();
-          await using host = store.open(directory.path);
+          await using fixture = await store.fixture();
+          await using host = store.open(fixture.location);
           await using holder = startWorker(
-            holderSource(directory.path),
+            holderSource(fixture.location),
             'holder',
             { host },
           );
@@ -301,10 +302,10 @@ void describe.each(
         },
         async (t) => {
           // Arrange: a holder process dies while it holds the key, and leaves its files.
-          await using directory = await scratchDirectory();
-          await using host = store.open(directory.path);
+          await using fixture = await store.fixture();
+          await using host = store.open(fixture.location);
           await using holder = startWorker(
-            holderSource(directory.path),
+            holderSource(fixture.location),
             'holder',
             { host },
           );
@@ -317,7 +318,7 @@ void describe.each(
           holder.child.kill('SIGKILL');
           await holder.closed;
           const mutex = new Mutex(host.store);
-          const files = await filesIn(directory.path);
+          const files = await filesIn(fixture.location);
 
           // Act
           for (let look = 0; look < 5; look++) {
@@ -325,7 +326,7 @@ void describe.each(
           }
 
           // Assert: only a caller that acquires removes a gone holder.
-          assert.deepEqual(await filesIn(directory.path), files);
+          assert.deepEqual(await filesIn(fixture.location), files);
         },
       );
 
@@ -334,8 +335,8 @@ void describe.each(
         { timeout: 30000 },
         async (t) => {
           // Arrange: this process holds the key until the child has looked.
-          await using directory = await scratchDirectory();
-          await using host = store.open(directory.path);
+          await using fixture = await store.fixture();
+          await using host = store.open(fixture.location);
           const mutex = new Mutex(host.store);
           const entered = Promise.withResolvers<void>();
           const release = Promise.withResolvers<void>();
@@ -349,7 +350,7 @@ void describe.each(
             // Act
             await using looker = startWorker(
               `
-							${childPrelude(directory.path)}
+							${childPrelude(fixture.location)}
 							process.send({ type: 'looked', held: await mutex.isHeld('report:daily') });
 						`,
               'looker',
@@ -382,8 +383,8 @@ void describe.each(
         { timeout: 15000 },
         async () => {
           // Arrange: this thread holds the key until the worker has looked.
-          await using directory = await scratchDirectory();
-          await using host = store.open(directory.path);
+          await using fixture = await store.fixture();
+          await using host = store.open(fixture.location);
           const mutex = new Mutex(host.store);
           const entered = Promise.withResolvers<void>();
           const release = Promise.withResolvers<void>();
@@ -399,7 +400,7 @@ void describe.each(
               host,
               threadSource(
                 store.name,
-                directory.path,
+                fixture.location,
                 `parentPort.postMessage({ looked: await mutex.isHeld('report:daily') });`,
               ),
             );
@@ -422,12 +423,12 @@ void describe.each(
  * `mutex`, `parentPort` and `workerData` in scope. Only dynamic imports, because an eval
  * worker is CommonJS or ESM depending on the process that starts it.
  */
-const threadSource = (storeName: string, directory: string, body: string) => `
+const threadSource = (storeName: string, location: string, body: string) => `
 	(async () => {
 		const { parentPort, workerData } = await import('node:worker_threads');
 		const { Mutex } = await import(${JSON.stringify(mutexUrl.href)});
 		const { createThreadStore } = await import(${JSON.stringify(storeCasesUrl.href)});
-		const mutex = new Mutex(createThreadStore(${JSON.stringify(storeName)}, ${JSON.stringify(directory)}));
+		const mutex = new Mutex(createThreadStore(${JSON.stringify(storeName)}, ${JSON.stringify(location)}));
 		${body}
 	})();
 `;

@@ -7,8 +7,12 @@ import { Worker } from 'node:worker_threads';
 import { describe } from '@zukhruf/testing/node';
 
 import { MemoryStore } from '../lock-stores/memory/memory-store.ts';
-import { scratchDirectory } from '../testing/scratch-directory.ts';
-import { type StoreHost, settle, storeCases } from '../testing/store-cases.ts';
+import {
+  type StoreHost,
+  reaches,
+  settle,
+  storeCases,
+} from '../testing/store-cases.ts';
 import { waitUntil } from '../testing/wait-until.ts';
 import { startWorker } from '../testing/worker-process.ts';
 import type { AcquireMode } from './acquire-mode.ts';
@@ -51,8 +55,8 @@ void describe.each(storeCases, (store) =>
       { timeout: 5000 },
       async () => {
         // Arrange
-        await using directory = await scratchDirectory();
-        await using host = store.open(directory.path);
+        await using fixture = await store.fixture();
+        await using host = store.open(fixture.location);
         const mutex = new Mutex(host.store);
         const holder = await hold(mutex, 'report:daily');
         let ran = false;
@@ -79,8 +83,8 @@ void describe.each(storeCases, (store) =>
 
     test('skipIfBusy acquires a free key and gives back the task value', async () => {
       // Arrange
-      await using directory = await scratchDirectory();
-      await using host = store.open(directory.path);
+      await using fixture = await store.fixture();
+      await using host = store.open(fixture.location);
       const mutex = new Mutex(host.store);
 
       // Act
@@ -97,8 +101,8 @@ void describe.each(storeCases, (store) =>
       { timeout: 5000 },
       async () => {
         // Arrange
-        await using directory = await scratchDirectory();
-        await using host = store.open(directory.path);
+        await using fixture = await store.fixture();
+        await using host = store.open(fixture.location);
         const mutex = new Mutex(host.store);
         const holder = await hold(mutex, 'report:daily');
 
@@ -131,8 +135,8 @@ void describe.each(storeCases, (store) =>
       { timeout: 5000 },
       async () => {
         // Arrange
-        await using directory = await scratchDirectory();
-        await using host = store.open(directory.path);
+        await using fixture = await store.fixture();
+        await using host = store.open(fixture.location);
         const mutex = new Mutex(host.store);
         const holder = await hold(mutex, 'report:daily');
 
@@ -153,8 +157,8 @@ void describe.each(storeCases, (store) =>
       { timeout: 5000 },
       async () => {
         // Arrange: a holder, a caller that gives up, and a caller that waits behind it.
-        await using directory = await scratchDirectory();
-        await using host = store.open(directory.path);
+        await using fixture = await store.fixture();
+        await using host = store.open(fixture.location);
         const mutex = new Mutex(host.store);
         const holder = await hold(mutex, 'report:daily');
         const gaveUp = await mutex.acquire(
@@ -184,8 +188,8 @@ void describe.each(storeCases, (store) =>
       { timeout: 5000 },
       async () => {
         // Arrange: callers of this key skip by default.
-        await using directory = await scratchDirectory();
-        await using host = store.open(directory.path);
+        await using fixture = await store.fixture();
+        await using host = store.open(fixture.location);
         const mutex = new Mutex(host.store);
         const report = mutex.key('report:daily', { mode: Modes.skipIfBusy() });
         const holder = await hold(mutex, report.name);
@@ -213,8 +217,8 @@ void describe.each(storeCases, (store) =>
       { timeout: 5000 },
       async () => {
         // Arrange: a holder, a caller that will cancel, and a caller that waits.
-        await using directory = await scratchDirectory();
-        await using host = store.open(directory.path);
+        await using fixture = await store.fixture();
+        await using host = store.open(fixture.location);
         const mutex = new Mutex(host.store);
         const holder = await hold(mutex, 'report:daily');
         const cancel = new AbortController();
@@ -258,8 +262,8 @@ void describe.each(storeCases, (store) =>
       { timeout: 5000 },
       async () => {
         // Arrange
-        await using directory = await scratchDirectory();
-        await using host = store.open(directory.path);
+        await using fixture = await store.fixture();
+        await using host = store.open(fixture.location);
         const mutex = new Mutex(host.store);
         const holder = await hold(mutex, 'report:daily');
         const cancel = new AbortController();
@@ -288,8 +292,8 @@ void describe.each(storeCases, (store) =>
       { timeout: 5000 },
       async () => {
         // Arrange
-        await using directory = await scratchDirectory();
-        await using host = store.open(directory.path);
+        await using fixture = await store.fixture();
+        await using host = store.open(fixture.location);
         const mutex = new Mutex(host.store);
         const holder = await hold(mutex, 'report:daily');
 
@@ -314,8 +318,8 @@ void describe.each(storeCases, (store) =>
 
     test('a caller that already cancelled rejects in every mode, and leaves a free key free', async () => {
       // Arrange
-      await using directory = await scratchDirectory();
-      await using host = store.open(directory.path);
+      await using fixture = await store.fixture();
+      await using host = store.open(fixture.location);
       const mutex = new Mutex(host.store);
       const reason = new Error('cancelled');
       const signal = AbortSignal.abort(reason);
@@ -359,8 +363,8 @@ void describe.each(storeCases, (store) =>
       { timeout: 5000 },
       async () => {
         // Arrange: a free key, a busy key, and a skip with a limit, all with one signal.
-        await using directory = await scratchDirectory();
-        await using host = store.open(directory.path);
+        await using fixture = await store.fixture();
+        await using host = store.open(fixture.location);
         const mutex = new Mutex(host.store);
         const { signal } = new AbortController();
         await mutex.acquire('report:daily', async () => 'free', { signal });
@@ -684,10 +688,7 @@ const skipperBody = `
 `;
 
 void describe.each(
-  storeCases.filter(
-    (candidate) =>
-      candidate.reach === 'host' || candidate.reach === 'process-tree',
-  ),
+  storeCases.filter((candidate) => reaches(candidate, 'process-tree')),
   (store) =>
     describe(`Acquire modes across processes with ${store.name}`, () => {
       test(
@@ -695,8 +696,8 @@ void describe.each(
         { timeout: 10000 },
         async (t) => {
           // Arrange: this process holds the key; a child (kept alive) tries to skip.
-          await using directory = await scratchDirectory();
-          await using host = store.open(directory.path);
+          await using fixture = await store.fixture();
+          await using host = store.open(fixture.location);
           const mutex = new Mutex(host.store);
           const holder = await hold(mutex, 'report:daily');
           await using child = startWorker(
@@ -705,7 +706,7 @@ void describe.each(
 					import { Modes } from ${JSON.stringify(modesUrl.href)};
 					import { createChildStore } from ${JSON.stringify(storeCasesUrl.href)};
 					setInterval(() => {}, 1000);
-					const mutex = new Mutex(createChildStore(${JSON.stringify(store.name)}, ${JSON.stringify(directory.path)}));
+					const mutex = new Mutex(createChildStore(${JSON.stringify(store.name)}, ${JSON.stringify(fixture.location)}));
 					const report = (message) => process.send(message);
 					${skipperBody}
 				`,
@@ -757,8 +758,8 @@ void describe.each(
         { timeout: 10000 },
         async () => {
           // Arrange: the main thread holds the key; a worker (kept alive) tries to skip.
-          await using directory = await scratchDirectory();
-          await using host: StoreHost = store.open(directory.path);
+          await using fixture = await store.fixture();
+          await using host: StoreHost = store.open(fixture.location);
           const mutex = new Mutex(host.store);
           const holder = await hold(mutex, 'report:daily');
           const thread = new Worker(
@@ -769,7 +770,7 @@ void describe.each(
 						const { Modes } = await import(${JSON.stringify(modesUrl.href)});
 						const { createThreadStore } = await import(${JSON.stringify(storeCasesUrl.href)});
 						setInterval(() => {}, 1000);
-						const mutex = new Mutex(createThreadStore(${JSON.stringify(store.name)}, ${JSON.stringify(directory.path)}));
+						const mutex = new Mutex(createThreadStore(${JSON.stringify(store.name)}, ${JSON.stringify(fixture.location)}));
 						const report = (message) => parentPort.postMessage(message);
 						${skipperBody}
 					})();

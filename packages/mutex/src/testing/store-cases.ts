@@ -11,6 +11,7 @@ import { SqliteStore } from '../lock-stores/sqlite/sqlite-store.ts';
 import { ThreadLockCoordinator } from '../lock-stores/thread/thread-lock-coordinator.ts';
 import { ThreadStore } from '../lock-stores/thread/thread-store.ts';
 import type { LockStore } from '../mutex/lock-store.ts';
+import { scratchDirectory } from './scratch-directory.ts';
 
 const pollInterval = 10;
 
@@ -22,9 +23,28 @@ export const graceWindow = 200;
 
 /**
  * Who can share a store's locks: one store instance, the threads of one
- * process, a parent and the children it spawned, or every process on the host.
+ * process, a parent and the children it spawned, every process on the host, or
+ * every process on every machine that reaches one server.
  */
-export type Reach = 'instance' | 'process' | 'process-tree' | 'host';
+export type Reach =
+  'instance' | 'process' | 'process-tree' | 'host' | 'network';
+
+const reachOrder: readonly Reach[] = [
+  'instance',
+  'process',
+  'process-tree',
+  'host',
+  'network',
+];
+
+/** Whether the locks of `store` are shared at least as far as `reach`. */
+export const reaches = (store: StoreCase, reach: Reach): boolean =>
+  reachOrder.indexOf(store.reach) >= reachOrder.indexOf(reach);
+
+/** The xUnit test fixture of one case: the shared thing that its stores open, found at `location`. */
+export interface StoreFixture extends AsyncDisposable {
+  location: string;
+}
 
 /** A store built in this thread, plus how children and workers started from here join it. */
 export interface StoreHost extends AsyncDisposable {
@@ -36,17 +56,28 @@ export interface StoreHost extends AsyncDisposable {
 export interface StoreCase {
   name: string;
   reach: Reach;
-  /** Whether a new store over the same directory keeps issuing newer tokens. */
+  /** Whether a new store over the same fixture keeps issuing newer tokens. */
   durableTokens: boolean;
-  /** Stores opened over the same directory share locks. */
-  open(directory: string): StoreHost;
+  /** Makes a new fixture, which the test disposes. */
+  fixture(): Promise<StoreFixture>;
+  /** Stores opened over the same fixture location share locks. */
+  open(location: string): StoreHost;
   /**
    * Builds the store that a child process started by a host uses. It shares
    * locks with the host only when the reach includes that child.
    */
-  openInChild?(directory: string): LockStore;
+  openInChild?(location: string): LockStore;
   /** Builds the store inside a worker thread that a host started and adopted. */
-  openInThread?(directory: string): LockStore;
+  openInThread?(location: string): LockStore;
+}
+
+/** A scratch directory as the fixture: its path is the location. */
+async function directoryFixture(): Promise<StoreFixture> {
+  const directory = await scratchDirectory();
+  return {
+    location: directory.path,
+    [Symbol.asyncDispose]: () => directory[Symbol.asyncDispose](),
+  };
 }
 
 const isAsyncDisposable = (value: object): value is AsyncDisposable =>
@@ -77,6 +108,7 @@ export const storeCases: StoreCase[] = [
     name: 'MemoryStore',
     reach: 'instance',
     durableTokens: false,
+    fixture: directoryFixture,
     open: () => ({
       store: new MemoryStore(),
       adoptProcess() {},
@@ -89,6 +121,7 @@ export const storeCases: StoreCase[] = [
     name: 'ThreadStore',
     reach: 'process',
     durableTokens: false,
+    fixture: directoryFixture,
     open: () => {
       const coordinator = new ThreadLockCoordinator();
       return {
@@ -106,6 +139,7 @@ export const storeCases: StoreCase[] = [
     name: 'IpcStore',
     reach: 'process-tree',
     durableTokens: false,
+    fixture: directoryFixture,
     open: () => {
       const coordinator = new IpcLockCoordinator();
       return {
@@ -121,6 +155,7 @@ export const storeCases: StoreCase[] = [
     name: 'TicketQueueFileStore',
     reach: 'host',
     durableTokens: true,
+    fixture: directoryFixture,
     ...sharedByDirectory(
       (directory) => new TicketQueueFileStore(directory, { pollInterval }),
     ),
@@ -129,6 +164,7 @@ export const storeCases: StoreCase[] = [
     name: 'LockFileStore',
     reach: 'host',
     durableTokens: true,
+    fixture: directoryFixture,
     ...sharedByDirectory(
       (directory) => new LockFileStore(directory, { pollInterval }),
     ),
@@ -137,6 +173,7 @@ export const storeCases: StoreCase[] = [
     name: 'SqliteStore',
     reach: 'host',
     durableTokens: true,
+    fixture: directoryFixture,
     ...sharedByDirectory(
       (directory) => new SqliteStore(directory, { pollInterval }),
     ),
@@ -145,6 +182,7 @@ export const storeCases: StoreCase[] = [
     name: 'SocketStore',
     reach: 'host',
     durableTokens: true,
+    fixture: directoryFixture,
     ...sharedByDirectory(
       (directory) => new SocketStore(directory, { pollInterval, graceWindow }),
     ),
@@ -158,17 +196,17 @@ function storeCase(name: string): StoreCase {
 }
 
 /** For child processes that a host started and adopted. */
-export function createChildStore(name: string, directory: string): LockStore {
+export function createChildStore(name: string, location: string): LockStore {
   const openInChild = storeCase(name).openInChild;
   if (!openInChild)
     throw new Error(`${name} cannot be shared with child processes`);
-  return openInChild(directory);
+  return openInChild(location);
 }
 
 /** For worker threads that a host started and adopted. */
-export function createThreadStore(name: string, directory: string): LockStore {
+export function createThreadStore(name: string, location: string): LockStore {
   const openInThread = storeCase(name).openInThread;
   if (!openInThread)
     throw new Error(`${name} cannot be shared with worker threads`);
-  return openInThread(directory);
+  return openInThread(location);
 }
