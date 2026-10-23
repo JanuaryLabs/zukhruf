@@ -21,6 +21,7 @@ import { PostgresStore } from '@zukhruf/mutex/postgres';
 const pool = new pg.Pool({
   connectionString: process.env.DATABASE_URL,
   keepAlive: true,
+  keepAliveInitialDelayMillis: 10_000,
 });
 
 const mutex = new Mutex(
@@ -74,7 +75,14 @@ A holder must know when its session ends. A session that ends with a reset or a 
 
 `heartbeatInterval` is the longest time that a holder can work after its session ended, before its signal aborts. Until then, only the [fencing token](../concepts/fencing-tokens.md) protects the resource.
 
-**The token.** The tokens come from one Postgres sequence that you name with `sequence`. Before the store makes its first token, it runs `CREATE SEQUENCE IF NOT EXISTS <sequence> AS bigint CACHE 1`. `nextval` gives each session a different number, also when many sessions call it at the same time. A sequence with `CACHE 1` gives the numbers in the order of the calls. A sequence with a larger cache does not, so do not create the sequence with a larger cache. A sequence never gives a number again, and `pg_dump` keeps its last number. The tokens thus increase across all machines and across a restore of a dump. Gaps between tokens are normal.
+**The token.** The tokens come from one Postgres sequence that you name with `sequence`. The store runs no DDL. Create the sequence one time before the app starts, for example in a migration, and give the role of the app `USAGE` on it:
+
+```sql
+CREATE SEQUENCE app_lock_tokens AS bigint CACHE 1;
+GRANT USAGE ON SEQUENCE app_lock_tokens TO app_role;
+```
+
+A `CREATE SEQUENCE IF NOT EXISTS` in the store would fail for a role without `CREATE` on the schema, also when the sequence exists (see [Evidence](#evidence)). `nextval` gives each session a different number, also when many sessions call it at the same time. A sequence with `CACHE 1` gives the numbers in the order of the calls. A sequence with a larger cache does not, so do not create the sequence with a larger cache. A sequence never gives a number again, and `pg_dump` keeps its last number. The tokens thus increase across all machines and across a restore of a dump. Gaps between tokens are normal.
 
 ### Sessions and the pool
 
@@ -108,14 +116,14 @@ A waiter has a row with `granted` equal to `false`, so it does not count as a ho
 - **A holder process stops:** its kernel closes the connection. The server ends the session and releases the key. The next waiter gets the key.
 - **A session ends while the holder runs:** the server releases the key at once, and another holder can get it. Causes: the network drops the connection, `pg_terminate_backend`, `idle_session_timeout`, and a restart of the server. The session emits `error` or `end`. The store then aborts the signal of the lease with `LeaseLostError` ([ADR 0013](../adr/0013-a-lost-lease-aborts-the-signal-of-the-lease.md)). node-postgres can emit `error` two times for one end, and the lease is lost only one time.
 - **The server restarts, or a standby is promoted:** each session ends, so each key is released and each holder gets a lost lease. Postgres does not write advisory locks to the WAL, so a promoted standby holds none of the locks of the old primary.
-- **A silent partition:** the network stops and sends no reset. The server can release the key, and the holder does not see the end of its session. The [heartbeat](#the-heartbeat) finds it within `heartbeatInterval`, and the signal of the lease aborts. Until then, only the [fencing token](../concepts/fencing-tokens.md) protects the resource. A waiting session has no heartbeat: set `keepAlive: true` on the pool, so that TCP keep-alive finds a dead connection of a waiter.
+- **A silent partition:** the network stops and sends no reset. The server can release the key, and the holder does not see the end of its session. The [heartbeat](#the-heartbeat) finds it within `heartbeatInterval`, and the signal of the lease aborts. Until then, only the [fencing token](../concepts/fencing-tokens.md) protects the resource. A waiting session has no heartbeat: set `keepAlive: true` and `keepAliveInitialDelayMillis` on the pool (the example uses `10_000`), so that TCP keep-alive finds a dead connection of a waiter within seconds. With `keepAliveInitialDelayMillis` equal to `0`, Node.js keeps the idle time of the operating system, approximately 2 hours on Linux.
 - **A holder machine stops with no reset:** the server sees the end of the session only through its own TCP keep-alive (`tcp_keepalives_idle`, `tcp_keepalives_interval`, `tcp_keepalives_count`). Until then, the key stays held, and waiters wait.
 - **A cancelled waiter stays on the server:** its process waits in the lock queue as a phantom waiter until the key is free, and uses one connection slot of the server. Set `client_connection_check_interval` to end it sooner. See [A cancel](#how-it-works).
 - **A holder freezes:** waiters wait. If the server ends the session meanwhile, another holder can get the key. The frozen holder sees the lost lease only when it runs again. A [fenced resource](../concepts/fencing-tokens.md) refuses its late writes.
 - **PgBouncer in transaction pooling or statement pooling:** not supported. PgBouncer gives the server connection to another client after each transaction or statement. That client then holds the lock of the holder, and Postgres grants the key to it at once. The unlock of the holder can run on another server connection. Use PgBouncer in session pooling, or connect to Postgres directly.
 - **A reset of a session:** `DISCARD ALL` releases each advisory lock of the session. `RESET ALL` does not. Do not run `DISCARD ALL` on a session that the store holds.
 - **Timeouts on the session:** do not set `query_timeout` on the pool that `connect` uses. It is a setting of node-postgres on the client, so the store cannot change it. When it fires, node-postgres rejects the query, but the server continues to wait and later grants the lock to a session that nobody uses (see [Evidence](#evidence)). The store sets `statement_timeout` and `lock_timeout` to `0` before it waits, and resets them before it gives the session back.
-- **A role with no `CREATE` permission:** `CREATE SEQUENCE` fails with `permission denied for schema public`. Create the sequence before you start the app, with `CACHE 1`, and give the role `USAGE` on it.
+- **The sequence does not exist:** the first grant fails with the error of Postgres (`relation "<sequence>" does not exist`), and the call rejects. The store releases the key when it cannot make the token. Create the sequence (see [The token](#how-it-works)).
 - **The tokens after a promotion:** a sequence writes its numbers to the WAL in blocks ahead of use. A standby that was promoted with asynchronous replication could perhaps give a token again that the old primary gave. We did not test this. Use synchronous replication if your fenced resource must never see a token two times.
 
 See [failure modes](../concepts/failure-modes.md).
@@ -125,7 +133,7 @@ See [failure modes](../concepts/failure-modes.md).
 | Option              | Default | Description                                                                                                                                                                                                  |
 | ------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `connect`           | —       | A function that gives a new session. `pool.connect` of `pg.Pool` fits. A session has `query(text, values)`, `on('error' \| 'end')`, `off`, and `release(destroy)`. The store owns each session that it gets. |
-| `sequence`          | —       | The name of the sequence of the fencing tokens. The store creates it if it does not exist.                                                                                                                   |
+| `sequence`          | —       | The name of an existing sequence for the fencing tokens. Create it before the app starts; the store runs no DDL.                                                                                             |
 | `heartbeatInterval` | —       | Milliseconds between two heartbeats of a holder, and the time limit of each heartbeat. It is the longest time that a holder can work after its session ended, before its signal aborts.                      |
 
 All three options are required. No option has a default.
@@ -142,4 +150,4 @@ No test exists yet. These facts come from probes before the design. Each probe u
 - **`nextval` follows the order of the calls.** With `CACHE 1`, two sessions called `nextval` in turn and got 1, 2, 3, 4, 5, 6. node-postgres returned each number as a string.
 - **A closed waiter becomes a phantom waiter, and the key still goes to the next waiter** (`postgres:18-alpine` in Docker). A waiter in `pg_advisory_lock(33)` was destroyed with `release(true)`. Its query rejected at once with `Connection terminated`. While the holder held the key, `pg_stat_activity` still showed the waiter's process as `active`, with `wait_event_type` equal to `Lock`. When the holder released the key, the next waiter got it 2 ms later, and the phantom process was gone.
 - **An ended session releases its locks and emits its events.** After `pg_terminate_backend`, the client emitted `error` two times and then `end`. Its lock was gone at once.
-- **A new role cannot create the sequence.** A new login role ran `CREATE SEQUENCE IF NOT EXISTS` and got `permission denied for schema public`.
+- **A role without `CREATE` fails `CREATE SEQUENCE IF NOT EXISTS`, also when the sequence exists** (`postgres:18-alpine` in Docker). The owner created `app_lock_tokens` and gave a new login role `USAGE` on it. That role ran `CREATE SEQUENCE IF NOT EXISTS app_lock_tokens` and got `42501 permission denied for schema public`. Its `nextval('app_lock_tokens')` returned 1. Thus the store runs no DDL.
