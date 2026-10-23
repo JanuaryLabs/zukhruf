@@ -12,11 +12,6 @@
   "scripts": {
     "prepare": "git config core.hooksPath .husky && git config blame.ignoreRevsFile .git-blame-ignore-revs || exit 0"
   },
-  "lint-staged": {
-    "*.{ts,tsx,mts,cts,js,mjs,cjs,json,md,yml,yaml,css}": [
-      "prettier --write"
-    ]
-  },
   "devDependencies": {
     "@babel/cli": "7.29.7",
     "@babel/core": "7.29.7",
@@ -46,7 +41,6 @@
     "fontkit": "2.0.4",
     "happy-dom": "20.14.5",
     "jsonc-eslint-parser": "3.3.0",
-    "lint-staged": "17.6.0",
     "motion": "12.43.0",
     "nx": "23.2.1",
     "prettier": "3.9.9",
