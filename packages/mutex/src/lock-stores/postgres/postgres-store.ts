@@ -7,7 +7,7 @@ import { LeaseController } from '@zukhruf/lease';
 
 import type { LockHandle } from '../../mutex/lease.ts';
 import type { AcquireOptions, LockStore } from '../../mutex/lock-store.ts';
-import { MemoryStore } from '../memory/memory-store.ts';
+import { InProcessTurns } from '../../shared/in-process-turns.ts';
 
 /**
  * One connection to the Postgres server: only the methods that the store
@@ -58,31 +58,28 @@ const heldQuery = `SELECT EXISTS (
  * callers wait, and first-come order within the process.
  */
 export class PostgresStore implements LockStore {
-  readonly #inProcess = new MemoryStore();
+  readonly #turns = new InProcessTurns();
   readonly #options: PostgresStoreOptions;
 
   constructor(options: PostgresStoreOptions) {
     this.#options = options;
   }
 
-  async acquire(key: string, options?: AcquireOptions): Promise<LockHandle> {
-    const signal = options?.signal;
-    await using turn = new AsyncDisposableStack();
-    // Joining the in-process queue is synchronous, so the order is the order of the calls.
-    turn.use(await this.#inProcess.acquire(key, { signal }));
-    const session = await this.#session(key, signal);
-    await session.wait(signal);
-    return withTurn(await session.hold(), turn);
+  acquire(key: string, options?: AcquireOptions): Promise<LockHandle> {
+    return this.#turns.acquire(key, options, async () => {
+      const signal = options?.signal;
+      const session = await this.#session(key, signal);
+      await session.wait(signal);
+      return session.hold();
+    });
   }
 
-  async tryAcquire(key: string): Promise<LockHandle | undefined> {
-    await using turn = new AsyncDisposableStack();
-    const inProcess = await this.#inProcess.tryAcquire(key);
-    if (!inProcess) return undefined;
-    turn.use(inProcess);
-    const session = await this.#session(key, undefined);
-    if (!(await session.try())) return undefined;
-    return withTurn(await session.hold(), turn);
+  tryAcquire(key: string): Promise<LockHandle | undefined> {
+    return this.#turns.tryAcquire(key, async () => {
+      const session = await this.#session(key, undefined);
+      if (!(await session.try())) return undefined;
+      return session.hold();
+    });
   }
 
   /** Reads `pg_locks` on a short session, and never runs an advisory lock function. */
@@ -323,15 +320,4 @@ class KeySession {
     this.#lease.end();
     this.#session.giveBack();
   }
-}
-
-/** Releases the Postgres lock first, then lets the next caller in this process continue. */
-function withTurn(handle: LockHandle, turn: AsyncDisposableStack): LockHandle {
-  turn.use(handle);
-  const release = turn.move();
-  return {
-    token: handle.token,
-    signal: handle.signal,
-    [Symbol.asyncDispose]: () => release.disposeAsync(),
-  };
 }

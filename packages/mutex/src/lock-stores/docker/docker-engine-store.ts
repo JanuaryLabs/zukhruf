@@ -15,7 +15,7 @@ import { LeaseController } from '@zukhruf/lease';
 
 import type { LockHandle } from '../../mutex/lease.ts';
 import type { AcquireOptions, LockStore } from '../../mutex/lock-store.ts';
-import { MemoryStore } from '../memory/memory-store.ts';
+import { InProcessTurns } from '../../shared/in-process-turns.ts';
 
 export interface DockerEngineStoreOptions {
   /** The client of the engine. The caller owns it; its disposal ends each attach, so each held key is lost. */
@@ -50,41 +50,36 @@ const holdingStates = new Set(['created', 'running', 'paused', 'restarting']);
  * makes at most one claim attempt for each key, in the order of the calls.
  */
 export class DockerEngineStore implements LockStore {
-  readonly #inProcess = new MemoryStore();
+  readonly #turns = new InProcessTurns();
   readonly #options: DockerEngineStoreOptions;
 
   constructor(options: DockerEngineStoreOptions) {
     this.#options = options;
   }
 
-  async acquire(key: string, options?: AcquireOptions): Promise<LockHandle> {
-    const signal = options?.signal;
-    await using turn = new AsyncDisposableStack();
-    // Joining the in-process queue is synchronous, so the order is the order of the calls.
-    turn.use(await this.#inProcess.acquire(key, { signal }));
-    const claims = new Claims(key, this.#options);
-    const cancel: CancelOptions = signal === undefined ? {} : { signal };
-    for (;;) {
-      signal?.throwIfAborted();
-      const claim = await claims.create(signal);
-      if (claim === undefined) {
-        await claims.waitForRelease(cancel);
-        continue;
+  acquire(key: string, options?: AcquireOptions): Promise<LockHandle> {
+    return this.#turns.acquire(key, options, async () => {
+      const signal = options?.signal;
+      const claims = new Claims(key, this.#options);
+      const cancel: CancelOptions = signal === undefined ? {} : { signal };
+      for (;;) {
+        signal?.throwIfAborted();
+        const claim = await claims.create(signal);
+        if (claim === undefined) {
+          await claims.waitForRelease(cancel);
+          continue;
+        }
+        const handle = await claim.hold();
+        if (handle !== undefined) return handle;
       }
-      const handle = await claim.hold();
-      if (handle !== undefined) return withTurn(handle, turn);
-    }
+    });
   }
 
-  async tryAcquire(key: string): Promise<LockHandle | undefined> {
-    await using turn = new AsyncDisposableStack();
-    const inProcess = await this.#inProcess.tryAcquire(key);
-    if (!inProcess) return undefined;
-    turn.use(inProcess);
-    const claim = await new Claims(key, this.#options).create(undefined);
-    const handle = await claim?.hold();
-    if (handle === undefined) return undefined;
-    return withTurn(handle, turn);
+  tryAcquire(key: string): Promise<LockHandle | undefined> {
+    return this.#turns.tryAcquire(key, async () => {
+      const claim = await new Claims(key, this.#options).create(undefined);
+      return claim?.hold();
+    });
   }
 
   /** Reads the state of the claim, and never creates a container or mints a token. */
@@ -340,15 +335,4 @@ class Claim {
     }
     this.#lease.end();
   }
-}
-
-/** Removes the claim first, then lets the next caller in this process continue. */
-function withTurn(handle: LockHandle, turn: AsyncDisposableStack): LockHandle {
-  turn.use(handle);
-  const release = turn.move();
-  return {
-    token: handle.token,
-    signal: handle.signal,
-    [Symbol.asyncDispose]: () => release.disposeAsync(),
-  };
 }

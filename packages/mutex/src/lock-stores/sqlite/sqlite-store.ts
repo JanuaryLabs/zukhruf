@@ -2,8 +2,8 @@ import { FileLock } from '@zukhruf/fs';
 
 import type { LockHandle } from '../../mutex/lease.ts';
 import type { AcquireOptions } from '../../mutex/lock-store.ts';
+import { InProcessTurns } from '../../shared/in-process-turns.ts';
 import { FileLockStore } from '../file-system/file-lock-store.ts';
-import { MemoryStore } from '../memory/memory-store.ts';
 import { HolderRecord } from './holder-record.ts';
 
 /**
@@ -26,25 +26,14 @@ export class SqliteStore extends FileLockStore {
    * holder folder `<path>.holder` is shorter.
    */
   protected readonly longestSuffix = '-journal'.length;
-  readonly #inProcess = new MemoryStore();
+  readonly #turns = new InProcessTurns();
 
-  override async acquire(
-    key: string,
-    options: AcquireOptions = {},
-  ): Promise<LockHandle> {
-    await using turn = new AsyncDisposableStack();
-    // Joining the in-process queue is synchronous, so the order is the order of the calls.
-    turn.use(await this.#inProcess.acquire(key, options));
-    return withTurn(await super.acquire(key, options), turn);
+  override acquire(key: string, options?: AcquireOptions): Promise<LockHandle> {
+    return this.#turns.acquire(key, options, () => super.acquire(key, options));
   }
 
-  override async tryAcquire(key: string): Promise<LockHandle | undefined> {
-    await using turn = new AsyncDisposableStack();
-    const inProcess = await this.#inProcess.tryAcquire(key);
-    if (!inProcess) return undefined;
-    turn.use(inProcess);
-    const lease = await super.tryAcquire(key);
-    return lease && withTurn(lease, turn);
+  override tryAcquire(key: string): Promise<LockHandle | undefined> {
+    return this.#turns.tryAcquire(key, () => super.tryAcquire(key));
   }
 
   protected async lock(
@@ -70,15 +59,4 @@ export class SqliteStore extends FileLockStore {
   protected isHeldAt(path: string): Promise<boolean> {
     return new HolderRecord(path).isPresent();
   }
-}
-
-/** Releases the database lock first, then lets the next caller in this process try. */
-function withTurn(handle: LockHandle, turn: AsyncDisposableStack): LockHandle {
-  turn.use(handle);
-  const release = turn.move();
-  return {
-    token: handle.token,
-    signal: handle.signal,
-    [Symbol.asyncDispose]: () => release.disposeAsync(),
-  };
 }
