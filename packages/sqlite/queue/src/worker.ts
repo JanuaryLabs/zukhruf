@@ -48,7 +48,8 @@ export class Worker<TJob> {
   #notifications = 0;
   // Aborts the round's wait; a fresh one arms each wait.
   #wake = new AbortController();
-  readonly #ran = new Latch();
+  // How the loop ended, which stop() waits for.
+  readonly #ran = new Latch<{ ok: true } | { ok: false; error: unknown }>();
   #lastFetchedOn: number | null = null;
   #lastJobStartedOn: number | null = null;
   #lastJobEndedOn: number | null = null;
@@ -77,8 +78,19 @@ export class Worker<TJob> {
     return this.#state === 'stopped';
   }
 
+  // pg-boss keeps the loop's promise for stop() to await (worker.js:51, 113):
+  // a loop that rejects, for example on an error emit with no listener,
+  // rejects the stop that waits for it, and is unhandled when no stop waits.
   start(): void {
-    void this.#run().finally(() => this.#ran.open());
+    void this.#run().then(
+      () => this.#ran.open({ ok: true }),
+      (error: unknown) => {
+        this.#ran.open({ ok: false, error });
+        if (!this.stopping) {
+          throw error;
+        }
+      },
+    );
   }
 
   async #run(): Promise<void> {
@@ -144,7 +156,10 @@ export class Worker<TJob> {
     }
     this.#state = 'stopping';
     this.#wake.abort();
-    await this.#ran.wait();
+    const ran = await this.#ran.wait();
+    if (!ran.ok) {
+      throw ran.error;
+    }
   }
 
   // worker.js:123-139
