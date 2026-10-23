@@ -200,7 +200,9 @@ export class Container {
   }
 
   /**
-   * Resolves for 304 (already running). A 404 is a missing container or a
+   * Resolves for 304 (already running). A 409 of a container whose removal
+   * is in progress is a ContainerNotFoundError: an inspect finds it gone or
+   * 'removing'. A 404 is a missing container or a
    * missing network: an inspect of the container tells which, and a lookup of
    * each of its networks names the missing one. An engine in swarm mode
    * answers a missing network with 500 ("Could not attach to network", probed
@@ -213,6 +215,7 @@ export class Container {
     const response = await this.#client.exchange(method, path, { signal });
     if (response.status === 304 || isSuccess(response)) return;
     const error = this.#client.error(response, method, path);
+    if (response.status === 409) throw await this.#removedOr(error, signal);
     if (response.status !== 404 && response.status !== 500) {
       throw bindSourceOr(error);
     }
@@ -773,6 +776,29 @@ export class Container {
       this.id,
       { cause: error },
     );
+  }
+
+  /**
+   * A 409 of a start: a ContainerNotFoundError when an inspect finds the
+   * container gone or in the state 'removing'; the error as it is otherwise,
+   * for example for a paused container.
+   */
+  async #removedOr(
+    error: DockerEngineError,
+    signal: AbortSignal | undefined,
+  ): Promise<DockerEngineError> {
+    const inspect = await this.#client.exchange('GET', `${this.#path}/json`, {
+      signal,
+    });
+    const gone =
+      inspect.status === 404 ||
+      (isSuccess(inspect) &&
+        parseBody<EngineApi.ContainerInspectResponse>(inspect).State?.Status ===
+          'removing');
+    if (!gone) return error;
+    return new ContainerNotFoundError(error.message, error, this.id, {
+      cause: error,
+    });
   }
 
   /** The ContainerNotRunningError of a 409, with the state of an inspect. */

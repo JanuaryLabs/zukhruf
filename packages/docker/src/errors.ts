@@ -94,7 +94,7 @@ export class DockerEngineError extends DockerError {
   }
 }
 
-/** A request about a container got 404. */
+/** A request about a container got 404, or a start got 409 and an inspect found the removal of the container in progress. */
 export class ContainerNotFoundError extends DockerEngineError {
   readonly container: string;
 

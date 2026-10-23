@@ -488,6 +488,42 @@ describe('a request that the engine refuses for one container', () => {
       await removeLabeled(docker, run);
     }
   });
+
+  test('start() that races a removal without force runs the container or is a ContainerNotFoundError with its ID', async () => {
+    // Arrange: the engine answers a start during the removal with 409 "marked for removal", after it with 404.
+    await using docker = await connect();
+    const run = randomUUID();
+    try {
+      for (let round = 0; round < 10; round += 1) {
+        const container = await docker.containers.create(sleeper(run));
+        const other = await docker.containers.find(container.id);
+        assert.ok(other);
+
+        // Act
+        const [started, removed] = await Promise.allSettled([
+          container.start(),
+          other.remove(),
+        ]);
+
+        // Assert: exactly one wins, and a lost start names the container as gone.
+        if (started.status === 'fulfilled') {
+          assert.equal(removed.status, 'rejected');
+          assert.ok(removed.reason instanceof ContainerRunningError);
+          await container.remove({ force: true });
+        } else {
+          assert.equal(removed.status, 'fulfilled');
+          const error: unknown = started.reason;
+          assert.ok(
+            error instanceof ContainerNotFoundError,
+            `round ${round}: ${String(error)}`,
+          );
+          assert.equal(error.container, container.id);
+        }
+      }
+    } finally {
+      await removeLabeled(docker, run);
+    }
+  });
 });
 
 describe('container.kill()', () => {
