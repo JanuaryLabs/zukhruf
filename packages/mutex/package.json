@@ -1,6 +1,6 @@
 {
   "name": "@zukhruf/mutex",
-  "version": "0.3.39",
+  "version": "0.3.40",
   "description": "A mutex with interchangeable lock stores, from one object to every process on a host, with fencing tokens on every lease.",
   "license": "MIT",
   "repository": {
@@ -45,15 +45,15 @@
     "access": "public"
   },
   "dependencies": {
-    "@zukhruf/async": "^0.3.39",
-    "@zukhruf/election": "^0.3.39",
-    "@zukhruf/fencing": "^0.3.39",
-    "@zukhruf/fs": "^0.3.39",
-    "@zukhruf/lease": "^0.3.39"
+    "@zukhruf/async": "^0.3.40",
+    "@zukhruf/election": "^0.3.40",
+    "@zukhruf/fencing": "^0.3.40",
+    "@zukhruf/fs": "^0.3.40",
+    "@zukhruf/lease": "^0.3.40"
   },
   "devDependencies": {
     "@types/pg": "^8.23.1",
-    "@zukhruf/testing": "^0.3.39",
+    "@zukhruf/testing": "^0.3.40",
     "hono": "^4.13.13",
     "pg": "^8.23.1"
   }
