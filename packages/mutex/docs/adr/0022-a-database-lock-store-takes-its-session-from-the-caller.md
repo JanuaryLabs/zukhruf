@@ -20,6 +20,6 @@ Other libraries do the same. The dialects of Kysely take a pool that the caller 
 
 - The package has no dependency on a Postgres driver. `pg` is a dev dependency for the tests only.
 - `@zukhruf/mutex/postgres` gives `PostgresStore` and the type of its session ([ADR 0020](./0020-each-store-family-has-its-own-import-path.md)).
-- The pool of the caller must have room for one session for each key that the process holds or waits for, and for one more session for a cancel or a holder check.
-- The caller sets the connection settings that the store needs: `keepAlive: true`, and no `query_timeout`. See [PostgresStore](../stores/postgres-store.md#failure-modes).
+- The pool of the caller must have room for one session for each key that the process holds or waits for, and for one session for a holder check. A cancel needs no session ([ADR 0023](./0023-a-postgres-waiter-is-cancelled-by-closing-its-session.md)).
+- The caller sets the client settings that the store cannot set: `keepAlive: true`, and no `query_timeout`. The store sets the server settings that it needs, `statement_timeout` and `lock_timeout`, on its own session, and resets them before it gives the session back. See [PostgresStore](../stores/postgres-store.md#failure-modes).
 - A driver that does not fit the type needs a small wrapper that the caller writes.

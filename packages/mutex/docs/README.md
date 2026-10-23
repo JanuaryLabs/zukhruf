@@ -57,7 +57,7 @@ Start with the [project README](../README.md). The glossary is in [CONTEXT.md](.
 20. [Each family of lock stores has its own import path](./adr/0020-each-store-family-has-its-own-import-path.md)
 21. [A lock store can reach every machine that reaches one server](./adr/0021-a-lock-store-can-reach-every-machine-that-reaches-one-server.md)
 22. [A database lock store takes its session from the caller](./adr/0022-a-database-lock-store-takes-its-session-from-the-caller.md)
-23. [A Postgres waiter is cancelled from a second session](./adr/0023-a-postgres-waiter-is-cancelled-from-a-second-session.md)
+23. [A Postgres waiter is cancelled by closing its session](./adr/0023-a-postgres-waiter-is-cancelled-by-closing-its-session.md)
 
 ## Copied code
 

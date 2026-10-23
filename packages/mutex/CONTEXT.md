@@ -100,6 +100,10 @@ _Avoid_: Distributed, global, cluster, remote
 A connection to the server of a network lock store. The server keeps the lock of a key while the session that holds it lasts, and releases the lock when the session ends.
 _Avoid_: Connection pool, client
 
+**Heartbeat**:
+A short query that the session of a holder sends at a fixed interval, with a time limit. A failed or late heartbeat tells the network lock store that the session ended, and the lease is lost.
+_Avoid_: Ping, keep-alive (TCP keep-alive is a different mechanism), presence
+
 **Presence**:
 The kernel lock that a holder or a waiter of a file lock store keeps while it runs. A waiter that can take the presence of another caller knows that the caller stopped.
 _Avoid_: Liveness check, heartbeat, process check
