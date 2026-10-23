@@ -1,13 +1,10 @@
-import { createHash } from 'node:crypto';
-import { setTimeout as delay } from 'node:timers/promises';
-
 import { untilAborted } from '@zukhruf/async';
-import { FencingToken } from '@zukhruf/fencing';
-import { LeaseController } from '@zukhruf/lease';
 
-import type { LockHandle } from '../../mutex/lease.ts';
-import type { AcquireOptions, LockStore } from '../../mutex/lock-store.ts';
-import { InProcessTurns } from '../../shared/in-process-turns.ts';
+import { keyDigest } from '../../shared/key-digest.ts';
+import {
+  type SessionLockDialect,
+  SessionLockStore,
+} from '../session/session-lock-store.ts';
 
 /**
  * One connection to SQL Server: only the methods that the store calls. No
@@ -80,247 +77,76 @@ EXEC sp_executesql @next;`;
  * first one gets a session: one session per key per process, however many
  * callers wait, and first-come order within the process.
  */
-export class SqlServerStore implements LockStore {
-  readonly #turns = new InProcessTurns();
-  readonly #options: SqlServerStoreOptions;
-
+export class SqlServerStore extends SessionLockStore<SqlServerSession> {
   constructor(options: SqlServerStoreOptions) {
-    this.#options = options;
-  }
-
-  acquire(key: string, options?: AcquireOptions): Promise<LockHandle> {
-    return this.#turns.acquire(key, options, async () => {
-      const signal = options?.signal;
-      const session = await this.#session(key, signal);
-      await session.wait(signal);
-      return session.hold();
-    });
-  }
-
-  tryAcquire(key: string): Promise<LockHandle | undefined> {
-    return this.#turns.tryAcquire(key, async () => {
-      const session = await this.#session(key, undefined);
-      if (!(await session.try())) return undefined;
-      return session.hold();
-    });
-  }
-
-  /** Reads `sys.dm_tran_locks` on a short session. `APPLOCK_TEST` would take the lock for an instant. */
-  async isHeld(key: string): Promise<boolean> {
-    const session = new OwnedSession(await this.#options.connect());
-    try {
-      const [row] = await session.query(heldQuery, {
-        resource: resourceName(key),
-      });
-      return row?.held === 1;
-    } finally {
-      session.close();
-    }
-  }
-
-  /** Gets a session for `key`. A cancel never waits for `connect`: a session that comes later is closed at once. */
-  async #session(
-    key: string,
-    signal: AbortSignal | undefined,
-  ): Promise<KeySession> {
-    const connecting = this.#options.connect();
-    try {
-      return new KeySession(
-        new OwnedSession(await untilAborted(connecting, signal)),
-        key,
-        this.#options,
-      );
-    } catch (error) {
-      if (signal?.aborted && error === signal.reason) {
-        void connecting.then(
-          (late) => late.close(),
-          () => {},
-        );
-      }
-      throw error;
-    }
+    super(options, sqlServerDialect(options));
   }
 }
 
 /**
- * The application lock resource of `key`: the first 16 bytes of the SHA-256
- * digest of its UTF-16 code units, as 32 hex characters. Any key fits the
- * 255 characters of `@Resource`, and `sys.dm_tran_locks` shows only the first
- * 32 characters of a resource, so the holder check sees the whole name.
+ * The application lock resource of `key`: the first 16 bytes of the key
+ * digest, as 32 hex characters. Any key fits the 255 characters of
+ * `@Resource`, and `sys.dm_tran_locks` shows only the first 32 characters of
+ * a resource, so the holder check sees the whole name.
  */
 function resourceName(key: string): string {
-  return createHash('sha256')
-    .update(Buffer.from(key, 'utf16le'))
-    .digest()
-    .subarray(0, 16)
-    .toString('hex');
+  return keyDigest(key).subarray(0, 16).toString('hex');
 }
 
-/**
- * A session from `connect` that the store owns until it closes it, once. Its
- * `ended` signal aborts when the session emits `error` or `end`. Its listeners
- * stay after the close, because a driver can emit `error` after it.
- */
-class OwnedSession {
-  readonly #session: SqlServerSession;
-  readonly #ended = new AbortController();
-  readonly #closed = new AbortController();
-
-  constructor(session: SqlServerSession) {
-    this.#session = session;
-    session.on('error', (error) => this.#ended.abort(error));
-    session.on('end', () =>
-      this.#ended.abort(new Error('The SQL Server session ended.')),
-    );
-  }
-
-  get ended(): AbortSignal {
-    return this.#ended.signal;
-  }
-
-  query(
-    text: string,
-    parameters: Record<string, string>,
-  ): Promise<Record<string, unknown>[]> {
-    return this.#session.query(text, parameters);
-  }
-
-  close(): void {
-    if (this.#closed.signal.aborted) return;
-    this.#closed.abort();
-    this.#session.close();
-  }
-}
-
-/** One session for one key: it waits for the lock or tries it, then holds it with a heartbeat. */
-class KeySession {
-  readonly #session: OwnedSession;
-  readonly #key: string;
-  readonly #resource: { resource: string };
-  readonly #options: SqlServerStoreOptions;
-  readonly #lease: LeaseController;
-  /** Aborts when the store stops holding: a release, or a lost session. */
-  readonly #done = new AbortController();
-
-  constructor(
-    session: OwnedSession,
-    key: string,
-    options: SqlServerStoreOptions,
-  ) {
-    this.#session = session;
-    this.#key = key;
-    this.#resource = { resource: resourceName(key) };
-    this.#options = options;
-    this.#lease = new LeaseController(key);
-  }
-
-  /** Waits in SQL Server's lock queue. A cancel closes the session, and the end of the session releases a late grant. */
-  async wait(signal: AbortSignal | undefined): Promise<void> {
-    try {
+function sqlServerDialect(
+  options: SqlServerStoreOptions,
+): SessionLockDialect<SqlServerSession> {
+  return {
+    server: 'SQL Server',
+    lockName: resourceName,
+    wait: async (session, { key, name }, signal) => {
       const [row] = await untilAborted(
-        this.#session.query(waitQuery, this.#resource),
+        session.query(waitQuery, { resource: name }),
         signal,
       );
       if (typeof row?.result !== 'number' || row.result < 0) {
         throw new Error(
-          `sp_getapplock for ${JSON.stringify(this.#key)} returned ${String(row?.result)}.`,
+          `sp_getapplock for ${JSON.stringify(key)} returned ${String(row?.result)}.`,
         );
       }
-    } catch (error) {
-      this.#session.close();
-      throw error;
-    }
-  }
-
-  async try(): Promise<boolean> {
-    try {
-      const [row] = await this.#session.query(tryQuery, this.#resource);
+    },
+    try: async (session, { key, name }) => {
+      const [row] = await session.query(tryQuery, { resource: name });
       if (row?.result === 0) return true;
       if (row?.result !== -1) {
         throw new Error(
-          `sp_getapplock for ${JSON.stringify(this.#key)} returned ${String(row?.result)}.`,
+          `sp_getapplock for ${JSON.stringify(key)} returned ${String(row?.result)}.`,
         );
       }
-    } catch (error) {
-      this.#session.close();
-      throw error;
-    }
-    this.#session.close();
-    return false;
-  }
-
-  /** Mints the token of a granted lock and starts the heartbeat. A failed mint releases the key. */
-  async hold(): Promise<LockHandle> {
-    let token: FencingToken;
-    try {
-      const [row] = await this.#session.query(tokenQuery, {
-        sequence: this.#options.sequence,
+      return false;
+    },
+    mint: async (session) => {
+      const [row] = await session.query(tokenQuery, {
+        sequence: options.sequence,
       });
       if (typeof row?.token !== 'string') {
         throw new Error(
-          `NEXT VALUE FOR sequence ${JSON.stringify(this.#options.sequence)} gave no number.`,
+          `NEXT VALUE FOR sequence ${JSON.stringify(options.sequence)} gave no number.`,
         );
       }
-      token = new FencingToken(BigInt(row.token));
-    } catch (error) {
-      await this.#release();
-      throw error;
-    }
-    const ended = this.#session.ended;
-    ended.addEventListener('abort', () => this.#lose(ended.reason), {
-      once: true,
-      signal: this.#done.signal,
-    });
-    void this.#beat();
-    return {
-      token,
-      signal: this.#lease.signal,
-      [Symbol.asyncDispose]: () => this.#release(),
-    };
-  }
-
-  /** Sends `SELECT 1` each interval. A failed or late answer loses the lease. */
-  async #beat(): Promise<void> {
-    const interval = this.#options.heartbeatInterval;
-    const done = this.#done.signal;
-    try {
-      for (;;) {
-        await delay(interval, undefined, { signal: done });
-        await untilAborted(
-          this.#session.query('SELECT 1', {}),
-          AbortSignal.any([done, AbortSignal.timeout(interval)]),
-        );
-      }
-    } catch (cause) {
-      if (!done.aborted) this.#lose(cause);
-    }
-  }
-
-  /** Another holder can have the key now. */
-  #lose(cause: unknown): void {
-    if (this.#done.signal.aborted) return;
-    this.#done.abort();
-    this.#lease.lose(cause);
-    this.#session.close();
-  }
-
-  /** Releases the lock on the server before the close: the server sees a closed connection a little later. */
-  async #release(): Promise<void> {
-    if (this.#done.signal.aborted) return;
-    this.#done.abort();
-    try {
-      const [row] = await this.#session.query(releaseQuery, this.#resource);
-      if (row?.result !== 0) {
-        throw new Error(
-          `The session did not hold the lock of ${JSON.stringify(this.#key)}.`,
-        );
-      }
-    } catch (cause) {
-      this.#lease.lose(cause);
-      this.#session.close();
-      return;
-    }
-    this.#lease.end();
-    this.#session.close();
-  }
+      return BigInt(row.token);
+    },
+    heartbeat: async (session) => {
+      await session.query('SELECT 1', {});
+    },
+    // Releases the lock on the server before the close: the server sees a closed connection a little later.
+    release: async (session, { name }) => {
+      const [row] = await session.query(releaseQuery, { resource: name });
+      return row?.result === 0;
+    },
+    /** Reads `sys.dm_tran_locks`. `APPLOCK_TEST` would take the lock for an instant. */
+    isHeld: async (session, { name }) => {
+      const [row] = await session.query(heldQuery, { resource: name });
+      return row?.held === 1;
+    },
+    // A closed session keeps its listeners, because a driver can emit `error` after the close.
+    detach: () => {},
+    giveBack: (session) => session.close(),
+    destroy: (session) => session.close(),
+  };
 }

@@ -1,12 +1,11 @@
-import type { LockHandle } from '../../mutex/lease.ts';
-import type { AcquireOptions, LockStore } from '../../mutex/lock-store.ts';
 import {
-  type GetLockDialect,
+  type GetLockServer,
   type GetLockSession,
-  GetLockStore,
+  getLockDialect,
   lockName,
   quoteName,
-} from '../mysql/get-lock-session.ts';
+} from '../mysql/get-lock-dialect.ts';
+import { SessionLockStore } from '../session/session-lock-store.ts';
 
 /**
  * One connection to the MariaDB server: only the methods that the store
@@ -44,31 +43,16 @@ const oneYear = 31_536_000;
  * stops never leaves a key locked. Every process on every machine that
  * reaches one MariaDB database shares the locks.
  */
-export class MariadbStore implements LockStore {
-  readonly #store: GetLockStore<MariadbSession>;
-
+export class MariadbStore extends SessionLockStore<MariadbSession> {
   constructor({ connect, sequence, heartbeatInterval }: MariadbStoreOptions) {
-    this.#store = new GetLockStore({
-      connect,
-      heartbeatInterval,
-      dialect: mariadbDialect(quoteName(sequence)),
-    });
-  }
-
-  acquire(key: string, options?: AcquireOptions): Promise<LockHandle> {
-    return this.#store.acquire(key, options);
-  }
-
-  tryAcquire(key: string): Promise<LockHandle | undefined> {
-    return this.#store.tryAcquire(key);
-  }
-
-  isHeld(key: string): Promise<boolean> {
-    return this.#store.isHeld(key);
+    super(
+      { connect, heartbeatInterval },
+      getLockDialect(mariadbServer(quoteName(sequence))),
+    );
   }
 }
 
-function mariadbDialect(sequence: string): GetLockDialect<MariadbSession> {
+function mariadbServer(sequence: string): GetLockServer<MariadbSession> {
   return {
     server: 'MariaDB',
     // The session's max_statement_time makes a waiting GET_LOCK give NULL.

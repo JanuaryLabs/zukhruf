@@ -109,10 +109,16 @@ test('an error that several families throw is one class on every path, so instan
   );
 });
 
-test('the remote internals have no import path', async () => {
-  await assert.rejects(exportsOf('@zukhruf/mutex/remote'), (error: unknown) => {
-    assert.ok(error instanceof Error && 'stderr' in error);
-    assert.match(String(error.stderr), /ERR_PACKAGE_PATH_NOT_EXPORTED/);
-    return true;
-  });
+test('the remote and session internals have no import path', async () => {
+  for (const internal of ['remote', 'session']) {
+    await assert.rejects(
+      exportsOf(`@zukhruf/mutex/${internal}`),
+      (error: unknown) => {
+        assert.ok(error instanceof Error && 'stderr' in error);
+        assert.match(String(error.stderr), /ERR_PACKAGE_PATH_NOT_EXPORTED/);
+        return true;
+      },
+      `@zukhruf/mutex/${internal}`,
+    );
+  }
 });

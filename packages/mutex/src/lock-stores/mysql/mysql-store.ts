@@ -1,12 +1,11 @@
-import type { LockHandle } from '../../mutex/lease.ts';
-import type { AcquireOptions, LockStore } from '../../mutex/lock-store.ts';
+import { SessionLockStore } from '../session/session-lock-store.ts';
 import {
-  type GetLockDialect,
+  type GetLockServer,
   type GetLockSession,
-  GetLockStore,
+  getLockDialect,
   lockName,
   quoteName,
-} from './get-lock-session.ts';
+} from './get-lock-dialect.ts';
 
 /**
  * One connection to the MySQL server: only the methods that the store calls.
@@ -41,31 +40,16 @@ export interface MysqlStoreOptions {
  * never leaves a key locked. Every process on every machine that reaches one
  * MySQL database shares the locks.
  */
-export class MysqlStore implements LockStore {
-  readonly #store: GetLockStore<MysqlSession>;
-
+export class MysqlStore extends SessionLockStore<MysqlSession> {
   constructor({ connect, table, heartbeatInterval }: MysqlStoreOptions) {
-    this.#store = new GetLockStore({
-      connect,
-      heartbeatInterval,
-      dialect: mysqlDialect(quoteName(table)),
-    });
-  }
-
-  acquire(key: string, options?: AcquireOptions): Promise<LockHandle> {
-    return this.#store.acquire(key, options);
-  }
-
-  tryAcquire(key: string): Promise<LockHandle | undefined> {
-    return this.#store.tryAcquire(key);
-  }
-
-  isHeld(key: string): Promise<boolean> {
-    return this.#store.isHeld(key);
+    super(
+      { connect, heartbeatInterval },
+      getLockDialect(mysqlServer(quoteName(table))),
+    );
   }
 }
 
-function mysqlDialect(table: string): GetLockDialect<MysqlSession> {
+function mysqlServer(table: string): GetLockServer<MysqlSession> {
   return {
     server: 'MySQL',
     // A negative timeout waits with no limit. The hint lifts the session's

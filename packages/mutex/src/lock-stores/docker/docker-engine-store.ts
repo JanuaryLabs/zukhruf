@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 
 import {
@@ -16,6 +15,7 @@ import { LeaseController } from '@zukhruf/lease';
 import type { LockHandle } from '../../mutex/lease.ts';
 import type { AcquireOptions, LockStore } from '../../mutex/lock-store.ts';
 import { InProcessTurns } from '../../shared/in-process-turns.ts';
+import { keyDigest } from '../../shared/key-digest.ts';
 
 export interface DockerEngineStoreOptions {
   /** The client of the engine. The caller owns it; its disposal ends each attach, so each held key is lost. */
@@ -92,9 +92,9 @@ export class DockerEngineStore implements LockStore {
   }
 }
 
-/** The SHA-256 digest of the UTF-16 code units of `key`, as `PostgresStore` makes its lock number, in hexadecimal. */
+/** The key digest in hexadecimal. */
 function digestOf(key: string): string {
-  return createHash('sha256').update(Buffer.from(key, 'utf16le')).digest('hex');
+  return keyDigest(key).toString('hex');
 }
 
 function claimName(key: string, namespace: string): string {
