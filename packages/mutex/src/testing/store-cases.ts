@@ -1,11 +1,16 @@
 import type { ChildProcess } from 'node:child_process';
 import type { Worker } from 'node:worker_threads';
 
+import pg from 'pg';
+
+import { type DatabaseOptions, Postgres } from '@zukhruf/testing/postgres';
+
 import { LockFileStore } from '../lock-stores/file-system/lock-file-store.ts';
 import { TicketQueueFileStore } from '../lock-stores/file-system/ticket-queue-file-store.ts';
 import { IpcLockCoordinator } from '../lock-stores/ipc/ipc-lock-coordinator.ts';
 import { IpcStore } from '../lock-stores/ipc/ipc-store.ts';
 import { MemoryStore } from '../lock-stores/memory/memory-store.ts';
+import { PostgresStore } from '../lock-stores/postgres/postgres-store.ts';
 import { SocketStore } from '../lock-stores/socket/socket-store.ts';
 import { SqliteStore } from '../lock-stores/sqlite/sqlite-store.ts';
 import { ThreadLockCoordinator } from '../lock-stores/thread/thread-lock-coordinator.ts';
@@ -58,8 +63,11 @@ export interface StoreCase {
   reach: Reach;
   /** Whether a new store over the same fixture keeps issuing newer tokens. */
   durableTokens: boolean;
-  /** Makes a new fixture, which the test disposes. */
-  fixture(): Promise<StoreFixture>;
+  /**
+   * Makes a new fixture, which the test disposes. A server-backed fixture
+   * finds its Docker engine through `environment`.
+   */
+  fixture(environment: DatabaseOptions['environment']): Promise<StoreFixture>;
   /** Stores opened over the same fixture location share locks. */
   open(location: string): StoreHost;
   /**
@@ -102,6 +110,52 @@ function sharedByDirectory(create: (directory: string) => LockStore) {
     openInThread: create,
   };
 }
+
+/** A new database with the token sequence that the app creates before it starts; its connection string is the location. */
+async function postgresFixture(
+  environment: DatabaseOptions['environment'],
+): Promise<StoreFixture> {
+  const database = await new Postgres({ environment }).database();
+  try {
+    const owner = new pg.Client({
+      connectionString: database.connectionString,
+    });
+    await owner.connect();
+    try {
+      await owner.query('CREATE SEQUENCE mutex_tokens AS bigint CACHE 1');
+    } finally {
+      await owner.end();
+    }
+  } catch (error) {
+    await database.cleanup();
+    throw error;
+  }
+  return {
+    location: database.connectionString,
+    [Symbol.asyncDispose]: () => database.cleanup(),
+  };
+}
+
+/**
+ * A store over a pool that is configured as the PostgresStore page tells an
+ * app to. A child or a thread never ends its pool, so its pool lets it exit
+ * once its sessions are idle.
+ */
+function postgresStore(pool: pg.Pool) {
+  return new PostgresStore({
+    connect: () => pool.connect(),
+    sequence: 'mutex_tokens',
+    heartbeatInterval: 200,
+  });
+}
+
+const postgresPool = (location: string, allowExitOnIdle: boolean) =>
+  new pg.Pool({
+    connectionString: location,
+    keepAlive: true,
+    keepAliveInitialDelayMillis: 10_000,
+    allowExitOnIdle,
+  });
 
 export const storeCases: StoreCase[] = [
   {
@@ -186,6 +240,23 @@ export const storeCases: StoreCase[] = [
     ...sharedByDirectory(
       (directory) => new SocketStore(directory, { pollInterval, graceWindow }),
     ),
+  },
+  {
+    name: 'PostgresStore',
+    reach: 'network',
+    durableTokens: true,
+    fixture: postgresFixture,
+    open: (location) => {
+      const pool = postgresPool(location, false);
+      return {
+        store: postgresStore(pool),
+        adoptProcess() {},
+        adoptThread() {},
+        [Symbol.asyncDispose]: () => pool.end(),
+      };
+    },
+    openInChild: (location) => postgresStore(postgresPool(location, true)),
+    openInThread: (location) => postgresStore(postgresPool(location, true)),
   },
 ];
 

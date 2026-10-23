@@ -55,7 +55,7 @@ void describe.each(storeCases, (store) =>
       { timeout: 5000 },
       async () => {
         // Arrange
-        await using fixture = await store.fixture();
+        await using fixture = await store.fixture(process.env);
         await using host = store.open(fixture.location);
         const mutex = new Mutex(host.store);
         const holder = await hold(mutex, 'report:daily');
@@ -83,7 +83,7 @@ void describe.each(storeCases, (store) =>
 
     test('skipIfBusy acquires a free key and gives back the task value', async () => {
       // Arrange
-      await using fixture = await store.fixture();
+      await using fixture = await store.fixture(process.env);
       await using host = store.open(fixture.location);
       const mutex = new Mutex(host.store);
 
@@ -101,7 +101,7 @@ void describe.each(storeCases, (store) =>
       { timeout: 5000 },
       async () => {
         // Arrange
-        await using fixture = await store.fixture();
+        await using fixture = await store.fixture(process.env);
         await using host = store.open(fixture.location);
         const mutex = new Mutex(host.store);
         const holder = await hold(mutex, 'report:daily');
@@ -135,7 +135,7 @@ void describe.each(storeCases, (store) =>
       { timeout: 5000 },
       async () => {
         // Arrange
-        await using fixture = await store.fixture();
+        await using fixture = await store.fixture(process.env);
         await using host = store.open(fixture.location);
         const mutex = new Mutex(host.store);
         const holder = await hold(mutex, 'report:daily');
@@ -157,7 +157,7 @@ void describe.each(storeCases, (store) =>
       { timeout: 5000 },
       async () => {
         // Arrange: a holder, a caller that gives up, and a caller that waits behind it.
-        await using fixture = await store.fixture();
+        await using fixture = await store.fixture(process.env);
         await using host = store.open(fixture.location);
         const mutex = new Mutex(host.store);
         const holder = await hold(mutex, 'report:daily');
@@ -188,7 +188,7 @@ void describe.each(storeCases, (store) =>
       { timeout: 5000 },
       async () => {
         // Arrange: callers of this key skip by default.
-        await using fixture = await store.fixture();
+        await using fixture = await store.fixture(process.env);
         await using host = store.open(fixture.location);
         const mutex = new Mutex(host.store);
         const report = mutex.key('report:daily', { mode: Modes.skipIfBusy() });
@@ -217,7 +217,7 @@ void describe.each(storeCases, (store) =>
       { timeout: 5000 },
       async () => {
         // Arrange: a holder, a caller that will cancel, and a caller that waits.
-        await using fixture = await store.fixture();
+        await using fixture = await store.fixture(process.env);
         await using host = store.open(fixture.location);
         const mutex = new Mutex(host.store);
         const holder = await hold(mutex, 'report:daily');
@@ -262,7 +262,7 @@ void describe.each(storeCases, (store) =>
       { timeout: 5000 },
       async () => {
         // Arrange
-        await using fixture = await store.fixture();
+        await using fixture = await store.fixture(process.env);
         await using host = store.open(fixture.location);
         const mutex = new Mutex(host.store);
         const holder = await hold(mutex, 'report:daily');
@@ -292,7 +292,7 @@ void describe.each(storeCases, (store) =>
       { timeout: 5000 },
       async () => {
         // Arrange
-        await using fixture = await store.fixture();
+        await using fixture = await store.fixture(process.env);
         await using host = store.open(fixture.location);
         const mutex = new Mutex(host.store);
         const holder = await hold(mutex, 'report:daily');
@@ -318,7 +318,7 @@ void describe.each(storeCases, (store) =>
 
     test('a caller that already cancelled rejects in every mode, and leaves a free key free', async () => {
       // Arrange
-      await using fixture = await store.fixture();
+      await using fixture = await store.fixture(process.env);
       await using host = store.open(fixture.location);
       const mutex = new Mutex(host.store);
       const reason = new Error('cancelled');
@@ -363,7 +363,7 @@ void describe.each(storeCases, (store) =>
       { timeout: 5000 },
       async () => {
         // Arrange: a free key, a busy key, and a skip with a limit, all with one signal.
-        await using fixture = await store.fixture();
+        await using fixture = await store.fixture(process.env);
         await using host = store.open(fixture.location);
         const mutex = new Mutex(host.store);
         const { signal } = new AbortController();
@@ -696,7 +696,7 @@ void describe.each(
         { timeout: 10000 },
         async (t) => {
           // Arrange: this process holds the key; a child (kept alive) tries to skip.
-          await using fixture = await store.fixture();
+          await using fixture = await store.fixture(process.env);
           await using host = store.open(fixture.location);
           const mutex = new Mutex(host.store);
           const holder = await hold(mutex, 'report:daily');
@@ -758,7 +758,7 @@ void describe.each(
         { timeout: 10000 },
         async () => {
           // Arrange: the main thread holds the key; a worker (kept alive) tries to skip.
-          await using fixture = await store.fixture();
+          await using fixture = await store.fixture(process.env);
           await using host: StoreHost = store.open(fixture.location);
           const mutex = new Mutex(host.store);
           const holder = await hold(mutex, 'report:daily');

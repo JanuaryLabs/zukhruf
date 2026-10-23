@@ -53,6 +53,7 @@ test('each lock-store family has its own import path with its stores and the err
       ],
     ],
     ['sqlite', ['NetworkDirectoryError', 'SqliteStore']],
+    ['postgres', ['PostgresStore']],
     [
       'socket',
       [

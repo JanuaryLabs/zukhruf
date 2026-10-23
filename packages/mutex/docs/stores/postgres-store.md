@@ -2,8 +2,6 @@
 
 A network lock store that uses a Postgres advisory lock as the lock. Each process on each machine that reaches one Postgres database shares the locks. The server releases the lock when the session of the holder ends.
 
-This page is a design. The code does not exist yet.
-
 | Reach   | Order                                                                                        | Holder stops                   | Token source        |
 | ------- | -------------------------------------------------------------------------------------------- | ------------------------------ | ------------------- |
 | Network | First come, first served in one process; the order of Postgres' lock queue between processes | Released when its session ends | A Postgres sequence |
@@ -51,7 +49,7 @@ The host lock stores share a lock only between processes on one machine. When yo
 
 ## How it works
 
-**The number of a key.** An advisory lock takes a 64-bit integer, not a text. The store calculates the SHA-256 digest of the key. It reads the first 8 bytes of the digest as a signed 64-bit big-endian integer (`readBigInt64BE(0)` of Node.js). It hashes the key alone, with no prefix. It sends that integer as text and casts it in SQL (`$1::bigint`), because a JavaScript `number` cannot hold 64 bits. The store does not use `hashtextextended`: it is an internal Postgres function, and its result can change between major versions. DistributedLock also hashes on the client: its `allowHashing` option cuts a SHA-1 digest to 8 bytes.
+**The number of a key.** An advisory lock takes a 64-bit integer, not a text. The store calculates the SHA-256 digest of the UTF-16 code units of the key (`Buffer.from(key, 'utf16le')`). Thus two keys that differ only in a lone surrogate get two numbers. UTF-8 would change a lone surrogate to U+FFFD, and the two keys would get one number. The store reads the first 8 bytes of the digest as a signed 64-bit big-endian integer (`readBigInt64BE(0)` of Node.js). It hashes the key alone, with no prefix. It sends that integer as text and casts it in SQL (`$1::bigint`), because a JavaScript `number` cannot hold 64 bits. The store does not use `hashtextextended`: it is an internal Postgres function, and its result can change between major versions. DistributedLock also hashes on the client: its `allowHashing` option cuts a SHA-1 digest to 8 bytes.
 
 Two keys can get the same number. Then they are one lock: one key waits for the other. This is false contention, not two holders, because two keys never share a session. Other software that uses advisory locks in the same database uses the same numbers.
 
@@ -88,7 +86,7 @@ A `CREATE SEQUENCE IF NOT EXISTS` in the store would fail for a role without `CR
 
 The store keeps a session for each key that this process holds or waits for. A holder check gets one more session for one query. A cancel needs no session. If the pool has no free session, `connect` waits.
 
-A session that holds nothing goes back to the pool with `release()`. A session whose lock state is not known is destroyed with `release(true)`, because a plain `release()` keeps the lock on the session. The next caller that borrows that session would then get the key at once (see [Evidence](#evidence)).
+A session that holds nothing goes back to the pool with `release()`, and the store first removes its `error` and `end` listeners from it. A session whose lock state is not known is destroyed with `release(true)`, because a plain `release()` keeps the lock on the session. The next caller that borrows that session would then get the key at once (see [Evidence](#evidence)).
 
 ## Acquire modes
 
@@ -140,7 +138,17 @@ All three options are required. No option has a default.
 
 ## Evidence
 
-No test exists yet. These facts come from probes before the design. Each probe used `pg` (node-postgres) 8.23.1. The server was PostgreSQL 18.3, except where the item says `postgres:18-alpine`:
+`PostgresStore` runs in each test of the lock-store matrix (`src/testing/store-cases.ts`) that its reach includes: in one process, across processes, and across threads. Each test gets a new database. The tests that read the files of a store do not run, because the store keeps no files.
+
+Each design error that the review found has a test in [`src/lock-stores/postgres/postgres-store.test.ts`](../../src/lock-stores/postgres/postgres-store.test.ts). The name of the test says what the wrong design broke:
+
+- **A held key is lost within heartbeatInterval when the server stops answering.** A TCP proxy stops forwarding and closes no socket. The signal of the lease aborts with `LeaseLostError` within two intervals. Wrong design: no heartbeat.
+- **A cancel ends a wait when every session of the pool is busy.** The pool of the waiter has one session. The cancelled call rejects with the reason of its signal within 1 second. Wrong design: a cancel that gets a second session from the pool.
+- **A cancelled waiter that the server grants later gives the key to the next waiter.** After the holder releases, a caller in another pool gets the key. Wrong design: a cancel that does not close the waiting session.
+- **A role with only USAGE on the sequence can acquire.** The role has no `CREATE` on the schema. Wrong design: `CREATE SEQUENCE IF NOT EXISTS` in the store.
+- **A released key leaves no lock on the session that goes back to the pool.** The next borrower of the one session of the pool holds no advisory lock. Wrong design: a plain `release()` of a session that can still hold the lock.
+
+These facts come from probes before the design. Each probe used `pg` (node-postgres) 8.23.1. The server was PostgreSQL 18.3, except where the item says `postgres:18-alpine`:
 
 - **Locks stack in one session.** One session ran `pg_advisory_lock(-2)` two times. Then `pg_advisory_unlock(-2)` three times returned `true`, `true`, `false`, with the warning `you don't own a lock of type ExclusiveLock`. `pg_locks` showed one row for the number. Thus one session never excludes itself.
 - **A plain pool release gives the lock to the next borrower.** In a `pg.Pool` with `max: 1`, client A locked 11 and called `release()`. Client B got the same server process, `pg_locks` still showed 11 as held, and B's `pg_try_advisory_lock(11)` returned `true`. After `release(true)`, `pg_locks` showed no holder.

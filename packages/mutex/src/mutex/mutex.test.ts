@@ -53,7 +53,7 @@ void describe.each(storeCases, (store) =>
       { timeout: 2000 },
       async (t) => {
         // Arrange: the first operation holds the product until it encounters a storage failure.
-        await using fixture = await store.fixture();
+        await using fixture = await store.fixture(process.env);
         await using host = store.open(fixture.location);
         const mutex = new Mutex(host.store);
         const failure = new Error('Storage unavailable');
@@ -113,7 +113,7 @@ void describe.each(storeCases, (store) =>
       async (t) => {
         // Arrange: isolate process-level rejection handling from the test runner.
         // All mutex operations still happen inside ONE process and ONE Mutex instance.
-        await using fixture = await store.fixture();
+        await using fixture = await store.fixture(process.env);
         await using host = store.open(fixture.location);
 
         // Act: the application catches a failure, then processes another request later.
@@ -168,7 +168,7 @@ void describe.each(storeCases, (store) =>
       { timeout: 2000 },
       async (t) => {
         // Arrange: hold the first operation open until the test releases it.
-        await using fixture = await store.fixture();
+        await using fixture = await store.fixture(process.env);
         await using host = store.open(fixture.location);
         const mutex = new Mutex(host.store);
         const finishFirst = Promise.withResolvers<void>();
@@ -228,7 +228,7 @@ void describe.each(storeCases, (store) =>
 
     test('three overlapping requests for one product all finish without overlapping callbacks', async (t) => {
       // Arrange: whichever callback enters first stays active while the other requests queue.
-      await using fixture = await store.fixture();
+      await using fixture = await store.fixture(process.env);
       await using host = store.open(fixture.location);
       const mutex = new Mutex(host.store);
       const finishFirst = Promise.withResolvers<void>();
@@ -303,7 +303,7 @@ void describe.each(storeCases, (store) =>
       { timeout: 2000 },
       async (t) => {
         // Arrange: keep product 42 busy before product 99 is requested.
-        await using fixture = await store.fixture();
+        await using fixture = await store.fixture(process.env);
         await using host = store.open(fixture.location);
         const mutex = new Mutex(host.store);
         const finishFirst = Promise.withResolvers<void>();
@@ -357,7 +357,7 @@ void describe.each(storeCases, (store) =>
 
     test('an out-of-stock result does not prevent a later reservation for the same product', async () => {
       // Arrange: initially there is nothing to reserve.
-      await using fixture = await store.fixture();
+      await using fixture = await store.fixture(process.env);
       await using host = store.open(fixture.location);
       const mutex = new Mutex(host.store);
       let stock = 0;
@@ -407,7 +407,7 @@ void describe.each(storeCases, (store) =>
       (key) =>
         test(`resource name ${label(key)} supports ordinary mutex operations`, async (t) => {
           // Arrange: resource names may come directly from user-supplied names or slugs.
-          await using fixture = await store.fixture();
+          await using fixture = await store.fixture(process.env);
           await using host = store.open(fixture.location);
           const mutex = new Mutex(host.store);
           const finishFirst = Promise.withResolvers<void>();
@@ -477,7 +477,7 @@ void describe.each(storeCases, (store) =>
       ([held, other]) =>
         test(`resource names ${label(held)} and ${label(other)} are separate locks`, async (t) => {
           // Arrange: one caller holds the first name.
-          await using fixture = await store.fixture();
+          await using fixture = await store.fixture(process.env);
           await using host = store.open(fixture.location);
           const mutex = new Mutex(host.store);
           const finishHolder = Promise.withResolvers<void>();
@@ -516,7 +516,7 @@ void describe.each(storeCases, (store) =>
     // name their files; macOS and Windows fold case and so show the break.
     test('resource names that differ only in letter case are separate locks', async (t) => {
       // Arrange: one caller holds 'Sync'.
-      await using fixture = await store.fixture();
+      await using fixture = await store.fixture(process.env);
       await using host = store.open(fixture.location);
       const mutex = new Mutex(host.store);
       const finishHolder = Promise.withResolvers<void>();
@@ -557,7 +557,7 @@ void describe.each(storeCases, (store) =>
       { timeout: 2000 },
       async () => {
         // Arrange: this app and its inventory belong only to this test.
-        await using fixture = await store.fixture();
+        await using fixture = await store.fixture(process.env);
         const app = new Hono();
         await using host = store.open(fixture.location);
         const mutex = new Mutex(host.store);
@@ -617,7 +617,7 @@ void describe.each(storeCases, (store) =>
 
     test('concurrent requests receive fencing tokens that grow in the order the lock was granted', async () => {
       // Arrange: a burst of requests competes for one key.
-      await using fixture = await store.fixture();
+      await using fixture = await store.fixture(process.env);
       await using host = store.open(fixture.location);
       const mutex = new Mutex(host.store);
       const grantedTokens: FencingToken[] = [];
@@ -653,7 +653,7 @@ void describe.each(storeCases, (store) =>
         },
         async () => {
           // Arrange: one store instance holds the key once, then goes away (e.g. a restart).
-          await using fixture = await store.fixture();
+          await using fixture = await store.fixture(process.env);
           let before: FencingToken;
           {
             await using previous = store.open(fixture.location);
@@ -699,7 +699,7 @@ void describe.each(
           { timeout: 15000 },
           async (t) => {
             // Arrange: the callers have separate memory but share a resource key.
-            await using fixture = await store.fixture();
+            await using fixture = await store.fixture(process.env);
             await using host = store.open(fixture.location);
             await using journals = await scratchDirectory();
             const journal = join(journals.path, 'callbacks.log');
@@ -812,7 +812,7 @@ void describe.each(
           { timeout: 15000 },
           async (t) => {
             // Arrange: another process enters the callback and never leaves it.
-            await using fixture = await store.fixture();
+            await using fixture = await store.fixture(process.env);
             await using host = store.open(fixture.location);
             await using holder = startWorker(
               `
@@ -859,7 +859,7 @@ void describe.each(
         { timeout: 15000 },
         async () => {
           // Arrange: each increment reads, yields, then writes, so any overlap loses an update.
-          await using fixture = await store.fixture();
+          await using fixture = await store.fixture(process.env);
           await using host = store.open(fixture.location);
           await using journals = await scratchDirectory();
           const counter = join(journals.path, 'counter');
@@ -926,7 +926,7 @@ void describe.each(
         async (t) => {
           // Arrange: this process asks first, so a SocketStore leads from here and
           // freezing the holder never freezes the coordinator.
-          await using fixture = await store.fixture();
+          await using fixture = await store.fixture(process.env);
           await using host = store.open(fixture.location);
           const mutex = new Mutex(host.store);
           await mutex.acquire('warm-up', async () => {});
@@ -1043,7 +1043,7 @@ void describe.each(
         { timeout: 15000 },
         async (t) => {
           // Arrange: the main thread holds the key.
-          await using fixture = await store.fixture();
+          await using fixture = await store.fixture(process.env);
           await using host = store.open(fixture.location);
           const mutex = new Mutex(host.store);
           const finishMain = Promise.withResolvers<void>();
@@ -1098,7 +1098,7 @@ void describe.each(
         { timeout: 5000 },
         async () => {
           // Arrange: a worker thread enters and stays inside its callback.
-          await using fixture = await store.fixture();
+          await using fixture = await store.fixture(process.env);
           await using host = store.open(fixture.location);
           const holder = startThread(
             host,
@@ -1140,7 +1140,7 @@ void describe.each(
         { timeout: 5000 },
         async () => {
           // Arrange: the main thread holds the key, and the worker thread has nothing to do but wait.
-          await using fixture = await store.fixture();
+          await using fixture = await store.fixture(process.env);
           await using host = store.open(fixture.location);
           const mutex = new Mutex(host.store);
           const release = Promise.withResolvers<void>();
@@ -1184,7 +1184,7 @@ void describe.each(
         { timeout: 15000 },
         async (t) => {
           // Arrange: the thread posts its own messages to the main thread, and lock envelopes that hold no request.
-          await using fixture = await store.fixture();
+          await using fixture = await store.fixture(process.env);
           await using host = store.open(fixture.location);
           const mutex = new Mutex(host.store);
           const thread = startThread(
@@ -1235,7 +1235,7 @@ void describe.each(
         { timeout: 15000 },
         async (t) => {
           // Arrange: the main thread holds the key, and the thread asks for it.
-          await using fixture = await store.fixture();
+          await using fixture = await store.fixture(process.env);
           await using host = store.open(fixture.location);
           const mutex = new Mutex(host.store);
           const finishMain = Promise.withResolvers<void>();
@@ -1297,7 +1297,7 @@ void describe.each(
         { timeout: 10000 },
         async () => {
           // Arrange
-          await using fixture = await store.fixture();
+          await using fixture = await store.fixture(process.env);
 
           // Act
           const result = await incrementFromFourThreads(
@@ -1325,7 +1325,7 @@ void describe.each(
         { timeout: 15000 },
         async () => {
           // Arrange
-          await using fixture = await store.fixture();
+          await using fixture = await store.fixture(process.env);
 
           // Act: each thread builds its own store over the same fixture.
           const result = await incrementFromFourThreads(
@@ -1348,7 +1348,7 @@ void describe.each(
         async () => {
           // Arrange: this thread asks first, so a SocketStore leads from here and
           // terminating the holder never ends the leader's term.
-          await using fixture = await store.fixture();
+          await using fixture = await store.fixture(process.env);
           await using host = store.open(fixture.location);
           const mutex = new Mutex(host.store);
           await mutex.acquire('warm-up', async () => {});

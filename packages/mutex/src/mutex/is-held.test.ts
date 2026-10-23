@@ -22,7 +22,7 @@ void describe.each(storeCases, (store) =>
   describe(`Holder check with ${store.name}`, () => {
     test('a key reads as held only while a task holds it', async () => {
       // Arrange
-      await using fixture = await store.fixture();
+      await using fixture = await store.fixture(process.env);
       await using host = store.open(fixture.location);
       const mutex = new Mutex(host.store);
 
@@ -42,7 +42,7 @@ void describe.each(storeCases, (store) =>
 
     test('a key answers for its own name, not for another key', async () => {
       // Arrange
-      await using fixture = await store.fixture();
+      await using fixture = await store.fixture(process.env);
       await using host = store.open(fixture.location);
       const mutex = new Mutex(host.store);
       const daily = mutex.key('report:daily');
@@ -58,9 +58,9 @@ void describe.each(storeCases, (store) =>
       assert.deepEqual(seen, { daily: true, weekly: false });
     });
 
-    test('looks take no fencing token and change no file', async () => {
+    test('looks take no fencing token', async () => {
       // Arrange
-      await using fixture = await store.fixture();
+      await using fixture = await store.fixture(process.env);
       await using host = store.open(fixture.location);
       const mutex = new Mutex(host.store);
       const lookTwenty = async () => {
@@ -71,39 +71,64 @@ void describe.each(storeCases, (store) =>
 
       // Act: look while the key is held, then while it is free, between two grants.
       const held = await mutex.acquire('report:daily', async ({ token }) => {
-        const files = await filesIn(fixture.location);
         await lookTwenty();
-        return {
-          token,
-          files,
-          filesAfterLooks: await filesIn(fixture.location),
-        };
+        return token;
       });
-      const files = await filesIn(fixture.location);
       await lookTwenty();
-      const filesAfterLooks = await filesIn(fixture.location);
       const next = await mutex.acquire(
         'report:daily',
         async ({ token }) => token,
       );
 
       // Assert
-      assert.deepEqual(
-        held.filesAfterLooks,
-        held.files,
-        'Looks at a held key must not write',
-      );
-      assert.deepEqual(
-        filesAfterLooks,
-        files,
-        'Looks at a free key must not write',
-      );
       assert.equal(
         next.value,
-        held.token.value + 1n,
+        held.value + 1n,
         'Looks between two grants must take no token',
       );
     });
+
+    test(
+      'looks change no file',
+      {
+        skip: reaches(store, 'network')
+          ? 'A network lock store keeps no files'
+          : false,
+      },
+      async () => {
+        // Arrange
+        await using fixture = await store.fixture(process.env);
+        await using host = store.open(fixture.location);
+        const mutex = new Mutex(host.store);
+        const lookTwenty = async () => {
+          for (let look = 0; look < 20; look++) {
+            await mutex.isHeld('report:daily');
+          }
+        };
+
+        // Act: look while the key is held, then while it is free.
+        const held = await mutex.acquire('report:daily', async () => {
+          const files = await filesIn(fixture.location);
+          await lookTwenty();
+          return { files, filesAfterLooks: await filesIn(fixture.location) };
+        });
+        const files = await filesIn(fixture.location);
+        await lookTwenty();
+        const filesAfterLooks = await filesIn(fixture.location);
+
+        // Assert
+        assert.deepEqual(
+          held.filesAfterLooks,
+          held.files,
+          'Looks at a held key must not write',
+        );
+        assert.deepEqual(
+          filesAfterLooks,
+          files,
+          'Looks at a free key must not write',
+        );
+      },
+    );
   }),
 );
 
@@ -146,7 +171,7 @@ void describe.each(
         { timeout: 15000 },
         async (t) => {
           // Arrange: a worker thread looks at the key again and again until it is told to stop.
-          await using fixture = await store.fixture();
+          await using fixture = await store.fixture(process.env);
           await using host = store.open(fixture.location);
           const mutex = new Mutex(host.store);
           // [stop, looks made]
@@ -229,7 +254,7 @@ void describe.each(
         { timeout: 30000 },
         async (t) => {
           // Arrange: another process holds the key and never lets it go.
-          await using fixture = await store.fixture();
+          await using fixture = await store.fixture(process.env);
           await using host = store.open(fixture.location);
           await using holder = startWorker(
             holderSource(fixture.location),
@@ -263,7 +288,7 @@ void describe.each(
         { timeout: 30000 },
         async (t) => {
           // Arrange: a holder process dies while it holds the key.
-          await using fixture = await store.fixture();
+          await using fixture = await store.fixture(process.env);
           await using host = store.open(fixture.location);
           await using holder = startWorker(
             holderSource(fixture.location),
@@ -298,11 +323,13 @@ void describe.each(
           skip:
             store.name === 'SocketStore'
               ? 'A look that finds no leader campaigns to lead, and a campaign writes the term'
-              : false,
+              : reaches(store, 'network')
+                ? 'A network lock store keeps no files'
+                : false,
         },
         async (t) => {
           // Arrange: a holder process dies while it holds the key, and leaves its files.
-          await using fixture = await store.fixture();
+          await using fixture = await store.fixture(process.env);
           await using host = store.open(fixture.location);
           await using holder = startWorker(
             holderSource(fixture.location),
@@ -335,7 +362,7 @@ void describe.each(
         { timeout: 30000 },
         async (t) => {
           // Arrange: this process holds the key until the child has looked.
-          await using fixture = await store.fixture();
+          await using fixture = await store.fixture(process.env);
           await using host = store.open(fixture.location);
           const mutex = new Mutex(host.store);
           const entered = Promise.withResolvers<void>();
@@ -383,7 +410,7 @@ void describe.each(
         { timeout: 15000 },
         async () => {
           // Arrange: this thread holds the key until the worker has looked.
-          await using fixture = await store.fixture();
+          await using fixture = await store.fixture(process.env);
           await using host = store.open(fixture.location);
           const mutex = new Mutex(host.store);
           const entered = Promise.withResolvers<void>();
