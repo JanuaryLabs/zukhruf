@@ -10,7 +10,7 @@ When a stored object is not as declared, `apply` must make it as declared. Röth
 
 - **Change each stale table and keep its rows.** The callers do not need the rows, and the 12 steps cannot change every column, for example a new column that is NOT NULL with no default.
 - **Replace only the stale objects.** This fails when another table refers to a stale table.
-- **Replace every object of the declaration when one is stale, and only make the missing ones when none is stale.** This option was selected. `apply` drops the stored objects in the reverse order of the declaration, then makes all of them in order.
+- **Replace every object of the declaration when one is stale, and only make the missing ones when none is stale.** This option was selected. `apply` drops every stored declared object in the reverse order of the declaration, then makes all of them in order. The owned objects go with their declared objects ([ADR 0004](./0004-a-statement-owns-the-objects-its-create-makes.md)).
 
 ## Consequences
 

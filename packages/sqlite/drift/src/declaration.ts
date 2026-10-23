@@ -21,27 +21,20 @@ type SchemaObject = {
 type Stale = { readonly object: SchemaObject; readonly found: SchemaObject };
 
 // The tables, indexes, views and triggers a caller owns in a SQLite database,
-// by the CREATE statements that make them. SQLite keeps the text of each
-// CREATE in sqlite_schema. A declaration makes its objects once in an empty
-// database in memory, so the declared text and the stored text both come from
-// SQLite, and they compare as they are.
+// by the CREATE statements that make them, one statement for each object.
+// SQLite keeps the text of each CREATE in sqlite_schema. A declaration makes
+// its objects once in an empty database in memory, so the declared text and
+// the stored text both come from SQLite, and they compare as they are. The
+// other rows that a statement adds to sqlite_schema (shadow tables,
+// sqlite_sequence) are owned objects: SQLite makes and drops them with the
+// declared object (ADR 0004).
 export class Declaration {
   readonly #objects: readonly SchemaObject[];
   readonly #rows: Rows;
 
   constructor(statements: readonly string[], options: { readonly rows: Rows }) {
     using blank = new DatabaseSync(':memory:');
-    for (const statement of statements) blank.exec(statement);
-    this.#objects = blank
-      .prepare(
-        'SELECT "type", "name", "sql" FROM sqlite_schema WHERE "sql" IS NOT NULL ORDER BY rowid',
-      )
-      .all()
-      .map(({ type, name, sql }) => ({
-        type: String(type),
-        name: String(name),
-        sql: String(sql),
-      }));
+    this.#objects = statements.map((statement) => declare(blank, statement));
     this.#rows = options.rows;
   }
 
@@ -65,6 +58,12 @@ export class Declaration {
   // Objects the declaration does not name stay.
   apply(database: DatabaseSync): void {
     if (this.drift(database) === 'fits') return;
+    if (this.#rows === 'keep')
+      for (const { object, found } of this.#stale(database))
+        if (virtual(object) || virtual(found))
+          throw new Error(
+            `The virtual table ${object.name} cannot keep its rows: declare it in its own declaration with rows: 'replace'.`,
+          );
     // SQLite ignores PRAGMA foreign_keys in a transaction. With foreign keys
     // on, the rename of a referenced table changes the references to the old
     // table, and its drop then deletes the rows that refer to it.
@@ -179,21 +178,119 @@ export class Declaration {
       .map(({ sql }) => String(sql));
     const old = `${found.name}_${randomUUID().replaceAll('-', '')}`;
     database.exec(`ALTER TABLE ${quote(found.name)} RENAME TO ${quote(old)}`);
+    // The sqlite_sequence row of the table follows the rename.
+    const counter = sequence(database, old);
     database.exec(object.sql);
     const columns = new Set(
       names(database, object.name).map((name) => name.toLowerCase()),
     );
     const shared = names(database, old)
       .filter((name) => columns.has(name.toLowerCase()))
-      .map(quote)
-      .join(', ');
-    if (shared !== '')
+      .map(quote);
+    const into = [...shared];
+    const from = [...shared];
+    // pragma_table_info does not list the rowid, so a copy of the columns
+    // gives new rowids. The rowid goes first: when the list also has the
+    // INTEGER PRIMARY KEY of the new table, SQLite takes the later value.
+    const target = rowid(database, object.name);
+    const source = rowid(database, old);
+    if (target !== undefined && source !== undefined) {
+      into.unshift(target);
+      from.unshift(source);
+    }
+    if (into.length > 0)
       database.exec(
-        `INSERT INTO ${quote(object.name)} (${shared}) SELECT ${shared} FROM ${quote(old)}`,
+        `INSERT INTO ${quote(object.name)} (${into.join(', ')}) SELECT ${from.join(', ')} FROM ${quote(old)}`,
       );
+    // AUTOINCREMENT gives no id that the table gave before, also when its row
+    // is gone. sqlite_sequence keeps the largest such id. The copy gives no
+    // id larger than the old counter.
+    if (counter !== undefined && /\bAUTOINCREMENT\b/i.test(object.sql)) {
+      database
+        .prepare('DELETE FROM sqlite_sequence WHERE "name" = ?')
+        .run(object.name);
+      database
+        .prepare('INSERT INTO sqlite_sequence ("name", "seq") VALUES (?, ?)')
+        .run(object.name, counter);
+    }
     database.exec(`DROP TABLE ${quote(old)}`);
     for (const sql of undeclared) database.exec(sql);
   }
+}
+
+// Runs one element of a declaration in the blank database, and gives the
+// object that the element declares: the first row that it adds to
+// sqlite_schema. The other rows that it adds (the shadow tables of a virtual
+// table, sqlite_sequence, the index of a UNIQUE column) belong to that object:
+// SQLite makes and drops them with it (ADR 0004).
+function declare(blank: DatabaseSync, element: string): SchemaObject {
+  const last = Number(
+    blank
+      .prepare('SELECT coalesce(max(rowid), 0) AS "last" FROM sqlite_schema')
+      .get()?.last,
+  );
+  // prepare compiles the first statement of the text and ignores the rest.
+  const statement = blank.prepare(element);
+  statement.run();
+  if (holds(blank, element.slice(statement.sourceSQL.length)))
+    throw new Error(
+      `An element of a declaration holds one statement. This element holds more: ${element}`,
+    );
+  const made = blank
+    .prepare(
+      'SELECT "type", "name", "sql" FROM sqlite_schema WHERE rowid > ? ORDER BY rowid',
+    )
+    .get(last);
+  if (made === undefined)
+    throw new Error(
+      `An element of a declaration makes one object. This element makes none: ${element}`,
+    );
+  return {
+    type: String(made.type),
+    name: String(made.name),
+    sql: String(made.sql),
+  };
+}
+
+// Whether the text holds a statement. SQLite compiles no statement from a
+// text of spaces, comments and semicolons, and node:sqlite then throws.
+function holds(database: DatabaseSync, text: string): boolean {
+  try {
+    database.prepare(text);
+    return true;
+  } catch (error) {
+    return !(
+      error instanceof Error &&
+      'code' in error &&
+      error.code === 'ERR_INVALID_ARG_VALUE'
+    );
+  }
+}
+
+function virtual(object: SchemaObject): boolean {
+  return /^CREATE VIRTUAL TABLE /i.test(object.sql);
+}
+
+// The name that reads the rowid of the table: none for a WITHOUT ROWID table,
+// and none when columns have each of the three names of the rowid.
+function rowid(database: DatabaseSync, table: string): string | undefined {
+  const list = database
+    .prepare('SELECT "wr" FROM pragma_table_list(?)')
+    .get(table);
+  if (Number(list?.wr) === 1) return undefined;
+  const columns = new Set(
+    names(database, table).map((name) => name.toLowerCase()),
+  );
+  return ['rowid', '_rowid_', 'oid'].find((name) => !columns.has(name));
+}
+
+// The largest id that an AUTOINCREMENT table gave, as sqlite_sequence keeps it.
+function sequence(database: DatabaseSync, table: string): number | undefined {
+  if (stored(database, 'sqlite_sequence') === undefined) return undefined;
+  const row = database
+    .prepare('SELECT "seq" FROM sqlite_sequence WHERE "name" = ?')
+    .get(table);
+  return row === undefined ? undefined : Number(row.seq);
 }
 
 // SQLite takes names that differ only in ASCII case for one object.

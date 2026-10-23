@@ -12,6 +12,14 @@ _Avoid_: Schema (in SQLite, a schema is one attached database, for example `main
 A table, an index, a view or a trigger that `sqlite_schema` lists.
 _Avoid_: Relation (a relation is a table or a view only), entity
 
+**Declared object**:
+The object that one statement of a declaration makes: the first row that the statement adds to `sqlite_schema`. `drift` and `apply` examine only declared objects.
+_Avoid_: Main object, root
+
+**Owned object**:
+An object that a statement adds to `sqlite_schema` after its declared object, for example the shadow tables of a virtual table, `sqlite_sequence`, or the index of a `UNIQUE` column. SQLite makes and drops it with its declared object.
+_Avoid_: Shadow object (a shadow table is one kind of owned object), internal object
+
 **Drift**:
 How the database stores the objects of a declaration: `missing` when it stores none of them, `fits` when it stores each one as declared, and `stale` for all other cases.
 _Avoid_: Mismatch, diff, outdated

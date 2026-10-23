@@ -15,6 +15,8 @@ Thus `apply` renames the old table away first:
 2. It turns `PRAGMA legacy_alter_table` on. With this pragma, the rename does not change the references to `X` in other tables, views and triggers.
 3. It renames `X` to a name that cannot clash, and runs the declared CREATE text. SQLite stores the declared text exactly.
 4. It copies the columns that both tables have, by name. A column that only the declaration has gets its default. A column that only the old table has is discarded.
+   - When both tables have a rowid, it also copies the rowid. It reads and writes the rowid through the first name of `rowid`, `_rowid_` and `oid` that no column has. A `WITHOUT ROWID` table has no rowid. The rowid is first in the column list. When the list also has the `INTEGER PRIMARY KEY` column of the new table, SQLite uses the later value, so that column keeps its own values. A new `INTEGER PRIMARY KEY` column that the old table does not have gets the old rowids.
+   - When the declared table has `AUTOINCREMENT`, it keeps the old row of `sqlite_sequence`. The rename moves that row to the old name. After the copy, the new table gets the old value. The copy gives no id larger than the old value.
 5. It drops the old table, and runs the kept index and trigger SQL again. Then `apply` makes the declared objects that are missing.
 6. It runs `PRAGMA foreign_key_check`. A row that it finds makes `apply` fail, and the transaction rolls back.
 
@@ -25,6 +27,9 @@ We tested more facts:
 - `PRAGMA foreign_keys` does nothing in a transaction. `PRAGMA legacy_alter_table` changes in a transaction, and a rollback does not undo it. Thus `apply` sets the old value again in a `finally`.
 - The indexes and triggers on `X` move with the rename, and the drop of the old table drops them. Thus `apply` makes them again.
 - When a stored row does not fit the new table (NOT NULL, CHECK, a foreign key, STRICT), the copy fails with the error of SQLite, for example `NOT NULL constraint failed: runs.name`. The rollback restores the table and its rows.
+- A copy of the columns gives new rowids, because `pragma_table_info` does not list the rowid. A table with no `INTEGER PRIMARY KEY` changed the rowids `2, 3` to `1, 2`, and an external-content FTS5 index that refers to the rowids then found the wrong rows.
+- A copy of the columns does not copy `sqlite_sequence`. After the rebuild, an `AUTOINCREMENT` table gave the id of a deleted row again.
+- A module keeps the data of a virtual table in its own way. An external-content FTS5 index keeps the rowids of its content table, and a `vec0` table keeps the vectors in chunks of a declared size. A copy of the rows cannot keep these safely. Thus `apply` does not rebuild a stale virtual table. It fails before it changes the database, and tells the caller to give the virtual table its own declaration with `rows: 'replace'`.
 
 The foreign-key rule: when foreign keys are on, and a table (the stale table too) has a foreign key to a stale table, `apply` must turn foreign keys off. When `apply` owns the transaction, it turns them off before `BEGIN` and on again after the transaction. In a transaction of the caller, `apply` cannot turn them off, so it fails before it changes anything. When no table refers to the stale table, `apply` rebuilds it with foreign keys on, also in a transaction of the caller.
 
@@ -40,6 +45,8 @@ The foreign-key rule: when foreign keys are on, and a table (the stale table too
 ## Consequences
 
 - With `rows: 'keep'`, a stale table keeps its rows, and the rows of the tables that refer to it stay.
+- A kept row keeps its rowid, and an `AUTOINCREMENT` table does not give an old id again.
+- With `rows: 'keep'`, a stale virtual table makes `apply` fail. The caller declares it alone with `rows: 'replace'`, and fills it again.
 - `drift` gives `fits` after `apply`, because SQLite stores the declared text.
 - A renamed column reads as one column dropped and one column added. The values of the old column are discarded.
 - A stored row that does not fit the declaration makes `apply` fail with the error of SQLite. The caller changes or removes the row before `apply`.

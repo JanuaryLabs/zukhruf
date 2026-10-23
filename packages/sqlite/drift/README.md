@@ -49,6 +49,8 @@ fits
 ## A declaration compares the text that SQLite stores
 
 - `new Declaration(statements, { rows })` makes the objects once in an empty database in memory, and keeps the text that SQLite stores for each one. [ADR 0001](./docs/adr/0001-compare-the-text-that-sqlite-stores.md) tells why.
+- Each string in `statements` holds one CREATE statement, and the statement makes one declared object. A closing semicolon and comments after the statement are permitted.
+- A statement can also add owned objects to `sqlite_schema`: the shadow tables of a virtual table, `sqlite_sequence` for `AUTOINCREMENT`, and the index of a `UNIQUE` column. SQLite makes and drops an owned object with its declared object. `drift` and `apply` examine only the declared objects. [ADR 0004](./docs/adr/0004-a-statement-owns-the-objects-its-create-makes.md) tells why.
 - `rows` is `'replace'` or `'keep'`. It tells `apply` what to do with the rows of a stale table. It has no default, so no caller loses rows because it forgot an option.
 - `drift(database)` gives `missing` when the database stores none of the objects, `fits` when it stores each one as declared, and `stale` for all other cases. It only reads, so it also works on a database opened read-only.
 - Each change to a CREATE statement is drift: a column, a type, a CHECK, STRICT, the query of a view.
@@ -70,7 +72,7 @@ With `rows: 'keep'`, `apply` keeps the rows of each stale table. It replaces a s
 
 1. It renames the stored table to a temporary name, with `PRAGMA legacy_alter_table` on. Thus the references of other tables, views and triggers stay on the name of the table.
 2. It makes the table from its declared text, so SQLite stores the declared text.
-3. It copies the columns that both tables have, by name. SQLite takes names that are different only in ASCII case as one name.
+3. It copies the columns that both tables have, by name. SQLite takes names that are different only in ASCII case as one name. When both tables have a rowid, it also copies the rowid of each row. A copied `INTEGER PRIMARY KEY` column keeps its own values. When the declared table has `AUTOINCREMENT`, it keeps the largest id that the old table gave, so the id of a deleted row is not given again.
 4. It drops the old table, and makes again the indexes and triggers on the table that the declaration does not name.
 5. It runs `PRAGMA foreign_key_check`. When a kept row breaks a foreign key, `apply` fails.
 6. After it makes the missing objects, it compiles a `DELETE`, an `INSERT` and an `UPDATE` of each rebuilt table, and runs no row. SQLite does not examine the body of a trigger at `CREATE`. It examines the body when it compiles a statement that fires the trigger. When a trigger on the table names a dropped column, `apply` fails with the error of SQLite.
@@ -123,6 +125,7 @@ fits
 - When foreign keys are on and a table refers to a stale table (also the stale table to itself), `apply` must turn foreign keys off. SQLite ignores `PRAGMA foreign_keys` in a transaction. Thus `apply` turns foreign keys off before its own transaction, and on again after it. In a transaction of the caller, `apply` fails before it changes the database. Call `apply` outside a transaction, or turn foreign keys off before it.
 - When no table refers to the stale table, `apply` also works in a transaction of the caller, with foreign keys on.
 - After a rebuild, `PRAGMA legacy_alter_table` has its old value again, also when `apply` fails.
+- `apply` does not rebuild a virtual table. A module keeps the data of a virtual table in its own way, and a copy of the rows can break it. For example, an external-content FTS5 index can then find the wrong rows. When a virtual table is stale, `apply` fails before it changes the database. Give the virtual table its own declaration with `rows: 'replace'`, and fill it again after `apply`.
 
 ## Write a declaration
 
@@ -135,6 +138,9 @@ fits
 | Error                                                                               | When                                                                                                                                                     |
 | ----------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | The error of SQLite                                                                 | `new Declaration` fails when a statement does not run in an empty database.                                                                              |
+| `An element of a declaration holds one statement. …`                                | `new Declaration` fails when one string holds two statements.                                                                                            |
+| `An element of a declaration makes one object. …`                                   | `new Declaration` fails when a statement makes no object, for example `CREATE TABLE IF NOT EXISTS` of a declared table, a `TEMP` table, or an `INSERT`.  |
+| `The virtual table … cannot keep its rows: …`                                       | `rows: 'keep'`, and a virtual table is stale. Nothing changes.                                                                                           |
 | `database is locked`                                                                | `apply` with no transaction waits for the busy timeout of the connection, then fails.                                                                    |
 | The error of a statement                                                            | `apply` fails, and the database stays as it was.                                                                                                         |
 | `Keeping the rows of a table that other tables reference needs foreign keys off, …` | `rows: 'keep'`, in a transaction of the caller, with foreign keys on, and another table refers to a stale table. Nothing changes.                        |
@@ -160,6 +166,7 @@ fits
 - [0001 Compare the text that SQLite stores](./docs/adr/0001-compare-the-text-that-sqlite-stores.md)
 - [0002 A stale object replaces the whole declaration](./docs/adr/0002-a-stale-object-replaces-the-whole-declaration.md)
 - [0003 Keep rows rebuilds a table and keeps its references](./docs/adr/0003-keep-rows-rebuilds-a-table-and-keeps-its-references.md)
+- [0004 A statement owns the objects its CREATE makes](./docs/adr/0004-a-statement-owns-the-objects-its-create-makes.md)
 
 ## Development
 
