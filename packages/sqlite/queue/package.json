@@ -1,0 +1,54 @@
+{
+  "name": "@zukhruf/sqlite-queue",
+  "version": "0.3.40",
+  "description": "pg-boss's job queue API on node:sqlite. It implements a declared subset of 13 PgBoss methods: queues, send, work, findJobs, cancel, fail and schedules. A parity suite runs each scenario on real pg-boss and on SQLite, and requires the same result, so a caller can change from one engine to the other.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/JanuaryLabs/zukhruf",
+    "directory": "packages/sqlite/queue"
+  },
+  "bugs": {
+    "url": "https://github.com/JanuaryLabs/zukhruf/issues"
+  },
+  "homepage": "https://github.com/JanuaryLabs/zukhruf/tree/main/packages/sqlite/queue#readme",
+  "keywords": [
+    "sqlite",
+    "node-sqlite",
+    "pg-boss",
+    "job-queue",
+    "background-jobs",
+    "cron",
+    "scheduler"
+  ],
+  "type": "module",
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "@zukhruf/source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "!dist/spec/**",
+    "!**/*.tsbuildinfo",
+    "!**/*.test.*"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@zukhruf/async": "^0.3.40",
+    "@zukhruf/sqlite-transaction": "^0.3.40",
+    "cron-parser": "^5.10.1",
+    "pg-boss": "12.35.1",
+    "rrule-temporal": "^2.2.7",
+    "serialize-error": "^13.0.2"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "0.5.8"
+  }
+}

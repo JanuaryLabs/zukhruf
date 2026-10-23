@@ -64,6 +64,9 @@
     },
     {
       "path": "./packages/docker"
+    },
+    {
+      "path": "./packages/sqlite/queue"
     }
   ]
 }

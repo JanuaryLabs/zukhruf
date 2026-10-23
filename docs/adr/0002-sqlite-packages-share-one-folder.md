@@ -27,3 +27,4 @@ A SQLite backend of another concept stays with that concept. The `FileLock` of `
 - The `workspaces` field of the root `package.json` lists `packages/sqlite/*`.
 - A relative path in a package of this folder goes up three levels, for example `../../../tsconfig.base.json`.
 - Lint, the Nx targets, CI and the release need no change. They select a project by its tag, or by a glob that also finds a folder in a folder.
+- A concept that zukhruf implements only on SQLite also lives in this folder, although SQLite is not its concept. The job queue is an example: `packages/sqlite/queue`, `@zukhruf/sqlite-queue`. Its other engine is pg-boss itself, outside zukhruf. A lock and an election keep their own folders, because they have other backends in this workspace.
