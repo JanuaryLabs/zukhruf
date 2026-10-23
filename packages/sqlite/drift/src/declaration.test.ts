@@ -5,6 +5,8 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { test } from 'node:test';
 
+import * as sqliteVec from 'sqlite-vec';
+
 import { Declaration } from './index.ts';
 
 // The objects a database stores, as sqlite_schema keeps their CREATE text.
@@ -717,6 +719,30 @@ test('with rows keep, an AUTOINCREMENT table keeps its counter, so the id of a d
   }
 });
 
+test('with rows keep, a table that loses AUTOINCREMENT keeps its rows and rowids, and sqlite_sequence has no row for it', async () => {
+  await using scratch = await mkdtempDisposable(join(tmpdir(), 'drift-'));
+  using database = new DatabaseSync(join(scratch.path, 'data.sqlite'));
+  database.exec(`CREATE TABLE jobs (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT) STRICT;
+    INSERT INTO jobs (name) VALUES ('a'), ('b'), ('c');
+    DELETE FROM jobs WHERE id = 3`);
+  const declaration = new Declaration(
+    ['CREATE TABLE jobs (id INTEGER PRIMARY KEY, name TEXT) STRICT'],
+    { rows: 'keep' },
+  );
+
+  declaration.apply(database);
+
+  assert.equal(declaration.drift(database), 'fits');
+  assert.deepEqual(rows(database, 'SELECT id, name FROM jobs ORDER BY id'), [
+    { id: 1, name: 'a' },
+    { id: 2, name: 'b' },
+  ]);
+  assert.deepEqual(
+    rows(database, "SELECT seq FROM sqlite_sequence WHERE name = 'jobs'"),
+    [],
+  );
+});
+
 test('with rows keep, a stale virtual table fails apply before any change, and its index still finds the right rows', async () => {
   await using scratch = await mkdtempDisposable(join(tmpdir(), 'drift-'));
   using database = new DatabaseSync(join(scratch.path, 'data.sqlite'));
@@ -865,4 +891,84 @@ test('with rows keep, a column that becomes the INTEGER PRIMARY KEY keeps its va
       { id: ids[1], body: 'c' },
     ]);
   }
+});
+
+test('with a dev database that loads sqlite-vec, a vec0 declaration goes from missing to fits, and with rows replace a new dimension fits after apply', async () => {
+  await using scratch = await mkdtempDisposable(join(tmpdir(), 'drift-'));
+  using database = new DatabaseSync(join(scratch.path, 'data.sqlite'), {
+    allowExtension: true,
+  });
+  database.loadExtension(sqliteVec.getLoadablePath());
+  const devDatabase = () => {
+    const dev = new DatabaseSync(':memory:', { allowExtension: true });
+    dev.loadExtension(sqliteVec.getLoadablePath());
+    return dev;
+  };
+  const four = new Declaration(
+    ['CREATE VIRTUAL TABLE vectors USING vec0(embedding float[4])'],
+    { rows: 'replace', devDatabase },
+  );
+
+  assert.equal(four.drift(database), 'missing');
+  four.apply(database);
+  assert.equal(four.drift(database), 'fits');
+
+  const eight = new Declaration(
+    ['CREATE VIRTUAL TABLE vectors USING vec0(embedding float[8])'],
+    { rows: 'replace', devDatabase },
+  );
+  assert.equal(eight.drift(database), 'stale');
+  eight.apply(database);
+
+  assert.equal(eight.drift(database), 'fits');
+  database
+    .prepare('INSERT INTO vectors (rowid, embedding) VALUES (1, ?)')
+    .run(JSON.stringify([1, 2, 3, 4, 5, 6, 7, 8]));
+  assert.equal(count(database, 'vectors'), 1);
+});
+
+test('with a dev database that registers a function, an index on an expression that calls it is declared, and apply makes it', async () => {
+  await using scratch = await mkdtempDisposable(join(tmpdir(), 'drift-'));
+  using database = new DatabaseSync(join(scratch.path, 'data.sqlite'));
+  const slug = (title: unknown) =>
+    String(title).toLowerCase().replaceAll(' ', '-');
+  database.function('slug', { deterministic: true }, slug);
+  const declaration = new Declaration(
+    [
+      'CREATE TABLE pages (title TEXT NOT NULL) STRICT',
+      'CREATE UNIQUE INDEX pages_slug ON pages (slug(title))',
+    ],
+    {
+      rows: 'replace',
+      devDatabase: () => {
+        const dev = new DatabaseSync(':memory:');
+        dev.function('slug', { deterministic: true }, slug);
+        return dev;
+      },
+    },
+  );
+
+  assert.equal(declaration.drift(database), 'missing');
+  declaration.apply(database);
+
+  assert.equal(declaration.drift(database), 'fits');
+  database.exec("INSERT INTO pages VALUES ('Read Me')");
+  assert.throws(() => database.exec("INSERT INTO pages VALUES ('read me')"), {
+    message: /UNIQUE constraint failed/,
+  });
+});
+
+test('a dev database that already holds an object fails when the declaration is made', () => {
+  assert.throws(
+    () =>
+      new Declaration(['CREATE TABLE events (at TEXT) STRICT'], {
+        rows: 'replace',
+        devDatabase: () => {
+          const dev = new DatabaseSync(':memory:');
+          dev.exec('CREATE TABLE notes (body TEXT)');
+          return dev;
+        },
+      }),
+    { message: 'The dev database must be empty. It holds notes.' },
+  );
 });

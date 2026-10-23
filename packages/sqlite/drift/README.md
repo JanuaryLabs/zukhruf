@@ -1,6 +1,6 @@
 # @zukhruf/sqlite-drift
 
-A package keeps tables, indexes, views and triggers in a SQLite database. A later version of the package can declare them otherwise, for example with one more column. The database still stores the objects as the earlier version made them, and the new code fails on them, for example with `no such column`. This package compares the stored objects with their declaration, and makes the database store them as declared. No person keeps a version number. This is also known as declarative schema management, and the difference that it finds is known as schema drift.
+A package keeps tables, virtual tables, indexes, views and triggers in a SQLite database. A later version of the package can declare them otherwise, for example with one more column. The database still stores the objects as the earlier version made them, and the new code fails on them, for example with `no such column`. This package compares the stored objects with their declaration, and makes the database store them as declared. No person keeps a version number. This is also known as declarative schema management, and the difference that it finds is known as schema drift.
 
 The words in these documents have one meaning each. See the glossary in [CONTEXT.md](./CONTEXT.md).
 
@@ -48,7 +48,8 @@ fits
 
 ## A declaration compares the text that SQLite stores
 
-- `new Declaration(statements, { rows })` makes the objects once in an empty database in memory, and keeps the text that SQLite stores for each one. [ADR 0001](./docs/adr/0001-compare-the-text-that-sqlite-stores.md) tells why.
+- `new Declaration(statements, { rows, devDatabase })` makes the objects once in the dev database, and keeps the text that SQLite stores for each one. [ADR 0001](./docs/adr/0001-compare-the-text-that-sqlite-stores.md) tells why.
+- The dev database is an empty database in memory. `devDatabase` is an optional function that opens it. When there is no `devDatabase`, the package opens `new DatabaseSync(':memory:')`. See [Extensions and functions](#extensions-and-functions).
 - Each string in `statements` holds one CREATE statement, and the statement makes one declared object. A closing semicolon and comments after the statement are permitted.
 - A statement can also add owned objects to `sqlite_schema`: the shadow tables of a virtual table, `sqlite_sequence` for `AUTOINCREMENT`, and the index of a `UNIQUE` column. SQLite makes and drops an owned object with its declared object. `drift` and `apply` examine only the declared objects. [ADR 0004](./docs/adr/0004-a-statement-owns-the-objects-its-create-makes.md) tells why.
 - `rows` is `'replace'` or `'keep'`. It tells `apply` what to do with the rows of a stale table. It has no default, so no caller loses rows because it forgot an option.
@@ -127,17 +128,62 @@ fits
 - After a rebuild, `PRAGMA legacy_alter_table` has its old value again, also when `apply` fails.
 - `apply` does not rebuild a virtual table. A module keeps the data of a virtual table in its own way, and a copy of the rows can break it. For example, an external-content FTS5 index can then find the wrong rows. When a virtual table is stale, `apply` fails before it changes the database. Give the virtual table its own declaration with `rows: 'replace'`, and fill it again after `apply`.
 
+## Extensions and functions
+
+SQLite keeps virtual-table modules, functions of the application and collations on the connection, not in the database file. Thus a statement that uses one runs only in a connection that has it. The default dev database has only what SQLite has by default. A statement that uses more fails in `new Declaration`, for example with `no such module: vec0`. Give `devDatabase`, and open the dev database as you open the target database: load the same extensions, and register the same functions. The example loads the `vec0` module of the sqlite-vec extension. [ADR 0005](./docs/adr/0005-the-caller-can-give-the-dev-database.md) tells why.
+
+```ts
+import { mkdtempDisposable } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
+
+import * as sqliteVec from 'sqlite-vec';
+
+import { Declaration } from '@zukhruf/sqlite-drift';
+
+function open(path: string): DatabaseSync {
+  const database = new DatabaseSync(path, { allowExtension: true });
+  database.loadExtension(sqliteVec.getLoadablePath());
+  return database;
+}
+
+await using scratch = await mkdtempDisposable(join(tmpdir(), 'drift-'));
+using database = open(join(scratch.path, 'app.sqlite'));
+
+const vectors = new Declaration(
+  ['CREATE VIRTUAL TABLE vectors USING vec0(embedding float[4])'],
+  { rows: 'replace', devDatabase: () => open(':memory:') },
+);
+console.log(vectors.drift(database));
+vectors.apply(database);
+console.log(vectors.drift(database));
+```
+
+Output:
+
+```
+missing
+fits
+```
+
+- The dev database must be empty when the declaration starts. When it has an object, `new Declaration` fails.
+- `new Declaration` closes the dev database, also when it fails. Do not use the connection after you give it.
+- The target database must load the same modules. When it does not, `apply` fails with the error of SQLite, for example `no such module: vec0`. `drift` reads only `sqlite_schema`, so it still gives the drift.
+
 ## Write a declaration
 
 - List a table before the tables that refer to it.
-- A declaration must stand alone in an empty database. Do not declare a trigger or an index on a table that the declaration does not name, and do not use a function that only your connection registers.
+- A declaration must stand alone in the dev database. Do not declare a trigger or an index on a table that the declaration does not name. When a statement uses a function, a module or a collation, the dev database must have it too.
 - With `rows: 'replace'`, give each table its own declaration when it must keep its rows while another table changes.
 
 ## Errors
 
 | Error                                                                               | When                                                                                                                                                     |
 | ----------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| The error of SQLite                                                                 | `new Declaration` fails when a statement does not run in an empty database.                                                                              |
+| The error of SQLite                                                                 | `new Declaration` fails when a statement does not run in the dev database.                                                                               |
+| `The dev database must be empty. …`                                                 | `new Declaration` fails when the dev database has an object.                                                                                             |
+| `no such module: …`, `no such function: …`                                          | `new Declaration`, or `apply` on the target database, when that connection does not have a module or a function that a statement uses.                   |
 | `An element of a declaration holds one statement. …`                                | `new Declaration` fails when one string holds two statements.                                                                                            |
 | `An element of a declaration makes one object. …`                                   | `new Declaration` fails when a statement makes no object, for example `CREATE TABLE IF NOT EXISTS` of a declared table, a `TEMP` table, or an `INSERT`.  |
 | `The virtual table … cannot keep its rows: …`                                       | `rows: 'keep'`, and a virtual table is stale. Nothing changes.                                                                                           |
@@ -167,6 +213,7 @@ fits
 - [0002 A stale object replaces the whole declaration](./docs/adr/0002-a-stale-object-replaces-the-whole-declaration.md)
 - [0003 Keep rows rebuilds a table and keeps its references](./docs/adr/0003-keep-rows-rebuilds-a-table-and-keeps-its-references.md)
 - [0004 A statement owns the objects its CREATE makes](./docs/adr/0004-a-statement-owns-the-objects-its-create-makes.md)
+- [0005 The caller can give the dev database](./docs/adr/0005-the-caller-can-give-the-dev-database.md)
 
 ## Development
 

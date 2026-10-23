@@ -23,7 +23,7 @@ type Stale = { readonly object: SchemaObject; readonly found: SchemaObject };
 // The tables, indexes, views and triggers a caller owns in a SQLite database,
 // by the CREATE statements that make them, one statement for each object.
 // SQLite keeps the text of each CREATE in sqlite_schema. A declaration makes
-// its objects once in an empty database in memory, so the declared text and
+// its objects once in the dev database, so the declared text and
 // the stored text both come from SQLite, and they compare as they are. The
 // other rows that a statement adds to sqlite_schema (shadow tables,
 // sqlite_sequence) are owned objects: SQLite makes and drops them with the
@@ -32,8 +32,21 @@ export class Declaration {
   readonly #objects: readonly SchemaObject[];
   readonly #rows: Rows;
 
-  constructor(statements: readonly string[], options: { readonly rows: Rows }) {
-    using blank = new DatabaseSync(':memory:');
+  // devDatabase opens the empty database in memory. SQLite keeps modules,
+  // functions and collations on the connection, so the connection that makes
+  // the objects must have those that the statements use (ADR 0005). The
+  // declaration closes it.
+  constructor(
+    statements: readonly string[],
+    options: {
+      readonly rows: Rows;
+      readonly devDatabase?: () => DatabaseSync;
+    },
+  ) {
+    using blank = (
+      options.devDatabase ?? (() => new DatabaseSync(':memory:'))
+    )();
+    empty(blank);
     this.#objects = statements.map((statement) => declare(blank, statement));
     this.#rows = options.rows;
   }
@@ -216,6 +229,17 @@ export class Declaration {
     database.exec(`DROP TABLE ${quote(old)}`);
     for (const sql of undeclared) database.exec(sql);
   }
+}
+
+// A declared object is the first row that a statement adds, so an object
+// that is already in the dev database cannot be part of the declaration.
+// Atlas also refuses a dev database that is not clean.
+function empty(blank: DatabaseSync): void {
+  const object = blank.prepare('SELECT "name" FROM sqlite_schema').get();
+  if (object !== undefined)
+    throw new Error(
+      `The dev database must be empty. It holds ${String(object.name)}.`,
+    );
 }
 
 // Runs one element of a declaration in the blank database, and gives the

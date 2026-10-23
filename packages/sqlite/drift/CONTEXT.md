@@ -20,6 +20,10 @@ _Avoid_: Main object, root
 An object that a statement adds to `sqlite_schema` after its declared object, for example the shadow tables of a virtual table, `sqlite_sequence`, or the index of a `UNIQUE` column. SQLite makes and drops it with its declared object.
 _Avoid_: Shadow object (a shadow table is one kind of owned object), internal object
 
+**Dev database**:
+The empty database in memory where a declaration makes its objects once, to read the text that SQLite stores. The caller can open it with the same extensions and functions as the target database. The term comes from Atlas.
+_Avoid_: Blank database, shadow database (the Prisma term), scratch database
+
 **Drift**:
 How the database stores the objects of a declaration: `missing` when it stores none of them, `fits` when it stores each one as declared, and `stale` for all other cases.
 _Avoid_: Mismatch, diff, outdated
