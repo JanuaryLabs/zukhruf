@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { setTimeout } from 'node:timers/promises';
+import { setImmediate } from 'node:timers/promises';
 
 import { PGlite } from '@electric-sql/pglite';
 import { PgBoss, fromPglite } from 'pg-boss';
@@ -33,10 +33,11 @@ async function stopUnderWorkerError(queue: JobQueue) {
       close: false,
       timeout: 5000,
     });
-    // pg-boss closes its listener before its workers stop
-    // (node_modules/pg-boss/dist/index.js:227-231); nothing tells when the
-    // worker is stopping, so the batch ends after a pause.
-    await setTimeout(200);
+    // Without useListenNotify, both stops reach worker.stop() in microtasks,
+    // with no I/O before it (index.js:228-229, notifier.js:66-79,
+    // manager.js:866-875), so after one turn of the event loop the worker is
+    // stopping. No public event says so: wip is not emitted after a stop.
+    await setImmediate();
     release.resolve();
     let stop: string;
     try {
@@ -45,8 +46,10 @@ async function stopUnderWorkerError(queue: JobQueue) {
     } catch (error) {
       stop = `rejected: ${String(error)}`;
     }
-    // A rejection nobody handled is reported after the turn it settled in.
-    await setTimeout(50);
+    // A graceful stop resolves after the worker's loop settled
+    // (index.js:269), and Node reports a rejection nobody handled at the
+    // end of the turn it settled in, before the next turn runs.
+    await setImmediate();
     return { stop, unhandled: unhandled.length };
   } finally {
     process.off('unhandledRejection', onUnhandled);
