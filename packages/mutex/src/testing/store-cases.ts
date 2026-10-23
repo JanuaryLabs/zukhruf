@@ -394,8 +394,12 @@ interface DockerEngineLocation {
   namespace: string;
 }
 
+/** The image of each DockerEngineStore container. */
+const dockerImage = 'node:lts-alpine';
+
 /**
- * A new namespace on the engine that `environment` selects. The disposal
+ * A new namespace on the engine that `environment` selects, with
+ * `dockerImage` on it: the store never pulls its image. The disposal
  * removes each container and volume with the label of the namespace, through
  * a client of its own, so it runs after each store of the test ended its
  * client.
@@ -405,6 +409,9 @@ async function dockerEngineFixture(
 ): Promise<StoreFixture> {
   const { host } = await (async () => {
     await using docker = await Docker.connect({ environment });
+    if (!(await docker.images.inspect(dockerImage))) {
+      await docker.images.pull(dockerImage);
+    }
     return { host: docker.host };
   })();
   const location: DockerEngineLocation = {
@@ -445,7 +452,7 @@ function dockerEngineStore(location: string) {
     (client) =>
       new DockerEngineStore({
         docker: client,
-        image: 'node:lts-alpine',
+        image: dockerImage,
         namespace,
         heartbeatInterval: 500,
       }),

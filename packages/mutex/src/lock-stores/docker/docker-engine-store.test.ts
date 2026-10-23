@@ -32,12 +32,15 @@ const engineBound = 10_000;
 const namespaceLabel = 'zukhruf.mutex.namespace';
 
 /**
- * A client of the local engine and a new namespace. The disposal first ends
- * the client, so that no store of the test creates anything later, and then
- * removes each container and volume with the label of the namespace.
+ * A client of the local engine, with `image` on it, and a new namespace. The
+ * store never pulls its image, so the test pulls it before any store starts.
+ * The disposal first ends the client, so that no store of the test creates
+ * anything later, and then removes each container and volume with the label
+ * of the namespace.
  */
 async function engine() {
   const docker = await Docker.connect({ environment: process.env });
+  if (!(await docker.images.inspect(image))) await docker.images.pull(image);
   const namespace = `zukhruf-mutex-test-${randomUUID()}`;
   const label = { label: [`${namespaceLabel}=${namespace}`] };
   return {
