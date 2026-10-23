@@ -585,3 +585,253 @@ test('with rows keep, a view that was broken before apply does not fail it', asy
     { id: 1, name: null },
   ]);
 });
+
+test(
+  'with rows replace, a stale AUTOINCREMENT table is replaced and the declaration fits',
+  { todo: '#2857 drop of sqlite_sequence' },
+  async () => {
+    await using scratch = await mkdtempDisposable(join(tmpdir(), 'drift-'));
+    using database = new DatabaseSync(join(scratch.path, 'data.sqlite'));
+    database.exec(`CREATE TABLE jobs (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT) STRICT;
+    INSERT INTO jobs (name) VALUES ('first')`);
+    const declaration = new Declaration(
+      [
+        'CREATE TABLE jobs (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, at TEXT) STRICT',
+      ],
+      { rows: 'replace' },
+    );
+
+    assert.equal(declaration.drift(database), 'stale');
+    declaration.apply(database);
+
+    assert.equal(declaration.drift(database), 'fits');
+    assert.equal(count(database, 'jobs'), 0);
+  },
+);
+
+test(
+  'with rows replace, a stale FTS5 table is replaced, the declaration fits, and MATCH finds the new rows',
+  { todo: '#2857 drop of FTS5 shadow tables' },
+  async () => {
+    await using scratch = await mkdtempDisposable(join(tmpdir(), 'drift-'));
+    using database = new DatabaseSync(join(scratch.path, 'data.sqlite'));
+    database.exec(`CREATE VIRTUAL TABLE m_fts USING fts5(body);
+    INSERT INTO m_fts VALUES ('old')`);
+    const declaration = new Declaration(
+      ['CREATE VIRTUAL TABLE m_fts USING fts5(body, title)'],
+      { rows: 'replace' },
+    );
+
+    assert.equal(declaration.drift(database), 'stale');
+    declaration.apply(database);
+
+    assert.equal(declaration.drift(database), 'fits');
+    database.exec("INSERT INTO m_fts VALUES ('new body', 'new title')");
+    assert.deepEqual(
+      rows(
+        database,
+        "SELECT body, title FROM m_fts WHERE m_fts MATCH 'title:new'",
+      ),
+      [{ body: 'new body', title: 'new title' }],
+    );
+  },
+);
+
+test(
+  'an AUTOINCREMENT declaration that the database does not store is missing, when another table already made sqlite_sequence',
+  { todo: '#2857 sqlite_sequence counted as declared' },
+  async () => {
+    await using scratch = await mkdtempDisposable(join(tmpdir(), 'drift-'));
+    using database = new DatabaseSync(join(scratch.path, 'data.sqlite'));
+    database.exec(
+      'CREATE TABLE notes (id INTEGER PRIMARY KEY AUTOINCREMENT, body TEXT) STRICT',
+    );
+    const declaration = new Declaration(
+      [
+        'CREATE TABLE jobs (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT) STRICT',
+      ],
+      { rows: 'replace' },
+    );
+
+    assert.equal(declaration.drift(database), 'missing');
+  },
+);
+
+test(
+  'with rows keep, a table without INTEGER PRIMARY KEY keeps the rowid of each row, also when a column is named rowid',
+  { todo: '#2857 keep renumbers rowids' },
+  async () => {
+    for (const [older, newer, id] of [
+      [
+        'CREATE TABLE notes (body TEXT) STRICT',
+        'CREATE TABLE notes (body TEXT, at TEXT) STRICT',
+        'rowid',
+      ],
+      [
+        'CREATE TABLE notes (rowid TEXT, body TEXT) STRICT',
+        'CREATE TABLE notes (rowid TEXT, body TEXT, at TEXT) STRICT',
+        '_rowid_',
+      ],
+    ] as const) {
+      await using scratch = await mkdtempDisposable(join(tmpdir(), 'drift-'));
+      using database = new DatabaseSync(join(scratch.path, 'data.sqlite'));
+      database.exec(`${older};
+      INSERT INTO notes (body) VALUES ('a'), ('b'), ('c');
+      DELETE FROM notes WHERE body = 'a'`);
+      const declaration = new Declaration([newer], { rows: 'keep' });
+
+      declaration.apply(database);
+
+      assert.equal(declaration.drift(database), 'fits');
+      assert.deepEqual(
+        rows(database, `SELECT ${id} AS id, body FROM notes ORDER BY body`),
+        [
+          { id: 2, body: 'b' },
+          { id: 3, body: 'c' },
+        ],
+      );
+    }
+  },
+);
+
+test(
+  'with rows keep, an AUTOINCREMENT table keeps its counter, so the id of a deleted row is not used again',
+  { todo: '#2857 keep resets the AUTOINCREMENT counter' },
+  async () => {
+    await using scratch = await mkdtempDisposable(join(tmpdir(), 'drift-'));
+    using database = new DatabaseSync(join(scratch.path, 'data.sqlite'));
+    database.exec(`CREATE TABLE jobs (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT) STRICT;
+    INSERT INTO jobs (name) VALUES ('a'), ('b'), ('c');
+    DELETE FROM jobs WHERE id = 3`);
+    const declaration = new Declaration(
+      [
+        'CREATE TABLE jobs (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, at TEXT) STRICT',
+      ],
+      { rows: 'keep' },
+    );
+
+    declaration.apply(database);
+    database.exec("INSERT INTO jobs (name) VALUES ('d')");
+
+    assert.equal(declaration.drift(database), 'fits');
+    assert.deepEqual(rows(database, 'SELECT id, name FROM jobs ORDER BY id'), [
+      { id: 1, name: 'a' },
+      { id: 2, name: 'b' },
+      { id: 4, name: 'd' },
+    ]);
+  },
+);
+
+test(
+  'with rows keep, a stale virtual table fails apply before any change, and its index still finds the right rows',
+  { todo: '#2857 keep corrupts a stale virtual table' },
+  async () => {
+    await using scratch = await mkdtempDisposable(join(tmpdir(), 'drift-'));
+    using database = new DatabaseSync(join(scratch.path, 'data.sqlite'));
+    database.exec(`CREATE TABLE docs (id INTEGER PRIMARY KEY, body TEXT) STRICT;
+    CREATE VIRTUAL TABLE docs_fts USING fts5(body, content='docs', content_rowid='id');
+    INSERT INTO docs VALUES (10, 'apple'), (20, 'banana');
+    INSERT INTO docs_fts (rowid, body) SELECT id, body FROM docs`);
+    const before = stored(database);
+    const declaration = new Declaration(
+      [
+        'CREATE TABLE docs (id INTEGER PRIMARY KEY, body TEXT) STRICT',
+        "CREATE VIRTUAL TABLE docs_fts USING fts5(body, content='docs', content_rowid='id', prefix='2')",
+      ],
+      { rows: 'keep' },
+    );
+
+    assert.throws(() => declaration.apply(database), {
+      message:
+        "The virtual table docs_fts cannot keep its rows: declare it in its own declaration with rows: 'replace'.",
+    });
+
+    assert.deepEqual(stored(database), before);
+    assert.deepEqual(
+      rows(
+        database,
+        "SELECT rowid FROM docs_fts WHERE docs_fts MATCH 'banana'",
+      ),
+      [{ rowid: 20 }],
+    );
+  },
+);
+
+test(
+  'an element with two statements fails when the declaration is made, and one statement with a closing semicolon and a comment does not',
+  { todo: '#2857 one statement per element' },
+  async () => {
+    assert.throws(
+      () =>
+        new Declaration(
+          [
+            'CREATE TABLE events (at TEXT) STRICT; CREATE TABLE notes (body TEXT) STRICT',
+          ],
+          { rows: 'replace' },
+        ),
+      {
+        message:
+          'An element of a declaration holds one statement. This element holds more: CREATE TABLE events (at TEXT) STRICT; CREATE TABLE notes (body TEXT) STRICT',
+      },
+    );
+
+    await using scratch = await mkdtempDisposable(join(tmpdir(), 'drift-'));
+    using database = new DatabaseSync(join(scratch.path, 'data.sqlite'));
+    const declaration = new Declaration(
+      ['CREATE TABLE events (at TEXT) STRICT; -- the log'],
+      { rows: 'replace' },
+    );
+    declaration.apply(database);
+
+    assert.equal(declaration.drift(database), 'fits');
+    assert.deepEqual(stored(database), [
+      {
+        type: 'table',
+        name: 'events',
+        sql: 'CREATE TABLE events (at TEXT) STRICT',
+      },
+    ]);
+  },
+);
+
+test(
+  'an element that makes no object fails when the declaration is made',
+  { todo: '#2857 an element must make an object' },
+  () => {
+    for (const element of [
+      'CREATE TABLE IF NOT EXISTS events (at TEXT) STRICT',
+      'CREATE TEMP TABLE scratch (at TEXT) STRICT',
+      "INSERT INTO events VALUES ('2026-10-23')",
+    ])
+      assert.throws(
+        () =>
+          new Declaration(['CREATE TABLE events (at TEXT) STRICT', element], {
+            rows: 'replace',
+          }),
+        {
+          message: `An element of a declaration makes one object. This element makes none: ${element}`,
+        },
+      );
+  },
+);
+
+test('with rows keep, a WITHOUT ROWID table keeps its rows', async () => {
+  await using scratch = await mkdtempDisposable(join(tmpdir(), 'drift-'));
+  using database = new DatabaseSync(join(scratch.path, 'data.sqlite'));
+  database.exec(`CREATE TABLE tags (name TEXT PRIMARY KEY) STRICT, WITHOUT ROWID;
+    INSERT INTO tags VALUES ('a'), ('b')`);
+  const declaration = new Declaration(
+    [
+      'CREATE TABLE tags (name TEXT PRIMARY KEY, color TEXT) STRICT, WITHOUT ROWID',
+    ],
+    { rows: 'keep' },
+  );
+
+  declaration.apply(database);
+
+  assert.equal(declaration.drift(database), 'fits');
+  assert.deepEqual(rows(database, 'SELECT * FROM tags ORDER BY name'), [
+    { name: 'a', color: null },
+    { name: 'b', color: null },
+  ]);
+});
