@@ -4,6 +4,7 @@ import { PGlite } from '@electric-sql/pglite';
 import {
   type MaintenanceOptions,
   PgBoss,
+  type SchedulingOptions,
   TestClock,
   type Warning,
   type WipData,
@@ -18,9 +19,10 @@ export type WipWorker = Omit<WipData, 'options' | 'lastError'> & {
   lastError: { name: string; message: string } | null;
 };
 
-// The supervisor's constructor options a scenario may set on both backends;
-// every other scenario runs with supervise: false.
-export type SuperviseOptions = Pick<
+// The supervisor's and timekeeper's constructor options a scenario may set on
+// both backends; every other scenario runs with supervise: false and
+// schedule: false.
+export type RunOptions = Pick<
   MaintenanceOptions,
   | 'supervise'
   | 'superviseIntervalSeconds'
@@ -28,7 +30,11 @@ export type SuperviseOptions = Pick<
   | 'maintenanceIntervalSeconds'
   | 'queueCacheIntervalSeconds'
   | 'warningQueueSize'
->;
+> &
+  Pick<
+    SchedulingOptions,
+    'schedule' | 'cronMonitorIntervalSeconds' | 'cronWorkerIntervalSeconds'
+  >;
 
 // A warning event at its clock time. pinSeconds is how long the stats
 // aggregate held its snapshot in real time (node_modules/pg-boss/dist/
@@ -176,7 +182,7 @@ export class ParityRun {
 export class PgBossBackend {
   readonly name = 'pg-boss';
 
-  async open(options: SuperviseOptions = {}): Promise<ParityRun> {
+  async open(options: RunOptions = {}): Promise<ParityRun> {
     const pglite = new PGlite();
     const errors: Error[] = [];
     const clock = new TestClock(ParityRun.start);
@@ -213,7 +219,7 @@ export class PgBossBackend {
 export class SqliteBackend {
   readonly name = 'sqlite';
 
-  async open(options: SuperviseOptions = {}): Promise<ParityRun> {
+  async open(options: RunOptions = {}): Promise<ParityRun> {
     // The caller supplies the database, as the oracle's caller supplies
     // PGlite, and closes it after the queue stops.
     const database = new DatabaseSync(':memory:');

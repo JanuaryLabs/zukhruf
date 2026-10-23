@@ -30,21 +30,23 @@ export class ClaimTimer {
     this.#disarm();
   }
 
-  anchor(): void {
+  // claimTimer.js:66-71: the next attempt an interval from now, or after
+  // `ms` when the pass knows when the claim it lost to comes due.
+  anchor(ms = this.#ms): void {
     if (this.#stopped.signal.aborted) {
       return;
     }
     this.#anchoredPass = this.#passes;
-    this.#arm();
+    this.#arm(ms);
   }
 
-  #arm(): void {
+  #arm(ms = this.#ms): void {
     this.#disarm();
     if (this.#stopped.signal.aborted) {
       return;
     }
-    this.#due = this.#clock.now() + this.#ms;
-    this.#wait(this.#ms);
+    this.#due = this.#clock.now() + ms;
+    this.#wait(ms);
   }
 
   // claimTimer.js:79-94: a timer that fires short of its due time waits out

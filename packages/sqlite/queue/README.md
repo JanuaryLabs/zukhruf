@@ -58,12 +58,24 @@ const queue: JobQueue = new PgBoss(process.env.DATABASE_URL);
 - `new SqliteJobQueue({ path })` owns the database file. `start()` opens it and makes the tables, and `stop()` closes it.
 - `new SqliteJobQueue({ database })` uses a `DatabaseSync` that the caller opened. The caller closes it.
 - With no `path` and no `database`, the queue keeps its jobs in memory.
-- The other options are the options of pg-boss with the same names: `clock`, `supervise`, `superviseIntervalSeconds`, `monitorIntervalSeconds`, `maintenanceIntervalSeconds`, `queueCacheIntervalSeconds`, `warningQueueSize` and `useListenNotify`. The defaults are the defaults of pg-boss.
+- The other options are the options of pg-boss with the same names: `clock`, `supervise`, `superviseIntervalSeconds`, `monitorIntervalSeconds`, `maintenanceIntervalSeconds`, `queueCacheIntervalSeconds`, `warningQueueSize`, `useListenNotify`, `schedule`, `cronMonitorIntervalSeconds`, `cronWorkerIntervalSeconds` and `clockMonitorIntervalSeconds`. The defaults are the defaults of pg-boss.
 - The types of the options, the jobs and the results come from pg-boss. Import them from `pg-boss`, for example `import type { Job, SendOptions } from 'pg-boss'`.
 - Job data is `unknown`. `work()` gives each handler `Job<unknown>`, and `findJobs()` gives `FoundJob<unknown>`. Validate the data that you read.
 - A listener for `error` is necessary. A failure in work that no caller awaits, for example a worker poll, goes to the `error` event. With no listener, `EventEmitter` throws.
 - `useListenNotify` wakes the workers of this `SqliteJobQueue` only. In pg-boss, each listener on the schema hears a `NOTIFY`. Here, another instance on the same file does not hear it.
-- A schedule fires from a poll on real time, every `schedulePollingIntervalMs` (1000 by default). `schedule: false` stops the poll. pg-boss uses its timekeeper on the clock for this. The port of the timekeeper is not done.
+
+## Schedules
+
+A schedule sends a job to its queue at each time that its cron or rrule rule gives. The timekeeper of pg-boss does this work, and this package copies it ([ADR 0003](./docs/adr/0003-the-timekeeper-is-ported-literally.md)).
+
+- `schedule` is `true` by default, as in pg-boss. `start()` then makes the queue `__pgboss__send-it`, starts one worker on it, and starts the cron pass. `schedule: false` starts none of them.
+- The cron pass runs at start, then every `cronMonitorIntervalSeconds` (30 by default) on the clock. It finds the occurrences of each schedule in the last 60 seconds. For each occurrence, it puts one job in `__pgboss__send-it`, in the slot of the minute of the occurrence. A unique index keeps one job for each schedule and slot, so the next pass does not send the same occurrence again.
+- The worker of `__pgboss__send-it` polls every `cronWorkerIntervalSeconds` (5 by default). It sends each job to the queue of its schedule, with the data and the options of the schedule. Thus a job goes out up to 35 seconds after its time, as in pg-boss.
+- A cron expression without `tz` uses UTC. An rrule without `DTSTART` counts from 1970-01-01, so `FREQ=MINUTELY;INTERVAL=2` gives the even minutes.
+- `missed` tells the pass what to do after a time when no pass ran, for example when the program was stopped. With `skip` (the default), the pass sends only the occurrences of the last 60 seconds. With `once`, the pass also sends the latest occurrence of that time, but not one from before the schedule was written.
+- When the send to the queue of the schedule fails, the failure goes to the `error` event, and the job in `__pgboss__send-it` completes. The pass does not send the occurrence again.
+- `__pgboss__send-it` is a queue like the others: `findJobs` reads its jobs. Its worker is not in the `wip` events.
+- `clockMonitorIntervalSeconds` is validated only. pg-boss uses it to measure the difference between its clock and the clock of Postgres. Here the clock of the queue is the clock of the database.
 
 ## The subset
 
@@ -104,6 +116,7 @@ Code that runs on both engines examines `code`, not the class. On Postgres, the 
 
 - [0001 pg-boss's API on SQLite](./docs/adr/0001-pg-boss-api-on-sqlite.md)
 - [0002 The parity suite is the contract](./docs/adr/0002-the-parity-suite-is-the-contract.md)
+- [0003 The timekeeper is ported literally](./docs/adr/0003-the-timekeeper-is-ported-literally.md)
 
 ## Development
 

@@ -5,7 +5,6 @@ import { DatabaseSync } from 'node:sqlite';
 import type { SQLInputValue } from 'node:sqlite';
 import { setImmediate } from 'node:timers/promises';
 
-import { CronExpressionParser } from 'cron-parser';
 import {
   type Clock,
   type ClockTimer,
@@ -17,6 +16,7 @@ import {
   type Queue,
   type Request,
   type ScheduleOptions,
+  type SchedulingOptions,
   type SendOptions,
   type StopOptions,
   type UpdateQueueOptions,
@@ -28,6 +28,7 @@ import {
 } from 'pg-boss';
 
 import { Latch } from '@zukhruf/async';
+import { transaction } from '@zukhruf/sqlite-transaction';
 
 import { Activity } from './activity.ts';
 import { Attorney } from './attorney.ts';
@@ -52,15 +53,11 @@ import { SqlValues } from './sql-values.ts';
 import { StartAfter } from './start-after.ts';
 import { Supervisor } from './supervisor.ts';
 import { Throttle } from './throttle.ts';
+import { Timekeeper } from './timekeeper.ts';
+import type { SlottedJob } from './timekeeper.ts';
 import { Timers } from './timers.ts';
 import { Uuid } from './uuid.ts';
 import { Worker } from './worker.ts';
-
-// A slot missed by more than this is abandoned, not replayed: the cursor moves
-// to the next occurrence and nothing is sent. Matches pg-boss, which fires a
-// cron only while its previous occurrence is under 60s old, so both backends
-// answer "the process was down through a slot" the same way.
-const SCHEDULE_GRACE_SECONDS = 60;
 
 export { DatabaseError } from './database-error.ts';
 export { UnsupportedStartAfterError } from './start-after.ts';
@@ -95,44 +92,28 @@ function spreadCopy<T extends object>(error: Error, extra: T): Error & T {
   return copy;
 }
 
-export interface SqliteJobQueueOptions extends Pick<
-  MaintenanceOptions,
-  | 'supervise'
-  | 'superviseIntervalSeconds'
-  | 'monitorIntervalSeconds'
-  | 'maintenanceIntervalSeconds'
-  | 'queueCacheIntervalSeconds'
-  | 'warningQueueSize'
-> {
+export interface SqliteJobQueueOptions
+  extends
+    Pick<
+      MaintenanceOptions,
+      | 'supervise'
+      | 'superviseIntervalSeconds'
+      | 'monitorIntervalSeconds'
+      | 'maintenanceIntervalSeconds'
+      | 'queueCacheIntervalSeconds'
+      | 'warningQueueSize'
+    >,
+    Pick<
+      SchedulingOptions,
+      | 'schedule'
+      | 'cronMonitorIntervalSeconds'
+      | 'cronWorkerIntervalSeconds'
+      | 'clockMonitorIntervalSeconds'
+    > {
   path?: string;
   database?: DatabaseSync;
   clock?: Clock;
   useListenNotify?: boolean;
-  schedule?: boolean;
-  schedulePollingIntervalMs?: number;
-}
-
-type ScheduleRow = {
-  queue_name: string;
-  key: string;
-  cron: string;
-  timezone: string;
-  data: string | null;
-  options: string;
-  next_run_on: string;
-};
-
-function mapScheduleRow(value: unknown): ScheduleRow {
-  const row = Row.parse(value, 'schedule');
-  return {
-    queue_name: Row.readString(row, 'queue_name'),
-    key: Row.readString(row, 'key'),
-    cron: Row.readString(row, 'cron'),
-    timezone: Row.readString(row, 'timezone'),
-    data: Row.readNullableString(row, 'data'),
-    options: Row.readString(row, 'options'),
-    next_run_on: Row.readString(row, 'next_run_on'),
-  };
 }
 
 // The database start() opened or the caller gave, or none.
@@ -146,26 +127,14 @@ type NotifierPhase = { kind: 'available' } | { kind: 'unavailable' };
 type LifecyclePhase =
   { kind: 'stopped' } | { kind: 'armed' } | { kind: 'running' };
 
-type ScheduleMonitorPhase =
-  { kind: 'idle' } | { kind: 'polling'; timer: ReturnType<typeof setInterval> };
-
 function normalizeOptions(
   options?: string | SqliteJobQueueOptions,
 ): SqliteJobQueueOptions {
   if (typeof options === 'string' || options === undefined) {
-    return {
-      path: options ?? ':memory:',
-      schedule: true,
-      schedulePollingIntervalMs: 1000,
-    };
+    return { path: options ?? ':memory:' };
   }
 
-  return {
-    ...options,
-    path: options.path ?? ':memory:',
-    schedule: options.schedule ?? true,
-    schedulePollingIntervalMs: options.schedulePollingIntervalMs ?? 1000,
-  };
+  return { ...options, path: options.path ?? ':memory:' };
 }
 
 export class SqliteJobQueue
@@ -213,10 +182,10 @@ export class SqliteJobQueue
   readonly #pendingCleanups = new Set<Latch>();
   readonly #localGroups = new LocalGroups();
   readonly #supervisor: Supervisor;
-  private readonly scheduleEnabled: boolean;
-  private readonly schedulePollingIntervalMs: number;
+  // attorney.js:412
+  readonly #schedule: boolean;
+  readonly #timekeeper: Timekeeper;
   private readonly workers = new Map<string, Worker<JobRow>>();
-  #scheduleMonitor: ScheduleMonitorPhase = { kind: 'idle' };
 
   constructor(options?: string | SqliteJobQueueOptions) {
     super();
@@ -230,6 +199,7 @@ export class SqliteJobQueue
     // node_modules/pg-boss/dist/attorney.js:419, 421, 425
     this.#clock = Attorney.applyClockConfig(normalized.clock);
     const intervals = Attorney.applyOpsConfig(normalized);
+    const timekeeping = Attorney.applyScheduleConfig(normalized);
     Attorney.validateWarningConfig(normalized);
     this.#queueCacheIntervalSeconds = intervals.queueCacheIntervalSeconds;
     this.#supervisor = new Supervisor(this.#clock, this.#activity, {
@@ -241,12 +211,26 @@ export class SqliteJobQueue
     // index.js:87-88, 101-104
     this.#supervisor.on('error', (error) => this.emit('error', error));
     this.#supervisor.on('warning', (warning) => this.emit('warning', warning));
+    this.#schedule = Boolean(
+      'schedule' in normalized ? normalized.schedule : true,
+    );
+    this.#timekeeper = new Timekeeper(
+      this.#clock,
+      this.#activity,
+      timekeeping,
+      {
+        createQueue: (name) => this.createQueue(name),
+        work: (name, options, handler) => this.work(name, options, handler),
+        offWork: (name, options) => this.offWork(name, options),
+        send: (request) => this.#send([request]),
+        insert: (name, jobs) => this.#insertSlotted(name, jobs),
+      },
+    );
+    // index.js:89
+    this.#timekeeper.on('error', (error) => this.emit('error', error));
     this.#wipTs = this.#clock.now();
     // node_modules/pg-boss/dist/attorney.js:416
     this.#useListenNotify = normalized.useListenNotify ?? false;
-    this.scheduleEnabled = normalized.schedule ?? true;
-    this.schedulePollingIntervalMs =
-      normalized.schedulePollingIntervalMs ?? 1000;
   }
 
   #now(): Date {
@@ -307,13 +291,15 @@ export class SqliteJobQueue
       2000,
     );
     await this.#onCacheQueues(false);
-    this.startScheduleMonitor();
     if (this.#useListenNotify) {
       this.#notifier = { kind: 'available' };
       await this.#activity.deliver(() => this.wakeNotifyQueueWorkers());
     }
-    // index.js:159-160
+    // index.js:159-164
     this.#supervisor.start(this.db);
+    if (this.#schedule) {
+      await this.#timekeeper.start(this.db);
+    }
     this.#lifecycle = { kind: 'running' };
     return this;
   }
@@ -362,16 +348,18 @@ export class SqliteJobQueue
     this.#manager = { kind: 'stopped' };
     this.#clock.clearInterval(this.#queueCacheInterval);
     this.#clock.clearInterval(this.#wipInterval);
-    const names = new Set(Array.from(this.workers.values(), (w) => w.name));
+    // The send-it worker is the timekeeper's to stop (manager.js:872-874).
+    const names = new Set(
+      Array.from(this.workers.values(), (w) => w.name).filter(
+        (name) => name !== Timekeeper.sendIt,
+      ),
+    );
     await Promise.allSettled(
       Array.from(names, (name) => this.offWork(name, { wait: false })),
     );
     this.#localGroups.clear();
-    if (this.#scheduleMonitor.kind === 'polling') {
-      clearInterval(this.#scheduleMonitor.timer);
-      this.#scheduleMonitor = { kind: 'idle' };
-    }
-    // index.js:231
+    // index.js:230-231
+    await this.#timekeeper.stop();
     await this.#supervisor.stop();
     // pg-boss awaits its notifier, timekeeper, navigator and bam stops here
     // (node_modules/pg-boss/dist/index.js:227-233); in those turns
@@ -479,8 +467,11 @@ export class SqliteJobQueue
   }
 
   // manager.js:1067-1075: before and after each batch, strictly more than
-  // 2000 ms apart.
-  #emitWip(): void {
+  // 2000 ms apart, except the send-it worker's.
+  #emitWip(name: string): void {
+    if (name === Timekeeper.sendIt) {
+      return;
+    }
     const now = this.#clock.now();
     if (now - this.#wipTs > 2000) {
       this.emit('wip', this.#getWipData());
@@ -488,11 +479,14 @@ export class SqliteJobQueue
     }
   }
 
-  // manager.js:1076-1081
+  // manager.js:1076-1081: the send-it worker is internal.
   #getWipData(): WipData[] {
     return Array.from(this.workers.values(), (worker) =>
       worker.toWipData(),
-    ).filter((worker) => worker.state !== 'stopped');
+    ).filter(
+      (worker) =>
+        worker.state !== 'stopped' && worker.name !== Timekeeper.sendIt,
+    );
   }
 
   // manager.js:1095-1125: stops the queue's workers, or one work() call's
@@ -695,6 +689,10 @@ export class SqliteJobQueue
   ): Promise<string | null>;
   // node_modules/pg-boss/dist/manager.js:1179-1182, 1232-1258.
   async send(...args: unknown[]): Promise<string | null> {
+    return this.#send(args);
+  }
+
+  async #send(args: unknown[]): Promise<string | null> {
     const { name, data, options } = Attorney.checkSendArgs(args);
     // The insert is a statement like a fetch's claim: it runs when issued
     // and its outcome comes back over I/O.
@@ -714,7 +712,7 @@ export class SqliteJobQueue
       const stored =
         this.#insertJob(queue.name, data, options, queue, now, {
           startAfter: options.startAfter,
-          singletonOffset: 0,
+          singletonOn: Throttle.slot(options.singletonSeconds, 0, now),
         }) ??
         // manager.js:1253-1256: a send a unique index refused retries once into
         // the next throttle slot, starting when that slot does.
@@ -724,7 +722,11 @@ export class SqliteJobQueue
                 options.singletonSeconds,
                 now,
               ),
-              singletonOffset: options.singletonSeconds,
+              singletonOn: Throttle.slot(
+                options.singletonSeconds,
+                options.singletonSeconds,
+                now,
+              ),
             })
           : null);
       if (stored === null) {
@@ -745,6 +747,32 @@ export class SqliteJobQueue
     });
   }
 
+  // manager.js:1360-1440 with __singletonSlots, the cron pass's own insert:
+  // each job names the throttle slot it is filed in, and one a unique index
+  // refuses is skipped (plans.js:2258, 2329). One statement for the batch.
+  async #insertSlotted(name: string, jobs: SlottedJob[]): Promise<void> {
+    await this.#activity.query(() => {
+      const queue = this.getQueueOrThrow(name);
+      const now = this.#now();
+      transaction(
+        this.db,
+        () => {
+          for (const job of jobs) {
+            this.#insertJob(
+              queue.name,
+              job.data,
+              { singletonKey: job.singletonKey },
+              queue,
+              now,
+              { startAfter: undefined, singletonOn: job.singletonOn },
+            );
+          }
+        },
+        { mode: 'immediate' },
+      );
+    });
+  }
+
   // One insert, returning the stored id and start_after; null when a unique
   // index (policy or throttle) refuses it, like pg-boss's ON CONFLICT DO
   // NOTHING (plans.js:2329).
@@ -756,7 +784,7 @@ export class SqliteJobQueue
     now: Date,
     attempt: {
       startAfter: SendOptions['startAfter'];
-      singletonOffset: SendOptions['singletonSeconds'];
+      singletonOn: string | null;
     },
   ): { id: string; startAfter: string } | null {
     const startAfter = StartAfter.resolve(attempt.startAfter, now);
@@ -807,7 +835,7 @@ export class SqliteJobQueue
           options.retryDelayMax ?? queue.retry_delay_max_seconds,
           SqlValues.asIso(startAfter),
           options.singletonKey ?? null,
-          Throttle.slot(options.singletonSeconds, attempt.singletonOffset, now),
+          attempt.singletonOn,
           options.expireInSeconds ?? queue.expire_seconds,
           retentionSeconds,
           options.deleteAfterSeconds ?? queue.deletion_seconds,
@@ -969,7 +997,7 @@ export class SqliteJobQueue
           if (rows.length === 0) {
             return;
           }
-          this.#emitWip();
+          this.#emitWip(name);
           const run = (jobs: JobRow[]) =>
             this.processJobs(
               name,
@@ -1012,7 +1040,7 @@ export class SqliteJobQueue
               this.#localGroups.end(name, grouped);
             }
           }
-          this.#emitWip();
+          this.#emitWip(name);
         },
         onError: (error) => {
           this.emit('error', toWorkerEvent(error, name, workerId));
@@ -1117,8 +1145,7 @@ export class SqliteJobQueue
     Attorney.assertKey(key);
     Recurrence.assertMissedPolicy(missed);
     try {
-      // plans.js:1337-1349, plus the cursor the interim schedule monitor
-      // reads, for cron rows only.
+      // plans.js:1337-1349
       this.db
         .prepare(
           `INSERT INTO pgboss_schedule (
@@ -1129,17 +1156,15 @@ export class SqliteJobQueue
             timezone,
             data,
             options,
-            next_run_on,
             created_on,
             updated_on
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
           ON CONFLICT(queue_name, key) DO UPDATE SET
             kind = excluded.kind,
             cron = excluded.cron,
             timezone = excluded.timezone,
             data = excluded.data,
             options = excluded.options,
-            next_run_on = excluded.next_run_on,
             updated_on = excluded.updated_on`,
         )
         .run(
@@ -1150,9 +1175,6 @@ export class SqliteJobQueue
           tz,
           data == null ? null : Jsonb.parameter(data),
           Jsonb.parameter(options),
-          kind === scheduleKinds.cron
-            ? SqlValues.asIso(this.nextCronRun(cron, tz, now))
-            : null,
           SqlValues.asIso(now),
           SqlValues.asIso(now),
         );
@@ -1183,64 +1205,12 @@ export class SqliteJobQueue
       .run(SqlValues.text(name), SqlValues.text(key));
   }
 
-  async runDueSchedules(): Promise<void> {
-    const now = this.#now();
-    const rows = this.db
-      .prepare(
-        `SELECT *
-        FROM pgboss_schedule
-        WHERE next_run_on <= ?
-        ORDER BY next_run_on, queue_name, key`,
-      )
-      .all(SqlValues.asIso(now))
-      .map(mapScheduleRow);
-
-    for (const row of rows) {
-      const staleSeconds =
-        (now.getTime() - new Date(row.next_run_on).getTime()) / 1000;
-      if (staleSeconds < SCHEDULE_GRACE_SECONDS) {
-        const data: object | null =
-          row.data === null ? null : JSON.parse(row.data);
-        const options: SendOptions = JSON.parse(row.options);
-        await this.send(row.queue_name, data, options);
-      }
-      const nextRunOn = this.nextCronRun(row.cron, row.timezone, now);
-      this.db
-        .prepare(
-          `UPDATE pgboss_schedule
-          SET next_run_on = ?, updated_on = ?
-          WHERE queue_name = ? AND key = ?`,
-        )
-        .run(
-          SqlValues.asIso(nextRunOn),
-          SqlValues.asIso(now),
-          row.queue_name,
-          row.key,
-        );
-    }
-  }
-
   private applySchema(): void {
     this.db.exec('PRAGMA foreign_keys = ON');
     this.db.exec('PRAGMA busy_timeout = 5000');
     for (const statement of SQLITE_QUEUE_SCHEMA) {
       this.db.exec(statement);
     }
-  }
-
-  // Still on real time: the timekeeper's timers move onto the clock with
-  // slice 9 (node_modules/pg-boss/dist/timekeeper.js).
-  private startScheduleMonitor(): void {
-    if (!this.scheduleEnabled || this.#scheduleMonitor.kind === 'polling') {
-      return;
-    }
-
-    const timer = setInterval(() => {
-      void this.runDueSchedules().catch((error: unknown) => {
-        this.emit('error', toError(error));
-      });
-    }, this.schedulePollingIntervalMs);
-    this.#scheduleMonitor = { kind: 'polling', timer };
   }
 
   private mapQueueUpdateOptions(options: UpdateQueueOptions) {
@@ -1316,15 +1286,6 @@ export class SqliteJobQueue
     }
     this.#queueCache.fill(queue);
     return queue;
-  }
-
-  private nextCronRun(cron: string, timezone: string, currentDate: Date): Date {
-    return CronExpressionParser.parse(cron, {
-      currentDate,
-      tz: timezone,
-    })
-      .next()
-      .toDate();
   }
 
   // A DeprecationWarning, not a queue event, once per option per instance and

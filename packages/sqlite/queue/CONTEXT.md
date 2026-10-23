@@ -47,3 +47,19 @@ _Avoid_: Maintenance job, cron, janitor
 **Schedule**:
 A cron or rrule rule with a key, which sends a job to its queue at each time that the rule gives.
 _Avoid_: Timer, recurring job, cron job
+
+**Cron pass**:
+The pass that runs at start and then every `cronMonitorIntervalSeconds`. It finds the occurrences of each schedule that are due, and puts a job for each slot in the send-it queue.
+_Avoid_: Poll, tick, scheduler run
+
+**Occurrence**:
+One time that the rule of a schedule gives. It is due for 60 seconds after that time.
+_Avoid_: Fire time, run, trigger
+
+**Slot**:
+The minute that an occurrence is in. The send-it queue keeps one job for each schedule and slot, so two passes do not send one occurrence two times.
+_Avoid_: Bucket, window (the window is the 60 seconds in which an occurrence is due)
+
+**Send-it queue**:
+The queue `__pgboss__send-it`, which the cron pass fills. Its worker sends each job to the queue of its schedule.
+_Avoid_: Internal queue, outbox

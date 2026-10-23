@@ -7,6 +7,8 @@ import {
   systemClock,
 } from 'pg-boss';
 
+import type { TimekeeperConfig } from './timekeeper.ts';
+
 // The supervisor's timers, in seconds (node_modules/pg-boss/dist/attorney.js:
 // 608-620).
 export type SuperviseIntervals = {
@@ -89,6 +91,42 @@ export class Attorney {
       `configuration assert: ${key} cannot exceed ${Attorney.MAX_EXPIRATION_HOURS} hours`,
     );
     return seconds;
+  }
+
+  // attorney.js:653-660, in that order. clockMonitorIntervalSeconds is
+  // validated only: it paces pg-boss's clock-skew read, and SQLite's clock is
+  // the database clock.
+  static applyScheduleConfig(config: object): TimekeeperConfig {
+    Attorney.#scheduleInterval(config, 'clockMonitorIntervalSeconds', {
+      max: 600,
+      range: 'between 1 second and 10 minutes',
+      fallback: 600,
+    });
+    return {
+      cronMonitorIntervalSeconds: Attorney.#scheduleInterval(
+        config,
+        'cronMonitorIntervalSeconds',
+        { max: 45, range: 'between 1 and 45 seconds', fallback: 30 },
+      ),
+      cronWorkerIntervalSeconds: Attorney.#scheduleInterval(
+        config,
+        'cronWorkerIntervalSeconds',
+        { max: 45, range: 'between 1 and 45 seconds', fallback: 5 },
+      ),
+    };
+  }
+
+  static #scheduleInterval(
+    config: object,
+    key: string,
+    bounds: { max: number; range: string; fallback: number },
+  ): number {
+    const value = Attorney.#read(config, key);
+    assert(
+      !(key in config) || (Number(value) >= 1 && Number(value) <= bounds.max),
+      `configuration assert: ${key} must be ${bounds.range}`,
+    );
+    return Number(value) || bounds.fallback;
   }
 
   // attorney.js:445. warningSlowQuerySeconds and warningRetentionDays (446-449)

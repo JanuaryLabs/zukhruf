@@ -13,7 +13,7 @@ import {
 
 import type { JobQueue } from '../index.ts';
 import { SqliteJobQueue } from '../index.ts';
-import { ParityRun, type SuperviseOptions } from './backends.ts';
+import { ParityRun, type RunOptions } from './backends.ts';
 import { Observe } from './observe.ts';
 import { Parity } from './parity.ts';
 
@@ -37,7 +37,7 @@ const supervised = {
   monitorIntervalSeconds: 1,
   maintenanceIntervalSeconds: 1,
   queueCacheIntervalSeconds: 1,
-} satisfies SuperviseOptions;
+} satisfies RunOptions;
 
 // Lets everything due now finish on both backends: tick(0) waits until each
 // one's statements in flight have settled (node_modules/pg-boss/dist/
@@ -235,7 +235,7 @@ describe('supervisor', () => {
 
   // pg-boss reads the key's presence (attorney.js:413); an explicit
   // undefined is outside its types under exactOptionalPropertyTypes.
-  const supervisedUndefined: SuperviseOptions = { ...supervised };
+  const supervisedUndefined: RunOptions = { ...supervised };
   Reflect.set(supervisedUndefined, 'supervise', undefined);
   for (const { label, options } of [
     { label: 'supervise: false', options: { ...supervised, supervise: false } },
@@ -595,10 +595,10 @@ describe('supervisor', () => {
     supervise: true,
     superviseIntervalSeconds: 1,
     monitorIntervalSeconds: 1,
-  } satisfies SuperviseOptions;
+  } satisfies RunOptions;
   const heldKeyCases: {
     label: string;
-    options: SuperviseOptions;
+    options: RunOptions;
     claims: { at: number; ids: string[] }[];
     policy?: 'singleton' | 'stately' | 'standard';
     // null sends job 1 without a key.

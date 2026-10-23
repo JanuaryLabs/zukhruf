@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 import {
   type ParityRun,
   PgBossBackend,
+  type RunOptions,
   SqliteBackend,
-  type SuperviseOptions,
 } from './backends.ts';
 
 // Runs one scenario on each backend, pg-boss first, each on a fresh queue torn
@@ -18,7 +18,7 @@ export class Parity {
 
   static async assertSame<T>(
     scenario: (run: ParityRun) => Promise<T>,
-    options: SuperviseOptions = {},
+    options: RunOptions = {},
   ): Promise<T> {
     const [pgBossBackend, sqliteBackend] = Parity.backends;
     const pgBoss = await Parity.#observe(pgBossBackend, scenario, options);
@@ -31,7 +31,7 @@ export class Parity {
   static async #observe<T>(
     backend: PgBossBackend | SqliteBackend,
     scenario: (run: ParityRun) => Promise<T>,
-    options: SuperviseOptions,
+    options: RunOptions,
   ): Promise<T> {
     const run = await backend.open(options);
     try {

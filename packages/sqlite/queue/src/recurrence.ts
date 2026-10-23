@@ -41,6 +41,9 @@ export class Recurrence {
   static readonly #property = /^([a-z][a-z0-9-]*)[;:]/i;
   // rrule.js:63
   static readonly #rruleShape = /^[ \t]*[a-z][a-z0-9-]*[;:]|(?:^|[\s;])FREQ=/im;
+  // rrule.js:290-291
+  static readonly #stepSeconds = 60 * 60;
+  static readonly #stepGrowth = 4;
   // timekeeper.js:48
   static readonly #missedPolicies: readonly unknown[] = Object.values(
     scheduleMissedPolicies,
@@ -216,6 +219,58 @@ export class Recurrence {
   // rrule.js:205-211
   static #buildRule(ics: string, tz: string): RRuleTemporal {
     return new RRuleTemporal({ rruleString: ics, tzid: tz, strict: true });
+  }
+
+  // rrule.js:268-274, 281: every occurrence in (after, until], in order. between()
+  // excludes both ends, so the upper one is nudged past.
+  static occurrencesInWindow(
+    expression: string,
+    after: Date,
+    until: Date,
+    tz: string,
+  ): Date[] {
+    return Recurrence.#parseRule(expression, tz)
+      .between(after, new Date(until.getTime() + 1))
+      .map((occurrence) => new Date(occurrence.epochMilliseconds));
+  }
+
+  // rrule.js:323-356: the latest occurrence in (after, until], read in steps
+  // that widen backwards from `until`. A step rrule-temporal refuses as too
+  // dense is halved and read again, and its width caps every later step; one
+  // refused at the floor is the expression's own fault, so it throws.
+  static latestOccurrenceBefore(
+    expression: string,
+    after: Date,
+    until: Date,
+    tz: string,
+  ): Date | null {
+    const rule = Recurrence.#parseRule(expression, tz);
+    const floor = Recurrence.#stepSeconds * 1000;
+    const start = after.getTime();
+    let upper = until.getTime();
+    let width = floor;
+    let ceiling = Number.POSITIVE_INFINITY;
+    while (upper > start) {
+      const lower = Math.max(start, upper - width);
+      let step;
+      try {
+        step = rule.between(new Date(lower), new Date(upper + 1));
+      } catch (error) {
+        if (upper - lower <= floor) {
+          throw error;
+        }
+        ceiling = Math.max(floor, Math.floor((upper - lower) / 2));
+        width = ceiling;
+        continue;
+      }
+      const latest = step.at(-1);
+      if (latest !== undefined) {
+        return new Date(latest.epochMilliseconds);
+      }
+      upper = lower;
+      width = Math.min(width * Recurrence.#stepGrowth, ceiling);
+    }
+    return null;
   }
 
   // rrule.js:221-223

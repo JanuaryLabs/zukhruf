@@ -89,13 +89,17 @@ export const SQLITE_QUEUE_SCHEMA = [
     timezone TEXT DEFAULT 'UTC',
     data TEXT,
     options TEXT,
-    -- The interim schedule monitor's cursor, for cron rows only, until the
-    -- timekeeper replaces it.
-    next_run_on TEXT,
     created_on TEXT NOT NULL,
     updated_on TEXT NOT NULL,
     PRIMARY KEY (queue_name, key)
   )`,
+  // The instance-wide cron claim, one row (node_modules/pg-boss/dist/
+  // plans.js:288-298, 1078-1086): when a pass last ran.
+  `CREATE TABLE IF NOT EXISTS pgboss_version (
+    singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
+    cron_on TEXT
+  )`,
+  `INSERT OR IGNORE INTO pgboss_version (singleton) VALUES (1)`,
   `CREATE INDEX IF NOT EXISTS pgboss_job_fetch_i
     ON pgboss_job (queue_name, state, priority DESC, start_after, created_on)`,
   `CREATE INDEX IF NOT EXISTS pgboss_job_lease_i
