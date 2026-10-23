@@ -231,7 +231,7 @@ test(
 );
 
 test(
-  'a cancel ends a wait when every session of the pool is busy',
+  'the next acquire after a cancel gets the only session of the pool at once',
   { timeout: 30_000 },
   async () => {
     // Arrange: another pool holds the key, and the waiter's only session waits for it.
@@ -248,35 +248,37 @@ test(
         new Mutex(storeOver(holderPool)),
         'report:daily',
       );
-      try {
-        const cancel = new AbortController();
-        const reason = new Error('cancelled');
-        const waiting = new Mutex(storeOver(waiterPool)).acquire(
-          'report:daily',
-          async () => 'ran',
-          { signal: cancel.signal },
-        );
-        await untilASessionWaitsForALock(database.connectionString);
+      const waiter = new Mutex(storeOver(waiterPool));
+      const cancel = new AbortController();
+      const reason = new Error('cancelled');
+      const waiting = waiter.acquire('report:daily', async () => 'ran', {
+        signal: cancel.signal,
+      });
+      const outcome = waiting.then(
+        (value) => value,
+        (error: unknown) => error,
+      );
+      await untilASessionWaitsForALock(database.connectionString);
+      cancel.abort(reason);
+      await holder.release();
 
-        // Act
-        cancel.abort(reason);
-        const outcome = await Promise.race([
-          waiting.then(
-            (value) => value,
-            (error: unknown) => error,
-          ),
-          delay(1000, 'still waiting' as const),
-        ]);
+      // Act
+      const next = await Promise.race([
+        waiter.acquire('report:daily', async () => 'ran' as const),
+        delay(300, 'still waiting' as const),
+      ]);
 
-        // Assert
-        assert.equal(
-          outcome,
-          reason,
-          'The cancelled call must reject with the reason of its signal at once',
-        );
-      } finally {
-        await holder.release();
-      }
+      // Assert: first the next acquire, because a cancel that waits for a second session never settles.
+      assert.equal(
+        next,
+        'ran',
+        'A cancel must give back its turn and its session at once',
+      );
+      assert.equal(
+        await outcome,
+        reason,
+        'The cancelled call must reject with the reason of its signal',
+      );
     } finally {
       await holderPool.end();
       await waiterPool.end();
