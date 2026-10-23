@@ -66,13 +66,17 @@ Backlog #2544 is about this code: `close` stops the listeners, but it does not e
 - Same: `JSON.parse` of one line of the socket's newline-delimited JSON. The write side is in one place already: `jsonLine` (`socket/json-line.ts`).
 - Differs: a line that is not JSON. `SocketConnection` closes the connection, because the framing is broken ([ADR 0017](./adr/0017-a-connection-closes-only-when-its-framing-breaks.md)). `parse` gives `undefined`, and the handshake reads that as no `hello` or no answer.
 
-**The turn in this process.**
+**The listeners that come off a session that goes back to its pool.**
 
-- Places: the `#inProcess` queue, `acquire`, `tryAcquire` and `withTurn` of `SqliteStore` (`sqlite/sqlite-store.ts`), and of `PostgresStore` (`postgres/postgres-store.ts`).
-- Same: the callers of one key in this process first line up in a `MemoryStore`. Only the first caller opens a file or gets a session, so one process uses one for each key. `withTurn` gives back the key of the lock store first, and then lets the next caller in this process continue.
-- Differs: what the turn holds after it: the file lock of the key's database file, or the advisory lock of a Postgres session. `PostgresStore.acquire` also passes the caller's signal to the wait of its session.
+- Places: `detach` of the Postgres dialect (`postgres/postgres-store.ts`), and of the `GET_LOCK` dialect of MySQL and MariaDB (`mysql/get-lock-dialect.ts`).
+- Same: `off('error', …)` and `off('end', …)` with the two listeners of the session core (`session/session-lock-store.ts`).
+- Differs: nothing but the type of the session. The SQL Server dialect does nothing in `detach`: it closes each session, and a closed session keeps its listeners, because a driver can emit `error` after the close.
 
-Backlog #2886 is about this code. A third lock store with an in-process queue is the time to extract it.
+Backlog #2899 is about this code. A third dialect with a pool is the time to move it into the session core.
+
+**Not counted: the lifecycle of a Docker engine claim.** `Claim` of `DockerEngineStore` (`docker/docker-engine-store.ts`) has a heartbeat, a lost lease, and a release, as the key session of the session core has. But a claim is a container, not a session: it attaches, it climbs a ladder for its token, and a waiter can remove it. Thus it differs in kind, and it stays in its store. It uses only the in-process turn (`shared/in-process-turns.ts`) and the key digest (`shared/key-digest.ts`).
+
+**Not counted: the test helpers.** `proxyTo`, `hold`, `untilASessionWaitsForALock` and `silentlyReconnectingSession` are in the test file of each network lock store. Test helpers stay copied in each test file, so that each file reads from top to bottom.
 
 ## In more than two places
 
