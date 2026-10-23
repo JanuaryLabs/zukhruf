@@ -3,7 +3,7 @@ import { execFile } from 'node:child_process';
 import { access, mkdir, mkdtemp, readFile, rename, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { describe } from 'node:test';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 
 import { test } from '@zukhruf/testing/node';
@@ -119,10 +119,7 @@ async function latestRelease() {
       await rm(draft, { recursive: true, force: true });
     }
   }
-  return {
-    version,
-    url: pathToFileURL(join(unpacked, 'package', 'dist', 'index.js')).href,
-  };
+  return { version, root: join(unpacked, 'package') };
 }
 
 const release = await latestRelease().catch((error: unknown) => {
@@ -132,17 +129,71 @@ const release = await latestRelease().catch((error: unknown) => {
   );
 });
 
+/** The import path of each store's family, as in import-paths.test.ts. */
+const familyOf = {
+  LockFileStore: 'file-system',
+  TicketQueueFileStore: 'file-system',
+  SqliteStore: 'sqlite',
+  SocketStore: 'socket',
+} as const;
+type Store = keyof typeof familyOf;
+
+/** Where a process finds `Mutex`, at the root entry point, and a store, at the entry point of its family. */
+type Version = { mutex: string; entryOf: (store: Store) => string };
+
+/**
+ * The release as a consumer imports it: code inside the release's package
+ * resolves `@zukhruf/mutex` and each family through the exports of the
+ * release's own package.json, with the import condition.
+ */
+async function resolveInRelease(root: string): Promise<Version> {
+  const specifiers = [
+    '@zukhruf/mutex',
+    ...Object.values(familyOf).map((family) => `@zukhruf/mutex/${family}`),
+  ];
+  const { stdout } = await run(
+    process.execPath,
+    [
+      '--input-type=module',
+      '--eval',
+      `console.log(JSON.stringify(Object.fromEntries(${JSON.stringify(specifiers)}.map((specifier) => [specifier, import.meta.resolve(specifier)]))));`,
+    ],
+    { cwd: root, encoding: 'utf8' },
+  );
+  const resolved: unknown = JSON.parse(stdout);
+  const urlOf = (specifier: string) => {
+    const url = isRecord(resolved) ? resolved[specifier] : undefined;
+    if (typeof url !== 'string') {
+      throw new Error(`The release resolved no ${specifier}: ${stdout}`);
+    }
+    return url;
+  };
+  return {
+    mutex: urlOf('@zukhruf/mutex'),
+    entryOf: (store) => urlOf(`@zukhruf/mutex/${familyOf[store]}`),
+  };
+}
+
+const releaseVersion = await resolveInRelease(release.root);
+const thisVersion: Version = {
+  mutex: new URL('../index.ts', import.meta.url).href,
+  entryOf: (store) =>
+    new URL(`./${familyOf[store]}/index.ts`, import.meta.url).href,
+};
+
 /**
  * Each store with the keys whose file names both versions must agree on, up
  * to the longest key that keeps its name. The limits are those of
  * file-lock-store.test.ts.
  */
-const cases = [
-  ...[
-    { store: 'LockFileStore', longest: 204 },
-    { store: 'TicketQueueFileStore', longest: 204 },
-    { store: 'SqliteStore', longest: 208 },
-  ].flatMap(({ store, longest }) =>
+const cases: { store: Store; key: string }[] = [
+  ...(
+    [
+      { store: 'LockFileStore', longest: 204 },
+      { store: 'TicketQueueFileStore', longest: 204 },
+      { store: 'SqliteStore', longest: 208 },
+    ] as const
+  ).flatMap(({ store, longest }) =>
     ['orders/حساب.v2', 'k'.repeat(longest)].map((key) => ({ store, key })),
   ),
   // A socket store sends keys as JSON, so no length is special.
@@ -159,8 +210,9 @@ function openThisSource(store: string, directory: string) {
 }
 
 /** A process on the release that holds `key` until it is told to release it, and reports its fencing token. */
-const releaseHolder = (store: string, directory: string, key: string) => `
-	import { Mutex, ${store} } from ${JSON.stringify(release.url)};
+const releaseHolder = (store: Store, directory: string, key: string) => `
+	import { Mutex } from ${JSON.stringify(releaseVersion.mutex)};
+	import { ${store} } from ${JSON.stringify(releaseVersion.entryOf(store))};
 	const mutex = new Mutex(new ${store}(${JSON.stringify(directory)}));
 	const done = Promise.withResolvers();
 	process.on('message', (message) => {
@@ -175,8 +227,9 @@ const releaseHolder = (store: string, directory: string, key: string) => `
 `;
 
 /** A process on the release that looks at `key` and skips if it is busy, then skips once more when told to. */
-const releaseCaller = (store: string, directory: string, key: string) => `
-	import { Modes, Mutex, ${store} } from ${JSON.stringify(release.url)};
+const releaseCaller = (store: Store, directory: string, key: string) => `
+	import { Modes, Mutex } from ${JSON.stringify(releaseVersion.mutex)};
+	import { ${store} } from ${JSON.stringify(releaseVersion.entryOf(store))};
 	const mutex = new Mutex(new ${store}(${JSON.stringify(directory)}));
 	const skip = () =>
 		mutex.acquire(${JSON.stringify(key)}, async ({ token }) => token.value.toString(), {
@@ -191,18 +244,6 @@ const releaseCaller = (store: string, directory: string, key: string) => `
 `;
 
 /**
- * Where a process finds `Mutex` and the file stores. The release has both at
- * its root entry point; this source has the stores at the entry point of their
- * family.
- */
-type Version = { mutex: string; stores: string };
-const releaseVersion: Version = { mutex: release.url, stores: release.url };
-const thisVersion: Version = {
-  mutex: new URL('../index.ts', import.meta.url).href,
-  stores: new URL('./file-system/index.ts', import.meta.url).href,
-};
-
-/**
  * A process on `version` that waits for `key` behind a dead holder and starts
  * to evict it, then stops at the file step that removes the holder, as if it
  * froze there: it still holds the reclaim lock. Its own file system step is
@@ -211,7 +252,7 @@ const thisVersion: Version = {
  */
 const pausedEvicter = (
   version: Version,
-  store: string,
+  store: Store,
   directory: string,
   key: string,
 ) => `
@@ -235,7 +276,7 @@ const pausedEvicter = (
 	};
 	syncBuiltinESMExports();
 	const { Mutex } = await import(${JSON.stringify(version.mutex)});
-	const { ${store} } = await import(${JSON.stringify(version.stores)});
+	const { ${store} } = await import(${JSON.stringify(version.entryOf(store))});
 	await new Mutex(new ${store}(${JSON.stringify(directory)})).acquire(${JSON.stringify(key)}, async ({ token }) => {
 		process.send({ type: 'holding', token: token.value.toString() });
 		await new Promise(() => {});
