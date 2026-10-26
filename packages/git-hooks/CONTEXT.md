@@ -41,19 +41,19 @@ What `git push` is about to send: the remote (its name and URL) and the ref upda
 _Avoid_: Upload, publish
 
 **Ref update**:
-One line that git gives to the pre-push hook: the local ref, the local sha, the remote ref and the remote sha. Its kind is create (the remote sha is all zeros), update, or delete (the local sha is all zeros). A create or an update has a head, the local sha, and a base, the newest commit that the remote has. A create has no base when the remote has no commit of that history.
+One line that git gives to the pre-push hook: the local ref, the local sha, the remote ref and the remote sha. Its kind is create (the remote sha is all zeros), update, or delete (the local sha is all zeros). A create or an update has a head, the local sha, and a base, the newest commit that the remote has. For an update, the base is the remote sha. For a create, and for an update whose remote sha is not in the local repo, the base is the parent of the first commit that no ref of the remote has. When the remote has the head already, the base is the head, and the range is empty. When the remote has no commit of that history, there is no base.
 _Avoid_: Branch (a ref can also be a tag), change
 
 **Pushed commit**:
-The commit that a ref update sends: its local sha. A pre-push step judges the pushed commits. A push that only deletes refs has no pushed commit.
+The commit that a ref update sends: its local sha. A pre-push step judges the pushed commits. A push that only deletes refs has no pushed commit. `Build` builds a pushed commit only when the remote does not have it.
 _Avoid_: HEAD (the branch that is checked out, which a push can leave out), local commit
 
 **Snapshot**:
-The files of one commit in a temporary folder outside the repo. The snapshot of the staged commit (`Commit.inSnapshot`) holds only the files. The snapshot of a pushed commit (`Push.inSnapshot`) also has a `node_modules` that the build can use: its workspace packages resolve to the snapshot, and the other packages are the installed packages. The hook deletes a snapshot after use.
+The files of one commit in a temporary folder outside the repo. The snapshot of the staged commit (`Commit.inSnapshot`) holds only the files. The snapshot of a pushed commit (`Push.inSnapshot`) also has a `node_modules` that the build can use: its workspace packages resolve to the snapshot, and the other packages are the installed packages. Git commands that nx runs in it see a clean checkout of the pushed commit. The hook deletes a snapshot after use.
 _Avoid_: Checkout, worktree (git's word for a working tree that git tracks), copy
 
 **Install drift**:
-The installed packages do not match the `package-lock.json` of a pushed commit: a package that the lockfile names is missing, or has a different version. The hook finds it from npm's hidden lockfile, `node_modules/.package-lock.json`. On install drift, the build uses an install of the pushed lockfile in the state folder.
+The installed packages do not match the `package-lock.json` of a pushed commit: a package that the lockfile names is missing or has a different version, or a package is installed that the lockfile does not name. Workspace links are not compared. The hook finds it from npm's hidden lockfile, `node_modules/.package-lock.json`. On install drift, the build uses an install of the pushed lockfile in the state folder.
 _Avoid_: Stale install, dependency mismatch
 
 **State folder**:
