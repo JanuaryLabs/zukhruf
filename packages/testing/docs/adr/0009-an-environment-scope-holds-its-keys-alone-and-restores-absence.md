@@ -13,5 +13,6 @@ Tests change `process.env` by hand and restore it at the end. 37 places restore 
 ## Consequences
 
 - To set several keys, a test gives them to one `set`.
+- On Windows, the name of a variable is not case-sensitive, so the scope compares the held keys without case there. A scope that holds `PATH` also holds `Path`.
 - A module that reads a variable when it loads keeps that value (about 15 places). The test sets the scope, then loads the module with `await import()`, or runs the code in a child process.
 - A child process sees the scope only if it inherits the environment when it starts. About 40 places give `env` to the child, and need no scope.

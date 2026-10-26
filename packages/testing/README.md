@@ -244,7 +244,7 @@ test('reads the region', (t) => {
 
 A key that was absent before the scope is deleted at restore. It does not become the string `"undefined"`. An empty string is a value: a key that held `''` holds `''` again. The scope assigns each key on the real `process.env` object. It does not replace the object and does not use `Object.defineProperty`. Native addons read the real object, and Node resets its `TZ` cache only on an assignment.
 
-One scope at a time holds a key. A second `set` that names a key of an open scope throws, and the error names the key. Thus two tests that run at the same time cannot restore each other's values. To set several keys, give them to one `set`.
+One scope at a time holds a key. A second `set` that names a key of an open scope throws, and the error names the key. Thus two tests that run at the same time cannot restore each other's values. To set several keys, give them to one `set`. On Windows, the name of a variable is not case-sensitive: `Path` and `PATH` are one variable. Thus there, a scope that holds `PATH` also holds `Path`.
 
 A module that reads a variable when it loads keeps the value that it read. The restore does not change that value, and Node loads a module only once in a process. Thus set the scope first, then load the module with `await import()`. Or run the code in a child process.
 
@@ -289,7 +289,7 @@ An interception is always strict: the server listens with `onUnhandledFrame: 'er
 
 `requests` holds a clone of each request that the server receives, in the order of arrival. A clone keeps its body, so the test can read the body after a handler read the original.
 
-`server` is the msw `SetupServerApi`. Use `interception.server.use(...handlers)` to add handlers for a part of the test.
+`server` is the msw server, of the type `SetupServer` from `msw/node`. Use `interception.server.use(...handlers)` to add handlers for a part of the test.
 
 An interception also receives the requests to a local server, such as an `HttpServer` of the same test. To send them to that server, give a handler for the origin of that server. The handler passes each of its requests through:
 
