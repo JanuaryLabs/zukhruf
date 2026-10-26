@@ -113,6 +113,20 @@ export default defineConfig(
       '@nx/enforce-module-boundaries': moduleBoundaryRule('tests'),
     },
   },
+  // @zukhruf/testing depends on docker, and docker on async, so the tests of
+  // these two packages cannot import TemporaryFiles: that import would make a
+  // cycle in the build (docs/adr/0001, line 29). Docker keeps its own copy of
+  // the temporary directory (packages/docker/docs/copied-code.md).
+  {
+    files: ['packages/docker/**', 'packages/async/**'],
+    rules: { 'zukhruf/no-raw-temp-directory': 'off' },
+  },
+  // The tests of TemporaryFiles arrange their parent folders with node:fs, so
+  // that the subject under test does not make its own fixtures.
+  {
+    files: ['packages/testing/src/fs/temporary-files.test.ts'],
+    rules: { 'zukhruf/no-raw-temp-directory': 'off' },
+  },
   // The tests of the UI packages import them by their names, as an app does,
   // so they check the published entry and not the source files.
   {

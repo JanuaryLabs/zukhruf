@@ -4,6 +4,7 @@ import noCatchAllMswHandler from './no-catch-all-msw-handler.ts';
 import noDirectMswServer from './no-direct-msw-server.ts';
 import noGlobalTestMock from './no-global-test-mock.ts';
 import noProcessEnvWrite from './no-process-env-write.ts';
+import noRawTempDirectory from './no-raw-temp-directory.ts';
 import noSleepPollLoop from './no-sleep-poll-loop.ts';
 import noTestLifecycleHooks from './no-test-lifecycle-hooks.ts';
 import noTimerRace from './no-timer-race.ts';
@@ -16,6 +17,7 @@ const rules = {
   'no-timer-race': noTimerRace,
   'no-sleep-poll-loop': noSleepPollLoop,
   'no-global-test-mock': noGlobalTestMock,
+  'no-raw-temp-directory': noRawTempDirectory,
 };
 
 export const tests: Concept = {
