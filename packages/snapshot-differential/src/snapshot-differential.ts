@@ -37,6 +37,13 @@ export type SnapshotGroup<Data> = {
   records(): AsyncIterable<Data> | Iterable<Data>;
 };
 
+// A group the scan lists without reading, because the source vouches that
+// its input did not change. It keeps its saved fingerprint and records.
+export type KeptGroup = {
+  readonly key: string;
+  readonly kept: true;
+};
+
 export type SnapshotChange<Data, State> =
   | { readonly type: 'upsert'; readonly record: Data }
   | {
@@ -119,12 +126,15 @@ export class SnapshotDifferential<Data extends Record<string, unknown>> {
   }
 
   // diff for a scan whose records come from inputs the source fingerprints
-  // cheaply. A group whose fingerprint matches the last committed scan keeps
-  // its records without reading them; every other group is read and diffed
-  // record by record. Vanished keys are judged over the complete scan.
-  // continues makes this call one part of a scan in parts, as for diff.
+  // cheaply. A group whose fingerprint matches the last committed scan, and a
+  // kept group, keep their records without reading them; every other group is
+  // read and diffed record by record. Vanished keys are judged over the
+  // complete scan. continues makes this call one part of a scan in parts, as
+  // for diff.
   async *diffGroups(
-    groups: AsyncIterable<SnapshotGroup<Data>> | Iterable<SnapshotGroup<Data>>,
+    groups:
+      | AsyncIterable<SnapshotGroup<Data> | KeptGroup>
+      | Iterable<SnapshotGroup<Data> | KeptGroup>,
     state: unknown,
     { continues = false }: { readonly continues?: boolean } = {},
   ): AsyncGenerator<SnapshotChange<Data, GroupedSnapshotState>> {
@@ -145,9 +155,14 @@ export class SnapshotDifferential<Data extends Record<string, unknown>> {
         );
       const before = previous.groups.get(group.key);
       if (
-        group.fingerprint !== null &&
-        before?.fingerprint === group.fingerprint
+        'kept' in group ||
+        (group.fingerprint !== null &&
+          before?.fingerprint === group.fingerprint)
       ) {
+        if (before === undefined)
+          throw new TypeError(
+            `Snapshot ${this.name} kept group ${group.key}, which its snapshot does not have`,
+          );
         for (const key of Object.keys(before.snapshot))
           this.#claimKey(seen, key);
         current.set(group.key, before);

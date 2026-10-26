@@ -8,6 +8,7 @@ export {
 } from './deletion-policy.ts';
 export { Retention } from './retention.ts';
 export {
+  type KeptGroup,
   type SnapshotChange,
   SnapshotDifferential,
   type SnapshotDifferentialOptions,

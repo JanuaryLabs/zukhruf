@@ -411,6 +411,59 @@ test('a grouped scan keeps an unchanged group unread, follows a record that move
   assert.equal(covered.state.unknown, undefined);
 });
 
+test('a kept group keeps its saved fingerprint and records unread, so the scan deletes nothing and saves the same state', async () => {
+  const policy = new ClosedWorld();
+  const first = await changes(
+    items(policy).diffGroups(
+      [
+        group('one', 'v1', [{ id: 'a', value: '1' }]),
+        group('two', 'v1', [{ id: 'b', value: '1' }]),
+      ],
+      null,
+    ),
+  );
+
+  const kept = await changes(
+    items(policy).diffGroups(
+      [{ key: 'one', kept: true }, group('two', 'v1', [])],
+      first.state,
+    ),
+  );
+
+  assert.deepEqual(kept.upserted, []);
+  assert.deepEqual(kept.deleted, []);
+  assert.deepEqual(kept.state, first.state);
+});
+
+test('a group kept in a scan in parts is listed, so the part that ends the scan does not delete its records', async () => {
+  const policy = new ClosedWorld();
+  const loaded = await changes(
+    items(policy).diffGroups(
+      [
+        group('one', 'v1', [{ id: 'a', value: '1' }]),
+        group('two', 'v1', [{ id: 'b', value: '1' }]),
+        group('three', 'v1', [{ id: 'c', value: '1' }]),
+      ],
+      null,
+    ),
+  );
+
+  const first = await changes(
+    items(policy).diffGroups([{ key: 'one', kept: true }], loaded.state, {
+      continues: true,
+    }),
+  );
+  const last = await changes(
+    items(policy).diffGroups(
+      [group('two', 'v1', [{ id: 'b', value: '1' }])],
+      first.state,
+    ),
+  );
+
+  assert.deepEqual(last.deleted, ['c']);
+  assert.deepEqual(last.state.groups.one, loaded.state.groups.one);
+});
+
 test('a grouped scan in parts keeps the groups it has not reached and, at its last part, deletes the records of the groups no part listed', async () => {
   const policy = new ClosedWorld();
   const loaded = await changes(
@@ -579,6 +632,10 @@ test('a scan that lists a key or a group twice, holds a record JSON cannot hold,
         null,
       ),
       /Snapshot items returned group g twice in one scan/,
+    ],
+    [
+      items(policy).diffGroups([{ key: 'g', kept: true }], null),
+      /Snapshot items kept group g, which its snapshot does not have/,
     ],
     [
       loose.diff([{ id: 'a', value: undefined }], null),

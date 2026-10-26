@@ -75,3 +75,7 @@ _Avoid_: Seen key, marked key
 **Group**:
 The records that one input produced, such as one file, with a fingerprint of the input. A group with the same fingerprint as before keeps its records, and the diff does not read them.
 _Avoid_: Batch, partition (an ELT pipeline uses partition for its own concept)
+
+**Kept group**:
+A group that the scan lists by its key only, because the source knows that its input did not change. The diff keeps its saved fingerprint and records, and does not read it.
+_Avoid_: Skipped group, cached group, deferred group (deferred is the reason of one source, not the concept)

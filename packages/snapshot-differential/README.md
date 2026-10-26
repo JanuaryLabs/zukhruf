@@ -105,6 +105,7 @@ for await (const change of differential.diffGroups(
 
 - A group with the same fingerprint as in the snapshot keeps its records. The diff does not call its `records`.
 - A group with a `null` fingerprint is always read.
+- A kept group, `{ key, kept: true }`, keeps its saved fingerprint and records. Give it when you know that the input did not change but you cannot fingerprint it, such as a page that a crawl did not request. A kept group that the snapshot does not have is an error ([ADR 0004](./docs/adr/0004-a-scan-can-keep-a-group-without-reading-it.md)).
 - A record that moves to a different group, with the same fingerprint, gets no upsert.
 - The policy judges the vanished keys of the complete scan, also the keys of groups that are not in the scan.
 
@@ -171,6 +172,7 @@ Airbyte has no equivalent. Outside change data capture, it deletes only when it 
 - [ADR 0001: A vanished key is judged by a deletion policy](./docs/adr/0001-a-vanished-key-is-judged-by-a-deletion-policy.md)
 - [ADR 0002: A scan can be listed in parts](./docs/adr/0002-a-scan-can-be-listed-in-parts.md)
 - [ADR 0003: The differential is a zukhruf package](./docs/adr/0003-the-differential-is-a-zukhruf-package.md)
+- [ADR 0004: A scan can keep a group without reading it](./docs/adr/0004-a-scan-can-keep-a-group-without-reading-it.md)
 
 ## Development
 
