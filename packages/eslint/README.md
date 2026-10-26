@@ -156,9 +156,11 @@ An island is an Nx project tagged `layer:island`. Its tags come from its `projec
 - A **bundled** project is an application whose build inlines the workspace packages it imports. Their manifests are not there when it is deployed, so its own manifest declares every npm package they pull in. Workspace packages themselves are not demanded.
 - Every other project is **unbundled**. It declares what its own code imports.
 
-The rule reads the build target as Nx resolves it: `project.json`, the target defaults in `nx.json`, and the targets that Nx plugins infer. An application bundles unless its build is `nx:noop`, or esbuild with `bundle: false`.
+The rule reads the build target as Nx resolves it: `project.json`, the target defaults in `nx.json`, and the targets that Nx plugins infer. An application bundles unless its build compiles with tsc, is `nx:noop`, or is esbuild with `bundle: false`. tsc emits one file for each source file and keeps each import. The rule counts `@nx/js:tsc` and the `tsc --build` target that the `@nx/js/typescript` plugin infers.
 
 An esbuild app can name workspace packages in `external`. Its build does not inline those packages, so they come from `node_modules` when the app runs. When the app imports one of them, it is unbundled, and its manifest declares them. Its manifest does not declare the workspace packages that its build still inlines. The rule reads the list that Nx gives esbuild: `external` and `esbuildOptions.external`, less the entries in `excludeFromExternal`. A `*` in an entry is esbuild's wildcard, as in `@acme/*`.
+
+A `testing/` folder holds test support, so the rule does not check its imports. A package can also ship a testing subpath to its consumers. So the rule checks a `testing/` folder when the manifest publishes it: an `exports` target or a `files` entry has a `testing` segment, or an `exports` target has a `*`. For a bundled project, the rule applies the same decision to each workspace package that it inlines.
 
 Nx's check follows the imports of all workspace packages, or of none. So when an app inlines some workspace packages and names others in `external`, the rule does not check the npm imports of the inlined packages.
 

@@ -81,5 +81,9 @@ An application whose build inlines all the workspace packages it imports, such a
 _Avoid_: Inline project
 
 **Unbundled project**:
-Every project that is not bundled: libraries, an `nx:noop` shell, esbuild with `bundle: false`, esbuild that names a workspace package it imports in `external`. Its manifest declares what its own code imports, but not the workspace packages that its build inlines.
+Every project that is not bundled: libraries, an app that compiles with tsc, an `nx:noop` shell, esbuild with `bundle: false`, esbuild that names a workspace package it imports in `external`. Its manifest declares what its own code imports, but not the workspace packages that its build inlines.
 _Avoid_: Library (when shape is meant)
+
+**Test support**:
+The code in a `testing/` folder that the project's manifest does not publish through `exports` or `files`. Tests import it, and the project does not ship it. Its imports are not dependencies.
+_Avoid_: Test helpers (when the folder is meant)
