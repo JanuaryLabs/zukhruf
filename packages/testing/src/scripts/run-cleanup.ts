@@ -11,7 +11,11 @@ import {
   type Kind,
   ownedBy,
 } from '../databases/collector.ts';
-import { SHARED_SERVER_LABEL } from '../docker/fixtures.ts';
+import {
+  PACKAGE_VERSION,
+  SHARED_SERVER_LABEL,
+  VERSION_LABEL,
+} from '../docker/fixtures.ts';
 import { DockerHost, SHELL_TIMEOUT, quote } from '../docker/host.ts';
 import {
   TEST_RUN_LABEL,
@@ -154,7 +158,7 @@ export async function cleanup(
   const owner = new TestRun(previous.id, directory);
   const signal = () => AbortSignal.timeout(ENGINE_CALL_TIMEOUT);
   // Labels are attached atomically at creation. Never prune an engine,
-  // remove shared servers, or trust names alone as proof of ownership.
+  // remove a shared server here, or trust names alone as proof of ownership.
   const filters = { label: [`${TEST_RUN_LABEL}=${previous.id}`] };
   for (const summary of await engine.containers.list({
     all: true,
@@ -194,7 +198,31 @@ export async function cleanup(
   await dropDatabases(engine, host, previous.id, signal);
 }
 
-/** Connects to the run's engine, cleans the run, and ends the connection. */
+/**
+ * Removes each shared server whose version label is not this package's
+ * version, or that has no version label (ADR 0012).
+ */
+async function removeOtherVersions(engine: Docker): Promise<void> {
+  const signal = () => AbortSignal.timeout(ENGINE_CALL_TIMEOUT);
+  for (const summary of await engine.containers.list({
+    all: true,
+    filters: { label: [`${SHARED_SERVER_LABEL}=1`] },
+    signal: signal(),
+  })) {
+    if (summary.Labels?.[VERSION_LABEL] === PACKAGE_VERSION) continue;
+    // Another run's teardown can remove it first.
+    const container = await engine.containers.find(summary.Id, {
+      signal: signal(),
+    });
+    await container?.remove({ force: true, v: true, signal: signal() });
+  }
+}
+
+/**
+ * Connects to the run's engine, cleans the run, removes the shared servers
+ * of other versions, and ends the connection. Only the global teardown
+ * calls it, for a run that used Docker.
+ */
 export async function connectAndCleanup(
   previous: Run,
   directory: string,
@@ -205,4 +233,5 @@ export async function connectAndCleanup(
     signal: AbortSignal.timeout(ENGINE_CALL_TIMEOUT),
   });
   await cleanup(engine, previous, directory);
+  await removeOtherVersions(engine);
 }

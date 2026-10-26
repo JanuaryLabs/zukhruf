@@ -1,11 +1,20 @@
 import assert from 'node:assert/strict';
 import { spawn as spawnProcess } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { access, mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import {
+  access,
+  cp,
+  mkdir,
+  readFile,
+  readdir,
+  symlink,
+  writeFile,
+} from 'node:fs/promises';
+import { findPackageJSON } from 'node:module';
+import { dirname, join } from 'node:path';
 import { type TestContext, test } from 'node:test';
 import { setTimeout } from 'node:timers/promises';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import spawn, { SubprocessError } from 'nano-spawn';
 
@@ -983,6 +992,174 @@ test(
         () => undefined,
       );
       if (state) await removeContainer(state.container).catch(() => {});
+    }
+  },
+);
+
+/** The manifest of this package, whose version its shared servers carry. */
+const manifest: { version: string } = JSON.parse(
+  await readFile(new URL('../../package.json', import.meta.url), 'utf8'),
+);
+
+/**
+ * Another version of this package: a copy of its source below `directory`,
+ * whose package.json names `version`. The copy resolves its dependencies
+ * from the node_modules of this package. Gives the URL of its docker area.
+ */
+async function anotherVersion(
+  directory: string,
+  version: string,
+): Promise<string> {
+  const root = join(directory, 'another-version');
+  await cp(fileURLToPath(new URL('../', import.meta.url)), join(root, 'src'), {
+    recursive: true,
+  });
+  await writeFile(
+    join(root, 'package.json'),
+    JSON.stringify({ ...manifest, version }),
+  );
+  const dependency = findPackageJSON('p-memoize', import.meta.url);
+  assert.ok(dependency !== undefined);
+  await symlink(dirname(dirname(dependency)), join(root, 'node_modules'));
+  return pathToFileURL(join(root, 'src', 'docker', 'index.ts')).href;
+}
+
+/** Code that reuses one shared server from the docker area at `library`, and writes its id to `statePath`. */
+const reuseSource = (library: string, statePath: string, probe: string) => `
+  const { DockerFixtures } = await import(${JSON.stringify(library)});
+  const { writeFile } = await import('node:fs/promises');
+  const docker = new DockerFixtures({ environment: process.env });
+  const server = await docker.reuse({ image: 'alpine:latest', command: ['sleep', '3600'], internalPort: 80, labels: { 'dev.zukhruf.testing.probe': ${JSON.stringify(probe)} } });
+  await writeFile(${JSON.stringify(statePath)}, JSON.stringify({ id: server.container.id }));
+  await server.disconnect();
+  await (await docker.client())[Symbol.asyncDispose]();
+`;
+
+/**
+ * Arrange and act: another version of the package reuses a shared server
+ * outside a run. Then a run of this version reuses a server with the same
+ * options, and ends. `ids` gets each server, for the test's teardown.
+ */
+async function reusedByTwoVersions(
+  t: TestContext,
+  directory: string,
+  ids: string[],
+): Promise<{ another: string; current: string }> {
+  const probe = randomUUID();
+  const env = runEnvironment(join(directory, 'state'));
+  const anotherState = join(directory, 'another.json');
+  const anotherFile = join(directory, 'another.ts');
+  await writeFile(
+    anotherFile,
+    reuseSource(
+      await anotherVersion(directory, `${manifest.version}-next.0`),
+      anotherState,
+      probe,
+    ),
+  );
+  await spawn(process.execPath, [anotherFile], { env, timeout: 120_000 });
+  const { id: another } = await readState<{ id: string }>(t, anotherState);
+  ids.push(another);
+  const currentState = join(directory, 'current.json');
+  const file = join(directory, 'current.test.ts');
+  await writeFile(
+    file,
+    `
+    import { test } from 'node:test';
+    test('a shared server', { timeout: 120000 }, async () => {
+      ${reuseSource(JSON.parse(library), currentState, probe)}
+    });
+  `,
+  );
+  await spawn(process.execPath, runnerArgs(file), { env, timeout: 150_000 });
+  const { id: current } = await readState<{ id: string }>(t, currentState);
+  ids.push(current);
+  return { another, current };
+}
+
+/** Creates and starts a shared server that carries no version label. */
+async function unversionedServer(): Promise<string> {
+  if ((await docker.images.inspect('alpine:latest')) === undefined)
+    await docker.images.pull('alpine:latest');
+  const created = await docker.containers.create({
+    Image: 'alpine:latest',
+    Cmd: ['sleep', '3600'],
+    Labels: {
+      'dev.zukhruf.testing.shared': '1',
+      'dev.zukhruf.testing.probe': randomUUID(),
+    },
+  });
+  await created.start();
+  return created.id;
+}
+
+test(
+  'a shared server of another @zukhruf/testing version is removed when a run that used Docker ends',
+  { timeout: 300_000 },
+  async (t) => {
+    await using directory = await new TemporaryFiles().directory(
+      'zukhruf-testing-another-version-',
+    );
+    const ids: string[] = [];
+    try {
+      const { another } = await reusedByTwoVersions(t, directory.path, ids);
+
+      assert.equal(await exists(another), false);
+    } finally {
+      for (const id of ids) await removeContainer(id).catch(() => {});
+    }
+  },
+);
+
+test(
+  'a shared server of this version is kept',
+  { timeout: 300_000 },
+  async (t) => {
+    await using directory = await new TemporaryFiles().directory(
+      'zukhruf-testing-this-version-',
+    );
+    const ids: string[] = [];
+    try {
+      const { current } = await reusedByTwoVersions(t, directory.path, ids);
+
+      assert.equal(await running(current), true);
+    } finally {
+      for (const id of ids) await removeContainer(id).catch(() => {});
+    }
+  },
+);
+
+test(
+  'a shared server with no version label is removed',
+  { timeout: 180_000 },
+  async (t) => {
+    await using directory = await new TemporaryFiles().directory(
+      'zukhruf-testing-unversioned-',
+    );
+    const statePath = join(directory.path, 'state.json');
+    const file = join(directory.path, 'worker.test.ts');
+    await writeFile(file, smallWorkerSource(statePath, ''));
+    const server = await unversionedServer();
+    // Not a shared server: the sweep must not select it.
+    const other = await docker.containers.create({
+      Image: 'alpine:latest',
+      Cmd: ['sleep', '3600'],
+      Labels: { 'dev.zukhruf.testing.probe': randomUUID() },
+    });
+    let state: SmallState | undefined;
+    try {
+      await spawn(process.execPath, runnerArgs(file), {
+        env: runEnvironment(join(directory.path, 'state')),
+        timeout: 150_000,
+      });
+      state = await readState<SmallState>(t, statePath);
+
+      assert.equal(await exists(server), false);
+      assert.equal(await exists(other.id), true);
+    } finally {
+      await removeContainer(server).catch(() => {});
+      await removeContainer(other.id).catch(() => {});
+      if (state) await removeContainer(state.id).catch(() => {});
     }
   },
 );

@@ -38,7 +38,7 @@ Thus the rule has no wait for the runs that are alive, no index of the last use,
 ## Consequences
 
 - Each release starts each shared server one time on each engine. A Postgres server starts in about 2 s on a local engine. A SQL Server server starts in about 30 s.
-- Two projects on different versions that use one engine remove the servers of each other at the start of each run. This continues until both use the latest release.
+- Two projects on different versions that use one engine remove the servers of each other at the end of each run that used Docker. This continues until both use the latest release.
 - A run without Docker never calls the engine. The global setup calls the engine only when a dead run on that engine has records to sweep (ADR 0006). The global teardown calls it only for a run that used Docker.
 - The servers of other versions stay on the engine until the end of the first run that used Docker on that engine.
 - The global teardown fails when the removal of a shared server fails. It prints the error, keeps the run's records and sets exit code 1, as for each cleanup failure (ADR 0006).

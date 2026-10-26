@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 
 import pMemoize from 'p-memoize';
 
@@ -23,6 +24,13 @@ import { TestRun } from './test-run.ts';
 export const SHARED_SERVER_LABEL = 'dev.zukhruf.testing.shared';
 /** The fingerprint of a shared server's configuration. */
 export const CONFIG_LABEL = 'dev.zukhruf.testing.config';
+/** The version of this package that a shared server belongs to (ADR 0012). */
+export const VERSION_LABEL = 'dev.zukhruf.testing.version';
+
+/** The version of this package: `../../package.json` from `src/docker` and from `dist/docker`. */
+export const { version: PACKAGE_VERSION }: { version: string } = JSON.parse(
+  readFileSync(new URL('../../package.json', import.meta.url), 'utf8'),
+);
 
 /** A volume or a path on the engine's host, mounted into a container. */
 export interface Mount {
@@ -210,6 +218,7 @@ export class DockerFixtures {
           ...options.labels,
           [SHARED_SERVER_LABEL]: '1',
           [CONFIG_LABEL]: fingerprint,
+          [VERSION_LABEL]: PACKAGE_VERSION,
         },
       }),
       options.internalPort,
@@ -366,7 +375,7 @@ export class DockerFixtures {
     return createHash('sha256')
       .update(
         JSON.stringify({
-          transportVersion: 3,
+          version: PACKAGE_VERSION,
           memory: options.memory ?? resources.memory,
           cpus: options.cpus ?? resources.cpus,
           image: options.image,
