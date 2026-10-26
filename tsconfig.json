@@ -76,6 +76,9 @@
     },
     {
       "path": "./packages/pool"
+    },
+    {
+      "path": "./packages/embeddings"
     }
   ]
 }

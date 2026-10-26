@@ -1,0 +1,51 @@
+{
+  "name": "@zukhruf/embeddings",
+  "version": "0.3.46",
+  "description": "A collection of document embeddings in SQLite. It embeds only new or changed text through an AI SDK embedding model, and finds the nearest documents of a document by exact cosine similarity inside a publish-date window.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/JanuaryLabs/zukhruf",
+    "directory": "packages/embeddings"
+  },
+  "bugs": {
+    "url": "https://github.com/JanuaryLabs/zukhruf/issues"
+  },
+  "homepage": "https://github.com/JanuaryLabs/zukhruf/tree/main/packages/embeddings#readme",
+  "keywords": [
+    "embeddings",
+    "vector-search",
+    "nearest-neighbour",
+    "cosine-similarity",
+    "sqlite",
+    "node-sqlite",
+    "ai-sdk"
+  ],
+  "type": "module",
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "@zukhruf/source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "!dist/spec/**",
+    "!**/*.tsbuildinfo",
+    "!**/*.test.*"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@zukhruf/sqlite-drift": "^0.3.46",
+    "@zukhruf/sqlite-transaction": "^0.3.46",
+    "ai": "^7.0.154"
+  },
+  "devDependencies": {
+    "@zukhruf/testing": "^0.3.46"
+  }
+}
