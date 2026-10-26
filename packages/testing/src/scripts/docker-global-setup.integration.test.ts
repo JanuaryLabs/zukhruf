@@ -79,8 +79,8 @@ const workerSource = (statePath: string, ending: string, timeout: number) => `
   import { DockerTestbed } from ${library};
   test('disposable resources before interruption', { timeout: ${timeout} }, async () => {
     const docker = new DockerTestbed({ environment: process.env });
-    const { container } = await docker.serve({ image: 'postgres:18-alpine', internalPort: 5432, env: { POSTGRES_PASSWORD: 'test' } });
-    const general = await docker.start({ image: 'postgres:18-alpine', command: ['sleep', '600'] });
+    const { container } = await docker.serve({ Image: 'postgres:18-alpine', Env: ['POSTGRES_PASSWORD=test'] }, { internalPort: 5432 });
+    const general = await docker.start({ Image: 'postgres:18-alpine', Cmd: ['sleep', '600'] });
     const fixture = await docker.directory();
     await fixture.writeFile('sentinel.txt', 'owned');
     const volume = await docker.volume();
@@ -111,7 +111,7 @@ const smallWorkerSource = (statePath: string, ending: string) => `
   import { DockerTestbed } from ${library};
   test('one container', { timeout: 150000 }, async () => {
     const docker = new DockerTestbed({ environment: process.env });
-    const container = await docker.start({ image: 'alpine:latest', command: ['sleep', '600'] });
+    const container = await docker.start({ Image: 'alpine:latest', Cmd: ['sleep', '600'] });
     await writeFile(${JSON.stringify(statePath)}, JSON.stringify({ id: container.id, run: process.env.ZUKHRUF_TESTING_RUN_ID, record: process.env.ZUKHRUF_TESTING_RUN_DIR, pid: process.pid }));
     ${ending}
   });
@@ -272,8 +272,8 @@ for (const mode of [
         },
       });
       await using sentinel = await unrelated.start({
-        image: 'alpine:latest',
-        command: ['sleep', '600'],
+        Image: 'alpine:latest',
+        Cmd: ['sleep', '600'],
       });
       await using sentinelVolume = await unrelated.volume();
       const statePath = join(directory.path, 'state.json');
@@ -776,7 +776,7 @@ test(
     const scope = randomUUID();
     const verification = `dev.zukhruf.testing.verification=${scope}`;
     // Another Docker client, such as a sandbox launcher, creates the container
-    // and the volume: only docker.defaults.labels ties them to the run.
+    // and the volume: only docker.defaults.Labels ties them to the run.
     await writeFile(
       file,
       `
@@ -786,12 +786,12 @@ test(
       import { DockerTestbed } from ${library};
       test('resources that the run owns through its labels', { timeout: 150000 }, async () => {
         const docker = new DockerTestbed({ environment: process.env });
-        const shared = await docker.reuse({ image: 'alpine:latest', command: ['sleep', '600'], internalPort: 80, labels: { ...docker.defaults.labels, 'dev.zukhruf.testing.verification': ${JSON.stringify(scope)} } });
+        const shared = await docker.reuse({ Image: 'alpine:latest', Cmd: ['sleep', '600'], Labels: { ...docker.defaults.Labels, 'dev.zukhruf.testing.verification': ${JSON.stringify(scope)} } }, { internalPort: 80 });
         await shared.disconnect();
         await using other = await Docker.connect({ environment: process.env });
-        const created = await other.containers.create({ Image: 'alpine:latest', Cmd: ['sleep', '600'], Labels: docker.defaults.labels });
+        const created = await other.containers.create({ Image: 'alpine:latest', Cmd: ['sleep', '600'], Labels: docker.defaults.Labels });
         await created.start();
-        const { name: volume } = await other.volumes.create({ Labels: docker.defaults.labels });
+        const { name: volume } = await other.volumes.create({ Labels: docker.defaults.Labels });
         await writeFile(${JSON.stringify(statePath)}, JSON.stringify({ container: created.id, volume, shared: shared.container.id }));
       });
     `,
@@ -837,7 +837,7 @@ test(
       import { Docker } from ${client};
       import { DockerTestbed } from ${library};
       test('resources of another Docker client', { timeout: 150000 }, async () => {
-        const { labels } = new DockerTestbed({ environment: process.env }).defaults;
+        const { Labels: labels } = new DockerTestbed({ environment: process.env }).defaults;
         await using other = await Docker.connect({ environment: process.env });
         const created = await other.containers.create({ Image: 'alpine:latest', Cmd: ['sleep', '600'], Labels: labels });
         await created.start();
@@ -887,7 +887,7 @@ test(
       import { DockerTestbed } from ${library};
       test('an image that the engine does not have', { timeout: 150000 }, async () => {
         const docker = new DockerTestbed({ environment: process.env });
-        await using container = await docker.start({ image: ${JSON.stringify(image)}, command: ['sleep', '600'] });
+        await using container = await docker.start({ Image: ${JSON.stringify(image)}, Cmd: ['sleep', '600'] });
         const { exitCode } = await container.exec({ Cmd: ['true'] });
         if (exitCode !== 0) throw new Error('true exited with ' + exitCode);
         await writeFile(${JSON.stringify(statePath)}, JSON.stringify({ id: container.id }));
@@ -967,7 +967,7 @@ test(
       import { Docker } from ${client};
       import { DockerTestbed } from ${JSON.stringify(import.meta.resolve('@zukhruf/testing/docker'))};
       test('a container of the run', { timeout: 150000 }, async () => {
-        const { labels } = new DockerTestbed({ environment: process.env }).defaults;
+        const { Labels: labels } = new DockerTestbed({ environment: process.env }).defaults;
         await using other = await Docker.connect({ environment: process.env });
         const created = await other.containers.create({ Image: 'alpine:latest', Cmd: ['sleep', '600'], Labels: labels });
         await created.start();
@@ -1034,7 +1034,7 @@ const reuseSource = (library: string, statePath: string, probe: string) => `
   const { DockerTestbed } = await import(${JSON.stringify(library)});
   const { writeFile } = await import('node:fs/promises');
   const docker = new DockerTestbed({ environment: process.env });
-  const server = await docker.reuse({ image: 'alpine:latest', command: ['sleep', '3600'], internalPort: 80, labels: { 'dev.zukhruf.testing.probe': ${JSON.stringify(probe)} } });
+  const server = await docker.reuse({ Image: 'alpine:latest', Cmd: ['sleep', '3600'], Labels: { 'dev.zukhruf.testing.probe': ${JSON.stringify(probe)} } }, { internalPort: 80 });
   await writeFile(${JSON.stringify(statePath)}, JSON.stringify({ id: server.container.id }));
   await server.disconnect();
   await (await docker.client())[Symbol.asyncDispose]();

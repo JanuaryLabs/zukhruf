@@ -32,36 +32,11 @@ export const { version: PACKAGE_VERSION }: { version: string } = JSON.parse(
   readFileSync(new URL('../../package.json', import.meta.url), 'utf8'),
 );
 
-/** A volume or a path on the engine's host, mounted into a container. */
-export interface Mount {
-  /** A volume's name, or an absolute path on the engine's host. */
-  source: string;
-  target: string;
-  readOnly?: boolean;
-}
-
-export interface ContainerOptions {
-  image: string;
-  /** Replaces the image's command. */
-  command?: string[];
-  /** A dedicated container gets a generated name; a reused server's name comes from its configuration. */
-  name?: string;
-  hostname?: string;
-  env?: Record<string, string>;
-  labels?: Record<string, string> | undefined;
-  mounts?: Mount[];
-  /** `<path>[:<options>]`, as `docker run --tmpfs` takes it. */
-  tmpfs?: string[];
-  ipcHost?: boolean;
-  /** A size in the Docker CLI's binary units, such as `512m` or `1g`. */
-  memory?: string;
-  cpus?: number;
-  memorySwappiness?: number;
-}
-
-export interface ServiceOptions extends ContainerOptions {
+export interface ServiceOptions {
   /** The container's port that answers on 127.0.0.1 of this machine. */
   internalPort: number;
+  /** Without it, the engine names a dedicated server; a shared server's name comes from its configuration. */
+  name?: string;
   /** Runs on every acquisition. Throw until ready, using timebox for polling. */
   healthy?: (service: ServiceContainer) => unknown;
 }
@@ -77,32 +52,29 @@ interface Engine {
   host: DockerHost;
 }
 
-const units: Record<string, number> = {
-  b: 1,
-  k: 1024,
-  m: 1024 ** 2,
-  g: 1024 ** 3,
-  t: 1024 ** 4,
-  p: 1024 ** 5,
-};
+/** The default resources: they protect a shared engine, such as an SSH engine that runs real applications. */
+const RESOURCES = { Memory: 1024 ** 3, NanoCpus: 1e9 };
 
-/** Bytes of a size such as `1g`, in the binary units of the Docker CLI's `--memory`. */
-function bytes(size: string): number {
-  const match = /^(\d+(?:\.\d+)?)\s?([bkmgtp])?i?b?$/i.exec(size);
-  if (!match?.[1]) throw new Error(`Invalid memory size: ${size}`);
-  return Math.trunc(
-    Number(match[1]) * (units[match[2]?.toLowerCase() ?? 'b'] ?? 1),
-  );
-}
-
-const byKey = ([a]: [string, string], [b]: [string, string]): number => {
+const byKey = ([a]: [string, unknown], [b]: [string, unknown]): number => {
   if (a < b) return -1;
   if (a > b) return 1;
   return 0;
 };
 
-const generatedName = (image: string): string =>
-  `test-${image.replace(/[^a-zA-Z0-9_.-]/g, '-')}-${randomUUID()}`;
+/** The value with its object keys sorted and its `Env` entries sorted; every other array keeps its order. */
+function canonical(value: unknown, key?: string): unknown {
+  if (Array.isArray(value)) {
+    const items = value.map((item: unknown) => canonical(item));
+    return key === 'Env' ? items.toSorted() : items;
+  }
+  if (typeof value === 'object' && value !== null)
+    return Object.fromEntries(
+      Object.entries(value)
+        .toSorted(byKey)
+        .map(([name, item]) => [name, canonical(item, name)]),
+    );
+  return value;
+}
 
 /**
  * A testbed of containers on the engine that `environment` selects. The engine is
@@ -143,13 +115,13 @@ export class DockerTestbed {
    * the read records this process, so the global teardown sweeps the run.
    */
   get defaults(): {
-    resources: { memory: string; cpus: number };
-    labels: Record<string, string>;
+    Labels: Record<string, string>;
+    HostConfig: { Memory: number; NanoCpus: number };
   } {
     this.#run?.records.recordThisProcess();
     return {
-      resources: { memory: '1g', cpus: 1 },
-      labels: this.#run ? { [TEST_RUN_LABEL]: this.#run.id } : {},
+      Labels: this.#run ? { [TEST_RUN_LABEL]: this.#run.id } : {},
+      HostConfig: { ...RESOURCES },
     };
   }
 
@@ -168,36 +140,50 @@ export class DockerTestbed {
     const { client } = await this.#engine();
     return client.volumes.create({
       Name: `zukhruf-testing-${randomUUID()}`,
-      Labels: this.defaults.labels,
+      Labels: this.defaults.Labels,
     });
   }
 
   /** Starts a container this process owns. It stays after it stops, until disposal removes it. */
-  async start(options: ContainerOptions): Promise<OwnedContainer> {
+  async start(
+    body: EngineApi.ContainerCreateRequest,
+    options?: { name?: string },
+  ): Promise<OwnedContainer> {
     const engine = await this.#engine();
-    const container = await this.#create(engine, this.#owned(options), {
-      name: options.name ?? generatedName(options.image),
-    });
+    const container = await this.#creating(engine, () =>
+      engine.client.containers.create(this.#owned(body), options),
+    );
     await this.#startOrRemove(container);
     return container;
   }
 
-  /** Starts a dedicated server. Failure or disposal removes it. */
-  async serve(options: ServiceOptions): Promise<ServiceContainer> {
+  /**
+   * Starts a dedicated server. Failure or disposal removes it. A server that
+   * is not ready rejects with its container's output, read before the removal.
+   */
+  async serve(
+    body: EngineApi.ContainerCreateRequest,
+    options: ServiceOptions,
+  ): Promise<ServiceContainer> {
     const engine = await this.#engine();
-    const owned = this.#owned(options);
-    const container = await this.#create(
-      engine,
-      this.#published(owned, options.internalPort),
-      { name: options.name ?? generatedName(options.image) },
+    const published = this.#published(this.#owned(body), options.internalPort);
+    const container = await this.#creating(engine, () =>
+      engine.client.containers.create(published, options),
     );
     const remove = () => container.remove({ force: true, v: true });
     await this.#startOrRemove(container);
     try {
       return await this.#ready(engine, container, options, remove);
     } catch (error) {
+      const output = await container.logs().then(
+        (logs) => logs.output,
+        () => undefined,
+      );
       await remove().catch(() => {});
-      throw error;
+      if (output === undefined) throw error;
+      throw new Error(`Container ${container.id} was not ready:\n${output}`, {
+        cause: error,
+      });
     }
   }
 
@@ -205,26 +191,47 @@ export class DockerTestbed {
    * Reuse one server per configuration on this engine, across processes and
    * runs. Docker reserves the name atomically. Readiness failure leaves it
    * running. Disposal closes only the forward; the server keeps running for
-   * its other users.
+   * its other users. The engine removes the server when it stops.
    */
-  async reuse(options: ServiceOptions): Promise<ServiceContainer> {
+  async reuse(
+    body: EngineApi.ContainerCreateRequest,
+    options: ServiceOptions,
+  ): Promise<ServiceContainer> {
     const engine = await this.#engine();
-    const fingerprint = this.#fingerprint(options);
+    const configured: EngineApi.ContainerCreateRequest = {
+      ...body,
+      HostConfig: { ...RESOURCES, ...body.HostConfig },
+    };
+    const fingerprint = createHash('sha256')
+      .update(
+        JSON.stringify(
+          canonical({
+            version: PACKAGE_VERSION,
+            internalPort: options.internalPort,
+            body: configured,
+          }),
+        ),
+      )
+      .digest('hex');
     const name = options.name ?? `zukhruf-testing-${fingerprint}`;
-    const body = this.#published(
-      this.#body({
-        ...options,
-        labels: {
-          ...options.labels,
+    const published = this.#published(
+      {
+        ...configured,
+        Labels: {
+          ...configured.Labels,
           [SHARED_SERVER_LABEL]: '1',
           [CONFIG_LABEL]: fingerprint,
           [VERSION_LABEL]: PACKAGE_VERSION,
         },
-      }),
+      },
       options.internalPort,
     );
+    const shared: EngineApi.ContainerCreateRequest = {
+      ...published,
+      HostConfig: { ...published.HostConfig, AutoRemove: true },
+    };
     const { container } = await this.#creating(engine, () =>
-      engine.client.containers.createOrGet(body, { name }),
+      engine.client.containers.createOrGet(shared, { name }),
     );
     const inspected = await container.inspect();
     const labels = inspected.Config?.Labels;
@@ -240,23 +247,14 @@ export class DockerTestbed {
   }
 
   /** Runs a container to completion and gives its output and exit code. The container is removed afterwards. */
-  async run(options: ContainerOptions): Promise<ExecResult> {
-    const engine = await this.#engine();
-    const body = this.#owned(options);
-    return this.#creating(engine, () =>
-      engine.client.containers.run(body, {
-        name: options.name ?? generatedName(options.image),
-      }),
-    );
-  }
-
-  async #create(
-    engine: Engine,
+  async run(
     body: EngineApi.ContainerCreateRequest,
-    { name }: { name: string },
-  ): Promise<OwnedContainer> {
+    options?: { name?: string },
+  ): Promise<ExecResult> {
+    const engine = await this.#engine();
+    const owned = this.#owned(body);
     return this.#creating(engine, () =>
-      engine.client.containers.create(body, { name }),
+      engine.client.containers.run(owned, options),
     );
   }
 
@@ -311,15 +309,19 @@ export class DockerTestbed {
     }
   }
 
-  /** The body of a container this process owns: it carries the run's labels. */
-  #owned(options: ContainerOptions): EngineApi.ContainerCreateRequest {
-    return this.#body({
-      ...options,
-      labels: { ...options.labels, ...this.defaults.labels },
-    });
+  /** The body of a container this process owns: the run's labels win, and the body's resources win over the defaults. */
+  #owned(
+    body: EngineApi.ContainerCreateRequest,
+  ): EngineApi.ContainerCreateRequest {
+    const { Labels, HostConfig } = this.defaults;
+    return {
+      ...body,
+      Labels: { ...body.Labels, ...Labels },
+      HostConfig: { ...HostConfig, ...body.HostConfig },
+    };
   }
 
-  /** Publishes `internalPort` on 127.0.0.1 of the engine's host; the engine removes the container when it stops. */
+  /** Publishes `internalPort` on 127.0.0.1 of the engine's host. */
   #published(
     body: EngineApi.ContainerCreateRequest,
     internalPort: number,
@@ -330,66 +332,8 @@ export class DockerTestbed {
       ExposedPorts: { [port]: {} },
       HostConfig: {
         ...body.HostConfig,
-        AutoRemove: true,
         PortBindings: { [port]: [{ HostIp: '127.0.0.1', HostPort: '' }] },
       },
     };
-  }
-
-  #body(options: ContainerOptions): EngineApi.ContainerCreateRequest {
-    const { resources } = this.defaults;
-    const hostConfig: EngineApi.HostConfig = {
-      Binds: (options.mounts ?? []).map(
-        ({ source, target, readOnly }) =>
-          `${source}:${target}${readOnly ? ':ro' : ''}`,
-      ),
-      Tmpfs: Object.fromEntries(
-        (options.tmpfs ?? []).map((spec) => {
-          const separator = spec.indexOf(':');
-          return separator === -1
-            ? [spec, '']
-            : [spec.slice(0, separator), spec.slice(separator + 1)];
-        }),
-      ),
-      Memory: bytes(options.memory ?? resources.memory),
-      NanoCpus: Math.round((options.cpus ?? resources.cpus) * 1e9),
-      ...(options.ipcHost ? { IpcMode: 'host' } : {}),
-      ...(options.memorySwappiness === undefined
-        ? {}
-        : { MemorySwappiness: options.memorySwappiness }),
-    };
-    return {
-      Image: options.image,
-      ...(options.command ? { Cmd: options.command } : {}),
-      ...(options.hostname ? { Hostname: options.hostname } : {}),
-      Labels: options.labels ?? {},
-      Env: Object.entries(options.env ?? {}).map(
-        ([key, value]) => `${key}=${value}`,
-      ),
-      HostConfig: hostConfig,
-    };
-  }
-
-  #fingerprint(options: ServiceOptions): string {
-    const { resources } = this.defaults;
-    return createHash('sha256')
-      .update(
-        JSON.stringify({
-          version: PACKAGE_VERSION,
-          memory: options.memory ?? resources.memory,
-          cpus: options.cpus ?? resources.cpus,
-          image: options.image,
-          command: options.command ?? [],
-          hostname: options.hostname,
-          internalPort: options.internalPort,
-          env: Object.entries(options.env ?? {}).sort(byKey),
-          labels: Object.entries(options.labels ?? {}).sort(byKey),
-          mounts: options.mounts ?? [],
-          tmpfs: options.tmpfs ?? [],
-          ipcHost: Boolean(options.ipcHost),
-          memorySwappiness: options.memorySwappiness,
-        }),
-      )
-      .digest('hex');
   }
 }

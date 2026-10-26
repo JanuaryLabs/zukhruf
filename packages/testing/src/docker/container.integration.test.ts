@@ -14,8 +14,8 @@ test(
     const testbed = new DockerTestbed({ environment: process.env });
     const client = await testbed.client();
     const container = await testbed.start({
-      image,
-      command: ['sh', '-c', 'echo printed; echo complained >&2'],
+      Image: image,
+      Cmd: ['sh', '-c', 'echo printed; echo complained >&2'],
     });
     try {
       await t.waitFor(
@@ -51,12 +51,12 @@ test(
     const scope = randomUUID();
     await using volume = await testbed.volume();
     await using container = await testbed.start({
-      image,
-      hostname: 'holder',
-      env: { GREETING: 'hello' },
-      labels: { 'dev.zukhruf.testing.verification': scope },
-      mounts: [{ source: volume.name, target: '/data' }],
-      command: [
+      Image: image,
+      Hostname: 'holder',
+      Env: ['GREETING=hello'],
+      Labels: { 'dev.zukhruf.testing.verification': scope },
+      HostConfig: { Binds: [`${volume.name}:/data`] },
+      Cmd: [
         'sh',
         '-c',
         'echo "$GREETING from $(hostname)" > /data/greeting; exec sleep 600',
@@ -74,12 +74,14 @@ test(
     const name = `zukhruf-testing-reader-${scope}`;
 
     // Act
-    const read = await testbed.run({
-      image,
-      name,
-      mounts: [{ source: volume.name, target: '/data', readOnly: true }],
-      command: ['cat', '/data/greeting'],
-    });
+    const read = await testbed.run(
+      {
+        Image: image,
+        HostConfig: { Binds: [`${volume.name}:/data:ro`] },
+        Cmd: ['cat', '/data/greeting'],
+      },
+      { name },
+    );
 
     // Assert
     assert.equal(read.stdout, 'hello from holder\n');
@@ -107,9 +109,9 @@ test(
 
     // Act
     const result = await testbed.run({
-      image,
-      mounts: [{ source: volume.name, target: '/data', readOnly: true }],
-      command: ['touch', '/data/written'],
+      Image: image,
+      HostConfig: { Binds: [`${volume.name}:/data:ro`] },
+      Cmd: ['touch', '/data/written'],
     });
 
     // Assert
@@ -128,8 +130,8 @@ test(
     const testbed = new DockerTestbed({ environment: process.env });
     const client = await testbed.client();
     const container = await testbed.start({
-      image: 'postgres:18-alpine',
-      command: ['true'],
+      Image: 'postgres:18-alpine',
+      Cmd: ['true'],
     });
     const volumes = ((await container.inspect()).Mounts ?? [])
       .filter((mount) => mount.Type === 'volume')
@@ -158,8 +160,8 @@ test(
     // Arrange
     const testbed = new DockerTestbed({ environment: process.env });
     await using container = await testbed.start({
-      image,
-      command: ['sleep', '600'],
+      Image: image,
+      Cmd: ['sleep', '600'],
     });
 
     // Act

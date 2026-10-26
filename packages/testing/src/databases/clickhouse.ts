@@ -17,21 +17,25 @@ export class ClickHouse {
   }
 
   start(): Promise<ServiceContainer> {
-    return this.#docker.serve({
-      image: this.#image,
-      internalPort: 8123,
-      memory: '2g',
-      env: { CLICKHOUSE_SKIP_USER_SETUP: '1' },
-      healthy: (service) =>
-        timebox(
-          () =>
-            succeeded(service.container, [
-              'clickhouse-client',
-              '--query',
-              'SELECT 1',
-            ]),
-          { maxRetryTime: 60_000 },
-        ),
-    });
+    return this.#docker.serve(
+      {
+        Image: this.#image,
+        Env: ['CLICKHOUSE_SKIP_USER_SETUP=1'],
+        HostConfig: { Memory: 2 * 1024 ** 3 },
+      },
+      {
+        internalPort: 8123,
+        healthy: (service) =>
+          timebox(
+            () =>
+              succeeded(service.container, [
+                'clickhouse-client',
+                '--query',
+                'SELECT 1',
+              ]),
+            { maxRetryTime: 60_000 },
+          ),
+      },
+    );
   }
 }

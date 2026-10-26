@@ -123,22 +123,28 @@ export class SqlServer {
 
   #acquire(image: string, mode: 'serve' | 'reuse'): Promise<ServiceContainer> {
     const { password, labels } = this.#options;
-    return this.#docker[mode]({
-      image,
-      labels: { ...labels, [KIND_LABEL]: sqlserver.kind },
-      env: {
-        ACCEPT_EULA: 'Y',
-        MSSQL_SA_PASSWORD: password,
-        MSSQL_MEMORY_LIMIT_MB: '2048',
-        ...(image.includes('azure-sql-edge') ? {} : { MSSQL_PID: 'Express' }),
+    return this.#docker[mode](
+      {
+        Image: image,
+        Labels: { ...labels, [KIND_LABEL]: sqlserver.kind },
+        Env: [
+          'ACCEPT_EULA=Y',
+          `MSSQL_SA_PASSWORD=${password}`,
+          'MSSQL_MEMORY_LIMIT_MB=2048',
+          ...(image.includes('azure-sql-edge') ? [] : ['MSSQL_PID=Express']),
+        ],
+        HostConfig: {
+          Tmpfs: { '/var/opt/mssql': 'rw,size=2g,mode=1777' },
+          Memory: 3 * 1024 ** 3,
+          MemorySwappiness: 0,
+        },
       },
-      internalPort: 1433,
-      tmpfs: ['/var/opt/mssql:rw,size=2g,mode=1777'],
-      memory: '3g',
-      memorySwappiness: 0,
-      healthy: (container) =>
-        timebox(() => this.#ping(container), { maxRetryTime: 180_000 }),
-    });
+      {
+        internalPort: 1433,
+        healthy: (container) =>
+          timebox(() => this.#ping(container), { maxRetryTime: 180_000 }),
+      },
+    );
   }
 
   #handle(

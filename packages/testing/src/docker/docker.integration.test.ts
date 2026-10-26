@@ -23,11 +23,10 @@ test(
     // Arrange
     const testbed = new DockerTestbed({ environment: process.env });
     const client = await testbed.client();
-    await using server = await testbed.serve({
-      image: 'postgres:18-alpine',
-      internalPort: 5432,
-      env: { POSTGRES_PASSWORD: 'test' },
-    });
+    await using server = await testbed.serve(
+      { Image: 'postgres:18-alpine', Env: ['POSTGRES_PASSWORD=test'] },
+      { internalPort: 5432 },
+    );
     const volumes = ((await server.container.inspect()).Mounts ?? [])
       .filter((mount) => mount.Type === 'volume')
       .map((mount) => mount.Name ?? '');
@@ -71,35 +70,41 @@ test(
       'dev.zukhruf.testing.verification': scope,
       purpose: 'identity',
     };
-    const options = {
-      image: 'postgres:18-alpine',
-      internalPort: 5432,
-      env: { POSTGRES_PASSWORD: 'testpassword', POSTGRES_DB: 'postgres' },
-      labels,
-      tmpfs: ['/var/lib/postgresql:rw,size=512m'],
+    const body = {
+      Image: 'postgres:18-alpine',
+      Env: ['POSTGRES_PASSWORD=testpassword', 'POSTGRES_DB=postgres'],
+      Labels: labels,
+      HostConfig: { Tmpfs: { '/var/lib/postgresql': 'rw,size=512m' } },
     };
+    const options = { internalPort: 5432 };
     const running = async (id: string) =>
       (await (await client.containers.find(id))?.inspect())?.State?.Running;
     try {
       // Act + Assert: the configuration, not the order of its entries, picks the server.
-      await using first = await testbed.reuse(options);
-      await using reordered = await testbed.reuse({
-        ...options,
-        env: { POSTGRES_DB: 'postgres', POSTGRES_PASSWORD: 'testpassword' },
-        labels: {
-          purpose: 'identity',
-          'dev.zukhruf.testing.verification': scope,
+      await using first = await testbed.reuse(body, options);
+      await using reordered = await testbed.reuse(
+        {
+          ...body,
+          Env: ['POSTGRES_DB=postgres', 'POSTGRES_PASSWORD=testpassword'],
+          Labels: {
+            purpose: 'identity',
+            'dev.zukhruf.testing.verification': scope,
+          },
         },
-      });
+        options,
+      );
       assert.equal(reordered.container.id, first.container.id);
-      await using different = await testbed.reuse({
-        ...options,
-        env: { ...options.env, POSTGRES_PASSWORD: 'another-password' },
-      });
+      await using different = await testbed.reuse(
+        {
+          ...body,
+          Env: ['POSTGRES_PASSWORD=another-password', 'POSTGRES_DB=postgres'],
+        },
+        options,
+      );
       assert.notEqual(different.container.id, first.container.id);
 
       await assert.rejects(
-        testbed.reuse({
+        testbed.reuse(body, {
           ...options,
           healthy: () => {
             throw new Error('readiness failed');
@@ -107,7 +112,7 @@ test(
         }),
         /readiness failed/,
       );
-      await using healthy = await testbed.reuse({
+      await using healthy = await testbed.reuse(body, {
         ...options,
         healthy: ({ container }) =>
           timebox(
@@ -132,25 +137,24 @@ test(
 
       // Act + Assert: a dedicated server with the name is not a shared one.
       const name = `zukhruf-testing-owned-${scope}`;
-      await using owned = await testbed.serve({ ...options, name });
+      await using owned = await testbed.serve(body, { ...options, name });
       await assert.rejects(
-        testbed.reuse({ ...options, name }),
+        testbed.reuse(body, { ...options, name }),
         /does not match/,
       );
       assert.equal(await running(owned.container.id), true);
 
       const failedName = `zukhruf-testing-failed-${scope}`;
       await assert.rejects(
-        testbed.serve({
+        testbed.serve(body, {
           ...options,
           name: failedName,
           healthy: () => {
             throw new Error('owned startup failed');
           },
         }),
-        /owned startup failed/,
+        { cause: new Error('owned startup failed') },
       );
-      // The removal of an auto-removed container can finish after the stop.
       await t.waitFor(
         async () =>
           assert.equal(await client.containers.find(failedName), undefined),
@@ -171,7 +175,7 @@ test(
       );
       await client.containers.create(
         {
-          Image: options.image,
+          Image: body.Image,
           Labels: inspection.Config?.Labels ?? {},
           Env: ['POSTGRES_PASSWORD=testpassword', 'POSTGRES_DB=postgres'],
           ExposedPorts: { '5432/tcp': {} },
@@ -187,7 +191,7 @@ test(
       );
 
       // Act
-      await using recovered = await testbed.reuse(options);
+      await using recovered = await testbed.reuse(body, options);
 
       // Assert
       assert.notEqual(recovered.container.id, first.container.id);

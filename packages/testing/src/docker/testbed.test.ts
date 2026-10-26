@@ -23,9 +23,9 @@ test('an environment with only one of the two run variables is refused', () => {
 test('a process outside a run labels what it creates with no run', () => {
   const testbed = new DockerTestbed({ environment: { PATH: '/usr/bin' } });
 
-  const { labels } = testbed.defaults;
+  const { Labels } = testbed.defaults;
 
-  assert.deepEqual(labels, {});
+  assert.deepEqual(Labels, {});
 });
 
 test('a process in a run labels what it creates with the run, and reading the labels records the process in the run', async () => {
@@ -39,9 +39,9 @@ test('a process in a run labels what it creates with the run, and reading the la
     },
   });
 
-  const { labels } = testbed.defaults;
+  const { Labels } = testbed.defaults;
 
-  assert.deepEqual(labels, { 'dev.zukhruf.testing.run': 'run-1' });
+  assert.deepEqual(Labels, { 'dev.zukhruf.testing.run': 'run-1' });
   const recorded = (await readdir(directory.path)).map(
     (file) => /^process-(\d+)-[0-9a-f-]{36}\.json$/.exec(file)?.[1],
   );

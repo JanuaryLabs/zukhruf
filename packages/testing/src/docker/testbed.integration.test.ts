@@ -53,21 +53,22 @@ test(
     const testbed = new DockerTestbed({ environment: process.env });
 
     // Act
-    await using server = await testbed.serve({
-      image: 'postgres:18-alpine',
-      internalPort: 5432,
-      env: { POSTGRES_PASSWORD: 'test' },
-      healthy: ({ container }) =>
-        timebox(
-          async () => {
-            const { exitCode, output } = await container.exec({
-              Cmd: ['pg_isready', '-h', '127.0.0.1', '-U', 'postgres'],
-            });
-            if (exitCode !== 0) throw new Error(output);
-          },
-          { maxRetryTime: 60_000 },
-        ),
-    });
+    await using server = await testbed.serve(
+      { Image: 'postgres:18-alpine', Env: ['POSTGRES_PASSWORD=test'] },
+      {
+        internalPort: 5432,
+        healthy: ({ container }) =>
+          timebox(
+            async () => {
+              const { exitCode, output } = await container.exec({
+                Cmd: ['pg_isready', '-h', '127.0.0.1', '-U', 'postgres'],
+              });
+              if (exitCode !== 0) throw new Error(output);
+            },
+            { maxRetryTime: 60_000 },
+          ),
+      },
+    );
 
     // Assert
     const client = new pg.Client({
@@ -97,7 +98,7 @@ test(
 );
 
 test(
-  'a started container gets the default limits, or the memory and cpus it was given',
+  'a started container gets the default limits, or the Memory and NanoCpus of its body',
   { timeout: 60_000 },
   async () => {
     // Arrange
@@ -105,17 +106,16 @@ test(
 
     // Act
     await using defaults = await testbed.start({
-      image,
-      command: ['sleep', '60'],
+      Image: image,
+      Cmd: ['sleep', '60'],
     });
     await using given = await testbed.start({
-      image,
-      command: ['sleep', '60'],
-      memory: '512m',
-      cpus: 0.5,
+      Image: image,
+      Cmd: ['sleep', '60'],
+      HostConfig: { Memory: 512 * 1024 ** 2, NanoCpus: 500_000_000 },
     });
 
-    // Assert: the Docker CLI's binary units.
+    // Assert
     const limits = async (container: typeof defaults) => {
       const { HostConfig } = await container.inspect();
       return { memory: HostConfig?.Memory, cpus: HostConfig?.NanoCpus };
@@ -132,7 +132,7 @@ test(
 );
 
 test(
-  'a started container runs with the hostname, environment, labels, mounts, tmpfs and IPC namespace it was given, and the run label',
+  'a started container runs with the hostname, environment, labels, binds, tmpfs and IPC namespace of its body, and the run label',
   { timeout: 60_000 },
   async () => {
     // Arrange
@@ -142,17 +142,16 @@ test(
 
     // Act
     await using container = await testbed.start({
-      image,
-      command: ['sleep', '60'],
-      hostname: 'fixture-host',
-      env: { GREETING: 'hello world' },
-      labels: { 'dev.zukhruf.testing.verification': scope },
-      mounts: [
-        { source: volume.name, target: '/data' },
-        { source: volume.name, target: '/readonly', readOnly: true },
-      ],
-      tmpfs: ['/scratch:rw,size=8m'],
-      ipcHost: true,
+      Image: image,
+      Cmd: ['sleep', '60'],
+      Hostname: 'fixture-host',
+      Env: ['GREETING=hello world'],
+      Labels: { 'dev.zukhruf.testing.verification': scope },
+      HostConfig: {
+        Binds: [`${volume.name}:/data`, `${volume.name}:/readonly:ro`],
+        Tmpfs: { '/scratch': 'rw,size=8m' },
+        IpcMode: 'host',
+      },
     });
 
     // Assert
@@ -168,8 +167,7 @@ test(
       /^tmpfs \/scratch tmpfs rw.*size=8192k/,
     );
     const inspected = await container.inspect();
-    // The docker package's HostConfig type does not list IpcMode.
-    assert.partialDeepStrictEqual(inspected.HostConfig, { IpcMode: 'host' });
+    assert.equal(inspected.HostConfig?.IpcMode, 'host');
     const labels = inspected.Config?.Labels ?? {};
     assert.deepEqual(
       {
@@ -192,9 +190,9 @@ test(
 
     // Act: the container's hostname is the start of its id.
     const result = await testbed.run({
-      image,
-      command: ['sh', '-c', 'echo printed; hostname >&2; exit 3'],
-      labels: { 'dev.zukhruf.testing.verification': scope },
+      Image: image,
+      Cmd: ['sh', '-c', 'echo printed; hostname >&2; exit 3'],
+      Labels: { 'dev.zukhruf.testing.verification': scope },
     });
 
     // Assert
@@ -210,7 +208,7 @@ test(
 );
 
 test(
-  'a served server whose readiness fails is removed, and the failure is the readiness error',
+  'a served server whose readiness fails is removed, and the failure has the readiness error as its cause',
   { timeout: 60_000 },
   async (t) => {
     // Arrange
@@ -221,21 +219,29 @@ test(
     const served: string[] = [];
     try {
       // Act
-      await assert.rejects(
-        testbed.serve({
-          image,
-          command: ['sleep', '60'],
-          internalPort: 8080,
-          labels: { 'dev.zukhruf.testing.verification': scope },
-          healthy: ({ container }) => {
-            served.push(container.id);
-            throw new Error('not ready');
+      const failure = await testbed
+        .serve(
+          {
+            Image: image,
+            Cmd: ['sleep', '60'],
+            Labels: { 'dev.zukhruf.testing.verification': scope },
           },
-        }),
-        /not ready/,
-      );
+          {
+            internalPort: 8080,
+            healthy: ({ container }) => {
+              served.push(container.id);
+              throw new Error('not ready');
+            },
+          },
+        )
+        .then(
+          () => assert.fail('serve resolved'),
+          (error: unknown) => error,
+        );
 
       // Assert
+      assert.ok(failure instanceof Error);
+      assert.deepEqual(failure.cause, new Error('not ready'));
       assert.equal(served.length, 1);
       await t.waitFor(
         async () =>
@@ -252,6 +258,61 @@ test(
 );
 
 test(
+  'a served server whose container exits before it is ready is removed, and the failure has its output and the readiness error as its cause',
+  { timeout: 60_000 },
+  async (t) => {
+    // Arrange: the container lives long enough to publish its port, then exits.
+    const testbed = new DockerTestbed({ environment: process.env });
+    const client = await testbed.client();
+    const scope = randomUUID();
+    const readiness = new Error('the server stopped');
+    const served: string[] = [];
+    try {
+      // Act
+      const failure = await testbed
+        .serve(
+          {
+            Image: image,
+            Cmd: ['sh', '-c', `echo printed-${scope}; sleep 1; exit 3`],
+            Labels: { 'dev.zukhruf.testing.verification': scope },
+          },
+          {
+            internalPort: 8080,
+            healthy: async ({ container }) => {
+              served.push(container.id);
+              await timebox(async () => {
+                const { State } = await container.inspect();
+                if (State?.Running) throw new Error('still running');
+              });
+              throw readiness;
+            },
+          },
+        )
+        .then(
+          () => assert.fail('serve resolved'),
+          (error: unknown) => error,
+        );
+
+      // Assert
+      assert.ok(failure instanceof Error);
+      assert.match(failure.message, new RegExp(`printed-${scope}`));
+      assert.equal(failure.cause, readiness);
+      assert.equal(served.length, 1);
+      await t.waitFor(
+        async () =>
+          assert.equal(
+            await client.containers.find(served[0] ?? ''),
+            undefined,
+          ),
+        { timeout: 10_000 },
+      );
+    } finally {
+      await removeLabelled(client, `dev.zukhruf.testing.verification=${scope}`);
+    }
+  },
+);
+
+test(
   'handles keep the engine of the first acquisition when the environment changes',
   { timeout: 60_000 },
   async () => {
@@ -259,8 +320,8 @@ test(
     const environment = { ...process.env };
     const testbed = new DockerTestbed({ environment });
     await using first = await testbed.start({
-      image,
-      command: ['sleep', '60'],
+      Image: image,
+      Cmd: ['sleep', '60'],
     });
     const host = (await testbed.client()).host;
 
@@ -268,8 +329,8 @@ test(
     environment.DOCKER_HOST = 'unix:///nonexistent/docker-test.sock';
     delete environment.DOCKER_CONTEXT;
     await using second = await testbed.start({
-      image,
-      command: ['sleep', '60'],
+      Image: image,
+      Cmd: ['sleep', '60'],
     });
 
     // Assert
@@ -292,7 +353,7 @@ test(
     });
 
     // Act
-    const failure = await testbed.start({ image }).then(
+    const failure = await testbed.start({ Image: image }).then(
       () => assert.fail('the acquisition succeeded'),
       (error: unknown) => error,
     );
@@ -320,8 +381,8 @@ test(
     try {
       // Act
       await using container = await testbed.start({
-        image: pulled,
-        command: ['sleep', '60'],
+        Image: pulled,
+        Cmd: ['sleep', '60'],
       });
 
       // Assert
@@ -346,16 +407,15 @@ test(
     const client = await testbed.client();
     const scope = randomUUID();
     const label = `dev.zukhruf.testing.verification=${scope}`;
-    const options = {
-      image,
-      command: ['sh', '-c', 'while true; do nc -l -p 8080 < /dev/null; done'],
-      internalPort: 8080,
-      labels: { 'dev.zukhruf.testing.verification': scope },
+    const body = {
+      Image: image,
+      Cmd: ['sh', '-c', 'while true; do nc -l -p 8080 < /dev/null; done'],
+      Labels: { 'dev.zukhruf.testing.verification': scope },
     };
     const reuser = `
       import { DockerTestbed } from ${library};
       const testbed = new DockerTestbed({ environment: process.env });
-      const server = await testbed.reuse(${JSON.stringify(options)});
+      const server = await testbed.reuse(${JSON.stringify(body)}, { internalPort: 8080 });
       await server[Symbol.asyncDispose]();
       console.log(server.container.id);
     `;
@@ -383,7 +443,7 @@ test(
 
       // Act + Assert
       await assert.rejects(
-        testbed.reuse({ ...options, name }),
+        testbed.reuse(body, { internalPort: 8080, name }),
         new Error(
           `Container ${name} does not match the shared test configuration`,
         ),
@@ -423,7 +483,7 @@ test(
       (await readdir(directory.path)).filter((file) =>
         file.startsWith('creating-'),
       );
-    const started = testbed.start({ image, command: ['sleep', '60'] });
+    const started = testbed.start({ Image: image, Cmd: ['sleep', '60'] });
     try {
       // Act
       await arrived.promise;
@@ -460,7 +520,7 @@ test(
         `
         import { DockerTestbed } from ${library};
         const testbed = new DockerTestbed({ environment: process.env });
-        const container = await testbed.start({ image: ${JSON.stringify(image)}, command: ['sleep', '120'] });
+        const container = await testbed.start({ Image: ${JSON.stringify(image)}, Cmd: ['sleep', '120'] });
         await container.exec({ Cmd: ['true'] });
         console.log(container.id);
         setInterval(() => {}, 1_000);

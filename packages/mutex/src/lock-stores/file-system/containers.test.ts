@@ -31,13 +31,10 @@ assert.ok(
   isRecord(manifest) && isRecord(manifest.dependencies),
   'The package.json of the package must list its dependencies',
 );
-const dependencyMounts = Object.keys(manifest.dependencies).map((name) => ({
-  source: fileURLToPath(
-    new URL('.', import.meta.resolve(`${name}/package.json`)),
-  ),
-  target: `/node_modules/${name}`,
-  readOnly: true,
-}));
+const dependencyBinds = Object.keys(manifest.dependencies).map(
+  (name) =>
+    `${fileURLToPath(new URL('.', import.meta.resolve(`${name}/package.json`)))}:/node_modules/${name}:ro`,
+);
 
 const stores = ['LockFileStore', 'TicketQueueFileStore'] as const;
 
@@ -74,18 +71,20 @@ interface ContainerOptions {
 
 /** The image, the shared lock directory, the package and its dependencies, for one container. */
 const placement = ({ volume, hostname, source }: ContainerOptions) => ({
-  image,
-  ...(hostname ? { hostname } : {}),
-  ...(source ? { env: { SOURCE: source } } : {}),
-  mounts: [
-    { source: volume.name, target: '/locks' },
-    { source: packageRoot, target: '/pkg', readOnly: true },
-    ...dependencyMounts,
-  ],
+  Image: image,
+  ...(hostname ? { Hostname: hostname } : {}),
+  ...(source ? { Env: [`SOURCE=${source}`] } : {}),
+  HostConfig: {
+    Binds: [
+      `${volume.name}:/locks`,
+      `${packageRoot}:/pkg:ro`,
+      ...dependencyBinds,
+    ],
+  },
 });
 
 const startContainer = (options: ContainerOptions, ...command: string[]) =>
-  docker.start({ ...placement(options), command });
+  docker.start({ ...placement(options), Cmd: command });
 
 /** Waits until the holder in `container` prints that it holds the key. */
 function holdingIn(
@@ -113,7 +112,7 @@ async function waiterIn(
 ): Promise<Grant> {
   const { stdout } = await docker.run({
     ...placement(options),
-    command: ['node', '--input-type=module', '--eval', waiterSource(storeName)],
+    Cmd: ['node', '--input-type=module', '--eval', waiterSource(storeName)],
   });
   return JSON.parse(stdout.trimEnd().split('\n').at(-1)!);
 }
@@ -135,9 +134,9 @@ function assertTakenOver(
 const lockFiles = async (volume: OwnedVolume) =>
   (
     await docker.run({
-      image,
-      mounts: [{ source: volume.name, target: '/locks' }],
-      command: [
+      Image: image,
+      HostConfig: { Binds: [`${volume.name}:/locks`] },
+      Cmd: [
         'sh',
         '-c',
         'for f in /locks/*.lock; do echo "$f: $(cat "$f")"; done',

@@ -125,15 +125,20 @@ export abstract class MysqlFamilyServer {
     mode: 'serve' | 'reuse',
   ): Promise<ServiceContainer> {
     const { image, password, labels } = this.#options;
-    return this.#docker[mode]({
-      image,
-      labels: { ...labels, [KIND_LABEL]: this.collector.kind },
-      internalPort: 3306,
-      env: this.environment(password, database),
-      tmpfs: ['/var/lib/mysql:rw,size=512m'],
-      memorySwappiness: 0,
-      healthy: (container) => this.#ready(container),
-    });
+    return this.#docker[mode](
+      {
+        Image: image,
+        Labels: { ...labels, [KIND_LABEL]: this.collector.kind },
+        Env: Object.entries(this.environment(password, database)).map(
+          ([key, value]) => `${key}=${value}`,
+        ),
+        HostConfig: {
+          Tmpfs: { '/var/lib/mysql': 'rw,size=512m' },
+          MemorySwappiness: 0,
+        },
+      },
+      { internalPort: 3306, healthy: (container) => this.#ready(container) },
+    );
   }
 
   #ready(container: ServiceContainer) {

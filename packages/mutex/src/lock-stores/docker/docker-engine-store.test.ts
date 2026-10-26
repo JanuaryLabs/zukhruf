@@ -55,7 +55,7 @@ async function engine() {
         image,
         namespace,
         heartbeatInterval,
-        labels: new DockerTestbed({ environment: process.env }).defaults.labels,
+        labels: new DockerTestbed({ environment: process.env }).defaults.Labels,
       }),
     [Symbol.asyncDispose]: async () => {
       await docker[Symbol.asyncDispose]();
@@ -195,7 +195,7 @@ const holderSource = (namespace: string, key: string) => `
 	import { DockerEngineStore } from ${JSON.stringify(new URL('./index.ts', import.meta.url).href)};
 	setInterval(() => {}, 1000);
 	const docker = await Docker.connect({ environment: process.env });
-	const labels = new DockerTestbed({ environment: process.env }).defaults.labels;
+	const labels = new DockerTestbed({ environment: process.env }).defaults.Labels;
 	const store = new DockerEngineStore({ docker, image: ${JSON.stringify(image)}, namespace: ${JSON.stringify(namespace)}, heartbeatInterval: ${heartbeatInterval}, labels });
 	await new Mutex(store).acquire(${JSON.stringify(key)}, async (lease) => {
 		process.send({ type: 'holding', token: String(lease.token.value) });

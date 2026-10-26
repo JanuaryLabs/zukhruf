@@ -466,7 +466,7 @@ function dockerEngineStore(location: string) {
   // Before the first claim: the read records this process in the run, so the
   // run's teardown waits for it and sweeps what it created
   // (@zukhruf/testing ADR 0006 and ADR 0013).
-  const labels = new DockerTestbed({ environment: run }).defaults.labels;
+  const labels = new DockerTestbed({ environment: run }).defaults.Labels;
   const docker = Docker.connect({ host });
   const store = docker.then(
     (client) =>

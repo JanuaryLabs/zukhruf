@@ -75,19 +75,25 @@ export class Postgres {
     mode: 'serve' | 'reuse',
   ): Promise<ServiceContainer> {
     const { image, password, user, labels } = this.#options;
-    return this.#docker[mode]({
-      image,
-      labels: { ...labels, [KIND_LABEL]: postgres.kind },
-      internalPort: 5432,
-      env: {
-        POSTGRES_PASSWORD: password,
-        POSTGRES_DB: database,
-        POSTGRES_USER: user,
+    return this.#docker[mode](
+      {
+        Image: image,
+        Labels: { ...labels, [KIND_LABEL]: postgres.kind },
+        Env: [
+          `POSTGRES_PASSWORD=${password}`,
+          `POSTGRES_DB=${database}`,
+          `POSTGRES_USER=${user}`,
+        ],
+        HostConfig: {
+          Tmpfs: { '/var/lib/postgresql': 'rw,size=512m' },
+          MemorySwappiness: 0,
+        },
       },
-      tmpfs: ['/var/lib/postgresql:rw,size=512m'],
-      memorySwappiness: 0,
-      healthy: (container) => this.#ready(container, database),
-    });
+      {
+        internalPort: 5432,
+        healthy: (container) => this.#ready(container, database),
+      },
+    );
   }
 
   #ready(container: ServiceContainer, database: string): Promise<void> {
