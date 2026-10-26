@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 
-import { JsonLinesProcess } from './json-lines-process.ts';
+import { Coprocess } from './coprocess.ts';
 
 // A real child process: it answers each JSON line with the value it got, or
 // with three lines for {"many":true}, and obeys a few commands.
@@ -25,16 +25,12 @@ if (process.argv.includes('--ignore-sigterm')) process.on('SIGTERM', () => {});
 `;
 
 function echo(...flags: string[]) {
-  return new JsonLinesProcess(
-    process.execPath,
-    ['-e', script, '--', ...flags],
-    {
-      name: 'Echo',
-    },
-  );
+  return new Coprocess(process.execPath, ['-e', script, '--', ...flags], {
+    name: 'Echo',
+  });
 }
 
-describe('JsonLinesProcess', () => {
+describe('Coprocess', () => {
   test(
     'a request gets the value that answers it, in order, from one process',
     { timeout: 10_000 },
@@ -183,7 +179,7 @@ describe('JsonLinesProcess', () => {
     { timeout: 10_000 },
     async () => {
       // Arrange
-      const process = new JsonLinesProcess('/no/such/helper', [], {
+      const process = new Coprocess('/no/such/helper', [], {
         name: 'Missing',
       });
 

@@ -1,12 +1,12 @@
-# JSON Lines Process
+# Coprocess
 
-A child process that the caller keeps for a long time, and that takes and gives JSON values, one on each line.
+A child process that the caller keeps for a long time, and talks to over its stdin and stdout. The values go as JSON, one on each line.
 
 ## Language
 
-**Process**:
-The child process that the class starts. It lives until it exits, until `kill`, or until `close`.
-_Avoid_: Subprocess, child, worker (a pool lends workers; a worker can be a process)
+**Coprocess**:
+The child process that the class starts, and that the caller talks to. It lives until it exits, until `kill`, or until `close`.
+_Avoid_: Subprocess, child, worker (a pool lends workers; a worker can be a coprocess)
 
 **Value**:
 One JSON value on one line, in either direction.

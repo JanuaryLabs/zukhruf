@@ -1,18 +1,19 @@
 {
-  "name": "@zukhruf/json-lines-process",
+  "name": "@zukhruf/coprocess",
   "version": "0.3.41",
-  "description": "A long-lived child process that takes and gives JSON values, one per line, and stops with SIGTERM and then SIGKILL after a grace period.",
+  "description": "A coprocess: a long-lived child process that the parent talks to over stdin and stdout, with JSON values on lines, and stops with SIGTERM and then SIGKILL after a grace period.",
   "license": "MIT",
   "repository": {
     "type": "git",
     "url": "https://github.com/JanuaryLabs/zukhruf",
-    "directory": "packages/json-lines-process"
+    "directory": "packages/coprocess"
   },
   "bugs": {
     "url": "https://github.com/JanuaryLabs/zukhruf/issues"
   },
-  "homepage": "https://github.com/JanuaryLabs/zukhruf/tree/main/packages/json-lines-process#readme",
+  "homepage": "https://github.com/JanuaryLabs/zukhruf/tree/main/packages/coprocess#readme",
   "keywords": [
+    "coprocess",
     "child-process",
     "subprocess",
     "json-lines",

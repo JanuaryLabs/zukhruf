@@ -1,6 +1,6 @@
-# @zukhruf/json-lines-process
+# @zukhruf/coprocess
 
-A long-lived child process that takes JSON values on stdin and gives JSON values on stdout, one value on each line. A native helper that keeps a model loaded, or a command-line agent that reads one message at a time, works this way. The class starts the process, sends and receives values, tells you when the process exits, and stops it with SIGTERM and then SIGKILL.
+A coprocess is a long-lived child process that the parent talks to over its stdin and stdout, as with `coproc` in bash and `|&` in ksh. A native helper that keeps a model loaded, or a command-line agent that reads one message at a time, is a coprocess. `Coprocess` starts the process, sends and receives values, tells you when the process exits, and stops it with SIGTERM and then SIGKILL. A value is JSON on one line; that is the only framing so far.
 
 The words in these documents have one meaning each. See the glossary in [CONTEXT.md](./CONTEXT.md).
 
@@ -9,9 +9,9 @@ The words in these documents have one meaning each. See the glossary in [CONTEXT
 A helper answers each request with one line. `request` sends a value and receives the next one.
 
 ```ts
-import { JsonLinesProcess } from '@zukhruf/json-lines-process';
+import { Coprocess } from '@zukhruf/coprocess';
 
-const ocr = new JsonLinesProcess('/path/to/vision-worker', [], {
+const ocr = new Coprocess('/path/to/vision-worker', [], {
   name: 'Vision worker',
 });
 const answer = await ocr.request({ path: '/tmp/receipt.png' });

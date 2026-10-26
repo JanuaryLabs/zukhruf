@@ -72,7 +72,7 @@
       "path": "./packages/git-hooks"
     },
     {
-      "path": "./packages/json-lines-process"
+      "path": "./packages/coprocess"
     }
   ]
 }

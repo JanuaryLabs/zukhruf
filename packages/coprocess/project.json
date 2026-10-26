@@ -1,7 +1,7 @@
 {
-  "name": "json-lines-process",
+  "name": "coprocess",
   "$schema": "../../node_modules/nx/schemas/project-schema.json",
-  "sourceRoot": "packages/json-lines-process/src",
+  "sourceRoot": "packages/coprocess/src",
   "projectType": "library",
   "tags": ["layer:island", "std:base", "test:node"],
   "targets": {

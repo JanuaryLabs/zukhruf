@@ -9,7 +9,7 @@ import { Latch } from '@zukhruf/async';
 // would end the process instead.
 const tail = 16_384;
 
-export interface JsonLinesProcessOptions extends Pick<Options, 'cwd' | 'env'> {
+export interface CoprocessOptions extends Pick<Options, 'cwd' | 'env'> {
   // Names the process in the error its exit gives, such as "Vision worker".
   readonly name: string;
 }
@@ -19,7 +19,7 @@ export interface JsonLinesProcessOptions extends Pick<Options, 'cwd' | 'env'> {
 // protocol: one answer per request, or many lines until one says the work is
 // done. The exit is an event: exited settles when the process ends, and every
 // receive after it fails with the stderr of the process.
-export class JsonLinesProcess {
+export class Coprocess {
   readonly #name: string;
   readonly #stdin: NodeJS.WritableStream;
   readonly #lines: AsyncIterator<string>;
@@ -30,7 +30,7 @@ export class JsonLinesProcess {
   constructor(
     file: string,
     args: readonly string[],
-    options: JsonLinesProcessOptions,
+    options: CoprocessOptions,
   ) {
     const { name, ...spawning } = options;
     this.#name = name;
