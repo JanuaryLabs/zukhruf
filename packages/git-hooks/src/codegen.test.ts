@@ -430,6 +430,18 @@ writeFileSync('git-init.log', 'ran\\n');
     config,
     'The git config of the committing repo must not change',
   );
+  assert.equal(
+    await repo.git(
+      'show',
+      '--name-only',
+      '--format=',
+      'HEAD',
+      '--',
+      'git-init.log',
+    ),
+    'git-init.log\n',
+    'The hook must stage the output of the target in the commit',
+  );
   const inTask = async (...args: string[]) =>
     (await execFileAsync('git', args, { cwd: taskRepo })).stdout.trim();
   assert.equal(

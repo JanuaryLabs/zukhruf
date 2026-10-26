@@ -80,11 +80,14 @@ async function repository(folder: string, hook: string) {
       await git('commit', '--quiet', '--no-verify', '-m', message);
       return (await git('rev-parse', 'HEAD')).trim();
     },
-    async push(...args: string[]) {
+    push(...args: string[]) {
+      return this.pushWith([], ...args);
+    },
+    async pushWith(gitOptions: readonly string[], ...args: string[]) {
       try {
         const { stdout, stderr } = await execFileAsync(
           'git',
-          ['-c', 'core.hooksPath=.husky', 'push', ...args],
+          ['-c', 'core.hooksPath=.husky', ...gitOptions, 'push', ...args],
           { cwd: root, env: environment },
         );
         return { code: 0, stdout, stderr };
@@ -530,7 +533,14 @@ execFileSync('git', ['add', 'staged.txt'], { cwd: folder });
     const config = await readFile(join(repo.root, '.git/config'));
 
     // Act
-    const result = await repo.push('--quiet', 'origin', 'main');
+    // With --git-dir and --work-tree, git gives the hook GIT_DIR and
+    // GIT_WORK_TREE of the pushing repo.
+    const result = await repo.pushWith(
+      [`--git-dir=${join(repo.root, '.git')}`, `--work-tree=${repo.root}`],
+      '--quiet',
+      'origin',
+      'main',
+    );
 
     // Assert
     assert.equal(result.code, 0, result.stderr);
