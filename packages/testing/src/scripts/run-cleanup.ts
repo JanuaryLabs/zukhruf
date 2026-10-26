@@ -3,7 +3,11 @@ import { readFile, readdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 
-import { type Container, Docker } from '@zukhruf/docker';
+import {
+  type Container,
+  ContainerNotFoundError,
+  Docker,
+} from '@zukhruf/docker';
 
 import {
   type Collector,
@@ -111,8 +115,14 @@ async function dropDatabases(
       signal: signal(),
     });
     if (!container) continue;
-    const inspected = await container.inspect({ signal: signal() });
-    if (!inspected.State?.Running) continue;
+    // Another run's teardown can remove it after the find.
+    const inspected = await container
+      .inspect({ signal: signal() })
+      .catch((error: unknown) => {
+        if (error instanceof ContainerNotFoundError) return undefined;
+        throw error;
+      });
+    if (!inspected?.State?.Running) continue;
     const environment = Object.fromEntries(
       (inspected.Config?.Env ?? []).map((entry) => {
         const separator = entry.indexOf('=');

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { once } from 'node:events';
+import { existsSync } from 'node:fs';
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { type TestContext, test } from 'node:test';
@@ -15,8 +16,17 @@ import { Mysql } from '../databases/mysql.ts';
 import { Postgres } from '../databases/postgres.ts';
 import { SqlServer } from '../databases/sqlserver.ts';
 import { TemporaryFiles } from '../fs/temporary-files.ts';
+import { EngineProxy } from '../testing/engine-proxy.ts';
 
 const docker = await Docker.connect({ environment: process.env });
+/** The host of the engine that this process's context selects. */
+const engine =
+  (await Docker.contexts({ environment: process.env })).find(
+    (context) => context.current,
+  )?.host ?? '';
+const proxyless = engine.startsWith('unix://')
+  ? false
+  : `the engine proxy forwards to a local unix:// engine only, not ${engine}`;
 const signals =
   process.platform === 'win32'
     ? 'Windows ends a process on a signal, so it runs no global teardown'
@@ -151,11 +161,11 @@ const runEnvironment = (state: string): Record<string, string | undefined> => ({
 });
 
 /** Runs `file` with the Docker global setup, and gives its exit code and output. */
-async function runFile(file: string, state: string) {
+async function runFile(file: string, env: Record<string, string | undefined>) {
   const child = spawn(
     process.execPath,
     ['--test', `--test-global-setup=${setup}`, '--test-force-exit', file],
-    { env: runEnvironment(state), stdio: ['ignore', 'pipe', 'pipe'] },
+    { env, stdio: ['ignore', 'pipe', 'pipe'] },
   );
   let output = '';
   child.stdout.on('data', (data) => (output += data));
@@ -211,7 +221,10 @@ for (const kind of kinds) {
           ),
         );
 
-        const run = await runFile(file, join(directory.path, 'state'));
+        const run = await runFile(
+          file,
+          runEnvironment(join(directory.path, 'state')),
+        );
 
         assert.notEqual(run.code, 0, run.output);
         assert.doesNotMatch(run.output, /retained ownership record/);
@@ -256,7 +269,10 @@ test(
         ),
       );
 
-      const run = await runFile(file, join(directory.path, 'state'));
+      const run = await runFile(
+        file,
+        runEnvironment(join(directory.path, 'state')),
+      );
 
       assert.notEqual(run.code, 0, run.output);
       const { database } = await readState(t, statePath);
@@ -283,7 +299,10 @@ test(
       // The test never disposes its database.
       await writeFile(file, workerSource(postgres, scope, statePath, ''));
 
-      const run = await runFile(file, join(directory.path, 'state'));
+      const run = await runFile(
+        file,
+        runEnvironment(join(directory.path, 'state')),
+      );
 
       assert.equal(run.code, 0, run.output);
       const { database } = await readState(t, statePath);
@@ -328,11 +347,67 @@ test(
         ),
       );
 
-      const run = await runFile(file, join(directory.path, 'state'));
+      const run = await runFile(
+        file,
+        runEnvironment(join(directory.path, 'state')),
+      );
 
       assert.doesNotMatch(run.output, /retained ownership record/);
       const { database } = await readState(t, statePath);
       assert.equal(await postgres.exists(own, database), false, run.output);
+    } finally {
+      await removeScope(scope);
+    }
+  },
+);
+
+test(
+  'a run ends cleanly when its database server is removed while the teardown drops its databases',
+  { skip: proxyless, timeout: 300_000 },
+  async (t) => {
+    await using directory = await new TemporaryFiles().directory(
+      'zukhruf-testing-database-cleanup-',
+    );
+    await using proxy = await EngineProxy.start(engine);
+    const scope = randomUUID();
+    try {
+      // Not disposed: the test removes its server.
+      await postgres.create(process.env, scope);
+      const [server] = await docker.containers.list({
+        filters: { label: [`${VERIFICATION}=${scope}`] },
+      });
+      assert.ok(server);
+      const statePath = join(directory.path, 'state.json');
+      const file = join(directory.path, 'worker.test.ts');
+      // The test never disposes its database.
+      await writeFile(file, workerSource(postgres, scope, statePath, ''));
+      // Once the worker took its database, the requests about the server
+      // are the teardown's. Another run removes the server after the
+      // teardown found it and before it looks into it.
+      let teardownRequests = 0;
+      proxy.intercept('GET', `/containers/${server.Id}/json`, async () => {
+        if (!existsSync(statePath)) return;
+        teardownRequests += 1;
+        if (teardownRequests !== 2) return;
+        await (
+          await docker.containers.find(server.Id)
+        )?.remove({
+          force: true,
+          v: true,
+        });
+      });
+
+      const run = await runFile(file, {
+        ...runEnvironment(join(directory.path, 'state')),
+        // A selected context wins over DOCKER_HOST.
+        DOCKER_CONTEXT: undefined,
+        DOCKER_HOST: proxy.host,
+      });
+
+      assert.equal(run.code, 0, run.output);
+      assert.doesNotMatch(run.output, /retained ownership record/);
+      await readState(t, statePath);
+      assert.equal(await docker.containers.find(server.Id), undefined);
     } finally {
       await removeScope(scope);
     }
