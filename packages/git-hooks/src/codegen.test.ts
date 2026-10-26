@@ -319,7 +319,7 @@ await preCommit([
   assert.notEqual(result.code, 0, 'The generated spec is not formatted');
   assert.match(
     result.stderr,
-    /are not formatted:\n\s+openapi\.json$/m,
+    /is not formatted:\n\s+openapi\.json$/m,
     'The format step must list the generated file',
   );
 });

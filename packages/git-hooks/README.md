@@ -28,6 +28,8 @@ chmod +x .husky/pre-commit.ts
 ln -s pre-commit.ts .husky/pre-commit
 ```
 
+The hook uses `await` at the top level, so Node must read it as a module. When `package.json` has no `"type": "module"`, name the file `pre-commit.mts`, and link `.husky/pre-commit` to that name.
+
 Tell git where the hooks are, in the `prepare` script of `package.json`:
 
 ```json

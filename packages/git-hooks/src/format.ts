@@ -33,13 +33,16 @@ export class Format extends Step<Commit> {
     if (unformatted.length === 0)
       return this.pass('the staged files are formatted');
     const paths = unformatted.map(({ path }) => path);
+    const one = unformatted.length === 1;
     return this.fail(
       [
-        `${unformatted.length} staged files are not formatted:`,
+        one
+          ? '1 staged file is not formatted:'
+          : `${unformatted.length} staged files are not formatted:`,
         ...unformatted.map(({ path, reason }) =>
           reason === undefined ? `  ${path}` : `  ${path} (${reason})`,
         ),
-        `Run \`npx prettier --write ${paths.join(' ')}\`, stage them, and commit again.`,
+        `Run \`npx prettier --write ${paths.join(' ')}\`, stage ${one ? 'it' : 'them'}, and commit again.`,
       ].join('\n'),
     );
   }

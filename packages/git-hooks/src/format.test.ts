@@ -97,13 +97,42 @@ test('a commit whose staged files are not formatted is stopped, and the hook lis
   assert.match(result.stderr, /\bb\.ts\b/, 'The hook must name b.ts');
   assert.match(
     result.stderr,
-    /Run `npx prettier --write a\.ts b\.ts`/,
+    /2 staged files are not formatted:/,
+    'The hook must count the files in the plural',
+  );
+  assert.match(
+    result.stderr,
+    /Run `npx prettier --write a\.ts b\.ts`, stage them, and commit again\./,
     'The hook must give the command that formats the files',
   );
   assert.equal(
     await repo.git('rev-list', '--all', '--count').catch(() => '0\n'),
     '0\n',
     'No commit may exist',
+  );
+});
+
+test('a commit with one unformatted staged file is stopped, and the hook names that one file in the singular', async () => {
+  // Arrange
+  await using folder = await mkdtempDisposable(join(tmpdir(), 'git-hooks-'));
+  const repo = await repository(folder.path, formatOnly);
+  await repo.write('a.ts', 'const a=1\n');
+  await repo.git('add', 'a.ts');
+
+  // Act
+  const result = await repo.commit('one unformatted');
+
+  // Assert
+  assert.notEqual(result.code, 0, 'The hook must stop the commit');
+  assert.match(
+    result.stderr,
+    /1 staged file is not formatted:\n\s+a\.ts\n/,
+    'The hook must count one file in the singular',
+  );
+  assert.match(
+    result.stderr,
+    /Run `npx prettier --write a\.ts`, stage it, and commit again\./,
+    'The hook must tell the user to stage it',
   );
 });
 
@@ -390,7 +419,7 @@ test('a repo that installs the packed package runs a hook that imports it by nam
   assert.notEqual(result.code, 0, 'a.ts is unformatted');
   assert.match(
     result.stderr,
-    /are not formatted:\n\s+a\.ts$/m,
+    /is not formatted:\n\s+a\.ts$/m,
     'The installed package must run the format step and list a.ts',
   );
 });
