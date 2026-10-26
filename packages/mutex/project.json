@@ -6,15 +6,6 @@
   "tags": ["layer:island", "std:domain", "test:node", "test:docker"],
   "targets": {
     "format": {},
-    "test": {},
-    "test-latest-release": {
-      "executor": "nx:run-commands",
-      "dependsOn": ["build", "^build"],
-      "cache": false,
-      "options": {
-        "cwd": "{projectRoot}",
-        "command": "node --test --test-force-exit --test-timeout=60000 \"src/**/*.release.test.ts\""
-      }
-    }
+    "test": {}
   }
 }

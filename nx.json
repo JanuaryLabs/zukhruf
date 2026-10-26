@@ -68,7 +68,7 @@
           "projects": ["tag:test:node"]
         },
         "options": {
-          "command": "node --test --test-force-exit --test-timeout=60000 --test-reporter=spec --test-reporter-destination=stdout --test-reporter=junit --test-reporter-destination=test-results.xml \"src/**/!(*.release).test.ts\""
+          "command": "node --test --test-force-exit --test-timeout=60000 --test-reporter=spec --test-reporter-destination=stdout --test-reporter=junit --test-reporter-destination=test-results.xml \"src/**/*.test.ts\""
         }
       },
       {
@@ -76,7 +76,7 @@
           "projects": ["tag:test:docker"]
         },
         "options": {
-          "command": "node --test --test-force-exit --test-timeout=60000 --test-reporter=spec --test-reporter-destination=stdout --test-reporter=junit --test-reporter-destination=test-results.xml --test-global-setup=src/testing/docker-global-setup.ts \"src/**/!(*.release).test.ts\""
+          "command": "node --test --test-force-exit --test-timeout=60000 --test-reporter=spec --test-reporter-destination=stdout --test-reporter=junit --test-reporter-destination=test-results.xml --test-global-setup=src/testing/docker-global-setup.ts \"src/**/*.test.ts\""
         }
       }
     ]
