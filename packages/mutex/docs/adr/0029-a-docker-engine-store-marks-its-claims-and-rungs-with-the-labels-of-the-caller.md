@@ -27,7 +27,7 @@ new DockerEngineStore({
   image,
   namespace,
   heartbeatInterval,
-  labels: new DockerFixtures({ environment: process.env }).defaults.labels,
+  labels: new DockerTestbed({ environment: process.env }).defaults.Labels,
 });
 ```
 
@@ -35,7 +35,7 @@ The README of `@zukhruf/testing` gives `defaults` as the seam for other containe
 
 **A removal of rungs by these labels is safe.** A cleanup by the labels of the caller can remove the ladder of a key. Since [ADR 0028](./0028-a-docker-engine-token-is-the-higher-of-the-engine-time-and-the-ladder.md), the tokens after a removed ladder start at the engine time, which is higher than each earlier token. Thus no rule about who may remove the rungs is necessary.
 
-**A gap that stays.** A create that is in progress when its process stops can finish after the teardown. `DockerFixtures` covers this with a `creating` record. The store does not know test runs, and it must not know them. Backlog item #2843 (a lease, a mark and a collector for each kind of resource) is responsible for this gap.
+**A gap that stays.** A create that is in progress when its process stops can finish after the teardown. `DockerTestbed` covers this with a `creating` record. The store does not know test runs, and it must not know them. Backlog item #2843 (a lease, a mark and a collector for each kind of resource) is responsible for this gap.
 
 ## Considered Options
 

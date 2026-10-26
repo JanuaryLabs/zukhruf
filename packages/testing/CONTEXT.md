@@ -23,6 +23,10 @@ _Avoid_: Instance, connection
 The Docker daemon that the environment selects as the Docker CLI selects it, local or over SSH. `@zukhruf/docker` does the selection and sends the requests; the package uses no Docker CLI. A handle keeps the engine it was created on.
 _Avoid_: Host, daemon (for the selection)
 
+**Testbed**:
+The engine that the environment selects, as one test process uses it. A `DockerTestbed` acquires containers, volumes and directories on it, and marks each with the run.
+_Avoid_: Fixtures (a fixture is what the testbed acquires)
+
 **Container**:
 A container that this process started and owns. It stays after it stops, until disposal removes it.
 
@@ -50,7 +54,7 @@ _Avoid_: Cleanup hook
 The `node --test` process that runs the global setup, starts the test processes and runs the global teardown.
 
 **Process record**:
-A record in the run's directory that names a process that can create something for the run: a test process, or an SSH command that it started. A test process records itself on the first acquisition of a `DockerFixtures`, which every database fixture makes, and when it reads `defaults`, because another Docker client can create with those labels. While a recorded process lives, the run's records stay.
+A record in the run's directory that names a process that can create something for the run: a test process, another process that reads `defaults`, or an SSH command that a test process started. A test process records itself on the first acquisition of a `DockerTestbed`, which every database fixture makes. A process also records itself when it reads `defaults`, because another Docker client in that process can create with those labels, for example a sandbox launcher. While a recorded process lives, the run's records stay.
 _Avoid_: Worker record, PID file
 
 **Creating record**:

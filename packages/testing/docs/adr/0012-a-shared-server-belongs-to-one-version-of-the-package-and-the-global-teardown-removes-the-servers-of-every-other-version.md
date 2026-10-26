@@ -1,6 +1,6 @@
 # A shared server belongs to one version of the package, and the global teardown removes the servers of every other version
 
-`reuse()` gives one shared server for each configuration on an engine. The name of the server is `zukhruf-testing-<fingerprint>`. `#fingerprint()` in `src/docker/fixtures.ts` hashes the whole configuration: the image, the command, the environment, the labels, the resources and the number `transportVersion`. Shared servers outlive runs on purpose (ADR 0006). They exist for speed: in deepagents 528cafa7, the SQL Server tests went from 813 s to 30 s. Thus a removal after each run is not an option.
+`reuse()` gives one shared server for each configuration on an engine. The name of the server is `zukhruf-testing-<fingerprint>`. `#fingerprint()` in `src/docker/testbed.ts` hashes the whole configuration: the Engine API body after the testbed adds its defaults (the image, the command, the environment, the labels, the resources), the `internalPort` and the number `transportVersion`. Shared servers outlive runs on purpose (ADR 0006). They exist for speed: in deepagents 528cafa7, the SQL Server tests went from 813 s to 30 s. Thus a removal after each run is not an option.
 
 A change of the configuration gives a new fingerprint, thus a new name and a new server. Nothing removes the old server. The README told the user to stop it with `docker stop`. Each change in `@zukhruf/testing` left one full set of servers on each engine:
 
@@ -42,7 +42,7 @@ Thus the rule has no wait for the runs that are alive, no index of the last use,
 - A run without Docker never calls the engine. The global setup calls the engine only when a dead run on that engine has records to sweep (ADR 0006). The global teardown calls it only for a run that used Docker.
 - The servers of other versions stay on the engine until the end of the first run that used Docker on that engine.
 - The global teardown fails when the removal of a shared server fails. It prints the error, keeps the run's records and sets exit code 1, as for each cleanup failure (ADR 0006).
-- The rule does not cover a consumer that changes its own options in one version, for example the tag of its image. The old server stays. The README keeps the `docker stop` procedure for this case.
+- The rule does not cover a consumer that changes its own body in one version, for example the tag of its image. The old server stays. The README keeps the `docker stop` procedure for this case.
 - In this repository, the version changes only at a release. A change to what `reuse()` creates before that release gets the servers of the last release. Stop them with `docker stop` to test the change.
 - The rule does not cover a project that runs `reuse()` without the global setup. No global setup runs, so nothing removes its old servers.
 - The code step adds these tests, in the shape of `src/scripts/docker-global-setup.integration.test.ts`:

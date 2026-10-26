@@ -9,7 +9,7 @@ Backlog #2843 gives the standard for the resources of a run. Each resource carri
 Thus a database in a shared server becomes a thing that the run owns, as a container is:
 
 1. In a run, `database()` names the database `test_<run id>_<random>`. `<run id>` is the run's id as 32 hex characters, without hyphens. `<random>` is 16 random hex characters. The name has 54 bytes. Postgres allows 63 bytes for an identifier, MySQL and MariaDB allow 64 characters, and SQL Server allows 128 characters. The name is set before `CREATE DATABASE`, so it also marks a create that is in progress when the process dies. Outside a run, the environment gives no run id. Then `database()` keeps the name `test_<32 hex>`, and only disposal drops it.
-2. Each database fixture adds a kind label to the shared server through the `labels` of its options: `dev.zukhruf.testing.kind`, with the value `postgres`, `mysql`, `mariadb` or `sqlserver`. `reuse()` puts the labels in the fingerprint of the configuration, and the fingerprint gives the name of the server. Thus a server that was created before this change has a different name, and `reuse()` does not give it again. Each server that holds a database with a run id has the kind label.
+2. Each database fixture adds a kind label to the shared server through the `Labels` of its body: `dev.zukhruf.testing.kind`, with the value `postgres`, `mysql`, `mariadb` or `sqlserver`. `reuse()` puts the labels in the fingerprint of the configuration, and the fingerprint gives the name of the server. Thus a server that was created before this change has a different name, and `reuse()` does not give it again. Each server that holds a database with a run id has the kind label.
 3. Each kind has one drop function. Disposal and the collector both use it:
    - Postgres: an exec of `psql` in the server's container, with `DROP DATABASE IF EXISTS … WITH (FORCE)`.
    - MySQL and MariaDB: an exec of the image's client (`mysql` or `mariadb`), with `DROP DATABASE IF EXISTS`.
@@ -20,7 +20,7 @@ Thus a database in a shared server becomes a thing that the run owns, as a conta
 7. When the driver of a kind does not load, for example because the project did not install `mssql`, `cleanup()` skips the servers of that kind. The run's test processes used the same project, so they could not create a database of that kind.
 8. Each drop is `IF EXISTS`, so a second sweep of the same run does nothing. Thus the global teardown and a recovery need no lock between them.
 
-This covers a killed test, a create that was in progress when the process died, and a drop that failed in disposal. No record file is necessary, and `TestRun` gets no new method. The fixture reads the run id from the environment that it already takes.
+This covers a killed test, a create that was in progress when the process died, and a drop that failed in disposal. No record file is necessary, and the run's records get no new kind. The fixture reads the run id from the environment that it already takes.
 
 "Collector" is the term of backlog #2843. The Kubernetes garbage collector deletes each dependent object through the API of its own type. Boskos calls the cleaner of one resource type a janitor.
 
@@ -28,7 +28,7 @@ The comment in `run-cleanup.ts` says: never trust names alone as proof of owners
 
 ## Considered Options
 
-- **A database record in the run's directory** (the previous draft of this ADR, with `TestRun.recordDatabase`). The record is on the disk of one test machine. Backlog #2843 sweeps the runs of many machines that share one engine, and that sweep cannot read the record. The record also adds a method to `TestRun`.
+- **A database record in the run's directory** (the previous draft of this ADR). The record is on the disk of one test machine. Backlog #2843 sweeps the runs of many machines that share one engine, and that sweep cannot read the record. The record also adds a kind to the run's records.
 - **A comment on the database.** MySQL and MariaDB have no comment on a database.
 - **One database for each run, dropped when the run ends.** Then the tests of one run share one database, and a test is no longer isolated.
 - **The kind from the image name, without a kind label.** A consumer can give a custom `image`, and then the image name does not give the kind.
@@ -43,4 +43,4 @@ The comment in `run-cleanup.ts` says: never trust names alone as proof of owners
 - The code step adds these tests, in the shape of `src/scripts/docker-global-setup.integration.test.ts`:
   - "a database whose test process was killed is dropped when the run ends", one for each Docker kind.
   - "the run's cleanup leaves the databases of another run on the same server". It proves that a collector drops only the names of its own run.
-  - "a run whose test process only took a database is cleaned when it ends". The test process records itself on the first acquisition of its `DockerFixtures`, so the global teardown runs the collectors.
+  - "a run whose test process only took a database is cleaned when it ends". The test process records itself on the first acquisition of its `DockerTestbed`, so the global teardown runs the collectors.
