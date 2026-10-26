@@ -97,7 +97,7 @@ const recordedPids = (directory: string) =>
     );
 
 test(
-  'a matrix child that opens the DockerEngineStore records itself in the run of the fixture while it lives',
+  'a matrix child that opens the DockerEngineStore records itself in the run of the fixture',
   { timeout: 60_000 },
   async (t) => {
     // Arrange: a run of its own, with its records in a scratch directory.

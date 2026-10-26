@@ -44,10 +44,6 @@ const setup = fileURLToPath(
 const library = JSON.stringify(
   new URL('../docker/index.ts', import.meta.url).href,
 );
-/** The internal module that writes a run's records, for workers that act as a test process. */
-const runRecords = JSON.stringify(
-  new URL('../docker/run-records.ts', import.meta.url).href,
-);
 const client = JSON.stringify(import.meta.resolve('@zukhruf/docker'));
 
 /** What a worker of a run created, written where the test can read it. */
@@ -413,14 +409,10 @@ test(
       `
       import { test } from 'node:test';
       import { writeFile } from 'node:fs/promises';
-      import { Docker } from ${client};
-      import { TEST_RUN_LABEL, readRun } from ${runRecords};
+      import { DockerTestbed } from ${library};
       test('a slow create', { timeout: 3000 }, async () => {
-        const run = readRun(process.env);
-        const docker = await Docker.connect({ environment: process.env });
-        await writeFile(${JSON.stringify(statePath)}, JSON.stringify({ run: run.id, record: run.records.directory, pid: process.pid }));
-        await using _creating = await run.records.recordCreating();
-        await docker.containers.create({ Image: 'alpine:latest', Cmd: ['sleep', '600'], Labels: { [TEST_RUN_LABEL]: run.id } });
+        await writeFile(${JSON.stringify(statePath)}, JSON.stringify({ run: process.env.ZUKHRUF_TESTING_RUN_ID, record: process.env.ZUKHRUF_TESTING_RUN_DIR, pid: process.pid }));
+        await new DockerTestbed({ environment: process.env }).start({ Image: 'alpine:latest', Cmd: ['sleep', '600'] });
       });
     `,
     );
