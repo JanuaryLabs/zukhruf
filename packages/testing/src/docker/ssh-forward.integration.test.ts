@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict';
-import { mkdtempDisposable, readFile, writeFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 
 import spawn from 'nano-spawn';
 
+import { TemporaryFiles } from '../fs/temporary-files.ts';
 import { fakeEngine } from '../testing/fake-engine.ts';
 
 const skip =
@@ -111,8 +111,8 @@ async function standIns(
 ) {
   const resources = new AsyncDisposableStack();
   try {
-    const directory = await mkdtempDisposable(
-      join(tmpdir(), 'zukhruf-testing-ssh-'),
+    const directory = await new TemporaryFiles().directory(
+      'zukhruf-testing-ssh-',
     );
     resources.use(directory);
     const engine = resources.use(

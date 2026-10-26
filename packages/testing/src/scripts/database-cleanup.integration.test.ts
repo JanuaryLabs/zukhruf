@@ -2,8 +2,7 @@ import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { once } from 'node:events';
-import { mkdtempDisposable, readFile, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { type TestContext, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
@@ -15,6 +14,7 @@ import { Mariadb } from '../databases/mariadb.ts';
 import { Mysql } from '../databases/mysql.ts';
 import { Postgres } from '../databases/postgres.ts';
 import { SqlServer } from '../databases/sqlserver.ts';
+import { TemporaryFiles } from '../fs/temporary-files.ts';
 
 const docker = await Docker.connect({ environment: process.env });
 const signals =
@@ -191,8 +191,8 @@ for (const kind of kinds) {
     `a database whose test process was killed is dropped when the run ends (${kind.name})`,
     { skip: signals, timeout: 600_000 },
     async (t) => {
-      await using directory = await mkdtempDisposable(
-        join(tmpdir(), 'zukhruf-testing-database-cleanup-'),
+      await using directory = await new TemporaryFiles().directory(
+        'zukhruf-testing-database-cleanup-',
       );
       const scope = randomUUID();
       try {
@@ -229,8 +229,8 @@ test(
   "the run's cleanup leaves the databases of another run on the same server",
   { skip: signals, timeout: 300_000 },
   async (t) => {
-    await using directory = await mkdtempDisposable(
-      join(tmpdir(), 'zukhruf-testing-database-cleanup-'),
+    await using directory = await new TemporaryFiles().directory(
+      'zukhruf-testing-database-cleanup-',
     );
     const scope = randomUUID();
     try {
@@ -272,8 +272,8 @@ test(
   'a run whose test process only took a database is cleaned when it ends',
   { timeout: 300_000 },
   async (t) => {
-    await using directory = await mkdtempDisposable(
-      join(tmpdir(), 'zukhruf-testing-database-cleanup-'),
+    await using directory = await new TemporaryFiles().directory(
+      'zukhruf-testing-database-cleanup-',
     );
     const scope = randomUUID();
     try {
@@ -298,8 +298,8 @@ test(
   'a run ends cleanly while another process still starts a shared server',
   { skip: signals, timeout: 300_000 },
   async (t) => {
-    await using directory = await mkdtempDisposable(
-      join(tmpdir(), 'zukhruf-testing-database-cleanup-'),
+    await using directory = await new TemporaryFiles().directory(
+      'zukhruf-testing-database-cleanup-',
     );
     const scope = randomUUID();
     try {

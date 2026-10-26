@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempDisposable, readFile, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import type { TestContext } from 'node:test';
 
+import { TemporaryFiles } from '../fs/temporary-files.ts';
 import {
   describe as parameterizedDescribe,
   it as parameterizedIt,
@@ -16,9 +16,7 @@ import {
 const implementation = import.meta.resolve('@zukhruf/testing/node');
 
 async function run(body: string, ...args: string[]) {
-  await using directory = await mkdtempDisposable(
-    join(tmpdir(), 'testing-node-'),
-  );
+  await using directory = await new TemporaryFiles().directory('testing-node-');
   const file = join(directory.path, 'cases.mjs');
   await writeFile(
     file,
@@ -218,8 +216,8 @@ test('registration callbacks must return a native declaration promise', async ()
 });
 
 test('native spec and JUnit reporters retain row names, failures and directives', async () => {
-  await using directory = await mkdtempDisposable(
-    join(tmpdir(), 'testing-node-reports-'),
+  await using directory = await new TemporaryFiles().directory(
+    'testing-node-reports-',
   );
   const file = join(directory.path, 'reports.mjs');
   const report = join(directory.path, 'report.xml');
@@ -273,8 +271,8 @@ test('native spec and JUnit reporters retain row names, failures and directives'
 });
 
 test('native snapshots use each entry file and detect a changed row', async () => {
-  await using directory = await mkdtempDisposable(
-    join(tmpdir(), 'testing-node-snapshots-'),
+  await using directory = await new TemporaryFiles().directory(
+    'testing-node-snapshots-',
   );
   const files = [
     join(directory.path, 'first.mjs'),
@@ -317,8 +315,8 @@ test('native snapshots use each entry file and detect a changed row', async () =
 
 for (const registration of ['test', 'suite'] as const) {
   test(`saved failure reruns execute failed ${registration} rows across files`, async () => {
-    await using directory = await mkdtempDisposable(
-      join(tmpdir(), 'testing-node-rerun-'),
+    await using directory = await new TemporaryFiles().directory(
+      'testing-node-rerun-',
     );
     const files = [
       join(directory.path, 'first.mjs'),

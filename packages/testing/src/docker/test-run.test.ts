@@ -1,9 +1,7 @@
 import assert from 'node:assert/strict';
-import { mkdtempDisposable } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
 import { test } from 'node:test';
 
+import { TemporaryFiles } from '../fs/temporary-files.ts';
 import { DockerFixtures, TestRun } from './index.ts';
 
 test('an environment with only one of the two run variables is refused', () => {
@@ -28,8 +26,8 @@ test('a process outside a run has no run, and its containers carry no run label'
 
 test('a process in a run gets its run, and Docker labels what it creates with the run', async () => {
   // Reading the labels writes a process record into the run's directory.
-  await using directory = await mkdtempDisposable(
-    join(tmpdir(), 'zukhruf-testing-run-'),
+  await using directory = await new TemporaryFiles().directory(
+    'zukhruf-testing-run-',
   );
   const environment = {
     ZUKHRUF_TESTING_RUN_ID: 'run-1',

@@ -2,9 +2,7 @@ import assert from 'node:assert/strict';
 import { spawn as spawnProcess } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { once } from 'node:events';
-import { mkdtempDisposable, readdir } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { readdir } from 'node:fs/promises';
 import { createInterface } from 'node:readline';
 import { test } from 'node:test';
 
@@ -14,6 +12,7 @@ import pg from 'pg';
 import { ConnectionFailedError, Docker } from '@zukhruf/docker';
 
 import { timebox } from '../async/index.ts';
+import { TemporaryFiles } from '../fs/temporary-files.ts';
 import { EngineProxy } from '../testing/engine-proxy.ts';
 import { DockerFixtures } from './index.ts';
 
@@ -400,8 +399,8 @@ test(
   { skip: proxyless, timeout: 60_000 },
   async () => {
     // Arrange: an engine that holds the create until the test lets it go.
-    await using directory = await mkdtempDisposable(
-      join(tmpdir(), 'zukhruf-testing-creating-'),
+    await using directory = await new TemporaryFiles().directory(
+      'zukhruf-testing-creating-',
     );
     await using proxy = await EngineProxy.start(engine);
     const arrived = Promise.withResolvers<void>();

@@ -1,15 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawn as spawnProcess } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import {
-  access,
-  mkdir,
-  mkdtempDisposable,
-  readFile,
-  readdir,
-  writeFile,
-} from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { access, mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { type TestContext, test } from 'node:test';
 import { setTimeout } from 'node:timers/promises';
@@ -20,6 +12,7 @@ import spawn, { SubprocessError } from 'nano-spawn';
 import { BindSourceNotFoundError, Docker } from '@zukhruf/docker';
 
 import { DockerFixtures, TestRun } from '../docker/index.ts';
+import { TemporaryFiles } from '../fs/temporary-files.ts';
 import { EngineProxy } from '../testing/engine-proxy.ts';
 
 const docker = await Docker.connect({ environment: process.env });
@@ -252,8 +245,8 @@ for (const mode of [
       timeout: 180_000,
     },
     async (t) => {
-      await using directory = await mkdtempDisposable(
-        join(tmpdir(), 'zukhruf-testing-cleanup-'),
+      await using directory = await new TemporaryFiles().directory(
+        'zukhruf-testing-cleanup-',
       );
       // Another run's container and volume: the sweep must match the run id,
       // not only the label.
@@ -385,8 +378,8 @@ test(
   'a create that the engine finishes after its test process was killed keeps the run, and the next run removes what it created',
   { skip: proxyless, timeout: 180_000 },
   async (t) => {
-    await using directory = await mkdtempDisposable(
-      join(tmpdir(), 'zukhruf-testing-orphan-create-'),
+    await using directory = await new TemporaryFiles().directory(
+      'zukhruf-testing-orphan-create-',
     );
     const statePath = join(directory.path, 'state.json');
     const file = join(directory.path, 'worker.test.ts');
@@ -457,8 +450,8 @@ test(
   'recovery leaves a dead runner’s run alone while one of its test processes lives',
   { timeout: 180_000 },
   async (t) => {
-    await using directory = await mkdtempDisposable(
-      join(tmpdir(), 'zukhruf-testing-orphan-'),
+    await using directory = await new TemporaryFiles().directory(
+      'zukhruf-testing-orphan-',
     );
     const statePath = join(directory.path, 'state.json');
     const file = join(directory.path, 'worker.test.ts');
@@ -496,8 +489,8 @@ test(
   'a run whose tests never touch Docker leaves no record and makes no daemon call',
   { skip: proxyless, timeout: 120_000 },
   async () => {
-    await using directory = await mkdtempDisposable(
-      join(tmpdir(), 'zukhruf-testing-untouched-'),
+    await using directory = await new TemporaryFiles().directory(
+      'zukhruf-testing-untouched-',
     );
     await using proxy = await EngineProxy.start(engine);
     const file = join(directory.path, 'plain.test.ts');
@@ -602,8 +595,8 @@ test(
   'two runs that start together recover a dead run, and both succeed',
   { skip: proxyless, timeout: 180_000 },
   async (t) => {
-    await using directory = await mkdtempDisposable(
-      join(tmpdir(), 'zukhruf-testing-recovery-'),
+    await using directory = await new TemporaryFiles().directory(
+      'zukhruf-testing-recovery-',
     );
     await using proxy = await EngineProxy.start(engine);
     const { state, recover, root } = await killedRun(t, directory.path, proxy);
@@ -631,8 +624,8 @@ test(
   'a run that starts while another recovers a dead run leaves the run to it',
   { skip: proxyless, timeout: 180_000 },
   async (t) => {
-    await using directory = await mkdtempDisposable(
-      join(tmpdir(), 'zukhruf-testing-recovery-'),
+    await using directory = await new TemporaryFiles().directory(
+      'zukhruf-testing-recovery-',
     );
     await using proxy = await EngineProxy.start(engine);
     const { state, recover, root } = await killedRun(t, directory.path, proxy);
@@ -660,8 +653,8 @@ test(
   'recovery keeps a dead run while a command lives whose pid an ended command of the run had',
   { timeout: 120_000 },
   async () => {
-    await using directory = await mkdtempDisposable(
-      join(tmpdir(), 'zukhruf-testing-reused-pid-'),
+    await using directory = await new TemporaryFiles().directory(
+      'zukhruf-testing-reused-pid-',
     );
     const id = randomUUID();
     const record = join(
@@ -713,8 +706,8 @@ test(
   'recovery leaves a dead run on another engine alone',
   { timeout: 120_000 },
   async () => {
-    await using directory = await mkdtempDisposable(
-      join(tmpdir(), 'zukhruf-testing-other-engine-'),
+    await using directory = await new TemporaryFiles().directory(
+      'zukhruf-testing-other-engine-',
     );
     const id = randomUUID();
     const record = join(
@@ -759,8 +752,8 @@ test(
   'the global teardown removes a container and a volume that carry only the run’s labels, and keeps a shared server that carries the run’s label',
   { timeout: 180_000 },
   async (t) => {
-    await using directory = await mkdtempDisposable(
-      join(tmpdir(), 'zukhruf-testing-labels-'),
+    await using directory = await new TemporaryFiles().directory(
+      'zukhruf-testing-labels-',
     );
     const statePath = join(directory.path, 'state.json');
     const file = join(directory.path, 'worker.test.ts');
@@ -815,8 +808,8 @@ test(
   'the global teardown removes a container and a volume of a test process that only read docker.defaults',
   { timeout: 180_000 },
   async (t) => {
-    await using directory = await mkdtempDisposable(
-      join(tmpdir(), 'zukhruf-testing-defaults-'),
+    await using directory = await new TemporaryFiles().directory(
+      'zukhruf-testing-defaults-',
     );
     const statePath = join(directory.path, 'state.json');
     const file = join(directory.path, 'worker.test.ts');
@@ -862,8 +855,8 @@ test(
   'start() pulls an image that the engine does not have',
   { timeout: 180_000 },
   async (t) => {
-    await using directory = await mkdtempDisposable(
-      join(tmpdir(), 'zukhruf-testing-pull-'),
+    await using directory = await new TemporaryFiles().directory(
+      'zukhruf-testing-pull-',
     );
     // Only this test uses this tag, so it can remove the image.
     const image = 'busybox:1.37.0-musl';
@@ -906,8 +899,8 @@ test(
   'a runner whose DOCKER_HOST names a tcp:// engine fails in the global setup',
   { timeout: 60_000 },
   async () => {
-    await using directory = await mkdtempDisposable(
-      join(tmpdir(), 'zukhruf-testing-tcp-'),
+    await using directory = await new TemporaryFiles().directory(
+      'zukhruf-testing-tcp-',
     );
     const file = join(directory.path, 'plain.test.ts');
     await writeFile(
@@ -940,8 +933,8 @@ test(
   'the global setup and teardown of the built package clean a run',
   { timeout: 180_000 },
   async (t) => {
-    await using directory = await mkdtempDisposable(
-      join(tmpdir(), 'zukhruf-testing-dist-'),
+    await using directory = await new TemporaryFiles().directory(
+      'zukhruf-testing-dist-',
     );
     const built = import.meta.resolve('@zukhruf/testing/docker-global-setup');
     assert.match(built, /\/dist\/scripts\/docker-global-setup\.js$/);
