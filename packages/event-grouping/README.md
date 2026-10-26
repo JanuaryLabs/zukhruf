@@ -84,7 +84,7 @@ Read [the limitations](./docs/limitations.md) before you use the events for a de
 - Look-alike occurrences a few days apart can join.
 - Each headline-only report is a duplicate for the reader.
 - The parameters are valid only with EmbeddingGemma 2 and the vector text of round #3130.
-- One clustering of a window of 1,000 reports took 8 s, and of 3,500 reports 71 s, through the `Collection` of `@zukhruf/embeddings`.
+- One clustering of a window of 1,001 reports takes 2.9 s, and of 3,500 reports 28 s, through the `Collection` of `@zukhruf/embeddings`. The cost grows with the square of the window size (limitation 21).
 
 ## Decisions
 

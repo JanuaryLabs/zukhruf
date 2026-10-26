@@ -56,14 +56,14 @@ The research for event grouping found these limits. They apply to this package. 
 
 **Evidence.** Round #3130 measured 0.68 ms for each report for the grouping step, but the daily windows of the Gun Violence Corpus are small. Backlog #3131 measured one clustering on a synthetic window: 768-dimension vectors with a shared direction, topics and events of 3 reports, through the `Collection` of `@zukhruf/embeddings` in memory, on an Apple M4 Pro with Node.js 26.
 
-| Reports in the window | One clustering |
-| --------------------- | -------------- |
-| 1,001                 | 8.2 s          |
-| 3,500                 | 71 s           |
+| Reports in the window | One clustering, first measurement | After the faster cosine of `@zukhruf/embeddings` (51eed3d) |
+| --------------------- | --------------------------------- | ---------------------------------------------------------- |
+| 1,001                 | 8.2 s                             | 2.9 s                                                      |
+| 3,500                 | 71 s                              | 28 s                                                       |
 
-**Cause.** The clustering asks the vectors port for the shortlist of each report in the window. Each `nearest` call of the `Collection` compares the report with each report in the window. Thus one clustering calculates the square of the window size in similarities. A CPU profile puts most of the time in the cosine and the BLOB reads of `nearest`.
+**Cause.** The clustering asks the vectors port for the shortlist of each report in the window. Each `nearest` call of the `Collection` compares the report with each report in the window. Thus one clustering calculates the square of the window size in similarities. Each call also reads and decodes every vector of the window again. A CPU profile put most of the time in the cosine and the BLOB reads of `nearest`. The faster cosine removed about half of that time.
 
-**Before you change it.** Measure one clustering at the window size of the real feeds before you choose the window.
+**Before you change it.** Measure one clustering at the window size of the real feeds before you choose the window. A port call that gives the shortlist of every report of the window at one time decodes each vector only once. That is a change to the API of `@zukhruf/embeddings` (backlog #3137).
 
 ## 22. Small leaks in the cross-validation
 
