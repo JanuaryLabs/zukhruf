@@ -1,6 +1,6 @@
 {
   "name": "@zukhruf/coprocess",
-  "version": "0.3.42",
+  "version": "0.3.44",
   "description": "A coprocess: a long-lived child process that the parent talks to over stdin and stdout, with JSON values on lines, and stops with SIGTERM and then SIGKILL after a grace period.",
   "license": "MIT",
   "repository": {
@@ -43,7 +43,7 @@
     "access": "public"
   },
   "dependencies": {
-    "@zukhruf/async": "^0.3.42",
+    "@zukhruf/async": "^0.3.44",
     "execa": "10.2.1"
   }
 }
