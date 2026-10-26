@@ -20,7 +20,7 @@ import { startWorker } from '../../testing/worker-process.ts';
 import { DockerEngineStore } from './index.ts';
 
 /**
- * The first eleven tests are the design errors that the probes of
+ * The first twelve tests are the design errors that the probes of
  * DockerEngineStore found. The name of each test says what the wrong design
  * broke. The tests after them are the contract of a lock store.
  */
@@ -634,6 +634,84 @@ test(
       'A claim that ended must not keep the key from a waiter',
     );
     assert.ok(outcome.value > holder.token);
+  },
+);
+
+test(
+  "a holder whose list missed a stale minter's new rung still gets a token above the previous holder's",
+  { timeout: 30_000 },
+  async (t) => {
+    // Arrange: a rung far above the engine time, so that each mint takes the highest rung + 1, not the engine time.
+    // The test makes it, because no operation of the store moves the clock of the engine.
+    await using fixture = await engine();
+    const labelled = { label: [`${namespaceLabel}=${fixture.namespace}`] };
+    const mutex = new Mutex(fixture.store());
+    await mutex.acquire('report:daily', async () => {});
+    const [rung] = await fixture.docker.volumes.list({ filters: labelled });
+    assert.ok(rung);
+    await fixture.docker.volumes.create({
+      Name: rung.Name.replace(/\d+$/, String(2n ** 52n)),
+      Labels: rung.Labels ?? {},
+    });
+    const previous = await mutex.acquire(
+      'report:daily',
+      async (lease) => lease.token.value,
+    );
+    const ladder = async () =>
+      (await fixture.docker.volumes.list({ filters: labelled })).map(
+        ({ Name }) => BigInt(Name.slice(Name.lastIndexOf('-') + 1)),
+      );
+    assert.deepEqual(await ladder(), [previous]);
+
+    // Arrange: a stale minter read the ladder, the proxy keeps its create of a rung, and then its claim is removed.
+    await using staleProxy = await engineProxy(fixture.docker);
+    await using staleClient = await Docker.connect({ host: staleProxy.host });
+    const staleRung = staleProxy.holdRequestsFrom(
+      /^POST \S*\/volumes\/create /,
+    );
+    const stale = new Mutex(fixture.store(staleClient)).acquire(
+      'report:daily',
+      async (lease) => lease.token.value,
+    );
+    stale.catch(() => {});
+    await staleRung.reached;
+    const [claim, ...others] = await fixture.docker.containers.list({
+      all: true,
+      filters: labelled,
+    });
+    assert.ok(claim && others.length === 0);
+    await (
+      await fixture.docker.containers.find(claim.Id)
+    )?.remove({ force: true });
+
+    // Arrange: the next holder gets the claim, reads the same ladder, and the proxy keeps its create of a rung.
+    await using nextProxy = await engineProxy(fixture.docker);
+    await using nextClient = await Docker.connect({ host: nextProxy.host });
+    const nextRung = nextProxy.holdRequestsFrom(/^POST \S*\/volumes\/create /);
+    const next = new Mutex(fixture.store(nextClient)).acquire(
+      'report:daily',
+      async (lease) => lease.token.value,
+    );
+    next.catch(() => {});
+    await nextRung.reached;
+
+    // Act: the stale minter creates the rung above the previous token and removes the rung of the previous holder, and then the next holder creates its rung.
+    staleRung.release();
+    await t.waitFor(
+      async () => assert.ok(!(await ladder()).includes(previous)),
+      { interval: 5, timeout: engineBound },
+    );
+    nextRung.release();
+    const outcome = await outcomeOf(next, engineBound);
+
+    // Assert
+    assert.equal(outcome.settled, 'resolved');
+    assert.ok(
+      outcome.value > previous,
+      `The next holder got ${outcome.value} after the previous holder got ${previous}`,
+    );
+    // The stale minter takes the key after the next holder, so that no request of it is open at the disposal.
+    await outcomeOf(stale, engineBound);
   },
 );
 

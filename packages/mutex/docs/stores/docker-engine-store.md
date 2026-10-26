@@ -232,6 +232,7 @@ These changes are not necessary:
 | A rung above the engine time still gives a higher token                                                     | A token from the engine time alone                                             |
 | A token is the engine time of the claim in microseconds                                                     | A time from `Date.parse`, which keeps milliseconds only                        |
 | A waiter gets the key when the released claim stays dead after a failed removal                             | A wait for the removal with no time limit on an `exited` claim                 |
+| A holder whose list missed a stale minter's new rung still gets a token above the previous holder's         | A mint that asks for the highest rung, not the highest rung + 1                |
 
 Each wrong design was put back into a copy of the store, one at a time. Each one made its test fail.
 
