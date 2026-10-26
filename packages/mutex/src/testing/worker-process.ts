@@ -27,8 +27,20 @@ export interface WorkerOptions {
 }
 
 /**
+ * Ends the child when this process ends, even by SIGKILL: the OS closes the
+ * write end of the child's stdin, and the child reads its end. A `disconnect`
+ * listener on the IPC channel would keep each child alive until its parent
+ * ends, and an unref of the channel would let an IpcStore child exit while it
+ * waits for a grant. The unref stdin keeps nothing alive. ESM hoists the
+ * imports of `source` above it.
+ */
+const exitWithParent =
+  "process.stdin.once('end', () => process.exit(1)).resume().unref();\n";
+
+/**
  * Runs `source` as an ES module in its own Node process, with `name` as
- * argv[1] and an IPC channel back to this process. Disposing kills it.
+ * argv[1] and an IPC channel back to this process. Disposing kills it, and
+ * the child exits when this process ends.
  */
 export function startWorker(
   source: string,
@@ -37,8 +49,14 @@ export function startWorker(
 ): WorkerProcess {
   const child = spawn(
     process.execPath,
-    [...nodeOptions, '--input-type=module', '--eval', source, name],
-    { stdio: ['ignore', 'ignore', 'pipe', 'ipc'] },
+    [
+      ...nodeOptions,
+      '--input-type=module',
+      '--eval',
+      exitWithParent + source,
+      name,
+    ],
+    { stdio: ['pipe', 'ignore', 'pipe', 'ipc'] },
   );
   host?.adoptProcess(child);
   const closed = Promise.withResolvers<void>();
