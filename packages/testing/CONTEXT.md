@@ -31,7 +31,7 @@ A container whose port answers on 127.0.0.1 of this machine.
 _Avoid_: Server container
 
 **Shared server**:
-A service container that `reuse()` shares between processes and runs, one per configuration.
+A service container that `reuse()` shares between processes and runs, one per configuration and package version.
 _Avoid_: Global container, singleton
 
 **Run**:

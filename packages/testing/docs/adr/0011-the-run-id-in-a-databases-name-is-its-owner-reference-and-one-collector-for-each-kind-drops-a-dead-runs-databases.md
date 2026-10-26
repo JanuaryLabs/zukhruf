@@ -38,7 +38,7 @@ The comment in `run-cleanup.ts` says: never trust names alone as proof of owners
 ## Consequences
 
 - Each global teardown lists the shared servers on the engine. For each server of a kind whose driver loads, it sends one list query.
-- The new names start new shared servers, one time for each configuration. The old servers keep only their old `test_<32 hex>` databases. Nothing removes these servers or databases. That is the present behavior for shared servers: stop the server to remove it.
+- The new names start new shared servers, one time for each configuration. The old servers keep only their old `test_<32 hex>` databases. The old servers are not kept: the global setup removes the shared servers of every other version of the package (ADR 0012).
 - Runs on more than one machine that share one engine use the same collectors when backlog #2843 adds a lease that tells which run ids are dead. BigQuery datasets also stay in backlog #2843.
 - The code step adds these tests, in the shape of `src/scripts/docker-global-setup.integration.test.ts`:
   - "a database whose test process was killed is dropped when the run ends", one for each Docker kind.

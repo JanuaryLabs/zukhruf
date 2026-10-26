@@ -98,7 +98,7 @@ test('a holder in another container', async () => {
 | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------- |
 | `start(options)` | A container this process owns. It stays after it stops, so its logs remain, until disposal removes it.                                      | `OwnedContainer`                  |
 | `serve(options)` | A dedicated server whose `internalPort` answers on `127.0.0.1` of this machine. Failure or disposal removes it.                             | `ServiceContainer`                |
-| `reuse(options)` | One server per configuration on the engine, shared across processes and runs.                                                               | `ServiceContainer`                |
+| `reuse(options)` | One server per configuration and package version on the engine, shared across processes and runs.                                           | `ServiceContainer`                |
 | `run(options)`   | A container that runs to completion. It gives the output and the exit code, and removes the container. A non-zero exit code does not throw. | `ExecResult`                      |
 | `volume()`       | A named volume.                                                                                                                             | `OwnedVolume`                     |
 | `directory()`    | A directory on the engine's host, for bind mounts. It has `mkdir`, `writeFile`, `readFile`, `chmod` and `symlink`.                          | `DockerDirectory`                 |
@@ -115,7 +115,9 @@ A `ServiceContainer` has `container`, `host` and `port`. On an SSH engine, the p
 
 `reuse(options)` finds the server for this configuration, or creates it. Docker reserves the name atomically, so concurrent processes attach to the same container. Different images, passwords, environments or labels select separate servers. A readiness failure leaves the shared server running for diagnosis. Dispose a reused server only after all its users finish: disposal stops it for every caller.
 
-Shared servers remain until you stop them:
+A shared server belongs to one version of `@zukhruf/testing`. Its label `dev.zukhruf.testing.version` holds that version, and the version is part of its name. At the start of each run, the global setup removes each shared server on its engine whose version is not this version, and each shared server that has no version label ([ADR 0012](./docs/adr/0012-a-shared-server-belongs-to-one-version-of-the-package-and-the-global-setup-removes-the-servers-of-every-other-version.md)). Thus a project on an older version breaks when it uses the same engine: move it to the latest release.
+
+When you change your own options in one version, for example the image tag, the old server stays. Stop it:
 
 ```sh
 docker ps -a --filter label=dev.zukhruf.testing.shared=1
@@ -148,7 +150,7 @@ The global teardown removes the labeled containers with their anonymous volumes,
 
 If cleanup fails, for example because the engine is unreachable, the global teardown prints the error, keeps the run's records, and sets exit code 1. The next run on the same engine removes what the run left, from any project of this user. This is recovery. Recovery does not touch a run while its runner or one of its recorded processes lives. The records are in `$XDG_STATE_HOME/zukhruf-testing/docker-runs` (`~/.local/state/zukhruf-testing/docker-runs` by default). Do not delete a record to hide a cleanup failure.
 
-The global setup selects the engine as the Docker CLI does, through `@zukhruf/docker`, so the Docker CLI is not necessary. It calls the engine only when a dead run on that engine has records to sweep.
+The global setup selects the engine as the Docker CLI does, through `@zukhruf/docker`, so the Docker CLI is not necessary. It calls the engine at the start of each run, to remove the shared servers of other versions, and to sweep a dead run on that engine.
 
 On an SSH engine, run one test file at a time with `--test-concurrency=1` if the engine cannot take more. An SSH forward runs `cat` in a remote shell, so the SSH user needs a shell on the engine's host. The forward ends when the process that opened it ends, also when that process is killed.
 
