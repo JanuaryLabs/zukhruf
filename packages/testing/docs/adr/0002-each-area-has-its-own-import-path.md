@@ -1,6 +1,6 @@
 # Each area has its own import path
 
-The package began as one entry point that re-exported everything. Importing `timebox` from it loaded the SQL Server driver, the BigQuery client and DuckDB's native binding, and installing the package installed 116 packages, among them a native DuckDB binary of about 113 MB for each platform. Thus each area has its own import path, such as `@zukhruf/testing/docker` or `@zukhruf/testing/sqlserver`, and there is no root entry point. The three drivers are optional peer dependencies: a consumer installs the driver of each area it imports.
+The package began as one entry point that re-exported everything. Importing `timebox` from it loaded the SQL Server driver, the BigQuery client and DuckDB's native binding, and installing the package installed 116 packages, among them a native DuckDB binary of about 113 MB for each platform. Thus each area has its own import path, such as `@zukhruf/testing/docker` or `@zukhruf/testing/sqlserver`, and there is no root entry point. The four drivers, `mssql`, `@duckdb/node-api`, `@google-cloud/bigquery` and `msw`, are optional peer dependencies: a consumer installs the driver of each area it imports.
 
 ## Considered Options
 

@@ -6,7 +6,7 @@ The words in these documents have one meaning each. See the glossary in [CONTEXT
 
 ## Areas
 
-Each area has its own import path, so a test loads only the drivers it uses. The three drivers are optional peer dependencies: install the one an area names.
+Each area has its own import path, so a test loads only the drivers it uses. The four drivers are optional peer dependencies: install the one an area names.
 
 | Import                        | Gives                                                              | Needs                    |
 | ----------------------------- | ------------------------------------------------------------------ | ------------------------ |
@@ -23,6 +23,9 @@ Each area has its own import path, so a test loads only the drivers it uses. The
 | `@zukhruf/testing/bigquery`   | `BigQuery`                                                         | `@google-cloud/bigquery` |
 | `@zukhruf/testing/http`       | `HttpServer`                                                       |                          |
 | `@zukhruf/testing/streams`    | `StreamHarness`                                                    |                          |
+| `@zukhruf/testing/fs`         | `TemporaryFiles`                                                   |                          |
+| `@zukhruf/testing/process`    | `Environment`                                                      |                          |
+| `@zukhruf/testing/msw`        | `Msw`                                                              | `msw`                    |
 
 ## Parameterized tests
 
@@ -198,6 +201,113 @@ The handler is a Node.js request listener. A web framework gives one for its fet
 ## Waiting
 
 `timebox(fn, options)` retries `fn` until it stops throwing, every 250 ms for at most 30 seconds by default. It takes every p-retry option. `settleWithin(promise, label, ms)` rejects when a promise that cannot be cancelled does not settle in time. When an operation accepts an `AbortSignal`, pass `AbortSignal.timeout(ms)` to it instead.
+
+## Temporary directories
+
+`new TemporaryFiles().directory(prefix)` creates an empty directory in `os.tmpdir()`. Its name starts with `prefix`. The handle has `path` and `cleanup`. Disposal removes the directory and all that it holds.
+
+```ts
+import { TemporaryFiles } from '@zukhruf/testing/fs';
+
+const files = new TemporaryFiles();
+
+test('writes the report', async (t) => {
+  await using directory = await files.directory('report-');
+  await writeReport(join(directory.path, 'report.json'));
+  t.assert.ok(existsSync(join(directory.path, 'report.json')));
+});
+```
+
+`path` is the real path: the acquisition resolves symbolic links. On macOS, `os.tmpdir()` is below `/var`, and `/var` is a link to `/private/var`. git, a child process and a bind mount give the resolved path. Thus a test can compare their output with `path` directly.
+
+On Windows, a process that still holds a file open stops its removal for a short time. Thus disposal retries the removal on `EBUSY`, `EMFILE`, `ENFILE`, `ENOTEMPTY` and `EPERM`. It retries 8 times, and it waits 50 ms longer before each retry: 50 + 100 + … + 400 = 1.8 s at most. A removal that does not fail does not wait. When the last retry fails, disposal rejects with the error.
+
+The only option is `parent`, the directory that holds the new directory. The default is `os.tmpdir()`. A Unix socket path has a limit of 104 bytes on macOS and 108 bytes on Linux. On macOS, the real path of `os.tmpdir()` uses 56 of them. Thus give a short parent, such as `/tmp`, for a socket. Node resolves a package from the parent directories of the file that imports it. Thus give a parent in the repository when a file in the directory imports a package of the repository.
+
+## Environment variables
+
+`new Environment().set(values)` assigns each key on `process.env` and returns an environment scope. The value `undefined` deletes the key for the scope. Disposal restores each key to its earlier value.
+
+```ts
+import { Environment } from '@zukhruf/testing/process';
+
+const environment = new Environment();
+
+test('reads the region', (t) => {
+  using scope = environment.set({
+    AWS_REGION: 'eu-west-1',
+    AWS_PROFILE: undefined,
+  });
+  t.assert.equal(region(), 'eu-west-1');
+});
+```
+
+A key that was absent before the scope is deleted at restore. It does not become the string `"undefined"`. An empty string is a value: a key that held `''` holds `''` again. The scope assigns each key on the real `process.env` object. It does not replace the object and does not use `Object.defineProperty`. Native addons read the real object, and Node resets its `TZ` cache only on an assignment.
+
+One scope at a time holds a key. A second `set` that names a key of an open scope throws, and the error names the key. Thus two tests that run at the same time cannot restore each other's values. To set several keys, give them to one `set`.
+
+A module that reads a variable when it loads keeps the value that it read. The restore does not change that value, and Node loads a module only once in a process. Thus set the scope first, then load the module with `await import()`. Or run the code in a child process.
+
+A child process copies the environment when it starts. It sees the scope only if it starts while the scope is open and inherits the environment. Thus give the values to the child as `env`, such as `spawn(command, args, { env: { ...process.env, REGION: 'eu-west-1' } })`. Then the test needs no scope.
+
+To put a directory first on `PATH`, join it with `path.delimiter`, which is `:` on Unix and `;` on Windows:
+
+```ts
+import path from 'node:path';
+
+using scope = environment.set({
+  PATH: [binDirectory, process.env.PATH ?? ''].join(path.delimiter),
+});
+```
+
+## Intercepted requests
+
+`new Msw().intercept(...handlers)` starts an msw server in this process with the handlers, and returns an interception. The handle has `server`, `requests` and `cleanup`. Disposal closes the server.
+
+```ts
+import { HttpResponse, http } from 'msw';
+
+import { Msw } from '@zukhruf/testing/msw';
+
+const msw = new Msw();
+
+test('sends the token', async (t) => {
+  using interception = msw.intercept(
+    http.get('https://api.example.com/user', () =>
+      HttpResponse.json({ id: 1 }),
+    ),
+  );
+  await fetchUser('token');
+  t.assert.equal(
+    interception.requests[0].headers.get('authorization'),
+    'Bearer token',
+  );
+});
+```
+
+An interception is always strict: the server listens with `onUnhandledFrame: 'error'`. A request that no handler answers fails, and the error names it. There is no option for a different strategy.
+
+`requests` holds a clone of each request that the server receives, in the order of arrival. A clone keeps its body, so the test can read the body after a handler read the original.
+
+`server` is the msw `SetupServerApi`. Use `interception.server.use(...handlers)` to add handlers for a part of the test.
+
+An interception also receives the requests to a local server, such as an `HttpServer` of the same test. To send them to that server, give a handler that passes them through:
+
+```ts
+import { http, passthrough } from 'msw';
+
+using interception = msw.intercept(
+  http.all('*', ({ request }) => {
+    const { hostname } = new URL(request.url);
+    if (hostname === '127.0.0.1' || hostname === 'localhost') {
+      return passthrough();
+    }
+  }),
+  http.get('https://api.example.com/user', () => HttpResponse.json({ id: 1 })),
+);
+```
+
+The driver is msw 3 (`msw ^3.0.3`), which needs Node.js 22.12 or later. Install it next to this package.
 
 ## Development
 
