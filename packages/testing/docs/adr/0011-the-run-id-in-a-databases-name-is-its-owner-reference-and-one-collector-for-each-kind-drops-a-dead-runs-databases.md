@@ -1,10 +1,10 @@
-# The run id in a database's name is its owner mark, and one collector for each kind drops a dead run's databases
+# The run id in a database's name is its owner reference, and one collector for each kind drops a dead run's databases
 
 `database()` of `Postgres`, `Mysql`, `Mariadb` and `SqlServer` creates a database named `test_<uuid>` on a shared server. Disposal is the only step that drops it. ADR 0006 cleans up a killed run: the global teardown, or the recovery of a later run, removes the containers and volumes that carry the run's label, and the paths in the forward and directory records. Shared servers outlive runs on purpose, and nothing marks the databases in them with a run. Thus a killed test process leaves its database in the shared server. A probe proved this on 2026-10-22. A process acquired `new Postgres({ environment }).database()` and got SIGKILL before its disposal. Its database `test_<uuid>` stayed. An empty Postgres database uses about 7.75 MB of the server's 512 MB tmpfs. Thus about 59 killed tests fill the tmpfs, and after that each `database()` on that server fails. The same applies to MySQL, MariaDB and SQL Server (backlog #2842).
 
 A failed drop also leaves a database. Disposal ignores the error of its drop: Postgres, MySQL and MariaDB call `.catch(() => {})`, and SQL Server has an empty `catch`.
 
-Backlog #2843 gives the standard for the resources of a run. Each resource carries an owner mark: the run id, in the native slot of its kind. One collector for each kind lists the resources by that mark and removes each one. A container already follows this standard: its native slot is a label, and `cleanup()` lists the containers by the run's label. A database has no label. Its native slot is its name.
+Backlog #2843 gives the standard for the resources of a run. Each resource carries an owner reference: the run id, in the native slot of its kind. "Owner reference" is the Kubernetes term for a reference from a resource to the object that owns it. One collector for each kind lists the resources by that owner reference and removes each one. A container already follows this standard: its native slot is a label, and `cleanup()` lists the containers by the run's label. A database has no label. Its native slot is its name.
 
 Thus a database in a shared server becomes a thing that the run owns, as a container is:
 
@@ -24,7 +24,7 @@ This covers a killed test, a create that was in progress when the process died, 
 
 "Collector" is the term of backlog #2843. The Kubernetes garbage collector deletes each dependent object through the API of its own type. Boskos calls the cleaner of one resource type a janitor.
 
-The comment in `run-cleanup.ts` says: never trust names alone as proof of ownership. That rule is about Docker objects, which have labels. A database has no label, so its name is the only slot for the mark. The collector does not trust the name alone. It looks only in the shared servers of this package, which it finds by label, and it requires the exact pattern with the run's id.
+The comment in `run-cleanup.ts` says: never trust names alone as proof of ownership. That rule is about Docker objects, which have labels. A database has no label, so its name is the only slot for the owner reference. The collector does not trust the name alone. It looks only in the shared servers of this package, which it finds by label, and it requires the exact pattern with the run's id.
 
 ## Considered Options
 
