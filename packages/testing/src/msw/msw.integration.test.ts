@@ -14,7 +14,7 @@ const bypassRejected = (error: unknown) =>
   );
 
 test('a request that no handler answers rejects with the msw error', async () => {
-  using _interception = new Msw().intercept(
+  using interception = new Msw().intercept(
     http.get('https://api.example.invalid/user', () =>
       HttpResponse.json({ id: 1 }),
     ),
@@ -23,6 +23,11 @@ test('a request that no handler answers rejects with the msw error', async () =>
   await assert.rejects(
     fetch('https://api.example.invalid/unknown'),
     bypassRejected,
+  );
+
+  assert.deepEqual(
+    interception.requests.map(({ url }) => url),
+    ['https://api.example.invalid/unknown'],
   );
 });
 
@@ -110,7 +115,7 @@ test('disposal closes the server, so requests reach the network again', async ()
   await using local = await new HttpServer().start((_request, response) => {
     response.end('network');
   });
-  const interception = new Msw().intercept(
+  using interception = new Msw().intercept(
     http.get(`${local.origin}/answer`, () => HttpResponse.text('intercepted')),
   );
   const intercepted = await fetch(`${local.origin}/answer`);

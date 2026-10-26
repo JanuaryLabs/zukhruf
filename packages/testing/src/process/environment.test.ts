@@ -6,12 +6,11 @@ import spawn from 'nano-spawn';
 import { Environment } from './environment.ts';
 
 test('a set that names a key of an open scope throws, names the key, and changes nothing', () => {
-  const environment = new Environment();
-  using _held = environment.set({ ZUKHRUF_TESTING_HELD: 'first' });
+  using _held = new Environment().set({ ZUKHRUF_TESTING_HELD: 'first' });
 
   assert.throws(
     () =>
-      environment.set({
+      new Environment().set({
         ZUKHRUF_TESTING_FREE: 'second',
         ZUKHRUF_TESTING_HELD: 'second',
       }),
@@ -20,12 +19,12 @@ test('a set that names a key of an open scope throws, names the key, and changes
 
   assert.equal(process.env.ZUKHRUF_TESTING_HELD, 'first');
   assert.equal(Object.hasOwn(process.env, 'ZUKHRUF_TESTING_FREE'), false);
-  using free = environment.set({ ZUKHRUF_TESTING_FREE: 'third' });
+  using free = new Environment().set({ ZUKHRUF_TESTING_FREE: 'third' });
   assert.equal(process.env.ZUKHRUF_TESTING_FREE, 'third');
 });
 
 test('a key that was absent is deleted at restore', () => {
-  const scope = new Environment().set({ ZUKHRUF_TESTING_ABSENT: 'value' });
+  using scope = new Environment().set({ ZUKHRUF_TESTING_ABSENT: 'value' });
   assert.equal(process.env.ZUKHRUF_TESTING_ABSENT, 'value');
 
   scope.cleanup();
@@ -36,7 +35,7 @@ test('a key that was absent is deleted at restore', () => {
 test('a key that held an empty string holds it again after restore', () => {
   process.env.ZUKHRUF_TESTING_EMPTY = '';
   try {
-    const scope = new Environment().set({ ZUKHRUF_TESTING_EMPTY: 'value' });
+    using scope = new Environment().set({ ZUKHRUF_TESTING_EMPTY: 'value' });
 
     scope.cleanup();
 
@@ -49,7 +48,7 @@ test('a key that held an empty string holds it again after restore', () => {
 test('undefined deletes the key for the scope, and restore gives its earlier value', () => {
   process.env.ZUKHRUF_TESTING_DELETED = 'earlier';
   try {
-    const scope = new Environment().set({ ZUKHRUF_TESTING_DELETED: undefined });
+    using scope = new Environment().set({ ZUKHRUF_TESTING_DELETED: undefined });
     assert.equal(Object.hasOwn(process.env, 'ZUKHRUF_TESTING_DELETED'), false);
 
     scope.cleanup();
@@ -87,7 +86,7 @@ test('TZ in a scope changes the time zone of dates, and restore changes it back'
   const before = offset();
   const zone = before === -330 ? 'Asia/Tokyo' : 'Asia/Kolkata';
   const expected = zone === 'Asia/Tokyo' ? -540 : -330;
-  const scope = new Environment().set({ TZ: zone });
+  using scope = new Environment().set({ TZ: zone });
 
   assert.equal(offset(), expected);
   scope.cleanup();
