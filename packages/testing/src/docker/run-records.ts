@@ -14,39 +14,16 @@ export const TEST_RUN_LABEL = 'dev.zukhruf.testing.run';
 const recordedRuns = new Set<string>();
 
 /**
- * One `node --test` invocation with the Docker global setup. What its test
- * processes create carries the run's label or a record in the run's
- * directory, so the global teardown, or the recovery of a later run, removes
- * it after a process that was killed before it could.
+ * The records of one `node --test` invocation with the Docker global setup,
+ * in the run's directory. While a recorded process lives, or a record of a
+ * path remains, the global teardown, or the recovery of a later run, keeps
+ * the run and removes what a killed process left.
  */
-export class TestRun {
-  readonly id: string;
+export class RunRecords {
   readonly directory: string;
 
-  constructor(id: string, directory: string) {
-    this.id = id;
+  constructor(directory: string) {
     this.directory = directory;
-  }
-
-  /**
-   * The run the global setup started this process in, read from the
-   * environment the host passes (`process.env`). Undefined outside a run.
-   */
-  static fromEnvironment(
-    environment: Readonly<Record<string, string | undefined>>,
-  ): TestRun | undefined {
-    const id = environment[TEST_RUN_ID];
-    const directory = environment[TEST_RUN_DIRECTORY];
-    if (id === undefined && directory === undefined) return undefined;
-    if (!id || !directory)
-      throw new Error(
-        `The global setup sets ${TEST_RUN_ID} and ${TEST_RUN_DIRECTORY} together, but only one of them is set`,
-      );
-    return new TestRun(id, directory);
-  }
-
-  get labels(): Record<string, string> {
-    return { [TEST_RUN_LABEL]: this.id };
   }
 
   /**
@@ -101,10 +78,33 @@ export class TestRun {
   }
 }
 
+/**
+ * The run this process belongs to: its id marks what the process creates,
+ * its records keep the run while the process lives.
+ */
+export type ProcessRun = { id: string; records: RunRecords };
+
+/**
+ * The run the global setup started this process in, read from the
+ * environment the host passes (`process.env`). Undefined outside a run.
+ */
+export function readRun(
+  environment: Readonly<Record<string, string | undefined>>,
+): ProcessRun | undefined {
+  const id = environment[TEST_RUN_ID];
+  const directory = environment[TEST_RUN_DIRECTORY];
+  if (id === undefined && directory === undefined) return undefined;
+  if (!id || !directory)
+    throw new Error(
+      `The global setup sets ${TEST_RUN_ID} and ${TEST_RUN_DIRECTORY} together, but only one of them is set`,
+    );
+  return { id, records: new RunRecords(directory) };
+}
+
 /** The name prefix of a host directory that a run's test process created. */
-export const directoryPrefix = (run: TestRun | undefined): string =>
-  `zukhruf-testing-${run?.id ?? 'standalone'}-`;
+export const directoryPrefix = (id: string | undefined): string =>
+  `zukhruf-testing-${id ?? 'standalone'}-`;
 
 /** The path prefix of the private directory behind an SSH port forward. */
-export const forwardPrefix = (run: TestRun | undefined): string =>
-  `/tmp/zukhruf-testing-forward-${run?.id ?? 'standalone'}-`;
+export const forwardPrefix = (id: string | undefined): string =>
+  `/tmp/zukhruf-testing-forward-${id ?? 'standalone'}-`;

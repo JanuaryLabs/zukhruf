@@ -11,7 +11,7 @@ import { tmpdir } from 'node:os';
 import { join, posix } from 'node:path';
 
 import { DockerHost, quote } from './host.ts';
-import { type TestRun, directoryPrefix } from './test-run.ts';
+import { type ProcessRun, directoryPrefix } from './run-records.ts';
 
 /** A disposable fixture directory on the selected daemon's host filesystem. */
 export class DockerDirectory implements AsyncDisposable {
@@ -31,11 +31,11 @@ export class DockerDirectory implements AsyncDisposable {
 
   static async create(
     host: DockerHost,
-    run: TestRun | undefined,
+    run: ProcessRun | undefined,
   ): Promise<DockerDirectory> {
-    const name = `${directoryPrefix(run)}${randomUUID()}`;
+    const name = `${directoryPrefix(run?.id)}${randomUUID()}`;
     const path = host.remote ? `/tmp/${name}` : join(tmpdir(), name);
-    const record = await run?.record('directory', path);
+    const record = await run?.records.record('directory', path);
     if (host.remote) await host.shell(`mkdir -m 700 -- ${quote(path)}`);
     else await mkdir(path, { mode: 0o700 });
     return new DockerDirectory(path, host, record);

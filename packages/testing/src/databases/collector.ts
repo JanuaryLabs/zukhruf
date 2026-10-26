@@ -3,7 +3,6 @@ import { randomBytes, randomUUID } from 'node:crypto';
 import type { Container } from '@zukhruf/docker';
 
 import type { DockerHost } from '../docker/host.ts';
-import type { TestRun } from '../docker/test-run.ts';
 
 /** The kind of a database fixture's shared server: it names the collector of the server. */
 export const KIND_LABEL = 'dev.zukhruf.testing.kind';
@@ -16,9 +15,9 @@ const hex = (runId: string): string => runId.replaceAll('-', '');
  * The name of a database that `database()` creates. In a run, the name holds
  * the run's id, its owner reference (ADR 0011).
  */
-export const databaseName = (run: TestRun | undefined): string =>
-  run
-    ? `test_${hex(run.id)}_${randomBytes(8).toString('hex')}`
+export const databaseName = (id: string | undefined): string =>
+  id
+    ? `test_${hex(id)}_${randomBytes(8).toString('hex')}`
     : `test_${hex(randomUUID())}`;
 
 /**

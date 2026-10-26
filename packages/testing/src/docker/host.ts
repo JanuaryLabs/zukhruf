@@ -10,7 +10,7 @@ import command, {
 } from 'nano-spawn';
 
 import { timebox } from '../async/timebox.ts';
-import { type TestRun, forwardPrefix } from './test-run.ts';
+import { type ProcessRun, forwardPrefix } from './run-records.ts';
 
 export const quote = (value: string): string =>
   `'${value.replaceAll("'", "'\\''")}'`;
@@ -26,7 +26,7 @@ const supportedEndpoints = ['unix://', 'npipe://', 'ssh://'];
  * running; their process records keep its run until they end.
  */
 async function recorded(
-  run: TestRun | undefined,
+  run: ProcessRun | undefined,
   subprocess: Subprocess,
 ): Promise<Result> {
   if (!run) return subprocess;
@@ -36,7 +36,7 @@ async function recorded(
   const { pid } = await subprocess.nodeChildProcess;
   // Node leaves pid undefined when the spawn failed: no process to record.
   if (pid === undefined) return subprocess;
-  await using _record = await run.recordProcess(pid);
+  await using _record = await run.records.recordProcess(pid);
   return await subprocess;
 }
 
@@ -47,9 +47,9 @@ async function recorded(
  */
 export class DockerHost {
   readonly endpoint: string;
-  readonly #run: TestRun | undefined;
+  readonly #run: ProcessRun | undefined;
 
-  constructor(endpoint: string, run: TestRun | undefined) {
+  constructor(endpoint: string, run: ProcessRun | undefined) {
     if (!supportedEndpoints.some((scheme) => endpoint.startsWith(scheme))) {
       throw new Error(
         `Unsupported Docker endpoint ${endpoint}; tests support ${supportedEndpoints.join(', ')}`,
@@ -105,9 +105,10 @@ export class DockerHost {
       // Keep the Unix socket path below macOS's 104-byte limit. The private
       // directory and ownership record also cover workers killed mid-test.
       const directory = resources.use(
-        await mkdtempDisposable(forwardPrefix(run)),
+        await mkdtempDisposable(forwardPrefix(run?.id)),
       );
-      if (run) resources.use(await run.record('forward', directory.path));
+      if (run)
+        resources.use(await run.records.record('forward', directory.path));
       const path = join(directory.path, 's');
       const sockets = new Set<Socket>();
       const server = createServer((socket) => {
@@ -169,7 +170,7 @@ export class DockerHost {
       const child = await ssh.nodeChildProcess;
       // Disposed after ssh has stopped.
       if (run && child.pid !== undefined)
-        resources.use(await run.recordProcess(child.pid));
+        resources.use(await run.records.recordProcess(child.pid));
       resources.defer(async () => {
         child.stdin!.end();
         const deadline = setTimeout(() => child.kill('SIGKILL'), 1_000);

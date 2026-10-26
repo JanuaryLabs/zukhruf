@@ -2,8 +2,8 @@ import sql from 'mssql';
 import pMemoize from 'p-memoize';
 
 import { timebox } from '../async/timebox.ts';
+import { readRun } from '../docker/run-records.ts';
 import type { ServiceContainer } from '../docker/service-container.ts';
-import { TestRun } from '../docker/test-run.ts';
 import { DockerTestbed } from '../docker/testbed.ts';
 import { KIND_LABEL, databaseName } from './collector.ts';
 import type { Database, DatabaseOptions } from './database.ts';
@@ -22,7 +22,7 @@ export const SQL_SERVER_EDGE_IMAGE = 'mcr.microsoft.com/azure-sql-edge:latest';
 /** SQL Server test configuration. Without an image, the engine's architecture picks one. */
 export class SqlServer {
   readonly #docker: DockerTestbed;
-  readonly #run: TestRun | undefined;
+  readonly #runId: string | undefined;
   readonly #options;
   readonly #image = pMemoize(async (): Promise<string> => {
     if (this.#options.image) return this.#options.image;
@@ -40,7 +40,7 @@ export class SqlServer {
     labels,
   }: DatabaseOptions) {
     this.#docker = new DockerTestbed({ environment });
-    this.#run = TestRun.fromEnvironment(environment);
+    this.#runId = readRun(environment)?.id;
     this.#options = { image, password, database, labels };
   }
 
@@ -48,7 +48,7 @@ export class SqlServer {
   async database(): Promise<Database> {
     const image = await this.#image();
     const container = await this.#acquire(image, 'reuse');
-    const database = databaseName(this.#run);
+    const database = databaseName(this.#runId);
     try {
       await this.#createDatabase(container, database);
       return this.#handle(container, image, database, async () => {

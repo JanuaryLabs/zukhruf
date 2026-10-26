@@ -14,10 +14,9 @@ import {
 import { DockerHost, SHELL_TIMEOUT, quote } from '../docker/host.ts';
 import {
   TEST_RUN_LABEL,
-  TestRun,
   directoryPrefix,
   forwardPrefix,
-} from '../docker/test-run.ts';
+} from '../docker/run-records.ts';
 import {
   PACKAGE_VERSION,
   SHARED_SERVER_LABEL,
@@ -155,7 +154,6 @@ export async function cleanup(
   directory: string,
 ): Promise<void> {
   const host = new DockerHost(previous.endpoint, undefined);
-  const owner = new TestRun(previous.id, directory);
   const signal = () => AbortSignal.timeout(ENGINE_CALL_TIMEOUT);
   // Labels are attached atomically at creation. Never prune an engine,
   // remove a shared server here, or trust names alone as proof of ownership.
@@ -181,12 +179,18 @@ export async function cleanup(
   for (const file of await readdir(directory)) {
     if (file.startsWith('forward-')) {
       const path = await readRecordedPath(join(directory, file));
-      if (!path.startsWith(forwardPrefix(owner)) || path.slice(5).includes('/'))
+      if (
+        !path.startsWith(forwardPrefix(previous.id)) ||
+        path.slice(5).includes('/')
+      )
         throw new Error(`Invalid SSH forwarding cleanup record: ${path}`);
       await rm(path, { recursive: true, force: true });
     } else if (file.startsWith('directory-')) {
       const path = await readRecordedPath(join(directory, file));
-      if (!path.includes(`/${directoryPrefix(owner)}`) || path.includes('/../'))
+      if (
+        !path.includes(`/${directoryPrefix(previous.id)}`) ||
+        path.includes('/../')
+      )
         throw new Error(`Invalid fixture cleanup record: ${path}`);
       if (host.remote)
         await execute('ssh', [...host.sshArgs(), `rm -rf -- ${quote(path)}`], {

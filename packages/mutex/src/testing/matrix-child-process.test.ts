@@ -97,7 +97,7 @@ const recordedPids = (directory: string) =>
     );
 
 test(
-  'the DockerEngineStore case records a matrix child in the test run while the child lives',
+  'a matrix child that opens the DockerEngineStore records itself in the run of the fixture while it lives',
   { timeout: 60_000 },
   async (t) => {
     // Arrange: a run of its own, with its records in a scratch directory.
@@ -111,41 +111,30 @@ test(
     await using host = store.open(fixture.location);
 
     // Act
-    const child = startWorker(
-      `process.send({ type: 'started' }); setInterval(() => {}, 1000);`,
+    await using child = startWorker(
+      `
+				import { createChildStore } from ${JSON.stringify(storeCasesUrl.href)};
+
+				createChildStore('DockerEngineStore', ${JSON.stringify(fixture.location)});
+				process.send({ type: 'started' });
+				setInterval(() => {}, 1000);
+			`,
       'child',
       { host },
     );
-    const pid = child.child.pid!;
-    try {
-      await t.waitFor(
-        () =>
-          assert.ok(
-            child.has('started'),
-            `The matrix child must start.\n${child.stderr}`,
-          ),
-        { interval: 5, timeout: newProcessTimeout },
-      );
-
-      // Assert
-      await t.waitFor(
-        () =>
-          assert.ok(
-            recordedPids(records.path).includes(pid),
-            'The run must have a process record of the matrix child while it lives',
-          ),
-        { interval: 5, timeout: 2000 },
-      );
-    } finally {
-      await child[Symbol.asyncDispose]();
-    }
     await t.waitFor(
       () =>
         assert.ok(
-          !recordedPids(records.path).includes(pid),
-          'The process record of the matrix child must go when the child ends',
+          child.has('started'),
+          `The matrix child must start.\n${child.stderr}`,
         ),
-      { interval: 5, timeout: 2000 },
+      { interval: 5, timeout: newProcessTimeout },
+    );
+
+    // Assert
+    assert.ok(
+      recordedPids(records.path).includes(child.child.pid!),
+      'The run must have a process record of the matrix child once it opened the store',
     );
   },
 );

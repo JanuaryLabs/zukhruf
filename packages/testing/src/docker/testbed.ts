@@ -17,8 +17,8 @@ import {
 
 import { DockerDirectory } from './directory.ts';
 import { DockerHost } from './host.ts';
+import { type ProcessRun, TEST_RUN_LABEL, readRun } from './run-records.ts';
 import { ServiceContainer } from './service-container.ts';
-import { TestRun } from './test-run.ts';
 
 /** Marks a server that `reuse()` shares across processes and runs. */
 export const SHARED_SERVER_LABEL = 'dev.zukhruf.testing.shared';
@@ -112,9 +112,9 @@ const generatedName = (image: string): string =>
  */
 export class DockerTestbed {
   readonly #environment: Environment;
-  readonly #run: TestRun | undefined;
+  readonly #run: ProcessRun | undefined;
   readonly #engine = pMemoize(async (): Promise<Engine> => {
-    this.#run?.recordThisProcess();
+    this.#run?.records.recordThisProcess();
     const client = await Docker.connect({
       environment: this.#environment,
     }).catch((error: unknown) => {
@@ -134,7 +134,7 @@ export class DockerTestbed {
 
   constructor({ environment }: DockerTestbedOptions) {
     this.#environment = environment;
-    this.#run = TestRun.fromEnvironment(environment);
+    this.#run = readRun(environment);
   }
 
   /**
@@ -146,10 +146,10 @@ export class DockerTestbed {
     resources: { memory: string; cpus: number };
     labels: Record<string, string>;
   } {
-    this.#run?.recordThisProcess();
+    this.#run?.records.recordThisProcess();
     return {
       resources: { memory: '1g', cpus: 1 },
-      labels: this.#run?.labels ?? {},
+      labels: this.#run ? { [TEST_RUN_LABEL]: this.#run.id } : {},
     };
   }
 
@@ -265,7 +265,7 @@ export class DockerTestbed {
    * a second try, as `docker run` does.
    */
   async #creating<T>(engine: Engine, create: () => Promise<T>): Promise<T> {
-    await using _creating = await this.#run?.recordCreating();
+    await using _creating = await this.#run?.records.recordCreating();
     try {
       return await create();
     } catch (error) {

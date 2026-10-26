@@ -8,7 +8,7 @@ import pg from 'pg';
 import { Connection, Request, TYPES } from 'tedious';
 
 import { Docker } from '@zukhruf/docker';
-import { DockerTestbed, TestRun } from '@zukhruf/testing/docker';
+import { DockerTestbed } from '@zukhruf/testing/docker';
 import { TemporaryFiles } from '@zukhruf/testing/fs';
 import { Mariadb } from '@zukhruf/testing/mariadb';
 import { Mysql } from '@zukhruf/testing/mysql';
@@ -393,10 +393,16 @@ const dockerNamespaceLabel = 'zukhruf.mutex.namespace';
 interface DockerEngineLocation {
   host: string;
   namespace: string;
-  /** The labels of the test run, for each claim and rung. */
-  labels: Record<string, string>;
-  /** The test run, which records each child process of a host. Absent outside a run. */
-  run?: { id: string; directory: string };
+  /**
+   * The test run's variables from the fixture's environment, empty outside a
+   * run. Each process that opens a store reads the run's labels from them,
+   * which records the process in the run. Only these two: the location is
+   * in each child's source, so the rest of the environment would reach argv.
+   */
+  run: {
+    ZUKHRUF_TESTING_RUN_ID?: string | undefined;
+    ZUKHRUF_TESTING_RUN_DIR?: string | undefined;
+  };
 }
 
 /** The image of each DockerEngineStore container. */
@@ -405,8 +411,8 @@ const dockerImage = 'node:lts-alpine';
 /**
  * A new namespace on the engine that `environment` selects, with
  * `dockerImage` on it: the store never pulls its image. The location also
- * has the labels and the records of the test run, so the teardown of the run
- * removes what a killed process left. The disposal removes each container and volume with
+ * has the variables of the test run, so the teardown of the run removes what
+ * a killed process left. The disposal removes each container and volume with
  * the label of the namespace, through a client of its own, so it runs after
  * each store of the test ended its client.
  */
@@ -420,12 +426,13 @@ async function dockerEngineFixture(
     }
     return { host: docker.host };
   })();
-  const run = TestRun.fromEnvironment(environment);
   const location: DockerEngineLocation = {
     host,
     namespace: `zukhruf-mutex-test-${randomUUID()}`,
-    labels: new DockerTestbed({ environment }).defaults.labels,
-    ...(run && { run: { id: run.id, directory: run.directory } }),
+    run: {
+      ZUKHRUF_TESTING_RUN_ID: environment.ZUKHRUF_TESTING_RUN_ID,
+      ZUKHRUF_TESTING_RUN_DIR: environment.ZUKHRUF_TESTING_RUN_DIR,
+    },
   };
   return {
     location: JSON.stringify(location),
@@ -455,8 +462,11 @@ async function dockerEngineFixture(
  * never disposes its client can exit.
  */
 function dockerEngineStore(location: string) {
-  const { host, namespace, labels }: DockerEngineLocation =
-    JSON.parse(location);
+  const { host, namespace, run }: DockerEngineLocation = JSON.parse(location);
+  // Before the first claim: the read records this process in the run, so the
+  // run's teardown waits for it and sweeps what it created
+  // (@zukhruf/testing ADR 0006 and ADR 0013).
+  const labels = new DockerTestbed({ environment: run }).defaults.labels;
   const docker = Docker.connect({ host });
   const store = docker.then(
     (client) =>
@@ -660,36 +670,12 @@ export const storeCases: StoreCase[] = [
     fixture: dockerEngineFixture,
     open: (location) => {
       const { docker, store } = dockerEngineStore(location);
-      const { run }: DockerEngineLocation = JSON.parse(location);
-      const records: Promise<void>[] = [];
       return {
         store,
-        // A child that outlives a killed test process can still grant. Its
-        // process record keeps the run's records until it ends, so the
-        // recovery of a later run removes what it created after the teardown.
-        adoptProcess(child) {
-          const { pid } = child;
-          if (!run || pid === undefined) return;
-          const exited = Promise.withResolvers<void>();
-          child.once('exit', () => exited.resolve());
-          const record = (async () => {
-            await using _record = await new TestRun(
-              run.id,
-              run.directory,
-            ).recordProcess(pid);
-            await exited.promise;
-          })();
-          // The disposal awaits it and reports a failed write.
-          record.catch(() => {});
-          records.push(record);
-        },
+        adoptProcess() {},
         adoptThread() {},
         [Symbol.asyncDispose]: async () => {
-          try {
-            await Promise.all(records);
-          } finally {
-            await (await docker)[Symbol.asyncDispose]();
-          }
+          await (await docker)[Symbol.asyncDispose]();
         },
       };
     },

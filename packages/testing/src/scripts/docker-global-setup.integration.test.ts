@@ -20,7 +20,8 @@ import spawn, { SubprocessError } from 'nano-spawn';
 
 import { BindSourceNotFoundError, Docker } from '@zukhruf/docker';
 
-import { DockerTestbed, TestRun } from '../docker/index.ts';
+import { DockerTestbed } from '../docker/index.ts';
+import { RunRecords } from '../docker/run-records.ts';
 import { TemporaryFiles } from '../fs/temporary-files.ts';
 import { EngineProxy } from '../testing/engine-proxy.ts';
 
@@ -42,6 +43,10 @@ const setup = fileURLToPath(
 );
 const library = JSON.stringify(
   new URL('../docker/index.ts', import.meta.url).href,
+);
+/** The internal module that writes a run's records, for workers that act as a test process. */
+const runRecords = JSON.stringify(
+  new URL('../docker/run-records.ts', import.meta.url).href,
 );
 const client = JSON.stringify(import.meta.resolve('@zukhruf/docker'));
 
@@ -409,13 +414,13 @@ test(
       import { test } from 'node:test';
       import { writeFile } from 'node:fs/promises';
       import { Docker } from ${client};
-      import { TestRun } from ${library};
+      import { TEST_RUN_LABEL, readRun } from ${runRecords};
       test('a slow create', { timeout: 3000 }, async () => {
-        const run = TestRun.fromEnvironment(process.env);
+        const run = readRun(process.env);
         const docker = await Docker.connect({ environment: process.env });
-        await writeFile(${JSON.stringify(statePath)}, JSON.stringify({ run: run.id, record: run.directory, pid: process.pid }));
-        await using _creating = await run.recordCreating();
-        await docker.containers.create({ Image: 'alpine:latest', Cmd: ['sleep', '600'], Labels: run.labels });
+        await writeFile(${JSON.stringify(statePath)}, JSON.stringify({ run: run.id, record: run.records.directory, pid: process.pid }));
+        await using _creating = await run.records.recordCreating();
+        await docker.containers.create({ Image: 'alpine:latest', Cmd: ['sleep', '600'], Labels: { [TEST_RUN_LABEL]: run.id } });
       });
     `,
     );
@@ -689,11 +694,11 @@ test(
     );
     try {
       assert.ok(command.child.pid !== undefined);
-      const run = new TestRun(id, record);
+      const records = new RunRecords(record);
       // The OS gave the pid of a command that ended to the next command
       // before the record of the first one was removed.
-      const ended = await run.recordProcess(command.child.pid);
-      await run.recordProcess(command.child.pid);
+      const ended = await records.recordProcess(command.child.pid);
+      await records.recordProcess(command.child.pid);
       await ended[Symbol.asyncDispose]();
       const file = join(directory.path, 'plain.test.ts');
       await writeFile(
@@ -737,7 +742,7 @@ test(
         pid: await endedPid(),
       }),
     );
-    await new TestRun(id, record).recordProcess(await endedPid());
+    await new RunRecords(record).recordProcess(await endedPid());
     const file = join(directory.path, 'plain.test.ts');
     await writeFile(
       file,

@@ -1,6 +1,6 @@
 import { timebox } from '../async/timebox.ts';
+import { readRun } from '../docker/run-records.ts';
 import type { ServiceContainer } from '../docker/service-container.ts';
-import { TestRun } from '../docker/test-run.ts';
 import { DockerTestbed } from '../docker/testbed.ts';
 import { KIND_LABEL, databaseName } from './collector.ts';
 import type { Database, DatabaseOptions } from './database.ts';
@@ -16,7 +16,7 @@ export interface PostgresOptions extends DatabaseOptions {
 /** PostgreSQL test configuration. Each acquisition returns an independent handle. */
 export class Postgres {
   readonly #docker: DockerTestbed;
-  readonly #run: TestRun | undefined;
+  readonly #runId: string | undefined;
   readonly #options;
 
   constructor({
@@ -28,14 +28,14 @@ export class Postgres {
     labels,
   }: PostgresOptions) {
     this.#docker = new DockerTestbed({ environment });
-    this.#run = TestRun.fromEnvironment(environment);
+    this.#runId = readRun(environment)?.id;
     this.#options = { image, password, database, user, labels };
   }
 
   /** Create an isolated database on the persistent shared server. */
   async database(): Promise<Database> {
     const container = await this.#acquire('postgres', 'reuse');
-    const database = databaseName(this.#run);
+    const database = databaseName(this.#runId);
     const server = { container: container.container, user: this.#options.user };
     try {
       await this.#sql(container, `CREATE DATABASE ${database}`);

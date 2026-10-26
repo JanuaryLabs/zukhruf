@@ -2,7 +2,7 @@
  * The Docker global setup and teardown for `node --test
  * --test-global-setup=<file>`, where the file re-exports both functions. The
  * setup starts one run: its test processes tie what they create to the run
- * (see TestRun.fromEnvironment), and the teardown removes it after they exit.
+ * (see readRun), and the teardown removes it after they exit.
  * A run that was killed before it could is removed by a later run on the same
  * engine, from any project of this user.
  */
@@ -24,8 +24,8 @@ import { DockerHost } from '../docker/host.ts';
 import {
   TEST_RUN_DIRECTORY,
   TEST_RUN_ID,
-  TestRun,
-} from '../docker/test-run.ts';
+  readRun,
+} from '../docker/run-records.ts';
 import type { CleanupOutcome, CleanupWork } from './docker-cleanup-worker.ts';
 import { ENGINE_CALL_TIMEOUT, type Run, cleanup } from './run-cleanup.ts';
 
@@ -110,7 +110,7 @@ function cleanupInWorker(run: Run, directory: string): void {
   }
 }
 
-async function readRun(directory: string): Promise<Run | undefined> {
+async function readRunFile(directory: string): Promise<Run | undefined> {
   try {
     return JSON.parse(await readFile(join(directory, 'run.json'), 'utf8'));
   } catch {
@@ -136,7 +136,7 @@ async function recover(root: string, endpoint: string): Promise<void> {
     const claimant = /^recovering-(\d+)-/.exec(name)?.[1];
     if (claimant !== undefined && alive(Number(claimant))) continue;
     const directory = join(root, name);
-    const previous = await readRun(directory);
+    const previous = await readRunFile(directory);
     if (!previous || previous.endpoint !== endpoint || alive(previous.pid))
       continue;
     // A killed runner leaves its test processes running. Each one can still
@@ -204,27 +204,27 @@ export async function globalSetup(): Promise<void> {
 
 /** Synchronous: see cleanupInWorker. */
 export function globalTeardown(): void {
-  const owner = TestRun.fromEnvironment(process.env);
+  const owner = readRun(process.env);
   if (!owner)
     throw new Error(
       `The Docker global teardown runs after its global setup, which sets ${TEST_RUN_ID} and ${TEST_RUN_DIRECTORY}`,
     );
+  const { directory } = owner.records;
   try {
     const run: Run = JSON.parse(
-      readFileSync(join(owner.directory, 'run.json'), 'utf8'),
+      readFileSync(join(directory, 'run.json'), 'utf8'),
     );
-    const { processes, creating } = records(owner.directory);
+    const { processes, creating } = records(directory);
     // No test process recorded itself, so the run created nothing.
-    if (processes.length > 0 || creating > 0)
-      cleanupInWorker(run, owner.directory);
+    if (processes.length > 0 || creating > 0) cleanupInWorker(run, directory);
     // A process that still lives, or a create that the engine can still
     // finish, can still add something: the next run's recovery sweeps again.
     if (!processes.some(alive) && creating === 0)
-      rmSync(owner.directory, { recursive: true, force: true });
+      rmSync(directory, { recursive: true, force: true });
   } catch (error) {
     // Node sets exit code 1 for a teardown that throws, but prints nothing.
     console.error(
-      `Docker test cleanup failed; retained ownership record for retry: ${owner.directory}`,
+      `Docker test cleanup failed; retained ownership record for retry: ${directory}`,
       error,
     );
     process.exitCode = 1;

@@ -7,4 +7,3 @@ export {
   type ServiceOptions,
 } from './testbed.ts';
 export { ServiceContainer } from './service-container.ts';
-export { TestRun } from './test-run.ts';
