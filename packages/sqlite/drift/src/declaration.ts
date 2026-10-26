@@ -102,6 +102,7 @@ export class Declaration {
         database,
         () => {
           const stale = this.#stale(database);
+          const triggered = writable(database);
           if (this.#rows === 'keep') {
             const views = compiled(database);
             const rebuilt = this.#keep(database, stale);
@@ -115,6 +116,8 @@ export class Declaration {
               }
             this.#create(database);
           }
+          for (const table of triggers(database))
+            if (triggered.has(table)) write(database, table);
         },
         { mode: 'immediate' },
       );
@@ -368,26 +371,58 @@ function compiled(database: DatabaseSync): Set<string> {
 
 // SQLite checks the columns of a trigger or a view only when it compiles a
 // statement that uses it, not at CREATE. Each statement here compiles every
-// trigger on a rebuilt table for its event, and runs no row: an UPDATE trigger
-// OF a column compiles only when SET names that column. A view that compiled
-// before the rebuilds and does not compile now fails apply; a view that was
-// already broken does not.
+// trigger on the table for its event, and runs no row: an UPDATE trigger OF a
+// column compiles only when SET names that column.
+function write(database: DatabaseSync, table: string): void {
+  const columns = names(database, table).map(quote);
+  const name = quote(table);
+  database.prepare(`DELETE FROM ${name} WHERE 0`);
+  database.prepare(
+    `INSERT INTO ${name} (${columns.join(', ')}) SELECT ${columns.join(', ')} FROM ${name} WHERE 0`,
+  );
+  database.prepare(
+    `UPDATE ${name} SET ${columns.map((column) => `${column} = ${column}`).join(', ')} WHERE 0`,
+  );
+}
+
+// The tables that have triggers.
+function triggers(database: DatabaseSync): Set<string> {
+  return new Set(
+    database
+      .prepare(
+        `SELECT DISTINCT "tbl_name" FROM sqlite_schema WHERE "type" = 'trigger'`,
+      )
+      .all()
+      .map(({ tbl_name }) => String(tbl_name)),
+  );
+}
+
+// The tables with triggers whose writes SQLite can compile now. A trigger can
+// read any table, so a change to one table can break the trigger of another.
+// A table here whose writes do not compile after the change fails apply; a
+// table whose trigger was broken before apply does not.
+function writable(database: DatabaseSync): Set<string> {
+  return new Set(
+    [...triggers(database)].filter((table) => {
+      try {
+        write(database, table);
+        return true;
+      } catch {
+        return false;
+      }
+    }),
+  );
+}
+
+// Each rebuilt table must compile its writes. A view that compiled before the
+// rebuilds and does not compile now fails apply; a view that was already
+// broken does not.
 function verify(
   database: DatabaseSync,
   tables: readonly string[],
   views: ReadonlySet<string>,
 ): void {
-  for (const table of tables) {
-    const columns = names(database, table).map(quote);
-    const name = quote(table);
-    database.prepare(`DELETE FROM ${name} WHERE 0`);
-    database.prepare(
-      `INSERT INTO ${name} (${columns.join(', ')}) SELECT ${columns.join(', ')} FROM ${name} WHERE 0`,
-    );
-    database.prepare(
-      `UPDATE ${name} SET ${columns.map((column) => `${column} = ${column}`).join(', ')} WHERE 0`,
-    );
-  }
+  for (const table of tables) write(database, table);
   for (const view of views)
     try {
       database.prepare(`SELECT * FROM ${quote(view)} WHERE 0`);

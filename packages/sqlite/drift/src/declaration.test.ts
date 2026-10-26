@@ -588,6 +588,90 @@ test('with rows keep, a view that was broken before apply does not fail it', asy
   ]);
 });
 
+test('with rows keep, a rebuild that drops a column that a trigger on another table reads fails apply with the error of SQLite, and the tables and their rows stay as they were', async () => {
+  await using scratch = await new TemporaryFiles().directory('drift-');
+  using database = new DatabaseSync(join(scratch.path, 'data.sqlite'));
+  database.exec(`CREATE TABLE customers (id INTEGER PRIMARY KEY, legacy_code TEXT) STRICT;
+    CREATE TABLE orders (id INTEGER PRIMARY KEY, customer INTEGER, code TEXT) STRICT;
+    CREATE TRIGGER orders_added AFTER INSERT ON orders BEGIN
+      UPDATE orders SET code = (SELECT legacy_code FROM customers WHERE id = new.customer) WHERE id = new.id;
+    END;
+    INSERT INTO customers VALUES (1, 'c1');
+    INSERT INTO orders (id, customer) VALUES (1, 1)`);
+  const before = stored(database);
+  const declaration = new Declaration(
+    ['CREATE TABLE customers (id INTEGER PRIMARY KEY) STRICT'],
+    { rows: 'keep' },
+  );
+
+  assert.throws(() => declaration.apply(database), {
+    message: 'no such column: legacy_code',
+  });
+
+  assert.deepEqual(stored(database), before);
+  assert.deepEqual(rows(database, 'SELECT * FROM customers'), [
+    { id: 1, legacy_code: 'c1' },
+  ]);
+  assert.deepEqual(rows(database, 'SELECT * FROM orders'), [
+    { id: 1, customer: 1, code: 'c1' },
+  ]);
+});
+
+test('with rows replace, a replace that drops a column that a trigger on another table reads fails apply with the error of SQLite, and the tables and their rows stay as they were', async () => {
+  await using scratch = await new TemporaryFiles().directory('drift-');
+  using database = new DatabaseSync(join(scratch.path, 'data.sqlite'));
+  database.exec(`CREATE TABLE chunks (id INTEGER PRIMARY KEY, document INTEGER) STRICT;
+    CREATE TABLE documents (id INTEGER PRIMARY KEY) STRICT;
+    CREATE TRIGGER documents_gone AFTER DELETE ON documents BEGIN
+      DELETE FROM chunks WHERE document = old.id;
+    END;
+    INSERT INTO chunks VALUES (1, 1);
+    INSERT INTO documents VALUES (1)`);
+  const before = stored(database);
+  const declaration = new Declaration(
+    ['CREATE TABLE chunks (id INTEGER PRIMARY KEY) STRICT'],
+    { rows: 'replace' },
+  );
+
+  assert.throws(() => declaration.apply(database), {
+    message: 'no such column: document',
+  });
+
+  assert.deepEqual(stored(database), before);
+  assert.deepEqual(rows(database, 'SELECT * FROM chunks'), [
+    { id: 1, document: 1 },
+  ]);
+  assert.deepEqual(rows(database, 'SELECT * FROM documents'), [{ id: 1 }]);
+});
+
+test('a change that keeps the columns that a trigger on another table reads applies, with rows keep and with rows replace, and the trigger works after it', async () => {
+  for (const kept of ['keep', 'replace'] as const) {
+    await using scratch = await new TemporaryFiles().directory('drift-');
+    using database = new DatabaseSync(join(scratch.path, 'data.sqlite'));
+    database.exec(`CREATE TABLE chunks (id INTEGER PRIMARY KEY, document INTEGER) STRICT;
+      CREATE TABLE documents (id INTEGER PRIMARY KEY) STRICT;
+      CREATE TRIGGER documents_gone AFTER DELETE ON documents BEGIN
+        DELETE FROM chunks WHERE document = old.id;
+      END;
+      INSERT INTO chunks VALUES (1, 1);
+      INSERT INTO documents VALUES (1)`);
+    const declaration = new Declaration(
+      [
+        'CREATE TABLE chunks (id INTEGER PRIMARY KEY, document INTEGER, note TEXT) STRICT',
+      ],
+      { rows: kept },
+    );
+
+    declaration.apply(database);
+
+    assert.equal(declaration.drift(database), 'fits');
+    database.exec(`INSERT INTO chunks VALUES (2, 1, 'second');
+      INSERT INTO chunks VALUES (3, 2, 'third');
+      DELETE FROM documents WHERE id = 1`);
+    assert.deepEqual(rows(database, 'SELECT id FROM chunks'), [{ id: 3 }]);
+  }
+});
+
 test('with rows replace, a stale AUTOINCREMENT table is replaced and the declaration fits', async () => {
   await using scratch = await new TemporaryFiles().directory('drift-');
   using database = new DatabaseSync(join(scratch.path, 'data.sqlite'));
