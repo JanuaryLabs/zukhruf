@@ -7,8 +7,8 @@ import { describe, test } from 'node:test';
 import { SqliteElection } from '@zukhruf/election';
 import type { FileLock } from '@zukhruf/fs';
 import { LeaseLostError } from '@zukhruf/lease';
+import { TemporaryFiles } from '@zukhruf/testing/fs';
 
-import { scratchDirectory } from '../../testing/scratch-directory.ts';
 import { LockServer } from './lock-server.ts';
 import { type SocketRole, SocketStore } from './socket-store.ts';
 
@@ -66,7 +66,9 @@ describe('Lock server', () => {
     onUnixSockets,
     async () => {
       // Arrange
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory(
+        'mutex-test-',
+      );
       const socketPath = join(directory.path, 'lock.sock');
       const loss = new AbortController();
       const term = await new LosableElection(
@@ -94,7 +96,9 @@ describe('Lock server', () => {
     onUnixSockets,
     async (t) => {
       // Arrange: a server for a term its backend can take away, and a store that follows it.
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory(
+        'mutex-test-',
+      );
       const loss = new AbortController();
       const term = await new LosableElection(
         directory.path,

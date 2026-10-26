@@ -8,11 +8,11 @@ import { describe } from 'node:test';
 
 import { CounterTokenSource, type TokenSource } from '@zukhruf/fencing';
 import { isErrno } from '@zukhruf/fs';
+import { TemporaryFiles } from '@zukhruf/testing/fs';
 import { test } from '@zukhruf/testing/node';
 
 import type { LockStore } from '../../mutex/lock-store.ts';
 import { Mutex } from '../../mutex/mutex.ts';
-import { scratchDirectory } from '../../testing/scratch-directory.ts';
 import { SqliteStore } from '../sqlite/sqlite-store.ts';
 import { LockFileStore } from './lock-file-store.ts';
 import { TicketQueueFileStore } from './ticket-queue-file-store.ts';
@@ -137,7 +137,9 @@ describe('Lock file names', () => {
       ([key, name]) =>
         test(`${store.name} keeps the file name that earlier versions gave a key of ${key.length} characters`, async () => {
           // Arrange: processes of an earlier version may use the same directory.
-          await using directory = await scratchDirectory();
+          await using directory = await new TemporaryFiles().directory(
+            'mutex-test-',
+          );
           const mutex = new Mutex(store.open(directory.path));
 
           // Act: list the directory while the key is held.
@@ -169,7 +171,9 @@ describe('Lock file names', () => {
 
     return test(`${store.name} holds a key one character longer than the longest key that earlier versions held`, async () => {
       // Arrange
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory(
+        'mutex-test-',
+      );
       const mutex = new Mutex(store.open(directory.path));
 
       // Act
@@ -201,7 +205,9 @@ describe('File lock stores on Windows', () => {
       },
       async () => {
         // Arrange: a holder, a waiter, and another program that holds the lock file open with no sharing.
-        await using directory = await scratchDirectory();
+        await using directory = await new TemporaryFiles().directory(
+          'mutex-test-',
+        );
         const mutex = new Mutex(open(directory.path));
         const entered = Promise.withResolvers<void>();
         const finish = Promise.withResolvers<void>();
@@ -253,7 +259,9 @@ describe('File lock stores on Windows', () => {
       async () => {
         // Arrange: a holder, and another program that keeps the holder's
         // presence file open beside SQLite without letting it be deleted.
-        await using directory = await scratchDirectory();
+        await using directory = await new TemporaryFiles().directory(
+          'mutex-test-',
+        );
         const mutex = new Mutex(open(directory.path));
         const entered = Promise.withResolvers<void>();
         const finish = Promise.withResolvers<void>();
@@ -296,7 +304,9 @@ describe('LockFileStore damaged lock file', () => {
   void test.each(['garbage', '{"pid":1}'], (damaged) =>
     test(`a lock file that holds ${damaged} makes every call reject with a SyntaxError and stays as it is`, async () => {
       // Arrange: a power loss in the middle of a write can leave such a file; no operation writes one.
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory(
+        'mutex-test-',
+      );
       const store = new LockFileStore(directory.path, { pollInterval: 10 });
       const lockFile = join(directory.path, 'report-daily.lock');
       await writeFile(lockFile, damaged);
@@ -356,7 +366,9 @@ describe('File lock stores whose token source fails', () => {
     ([name, open]) =>
       test(`${name}: an acquire whose token cannot be minted rejects with that error and leaves the key free`, async () => {
         // Arrange
-        await using directory = await scratchDirectory();
+        await using directory = await new TemporaryFiles().directory(
+          'mutex-test-',
+        );
         const failure = new Error('The token file could not be written.');
         const store = open(directory.path, failingOnce(failure));
 
@@ -387,7 +399,7 @@ test(
     // Arrange: the token source runs while the lock file exists. It makes the
     // directory read-only, so the release that gives the lock back cannot
     // delete that file, and then it fails.
-    await using directory = await scratchDirectory();
+    await using directory = await new TemporaryFiles().directory('mutex-test-');
     const failure = new Error('The token file could not be written.');
     const tokens: TokenSource = {
       async next() {

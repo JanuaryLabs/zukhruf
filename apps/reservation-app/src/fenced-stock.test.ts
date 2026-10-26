@@ -1,24 +1,21 @@
 import assert from 'node:assert/strict';
-import { mkdtempDisposable } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, test } from 'node:test';
 
 import { FencingToken } from '@zukhruf/fencing';
+import { TemporaryFiles } from '@zukhruf/testing/fs';
 
 import { FencedStock } from './fenced-stock.ts';
 
 async function stockOf(quantity: number) {
-  const directory = await mkdtempDisposable(
-    join(tmpdir(), 'fenced-stock-test-'),
-  );
+  const directory = await new TemporaryFiles().directory('fenced-stock-test-');
   const stock = new FencedStock(join(directory.path, 'inventory.db'));
   stock.restock('product:42', quantity);
   return {
     stock,
     [Symbol.asyncDispose]: async () => {
       stock.close();
-      await directory.remove();
+      await directory.cleanup();
     },
   };
 }

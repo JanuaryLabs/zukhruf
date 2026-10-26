@@ -6,10 +6,11 @@ import { join } from 'node:path';
 import { describe, test } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
 
+import { TemporaryFiles } from '@zukhruf/testing/fs';
+
 import { Mutex } from '../../mutex/mutex.ts';
 import { FencedRegister } from '../../testing/fenced-register.ts';
 import { newProcessTimeout } from '../../testing/new-process-timeout.ts';
-import { scratchDirectory } from '../../testing/scratch-directory.ts';
 import { graceWindow, settle } from '../../testing/store-cases.ts';
 import { watch } from '../../testing/watch.ts';
 import { startWorker } from '../../testing/worker-process.ts';
@@ -61,7 +62,9 @@ describe('Socket lock server failover', () => {
     { timeout: 15000 },
     async (t) => {
       // Arrange: a leader, a holder inside its callback, and a waiter behind it.
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory(
+        'mutex-test-',
+      );
       await using leader = startWorker(
         participant(directory.path, leaderBody),
         'leader',
@@ -171,7 +174,9 @@ describe('Socket lock server failover', () => {
     { timeout: 15000 },
     async (t) => {
       // Arrange: this process leads, and a follower holds a key.
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory(
+        'mutex-test-',
+      );
       const leaderStore = new SocketStore(directory.path, {
         pollInterval: 10,
         graceWindow,
@@ -235,7 +240,9 @@ describe('Socket lock server failover', () => {
     { timeout: 15000 },
     async (t) => {
       // Arrange: a leader, a holder inside its callback, and a waiter behind it.
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory(
+        'mutex-test-',
+      );
       await using leader = startWorker(
         participant(
           directory.path,
@@ -359,7 +366,9 @@ describe('Socket lock server failover', () => {
     },
     async (t) => {
       // Arrange: a fenced register, a leader, and a holder inside its callback.
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory(
+        'mutex-test-',
+      );
       const register = new FencedRegister(join(directory.path, 'register.db'));
       const writeBody = (then: string) => `
 				const outcome = await mutex.acquire('product:42', async (lease) => {
@@ -454,7 +463,7 @@ describe('Socket lock server failover', () => {
 describe('Socket store disposal', () => {
   test('a store disposed while it becomes the leader leaves no lock server and no term behind', async () => {
     // Arrange: the first acquire in a directory makes the store campaign.
-    await using directory = await scratchDirectory();
+    await using directory = await new TemporaryFiles().directory('mutex-test-');
     const store = new SocketStore(directory.path, { pollInterval: 10 });
     const roles: SocketRole[] = [];
     store.on('role', (role) => roles.push(role));
@@ -487,7 +496,9 @@ describe('Socket store lock server failure', () => {
     },
     async () => {
       // Arrange: a directory where the socket file must go makes the lock server fail to start.
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory(
+        'mutex-test-',
+      );
       const socketPath = join(directory.path, 'lock.sock');
       await mkdir(socketPath);
       await using store = new SocketStore(directory.path, { pollInterval: 10 });
@@ -515,7 +526,7 @@ describe('Socket store lock server failure', () => {
 
   test('a leader whose role listener throws closes its lock server before ending its term', async () => {
     // Arrange: the first acquire in the directory makes this store the leader.
-    await using directory = await scratchDirectory();
+    await using directory = await new TemporaryFiles().directory('mutex-test-');
     await using store = new SocketStore(directory.path, { pollInterval: 10 });
     const listenerFailure = new Error('The role listener failed');
     store.once('role', () => {
@@ -550,7 +561,7 @@ describe('Socket store lock server failure', () => {
 describe('Socket store roles', () => {
   test('a store that becomes the leader reports only the leader role', async () => {
     // Arrange
-    await using directory = await scratchDirectory();
+    await using directory = await new TemporaryFiles().directory('mutex-test-');
     await using store = new SocketStore(directory.path, { pollInterval: 10 });
     const roles: SocketRole[] = [];
     store.on('role', (role) => roles.push(role));
@@ -569,7 +580,7 @@ describe('Socket store roles', () => {
 
   test('a store that reaches another leader reports only the follower role', async () => {
     // Arrange: one store leads the directory.
-    await using directory = await scratchDirectory();
+    await using directory = await new TemporaryFiles().directory('mutex-test-');
     await using leader = new SocketStore(directory.path, { pollInterval: 10 });
     await (await leader.acquire('warm-up'))[Symbol.asyncDispose]();
     await using follower = new SocketStore(directory.path, {
@@ -588,7 +599,7 @@ describe('Socket store roles', () => {
 
   test('a follower reports the follower role again when it reaches a new leader', async (t) => {
     // Arrange: one store leads, and two stores follow it.
-    await using directory = await scratchDirectory();
+    await using directory = await new TemporaryFiles().directory('mutex-test-');
     const options = { pollInterval: 10, graceWindow: 50 };
     const leader = new SocketStore(directory.path, options);
     await (await leader.acquire('warm-up'))[Symbol.asyncDispose]();
@@ -634,7 +645,9 @@ describe('Socket store follower failure', () => {
     { timeout: 10_000 },
     async (t) => {
       // Arrange: a leader serves the directory from this process.
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory(
+        'mutex-test-',
+      );
       await using leader = new SocketStore(directory.path, {
         pollInterval: 10,
       });
@@ -688,7 +701,9 @@ describe('Socket store follower failure', () => {
     },
     async (t) => {
       // Arrange: a stand-in leader holds the term and serves the socket path; it records when its peer goes away.
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory(
+        'mutex-test-',
+      );
       await using _term = await socketElection(directory.path, 10).campaign();
       let peerClosed = false;
       const leader = createServer((peer) => {
@@ -750,7 +765,9 @@ describe('Socket store after a clean shutdown', () => {
     { timeout: 30_000 },
     async (t) => {
       // Arrange: the first process takes and releases a lock, then disposes its store and exits.
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory(
+        'mutex-test-',
+      );
       await using first = startWorker(loneProcess(directory.path), 'first');
       await t.waitFor(
         () =>

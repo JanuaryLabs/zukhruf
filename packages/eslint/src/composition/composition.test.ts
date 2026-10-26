@@ -15,10 +15,10 @@ const tsconfig = JSON.stringify({
 const ruleIds = (findings: { ruleId: string | null }[]) =>
   findings.map(({ ruleId }) => ruleId);
 
-test('a later config that sets no-restricted-syntax cannot silence the package’s checks', () => {
+test('a later config that sets no-restricted-syntax cannot silence the package’s checks', async () => {
   // Arrange: a framework preset after the package's configs, setting the one
   // key every hand-written ban used to share (Nx's React preset sets exactly this).
-  using workspace = fixtureWorkspace({
+  await using workspace = await fixtureWorkspace({
     'nx.json': '{}',
     'tsconfig.json': tsconfig,
     'eslint.config.mjs': fixtureConfig(`
@@ -37,10 +37,10 @@ test('a later config that sets no-restricted-syntax cannot silence the package�
   assert.ok(ruleIds(findings).includes('zukhruf/no-test-lifecycle-hooks'));
 });
 
-test('a project config that re-exports the root config still applies path-scoped checks', () => {
+test('a project config that re-exports the root config still applies path-scoped checks', async () => {
   // Arrange: `nx lint` runs ESLint from the project folder, and the project's
   // own config re-exports the root one, which resolves root globs from there.
-  using workspace = fixtureWorkspace({
+  await using workspace = await fixtureWorkspace({
     'nx.json': '{}',
     'tsconfig.json': tsconfig,
     'eslint.config.mjs': fixtureConfig(`
@@ -77,10 +77,10 @@ test('a project config that re-exports the root config still applies path-scoped
   assert.deepEqual(ruleIds(web), []);
 });
 
-test('the typed-lint root is the workspace, found from the folder ESLint runs in', () => {
+test('the typed-lint root is the workspace, found from the folder ESLint runs in', async () => {
   // Arrange: the package is installed (its build under node_modules), and
   // ESLint runs from a project two folders below the workspace root.
-  using workspace = fixtureWorkspace({
+  await using workspace = await fixtureWorkspace({
     'nx.json': '{}',
     'tsconfig.json': tsconfig,
     'eslint.config.mjs': fixtureConfig(
@@ -104,10 +104,10 @@ test('the typed-lint root is the workspace, found from the folder ESLint runs in
   assert.equal(parserOptions['tsconfigRootDir'], workspace.root);
 });
 
-test('the tests config checks a test helper in src/testing as a test file', () => {
+test('the tests config checks a test helper in src/testing as a test file', async () => {
   // Arrange: a helper outside any *.test.* file, in the folder that holds the
   // test helpers (docs/adr/0001 of the workspace).
-  using workspace = fixtureWorkspace({
+  await using workspace = await fixtureWorkspace({
     'nx.json': '{}',
     'tsconfig.json': tsconfig,
     'eslint.config.mjs': fixtureConfig(
@@ -123,11 +123,11 @@ test('the tests config checks a test helper in src/testing as a test file', () =
   assert.ok(ruleIds(findings).includes('zukhruf/no-test-lifecycle-hooks'));
 });
 
-test('a config that skips test files also skips a test helper in src/testing', () => {
+test('a config that skips test files also skips a test helper in src/testing', async () => {
   // Arrange: the same module-scope `let` in shipped source and in a test
   // helper (docs/adr/0001 of the workspace: a file in src/testing is a test file).
   const counter = 'let count = 0;\nexport const next = () => ++count;\n';
-  using workspace = fixtureWorkspace({
+  await using workspace = await fixtureWorkspace({
     'nx.json': '{}',
     'tsconfig.json': tsconfig,
     'eslint.config.mjs': fixtureConfig(

@@ -3,15 +3,15 @@ import assert from 'node:assert/strict';
 // syncBuiltinESMExports then copies the patch to the named exports.
 import fsPromises, {
   mkdir,
-  mkdtempDisposable,
   readFile,
   readdir,
   writeFile,
 } from 'node:fs/promises';
 import { syncBuiltinESMExports } from 'node:module';
-import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { type TestContext, describe, test } from 'node:test';
+
+import { TemporaryFiles } from '@zukhruf/testing/fs';
 
 import { atomicWrite } from './atomic-write.ts';
 import { durableWrite } from './durable-write.ts';
@@ -120,8 +120,8 @@ describe('A replacement in one step', () => {
     { timeout: 2_000 },
     async () => {
       // Arrange: a directory with content sits at the path, so the rename fails after the draft exists.
-      await using directory = await mkdtempDisposable(
-        join(tmpdir(), 'zukhruf-fs-'),
+      await using directory = await new TemporaryFiles().directory(
+        'zukhruf-fs-',
       );
       const path = join(directory.path, 'queue');
       await mkdir(path);
@@ -146,8 +146,8 @@ describe('A replacement in one step', () => {
     { timeout: 2_000 },
     async () => {
       // Arrange: a directory with content sits at the path, so the rename fails after the draft exists.
-      await using directory = await mkdtempDisposable(
-        join(tmpdir(), 'zukhruf-fs-'),
+      await using directory = await new TemporaryFiles().directory(
+        'zukhruf-fs-',
       );
       const path = join(directory.path, 'counter');
       await mkdir(path);
@@ -172,8 +172,8 @@ describe('A replacement in one step', () => {
     { timeout: 2_000 },
     async (t) => {
       // Arrange
-      await using directory = await mkdtempDisposable(
-        join(tmpdir(), 'zukhruf-fs-'),
+      await using directory = await new TemporaryFiles().directory(
+        'zukhruf-fs-',
       );
       const path = join(directory.path, 'counter');
       await writeFile(path, '41');
@@ -198,8 +198,8 @@ describe('A replacement in one step', () => {
     { timeout: 2_000 },
     async (t) => {
       // Arrange
-      await using directory = await mkdtempDisposable(
-        join(tmpdir(), 'zukhruf-fs-'),
+      await using directory = await new TemporaryFiles().directory(
+        'zukhruf-fs-',
       );
       const path = join(directory.path, 'queue');
       await writeFile(path, 'first\n');
@@ -222,8 +222,8 @@ describe('A replacement in one step', () => {
     { timeout: 2_000 },
     async (t) => {
       // Arrange
-      await using directory = await mkdtempDisposable(
-        join(tmpdir(), 'zukhruf-fs-'),
+      await using directory = await new TemporaryFiles().directory(
+        'zukhruf-fs-',
       );
       const path = join(directory.path, 'counter');
       await writeFile(path, '41');
@@ -256,8 +256,8 @@ describe('A replacement in one step', () => {
     { ...neverOnWindows, timeout: 2_000 },
     async (t) => {
       // Arrange
-      await using directory = await mkdtempDisposable(
-        join(tmpdir(), 'zukhruf-fs-'),
+      await using directory = await new TemporaryFiles().directory(
+        'zukhruf-fs-',
       );
       const path = join(directory.path, 'counter');
       using disk = recordDiskWrites(t);
@@ -288,8 +288,8 @@ describe('A replacement in one step', () => {
       { ...neverOnWindows, timeout: 2_000 },
       async (t) => {
         // Arrange: a file system whose directories answer fsync with `code`.
-        await using directory = await mkdtempDisposable(
-          join(tmpdir(), 'zukhruf-fs-'),
+        await using directory = await new TemporaryFiles().directory(
+          'zukhruf-fs-',
         );
         const path = join(directory.path, 'counter');
         using _refused = refuseSync(

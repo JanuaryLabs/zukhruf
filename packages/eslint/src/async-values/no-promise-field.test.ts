@@ -20,8 +20,8 @@ const tsconfig = JSON.stringify({
 
 const reported = [{ messageId: 'promiseField' }];
 
-test('no-promise-field', () => {
-  using workspace = fixtureWorkspace({
+test('no-promise-field', async () => {
+  await using workspace = await fixtureWorkspace({
     'tsconfig.json': tsconfig,
     'index.ts': 'export {};\n',
     // A library's types: the rule does not look inside them, but it still

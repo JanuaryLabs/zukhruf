@@ -14,8 +14,8 @@ const workspaceFiles = {
   'apps/host/src/main.ts': '',
 };
 
-test('island/no-console reports console in islands and in library globs, not in hosts', () => {
-  using workspace = fixtureWorkspace(workspaceFiles);
+test('island/no-console reports console in islands and in library globs, not in hosts', async () => {
+  await using workspace = await fixtureWorkspace(workspaceFiles);
   const libraries = { island: { libraries: ['packages/library/**/*.ts'] } };
 
   typescriptRuleTester().run('no-console', plugin.rules['no-console'], {
@@ -47,8 +47,8 @@ test('island/no-console reports console in islands and in library globs, not in 
   });
 });
 
-test('island/no-process-env reports both read forms in islands only', () => {
-  using workspace = fixtureWorkspace(workspaceFiles);
+test('island/no-process-env reports both read forms in islands only', async () => {
+  await using workspace = await fixtureWorkspace(workspaceFiles);
   const island = workspace.path('packages/island/src/index.ts');
 
   typescriptRuleTester().run('no-process-env', plugin.rules['no-process-env'], {
@@ -79,8 +79,8 @@ test('island/no-process-env reports both read forms in islands only', () => {
   });
 });
 
-test('island/no-generic-port reports generic port methods in islands only', () => {
-  using workspace = fixtureWorkspace(workspaceFiles);
+test('island/no-generic-port reports generic port methods in islands only', async () => {
+  await using workspace = await fixtureWorkspace(workspaceFiles);
   const island = workspace.path('packages/island/src/index.ts');
 
   typescriptRuleTester().run(
@@ -113,8 +113,8 @@ test('island/no-generic-port reports generic port methods in islands only', () =
   );
 });
 
-test('island/no-explicit-any reuses typescript-eslint and applies to islands only', () => {
-  using workspace = fixtureWorkspace(workspaceFiles);
+test('island/no-explicit-any reuses typescript-eslint and applies to islands only', async () => {
+  await using workspace = await fixtureWorkspace(workspaceFiles);
 
   typescriptRuleTester().run(
     'no-explicit-any',

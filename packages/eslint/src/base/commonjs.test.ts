@@ -22,9 +22,9 @@ const requireAt = (findings: { ruleId: string | null; file: string }[]) =>
     .filter(({ ruleId }) => ruleId === '@typescript-eslint/no-require-imports')
     .map(({ file }) => file);
 
-test('a CommonJS file (.cjs or .cts) may call require(), its only import form', () => {
+test('a CommonJS file (.cjs or .cts) may call require(), its only import form', async () => {
   // Arrange: an Electron Forge hook, which Forge loads with require().
-  using workspace = fixtureWorkspace({
+  await using workspace = await fixtureWorkspace({
     'nx.json': '{}',
     'tsconfig.json': tsconfig,
     'eslint.config.mjs': fixtureConfig(
@@ -49,9 +49,9 @@ test('a CommonJS file (.cjs or .cts) may call require(), its only import form', 
   assert.deepEqual(requireAt(findings), []);
 });
 
-test('an ES module file still may not call require()', () => {
+test('an ES module file still may not call require()', async () => {
   // Arrange
-  using workspace = fixtureWorkspace({
+  await using workspace = await fixtureWorkspace({
     'nx.json': '{}',
     'tsconfig.json': tsconfig,
     'eslint.config.mjs': fixtureConfig(

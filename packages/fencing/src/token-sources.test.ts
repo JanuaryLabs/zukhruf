@@ -1,14 +1,10 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import {
-  mkdtempDisposable,
-  readFile,
-  readdir,
-  writeFile,
-} from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { readFile, readdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { describe, test } from 'node:test';
+
+import { TemporaryFiles } from '@zukhruf/testing/fs';
 
 import {
   CounterTokenSource,
@@ -51,8 +47,8 @@ describe('Token sources', () => {
   for (const source of sources) {
     test(`${source.name} mints strictly newer tokens for a key`, async () => {
       // Arrange
-      await using directory = await mkdtempDisposable(
-        join(tmpdir(), 'zukhruf-fencing-'),
+      await using directory = await new TemporaryFiles().directory(
+        'zukhruf-fencing-',
       );
       const tokens = source.create(directory.path);
       const minted: FencingToken[] = [];
@@ -74,8 +70,8 @@ describe('Token sources', () => {
 
   test('a FileTokenSource over the same directory continues above the previous maximum', async () => {
     // Arrange: a previous process minted tokens, then exited.
-    await using directory = await mkdtempDisposable(
-      join(tmpdir(), 'zukhruf-fencing-'),
+    await using directory = await new TemporaryFiles().directory(
+      'zukhruf-fencing-',
     );
     const previous = new FileTokenSource(directory.path);
     await previous.next('product:42');
@@ -115,8 +111,8 @@ describe('Token sources', () => {
 
   test('a counter file that is not a number fails the mint and stays as it was, so tokens never start again at 1', async () => {
     // Arrange: the counter file of the key holds text that is not a number.
-    await using directory = await mkdtempDisposable(
-      join(tmpdir(), 'zukhruf-fencing-'),
+    await using directory = await new TemporaryFiles().directory(
+      'zukhruf-fencing-',
     );
     const path = join(directory.path, 'product%3A42.fence');
     await writeFile(path, 'abc');
@@ -138,8 +134,8 @@ describe('Token sources', () => {
   ]) {
     test(`${kind} counter file fails the mint with a SyntaxError that names the file, and stays as it was, so tokens never start again`, async () => {
       // Arrange
-      await using directory = await mkdtempDisposable(
-        join(tmpdir(), 'zukhruf-fencing-'),
+      await using directory = await new TemporaryFiles().directory(
+        'zukhruf-fencing-',
       );
       const path = join(directory.path, 'product%3A42.fence');
       await writeFile(path, text);
@@ -163,8 +159,8 @@ describe('Token sources', () => {
 
   test('a FileTokenSource counts each key apart, in its own file', async () => {
     // Arrange
-    await using directory = await mkdtempDisposable(
-      join(tmpdir(), 'zukhruf-fencing-'),
+    await using directory = await new TemporaryFiles().directory(
+      'zukhruf-fencing-',
     );
     const tokens = new FileTokenSource(directory.path);
     await tokens.next('product:42');
@@ -185,8 +181,8 @@ describe('Token sources', () => {
   // names are; macOS and Windows fold case and so show the break.
   test('a FileTokenSource counts keys that differ only in letter case apart', async () => {
     // Arrange
-    await using directory = await mkdtempDisposable(
-      join(tmpdir(), 'zukhruf-fencing-'),
+    await using directory = await new TemporaryFiles().directory(
+      'zukhruf-fencing-',
     );
     const tokens = new FileTokenSource(directory.path);
     await tokens.next('Sync');
@@ -206,8 +202,8 @@ describe('Token sources', () => {
 
   test('a FileTokenSource continues the counter file that an earlier version wrote', async () => {
     // Arrange: published @zukhruf/mutex versions keep the counter as decimal text in <encoded key>.fence.
-    await using directory = await mkdtempDisposable(
-      join(tmpdir(), 'zukhruf-fencing-'),
+    await using directory = await new TemporaryFiles().directory(
+      'zukhruf-fencing-',
     );
     await writeFile(join(directory.path, 'product%3A42.fence'), '41');
 
@@ -225,8 +221,8 @@ describe('Token sources', () => {
 
   test('a FileTokenSource names the file of a long key as earlier versions did', async () => {
     // Arrange: a name has room for 255 characters, less '.fence' and a draft's suffix of 41, so 208 is the longest key kept as is.
-    await using directory = await mkdtempDisposable(
-      join(tmpdir(), 'zukhruf-fencing-'),
+    await using directory = await new TemporaryFiles().directory(
+      'zukhruf-fencing-',
     );
     const tokens = new FileTokenSource(directory.path);
     const longest = 'a'.repeat(208);
@@ -248,8 +244,8 @@ describe('Token sources', () => {
 
   test('a new CounterTokenSource and a FileTokenSource with no counter file mint 1 first', async () => {
     // Arrange
-    await using directory = await mkdtempDisposable(
-      join(tmpdir(), 'zukhruf-fencing-'),
+    await using directory = await new TemporaryFiles().directory(
+      'zukhruf-fencing-',
     );
 
     // Act

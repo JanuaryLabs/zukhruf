@@ -8,12 +8,12 @@ import { type TestContext, describe } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
 
 import type { FencedLease } from '@zukhruf/fencing';
+import { TemporaryFiles } from '@zukhruf/testing/fs';
 import { test } from '@zukhruf/testing/node';
 
 import { LeaseLostError, type LockHandle, Mutex } from '../../index.ts';
 import { isRecord } from '../../shared/is-record.ts';
 import { newProcessTimeout } from '../../testing/new-process-timeout.ts';
-import { scratchDirectory } from '../../testing/scratch-directory.ts';
 import { settle } from '../../testing/store-cases.ts';
 import { watch } from '../../testing/watch.ts';
 import { startWorker } from '../../testing/worker-process.ts';
@@ -97,7 +97,9 @@ async function standInLeader(directory: string) {
  */
 async function followerOfStandIn() {
   await using stack = new AsyncDisposableStack();
-  const directory = stack.use(await scratchDirectory());
+  const directory = stack.use(
+    await new TemporaryFiles().directory('mutex-test-'),
+  );
   stack.use(await socketElection(directory.path, 10).campaign());
   const leader = stack.use(await standInLeader(directory.path));
   const store = stack.use(
@@ -786,7 +788,9 @@ describe('A follower process through a reconnect', () => {
     { timeout: 20_000 },
     async (t) => {
       // Arrange: a process waits for a key from its first call, before any connection exists.
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory(
+        'mutex-test-',
+      );
       await using _term = await socketElection(directory.path, 10).campaign();
       await using leader = await standInLeader(directory.path);
       await using waiter = startWorker(
@@ -845,7 +849,9 @@ describe('A follower process through a reconnect', () => {
     { timeout: 20_000 },
     async (t) => {
       // Arrange: a process holds a key, and stays alive only until the test says so.
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory(
+        'mutex-test-',
+      );
       await using _term = await socketElection(directory.path, 10).campaign();
       await using leader = await standInLeader(directory.path);
       await using holder = startWorker(

@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
-import { chmod, mkdtempDisposable, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { chmod, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { test } from 'node:test';
+
+import { TemporaryFiles } from '@zukhruf/testing/fs';
 
 import { Snapshot } from './index.ts';
 
@@ -29,7 +30,7 @@ class SourceSchemaError extends Error {
 }
 
 test('a read stays on one moment while the owner commits, and the next snapshot sees the commit', async () => {
-  await using dir = await mkdtempDisposable(join(tmpdir(), 'snapshot-'));
+  await using dir = await new TemporaryFiles().directory('snapshot-');
   const path = join(dir.path, 'source.sqlite');
   using owner = new DatabaseSync(path);
   owner.exec(`
@@ -54,7 +55,7 @@ test('a read stays on one moment while the owner commits, and the next snapshot 
 });
 
 test('a layout without the required columns fails with the caller’s schema error, naming each one, and closes', async () => {
-  await using dir = await mkdtempDisposable(join(tmpdir(), 'snapshot-'));
+  await using dir = await new TemporaryFiles().directory('snapshot-');
   const path = join(dir.path, 'source.sqlite');
   using owner = new DatabaseSync(path);
   owner.exec('CREATE TABLE notes (id INTEGER PRIMARY KEY)');
@@ -76,7 +77,7 @@ test('a layout without the required columns fails with the caller’s schema err
 });
 
 test('a missing file is the caller’s unavailable error, and a file that is no database is not', async () => {
-  await using dir = await mkdtempDisposable(join(tmpdir(), 'snapshot-'));
+  await using dir = await new TemporaryFiles().directory('snapshot-');
   const missing = join(dir.path, 'missing', 'source.sqlite');
   const notDatabase = join(dir.path, 'notes.txt');
   await writeFile(notDatabase, 'not a database, but long enough to be read');
@@ -106,7 +107,7 @@ test(
     skip: process.platform === 'win32' || process.getuid?.() === 0,
   },
   async () => {
-    await using dir = await mkdtempDisposable(join(tmpdir(), 'snapshot-'));
+    await using dir = await new TemporaryFiles().directory('snapshot-');
     const path = join(dir.path, 'source.sqlite');
     new DatabaseSync(path).close();
     await chmod(path, 0o000);

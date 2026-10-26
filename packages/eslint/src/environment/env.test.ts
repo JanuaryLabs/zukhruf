@@ -13,9 +13,9 @@ const tsconfig = JSON.stringify({
 
 const RULE = 'zukhruf/no-undeclared-process-env';
 
-test('zukhruf/env does not check a tool config file, which runs at build time without the startup schema', () => {
+test('zukhruf/env does not check a tool config file, which runs at build time without the startup schema', async () => {
   // Arrange
-  using workspace = fixtureWorkspace({
+  await using workspace = await fixtureWorkspace({
     'nx.json': '{}',
     'tsconfig.json': tsconfig,
     'eslint.config.mjs': fixtureConfig(`{
@@ -38,9 +38,9 @@ test('zukhruf/env does not check a tool config file, which runs at build time wi
   );
 });
 
-test('zukhruf/env with settings.env.startupFile does not check test files', () => {
+test('zukhruf/env with settings.env.startupFile does not check test files', async () => {
   // Arrange: a repo whose startup file is not src/startup.ts.
-  using workspace = fixtureWorkspace({
+  await using workspace = await fixtureWorkspace({
     'nx.json': '{}',
     'tsconfig.json': tsconfig,
     'eslint.config.mjs': fixtureConfig(`
@@ -61,9 +61,9 @@ test('zukhruf/env with settings.env.startupFile does not check test files', () =
   );
 });
 
-test('zukhruf/env with settings.env.startupFile reports an undeclared key against that file', () => {
+test('zukhruf/env with settings.env.startupFile reports an undeclared key against that file', async () => {
   // Arrange
-  using workspace = fixtureWorkspace({
+  await using workspace = await fixtureWorkspace({
     'nx.json': '{}',
     'tsconfig.json': tsconfig,
     'eslint.config.mjs': fixtureConfig(`

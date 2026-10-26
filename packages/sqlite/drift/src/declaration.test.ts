@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
-import { mkdtempDisposable } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { test } from 'node:test';
 
 import * as sqliteVec from 'sqlite-vec';
+
+import { TemporaryFiles } from '@zukhruf/testing/fs';
 
 import { Declaration } from './index.ts';
 
@@ -26,7 +26,7 @@ function count(database: DatabaseSync, table: string): number {
 }
 
 test('a new database stores none of a declaration, and apply creates each object as declared', async () => {
-  await using scratch = await mkdtempDisposable(join(tmpdir(), 'drift-'));
+  await using scratch = await new TemporaryFiles().directory('drift-');
   using database = new DatabaseSync(join(scratch.path, 'data.sqlite'));
   const declaration = new Declaration(
     [
@@ -55,7 +55,7 @@ test('a new database stores none of a declaration, and apply creates each object
 });
 
 test('a database that stores every object as declared fits, and apply keeps its rows', async () => {
-  await using scratch = await mkdtempDisposable(join(tmpdir(), 'drift-'));
+  await using scratch = await new TemporaryFiles().directory('drift-');
   using database = new DatabaseSync(join(scratch.path, 'data.sqlite'));
   database.exec(`CREATE TABLE events (at TEXT NOT NULL) STRICT;
     INSERT INTO events VALUES ('2026-10-15')`);
@@ -75,7 +75,7 @@ test('a table whose columns or CHECK differ from its declaration is stale, and a
     'CREATE TABLE parents (id INTEGER PRIMARY KEY) STRICT',
     "CREATE TABLE parents (id INTEGER PRIMARY KEY, status TEXT CHECK (status IN ('a'))) STRICT",
   ]) {
-    await using scratch = await mkdtempDisposable(join(tmpdir(), 'drift-'));
+    await using scratch = await new TemporaryFiles().directory('drift-');
     using database = new DatabaseSync(join(scratch.path, 'data.sqlite'));
     database.exec(`${older};
       CREATE TABLE children (parent INTEGER NOT NULL REFERENCES parents (id)) STRICT;
@@ -99,7 +99,7 @@ test('a table whose columns or CHECK differ from its declaration is stale, and a
 });
 
 test('a database that stores some objects of a declaration but not others has drifted, and apply creates only the missing ones', async () => {
-  await using scratch = await mkdtempDisposable(join(tmpdir(), 'drift-'));
+  await using scratch = await new TemporaryFiles().directory('drift-');
   using database = new DatabaseSync(join(scratch.path, 'data.sqlite'));
   database.exec(`CREATE TABLE attempts (id INTEGER PRIMARY KEY) STRICT;
     INSERT INTO attempts VALUES (7)`);
@@ -126,7 +126,7 @@ test('a database that stores some objects of a declaration but not others has dr
 });
 
 test('a view whose query differs from its declaration is stale', async () => {
-  await using scratch = await mkdtempDisposable(join(tmpdir(), 'drift-'));
+  await using scratch = await new TemporaryFiles().directory('drift-');
   using database = new DatabaseSync(join(scratch.path, 'data.sqlite'));
   database.exec(`CREATE TABLE attempts (id INTEGER, at TEXT) STRICT;
     CREATE VIEW latest AS SELECT id FROM attempts`);
@@ -143,7 +143,7 @@ test('a view whose query differs from its declaration is stale', async () => {
 });
 
 test('drift reads a database opened read-only and changes nothing', async () => {
-  await using scratch = await mkdtempDisposable(join(tmpdir(), 'drift-'));
+  await using scratch = await new TemporaryFiles().directory('drift-');
   const path = join(scratch.path, 'data.sqlite');
   {
     using writer = new DatabaseSync(path);
@@ -166,7 +166,7 @@ test('drift reads a database opened read-only and changes nothing', async () => 
 });
 
 test("apply inside the caller's transaction is undone when the caller rolls back", async () => {
-  await using scratch = await mkdtempDisposable(join(tmpdir(), 'drift-'));
+  await using scratch = await new TemporaryFiles().directory('drift-');
   using database = new DatabaseSync(join(scratch.path, 'data.sqlite'));
   database.exec('CREATE TABLE events (at TEXT) STRICT');
   const declaration = new Declaration(
@@ -183,7 +183,7 @@ test("apply inside the caller's transaction is undone when the caller rolls back
 });
 
 test('apply leaves every object the declaration does not name', async () => {
-  await using scratch = await mkdtempDisposable(join(tmpdir(), 'drift-'));
+  await using scratch = await new TemporaryFiles().directory('drift-');
   using database = new DatabaseSync(join(scratch.path, 'data.sqlite'));
   database.exec(`CREATE TABLE events (at TEXT) STRICT;
     CREATE TABLE notes (body TEXT) STRICT;
@@ -212,7 +212,7 @@ test('a declaration that cannot stand alone in an empty database fails when it i
 });
 
 test("apply inside the caller's transaction fails with the error that made SQLite end that transaction", async () => {
-  await using scratch = await mkdtempDisposable(join(tmpdir(), 'drift-'));
+  await using scratch = await new TemporaryFiles().directory('drift-');
   using database = new DatabaseSync(join(scratch.path, 'data.sqlite'));
   // Dropping the stale parents table deletes its rows first. The cascade
   // reaches children, and its trigger ends the transaction.
@@ -247,7 +247,7 @@ function rows(database: DatabaseSync, sql: string): Record<string, unknown>[] {
 }
 
 test('with rows keep, a table with a new column keeps its rows, the new column gets its default, and a dropped column is discarded', async () => {
-  await using scratch = await mkdtempDisposable(join(tmpdir(), 'drift-'));
+  await using scratch = await new TemporaryFiles().directory('drift-');
   using database = new DatabaseSync(join(scratch.path, 'data.sqlite'));
   database.exec(`CREATE TABLE runs (id INTEGER PRIMARY KEY, name TEXT NOT NULL, note TEXT) STRICT;
     INSERT INTO runs VALUES (1, 'first', 'gone'), (2, 'second', 'gone')`);
@@ -270,7 +270,7 @@ test('with rows keep, a table with a new column keeps its rows, the new column g
 });
 
 test('with rows keep, a row the new declaration refuses fails apply with the error of SQLite, and the table and its rows stay as they were', async () => {
-  await using scratch = await mkdtempDisposable(join(tmpdir(), 'drift-'));
+  await using scratch = await new TemporaryFiles().directory('drift-');
   using database = new DatabaseSync(join(scratch.path, 'data.sqlite'));
   database.exec(`CREATE TABLE runs (id INTEGER PRIMARY KEY, status TEXT CHECK (status IN ('a', 'b'))) STRICT;
     CREATE TABLE cases (run INTEGER NOT NULL REFERENCES runs (id) ON DELETE CASCADE) STRICT;
@@ -296,7 +296,7 @@ test('with rows keep, a row the new declaration refuses fails apply with the err
 });
 
 test('with rows keep, a table that other tables reference keeps the rows of its children and grandchildren, and its cascade still works', async () => {
-  await using scratch = await mkdtempDisposable(join(tmpdir(), 'drift-'));
+  await using scratch = await new TemporaryFiles().directory('drift-');
   using database = new DatabaseSync(join(scratch.path, 'data.sqlite'));
   database.exec(`CREATE TABLE runs (id INTEGER PRIMARY KEY) STRICT;
     CREATE TABLE cases (id INTEGER PRIMARY KEY, run INTEGER NOT NULL REFERENCES runs (id) ON DELETE CASCADE) STRICT;
@@ -327,7 +327,7 @@ test('with rows keep, a table that other tables reference keeps the rows of its 
 });
 
 test("with rows keep, a referenced table inside the caller's transaction fails before any change, because SQLite keeps foreign keys on there", async () => {
-  await using scratch = await mkdtempDisposable(join(tmpdir(), 'drift-'));
+  await using scratch = await new TemporaryFiles().directory('drift-');
   using database = new DatabaseSync(join(scratch.path, 'data.sqlite'));
   database.exec(`CREATE TABLE runs (id INTEGER PRIMARY KEY) STRICT;
     CREATE TABLE cases (run INTEGER NOT NULL REFERENCES runs (id) ON DELETE CASCADE) STRICT;
@@ -354,7 +354,7 @@ test("with rows keep, a referenced table inside the caller's transaction fails b
 });
 
 test("with rows keep, a table that no table references is rebuilt inside the caller's transaction, with foreign keys on", async () => {
-  await using scratch = await mkdtempDisposable(join(tmpdir(), 'drift-'));
+  await using scratch = await new TemporaryFiles().directory('drift-');
   using database = new DatabaseSync(join(scratch.path, 'data.sqlite'));
   database.exec(`CREATE TABLE runs (id INTEGER PRIMARY KEY) STRICT;
     CREATE TABLE cases (run INTEGER NOT NULL REFERENCES runs (id)) STRICT;
@@ -380,7 +380,7 @@ test("with rows keep, a table that no table references is rebuilt inside the cal
 });
 
 test('with rows keep, kept rows that break a foreign key of the new declaration fail apply, and the table stays as it was', async () => {
-  await using scratch = await mkdtempDisposable(join(tmpdir(), 'drift-'));
+  await using scratch = await new TemporaryFiles().directory('drift-');
   using database = new DatabaseSync(join(scratch.path, 'data.sqlite'));
   database.exec(`CREATE TABLE runs (id INTEGER PRIMARY KEY) STRICT;
     CREATE TABLE cases (run INTEGER NOT NULL) STRICT;
@@ -405,7 +405,7 @@ test('with rows keep, kept rows that break a foreign key of the new declaration 
 });
 
 test('with rows keep, the indexes, triggers and views on a rebuilt table that the declaration does not name stay and work', async () => {
-  await using scratch = await mkdtempDisposable(join(tmpdir(), 'drift-'));
+  await using scratch = await new TemporaryFiles().directory('drift-');
   using database = new DatabaseSync(join(scratch.path, 'data.sqlite'));
   database.exec(`CREATE TABLE runs (id INTEGER PRIMARY KEY, name TEXT) STRICT;
     CREATE TABLE log (id INTEGER) STRICT;
@@ -446,7 +446,7 @@ test('with rows keep, the indexes, triggers and views on a rebuilt table that th
 });
 
 test('with rows keep, a stale index on a table that fits is made again, and the table keeps its rows', async () => {
-  await using scratch = await mkdtempDisposable(join(tmpdir(), 'drift-'));
+  await using scratch = await new TemporaryFiles().directory('drift-');
   using database = new DatabaseSync(join(scratch.path, 'data.sqlite'));
   database.exec(`CREATE TABLE runs (id INTEGER PRIMARY KEY, name TEXT) STRICT;
     CREATE INDEX runs_name ON runs (name);
@@ -466,7 +466,7 @@ test('with rows keep, a stale index on a table that fits is made again, and the 
 });
 
 test("with rows keep, a table that refers to itself counts as referenced inside the caller's transaction", async () => {
-  await using scratch = await mkdtempDisposable(join(tmpdir(), 'drift-'));
+  await using scratch = await new TemporaryFiles().directory('drift-');
   using database = new DatabaseSync(join(scratch.path, 'data.sqlite'));
   database.exec(`CREATE TABLE steps (id INTEGER PRIMARY KEY, after INTEGER REFERENCES steps (id)) STRICT;
     INSERT INTO steps VALUES (1, NULL), (2, 1)`);
@@ -488,7 +488,7 @@ test("with rows keep, a table that refers to itself counts as referenced inside 
 });
 
 test('with rows keep, a trigger on a rebuilt table that names a dropped column fails apply with the error of SQLite, and the table and its rows stay as they were', async () => {
-  await using scratch = await mkdtempDisposable(join(tmpdir(), 'drift-'));
+  await using scratch = await new TemporaryFiles().directory('drift-');
   using database = new DatabaseSync(join(scratch.path, 'data.sqlite'));
   database.exec(`CREATE TABLE runs (id INTEGER PRIMARY KEY, note TEXT) STRICT;
     CREATE TABLE log (note TEXT) STRICT;
@@ -511,7 +511,7 @@ test('with rows keep, a trigger on a rebuilt table that names a dropped column f
 });
 
 test('with rows keep, a view that names a dropped column of a rebuilt table fails apply, and the table and its rows stay as they were', async () => {
-  await using scratch = await mkdtempDisposable(join(tmpdir(), 'drift-'));
+  await using scratch = await new TemporaryFiles().directory('drift-');
   using database = new DatabaseSync(join(scratch.path, 'data.sqlite'));
   database.exec(`CREATE TABLE runs (id INTEGER PRIMARY KEY, note TEXT) STRICT;
     CREATE VIEW notes AS SELECT note FROM runs;
@@ -538,7 +538,7 @@ test('with rows keep, a view that names a dropped column of a rebuilt table fail
 });
 
 test('with rows keep, the triggers and views on a rebuilt table that do not name a dropped column work after apply', async () => {
-  await using scratch = await mkdtempDisposable(join(tmpdir(), 'drift-'));
+  await using scratch = await new TemporaryFiles().directory('drift-');
   using database = new DatabaseSync(join(scratch.path, 'data.sqlite'));
   database.exec(`CREATE TABLE runs (id INTEGER PRIMARY KEY, name TEXT, note TEXT) STRICT;
     CREATE TABLE log (kind TEXT, id INTEGER) STRICT;
@@ -570,7 +570,7 @@ test('with rows keep, the triggers and views on a rebuilt table that do not name
 });
 
 test('with rows keep, a view that was broken before apply does not fail it', async () => {
-  await using scratch = await mkdtempDisposable(join(tmpdir(), 'drift-'));
+  await using scratch = await new TemporaryFiles().directory('drift-');
   using database = new DatabaseSync(join(scratch.path, 'data.sqlite'));
   database.exec(`CREATE TABLE runs (id INTEGER PRIMARY KEY) STRICT;
     CREATE VIEW lost AS SELECT missing FROM runs;
@@ -589,7 +589,7 @@ test('with rows keep, a view that was broken before apply does not fail it', asy
 });
 
 test('with rows replace, a stale AUTOINCREMENT table is replaced and the declaration fits', async () => {
-  await using scratch = await mkdtempDisposable(join(tmpdir(), 'drift-'));
+  await using scratch = await new TemporaryFiles().directory('drift-');
   using database = new DatabaseSync(join(scratch.path, 'data.sqlite'));
   database.exec(`CREATE TABLE jobs (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT) STRICT;
     INSERT INTO jobs (name) VALUES ('first')`);
@@ -608,7 +608,7 @@ test('with rows replace, a stale AUTOINCREMENT table is replaced and the declara
 });
 
 test('with rows replace, a stale FTS5 table is replaced, the declaration fits, and MATCH finds the new rows', async () => {
-  await using scratch = await mkdtempDisposable(join(tmpdir(), 'drift-'));
+  await using scratch = await new TemporaryFiles().directory('drift-');
   using database = new DatabaseSync(join(scratch.path, 'data.sqlite'));
   database.exec(`CREATE VIRTUAL TABLE m_fts USING fts5(body);
     INSERT INTO m_fts VALUES ('old')`);
@@ -632,7 +632,7 @@ test('with rows replace, a stale FTS5 table is replaced, the declaration fits, a
 });
 
 test('an AUTOINCREMENT declaration that the database does not store is missing, when another table already made sqlite_sequence', async () => {
-  await using scratch = await mkdtempDisposable(join(tmpdir(), 'drift-'));
+  await using scratch = await new TemporaryFiles().directory('drift-');
   using database = new DatabaseSync(join(scratch.path, 'data.sqlite'));
   database.exec(
     'CREATE TABLE notes (id INTEGER PRIMARY KEY AUTOINCREMENT, body TEXT) STRICT',
@@ -665,7 +665,7 @@ test('with rows keep, a table without INTEGER PRIMARY KEY keeps the rowid of eac
       'oid',
     ],
   ] as const) {
-    await using scratch = await mkdtempDisposable(join(tmpdir(), 'drift-'));
+    await using scratch = await new TemporaryFiles().directory('drift-');
     using database = new DatabaseSync(join(scratch.path, 'data.sqlite'));
     database.exec(`${older};
       INSERT INTO notes (body) VALUES ('a'), ('b'), ('c');
@@ -696,7 +696,7 @@ test('with rows keep, an AUTOINCREMENT table keeps its counter, so the id of a d
     ],
     ['DELETE FROM jobs', []],
   ] as const) {
-    await using scratch = await mkdtempDisposable(join(tmpdir(), 'drift-'));
+    await using scratch = await new TemporaryFiles().directory('drift-');
     using database = new DatabaseSync(join(scratch.path, 'data.sqlite'));
     database.exec(`CREATE TABLE jobs (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT) STRICT;
       INSERT INTO jobs (name) VALUES ('a'), ('b'), ('c');
@@ -720,7 +720,7 @@ test('with rows keep, an AUTOINCREMENT table keeps its counter, so the id of a d
 });
 
 test('with rows keep, a table that loses AUTOINCREMENT keeps its rows and rowids, and sqlite_sequence has no row for it', async () => {
-  await using scratch = await mkdtempDisposable(join(tmpdir(), 'drift-'));
+  await using scratch = await new TemporaryFiles().directory('drift-');
   using database = new DatabaseSync(join(scratch.path, 'data.sqlite'));
   database.exec(`CREATE TABLE jobs (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT) STRICT;
     INSERT INTO jobs (name) VALUES ('a'), ('b'), ('c');
@@ -744,7 +744,7 @@ test('with rows keep, a table that loses AUTOINCREMENT keeps its rows and rowids
 });
 
 test('with rows keep, a stale virtual table fails apply before any change, and its index still finds the right rows', async () => {
-  await using scratch = await mkdtempDisposable(join(tmpdir(), 'drift-'));
+  await using scratch = await new TemporaryFiles().directory('drift-');
   using database = new DatabaseSync(join(scratch.path, 'data.sqlite'));
   database.exec(`CREATE TABLE docs (id INTEGER PRIMARY KEY, body TEXT) STRICT;
     CREATE VIRTUAL TABLE docs_fts USING fts5(body, content='docs', content_rowid='id');
@@ -780,7 +780,7 @@ test('an element with two statements fails when the declaration is made, and one
       message: `An element of a declaration holds one statement. This element holds more: ${element}`,
     });
 
-  await using scratch = await mkdtempDisposable(join(tmpdir(), 'drift-'));
+  await using scratch = await new TemporaryFiles().directory('drift-');
   using database = new DatabaseSync(join(scratch.path, 'data.sqlite'));
   const declaration = new Declaration(
     ['CREATE TABLE events (at TEXT) STRICT; -- the log'],
@@ -816,7 +816,7 @@ test('an element that makes no object fails when the declaration is made', () =>
 });
 
 test('with rows keep, a WITHOUT ROWID table keeps its rows', async () => {
-  await using scratch = await mkdtempDisposable(join(tmpdir(), 'drift-'));
+  await using scratch = await new TemporaryFiles().directory('drift-');
   using database = new DatabaseSync(join(scratch.path, 'data.sqlite'));
   database.exec(`CREATE TABLE tags (name TEXT PRIMARY KEY) STRICT, WITHOUT ROWID;
     INSERT INTO tags VALUES ('a'), ('b')`);
@@ -847,7 +847,7 @@ test('with rows keep, a table that becomes a virtual table, or a virtual table t
       'CREATE TABLE notes (body TEXT)',
     ],
   ] as const) {
-    await using scratch = await mkdtempDisposable(join(tmpdir(), 'drift-'));
+    await using scratch = await new TemporaryFiles().directory('drift-');
     using database = new DatabaseSync(join(scratch.path, 'data.sqlite'));
     database.exec(`${older};
       INSERT INTO notes VALUES ('kept')`);
@@ -871,7 +871,7 @@ test('with rows keep, a column that becomes the INTEGER PRIMARY KEY keeps its va
     ['CREATE TABLE notes (id INTEGER, body TEXT) STRICT', [100, 200]],
     ['CREATE TABLE notes (body TEXT) STRICT', [2, 3]],
   ] as const) {
-    await using scratch = await mkdtempDisposable(join(tmpdir(), 'drift-'));
+    await using scratch = await new TemporaryFiles().directory('drift-');
     using database = new DatabaseSync(join(scratch.path, 'data.sqlite'));
     database.exec(`${older};
       INSERT INTO notes (body) VALUES ('a'), ('b'), ('c');
@@ -894,7 +894,7 @@ test('with rows keep, a column that becomes the INTEGER PRIMARY KEY keeps its va
 });
 
 test('with a dev database that loads sqlite-vec, a vec0 declaration goes from missing to fits, and with rows replace a new dimension fits after apply', async () => {
-  await using scratch = await mkdtempDisposable(join(tmpdir(), 'drift-'));
+  await using scratch = await new TemporaryFiles().directory('drift-');
   using database = new DatabaseSync(join(scratch.path, 'data.sqlite'), {
     allowExtension: true,
   });
@@ -928,7 +928,7 @@ test('with a dev database that loads sqlite-vec, a vec0 declaration goes from mi
 });
 
 test('with a dev database that registers a function, an index on an expression that calls it is declared, and apply makes it', async () => {
-  await using scratch = await mkdtempDisposable(join(tmpdir(), 'drift-'));
+  await using scratch = await new TemporaryFiles().directory('drift-');
   using database = new DatabaseSync(join(scratch.path, 'data.sqlite'));
   const slug = (title: unknown) =>
     String(title).toLowerCase().replaceAll(' ', '-');

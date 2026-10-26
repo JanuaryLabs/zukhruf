@@ -5,13 +5,14 @@ import { type Socket, connect, createServer } from 'node:net';
 import { join } from 'node:path';
 import { describe, test } from 'node:test';
 
-import { scratchDirectory } from '../testing/scratch-directory.ts';
+import { TemporaryFiles } from '@zukhruf/testing/fs';
+
 import { SocketConnection } from './socket-connection.ts';
 
 describe('Socket connection', () => {
   test('a peer that dies while this side writes is reported as closed, not thrown', async (t) => {
     // Arrange: a connection whose peer accepts and then destroys its end at once.
-    await using directory = await scratchDirectory();
+    await using directory = await new TemporaryFiles().directory('flights-');
     const socketPath =
       process.platform === 'win32'
         ? `\\\\.\\pipe\\single-flight-test-${randomUUID()}`

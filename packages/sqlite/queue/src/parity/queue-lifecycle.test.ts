@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it } from 'node:test';
 
 import { type Clock, PgBoss, type UpdateQueueOptions } from 'pg-boss';
+
+import { TemporaryFiles } from '@zukhruf/testing/fs';
 
 import { SqliteJobQueue } from '../index.ts';
 import { Parity } from './parity.ts';
@@ -137,9 +137,9 @@ describe('queue lifecycle', () => {
   // Postgres server), so this pins pg-boss 12.35.1's message for it by
   // citation: node_modules/pg-boss/dist/db.js:89.
   it('refuses SQL before start and after a closing stop when it owns its database, and reopens it on restart', async () => {
-    const dir = await mkdtemp(join(tmpdir(), 'queue-owned-'));
+    await using dir = await new TemporaryFiles().directory('queue-owned-');
     const queue = new SqliteJobQueue({
-      path: join(dir, 'queue.sqlite'),
+      path: join(dir.path, 'queue.sqlite'),
       schedule: false,
     });
     try {
@@ -182,7 +182,6 @@ describe('queue lifecycle', () => {
       );
     } finally {
       await queue.stop({ graceful: false, close: true });
-      await rm(dir, { recursive: true, force: true });
     }
   });
 

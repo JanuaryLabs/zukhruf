@@ -4,9 +4,9 @@ import { test } from 'node:test';
 import { fixtureWorkspace } from '../testing/fixture-workspace.ts';
 import { fixtureConfig, lint } from '../testing/run-eslint.ts';
 
-test('hermes/recommended flags what Hermes lacks in app code, and leaves Node-side files alone', () => {
+test('hermes/recommended flags what Hermes lacks in app code, and leaves Node-side files alone', async () => {
   // Arrange
-  using workspace = fixtureWorkspace({
+  await using workspace = await fixtureWorkspace({
     'nx.json': '{}',
     'eslint.config.mjs': fixtureConfig(`{
       plugins: { hermes },

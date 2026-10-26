@@ -3,9 +3,10 @@ import assert from 'node:assert/strict';
 // syncBuiltinESMExports then copies the patch to the named exports.
 import fsPromises from 'node:fs/promises';
 import { syncBuiltinESMExports } from 'node:module';
-import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { dirname } from 'node:path';
 import { type TestContext, describe, test } from 'node:test';
+
+import { TemporaryFiles } from '@zukhruf/testing/fs';
 
 import { FileTokenSource } from './index.ts';
 
@@ -103,8 +104,8 @@ function refuseSync(
 describe('FileTokenSource durability', () => {
   test('a minted token is written and on disk before it replaces the previous one', async (t) => {
     // Arrange
-    await using directory = await fsPromises.mkdtempDisposable(
-      join(tmpdir(), 'zukhruf-fencing-'),
+    await using directory = await new TemporaryFiles().directory(
+      'zukhruf-fencing-',
     );
     const tokens = new FileTokenSource(directory.path);
     using disk = recordDiskWrites(t);
@@ -142,8 +143,8 @@ describe('FileTokenSource durability', () => {
     },
     async (t) => {
       // Arrange
-      await using directory = await fsPromises.mkdtempDisposable(
-        join(tmpdir(), 'zukhruf-fencing-'),
+      await using directory = await new TemporaryFiles().directory(
+        'zukhruf-fencing-',
       );
       const tokens = new FileTokenSource(directory.path);
       using disk = recordDiskWrites(t);
@@ -166,8 +167,8 @@ describe('FileTokenSource durability', () => {
 
   test('a token that cannot reach the disk leaves the directory as it was and does not use up a token', async (t) => {
     // Arrange: one token is minted, then the disk refuses to sync any new file in the directory.
-    await using directory = await fsPromises.mkdtempDisposable(
-      join(tmpdir(), 'zukhruf-fencing-'),
+    await using directory = await new TemporaryFiles().directory(
+      'zukhruf-fencing-',
     );
     const tokens = new FileTokenSource(directory.path);
     const first = await tokens.next('product:42');
@@ -212,8 +213,8 @@ describe('FileTokenSource durability', () => {
       },
       async (t) => {
         // Arrange: a file system whose directories answer fsync with `code`.
-        await using directory = await fsPromises.mkdtempDisposable(
-          join(tmpdir(), 'zukhruf-fencing-'),
+        await using directory = await new TemporaryFiles().directory(
+          'zukhruf-fencing-',
         );
         const tokens = new FileTokenSource(directory.path);
         using _refused = refuseSync(t, (path) => path === directory.path, code);

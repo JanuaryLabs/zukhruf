@@ -1,15 +1,10 @@
 import assert from 'node:assert/strict';
-import {
-  chmod,
-  mkdir,
-  mkdtempDisposable,
-  stat,
-  utimes,
-} from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { chmod, mkdir, stat, utimes } from 'node:fs/promises';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { test } from 'node:test';
+
+import { TemporaryFiles } from '@zukhruf/testing/fs';
 
 import { DataVersion, lastWrite } from './index.ts';
 
@@ -53,7 +48,7 @@ async function writtenAt(
 }
 
 test('the last write is the later of the database file and its WAL', async () => {
-  await using dir = await mkdtempDisposable(join(tmpdir(), 'last-write-'));
+  await using dir = await new TemporaryFiles().directory('last-write-');
   const path = join(dir.path, 'source.sqlite');
   using _owner = owning(path);
   await writtenAt(path, {
@@ -68,7 +63,7 @@ test('the last write is the later of the database file and its WAL', async () =>
 });
 
 test('a later write to the shared-memory index, which readers touch, does not count', async () => {
-  await using dir = await mkdtempDisposable(join(tmpdir(), 'last-write-'));
+  await using dir = await new TemporaryFiles().directory('last-write-');
   const path = join(dir.path, 'source.sqlite');
   using _owner = owning(path);
   await writtenAt(path, {
@@ -83,7 +78,7 @@ test('a later write to the shared-memory index, which readers touch, does not co
 });
 
 test('a database whose owner closed it, which removes the WAL, was last written when its file was', async () => {
-  await using dir = await mkdtempDisposable(join(tmpdir(), 'last-write-'));
+  await using dir = await new TemporaryFiles().directory('last-write-');
   const path = join(dir.path, 'source.sqlite');
   owning(path).close();
   // A time in the past: a WAL with frames left behind would carry a later one.
@@ -95,7 +90,7 @@ test('a database whose owner closed it, which removes the WAL, was last written 
 });
 
 test('a WAL that a reader made after the owner removed its own does not count', async () => {
-  await using dir = await mkdtempDisposable(join(tmpdir(), 'last-write-'));
+  await using dir = await new TemporaryFiles().directory('last-write-');
   const path = join(dir.path, 'source.sqlite');
   owning(path).close();
   await utimes(path, 1_000_000_000 + readLater, 1_000_000_000);
@@ -113,7 +108,7 @@ test('a WAL that a reader made after the owner removed its own does not count', 
 });
 
 test('a missing file is the caller’s unavailable error', async () => {
-  await using dir = await mkdtempDisposable(join(tmpdir(), 'last-write-'));
+  await using dir = await new TemporaryFiles().directory('last-write-');
   const missing = join(dir.path, 'missing', 'source.sqlite');
 
   assert.throws(
@@ -133,7 +128,7 @@ test(
     skip: process.platform === 'win32' || process.getuid?.() === 0,
   },
   async () => {
-    await using dir = await mkdtempDisposable(join(tmpdir(), 'last-write-'));
+    await using dir = await new TemporaryFiles().directory('last-write-');
     // A file's own mode does not deny reading its times; its folder's does.
     const folder = join(dir.path, 'denied');
     await mkdir(folder);

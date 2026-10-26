@@ -10,6 +10,7 @@ import type { TestContext } from 'node:test';
 import { setTimeout } from 'node:timers/promises';
 
 import { SqliteElection } from '@zukhruf/election';
+import { TemporaryFiles } from '@zukhruf/testing/fs';
 
 import { SingleFlight } from './index.ts';
 import {
@@ -18,7 +19,6 @@ import {
   journalOf,
 } from './testing/caller.ts';
 import { newProcessTimeout } from './testing/new-process-timeout.ts';
-import { scratchDirectory } from './testing/scratch-directory.ts';
 import { type WorkerProcess, startWorker } from './testing/worker-process.ts';
 
 const onUnix = {
@@ -137,7 +137,7 @@ describe('A single flight across processes when a leader stops', () => {
     { timeout: 30_000 },
     async (t) => {
       // Arrange: the coordinator, a leader in its own process, and a joiner in another.
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory('flights-');
       await using _coordinator = await coordinatorOf(t, directory.path);
       await using leader = await caller(t, directory.path, 'leader');
       run(leader, 'l', 'sync');
@@ -173,7 +173,7 @@ describe('A single flight across processes when a leader stops', () => {
     { timeout: 30_000 },
     async (t) => {
       // Arrange: the coordinator leads the flight itself, and two processes join it.
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory('flights-');
       await using coordinator = await caller(t, directory.path, 'coordinator');
       run(coordinator, 'l', 'sync');
       await heard(t, coordinator, 'leading', 'l');
@@ -205,7 +205,7 @@ describe('A single flight across processes when a leader stops', () => {
     { timeout: 30_000 },
     async (t) => {
       // Arrange
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory('flights-');
       await using _coordinator = await coordinatorOf(t, directory.path);
       await using leader = await caller(t, directory.path, 'leader');
       run(leader, 'l', 'sync');
@@ -392,7 +392,7 @@ describe('A single flight across processes when the coordinator stops', () => {
     { timeout: 30_000 },
     async (t) => {
       // Arrange
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory('flights-');
       await using coordinator = await coordinatorOf(t, directory.path);
       await using leader = await caller(t, directory.path, 'leader');
       run(leader, 'l', 'sync');
@@ -427,7 +427,7 @@ describe('A single flight across processes when the coordinator stops', () => {
     { timeout: 30_000 },
     async (t) => {
       // Arrange: the leader leads two flights, and the joiner joins both.
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory('flights-');
       await using coordinator = await coordinatorOf(t, directory.path);
       await using leader = await caller(t, directory.path, 'leader');
       run(leader, 'l', 'sync');
@@ -463,7 +463,7 @@ describe('A single flight across processes when the coordinator disposes', () =>
     { timeout: 30_000 },
     async (t) => {
       // Arrange
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory('flights-');
       await using coordinator = await coordinatorOf(t, directory.path);
       await using leader = await caller(t, directory.path, 'leader');
       run(leader, 'l', 'sync');
@@ -502,7 +502,7 @@ describe('A single flight across processes when the coordinator disposes', () =>
     { ...onUnix, timeout: 30_000 },
     async (t) => {
       // Arrange: this process coordinates and leads, and the joiner's process will not read for a while.
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory('flights-');
       await using flights = new SingleFlight({
         directory: directory.path,
         codec: {
@@ -563,7 +563,7 @@ describe('A single flight across processes in the gaps of a failover', () => {
     { ...onUnix, timeout: 30_000 },
     async (t) => {
       // Arrange: the coordinator is frozen, so it never answers the call.
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory('flights-');
       await using coordinator = await coordinatorOf(t, directory.path);
       await using next = await connected(t, directory.path, 'next');
       coordinator.child.kill('SIGSTOP');
@@ -588,7 +588,7 @@ describe('A single flight across processes in the gaps of a failover', () => {
     { ...onUnix, timeout: 30_000 },
     async (t) => {
       // Arrange
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory('flights-');
       await using coordinator = await coordinatorOf(t, directory.path);
       await using leader = await caller(t, directory.path, 'leader');
       run(leader, 'l', 'sync');
@@ -636,7 +636,7 @@ describe('A single flight across processes in the gaps of a failover', () => {
     { ...onUnix, timeout: 30_000 },
     async (t) => {
       // Arrange: the leader is frozen, so its flight is not reasserted when the fresh run arrives.
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory('flights-');
       await using coordinator = await coordinatorOf(t, directory.path);
       await using leader = await caller(t, directory.path, 'leader');
       run(leader, 'l', 'sync');
@@ -674,7 +674,7 @@ describe('A single flight across processes in the gaps of a failover', () => {
     { timeout: 30_000 },
     async (t) => {
       // Arrange
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory('flights-');
       await using coordinator = await coordinatorOf(t, directory.path);
       await using probe = await connected(t, directory.path, 'probe');
 
@@ -700,7 +700,7 @@ describe('A single flight across processes in the gaps of a failover', () => {
     { ...onUnix, timeout: 30_000 },
     async (t) => {
       // Arrange
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory('flights-');
       await using coordinator = await coordinatorOf(t, directory.path);
       await using leader = await caller(t, directory.path, 'leader');
       run(leader, 'l', 'sync');
@@ -736,7 +736,7 @@ describe('A single flight across processes in the gaps of a failover', () => {
     { ...onUnix, timeout: 30_000 },
     async (t) => {
       // Arrange: the next coordinator knows no flight, so it rejects the leader's reassertion.
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory('flights-');
       await using coordinator = await coordinatorOf(t, directory.path);
       await using leader = await caller(t, directory.path, 'leader');
       run(leader, 'l', 'sync');
@@ -778,7 +778,7 @@ describe('A single flight across processes in the gaps of a failover', () => {
     { ...onUnix, timeout: 30_000 },
     async (t) => {
       // Arrange: the next coordinator knows no flight, so it rejects the leader's reassertion.
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory('flights-');
       await using coordinator = await coordinatorOf(t, directory.path);
       await using leader = await caller(t, directory.path, 'leader');
       run(leader, 'l', 'sync');
@@ -809,7 +809,7 @@ describe('A single flight across processes in the gaps of a failover', () => {
     { ...onUnix, timeout: 30_000 },
     async (t) => {
       // Arrange: the next coordinator knows no flight, so it rejects the leader's reassertion.
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory('flights-');
       await using coordinator = await coordinatorOf(t, directory.path);
       await using leader = await caller(t, directory.path, 'leader', {
         codec: 'encode-throws',
@@ -844,7 +844,7 @@ describe('A single flight across processes in the gaps of a failover', () => {
       // Arrange: the next coordinator knows no flight, so it rejects the
       // leader's reassertion; then it stops, and a process of the group
       // coordinates the term after it.
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory('flights-');
       await using coordinator = await coordinatorOf(t, directory.path);
       await using leader = await caller(t, directory.path, 'leader');
       run(leader, 'l', 'sync');
@@ -898,7 +898,7 @@ describe('A single flight across processes in the gaps of a failover', () => {
     { ...onUnix, timeout: 30_000 },
     async (t) => {
       // Arrange: the leader leads two flights, and the joiner joins both.
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory('flights-');
       await using coordinator = await coordinatorOf(t, directory.path);
       await using leader = await caller(t, directory.path, 'leader');
       run(leader, 'l', 'sync');
@@ -944,7 +944,7 @@ describe('A single flight across processes when a leader is frozen past a failov
     },
     async (t) => {
       // Arrange
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory('flights-');
       await using coordinator = await coordinatorOf(t, directory.path);
       await using leader = await caller(t, directory.path, 'leader');
       run(leader, 'l', 'sync');
@@ -1014,7 +1014,7 @@ describe('A single flight across processes when a leader is frozen past a failov
     },
     async (t) => {
       // Arrange
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory('flights-');
       await using coordinator = await coordinatorOf(t, directory.path);
       await using leader = await caller(t, directory.path, 'leader');
       run(leader, 'l', 'sync');
@@ -1081,7 +1081,7 @@ describe('A single flight across processes when a leader is frozen past a failov
     },
     async (t) => {
       // Arrange
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory('flights-');
       await using coordinator = await coordinatorOf(t, directory.path);
       await using leader = await caller(t, directory.path, 'leader');
       run(leader, 'l', 'sync');
@@ -1148,7 +1148,7 @@ describe('A single flight across processes when a leader is frozen past a failov
     },
     async (t) => {
       // Arrange
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory('flights-');
       await using coordinator = await coordinatorOf(t, directory.path);
       await using leader = await caller(t, directory.path, 'leader');
       run(leader, 'l', 'sync');
@@ -1209,7 +1209,7 @@ describe('A single flight across processes when a leader is frozen past a failov
     },
     async (t) => {
       // Arrange: the leader's caller stops waiting, and the work runs on.
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory('flights-');
       await using coordinator = await coordinatorOf(t, directory.path);
       await using leader = await caller(t, directory.path, 'leader');
       run(leader, 'l', 'sync');
@@ -1270,7 +1270,7 @@ describe('A single flight across processes when a leader is frozen past a failov
     { ...onUnix, timeout: 30_000 },
     async (t) => {
       // Arrange
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory('flights-');
       await using coordinator = await coordinatorOf(t, directory.path);
       await using leader = await caller(t, directory.path, 'leader');
       run(leader, 'l', 'sync');
@@ -1309,7 +1309,7 @@ describe('A single flight across processes when a leader is frozen past a failov
     { ...onUnix, timeout: 30_000 },
     async (t) => {
       // Arrange
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory('flights-');
       await using coordinator = await coordinatorOf(t, directory.path);
       await using leader = await caller(t, directory.path, 'leader');
       run(leader, 'l', 'sync');
@@ -1342,7 +1342,7 @@ describe('A single flight across processes after a flight lands', () => {
     { timeout: 30_000 },
     async (t) => {
       // Arrange
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory('flights-');
       await using _coordinator = await coordinatorOf(t, directory.path);
       await using leader = await caller(t, directory.path, 'leader');
       run(leader, 'l', 'sync');

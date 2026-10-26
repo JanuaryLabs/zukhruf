@@ -9,6 +9,7 @@ import { Connection, Request, TYPES } from 'tedious';
 
 import { Docker } from '@zukhruf/docker';
 import { DockerFixtures, TestRun } from '@zukhruf/testing/docker';
+import { TemporaryFiles } from '@zukhruf/testing/fs';
 import { Mariadb } from '@zukhruf/testing/mariadb';
 import { Mysql } from '@zukhruf/testing/mysql';
 import { type DatabaseOptions, Postgres } from '@zukhruf/testing/postgres';
@@ -35,7 +36,6 @@ import {
 import { ThreadLockCoordinator } from '../lock-stores/thread/thread-lock-coordinator.ts';
 import { ThreadStore } from '../lock-stores/thread/thread-store.ts';
 import type { LockStore } from '../mutex/lock-store.ts';
-import { scratchDirectory } from './scratch-directory.ts';
 
 const pollInterval = 10;
 
@@ -126,7 +126,7 @@ export interface StoreCase {
 
 /** A scratch directory as the fixture: its path is the location. */
 async function directoryFixture(): Promise<StoreFixture> {
-  const directory = await scratchDirectory();
+  const directory = await new TemporaryFiles().directory('mutex-test-');
   return {
     location: directory.path,
     [Symbol.asyncDispose]: () => directory[Symbol.asyncDispose](),

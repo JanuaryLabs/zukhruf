@@ -9,10 +9,10 @@ import { describe, test } from 'node:test';
 import type { TestContext } from 'node:test';
 
 import { SqliteElection } from '@zukhruf/election';
+import { TemporaryFiles } from '@zukhruf/testing/fs';
 
 import { callerSource, journalOf } from './testing/caller.ts';
 import { newProcessTimeout } from './testing/new-process-timeout.ts';
-import { scratchDirectory } from './testing/scratch-directory.ts';
 import { type WorkerProcess, startWorker } from './testing/worker-process.ts';
 
 /**
@@ -197,7 +197,7 @@ describe('A single flight across processes while a run waits for its key', () =>
     { timeout: 30_000 },
     async (t) => {
       // Arrange: the runner is told to lead while the holder's work still runs.
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory('flights-');
       await using coordinator = await leadingCoordinator(directory.path);
       await using holder = await caller(t, directory.path, 'holder');
       run(holder, 'l', 'sync');
@@ -244,7 +244,7 @@ describe('A single flight across processes while a run waits for its key', () =>
     { timeout: 30_000 },
     async (t) => {
       // Arrange: the runner is told to lead while the holder's work still runs.
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory('flights-');
       await using _coordinator = await leadingCoordinator(directory.path);
       await using holder = await caller(t, directory.path, 'holder');
       run(holder, 'l', 'sync');
@@ -279,7 +279,7 @@ describe('A single flight across processes while a run waits for its key', () =>
     async (t) => {
       // Arrange: platform setup that no operation exposes. A plain file where
       // the folder of the key locks belongs makes every key lock fail.
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory('flights-');
       const folder = join(directory.path, 'execution-locks');
       await writeFile(folder, '');
       await using runner = await caller(t, directory.path, 'runner');
@@ -311,7 +311,7 @@ describe('A single flight across processes when the work of a key ends', () => {
     { timeout: 30_000 },
     async (t) => {
       // Arrange
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory('flights-');
       await using _coordinator = await coordinatorOf(t, directory.path);
       await using leader = await caller(t, directory.path, 'leader');
       run(leader, 'l', 'sync');
@@ -348,7 +348,7 @@ describe('A single flight across processes with keys that are no file names', ()
     { timeout: 30_000 },
     async (t) => {
       // Arrange
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory('flights-');
       await using worker = await coordinatorOf(t, directory.path);
       const key = `../${'x/'.repeat(200)}`;
 
@@ -374,7 +374,7 @@ describe('A single flight across processes with keys that differ only in case', 
     { timeout: 30_000 },
     async (t) => {
       // Arrange
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory('flights-');
       await using _coordinator = await coordinatorOf(t, directory.path);
       await using upper = await caller(t, directory.path, 'upper');
       await using lower = await caller(t, directory.path, 'lower');
@@ -401,7 +401,7 @@ describe('A single flight across processes with keys that differ only in case', 
     { timeout: 30_000 },
     async (t) => {
       // Arrange
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory('flights-');
       await using worker = await coordinatorOf(t, directory.path);
       run(worker, 'outer', 'sync');
       await heard(t, worker, 'leading', 'outer');

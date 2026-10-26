@@ -11,8 +11,8 @@ const ruleTester = typescriptRuleTester();
  * fixture. A fresh temp directory per test also sidesteps the module-level
  * startup cache, which is keyed by absolute path and mtime.
  */
-test('no-undeclared-process-env accepts keys declared in the startup schema', () => {
-  using workspace = fixtureWorkspace({
+test('no-undeclared-process-env accepts keys declared in the startup schema', async () => {
+  await using workspace = await fixtureWorkspace({
     'startup.ts':
       'const env = z.object({ DATABASE_URL: z.string(), PORT: z.string() });\n',
   });
@@ -56,8 +56,8 @@ test('no-undeclared-process-env accepts keys declared in the startup schema', ()
   });
 });
 
-test('no-undeclared-process-env reports once when the startup schema is unreadable', () => {
-  using workspace = fixtureWorkspace({});
+test('no-undeclared-process-env reports once when the startup schema is unreadable', async () => {
+  await using workspace = await fixtureWorkspace({});
 
   ruleTester.run('no-undeclared-process-env', rule, {
     valid: [],
@@ -74,8 +74,8 @@ test('no-undeclared-process-env reports once when the startup schema is unreadab
   });
 });
 
-test('no-undeclared-process-env reports when the startup file has no env schema', () => {
-  using workspace = fixtureWorkspace({
+test('no-undeclared-process-env reports when the startup file has no env schema', async () => {
+  await using workspace = await fixtureWorkspace({
     'startup.ts': 'export const unrelated = 1;\n',
   });
 
@@ -95,10 +95,10 @@ test('no-undeclared-process-env reports when the startup file has no env schema'
   });
 });
 
-test('no-undeclared-process-env reads the default startup file from the project of the linted file, not the working directory', () => {
+test('no-undeclared-process-env reads the default startup file from the project of the linted file, not the working directory', async () => {
   // The test process runs from packages/eslint, outside this workspace, as an
   // editor runs ESLint from the workspace root rather than the project.
-  using workspace = fixtureWorkspace({
+  await using workspace = await fixtureWorkspace({
     'nx.json': '{}',
     'apps/api/project.json': '{}',
     'apps/api/src/startup.ts':

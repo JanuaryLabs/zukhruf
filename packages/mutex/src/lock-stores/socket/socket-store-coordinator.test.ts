@@ -7,10 +7,10 @@ import { createInterface } from 'node:readline';
 import { type TestContext, describe } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
 
+import { TemporaryFiles } from '@zukhruf/testing/fs';
 import { test } from '@zukhruf/testing/node';
 
 import { isRecord } from '../../shared/is-record.ts';
-import { scratchDirectory } from '../../testing/scratch-directory.ts';
 import { settle } from '../../testing/store-cases.ts';
 import { SocketStore } from './index.ts';
 import { socketElection } from './socket-election.ts';
@@ -49,7 +49,9 @@ async function serving(
 /** A real store that leads the first term of its directory, which has no grace window. */
 async function firstLeader() {
   await using stack = new AsyncDisposableStack();
-  const directory = stack.use(await scratchDirectory());
+  const directory = stack.use(
+    await new TemporaryFiles().directory('mutex-test-'),
+  );
   const store = stack.use(
     new SocketStore(directory.path, { pollInterval: 10 }),
   );
@@ -62,7 +64,9 @@ async function firstLeader() {
  */
 async function leaderAfterFailover(graceWindow: number) {
   await using stack = new AsyncDisposableStack();
-  const directory = stack.use(await scratchDirectory());
+  const directory = stack.use(
+    await new TemporaryFiles().directory('mutex-test-'),
+  );
   const earlier = await socketElection(directory.path, 10).campaign();
   await earlier?.resign();
   const store = stack.use(

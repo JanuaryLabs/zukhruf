@@ -1,18 +1,18 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
-import { access, mkdir, mkdtemp, readFile, rename, rm } from 'node:fs/promises';
+import { access, mkdir, readFile, rename, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { describe } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 
+import { TemporaryFiles } from '@zukhruf/testing/fs';
 import { test } from '@zukhruf/testing/node';
 
 import { Modes } from '../mutex/acquire-modes/modes.ts';
 import { Mutex } from '../mutex/mutex.ts';
 import { isRecord } from '../shared/is-record.ts';
 import { newProcessTimeout } from '../testing/new-process-timeout.ts';
-import { scratchDirectory } from '../testing/scratch-directory.ts';
 import { storeCases } from '../testing/store-cases.ts';
 import { startWorker } from '../testing/worker-process.ts';
 
@@ -77,47 +77,45 @@ async function latestRelease() {
   if (!(await isUnpacked(unpacked, version))) {
     await rm(unpacked, { recursive: true, force: true });
     await mkdir(cache, { recursive: true });
-    const draft = await mkdtemp(join(cache, 'download-'));
-    try {
-      const packed: unknown = JSON.parse(
-        await npm([
-          'pack',
-          `@zukhruf/mutex@${version}`,
-          '--json',
-          '--ignore-scripts',
-          '--pack-destination',
-          draft,
-        ]),
-      );
-      const filename =
-        Array.isArray(packed) && isRecord(packed[0])
-          ? packed[0].filename
-          : undefined;
-      if (typeof filename !== 'string') {
-        throw new Error(`npm pack named no file: ${JSON.stringify(packed)}`);
-      }
-      await run('tar', ['-xzf', join(draft, filename), '-C', draft], {
-        timeout: downloadTimeout,
-      });
-      // Only the release's own folder: never this workspace or its lockfile.
+    await using draft = await new TemporaryFiles().directory('download-', {
+      parent: cache,
+    });
+    const packed: unknown = JSON.parse(
       await npm([
-        'install',
-        '--prefix',
-        join(draft, 'package'),
-        '--omit=dev',
+        'pack',
+        `@zukhruf/mutex@${version}`,
+        '--json',
         '--ignore-scripts',
-        '--no-audit',
-        '--no-fund',
-        '--no-package-lock',
-        '--workspaces=false',
-      ]);
-      // A rename is atomic, so a run that unpacks at the same time finds the whole package or none.
-      await rename(draft, unpacked).catch((error: unknown) => {
-        if (!isRecord(error) || error.code !== 'ENOTEMPTY') throw error;
-      });
-    } finally {
-      await rm(draft, { recursive: true, force: true });
+        '--pack-destination',
+        draft.path,
+      ]),
+    );
+    const filename =
+      Array.isArray(packed) && isRecord(packed[0])
+        ? packed[0].filename
+        : undefined;
+    if (typeof filename !== 'string') {
+      throw new Error(`npm pack named no file: ${JSON.stringify(packed)}`);
     }
+    await run('tar', ['-xzf', join(draft.path, filename), '-C', draft.path], {
+      timeout: downloadTimeout,
+    });
+    // Only the release's own folder: never this workspace or its lockfile.
+    await npm([
+      'install',
+      '--prefix',
+      join(draft.path, 'package'),
+      '--omit=dev',
+      '--ignore-scripts',
+      '--no-audit',
+      '--no-fund',
+      '--no-package-lock',
+      '--workspaces=false',
+    ]);
+    // A rename is atomic, so a run that unpacks at the same time finds the whole package or none.
+    await rename(draft.path, unpacked).catch((error: unknown) => {
+      if (!isRecord(error) || error.code !== 'ENOTEMPTY') throw error;
+    });
   }
   return { version, root: join(unpacked, 'package') };
 }
@@ -299,7 +297,9 @@ describe('A holder on the latest release, and this source', () => {
       { timeout: 30000 },
       async (t) => {
         // Arrange: a process on the release holds the key. It started first, so a socket store's release process leads.
-        await using directory = await scratchDirectory();
+        await using directory = await new TemporaryFiles().directory(
+          'mutex-test-',
+        );
         await using holder = startWorker(
           releaseHolder(store, directory.path, key),
           'holder',
@@ -356,7 +356,9 @@ describe('A holder on this source, and the latest release', () => {
       { timeout: 30000 },
       async (t) => {
         // Arrange: this source holds the key. It started first, so a socket store's source process leads.
-        await using directory = await scratchDirectory();
+        await using directory = await new TemporaryFiles().directory(
+          'mutex-test-',
+        );
         await using host = openThisSource(store, directory.path);
         const mutex = new Mutex(host.store);
         const entered = Promise.withResolvers<bigint>();
@@ -430,7 +432,9 @@ describe('A holder on the latest release that was killed, and this source', () =
         { timeout: 30000 },
         async (t) => {
           // Arrange: a process on the release holds the key and is killed, so its records stay behind.
-          await using directory = await scratchDirectory();
+          await using directory = await new TemporaryFiles().directory(
+            'mutex-test-',
+          );
           await using holder = startWorker(
             releaseHolder(store, directory.path, key),
             'holder',
@@ -488,7 +492,9 @@ describe('Two evicters of one dead holder, one on the latest release and one on 
         { timeout: 30000 },
         async (t) => {
           // Arrange: a holder on the release is killed, and an evicter on the release stops inside its eviction.
-          await using directory = await scratchDirectory();
+          await using directory = await new TemporaryFiles().directory(
+            'mutex-test-',
+          );
           await using holder = startWorker(
             releaseHolder(store, directory.path, key),
             'holder',
@@ -555,7 +561,9 @@ describe('Two evicters of one dead holder, one on the latest release and one on 
         { timeout: 30000 },
         async (t) => {
           // Arrange: a holder on the release is killed, and an evicter on the release stops inside its eviction.
-          await using directory = await scratchDirectory();
+          await using directory = await new TemporaryFiles().directory(
+            'mutex-test-',
+          );
           await using holder = startWorker(
             releaseHolder(store, directory.path, key),
             'holder',
@@ -607,7 +615,9 @@ describe('Two evicters of one dead holder, one on the latest release and one on 
         { timeout: 30000 },
         async (t) => {
           // Arrange: a holder on the release is killed, and an evicter on this source stops inside its eviction.
-          await using directory = await scratchDirectory();
+          await using directory = await new TemporaryFiles().directory(
+            'mutex-test-',
+          );
           await using holder = startWorker(
             releaseHolder(store, directory.path, key),
             'holder',
@@ -698,7 +708,9 @@ describe('Two evicters of one dead holder, one on the latest release and one on 
         { timeout: 30000 },
         async (t) => {
           // Arrange: a holder on the release is killed, and an evicter on this source stops inside its eviction.
-          await using directory = await scratchDirectory();
+          await using directory = await new TemporaryFiles().directory(
+            'mutex-test-',
+          );
           await using holder = startWorker(
             releaseHolder(store, directory.path, key),
             'holder',

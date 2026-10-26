@@ -12,6 +12,9 @@
     },
     {
       "path": "../../packages/fencing"
+    },
+    {
+      "path": "../../packages/testing"
     }
   ]
 }

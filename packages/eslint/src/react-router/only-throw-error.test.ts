@@ -38,9 +38,9 @@ const thrownAt = (findings: { ruleId: string | null; file: string }[]) =>
     .filter(({ ruleId }) => ruleId === '@typescript-eslint/only-throw-error')
     .map(({ file }) => file);
 
-test('a react-router file may throw redirect(), replace() and data(), in a loader and in a helper', () => {
+test('a react-router file may throw redirect(), replace() and data(), in a loader and in a helper', async () => {
   // Arrange: the helper sits outside any routes folder, as an auth gate does.
-  using workspace = fixtureWorkspace({
+  await using workspace = await fixtureWorkspace({
     'nx.json': '{}',
     'tsconfig.json': tsconfig,
     'eslint.config.mjs': fixtureConfig(
@@ -72,9 +72,9 @@ test('a react-router file may throw redirect(), replace() and data(), in a loade
   assert.deepEqual(thrownAt(findings), []);
 });
 
-test('a react-router file still may not throw a string or a plain object', () => {
+test('a react-router file still may not throw a string or a plain object', async () => {
   // Arrange
-  using workspace = fixtureWorkspace({
+  await using workspace = await fixtureWorkspace({
     'nx.json': '{}',
     'tsconfig.json': tsconfig,
     'eslint.config.mjs': fixtureConfig(
@@ -95,9 +95,9 @@ test('a react-router file still may not throw a string or a plain object', () =>
   ]);
 });
 
-test('without the react-router config, a thrown Response is still reported', () => {
+test('without the react-router config, a thrown Response is still reported', async () => {
   // Arrange
-  using workspace = fixtureWorkspace({
+  await using workspace = await fixtureWorkspace({
     'nx.json': '{}',
     'tsconfig.json': tsconfig,
     'eslint.config.mjs': fixtureConfig(

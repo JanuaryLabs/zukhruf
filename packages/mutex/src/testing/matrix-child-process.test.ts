@@ -4,8 +4,9 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 
+import { TemporaryFiles } from '@zukhruf/testing/fs';
+
 import { newProcessTimeout } from './new-process-timeout.ts';
-import { scratchDirectory } from './scratch-directory.ts';
 import { storeCases } from './store-cases.ts';
 import { startWorker } from './worker-process.ts';
 
@@ -100,7 +101,7 @@ test(
   { timeout: 60_000 },
   async (t) => {
     // Arrange: a run of its own, with its records in a scratch directory.
-    await using records = await scratchDirectory();
+    await using records = await new TemporaryFiles().directory('mutex-test-');
     const store = storeCases.find(({ name }) => name === 'DockerEngineStore')!;
     await using fixture = await store.fixture({
       ...process.env,

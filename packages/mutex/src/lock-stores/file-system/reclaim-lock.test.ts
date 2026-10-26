@@ -6,9 +6,9 @@ import { syncBuiltinESMExports } from 'node:module';
 import { join } from 'node:path';
 import { type TestContext, describe } from 'node:test';
 
+import { TemporaryFiles } from '@zukhruf/testing/fs';
 import { test } from '@zukhruf/testing/node';
 
-import { scratchDirectory } from '../../testing/scratch-directory.ts';
 import { type Settlement, watch } from '../../testing/watch.ts';
 import { startWorker } from '../../testing/worker-process.ts';
 import { LockFileStore } from './lock-file-store.ts';
@@ -108,7 +108,9 @@ describe('A waiter that dies while it evicts a dead holder', () => {
       { timeout: 20_000 },
       async (t) => {
         // Arrange: a holder dies with the key, and a waiter freezes in the middle of evicting it.
-        await using directory = await scratchDirectory();
+        await using directory = await new TemporaryFiles().directory(
+          'mutex-test-',
+        );
         await using holder = startWorker(
           holderSource(store.url, store.name, directory.path),
           'holder',
@@ -210,7 +212,9 @@ describe('A waiter that dies while it evicts a dead holder', () => {
       { timeout: 20_000 },
       async (t) => {
         // Arrange: a holder dies with the key, and an older version's waiter died while it evicted it.
-        await using directory = await scratchDirectory();
+        await using directory = await new TemporaryFiles().directory(
+          'mutex-test-',
+        );
         await using holder = startWorker(
           holderSource(store.url, store.name, directory.path),
           'holder',

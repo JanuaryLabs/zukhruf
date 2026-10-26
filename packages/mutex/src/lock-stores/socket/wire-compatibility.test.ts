@@ -1,18 +1,18 @@
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { once } from 'node:events';
-import { readFile, realpath, writeFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 import { type Socket, connect, createServer } from 'node:net';
 import { join, resolve } from 'node:path';
 import { createInterface } from 'node:readline';
 import { DatabaseSync } from 'node:sqlite';
 import { describe } from 'node:test';
 
+import { TemporaryFiles } from '@zukhruf/testing/fs';
 import { test } from '@zukhruf/testing/node';
 
 import { Mutex } from '../../index.ts';
 import { newProcessTimeout } from '../../testing/new-process-timeout.ts';
-import { scratchDirectory } from '../../testing/scratch-directory.ts';
 import { startWorker } from '../../testing/worker-process.ts';
 import {
   ProtocolVersionError,
@@ -124,7 +124,9 @@ describe('What a socket store shares with other versions in its directory', () =
     { ...onUnixSockets, timeout: 10_000 },
     async () => {
       // Arrange: a published leader holds the term and serves nothing yet.
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory(
+        'mutex-test-',
+      );
       using term = holdTerm(directory.path);
       await using store = new SocketStore(directory.path, { pollInterval: 10 });
       const roles: SocketRole[] = [];
@@ -156,7 +158,9 @@ describe('What a socket store shares with other versions in its directory', () =
     { ...onUnixSockets, timeout: 10_000 },
     async () => {
       // Arrange
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory(
+        'mutex-test-',
+      );
       await using _leader = await leaderOf(directory.path);
       const candidate = new DatabaseSync(join(directory.path, 'leader.lock'), {
         timeout: 0,
@@ -193,7 +197,9 @@ describe('What a socket store shares with other versions in its directory', () =
     { ...onUnixSockets, timeout: 10_000 },
     async () => {
       // Arrange: the last leader in this directory, of a published version, recorded term 6.
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory(
+        'mutex-test-',
+      );
       await writeFile(join(directory.path, 'leader.epoch'), '6');
       await using store = new SocketStore(directory.path, {
         pollInterval: 10,
@@ -237,7 +243,9 @@ describe('What a socket store shares with other versions in its directory', () =
         { ...onUnixSockets, timeout: 10_000 },
         async (t) => {
           // Arrange: a leader of those versions holds the term, grants each acquire a token of its term 5, and answers each look that the key is held.
-          await using directory = await scratchDirectory();
+          await using directory = await new TemporaryFiles().directory(
+            'mutex-test-',
+          );
           using _term = holdTerm(directory.path);
           const granted = (5n << 32n) | 1n;
           const requests: Record<string, unknown>[] = [];
@@ -315,7 +323,9 @@ describe('What a socket store shares with other versions in its directory', () =
     { ...onUnixSockets, timeout: 10_000 },
     async (t) => {
       // Arrange
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory(
+        'mutex-test-',
+      );
       await using _leader = await leaderOf(directory.path);
 
       // Act: a follower of a published version says hello.
@@ -342,7 +352,9 @@ describe('What a socket store shares with other versions in its directory', () =
     { ...onUnixSockets, timeout: 10_000 },
     async (t) => {
       // Arrange
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory(
+        'mutex-test-',
+      );
       await using _leader = await leaderOf(directory.path);
 
       // Act: a process of protocol version 2 says hello.
@@ -369,7 +381,9 @@ describe('What a socket store shares with other versions in its directory', () =
     { ...onUnixSockets, timeout: 10_000 },
     async (t) => {
       // Arrange: a new directory, so the leader's term is 1, and its warm-up took the first token of the term.
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory(
+        'mutex-test-',
+      );
       await using _leader = await leaderOf(directory.path);
       const term = 1n << 32n;
       const lines = (received: string) => received.split('\n').length - 1;
@@ -417,7 +431,9 @@ describe('What a socket store shares with other versions in its directory', () =
     { ...onUnixSockets, timeout: 10_000 },
     async () => {
       // Arrange: a leader of protocol version 2 holds the term and refuses every hello, as the published refusal does.
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory(
+        'mutex-test-',
+      );
       using _term = holdTerm(directory.path);
       await using _leader = await publishedLeader(directory.path, (peer) =>
         peer.end('{"op":"refused","version":2}\n'),
@@ -441,7 +457,9 @@ describe('What a socket store shares with other versions in its directory', () =
     { ...onUnixSockets, timeout: 10_000 },
     async (t) => {
       // Arrange: two hellos padded with JSON whitespace to their full length.
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory(
+        'mutex-test-',
+      );
       await using _leader = await leaderOf(directory.path);
       const helloOf = (bytes: number) =>
         `{"op":"hello","version":1${' '.repeat(bytes - 26)}}`;
@@ -482,7 +500,7 @@ describe('What a socket store shares with other versions in its directory', () =
     { ...onUnixSockets, timeout: 10_000 },
     async () => {
       // Arrange: directory names in Arabic letters, which take two bytes each, so each path has fewer characters than bytes.
-      await using scratch = await scratchDirectory();
+      await using scratch = await new TemporaryFiles().directory('mutex-test-');
       const withSocketPathOf = (bytes: number) => {
         const nameBytes =
           bytes - Buffer.byteLength(join(scratch.path, 'lock.sock')) - 1;
@@ -543,9 +561,8 @@ describe('What a socket store shares with other versions on Windows', () => {
     { timeout: 15_000 },
     async (t) => {
       // Arrange: a leader of a published version listens on the pipe of the directory.
-      await using scratch = await scratchDirectory();
-      const cwd = await realpath(scratch.path);
-      const pipe = pipeFor(resolve(cwd, directory));
+      await using scratch = await new TemporaryFiles().directory('mutex-test-');
+      const pipe = pipeFor(resolve(scratch.path, directory));
 
       // Act
       await using follower = startWorker(
@@ -554,7 +571,7 @@ describe('What a socket store shares with other versions on Windows', () => {
         import { createInterface } from 'node:readline';
         import { Mutex } from ${JSON.stringify(mutexUrl.href)};
         import { SocketStore } from ${JSON.stringify(socketUrl.href)};
-        process.chdir(${JSON.stringify(cwd)});
+        process.chdir(${JSON.stringify(scratch.path)});
         const leader = createServer((peer) => {
           peer.on('error', () => {});
           createInterface({ input: peer }).once('line', (line) => process.send({ type: 'hello', line }));
@@ -593,9 +610,8 @@ describe('What a socket store shares with other versions on Windows', () => {
     { timeout: 15_000 },
     async (t) => {
       // Arrange
-      await using scratch = await scratchDirectory();
-      const cwd = await realpath(scratch.path);
-      const pipe = pipeFor(resolve(cwd, directory));
+      await using scratch = await new TemporaryFiles().directory('mutex-test-');
+      const pipe = pipeFor(resolve(scratch.path, directory));
 
       // Act: the store leads, and a follower of a published version says hello on the pipe.
       await using leader = startWorker(
@@ -603,7 +619,7 @@ describe('What a socket store shares with other versions on Windows', () => {
         import { connect } from 'node:net';
         import { Mutex } from ${JSON.stringify(mutexUrl.href)};
         import { SocketStore } from ${JSON.stringify(socketUrl.href)};
-        process.chdir(${JSON.stringify(cwd)});
+        process.chdir(${JSON.stringify(scratch.path)});
         const store = new SocketStore(${JSON.stringify(directory)}, { pollInterval: 10 });
         store.on('role', (role) => process.send({ type: 'role', role }));
         await new Mutex(store).acquire('warm-up', async () => {});

@@ -175,9 +175,9 @@ const esbuild = (options?: Record<string, unknown>) => ({
   ...(options ? { options } : {}),
 });
 
-test('a bundled app must declare the npm packages its workspace imports pull in, from the root and from its folder', () => {
+test('a bundled app must declare the npm packages its workspace imports pull in, from the root and from its folder', async () => {
   // Arrange
-  using workspace = fixtureWorkspace(
+  await using workspace = await fixtureWorkspace(
     workspaceFiles({ apps: { web: { build: VITE_BUILD } } }),
   );
   buildProjectGraph(workspace.root);
@@ -195,9 +195,9 @@ test('a bundled app must declare the npm packages its workspace imports pull in,
   }
 });
 
-test('an app that does not bundle declares its workspace imports, not their npm packages', () => {
+test('an app that does not bundle declares its workspace imports, not their npm packages', async () => {
   // Arrange: esbuild with bundle: false transpiles file by file.
-  using workspace = fixtureWorkspace(
+  await using workspace = await fixtureWorkspace(
     workspaceFiles({ apps: { web: { build: esbuild({ bundle: false }) } } }),
   );
   buildProjectGraph(workspace.root);
@@ -211,7 +211,7 @@ test('an app that does not bundle declares its workspace imports, not their npm 
   assert.doesNotMatch(findings[0]?.message ?? '', /left-pad/);
 });
 
-test('an app declares the workspace packages its build leaves to node_modules, and the npm packages of those it inlines', () => {
+test('an app declares the workspace packages its build leaves to node_modules, and the npm packages of those it inlines', async () => {
   // Arrange: every app imports greet, which imports left-pad.
   const installsGreet = {
     shell: { build: { executor: 'nx:noop' } },
@@ -244,7 +244,7 @@ test('an app declares the workspace packages its build leaves to node_modules, a
     'overlapping-wildcard': { build: esbuild({ external: ['@fx/gr*reet'] }) },
     'not-imported': { build: esbuild({ external: ['@fx/shout', 'left-pad'] }) },
   };
-  using workspace = fixtureWorkspace(
+  await using workspace = await fixtureWorkspace(
     workspaceFiles({ apps: { ...installsGreet, ...inlinesGreet } }),
   );
   buildProjectGraph(workspace.root);
@@ -273,9 +273,9 @@ test('an app declares the workspace packages its build leaves to node_modules, a
   }
 });
 
-test('an esbuild app takes its external list from the target defaults in nx.json', () => {
+test('an esbuild app takes its external list from the target defaults in nx.json', async () => {
   // Arrange
-  using workspace = fixtureWorkspace(
+  await using workspace = await fixtureWorkspace(
     workspaceFiles({
       apps: { api: { build: esbuild() } },
       targetDefaults: {
@@ -294,9 +294,9 @@ test('an esbuild app takes its external list from the target defaults in nx.json
   assert.doesNotMatch(findings[0]?.message ?? '', /left-pad/);
 });
 
-test('an app that leaves one workspace package to node_modules never declares one it inlines', () => {
+test('an app that leaves one workspace package to node_modules never declares one it inlines', async () => {
   // Arrange
-  using workspace = fixtureWorkspace(
+  await using workspace = await fixtureWorkspace(
     workspaceFiles({
       apps: {
         api: {
@@ -317,9 +317,9 @@ test('an app that leaves one workspace package to node_modules never declares on
   assert.doesNotMatch(findings[0]?.message ?? '', /@fx\/shout/);
 });
 
-test('a manifest is not checked before Nx caches a project graph, as on a fresh clone', () => {
+test('a manifest is not checked before Nx caches a project graph, as on a fresh clone', async () => {
   // Arrange: no buildProjectGraph.
-  using workspace = fixtureWorkspace(
+  await using workspace = await fixtureWorkspace(
     workspaceFiles({ apps: { web: { build: VITE_BUILD } } }),
   );
 
@@ -330,9 +330,9 @@ test('a manifest is not checked before Nx caches a project graph, as on a fresh 
   assert.deepEqual(findings, []);
 });
 
-test('an island manifest is reported once, by island/dependency-checks', () => {
+test('an island manifest is reported once, by island/dependency-checks', async () => {
   // Arrange: greet becomes an island and no longer declares left-pad.
-  using workspace = fixtureWorkspace(
+  await using workspace = await fixtureWorkspace(
     workspaceFiles({
       apps: { web: { build: VITE_BUILD } },
       greetTags: ['layer:island'],
@@ -359,9 +359,9 @@ for (const testFile of [
   'index.test.cjs',
   'index.spec.jsx',
 ]) {
-  test(`the imports of a test file named ${testFile} are not dependencies of the package`, () => {
+  test(`the imports of a test file named ${testFile} are not dependencies of the package`, async () => {
     // Arrange: greet ships nothing that imports left-pad; only its test does.
-    using workspace = fixtureWorkspace(
+    await using workspace = await fixtureWorkspace(
       workspaceFiles({
         apps: { web: { build: VITE_BUILD } },
         greetTags: ['layer:island'],
@@ -382,9 +382,9 @@ for (const testFile of [
   });
 }
 
-test('the imports of a JavaScript test file are not dependencies of a package that is not an island', () => {
+test('the imports of a JavaScript test file are not dependencies of a package that is not an island', async () => {
   // Arrange
-  using workspace = fixtureWorkspace(
+  await using workspace = await fixtureWorkspace(
     workspaceFiles({
       apps: { web: { build: VITE_BUILD } },
       greetDependencies: {},
@@ -413,9 +413,9 @@ const greetWithTestSupport = {
   },
 };
 
-test('the imports of a testing folder that the manifest does not export are not dependencies of the package', () => {
+test('the imports of a testing folder that the manifest does not export are not dependencies of the package', async () => {
   // Arrange
-  using workspace = fixtureWorkspace(
+  await using workspace = await fixtureWorkspace(
     workspaceFiles({
       apps: { web: { build: VITE_BUILD } },
       ...greetWithTestSupport,
@@ -441,9 +441,9 @@ for (const [publishes, published] of [
   ['an exports pattern', { exports: { './*': './src/*.ts' } }],
   ['a files entry', { files: ['src/index.ts', 'src/testing'] }],
 ] as const) {
-  test(`a package whose manifest publishes its testing folder through ${publishes} declares what that folder imports`, () => {
+  test(`a package whose manifest publishes its testing folder through ${publishes} declares what that folder imports`, async () => {
     // Arrange
-    using workspace = fixtureWorkspace(
+    await using workspace = await fixtureWorkspace(
       workspaceFiles({
         apps: { web: { build: VITE_BUILD } },
         ...greetWithTestSupport,
@@ -465,9 +465,9 @@ for (const [publishes, published] of [
   });
 }
 
-test('a bundled app does not declare what the unexported testing folder of a package it inlines imports', () => {
+test('a bundled app does not declare what the unexported testing folder of a package it inlines imports', async () => {
   // Arrange
-  using workspace = fixtureWorkspace(
+  await using workspace = await fixtureWorkspace(
     workspaceFiles({
       apps: { web: { build: VITE_BUILD } },
       ...greetWithTestSupport,

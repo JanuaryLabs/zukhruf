@@ -7,10 +7,10 @@ import { describe, test } from 'node:test';
 
 import { SqliteElection } from '@zukhruf/election';
 import type { FileLock } from '@zukhruf/fs';
+import { TemporaryFiles } from '@zukhruf/testing/fs';
 
 import { LeaseLostError, SingleFlight } from '../index.ts';
 import { KeyLocks } from '../key-lock/key-locks.ts';
-import { scratchDirectory } from '../testing/scratch-directory.ts';
 import { FlightServer } from './flight-server.ts';
 
 /**
@@ -81,7 +81,7 @@ describe('Flight server', () => {
     { ...onUnixSockets, timeout: 10_000 },
     async () => {
       // Arrange
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory('flights-');
       const socketPath = join(directory.path, 'flight.sock');
       const loss = new AbortController();
       const term = await new LosableElection(
@@ -111,7 +111,7 @@ describe('Flight server', () => {
     { ...onUnixSockets, timeout: 10_000 },
     async (t) => {
       // Arrange: a server for a term its backend can take away, and a single flight that follows it.
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory('flights-');
       const loss = new AbortController();
       const term = await new LosableElection(
         directory.path,

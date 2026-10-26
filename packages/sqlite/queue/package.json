@@ -50,6 +50,7 @@
     "serialize-error": "^13.0.2"
   },
   "devDependencies": {
-    "@electric-sql/pglite": "0.5.8"
+    "@electric-sql/pglite": "0.5.8",
+    "@zukhruf/testing": "^0.3.42"
   }
 }

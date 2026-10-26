@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
-import { chmod, mkdtempDisposable } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { chmod } from 'node:fs/promises';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { test } from 'node:test';
+
+import { TemporaryFiles } from '@zukhruf/testing/fs';
 
 import { DataVersion } from './index.ts';
 
@@ -19,7 +20,7 @@ class SourceUnavailableError extends Error {
 }
 
 test('the version stays the same until the owner commits, then changes', async () => {
-  await using dir = await mkdtempDisposable(join(tmpdir(), 'data-version-'));
+  await using dir = await new TemporaryFiles().directory('data-version-');
   const path = join(dir.path, 'source.sqlite');
   using owner = new DatabaseSync(path);
   owner.exec(`
@@ -37,7 +38,7 @@ test('the version stays the same until the owner commits, then changes', async (
 });
 
 test('a missing file is the caller’s unavailable error', async () => {
-  await using dir = await mkdtempDisposable(join(tmpdir(), 'data-version-'));
+  await using dir = await new TemporaryFiles().directory('data-version-');
   const missing = join(dir.path, 'missing', 'source.sqlite');
 
   assert.throws(
@@ -57,7 +58,7 @@ test(
     skip: process.platform === 'win32' || process.getuid?.() === 0,
   },
   async () => {
-    await using dir = await mkdtempDisposable(join(tmpdir(), 'data-version-'));
+    await using dir = await new TemporaryFiles().directory('data-version-');
     const path = join(dir.path, 'source.sqlite');
     new DatabaseSync(path).close();
     await chmod(path, 0o000);

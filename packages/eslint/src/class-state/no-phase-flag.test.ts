@@ -20,8 +20,8 @@ const tsconfig = JSON.stringify({
 
 const reported = [{ messageId: 'phaseFlag' }];
 
-test('no-phase-flag', () => {
-  using workspace = fixtureWorkspace({
+test('no-phase-flag', async () => {
+  await using workspace = await fixtureWorkspace({
     'tsconfig.json': tsconfig,
     'index.ts': 'export {};\n',
   });

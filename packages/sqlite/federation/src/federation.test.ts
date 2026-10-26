@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
 import { existsSync } from 'node:fs';
-import { mkdtempDisposable } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { test } from 'node:test';
 import { Worker } from 'node:worker_threads';
+
+import { TemporaryFiles } from '@zukhruf/testing/fs';
 
 import { Federation, TooManyDatabasesError } from './index.ts';
 
@@ -27,7 +27,7 @@ function attachedNames(federation: Federation): unknown[] {
 }
 
 test('a main database preserves its schema, presets and read-only behavior when also located by name', async () => {
-  await using scratch = await mkdtempDisposable(join(tmpdir(), 'federation-'));
+  await using scratch = await new TemporaryFiles().directory('federation-');
   const path = join(scratch.path, 'main.sqlite');
   writeDatabase(path, [1]);
   const locate = (name: string) => (name === 'd' ? path : undefined);
@@ -77,7 +77,7 @@ test('a main database preserves its schema, presets and read-only behavior when 
 });
 
 test('a named main stays open while its name locates a new path for later statements', async () => {
-  await using scratch = await mkdtempDisposable(join(tmpdir(), 'federation-'));
+  await using scratch = await new TemporaryFiles().directory('federation-');
   const first = join(scratch.path, 'first.sqlite');
   const second = join(scratch.path, 'second.sqlite');
   writeDatabase(first, [1]);
@@ -120,7 +120,7 @@ test('a named main must resolve to an existing database and preserves locate err
       }),
     (error) => error === unreadable,
   );
-  await using scratch = await mkdtempDisposable(join(tmpdir(), 'federation-'));
+  await using scratch = await new TemporaryFiles().directory('federation-');
   const absent = join(scratch.path, 'absent.sqlite');
   assert.throws(
     () => new Federation({ main: { name: 'absent' }, locate: () => absent }),
@@ -130,7 +130,7 @@ test('a named main must resolve to an existing database and preserves locate err
 });
 
 test('main stays open while up to ten additional databases attach for one statement', async () => {
-  await using scratch = await mkdtempDisposable(join(tmpdir(), 'federation-'));
+  await using scratch = await new TemporaryFiles().directory('federation-');
   const main = join(scratch.path, 'main.sqlite');
   writeDatabase(main, [100]);
   const paths = new Map<string, string>();
@@ -168,7 +168,7 @@ test('main stays open while up to ten additional databases attach for one statem
 });
 
 test('a statement that names more than 10 databases fails with TooManyDatabasesError and leaves none attached', async () => {
-  await using scratch = await mkdtempDisposable(join(tmpdir(), 'federation-'));
+  await using scratch = await new TemporaryFiles().directory('federation-');
   const paths = new Map<string, string>();
   for (let index = 0; index <= 10; index++) {
     const path = join(scratch.path, `d${index}.sqlite`);
@@ -200,7 +200,7 @@ test('a statement that names more than 10 databases fails with TooManyDatabasesE
 });
 
 test('a name the host cannot locate fails with SQLite’s own error', async () => {
-  await using scratch = await mkdtempDisposable(join(tmpdir(), 'federation-'));
+  await using scratch = await new TemporaryFiles().directory('federation-');
   const path = join(scratch.path, 'd.sqlite');
   writeDatabase(path, [1]);
   using federation = new Federation({
@@ -218,7 +218,7 @@ test('a name the host cannot locate fails with SQLite’s own error', async () =
 });
 
 test('a table its database lacks fails with SQLite’s own error and leaves none attached', async () => {
-  await using scratch = await mkdtempDisposable(join(tmpdir(), 'federation-'));
+  await using scratch = await new TemporaryFiles().directory('federation-');
   const path = join(scratch.path, 'd.sqlite');
   writeDatabase(path, [1]);
   using federation = new Federation({
@@ -233,7 +233,7 @@ test('a table its database lacks fails with SQLite’s own error and leaves none
 });
 
 test('a path to a file that does not exist fails with SQLite’s own error and leaves none attached', async () => {
-  await using scratch = await mkdtempDisposable(join(tmpdir(), 'federation-'));
+  await using scratch = await new TemporaryFiles().directory('federation-');
   const first = join(scratch.path, 'first.sqlite');
   writeDatabase(first, [1]);
   const paths = new Map([
@@ -255,7 +255,7 @@ test('a path to a file that does not exist fails with SQLite’s own error and l
 });
 
 test('a locate that throws fails the statement with its error and leaves none attached', async () => {
-  await using scratch = await mkdtempDisposable(join(tmpdir(), 'federation-'));
+  await using scratch = await new TemporaryFiles().directory('federation-');
   const first = join(scratch.path, 'first.sqlite');
   writeDatabase(first, [1]);
   const unreadable = new Error('the host cannot read its settings');
@@ -275,7 +275,7 @@ test('a locate that throws fails the statement with its error and leaves none at
 });
 
 test('a statement cannot change a database it reads', async () => {
-  await using scratch = await mkdtempDisposable(join(tmpdir(), 'federation-'));
+  await using scratch = await new TemporaryFiles().directory('federation-');
   const path = join(scratch.path, 'd.sqlite');
   writeDatabase(path, [1]);
   using federation = new Federation({
@@ -298,7 +298,7 @@ test('a statement cannot change a database it reads', async () => {
 });
 
 test('a writer commits between two statements', async () => {
-  await using scratch = await mkdtempDisposable(join(tmpdir(), 'federation-'));
+  await using scratch = await new TemporaryFiles().directory('federation-');
   const path = join(scratch.path, 'd.sqlite');
   writeDatabase(path, [1]);
   using federation = new Federation({
@@ -320,7 +320,7 @@ test('a writer commits between two statements', async () => {
 });
 
 test('a database that moves between statements is read from its new path', async () => {
-  await using scratch = await mkdtempDisposable(join(tmpdir(), 'federation-'));
+  await using scratch = await new TemporaryFiles().directory('federation-');
   const before = join(scratch.path, 'before.sqlite');
   const after = join(scratch.path, 'after.sqlite');
   writeDatabase(before, [1]);
@@ -340,7 +340,7 @@ test('a database that moves between statements is read from its new path', async
 });
 
 test('a statement reads a database that it names by schema', async () => {
-  await using scratch = await mkdtempDisposable(join(tmpdir(), 'federation-'));
+  await using scratch = await new TemporaryFiles().directory('federation-');
   const path = join(scratch.path, 'd.sqlite');
   writeDatabase(path, [1, 2]);
   using federation = new Federation({
@@ -363,7 +363,7 @@ test('a statement reads a database that it names by schema', async () => {
 });
 
 test('one statement joins two databases', async () => {
-  await using scratch = await mkdtempDisposable(join(tmpdir(), 'federation-'));
+  await using scratch = await new TemporaryFiles().directory('federation-');
   const paths = new Map([
     ['left', join(scratch.path, 'left.sqlite')],
     ['right', join(scratch.path, 'right.sqlite')],
@@ -385,7 +385,7 @@ test('one statement joins two databases', async () => {
 });
 
 test('one statement reads 10 databases', async () => {
-  await using scratch = await mkdtempDisposable(join(tmpdir(), 'federation-'));
+  await using scratch = await new TemporaryFiles().directory('federation-');
   const paths = new Map<string, string>();
   for (let index = 0; index < 10; index++) {
     const path = join(scratch.path, `d${index}.sqlite`);
@@ -412,7 +412,7 @@ test('one statement reads 10 databases', async () => {
 });
 
 test('a SQL file defines temporary views read by raw and tagged queries across databases', async () => {
-  await using scratch = await mkdtempDisposable(join(tmpdir(), 'federation-'));
+  await using scratch = await new TemporaryFiles().directory('federation-');
   const left = join(scratch.path, 'left.sqlite');
   const right = join(scratch.path, 'right.sqlite');
   writeDatabase(left, [1, 2]);
@@ -446,7 +446,7 @@ test('a SQL file defines temporary views read by raw and tagged queries across d
 });
 
 test('raw SQL preserves column positions, empty headers and qualified table resolution', async () => {
-  await using scratch = await mkdtempDisposable(join(tmpdir(), 'federation-'));
+  await using scratch = await new TemporaryFiles().directory('federation-');
   const first = join(scratch.path, 'first.sqlite');
   const second = join(scratch.path, 'second.sqlite');
   writeDatabase(first, [1]);
@@ -492,7 +492,7 @@ test('raw SQL preserves column positions, empty headers and qualified table reso
 });
 
 test('PRAGMAs discover bare and quoted database names through raw SQL and bound parameters', async () => {
-  await using scratch = await mkdtempDisposable(join(tmpdir(), 'federation-'));
+  await using scratch = await new TemporaryFiles().directory('federation-');
   const path = join(scratch.path, 'd.sqlite');
   writeDatabase(path, [1]);
   const schemas = [
@@ -552,7 +552,7 @@ test('PRAGMAs discover bare and quoted database names through raw SQL and bound 
 });
 
 test('raw SQL rejects second statements before executing and detaches on failure', async () => {
-  await using scratch = await mkdtempDisposable(join(tmpdir(), 'federation-'));
+  await using scratch = await new TemporaryFiles().directory('federation-');
   const path = join(scratch.path, 'd.sqlite');
   writeDatabase(path, [1]);
   const paths = new Map([['d', path]]);
@@ -603,7 +603,7 @@ test('raw SQL rejects second statements before executing and detaches on failure
 });
 
 test('a configured busy timeout waits for a writer before reading an attached database', async () => {
-  await using scratch = await mkdtempDisposable(join(tmpdir(), 'federation-'));
+  await using scratch = await new TemporaryFiles().directory('federation-');
   const path = join(scratch.path, 'd.sqlite');
   writeDatabase(path, [1]);
   using federation = new Federation({

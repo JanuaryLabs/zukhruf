@@ -12,10 +12,10 @@ import { promisify } from 'node:util';
 
 import { Docker } from '@zukhruf/docker';
 import { DockerFixtures } from '@zukhruf/testing/docker';
+import { TemporaryFiles } from '@zukhruf/testing/fs';
 
 import { Mutex } from '../../index.ts';
 import { newProcessTimeout } from '../../testing/new-process-timeout.ts';
-import { scratchDirectory } from '../../testing/scratch-directory.ts';
 import { startWorker } from '../../testing/worker-process.ts';
 import { DockerEngineStore } from './index.ts';
 
@@ -103,7 +103,7 @@ async function hold(mutex: Mutex, key: string) {
  */
 async function engineProxy(docker: Docker) {
   const enginePath = new URL(docker.host).pathname;
-  const directory = await scratchDirectory();
+  const directory = await new TemporaryFiles().directory('mutex-test-');
   const path = join(directory.path, 'engine.sock');
   const partitioned = new AbortController();
   const sockets = new Set<Socket>();
@@ -1041,7 +1041,7 @@ test(
       return;
     }
     // Arrange: a run of its own, with its records in a scratch directory.
-    await using directory = await scratchDirectory();
+    await using directory = await new TemporaryFiles().directory('mutex-test-');
     const statePath = join(directory.path, 'state.json');
     const file = join(directory.path, 'killed-holder.test.mjs');
     await writeFile(file, killedHolderSource(statePath));

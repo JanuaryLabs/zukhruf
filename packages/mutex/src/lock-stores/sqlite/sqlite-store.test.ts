@@ -5,13 +5,13 @@ import { join } from 'node:path';
 import { describe } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
 
+import { TemporaryFiles } from '@zukhruf/testing/fs';
 import { test } from '@zukhruf/testing/node';
 
 import { Modes } from '../../mutex/acquire-modes/modes.ts';
 import { Mutex } from '../../mutex/mutex.ts';
 import { isRecord } from '../../shared/is-record.ts';
 import { newProcessTimeout } from '../../testing/new-process-timeout.ts';
-import { scratchDirectory } from '../../testing/scratch-directory.ts';
 import { startWorker } from '../../testing/worker-process.ts';
 import { SqliteStore } from './sqlite-store.ts';
 
@@ -50,7 +50,9 @@ describe('SqliteStore', () => {
     },
     async () => {
       // Arrange
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory(
+        'mutex-test-',
+      );
       const mutex = new Mutex(
         new SqliteStore(directory.path, { pollInterval: 10 }),
       );
@@ -79,7 +81,9 @@ describe('SqliteStore', () => {
     { timeout: 10000 },
     async () => {
       // Arrange
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory(
+        'mutex-test-',
+      );
       const mutex = new Mutex(
         new SqliteStore(directory.path, { pollInterval: 10 }),
       );
@@ -107,7 +111,9 @@ describe('SqliteStore holder record', () => {
   void test.each(['garbage', '{"pid":1}'], (damaged) =>
     test(`a holder record that holds ${damaged} names nobody, and the next holder writes its own`, async () => {
       // Arrange: a power loss in the middle of a write can leave such a record; no operation writes one.
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory(
+        'mutex-test-',
+      );
       const mutex = new Mutex(new SqliteStore(directory.path));
       const folder = join(directory.path, 'report%3Adaily.lock.holder');
       const record = join(folder, 'caller');
@@ -141,7 +147,9 @@ describe('SqliteStore holder record', () => {
     { timeout: 30000 },
     async (t) => {
       // Arrange: a holder process dies while it holds the key.
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory(
+        'mutex-test-',
+      );
       await using holder = startWorker(
         `
 				import { Mutex } from ${JSON.stringify(mutexUrl.href)};
@@ -183,7 +191,9 @@ describe('SqliteStore holder record', () => {
     { skip: posixOnly, timeout: 10000 },
     async () => {
       // Arrange: the holder folder turns read-only while the task holds the key, so the release cannot remove the record.
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory(
+        'mutex-test-',
+      );
       const mutex = new Mutex(new SqliteStore(directory.path));
       const folder = join(directory.path, 'report%3Adaily.lock.holder');
 

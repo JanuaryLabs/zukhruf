@@ -12,8 +12,8 @@ function projectJson(assets: string): string {
   return `{"targets":{"build":{"options":{"assets":${assets}}}}}`;
 }
 
-test('no-missing-asset-input', () => {
-  using workspace = fixtureWorkspace({
+test('no-missing-asset-input', async () => {
+  await using workspace = await fixtureWorkspace({
     'nx.json': '{}',
     'openapi.json': '{}',
     'packages/assets/skills/.keep': '',
@@ -96,8 +96,8 @@ test('no-missing-asset-input', () => {
   });
 });
 
-test('no-missing-asset-input: root-ignored assets', () => {
-  using workspace = fixtureWorkspace({
+test('no-missing-asset-input: root-ignored assets', async () => {
+  await using workspace = await fixtureWorkspace({
     'nx.json': '{}',
     '.gitignore': 'apps/v2/backend/openapi.json\ndist\n*.tsbuildinfo\n',
     '.nxignore': 'vendor/**\n',

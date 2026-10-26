@@ -25,6 +25,9 @@
     },
     {
       "path": "../mutex/tsconfig.lib.json"
+    },
+    {
+      "path": "../testing/tsconfig.lib.json"
     }
   ]
 }

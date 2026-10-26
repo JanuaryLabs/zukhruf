@@ -77,5 +77,8 @@
     "eslint-plugin-es-x": {
       "optional": true
     }
+  },
+  "devDependencies": {
+    "@zukhruf/testing": "^0.3.42"
   }
 }

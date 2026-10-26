@@ -15,13 +15,13 @@ import {
   type FencingToken,
   type TokenSource,
 } from '@zukhruf/fencing';
+import { TemporaryFiles } from '@zukhruf/testing/fs';
 import { describe, test } from '@zukhruf/testing/node';
 
 import { IpcLockCoordinator } from '../lock-stores/ipc/index.ts';
 import { ThreadLockCoordinator } from '../lock-stores/thread/index.ts';
 import { isRecord } from '../shared/is-record.ts';
 import { newProcessTimeout } from '../testing/new-process-timeout.ts';
-import { scratchDirectory } from '../testing/scratch-directory.ts';
 import {
   type StoreCase,
   type StoreHost,
@@ -725,7 +725,9 @@ void describe.each(
             // Arrange: the callers have separate memory but share a resource key.
             await using fixture = await store.fixture(process.env);
             await using host = store.open(fixture.location);
-            await using journals = await scratchDirectory();
+            await using journals = await new TemporaryFiles().directory(
+              'mutex-test-',
+            );
             const journal = join(journals.path, 'callbacks.log');
 
             // The log records real callback boundaries; it never grants or blocks a lock.
@@ -894,7 +896,9 @@ void describe.each(
           // Arrange: each increment reads, yields, then writes, so any overlap loses an update.
           await using fixture = await store.fixture(process.env);
           await using host = store.open(fixture.location);
-          await using journals = await scratchDirectory();
+          await using journals = await new TemporaryFiles().directory(
+            'mutex-test-',
+          );
           const counter = join(journals.path, 'counter');
           const tokenJournal = join(journals.path, 'tokens.log');
           await writeFile(counter, '0');
@@ -1512,7 +1516,9 @@ describe('Process-tree mutex with IpcStore', () => {
     async (t) => {
       // Arrange: a parent holds the key and coordinates a child that waits for it.
       // The child reports through a journal file, because its only channel is to that parent.
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory(
+        'mutex-test-',
+      );
       const journal = join(directory.path, 'child.log');
       const ipcLockCoordinatorUrl = new URL(
         '../lock-stores/ipc/ipc-lock-coordinator.ts',
@@ -1605,7 +1611,9 @@ describe('Process-tree mutex with IpcStore', () => {
     async (t) => {
       // Arrange: a parent holds the key and coordinates a child that waits for it.
       // The child reports through a journal file, because its only channel is to that parent.
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory(
+        'mutex-test-',
+      );
       const journal = join(directory.path, 'child.log');
       const ipcUrl = new URL('../lock-stores/ipc/index.ts', import.meta.url);
       const childSource = `

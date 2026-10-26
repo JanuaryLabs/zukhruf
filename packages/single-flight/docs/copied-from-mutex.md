@@ -107,16 +107,15 @@ A single flight has no role event. Thus the test reads `flight.epoch` to see tha
 
 ## Test helpers copied
 
-The tests start real processes, so this package also copies three helpers from `packages/mutex/src/testing`. They are not part of the package: the build leaves `src/testing` out.
+The tests start real processes, so this package also copies two helpers from `packages/mutex/src/testing`. They are not part of the package: the build leaves `src/testing` out.
 
 **`testing/new-process-timeout.ts` → `testing/new-process-timeout.ts`.**
 Copied without a change.
 
-**`testing/scratch-directory.ts` → `testing/scratch-directory.ts`.**
-The prefix of the directory is `flights-`, not `mutex-test-`.
-
 **`testing/worker-process.ts` → `testing/worker-process.ts`.**
 `startWorker` has no options: no `host` (it joins a child to the mutex's IPC coordinator) and no `nodeOptions`. The worker has no `exit` and no `find`. These tests use none of them.
+
+The temporary directory of the tests is not a copy: the tests use `TemporaryFiles` of `@zukhruf/testing/fs`, with the prefix `flights-`.
 
 These helpers do not belong in `@zukhruf/coordinator`. A third package that copies them is the time to move them to `@zukhruf/testing` (backlog #2509).
 

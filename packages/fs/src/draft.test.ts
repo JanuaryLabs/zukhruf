@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
-import { mkdtempDisposable, readdir } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { describe, test } from 'node:test';
+
+import { TemporaryFiles } from '@zukhruf/testing/fs';
 
 import { atomicWrite } from './atomic-write.ts';
 import { createExclusive } from './create-exclusive.ts';
@@ -25,8 +26,8 @@ describe('The room for the name of a draft', () => {
       { timeout: 2_000 },
       async () => {
         // Arrange
-        await using directory = await mkdtempDisposable(
-          join(tmpdir(), 'zukhruf-fs-'),
+        await using directory = await new TemporaryFiles().directory(
+          'zukhruf-fs-',
         );
         const longest = 'k'.repeat(longestFileName - draftSuffixLength);
 
@@ -43,8 +44,8 @@ describe('The room for the name of a draft', () => {
       { timeout: 2_000 },
       async () => {
         // Arrange
-        await using directory = await mkdtempDisposable(
-          join(tmpdir(), 'zukhruf-fs-'),
+        await using directory = await new TemporaryFiles().directory(
+          'zukhruf-fs-',
         );
         const tooLong = 'k'.repeat(longestFileName - draftSuffixLength + 1);
 

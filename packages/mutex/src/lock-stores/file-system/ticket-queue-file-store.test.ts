@@ -8,12 +8,12 @@ import { join } from 'node:path';
 import { describe } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
 
+import { TemporaryFiles } from '@zukhruf/testing/fs';
 import { test } from '@zukhruf/testing/node';
 
 import type { LockHandle } from '../../mutex/lease.ts';
 import { Mutex } from '../../mutex/mutex.ts';
 import { newProcessTimeout } from '../../testing/new-process-timeout.ts';
-import { scratchDirectory } from '../../testing/scratch-directory.ts';
 import { startWorker } from '../../testing/worker-process.ts';
 import { TicketQueueFileStore } from './ticket-queue-file-store.ts';
 
@@ -28,7 +28,9 @@ describe('TicketQueueFileStore', () => {
     { timeout: 5000 },
     async (t) => {
       // Arrange: a holder, and a file system that pauses the rename that replaces the queue.
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory(
+        'mutex-test-',
+      );
       const store = new TicketQueueFileStore(directory.path, {
         pollInterval: 10,
       });
@@ -90,7 +92,9 @@ describe('TicketQueueFileStore holder check', () => {
     { timeout: 30000 },
     async (t) => {
       // Arrange: a holder process, and a waiter process in line that checks the queue only once a minute.
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory(
+        'mutex-test-',
+      );
       const queue = join(directory.path, 'report%3Adaily.lock');
       const caller = (pollInterval: number) => `
 				import { TicketQueueFileStore } from ${JSON.stringify(storeUrl.href)};
@@ -152,7 +156,9 @@ describe('TicketQueueFileStore damaged queue', () => {
     test(`a first ticket line that holds ${damaged} makes every call reject with a SyntaxError and stays first`, async () => {
       // Arrange: a power loss can leave a complete line whose bytes never reached the disk; no operation writes one.
       // (A line without its newline is an append still in progress, which the store skips.)
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory(
+        'mutex-test-',
+      );
       const store = new TicketQueueFileStore(directory.path, {
         pollInterval: 10,
       });

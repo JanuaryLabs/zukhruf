@@ -4,8 +4,8 @@ import { fixtureWorkspace } from '../testing/fixture-workspace.ts';
 import { typescriptRuleTester } from '../testing/rule-tester.ts';
 import rule from './no-fabricated-fallback.ts';
 
-test('no-fabricated-fallback', () => {
-  using workspace = fixtureWorkspace({ 'nx.json': '{}' });
+test('no-fabricated-fallback', async () => {
+  await using workspace = await fixtureWorkspace({ 'nx.json': '{}' });
   const backendOnly = [{ roots: ['apps/backend/src'] }];
 
   typescriptRuleTester().run('no-fabricated-fallback', rule, {

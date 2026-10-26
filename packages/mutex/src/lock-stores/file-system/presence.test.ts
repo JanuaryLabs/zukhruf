@@ -9,11 +9,11 @@ import { join } from 'node:path';
 import { createInterface } from 'node:readline';
 import { describe } from 'node:test';
 
+import { TemporaryFiles } from '@zukhruf/testing/fs';
 import { test } from '@zukhruf/testing/node';
 
 import { Modes } from '../../mutex/acquire-modes/modes.ts';
 import { Mutex } from '../../mutex/mutex.ts';
-import { scratchDirectory } from '../../testing/scratch-directory.ts';
 import { startWorker } from '../../testing/worker-process.ts';
 import { LockFileStore } from './lock-file-store.ts';
 import { TicketQueueFileStore } from './ticket-queue-file-store.ts';
@@ -109,7 +109,9 @@ void test.each(stores, (store) => {
         // Arrange: the shell starts the holder and then becomes `sleep`, which
         // never reaps it, so the killed holder stays a zombie that still
         // answers kill(pid, 0). Platform setup that no operation exposes.
-        await using directory = await scratchDirectory();
+        await using directory = await new TemporaryFiles().directory(
+          'mutex-test-',
+        );
         const shell = spawn(
           'sh',
           [
@@ -165,7 +167,9 @@ void test.each(stores, (store) => {
       async (t) => {
         // Arrange: a holder in another process holds the key, then the
         // directory turns read-only, so its release cannot remove the record.
-        await using directory = await scratchDirectory();
+        await using directory = await new TemporaryFiles().directory(
+          'mutex-test-',
+        );
         await using holder = startWorker(
           callerSource(store, directory.path),
           'holder',
@@ -207,7 +211,9 @@ void test.each(stores, (store) => {
         // Arrange: an older version wrote the record, naming this live
         // process, and keeps no presence file. Platform setup that no
         // operation of this version exposes.
-        await using directory = await scratchDirectory();
+        await using directory = await new TemporaryFiles().directory(
+          'mutex-test-',
+        );
         const id = randomUUID();
         const record = join(directory.path, 'product-42.lock');
         await writeFile(
@@ -246,7 +252,9 @@ void test.each(stores, (store) => {
   describe(`${store.name}: presence files`, () => {
     test('a released key leaves no presence file', async () => {
       // Arrange
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory(
+        'mutex-test-',
+      );
 
       // Act
       const whileHeld = await new Mutex(store.create(directory.path)).acquire(
@@ -264,7 +272,9 @@ void test.each(stores, (store) => {
       { timeout: 20_000 },
       async (t) => {
         // Arrange
-        await using directory = await scratchDirectory();
+        await using directory = await new TemporaryFiles().directory(
+          'mutex-test-',
+        );
         await using holder = startWorker(
           callerSource(store, directory.path),
           'holder',
@@ -290,7 +300,9 @@ void test.each(stores, (store) => {
       { timeout: 20_000 },
       async () => {
         // Arrange: twenty callers in this process skip the key if it is busy.
-        await using directory = await scratchDirectory();
+        await using directory = await new TemporaryFiles().directory(
+          'mutex-test-',
+        );
         const mutex = new Mutex(store.create(directory.path));
 
         // Act: all of them ask at once, and the winner holds the key for a moment.
@@ -316,7 +328,9 @@ void test.each(stores, (store) => {
       { skip: posixOnly, timeout: 20_000 },
       async (t) => {
         // Arrange: a live holder whose presence file nobody else may read.
-        await using directory = await scratchDirectory();
+        await using directory = await new TemporaryFiles().directory(
+          'mutex-test-',
+        );
         await using holder = startWorker(
           callerSource(store, directory.path),
           'holder',
@@ -349,7 +363,9 @@ void test.each(stores, (store) => {
     async (t) => {
       // Arrange: each process takes the key 30 times, in turn waiting,
       // skipping at once, and giving up after 5 ms.
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory(
+        'mutex-test-',
+      );
       const journal = join(directory.path, 'journal.log');
       const source = `
         import { appendFileSync } from 'node:fs';
@@ -433,7 +449,9 @@ describe('TicketQueueFileStore: presence files of waiters', () => {
     { timeout: 20_000 },
     async (t) => {
       // Arrange: a waiter lines up behind a holder and is killed there.
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory(
+        'mutex-test-',
+      );
       await using holder = startWorker(
         callerSource(ticketQueue, directory.path),
         'holder',
@@ -501,7 +519,9 @@ describe('TicketQueueFileStore: presence files of waiters', () => {
         { timeout: 20_000 },
         async (t) => {
           // Arrange: a waiter lines up behind a holder and ends its wait.
-          await using directory = await scratchDirectory();
+          await using directory = await new TemporaryFiles().directory(
+            'mutex-test-',
+          );
           await using holder = startWorker(
             callerSource(ticketQueue, directory.path),
             'holder',
@@ -543,7 +563,7 @@ test(
   { timeout: 20_000 },
   async (t) => {
     // Arrange: a holder and two waiters line up, then all three die.
-    await using directory = await scratchDirectory();
+    await using directory = await new TemporaryFiles().directory('mutex-test-');
     const queue = join(directory.path, 'product-42.lock');
     await using holder = startWorker(
       callerSource(ticketQueue, directory.path),

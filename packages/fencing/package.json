@@ -42,5 +42,8 @@
   "dependencies": {
     "@zukhruf/fs": "^0.3.42",
     "@zukhruf/lease": "^0.3.42"
+  },
+  "devDependencies": {
+    "@zukhruf/testing": "^0.3.42"
   }
 }

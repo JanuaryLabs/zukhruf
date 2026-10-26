@@ -6,8 +6,8 @@ import rule from './no-bare-spawn.ts';
 
 const ROOTS = [{ roots: ['packages/sources', 'apps/desktop/src/main'] }];
 
-test('no-bare-spawn', () => {
-  using workspace = fixtureWorkspace({ 'nx.json': '{}' });
+test('no-bare-spawn', async () => {
+  await using workspace = await fixtureWorkspace({ 'nx.json': '{}' });
   const inScope = workspace.path('packages/sources/postgres/src/x.ts');
 
   typescriptRuleTester().run('no-bare-spawn', rule, {

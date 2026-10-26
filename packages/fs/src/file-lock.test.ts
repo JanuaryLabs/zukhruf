@@ -1,13 +1,14 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
-import { chmod, mkdtempDisposable, readdir, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { chmod, readdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline';
 import { DatabaseSync } from 'node:sqlite';
 import { text } from 'node:stream/consumers';
 import { describe, test } from 'node:test';
+
+import { TemporaryFiles } from '@zukhruf/testing/fs';
 
 import { FileLock } from './file-lock.ts';
 
@@ -108,8 +109,8 @@ describe('FileLock', () => {
     { timeout: 10_000 },
     async () => {
       // Arrange
-      await using directory = await mkdtempDisposable(
-        join(tmpdir(), 'zukhruf-fs-'),
+      await using directory = await new TemporaryFiles().directory(
+        'zukhruf-fs-',
       );
       const path = join(directory.path, 'job.lock');
       const holder = await startHolder(keepsHandle(path));
@@ -150,8 +151,8 @@ describe('FileLock', () => {
     { timeout: 10_000 },
     async () => {
       // Arrange
-      await using directory = await mkdtempDisposable(
-        join(tmpdir(), 'zukhruf-fs-'),
+      await using directory = await new TemporaryFiles().directory(
+        'zukhruf-fs-',
       );
       const path = join(directory.path, 'job.lock');
       const holder = await startHolder(holdsPublishedTransaction(path));
@@ -181,8 +182,8 @@ describe('FileLock', () => {
     { timeout: 10_000 },
     async () => {
       // Arrange
-      await using directory = await mkdtempDisposable(
-        join(tmpdir(), 'zukhruf-fs-'),
+      await using directory = await new TemporaryFiles().directory(
+        'zukhruf-fs-',
       );
       const path = join(directory.path, 'job.lock');
       const holder = await startHolder(keepsHandle(path));
@@ -208,8 +209,8 @@ describe('FileLock', () => {
     { timeout: 2_000 },
     async () => {
       // Arrange
-      await using directory = await mkdtempDisposable(
-        join(tmpdir(), 'zukhruf-fs-'),
+      await using directory = await new TemporaryFiles().directory(
+        'zukhruf-fs-',
       );
       const path = join(directory.path, 'job.lock');
       using holder = FileLock.open(path);
@@ -236,8 +237,8 @@ describe('FileLock', () => {
     { timeout: 10_000 },
     async () => {
       // Arrange
-      await using directory = await mkdtempDisposable(
-        join(tmpdir(), 'zukhruf-fs-'),
+      await using directory = await new TemporaryFiles().directory(
+        'zukhruf-fs-',
       );
       const path = join(directory.path, 'job.lock');
       using lock = FileLock.open(path);
@@ -262,8 +263,8 @@ describe('FileLock', () => {
     { timeout: 2_000 },
     async () => {
       // Arrange
-      await using directory = await mkdtempDisposable(
-        join(tmpdir(), 'zukhruf-fs-'),
+      await using directory = await new TemporaryFiles().directory(
+        'zukhruf-fs-',
       );
       const path = join(directory.path, 'job.lock');
       await writeFile(
@@ -286,8 +287,8 @@ describe('FileLock', () => {
     async () => {
       // Arrange: the presence of the mutex checks the lock of a caller in
       // another process, so a lock must refuse readers there too.
-      await using directory = await mkdtempDisposable(
-        join(tmpdir(), 'zukhruf-fs-'),
+      await using directory = await new TemporaryFiles().directory(
+        'zukhruf-fs-',
       );
       const path = join(directory.path, 'job.lock');
       const absent = join(directory.path, 'absent.lock');
@@ -323,8 +324,8 @@ describe('FileLock', () => {
     { timeout: 10_000 },
     async () => {
       // Arrange
-      await using directory = await mkdtempDisposable(
-        join(tmpdir(), 'zukhruf-fs-'),
+      await using directory = await new TemporaryFiles().directory(
+        'zukhruf-fs-',
       );
       const path = join(directory.path, 'job.lock');
       using lock = FileLock.open(path);
@@ -360,8 +361,8 @@ describe('FileLock', () => {
     { timeout: 10_000 },
     async () => {
       // Arrange
-      await using directory = await mkdtempDisposable(
-        join(tmpdir(), 'zukhruf-fs-'),
+      await using directory = await new TemporaryFiles().directory(
+        'zukhruf-fs-',
       );
       const path = join(directory.path, 'job.lock');
       using lock = FileLock.open(path);
@@ -401,8 +402,8 @@ describe('FileLock', () => {
     { timeout: 2_000 },
     async () => {
       // Arrange
-      await using directory = await mkdtempDisposable(
-        join(tmpdir(), 'zukhruf-fs-'),
+      await using directory = await new TemporaryFiles().directory(
+        'zukhruf-fs-',
       );
 
       // Act
@@ -424,8 +425,8 @@ describe('FileLock', () => {
     },
     async () => {
       // Arrange
-      await using directory = await mkdtempDisposable(
-        join(tmpdir(), 'zukhruf-fs-'),
+      await using directory = await new TemporaryFiles().directory(
+        'zukhruf-fs-',
       );
       const path = join(directory.path, 'job.lock');
       await writeFile(path, '');
@@ -444,8 +445,8 @@ describe('FileLock', () => {
     { timeout: 2_000 },
     async () => {
       // Arrange
-      await using directory = await mkdtempDisposable(
-        join(tmpdir(), 'zukhruf-fs-'),
+      await using directory = await new TemporaryFiles().directory(
+        'zukhruf-fs-',
       );
       const path = join(directory.path, 'job.lock');
       using first = FileLock.open(path);
@@ -478,8 +479,8 @@ describe('FileLock', () => {
     { timeout: 2_000 },
     async () => {
       // Arrange
-      await using directory = await mkdtempDisposable(
-        join(tmpdir(), 'zukhruf-fs-'),
+      await using directory = await new TemporaryFiles().directory(
+        'zukhruf-fs-',
       );
       const path = join(directory.path, 'job.lock');
       using holding = FileLock.open(path);

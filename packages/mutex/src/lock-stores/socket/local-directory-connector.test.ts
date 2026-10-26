@@ -7,8 +7,8 @@ import { sep } from 'node:path';
 import { type TestContext, describe, test } from 'node:test';
 
 import { NetworkDirectoryError } from '@zukhruf/fs';
+import { TemporaryFiles } from '@zukhruf/testing/fs';
 
-import { scratchDirectory } from '../../testing/scratch-directory.ts';
 import type { ClientConnector } from '../remote/connector.ts';
 import { LocalDirectoryConnector } from './local-directory-connector.ts';
 
@@ -69,7 +69,9 @@ describe('LocalDirectoryConnector', () => {
     onLinux,
     async (t) => {
       // Arrange: the directory looks like a network mount.
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory(
+        'mutex-test-',
+      );
       using mount = slowMount(t, directory.path, 0x6969n);
       mount.release();
       const { connector: inner, counted } = countingConnector();
@@ -90,7 +92,9 @@ describe('LocalDirectoryConnector', () => {
     onLinux,
     async (t) => {
       // Arrange: the judgement of a local directory is slow to arrive.
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory(
+        'mutex-test-',
+      );
       using mount = slowMount(t, directory.path, 0xef53n);
       const { connector: inner, counted } = countingConnector();
       const connector = new LocalDirectoryConnector(directory.path, inner);
@@ -114,7 +118,9 @@ describe('LocalDirectoryConnector', () => {
     onLinux,
     async (t) => {
       // Arrange
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory(
+        'mutex-test-',
+      );
       using mount = slowMount(t, directory.path, 0x6969n);
       mount.release();
       const { connector: inner, counted } = countingConnector();

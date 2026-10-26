@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict';
 // The default export is the module object itself, which mock.method can patch;
 // syncBuiltinESMExports then copies the patch to the named exports.
-import fsPromises, { mkdtempDisposable, readdir } from 'node:fs/promises';
+import fsPromises, { readdir } from 'node:fs/promises';
 import { syncBuiltinESMExports } from 'node:module';
-import { tmpdir } from 'node:os';
 import { join, sep } from 'node:path';
 import { type TestContext, describe, test } from 'node:test';
+
+import { TemporaryFiles } from '@zukhruf/testing/fs';
 
 import { assertLocalDirectory } from './local-directory.ts';
 import { NetworkDirectoryError } from './network-directory-error.ts';
@@ -97,8 +98,8 @@ describe('A network directory', () => {
       { ...onLinux, timeout: 2_000 },
       async (t) => {
         // Arrange
-        await using directory = await mkdtempDisposable(
-          join(tmpdir(), 'zukhruf-fs-'),
+        await using directory = await new TemporaryFiles().directory(
+          'zukhruf-fs-',
         );
         using _mount = mountAs(t, directory.path, type);
 
@@ -125,8 +126,8 @@ describe('A network directory', () => {
       { ...onLinux, timeout: 2_000 },
       async (t) => {
         // Arrange: f_type is a signed long, so libuv hands over a magic with its high bit set as 64 sign-extended bits.
-        await using directory = await mkdtempDisposable(
-          join(tmpdir(), 'zukhruf-fs-'),
+        await using directory = await new TemporaryFiles().directory(
+          'zukhruf-fs-',
         );
         using _mount = mountAs(
           t,
@@ -148,8 +149,8 @@ describe('A network directory', () => {
     { ...onLinux, timeout: 2_000 },
     async (t) => {
       // Arrange: CIFS's magic has its high bit set, so a signed f_type extends its sign.
-      await using directory = await mkdtempDisposable(
-        join(tmpdir(), 'zukhruf-fs-'),
+      await using directory = await new TemporaryFiles().directory(
+        'zukhruf-fs-',
       );
       using _mount = mountAs(t, directory.path, 0xff534d42n - 2n ** 32n);
 
@@ -177,8 +178,8 @@ describe('A network directory', () => {
       { ...onLinux, timeout: 2_000 },
       async (t) => {
         // Arrange
-        await using directory = await mkdtempDisposable(
-          join(tmpdir(), 'zukhruf-fs-'),
+        await using directory = await new TemporaryFiles().directory(
+          'zukhruf-fs-',
         );
         using _mount = mountAs(t, directory.path, type);
 
@@ -196,8 +197,8 @@ describe('A network directory', () => {
     { ...onLinux, timeout: 2_000 },
     async (t) => {
       // Arrange
-      await using directory = await mkdtempDisposable(
-        join(tmpdir(), 'zukhruf-fs-'),
+      await using directory = await new TemporaryFiles().directory(
+        'zukhruf-fs-',
       );
       const notYet = join(directory.path, 'not', 'yet');
       using _mount = mountAs(t, directory.path, 0x6969n);
@@ -216,8 +217,8 @@ describe('A network directory', () => {
     { ...onLinux, timeout: 2_000 },
     async (t) => {
       // Arrange
-      await using directory = await mkdtempDisposable(
-        join(tmpdir(), 'zukhruf-fs-'),
+      await using directory = await new TemporaryFiles().directory(
+        'zukhruf-fs-',
       );
       using _failing = failStatfs(t, directory.path, 'EIO');
 
@@ -234,8 +235,8 @@ describe('A network directory', () => {
     { ...onLinux, timeout: 2_000 },
     async (t) => {
       // Arrange: the first check cannot read the file system, then the mount answers as NFS.
-      await using directory = await mkdtempDisposable(
-        join(tmpdir(), 'zukhruf-fs-'),
+      await using directory = await new TemporaryFiles().directory(
+        'zukhruf-fs-',
       );
       {
         using _failing = failStatfs(t, directory.path, 'EIO');
@@ -256,8 +257,8 @@ describe('A network directory', () => {
     { ...onLinux, timeout: 2_000 },
     async (t) => {
       // Arrange: the first check finds a local file system.
-      await using directory = await mkdtempDisposable(
-        join(tmpdir(), 'zukhruf-fs-'),
+      await using directory = await new TemporaryFiles().directory(
+        'zukhruf-fs-',
       );
       await assertLocalDirectory(directory.path);
 
@@ -285,8 +286,8 @@ describe('A network directory', () => {
     },
     async (t) => {
       // Arrange: a local directory whose number matches NFS on Linux.
-      await using directory = await mkdtempDisposable(
-        join(tmpdir(), 'zukhruf-fs-'),
+      await using directory = await new TemporaryFiles().directory(
+        'zukhruf-fs-',
       );
       using _mount = mountAs(t, directory.path, 0x6969n);
 
@@ -334,8 +335,8 @@ describe('A network directory', () => {
     },
     async () => {
       // Arrange
-      await using directory = await mkdtempDisposable(
-        join(tmpdir(), 'zukhruf-fs-'),
+      await using directory = await new TemporaryFiles().directory(
+        'zukhruf-fs-',
       );
 
       // Act

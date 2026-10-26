@@ -5,11 +5,11 @@ import { test } from 'node:test';
 import { setImmediate as nextTurn } from 'node:timers/promises';
 import { Worker } from 'node:worker_threads';
 
+import { TemporaryFiles } from '@zukhruf/testing/fs';
 import { describe } from '@zukhruf/testing/node';
 
 import { isRecord } from '../shared/is-record.ts';
 import { newProcessTimeout } from '../testing/new-process-timeout.ts';
-import { scratchDirectory } from '../testing/scratch-directory.ts';
 import {
   type StoreHost,
   reaches,
@@ -160,7 +160,9 @@ void describe.each(
         },
         async () => {
           // Arrange
-          await using directory = await scratchDirectory();
+          await using directory = await new TemporaryFiles().directory(
+            'mutex-test-',
+          );
           const locks = join(directory.path, 'locks');
           await using host = store.open(locks);
           const mutex = new Mutex(host.store);

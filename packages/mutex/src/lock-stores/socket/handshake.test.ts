@@ -6,11 +6,11 @@ import { createInterface } from 'node:readline';
 import { describe } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
 
+import { TemporaryFiles } from '@zukhruf/testing/fs';
 import { test } from '@zukhruf/testing/node';
 
 import { Mutex } from '../../mutex/mutex.ts';
 import { isRecord } from '../../shared/is-record.ts';
-import { scratchDirectory } from '../../testing/scratch-directory.ts';
 import { startWorker } from '../../testing/worker-process.ts';
 import { isLockRequest, isRequestEnvelope } from '../remote/protocol.ts';
 import { PROTOCOL_VERSION } from './handshake.ts';
@@ -134,7 +134,9 @@ describe('Socket store protocol handshake', () => {
     onUnixSockets,
     async () => {
       // Arrange: a leader that holds the term answers every hello with its own version, 99.
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory(
+        'mutex-test-',
+      );
       await using _term = await socketElection(directory.path, 10).campaign();
       await using _leader = await standInLeader(directory.path, (peer, line) =>
         // It answers only a well-formed hello, so a store that sends anything else fails another way.
@@ -161,7 +163,9 @@ describe('Socket store protocol handshake', () => {
     onUnixSockets,
     async () => {
       // Arrange: a leader from before the handshake holds the term and hangs up on every hello.
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory(
+        'mutex-test-',
+      );
       await using _term = await socketElection(directory.path, 10).campaign();
       await using _leader = await standInLeader(directory.path, (peer) =>
         peer.destroy(),
@@ -184,7 +188,9 @@ describe('Socket store protocol handshake', () => {
     onUnixSockets,
     async () => {
       // Arrange: a stopping leader hangs up on the hello and ends its term a moment later, as a real shutdown does.
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory(
+        'mutex-test-',
+      );
       const term = await socketElection(directory.path, 10).campaign();
       assert.ok(term, 'The stand-in must win the first term');
       await using _leader = await standInLeader(directory.path, (peer) => {
@@ -215,7 +221,9 @@ describe('Socket store protocol handshake', () => {
     onUnixSockets,
     async () => {
       // Arrange: something hangs up on the socket path, but nobody holds the term.
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory(
+        'mutex-test-',
+      );
       await using _leader = await standInLeader(directory.path, (peer) =>
         peer.destroy(),
       );
@@ -249,7 +257,9 @@ describe('Socket store protocol handshake', () => {
         onUnixSockets,
         async () => {
           // Arrange: a real leader serves the directory, and a follower uses it.
-          await using directory = await scratchDirectory();
+          await using directory = await new TemporaryFiles().directory(
+            'mutex-test-',
+          );
           await using leader = new SocketStore(directory.path, {
             pollInterval: 10,
           });
@@ -298,7 +308,9 @@ describe('Socket store protocol handshake', () => {
         onUnixSockets,
         async (t) => {
           // Arrange: a real leader serves the directory, and a follower uses it.
-          await using directory = await scratchDirectory();
+          await using directory = await new TemporaryFiles().directory(
+            'mutex-test-',
+          );
           await using leader = new SocketStore(directory.path, {
             pollInterval: 10,
           });
@@ -337,7 +349,9 @@ describe('Socket store protocol handshake', () => {
     onUnixSockets,
     async (t) => {
       // Arrange: a real leader, and a process that opens with a lock request and no hello.
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory(
+        'mutex-test-',
+      );
       await using leader = new SocketStore(directory.path, {
         pollInterval: 10,
       });
@@ -382,7 +396,9 @@ describe('Socket store protocol handshake', () => {
     onUnixSockets,
     async (t) => {
       // Arrange: a leader in its own process, which tells its buffer memory after a full collection.
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory(
+        'mutex-test-',
+      );
       await using leader = startWorker(
         `
         import { SocketStore } from ${JSON.stringify(new URL('./socket-store.ts', import.meta.url).href)};
@@ -451,7 +467,9 @@ describe('Socket store protocol handshake', () => {
     onUnixSockets,
     async () => {
       // Arrange: when the store says hello, the stopping leader ends its term, another store takes it over, and only then does the stopping leader hang up.
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory(
+        'mutex-test-',
+      );
       const term = await socketElection(directory.path, 10).campaign();
       assert.ok(term, 'The stand-in must win the first term');
       await using successor = new SocketStore(directory.path, {
@@ -490,7 +508,9 @@ describe('Socket store protocol handshake', () => {
       // Arrange: the store holds a key from the stand-in leader. When the
       // store connects again, the stand-in keeps that hello unanswered,
       // because it stops: it ends its term, and a successor takes it over.
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory(
+        'mutex-test-',
+      );
       const term = await socketElection(directory.path, 10).campaign();
       assert.ok(term, 'The stand-in must win the first term');
       let hellos = 0;
@@ -566,7 +586,9 @@ describe('Socket store protocol handshake', () => {
     onUnixSockets,
     async (t) => {
       // Arrange: a real leader serves the directory.
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory(
+        'mutex-test-',
+      );
       await using leader = new SocketStore(directory.path, {
         pollInterval: 10,
       });
@@ -604,7 +626,9 @@ describe('Socket store protocol handshake', () => {
     onUnixSockets,
     async (t) => {
       // Arrange: a leader that holds the term reads the hello and never answers.
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory(
+        'mutex-test-',
+      );
       await using _term = await socketElection(directory.path, 10).campaign();
       let peerClosed = false;
       let greeted = false;
@@ -636,7 +660,9 @@ describe('Socket store protocol handshake', () => {
     onUnixSockets,
     async (t) => {
       // Arrange: a real leader, and a peer that opens with another version and never hangs up.
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory(
+        'mutex-test-',
+      );
       await using leader = new SocketStore(directory.path, {
         pollInterval: 10,
       });
@@ -683,7 +709,9 @@ describe('Requests added after protocol version 1', () => {
     async () => {
       // Arrange: a leader of 0.3.x welcomes without a list of added requests,
       // and hangs up on any request it does not know.
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory(
+        'mutex-test-',
+      );
       await using term = await socketElection(directory.path, 10).campaign();
       assert.ok(term, 'The stand-in must win the first term');
       const knownToOldLeaders = new Set([

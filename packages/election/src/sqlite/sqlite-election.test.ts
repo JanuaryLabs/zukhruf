@@ -11,10 +11,10 @@ import {
   type FileLock,
   NetworkDirectoryError as FsNetworkDirectoryError,
 } from '@zukhruf/fs';
+import { TemporaryFiles } from '@zukhruf/testing/fs';
 
 import { NetworkDirectoryError, SqliteElection } from '../index.ts';
 import { newProcessTimeout } from '../testing/new-process-timeout.ts';
-import { scratchDirectory } from '../testing/scratch-directory.ts';
 import { startWorker } from '../testing/worker-process.ts';
 
 const indexUrl = new URL('../index.ts', import.meta.url);
@@ -77,7 +77,9 @@ describe('A SQLite election across processes', () => {
     { timeout: 15_000 },
     async (t) => {
       // Arrange
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory(
+        'election-test-',
+      );
 
       // Act: four processes campaign at the same time and keep whatever they win.
       await using candidates = new AsyncDisposableStack();
@@ -109,7 +111,9 @@ describe('A SQLite election across processes', () => {
     { timeout: 15_000 },
     async (t) => {
       // Arrange: a leader in another process.
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory(
+        'election-test-',
+      );
       const election = electionIn(directory.path);
       await using leader = startWorker(
         candidateSource(directory.path, 1000),
@@ -153,7 +157,9 @@ describe('A SQLite election across processes', () => {
     { timeout: 10_000 },
     async () => {
       // Arrange
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory(
+        'election-test-',
+      );
       const election = electionIn(directory.path);
       const first = await election.campaign();
       assert.ok(first, 'The first campaign in an empty directory must win');
@@ -181,7 +187,9 @@ describe('A SQLite election across processes', () => {
     { timeout: 10_000 },
     async () => {
       // Arrange: someone else leads for the whole campaign.
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory(
+        'election-test-',
+      );
       const election = electionIn(directory.path);
       await using _leader = await election.campaign();
       let ticks = 0;
@@ -211,7 +219,9 @@ describe('The files of a SQLite election', () => {
     { timeout: 10_000 },
     async () => {
       // Arrange: a leader holds one claim file. The names are ones no backend would hard-code.
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory(
+        'election-test-',
+      );
       const electionOn = (claimFile: string, epochFile: string) =>
         new SqliteElection({ directory: directory.path, claimFile, epochFile });
       await using _leader = await electionOn('seat-a.db', 'count-a').campaign();
@@ -244,7 +254,9 @@ describe('The files of a SQLite election', () => {
     { timeout: 10_000 },
     async () => {
       // Arrange
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory(
+        'election-test-',
+      );
       const election = electionIn(directory.path);
       const epochFile = join(directory.path, 'term.epoch');
       const first = await election.campaign();
@@ -278,7 +290,9 @@ describe('The files of a SQLite election', () => {
     },
     async (t) => {
       // Arrange
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory(
+        'election-test-',
+      );
       const election = electionIn(directory.path);
       using disk = recordDiskWrites(t);
 
@@ -315,7 +329,9 @@ describe('The files of a SQLite election', () => {
       { timeout: 10_000 },
       async () => {
         // Arrange
-        await using directory = await scratchDirectory();
+        await using directory = await new TemporaryFiles().directory(
+          'election-test-',
+        );
         const epochFile = join(directory.path, 'term.epoch');
         await fsPromises.writeFile(epochFile, text);
         const failsOnTheEpochFile = (error: unknown) =>
@@ -358,7 +374,9 @@ describe('The last epoch of a SQLite election', () => {
       { timeout: 10_000 },
       async () => {
         // Arrange
-        await using directory = await scratchDirectory();
+        await using directory = await new TemporaryFiles().directory(
+          'election-test-',
+        );
         const epochFile = join(directory.path, 'term.epoch');
         await fsPromises.writeFile(epochFile, text);
 
@@ -390,7 +408,9 @@ describe('The last epoch of a SQLite election', () => {
       { timeout: 10_000 },
       async () => {
         // Arrange
-        await using directory = await scratchDirectory();
+        await using directory = await new TemporaryFiles().directory(
+          'election-test-',
+        );
 
         // Act
         const epoch = await electionIn(join(directory.path, ...at)).lastEpoch();
@@ -408,7 +428,9 @@ describe('The last epoch of a SQLite election', () => {
     async () => {
       // Arrange: a directory at the path of the epoch file. This is platform
       // setup that no operation exposes: it stands for any read error.
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory(
+        'election-test-',
+      );
       await fsPromises.mkdir(join(directory.path, 'term.epoch'));
 
       // Act
@@ -424,7 +446,9 @@ describe('The last epoch of a SQLite election', () => {
     { timeout: 10_000 },
     async () => {
       // Arrange
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory(
+        'election-test-',
+      );
       const epochFile = join(directory.path, 'term.epoch');
       /** The identity and last change of the epoch file: a write changes one of them. */
       const versionOfEpochFile = async () => {
@@ -479,7 +503,9 @@ describe('A clean shutdown in a SQLite election', () => {
     { timeout: 10_000 },
     async () => {
       // Arrange
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory(
+        'election-test-',
+      );
       const election = electionIn(directory.path);
       const first = await election.campaign();
       assert.ok(first, 'The first campaign in an empty directory must win');
@@ -499,7 +525,9 @@ describe('A clean shutdown in a SQLite election', () => {
     { timeout: 10_000 },
     async () => {
       // Arrange
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory(
+        'election-test-',
+      );
       const election = electionIn(directory.path);
       const first = await election.campaign();
       assert.ok(first, 'The first campaign in an empty directory must win');
@@ -519,7 +547,9 @@ describe('A clean shutdown in a SQLite election', () => {
     { timeout: 10_000 },
     async () => {
       // Arrange: the backend takes the claim away from a living leader.
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory(
+        'election-test-',
+      );
       const loss = new AbortController();
       const lost = await new LosableElection(
         directory.path,
@@ -543,7 +573,9 @@ describe('A clean shutdown in a SQLite election', () => {
     { timeout: 15_000 },
     async (t) => {
       // Arrange: a clean term, then a term in another process.
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory(
+        'election-test-',
+      );
       const election = electionIn(directory.path);
       const clean = await election.campaign();
       assert.ok(clean, 'The first campaign in an empty directory must win');
@@ -581,7 +613,9 @@ describe('A clean shutdown in a SQLite election', () => {
       // first term, written by hand: a published version never removes a
       // note, so a note can stay behind from a term before its terms. No
       // operation of this version leaves one.
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory(
+        'election-test-',
+      );
       const election = electionIn(directory.path);
       for (let terms = 0; terms < 2; terms++) {
         const term = await election.campaign();
@@ -605,7 +639,9 @@ describe('A clean shutdown in a SQLite election', () => {
     { timeout: 10_000 },
     async () => {
       // Arrange: a clean term, and a term after it that reads the note.
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory(
+        'election-test-',
+      );
       const election = electionIn(directory.path);
       const clean = await election.campaign();
       assert.ok(clean, 'The first campaign in an empty directory must win');
@@ -636,7 +672,9 @@ describe('A clean shutdown in a SQLite election', () => {
     { timeout: 10_000 },
     async () => {
       // Arrange
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory(
+        'election-test-',
+      );
 
       // Act
       await using first = await electionIn(directory.path).campaign();
@@ -654,7 +692,9 @@ describe('A clean shutdown in a SQLite election', () => {
       // Arrange: an empty note and no epoch file. The note is not synced to
       // the disk, and after a power loss some file systems keep its name but
       // not its text. This is platform setup that no operation exposes.
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory(
+        'election-test-',
+      );
       await fsPromises.writeFile(join(directory.path, 'term.lock.clean'), '');
 
       // Act
@@ -673,7 +713,9 @@ describe('A SQLite election in a directory on a network file system', () => {
     onLinux,
     async (t) => {
       // Arrange
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory(
+        'election-test-',
+      );
       using _mount = mountAs(t, directory.path, 0x6969n);
 
       // Act
@@ -690,7 +732,9 @@ describe('A SQLite election in a directory on a network file system', () => {
     onLinux,
     async (t) => {
       // Arrange
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory(
+        'election-test-',
+      );
       const notYet = join(directory.path, 'not', 'yet');
       using _mount = mountAs(t, directory.path, 0x6969n);
 

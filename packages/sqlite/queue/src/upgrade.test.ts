@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
-import { mkdtempDisposable } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { describe, it } from 'node:test';
 
 import { TestClock } from 'pg-boss';
+
+import { TemporaryFiles } from '@zukhruf/testing/fs';
 
 import { SqliteJobQueue } from './index.ts';
 
@@ -60,7 +60,7 @@ async function scheduleTableBeforeKinds(path: string, clock: TestClock) {
 
 describe('a queue file an earlier release made', () => {
   it('runs the job and fires the schedule that the earlier release stored', async () => {
-    await using scratch = await mkdtempDisposable(join(tmpdir(), 'queue-'));
+    await using scratch = await new TemporaryFiles().directory('queue-');
     const path = join(scratch.path, 'queue.sqlite');
     const clock = new TestClock('2026-01-01T00:00:30.000Z');
     await scheduleTableBeforeKinds(path, clock);
@@ -87,7 +87,7 @@ describe('a queue file an earlier release made', () => {
   });
 
   it('runs the job that a release before the monitor columns stored, in a queue it made', async () => {
-    await using scratch = await mkdtempDisposable(join(tmpdir(), 'queue-'));
+    await using scratch = await new TemporaryFiles().directory('queue-');
     const path = join(scratch.path, 'queue.sqlite');
     const clock = new TestClock('2026-01-01T00:00:00.000Z');
     {
@@ -179,7 +179,7 @@ describe('a queue file an earlier release made', () => {
   });
 
   it('stores a new schedule and fires it on the clock', async () => {
-    await using scratch = await mkdtempDisposable(join(tmpdir(), 'queue-'));
+    await using scratch = await new TemporaryFiles().directory('queue-');
     const path = join(scratch.path, 'queue.sqlite');
     const clock = new TestClock('2026-01-01T00:00:30.000Z');
     await scheduleTableBeforeKinds(path, clock);
@@ -199,7 +199,7 @@ describe('a queue file an earlier release made', () => {
   });
 
   it('keeps a job queued while its key runs on a singleton queue whose index an earlier release made without UNIQUE', async () => {
-    await using scratch = await mkdtempDisposable(join(tmpdir(), 'queue-'));
+    await using scratch = await new TemporaryFiles().directory('queue-');
     const path = join(scratch.path, 'queue.sqlite');
     const clock = new TestClock('2026-01-01T00:00:00.000Z');
     const earlier = new SqliteJobQueue({ path, clock, schedule: false });

@@ -1,16 +1,12 @@
 import assert from 'node:assert/strict';
 // The default export is the module object itself, which mock.method can patch;
 // syncBuiltinESMExports then copies the patch to the named exports.
-import fsPromises, {
-  mkdtempDisposable,
-  readFile,
-  readdir,
-  writeFile,
-} from 'node:fs/promises';
+import fsPromises, { readFile, readdir, writeFile } from 'node:fs/promises';
 import { syncBuiltinESMExports } from 'node:module';
-import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { type TestContext, describe, test } from 'node:test';
+
+import { TemporaryFiles } from '@zukhruf/testing/fs';
 
 import { createExclusive } from './create-exclusive.ts';
 
@@ -81,8 +77,8 @@ describe('createExclusive', () => {
       { timeout: 2_000 },
       async (t) => {
         // Arrange
-        await using directory = await mkdtempDisposable(
-          join(tmpdir(), 'zukhruf-fs-'),
+        await using directory = await new TemporaryFiles().directory(
+          'zukhruf-fs-',
         );
         const path = join(directory.path, 'job.lock');
         if (before !== undefined) await writeFile(path, before);
@@ -110,8 +106,8 @@ describe('createExclusive', () => {
     { timeout: 2_000 },
     async (t) => {
       // Arrange: a broken disk refuses the removal of the draft too.
-      await using directory = await mkdtempDisposable(
-        join(tmpdir(), 'zukhruf-fs-'),
+      await using directory = await new TemporaryFiles().directory(
+        'zukhruf-fs-',
       );
       const path = join(directory.path, 'job.lock');
       using disk = failWriteHalfway(t, 'EIO');
@@ -136,8 +132,8 @@ describe('createExclusive', () => {
     { timeout: 2_000 },
     async (t) => {
       // Arrange
-      await using directory = await mkdtempDisposable(
-        join(tmpdir(), 'zukhruf-fs-'),
+      await using directory = await new TemporaryFiles().directory(
+        'zukhruf-fs-',
       );
       const path = join(directory.path, 'job.lock');
       using _failing = failLink(t, 'EIO');
@@ -160,8 +156,8 @@ describe('createExclusive', () => {
     { timeout: 2_000 },
     async () => {
       // Arrange
-      await using directory = await mkdtempDisposable(
-        join(tmpdir(), 'zukhruf-fs-'),
+      await using directory = await new TemporaryFiles().directory(
+        'zukhruf-fs-',
       );
       const path = join(directory.path, 'job.lock');
 
@@ -180,8 +176,8 @@ describe('createExclusive', () => {
     { timeout: 2_000 },
     async () => {
       // Arrange
-      await using directory = await mkdtempDisposable(
-        join(tmpdir(), 'zukhruf-fs-'),
+      await using directory = await new TemporaryFiles().directory(
+        'zukhruf-fs-',
       );
       const path = join(directory.path, 'job.lock');
       await writeFile(path, 'pid 1');
@@ -200,8 +196,8 @@ describe('createExclusive', () => {
     { timeout: 2_000 },
     async () => {
       // Arrange
-      await using directory = await mkdtempDisposable(
-        join(tmpdir(), 'zukhruf-fs-'),
+      await using directory = await new TemporaryFiles().directory(
+        'zukhruf-fs-',
       );
       const path = join(directory.path, 'job.lock');
       const content = 'pid 4242\n'.repeat(1_000);
@@ -220,8 +216,8 @@ describe('createExclusive', () => {
     { timeout: 2_000 },
     async () => {
       // Arrange
-      await using directory = await mkdtempDisposable(
-        join(tmpdir(), 'zukhruf-fs-'),
+      await using directory = await new TemporaryFiles().directory(
+        'zukhruf-fs-',
       );
       const path = join(directory.path, 'job.lock');
       const callers = Array.from({ length: 8 }, (_, index) => `pid ${index}`);
@@ -248,8 +244,8 @@ describe('createExclusive', () => {
     { timeout: 2_000 },
     async (t) => {
       // Arrange
-      await using directory = await mkdtempDisposable(
-        join(tmpdir(), 'zukhruf-fs-'),
+      await using directory = await new TemporaryFiles().directory(
+        'zukhruf-fs-',
       );
       const path = join(directory.path, 'job.lock');
       const content = 'pid 4242\n'.repeat(1_000);

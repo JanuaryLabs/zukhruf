@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
-import { mkdtempDisposable } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { test } from 'node:test';
+
+import { TemporaryFiles } from '@zukhruf/testing/fs';
 
 import { transaction } from './index.ts';
 
@@ -15,7 +15,7 @@ function notes(database: DatabaseSync): unknown[] {
 }
 
 test('a transaction commits when the work returns, and gives the value of the work', async () => {
-  await using scratch = await mkdtempDisposable(join(tmpdir(), 'transaction-'));
+  await using scratch = await new TemporaryFiles().directory('transaction-');
   const path = join(scratch.path, 'data.sqlite');
   using database = new DatabaseSync(path);
   database.exec('CREATE TABLE notes (body TEXT) STRICT');
@@ -36,7 +36,7 @@ test('a transaction commits when the work returns, and gives the value of the wo
 });
 
 test('a transaction rolls back when the work throws, and throws the same error', async () => {
-  await using scratch = await mkdtempDisposable(join(tmpdir(), 'transaction-'));
+  await using scratch = await new TemporaryFiles().directory('transaction-');
   using database = new DatabaseSync(join(scratch.path, 'data.sqlite'));
   database.exec('CREATE TABLE notes (body TEXT) STRICT');
   const failure = new Error('work failed');
@@ -62,7 +62,7 @@ test('a transaction rolls back when the work throws, and throws the same error',
 });
 
 test('when SQLite ends the transaction itself, the transaction throws the original error', async () => {
-  await using scratch = await mkdtempDisposable(join(tmpdir(), 'transaction-'));
+  await using scratch = await new TemporaryFiles().directory('transaction-');
   using database = new DatabaseSync(join(scratch.path, 'data.sqlite'));
   database.exec(`CREATE TABLE notes (body TEXT) STRICT;
     CREATE TRIGGER notes_refused BEFORE INSERT ON notes WHEN NEW.body = 'refused'
@@ -86,7 +86,7 @@ test('when SQLite ends the transaction itself, the transaction throws the origin
 });
 
 test('a nested transaction that throws undoes only its own rows, and the outer transaction commits', async () => {
-  await using scratch = await mkdtempDisposable(join(tmpdir(), 'transaction-'));
+  await using scratch = await new TemporaryFiles().directory('transaction-');
   using database = new DatabaseSync(join(scratch.path, 'data.sqlite'));
   database.exec('CREATE TABLE notes (body TEXT) STRICT');
   const failure = new Error('inner failed');
@@ -122,7 +122,7 @@ test('a nested transaction that throws undoes only its own rows, and the outer t
 });
 
 test('a savepoint that throws after a nested savepoint failed undoes its own rows too', async () => {
-  await using scratch = await mkdtempDisposable(join(tmpdir(), 'transaction-'));
+  await using scratch = await new TemporaryFiles().directory('transaction-');
   using database = new DatabaseSync(join(scratch.path, 'data.sqlite'));
   database.exec('CREATE TABLE notes (body TEXT) STRICT');
 
@@ -162,7 +162,7 @@ test('a savepoint that throws after a nested savepoint failed undoes its own row
 });
 
 test('a savepoint that throws after a nested savepoint committed undoes the rows of both', async () => {
-  await using scratch = await mkdtempDisposable(join(tmpdir(), 'transaction-'));
+  await using scratch = await new TemporaryFiles().directory('transaction-');
   using database = new DatabaseSync(join(scratch.path, 'data.sqlite'));
   database.exec('CREATE TABLE notes (body TEXT) STRICT');
 
@@ -195,7 +195,7 @@ test('a savepoint that throws after a nested savepoint committed undoes the rows
 });
 
 test('when SQLite ends the outer transaction inside a nested transaction, the nested transaction throws the original error', async () => {
-  await using scratch = await mkdtempDisposable(join(tmpdir(), 'transaction-'));
+  await using scratch = await new TemporaryFiles().directory('transaction-');
   using database = new DatabaseSync(join(scratch.path, 'data.sqlite'));
   database.exec(`CREATE TABLE notes (body TEXT) STRICT;
     CREATE TRIGGER notes_refused BEFORE INSERT ON notes WHEN NEW.body = 'refused'
@@ -218,7 +218,7 @@ test('when SQLite ends the outer transaction inside a nested transaction, the ne
 });
 
 test('mode immediate takes the write lock at BEGIN, and mode deferred takes it at the first write of the transaction', async () => {
-  await using scratch = await mkdtempDisposable(join(tmpdir(), 'transaction-'));
+  await using scratch = await new TemporaryFiles().directory('transaction-');
   const path = join(scratch.path, 'data.sqlite');
   using database = new DatabaseSync(path);
   database.exec('CREATE TABLE notes (body TEXT) STRICT');
@@ -244,7 +244,7 @@ test('mode immediate takes the write lock at BEGIN, and mode deferred takes it a
 });
 
 test('mode exclusive keeps other connections from reading', async () => {
-  await using scratch = await mkdtempDisposable(join(tmpdir(), 'transaction-'));
+  await using scratch = await new TemporaryFiles().directory('transaction-');
   const path = join(scratch.path, 'data.sqlite');
   using database = new DatabaseSync(path);
   database.exec('CREATE TABLE notes (body TEXT) STRICT');
@@ -264,7 +264,7 @@ test('mode exclusive keeps other connections from reading', async () => {
 });
 
 test('work that returns a promise fails with a TypeError, and its rows are rolled back', async () => {
-  await using scratch = await mkdtempDisposable(join(tmpdir(), 'transaction-'));
+  await using scratch = await new TemporaryFiles().directory('transaction-');
   using database = new DatabaseSync(join(scratch.path, 'data.sqlite'));
   database.exec('CREATE TABLE notes (body TEXT) STRICT');
   // TypeScript refuses an async function here; a caller in JavaScript can

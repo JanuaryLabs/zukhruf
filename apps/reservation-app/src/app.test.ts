@@ -1,7 +1,5 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
-import { mkdtemp, mkdtempDisposable, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, test } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
@@ -10,6 +8,7 @@ import { promisify } from 'node:util';
 
 import { Mutex } from '@zukhruf/mutex';
 import { TicketQueueFileStore } from '@zukhruf/mutex/file-system';
+import { TemporaryFiles } from '@zukhruf/testing/fs';
 
 import { createApp } from './create-app.ts';
 import { FencedStock } from './fenced-stock.ts';
@@ -52,9 +51,7 @@ describe('Reservation endpoint', () => {
     { timeout: 5000 },
     async () => {
       // Arrange: the app wired like production, over its own directory, with one item left.
-      await using directory = await mkdtempDisposable(
-        join(tmpdir(), 'app-test-'),
-      );
+      await using directory = await new TemporaryFiles().directory('app-test-');
       const stock = new FencedStock(join(directory.path, 'inventory.db'));
       stock.seed('product:42', 1);
       const app = createApp({
@@ -109,9 +106,7 @@ describe('Reservation endpoint', () => {
     { timeout: 5000 },
     async () => {
       // Arrange: one item left, and another holder on the product's key.
-      await using directory = await mkdtempDisposable(
-        join(tmpdir(), 'app-test-'),
-      );
+      await using directory = await new TemporaryFiles().directory('app-test-');
       const stock = new FencedStock(join(directory.path, 'inventory.db'));
       stock.seed('product:42', 1);
       const mutex = new Mutex(new TicketQueueFileStore(directory.path));
@@ -167,16 +162,16 @@ describe('Reservation endpoint', () => {
     { timeout: 15000 },
     async () => {
       // Arrange: one item in the shared stock, and two copies of the app, each in its own process.
-      const directory = await mkdtemp(join(tmpdir(), 'app-test-'));
-      const stock = new FencedStock(join(directory, 'inventory.db'));
+      await using directory = await new TemporaryFiles().directory('app-test-');
+      const stock = new FencedStock(join(directory.path, 'inventory.db'));
       stock.seed('product:42', 1);
 
       try {
         // Act: both processes reserve at the same time.
         const started = performance.now();
         const statuses = await Promise.all([
-          reserveFromOwnProcess(directory),
-          reserveFromOwnProcess(directory),
+          reserveFromOwnProcess(directory.path),
+          reserveFromOwnProcess(directory.path),
         ]);
         const elapsed = performance.now() - started;
 
@@ -198,12 +193,6 @@ describe('Reservation endpoint', () => {
         );
       } finally {
         stock.close();
-        await rm(directory, {
-          recursive: true,
-          force: true,
-          maxRetries: 5,
-          retryDelay: 20,
-        });
       }
     },
   );

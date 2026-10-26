@@ -8,16 +8,16 @@ import { createInterface } from 'node:readline';
 import { describe, test } from 'node:test';
 
 import type { CampaignOptions, Term } from '@zukhruf/election';
+import { TemporaryFiles } from '@zukhruf/testing/fs';
 
 import { isRecord } from '../../shared/is-record.ts';
-import { scratchDirectory } from '../../testing/scratch-directory.ts';
 import { ElectingConnector } from './electing-connector.ts';
 import { socketElection } from './socket-election.ts';
 
 describe('Electing connector', () => {
   test('a connect aborted while it campaigns resigns the term it wins and never serves', async () => {
     // Arrange: nobody serves the directory, and the abort lands while the campaign wins.
-    await using directory = await scratchDirectory();
+    await using directory = await new TemporaryFiles().directory('mutex-test-');
     const election = socketElection(directory.path, 10);
     const abort = new AbortController();
     const served: Term[] = [];
@@ -49,7 +49,7 @@ describe('Electing connector', () => {
 
   test('a connect aborted before it starts never campaigns', async () => {
     // Arrange
-    await using directory = await scratchDirectory();
+    await using directory = await new TemporaryFiles().directory('mutex-test-');
     let campaigns = 0;
     const connector = new ElectingConnector({
       socketPath: join(directory.path, 'lock.sock'),
@@ -80,7 +80,9 @@ describe('Electing connector', () => {
     async () => {
       // Arrange: nobody serves the socket, and no campaign wins. The abort lands
       // after the lost campaign returned, so the connect waits for its next try.
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory(
+        'mutex-test-',
+      );
       const abort = new AbortController();
       const reason = new Error('The store closed');
       const connector = new ElectingConnector({
@@ -114,7 +116,9 @@ describe('Electing connector', () => {
     { timeout: 5000 },
     async () => {
       // Arrange: a leader hangs up on each hello, and no campaign wins.
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory(
+        'mutex-test-',
+      );
       const socketPath =
         process.platform === 'win32'
           ? `\\\\.\\pipe\\mutex-test-${randomUUID()}`

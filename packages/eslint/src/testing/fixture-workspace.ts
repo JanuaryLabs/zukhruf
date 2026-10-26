@@ -1,13 +1,9 @@
-import {
-  mkdirSync,
-  mkdtempDisposableSync,
-  realpathSync,
-  writeFileSync,
-} from 'node:fs';
-import { tmpdir } from 'node:os';
+import { mkdir, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 
-export interface FixtureWorkspace extends Disposable {
+import { TemporaryFiles } from '@zukhruf/testing/fs';
+
+export interface FixtureWorkspace extends AsyncDisposable {
   readonly root: string;
   /** Absolute path of a file inside the workspace. */
   path(relativePath: string): string;
@@ -16,23 +12,22 @@ export interface FixtureWorkspace extends Disposable {
 /**
  * A temporary folder holding `files` (workspace-relative path → content).
  * Include an `nx.json` to make it a workspace root. Disposing deletes it, so a
- * test declares it with `using` and needs no teardown hook.
+ * test declares it with `await using` and needs no teardown hook. The root is
+ * the real path, as a child process reports its cwd.
  */
-export function fixtureWorkspace(
+export async function fixtureWorkspace(
   files: Record<string, string>,
-): FixtureWorkspace {
-  const folder = mkdtempDisposableSync(join(tmpdir(), 'zukhruf-eslint-'));
-  // The real path: macOS's tmpdir is a symlink and Windows' can use 8.3 short
-  // names, while a child process reports its cwd fully resolved.
-  const root = realpathSync.native(folder.path);
+): Promise<FixtureWorkspace> {
+  const folder = await new TemporaryFiles().directory('zukhruf-eslint-');
+  const root = folder.path;
   for (const [relativePath, content] of Object.entries(files)) {
     const file = join(root, relativePath);
-    mkdirSync(dirname(file), { recursive: true });
-    writeFileSync(file, content);
+    await mkdir(dirname(file), { recursive: true });
+    await writeFile(file, content);
   }
   return {
     root,
     path: (relativePath) => join(root, relativePath),
-    [Symbol.dispose]: () => folder.remove(),
+    [Symbol.asyncDispose]: folder.cleanup,
   };
 }

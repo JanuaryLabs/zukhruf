@@ -11,9 +11,9 @@ import { describe, test } from 'node:test';
 import type { TestContext } from 'node:test';
 
 import { FileLock } from '@zukhruf/fs';
+import { TemporaryFiles } from '@zukhruf/testing/fs';
 
 import { ProtocolVersionError, SingleFlight } from './index.ts';
-import { scratchDirectory } from './testing/scratch-directory.ts';
 
 // Processes of different versions of this package meet on the wire, so these
 // tests speak it byte by byte, as such a process would.
@@ -160,7 +160,7 @@ describe('The wire of a single flight', () => {
     { ...onUnixSockets, timeout: 10_000 },
     async () => {
       // Arrange: a coordinator of version 2 holds the term and refuses every hello.
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory('flights-');
       const claim = new DatabaseSync(join(directory.path, 'flight.lock'), {
         timeout: 0,
       });
@@ -217,7 +217,7 @@ describe('The wire of a single flight', () => {
     { ...onUnixSockets, timeout: 10_000 },
     async () => {
       // Arrange: a coordinator of a published version holds the term and serves nothing yet.
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory('flights-');
       const claim = new DatabaseSync(join(directory.path, 'flight.lock'), {
         timeout: 0,
       });
@@ -261,7 +261,7 @@ describe('The wire of a single flight', () => {
     { ...onUnixSockets, timeout: 10_000 },
     async () => {
       // Arrange
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory('flights-');
       await using _coordinator = await coordinatorOf(directory.path);
       const candidate = new DatabaseSync(join(directory.path, 'flight.lock'), {
         timeout: 0,
@@ -298,7 +298,7 @@ describe('The wire of a single flight', () => {
     { ...onUnixSockets, timeout: 10_000 },
     async () => {
       // Arrange: the last coordinator in this directory, of a published version, recorded term 41, which reads differently in hex.
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory('flights-');
       await writeFile(join(directory.path, 'flight.epoch'), '41');
       await using flights = new SingleFlight({
         directory: directory.path,
@@ -329,7 +329,7 @@ describe('The wire of a single flight', () => {
     { ...onUnixSockets, timeout: 10_000 },
     async (t) => {
       // Arrange
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory('flights-');
       await using _coordinator = await coordinatorOf(directory.path);
       using peer = await peerOf(directory.path);
 
@@ -353,7 +353,7 @@ describe('The wire of a single flight', () => {
     { ...onUnixSockets, timeout: 10_000 },
     async (t) => {
       // Arrange
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory('flights-');
       await using _coordinator = await coordinatorOf(directory.path);
       using peer = await peerOf(directory.path);
 
@@ -374,7 +374,7 @@ describe('The wire of a single flight', () => {
     { ...onUnixSockets, timeout: 10_000 },
     async (t) => {
       // Arrange: a flight of `sync` is in progress, and `free` has none.
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory('flights-');
       await using coordinator = await coordinatorOf(directory.path);
       const leading = Promise.withResolvers<string>();
       const ending = Promise.withResolvers<string>();
@@ -414,7 +414,7 @@ describe('The wire of a single flight', () => {
     { ...onUnixSockets, timeout: 10_000 },
     async (t) => {
       // Arrange: the last coordinator, of a published version, recorded term 41.
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory('flights-');
       await writeFile(join(directory.path, 'flight.epoch'), '41');
       await using flights = new SingleFlight({
         directory: directory.path,
@@ -459,7 +459,7 @@ describe('The wire of a single flight', () => {
     { ...onUnixSockets, timeout: 10_000 },
     async (t) => {
       // Arrange
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory('flights-');
       await using _coordinator = await coordinatorOf(directory.path);
       using peer = await peerOf(directory.path);
       peer.send('{"op":"hello","protocol":"single-flight","version":1}');
@@ -485,7 +485,7 @@ describe('The wire of a single flight', () => {
     { ...onUnixSockets, timeout: 10_000 },
     async (t) => {
       // Arrange: a flight of `sync` is in progress, and a process is welcomed.
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory('flights-');
       await using coordinator = await coordinatorOf(directory.path);
       const leading = Promise.withResolvers<string>();
       const ending = Promise.withResolvers<string>();
@@ -534,7 +534,7 @@ describe('The wire of a single flight', () => {
     { ...onUnixSockets, timeout: 10_000 },
     async (t) => {
       // Arrange: a process of a later version is welcomed.
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory('flights-');
       await using _coordinator = await coordinatorOf(directory.path);
       using peer = await peerOf(directory.path);
       peer.send('{"op":"hello","protocol":"single-flight","version":1}');
@@ -559,7 +559,7 @@ describe('The wire of a single flight', () => {
     { ...onUnixSockets, timeout: 10_000 },
     async (t) => {
       // Arrange: a welcomed process leads the flight of `sync`, and the coordinator's own call joins it.
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory('flights-');
       await using coordinator = await coordinatorOf(directory.path);
       using peer = await peerOf(directory.path);
       peer.send('{"op":"hello","protocol":"single-flight","version":1}');
@@ -603,7 +603,7 @@ describe('The wire of a single flight', () => {
     { ...onUnixSockets, timeout: 10_000 },
     async (t) => {
       // Arrange
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory('flights-');
       await using _coordinator = await coordinatorOf(directory.path);
       using peer = await peerOf(directory.path);
       peer.send('{"op":"hello","protocol":"single-flight","version":1}');
@@ -629,7 +629,7 @@ describe('The wire of a single flight while a process holds a key', () => {
     async (t) => {
       // Arrange: a process leads `sync` and holds its key; its connection is
       // lost, so the coordinator ends the flight, and the joiner learns it.
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory('flights-');
       await using _coordinator = await coordinatorOf(directory.path);
       using first = await welcomedPeerOf(t, directory.path);
       first.send('{"op":"run","id":"a","key":"sync"}');
@@ -672,7 +672,7 @@ describe('The wire of a single flight while a process holds a key', () => {
     async (t) => {
       // Arrange: platform setup that no operation exposes. A folder where the
       // key's lock file belongs makes every check of that lock fail.
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory('flights-');
       await using _coordinator = await coordinatorOf(directory.path);
       await mkdir(keyLockPath(directory.path, 'sync'), { recursive: true });
       using peer = await welcomedPeerOf(t, directory.path);
@@ -702,7 +702,7 @@ describe('The wire of a single flight while a process holds a key', () => {
     { ...onUnixSockets, timeout: 10_000 },
     async (t) => {
       // Arrange: a process holds `sync`, and a run waits for it.
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory('flights-');
       await using _coordinator = await coordinatorOf(directory.path);
       using key = holdKey(directory.path, 'sync');
       using peer = await welcomedPeerOf(t, directory.path);
@@ -731,7 +731,7 @@ describe('The wire of a single flight while a process holds a key', () => {
     { ...onUnixSockets, timeout: 10_000 },
     async (t) => {
       // Arrange: a leader of an earlier term reasserts its flight of `sync`, and a joiner rejoins it.
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory('flights-');
       await using _coordinator = await coordinatorOf(directory.path);
       const older = (1n << 32n) | 100n;
       using first = await welcomedPeerOf(t, directory.path);
@@ -768,7 +768,7 @@ describe('The wire of a single flight while a process holds a key', () => {
     { ...onUnixSockets, timeout: 10_000 },
     async (t) => {
       // Arrange: a flight of `sync` led on this coordinator lands.
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory('flights-');
       await using _coordinator = await coordinatorOf(directory.path);
       using leader = await welcomedPeerOf(t, directory.path);
       leader.send('{"op":"run","id":"a","key":"sync"}');
@@ -794,7 +794,7 @@ describe('The wire of a single flight while a process holds a key', () => {
     async (t) => {
       // Arrange: a process leads `sync` and holds its key; its connection is
       // lost, so the coordinator ends the flight, and the joiner learns it.
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory('flights-');
       await using _coordinator = await coordinatorOf(directory.path);
       using first = await welcomedPeerOf(t, directory.path);
       first.send('{"op":"run","id":"a","key":"sync"}');
@@ -837,7 +837,7 @@ describe('The wire of a single flight while a process holds a key', () => {
     async (t) => {
       // Arrange: a process holds `sync`, and two runs wait for it. A run of
       // another key, sent after them, is answered after both were decided.
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory('flights-');
       await using _coordinator = await coordinatorOf(directory.path);
       using key = holdKey(directory.path, 'sync');
       using peer = await welcomedPeerOf(t, directory.path);
@@ -875,7 +875,7 @@ describe('The wire of a single flight while a process holds a key', () => {
     { ...onUnixSockets, timeout: 10_000 },
     async (t) => {
       // Arrange: a process leads `sync` and `other` on its first connection, and the joiner joins both.
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory('flights-');
       await using _coordinator = await coordinatorOf(directory.path);
       using first = await welcomedPeerOf(t, directory.path);
       first.send('{"op":"run","id":"a","key":"sync"}');
@@ -912,7 +912,7 @@ describe('The wire of a single flight while a process holds a key', () => {
     { ...onUnixSockets, timeout: 10_000 },
     async (t) => {
       // Arrange
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory('flights-');
       await using _coordinator = await coordinatorOf(directory.path);
       using first = await welcomedPeerOf(t, directory.path);
       using waiter = await welcomedPeerOf(t, directory.path);

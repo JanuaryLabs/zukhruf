@@ -10,6 +10,7 @@ import { Worker } from 'node:worker_threads';
 import { SqliteElection } from '@zukhruf/election';
 import { Mutex } from '@zukhruf/mutex';
 import { SocketStore } from '@zukhruf/mutex/socket';
+import { TemporaryFiles } from '@zukhruf/testing/fs';
 
 import {
   type Codec,
@@ -17,7 +18,6 @@ import {
   NetworkDirectoryError,
   SingleFlight,
 } from './index.ts';
-import { scratchDirectory } from './testing/scratch-directory.ts';
 
 /** Values that are text already. */
 const asText: Codec<string> = {
@@ -63,7 +63,7 @@ describe('A single flight when the work fails', () => {
     { timeout: 10_000 },
     async () => {
       // Arrange
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory('flights-');
       await using leading = new SingleFlight({
         directory: directory.path,
         codec: asText,
@@ -118,7 +118,7 @@ describe('A single flight when the work fails', () => {
     { timeout: 10_000 },
     async () => {
       // Arrange
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory('flights-');
       await using leading = new SingleFlight({
         directory: directory.path,
         codec: asText,
@@ -155,7 +155,7 @@ describe('A single flight when the work fails', () => {
     { timeout: 10_000 },
     async () => {
       // Arrange
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory('flights-');
       const failing: Codec<string> = {
         encode: () => {
           throw new TypeError('This value cannot be encoded');
@@ -195,7 +195,7 @@ describe('A single flight when the work fails', () => {
     { timeout: 10_000 },
     async () => {
       // Arrange
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory('flights-');
       const failing: Codec<string> = {
         encode: (value) => value,
         decode: () => {
@@ -252,7 +252,7 @@ describe('A single flight when the leader cannot decode', () => {
     { timeout: 10_000 },
     async () => {
       // Arrange: only the leader's codec fails to decode.
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory('flights-');
       const refusing: Codec<string> = {
         encode: (value) => value,
         decode: () => {
@@ -293,7 +293,7 @@ describe('A single flight when a caller cancels', () => {
     { timeout: 10_000 },
     async () => {
       // Arrange
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory('flights-');
       await using leading = new SingleFlight({
         directory: directory.path,
         codec: asText,
@@ -342,7 +342,7 @@ describe('A single flight when a caller cancels', () => {
     { timeout: 10_000 },
     async () => {
       // Arrange
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory('flights-');
       await using leading = new SingleFlight({
         directory: directory.path,
         codec: asText,
@@ -382,7 +382,7 @@ describe('A single flight when a caller cancels', () => {
     { timeout: 10_000 },
     async () => {
       // Arrange: a flight is in progress for one key, and none for another.
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory('flights-');
       await using flights = new SingleFlight({
         directory: directory.path,
         codec: asText,
@@ -427,7 +427,7 @@ describe('A single flight shares the run in progress', () => {
     { timeout: 10_000 },
     async (t) => {
       // Arrange: two callers of one instance, and one of another instance on the same directory.
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory('flights-');
       await using first = new SingleFlight({
         directory: directory.path,
         codec: asText,
@@ -478,7 +478,7 @@ describe('A single flight shares the run in progress', () => {
     { timeout: 10_000 },
     async () => {
       // Arrange
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory('flights-');
       await using flights = new SingleFlight({
         directory: directory.path,
         codec: asText,
@@ -517,7 +517,7 @@ describe('A single flight shares the run in progress', () => {
     { timeout: 10_000 },
     async () => {
       // Arrange: a first run elects the coordinator, so neither loop pays for the election.
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory('flights-');
       await using flights = new SingleFlight({
         directory: directory.path,
         codec: asText,
@@ -555,8 +555,8 @@ describe('A single flight shares the run in progress', () => {
     { timeout: 10_000 },
     async () => {
       // Arrange
-      await using one = await scratchDirectory();
-      await using another = await scratchDirectory();
+      await using one = await new TemporaryFiles().directory('flights-');
+      await using another = await new TemporaryFiles().directory('flights-');
       await using flights = new SingleFlight({
         directory: one.path,
         codec: asText,
@@ -596,7 +596,7 @@ describe('A single flight shares the run in progress', () => {
     { timeout: 10_000 },
     async () => {
       // Arrange
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory('flights-');
       await using flights = new SingleFlight({
         directory: directory.path,
         codec: asText,
@@ -653,7 +653,7 @@ describe('A single flight gives the leader what the joiners get', () => {
     { timeout: 10_000 },
     async () => {
       // Arrange
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory('flights-');
       interface Report {
         at: Date;
         draft?: string | undefined;
@@ -711,7 +711,7 @@ describe('A single flight gives the leader what the joiners get', () => {
     { timeout: 10_000 },
     async () => {
       // Arrange: a new directory, so the coordinator's term is the first.
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory('flights-');
       await using flights = new SingleFlight({
         directory: directory.path,
         codec: asText,
@@ -742,7 +742,7 @@ describe('A single flight in its directory', () => {
     { timeout: 10_000 },
     async () => {
       // Arrange
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory('flights-');
       await using flights = new SingleFlight({
         directory: directory.path,
         codec: asText,
@@ -763,7 +763,7 @@ describe('A single flight in its directory', () => {
     { timeout: 10_000 },
     async (t) => {
       // Arrange: the first term resigns without a clean shutdown, as a coordinator of a published version does.
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory('flights-');
       const earlier = await new SqliteElection({
         directory: directory.path,
         claimFile: 'flight.lock',
@@ -817,7 +817,7 @@ describe('A single flight in its directory', () => {
     { timeout: 10_000 },
     async () => {
       // Arrange
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory('flights-');
       await using store = new SocketStore(directory.path);
       await using flights = new SingleFlight({
         directory: directory.path,
@@ -850,7 +850,7 @@ describe('A single flight in its directory', () => {
     },
     async (t) => {
       // Arrange: statfs reports NFS for the directory, as the kernel does for a mount.
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory('flights-');
       const realStatfs = fsPromises.statfs;
       t.mock.method(
         fsPromises,
@@ -892,7 +892,7 @@ describe('A single flight when it is disposed', () => {
     { timeout: 10_000 },
     async () => {
       // Arrange: the leader's instance is the coordinator too, so disposing it also ends the term.
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory('flights-');
       await using leading = new SingleFlight({
         directory: directory.path,
         codec: asText,
@@ -929,7 +929,7 @@ describe('A single flight when it is disposed', () => {
     { timeout: 10_000 },
     async () => {
       // Arrange: the first instance to call is the coordinator.
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory('flights-');
       await using coordinating = new SingleFlight({
         directory: directory.path,
         codec: asText,

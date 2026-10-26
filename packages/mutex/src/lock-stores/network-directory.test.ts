@@ -6,9 +6,9 @@ import { syncBuiltinESMExports } from 'node:module';
 import { join, sep } from 'node:path';
 import { type TestContext, describe } from 'node:test';
 
+import { TemporaryFiles } from '@zukhruf/testing/fs';
 import { test } from '@zukhruf/testing/node';
 
-import { scratchDirectory } from '../testing/scratch-directory.ts';
 import { storeCases } from '../testing/store-cases.ts';
 import { LockFileStore, NetworkDirectoryError } from './file-system/index.ts';
 import { type SocketRole, SocketStore } from './socket/index.ts';
@@ -85,7 +85,9 @@ describe('A lock directory on a network file system', () => {
         onLinux,
         async (t) => {
           // Arrange
-          await using directory = await scratchDirectory();
+          await using directory = await new TemporaryFiles().directory(
+            'mutex-test-',
+          );
           using _mount = mountAs(t, directory.path, type);
           await using host = store.open(directory.path);
 
@@ -116,7 +118,9 @@ describe('A lock directory on a network file system', () => {
       onLinux,
       async (t) => {
         // Arrange
-        await using directory = await scratchDirectory();
+        await using directory = await new TemporaryFiles().directory(
+          'mutex-test-',
+        );
         using _mount = mountAs(t, directory.path, 0x6969n);
         await using host = store.open(directory.path);
 
@@ -144,7 +148,9 @@ describe('A lock directory on a network file system', () => {
           onLinux,
           async (t) => {
             // Arrange
-            await using directory = await scratchDirectory();
+            await using directory = await new TemporaryFiles().directory(
+              'mutex-test-',
+            );
             using _mount = mountAs(t, directory.path, type);
             await using host = store.open(directory.path);
 
@@ -163,7 +169,9 @@ describe('A lock directory on a network file system', () => {
     onLinux,
     async (t) => {
       // Arrange
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory(
+        'mutex-test-',
+      );
       const notYet = join(directory.path, 'not', 'yet');
       using _mount = mountAs(t, directory.path, 0x6969n);
       const store = new LockFileStore(notYet);
@@ -185,7 +193,9 @@ describe('A lock directory on a network file system', () => {
     onLinux,
     async (t) => {
       // Arrange: a leader and a follower that holds a key, both past the check.
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory(
+        'mutex-test-',
+      );
       const options = { pollInterval: 10, graceWindow: 50 };
       const leader = new SocketStore(directory.path, options);
       await using follower = new SocketStore(directory.path, options);
@@ -227,7 +237,9 @@ describe('A lock directory on a network file system', () => {
       onLinux,
       async (t) => {
         // Arrange
-        await using directory = await scratchDirectory();
+        await using directory = await new TemporaryFiles().directory(
+          'mutex-test-',
+        );
         using _mount = mountAs(t, directory.path, 0x6969n);
         await using host = store.open(directory.path);
 
@@ -246,7 +258,9 @@ describe('A lock directory on a network file system', () => {
     async (t) => {
       // Arrange: a leader serves the directory; a second store reaches it through a
       // symlink that looks like a network mount, so it would follow without campaigning.
-      await using directory = await scratchDirectory();
+      await using directory = await new TemporaryFiles().directory(
+        'mutex-test-',
+      );
       const options = { pollInterval: 10, graceWindow: 50 };
       await using leader = new SocketStore(directory.path, options);
       await (await leader.acquire('warm-up'))[Symbol.asyncDispose]();

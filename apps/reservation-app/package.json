@@ -6,5 +6,8 @@
     "@zukhruf/fencing": "*",
     "@zukhruf/mutex": "*",
     "hono": "^4.13.13"
+  },
+  "devDependencies": {
+    "@zukhruf/testing": "*"
   }
 }
