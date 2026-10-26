@@ -228,6 +228,9 @@ These changes are not necessary:
 | A holder that lost its claim during the mint gets no token                                                  | A mint with no confirmation of the claim                                       |
 | A held key is lost within heartbeatInterval when the engine stops answering                                 | No heartbeat, only the attach. The proxy stops forwarding and closes no socket |
 | The tokens increase after docker container prune                                                            | A ladder of created containers                                                 |
+| The tokens increase after the ladder volumes are removed                                                    | A token from the ladder alone                                                  |
+| A rung above the engine time still gives a higher token                                                     | A token from the engine time alone                                             |
+| A token is the engine time of the claim in microseconds                                                     | A time from `Date.parse`, which keeps milliseconds only                        |
 | A waiter gets the key when the released claim stays dead after a failed removal                             | A wait for the removal with no time limit on an `exited` claim                 |
 
 Each wrong design was put back into a copy of the store, one at a time. Each one made its test fail.

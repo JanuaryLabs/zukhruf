@@ -118,6 +118,24 @@ async function stateOf(
   }
 }
 
+/**
+ * The microseconds since 1970 of a time that the engine wrote: RFC 3339 in
+ * UTC, with 0 to 9 digits of a fraction of a second.
+ */
+function microsecondsOf(time: string | undefined): bigint {
+  const parts = /^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.(\d{1,9}))?Z$/.exec(
+    time ?? '',
+  );
+  const milliseconds = parts === null ? NaN : Date.parse(`${parts[1]}Z`);
+  if (parts === null || Number.isNaN(milliseconds)) {
+    throw new Error(
+      `The engine gave the claim the Created time ${JSON.stringify(time)}, which is not an RFC 3339 time in UTC.`,
+    );
+  }
+  const fraction = (parts[2] ?? '').padEnd(6, '0').slice(0, 6);
+  return BigInt(milliseconds) * 1000n + BigInt(fraction);
+}
+
 /** The claims of one key: their create, and the wait of a caller that did not get the name. */
 class Claims {
   readonly #key: string;
@@ -282,27 +300,33 @@ class Claim {
   }
 
   /**
-   * Creates the rung above the highest rung of the ladder of the key, climbs
-   * on a taken name, then removes the rungs that it read. A rung goes only
-   * after a higher one exists, so a list always finds the highest rung.
+   * Creates the rung at the higher of the engine time of the claim and the
+   * highest rung of the ladder of the key + 1, climbs on a taken name, then
+   * removes the rungs that it read. A rung goes only after a higher one
+   * exists, so a list always finds the highest rung. A claim that is gone
+   * rejects with `ContainerNotFoundError`.
    */
   async #mint(): Promise<FencingToken> {
     const { docker, namespace } = this.#options;
     const digest = digestOf(this.#key);
     const prefix = `${namespace}-${digest}-token-`;
-    const rungs = await docker.volumes.list({
-      filters: {
-        label: [`${namespaceLabel}=${namespace}`, `${tokenLabel}=${digest}`],
-      },
-    });
-    let rung = 0;
+    const [claim, rungs] = await Promise.all([
+      this.#container.inspect(),
+      docker.volumes.list({
+        filters: {
+          label: [`${namespaceLabel}=${namespace}`, `${tokenLabel}=${digest}`],
+        },
+      }),
+    ]);
+    let rung = microsecondsOf(claim.Created);
     for (const { Name } of rungs) {
       if (!Name.startsWith(prefix)) continue;
       const number = Number(Name.slice(prefix.length));
-      if (Number.isSafeInteger(number) && number > rung) rung = number;
+      if (Number.isSafeInteger(number) && BigInt(number) >= rung) {
+        rung = BigInt(number) + 1n;
+      }
     }
     for (;;) {
-      rung += 1;
       try {
         await docker.volumes.create({
           Name: `${prefix}${rung}`,
@@ -312,11 +336,12 @@ class Claim {
       } catch (error) {
         if (!(error instanceof NameConflictError)) throw error;
       }
+      rung += 1n;
     }
     for (const { Name } of rungs) {
       await (await docker.volumes.find(Name))?.remove();
     }
-    return new FencingToken(BigInt(rung));
+    return new FencingToken(rung);
   }
 
   /** Inspects the claim each interval. A claim that is gone or does not run, or a failed or late answer, loses the lease. */

@@ -17,7 +17,7 @@ import { startWorker } from '../../testing/worker-process.ts';
 import { DockerEngineStore } from './index.ts';
 
 /**
- * The first eight tests are the design errors that the probes of
+ * The first eleven tests are the design errors that the probes of
  * DockerEngineStore found. The name of each test says what the wrong design
  * broke. The tests after them are the contract of a lock store.
  */
@@ -242,11 +242,12 @@ test(
     const outcome = await outcomeOf(waiting, engineBound);
 
     // Assert
-    assert.deepEqual(
-      outcome,
-      { settled: 'resolved', value: 2n },
+    assert.equal(
+      outcome.settled,
+      'resolved',
       'The end of the attach of a killed holder must end its claim',
     );
+    assert.ok(outcome.value > BigInt(String(holder.find('holding')?.token)));
   },
 );
 
@@ -272,11 +273,12 @@ test(
     const outcome = await outcomeOf(waiting, engineBound);
 
     // Assert
-    assert.deepEqual(
-      outcome,
-      { settled: 'resolved', value: 2n },
+    assert.equal(
+      outcome.settled,
+      'resolved',
       'A release before the wait must not be lost',
     );
+    assert.ok(outcome.value > holder.token);
   },
 );
 
@@ -347,11 +349,12 @@ test(
     const outcome = await outcomeOf(slow, engineBound);
 
     // Assert
-    assert.deepEqual(
-      outcome,
-      { settled: 'resolved', value: waiter.token + 1n },
+    assert.equal(
+      outcome.settled,
+      'resolved',
       'A start that lost to a removal must send the caller back to the create',
     );
+    assert.ok(outcome.value > waiter.token);
   },
 );
 
@@ -387,7 +390,7 @@ test(
     const next = await hold(new Mutex(fixture.store()), 'report:daily');
     ran.push(`next ${next.token}`);
 
-    // Act: the stale holder climbs above the token of the next holder.
+    // Act: the stale holder creates its rung while the next holder holds.
     beforeRung.release();
     await delay(2 * heartbeatInterval);
     const whileNextHolds = [...ran];
@@ -397,7 +400,7 @@ test(
     // Assert
     assert.deepEqual(
       whileNextHolds,
-      ['next 1'],
+      [`next ${next.token}`],
       'A holder whose claim is gone must not run with the token it minted',
     );
     assert.equal(outcome.settled, 'resolved');
@@ -487,6 +490,99 @@ test(
 );
 
 test(
+  'the tokens increase after the ladder volumes are removed',
+  { timeout: 30_000 },
+  async () => {
+    // Arrange
+    await using fixture = await engine();
+    const mutex = new Mutex(fixture.store());
+    const first = await mutex.acquire(
+      'report:daily',
+      async (lease) => lease.token.value,
+    );
+
+    // Act: an operator removes the volumes of the namespace, as `docker volume prune -a` does.
+    for (const { Name } of await fixture.docker.volumes.list({
+      filters: { label: [`${namespaceLabel}=${fixture.namespace}`] },
+    })) {
+      await (await fixture.docker.volumes.find(Name))?.remove();
+    }
+    const second = await mutex.acquire(
+      'report:daily',
+      async (lease) => lease.token.value,
+    );
+
+    // Assert
+    assert.ok(
+      second > first,
+      `The token went from ${first} to ${second}, so a stale holder with ${first} can still write`,
+    );
+  },
+);
+
+test(
+  'a rung above the engine time still gives a higher token',
+  { timeout: 30_000 },
+  async () => {
+    // Arrange: a rung far above the engine time stands for a clock of the engine that went back.
+    // The test makes it, because no operation of the store moves the clock of the engine.
+    await using fixture = await engine();
+    const mutex = new Mutex(fixture.store());
+    await mutex.acquire('report:daily', async () => {});
+    const [rung] = await fixture.docker.volumes.list({
+      filters: { label: [`${namespaceLabel}=${fixture.namespace}`] },
+    });
+    assert.ok(rung);
+    const high = 2n ** 52n;
+    await fixture.docker.volumes.create({
+      Name: rung.Name.replace(/\d+$/, String(high)),
+      Labels: rung.Labels ?? {},
+    });
+
+    // Act
+    const token = await mutex.acquire(
+      'report:daily',
+      async (lease) => lease.token.value,
+    );
+
+    // Assert
+    assert.equal(token, high + 1n);
+  },
+);
+
+test(
+  'a token is the engine time of the claim in microseconds',
+  { timeout: 30_000 },
+  async () => {
+    // Arrange
+    await using fixture = await engine();
+    const holder = await hold(new Mutex(fixture.store()), 'report:daily');
+    const [claim] = await fixture.docker.containers.list({
+      all: true,
+      filters: { label: [`${namespaceLabel}=${fixture.namespace}`] },
+    });
+    assert.ok(claim);
+
+    // Act
+    const created = (
+      await (await fixture.docker.containers.find(claim.Id))?.inspect()
+    )?.Created;
+    await holder.release();
+
+    // Assert: the engine writes RFC 3339 in UTC with up to nine digits of a fraction.
+    const [, seconds, fraction = ''] =
+      /^(.+?)(?:\.(\d+))?Z$/.exec(created ?? '') ?? [];
+    assert.ok(seconds, `The claim has the Created time ${created}`);
+    assert.equal(
+      holder.token,
+      BigInt(Date.parse(`${seconds}Z`)) * 1000n +
+        BigInt(fraction.padEnd(6, '0').slice(0, 6)),
+      `The token ${holder.token} is not the Created time ${created} in microseconds`,
+    );
+  },
+);
+
+test(
   'a waiter gets the key when the released claim stays dead after a failed removal',
   { timeout: 30_000 },
   async () => {
@@ -525,11 +621,12 @@ test(
     );
 
     // Assert
-    assert.deepEqual(
-      outcome,
-      { settled: 'resolved', value: 2n },
+    assert.equal(
+      outcome.settled,
+      'resolved',
       'A claim that ended must not keep the key from a waiter',
     );
+    assert.ok(outcome.value > holder.token);
   },
 );
 
@@ -563,7 +660,11 @@ test(
 
     // Assert
     assert.equal(most, 1, 'Two tasks of one key ran at the same time');
-    assert.deepEqual(tokens, [1n, 2n, 3n, 4n, 5n, 6n]);
+    assert.equal(tokens.length, 6);
+    assert.ok(
+      tokens.every((token, index) => index === 0 || token > tokens[index - 1]!),
+      `The tokens did not increase in grant order: ${tokens.join(', ')}`,
+    );
   },
 );
 
@@ -587,7 +688,8 @@ test(
 
     // Assert
     assert.deepEqual(whileHeld, { settled: 'pending' });
-    assert.deepEqual(outcome, { settled: 'resolved', value: 2n });
+    assert.equal(outcome.settled, 'resolved');
+    assert.ok(outcome.value > holder.token);
   },
 );
 
@@ -609,7 +711,7 @@ test(
 
     // Assert
     assert.equal(whileHeld, undefined);
-    assert.equal(afterRelease?.token.value, 2n);
+    assert.ok(afterRelease && afterRelease.token.value > holder.token);
   },
 );
 
@@ -630,14 +732,31 @@ test(
     });
     const volumes = await fixture.docker.volumes.list({ filters: labelled });
     const holder = await hold(new Mutex(fixture.store()), 'report:daily');
+    const rungsBefore = await fixture.docker.volumes.list({
+      filters: labelled,
+    });
     const held = await store.isHeld('report:daily');
+    const rungsAfter = await fixture.docker.volumes.list({ filters: labelled });
     await holder.release();
     const released = await store.isHeld('report:daily');
+    const rungsReleased = await fixture.docker.volumes.list({
+      filters: labelled,
+    });
 
     // Assert
     assert.equal(free, false);
     assert.deepEqual([containers.length, volumes.length], [0, 0]);
     assert.equal(held, true);
+    assert.deepEqual(
+      rungsAfter.map(({ Name }) => Name),
+      rungsBefore.map(({ Name }) => Name),
+      'A look at a held key must not mint a token',
+    );
+    assert.deepEqual(
+      rungsReleased.map(({ Name }) => Name),
+      rungsBefore.map(({ Name }) => Name),
+      'A look at a free key must not mint a token',
+    );
     assert.equal(released, false);
   },
 );
@@ -656,7 +775,10 @@ test('the tokens of one key increase', { timeout: 30_000 }, async () => {
   }
 
   // Assert
-  assert.deepEqual(tokens, [1n, 2n, 3n]);
+  assert.ok(
+    tokens.every((token, index) => index === 0 || token > tokens[index - 1]!),
+    `The tokens did not increase: ${tokens.join(', ')}`,
+  );
 });
 
 test(
@@ -691,11 +813,20 @@ test(
   'two namespaces do not share a key or its tokens',
   { timeout: 30_000 },
   async () => {
-    // Arrange: the second namespace is on the same engine.
+    // Arrange: the second namespace is on the same engine. The ladder of the first namespace has a rung far above the engine time.
     await using first = await engine();
     await using second = await engine();
     const firstMutex = new Mutex(first.store());
     await firstMutex.acquire('report:daily', async () => {});
+    const [rung] = await first.docker.volumes.list({
+      filters: { label: [`${namespaceLabel}=${first.namespace}`] },
+    });
+    assert.ok(rung);
+    const high = 2n ** 52n;
+    await first.docker.volumes.create({
+      Name: rung.Name.replace(/\d+$/, String(high)),
+      Labels: rung.Labels ?? {},
+    });
     const holder = await hold(firstMutex, 'report:daily');
 
     // Act
@@ -713,8 +844,12 @@ test(
     );
 
     // Assert
-    assert.deepEqual(other, { settled: 'resolved', value: 1n });
-    assert.equal(holder.token, 2n);
-    assert.equal(next, 3n);
+    assert.equal(other.settled, 'resolved');
+    assert.ok(
+      other.value < high,
+      `The second namespace got ${other.value}, above the ladder of the first`,
+    );
+    assert.equal(holder.token, high + 1n);
+    assert.equal(next, high + 2n);
   },
 );
