@@ -10,7 +10,7 @@ import { leaveErrorsToClose } from './leave-errors-to-close.ts';
  * shape in every version: they are how a leader and a process find out that
  * they cannot read each other.
  */
-export const PROTOCOL_VERSION = 1;
+export const PROTOCOL_VERSION = 2;
 
 /** What a leader answered to this process's `hello`. */
 export type Greeting =

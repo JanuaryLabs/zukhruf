@@ -99,7 +99,7 @@ See [failure modes](../concepts/failure-modes.md).
 
 ## Protocol version
 
-Before a process sends its first request, it tells the leader its protocol version. If the leader speaks another protocol version, it refuses the process, and the acquire fails at once with `ProtocolVersionError`. The leader also refuses a process whose first line is not a `hello`. Thus a leader never reads a request that it can read incorrectly. Use one package version in all processes that share a directory. See [ADR 0014](../adr/0014-a-process-says-its-protocol-version-before-its-first-request.md).
+Before a process sends its first request, it tells the leader its protocol version. This package version speaks protocol version 2. Package versions 0.3.1 to 0.3.44 speak protocol version 1. If the leader speaks another protocol version, it refuses the process, and the acquire fails at once with `ProtocolVersionError`. The leader also refuses a process whose first line is not a `hello`. Thus a leader never reads a request that it can read incorrectly. Use one package version in all processes that share a directory. See [ADR 0014](../adr/0014-a-process-says-its-protocol-version-before-its-first-request.md).
 
 `ProtocolVersionError` has two properties: `ours` is the protocol version of this process, and `theirs` is the protocol version of the leader.
 

@@ -275,7 +275,7 @@ describe('What a socket store shares with other versions in its directory', () =
       );
 
       // Assert
-      assert.deepEqual(leader.firstLines, ['{"op":"hello","version":1}']);
+      assert.deepEqual(leader.firstLines, ['{"op":"hello","version":2}']);
       assert.equal(token.value, granted);
       assert.deepEqual(roles, ['follower']);
       assert.equal(answer, true);
@@ -303,7 +303,7 @@ describe('What a socket store shares with other versions in its directory', () =
       // Act: a follower of a published version says hello.
       using follower = await publishedPeer(
         directory.path,
-        '{"op":"hello","version":1}\n',
+        '{"op":"hello","version":2}\n',
       );
 
       // Assert
@@ -329,10 +329,10 @@ describe('What a socket store shares with other versions in its directory', () =
       );
       await using _leader = await leaderOf(directory.path);
 
-      // Act: a process of protocol version 2 says hello.
+      // Act: a process of protocol version 3 says hello.
       using other = await publishedPeer(
         directory.path,
-        '{"op":"hello","version":2}\n',
+        '{"op":"hello","version":3}\n',
       );
 
       // Assert
@@ -344,7 +344,7 @@ describe('What a socket store shares with other versions in its directory', () =
           ),
         { interval: 5, timeout: 2000 },
       );
-      assert.equal(other.received, '{"op":"refused","version":1}\n');
+      assert.equal(other.received, '{"op":"refused","version":2}\n');
     },
   );
 
@@ -363,7 +363,7 @@ describe('What a socket store shares with other versions in its directory', () =
       // Act: a follower of a published version takes the key, gives it back, and takes it again.
       using follower = await publishedPeer(
         directory.path,
-        '{"op":"hello","version":1}\n{"op":"acquire","id":"a","key":"product:42"}\n',
+        '{"op":"hello","version":2}\n{"op":"acquire","id":"a","key":"product:42"}\n',
       );
       await t.waitFor(
         () =>
@@ -402,13 +402,13 @@ describe('What a socket store shares with other versions in its directory', () =
     'a store refused by a leader of another protocol version rejects with the ProtocolVersionError of this package',
     { ...onUnixSockets, timeout: 10_000 },
     async () => {
-      // Arrange: a leader of protocol version 2 holds the term and refuses every hello, as the published refusal does.
+      // Arrange: a leader of protocol version 3 holds the term and refuses every hello, as the published refusal does.
       await using directory = await new TemporaryFiles().directory(
         'mutex-test-',
       );
       using _term = holdTerm(directory.path);
       await using _leader = await publishedLeader(directory.path, (peer) =>
-        peer.end('{"op":"refused","version":2}\n'),
+        peer.end('{"op":"refused","version":3}\n'),
       );
       await using store = new SocketStore(directory.path, { pollInterval: 10 });
 
@@ -419,8 +419,8 @@ describe('What a socket store shares with other versions in its directory', () =
 
       // Assert
       assert.ok(result instanceof ProtocolVersionError, String(result));
-      assert.equal(result.theirs, 2);
-      assert.equal(result.ours, 1);
+      assert.equal(result.theirs, 3);
+      assert.equal(result.ours, 2);
     },
   );
 
@@ -434,7 +434,7 @@ describe('What a socket store shares with other versions in its directory', () =
       );
       await using _leader = await leaderOf(directory.path);
       const helloOf = (bytes: number) =>
-        `{"op":"hello","version":1${' '.repeat(bytes - 26)}}`;
+        `{"op":"hello","version":2${' '.repeat(bytes - 26)}}`;
       assert.equal(Buffer.byteLength(helloOf(1024)), 1024);
 
       // Act
@@ -459,7 +459,7 @@ describe('What a socket store shares with other versions in its directory', () =
 
       // Assert
       assert.equal(longest.received, '{"op":"welcome"}\n');
-      assert.equal(tooLong.received, '{"op":"refused","version":1}\n');
+      assert.equal(tooLong.received, '{"op":"refused","version":2}\n');
     },
   );
 
@@ -567,7 +567,7 @@ describe('What a socket store shares with other versions on Windows', () => {
       // Assert
       assert.equal(
         follower.find('hello')?.line,
-        '{"op":"hello","version":1}',
+        '{"op":"hello","version":2}',
         `Messages: ${JSON.stringify(follower.messages)} ${follower.stderr}`,
       );
     },
@@ -599,7 +599,7 @@ describe('What a socket store shares with other versions on Windows', () => {
           if (received.includes('\\n')) process.send({ type: 'answer', received });
         });
         follower.on('error', (error) => process.send({ type: 'failed', message: String(error) }));
-        follower.write('{"op":"hello","version":1}\\n');
+        follower.write('{"op":"hello","version":2}\\n');
       `,
         'windows-leader',
         { nodeOptions: asOnWindows },

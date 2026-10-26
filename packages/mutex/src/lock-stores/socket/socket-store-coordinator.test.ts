@@ -89,7 +89,7 @@ async function rawPeer(t: TestContext, directory: string) {
     const message: unknown = JSON.parse(line);
     received.push(isRecord(message) ? message : { line });
   });
-  socket.write(`${JSON.stringify({ op: 'hello', version: 1 })}\n`);
+  socket.write(`${JSON.stringify({ op: 'hello', version: 2 })}\n`);
   await t.waitFor(
     () => assert.ok(received.length > 0, 'The leader must answer the hello'),
     { interval: 5, timeout: 2000 },
