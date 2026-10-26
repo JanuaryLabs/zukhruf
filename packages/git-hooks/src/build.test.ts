@@ -444,7 +444,7 @@ test(
 test(
   'a second pre-push build in the same repo waits for the first, prints that it waits, and both pushes go through',
   { timeout: 60_000 },
-  async () => {
+  async (t) => {
     // Arrange
     await using folder = await mkdtempDisposable(join(tmpdir(), 'git-hooks-'));
     const repo = await workspace(folder.path, build);
@@ -454,7 +454,10 @@ test(
     await repo.git('remote', 'add', 'second', second);
     const gate = join(repo.top, 'gate');
     const first = repo.start({ PROBE_GATE: gate }, '--quiet', 'origin', 'main');
-    while (!existsSync(`${gate}.started`)) await delay(50);
+    await t.waitFor(() => assert.ok(existsSync(`${gate}.started`)), {
+      interval: 50,
+      timeout: 20_000,
+    });
 
     // Act
     const waiting = repo.start(
@@ -463,17 +466,13 @@ test(
       'second',
       'main',
     );
-    // The gate stays closed until the second build starts its tasks, which
-    // it must not do while the first holds the lock, or for 5 s.
-    const deadline = performance.now() + 20_000;
-    while (
-      !waiting.stderr().includes('waiting') &&
-      performance.now() < deadline
-    )
-      await delay(50);
-    const grace = performance.now() + 5000;
-    while (!existsSync(`${gate}.second`) && performance.now() < grace)
-      await delay(50);
+    await t.waitFor(() => assert.match(waiting.stderr(), /waiting/), {
+      interval: 50,
+      timeout: 20_000,
+    });
+    // The gate stays closed for 5 s, a window in which the second build must
+    // not start its tasks: if it does, it writes `<gate>.second` and fails.
+    await delay(5000);
     await writeFile(`${gate}.release`, '');
     const [one, two] = await Promise.all([first.exited, waiting.exited]);
 
