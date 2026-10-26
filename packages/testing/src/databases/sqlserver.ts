@@ -1,12 +1,17 @@
-import { randomUUID } from 'node:crypto';
-
 import sql from 'mssql';
 import pMemoize from 'p-memoize';
 
 import { timebox } from '../async/timebox.ts';
 import { DockerFixtures } from '../docker/fixtures.ts';
 import type { ServiceContainer } from '../docker/service-container.ts';
+import { TestRun } from '../docker/test-run.ts';
+import { KIND_LABEL, databaseName } from './collector.ts';
 import type { Database, DatabaseOptions } from './database.ts';
+import {
+  type SqlServerServer,
+  connectionString,
+  sqlserver,
+} from './sqlserver-collector.ts';
 
 export type { Database, DatabaseOptions } from './database.ts';
 
@@ -17,6 +22,7 @@ export const SQL_SERVER_EDGE_IMAGE = 'mcr.microsoft.com/azure-sql-edge:latest';
 /** SQL Server test configuration. Without an image, the engine's architecture picks one. */
 export class SqlServer {
   readonly #docker: DockerFixtures;
+  readonly #run: TestRun | undefined;
   readonly #options;
   readonly #image = pMemoize(async (): Promise<string> => {
     if (this.#options.image) return this.#options.image;
@@ -34,6 +40,7 @@ export class SqlServer {
     labels,
   }: DatabaseOptions) {
     this.#docker = new DockerFixtures({ environment });
+    this.#run = TestRun.fromEnvironment(environment);
     this.#options = { image, password, database, labels };
   }
 
@@ -41,12 +48,14 @@ export class SqlServer {
   async database(): Promise<Database> {
     const image = await this.#image();
     const container = await this.#acquire(image, 'reuse');
-    const database = `test_${randomUUID().replaceAll('-', '')}`;
+    const database = databaseName(this.#run);
     try {
       await this.#createDatabase(container, database);
       return this.#handle(container, image, database, async () => {
         try {
-          await this.#dropDatabase(container, database);
+          await sqlserver.drop(this.#server(container), database);
+        } catch {
+          // Best-effort: the run's cleanup drops a database that disposal left.
         } finally {
           await container.disconnect();
         }
@@ -73,8 +82,12 @@ export class SqlServer {
     }
   }
 
+  #server({ host, port }: ServiceContainer): SqlServerServer {
+    return { host, port, password: this.#options.password };
+  }
+
   #connectionString(container: ServiceContainer, database: string): string {
-    return `Server=${container.host},${container.port};Database=${database};User Id=sa;Password=${this.#options.password};TrustServerCertificate=true;Encrypt=false;`;
+    return connectionString(this.#server(container), database);
   }
 
   async #ping(container: ServiceContainer): Promise<void> {
@@ -108,32 +121,11 @@ export class SqlServer {
     }
   }
 
-  async #dropDatabase(
-    container: ServiceContainer,
-    database: string,
-  ): Promise<void> {
-    const pool = new sql.ConnectionPool(
-      this.#connectionString(container, 'master'),
-    );
-    try {
-      await pool.connect();
-      await pool
-        .request()
-        .query(
-          `IF DB_ID('${database}') IS NOT NULL BEGIN ALTER DATABASE [${database}] SET SINGLE_USER WITH ROLLBACK IMMEDIATE; DROP DATABASE [${database}]; END`,
-        );
-    } catch {
-      // Best-effort cleanup; a leaked database lasts until container removal.
-    } finally {
-      await pool.close().catch(() => {});
-    }
-  }
-
   #acquire(image: string, mode: 'serve' | 'reuse'): Promise<ServiceContainer> {
     const { password, labels } = this.#options;
     return this.#docker[mode]({
       image,
-      labels,
+      labels: { ...labels, [KIND_LABEL]: sqlserver.kind },
       env: {
         ACCEPT_EULA: 'Y',
         MSSQL_SA_PASSWORD: password,

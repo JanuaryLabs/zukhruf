@@ -1,9 +1,10 @@
-import { randomUUID } from 'node:crypto';
-
 import { timebox } from '../async/timebox.ts';
 import { DockerFixtures } from '../docker/fixtures.ts';
 import type { ServiceContainer } from '../docker/service-container.ts';
+import { TestRun } from '../docker/test-run.ts';
+import { KIND_LABEL, databaseName } from './collector.ts';
 import type { Database, DatabaseOptions } from './database.ts';
+import { postgres } from './postgres-collector.ts';
 import { succeeded } from './succeeded.ts';
 
 export type { Database, DatabaseOptions } from './database.ts';
@@ -15,6 +16,7 @@ export interface PostgresOptions extends DatabaseOptions {
 /** PostgreSQL test configuration. Each acquisition returns an independent handle. */
 export class Postgres {
   readonly #docker: DockerFixtures;
+  readonly #run: TestRun | undefined;
   readonly #options;
 
   constructor({
@@ -26,13 +28,15 @@ export class Postgres {
     labels,
   }: PostgresOptions) {
     this.#docker = new DockerFixtures({ environment });
+    this.#run = TestRun.fromEnvironment(environment);
     this.#options = { image, password, database, user, labels };
   }
 
   /** Create an isolated database on the persistent shared server. */
   async database(): Promise<Database> {
     const container = await this.#acquire('postgres', 'reuse');
-    const database = `test_${randomUUID().replaceAll('-', '')}`;
+    const database = databaseName(this.#run);
+    const server = { container: container.container, user: this.#options.user };
     try {
       await this.#sql(container, `CREATE DATABASE ${database}`);
     } catch (error) {
@@ -40,11 +44,8 @@ export class Postgres {
       throw error;
     }
     return this.#handle(container, database, async () => {
-      await this.#sql(
-        container,
-        `DROP DATABASE IF EXISTS ${database} WITH (FORCE)`,
-      ).catch(() => {
-        /* Best-effort cleanup after external removal. */
+      await postgres.drop(server, database).catch(() => {
+        /* Best-effort: the run's cleanup drops a database that disposal left. */
       });
       await container.disconnect();
     });
@@ -58,7 +59,7 @@ export class Postgres {
   }
 
   #sql(container: ServiceContainer, sql: string): Promise<string> {
-    return succeeded(container, [
+    return succeeded(container.container, [
       'psql',
       '-U',
       this.#options.user,
@@ -76,7 +77,7 @@ export class Postgres {
     const { image, password, user, labels } = this.#options;
     return this.#docker[mode]({
       image,
-      labels,
+      labels: { ...labels, [KIND_LABEL]: postgres.kind },
       internalPort: 5432,
       env: {
         POSTGRES_PASSWORD: password,
@@ -94,14 +95,14 @@ export class Postgres {
     // TCP excludes PostgreSQL's temporary, socket-only initialization server.
     return timebox(
       async () => {
-        await succeeded(container, [
+        await succeeded(container.container, [
           'pg_isready',
           '-h',
           '127.0.0.1',
           '-U',
           user,
         ]);
-        await succeeded(container, [
+        await succeeded(container.container, [
           'psql',
           '-h',
           '127.0.0.1',

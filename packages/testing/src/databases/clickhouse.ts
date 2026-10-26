@@ -28,7 +28,11 @@ export class ClickHouse {
       healthy: (service) =>
         timebox(
           () =>
-            succeeded(service, ['clickhouse-client', '--query', 'SELECT 1']),
+            succeeded(service.container, [
+              'clickhouse-client',
+              '--query',
+              'SELECT 1',
+            ]),
           { maxRetryTime: 60_000 },
         ),
     });

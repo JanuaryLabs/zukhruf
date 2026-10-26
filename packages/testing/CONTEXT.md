@@ -50,7 +50,7 @@ _Avoid_: Cleanup hook
 The `node --test` process that runs the global setup, starts the test processes and runs the global teardown.
 
 **Process record**:
-A record in the run's directory that names a process that can create something for the run: a test process, or an SSH command that it started. A test process records itself when it reads `defaults`, because another Docker client can create with those labels. While a recorded process lives, the run's records stay.
+A record in the run's directory that names a process that can create something for the run: a test process, or an SSH command that it started. A test process records itself on the first acquisition of a `DockerFixtures`, which every database fixture makes, and when it reads `defaults`, because another Docker client can create with those labels. While a recorded process lives, the run's records stay.
 _Avoid_: Worker record, PID file
 
 **Creating record**:

@@ -3,8 +3,14 @@ import { readFile, readdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 
-import { Docker } from '@zukhruf/docker';
+import { type Container, Docker } from '@zukhruf/docker';
 
+import {
+  type Collector,
+  KIND_LABEL,
+  type Kind,
+  ownedBy,
+} from '../databases/collector.ts';
 import { SHARED_SERVER_LABEL } from '../docker/fixtures.ts';
 import { DockerHost, SHELL_TIMEOUT, quote } from '../docker/host.ts';
 import {
@@ -25,6 +31,110 @@ export interface Run {
 }
 
 const execute = promisify(execFile);
+
+const codeOf = (error: unknown): unknown =>
+  error instanceof Error && 'code' in error ? error.code : undefined;
+
+/**
+ * The collector of each kind, loaded when a server of the kind runs. A
+ * driver is an optional peer dependency: without it, the run's test
+ * processes could not create a database of the kind.
+ */
+const collectors: Record<
+  Kind,
+  { driver?: string; load: () => Promise<Collector<unknown>> }
+> = {
+  postgres: {
+    load: async () =>
+      (await import('../databases/postgres-collector.ts')).postgres,
+  },
+  mysql: {
+    load: async () =>
+      (await import('../databases/mysql-family-collector.ts')).mysql,
+  },
+  mariadb: {
+    load: async () =>
+      (await import('../databases/mysql-family-collector.ts')).mariadb,
+  },
+  sqlserver: {
+    driver: 'mssql',
+    load: async () =>
+      (await import('../databases/sqlserver-collector.ts')).sqlserver,
+  },
+};
+
+const isKind = (value: string | undefined): value is Kind =>
+  value !== undefined && Object.hasOwn(collectors, value);
+
+/** The collector of `kind`, or undefined when its driver is not installed. */
+async function collectorOf(
+  kind: Kind,
+): Promise<Collector<unknown> | undefined> {
+  const { driver, load } = collectors[kind];
+  if (driver !== undefined)
+    try {
+      await import(driver);
+    } catch (error) {
+      if (codeOf(error) === 'ERR_MODULE_NOT_FOUND') return undefined;
+      throw error;
+    }
+  return load();
+}
+
+const running = async (container: Container): Promise<boolean> =>
+  (await container.inspect().catch(() => undefined))?.State?.Running === true;
+
+/**
+ * Drops the run's databases on each running shared server of a database
+ * fixture. A server that stops takes its databases with it. A server that
+ * does not answer yet holds none: a fixture creates a database only after
+ * the server answered its readiness check.
+ */
+async function dropDatabases(
+  engine: Docker,
+  host: DockerHost,
+  runId: string,
+  signal: () => AbortSignal,
+): Promise<void> {
+  for (const summary of await engine.containers.list({
+    filters: { label: [`${SHARED_SERVER_LABEL}=1`, KIND_LABEL] },
+    signal: signal(),
+  })) {
+    const kind = summary.Labels?.[KIND_LABEL];
+    if (!isKind(kind)) continue;
+    const collector = await collectorOf(kind);
+    if (!collector) continue;
+    const container = await engine.containers.find(summary.Id, {
+      signal: signal(),
+    });
+    if (!container) continue;
+    const inspected = await container.inspect({ signal: signal() });
+    if (!inspected.State?.Running) continue;
+    const environment = Object.fromEntries(
+      (inspected.Config?.Env ?? []).map((entry) => {
+        const separator = entry.indexOf('=');
+        return [entry.slice(0, separator), entry.slice(separator + 1)];
+      }),
+    );
+    await using connection = new AsyncDisposableStack();
+    let server: unknown;
+    let names: string[];
+    try {
+      server = connection.use(
+        await collector.open(container, environment, host),
+      );
+      names = await collector.list(server);
+    } catch {
+      continue;
+    }
+    for (const name of names.filter(ownedBy(runId)))
+      try {
+        await collector.drop(server, name);
+      } catch (error) {
+        if (await running(container)) throw error;
+      }
+  }
+}
 
 async function readRecordedPath(file: string): Promise<string> {
   const { path }: { path: string } = JSON.parse(await readFile(file, 'utf8'));
@@ -81,6 +191,7 @@ export async function cleanup(
       else await rm(path, { recursive: true, force: true });
     }
   }
+  await dropDatabases(engine, host, previous.id, signal);
 }
 
 /** Connects to the run's engine, cleans the run, and ends the connection. */

@@ -14,9 +14,9 @@ Thus a database in a shared server becomes a thing that the run owns, as a conta
    - Postgres: an exec of `psql` in the server's container, with `DROP DATABASE IF EXISTS … WITH (FORCE)`.
    - MySQL and MariaDB: an exec of the image's client (`mysql` or `mariadb`), with `DROP DATABASE IF EXISTS`.
    - SQL Server: the `mssql` driver, with `SET SINGLE_USER WITH ROLLBACK IMMEDIATE` and then `DROP DATABASE`. An exec is not possible, because the `azure-sql-edge` image has no `sqlcmd`. On an SSH engine, the collector opens a forward to the published port with `DockerHost(endpoint).forward(port)`, as an acquisition does.
-4. Each kind has one collector. The collector lists the databases of one server whose name matches `^test_<run id>_[0-9a-f]{16}$`, and drops each one with the drop function of the kind.
+4. Each kind has one collector. Its SQL lists the databases of one server whose name starts with `test`. In SQL's `LIKE`, `_` matches any character, so the SQL does not prove a name. The cleanup keeps only the names that match `^test_<run id>_[0-9a-f]{16}$` exactly, and drops each one with the drop function of the kind.
 5. `cleanup()` in `run-cleanup.ts` runs the collectors. The global teardown and the recovery of a later run both call it. It lists the containers that carry the label `dev.zukhruf.testing.shared=1` and a kind label. For each container, it runs the collector of that kind with the id of the run that it cleans. It reads the credentials from `Config.Env` of the server's container: `POSTGRES_USER`, `MYSQL_ROOT_PASSWORD`, `MARIADB_ROOT_PASSWORD` or `MSSQL_SA_PASSWORD`. The fixture set these values when it created the server.
-6. A server that does not run counts as done. Its databases are on a tmpfs, and the engine removes a shared server when it stops.
+6. A server that does not run counts as done. Its databases are on a tmpfs, and the engine removes a shared server when it stops. A server that does not answer the list counts as done too. Another process can start a server while a run ends, and a server that starts holds no database of a run: a fixture creates a database only after the server answered its readiness check. The collectors run after the containers, volumes and paths of the run are removed, so a failed drop does not stop that removal.
 7. When the driver of a kind does not load, for example because the project did not install `mssql`, `cleanup()` skips the servers of that kind. The run's test processes used the same project, so they could not create a database of that kind.
 8. Each drop is `IF EXISTS`, so a second sweep of the same run does nothing. Thus the global teardown and a recovery need no lock between them.
 
@@ -43,3 +43,4 @@ The comment in `run-cleanup.ts` says: never trust names alone as proof of owners
 - The code step adds these tests, in the shape of `src/scripts/docker-global-setup.integration.test.ts`:
   - "a database whose test process was killed is dropped when the run ends", one for each Docker kind.
   - "the run's cleanup leaves the databases of another run on the same server". It proves that a collector drops only the names of its own run.
+  - "a run whose test process only took a database is cleaned when it ends". The test process records itself on the first acquisition of its `DockerFixtures`, so the global teardown runs the collectors.

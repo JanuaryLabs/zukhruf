@@ -1,29 +1,29 @@
-import { randomUUID } from 'node:crypto';
-
 import { timebox } from '../async/timebox.ts';
 import { DockerFixtures } from '../docker/fixtures.ts';
 import type { ServiceContainer } from '../docker/service-container.ts';
+import { TestRun } from '../docker/test-run.ts';
+import { KIND_LABEL, databaseName } from './collector.ts';
 import type { Database, DatabaseOptions } from './database.ts';
+import { type MysqlFamilyCollector, user } from './mysql-family-collector.ts';
 import { succeeded } from './succeeded.ts';
 
 export interface MysqlFamilyDatabase extends Database {
   query: (sql: string) => Promise<Record<string, string | null>[]>;
 }
 
-/** The image creates only root, from the root password in its environment. */
-const user = 'root';
-
 /**
  * A template method for servers that speak MySQL's protocol and client flags:
  * acquisitions, readiness, queries and the batch parser stay the same. A
- * subclass names the client in its image, the connection string's scheme and
- * the environment, and passes its default image to this constructor.
+ * subclass names its collector (its kind and the client in its image), the
+ * connection string's scheme and the environment, and passes its default
+ * image to this constructor.
  */
 export abstract class MysqlFamilyServer {
   readonly #docker: DockerFixtures;
+  readonly #run: TestRun | undefined;
   readonly #options;
 
-  protected abstract readonly client: string;
+  protected abstract readonly collector: MysqlFamilyCollector;
   protected abstract readonly scheme: string;
   protected abstract environment(
     password: string,
@@ -38,13 +38,18 @@ export abstract class MysqlFamilyServer {
     labels,
   }: DatabaseOptions & { image: string }) {
     this.#docker = new DockerFixtures({ environment });
+    this.#run = TestRun.fromEnvironment(environment);
     this.#options = { image, password, database, labels };
   }
 
   /** Create an isolated database on the persistent shared server. */
   async database(): Promise<MysqlFamilyDatabase> {
     const container = await this.#acquire('app', 'reuse');
-    const database = `test_${randomUUID().replaceAll('-', '')}`;
+    const database = databaseName(this.#run);
+    const server = {
+      container: container.container,
+      password: this.#options.password,
+    };
     try {
       await this.#sql(container, `CREATE DATABASE \`${database}\``);
     } catch (error) {
@@ -52,11 +57,8 @@ export abstract class MysqlFamilyServer {
       throw error;
     }
     return this.#handle(container, database, async () => {
-      await this.#sql(
-        container,
-        `DROP DATABASE IF EXISTS \`${database}\``,
-      ).catch(() => {
-        /* Best-effort cleanup after external removal. */
+      await this.collector.drop(server, database).catch(() => {
+        /* Best-effort: the run's cleanup drops a database that disposal left. */
       });
       await container.disconnect();
     });
@@ -71,8 +73,8 @@ export abstract class MysqlFamilyServer {
 
   #sql(container: ServiceContainer, sql: string): Promise<string> {
     const { password } = this.#options;
-    return succeeded(container, [
-      this.client,
+    return succeeded(container.container, [
+      this.collector.client,
       `-u${user}`,
       `-p${password}`,
       '--execute',
@@ -86,8 +88,8 @@ export abstract class MysqlFamilyServer {
     sql: string,
   ): Promise<Record<string, string | null>[]> {
     const { password } = this.#options;
-    const stdout = await succeeded(container, [
-      this.client,
+    const stdout = await succeeded(container.container, [
+      this.collector.client,
       `-u${user}`,
       `-p${password}`,
       '--database',
@@ -125,7 +127,7 @@ export abstract class MysqlFamilyServer {
     const { image, password, labels } = this.#options;
     return this.#docker[mode]({
       image,
-      labels,
+      labels: { ...labels, [KIND_LABEL]: this.collector.kind },
       internalPort: 3306,
       env: this.environment(password, database),
       tmpfs: ['/var/lib/mysql:rw,size=512m'],
@@ -139,8 +141,8 @@ export abstract class MysqlFamilyServer {
     // TCP excludes the entrypoint's temporary, socket-only initialization server.
     return timebox(
       () =>
-        succeeded(container, [
-          this.client,
+        succeeded(container.container, [
+          this.collector.client,
           '-h',
           '127.0.0.1',
           `-u${user}`,

@@ -1,4 +1,5 @@
 import type { DatabaseOptions } from './database.ts';
+import { mariadb } from './mysql-family-collector.ts';
 import {
   type MysqlFamilyDatabase,
   MysqlFamilyServer,
@@ -11,8 +12,7 @@ export type MariadbOptions = DatabaseOptions;
 export type MariadbDatabase = MysqlFamilyDatabase;
 
 export class Mariadb extends MysqlFamilyServer {
-  /** MariaDB 11 and later ship only the mariadb client, not mysql. */
-  protected override readonly client = 'mariadb';
+  protected override readonly collector = mariadb;
   protected override readonly scheme = 'mariadb';
 
   constructor({ image = 'mariadb:lts', ...options }: MariadbOptions) {
