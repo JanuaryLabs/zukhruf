@@ -66,7 +66,6 @@ test('each lock-store family has its own import path with its stores and the err
         'NetworkDirectoryError',
         'ProtocolVersionError',
         'SocketStore',
-        'UnsupportedRequestError',
       ],
     ],
   ] as const) {

@@ -625,38 +625,6 @@ describe('A peer that gives up or leaves', () => {
 });
 
 describe('Requests a leader does not know, and looks', () => {
-  test('a leader answers a request it does not know as unsupported, and its peer keeps its key', async (t) => {
-    // Arrange: a peer of a newer version holds a key.
-    await using scene = await firstLeader();
-    await using peer = await rawPeer(t, scene.directory);
-    peer.send({ op: 'acquire', id: 'a', key: 'product:42' });
-    await t.waitFor(
-      () =>
-        assert.ok(
-          peer.received.some((response) => response.op === 'granted'),
-          'The peer must be granted the key',
-        ),
-      { interval: 5, timeout: 2000 },
-    );
-
-    // Act: 'renew' stands in for a request that a later version adds.
-    peer.send({ op: 'renew', id: 'r' });
-    await t.waitFor(
-      () =>
-        assert.ok(
-          peer.received.length === 2,
-          'The leader must answer the request',
-        ),
-      { interval: 5, timeout: 2000 },
-    );
-    const stillHeld = await scene.leader.isHeld('product:42');
-
-    // Assert
-    assert.deepEqual(peer.received[1], { op: 'unsupported', id: 'r' });
-    assert.equal(peer.closed, false, 'The connection must stay open');
-    assert.equal(stillHeld, true, 'The peer must keep its key');
-  });
-
   test('a peer that sends a JSON line that is not a request keeps its key', async (t) => {
     // Arrange: a peer holds a key.
     await using scene = await firstLeader();
@@ -671,12 +639,13 @@ describe('Requests a leader does not know, and looks', () => {
       { interval: 5, timeout: 2000 },
     );
 
-    // Act: JSON lines that are not requests (no record, no id, no op, neither), then a look.
+    // Act: JSON lines that are not requests (no record, no id, no op, neither, an op it does not know), then a look.
     peer.send(
       null,
       { op: 'acquire', key: 'product:7' },
       { id: 'x' },
       { note: 'not a lock request' },
+      { op: 'renew', id: 'r' },
       { op: 'isHeld', id: 'look', key: 'product:42' },
     );
     await t.waitFor(

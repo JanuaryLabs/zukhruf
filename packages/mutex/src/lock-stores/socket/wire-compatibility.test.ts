@@ -14,18 +14,16 @@ import { test } from '@zukhruf/testing/node';
 import { Mutex } from '../../index.ts';
 import { newProcessTimeout } from '../../testing/new-process-timeout.ts';
 import { startWorker } from '../../testing/worker-process.ts';
-import {
-  ProtocolVersionError,
-  type SocketRole,
-  SocketStore,
-  UnsupportedRequestError,
-} from './index.ts';
+import { ProtocolVersionError, type SocketRole, SocketStore } from './index.ts';
 
 // Every process of every published version that shares a directory meets the
-// others through the names and bytes below. These tests spell them out
-// instead of importing them, so a change that moves the code and changes one
-// of them fails here: old and new processes would then lead side by side, or
-// never find each other, and no error would tell.
+// others through the names and bytes below: the claim on leader.lock, the term
+// in leader.epoch, the socket path, the hello and the refused answer. These
+// tests spell them out instead of importing them, so a change that moves the
+// code and changes one of them fails here: processes of two versions would
+// then lead side by side, or never find each other, and no error would tell.
+// The other messages are spelled out too: a change to one of them must change
+// PROTOCOL_VERSION, so that the hello tells two versions apart.
 
 const onUnixSockets = {
   skip:
@@ -221,101 +219,75 @@ describe('What a socket store shares with other versions in its directory', () =
     },
   );
 
-  void test.each(
-    [
-      {
-        versions: '0.3.1 to 0.3.9',
-        welcome: '{"op":"welcome"}',
-        // Such a leader hangs up on a request it does not know, so a look never reaches it.
-        sent: ['acquire', 'release'],
-        look: 'unsupported',
-      },
-      {
-        versions: '0.3.10 and later',
-        welcome: '{"op":"welcome","ops":["isHeld"]}',
-        sent: ['acquire', 'isHeld', 'release'],
-        look: 'held',
-      },
-    ] as const,
-    ({ versions, welcome, sent, look }) =>
-      test(
-        `a store follows a leader of ${versions} on lock.sock with the published hello, and sends it only the requests it reads`,
-        { ...onUnixSockets, timeout: 10_000 },
-        async (t) => {
-          // Arrange: a leader of those versions holds the term, grants each acquire a token of its term 5, and answers each look that the key is held.
-          await using directory = await new TemporaryFiles().directory(
-            'mutex-test-',
-          );
-          using _term = holdTerm(directory.path);
-          const granted = (5n << 32n) | 1n;
-          const requests: Record<string, unknown>[] = [];
-          await using leader = await publishedLeader(
-            directory.path,
-            (peer, line, opens) => {
-              if (opens) {
-                peer.write(`${welcome}\n`);
-                return;
-              }
-              const request: unknown = JSON.parse(line);
-              if (!isRecord(request)) return;
-              requests.push(request);
-              const id = JSON.stringify(request.id);
-              if (request.op === 'acquire') {
-                peer.write(
-                  `{"op":"granted","id":${id},"token":"${granted}"}\n`,
-                );
-              }
-              if (request.op === 'isHeld') {
-                peer.write(`{"op":"held","id":${id},"held":true}\n`);
-              }
-            },
-          );
-          await using store = new SocketStore(directory.path, {
-            pollInterval: 10,
-          });
-          const roles: SocketRole[] = [];
-          store.on('role', (role) => roles.push(role));
-          const mutex = new Mutex(store);
-
-          // Act: take the key, and look at it while holding it.
-          const { token, answer } = await mutex.acquire(
-            'product:42',
-            async ({ token }) => ({
-              token,
-              answer: await mutex.isHeld('product:42').then(
-                (held) => (held ? 'held' : 'free'),
-                (error: unknown) =>
-                  error instanceof UnsupportedRequestError
-                    ? 'unsupported'
-                    : error,
-              ),
-            }),
-          );
-          // A release has no answer, so the store sends it without waiting.
-          await t.waitFor(
-            () =>
-              assert.ok(
-                requests.some(({ op }) => op === 'release'),
-                `Requests: ${JSON.stringify(requests)}`,
-              ),
-            { interval: 5, timeout: 2000 },
-          );
-
-          // Assert
-          assert.deepEqual(leader.firstLines, ['{"op":"hello","version":1}']);
-          assert.equal(token.value, granted);
-          assert.deepEqual(roles, ['follower']);
-          assert.equal(answer, look);
-          assert.deepEqual(
-            requests.map(({ op }) => op),
-            sent,
-          );
-          const [acquire] = requests;
-          assert.equal(acquire?.key, 'product:42');
-          assert.equal(typeof acquire?.id, 'string');
-          assert.equal(requests.at(-1)?.id, acquire?.id);
+  test(
+    'a store follows a published leader on lock.sock with the published hello and the published requests',
+    { ...onUnixSockets, timeout: 10_000 },
+    async (t) => {
+      // Arrange: a published leader holds the term, grants each acquire a token of its term 5, and answers each look that the key is held.
+      await using directory = await new TemporaryFiles().directory(
+        'mutex-test-',
+      );
+      using _term = holdTerm(directory.path);
+      const granted = (5n << 32n) | 1n;
+      const requests: Record<string, unknown>[] = [];
+      await using leader = await publishedLeader(
+        directory.path,
+        (peer, line, opens) => {
+          if (opens) {
+            peer.write('{"op":"welcome"}\n');
+            return;
+          }
+          const request: unknown = JSON.parse(line);
+          if (!isRecord(request)) return;
+          requests.push(request);
+          const id = JSON.stringify(request.id);
+          if (request.op === 'acquire') {
+            peer.write(`{"op":"granted","id":${id},"token":"${granted}"}\n`);
+          }
+          if (request.op === 'isHeld') {
+            peer.write(`{"op":"held","id":${id},"held":true}\n`);
+          }
         },
-      ),
+      );
+      await using store = new SocketStore(directory.path, {
+        pollInterval: 10,
+      });
+      const roles: SocketRole[] = [];
+      store.on('role', (role) => roles.push(role));
+      const mutex = new Mutex(store);
+
+      // Act: take the key, and look at it while holding it.
+      const { token, answer } = await mutex.acquire(
+        'product:42',
+        async ({ token }) => ({
+          token,
+          answer: await mutex.isHeld('product:42'),
+        }),
+      );
+      // A release has no answer, so the store sends it without waiting.
+      await t.waitFor(
+        () =>
+          assert.ok(
+            requests.some(({ op }) => op === 'release'),
+            `Requests: ${JSON.stringify(requests)}`,
+          ),
+        { interval: 5, timeout: 2000 },
+      );
+
+      // Assert
+      assert.deepEqual(leader.firstLines, ['{"op":"hello","version":1}']);
+      assert.equal(token.value, granted);
+      assert.deepEqual(roles, ['follower']);
+      assert.equal(answer, true);
+      assert.deepEqual(
+        requests.map(({ op }) => op),
+        ['acquire', 'isHeld', 'release'],
+      );
+      const [acquire] = requests;
+      assert.equal(acquire?.key, 'product:42');
+      assert.equal(typeof acquire?.id, 'string');
+      assert.equal(requests.at(-1)?.id, acquire?.id);
+    },
   );
 
   test(
@@ -343,7 +315,7 @@ describe('What a socket store shares with other versions in its directory', () =
           ),
         { interval: 5, timeout: 2000 },
       );
-      assert.equal(follower.received, '{"op":"welcome","ops":["isHeld"]}\n');
+      assert.equal(follower.received, '{"op":"welcome"}\n');
     },
   );
 
@@ -417,7 +389,7 @@ describe('What a socket store shares with other versions in its directory', () =
       assert.equal(
         follower.received,
         [
-          '{"op":"welcome","ops":["isHeld"]}',
+          '{"op":"welcome"}',
           `{"op":"granted","id":"a","token":"${term | 2n}"}`,
           `{"op":"granted","id":"b","token":"${term | 3n}"}`,
           '',
@@ -453,7 +425,7 @@ describe('What a socket store shares with other versions in its directory', () =
   );
 
   test(
-    'a leader answers a first line of 1024 bytes and not one of 1025, not counting the newline',
+    'a leader welcomes a hello of 1024 bytes and refuses one of 1025, not counting the newline',
     { ...onUnixSockets, timeout: 10_000 },
     async (t) => {
       // Arrange: two hellos padded with JSON whitespace to their full length.
@@ -465,9 +437,7 @@ describe('What a socket store shares with other versions in its directory', () =
         `{"op":"hello","version":1${' '.repeat(bytes - 26)}}`;
       assert.equal(Buffer.byteLength(helloOf(1024)), 1024);
 
-      // Act: the longer line goes first. The leader reads it long before that
-      // process hangs up, so an answer it owed would be written before the
-      // hang-up and arrive before the close.
+      // Act
       using tooLong = await publishedPeer(directory.path, `${helloOf(1025)}\n`);
       using longest = await publishedPeer(directory.path, `${helloOf(1024)}\n`);
       await t.waitFor(
@@ -478,20 +448,18 @@ describe('What a socket store shares with other versions in its directory', () =
           ),
         { interval: 5, timeout: 2000 },
       );
-      // A leader that gives no answer still hangs up after the process does.
-      tooLong.socket.end();
       await t.waitFor(
         () =>
           assert.ok(
             tooLong.closed,
-            'The leader must hang up after the process does',
+            `The leader must hang up; got ${JSON.stringify(tooLong.received)}`,
           ),
         { interval: 5, timeout: 2000 },
       );
 
       // Assert
-      assert.equal(longest.received, '{"op":"welcome","ops":["isHeld"]}\n');
-      assert.equal(tooLong.received, '');
+      assert.equal(longest.received, '{"op":"welcome"}\n');
+      assert.equal(tooLong.received, '{"op":"refused","version":1}\n');
     },
   );
 
@@ -651,7 +619,7 @@ describe('What a socket store shares with other versions on Windows', () => {
       assert.equal(leader.find('role')?.role, 'leader');
       assert.equal(
         leader.find('answer')?.received,
-        '{"op":"welcome","ops":["isHeld"]}\n',
+        '{"op":"welcome"}\n',
         `Messages: ${JSON.stringify(leader.messages)} ${leader.stderr}`,
       );
     },

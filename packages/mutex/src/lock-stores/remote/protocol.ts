@@ -17,62 +17,24 @@ export type LockResponse =
   | { op: 'rejected'; id: string }
   | { op: 'held'; id: string; held: boolean }
   /** The coordinator could not mint a token for an acquire or a try, so nothing is held. Sent only on IPC channels and worker ports (ADR 0019). */
-  | { op: 'failed'; id: string; message: string }
-  /** The coordinator does not know the request: it runs an older version. */
-  | { op: 'unsupported'; id: string };
-
-/**
- * The requests added after protocol version 1. A coordinator of 0.3.x closes
- * a connection that sends one, so a leader lists those it answers in its
- * welcome, and a follower sends only those. A request added later goes here
- * and needs no new protocol version.
- */
-export const ADDED_OPS: ReadonlySet<string> = new Set<LockRequest['op']>([
-  'isHeld',
-]);
-
-/** A request whose `op` this process may not know. A coordinator answers one it does not know with `unsupported`. */
-export interface RequestEnvelope {
-  op: string;
-  id: string;
-}
+  | { op: 'failed'; id: string; message: string };
 
 const isToken = (value: unknown): boolean =>
   typeof value === 'string' && FencingToken.parse(value) !== null;
 
-export function isRequestEnvelope(
-  message: unknown,
-): message is RequestEnvelope {
-  return (
-    isRecord(message) &&
-    typeof message.op === 'string' &&
-    typeof message.id === 'string'
-  );
-}
-
-/**
- * Messages arrive from another thread or process, so their shape is checked
- * before use. `isRequestEnvelope` already checked the `op` and the `id`, so
- * only the fields of each request are left.
- */
-export function isLockRequest(
-  request: RequestEnvelope,
-): request is LockRequest {
-  switch (request.op) {
+/** Messages arrive from another thread or process, so their shape is checked before use. */
+export function isLockRequest(message: unknown): message is LockRequest {
+  if (!isRecord(message) || typeof message.id !== 'string') return false;
+  switch (message.op) {
     case 'acquire':
     case 'try':
     case 'isHeld':
-      return 'key' in request && typeof request.key === 'string';
+      return typeof message.key === 'string';
     case 'cancel':
     case 'release':
       return true;
     case 'reassert':
-      return (
-        'key' in request &&
-        typeof request.key === 'string' &&
-        'token' in request &&
-        isToken(request.token)
-      );
+      return typeof message.key === 'string' && isToken(message.token);
     default:
       return false;
   }
@@ -89,7 +51,6 @@ export function isLockResponse(message: unknown): message is LockResponse {
       return typeof message.message === 'string';
     case 'busy':
     case 'rejected':
-    case 'unsupported':
       return true;
     default:
       return false;

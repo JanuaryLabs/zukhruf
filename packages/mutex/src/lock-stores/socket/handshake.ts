@@ -1,26 +1,22 @@
 import type { Socket } from 'node:net';
 
 import { isRecord } from '../../shared/is-record.ts';
-import { ADDED_OPS } from '../remote/protocol.ts';
 import { jsonLine } from './json-line.ts';
 import { leaveErrorsToClose } from './leave-errors-to-close.ts';
 
 /**
  * The version of the messages a socket store's processes exchange. It changes
- * only when they change, so processes that run different package versions
- * with the same protocol still share a directory. The `hello` and the
- * `refused` answer keep their shape in every version: they are how two
- * versions find out that they differ. A request added later needs no new
- * version: the `welcome` lists it (see `ADDED_OPS`).
+ * whenever a message changes. The `hello` and the `refused` answer keep their
+ * shape in every version: they are how a leader and a process find out that
+ * they cannot read each other.
  */
 export const PROTOCOL_VERSION = 1;
 
 /** What a leader answered to this process's `hello`. */
 export type Greeting =
-  /** `ops`: the added requests the leader answers; a leader of 0.3.x lists none. */
-  | { kind: 'welcome'; ops: ReadonlySet<string> }
+  | { kind: 'welcome' }
   | { kind: 'refused'; version: number }
-  /** The leader closed the connection without an answer: it stops, or it predates the handshake. */
+  /** The leader closed the connection without an answer: it stops. */
   | { kind: 'closed' };
 
 /** Says which protocol this process speaks, and reads the leader's answer. */
@@ -28,7 +24,7 @@ export async function greet(socket: Socket): Promise<Greeting> {
   socket.write(jsonLine({ op: 'hello', version: PROTOCOL_VERSION }));
   const answer = parse(await readLine(socket));
   if (isRecord(answer) && answer.op === 'welcome') {
-    return { kind: 'welcome', ops: listedOps(answer.ops) };
+    return { kind: 'welcome' };
   }
   if (
     isRecord(answer) &&
@@ -41,23 +37,18 @@ export async function greet(socket: Socket): Promise<Greeting> {
 }
 
 /**
- * Reads a new process's `hello`. A process that speaks this protocol is
- * welcomed. A `hello` of another version is refused with this leader's
- * version, and the connection ends once that answer is written. A process
- * that opens with anything else predates the handshake: it cannot read
- * `refused`, and it connects again at once after any hang-up. So it gets no
- * answer, and it stays connected until it hangs up or the term ends.
+ * Reads a new process's first line. A `hello` of this protocol is welcomed.
+ * Anything else, a `hello` of another version included, is refused with this
+ * leader's version, and the connection ends once that answer is written.
  */
 export async function welcome(socket: Socket): Promise<boolean> {
   const hello = parse(await readLine(socket));
-  if (!isRecord(hello) || hello.op !== 'hello') {
-    // Flowing with no reader drops its lines, so a close behind them still ends the socket.
-    socket.resume();
-    return false;
-  }
-  if (hello.version === PROTOCOL_VERSION) {
-    // A follower of 0.3.x reads only `op`, so the list is new to followers only.
-    socket.write(jsonLine({ op: 'welcome', ops: [...ADDED_OPS] }));
+  if (
+    isRecord(hello) &&
+    hello.op === 'hello' &&
+    hello.version === PROTOCOL_VERSION
+  ) {
+    socket.write(jsonLine({ op: 'welcome' }));
     return true;
   }
   // Destroyed once the answer is written: a paused socket would never see a silent process hang up.
@@ -65,13 +56,6 @@ export async function welcome(socket: Socket): Promise<boolean> {
     socket.destroy(),
   );
   return false;
-}
-
-function listedOps(ops: unknown): ReadonlySet<string> {
-  if (!Array.isArray(ops)) return new Set();
-  return new Set(
-    ops.filter((op: unknown): op is string => typeof op === 'string'),
-  );
 }
 
 function parse(line: string | undefined): unknown {

@@ -201,9 +201,6 @@ export class RemoteLockClient implements LockStore {
       case 'held':
         this.#queries.answer(response.id, response.held);
         return;
-      case 'unsupported':
-        this.#queries.refuse(response.id);
-        return;
     }
   }
 

@@ -9,12 +9,9 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { TemporaryFiles } from '@zukhruf/testing/fs';
 import { test } from '@zukhruf/testing/node';
 
-import { Mutex } from '../../mutex/mutex.ts';
-import { isRecord } from '../../shared/is-record.ts';
-import { startWorker } from '../../testing/worker-process.ts';
-import { isLockRequest, isRequestEnvelope } from '../remote/protocol.ts';
+import { isLockRequest } from '../remote/protocol.ts';
 import { PROTOCOL_VERSION } from './handshake.ts';
-import { ProtocolVersionError, UnsupportedRequestError } from './index.ts';
+import { ProtocolVersionError } from './index.ts';
 import { socketElection } from './socket-election.ts';
 import { type SocketRole, SocketStore } from './socket-store.ts';
 
@@ -89,45 +86,6 @@ const outcome = (acquiring: Promise<AsyncDisposable>) =>
     (error: unknown) => error,
   );
 
-/**
- * A process of package version 0.3.0 or earlier, as a leader sees it: it opens
- * each connection with `line` instead of a hello, and it connects again at
- * once when the leader closes the connection. A connect that fails stops it,
- * because nothing listens then.
- */
-async function processWithoutHello(directory: string, line: string) {
-  const answers: string[] = [];
-  let closes = 0;
-  let stopped = false;
-  const open = () => {
-    const socket = connect(join(directory, 'lock.sock'));
-    socket.on('error', () => {});
-    socket.once('connect', () => {
-      createInterface({ input: socket }).on('line', (answer) =>
-        answers.push(answer),
-      );
-      socket.write(`${line}\n`);
-      socket.once('close', () => {
-        closes++;
-        if (!stopped) current = open();
-      });
-    });
-    return socket;
-  };
-  let current = open();
-  await once(current, 'connect');
-  return {
-    answers,
-    get closes() {
-      return closes;
-    },
-    [Symbol.dispose]() {
-      stopped = true;
-      current.destroy();
-    },
-  };
-}
-
 describe('Socket store protocol handshake', () => {
   test(
     'a store whose leader speaks another protocol version fails its acquire, naming both versions',
@@ -155,31 +113,6 @@ describe('Socket store protocol handshake', () => {
       assert.match(result.message, /version 99/);
       assert.equal(result.ours, PROTOCOL_VERSION);
       assert.match(result.message, new RegExp(`version ${PROTOCOL_VERSION}`));
-    },
-  );
-
-  test(
-    'a store whose leader keeps its term but hangs up on the handshake fails its acquire',
-    onUnixSockets,
-    async () => {
-      // Arrange: a leader from before the handshake holds the term and hangs up on every hello.
-      await using directory = await new TemporaryFiles().directory(
-        'mutex-test-',
-      );
-      await using _term = await socketElection(directory.path, 10).campaign();
-      await using _leader = await standInLeader(directory.path, (peer) =>
-        peer.destroy(),
-      );
-      await using store = new SocketStore(directory.path, { pollInterval: 10 });
-
-      // Act
-      const result = await outcome(
-        store.acquire('product:42', { signal: AbortSignal.timeout(5000) }),
-      );
-
-      // Assert: it fails loudly instead of trying to connect forever.
-      assert.ok(result instanceof ProtocolVersionError, String(result));
-      assert.equal(result.theirs, undefined);
     },
   );
 
@@ -245,15 +178,19 @@ describe('Socket store protocol handshake', () => {
   void test.each(
     [
       [
-        'another protocol version',
+        'a hello of another protocol version',
         JSON.stringify({ op: 'hello', version: 99 }),
       ],
-      // Any hello gets an answer: a process of a later protocol must learn that it differs, not wait.
-      ['no protocol version', JSON.stringify({ op: 'hello' })],
+      ['a hello with no protocol version', JSON.stringify({ op: 'hello' })],
+      ['a line that is not JSON', 'not json'],
+      [
+        'a lock request with no hello',
+        JSON.stringify({ op: 'acquire', id: 'x', key: 'product:42' }),
+      ],
     ] as const,
     ([what, line]) =>
       test(
-        `a leader refuses a process whose hello gives ${what}, and its followers keep working`,
+        `a leader refuses a process that opens with ${what}, and its followers keep working`,
         onUnixSockets,
         async () => {
           // Arrange: a real leader serves the directory, and a follower uses it.
@@ -292,174 +229,6 @@ describe('Socket store protocol handshake', () => {
           );
         },
       ),
-  );
-
-  void test.each(
-    [
-      ['a line that is not JSON', 'not json'],
-      [
-        'a lock request with no hello',
-        JSON.stringify({ op: 'acquire', id: 'x', key: 'product:42' }),
-      ],
-    ] as const,
-    ([what, line]) =>
-      test(
-        `a leader gives no answer to a process that opens with ${what}, and keeps it connected until its term ends`,
-        onUnixSockets,
-        async (t) => {
-          // Arrange: a real leader serves the directory, and a follower uses it.
-          await using directory = await new TemporaryFiles().directory(
-            'mutex-test-',
-          );
-          await using leader = new SocketStore(directory.path, {
-            pollInterval: 10,
-          });
-          await (await leader.acquire('warm-up'))[Symbol.asyncDispose]();
-          await using follower = new SocketStore(directory.path, {
-            pollInterval: 10,
-          });
-          await (await follower.acquire('warm-up'))[Symbol.asyncDispose]();
-
-          // Act: a process that connects again after each hang-up opens with that line.
-          using old = await processWithoutHello(directory.path, line);
-          const followed = await outcome(follower.acquire('product:42'));
-          // A leader that hangs up starts the loop of connections at once; this time lets it show.
-          await delay(200);
-
-          // Assert: no answer and no hang-up, and the request was never served.
-          assert.equal(old.closes, 0, `The leader hung up ${old.closes} times`);
-          assert.deepEqual(old.answers, []);
-          assert.equal(followed, 'granted');
-          // The end of the term still closes the connection, so the process was connected all along.
-          await leader[Symbol.asyncDispose]();
-          await t.waitFor(
-            () =>
-              assert.ok(
-                old.closes === 1,
-                'The end of the term must close the connection',
-              ),
-            { interval: 5, timeout: 2000 },
-          );
-        },
-      ),
-  );
-
-  test(
-    'a leader closes its side when a process that it gave no answer closes its side',
-    onUnixSockets,
-    async (t) => {
-      // Arrange: a real leader, and a process that opens with a lock request and no hello.
-      await using directory = await new TemporaryFiles().directory(
-        'mutex-test-',
-      );
-      await using leader = new SocketStore(directory.path, {
-        pollInterval: 10,
-      });
-      await (await leader.acquire('warm-up'))[Symbol.asyncDispose]();
-      const socket = connect({
-        path: join(directory.path, 'lock.sock'),
-        allowHalfOpen: true,
-      });
-      await once(socket, 'connect');
-      const answers: string[] = [];
-      createInterface({ input: socket }).on('line', (answer) =>
-        answers.push(answer),
-      );
-      let leaderClosed = false;
-      socket.once('end', () => (leaderClosed = true));
-
-      try {
-        // Act: the process sends two requests at once, as 0.3.0 does on connect, and exits.
-        // A paused leader keeps the second request unread, and then it never reads the close behind it.
-        socket.end(
-          `${JSON.stringify({ op: 'acquire', id: 'x', key: 'product:42' })}\n${JSON.stringify({ op: 'acquire', id: 'y', key: 'report-daily' })}\n`,
-        );
-
-        // Assert: the leader sees the close, so the connection does not stay open until the term ends.
-        await t.waitFor(
-          () =>
-            assert.ok(
-              leaderClosed,
-              'The leader must close its side once the process closes its side',
-            ),
-          { interval: 5, timeout: 2000 },
-        );
-        assert.deepEqual(answers, []);
-      } finally {
-        socket.destroy();
-      }
-    },
-  );
-
-  test(
-    'a leader keeps no more than a short first line of a process that sends no newline',
-    onUnixSockets,
-    async (t) => {
-      // Arrange: a leader in its own process, which tells its buffer memory after a full collection.
-      await using directory = await new TemporaryFiles().directory(
-        'mutex-test-',
-      );
-      await using leader = startWorker(
-        `
-        import { SocketStore } from ${JSON.stringify(new URL('./socket-store.ts', import.meta.url).href)};
-        const store = new SocketStore(${JSON.stringify(directory.path)}, { pollInterval: 10 });
-        await (await store.acquire('warm-up'))[Symbol.asyncDispose]();
-        process.on('message', () => {
-          globalThis.gc();
-          process.send({ type: 'memory', bytes: process.memoryUsage().arrayBuffers });
-        });
-        process.send({ type: 'ready' });
-      `,
-        'leader',
-        { nodeOptions: ['--expose-gc'] },
-      );
-      await t.waitFor(() => assert.ok(leader.has('ready'), leader.stderr), {
-        interval: 5,
-        timeout: 10_000,
-      });
-      const memory = async () => {
-        const told = leader.messages.length;
-        leader.child.send('measure');
-        await t.waitFor(
-          () =>
-            assert.ok(
-              leader.messages.length > told,
-              'The leader must tell its memory',
-            ),
-          { interval: 5, timeout: 2000 },
-        );
-        return Number(leader.messages.at(-1)?.bytes);
-      };
-      const before = await memory();
-      const socket = connect(join(directory.path, 'lock.sock'));
-      await once(socket, 'connect');
-
-      try {
-        // Act: the process sends 32 MiB and no newline. A write ends only once the leader read most of it.
-        const mebibyte = Buffer.alloc(1024 * 1024, 'x');
-        for (let sent = 0; sent < 32; sent++) {
-          if (!socket.write(mebibyte)) await once(socket, 'drain');
-        }
-        await new Promise((resolve) => socket.write('x', resolve));
-
-        // Assert: the leader drops what it read instead of keeping it for a line that never ends.
-        // V8 frees dropped buffers on a background thread, so a count read right after gc() can
-        // still hold them: the leader measures again until the count falls. A leader that keeps
-        // the line stays above the limit for the whole wait.
-        await t.waitFor(
-          async () => {
-            const kept = (await memory()) - before;
-            assert.ok(
-              kept < 8 * 1024 * 1024,
-              `The leader kept ${kept} bytes of a line with no end`,
-            );
-          },
-          { interval: 50, timeout: 5_000 },
-        );
-      } finally {
-        socket.destroy();
-      }
-    },
   );
 
   test(
@@ -529,11 +298,7 @@ describe('Socket store protocol handshake', () => {
             return;
           }
           const request: unknown = JSON.parse(line);
-          if (
-            isRequestEnvelope(request) &&
-            isLockRequest(request) &&
-            request.op === 'acquire'
-          ) {
+          if (isLockRequest(request) && request.op === 'acquire') {
             const token = String((term.epoch << 32n) | 1n);
             peer.write(
               `${JSON.stringify({ op: 'granted', id: request.id, token })}\n`,
@@ -698,77 +463,6 @@ describe('Socket store protocol handshake', () => {
         clearInterval(writing);
         socket.destroy();
       }
-    },
-  );
-});
-
-describe('Requests added after protocol version 1', () => {
-  test(
-    'a store never sends a look to a leader of 0.3.x, so the look fails and the store keeps its key',
-    { ...onUnixSockets, timeout: 10000 },
-    async () => {
-      // Arrange: a leader of 0.3.x welcomes without a list of added requests,
-      // and hangs up on any request it does not know.
-      await using directory = await new TemporaryFiles().directory(
-        'mutex-test-',
-      );
-      await using term = await socketElection(directory.path, 10).campaign();
-      assert.ok(term, 'The stand-in must win the first term');
-      const knownToOldLeaders = new Set([
-        'acquire',
-        'try',
-        'cancel',
-        'release',
-        'reassert',
-      ]);
-      const received: string[] = [];
-      await using _leader = await standInLeader(
-        directory.path,
-        (peer, line) => {
-          if (isHello(line)) {
-            peer.write(`${JSON.stringify({ op: 'welcome' })}\n`);
-            return;
-          }
-          const request: unknown = JSON.parse(line);
-          if (!isRecord(request) || typeof request.op !== 'string') return;
-          received.push(request.op);
-          if (!knownToOldLeaders.has(request.op)) {
-            peer.destroy();
-            return;
-          }
-          if (request.op === 'acquire') {
-            const token = String((term.epoch << 32n) | 1n);
-            peer.write(
-              `${JSON.stringify({ op: 'granted', id: request.id, token })}\n`,
-            );
-          }
-        },
-      );
-      await using store = new SocketStore(directory.path, { pollInterval: 10 });
-      const mutex = new Mutex(store);
-
-      // Act: look while this store holds the key.
-      const seen = await mutex.acquire('product:42', async ({ signal }) => {
-        const look = await mutex.isHeld('product:42').then(
-          () => 'answered',
-          (error: unknown) => error,
-        );
-        // A hang-up caused by the look would reach the store meanwhile.
-        await delay(50);
-        return { look, received: [...received], lost: signal.aborted };
-      });
-
-      // Assert
-      assert.ok(
-        seen.look instanceof UnsupportedRequestError,
-        `The look must fail as unsupported, got ${String(seen.look)}`,
-      );
-      assert.deepEqual(
-        seen.received,
-        ['acquire'],
-        'The old leader must never receive the look',
-      );
-      assert.equal(seen.lost, false, 'The store must keep its key');
     },
   );
 });

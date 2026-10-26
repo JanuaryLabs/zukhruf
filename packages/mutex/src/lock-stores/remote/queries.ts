@@ -2,7 +2,6 @@ import { randomUUID } from 'node:crypto';
 
 import type { ConnectionSupervisor } from './connection-supervisor.ts';
 import type { LockRequest } from './protocol.ts';
-import { UnsupportedRequestError } from './unsupported-request-error.ts';
 
 /** Keeps only what settles the caller's promise; the caller keeps the promise. */
 interface Query extends Pick<
@@ -51,12 +50,6 @@ export class Queries {
 
   answer(id: string, held: boolean) {
     this.#take(id)?.resolve(held);
-  }
-
-  /** The coordinator does not know the look: it runs an older version. */
-  refuse(id: string) {
-    const query = this.#take(id);
-    query?.reject(new UnsupportedRequestError('isHeld', query.key));
   }
 
   rejectAll(reason: (key: string) => unknown) {

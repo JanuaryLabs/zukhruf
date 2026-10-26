@@ -7,17 +7,10 @@ import type { LeaderElection, Term } from '@zukhruf/election';
 
 import type { ClientConnection, ClientConnector } from '../remote/connector.ts';
 import type { LockRequest } from '../remote/protocol.ts';
-import { AdvertisedOpsConnection } from './advertised-ops-connection.ts';
 import { type Greeting, PROTOCOL_VERSION, greet } from './handshake.ts';
 import { OwnServerConnection } from './own-server-connection.ts';
 import { ProtocolVersionError } from './protocol-version-error.ts';
 import { SocketConnection } from './socket-connection.ts';
-
-/**
- * How long a leader may keep its term while it hangs up on every hello. One
- * that stops ends its term within moments; one from before the handshake keeps it.
- */
-const HANDSHAKE_PATIENCE = 1000;
 
 export interface ElectingConnectorOptions {
   socketPath: string;
@@ -65,16 +58,14 @@ export class ElectingConnector implements ClientConnector {
   /**
    * After a leader hung up on the hello: a leader that stops frees its term
    * within moments, so this process leads or follows the successor soon
-   * enough to reassert its keys in the successor's grace window. A leader from
-   * before the handshake keeps its term and hangs up on every hello, which
-   * fails the connect after HANDSHAKE_PATIENCE. Resolves `undefined` once
-   * nothing listens.
+   * enough to reassert its keys in the successor's grace window. A campaign
+   * that waits for the term would miss that window when the successor already
+   * leads. Resolves `undefined` once nothing listens.
    */
   async #outlastHangUp(
     signal: AbortSignal,
   ): Promise<ClientConnection | undefined> {
     const { socketPath, pollInterval } = this.#options;
-    const deadline = performance.now() + HANDSHAKE_PATIENCE;
     for (;;) {
       const term = await this.#campaign(0, signal);
       if (term) return this.#lead(term, signal);
@@ -82,9 +73,6 @@ export class ElectingConnector implements ClientConnector {
       if (!again) return undefined;
       const connection = await this.#follow(again, signal);
       if (connection) return connection;
-      if (performance.now() >= deadline) {
-        throw new ProtocolVersionError(PROTOCOL_VERSION, undefined);
-      }
       await untilAborted(delay(pollInterval, undefined, { signal }), signal);
     }
   }
@@ -118,10 +106,7 @@ export class ElectingConnector implements ClientConnector {
     if (!own) return undefined;
     const greeting = await greetUnlessAborted(own, signal);
     if (greeting.kind === 'welcome') {
-      return new AdvertisedOpsConnection(
-        new OwnServerConnection<LockRequest>(own),
-        greeting.ops,
-      );
+      return new OwnServerConnection<LockRequest>(own);
     }
     own.destroy();
     return undefined;
@@ -145,18 +130,8 @@ export class ElectingConnector implements ClientConnector {
     following.defer(() => socket.destroy());
     this.#options.connected();
     following.move();
-    return leaderConnection(socket, greeting.ops);
+    return new SocketConnection<LockRequest>(socket);
   }
-}
-
-function leaderConnection(
-  socket: Socket,
-  listed: ReadonlySet<string>,
-): ClientConnection {
-  return new AdvertisedOpsConnection(
-    new SocketConnection<LockRequest>(socket),
-    listed,
-  );
 }
 
 /** Like `reach`, but a socket reached after `signal` aborted is destroyed, not returned. */

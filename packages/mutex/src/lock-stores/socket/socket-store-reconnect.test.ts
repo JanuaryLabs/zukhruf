@@ -17,7 +17,7 @@ import { newProcessTimeout } from '../../testing/new-process-timeout.ts';
 import { settle } from '../../testing/store-cases.ts';
 import { watch } from '../../testing/watch.ts';
 import { startWorker } from '../../testing/worker-process.ts';
-import { SocketStore, UnsupportedRequestError } from './index.ts';
+import { SocketStore } from './index.ts';
 import { socketElection } from './socket-election.ts';
 
 const socketUrl = new URL('./index.ts', import.meta.url);
@@ -66,7 +66,7 @@ async function standInLeader(directory: string) {
       hello: undefined,
       requests: [],
       closed: false,
-      welcome: () => write({ op: 'welcome', ops: ['isHeld'] }),
+      welcome: () => write({ op: 'welcome' }),
       refuse: () =>
         socket.end(`${JSON.stringify({ op: 'refused', version: 99 })}\n`),
       answer: write,
@@ -723,31 +723,6 @@ describe('A socket store that reconnects', () => {
     assert.equal(asked.op, 'isHeld');
     assert.equal(asked.key, 'product:42');
     assert.equal(await looking, true);
-  });
-
-  test('a look that the leader answers as unsupported rejects with UnsupportedRequestError', async (t) => {
-    // Arrange: the leader lists the look in its welcome, then does not know it.
-    await using follower = await followerOfStandIn();
-    const { leader, store } = follower;
-    const looking = store.isHeld('product:42');
-    const first = await connection(t, leader, 0);
-    first.welcome();
-    const asked = await request(t, first, 0);
-
-    // Act
-    first.answer({ op: 'unsupported', id: asked.id });
-
-    // Assert
-    const ended = await Promise.race([
-      looking.then(
-        (held) => `answered ${held}`,
-        (error: unknown) => error,
-      ),
-      delay(2000, 'still waiting', { ref: false }),
-    ]);
-    assert.ok(ended instanceof UnsupportedRequestError, String(ended));
-    assert.equal(ended.op, 'isHeld');
-    assert.equal(ended.key, 'product:42');
   });
 
   test('a store opens no connection until it is used, and opens one for two first calls', async (t) => {

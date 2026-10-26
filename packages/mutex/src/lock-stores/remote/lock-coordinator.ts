@@ -10,10 +10,9 @@ import type { AcquireOptions, LockStore } from '../../mutex/lock-store.ts';
 import { MemoryStore } from '../memory/memory-store.ts';
 import type { Connection } from './connection.ts';
 import {
+  type LockRequest,
   type LockResponse,
-  type RequestEnvelope,
   isLockRequest,
-  isRequestEnvelope,
 } from './protocol.ts';
 
 export interface LockCoordinatorOptions {
@@ -222,8 +221,8 @@ class Session {
     this.#onTokensExhausted = onTokensExhausted;
     this.#phase = new Serving(connection);
     connection.on('message', (message) => {
-      // A message with no op or no id cannot be answered, so it is ignored, and the peer keeps its keys (ADR 0017).
-      if (!isRequestEnvelope(message)) return;
+      // A message that is not a lock request is ignored, and the peer keeps its keys (ADR 0017).
+      if (!isLockRequest(message)) return;
       this.#handle(message).catch((error: unknown) =>
         this.#fail(message, error),
       );
@@ -233,12 +232,7 @@ class Session {
     });
   }
 
-  async #handle(request: RequestEnvelope) {
-    // A newer process may ask what this version does not know. The answer
-    // keeps its connection, and with it every key it holds.
-    if (!isLockRequest(request)) {
-      return this.#phase.reply({ op: 'unsupported', id: request.id });
-    }
+  async #handle(request: LockRequest) {
     switch (request.op) {
       case 'acquire': {
         if (!this.#register(request.id)) return;
@@ -294,7 +288,7 @@ class Session {
    * acquire, a try or a reassert mints one. The key is free again, and the
    * peer keeps its connection and every other key (ADR 0017, ADR 0019).
    */
-  #fail(request: RequestEnvelope, error: unknown) {
+  #fail(request: LockRequest, error: unknown) {
     this.#requested.delete(request.id);
     if (error instanceof EpochExhaustedError && this.#onTokensExhausted) {
       return this.#onTokensExhausted();
@@ -304,9 +298,14 @@ class Session {
       case 'acquire':
       case 'try':
         return this.#phase.reply({ op: 'failed', id: request.id, message });
-      // Each version of the client reads `rejected` as a lost lease.
+      // The client reads `rejected` as a lost lease.
       case 'reassert':
         return this.#phase.reply({ op: 'rejected', id: request.id });
+      // They mint no token.
+      case 'isHeld':
+      case 'cancel':
+      case 'release':
+        return;
     }
   }
 
