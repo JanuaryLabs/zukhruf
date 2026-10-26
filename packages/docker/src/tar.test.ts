@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import { link, mkdir, symlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { describe, test } from 'node:test';
@@ -8,20 +8,20 @@ import { tarEntries } from './tar-reader.ts';
 import { type TarWriterEntry, tarArchive } from './tar-writer.ts';
 import { scratchDirectory } from './testing/scratch-directory.ts';
 
-/** Runs the tar program of this machine with `input` on its standard input, and gives its standard output. */
-async function systemTar(
-  args: string[],
-  input: Uint8Array = new Uint8Array(0),
-): Promise<Buffer> {
-  const child = spawn('tar', args, { stdio: ['pipe', 'pipe', 'inherit'] });
-  const closed = new Promise<number | null>((resolve) =>
-    child.once('close', resolve),
-  );
-  child.stdin.end(input);
-  const chunks: Buffer[] = [];
-  for await (const chunk of child.stdout) chunks.push(Buffer.from(chunk));
-  assert.equal(await closed, 0, `tar ${args.join(' ')}`);
-  return Buffer.concat(chunks);
+/**
+ * Runs the tar program of this machine with `input`, if any, on its standard
+ * input, and gives its standard output. With no input nothing is written: tar
+ * -c never reads its standard input, and a write after it exits fails with
+ * EPIPE on Linux.
+ */
+function systemTar(args: string[], input?: Uint8Array): Buffer {
+  const result = spawnSync('tar', args, {
+    input,
+    stdio: ['pipe', 'pipe', 'inherit'],
+  });
+  assert.ifError(result.error);
+  assert.equal(result.status, 0, `tar ${args.join(' ')}`);
+  return result.stdout;
 }
 
 /** The bytes in chunks of `size`, so that headers and data cross chunk borders. */
@@ -77,7 +77,7 @@ describe('the tar archives of the package', () => {
 
     // Act
     const entries = await Array.fromAsync(tarEntries(inChunks(archive, 7)));
-    const listed = (await systemTar(['-tf', '-'], archive))
+    const listed = systemTar(['-tf', '-'], archive)
       .toString('utf8')
       .split('\n')
       .filter(Boolean);
@@ -152,7 +152,7 @@ describe('the tar archives of the package', () => {
       await writeFile(join(tree, 'target.txt'), 'target\n');
       await symlink('target.txt', join(tree, 'soft'));
       await link(join(tree, 'target.txt'), join(tree, 'hard'));
-      const archive = await systemTar(['-cf', '-', '-C', tree, '.']);
+      const archive = systemTar(['-cf', '-', '-C', tree, '.']);
 
       // Act
       const entries = await Array.fromAsync(tarEntries(inChunks(archive, 100)));
