@@ -45,11 +45,13 @@ function matchesExternal(name: string, pattern: string): boolean {
  * as Nx resolves it: project.json, the target defaults in nx.json, and the
  * targets that Nx plugins infer.
  *
- * An application bundles unless its build is `nx:noop` (it ships what other
- * projects built), esbuild with `bundle: false` (it transpiles file by file),
- * or esbuild that leaves a workspace package it imports to node_modules (it
- * installs that package, and inlines only the others). esbuild bundles by
- * default.
+ * An application bundles unless its build compiles with tsc (it emits file by
+ * file and keeps each import), as `@nx/js:tsc` or the `tsc --build` target
+ * that the `@nx/js/typescript` plugin infers, is `nx:noop` (it ships what
+ * other projects built), esbuild with `bundle: false` (it transpiles file by
+ * file), or esbuild that leaves a workspace package it imports to
+ * node_modules (it installs that package, and inlines only the others).
+ * esbuild bundles by default.
  */
 export class ProjectBuild {
   readonly shape: ProjectShape;
@@ -59,8 +61,13 @@ export class ProjectBuild {
   constructor(graph: ProjectGraph, project: ProjectGraphProjectNode) {
     const build = project.data.targets?.['build'];
     const esbuild = build?.executor?.includes('esbuild') === true;
+    const typescript =
+      build?.executor === '@nx/js:tsc' ||
+      (build?.executor === 'nx:run-commands' &&
+        build.metadata?.technologies?.includes('typescript') === true);
     if (
       project.data.projectType !== 'application' ||
+      typescript ||
       build?.executor === 'nx:noop' ||
       (esbuild && build?.options?.bundle === false)
     ) {

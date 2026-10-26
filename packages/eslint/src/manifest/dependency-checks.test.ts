@@ -211,6 +211,14 @@ test('an app declares the workspace packages its build leaves to node_modules, a
   // Arrange: every app imports greet, which imports left-pad.
   const installsGreet = {
     shell: { build: { executor: 'nx:noop' } },
+    tsc: { build: { executor: '@nx/js:tsc' } },
+    'inferred-tsc': {
+      build: {
+        executor: 'nx:run-commands',
+        metadata: { technologies: ['typescript'] },
+        options: { command: 'tsc --build tsconfig.lib.json' },
+      },
+    },
     external: { build: esbuild({ external: ['@fx/greet'] }) },
     'esbuild-options': {
       build: esbuild({ esbuildOptions: { external: ['@fx/greet'] } }),
