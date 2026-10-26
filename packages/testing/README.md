@@ -1,6 +1,6 @@
 # @zukhruf/testing
 
-Disposable fixtures for integration tests on Node.js: Docker containers and database servers, SQLite and DuckDB databases, BigQuery datasets, HTTP servers and controlled streams. Each acquisition returns a handle that `await using` cleans up, also when the test fails. A background server has no handle: it lives until the process exits. Node's global setup and global teardown remove what a killed test run left behind.
+Disposable fixtures for integration tests on Node.js: Docker containers and database servers, SQLite and DuckDB databases, BigQuery datasets, HTTP servers and controlled streams. Each acquisition returns a handle that `await using` cleans up, also when the test fails. Node's global setup and global teardown remove what a killed test run left behind.
 
 The words in these documents have one meaning each. See the glossary in [CONTEXT.md](./CONTEXT.md).
 
@@ -181,18 +181,6 @@ The handle has `connectionString`, `host`, `port`, `user`, `password`, `database
 
 `new HttpServer().start(handler)` listens on `127.0.0.1` on a free port and resolves once it listens. The handle has `origin` and the native `server`. Disposal closes active connections and waits for the server to close.
 
-Some modules read an origin when they load, so every test in the file uses the same server. `background(handler)` starts a background server for them. It listens until the process exits and never keeps the process running, also while a connection to it is open. It returns only `origin`, because nothing disposes it. Use `start` when only one test reads the origin.
-
-```ts
-import { HttpServer } from '@zukhruf/testing/http';
-
-const keys = await new HttpServer().background((request, response) => {
-  response.end(JSON.stringify(jwks));
-});
-process.env.KEYS_URL = keys.origin;
-const { verify } = await import('./verify.ts');
-```
-
 The handler is a Node.js request listener. A web framework gives one for its fetch handler: `getRequestListener((request) => app.fetch(request))` from `@hono/node-server`, or `toNodeHandler((request) => auth.handler(request))` from `better-auth/node`. The handler can be async. When it rejects, the rejection stays unhandled and fails the process, as a throw does. The server never answers for a handler that failed. A handler that needs the origin can read a `const` that the test declares after the acquisition: no request arrives before the test gives the origin to a client.
 
 `StreamHarness` gives a controlled producer, `source<T>()`, with `enqueue`, `close`, `error` and a read-only `state`, and a disposable `reader(stream)` that locks a stream without reading ahead. `collectUntilError()` returns the remaining chunks and either `completed` or `errored` with the error.
@@ -237,7 +225,7 @@ import { spawn } from 'node:child_process';
 spawn(command, args, { env: { ...process.env, REGION: 'eu-west-1' } });
 ```
 
-To put a directory first on the `PATH` of a child, join it with `path.delimiter`, which is `:` on Unix and `;` on Windows:
+To put a directory first on the `PATH` of a child, join it with `path.delimiter`, which is `:` on Unix and `;` on Windows. Remove an unset `PATH` before the join. On Unix, an empty entry is the current directory:
 
 ```ts
 import path from 'node:path';
@@ -245,7 +233,7 @@ import path from 'node:path';
 spawn(command, args, {
   env: {
     ...process.env,
-    PATH: [binDirectory, process.env.PATH].join(path.delimiter),
+    PATH: [binDirectory, process.env.PATH].filter(Boolean).join(path.delimiter),
   },
 });
 ```

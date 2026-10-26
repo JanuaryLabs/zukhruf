@@ -23,11 +23,6 @@ export interface HttpServerHandle extends AsyncDisposable {
   cleanup: () => Promise<void>;
 }
 
-/** A server whose scope is the process: nothing disposes it. */
-export interface BackgroundHttpServer {
-  origin: string;
-}
-
 /** Each acquisition owns a loopback HTTP server on an available port. */
 export class HttpServer {
   async start(handler: HttpHandler): Promise<HttpServerHandle> {
@@ -50,15 +45,6 @@ export class HttpServer {
       cleanup,
       [Symbol.asyncDispose]: cleanup,
     };
-  }
-
-  /** Serves until the process exits and never keeps it running, even while a connection is open. */
-  async background(handler: HttpHandler): Promise<BackgroundHttpServer> {
-    const server = serve(handler);
-    server.on('connection', (socket) => socket.unref());
-    await listen(server);
-    server.unref();
-    return { origin: originOf(server) };
   }
 }
 

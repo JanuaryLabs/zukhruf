@@ -89,41 +89,6 @@ test('HTTP acquisition preserves native bind errors without closing another serv
   assert.equal(await (await fetch(occupied.origin)).text(), 'occupied');
 });
 
-test(
-  'a background server answers, and its process exits while connections to it stay open',
-  { timeout: 15_000 },
-  async () => {
-    // The child keeps a served keep-alive connection, then opens an idle one.
-    // A server holds either open for longer than the spawn timeout.
-    const { stdout } = await spawn(
-      process.execPath,
-      [
-        '--input-type=module',
-        '--eval',
-        `
-          import { once } from 'node:events';
-          import { connect } from 'node:net';
-          const { HttpServer } = await import(${JSON.stringify(new URL('./http-server.ts', import.meta.url).href)});
-          const { origin } = await new HttpServer().background((request, response) => {
-            response.end(request.url);
-          });
-          const body = await (await fetch(origin + '/answered')).text();
-          const { hostname, port } = new URL(origin);
-          const idle = connect(Number(port), hostname);
-          await once(idle, 'connect');
-          idle.unref();
-          console.log(JSON.stringify({ origin, body }));
-        `,
-      ],
-      { timeout: 10_000 },
-    );
-
-    const { origin, body } = JSON.parse(stdout);
-    assert.equal(new URL(origin).hostname, '127.0.0.1');
-    assert.equal(body, '/answered');
-  },
-);
-
 test('an async handler answers', { timeout: 5_000 }, async () => {
   await using server = await new HttpServer().start(
     async (_request, response) => {

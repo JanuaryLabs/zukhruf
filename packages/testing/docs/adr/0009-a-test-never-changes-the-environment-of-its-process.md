@@ -12,3 +12,4 @@ About 50 places in 5 repositories change `process.env` in a test and restore it 
 
 - A lint rule reports each change to `process.env` in a test.
 - A consumer changes the code under test to take the environment or the value, such as a home directory or a time zone. Or it runs the code in a child process with `env`.
+- `HttpServer.background()` is removed ([ADR 0005](./0005-a-background-server-owns-its-connections.md) is superseded). It served a module that reads an origin from a global when it loads. The code under test now takes the origin, so each test starts its own server with `start`.

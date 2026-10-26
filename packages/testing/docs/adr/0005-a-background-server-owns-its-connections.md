@@ -1,5 +1,7 @@
 # A background server owns its connections
 
+Superseded on 2026-10-26 by [ADR 0009](./0009-a-test-never-changes-the-environment-of-its-process.md). A test never changes a global, so no module reads an origin from a global when it loads. Each test starts its own server with `start` and disposes it. Thus `background(handler)` is removed before its release. The measurements below stay true for a server that a test unrefs.
+
 Some modules read an origin when they load. For example, a module creates a remote key set from an environment variable. Every test in the file then uses the same server. No test can dispose it: the module still reads the origin after that test ends, and a test file has no `after` hook. Thus the server must listen until the process exits, and it must not keep the process running. `server.unref()` is not sufficient, because each open connection keeps the process running on its own. With one idle connection, a process with an unref'd server ran for more than 25 seconds. With its connections unref'd too, the process ended after 277 milliseconds. Thus `background(handler)` unrefs the server and each connection that it accepts, and returns only the origin.
 
 ## Considered Options
