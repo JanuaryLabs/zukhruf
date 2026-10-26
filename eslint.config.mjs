@@ -113,6 +113,11 @@ export default defineConfig(
       '@nx/enforce-module-boundaries': moduleBoundaryRule('tests'),
     },
   },
+  // `node --test-global-setup` (named in nx.json) runs the global setup as an entry point, so it reads the environment as a test file does.
+  {
+    files: ['packages/*/src/testing/docker-global-setup.ts'],
+    rules: { 'island/no-process-env': 'off' },
+  },
   // The tests of the UI packages import them by their names, as an app does,
   // so they check the published entry and not the source files.
   {
