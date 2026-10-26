@@ -1,19 +1,12 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import {
-  chmod,
-  mkdir,
-  mkdtempDisposable,
-  readFile,
-  realpath,
-  symlink,
-  writeFile,
-} from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { chmod, mkdir, readFile, symlink, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 import { promisify } from 'node:util';
+
+import { TemporaryFiles } from '@zukhruf/testing/fs';
 
 import { Format, prePush } from './index.ts';
 
@@ -26,8 +19,7 @@ const zukhrufModules = new URL('../../../node_modules', import.meta.url)
 // reached through the committed link `.husky/pre-push`, as a repo installs
 // it, and a bare remote `origin` beside it. git, npm and the hook see none of
 // the user's config and no environment of the Nx task that runs this test.
-async function repository(folder: string, hook: string) {
-  const top = await realpath(folder);
+async function repository(top: string, hook: string) {
   const root = join(top, 'repo');
   const remote = join(top, 'remote.git');
   await mkdir(root);
@@ -149,7 +141,7 @@ test(
   { timeout: 60_000 },
   async () => {
     // Arrange
-    await using folder = await mkdtempDisposable(join(tmpdir(), 'git-hooks-'));
+    await using folder = await new TemporaryFiles().directory('git-hooks-');
     const repo = await repository(folder.path, showUpdates);
     await repo.write('a.txt', 'a\n');
     const head = await repo.commit('first');
@@ -180,7 +172,7 @@ test(
   { timeout: 60_000 },
   async () => {
     // Arrange
-    await using folder = await mkdtempDisposable(join(tmpdir(), 'git-hooks-'));
+    await using folder = await new TemporaryFiles().directory('git-hooks-');
     const repo = await repository(folder.path, showUpdates);
     await repo.write('a.txt', 'a\n');
     const pushed = await repo.commit('first');
@@ -212,7 +204,7 @@ test(
   { timeout: 60_000 },
   async () => {
     // Arrange
-    await using folder = await mkdtempDisposable(join(tmpdir(), 'git-hooks-'));
+    await using folder = await new TemporaryFiles().directory('git-hooks-');
     const repo = await repository(folder.path, showUpdates);
     await repo.write('a.txt', 'a\n');
     const pushed = await repo.commit('first');
@@ -238,7 +230,7 @@ test(
   { timeout: 60_000 },
   async () => {
     // Arrange
-    await using folder = await mkdtempDisposable(join(tmpdir(), 'git-hooks-'));
+    await using folder = await new TemporaryFiles().directory('git-hooks-');
     const repo = await repository(folder.path, showUpdates);
     await repo.write('a.txt', 'a\n');
     const pushed = await repo.commit('first');
@@ -276,7 +268,7 @@ test(
   { timeout: 60_000 },
   async () => {
     // Arrange
-    await using folder = await mkdtempDisposable(join(tmpdir(), 'git-hooks-'));
+    await using folder = await new TemporaryFiles().directory('git-hooks-');
     const repo = await repository(folder.path, showUpdates);
     await repo.write('a.txt', 'a\n');
     const head = await repo.commit('first');
@@ -300,7 +292,7 @@ test(
   { timeout: 60_000 },
   async () => {
     // Arrange
-    await using folder = await mkdtempDisposable(join(tmpdir(), 'git-hooks-'));
+    await using folder = await new TemporaryFiles().directory('git-hooks-');
     const repo = await repository(folder.path, showUpdates);
     await repo.write('a.txt', 'a\n');
     const pushed = await repo.commit('first');
@@ -328,7 +320,7 @@ test(
   { timeout: 60_000 },
   async () => {
     // Arrange
-    await using folder = await mkdtempDisposable(join(tmpdir(), 'git-hooks-'));
+    await using folder = await new TemporaryFiles().directory('git-hooks-');
     const repo = await repository(
       folder.path,
       `import { type Push, Step, prePush } from '@zukhruf/git-hooks';
@@ -434,7 +426,7 @@ test(
   { timeout: 60_000 },
   async () => {
     // Arrange
-    await using folder = await mkdtempDisposable(join(tmpdir(), 'git-hooks-'));
+    await using folder = await new TemporaryFiles().directory('git-hooks-');
     const repo = await workspace(
       folder.path,
       `import { type Push, Step, prePush } from '@zukhruf/git-hooks';
@@ -492,7 +484,7 @@ test(
   { timeout: 60_000 },
   async () => {
     // Arrange
-    await using folder = await mkdtempDisposable(join(tmpdir(), 'git-hooks-'));
+    await using folder = await new TemporaryFiles().directory('git-hooks-');
     const repo = await workspace(
       folder.path,
       `import { Build, prePush } from '@zukhruf/git-hooks';

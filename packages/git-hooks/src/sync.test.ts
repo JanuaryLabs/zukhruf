@@ -1,18 +1,11 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
-import {
-  chmod,
-  mkdir,
-  mkdtempDisposable,
-  readFile,
-  realpath,
-  symlink,
-  writeFile,
-} from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { chmod, mkdir, readFile, symlink, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 import { promisify } from 'node:util';
+
+import { TemporaryFiles } from '@zukhruf/testing/fs';
 
 const execFileAsync = promisify(execFile);
 const packageEntry = import.meta.resolve('./index.ts');
@@ -21,8 +14,7 @@ const packageEntry = import.meta.resolve('./index.ts');
 // reached through the committed link `.husky/pre-commit`, as a repo installs
 // it. git and the hook see none of the user's git config and no environment
 // of the Nx task that runs this test.
-async function repository(folder: string, hook: string) {
-  const root = await realpath(folder);
+async function repository(root: string, hook: string) {
   const environment = {
     PATH: `${dirname(process.execPath)}:/usr/bin:/bin`,
     HOME: root,
@@ -128,7 +120,7 @@ async function workspace(folder: string, hook: string) {
 
 test('the sync step stages the tsconfig that nx sync rewrote, so the commit holds the new project reference', async () => {
   // Arrange
-  await using folder = await mkdtempDisposable(join(tmpdir(), 'git-hooks-'));
+  await using folder = await new TemporaryFiles().directory('git-hooks-');
   const repo = await workspace(
     folder.path,
     `import { Sync, preCommit } from '@zukhruf/git-hooks';
@@ -157,7 +149,7 @@ await preCommit([new Sync()]);
 
 test('the sync step never stages a file that was modified before the hook ran, even when nx sync rewrites it', async () => {
   // Arrange
-  await using folder = await mkdtempDisposable(join(tmpdir(), 'git-hooks-'));
+  await using folder = await new TemporaryFiles().directory('git-hooks-');
   const repo = await workspace(
     folder.path,
     `import { Sync, preCommit } from '@zukhruf/git-hooks';
@@ -206,7 +198,7 @@ await preCommit([new Sync()]);
 
 test('the sync step stages only files that match its globs: a file nx sync wrote outside them stays unstaged', async () => {
   // Arrange
-  await using folder = await mkdtempDisposable(join(tmpdir(), 'git-hooks-'));
+  await using folder = await new TemporaryFiles().directory('git-hooks-');
   const repo = await workspace(
     folder.path,
     `import { Sync, preCommit } from '@zukhruf/git-hooks';
@@ -235,7 +227,7 @@ await preCommit([new Sync({ stage: ['**/styles.css'] })]);
 
 test('an nx sync that fails stops the commit with the reason nx gave, and nothing is committed', async () => {
   // Arrange
-  await using folder = await mkdtempDisposable(join(tmpdir(), 'git-hooks-'));
+  await using folder = await new TemporaryFiles().directory('git-hooks-');
   const repo = await workspace(
     folder.path,
     `import { Sync, preCommit } from '@zukhruf/git-hooks';

@@ -1,18 +1,12 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import {
-  chmod,
-  mkdir,
-  mkdtempDisposable,
-  realpath,
-  symlink,
-  writeFile,
-} from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { chmod, mkdir, symlink, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 import { promisify } from 'node:util';
+
+import { TemporaryFiles } from '@zukhruf/testing/fs';
 
 const execFileAsync = promisify(execFile);
 const packageEntry = import.meta.resolve('./index.ts');
@@ -21,8 +15,7 @@ const packageEntry = import.meta.resolve('./index.ts');
 // reached through the committed link `.husky/pre-commit`, as a repo installs
 // it. git and the hook see none of the user's git config and no environment
 // of the Nx task that runs this test.
-async function repository(folder: string, hook: string) {
-  const root = await realpath(folder);
+async function repository(root: string, hook: string) {
   const environment = {
     PATH: `${dirname(process.execPath)}:/usr/bin:/bin`,
     HOME: root,
@@ -78,7 +71,7 @@ async function repository(folder: string, hook: string) {
 
 test("a repo's own step stops the commit with its reason when it fails, a step that skips lets the next steps run, and no step runs after a failed one", async () => {
   // Arrange
-  await using folder = await mkdtempDisposable(join(tmpdir(), 'git-hooks-'));
+  await using folder = await new TemporaryFiles().directory('git-hooks-');
   const repo = await repository(
     folder.path,
     `import { type Commit, Step, preCommit } from '@zukhruf/git-hooks';
@@ -135,7 +128,7 @@ await preCommit([new Nothing(), new Refuse(), new After()]);
 
 test('a step that reads the staged commit in a snapshot sees the staged copy of the tree, the snapshot is gone after the hook, and a commit that stages no file the step reads skips it', async () => {
   // Arrange
-  await using folder = await mkdtempDisposable(join(tmpdir(), 'git-hooks-'));
+  await using folder = await new TemporaryFiles().directory('git-hooks-');
   const repo = await repository(
     folder.path,
     `import { readFile } from 'node:fs/promises';

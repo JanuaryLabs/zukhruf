@@ -4,18 +4,17 @@ import { existsSync } from 'node:fs';
 import {
   chmod,
   mkdir,
-  mkdtempDisposable,
   readFile,
   readdir,
-  realpath,
   rm,
   symlink,
   writeFile,
 } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 import { promisify } from 'node:util';
+
+import { TemporaryFiles } from '@zukhruf/testing/fs';
 
 const execFileAsync = promisify(execFile);
 const packageEntry = import.meta.resolve('./index.ts');
@@ -26,8 +25,7 @@ const packageEntry = import.meta.resolve('./index.ts');
 // the user's config and no environment of the Nx task that runs this test.
 // PROBE_MARKS is the folder where a script of the repo leaves a mark when it
 // runs.
-async function repository(folder: string, hook: string) {
-  const top = await realpath(folder);
+async function repository(top: string, hook: string) {
   const root = join(top, 'repo');
   const remote = join(top, 'remote.git');
   const marks = join(top, 'marks');
@@ -211,7 +209,7 @@ test(
   { timeout: 60_000 },
   async () => {
     // Arrange
-    await using folder = await mkdtempDisposable(join(tmpdir(), 'git-hooks-'));
+    await using folder = await new TemporaryFiles().directory('git-hooks-');
     const repo = await workspace(folder.path, inspect);
     await repo.install({
       'probe-dep': repo.tarball.probe2,
@@ -249,7 +247,7 @@ test(
   { timeout: 60_000 },
   async () => {
     // Arrange
-    await using folder = await mkdtempDisposable(join(tmpdir(), 'git-hooks-'));
+    await using folder = await new TemporaryFiles().directory('git-hooks-');
     const repo = await workspace(folder.path, inspect);
     await repo.install({
       'probe-dep': repo.tarball.probe1,
@@ -278,7 +276,7 @@ test(
   { timeout: 60_000 },
   async () => {
     // Arrange
-    await using folder = await mkdtempDisposable(join(tmpdir(), 'git-hooks-'));
+    await using folder = await new TemporaryFiles().directory('git-hooks-');
     const repo = await workspace(folder.path, inspect);
     await repo.install({
       'probe-dep': repo.tarball.probe1,
@@ -307,7 +305,7 @@ test(
   { timeout: 60_000 },
   async () => {
     // Arrange
-    await using folder = await mkdtempDisposable(join(tmpdir(), 'git-hooks-'));
+    await using folder = await new TemporaryFiles().directory('git-hooks-');
     const repo = await workspace(folder.path, inspect);
     await repo.install({
       'probe-dep': repo.tarball.probe1,
@@ -340,7 +338,7 @@ test(
   { timeout: 120_000 },
   async () => {
     // Arrange
-    await using folder = await mkdtempDisposable(join(tmpdir(), 'git-hooks-'));
+    await using folder = await new TemporaryFiles().directory('git-hooks-');
     const repo = await workspace(folder.path, inspect);
     const lockfiles = {
       one: { 'probe-dep': repo.tarball.probe1 },
@@ -401,7 +399,7 @@ test(
   { timeout: 60_000 },
   async () => {
     // Arrange
-    await using folder = await mkdtempDisposable(join(tmpdir(), 'git-hooks-'));
+    await using folder = await new TemporaryFiles().directory('git-hooks-');
     const repo = await workspace(folder.path, inspect);
     await repo.install({
       'probe-dep': repo.tarball.probe1,

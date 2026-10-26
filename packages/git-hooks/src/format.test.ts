@@ -1,17 +1,11 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
-import {
-  chmod,
-  mkdir,
-  mkdtempDisposable,
-  realpath,
-  symlink,
-  writeFile,
-} from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { chmod, mkdir, symlink, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 import { promisify } from 'node:util';
+
+import { TemporaryFiles } from '@zukhruf/testing/fs';
 
 const execFileAsync = promisify(execFile);
 const packageEntry = import.meta.resolve('./index.ts');
@@ -20,8 +14,7 @@ const packageEntry = import.meta.resolve('./index.ts');
 // reached through the committed link `.husky/pre-commit`, as a repo installs
 // it. git and the hook see none of the user's git config and no environment
 // of the Nx task that runs this test.
-async function repository(folder: string, hook: string) {
-  const root = await realpath(folder);
+async function repository(root: string, hook: string) {
   const environment = {
     PATH: `${dirname(process.execPath)}:/usr/bin:/bin`,
     HOME: root,
@@ -81,7 +74,7 @@ await preCommit([new Format()]);
 
 test('a commit whose staged files are not formatted is stopped, and the hook lists every one of them, an executable one too, with the command that formats them', async () => {
   // Arrange
-  await using folder = await mkdtempDisposable(join(tmpdir(), 'git-hooks-'));
+  await using folder = await new TemporaryFiles().directory('git-hooks-');
   const repo = await repository(folder.path, formatOnly);
   await repo.write('a.ts', 'const a=1\n');
   await repo.write('b.ts', 'let b={x:1}\n');
@@ -114,7 +107,7 @@ test('a commit whose staged files are not formatted is stopped, and the hook lis
 
 test('a commit with one unformatted staged file is stopped, and the hook names that one file in the singular', async () => {
   // Arrange
-  await using folder = await mkdtempDisposable(join(tmpdir(), 'git-hooks-'));
+  await using folder = await new TemporaryFiles().directory('git-hooks-');
   const repo = await repository(folder.path, formatOnly);
   await repo.write('a.ts', 'const a=1\n');
   await repo.git('add', 'a.ts');
@@ -138,7 +131,7 @@ test('a commit with one unformatted staged file is stopped, and the hook names t
 
 test('a partially staged file is judged by its staged copy: an unformatted staged copy stops the commit even when the working tree is formatted', async () => {
   // Arrange
-  await using folder = await mkdtempDisposable(join(tmpdir(), 'git-hooks-'));
+  await using folder = await new TemporaryFiles().directory('git-hooks-');
   const repo = await repository(folder.path, formatOnly);
   await repo.write('a.ts', 'const a=1\n');
   await repo.git('add', 'a.ts');
@@ -154,7 +147,7 @@ test('a partially staged file is judged by its staged copy: an unformatted stage
 
 test('a partially staged file is judged by its staged copy: a formatted staged copy passes even when unstaged edits are unformatted', async () => {
   // Arrange
-  await using folder = await mkdtempDisposable(join(tmpdir(), 'git-hooks-'));
+  await using folder = await new TemporaryFiles().directory('git-hooks-');
   const repo = await repository(folder.path, formatOnly);
   await repo.write('a.ts', 'const a = 1;\n');
   await repo.git('add', 'a.ts');
@@ -174,7 +167,7 @@ test('a partially staged file is judged by its staged copy: a formatted staged c
 
 test('the hook rewrites no file and stages nothing: unstaged edits stay unstaged, and a stopped commit leaves the index as it was', async () => {
   // Arrange
-  await using folder = await mkdtempDisposable(join(tmpdir(), 'git-hooks-'));
+  await using folder = await new TemporaryFiles().directory('git-hooks-');
   const repo = await repository(folder.path, formatOnly);
   await repo.write('peer.ts', 'const peer = 1;\n');
   await repo.git('add', 'peer.ts');
@@ -219,7 +212,7 @@ test('the hook rewrites no file and stages nothing: unstaged edits stay unstaged
 
 test('a staged file that Prettier cannot parse stops the commit and is listed with its error, and the other staged files are still checked', async () => {
   // Arrange
-  await using folder = await mkdtempDisposable(join(tmpdir(), 'git-hooks-'));
+  await using folder = await new TemporaryFiles().directory('git-hooks-');
   const repo = await repository(folder.path, formatOnly);
   await repo.write('broken.ts', 'const = ;\n');
   await repo.write('unformatted.ts', 'const a=1\n');
@@ -254,7 +247,7 @@ test('a staged file that Prettier cannot parse stops the commit and is listed wi
 
 test('files that .prettierignore names and files that Prettier has no parser for do not stop the commit', async () => {
   // Arrange
-  await using folder = await mkdtempDisposable(join(tmpdir(), 'git-hooks-'));
+  await using folder = await new TemporaryFiles().directory('git-hooks-');
   const repo = await repository(folder.path, formatOnly);
   await repo.write('.prettierignore', 'generated.ts\n');
   await repo.write('generated.ts', 'const g=1\n');
@@ -277,7 +270,7 @@ test('files that .prettierignore names and files that Prettier has no parser for
 
 test('a staged file larger than 1 MiB is read and checked', async () => {
   // Arrange
-  await using folder = await mkdtempDisposable(join(tmpdir(), 'git-hooks-'));
+  await using folder = await new TemporaryFiles().directory('git-hooks-');
   const repo = await repository(folder.path, formatOnly);
   await repo.write(
     'large.md',
@@ -304,7 +297,7 @@ test('a staged file larger than 1 MiB is read and checked', async () => {
 
 test("the repo's own .prettierrc decides: a file formatted only under Prettier's defaults stops the commit, and a file formatted under the repo's config passes", async () => {
   // Arrange
-  await using folder = await mkdtempDisposable(join(tmpdir(), 'git-hooks-'));
+  await using folder = await new TemporaryFiles().directory('git-hooks-');
   const repo = await repository(folder.path, formatOnly);
   await repo.write('single.ts', "const a = 'x';\n");
   await repo.git('add', 'single.ts');
@@ -327,7 +320,7 @@ test("the repo's own .prettierrc decides: a file formatted only under Prettier's
 
 test('a commit whose staged files are formatted is made, and the hook says what the step checked', async () => {
   // Arrange
-  await using folder = await mkdtempDisposable(join(tmpdir(), 'git-hooks-'));
+  await using folder = await new TemporaryFiles().directory('git-hooks-');
   const repo = await repository(folder.path, formatOnly);
   await repo.write('a.ts', 'const a = 1;\n');
   await repo.git('add', 'a.ts');
@@ -351,7 +344,7 @@ test('a commit whose staged files are formatted is made, and the hook says what 
 
 test('a commit that deletes a file is made: a deleted file has no staged copy to check', async () => {
   // Arrange
-  await using folder = await mkdtempDisposable(join(tmpdir(), 'git-hooks-'));
+  await using folder = await new TemporaryFiles().directory('git-hooks-');
   const repo = await repository(folder.path, formatOnly);
   await repo.write('old.ts', 'const old = 1;\n');
   await repo.git('add', 'old.ts');
@@ -376,8 +369,8 @@ const zukhrufModules = new URL('../../../node_modules', import.meta.url)
 
 test('a repo that installs the packed package runs a hook that imports it by name', async () => {
   // Arrange
-  await using folder = await mkdtempDisposable(join(tmpdir(), 'git-hooks-'));
-  await using packed = await mkdtempDisposable(join(tmpdir(), 'git-hooks-'));
+  await using folder = await new TemporaryFiles().directory('git-hooks-');
+  await using packed = await new TemporaryFiles().directory('git-hooks-');
   const repo = await repository(folder.path, formatOnly);
   // The hook as a repo writes it: the package by name, from node_modules.
   await repo.write(
@@ -426,7 +419,7 @@ test('a repo that installs the packed package runs a hook that imports it by nam
 
 test('a staged link is not checked as source: the link to the hook and a CLAUDE.md link to AGENTS.md do not stop the commit', async () => {
   // Arrange
-  await using folder = await mkdtempDisposable(join(tmpdir(), 'git-hooks-'));
+  await using folder = await new TemporaryFiles().directory('git-hooks-');
   const repo = await repository(folder.path, formatOnly);
   await repo.write('AGENTS.md', '# Agents\n');
   await symlink('AGENTS.md', join(repo.root, 'CLAUDE.md'));

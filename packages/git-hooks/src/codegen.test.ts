@@ -1,19 +1,12 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import {
-  chmod,
-  mkdir,
-  mkdtempDisposable,
-  readFile,
-  realpath,
-  symlink,
-  writeFile,
-} from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { chmod, mkdir, readFile, symlink, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 import { promisify } from 'node:util';
+
+import { TemporaryFiles } from '@zukhruf/testing/fs';
 
 const execFileAsync = promisify(execFile);
 const packageEntry = import.meta.resolve('./index.ts');
@@ -22,8 +15,7 @@ const packageEntry = import.meta.resolve('./index.ts');
 // reached through the committed link `.husky/pre-commit`, as a repo installs
 // it. git and the hook see none of the user's git config and no environment
 // of the Nx task that runs this test.
-async function repository(folder: string, hook: string) {
-  const root = await realpath(folder);
+async function repository(root: string, hook: string) {
   const environment = {
     PATH: `${dirname(process.execPath)}:/usr/bin:/bin`,
     HOME: root,
@@ -185,7 +177,7 @@ await preCommit([
 
 test('the codegen step runs each of its targets in order when nx says one of its gated projects is affected by the staged files, and stages only its declared outputs', async () => {
   // Arrange
-  await using folder = await mkdtempDisposable(join(tmpdir(), 'git-hooks-'));
+  await using folder = await new TemporaryFiles().directory('git-hooks-');
   const repo = await workspace(folder.path, gated);
   // Only frontend is affected: backend does not depend on it.
   await repo.write(
@@ -213,7 +205,7 @@ test('the codegen step runs each of its targets in order when nx says one of its
 
 test('the codegen step builds nothing when no gated project is affected by the staged files', async () => {
   // Arrange
-  await using folder = await mkdtempDisposable(join(tmpdir(), 'git-hooks-'));
+  await using folder = await new TemporaryFiles().directory('git-hooks-');
   const repo = await workspace(folder.path, gated);
   await repo.write('packages/other/src/index.ts', 'export const value = 2;\n');
   await repo.git('add', 'packages/other/src/index.ts');
@@ -237,7 +229,7 @@ test('the codegen step builds nothing when no gated project is affected by the s
 
 test('the codegen step judges the staged files only: a gated project changed in the working tree and not staged builds nothing', async () => {
   // Arrange
-  await using folder = await mkdtempDisposable(join(tmpdir(), 'git-hooks-'));
+  await using folder = await new TemporaryFiles().directory('git-hooks-');
   const repo = await workspace(folder.path, gated);
   await repo.write(
     'packages/backend/src/index.ts',
@@ -262,7 +254,7 @@ test('the codegen step judges the staged files only: a gated project changed in 
 
 test('the codegen step matches gated project names exactly: an affected backend-e2e does not trigger a backend gate', async () => {
   // Arrange
-  await using folder = await mkdtempDisposable(join(tmpdir(), 'git-hooks-'));
+  await using folder = await new TemporaryFiles().directory('git-hooks-');
   const repo = await workspace(folder.path, gated);
   await repo.write(
     'packages/backend-e2e/src/index.ts',
@@ -284,7 +276,7 @@ test('the codegen step matches gated project names exactly: an affected backend-
 
 test('the codegen step without a gate builds on every commit', async () => {
   // Arrange
-  await using folder = await mkdtempDisposable(join(tmpdir(), 'git-hooks-'));
+  await using folder = await new TemporaryFiles().directory('git-hooks-');
   const repo = await workspace(
     folder.path,
     `import { Codegen, preCommit } from '@zukhruf/git-hooks';
@@ -308,7 +300,7 @@ await preCommit([new Codegen({ run: ['@probe/backend:openapi'], stage: ['openapi
 
 test('a generated file the codegen step staged is checked by the format step after it', async () => {
   // Arrange
-  await using folder = await mkdtempDisposable(join(tmpdir(), 'git-hooks-'));
+  await using folder = await new TemporaryFiles().directory('git-hooks-');
   const repo = await workspace(
     folder.path,
     `import { Codegen, Format, preCommit } from '@zukhruf/git-hooks';
@@ -335,7 +327,7 @@ await preCommit([
 
 test('a codegen target that fails stops the commit with the reason the target gave, and nothing is committed', async () => {
   // Arrange
-  await using folder = await mkdtempDisposable(join(tmpdir(), 'git-hooks-'));
+  await using folder = await new TemporaryFiles().directory('git-hooks-');
   const repo = await workspace(
     folder.path,
     `import { Codegen, preCommit } from '@zukhruf/git-hooks';
@@ -374,9 +366,9 @@ await preCommit([new Codegen({ run: ['@probe/backend:broken'], stage: ['openapi.
 
 test('a codegen target that runs git init and git config in its own temp folder makes a repo there, and the git config of the committing repo does not change', async () => {
   // Arrange
-  await using folder = await mkdtempDisposable(join(tmpdir(), 'git-hooks-'));
-  await using task = await mkdtempDisposable(join(tmpdir(), 'git-hooks-task-'));
-  const taskRepo = join(await realpath(task.path), 'repo');
+  await using folder = await new TemporaryFiles().directory('git-hooks-');
+  await using task = await new TemporaryFiles().directory('git-hooks-task-');
+  const taskRepo = join(task.path, 'repo');
   const repo = await workspace(
     folder.path,
     `import { Codegen, preCommit } from '@zukhruf/git-hooks';

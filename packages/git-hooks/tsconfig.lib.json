@@ -10,6 +10,9 @@
   "references": [
     {
       "path": "../fs/tsconfig.lib.json"
+    },
+    {
+      "path": "../testing/tsconfig.lib.json"
     }
   ]
 }
