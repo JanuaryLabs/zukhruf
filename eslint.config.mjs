@@ -1,7 +1,7 @@
 import nx from '@nx/eslint-plugin';
 import { defineConfig } from 'eslint/config';
 
-import { TESTS } from './packages/eslint/src/files.ts';
+import { TESTS, TEST_SUPPORT } from './packages/eslint/src/files.ts';
 import zukhruf from './packages/eslint/src/index.ts';
 import island, {
   islandConstraint,
@@ -108,7 +108,7 @@ export default defineConfig(
     },
   },
   {
-    files: [...TESTS, '**/src/testing/**'],
+    files: [...TESTS, ...TEST_SUPPORT],
     rules: {
       '@nx/enforce-module-boundaries': moduleBoundaryRule('tests'),
     },

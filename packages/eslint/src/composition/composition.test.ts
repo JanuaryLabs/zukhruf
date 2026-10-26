@@ -103,3 +103,22 @@ test('the typed-lint root is the workspace, found from the folder ESLint runs in
   assert.ok(isRecord(parserOptions));
   assert.equal(parserOptions['tsconfigRootDir'], workspace.root);
 });
+
+test('the tests config checks a test helper in src/testing as a test file', () => {
+  // Arrange: a helper outside any *.test.* file, in the folder that holds the
+  // test helpers (docs/adr/0001 of the workspace).
+  using workspace = fixtureWorkspace({
+    'nx.json': '{}',
+    'tsconfig.json': tsconfig,
+    'eslint.config.mjs': fixtureConfig(
+      `{ plugins: { zukhruf }, extends: ['zukhruf/base', 'zukhruf/tests'] }`,
+    ),
+    'src/testing/server.ts': 'beforeEach(() => {});\nexport const port = 1;\n',
+  });
+
+  // Act
+  const findings = lint(workspace.root, ['src']);
+
+  // Assert
+  assert.ok(ruleIds(findings).includes('zukhruf/no-test-lifecycle-hooks'));
+});

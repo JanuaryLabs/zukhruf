@@ -1,5 +1,5 @@
 import { type Concept, enable } from '../concept.ts';
-import { TESTS } from '../files.ts';
+import { TESTS, TEST_SUPPORT } from '../files.ts';
 import noTestLifecycleHooks from './no-test-lifecycle-hooks.ts';
 import requireMswErrorOnUnhandledRequest from './require-msw-error-on-unhandled-request.ts';
 
@@ -12,6 +12,11 @@ export const tests: Concept = {
   name: 'tests',
   rules,
   config: (plugins) => [
-    { name: 'zukhruf/tests', files: TESTS, plugins, rules: enable(rules) },
+    {
+      name: 'zukhruf/tests',
+      files: [...TESTS, ...TEST_SUPPORT],
+      plugins,
+      rules: enable(rules),
+    },
   ],
 };

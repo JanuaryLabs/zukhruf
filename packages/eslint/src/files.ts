@@ -19,6 +19,8 @@ export const TEST_EXTENSIONS = [
   'mjs',
 ];
 export const TESTS = [`**/*.{test,spec}.{${TEST_EXTENSIONS.join(',')}}`];
+/** Test helpers: a file in `src/testing` is a test file too, and the build does not ship it. */
+export const TEST_SUPPORT = ['**/src/testing/**'];
 /** Test-support scripts run top-level like tests: their state is arrange state. */
 export const FIXTURES = ['**/*.fixture.ts'];
 /** A script's stdout is its interface. */
