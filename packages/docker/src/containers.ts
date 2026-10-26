@@ -201,8 +201,8 @@ export class Container {
 
   /**
    * Resolves for 304 (already running). A 409 of a container whose removal
-   * is in progress is a ContainerNotFoundError: an inspect finds it gone or
-   * 'removing'. A 404 is a missing container or a
+   * is in progress is a ContainerNotFoundError: an inspect finds it gone,
+   * 'removing' or 'dead'. A 404 is a missing container or a
    * missing network: an inspect of the container tells which, and a lookup of
    * each of its networks names the missing one. An engine in swarm mode
    * answers a missing network with 500 ("Could not attach to network", probed
@@ -780,8 +780,11 @@ export class Container {
 
   /**
    * A 409 of a start: a ContainerNotFoundError when an inspect finds the
-   * container gone or in the state 'removing'; the error as it is otherwise,
-   * for example for a paused container.
+   * container gone, 'removing' or 'dead'; the error as it is otherwise, for
+   * example for a paused container. The engine marks the container dead
+   * during a removal and clears 'removing' at its end, so an inspect that
+   * waits on the lock of the container can read 'dead'. The engine never
+   * starts a dead container.
    */
   async #removedOr(
     error: DockerEngineError,
@@ -790,11 +793,11 @@ export class Container {
     const inspect = await this.#client.exchange('GET', `${this.#path}/json`, {
       signal,
     });
+    const status = isSuccess(inspect)
+      ? parseBody<EngineApi.ContainerInspectResponse>(inspect).State?.Status
+      : undefined;
     const gone =
-      inspect.status === 404 ||
-      (isSuccess(inspect) &&
-        parseBody<EngineApi.ContainerInspectResponse>(inspect).State?.Status ===
-          'removing');
+      inspect.status === 404 || status === 'removing' || status === 'dead';
     if (!gone) return error;
     return new ContainerNotFoundError(error.message, error, this.id, {
       cause: error,

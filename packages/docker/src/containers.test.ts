@@ -524,6 +524,52 @@ describe('a request that the engine refuses for one container', () => {
       await removeLabeled(docker, run);
     }
   });
+
+  test('start() that gets 409 "marked for removal" and an inspect that finds the container dead is a ContainerNotFoundError with its ID', async () => {
+    // Arrange: moby marks the container Dead during the removal and resets
+    // RemovalInProgress at its end, so an inspect that waited on the lock of
+    // the container reads 'dead' (CI run 40297823395).
+    await using scratch = await scratchDirectory();
+    await using engine = await fakeEngine({
+      directory: scratch.path,
+      apiVersion: '1.51',
+      answer: (request, response) => {
+        const json = (status: number, body: unknown) => {
+          response.writeHead(status, { 'Content-Type': 'application/json' });
+          response.end(JSON.stringify(body));
+        };
+        if (
+          request.method === 'POST' &&
+          request.url === '/v1.51/containers/c1/start'
+        ) {
+          json(409, {
+            message: 'container is marked for removal and cannot be started',
+          });
+        } else if (
+          request.method === 'GET' &&
+          request.url === '/v1.51/containers/c1/json'
+        ) {
+          json(200, { Id: 'c1', State: { Status: 'dead', Dead: true } });
+        } else {
+          json(404, { message: 'page not found' });
+        }
+      },
+    });
+    await using docker = await Docker.connect({ host: engine.host });
+    const container = await docker.containers.find('c1');
+    assert.ok(container);
+
+    // Act
+    const starting = container.start();
+
+    // Assert
+    await assert.rejects(starting, (error: unknown) => {
+      assert.ok(error instanceof ContainerNotFoundError, String(error));
+      assert.equal(error.container, 'c1');
+      assert.equal(error.status, 409);
+      return true;
+    });
+  });
 });
 
 describe('container.kill()', () => {
