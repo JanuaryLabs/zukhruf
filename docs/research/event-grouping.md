@@ -1,0 +1,250 @@
+# Event grouping: research record
+
+This record keeps what the research for event grouping found, before a package exists. The research asks one question: can a cheap program put news articles that report one event into one group? The planned packages are an embeddings `Collection` and an `EventDetector`. Neither package is built yet. When a package is built, its limitations move into its own `docs/adr`.
+
+Read this record before you change the design, add a feature, or start a new evaluation. Each limitation tells you what happens, what proves it, why it happens, and what to think about before you fix it.
+
+Status on 2026-10-26: round #3124 failed its gate. Round #3130 is in progress. Add the result of each new round to this record.
+
+## Words in this record
+
+| Word          | Meaning                                                                                                                               |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| Event         | One real occurrence at one time and place. Two lawsuits by one company are two events.                                                |
+| Topic         | What a text is about. Many events can have one topic.                                                                                 |
+| Pair          | Two articles that the program compares.                                                                                               |
+| Pair score    | The probability, from 0 to 1, that the two articles of a pair report one event.                                                       |
+| Shortlist     | The nearest articles of an article, by embedding similarity. Only these articles become pairs. The standard term is blocking.         |
+| Grouping step | The step that turns pair scores into groups of articles.                                                                              |
+| False join    | Two articles of different events in one group. A false join can hide news.                                                            |
+| False split   | Two articles of one event in different groups. A false split shows a duplicate.                                                       |
+| Precision     | The share of joined pairs that are correct.                                                                                           |
+| Recall        | The share of real same-event pairs that the program joins.                                                                            |
+| F0.5          | A score that counts precision two times as much as recall. The user chose it on 2026-10-26: a false join is worse than a false split. |
+| B-cubed       | A clustering score. For each article, it compares the article's group with the article's real event.                                  |
+| Arrival order | The order in which the program receives the articles.                                                                                 |
+| Lead          | The title and the first two real sentences of an article.                                                                             |
+| Dataset shift | A model learns from one kind of input and then gets a different kind.                                                                 |
+
+## The rounds
+
+All evidence is on the local Mac in `~/.codex/visualizations/2026/10/23/01a16a1c-424c-7793-8ca9-02cc1c715d82/`. The backlog items hold the full reports.
+
+| Round        | Question                                                                                  | Result                                                         | Folder                     |
+| ------------ | ----------------------------------------------------------------------------------------- | -------------------------------------------------------------- | -------------------------- |
+| #2938        | Do embeddings find topics and events on new articles?                                     | Topics: yes. Events: no.                                       | `embedding-heldout-2938`   |
+| #2944        | Can a reranker or a classifier decide the event?                                          | No tested method was ready.                                    | `event-grouping-2944`      |
+| #2947, #2948 | Do event summaries made by a local LLM help? How many neighbours must the shortlist keep? | Summaries lose evidence. 80 neighbours keep 99% of real pairs. | `event-evidence-2947-2948` |
+| #2957        | Can a local LLM compare two full articles?                                                | Good results, but too slow. The user closed this route.        | `event-evidence-2957`      |
+| #3124        | Can cheap features with a logistic regression decide the event?                           | Failed its gate on ECB+.                                       | `feature-scorer-3124`      |
+| #3130        | Same question, with full-article training data and a new grouping step.                   | In progress.                                                   | `feature-scorer-3130`      |
+
+## Limitations
+
+### 1. Embedding similarity measures the topic, not the event
+
+**What happens.** Two articles about one company get a high similarity, also when they report two different events. Examples: two different Python Summit talks, two Claude versions, a Starlink restriction and its later restoration.
+
+**Evidence.** On the #2938 held-out set, centered embeddings joined 1 of 14 real same-event pairs and made 11 false joins.
+
+**Cause.** An embedding encodes each article alone. It cannot compare the details of two articles, such as the date, the place or the version.
+
+**Before you change it.** Do not expect a better embedding model to fix this alone. Add signals that compare details: the date gap, the numbers and the names. Keep embeddings for the shortlist and for topic filtering.
+
+### 2. Raw cosine similarity is high for every pair
+
+**What happens.** Most pairs of news headlines have a cosine similarity near 0.78. There is no gap between related and unrelated pairs.
+
+**Evidence.** An early probe on 1,867 headlines (2026-10-23) found a median of 0.78. After the program subtracted the mean vector (centering), average linkage at 0.60 gave real story groups.
+
+**Cause.** Embedding vectors occupy a narrow cone of the space. The standard term is anisotropy.
+
+**Before you change it.** Keep centering, or another normalization. Calculate the mean vector on training data and freeze it. A mean vector from the test data leaks test information.
+
+### 3. One vector for a long article loses the details
+
+**What happens.** EmbeddingGemma 2 makes one vector as the mean of all token vectors (`pooling_type 1` in its GGUF file). For a long article, the event details become a small part of that mean.
+
+**Evidence.** The 49 full articles of #2938 have a median length of 7,615 characters. 22 of them are longer than about 2,000 tokens. The GGUF file accepts 262,144 tokens, but the research cut chunks at 2,048 tokens. The research did not record the reason for that cut.
+
+**Cause.** Mean pooling. News puts the important facts first (the inverted pyramid), so the lead holds most of the event.
+
+**Before you change it.** The design uses one vector per article, from the lead (Dai and Callan, SIGIR 2019, call this FirstP). The #2948 shortlist kept 607 of 613 real pairs with title and lead vectors. Add one vector per chunk (MaxP) only when a consumer needs facts deep in an article, for example the topic filter. Find the model's tested context length before you embed long text.
+
+### 4. A pair score from one kind of text does not transfer to another kind
+
+**What happens.** The #3124 scorer rejected most real ECB+ pairs. It found 11% of them.
+
+**Evidence.** On ECB+, the scorer gave real same-event pairs a median probability of 0.057, and same-topic pairs of different events 0.001. The order was correct (about 50 to 1), but the cut-off was 0.20. 87% of the missed ECB+ pairs had a pair score under the cut-off. Similarity medians of real pairs: HLGD headlines 0.895, ECB+ leads 0.854, #2938 full-article leads 0.728.
+
+**Cause.** Dataset shift. 83% of the training pairs were HLGD headlines. The scorer then got article leads, which have lower similarity.
+
+**Before you change it.** Train on the same kind of text that the scorer will get. Consider a similarity that is relative to each article's neighbours: the ratio margin (Artetxe and Schwenk, ACL 2019) or CSLS (Conneau et al., ICLR 2018). Then one cut-off can work for different sources. Check the probability scale on each new source before you trust a fixed cut-off.
+
+### 5. Some features help and some features hurt
+
+**What happens.** The features do not have equal value, and the training data of #3124 chose the wrong ones.
+
+**Evidence.** These are the #3124 test ablations. Nothing was tuned on them.
+
+| Feature                                     | Finding                                                                                  |
+| ------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| Publish-date gap                            | The strongest feature when dates exist. HLGD F1 fell from 0.408 to 0.295 without it.     |
+| 7-day shortlist window                      | No effect on quality. It reduces cost.                                                   |
+| Rare-word overlap (BM25 cosine of the body) | It hurt. F1 went up on all three test sets without it.                                   |
+| Numbers and versions                        | It helped. The run without numbers was the worst on ECB+ and Multi-News.                 |
+| Named entities (`Xenova/bert-base-NER`)     | Best on ECB+ (F1 0.584). HLGD precision fell to 0.635. It costs 5 to 110 ms per article. |
+| Centering                                   | Better than raw cosine on ECB+ and Multi-News.                                           |
+
+**Cause.** The #2938 training set had only 14 positive pairs. One join changed its score from 0.009 to 0.278. That noise picked the features.
+
+**Before you change it.** Get training data with many positive pairs of the target kind. Compare features with cross-validation by topic, so that hard negatives stay in one fold. A feature with agreement and disagreement evidence (the Fellegi and Sunter model) is stronger than overlap alone: "Claude 4.5" and "Claude 5" agree on the name and disagree on the version.
+
+### 6. The shortlist misses some real pairs
+
+**What happens.** The grouping step cannot join two articles that never become a pair.
+
+**Evidence.** Shortlist recall with 80 neighbours: ECB+ 99.7%, HLGD test 97.6%, Multi-News 82.2%. On HLGD, 10 neighbours kept 440 of 590 real pairs, and 80 neighbours kept 584. With complete linkage, 6 missing pairs caused 50 missed pairs in the final groups.
+
+**Cause.** Each article keeps a fixed number of neighbours. Large events have more members than the shortlist can hold. Complete linkage needs a pair between every two members of a group.
+
+**Before you change it.** Measure shortlist recall on a corpus that grows, not only on a fixed set (#2958). Lexical and hybrid shortlists were measured in #2948. Dense neighbours found more real pairs than BM25 neighbours.
+
+### 7. The groups depend on the arrival order
+
+**What happens.** The same articles in a different order give different groups.
+
+**Evidence.**
+
+- #3124, online complete linkage: 137 to 481 pair decisions changed for each order seed. An event that split early never merged again.
+- #2957, batch complete linkage with yes/no pair decisions: 6 of 11 orders changed the groups of the full-article method.
+
+**Cause.**
+
+- Online grouping decides when an article arrives, and it cannot change that decision later.
+- In batch grouping, yes/no decisions make many pairs equal. `getSmallestDistance` in ml-hclust's `agnes` uses a strict `<`, so the first equal pair in row order wins. Complete linkage then removes the third article of an open triangle (A–B joined, B–C joined, A–C not joined).
+
+**Before you change it.** Prefer pair scores with many values to yes/no decisions. Think about a merge step that can join two events later. Think about a comparison with the whole event (group average or centroid) instead of every member. Yang, Pierce and Carbonell (SIGIR 1998) compare batch group-average clustering with single-pass incremental clustering. Measure order stability for every candidate (#2959).
+
+### 8. Batch grouping changes old groups when new articles arrive
+
+**What happens.** New articles can move articles that were already in groups.
+
+**Evidence.** In #2944, the historical HLGD groups went from 165 correct joins and 49 false joins to 171 and 60 when unrelated live articles were added.
+
+**Cause.** A batch method calculates all groups again from all articles. Centering on the full set also moves when the set changes.
+
+**Before you change it.** A reader needs stable event IDs. If you group again in batches, carry event IDs forward by the largest overlap, and freeze the centering mean.
+
+### 9. Single linkage makes one large chain
+
+**What happens.** Single linkage joined 1,865 of 1,867 headlines into one group in the early probe.
+
+**Cause.** Single linkage joins two groups when one pair is near. A chain of near pairs connects unrelated articles.
+
+**Before you change it.** Do not use single linkage for events. Complete linkage and group average do not chain like this.
+
+### 10. Rerankers and classifiers trade precision for recall
+
+**What happens.** The tested cross-encoders did not separate events.
+
+**Evidence.** In #2944:
+
+- A Quora duplicate-question cross-encoder found 0 of 14 real pairs, but its known positive check passed.
+- Qwen3-Reranker-0.6B raised HLGD recall from 28.0% to 39.7%, but precision fell from 77.1% to 54.7%. It still joined different Claude models and different Python release candidates.
+- The NLI models and a 1.2B local generative model did not qualify for the fresh tests.
+
+**Cause.** These models learned relevance or paraphrase, not event identity.
+
+**Before you change it.** Test a model that learned event coreference, not search relevance. Check its cost per pair against the millisecond budget.
+
+### 11. A local LLM judge is accurate but too slow
+
+**What happens.** The user closed this route on 2026-10-26.
+
+**Evidence.**
+
+- In #2957, Qwen3.5-9B compared two full articles in both directions. On the fresh set it found 33 of 36 real pairs with 1 false join.
+- It took about 5.9 s of request time for each pair direction.
+- 5 pairs got different answers in the two directions.
+- It mixed up the start of the Equifax breach (mid-May) with its discovery (29 July) (#2963).
+
+**Cause.** A generative model reads two articles in order, so order changes the answer. Its cost grows with the number of pairs.
+
+**Before you change it.** Use an LLM only for a small set of uncertain pairs, if ever. Compare its cost with the feature scorer: about 25 ms for each article.
+
+### 12. Summaries made before the comparison lose evidence
+
+**What happens.** The program asked a local LLM for an event summary (a frame) of each article, then compared the frames. Most real pairs lost their evidence.
+
+**Evidence.** In #2947, the saved set accepted 188 of 292 frames and supported only 9 of 23 positive pairs. The live set supported 1 of 8. One frame reversed who reported what. Frames dropped a shared DOI.
+
+**Cause.** A frame keeps only what the model chose to write. A correct quote does not prove each generated field.
+
+**Before you change it.** Compare the source text, or features taken directly from it. Do not compare generated summaries.
+
+### 13. The boundary of an event has no written rule
+
+**What happens.** Some errors are disputes about the event boundary, not scorer errors.
+
+**Evidence.** In #2957, a Huawei lawsuit filing and a later motion in the same case were labeled two events. Every method joined them. Two reports of one tornado outbreak, one with a death and one with "no deaths yet", were labeled one event.
+
+**Cause.** "One event" can mean one action or one case. Data sets choose differently.
+
+**Before you change it.** Write the boundary rule for the product before you label data: action level or case level, and how to treat updates. Use the same rule in every label set.
+
+### 14. The input text can be incomplete or noisy
+
+**What happens.** A short or noisy text gives a wrong lead and wrong features.
+
+**Evidence.**
+
+- Web extraction returned only a 97-character description for one page, and a paywall preview for another (#2952).
+- The ECB+ rebuild turned the source URL into the first line of 466 of 982 articles.
+- `Intl.Segmenter` returns blank lines, image captions and URL parts as sentences (#2957).
+
+**Cause.** The extractor cannot always see whether a page is complete. A sentence splitter does not know what is boilerplate.
+
+**Before you change it.** Remove URL and boilerplate segments from the lead with a general rule. Make extraction report an incomplete page (#2952). Do not use a list of publishers.
+
+### 15. The test data has limits
+
+**What happens.** Each data set measures only a part of the problem.
+
+| Data set                        | Limit                                                                                                                              |
+| ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| HLGD                            | Headlines only. 195 of 286 test URLs failed when the research fetched the bodies. It may be in the pretraining data of the models. |
+| ECB+                            | No reliable publish dates, so the date gap cannot be tested.                                                                       |
+| Multi-News                      | Groups of articles cited by one summary. This is story level, not event level. No dates.                                           |
+| WCEP (`allenai/wcep_dense_max`) | The group members come from a search, not from people (#2961).                                                                     |
+| Miranda et al. (EMNLP 2018)     | The dataset FTP refused every anonymous login on 2026-10-26.                                                                       |
+| #2938 and #2957 fresh sets      | Labeled by one Codex session, not by several people. Small.                                                                        |
+| Gun Violence Corpus             | Has dates and many similar shootings. The research takes one incident per document from its mention labels.                        |
+
+**Before you change it.** A set that a round has inspected can only be a regression set after that round. Each new design needs a new untouched test set.
+
+### 16. Topic-filter probabilities need calibration
+
+**What happens.** The topic probe ranked well, but its raw probabilities were too high.
+
+**Evidence.** On a held-out day, the 0.5 to 0.7 probability bin was 19 of 19 relevant. After Platt scaling on day-one labels, the bins matched the real rates. On #2938, a soft vote of probes found 26 of 35 relevant headlines with 3 false accepts. Log loss went from 0.363 to 0.245.
+
+**Cause.** The training examples had about 40% positives. Real feeds have far fewer (prior shift).
+
+**Before you change it.** Calibrate the probabilities on data with the real positive rate. Check them again for each new source.
+
+### 17. A result is only useful if a person can run it again
+
+**What happens.** A retained run failed to start later.
+
+**Evidence.** The saved llama.cpp runtime linked its libraries to `/private/tmp`, and macOS removed that folder. Two runs of #2957 failed before the links were repaired (`event-evidence-2957/results/runtime-link-repair.json`). A closed laptop lid caused 60 timeouts in #2957.
+
+**Before you change it.** Keep every runtime file inside the evaluation folder, with relative links. Record hashes of models and packages. Run long stages on power, with the lid open.
+
+## Rules for every new round
+
+- Freeze the features, weights, cut-off and grouping method in `plan.json`, with hashes, before any test scoring.
+- Do not tune on a test set. After a round inspects a set, it is a regression set.
+- Write the pass rule before the test.
+- Report precision, recall and B-cubed scores, the errors with their article text, the cost per article, and the order stability.
+- Put the result of the round in this record.
