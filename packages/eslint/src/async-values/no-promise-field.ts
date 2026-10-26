@@ -88,8 +88,9 @@ function recordMembers({ checker }: Walk, type: ts.Type): ts.Type[] {
  * Whether `type` is a promise, or carries one as a type argument
  * (`Map<string, Promise<X>>`, `Promise<X>[]`) or as a member of a record the
  * project declares, in any member of a union or an intersection. A function
- * type is not entered: a field that holds `() => Promise<X>` holds the
- * memoized function this rule asks for.
+ * type is not entered, not even through the arguments of the generic alias
+ * that names it (Zod's `z.infer` of `z.function()`): a field that holds
+ * `() => Promise<X>` holds the memoized function this rule asks for.
  *
  * `path` holds only the types on the way to this one: a type that one branch
  * met at the depth limit must still be walked when another branch meets it
@@ -110,9 +111,10 @@ function holdsPromise(
       .some(
         (part) =>
           isPromiseWithResolvers(walk, part) ||
-          typeArguments(walk, part).some((argument) =>
-            holdsPromise(walk, argument, depth, path),
-          ) ||
+          (part.getCallSignatures().length === 0 &&
+            typeArguments(walk, part).some((argument) =>
+              holdsPromise(walk, argument, depth, path),
+            )) ||
           (depth < RECORD_DEPTH &&
             isProjectRecord(walk, part) &&
             recordMembers(walk, part).some((member) =>

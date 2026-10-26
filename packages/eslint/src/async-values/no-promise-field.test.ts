@@ -81,6 +81,12 @@ test('no-promise-field', () => {
         filename,
         code: `type Tree = Map<string, Tree>; class A { #tree?: Tree; }`,
       },
+      {
+        // The shape of Zod's z.infer of z.function(): the alias's arguments
+        // carry the promise, but the type is a function.
+        filename,
+        code: `interface Schema<T> { output: T } type InferFunction<Input extends Schema<unknown>, Output extends Schema<unknown>> = (input: Input['output']) => Output['output']; class A { #fetch?: InferFunction<Schema<string>, Schema<Promise<number>>>; }`,
+      },
     ],
     invalid: [
       {
