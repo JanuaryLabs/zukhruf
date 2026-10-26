@@ -23,7 +23,7 @@ A rule whose options are one list that each repo fills with its own entries: `no
 _Avoid_: Shared rule
 
 **Option factory**:
-A function that returns a rule's complete options, with a repo's entries added to the shared ones. Examples are `noLet()`, `dependencyPolicy()` and `moduleBoundaries()`.
+A function that returns a rule's complete options, with a repo's entries added to the shared ones. Examples are `noLet()`, `reactRouterOnlyThrowError()`, `dependencyPolicy()` and `moduleBoundaries()`.
 _Avoid_: Options helper, builder
 
 ### Where a rule applies

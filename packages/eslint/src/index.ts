@@ -4,5 +4,9 @@ export {
   type NoFloatingPromisesOptions,
   noLet,
   type NoLetOptions,
-  type SafeCall,
+  type TypeOrValueSpecifier,
 } from './base/options.ts';
+export {
+  reactRouterOnlyThrowError,
+  type ReactRouterOnlyThrowErrorOptions,
+} from './react-router/options.ts';

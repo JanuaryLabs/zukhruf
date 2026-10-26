@@ -14,7 +14,8 @@ export function noLet({ ignoreIdentifierPattern = [] }: NoLetOptions = {}) {
   return { allowInFunctions: true, ignoreIdentifierPattern };
 }
 
-export interface SafeCall {
+/** typescript-eslint's name for a type or value by where it is declared: the TS lib, a package, or a file. */
+export interface TypeOrValueSpecifier {
   from: 'file' | 'lib' | 'package';
   name: string | string[];
   package?: string;
@@ -22,11 +23,11 @@ export interface SafeCall {
 }
 
 export interface NoFloatingPromisesOptions {
-  allowForKnownSafeCalls?: SafeCall[];
+  allowForKnownSafeCalls?: TypeOrValueSpecifier[];
 }
 
 // node:test's test/it/describe/suite return a Promise the runner owns.
-const NODE_TEST_CALLS: SafeCall = {
+const NODE_TEST_CALLS: TypeOrValueSpecifier = {
   from: 'package',
   package: 'node:test',
   name: ['test', 'it', 'describe', 'suite'],

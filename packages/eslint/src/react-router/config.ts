@@ -1,7 +1,8 @@
 import { type Concept, enable } from '../concept.ts';
-import { SOURCE, TESTS } from '../files.ts';
+import { SOURCE, TESTS, TYPESCRIPT } from '../files.ts';
 import noInternalAnchor from './no-internal-anchor.ts';
 import noRawRoutePath from './no-raw-route-path.ts';
+import { reactRouterOnlyThrowError } from './options.ts';
 import requireLoaderDataTypeArgument from './require-loader-data-type-argument.ts';
 
 const rules = {
@@ -30,6 +31,19 @@ export const reactRouter: Concept = {
         'no-raw-route-path': noRawRoutePath,
         'no-internal-anchor': noInternalAnchor,
       }),
+    },
+    {
+      // `base` turns the rule on with no allow list. Loader helpers live
+      // outside the route modules, so the allow list covers every file of
+      // this config, not only a routes folder.
+      name: 'zukhruf/react-router/throws',
+      files: TYPESCRIPT,
+      rules: {
+        '@typescript-eslint/only-throw-error': [
+          'error',
+          reactRouterOnlyThrowError(),
+        ],
+      },
     },
   ],
 };
