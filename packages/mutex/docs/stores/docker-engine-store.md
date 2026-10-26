@@ -217,7 +217,7 @@ These changes are not necessary:
 
 ## Evidence
 
-`src/lock-stores/docker/docker-engine-store.test.ts` has one test for each design error that the probes found. The name of each test says what the wrong design broke. Each test uses a new `namespace` on the local engine. Its disposal removes each container and volume with the label of that namespace. A test that must stop a caller at one step uses a Unix socket proxy in front of the socket of the engine. The proxy keeps the requests of that caller from the engine.
+`src/lock-stores/docker/docker-engine-store.test.ts` has one test for each design error that the probes found. The name of each test says what the wrong design broke. Each test uses a new `namespace` on the local engine. Its disposal removes each container and volume with the label of that namespace. Each store also gets the labels of the test run, so the teardown of the run removes what a killed test process left. A test that must stop a caller at one step uses a Unix socket proxy in front of the socket of the engine. The proxy keeps the requests of that caller from the engine.
 
 | Test                                                                                                        | Wrong design that makes it fail                                                |
 | ----------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
@@ -235,7 +235,7 @@ These changes are not necessary:
 
 Each wrong design was put back into a copy of the store, one at a time. Each one made its test fail.
 
-The same file also has the tests of the lock store contract: two stores on one engine never run tasks of one key at the same time, a waiter gets the key when the holder releases it, `tryAcquire` gives up on a held key, `isHeld` creates nothing, the tokens of one key increase, a cancelled acquire rejects with the reason of its signal, and two namespaces do not share a key or its tokens.
+The same file also has the tests of the lock store contract: two stores on one engine never run tasks of one key at the same time, a waiter gets the key when the holder releases it, `tryAcquire` gives up on a held key, `isHeld` creates nothing, the tokens of one key increase, a cancelled acquire rejects with the reason of its signal, two namespaces do not share a key or its tokens, each claim and rung carries the labels of the caller, and the labels of the store replace labels of the caller with the same names. One test runs `node --test` with the global setup of the mutex on a test file that kills its own process while it holds a key. After the run, no claim and no rung of that process stays.
 
 `DockerEngineStore` runs in each test of the lock-store matrix (`src/testing/store-cases.ts`) that its reach includes: in one process, across processes, and across threads. Each test gets a new `namespace` on the local engine. A child process or a worker thread connects its own client to the same engine. The tests that read the files of a store do not run, because the store keeps no files.
 

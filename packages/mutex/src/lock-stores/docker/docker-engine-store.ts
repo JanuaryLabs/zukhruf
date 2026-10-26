@@ -32,6 +32,8 @@ export interface DockerEngineStoreOptions {
    * a waiter at the claim.
    */
   heartbeatInterval: number;
+  /** Labels on each claim and each rung, so that a cleanup can find them. The labels `zukhruf.mutex.*` of the store replace labels with the same names. */
+  labels?: Readonly<Record<string, string>>;
 }
 
 const namespaceLabel = 'zukhruf.mutex.namespace';
@@ -150,7 +152,7 @@ class Claims {
 
   /** The new claim, or undefined when another caller has the name. A cancel after the create removes the new claim. */
   async create(signal: AbortSignal | undefined): Promise<Claim | undefined> {
-    const { docker, image, namespace } = this.#options;
+    const { docker, image, namespace, labels } = this.#options;
     let container: Container;
     try {
       container = await docker.containers.create(
@@ -161,7 +163,11 @@ class Claims {
           OpenStdin: true,
           StdinOnce: true,
           AttachStdin: true,
-          Labels: { [namespaceLabel]: namespace, [keyLabel]: this.#key },
+          Labels: {
+            ...labels,
+            [namespaceLabel]: namespace,
+            [keyLabel]: this.#key,
+          },
           HostConfig: { AutoRemove: true },
         },
         { name: this.#name },
@@ -307,7 +313,7 @@ class Claim {
    * rejects with `ContainerNotFoundError`.
    */
   async #mint(): Promise<FencingToken> {
-    const { docker, namespace } = this.#options;
+    const { docker, namespace, labels } = this.#options;
     const digest = digestOf(this.#key);
     const prefix = `${namespace}-${digest}-token-`;
     const [claim, rungs] = await Promise.all([
@@ -330,7 +336,11 @@ class Claim {
       try {
         await docker.volumes.create({
           Name: `${prefix}${rung}`,
-          Labels: { [namespaceLabel]: namespace, [tokenLabel]: digest },
+          Labels: {
+            ...labels,
+            [namespaceLabel]: namespace,
+            [tokenLabel]: digest,
+          },
         });
         break;
       } catch (error) {

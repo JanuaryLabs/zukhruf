@@ -8,6 +8,7 @@ import pg from 'pg';
 import { Connection, Request, TYPES } from 'tedious';
 
 import { Docker } from '@zukhruf/docker';
+import { DockerFixtures } from '@zukhruf/testing/docker';
 import { Mariadb } from '@zukhruf/testing/mariadb';
 import { Mysql } from '@zukhruf/testing/mysql';
 import { type DatabaseOptions, Postgres } from '@zukhruf/testing/postgres';
@@ -392,6 +393,8 @@ const dockerNamespaceLabel = 'zukhruf.mutex.namespace';
 interface DockerEngineLocation {
   host: string;
   namespace: string;
+  /** The labels of the test run, for each claim and rung. */
+  labels: Record<string, string>;
 }
 
 /** The image of each DockerEngineStore container. */
@@ -399,10 +402,11 @@ const dockerImage = 'node:lts-alpine';
 
 /**
  * A new namespace on the engine that `environment` selects, with
- * `dockerImage` on it: the store never pulls its image. The disposal
- * removes each container and volume with the label of the namespace, through
- * a client of its own, so it runs after each store of the test ended its
- * client.
+ * `dockerImage` on it: the store never pulls its image. The location also
+ * has the labels of the test run, so the teardown of the run removes what a
+ * killed process left. The disposal removes each container and volume with
+ * the label of the namespace, through a client of its own, so it runs after
+ * each store of the test ended its client.
  */
 async function dockerEngineFixture(
   environment: DatabaseOptions['environment'],
@@ -417,6 +421,7 @@ async function dockerEngineFixture(
   const location: DockerEngineLocation = {
     host,
     namespace: `zukhruf-mutex-test-${randomUUID()}`,
+    labels: new DockerFixtures({ environment }).defaults.labels,
   };
   return {
     location: JSON.stringify(location),
@@ -446,7 +451,8 @@ async function dockerEngineFixture(
  * never disposes its client can exit.
  */
 function dockerEngineStore(location: string) {
-  const { host, namespace }: DockerEngineLocation = JSON.parse(location);
+  const { host, namespace, labels }: DockerEngineLocation =
+    JSON.parse(location);
   const docker = Docker.connect({ host });
   const store = docker.then(
     (client) =>
@@ -455,6 +461,7 @@ function dockerEngineStore(location: string) {
         image: dockerImage,
         namespace,
         heartbeatInterval: 500,
+        labels,
       }),
   );
   const lockStore: LockStore = {

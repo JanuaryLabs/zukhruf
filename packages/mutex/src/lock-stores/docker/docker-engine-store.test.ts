@@ -2,13 +2,16 @@ import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { once } from 'node:events';
+import { readFile, writeFile } from 'node:fs/promises';
 import { type Socket, connect, createServer } from 'node:net';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
+import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 
 import { Docker } from '@zukhruf/docker';
+import { DockerFixtures } from '@zukhruf/testing/docker';
 
 import { Mutex } from '../../index.ts';
 import { scratchDirectory } from '../../testing/scratch-directory.ts';
@@ -52,6 +55,8 @@ async function engine() {
         image,
         namespace,
         heartbeatInterval,
+        labels: new DockerFixtures({ environment: process.env }).defaults
+          .labels,
       }),
     [Symbol.asyncDispose]: async () => {
       await docker[Symbol.asyncDispose]();
@@ -187,10 +192,12 @@ async function engineProxy(docker: Docker) {
 const holderSource = (namespace: string, key: string) => `
 	import { Docker } from ${JSON.stringify(import.meta.resolve('@zukhruf/docker'))};
 	import { Mutex } from ${JSON.stringify(new URL('../../index.ts', import.meta.url).href)};
+	import { DockerFixtures } from ${JSON.stringify(import.meta.resolve('@zukhruf/testing/docker'))};
 	import { DockerEngineStore } from ${JSON.stringify(new URL('./index.ts', import.meta.url).href)};
 	setInterval(() => {}, 1000);
 	const docker = await Docker.connect({ environment: process.env });
-	const store = new DockerEngineStore({ docker, image: ${JSON.stringify(image)}, namespace: ${JSON.stringify(namespace)}, heartbeatInterval: ${heartbeatInterval} });
+	const labels = new DockerFixtures({ environment: process.env }).defaults.labels;
+	const store = new DockerEngineStore({ docker, image: ${JSON.stringify(image)}, namespace: ${JSON.stringify(namespace)}, heartbeatInterval: ${heartbeatInterval}, labels });
 	await new Mutex(store).acquire(${JSON.stringify(key)}, async (lease) => {
 		process.send({ type: 'holding', token: String(lease.token.value) });
 		await new Promise(() => {});
@@ -851,5 +858,166 @@ test(
     );
     assert.equal(holder.token, high + 1n);
     assert.equal(next, high + 2n);
+  },
+);
+
+test(
+  'every claim and rung carries the labels of the caller',
+  { timeout: 30_000 },
+  async () => {
+    // Arrange
+    await using fixture = await engine();
+    const store = new DockerEngineStore({
+      docker: fixture.docker,
+      image,
+      namespace: fixture.namespace,
+      heartbeatInterval,
+      labels: { 'com.example.owner': fixture.namespace },
+    });
+
+    // Act
+    const holder = await hold(new Mutex(store), 'report:daily');
+    const filters = { label: [`com.example.owner=${fixture.namespace}`] };
+    const claims = await fixture.docker.containers.list({ all: true, filters });
+    const rungs = await fixture.docker.volumes.list({ filters });
+    await holder.release();
+
+    // Assert
+    assert.deepEqual([claims.length, rungs.length], [1, 1]);
+  },
+);
+
+test(
+  'the labels of the store replace the labels of the caller with the same names',
+  { timeout: 30_000 },
+  async () => {
+    // Arrange: each label of the store also comes from the caller, with another value.
+    await using fixture = await engine();
+    const other = `${fixture.namespace}-other`;
+    const mutex = new Mutex(
+      new DockerEngineStore({
+        docker: fixture.docker,
+        image,
+        namespace: fixture.namespace,
+        heartbeatInterval,
+        labels: {
+          [namespaceLabel]: other,
+          'zukhruf.mutex.key': other,
+          'zukhruf.mutex.token': other,
+        },
+      }),
+    );
+    await mutex.acquire('report:daily', async () => {});
+
+    // Act
+    const holder = await hold(mutex, 'report:daily');
+    const filters = { label: [`${namespaceLabel}=${fixture.namespace}`] };
+    const claims = await fixture.docker.containers.list({ all: true, filters });
+    const rungs = await fixture.docker.volumes.list({ filters });
+    await holder.release();
+
+    // Assert
+    assert.deepEqual(
+      claims.map(({ Labels }) => Labels?.['zukhruf.mutex.key']),
+      ['report:daily'],
+    );
+    assert.equal(
+      rungs.length,
+      1,
+      'The second mint must find the rung of the first and remove it',
+    );
+  },
+);
+
+/**
+ * A test file that takes a key through the DockerEngineStore case of the
+ * lock-store matrix, writes the location of its fixture to `statePath`, and
+ * kills its own process while it holds the key.
+ */
+const killedHolderSource = (statePath: string) => `
+	import { test } from 'node:test';
+	import { writeFileSync } from 'node:fs';
+	import { Mutex } from ${JSON.stringify(new URL('../../index.ts', import.meta.url).href)};
+	import { storeCases } from ${JSON.stringify(new URL('../../testing/store-cases.ts', import.meta.url).href)};
+	test('holds a key until its process is killed', async () => {
+		const store = storeCases.find(({ name }) => name === 'DockerEngineStore');
+		const fixture = await store.fixture(process.env);
+		await new Mutex(store.open(fixture.location).store).acquire('report:daily', async () => {
+			writeFileSync(${JSON.stringify(statePath)}, fixture.location);
+			process.kill(process.pid, 'SIGKILL');
+		});
+	});
+`;
+
+test(
+  'a rung left by a killed test process is removed when the run ends',
+  { timeout: 180_000 },
+  async (t) => {
+    await using docker = await Docker.connect({ environment: process.env });
+    if (!['unix:', 'npipe:'].includes(new URL(docker.host).protocol)) {
+      t.skip(
+        `the global setup of the run starts the shared database servers of the lock-store matrix on the engine ${docker.host}`,
+      );
+      return;
+    }
+    // Arrange: a run of its own, with its records in a scratch directory.
+    await using directory = await scratchDirectory();
+    const statePath = join(directory.path, 'state.json');
+    const file = join(directory.path, 'killed-holder.test.mjs');
+    await writeFile(file, killedHolderSource(statePath));
+    let namespace: string | undefined;
+    try {
+      // Act: the test process dies while it holds the key, and the run ends.
+      const run = await promisify(execFile)(
+        process.execPath,
+        [
+          '--test',
+          `--test-global-setup=${fileURLToPath(new URL('../../testing/docker-global-setup.ts', import.meta.url))}`,
+          file,
+        ],
+        {
+          timeout: 150_000,
+          env: {
+            ...process.env,
+            XDG_STATE_HOME: join(directory.path, 'state'),
+            // A runner started from a test process would otherwise run no file.
+            NODE_TEST_CONTEXT: undefined,
+            // This test runs in a run itself; the nested run must start its own.
+            ZUKHRUF_TESTING_RUN_ID: undefined,
+            ZUKHRUF_TESTING_RUN_DIR: undefined,
+          },
+        },
+      ).catch((error: { stdout?: string; stderr?: string }) => error);
+      const location = await readFile(statePath, 'utf8').catch(() => {
+        throw new Error(
+          `The test process did not take the key:\n${run.stdout}\n${run.stderr}`,
+        );
+      });
+      const fixture: { namespace: string } = JSON.parse(location);
+      namespace = fixture.namespace;
+
+      // Assert
+      const filters = { label: [`${namespaceLabel}=${namespace}`] };
+      const containers = await docker.containers.list({ all: true, filters });
+      const volumes = await docker.volumes.list({ filters });
+      assert.deepEqual(
+        [containers.length, volumes.length],
+        [0, 0],
+        'The teardown of the run must remove the claims and rungs of a killed test process',
+      );
+    } finally {
+      if (namespace !== undefined) {
+        const filters = { label: [`${namespaceLabel}=${namespace}`] };
+        for (const { Id } of await docker.containers.list({
+          all: true,
+          filters,
+        })) {
+          await (await docker.containers.find(Id))?.remove({ force: true });
+        }
+        for (const { Name } of await docker.volumes.list({ filters })) {
+          await (await docker.volumes.find(Name))?.remove({ force: true });
+        }
+      }
+    }
   },
 );
