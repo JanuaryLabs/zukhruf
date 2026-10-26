@@ -31,4 +31,4 @@ Each import path also gives the errors that its lock stores throw. An error that
 - The dependencies of the package stay the same for each family. For example, `@zukhruf/election` is a dependency of the package, but only the socket lock store loads it. An install does not get smaller. A process loads less.
 - A new family needs a folder with an `index.ts`. Then its import path exists. `src/import-paths.test.ts` lists each family and what it gives, so add the new family there.
 - The README table "Select a lock store" and each page in `docs/stores` show the import path of the family.
-- A test in another process imports a lock store from the `index.ts` of its family. A test of the latest release imports it from the root of that release, because that release gives its lock stores at the root.
+- A test in another process imports a lock store from the `index.ts` of its family.

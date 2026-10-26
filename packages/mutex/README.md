@@ -136,7 +136,7 @@ See [Fencing tokens](./docs/concepts/fencing-tokens.md) and the recipe [Protect 
 - [Leader election](../election/docs/concepts/leader-election.md): how `SocketStore` selects its coordinator, with `SqliteElection` of `@zukhruf/election`.
 - [Failure modes](./docs/concepts/failure-modes.md): what each lock store does when something stops.
 
-**Lock stores**: one page for each lock store, with What, Why, When, When not, How it works, Acquire modes, Holder check, Failure modes, Options, and Evidence. The `SocketStore` page also has Two package versions in one directory. See the table above.
+**Lock stores**: one page for each lock store, with What, Why, When, When not, How it works, Acquire modes, Holder check, Failure modes, Options, and Evidence. The `SocketStore` page also has Protocol version. See the table above.
 
 **Recipes**: one use case each, with a full program that you can run.
 
@@ -173,12 +173,11 @@ This package is part of the [zukhruf](../../README.md) workspace. Run the comman
 ```sh
 npm install
 npx nx run mutex:test        # builds, then runs the tests in src/
-npx nx run mutex:test-latest-release   # checks src/ against the latest release on npm
 npx nx run mutex:typecheck   # formats, lints, then type checks
 npx nx run mutex:build       # compiles src/ to dist/
 ```
 
-The tests run from `src/`, not from `dist/`: they start workers and child processes from `.ts` files. A `*.release.test.ts` file checks this source against the latest release, which it downloads from npm. Its result can change when a new version is released, with no change here, so it has its own target, which nx never caches, and CI runs it.
+The tests run from `src/`, not from `dist/`: they start workers and child processes from `.ts` files.
 
 ```
 src/

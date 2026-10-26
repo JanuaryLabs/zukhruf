@@ -65,7 +65,7 @@ On macOS and Linux, the IPC channel between a parent and a child is a pair of co
 
 ## Holder check
 
-`isHeld(key)` in a child asks the coordinator of the parent, and the coordinator answers from its memory. `IpcLockCoordinator.isHeld(key)` in the parent answers at once. A coordinator of version 0.3.9 or earlier ignores the request, and the holder check of the child waits. Use one package version in the process tree. See [ADR 0015](../adr/0015-a-holder-check-never-acquires-the-key.md).
+`isHeld(key)` in a child asks the coordinator of the parent, and the coordinator answers from its memory. `IpcLockCoordinator.isHeld(key)` in the parent answers at once. Use one package version in the process tree. See [ADR 0015](../adr/0015-a-holder-check-never-acquires-the-key.md).
 
 ## Failure modes
 

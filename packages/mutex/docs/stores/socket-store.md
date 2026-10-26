@@ -81,7 +81,7 @@ Messages are lines of JSON. A socket does not keep message boundaries: in a test
 
 `isHeld(key)` sends an `isHeld` request, and the leader answers from its memory. A process that has no leader campaigns first, as it does for an acquire. Thus a holder check can make the process the leader and write the term. A new leader answers only after its grace window, because the holders from before the failover reassert their keys in that window.
 
-A leader of version 0.3.9 or earlier does not know the `isHeld` request, and it closes the connection of a process that sends a request that it does not know. Thus a process sends `isHeld` only to a leader that lists it in its `welcome`. With an older leader, the holder check rejects with `UnsupportedRequestError`, and the connection and the held keys stay. See [ADR 0015](../adr/0015-a-holder-check-never-acquires-the-key.md) and [ADR 0016](../adr/0016-a-leader-lists-the-requests-that-it-added.md).
+See [ADR 0015](../adr/0015-a-holder-check-never-acquires-the-key.md).
 
 ## Failure modes
 
@@ -97,23 +97,11 @@ A leader of version 0.3.9 or earlier does not know the `isHeld` request, and it 
 
 See [failure modes](../concepts/failure-modes.md).
 
-## Two package versions in one directory
+## Protocol version
 
-During a rolling upgrade, processes of two package versions of `@zukhruf/mutex` can use one directory. They can share it when they speak the same protocol version. The protocol version changes only when the messages between the processes change. All package versions from 0.3.1 speak protocol version 1.
-
-Before a process sends its first request, it tells the leader its protocol version. The leader serves it or refuses it. Package versions 0.3.0 and earlier do not tell their protocol version, and the leader does not answer them. See [ADR 0014](../adr/0014-a-process-says-its-protocol-version-before-its-first-request.md).
-
-| This process     | The leader               | Result                                                                                                                      |
-| ---------------- | ------------------------ | --------------------------------------------------------------------------------------------------------------------------- |
-| 0.3.1 or later   | Same protocol version    | The processes share the directory.                                                                                          |
-| 0.3.1 or later   | Another protocol version | The acquire fails at once with `ProtocolVersionError`. The error gives both protocol versions.                              |
-| 0.3.1 or later   | 0.3.0 or earlier         | The acquire fails after approximately 1 second with `ProtocolVersionError`. `theirs` is `undefined`.                        |
-| 0.3.0 or earlier | 0.3.1 to 0.3.6           | No error. The acquire does not end. The process connects again without a pause, and the leader must refuse each connection. |
-| 0.3.0 or earlier | 0.3.7 or later           | No error. The leader does not answer, so the acquire does not end. The process stays connected and uses no CPU time.        |
+Before a process sends its first request, it tells the leader its protocol version. If the leader speaks another protocol version, it refuses the process, and the acquire fails at once with `ProtocolVersionError`. The leader also refuses a process whose first line is not a `hello`. Thus a leader never reads a request that it can read incorrectly. Use one package version in all processes that share a directory. See [ADR 0014](../adr/0014-a-process-says-its-protocol-version-before-its-first-request.md).
 
 `ProtocolVersionError` has two properties: `ours` is the protocol version of this process, and `theirs` is the protocol version of the leader.
-
-To upgrade from 0.3.0 or earlier, stop all processes that use the directory. Then start the processes of the new package version.
 
 ## Options
 
@@ -133,7 +121,6 @@ The `'role'` event tells you each time this process starts to lead, or starts to
 - **`ECONNREFUSED` does not mean "no leader".** A live leader with a full connection queue also gave `ECONNREFUSED`.
 - `src/lock-stores/socket/lock-server.test.ts`: a server whose term is lost closes without a call to `close`, and a follower then leads with a higher epoch. A server that starts for a lost term rejects with `LeaseLostError` and serves nobody.
 - `src/lock-stores/remote/remote-locking.test.ts` (`A request whose epoch has no tokens left`): the coordinator reports the exhausted epoch once, answers nothing, and keeps the connection. No test reaches the end of a real epoch, which needs 2^32 grants, so no test runs the step-down of `LockServer` for it.
-- `src/lock-stores/mixed-version.release.test.ts`: a process of the latest release and a process of this source share one directory. In both directions, each one sees the holder of the other, does not get its key, and gets the key after the release. The test downloads the latest release each run, so each change is checked against the version that runs beside it during an upgrade.
 - After `SIGKILL` of a client, the server saw the connection close in 1.25 ms.
 - `src/lock-stores/socket/socket-store.test.ts`:
   - A holder keeps its key when the leader stops, and a waiter gets the key only after the release.
@@ -142,13 +129,7 @@ The `'role'` event tells you each time this process starts to lead, or starts to
   - A leader that shuts down while a follower holds a key leaves a grace window to the next leader. The holder reasserts its key, and a waiter gets the key only after the release. When the lock server resigns clean on each close, this test fails 3 of 3 runs.
   - A process that runs alone after a process that disposed its store with no key held gets its key in less than 400 ms. The default grace window is 500 ms. Before the clean shutdown, it took about 515 ms.
 - A mutation test removed the grace window, the reassert, and the epoch. The tests found each change.
-- A test with real processes of the published package versions 0.3.0, 0.3.1 and 0.3.5 on macOS:
-  - A process of 0.3.5 and a leader of 0.3.0: the acquire failed with `ProtocolVersionError` after 1,007 ms.
-  - A process of 0.3.0 and a leader of 0.3.6: in 5 seconds, the process connected again 98,985 times, and the leader used 2,300 ms of CPU time. The acquire did not end. With the leader of 0.3.7: 1 connection, and 0 ms of CPU time in each process.
-  - A process of 0.3.5 and a leader of 0.3.1: the process got its key in 3 ms.
 - `src/lock-stores/socket/handshake.test.ts`:
   - A process whose leader speaks another protocol version fails its acquire, and the error gives both protocol versions.
-  - A process whose leader keeps its term but closes the connection on the `hello` fails its acquire.
   - A holder whose `hello` gets to a leader that stops keeps its key from a new leader that already leads.
-  - A leader gives no answer to a process that opens without a `hello`, and keeps it connected until its term ends. A process that connects again after each close keeps its first connection.
-  - A leader closes its side when a process that it gave no answer closes its side.
+  - A leader refuses a process that opens with a `hello` of another protocol version, a `hello` with no protocol version, a line that is not JSON, or a request, and its followers keep working.

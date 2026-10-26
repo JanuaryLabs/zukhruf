@@ -43,7 +43,7 @@ The database file of a key is `<key>.lock`, the folder of its holder is `<key>.l
 5. The holder writes its name for a [holder check](#holder-check). It starts its [presence](../adr/0012-a-file-store-holder-is-judged-by-its-presence.md) on `<key>.lock.holder/caller.<id>.presence`. Then it writes its identity to `<key>.lock.holder/caller`. Then it deletes the other files in `<key>.lock.holder`: holders that stopped left them there. Only the holder of the key writes in this folder.
 6. To release the key, the holder deletes `caller`, ends its presence, and deletes its presence file. Then it closes the connection, also when a delete failed. SQLite rolls the transaction back when it closes the connection. Then the next caller in the in-process queue continues.
 
-The lock of a key is the file lock of `@zukhruf/fs`. It keeps the journal of the transaction in memory, so a holder that dies leaves no `<key>.lock-journal` file. Versions 0.3.16 and earlier keep the journal on the disk. The locks of the two journal modes are the same, so processes of the two versions exclude each other. Do not put these files in WAL mode: in WAL mode, an exclusive transaction does not stop readers.
+The lock of a key is the file lock of `@zukhruf/fs`. It keeps the journal of the transaction in memory, so a holder that dies leaves no `<key>.lock-journal` file. Do not put these files in WAL mode: in WAL mode, an exclusive transaction does not stop readers.
 
 The transaction ends with `ROLLBACK`, so the fencing token counter cannot be in the database. The default token source keeps it in a counter file next to the database.
 
@@ -57,7 +57,7 @@ The transaction ends with `ROLLBACK`, so the fencing token counter cannot be in 
 
 The holder folder belongs to the lock store. If another program removes `caller` while the key is held, holder checks do not see the holder, and the release rejects with `ENOENT` for `caller`. The key is free after that release.
 
-A holder of version 0.3.9 or earlier writes no `caller` file, so a holder check of a later version does not see that holder. Use one package version in all processes that share the directory. See [ADR 0015](../adr/0015-a-holder-check-never-acquires-the-key.md).
+Use one package version in all processes that share the directory. See [ADR 0015](../adr/0015-a-holder-check-never-acquires-the-key.md).
 
 ## Failure modes
 
@@ -78,7 +78,6 @@ The token sources come from `@zukhruf/fencing`, for example `import { FileTokenS
 
 ## Evidence
 
-- `src/lock-stores/mixed-version.release.test.ts`: a process of the latest release and a process of this source share one directory. In both directions, each one sees the holder of the other, does not get its key, and gets the key after the release. The test downloads the latest release each run, so each change is checked against the version that runs beside it during an upgrade.
 - A child process held the lock and got `SIGKILL`. The parent got the lock at its next attempt.
 - Two connections in one process also exclude each other (`SQLITE_BUSY`, code 5).
 - A mutation test changed `BEGIN EXCLUSIVE` to `BEGIN`. Eight tests failed.
