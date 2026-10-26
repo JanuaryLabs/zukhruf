@@ -1,3 +1,4 @@
+export { Build } from './build.ts';
 export { Codegen } from './codegen.ts';
 export { Commit } from './commit.ts';
 export { Format } from './format.ts';
