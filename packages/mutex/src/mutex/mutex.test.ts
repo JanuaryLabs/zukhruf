@@ -20,6 +20,7 @@ import { describe, test } from '@zukhruf/testing/node';
 import { IpcLockCoordinator } from '../lock-stores/ipc/index.ts';
 import { ThreadLockCoordinator } from '../lock-stores/thread/index.ts';
 import { isRecord } from '../shared/is-record.ts';
+import { newProcessTimeout } from '../testing/new-process-timeout.ts';
 import { scratchDirectory } from '../testing/scratch-directory.ts';
 import {
   type StoreCase,
@@ -30,7 +31,6 @@ import {
   storeCases,
   timeoutForGrants,
 } from '../testing/store-cases.ts';
-import { newProcessTimeout, waitUntil } from '../testing/wait-until.ts';
 import { watch } from '../testing/watch.ts';
 import { startWorker } from '../testing/worker-process.ts';
 import { Modes } from './acquire-modes/modes.ts';
@@ -74,10 +74,13 @@ void describe.each(storeCases, (store) =>
               throw failure;
             }),
           );
-          await waitUntil(
-            t,
-            () => events.includes('first started'),
-            'The first operation must start when its product has no active operation',
+          await t.waitFor(
+            () =>
+              assert.ok(
+                events.includes('first started'),
+                'The first operation must start when its product has no active operation',
+              ),
+            { interval: 5, timeout: 2000 },
           );
           operations.push(
             mutex.acquire('product:42', async () => {
@@ -149,11 +152,13 @@ void describe.each(storeCases, (store) =>
           'application',
           { host, nodeOptions: ['--unhandled-rejections=strict'] },
         );
-        await waitUntil(
-          t,
-          () => application.exit !== null,
-          () => `The application must finish.\n${application.stderr}`,
-          newProcessTimeout,
+        await t.waitFor(
+          () =>
+            assert.ok(
+              application.exit !== null,
+              `The application must finish.\n${application.stderr}`,
+            ),
+          { interval: 5, timeout: newProcessTimeout },
         );
 
         // Assert: catching a callback error must be enough to keep the app running.
@@ -187,10 +192,13 @@ void describe.each(storeCases, (store) =>
               return true;
             }),
           );
-          await waitUntil(
-            t,
-            () => firstStarted,
-            'The first operation must start when its product has no active operation',
+          await t.waitFor(
+            () =>
+              assert.ok(
+                firstStarted,
+                'The first operation must start when its product has no active operation',
+              ),
+            { interval: 5, timeout: 2000 },
           );
           operations.push(
             mutex.acquire('product:42', async () => {
@@ -261,10 +269,13 @@ void describe.each(storeCases, (store) =>
       );
 
       try {
-        await waitUntil(
-          t,
-          () => entered === 1,
-          'One request must enter while the burst is submitted',
+        await t.waitFor(
+          () =>
+            assert.ok(
+              entered === 1,
+              'One request must enter while the burst is submitted',
+            ),
+          { interval: 5, timeout: 2000 },
         );
         await delay(settle);
         finishFirst.resolve();
@@ -322,10 +333,13 @@ void describe.each(storeCases, (store) =>
               return true;
             }),
           );
-          await waitUntil(
-            t,
-            () => firstStarted,
-            'Product 42 must be held before product 99 is requested',
+          await t.waitFor(
+            () =>
+              assert.ok(
+                firstStarted,
+                'Product 42 must be held before product 99 is requested',
+              ),
+            { interval: 5, timeout: 2000 },
           );
 
           // Act: this operation uses a different resource key.
@@ -337,10 +351,9 @@ void describe.each(storeCases, (store) =>
           );
 
           // Assert: product 99 progressed before product 42 was released.
-          await waitUntil(
-            t,
-            () => secondFinished,
-            'An unrelated product was blocked',
+          await t.waitFor(
+            () => assert.ok(secondFinished, 'An unrelated product was blocked'),
+            { interval: 5, timeout: 2000 },
           );
           finishFirst.resolve();
           assert.deepEqual(
@@ -430,10 +443,13 @@ void describe.each(storeCases, (store) =>
                 return true;
               }),
             );
-            await waitUntil(
-              t,
-              () => firstStarted,
-              `The first operation for ${label(key)} must start`,
+            await t.waitFor(
+              () =>
+                assert.ok(
+                  firstStarted,
+                  `The first operation for ${label(key)} must start`,
+                ),
+              { interval: 5, timeout: 2000 },
             );
             operations.push(
               mutex.acquire(key, async () => {
@@ -493,10 +509,10 @@ void describe.each(storeCases, (store) =>
           });
 
           try {
-            await waitUntil(
-              t,
-              () => holding,
-              `The holder of ${label(held)} must start`,
+            await t.waitFor(
+              () =>
+                assert.ok(holding, `The holder of ${label(held)} must start`),
+              { interval: 5, timeout: 2000 },
             );
 
             // Act: another caller asks for the second name and does not wait.
@@ -532,7 +548,10 @@ void describe.each(storeCases, (store) =>
       });
 
       try {
-        await waitUntil(t, () => holding, "The holder of 'Sync' must start");
+        await t.waitFor(
+          () => assert.ok(holding, "The holder of 'Sync' must start"),
+          { interval: 5, timeout: 2000 },
+        );
 
         // Act: other callers ask for 'sync' and 'SYNC' and do not wait.
         const lower = await mutex.acquire('sync', async () => 'ran', {
@@ -745,24 +764,30 @@ void describe.each(
             await using second = startWorker(workerSource, 'second', { host });
             const stderr = () => first.stderr + second.stderr;
             const waitFor = (condition: () => boolean, message: string) =>
-              waitUntil(t, condition, () => `${message}\n${stderr()}`);
+              t.waitFor(
+                () => assert.ok(condition(), `${message}\n${stderr()}`),
+                { interval: 5, timeout: 2000 },
+              );
 
-            await waitUntil(
-              t,
-              () => first.has('ready') && second.has('ready'),
+            await t.waitFor(
               () =>
-                `Both Node processes must be ready before the contention scenario starts\n${stderr()}`,
-              newProcessTimeout,
+                assert.ok(
+                  first.has('ready') && second.has('ready'),
+                  `Both Node processes must be ready before the contention scenario starts\n${stderr()}`,
+                ),
+              { interval: 5, timeout: newProcessTimeout },
             );
 
             // Act: first holds the key while second attempts to acquire that same key.
             first.child.send('start');
             // The first acquire of a new process also opens the store.
-            await waitUntil(
-              t,
-              () => first.has('entered'),
-              () => `The first process must enter its callback\n${stderr()}`,
-              newProcessTimeout,
+            await t.waitFor(
+              () =>
+                assert.ok(
+                  first.has('entered'),
+                  `The first process must enter its callback\n${stderr()}`,
+                ),
+              { interval: 5, timeout: newProcessTimeout },
             );
             second.child.send('start');
             await waitFor(
@@ -831,12 +856,13 @@ void describe.each(
               'holder',
               { host },
             );
-            await waitUntil(
-              t,
-              () => holder.has('entered'),
+            await t.waitFor(
               () =>
-                `The holder process must enter its callback.\n${holder.stderr}`,
-              newProcessTimeout,
+                assert.ok(
+                  holder.has('entered'),
+                  `The holder process must enter its callback.\n${holder.stderr}`,
+                ),
+              { interval: 5, timeout: newProcessTimeout },
             );
             const mutex = new Mutex(host.store);
             const limit = deadlineFor(store, 2000, { grants: 1, releases: 1 });
@@ -950,11 +976,13 @@ void describe.each(
 					process.send({ type: 'released' });
 				`;
           await using holder = startWorker(holderSource, 'holder', { host });
-          await waitUntil(
-            t,
-            () => holder.has('holding'),
-            () => `The holder must take the key\n${holder.stderr}`,
-            newProcessTimeout,
+          await t.waitFor(
+            () =>
+              assert.ok(
+                holder.has('holding'),
+                `The holder must take the key\n${holder.stderr}`,
+              ),
+            { interval: 5, timeout: newProcessTimeout },
           );
 
           // Act: the holder freezes, and this process waits for the key.
@@ -973,10 +1001,13 @@ void describe.each(
             'pending',
             'A waiter took the key of a frozen holder, which can still resume and write',
           );
-          await waitUntil(
-            t,
-            () => waiter.now.status === 'fulfilled',
-            'The waiter must get the key once the holder releases it',
+          await t.waitFor(
+            () =>
+              assert.ok(
+                waiter.now.status === 'fulfilled',
+                'The waiter must get the key once the holder releases it',
+              ),
+            { interval: 5, timeout: 2000 },
           );
         },
       );
@@ -1071,11 +1102,13 @@ void describe.each(
 
           try {
             // Act: the thread asks for the same key while the main thread holds it.
-            await waitUntil(
-              t,
-              () => events.includes('requested'),
-              'The thread must start',
-              newProcessTimeout,
+            await t.waitFor(
+              () =>
+                assert.ok(
+                  events.includes('requested'),
+                  'The thread must start',
+                ),
+              { interval: 5, timeout: newProcessTimeout },
             );
             await delay(settle);
             const enteredWhileHeld = events.includes('entered');
@@ -1088,10 +1121,13 @@ void describe.each(
               false,
               'The thread entered while the main thread held the key',
             );
-            await waitUntil(
-              t,
-              () => events.includes('entered'),
-              'The thread must enter once the main thread releases',
+            await t.waitFor(
+              () =>
+                assert.ok(
+                  events.includes('entered'),
+                  'The thread must enter once the main thread releases',
+                ),
+              { interval: 5, timeout: 2000 },
             );
           } finally {
             finishMain.resolve();
@@ -1214,11 +1250,13 @@ void describe.each(
 
           try {
             // Act
-            await waitUntil(
-              t,
-              () => events.includes('released'),
-              'The thread must take and release the key after its other messages',
-              newProcessTimeout,
+            await t.waitFor(
+              () =>
+                assert.ok(
+                  events.includes('released'),
+                  'The thread must take and release the key after its other messages',
+                ),
+              { interval: 5, timeout: newProcessTimeout },
             );
             const next = await Promise.race([
               mutex.acquire('product:42', async () => 'granted' as const),
@@ -1265,11 +1303,13 @@ void describe.each(
           });
 
           try {
-            await waitUntil(
-              t,
-              () => request !== undefined,
-              'The thread must ask for the key',
-              newProcessTimeout,
+            await t.waitFor(
+              () =>
+                assert.ok(
+                  request !== undefined,
+                  'The thread must ask for the key',
+                ),
+              { interval: 5, timeout: newProcessTimeout },
             );
 
             // Act: a grant for the thread's request, with a token that no coordinator issues.
@@ -1287,10 +1327,13 @@ void describe.each(
               false,
               'The thread entered on a grant that was not valid',
             );
-            await waitUntil(
-              t,
-              () => events.includes('entered'),
-              'The thread must enter once the main thread releases',
+            await t.waitFor(
+              () =>
+                assert.ok(
+                  events.includes('entered'),
+                  'The thread must enter once the main thread releases',
+                ),
+              { interval: 5, timeout: 2000 },
             );
           } finally {
             finishMain.resolve();
@@ -1435,12 +1478,13 @@ describe('Process-tree mutex with IpcStore', () => {
       );
 
       // Act
-      await waitUntil(
-        t,
-        () => child.has('released'),
+      await t.waitFor(
         () =>
-          `The child must take and release the key after its other messages.\n${child.stderr}`,
-        newProcessTimeout,
+          assert.ok(
+            child.has('released'),
+            `The child must take and release the key after its other messages.\n${child.stderr}`,
+          ),
+        { interval: 5, timeout: newProcessTimeout },
       );
       const next = await Promise.race([
         mutex.acquire('product:42', async () => 'granted' as const),
@@ -1771,11 +1815,13 @@ describe('A worker or child whose token cannot be minted', () => {
       );
 
       // Act: the child reports while it holds the second key, and then exits.
-      await waitUntil(
-        t,
-        () => child.has('holding'),
-        () => `The child must report while it holds a key.\n${child.stderr}`,
-        newProcessTimeout,
+      await t.waitFor(
+        () =>
+          assert.ok(
+            child.has('holding'),
+            `The child must report while it holds a key.\n${child.stderr}`,
+          ),
+        { interval: 5, timeout: newProcessTimeout },
       );
       child.child.kill('SIGKILL');
       await child.closed;

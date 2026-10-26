@@ -4,12 +4,11 @@ import assert from 'node:assert/strict';
 import fsPromises, { readdir, writeFile } from 'node:fs/promises';
 import { syncBuiltinESMExports } from 'node:module';
 import { join } from 'node:path';
-import { describe, mock } from 'node:test';
+import { type TestContext, describe } from 'node:test';
 
 import { test } from '@zukhruf/testing/node';
 
 import { scratchDirectory } from '../../testing/scratch-directory.ts';
-import { waitUntil } from '../../testing/wait-until.ts';
 import { type Settlement, watch } from '../../testing/watch.ts';
 import { startWorker } from '../../testing/worker-process.ts';
 import { LockFileStore } from './lock-file-store.ts';
@@ -77,15 +76,15 @@ const evicterSource = (
  * a dead holder's lock file, or the rename of a shorter queue over it. Every
  * call still reaches the real disk.
  */
-function recordEvictions() {
+function recordEvictions(t: TestContext) {
   const evictions: string[] = [];
   const unlink = fsPromises.unlink;
   const rename = fsPromises.rename;
-  mock.method(fsPromises, 'unlink', async (path: string) => {
+  t.mock.method(fsPromises, 'unlink', async (path: string) => {
     if (path.endsWith('.lock')) evictions.push(`unlink ${path}`);
     return unlink(path);
   });
-  mock.method(fsPromises, 'rename', async (from: string, to: string) => {
+  t.mock.method(fsPromises, 'rename', async (from: string, to: string) => {
     if (to.endsWith('.lock')) evictions.push(`rename ${to}`);
     return rename(from, to);
   });
@@ -93,7 +92,7 @@ function recordEvictions() {
   return {
     evictions,
     [Symbol.dispose]() {
-      mock.restoreAll();
+      t.mock.restoreAll();
       syncBuiltinESMExports();
     },
   };
@@ -114,12 +113,10 @@ describe('A waiter that dies while it evicts a dead holder', () => {
           holderSource(store.url, store.name, directory.path),
           'holder',
         );
-        await waitUntil(
-          t,
-          () => holder.has('holding'),
-          () => holder.stderr,
-          5000,
-        );
+        await t.waitFor(() => assert.ok(holder.has('holding'), holder.stderr), {
+          interval: 5,
+          timeout: 5000,
+        });
         holder.child.kill('SIGKILL');
         await holder.closed;
         await using evicter = startWorker(
@@ -131,18 +128,16 @@ describe('A waiter that dies while it evicts a dead holder', () => {
           ),
           'evicter',
         );
-        await waitUntil(
-          t,
-          () => evicter.has('evicting'),
-          () => evicter.stderr,
-          5000,
+        await t.waitFor(
+          () => assert.ok(evicter.has('evicting'), evicter.stderr),
+          { interval: 5, timeout: 5000 },
         );
         const first = store.create(directory.path);
         const second = store.create(directory.path);
 
         // Act + Assert: while the evicter is inside its eviction, nobody else evicts or gets the key.
         {
-          using spy = recordEvictions();
+          using spy = recordEvictions(t);
           assert.equal(await first.tryAcquire('product:42'), undefined);
           assert.deepEqual(
             spy.evictions,
@@ -167,13 +162,14 @@ describe('A waiter that dies while it evicts a dead holder', () => {
         );
 
         // Assert: the dead holder is evicted after all, and the key goes to one waiter at a time.
-        await waitUntil(
-          t,
+        await t.waitFor(
           () =>
-            firstLease.now.status !== 'pending' ||
-            secondLease.now.status !== 'pending',
-          'A dead evicter must not keep the dead holder in place',
-          5000,
+            assert.ok(
+              firstLease.now.status !== 'pending' ||
+                secondLease.now.status !== 'pending',
+              'A dead evicter must not keep the dead holder in place',
+            ),
+          { interval: 5, timeout: 5000 },
         );
         const [winner, loser] =
           firstLease.now.status !== 'pending'
@@ -190,11 +186,13 @@ describe('A waiter that dies while it evicts a dead holder', () => {
           'Two waiters must not hold the key at once',
         );
         await won.value[Symbol.asyncDispose]();
-        await waitUntil(
-          t,
-          () => loser.now.status !== 'pending',
-          'The other waiter must get the key once it is released',
-          5000,
+        await t.waitFor(
+          () =>
+            assert.ok(
+              loser.now.status !== 'pending',
+              'The other waiter must get the key once it is released',
+            ),
+          { interval: 5, timeout: 5000 },
         );
         const lost = settlementOf(loser);
         assert.ok(
@@ -217,12 +215,10 @@ describe('A waiter that dies while it evicts a dead holder', () => {
           holderSource(store.url, store.name, directory.path),
           'holder',
         );
-        await waitUntil(
-          t,
-          () => holder.has('holding'),
-          () => holder.stderr,
-          5000,
-        );
+        await t.waitFor(() => assert.ok(holder.has('holding'), holder.stderr), {
+          interval: 5,
+          timeout: 5000,
+        });
         holder.child.kill('SIGKILL');
         await holder.closed;
         const [lockFile] = (await readdir(directory.path)).filter((file) =>

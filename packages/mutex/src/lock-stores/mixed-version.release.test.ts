@@ -11,9 +11,9 @@ import { test } from '@zukhruf/testing/node';
 import { Modes } from '../mutex/acquire-modes/modes.ts';
 import { Mutex } from '../mutex/mutex.ts';
 import { isRecord } from '../shared/is-record.ts';
+import { newProcessTimeout } from '../testing/new-process-timeout.ts';
 import { scratchDirectory } from '../testing/scratch-directory.ts';
 import { storeCases } from '../testing/store-cases.ts';
-import { newProcessTimeout, waitUntil } from '../testing/wait-until.ts';
 import { startWorker } from '../testing/worker-process.ts';
 
 const run = promisify(execFile);
@@ -304,11 +304,13 @@ describe('A holder on the latest release, and this source', () => {
           releaseHolder(store, directory.path, key),
           'holder',
         );
-        await waitUntil(
-          t,
-          () => holder.has('entered'),
-          () => `The ${release.version} holder must enter.\n${holder.stderr}`,
-          newProcessTimeout,
+        await t.waitFor(
+          () =>
+            assert.ok(
+              holder.has('entered'),
+              `The ${release.version} holder must enter.\n${holder.stderr}`,
+            ),
+          { interval: 5, timeout: newProcessTimeout },
         );
         await using host = openThisSource(store, directory.path);
         const mutex = new Mutex(host.store);
@@ -321,10 +323,13 @@ describe('A holder on the latest release, and this source', () => {
         const looked = await mutex.isHeld(key);
         const whileHeld = await skip();
         holder.child.send('release');
-        await waitUntil(
-          t,
-          () => holder.has('released'),
-          () => `The ${release.version} holder must release.\n${holder.stderr}`,
+        await t.waitFor(
+          () =>
+            assert.ok(
+              holder.has('released'),
+              `The ${release.version} holder must release.\n${holder.stderr}`,
+            ),
+          { interval: 5, timeout: 2000 },
         );
         const afterRelease = await skip();
 
@@ -368,20 +373,24 @@ describe('A holder on this source, and the latest release', () => {
             releaseCaller(store, directory.path, key),
             'caller',
           );
-          await waitUntil(
-            t,
-            () => caller.has('tried'),
-            () => `The ${release.version} caller must try.\n${caller.stderr}`,
-            newProcessTimeout,
+          await t.waitFor(
+            () =>
+              assert.ok(
+                caller.has('tried'),
+                `The ${release.version} caller must try.\n${caller.stderr}`,
+              ),
+            { interval: 5, timeout: newProcessTimeout },
           );
           done.resolve();
           await holding;
           caller.child.send('again');
-          await waitUntil(
-            t,
-            () => caller.has('tried again'),
+          await t.waitFor(
             () =>
-              `The ${release.version} caller must try again.\n${caller.stderr}`,
+              assert.ok(
+                caller.has('tried again'),
+                `The ${release.version} caller must try again.\n${caller.stderr}`,
+              ),
+            { interval: 5, timeout: 2000 },
           );
 
           // Assert: the release finds the record of this source's holder, and this source frees it for the release.
@@ -426,11 +435,13 @@ describe('A holder on the latest release that was killed, and this source', () =
             releaseHolder(store, directory.path, key),
             'holder',
           );
-          await waitUntil(
-            t,
-            () => holder.has('entered'),
-            () => `The ${release.version} holder must enter.\n${holder.stderr}`,
-            newProcessTimeout,
+          await t.waitFor(
+            () =>
+              assert.ok(
+                holder.has('entered'),
+                `The ${release.version} holder must enter.\n${holder.stderr}`,
+              ),
+            { interval: 5, timeout: newProcessTimeout },
           );
           holder.child.kill('SIGKILL');
           await holder.closed;
@@ -482,11 +493,13 @@ describe('Two evicters of one dead holder, one on the latest release and one on 
             releaseHolder(store, directory.path, key),
             'holder',
           );
-          await waitUntil(
-            t,
-            () => holder.has('entered'),
-            () => `The ${release.version} holder must enter.\n${holder.stderr}`,
-            newProcessTimeout,
+          await t.waitFor(
+            () =>
+              assert.ok(
+                holder.has('entered'),
+                `The ${release.version} holder must enter.\n${holder.stderr}`,
+              ),
+            { interval: 5, timeout: newProcessTimeout },
           );
           holder.child.kill('SIGKILL');
           await holder.closed;
@@ -494,12 +507,13 @@ describe('Two evicters of one dead holder, one on the latest release and one on 
             pausedEvicter(releaseVersion, store, directory.path, key),
             'evicter',
           );
-          await waitUntil(
-            t,
-            () => evicter.has('evicting'),
+          await t.waitFor(
             () =>
-              `The ${release.version} evicter must start to evict.\n${evicter.stderr}`,
-            newProcessTimeout,
+              assert.ok(
+                evicter.has('evicting'),
+                `The ${release.version} evicter must start to evict.\n${evicter.stderr}`,
+              ),
+            { interval: 5, timeout: newProcessTimeout },
           );
           await using host = openThisSource(store, directory.path);
           const mutex = new Mutex(host.store);
@@ -511,12 +525,13 @@ describe('Two evicters of one dead holder, one on the latest release and one on 
           // Act
           const whileEvicting = await tryOnce();
           evicter.child.send('resume');
-          await waitUntil(
-            t,
-            () => evicter.has('holding'),
+          await t.waitFor(
             () =>
-              `The ${release.version} evicter must finish and take the key.\n${evicter.stderr}`,
-            newProcessTimeout,
+              assert.ok(
+                evicter.has('holding'),
+                `The ${release.version} evicter must finish and take the key.\n${evicter.stderr}`,
+              ),
+            { interval: 5, timeout: newProcessTimeout },
           );
           const afterEviction = await tryOnce();
 
@@ -545,11 +560,13 @@ describe('Two evicters of one dead holder, one on the latest release and one on 
             releaseHolder(store, directory.path, key),
             'holder',
           );
-          await waitUntil(
-            t,
-            () => holder.has('entered'),
-            () => `The ${release.version} holder must enter.\n${holder.stderr}`,
-            newProcessTimeout,
+          await t.waitFor(
+            () =>
+              assert.ok(
+                holder.has('entered'),
+                `The ${release.version} holder must enter.\n${holder.stderr}`,
+              ),
+            { interval: 5, timeout: newProcessTimeout },
           );
           holder.child.kill('SIGKILL');
           await holder.closed;
@@ -557,12 +574,13 @@ describe('Two evicters of one dead holder, one on the latest release and one on 
             pausedEvicter(releaseVersion, store, directory.path, key),
             'evicter',
           );
-          await waitUntil(
-            t,
-            () => evicter.has('evicting'),
+          await t.waitFor(
             () =>
-              `The ${release.version} evicter must start to evict.\n${evicter.stderr}`,
-            newProcessTimeout,
+              assert.ok(
+                evicter.has('evicting'),
+                `The ${release.version} evicter must start to evict.\n${evicter.stderr}`,
+              ),
+            { interval: 5, timeout: newProcessTimeout },
           );
           await using host = openThisSource(store, directory.path);
           const mutex = new Mutex(host.store);
@@ -594,11 +612,13 @@ describe('Two evicters of one dead holder, one on the latest release and one on 
             releaseHolder(store, directory.path, key),
             'holder',
           );
-          await waitUntil(
-            t,
-            () => holder.has('entered'),
-            () => `The ${release.version} holder must enter.\n${holder.stderr}`,
-            newProcessTimeout,
+          await t.waitFor(
+            () =>
+              assert.ok(
+                holder.has('entered'),
+                `The ${release.version} holder must enter.\n${holder.stderr}`,
+              ),
+            { interval: 5, timeout: newProcessTimeout },
           );
           holder.child.kill('SIGKILL');
           await holder.closed;
@@ -606,12 +626,13 @@ describe('Two evicters of one dead holder, one on the latest release and one on 
             pausedEvicter(thisVersion, store, directory.path, key),
             'evicter',
           );
-          await waitUntil(
-            t,
-            () => evicter.has('evicting'),
+          await t.waitFor(
             () =>
-              `This source's evicter must start to evict.\n${evicter.stderr}`,
-            newProcessTimeout,
+              assert.ok(
+                evicter.has('evicting'),
+                `This source's evicter must start to evict.\n${evicter.stderr}`,
+              ),
+            { interval: 5, timeout: newProcessTimeout },
           );
 
           // Act: a waiter on the release tries the key once.
@@ -619,11 +640,13 @@ describe('Two evicters of one dead holder, one on the latest release and one on 
             releaseCaller(store, directory.path, key),
             'caller',
           );
-          await waitUntil(
-            t,
-            () => caller.has('tried'),
-            () => `The ${release.version} waiter must try.\n${caller.stderr}`,
-            newProcessTimeout,
+          await t.waitFor(
+            () =>
+              assert.ok(
+                caller.has('tried'),
+                `The ${release.version} waiter must try.\n${caller.stderr}`,
+              ),
+            { interval: 5, timeout: newProcessTimeout },
           );
           // A waiter that evicted would leave the evicter's live ticket first, and a held key.
           await using host = openThisSource(store, directory.path);
@@ -633,12 +656,13 @@ describe('Two evicters of one dead holder, one on the latest release and one on 
           evicter.child.kill('SIGKILL');
           await evicter.closed;
           caller.child.send('again');
-          await waitUntil(
-            t,
-            () => caller.has('tried again'),
+          await t.waitFor(
             () =>
-              `The ${release.version} waiter must try again.\n${caller.stderr}`,
-            newProcessTimeout,
+              assert.ok(
+                caller.has('tried again'),
+                `The ${release.version} waiter must try again.\n${caller.stderr}`,
+              ),
+            { interval: 5, timeout: newProcessTimeout },
           );
 
           // Assert: the waiter evicts once the lock is free, so its first "busy" came from the reclaim lock.
@@ -679,11 +703,13 @@ describe('Two evicters of one dead holder, one on the latest release and one on 
             releaseHolder(store, directory.path, key),
             'holder',
           );
-          await waitUntil(
-            t,
-            () => holder.has('entered'),
-            () => `The ${release.version} holder must enter.\n${holder.stderr}`,
-            newProcessTimeout,
+          await t.waitFor(
+            () =>
+              assert.ok(
+                holder.has('entered'),
+                `The ${release.version} holder must enter.\n${holder.stderr}`,
+              ),
+            { interval: 5, timeout: newProcessTimeout },
           );
           holder.child.kill('SIGKILL');
           await holder.closed;
@@ -691,40 +717,45 @@ describe('Two evicters of one dead holder, one on the latest release and one on 
             pausedEvicter(thisVersion, store, directory.path, key),
             'evicter',
           );
-          await waitUntil(
-            t,
-            () => evicter.has('evicting'),
+          await t.waitFor(
             () =>
-              `This source's evicter must start to evict.\n${evicter.stderr}`,
-            newProcessTimeout,
+              assert.ok(
+                evicter.has('evicting'),
+                `This source's evicter must start to evict.\n${evicter.stderr}`,
+              ),
+            { interval: 5, timeout: newProcessTimeout },
           );
           await using caller = startWorker(
             releaseCaller(store, directory.path, key),
             'caller',
           );
-          await waitUntil(
-            t,
-            () => caller.has('tried'),
-            () => `The ${release.version} waiter must try.\n${caller.stderr}`,
-            newProcessTimeout,
+          await t.waitFor(
+            () =>
+              assert.ok(
+                caller.has('tried'),
+                `The ${release.version} waiter must try.\n${caller.stderr}`,
+              ),
+            { interval: 5, timeout: newProcessTimeout },
           );
 
           // Act: this source's evicter finishes and takes the key, and the waiter on the release tries again.
           evicter.child.send('resume');
-          await waitUntil(
-            t,
-            () => evicter.has('holding'),
+          await t.waitFor(
             () =>
-              `This source's evicter must finish and take the key.\n${evicter.stderr}`,
-            newProcessTimeout,
+              assert.ok(
+                evicter.has('holding'),
+                `This source's evicter must finish and take the key.\n${evicter.stderr}`,
+              ),
+            { interval: 5, timeout: newProcessTimeout },
           );
           caller.child.send('again');
-          await waitUntil(
-            t,
-            () => caller.has('tried again'),
+          await t.waitFor(
             () =>
-              `The ${release.version} waiter must try again.\n${caller.stderr}`,
-            newProcessTimeout,
+              assert.ok(
+                caller.has('tried again'),
+                `The ${release.version} waiter must try again.\n${caller.stderr}`,
+              ),
+            { interval: 5, timeout: newProcessTimeout },
           );
 
           // Assert: the release reads the holder that this source's evicter became as present.

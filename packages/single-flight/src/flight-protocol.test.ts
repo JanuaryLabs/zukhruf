@@ -14,7 +14,6 @@ import { FileLock } from '@zukhruf/fs';
 
 import { ProtocolVersionError, SingleFlight } from './index.ts';
 import { scratchDirectory } from './testing/scratch-directory.ts';
-import { waitUntil } from './testing/wait-until.ts';
 
 // Processes of different versions of this package meet on the wire, so these
 // tests speak it byte by byte, as such a process would.
@@ -88,10 +87,13 @@ function linesOf(
   peer: { readonly received: string },
   count: number,
 ) {
-  return waitUntil(
-    t,
-    () => peer.received.split('\n').length - 1 >= count,
-    () => `Got ${JSON.stringify(peer.received)}`,
+  return t.waitFor(
+    () =>
+      assert.ok(
+        peer.received.split('\n').length - 1 >= count,
+        `Got ${JSON.stringify(peer.received)}`,
+      ),
+    { interval: 5, timeout: 2000 },
   );
 }
 
@@ -118,10 +120,13 @@ async function answerOf(
   pattern: RegExp,
 ) {
   const find = () => answersTo(peer, id).find((line) => pattern.test(line));
-  await waitUntil(
-    t,
-    () => find() !== undefined,
-    () => `No ${pattern} for ${id}; got ${JSON.stringify(peer.received)}`,
+  await t.waitFor(
+    () =>
+      assert.ok(
+        find() !== undefined,
+        `No ${pattern} for ${id}; got ${JSON.stringify(peer.received)}`,
+      ),
+    { interval: 5, timeout: 2000 },
   );
   const answer = find();
   assert.ok(answer);
@@ -332,7 +337,10 @@ describe('The wire of a single flight', () => {
       peer.send('{"op":"hello","version":1}');
 
       // Assert
-      await waitUntil(t, () => peer.closed, 'The coordinator must hang up');
+      await t.waitFor(
+        () => assert.ok(peer.closed, 'The coordinator must hang up'),
+        { interval: 5, timeout: 2000 },
+      );
       assert.equal(
         peer.received,
         '{"op":"refused","protocol":"single-flight","version":1}\n',
@@ -353,7 +361,10 @@ describe('The wire of a single flight', () => {
       peer.send('{"op":"run","id":"a","key":"sync"}');
 
       // Assert
-      await waitUntil(t, () => peer.closed, 'The coordinator must hang up');
+      await t.waitFor(
+        () => assert.ok(peer.closed, 'The coordinator must hang up'),
+        { interval: 5, timeout: 2000 },
+      );
       assert.equal(peer.received, '');
     },
   );
@@ -411,10 +422,13 @@ describe('The wire of a single flight', () => {
       });
       // This run starts the coordinator.
       const warmUp = settle(flights.run('warm-up', async () => 'warm'));
-      await waitUntil(
-        t,
-        () => existsSync(join(directory.path, 'flight.sock')),
-        'The coordinator must listen',
+      await t.waitFor(
+        () =>
+          assert.ok(
+            existsSync(join(directory.path, 'flight.sock')),
+            'The coordinator must listen',
+          ),
+        { interval: 5, timeout: 2000 },
       );
       using peer = await peerOf(directory.path);
       peer.send('{"op":"hello","protocol":"single-flight","version":1}');
@@ -491,10 +505,13 @@ describe('The wire of a single flight', () => {
         peer.send(`{"op":"run","id":"b","key":"sync","flight":"${token}"}`);
         peer.send(`{"op":"run","id":"b","key":"sync","flight":"${token}"}`);
         peer.send('{"op":"run","id":"c","key":"other"}');
-        await waitUntil(
-          t,
-          () => /"id":"c".*\n/.test(peer.received),
-          () => `Got ${JSON.stringify(peer.received)}`,
+        await t.waitFor(
+          () =>
+            assert.ok(
+              /"id":"c".*\n/.test(peer.received),
+              `Got ${JSON.stringify(peer.received)}`,
+            ),
+          { interval: 5, timeout: 2000 },
         );
 
         // Assert
@@ -596,7 +613,10 @@ describe('The wire of a single flight', () => {
       peer.send('run sync');
 
       // Assert
-      await waitUntil(t, () => peer.closed, 'The coordinator must hang up');
+      await t.waitFor(
+        () => assert.ok(peer.closed, 'The coordinator must hang up'),
+        { interval: 5, timeout: 2000 },
+      );
       assert.equal(peer.received, '{"op":"welcome"}\n');
     },
   );
@@ -926,13 +946,14 @@ describe('The wire of a single flight while a process holds a key', () => {
         // takes the key, as a leader does, lands, and lets the key go.
         held.unlock();
         late.send(`{"op":"run","id":"${x}","key":"${key}"}`);
-        await waitUntil(
-          t,
+        await t.waitFor(
           () =>
-            answersTo(waiter, p).some(isLead) ||
-            answersTo(late, x).some(isLead),
-          () =>
-            `Nobody leads: ${JSON.stringify(waiter.received)} ${JSON.stringify(late.received)}`,
+            assert.ok(
+              answersTo(waiter, p).some(isLead) ||
+                answersTo(late, x).some(isLead),
+              `Nobody leads: ${JSON.stringify(waiter.received)} ${JSON.stringify(late.received)}`,
+            ),
+          { interval: 5, timeout: 2000 },
         );
         const [leader, id, joiner, joinerId] = answersTo(waiter, p).some(isLead)
           ? [waiter, p, late, x]

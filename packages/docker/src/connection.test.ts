@@ -93,7 +93,7 @@ createServer().listen(${JSON.stringify(socketPath)}, () => console.log('listenin
     });
   });
 
-  test('a signal aborts a ping that the engine never answers, with the reason of the signal', async () => {
+  test('a signal aborts a ping that the engine never answers, with the reason of the signal', async (t) => {
     // Arrange
     await using scratch = await scratchDirectory();
     await using engine = await fakeEngine({
@@ -109,7 +109,10 @@ createServer().listen(${JSON.stringify(socketPath)}, () => console.log('listenin
       host: engine.host,
       signal: controller.signal,
     });
-    await waitUntil(() => engine.paths.includes('/_ping'));
+    await t.waitFor(() => assert.ok(engine.paths.includes('/_ping')), {
+      interval: 5,
+      timeout: 10_000,
+    });
     controller.abort(reason);
 
     // Assert
@@ -267,12 +270,4 @@ async function mkdirIn(parent: string, name: string): Promise<string> {
   const path = join(parent, name);
   await mkdir(path);
   return path;
-}
-
-async function waitUntil(condition: () => boolean): Promise<void> {
-  const deadline = Date.now() + 10_000;
-  while (!condition()) {
-    if (Date.now() > deadline) throw new Error('The condition never held.');
-    await new Promise((resolve) => setTimeout(resolve, 5));
-  }
 }

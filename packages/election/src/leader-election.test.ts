@@ -3,7 +3,6 @@ import { describe, test } from 'node:test';
 
 // A backend is written against the package's public entry, as an outside author would.
 import { LeaderElection, LeaseLostError } from './index.ts';
-import { waitUntil } from './testing/wait-until.ts';
 
 interface Script {
   /** What each try answers, in order: an epoch, `busy`, or an error. The last answer repeats. */
@@ -560,10 +559,13 @@ describe('A campaign that its caller stops', () => {
       const campaigning = settle(
         election.campaign({ timeout: 120_000, signal: stop.signal }),
       );
-      await waitUntil(
-        t,
-        () => election.steps.includes('try 1'),
-        'The campaign must try the claim before it waits',
+      await t.waitFor(
+        () =>
+          assert.ok(
+            election.steps.includes('try 1'),
+            'The campaign must try the claim before it waits',
+          ),
+        { interval: 5, timeout: 2000 },
       );
       stop.abort(reason);
       const result = await campaigning;

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { once } from 'node:events';
 import { type Socket, connect, createServer } from 'node:net';
-import { test } from 'node:test';
+import { type TestContext, test } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
 
 import mysql from 'mysql2/promise';
@@ -73,17 +73,25 @@ async function hold(mutex: Mutex, key: string) {
 }
 
 /** Resolves when a session of the database waits for a user lock. */
-async function untilASessionWaitsForALock(database: MysqlDatabase) {
+async function untilASessionWaitsForALock(
+  t: TestContext,
+  database: MysqlDatabase,
+) {
   const observer = await mysql.createConnection(database.connectionString);
   try {
-    for (;;) {
-      const [rows] = await observer.query<mysql.RowDataPacket[]>(
-        `SELECT COUNT(*) AS waiting FROM information_schema.PROCESSLIST
-         WHERE DB = DATABASE() AND STATE = 'User lock'`,
-      );
-      if (Number(rows[0]?.['waiting']) > 0) return;
-      await delay(10);
-    }
+    await t.waitFor(
+      async () => {
+        const [rows] = await observer.query<mysql.RowDataPacket[]>(
+          `SELECT COUNT(*) AS waiting FROM information_schema.PROCESSLIST
+           WHERE DB = DATABASE() AND STATE = 'User lock'`,
+        );
+        assert.ok(
+          Number(rows[0]?.['waiting']) > 0,
+          'No session waits for a lock.',
+        );
+      },
+      { interval: 10, timeout: 10_000 },
+    );
   } finally {
     await observer.end();
   }
@@ -335,7 +343,7 @@ test(
 test(
   'the next acquire after a cancel gets the only session of the pool at once',
   { timeout: 30_000 },
-  async () => {
+  async (t) => {
     // Arrange: another pool holds the key, and the waiter's only session waits for it.
     await using database = await mysqlDatabase();
     const holderPool = poolOf(database);
@@ -353,7 +361,7 @@ test(
         (value) => value,
         (error: unknown) => error,
       );
-      await untilASessionWaitsForALock(database);
+      await untilASessionWaitsForALock(t, database);
       cancel.abort(reason);
       await holder.release();
 
@@ -384,7 +392,7 @@ test(
 test(
   'a cancelled waiter that the server grants later gives the key to the next waiter',
   { timeout: 30_000 },
-  async () => {
+  async (t) => {
     // Arrange: a holder, and a waiter in another pool that cancels while the server keeps its place in the queue.
     await using database = await mysqlDatabase();
     const pools = [1, 2, 3].map(() => poolOf(database));
@@ -399,7 +407,7 @@ test(
         async () => 'ran',
         { signal: cancel.signal },
       );
-      await untilASessionWaitsForALock(database);
+      await untilASessionWaitsForALock(t, database);
       cancel.abort(new Error('cancelled'));
       await assert.rejects(waiting);
 
@@ -680,7 +688,7 @@ test(
 test(
   'a waiter gets the key when the holder releases it',
   { timeout: 30_000 },
-  async () => {
+  async (t) => {
     // Arrange
     await using database = await mysqlDatabase();
     const pools = [poolOf(database), poolOf(database)];
@@ -693,7 +701,7 @@ test(
         key,
         async () => 'ran' as const,
       );
-      await untilASessionWaitsForALock(database);
+      await untilASessionWaitsForALock(t, database);
       const early = await Promise.race([waiting, delay(100, 'waiting')]);
 
       // Act

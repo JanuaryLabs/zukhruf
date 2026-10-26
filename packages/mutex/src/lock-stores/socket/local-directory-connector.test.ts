@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import fsPromises from 'node:fs/promises';
 import { syncBuiltinESMExports } from 'node:module';
 import { sep } from 'node:path';
-import { describe, mock, test } from 'node:test';
+import { type TestContext, describe, test } from 'node:test';
 
 import { NetworkDirectoryError } from '@zukhruf/fs';
 
@@ -35,11 +35,11 @@ function countingConnector() {
  * Makes statfs report `type` for `directory` and everything inside it, and
  * holds each such answer until `release`, as a slow mount would.
  */
-function slowMount(directory: string, type: bigint) {
+function slowMount(t: TestContext, directory: string, type: bigint) {
   const statfs = fsPromises.statfs;
   const asked = Promise.withResolvers<void>();
   const released = Promise.withResolvers<void>();
-  mock.method(
+  t.mock.method(
     fsPromises,
     'statfs',
     async (...args: Parameters<typeof fsPromises.statfs>) => {
@@ -57,7 +57,7 @@ function slowMount(directory: string, type: bigint) {
     release: () => released.resolve(),
     [Symbol.dispose]() {
       released.resolve();
-      mock.restoreAll();
+      t.mock.restoreAll();
       syncBuiltinESMExports();
     },
   };
@@ -67,10 +67,10 @@ describe('LocalDirectoryConnector', () => {
   test(
     'a connect whose signal already aborted rejects with its reason, without judging the directory',
     onLinux,
-    async () => {
+    async (t) => {
       // Arrange: the directory looks like a network mount.
       await using directory = await scratchDirectory();
-      using mount = slowMount(directory.path, 0x6969n);
+      using mount = slowMount(t, directory.path, 0x6969n);
       mount.release();
       const { connector: inner, counted } = countingConnector();
       const connector = new LocalDirectoryConnector(directory.path, inner);
@@ -88,10 +88,10 @@ describe('LocalDirectoryConnector', () => {
   test(
     'a connect aborted while it judges the directory never reaches the connector it wraps',
     onLinux,
-    async () => {
+    async (t) => {
       // Arrange: the judgement of a local directory is slow to arrive.
       await using directory = await scratchDirectory();
-      using mount = slowMount(directory.path, 0xef53n);
+      using mount = slowMount(t, directory.path, 0xef53n);
       const { connector: inner, counted } = countingConnector();
       const connector = new LocalDirectoryConnector(directory.path, inner);
       const abort = new AbortController();
@@ -112,10 +112,10 @@ describe('LocalDirectoryConnector', () => {
   test(
     'a directory on a network file system is refused before the wrapped connector is asked',
     onLinux,
-    async () => {
+    async (t) => {
       // Arrange
       await using directory = await scratchDirectory();
-      using mount = slowMount(directory.path, 0x6969n);
+      using mount = slowMount(t, directory.path, 0x6969n);
       mount.release();
       const { connector: inner, counted } = countingConnector();
       const connector = new LocalDirectoryConnector(directory.path, inner);

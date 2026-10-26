@@ -4,9 +4,9 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 
+import { newProcessTimeout } from './new-process-timeout.ts';
 import { scratchDirectory } from './scratch-directory.ts';
 import { storeCases } from './store-cases.ts';
-import { newProcessTimeout, waitUntil } from './wait-until.ts';
 import { startWorker } from './worker-process.ts';
 
 const mutexUrl = new URL('../mutex/mutex.ts', import.meta.url);
@@ -57,11 +57,13 @@ test(
 			`,
       'test process',
     );
-    await waitUntil(
-      t,
-      () => testProcess.has('granting'),
-      () => `The matrix child must grant.\n${testProcess.stderr}`,
-      newProcessTimeout,
+    await t.waitFor(
+      () =>
+        assert.ok(
+          testProcess.has('granting'),
+          `The matrix child must grant.\n${testProcess.stderr}`,
+        ),
+      { interval: 5, timeout: newProcessTimeout },
     );
     const pid = Number(testProcess.find('granting')?.pid);
     try {
@@ -70,10 +72,13 @@ test(
       await testProcess.closed;
 
       // Assert
-      await waitUntil(
-        t,
-        () => !isRunning(pid),
-        'The matrix child must exit when its test process is killed',
+      await t.waitFor(
+        () =>
+          assert.ok(
+            !isRunning(pid),
+            'The matrix child must exit when its test process is killed',
+          ),
+        { interval: 5, timeout: 2000 },
       );
     } finally {
       if (isRunning(pid)) process.kill(pid, 'SIGKILL');
@@ -112,26 +117,34 @@ test(
     );
     const pid = child.child.pid!;
     try {
-      await waitUntil(
-        t,
-        () => child.has('started'),
-        () => `The matrix child must start.\n${child.stderr}`,
-        newProcessTimeout,
+      await t.waitFor(
+        () =>
+          assert.ok(
+            child.has('started'),
+            `The matrix child must start.\n${child.stderr}`,
+          ),
+        { interval: 5, timeout: newProcessTimeout },
       );
 
       // Assert
-      await waitUntil(
-        t,
-        () => recordedPids(records.path).includes(pid),
-        'The run must have a process record of the matrix child while it lives',
+      await t.waitFor(
+        () =>
+          assert.ok(
+            recordedPids(records.path).includes(pid),
+            'The run must have a process record of the matrix child while it lives',
+          ),
+        { interval: 5, timeout: 2000 },
       );
     } finally {
       await child[Symbol.asyncDispose]();
     }
-    await waitUntil(
-      t,
-      () => !recordedPids(records.path).includes(pid),
-      'The process record of the matrix child must go when the child ends',
+    await t.waitFor(
+      () =>
+        assert.ok(
+          !recordedPids(records.path).includes(pid),
+          'The process record of the matrix child must go when the child ends',
+        ),
+      { interval: 5, timeout: 2000 },
     );
   },
 );

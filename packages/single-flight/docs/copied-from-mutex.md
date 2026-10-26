@@ -109,7 +109,7 @@ A single flight has no role event. Thus the test reads `flight.epoch` to see tha
 
 The tests start real processes, so this package also copies three helpers from `packages/mutex/src/testing`. They are not part of the package: the build leaves `src/testing` out.
 
-**`testing/wait-until.ts` → `testing/wait-until.ts`.**
+**`testing/new-process-timeout.ts` → `testing/new-process-timeout.ts`.**
 Copied without a change.
 
 **`testing/scratch-directory.ts` → `testing/scratch-directory.ts`.**

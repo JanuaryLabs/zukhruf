@@ -10,21 +10,6 @@ import { SqliteJobQueue } from './index.ts';
 const id = (n: number) =>
   `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 
-async function waitFor(
-  predicate: () => Promise<boolean>,
-  timeoutMs = 1000,
-): Promise<void> {
-  const start = Date.now();
-  while (Date.now() - start < timeoutMs) {
-    if (await predicate()) {
-      return;
-    }
-    await new Promise((resolve) => setTimeout(resolve, 5));
-  }
-
-  throw new Error('Timed out waiting for condition');
-}
-
 // Lets what a tick fired finish: SQLite's fetch waits one event-loop turn.
 async function settle(clock: TestClock) {
   await clock.tick(0);
@@ -130,7 +115,7 @@ describe('SqliteJobQueue', () => {
     await queue.stop({ graceful: true, close: true });
   });
 
-  it('claims jobs through work and completes them when the handler succeeds', async () => {
+  it('claims jobs through work and completes them when the handler succeeds', async (t) => {
     const queue = new SqliteJobQueue({});
     await queue.start();
     await queue.createQueue('chat-run', { retryLimit: 0 });
@@ -142,12 +127,15 @@ describe('SqliteJobQueue', () => {
       handledJobs.push(...jobs);
     });
 
-    await waitFor(async () => {
-      const [job] = await queue.findJobs('chat-run', {
-        id: jobId,
-      });
-      return job?.state === 'completed';
-    });
+    await t.waitFor(
+      async () => {
+        const [job] = await queue.findJobs('chat-run', {
+          id: jobId,
+        });
+        assert.equal(job?.state, 'completed');
+      },
+      { interval: 5, timeout: 1000 },
+    );
 
     assert.equal(handledJobs.length, 1);
     assert.equal(handledJobs[0]?.id, jobId);
@@ -159,7 +147,7 @@ describe('SqliteJobQueue', () => {
   // SQLite-only: pg-boss swallows only a policy index refusing a claim and
   // surfaces every other fetch error (manager.js:1580-1586). The trigger stands
   // in for a disk failure, which no queue operation can cause on purpose.
-  it('reports a claim that fails for a reason other than a policy index', async () => {
+  it('reports a claim that fails for a reason other than a policy index', async (t) => {
     const database = new DatabaseSync(':memory:');
     const queue = new SqliteJobQueue({ database });
     const errors: string[] = [];
@@ -174,7 +162,10 @@ describe('SqliteJobQueue', () => {
       assert.ok(jobId);
 
       await queue.work('jobs', {}, async () => {});
-      await waitFor(async () => errors.length > 0);
+      await t.waitFor(() => assert.notEqual(errors.length, 0), {
+        interval: 5,
+        timeout: 1000,
+      });
 
       const [job] = await queue.findJobs('jobs', { id: jobId });
       assert.match(errors[0] ?? '', /^disk I\/O error \(Queue: jobs, Worker: /);
@@ -189,7 +180,7 @@ describe('SqliteJobQueue', () => {
   // transaction itself, and a ROLLBACK after that fails with "cannot rollback -
   // no transaction is active". RAISE(ROLLBACK) in the trigger ends it the same
   // way, as no queue operation can fill or break the disk on purpose.
-  it('reports the original error of a claim whose transaction SQLite already rolled back', async () => {
+  it('reports the original error of a claim whose transaction SQLite already rolled back', async (t) => {
     const database = new DatabaseSync(':memory:');
     const queue = new SqliteJobQueue({ database });
     const errors: string[] = [];
@@ -204,7 +195,10 @@ describe('SqliteJobQueue', () => {
       assert.ok(jobId);
 
       await queue.work('jobs', {}, async () => {});
-      await waitFor(async () => errors.length > 0);
+      await t.waitFor(() => assert.notEqual(errors.length, 0), {
+        interval: 5,
+        timeout: 1000,
+      });
 
       const [job] = await queue.findJobs('jobs', { id: jobId });
       const [error] = errors;
@@ -343,7 +337,7 @@ describe('SqliteJobQueue', () => {
     }
   });
 
-  it('runs up to localConcurrency jobs before earlier jobs finish', async () => {
+  it('runs up to localConcurrency jobs before earlier jobs finish', async (t) => {
     const queue = new SqliteJobQueue({});
     await queue.start();
     await queue.createQueue('chat-run', { retryLimit: 0 });
@@ -364,21 +358,27 @@ describe('SqliteJobQueue', () => {
       await handlersReleased;
     });
 
-    await waitFor(async () => activeJobs.length === 2);
+    await t.waitFor(() => assert.equal(activeJobs.length, 2), {
+      interval: 5,
+      timeout: 1000,
+    });
     assert.deepEqual(
       activeJobs.map((job) => job.id).sort(),
       [firstJobId, secondJobId].sort(),
     );
 
     releaseHandlers();
-    await waitFor(async () => {
-      const jobs = await queue.findJobs('chat-run');
-      return jobs.every((job) => job.state === 'completed');
-    });
+    await t.waitFor(
+      async () => {
+        const jobs = await queue.findJobs('chat-run');
+        assert.ok(jobs.every((job) => job.state === 'completed'));
+      },
+      { interval: 5, timeout: 1000 },
+    );
     await queue.stop({ graceful: true, close: true });
   });
 
-  it('retries failed worker jobs until retryLimit is exhausted', async () => {
+  it('retries failed worker jobs until retryLimit is exhausted', async (t) => {
     // A retry waits for the next poll, which the test clock fires.
     const clock = new TestClock('2026-01-01T00:00:00.000Z');
     const queue = new SqliteJobQueue({ clock });
@@ -396,12 +396,18 @@ describe('SqliteJobQueue', () => {
       throw new Error('handler failed');
     });
 
-    await waitFor(async () => attempts === 1);
-    await clock.tick(2000);
-    await waitFor(async () => {
-      const [job] = await queue.findJobs('automation-run', { id: jobId });
-      return job?.state === 'failed';
+    await t.waitFor(() => assert.equal(attempts, 1), {
+      interval: 5,
+      timeout: 1000,
     });
+    await clock.tick(2000);
+    await t.waitFor(
+      async () => {
+        const [job] = await queue.findJobs('automation-run', { id: jobId });
+        assert.equal(job?.state, 'failed');
+      },
+      { interval: 5, timeout: 1000 },
+    );
     const [job] = await queue.findJobs('automation-run', { id: jobId });
 
     assert.equal(attempts, 2);
@@ -413,7 +419,7 @@ describe('SqliteJobQueue', () => {
     await queue.stop({ graceful: true, close: true });
   });
 
-  it('finds and fails active jobs for startup recovery', async () => {
+  it('finds and fails active jobs for startup recovery', async (t) => {
     const queue = new SqliteJobQueue({});
     await queue.start();
     await queue.createQueue('chat-run', {
@@ -436,12 +442,15 @@ describe('SqliteJobQueue', () => {
       await handlerBlocked;
     });
 
-    await waitFor(async () => {
-      const [job] = await queue.findJobs('chat-run', {
-        id: jobId,
-      });
-      return job?.state === 'active';
-    });
+    await t.waitFor(
+      async () => {
+        const [job] = await queue.findJobs('chat-run', {
+          id: jobId,
+        });
+        assert.equal(job?.state, 'active');
+      },
+      { interval: 5, timeout: 1000 },
+    );
 
     const inFlightJobs = await queue.findJobs('chat-run');
     assert.deepEqual(

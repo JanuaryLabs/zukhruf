@@ -13,7 +13,6 @@ import {
   scriptedPeer,
 } from '../../testing/scripted-peer.ts';
 import { settle } from '../../testing/store-cases.ts';
-import { waitUntil } from '../../testing/wait-until.ts';
 import { ConnectionSupervisor } from './connection-supervisor.ts';
 import type { ClientConnector } from './connector.ts';
 import { LockCoordinator } from './lock-coordinator.ts';
@@ -118,12 +117,18 @@ describe('Remote lock client connection lifecycle', () => {
     });
     const second = grantingPeer();
     const acquiring = client.acquire('product:42');
-    await waitUntil(t, () => calls.length === 1, 'The client must connect');
+    await t.waitFor(
+      () => assert.ok(calls.length === 1, 'The client must connect'),
+      { interval: 5, timeout: 2000 },
+    );
 
     try {
       // Act
       calls[0]!.resolve(first.connection);
-      await waitUntil(t, () => calls.length === 2, 'The client must reconnect');
+      await t.waitFor(
+        () => assert.ok(calls.length === 2, 'The client must reconnect'),
+        { interval: 5, timeout: 2000 },
+      );
       calls[1]!.resolve(second.connection);
       const lease = await acquiring;
 
@@ -167,16 +172,22 @@ describe('A request whose token cannot be minted', () => {
 
     // Act
     peer.deliver({ op: 'acquire', id: 'a', key: 'product:42' });
-    await waitUntil(
-      t,
-      () => peer.sent.length === 1,
-      'The coordinator must answer the acquire',
+    await t.waitFor(
+      () =>
+        assert.ok(
+          peer.sent.length === 1,
+          'The coordinator must answer the acquire',
+        ),
+      { interval: 5, timeout: 2000 },
     );
     peer.deliver({ op: 'acquire', id: 'a', key: 'product:42' });
-    await waitUntil(
-      t,
-      () => peer.sent.length === 2,
-      'The coordinator must answer the acquire that is sent again',
+    await t.waitFor(
+      () =>
+        assert.ok(
+          peer.sent.length === 2,
+          'The coordinator must answer the acquire that is sent again',
+        ),
+      { interval: 5, timeout: 2000 },
     );
 
     // Assert: the peer learns why, keeps its connection, and gets the free key on the next try.
@@ -210,10 +221,13 @@ describe('A request whose token cannot be minted', () => {
 
     // Act: the newer claim fails to mint, then an older claim of the same key arrives.
     failed.deliver({ op: 'reassert', id: 'f', key: 'product:42', token: '9' });
-    await waitUntil(
-      t,
-      () => failed.sent.length === 1,
-      'The coordinator must answer the failed reassertion',
+    await t.waitFor(
+      () =>
+        assert.ok(
+          failed.sent.length === 1,
+          'The coordinator must answer the failed reassertion',
+        ),
+      { interval: 5, timeout: 2000 },
     );
     later.deliver({ op: 'reassert', id: 'l', key: 'product:42', token: '5' });
     const waiter = coordinator.acquire('product:42');
@@ -259,10 +273,13 @@ describe('A request whose epoch has no tokens left', () => {
 
     // Act
     peer.deliver({ op: 'acquire', id: 'a', key: 'product:42' });
-    await waitUntil(
-      t,
-      () => reports === 1,
-      'The coordinator must report the exhausted epoch',
+    await t.waitFor(
+      () =>
+        assert.ok(
+          reports === 1,
+          'The coordinator must report the exhausted epoch',
+        ),
+      { interval: 5, timeout: 2000 },
     );
 
     // Assert: the leader steps down instead, so the request is answered as on a lost connection.

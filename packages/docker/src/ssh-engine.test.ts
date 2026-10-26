@@ -436,7 +436,7 @@ console.log(JSON.stringify({ started: pids.length, alive }));
     {
       skip: needsLocalEngine,
     },
-    async () => {
+    async (t) => {
       // Arrange
       await using home = await scratchDirectory();
       await using standIn = await sshStandIn({
@@ -461,18 +461,13 @@ console.log('connected');
       const pids = (await standIn.runs()).map(({ pid }) => pid);
       try {
         assert.equal(pids.length, 2);
-        await waitUntil(() => pids.every((pid) => !isAlive(pid)));
+        await t.waitFor(() => assert.deepEqual(pids.filter(isAlive), []), {
+          interval: 20,
+          timeout: 10_000,
+        });
       } finally {
         for (const pid of pids.filter(isAlive)) process.kill(pid, 'SIGKILL');
       }
     },
   );
 });
-
-async function waitUntil(condition: () => boolean): Promise<void> {
-  const deadline = Date.now() + 10_000;
-  while (!condition()) {
-    if (Date.now() > deadline) throw new Error('The condition never held.');
-    await new Promise((resolve) => setTimeout(resolve, 20));
-  }
-}

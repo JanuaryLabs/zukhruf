@@ -6,7 +6,6 @@ import { join } from 'node:path';
 import { describe, test } from 'node:test';
 
 import { scratchDirectory } from '../../testing/scratch-directory.ts';
-import { waitUntil } from '../../testing/wait-until.ts';
 import { SocketConnection } from './socket-connection.ts';
 
 describe('Socket connection', () => {
@@ -37,10 +36,13 @@ describe('Socket connection', () => {
       }
 
       // Assert: the loss arrives as `close`, and the process did not crash.
-      await waitUntil(
-        t,
-        () => closed,
-        'The connection must report the dead peer as closed',
+      await t.waitFor(
+        () =>
+          assert.ok(
+            closed,
+            'The connection must report the dead peer as closed',
+          ),
+        { interval: 5, timeout: 2000 },
       );
       assert.equal(closed, true);
     } finally {

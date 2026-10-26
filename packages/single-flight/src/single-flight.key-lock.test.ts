@@ -11,8 +11,8 @@ import type { TestContext } from 'node:test';
 import { SqliteElection } from '@zukhruf/election';
 
 import { callerSource, journalOf } from './testing/caller.ts';
+import { newProcessTimeout } from './testing/new-process-timeout.ts';
 import { scratchDirectory } from './testing/scratch-directory.ts';
-import { newProcessTimeout, waitUntil } from './testing/wait-until.ts';
 import { type WorkerProcess, startWorker } from './testing/worker-process.ts';
 
 /**
@@ -32,12 +32,10 @@ function socketPathOf(directory: string) {
 /** A caller process on `directory`, ready for orders. */
 async function caller(t: TestContext, directory: string, name: string) {
   const worker = startWorker(callerSource(directory), name);
-  await waitUntil(
-    t,
-    () => worker.has('ready'),
-    () => worker.stderr,
-    newProcessTimeout,
-  );
+  await t.waitFor(() => assert.ok(worker.has('ready'), worker.stderr), {
+    interval: 5,
+    timeout: newProcessTimeout,
+  });
   return worker;
 }
 
@@ -71,12 +69,13 @@ async function firstOf(
     worker.messages.find(
       (message) => message.call === call && types.includes(message.type),
     );
-  await waitUntil(
-    t,
-    () => find() !== undefined,
+  await t.waitFor(
     () =>
-      `No ${types.join(' or ')} for ${call}; got ${JSON.stringify(worker.messages)} ${worker.stderr}`,
-    newProcessTimeout,
+      assert.ok(
+        find() !== undefined,
+        `No ${types.join(' or ')} for ${call}; got ${JSON.stringify(worker.messages)} ${worker.stderr}`,
+      ),
+    { interval: 5, timeout: newProcessTimeout },
   );
   const message = find();
   assert.ok(message);
@@ -214,10 +213,13 @@ describe('A single flight across processes while a run waits for its key', () =>
       );
       assert.ok(requests, 'The runner never reached the coordinator');
       const fresh = idOfRun(requests, 'sync');
-      await waitUntil(
-        t,
-        () => requests.includes(`{"op":"cancel","id":${fresh}}`),
-        () => `No cancel of ${fresh}: ${JSON.stringify(requests)}`,
+      await t.waitFor(
+        () =>
+          assert.ok(
+            requests.includes(`{"op":"cancel","id":${fresh}}`),
+            `No cancel of ${fresh}: ${JSON.stringify(requests)}`,
+          ),
+        { interval: 5, timeout: 2000 },
       );
       holder.child.send({ type: 'finish', call: 'l', value: 'first' });
       await heard(t, holder, 'value', 'l');

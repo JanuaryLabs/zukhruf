@@ -12,9 +12,9 @@ import { test } from '@zukhruf/testing/node';
 
 import { LeaseLostError, type LockHandle, Mutex } from '../../index.ts';
 import { isRecord } from '../../shared/is-record.ts';
+import { newProcessTimeout } from '../../testing/new-process-timeout.ts';
 import { scratchDirectory } from '../../testing/scratch-directory.ts';
 import { settle } from '../../testing/store-cases.ts';
-import { newProcessTimeout, waitUntil } from '../../testing/wait-until.ts';
 import { watch } from '../../testing/watch.ts';
 import { startWorker } from '../../testing/worker-process.ts';
 import { SocketStore, UnsupportedRequestError } from './index.ts';
@@ -120,22 +120,26 @@ async function connection(
   index: number,
   timeout = 2000,
 ) {
-  await waitUntil(
-    t,
-    () => leader.connections[index]?.hello !== undefined,
-    `The store must open connection ${index + 1} and say hello`,
-    timeout,
+  await t.waitFor(
+    () =>
+      assert.ok(
+        leader.connections[index]?.hello !== undefined,
+        `The store must open connection ${index + 1} and say hello`,
+      ),
+    { interval: 5, timeout: timeout },
   );
   return leader.connections[index]!;
 }
 
 /** The `index`th request on `side`, once it arrived. */
 async function request(t: TestContext, side: LeaderSide, index: number) {
-  await waitUntil(
-    t,
-    () => side.requests.length > index,
+  await t.waitFor(
     () =>
-      `The leader must read request ${index + 1}; it read ${JSON.stringify(side.requests)}`,
+      assert.ok(
+        side.requests.length > index,
+        `The leader must read request ${index + 1}; it read ${JSON.stringify(side.requests)}`,
+      ),
+    { interval: 5, timeout: 2000 },
   );
   return side.requests[index]!;
 }
@@ -168,7 +172,10 @@ describe('A socket store that loses its leader', () => {
       // Act: the connection drops, and the leader behind the next one refuses this store's protocol.
       leader.connections[0]!.drop();
       (await connection(t, leader, 1)).refuse();
-      await waitUntil(t, () => lease.signal.aborted, 'The key must be lost');
+      await t.waitFor(
+        () => assert.ok(lease.signal.aborted, 'The key must be lost'),
+        { interval: 5, timeout: 2000 },
+      );
       await delay(settle);
 
       // Assert: no leader heard the reassert, so another holder may have the
@@ -230,7 +237,10 @@ describe('A socket store that loses its leader', () => {
       // Act: while the task runs, the connection drops and the next leader refuses this store.
       first.drop();
       (await connection(t, leader, 1)).refuse();
-      await waitUntil(t, () => lease.signal.aborted, 'The key must be lost');
+      await t.waitFor(
+        () => assert.ok(lease.signal.aborted, 'The key must be lost'),
+        { interval: 5, timeout: 2000 },
+      );
       finish.resolve();
       await running;
 
@@ -295,10 +305,9 @@ describe('A socket store that loses its leader', () => {
           // Act: the key is lost while the task runs, and then the task fails.
           first.drop();
           (await connection(t, leader, 1)).refuse();
-          await waitUntil(
-            t,
-            () => lease.signal.aborted,
-            'The key must be lost',
+          await t.waitFor(
+            () => assert.ok(lease.signal.aborted, 'The key must be lost'),
+            { interval: 5, timeout: 2000 },
           );
           finish.resolve();
 
@@ -313,10 +322,10 @@ describe('A socket store that loses its leader', () => {
           });
         } finally {
           finish.resolve();
-          await waitUntil(
-            t,
-            () => ended.now.status !== 'pending',
-            'The call must end',
+          await t.waitFor(
+            () =>
+              assert.ok(ended.now.status !== 'pending', 'The call must end'),
+            { interval: 5, timeout: 2000 },
           );
         }
       }),
@@ -360,10 +369,9 @@ describe('A socket store that loses its leader', () => {
         delay(2000, 'never told', { ref: false }),
       ]);
       finish.resolve();
-      await waitUntil(
-        t,
-        () => running.now.status !== 'pending',
-        'The call must end',
+      await t.waitFor(
+        () => assert.ok(running.now.status !== 'pending', 'The call must end'),
+        { interval: 5, timeout: 2000 },
       );
       await delay(settle);
 
@@ -444,10 +452,9 @@ describe('A socket store whose caller gives up or disposes it', () => {
 
     // Act: the leader welcomes the store.
     first.welcome();
-    await waitUntil(
-      t,
-      () => first.closed,
-      'The store must close the connection',
+    await t.waitFor(
+      () => assert.ok(first.closed, 'The store must close the connection'),
+      { interval: 5, timeout: 2000 },
     );
     await delay(settle);
 
@@ -484,15 +491,17 @@ describe('A socket store whose caller gives up or disposes it', () => {
     await store[Symbol.asyncDispose]();
 
     // Assert: the waiter is rejected, the leader sees the connection close, and nothing comes back.
-    await waitUntil(
-      t,
-      () => acquiring.now.status === 'rejected',
-      'A waiting acquire must be rejected when its store is disposed',
+    await t.waitFor(
+      () =>
+        assert.ok(
+          acquiring.now.status === 'rejected',
+          'A waiting acquire must be rejected when its store is disposed',
+        ),
+      { interval: 5, timeout: 2000 },
     );
-    await waitUntil(
-      t,
-      () => first.closed,
-      'The store must close its connection',
+    await t.waitFor(
+      () => assert.ok(first.closed, 'The store must close its connection'),
+      { interval: 5, timeout: 2000 },
     );
     const later = await Promise.race([
       store.acquire('product:42').then(
@@ -814,12 +823,13 @@ describe('A follower process through a reconnect', () => {
         `A follower that waits must keep its process alive through a reconnect.\n${waiter.stderr}`,
       );
       second.answer({ op: 'granted', id: resent.id, token: '1' });
-      await waitUntil(
-        t,
-        () => waiter.exit !== null,
+      await t.waitFor(
         () =>
-          `A follower with nothing left to wait for must exit.\n${waiter.stderr}`,
-        5000,
+          assert.ok(
+            waiter.exit !== null,
+            `A follower with nothing left to wait for must exit.\n${waiter.stderr}`,
+          ),
+        { interval: 5, timeout: 5000 },
       );
       assert.deepEqual(waiter.exit, { code: 0, signal: null }, waiter.stderr);
       assert.ok(waiter.has('granted'));
@@ -855,10 +865,13 @@ describe('A follower process through a reconnect', () => {
         id: (await request(t, first, 0)).id,
         token: '1',
       });
-      await waitUntil(
-        t,
-        () => holder.has('holding'),
-        () => `The follower must hold the key.\n${holder.stderr}`,
+      await t.waitFor(
+        () =>
+          assert.ok(
+            holder.has('holding'),
+            `The follower must hold the key.\n${holder.stderr}`,
+          ),
+        { interval: 5, timeout: 2000 },
       );
 
       // Act: the connection drops, the next leader reads the reassert, and the process has nothing else to do.
@@ -870,12 +883,13 @@ describe('A follower process through a reconnect', () => {
 
       // Assert: holding a key alone does not keep the process alive.
       assert.equal(reassert.op, 'reassert');
-      await waitUntil(
-        t,
-        () => holder.exit !== null,
+      await t.waitFor(
         () =>
-          `A follower that only holds keys must let its process exit.\n${holder.stderr}`,
-        5000,
+          assert.ok(
+            holder.exit !== null,
+            `A follower that only holds keys must let its process exit.\n${holder.stderr}`,
+          ),
+        { interval: 5, timeout: 5000 },
       );
       assert.deepEqual(holder.exit, { code: 0, signal: null }, holder.stderr);
     },

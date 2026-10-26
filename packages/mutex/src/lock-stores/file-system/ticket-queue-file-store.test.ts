@@ -5,15 +5,15 @@ import { readFileSync } from 'node:fs';
 import fsPromises, { readFile, writeFile } from 'node:fs/promises';
 import { syncBuiltinESMExports } from 'node:module';
 import { join } from 'node:path';
-import { describe, mock } from 'node:test';
+import { describe } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
 
 import { test } from '@zukhruf/testing/node';
 
 import type { LockHandle } from '../../mutex/lease.ts';
 import { Mutex } from '../../mutex/mutex.ts';
+import { newProcessTimeout } from '../../testing/new-process-timeout.ts';
 import { scratchDirectory } from '../../testing/scratch-directory.ts';
-import { newProcessTimeout, waitUntil } from '../../testing/wait-until.ts';
 import { startWorker } from '../../testing/worker-process.ts';
 import { TicketQueueFileStore } from './ticket-queue-file-store.ts';
 
@@ -37,7 +37,7 @@ describe('TicketQueueFileStore', () => {
       const renaming = Promise.withResolvers<void>();
       const proceed = Promise.withResolvers<void>();
       const rename = fsPromises.rename;
-      mock.method(fsPromises, 'rename', async (from: string, to: string) => {
+      t.mock.method(fsPromises, 'rename', async (from: string, to: string) => {
         if (to === queue) {
           renaming.resolve();
           await proceed.promise;
@@ -54,10 +54,13 @@ describe('TicketQueueFileStore', () => {
         await renaming.promise;
         // A waiter appends its ticket to the file that the rename is about to replace.
         waiter = store.acquire('product:42');
-        await waitUntil(
-          t,
-          () => ticketsIn(queue) === 2,
-          'The waiter must append its ticket',
+        await t.waitFor(
+          () =>
+            assert.ok(
+              ticketsIn(queue) === 2,
+              'The waiter must append its ticket',
+            ),
+          { interval: 5, timeout: 2000 },
         );
         // The rename replaces the queue with a copy that has no ticket for the waiter.
         proceed.resolve();
@@ -72,7 +75,7 @@ describe('TicketQueueFileStore', () => {
         );
       } finally {
         proceed.resolve();
-        mock.restoreAll();
+        t.mock.restoreAll();
         syncBuiltinESMExports();
         const lease = await Promise.race([waiter, deadline]);
         if (typeof lease === 'object') await lease[Symbol.asyncDispose]();
@@ -97,19 +100,23 @@ describe('TicketQueueFileStore holder check', () => {
 				process.send({ type: 'entered' });
 			`;
       await using holder = startWorker(caller(10), 'holder');
-      await waitUntil(
-        t,
-        () => holder.has('entered'),
-        () => `The holder must enter.\n${holder.stderr}`,
-        newProcessTimeout,
+      await t.waitFor(
+        () =>
+          assert.ok(
+            holder.has('entered'),
+            `The holder must enter.\n${holder.stderr}`,
+          ),
+        { interval: 5, timeout: newProcessTimeout },
       );
       await using waiter = startWorker(caller(60_000), 'waiter');
       // No operation says that a waiter is in line, so the wait reads the queue.
-      await waitUntil(
-        t,
-        () => ticketsIn(queue) === 2,
-        () => `The waiter must join the line.\n${waiter.stderr}`,
-        newProcessTimeout,
+      await t.waitFor(
+        () =>
+          assert.ok(
+            ticketsIn(queue) === 2,
+            `The waiter must join the line.\n${waiter.stderr}`,
+          ),
+        { interval: 5, timeout: newProcessTimeout },
       );
       const mutex = new Mutex(new TicketQueueFileStore(directory.path));
 

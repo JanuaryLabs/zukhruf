@@ -5,7 +5,6 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { CounterTokenSource, type TokenSource } from '@zukhruf/fencing';
 
 import { settle } from '../../testing/store-cases.ts';
-import { waitUntil } from '../../testing/wait-until.ts';
 import { watch } from '../../testing/watch.ts';
 import { MemoryStore } from './memory-store.ts';
 
@@ -74,10 +73,13 @@ describe('MemoryStore', () => {
       'pending',
       'The last waiter must wait for the first waiter',
     );
-    await waitUntil(
-      t,
-      () => last.now.status === 'fulfilled',
-      'The last waiter must get the key once the first releases',
+    await t.waitFor(
+      () =>
+        assert.ok(
+          last.now.status === 'fulfilled',
+          'The last waiter must get the key once the first releases',
+        ),
+      { interval: 5, timeout: 2000 },
     );
   });
 

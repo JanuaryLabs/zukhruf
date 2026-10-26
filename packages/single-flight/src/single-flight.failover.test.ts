@@ -17,8 +17,8 @@ import {
   callerSource,
   journalOf,
 } from './testing/caller.ts';
+import { newProcessTimeout } from './testing/new-process-timeout.ts';
 import { scratchDirectory } from './testing/scratch-directory.ts';
-import { newProcessTimeout, waitUntil } from './testing/wait-until.ts';
 import { type WorkerProcess, startWorker } from './testing/worker-process.ts';
 
 const onUnix = {
@@ -36,12 +36,10 @@ async function caller(
   options?: CallerOptions,
 ) {
   const worker = startWorker(callerSource(directory, options), name);
-  await waitUntil(
-    t,
-    () => worker.has('ready'),
-    () => worker.stderr,
-    newProcessTimeout,
-  );
+  await t.waitFor(() => assert.ok(worker.has('ready'), worker.stderr), {
+    interval: 5,
+    timeout: newProcessTimeout,
+  });
   return worker;
 }
 
@@ -70,12 +68,13 @@ async function heard(
     worker.messages.find(
       (message) => message.type === type && message.call === call,
     );
-  await waitUntil(
-    t,
-    () => find() !== undefined,
+  await t.waitFor(
     () =>
-      `No ${type} for ${call}; got ${JSON.stringify(worker.messages)} ${worker.stderr}`,
-    timeout,
+      assert.ok(
+        find() !== undefined,
+        `No ${type} for ${call}; got ${JSON.stringify(worker.messages)} ${worker.stderr}`,
+      ),
+    { interval: 5, timeout: timeout },
   );
   const message = find();
   assert.ok(message);
@@ -104,12 +103,13 @@ async function firstOf(
     worker.messages.find(
       (message) => message.call === call && types.includes(message.type),
     );
-  await waitUntil(
-    t,
-    () => find() !== undefined,
+  await t.waitFor(
     () =>
-      `No ${types.join(' or ')} for ${call}; got ${JSON.stringify(worker.messages)} ${worker.stderr}`,
-    newProcessTimeout,
+      assert.ok(
+        find() !== undefined,
+        `No ${types.join(' or ')} for ${call}; got ${JSON.stringify(worker.messages)} ${worker.stderr}`,
+      ),
+    { interval: 5, timeout: newProcessTimeout },
   );
   const message = find();
   assert.ok(message);
@@ -216,12 +216,10 @@ describe('A single flight across processes when a leader stops', () => {
       // once the probe's run of another key, sent after the fresh run, has its
       // answer, the fresh run had its chance to lead.
       leader.child.send({ type: 'dispose' });
-      await waitUntil(
-        t,
-        () => leader.has('disposed'),
-        () => leader.stderr,
-        newProcessTimeout,
-      );
+      await t.waitFor(() => assert.ok(leader.has('disposed'), leader.stderr), {
+        interval: 5,
+        timeout: newProcessTimeout,
+      });
       run(probe, 'fresh', 'sync');
       await heard(t, probe, 'called', 'fresh');
       run(probe, 'other', 'other');
@@ -476,11 +474,9 @@ describe('A single flight across processes when the coordinator disposes', () =>
 
       // Act: the coordinator disposes, and the leader lands at the next coordinator.
       coordinator.child.send({ type: 'dispose' });
-      await waitUntil(
-        t,
-        () => coordinator.has('disposed'),
-        () => coordinator.stderr,
-        newProcessTimeout,
+      await t.waitFor(
+        () => assert.ok(coordinator.has('disposed'), coordinator.stderr),
+        { interval: 5, timeout: newProcessTimeout },
       );
       await newTerm(t, directory.path, '2');
       leader.child.send({ type: 'finish', call: 'l', value: { files: 42 } });
@@ -1030,11 +1026,9 @@ describe('A single flight across processes when a leader is frozen past a failov
       let ledBesideLeader: boolean;
       try {
         coordinator.child.send({ type: 'dispose' });
-        await waitUntil(
-          t,
-          () => coordinator.has('disposed'),
-          () => coordinator.stderr,
-          newProcessTimeout,
+        await t.waitFor(
+          () => assert.ok(coordinator.has('disposed'), coordinator.stderr),
+          { interval: 5, timeout: newProcessTimeout },
         );
         await newTerm(t, directory.path, '2');
         run(probe, 'fresh', 'sync');

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { once } from 'node:events';
 import { type Socket, connect, createServer } from 'node:net';
-import { test } from 'node:test';
+import { type TestContext, test } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
 
 import { Connection, Request, TYPES } from 'tedious';
@@ -112,16 +112,18 @@ async function observe(database: Database, text: string) {
 }
 
 /** Resolves when a session of the database waits for an application lock. */
-async function untilASessionWaitsForALock(database: Database) {
-  for (;;) {
-    const rows = await observe(
-      database,
-      `SELECT count(*) AS waiting FROM sys.dm_tran_locks
-       WHERE resource_type = N'APPLICATION' AND resource_database_id = DB_ID() AND request_status = N'WAIT'`,
-    );
-    if (Number(rows[0]?.waiting) > 0) return;
-    await delay(10);
-  }
+async function untilASessionWaitsForALock(t: TestContext, database: Database) {
+  await t.waitFor(
+    async () => {
+      const rows = await observe(
+        database,
+        `SELECT count(*) AS waiting FROM sys.dm_tran_locks
+         WHERE resource_type = N'APPLICATION' AND resource_database_id = DB_ID() AND request_status = N'WAIT'`,
+      );
+      assert.ok(Number(rows[0]?.waiting) > 0, 'No session waits for a lock.');
+    },
+    { interval: 10, timeout: 10_000 },
+  );
 }
 
 /**
@@ -191,12 +193,12 @@ test(
 test(
   'a waiter in another store gets the key after the holder releases',
   { timeout: 60_000 },
-  async () => {
+  async (t) => {
     // Arrange
     await using database = await sqlServerDatabase();
     const holder = await storeOver(database).acquire('report:daily');
     const waiting = storeOver(database).acquire('report:daily');
-    await untilASessionWaitsForALock(database);
+    await untilASessionWaitsForALock(t, database);
 
     // Act
     await holder[Symbol.asyncDispose]();
@@ -271,7 +273,7 @@ test(
 test(
   'a cancelled acquire rejects with the reason of its signal',
   { timeout: 60_000 },
-  async () => {
+  async (t) => {
     // Arrange
     await using database = await sqlServerDatabase();
     await using _ = await storeOver(database).acquire('report:daily');
@@ -280,7 +282,7 @@ test(
     const waiting = storeOver(database).acquire('report:daily', {
       signal: cancel.signal,
     });
-    await untilASessionWaitsForALock(database);
+    await untilASessionWaitsForALock(t, database);
 
     // Act
     cancel.abort(reason);
@@ -334,7 +336,7 @@ test(
 test(
   'a cancelled waiter that the server grants later gives the key to the next waiter',
   { timeout: 60_000 },
-  async () => {
+  async (t) => {
     // Arrange: a holder, and a waiter in another store that cancels.
     await using database = await sqlServerDatabase();
     const holder = await storeOver(database).acquire('report:daily');
@@ -342,7 +344,7 @@ test(
     const waiting = storeOver(database).acquire('report:daily', {
       signal: cancel.signal,
     });
-    await untilASessionWaitsForALock(database);
+    await untilASessionWaitsForALock(t, database);
     cancel.abort(new Error('cancelled'));
     await assert.rejects(waiting);
 

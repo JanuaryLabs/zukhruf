@@ -9,7 +9,6 @@ import type { FileLock } from '@zukhruf/fs';
 import { LeaseLostError } from '@zukhruf/lease';
 
 import { scratchDirectory } from '../../testing/scratch-directory.ts';
-import { waitUntil } from '../../testing/wait-until.ts';
 import { LockServer } from './lock-server.ts';
 import { type SocketRole, SocketStore } from './socket-store.ts';
 
@@ -120,10 +119,13 @@ describe('Lock server', () => {
         loss.abort();
 
         // Assert: the server dropped its follower, which then won the next term.
-        await waitUntil(
-          t,
-          () => roles.includes('leader'),
-          'The follower must lead once the server of the lost term closes',
+        await t.waitFor(
+          () =>
+            assert.ok(
+              roles.includes('leader'),
+              'The follower must lead once the server of the lost term closes',
+            ),
+          { interval: 5, timeout: 2000 },
         );
         assert.deepEqual(roles, ['follower', 'leader']);
         const lease = await store.acquire('product:42');

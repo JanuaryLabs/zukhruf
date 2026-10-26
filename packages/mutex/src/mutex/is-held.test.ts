@@ -8,6 +8,7 @@ import { Worker } from 'node:worker_threads';
 import { describe } from '@zukhruf/testing/node';
 
 import { isRecord } from '../shared/is-record.ts';
+import { newProcessTimeout } from '../testing/new-process-timeout.ts';
 import { scratchDirectory } from '../testing/scratch-directory.ts';
 import {
   type StoreHost,
@@ -15,7 +16,6 @@ import {
   storeCases,
   timeoutForGrants,
 } from '../testing/store-cases.ts';
-import { newProcessTimeout, waitUntil } from '../testing/wait-until.ts';
 import { startWorker } from '../testing/worker-process.ts';
 import { Modes } from './acquire-modes/modes.ts';
 import { Mutex } from './mutex.ts';
@@ -207,11 +207,13 @@ void describe.each(
             shared,
           );
           try {
-            await waitUntil(
-              t,
-              () => Atomics.load(shared, 1) > 0,
-              'The worker thread must start looking',
-              newProcessTimeout,
+            await t.waitFor(
+              () =>
+                assert.ok(
+                  Atomics.load(shared, 1) > 0,
+                  'The worker thread must start looking',
+                ),
+              { interval: 5, timeout: newProcessTimeout },
             );
 
             // Act: the key is free each time; the attempts go on until 200 looks ran among them.
@@ -276,11 +278,13 @@ void describe.each(
             'holder',
             { host },
           );
-          await waitUntil(
-            t,
-            () => holder.has('entered'),
-            () => `The holder process must enter its task.\n${holder.stderr}`,
-            newProcessTimeout,
+          await t.waitFor(
+            () =>
+              assert.ok(
+                holder.has('entered'),
+                `The holder process must enter its task.\n${holder.stderr}`,
+              ),
+            { interval: 5, timeout: newProcessTimeout },
           );
           const mutex = new Mutex(host.store);
 
@@ -315,11 +319,13 @@ void describe.each(
             'holder',
             { host },
           );
-          await waitUntil(
-            t,
-            () => holder.has('entered'),
-            () => `The holder process must enter its task.\n${holder.stderr}`,
-            newProcessTimeout,
+          await t.waitFor(
+            () =>
+              assert.ok(
+                holder.has('entered'),
+                `The holder process must enter its task.\n${holder.stderr}`,
+              ),
+            { interval: 5, timeout: newProcessTimeout },
           );
           holder.child.kill('SIGKILL');
           await holder.closed;
@@ -356,11 +362,13 @@ void describe.each(
             'holder',
             { host },
           );
-          await waitUntil(
-            t,
-            () => holder.has('entered'),
-            () => `The holder process must enter its task.\n${holder.stderr}`,
-            newProcessTimeout,
+          await t.waitFor(
+            () =>
+              assert.ok(
+                holder.has('entered'),
+                `The holder process must enter its task.\n${holder.stderr}`,
+              ),
+            { interval: 5, timeout: newProcessTimeout },
           );
           holder.child.kill('SIGKILL');
           await holder.closed;
@@ -403,11 +411,13 @@ void describe.each(
               'looker',
               { host },
             );
-            await waitUntil(
-              t,
-              () => looker.has('looked'),
-              () => `The child must report its look.\n${looker.stderr}`,
-              newProcessTimeout,
+            await t.waitFor(
+              () =>
+                assert.ok(
+                  looker.has('looked'),
+                  `The child must report its look.\n${looker.stderr}`,
+                ),
+              { interval: 5, timeout: newProcessTimeout },
             );
 
             // Assert

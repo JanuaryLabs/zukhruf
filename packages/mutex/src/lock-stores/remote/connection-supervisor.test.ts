@@ -8,7 +8,6 @@ import {
   scriptedPeer,
 } from '../../testing/scripted-peer.ts';
 import { settle } from '../../testing/store-cases.ts';
-import { waitUntil } from '../../testing/wait-until.ts';
 import { watch } from '../../testing/watch.ts';
 import { ConnectionSupervisor } from './connection-supervisor.ts';
 
@@ -63,10 +62,13 @@ describe('Connection supervisor', () => {
       'pending',
       'Close must wait for the connect it aborted',
     );
-    await waitUntil(
-      t,
-      () => closing.now.status === 'fulfilled',
-      'Close must finish once the connect settles',
+    await t.waitFor(
+      () =>
+        assert.ok(
+          closing.now.status === 'fulfilled',
+          'Close must finish once the connect settles',
+        ),
+      { interval: 5, timeout: 2000 },
     );
   });
 
@@ -86,10 +88,9 @@ describe('Connection supervisor', () => {
       supervisor.open();
 
       // Assert
-      await waitUntil(
-        t,
-        () => events.length > 0,
-        'The failure must be reported',
+      await t.waitFor(
+        () => assert.ok(events.length > 0, 'The failure must be reported'),
+        { interval: 5, timeout: 2000 },
       );
       assert.deepEqual(events, ['Error: EACCES']);
     } finally {
@@ -106,10 +107,13 @@ describe('Connection supervisor', () => {
     });
     supervisor.open();
     calls[0]!.resolve(peer.connection);
-    await waitUntil(
-      t,
-      () => events.includes('connected'),
-      'The connection must be reported',
+    await t.waitFor(
+      () =>
+        assert.ok(
+          events.includes('connected'),
+          'The connection must be reported',
+        ),
+      { interval: 5, timeout: 2000 },
     );
 
     try {
@@ -135,17 +139,23 @@ describe('Connection supervisor', () => {
     const second = scriptedPeer<Message, Message>();
     supervisor.open();
     calls[0]!.resolve(first.connection);
-    await waitUntil(
-      t,
-      () => events.includes('connected'),
-      'The connection must be reported',
+    await t.waitFor(
+      () =>
+        assert.ok(
+          events.includes('connected'),
+          'The connection must be reported',
+        ),
+      { interval: 5, timeout: 2000 },
     );
     first.drop();
     calls[1]!.resolve(second.connection);
-    await waitUntil(
-      t,
-      () => events.filter((event) => event === 'connected').length === 2,
-      'The replacement must be reported',
+    await t.waitFor(
+      () =>
+        assert.ok(
+          events.filter((event) => event === 'connected').length === 2,
+          'The replacement must be reported',
+        ),
+      { interval: 5, timeout: 2000 },
     );
 
     try {
@@ -178,10 +188,13 @@ describe('Connection supervisor', () => {
       // Act
       const whileConnecting = supervisor.send({ n: 1 });
       calls[0]!.resolve(peer.connection);
-      await waitUntil(
-        t,
-        () => events.includes('connected'),
-        'The connection must be reported',
+      await t.waitFor(
+        () =>
+          assert.ok(
+            events.includes('connected'),
+            'The connection must be reported',
+          ),
+        { interval: 5, timeout: 2000 },
       );
       const whileDropping = supervisor.send({ n: 2 });
 
@@ -227,10 +240,9 @@ describe('Connection supervisor', () => {
       // Assert
       assert.deepEqual(duringLoss, { status: 'connecting', sent: false });
       assert.deepEqual(first.sent, []);
-      await waitUntil(
-        t,
-        () => calls.length === 2,
-        'The supervisor must reconnect',
+      await t.waitFor(
+        () => assert.ok(calls.length === 2, 'The supervisor must reconnect'),
+        { interval: 5, timeout: 2000 },
       );
     } finally {
       await supervisor.close();

@@ -15,7 +15,6 @@ import {
   storeCases,
   timeoutForGrants,
 } from '../testing/store-cases.ts';
-import { waitUntil } from '../testing/wait-until.ts';
 import { startWorker } from '../testing/worker-process.ts';
 import type { AcquireMode } from './acquire-mode.ts';
 import { Modes } from './acquire-modes/modes.ts';
@@ -730,11 +729,13 @@ void describe.each(
           );
 
           // Act
-          await waitUntil(
-            t,
-            () => child.has('results'),
-            () => `The child must report.\n${child.stderr}`,
-            5000,
+          await t.waitFor(
+            () =>
+              assert.ok(
+                child.has('results'),
+                `The child must report.\n${child.stderr}`,
+              ),
+            { interval: 5, timeout: 5000 },
           );
           await holder.release();
 

@@ -11,7 +11,6 @@ import { test } from '@zukhruf/testing/node';
 import { Mutex } from '../../mutex/mutex.ts';
 import { isRecord } from '../../shared/is-record.ts';
 import { scratchDirectory } from '../../testing/scratch-directory.ts';
-import { waitUntil } from '../../testing/wait-until.ts';
 import { startWorker } from '../../testing/worker-process.ts';
 import { isLockRequest, isRequestEnvelope } from '../remote/protocol.ts';
 import { PROTOCOL_VERSION } from './handshake.ts';
@@ -321,10 +320,13 @@ describe('Socket store protocol handshake', () => {
           assert.equal(followed, 'granted');
           // The end of the term still closes the connection, so the process was connected all along.
           await leader[Symbol.asyncDispose]();
-          await waitUntil(
-            t,
-            () => old.closes === 1,
-            'The end of the term must close the connection',
+          await t.waitFor(
+            () =>
+              assert.ok(
+                old.closes === 1,
+                'The end of the term must close the connection',
+              ),
+            { interval: 5, timeout: 2000 },
           );
         },
       ),
@@ -360,10 +362,13 @@ describe('Socket store protocol handshake', () => {
         );
 
         // Assert: the leader sees the close, so the connection does not stay open until the term ends.
-        await waitUntil(
-          t,
-          () => leaderClosed,
-          'The leader must close its side once the process closes its side',
+        await t.waitFor(
+          () =>
+            assert.ok(
+              leaderClosed,
+              'The leader must close its side once the process closes its side',
+            ),
+          { interval: 5, timeout: 2000 },
         );
         assert.deepEqual(answers, []);
       } finally {
@@ -392,19 +397,20 @@ describe('Socket store protocol handshake', () => {
         'leader',
         { nodeOptions: ['--expose-gc'] },
       );
-      await waitUntil(
-        t,
-        () => leader.has('ready'),
-        () => leader.stderr,
-        10_000,
-      );
+      await t.waitFor(() => assert.ok(leader.has('ready'), leader.stderr), {
+        interval: 5,
+        timeout: 10_000,
+      });
       const memory = async () => {
         const told = leader.messages.length;
         leader.child.send('measure');
-        await waitUntil(
-          t,
-          () => leader.messages.length > told,
-          'The leader must tell its memory',
+        await t.waitFor(
+          () =>
+            assert.ok(
+              leader.messages.length > told,
+              'The leader must tell its memory',
+            ),
+          { interval: 5, timeout: 2000 },
         );
         return Number(leader.messages.at(-1)?.bytes);
       };
@@ -579,10 +585,9 @@ describe('Socket store protocol handshake', () => {
         );
 
         // Assert: the leader welcomes the peer and still sees the request behind the hello.
-        await waitUntil(
-          t,
-          () => answers.length >= 2,
-          `Got ${answers.join(' | ')}`,
+        await t.waitFor(
+          () => assert.ok(answers.length >= 2, `Got ${answers.join(' | ')}`),
+          { interval: 5, timeout: 2000 },
         );
         assert.deepEqual(
           answers.map((line) => JSON.parse(line).op),
@@ -609,17 +614,19 @@ describe('Socket store protocol handshake', () => {
       });
       const store = new SocketStore(directory.path, { pollInterval: 10 });
       const acquiring = outcome(store.acquire('product:42'));
-      await waitUntil(t, () => greeted, 'The store must say hello');
+      await t.waitFor(() => assert.ok(greeted, 'The store must say hello'), {
+        interval: 5,
+        timeout: 2000,
+      });
 
       // Act
       await store[Symbol.asyncDispose]();
 
       // Assert: closing does not wait for an answer that never comes, and the connection is closed.
       assert.ok((await acquiring) instanceof Error);
-      await waitUntil(
-        t,
-        () => peerClosed,
-        'The store must close the connection',
+      await t.waitFor(
+        () => assert.ok(peerClosed, 'The store must close the connection'),
+        { interval: 5, timeout: 2000 },
       );
     },
   );
@@ -653,10 +660,13 @@ describe('Socket store protocol handshake', () => {
 
       try {
         // Assert
-        await waitUntil(
-          t,
-          () => released,
-          'The leader must close its side of a peer it refused',
+        await t.waitFor(
+          () =>
+            assert.ok(
+              released,
+              'The leader must close its side of a peer it refused',
+            ),
+          { interval: 5, timeout: 2000 },
         );
       } finally {
         clearInterval(writing);

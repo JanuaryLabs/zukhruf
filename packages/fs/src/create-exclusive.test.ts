@@ -10,15 +10,15 @@ import fsPromises, {
 import { syncBuiltinESMExports } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { describe, mock, test } from 'node:test';
+import { type TestContext, describe, test } from 'node:test';
 
 import { createExclusive } from './create-exclusive.ts';
 
 /** Records each `link` with the content its source holds at that moment; every link still reaches the disk. */
-function recordLinks() {
+function recordLinks(t: TestContext) {
   const links: { from: string; to: string; content: string }[] = [];
   const link = fsPromises.link;
-  mock.method(fsPromises, 'link', async (from: string, to: string) => {
+  t.mock.method(fsPromises, 'link', async (from: string, to: string) => {
     links.push({ from, to, content: await readFile(from, 'utf8') });
     return link(from, to);
   });
@@ -26,15 +26,15 @@ function recordLinks() {
   return {
     links,
     [Symbol.dispose]() {
-      mock.restoreAll();
+      t.mock.restoreAll();
       syncBuiltinESMExports();
     },
   };
 }
 
 /** Makes every `link` fail with `code`, as a full or broken disk would. */
-function failLink(code: string) {
-  mock.method(fsPromises, 'link', async () => {
+function failLink(t: TestContext, code: string) {
+  t.mock.method(fsPromises, 'link', async () => {
     throw Object.assign(new Error(`${code}: link failed`), {
       code,
       syscall: 'link',
@@ -43,20 +43,20 @@ function failLink(code: string) {
   syncBuiltinESMExports();
   return {
     [Symbol.dispose]() {
-      mock.restoreAll();
+      t.mock.restoreAll();
       syncBuiltinESMExports();
     },
   };
 }
 
 /** Makes every `writeFile` put half of its content on the disk and then fail with `code`, as a disk that fills up halfway would. */
-function failWriteHalfway(code: string) {
+function failWriteHalfway(t: TestContext, code: string) {
   const failure = Object.assign(new Error(`${code}: write failed`), {
     code,
     syscall: 'write',
   });
   const write = fsPromises.writeFile;
-  mock.method(
+  t.mock.method(
     fsPromises,
     'writeFile',
     async (path: string, content: string) => {
@@ -68,7 +68,7 @@ function failWriteHalfway(code: string) {
   return {
     failure,
     [Symbol.dispose]() {
-      mock.restoreAll();
+      t.mock.restoreAll();
       syncBuiltinESMExports();
     },
   };
@@ -79,14 +79,14 @@ describe('createExclusive', () => {
     test(
       `a write of the draft that fails halfway rejects with that error, leaves no draft and ${before === undefined ? 'creates no file' : 'keeps the file that is there'}`,
       { timeout: 2_000 },
-      async () => {
+      async (t) => {
         // Arrange
         await using directory = await mkdtempDisposable(
           join(tmpdir(), 'zukhruf-fs-'),
         );
         const path = join(directory.path, 'job.lock');
         if (before !== undefined) await writeFile(path, before);
-        using disk = failWriteHalfway('ENOSPC');
+        using disk = failWriteHalfway(t, 'ENOSPC');
 
         // Act
         const creating = createExclusive(path, 'pid 4242\n'.repeat(1_000));
@@ -108,14 +108,14 @@ describe('createExclusive', () => {
   test(
     'a write of the draft that fails halfway rejects with that error, also when the draft cannot be removed',
     { timeout: 2_000 },
-    async () => {
+    async (t) => {
       // Arrange: a broken disk refuses the removal of the draft too.
       await using directory = await mkdtempDisposable(
         join(tmpdir(), 'zukhruf-fs-'),
       );
       const path = join(directory.path, 'job.lock');
-      using disk = failWriteHalfway('EIO');
-      mock.method(fsPromises, 'unlink', async () => {
+      using disk = failWriteHalfway(t, 'EIO');
+      t.mock.method(fsPromises, 'unlink', async () => {
         throw Object.assign(new Error('EIO: unlink failed'), {
           code: 'EIO',
           syscall: 'unlink',
@@ -134,13 +134,13 @@ describe('createExclusive', () => {
   test(
     'a link that fails for a reason other than an existing file rejects with that error and leaves no draft',
     { timeout: 2_000 },
-    async () => {
+    async (t) => {
       // Arrange
       await using directory = await mkdtempDisposable(
         join(tmpdir(), 'zukhruf-fs-'),
       );
       const path = join(directory.path, 'job.lock');
-      using _failing = failLink('EIO');
+      using _failing = failLink(t, 'EIO');
 
       // Act
       const creating = createExclusive(path, 'pid 4242');
@@ -246,14 +246,14 @@ describe('createExclusive', () => {
   test(
     'the file appears by a link of a draft that already holds all of the content, so a reader never sees it empty',
     { timeout: 2_000 },
-    async () => {
+    async (t) => {
       // Arrange
       await using directory = await mkdtempDisposable(
         join(tmpdir(), 'zukhruf-fs-'),
       );
       const path = join(directory.path, 'job.lock');
       const content = 'pid 4242\n'.repeat(1_000);
-      using disk = recordLinks();
+      using disk = recordLinks(t);
 
       // Act
       await createExclusive(path, content);

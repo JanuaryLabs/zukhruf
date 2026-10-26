@@ -105,14 +105,6 @@ class EchoWorker implements Worker {
   }
 }
 
-async function eventually(check: () => boolean): Promise<void> {
-  const deadline = Date.now() + 5_000;
-  while (!check()) {
-    if (Date.now() > deadline) throw new Error('Condition never held');
-    await setTimeout(10);
-  }
-}
-
 test('an on-demand pool starts no worker until a job needs one, then reuses it', async () => {
   const created: EchoWorker[] = [];
   await using pool = new Pool({
@@ -143,7 +135,7 @@ test('an on-demand pool starts no worker until a job needs one, then reuses it',
   assert.equal(created.length, 2);
 });
 
-test('a parallel pool starts every worker at once', async () => {
+test('a parallel pool starts every worker at once', async (t) => {
   const created: EchoWorker[] = [];
   await using pool = new Pool({
     size: new Fixed(3),
@@ -155,12 +147,15 @@ test('a parallel pool starts every worker at once', async () => {
     },
   });
   // Nothing is ready yet, so only a parallel start reaches three workers.
-  await eventually(() => created.length === 3);
+  await t.waitFor(() => assert.equal(created.length, 3), {
+    interval: 10,
+    timeout: 5000,
+  });
   for (const worker of created) worker.release();
   await pool.ready();
 });
 
-test('an ordered-ready pool starts each worker after the previous one is ready', async () => {
+test('an ordered-ready pool starts each worker after the previous one is ready', async (t) => {
   const created: EchoWorker[] = [];
   await using pool = new Pool({
     size: new Fixed(3),
@@ -171,17 +166,26 @@ test('an ordered-ready pool starts each worker after the previous one is ready',
       return worker;
     },
   });
-  await eventually(() => created.length === 1);
+  await t.waitFor(() => assert.equal(created.length, 1), {
+    interval: 10,
+    timeout: 5000,
+  });
   await setTimeout(200);
   assert.equal(created.length, 1);
 
   created[0]!.release();
-  await eventually(() => created.length === 2);
+  await t.waitFor(() => assert.equal(created.length, 2), {
+    interval: 10,
+    timeout: 5000,
+  });
   await setTimeout(200);
   assert.equal(created.length, 2);
 
   created[1]!.release();
-  await eventually(() => created.length === 3);
+  await t.waitFor(() => assert.equal(created.length, 3), {
+    interval: 10,
+    timeout: 5000,
+  });
   created[2]!.release();
   await pool.ready();
 });
@@ -325,7 +329,7 @@ test('a worker that fails to start fails the job waiting for it, and the next jo
   assert.equal(created.length, 2);
 });
 
-test('disposing a pool stops every worker, rejects waiting and later jobs, and starts no replacement', async () => {
+test('disposing a pool stops every worker, rejects waiting and later jobs, and starts no replacement', async (t) => {
   const created: EchoWorker[] = [];
   const pool = new Pool({
     size: new Fixed(2),
@@ -336,7 +340,10 @@ test('disposing a pool stops every worker, rejects waiting and later jobs, and s
       return worker;
     },
   });
-  await eventually(() => created.length === 1);
+  await t.waitFor(() => assert.equal(created.length, 1), {
+    interval: 10,
+    timeout: 5000,
+  });
   const ready = assert.rejects(pool.ready());
   const jobs = Promise.allSettled(
     Array.from({ length: 3 }, () => pool.use((worker) => worker.echo('x'))),
@@ -567,7 +574,7 @@ test('a job that started before the pool resized does not count toward the new s
   assert.equal(afterResize!.measurable, true);
 });
 
-test('an eager pool replaces an idle worker that exits on its own, before any job needs it', async () => {
+test('an eager pool replaces an idle worker that exits on its own, before any job needs it', async (t) => {
   const created: EchoWorker[] = [];
   await using pool = new Pool({
     size: new Fixed(2),
@@ -582,7 +589,10 @@ test('an eager pool replaces an idle worker that exits on its own, before any jo
   await pool.ready();
 
   process.kill(created[0]!.pid, 'SIGKILL');
-  await eventually(() => created.length === 3);
+  await t.waitFor(() => assert.equal(created.length, 3), {
+    interval: 10,
+    timeout: 5000,
+  });
   await created[2]!.ready();
 
   assert.deepEqual(

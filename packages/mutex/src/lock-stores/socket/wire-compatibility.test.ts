@@ -11,8 +11,8 @@ import { describe } from 'node:test';
 import { test } from '@zukhruf/testing/node';
 
 import { Mutex } from '../../index.ts';
+import { newProcessTimeout } from '../../testing/new-process-timeout.ts';
 import { scratchDirectory } from '../../testing/scratch-directory.ts';
-import { newProcessTimeout, waitUntil } from '../../testing/wait-until.ts';
 import { startWorker } from '../../testing/worker-process.ts';
 import {
   ProtocolVersionError,
@@ -284,10 +284,13 @@ describe('What a socket store shares with other versions in its directory', () =
             }),
           );
           // A release has no answer, so the store sends it without waiting.
-          await waitUntil(
-            t,
-            () => requests.some(({ op }) => op === 'release'),
-            () => `Requests: ${JSON.stringify(requests)}`,
+          await t.waitFor(
+            () =>
+              assert.ok(
+                requests.some(({ op }) => op === 'release'),
+                `Requests: ${JSON.stringify(requests)}`,
+              ),
+            { interval: 5, timeout: 2000 },
           );
 
           // Assert
@@ -322,10 +325,13 @@ describe('What a socket store shares with other versions in its directory', () =
       );
 
       // Assert
-      await waitUntil(
-        t,
-        () => follower.received.includes('\n'),
-        () => `Got ${JSON.stringify(follower.received)}`,
+      await t.waitFor(
+        () =>
+          assert.ok(
+            follower.received.includes('\n'),
+            `Got ${JSON.stringify(follower.received)}`,
+          ),
+        { interval: 5, timeout: 2000 },
       );
       assert.equal(follower.received, '{"op":"welcome","ops":["isHeld"]}\n');
     },
@@ -346,10 +352,13 @@ describe('What a socket store shares with other versions in its directory', () =
       );
 
       // Assert
-      await waitUntil(
-        t,
-        () => other.closed,
-        () => `The leader must hang up; got ${JSON.stringify(other.received)}`,
+      await t.waitFor(
+        () =>
+          assert.ok(
+            other.closed,
+            `The leader must hang up; got ${JSON.stringify(other.received)}`,
+          ),
+        { interval: 5, timeout: 2000 },
       );
       assert.equal(other.received, '{"op":"refused","version":1}\n');
     },
@@ -370,18 +379,24 @@ describe('What a socket store shares with other versions in its directory', () =
         directory.path,
         '{"op":"hello","version":1}\n{"op":"acquire","id":"a","key":"product:42"}\n',
       );
-      await waitUntil(
-        t,
-        () => lines(follower.received) === 2,
-        () => `Got ${JSON.stringify(follower.received)}`,
+      await t.waitFor(
+        () =>
+          assert.ok(
+            lines(follower.received) === 2,
+            `Got ${JSON.stringify(follower.received)}`,
+          ),
+        { interval: 5, timeout: 2000 },
       );
       follower.socket.write(
         '{"op":"release","id":"a"}\n{"op":"acquire","id":"b","key":"product:42"}\n',
       );
-      await waitUntil(
-        t,
-        () => lines(follower.received) === 3,
-        () => `Got ${JSON.stringify(follower.received)}`,
+      await t.waitFor(
+        () =>
+          assert.ok(
+            lines(follower.received) === 3,
+            `Got ${JSON.stringify(follower.received)}`,
+          ),
+        { interval: 5, timeout: 2000 },
       );
 
       // Assert
@@ -437,17 +452,23 @@ describe('What a socket store shares with other versions in its directory', () =
       // hang-up and arrive before the close.
       using tooLong = await publishedPeer(directory.path, `${helloOf(1025)}\n`);
       using longest = await publishedPeer(directory.path, `${helloOf(1024)}\n`);
-      await waitUntil(
-        t,
-        () => longest.received.includes('\n'),
-        () => `Got ${JSON.stringify(longest.received)}`,
+      await t.waitFor(
+        () =>
+          assert.ok(
+            longest.received.includes('\n'),
+            `Got ${JSON.stringify(longest.received)}`,
+          ),
+        { interval: 5, timeout: 2000 },
       );
       // A leader that gives no answer still hangs up after the process does.
       tooLong.socket.end();
-      await waitUntil(
-        t,
-        () => tooLong.closed,
-        'The leader must hang up after the process does',
+      await t.waitFor(
+        () =>
+          assert.ok(
+            tooLong.closed,
+            'The leader must hang up after the process does',
+          ),
+        { interval: 5, timeout: 2000 },
       );
 
       // Assert
@@ -547,14 +568,15 @@ describe('What a socket store shares with other versions on Windows', () => {
         'windows-follower',
         { nodeOptions: asOnWindows },
       );
-      await waitUntil(
-        t,
+      await t.waitFor(
         () =>
-          follower.has('hello') ||
-          follower.has('role') ||
-          follower.exit !== null,
-        () => `No hello on ${pipe}. ${follower.stderr}`,
-        newProcessTimeout,
+          assert.ok(
+            follower.has('hello') ||
+              follower.has('role') ||
+              follower.exit !== null,
+            `No hello on ${pipe}. ${follower.stderr}`,
+          ),
+        { interval: 5, timeout: newProcessTimeout },
       );
 
       // Assert
@@ -598,12 +620,15 @@ describe('What a socket store shares with other versions on Windows', () => {
         'windows-leader',
         { nodeOptions: asOnWindows },
       );
-      await waitUntil(
-        t,
+      await t.waitFor(
         () =>
-          leader.has('answer') || leader.has('failed') || leader.exit !== null,
-        () => `No answer on ${pipe}. ${leader.stderr}`,
-        newProcessTimeout,
+          assert.ok(
+            leader.has('answer') ||
+              leader.has('failed') ||
+              leader.exit !== null,
+            `No answer on ${pipe}. ${leader.stderr}`,
+          ),
+        { interval: 5, timeout: newProcessTimeout },
       );
 
       // Assert

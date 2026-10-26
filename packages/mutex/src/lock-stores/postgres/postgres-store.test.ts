@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { once } from 'node:events';
 import { type Socket, connect, createServer } from 'node:net';
-import { test } from 'node:test';
+import { type TestContext, test } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
 
 import pg from 'pg';
@@ -59,18 +59,23 @@ async function hold(mutex: Mutex, key: string) {
 }
 
 /** Resolves when a session of the database waits for a lock. */
-async function untilASessionWaitsForALock(connectionString: string) {
+async function untilASessionWaitsForALock(
+  t: TestContext,
+  connectionString: string,
+) {
   const observer = new pg.Client({ connectionString });
   await observer.connect();
   try {
-    for (;;) {
-      const { rows } = await observer.query(
-        `SELECT count(*)::int AS waiting FROM pg_stat_activity
-         WHERE datname = current_database() AND wait_event_type = 'Lock'`,
-      );
-      if (rows[0].waiting > 0) return;
-      await delay(10);
-    }
+    await t.waitFor(
+      async () => {
+        const { rows } = await observer.query(
+          `SELECT count(*)::int AS waiting FROM pg_stat_activity
+           WHERE datname = current_database() AND wait_event_type = 'Lock'`,
+        );
+        assert.ok(rows[0].waiting > 0, 'No session waits for a lock.');
+      },
+      { interval: 10, timeout: 10_000 },
+    );
   } finally {
     await observer.end();
   }
@@ -283,7 +288,7 @@ test(
 test(
   'the next acquire after a cancel gets the only session of the pool at once',
   { timeout: 30_000 },
-  async () => {
+  async (t) => {
     // Arrange: another pool holds the key, and the waiter's only session waits for it.
     await using database = await postgresDatabase();
     const holderPool = new pg.Pool({
@@ -308,7 +313,7 @@ test(
         (value) => value,
         (error: unknown) => error,
       );
-      await untilASessionWaitsForALock(database.connectionString);
+      await untilASessionWaitsForALock(t, database.connectionString);
       cancel.abort(reason);
       await holder.release();
 
@@ -339,7 +344,7 @@ test(
 test(
   'a cancelled waiter that the server grants later gives the key to the next waiter',
   { timeout: 30_000 },
-  async () => {
+  async (t) => {
     // Arrange: a holder, and a waiter in another pool that cancels while the server keeps its place in the queue.
     await using database = await postgresDatabase();
     const pools = [1, 2, 3].map(
@@ -358,7 +363,7 @@ test(
         async () => 'ran',
         { signal: cancel.signal },
       );
-      await untilASessionWaitsForALock(database.connectionString);
+      await untilASessionWaitsForALock(t, database.connectionString);
       cancel.abort(new Error('cancelled'));
       await assert.rejects(waiting);
 

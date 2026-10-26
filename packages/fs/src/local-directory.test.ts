@@ -5,7 +5,7 @@ import fsPromises, { mkdtempDisposable, readdir } from 'node:fs/promises';
 import { syncBuiltinESMExports } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join, sep } from 'node:path';
-import { describe, mock, test } from 'node:test';
+import { type TestContext, describe, test } from 'node:test';
 
 import { assertLocalDirectory } from './local-directory.ts';
 import { NetworkDirectoryError } from './network-directory-error.ts';
@@ -37,9 +37,9 @@ const within = (directory: string, path: string) =>
  * A copy of the helper in @zukhruf/mutex's network directory tests: test
  * helpers stay in their test files (backlog #2509).
  */
-function mountAs(directory: string, type: bigint) {
+function mountAs(t: TestContext, directory: string, type: bigint) {
   const statfs = fsPromises.statfs;
-  mock.method(
+  t.mock.method(
     fsPromises,
     'statfs',
     async (...args: Parameters<typeof fsPromises.statfs>) => {
@@ -52,16 +52,16 @@ function mountAs(directory: string, type: bigint) {
   syncBuiltinESMExports();
   return {
     [Symbol.dispose]() {
-      mock.restoreAll();
+      t.mock.restoreAll();
       syncBuiltinESMExports();
     },
   };
 }
 
 /** Makes every statfs of `directory` fail with `code`, as a broken mount would. */
-function failStatfs(directory: string, code: string) {
+function failStatfs(t: TestContext, directory: string, code: string) {
   const statfs = fsPromises.statfs;
-  mock.method(
+  t.mock.method(
     fsPromises,
     'statfs',
     async (...args: Parameters<typeof fsPromises.statfs>) => {
@@ -77,7 +77,7 @@ function failStatfs(directory: string, code: string) {
   syncBuiltinESMExports();
   return {
     [Symbol.dispose]() {
-      mock.restoreAll();
+      t.mock.restoreAll();
       syncBuiltinESMExports();
     },
   };
@@ -95,12 +95,12 @@ describe('A network directory', () => {
     test(
       `a directory on ${fileSystem} is refused with the directory and its file system`,
       { ...onLinux, timeout: 2_000 },
-      async () => {
+      async (t) => {
         // Arrange
         await using directory = await mkdtempDisposable(
           join(tmpdir(), 'zukhruf-fs-'),
         );
-        using _mount = mountAs(directory.path, type);
+        using _mount = mountAs(t, directory.path, type);
 
         // Act
         const checking = assertLocalDirectory(directory.path);
@@ -123,12 +123,16 @@ describe('A network directory', () => {
     test(
       `a ${fileSystem} type that statfs reports sign-extended is still refused`,
       { ...onLinux, timeout: 2_000 },
-      async () => {
+      async (t) => {
         // Arrange: f_type is a signed long, so libuv hands over a magic with its high bit set as 64 sign-extended bits.
         await using directory = await mkdtempDisposable(
           join(tmpdir(), 'zukhruf-fs-'),
         );
-        using _mount = mountAs(directory.path, 0xffff_ffff_0000_0000n | type);
+        using _mount = mountAs(
+          t,
+          directory.path,
+          0xffff_ffff_0000_0000n | type,
+        );
 
         // Act
         const checking = assertLocalDirectory(directory.path);
@@ -142,12 +146,12 @@ describe('A network directory', () => {
   test(
     'a CIFS type read as a negative number is still refused',
     { ...onLinux, timeout: 2_000 },
-    async () => {
+    async (t) => {
       // Arrange: CIFS's magic has its high bit set, so a signed f_type extends its sign.
       await using directory = await mkdtempDisposable(
         join(tmpdir(), 'zukhruf-fs-'),
       );
-      using _mount = mountAs(directory.path, 0xff534d42n - 2n ** 32n);
+      using _mount = mountAs(t, directory.path, 0xff534d42n - 2n ** 32n);
 
       // Act
       const checking = assertLocalDirectory(directory.path);
@@ -171,12 +175,12 @@ describe('A network directory', () => {
     test(
       `a directory on ${name} counts as local`,
       { ...onLinux, timeout: 2_000 },
-      async () => {
+      async (t) => {
         // Arrange
         await using directory = await mkdtempDisposable(
           join(tmpdir(), 'zukhruf-fs-'),
         );
-        using _mount = mountAs(directory.path, type);
+        using _mount = mountAs(t, directory.path, type);
 
         // Act
         const checking = assertLocalDirectory(directory.path);
@@ -190,13 +194,13 @@ describe('A network directory', () => {
   test(
     'a directory that does not exist yet is judged by its nearest parent, and is not created',
     { ...onLinux, timeout: 2_000 },
-    async () => {
+    async (t) => {
       // Arrange
       await using directory = await mkdtempDisposable(
         join(tmpdir(), 'zukhruf-fs-'),
       );
       const notYet = join(directory.path, 'not', 'yet');
-      using _mount = mountAs(directory.path, 0x6969n);
+      using _mount = mountAs(t, directory.path, 0x6969n);
 
       // Act
       const checking = assertLocalDirectory(notYet);
@@ -210,12 +214,12 @@ describe('A network directory', () => {
   test(
     'a statfs that fails tells nothing, so the directory is not refused',
     { ...onLinux, timeout: 2_000 },
-    async () => {
+    async (t) => {
       // Arrange
       await using directory = await mkdtempDisposable(
         join(tmpdir(), 'zukhruf-fs-'),
       );
-      using _failing = failStatfs(directory.path, 'EIO');
+      using _failing = failStatfs(t, directory.path, 'EIO');
 
       // Act
       const checking = assertLocalDirectory(directory.path);
@@ -228,16 +232,16 @@ describe('A network directory', () => {
   test(
     'a statfs that failed once is not remembered, so a later check can still refuse the directory',
     { ...onLinux, timeout: 2_000 },
-    async () => {
+    async (t) => {
       // Arrange: the first check cannot read the file system, then the mount answers as NFS.
       await using directory = await mkdtempDisposable(
         join(tmpdir(), 'zukhruf-fs-'),
       );
       {
-        using _failing = failStatfs(directory.path, 'EIO');
+        using _failing = failStatfs(t, directory.path, 'EIO');
         await assertLocalDirectory(directory.path);
       }
-      using _mount = mountAs(directory.path, 0x6969n);
+      using _mount = mountAs(t, directory.path, 0x6969n);
 
       // Act
       const checking = assertLocalDirectory(directory.path);
@@ -250,7 +254,7 @@ describe('A network directory', () => {
   test(
     'a directory that passed the check is not judged again',
     { ...onLinux, timeout: 2_000 },
-    async () => {
+    async (t) => {
       // Arrange: the first check finds a local file system.
       await using directory = await mkdtempDisposable(
         join(tmpdir(), 'zukhruf-fs-'),
@@ -258,7 +262,7 @@ describe('A network directory', () => {
       await assertLocalDirectory(directory.path);
 
       // Act: the same directory would now look like a network mount.
-      using _mount = mountAs(directory.path, 0x6969n);
+      using _mount = mountAs(t, directory.path, 0x6969n);
       const checking = assertLocalDirectory(directory.path);
 
       // Assert: the judged directory is not asked again, though the mount is live for a directory not yet judged.
@@ -279,12 +283,12 @@ describe('A network directory', () => {
           : 'Only macOS numbers its file systems as they load',
       timeout: 2_000,
     },
-    async () => {
+    async (t) => {
       // Arrange: a local directory whose number matches NFS on Linux.
       await using directory = await mkdtempDisposable(
         join(tmpdir(), 'zukhruf-fs-'),
       );
-      using _mount = mountAs(directory.path, 0x6969n);
+      using _mount = mountAs(t, directory.path, 0x6969n);
 
       // Act
       const checking = assertLocalDirectory(directory.path);

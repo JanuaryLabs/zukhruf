@@ -11,7 +11,7 @@ import fsPromises, {
 import { syncBuiltinESMExports } from 'node:module';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { describe, mock, test } from 'node:test';
+import { type TestContext, describe, test } from 'node:test';
 
 import { atomicWrite } from './atomic-write.ts';
 import { durableWrite } from './durable-write.ts';
@@ -28,11 +28,11 @@ type DiskEvent =
  * A copy of the recorder in @zukhruf/mutex's durability tests: test helpers
  * stay in their test files (backlog #2509).
  */
-function recordDiskWrites() {
+function recordDiskWrites(t: TestContext) {
   const events: DiskEvent[] = [];
   const open = fsPromises.open;
   const rename = fsPromises.rename;
-  mock.method(
+  t.mock.method(
     fsPromises,
     'open',
     async (...args: Parameters<typeof fsPromises.open>) => {
@@ -51,7 +51,7 @@ function recordDiskWrites() {
       return handle;
     },
   );
-  mock.method(fsPromises, 'rename', async (from: string, to: string) => {
+  t.mock.method(fsPromises, 'rename', async (from: string, to: string) => {
     events.push({ op: 'rename', from, to });
     return rename(from, to);
   });
@@ -71,16 +71,20 @@ function recordDiskWrites() {
       return { index, from: event.from, to: event.to };
     },
     [Symbol.dispose]() {
-      mock.restoreAll();
+      t.mock.restoreAll();
       syncBuiltinESMExports();
     },
   };
 }
 
 /** Makes `sync` fail with `code`, as a file system would, on every handle opened at a path that `refused` matches. */
-function refuseSync(refused: (path: string) => boolean, code: string) {
+function refuseSync(
+  t: TestContext,
+  refused: (path: string) => boolean,
+  code: string,
+) {
   const open = fsPromises.open;
-  mock.method(
+  t.mock.method(
     fsPromises,
     'open',
     async (...args: Parameters<typeof fsPromises.open>) => {
@@ -99,7 +103,7 @@ function refuseSync(refused: (path: string) => boolean, code: string) {
   syncBuiltinESMExports();
   return {
     [Symbol.dispose]() {
-      mock.restoreAll();
+      t.mock.restoreAll();
       syncBuiltinESMExports();
     },
   };
@@ -166,14 +170,18 @@ describe('A replacement in one step', () => {
   test(
     'a durable write that cannot sync its draft rejects, leaves no draft, and keeps the old content',
     { timeout: 2_000 },
-    async () => {
+    async (t) => {
       // Arrange
       await using directory = await mkdtempDisposable(
         join(tmpdir(), 'zukhruf-fs-'),
       );
       const path = join(directory.path, 'counter');
       await writeFile(path, '41');
-      using _refused = refuseSync((opened) => opened !== directory.path, 'EIO');
+      using _refused = refuseSync(
+        t,
+        (opened) => opened !== directory.path,
+        'EIO',
+      );
 
       // Act
       const writing = durableWrite(path, '42');
@@ -188,14 +196,14 @@ describe('A replacement in one step', () => {
   test(
     'an atomic write puts the new content in place with one rename of a draft beside the path',
     { timeout: 2_000 },
-    async () => {
+    async (t) => {
       // Arrange
       await using directory = await mkdtempDisposable(
         join(tmpdir(), 'zukhruf-fs-'),
       );
       const path = join(directory.path, 'queue');
       await writeFile(path, 'first\n');
-      using disk = recordDiskWrites();
+      using disk = recordDiskWrites(t);
 
       // Act
       await atomicWrite(path, 'first\nsecond\n');
@@ -212,14 +220,14 @@ describe('A replacement in one step', () => {
   test(
     'a durable write writes and syncs its draft before the rename that puts it in place',
     { timeout: 2_000 },
-    async () => {
+    async (t) => {
       // Arrange
       await using directory = await mkdtempDisposable(
         join(tmpdir(), 'zukhruf-fs-'),
       );
       const path = join(directory.path, 'counter');
       await writeFile(path, '41');
-      using disk = recordDiskWrites();
+      using disk = recordDiskWrites(t);
 
       // Act
       await durableWrite(path, '42');
@@ -246,13 +254,13 @@ describe('A replacement in one step', () => {
   test(
     'a durable write syncs the directory after the rename, so a power loss cannot undo it',
     { ...neverOnWindows, timeout: 2_000 },
-    async () => {
+    async (t) => {
       // Arrange
       await using directory = await mkdtempDisposable(
         join(tmpdir(), 'zukhruf-fs-'),
       );
       const path = join(directory.path, 'counter');
-      using disk = recordDiskWrites();
+      using disk = recordDiskWrites(t);
 
       // Act
       await durableWrite(path, '42');
@@ -278,13 +286,14 @@ describe('A replacement in one step', () => {
     test(
       `a directory sync that fails with ${code} ${outcome === 'writes' ? 'still completes the durable write' : 'fails the durable write'}`,
       { ...neverOnWindows, timeout: 2_000 },
-      async () => {
+      async (t) => {
         // Arrange: a file system whose directories answer fsync with `code`.
         await using directory = await mkdtempDisposable(
           join(tmpdir(), 'zukhruf-fs-'),
         );
         const path = join(directory.path, 'counter');
         using _refused = refuseSync(
+          t,
           (opened) => opened === directory.path,
           code,
         );

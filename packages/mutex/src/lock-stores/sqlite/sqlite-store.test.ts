@@ -10,8 +10,8 @@ import { test } from '@zukhruf/testing/node';
 import { Modes } from '../../mutex/acquire-modes/modes.ts';
 import { Mutex } from '../../mutex/mutex.ts';
 import { isRecord } from '../../shared/is-record.ts';
+import { newProcessTimeout } from '../../testing/new-process-timeout.ts';
 import { scratchDirectory } from '../../testing/scratch-directory.ts';
-import { newProcessTimeout, waitUntil } from '../../testing/wait-until.ts';
 import { startWorker } from '../../testing/worker-process.ts';
 import { SqliteStore } from './sqlite-store.ts';
 
@@ -155,11 +155,13 @@ describe('SqliteStore holder record', () => {
 			`,
         'holder',
       );
-      await waitUntil(
-        t,
-        () => holder.has('entered'),
-        () => `The holder must enter its task.\n${holder.stderr}`,
-        newProcessTimeout,
+      await t.waitFor(
+        () =>
+          assert.ok(
+            holder.has('entered'),
+            `The holder must enter its task.\n${holder.stderr}`,
+          ),
+        { interval: 5, timeout: newProcessTimeout },
       );
       holder.child.kill('SIGKILL');
       await holder.closed;

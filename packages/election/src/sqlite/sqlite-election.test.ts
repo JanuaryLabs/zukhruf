@@ -5,7 +5,7 @@ import { addAbortListener } from 'node:events';
 import fsPromises from 'node:fs/promises';
 import { syncBuiltinESMExports } from 'node:module';
 import { join, sep } from 'node:path';
-import { describe, mock, test } from 'node:test';
+import { type TestContext, describe, test } from 'node:test';
 
 import {
   type FileLock,
@@ -13,8 +13,8 @@ import {
 } from '@zukhruf/fs';
 
 import { NetworkDirectoryError, SqliteElection } from '../index.ts';
+import { newProcessTimeout } from '../testing/new-process-timeout.ts';
 import { scratchDirectory } from '../testing/scratch-directory.ts';
-import { newProcessTimeout, waitUntil } from '../testing/wait-until.ts';
 import { startWorker } from '../testing/worker-process.ts';
 
 const indexUrl = new URL('../index.ts', import.meta.url);
@@ -84,15 +84,15 @@ describe('A SQLite election across processes', () => {
       const workers = ['a', 'b', 'c', 'd'].map((name) =>
         candidates.use(startWorker(candidateSource(directory.path, 300), name)),
       );
-      await waitUntil(
-        t,
+      await t.waitFor(
         () =>
-          workers.every(
-            (worker) => worker.has('leader') || worker.has('follower'),
+          assert.ok(
+            workers.every(
+              (worker) => worker.has('leader') || worker.has('follower'),
+            ),
+            `Every candidate must report its outcome.\n${workers.map((worker) => worker.stderr).join('')}`,
           ),
-        () =>
-          `Every candidate must report its outcome.\n${workers.map((worker) => worker.stderr).join('')}`,
-        newProcessTimeout,
+        { interval: 5, timeout: newProcessTimeout },
       );
 
       // Assert
@@ -115,11 +115,13 @@ describe('A SQLite election across processes', () => {
         candidateSource(directory.path, 1000),
         'leader',
       );
-      await waitUntil(
-        t,
-        () => leader.has('leader'),
-        () => `The first candidate must lead.\n${leader.stderr}`,
-        newProcessTimeout,
+      await t.waitFor(
+        () =>
+          assert.ok(
+            leader.has('leader'),
+            `The first candidate must lead.\n${leader.stderr}`,
+          ),
+        { interval: 5, timeout: newProcessTimeout },
       );
       const epoch = leader.find('leader')?.epoch;
       assert.ok(typeof epoch === 'string', 'The leader must report its epoch');
@@ -274,11 +276,11 @@ describe('The files of a SQLite election', () => {
           : false,
       timeout: 10_000,
     },
-    async () => {
+    async (t) => {
       // Arrange
       await using directory = await scratchDirectory();
       const election = electionIn(directory.path);
-      using disk = recordDiskWrites();
+      using disk = recordDiskWrites(t);
 
       // Act
       await using _term = await election.campaign();
@@ -550,11 +552,13 @@ describe('A clean shutdown in a SQLite election', () => {
         candidateSource(directory.path, 1000),
         'leader',
       );
-      await waitUntil(
-        t,
-        () => leader.has('leader'),
-        () => `The second candidate must lead.\n${leader.stderr}`,
-        newProcessTimeout,
+      await t.waitFor(
+        () =>
+          assert.ok(
+            leader.has('leader'),
+            `The second candidate must lead.\n${leader.stderr}`,
+          ),
+        { interval: 5, timeout: newProcessTimeout },
       );
 
       // Act: the second leader dies without resigning.
@@ -667,10 +671,10 @@ describe('A SQLite election in a directory on a network file system', () => {
   test(
     'an election refuses the directory with the one NetworkDirectoryError class of @zukhruf/fs',
     onLinux,
-    async () => {
+    async (t) => {
       // Arrange
       await using directory = await scratchDirectory();
-      using _mount = mountAs(directory.path, 0x6969n);
+      using _mount = mountAs(t, directory.path, 0x6969n);
 
       // Act
       const campaigning = electionIn(directory.path).campaign();
@@ -684,11 +688,11 @@ describe('A SQLite election in a directory on a network file system', () => {
   test(
     'an election does not create a directory that it refuses',
     onLinux,
-    async () => {
+    async (t) => {
       // Arrange
       await using directory = await scratchDirectory();
       const notYet = join(directory.path, 'not', 'yet');
-      using _mount = mountAs(directory.path, 0x6969n);
+      using _mount = mountAs(t, directory.path, 0x6969n);
 
       // Act
       const campaigning = electionIn(notYet).campaign();
@@ -708,9 +712,9 @@ const within = (directory: string, path: string) =>
  * Makes statfs report `type` for `directory` and everything inside it, as a
  * mount of that file system would. Every other path gets the real answer.
  */
-function mountAs(directory: string, type: bigint) {
+function mountAs(t: TestContext, directory: string, type: bigint) {
   const statfs = fsPromises.statfs;
-  mock.method(
+  t.mock.method(
     fsPromises,
     'statfs',
     async (...args: Parameters<typeof fsPromises.statfs>) => {
@@ -723,7 +727,7 @@ function mountAs(directory: string, type: bigint) {
   syncBuiltinESMExports();
   return {
     [Symbol.dispose]() {
-      mock.restoreAll();
+      t.mock.restoreAll();
       syncBuiltinESMExports();
     },
   };
@@ -738,11 +742,11 @@ type DiskEvent =
  * durable, by patching node:fs/promises `open` (and each handle's `writeFile`
  * and `sync`) and `rename`. Every call still reaches the real disk.
  */
-function recordDiskWrites() {
+function recordDiskWrites(t: TestContext) {
   const events: DiskEvent[] = [];
   const open = fsPromises.open;
   const rename = fsPromises.rename;
-  mock.method(
+  t.mock.method(
     fsPromises,
     'open',
     async (...args: Parameters<typeof fsPromises.open>) => {
@@ -761,7 +765,7 @@ function recordDiskWrites() {
       return handle;
     },
   );
-  mock.method(fsPromises, 'rename', async (from: string, to: string) => {
+  t.mock.method(fsPromises, 'rename', async (from: string, to: string) => {
     events.push({ op: 'rename', from, to });
     return rename(from, to);
   });
@@ -769,7 +773,7 @@ function recordDiskWrites() {
   return {
     events,
     [Symbol.dispose]() {
-      mock.restoreAll();
+      t.mock.restoreAll();
       syncBuiltinESMExports();
     },
   };

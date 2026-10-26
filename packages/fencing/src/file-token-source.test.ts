@@ -5,7 +5,7 @@ import fsPromises from 'node:fs/promises';
 import { syncBuiltinESMExports } from 'node:module';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
-import { describe, mock, test } from 'node:test';
+import { type TestContext, describe, test } from 'node:test';
 
 import { FileTokenSource } from './index.ts';
 
@@ -19,11 +19,11 @@ type DiskEvent =
  * and `sync`) and `rename`. It pins those Node APIs: an equivalent call such
  * as `fs.fsync(fd)` would not be seen. Every call still reaches the real disk.
  */
-function recordDiskWrites() {
+function recordDiskWrites(t: TestContext) {
   const events: DiskEvent[] = [];
   const open = fsPromises.open;
   const rename = fsPromises.rename;
-  mock.method(
+  t.mock.method(
     fsPromises,
     'open',
     async (...args: Parameters<typeof fsPromises.open>) => {
@@ -42,7 +42,7 @@ function recordDiskWrites() {
       return handle;
     },
   );
-  mock.method(fsPromises, 'rename', async (from: string, to: string) => {
+  t.mock.method(fsPromises, 'rename', async (from: string, to: string) => {
     events.push({ op: 'rename', from, to });
     return rename(from, to);
   });
@@ -62,16 +62,20 @@ function recordDiskWrites() {
       return { index, from: event.from, to: event.to };
     },
     [Symbol.dispose]() {
-      mock.restoreAll();
+      t.mock.restoreAll();
       syncBuiltinESMExports();
     },
   };
 }
 
 /** Makes `sync` fail with `code`, as a file system would, on every handle opened at a path that `refused` matches. */
-function refuseSync(refused: (path: string) => boolean, code: string) {
+function refuseSync(
+  t: TestContext,
+  refused: (path: string) => boolean,
+  code: string,
+) {
   const open = fsPromises.open;
-  mock.method(
+  t.mock.method(
     fsPromises,
     'open',
     async (...args: Parameters<typeof fsPromises.open>) => {
@@ -90,20 +94,20 @@ function refuseSync(refused: (path: string) => boolean, code: string) {
   syncBuiltinESMExports();
   return {
     [Symbol.dispose]() {
-      mock.restoreAll();
+      t.mock.restoreAll();
       syncBuiltinESMExports();
     },
   };
 }
 
 describe('FileTokenSource durability', () => {
-  test('a minted token is written and on disk before it replaces the previous one', async () => {
+  test('a minted token is written and on disk before it replaces the previous one', async (t) => {
     // Arrange
     await using directory = await fsPromises.mkdtempDisposable(
       join(tmpdir(), 'zukhruf-fencing-'),
     );
     const tokens = new FileTokenSource(directory.path);
-    using disk = recordDiskWrites();
+    using disk = recordDiskWrites(t);
 
     // Act
     const token = await tokens.next('product:42');
@@ -136,13 +140,13 @@ describe('FileTokenSource durability', () => {
           ? 'Windows never syncs a directory'
           : false,
     },
-    async () => {
+    async (t) => {
       // Arrange
       await using directory = await fsPromises.mkdtempDisposable(
         join(tmpdir(), 'zukhruf-fencing-'),
       );
       const tokens = new FileTokenSource(directory.path);
-      using disk = recordDiskWrites();
+      using disk = recordDiskWrites(t);
 
       // Act
       await tokens.next('product:42');
@@ -160,7 +164,7 @@ describe('FileTokenSource durability', () => {
     },
   );
 
-  test('a token that cannot reach the disk leaves the directory as it was and does not use up a token', async () => {
+  test('a token that cannot reach the disk leaves the directory as it was and does not use up a token', async (t) => {
     // Arrange: one token is minted, then the disk refuses to sync any new file in the directory.
     await using directory = await fsPromises.mkdtempDisposable(
       join(tmpdir(), 'zukhruf-fencing-'),
@@ -172,6 +176,7 @@ describe('FileTokenSource durability', () => {
     // Act
     {
       using _refused = refuseSync(
+        t,
         (path) => dirname(path) === directory.path,
         'EIO',
       );
@@ -205,13 +210,13 @@ describe('FileTokenSource durability', () => {
             ? 'Windows never syncs a directory'
             : false,
       },
-      async () => {
+      async (t) => {
         // Arrange: a file system whose directories answer fsync with `code`.
         await using directory = await fsPromises.mkdtempDisposable(
           join(tmpdir(), 'zukhruf-fencing-'),
         );
         const tokens = new FileTokenSource(directory.path);
-        using _refused = refuseSync((path) => path === directory.path, code);
+        using _refused = refuseSync(t, (path) => path === directory.path, code);
 
         // Act
         const minting = tokens.next('product:42');

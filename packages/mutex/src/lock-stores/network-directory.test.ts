@@ -4,13 +4,12 @@ import assert from 'node:assert/strict';
 import fsPromises, { symlink } from 'node:fs/promises';
 import { syncBuiltinESMExports } from 'node:module';
 import { join, sep } from 'node:path';
-import { describe, mock } from 'node:test';
+import { type TestContext, describe } from 'node:test';
 
 import { test } from '@zukhruf/testing/node';
 
 import { scratchDirectory } from '../testing/scratch-directory.ts';
 import { storeCases } from '../testing/store-cases.ts';
-import { waitUntil } from '../testing/wait-until.ts';
 import { LockFileStore, NetworkDirectoryError } from './file-system/index.ts';
 import { type SocketRole, SocketStore } from './socket/index.ts';
 
@@ -41,9 +40,9 @@ const within = (directory: string, path: string) =>
  * Makes statfs report `type` for `directory` and everything inside it, as a
  * mount of that file system would. Every other path gets the real answer.
  */
-function mountAs(directory: string, type: bigint) {
+function mountAs(t: TestContext, directory: string, type: bigint) {
   const statfs = fsPromises.statfs;
-  mock.method(
+  t.mock.method(
     fsPromises,
     'statfs',
     async (...args: Parameters<typeof fsPromises.statfs>) => {
@@ -56,7 +55,7 @@ function mountAs(directory: string, type: bigint) {
   syncBuiltinESMExports();
   return {
     [Symbol.dispose]() {
-      mock.restoreAll();
+      t.mock.restoreAll();
       syncBuiltinESMExports();
     },
   };
@@ -84,10 +83,10 @@ describe('A lock directory on a network file system', () => {
       test(
         `${store.name} refuses a directory on ${fileSystem}`,
         onLinux,
-        async () => {
+        async (t) => {
           // Arrange
           await using directory = await scratchDirectory();
-          using _mount = mountAs(directory.path, type);
+          using _mount = mountAs(t, directory.path, type);
           await using host = store.open(directory.path);
 
           // Act
@@ -115,10 +114,10 @@ describe('A lock directory on a network file system', () => {
     test(
       `${store.name} leaves a refused directory untouched`,
       onLinux,
-      async () => {
+      async (t) => {
         // Arrange
         await using directory = await scratchDirectory();
-        using _mount = mountAs(directory.path, 0x6969n);
+        using _mount = mountAs(t, directory.path, 0x6969n);
         await using host = store.open(directory.path);
 
         // Act
@@ -143,10 +142,10 @@ describe('A lock directory on a network file system', () => {
         test(
           `${store.name} keeps working in a directory on ${name}`,
           onLinux,
-          async () => {
+          async (t) => {
             // Arrange
             await using directory = await scratchDirectory();
-            using _mount = mountAs(directory.path, type);
+            using _mount = mountAs(t, directory.path, type);
             await using host = store.open(directory.path);
 
             // Act
@@ -162,11 +161,11 @@ describe('A lock directory on a network file system', () => {
   test(
     'a directory that does not exist yet is judged by its nearest existing parent',
     onLinux,
-    async () => {
+    async (t) => {
       // Arrange
       await using directory = await scratchDirectory();
       const notYet = join(directory.path, 'not', 'yet');
-      using _mount = mountAs(directory.path, 0x6969n);
+      using _mount = mountAs(t, directory.path, 0x6969n);
       const store = new LockFileStore(notYet);
 
       // Act
@@ -197,12 +196,15 @@ describe('A lock directory on a network file system', () => {
         follower.on('role', (role) => roles.push(role));
 
         // Act: the leader stops while the directory would now look like a network mount.
-        using _mount = mountAs(directory.path, 0x6969n);
+        using _mount = mountAs(t, directory.path, 0x6969n);
         await leader[Symbol.asyncDispose]();
-        await waitUntil(
-          t,
-          () => roles.includes('leader'),
-          'The follower must take over as leader',
+        await t.waitFor(
+          () =>
+            assert.ok(
+              roles.includes('leader'),
+              'The follower must take over as leader',
+            ),
+          { interval: 5, timeout: 2000 },
         );
 
         // Assert: the mount is live, yet the takeover did not judge the directory again, so the holder never lost its key.
@@ -223,10 +225,10 @@ describe('A lock directory on a network file system', () => {
     test(
       `${store.name} refuses a try on a network directory too`,
       onLinux,
-      async () => {
+      async (t) => {
         // Arrange
         await using directory = await scratchDirectory();
-        using _mount = mountAs(directory.path, 0x6969n);
+        using _mount = mountAs(t, directory.path, 0x6969n);
         await using host = store.open(directory.path);
 
         // Act
@@ -241,7 +243,7 @@ describe('A lock directory on a network file system', () => {
   test(
     'a socket store refuses a network directory even when a leader already serves it',
     onLinux,
-    async () => {
+    async (t) => {
       // Arrange: a leader serves the directory; a second store reaches it through a
       // symlink that looks like a network mount, so it would follow without campaigning.
       await using directory = await scratchDirectory();
@@ -250,7 +252,7 @@ describe('A lock directory on a network file system', () => {
       await (await leader.acquire('warm-up'))[Symbol.asyncDispose]();
       const viaShare = join(directory.path, 'share');
       await symlink(directory.path, viaShare);
-      using _mount = mountAs(viaShare, 0x6969n);
+      using _mount = mountAs(t, viaShare, 0x6969n);
       await using follower = new SocketStore(viaShare, options);
 
       // Act

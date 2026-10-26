@@ -11,7 +11,6 @@ import type { FileLock } from '@zukhruf/fs';
 import { LeaseLostError, SingleFlight } from '../index.ts';
 import { KeyLocks } from '../key-lock/key-locks.ts';
 import { scratchDirectory } from '../testing/scratch-directory.ts';
-import { waitUntil } from '../testing/wait-until.ts';
 import { FlightServer } from './flight-server.ts';
 
 /**
@@ -135,11 +134,13 @@ describe('Flight server', () => {
         loss.abort();
 
         // Assert: the server dropped its follower, which then won the next term.
-        await waitUntil(
-          t,
-          () => epochOf(directory.path) === String(term.epoch + 1n),
+        await t.waitFor(
           () =>
-            `The follower must coordinate once the server of the lost term closes; flight.epoch is ${JSON.stringify(epochOf(directory.path))}`,
+            assert.ok(
+              epochOf(directory.path) === String(term.epoch + 1n),
+              `The follower must coordinate once the server of the lost term closes; flight.epoch is ${JSON.stringify(epochOf(directory.path))}`,
+            ),
+          { interval: 5, timeout: 2000 },
         );
         let token = 0n;
         await flights.run('product:42', async (lease) => {

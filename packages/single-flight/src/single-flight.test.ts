@@ -4,7 +4,7 @@ import { existsSync } from 'node:fs';
 import fsPromises from 'node:fs/promises';
 import { syncBuiltinESMExports } from 'node:module';
 import { join } from 'node:path';
-import { describe, mock, test } from 'node:test';
+import { describe, test } from 'node:test';
 import { Worker } from 'node:worker_threads';
 
 import { SqliteElection } from '@zukhruf/election';
@@ -18,7 +18,6 @@ import {
   SingleFlight,
 } from './index.ts';
 import { scratchDirectory } from './testing/scratch-directory.ts';
-import { waitUntil } from './testing/wait-until.ts';
 
 /** Values that are text already. */
 const asText: Codec<string> = {
@@ -449,11 +448,10 @@ describe('A single flight shares the run in progress', () => {
       ];
       await flight.started;
       // The joiners hear onJoin before the outcome, so the flight ends once both did.
-      await waitUntil(
-        t,
-        () => joins === 2,
-        () => `${joins} callers joined`,
-      );
+      await t.waitFor(() => assert.ok(joins === 2, `${joins} callers joined`), {
+        interval: 5,
+        timeout: 2000,
+      });
       flight.finish('report');
       const results = await Promise.all(calls);
 
@@ -781,10 +779,13 @@ describe('A single flight in its directory', () => {
           codec: asText,
         });
         void settle(second.run('sync', async () => 'second'));
-        await waitUntil(
-          t,
-          () => existsSync(join(directory.path, 'flight.sock')),
-          'The second term must start serving',
+        await t.waitFor(
+          () =>
+            assert.ok(
+              existsSync(join(directory.path, 'flight.sock')),
+              'The second term must start serving',
+            ),
+          { interval: 5, timeout: 2000 },
         );
       }
       await using next = new SingleFlight({
@@ -847,11 +848,11 @@ describe('A single flight in its directory', () => {
           : 'Only Linux statfs reports a stable file system type',
       timeout: 10_000,
     },
-    async () => {
+    async (t) => {
       // Arrange: statfs reports NFS for the directory, as the kernel does for a mount.
       await using directory = await scratchDirectory();
       const realStatfs = fsPromises.statfs;
-      mock.method(
+      t.mock.method(
         fsPromises,
         'statfs',
         async (path: string, options: { bigint: true }) => {
@@ -878,7 +879,7 @@ describe('A single flight in its directory', () => {
         );
         assert.equal(result.error.fileSystem, 'NFS');
       } finally {
-        mock.restoreAll();
+        t.mock.restoreAll();
         syncBuiltinESMExports();
       }
     },

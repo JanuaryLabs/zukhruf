@@ -8,9 +8,9 @@ import { setTimeout as delay } from 'node:timers/promises';
 
 import { Mutex } from '../../mutex/mutex.ts';
 import { FencedRegister } from '../../testing/fenced-register.ts';
+import { newProcessTimeout } from '../../testing/new-process-timeout.ts';
 import { scratchDirectory } from '../../testing/scratch-directory.ts';
 import { graceWindow, settle } from '../../testing/store-cases.ts';
-import { newProcessTimeout, waitUntil } from '../../testing/wait-until.ts';
 import { watch } from '../../testing/watch.ts';
 import { startWorker } from '../../testing/worker-process.ts';
 import { socketElection } from './socket-election.ts';
@@ -66,11 +66,13 @@ describe('Socket lock server failover', () => {
         participant(directory.path, leaderBody),
         'leader',
       );
-      await waitUntil(
-        t,
-        () => leader.has('ready'),
-        () => `The leader must start.\n${leader.stderr}`,
-        5000,
+      await t.waitFor(
+        () =>
+          assert.ok(
+            leader.has('ready'),
+            `The leader must start.\n${leader.stderr}`,
+          ),
+        { interval: 5, timeout: 5000 },
       );
       assert.equal(
         leader.find('role')?.role,
@@ -91,11 +93,13 @@ describe('Socket lock server failover', () => {
         ),
         'holder',
       );
-      await waitUntil(
-        t,
-        () => holder.has('entered'),
-        () => `The holder must enter.\n${holder.stderr}`,
-        5000,
+      await t.waitFor(
+        () =>
+          assert.ok(
+            holder.has('entered'),
+            `The holder must enter.\n${holder.stderr}`,
+          ),
+        { interval: 5, timeout: 5000 },
       );
       await using waiter = startWorker(
         participant(
@@ -106,11 +110,13 @@ describe('Socket lock server failover', () => {
         ),
         'waiter',
       );
-      await waitUntil(
-        t,
-        () => waiter.has('attempted'),
-        () => `The waiter must start.\n${waiter.stderr}`,
-        5000,
+      await t.waitFor(
+        () =>
+          assert.ok(
+            waiter.has('attempted'),
+            `The waiter must start.\n${waiter.stderr}`,
+          ),
+        { interval: 5, timeout: 5000 },
       );
       await delay(settle);
       const journal = async () =>
@@ -131,11 +137,13 @@ describe('Socket lock server failover', () => {
         ['holder:enter'],
         'No one may enter while the holder still runs, even across a leader failover',
       );
-      await waitUntil(
-        t,
-        () => holder.has('done') && waiter.has('done'),
-        () => `Both must finish.\n${holder.stderr}${waiter.stderr}`,
-        5000,
+      await t.waitFor(
+        () =>
+          assert.ok(
+            holder.has('done') && waiter.has('done'),
+            `Both must finish.\n${holder.stderr}${waiter.stderr}`,
+          ),
+        { interval: 5, timeout: 5000 },
       );
       assert.equal(
         holder.find('done')?.outcome,
@@ -183,11 +191,13 @@ describe('Socket lock server failover', () => {
         ),
         'follower',
       );
-      await waitUntil(
-        t,
-        () => follower.has('entered'),
-        () => `The follower must enter.\n${follower.stderr}`,
-        5000,
+      await t.waitFor(
+        () =>
+          assert.ok(
+            follower.has('entered'),
+            `The follower must enter.\n${follower.stderr}`,
+          ),
+        { interval: 5, timeout: 5000 },
       );
       const deadline = delay(2000, 'timed out' as const, { ref: false });
 
@@ -204,11 +214,13 @@ describe('Socket lock server failover', () => {
         'closed',
         'A leader must shut down without waiting for followers to leave',
       );
-      await waitUntil(
-        t,
-        () => follower.has('done'),
-        () => `The follower must finish.\n${follower.stderr}`,
-        5000,
+      await t.waitFor(
+        () =>
+          assert.ok(
+            follower.has('done'),
+            `The follower must finish.\n${follower.stderr}`,
+          ),
+        { interval: 5, timeout: 5000 },
       );
       assert.equal(
         follower.find('done')?.outcome,
@@ -234,11 +246,13 @@ describe('Socket lock server failover', () => {
         ),
         'leader',
       );
-      await waitUntil(
-        t,
-        () => leader.has('ready'),
-        () => `The leader must start.\n${leader.stderr}`,
-        5000,
+      await t.waitFor(
+        () =>
+          assert.ok(
+            leader.has('ready'),
+            `The leader must start.\n${leader.stderr}`,
+          ),
+        { interval: 5, timeout: 5000 },
       );
       await using holder = startWorker(
         participant(
@@ -253,11 +267,13 @@ describe('Socket lock server failover', () => {
         ),
         'holder',
       );
-      await waitUntil(
-        t,
-        () => holder.has('entered'),
-        () => `The holder must enter.\n${holder.stderr}`,
-        5000,
+      await t.waitFor(
+        () =>
+          assert.ok(
+            holder.has('entered'),
+            `The holder must enter.\n${holder.stderr}`,
+          ),
+        { interval: 5, timeout: 5000 },
       );
       await using waiter = startWorker(
         participant(
@@ -267,11 +283,13 @@ describe('Socket lock server failover', () => {
         ),
         'waiter',
       );
-      await waitUntil(
-        t,
-        () => waiter.has('role'),
-        () => `The waiter must reach the leader.\n${waiter.stderr}`,
-        5000,
+      await t.waitFor(
+        () =>
+          assert.ok(
+            waiter.has('role'),
+            `The waiter must reach the leader.\n${waiter.stderr}`,
+          ),
+        { interval: 5, timeout: 5000 },
       );
       const journal = async () =>
         (await readFile(join(directory.path, 'journal.log'), 'utf8'))
@@ -282,18 +300,21 @@ describe('Socket lock server failover', () => {
 
       // Act: the leader shuts down while the holder is inside its callback.
       leader.child.send('dispose');
-      await waitUntil(
-        t,
-        () => leader.has('disposed'),
-        () => `The leader must shut down.\n${leader.stderr}`,
-        5000,
-      );
-      await waitUntil(
-        t,
-        () => roles(holder) >= 2 && roles(waiter) >= 2,
+      await t.waitFor(
         () =>
-          `The holder and the waiter must reach the next leader.\n${holder.stderr}${waiter.stderr}`,
-        5000,
+          assert.ok(
+            leader.has('disposed'),
+            `The leader must shut down.\n${leader.stderr}`,
+          ),
+        { interval: 5, timeout: 5000 },
+      );
+      await t.waitFor(
+        () =>
+          assert.ok(
+            roles(holder) >= 2 && roles(waiter) >= 2,
+            `The holder and the waiter must reach the next leader.\n${holder.stderr}${waiter.stderr}`,
+          ),
+        { interval: 5, timeout: 5000 },
       );
       // Nothing happens while the holder keeps its key, so only time can show that the waiter stays out.
       await delay(graceWindow * 2);
@@ -306,11 +327,13 @@ describe('Socket lock server failover', () => {
         ['holder:enter'],
         'No one may enter while the holder still runs, even when the leader shuts down',
       );
-      await waitUntil(
-        t,
-        () => holder.has('done') && waiter.has('done'),
-        () => `Both must finish.\n${holder.stderr}${waiter.stderr}`,
-        5000,
+      await t.waitFor(
+        () =>
+          assert.ok(
+            holder.has('done') && waiter.has('done'),
+            `Both must finish.\n${holder.stderr}${waiter.stderr}`,
+          ),
+        { interval: 5, timeout: 5000 },
       );
       assert.equal(
         holder.find('done')?.outcome,
@@ -352,21 +375,25 @@ describe('Socket lock server failover', () => {
         participant(directory.path, leaderBody),
         'leader',
       );
-      await waitUntil(
-        t,
-        () => leader.has('ready'),
-        () => `The leader must start.\n${leader.stderr}`,
-        5000,
+      await t.waitFor(
+        () =>
+          assert.ok(
+            leader.has('ready'),
+            `The leader must start.\n${leader.stderr}`,
+          ),
+        { interval: 5, timeout: 5000 },
       );
       await using frozen = startWorker(
         participant(directory.path, writeBody(`await command('write');`)),
         'frozen',
       );
-      await waitUntil(
-        t,
-        () => frozen.has('entered'),
-        () => `The holder must enter.\n${frozen.stderr}`,
-        5000,
+      await t.waitFor(
+        () =>
+          assert.ok(
+            frozen.has('entered'),
+            `The holder must enter.\n${frozen.stderr}`,
+          ),
+        { interval: 5, timeout: 5000 },
       );
 
       // Act: the holder freezes, the leader dies, and a newer holder takes the key.
@@ -379,12 +406,13 @@ describe('Socket lock server failover', () => {
         'successor',
       );
       try {
-        await waitUntil(
-          t,
-          () => successor.has('done'),
+        await t.waitFor(
           () =>
-            `The successor must get the key once the grace window passes.\n${successor.stderr}`,
-          5000,
+            assert.ok(
+              successor.has('done'),
+              `The successor must get the key once the grace window passes.\n${successor.stderr}`,
+            ),
+          { interval: 5, timeout: 5000 },
         );
         assert.equal(successor.find('wrote')?.write, 'written');
       } finally {
@@ -395,11 +423,13 @@ describe('Socket lock server failover', () => {
       frozen.child.send('write');
 
       // Assert: the register refused the stale holder, and the holder was told it lost the lock.
-      await waitUntil(
-        t,
-        () => frozen.has('done'),
-        () => `The frozen holder must finish.\n${frozen.stderr}`,
-        5000,
+      await t.waitFor(
+        () =>
+          assert.ok(
+            frozen.has('done'),
+            `The frozen holder must finish.\n${frozen.stderr}`,
+          ),
+        { interval: 5, timeout: 5000 },
       );
       assert.equal(
         frozen.find('wrote')?.told,
@@ -575,16 +605,22 @@ describe('Socket store roles', () => {
 
     // Act: the leader stops, and one follower takes over.
     await leader[Symbol.asyncDispose]();
-    await waitUntil(
-      t,
-      () => [...roles.values()].some((seen) => seen.includes('leader')),
-      'A follower must take over as leader',
+    await t.waitFor(
+      () =>
+        assert.ok(
+          [...roles.values()].some((seen) => seen.includes('leader')),
+          'A follower must take over as leader',
+        ),
+      { interval: 5, timeout: 2000 },
     );
     const stayed = [...roles.values()].find((seen) => !seen.includes('leader'));
-    await waitUntil(
-      t,
-      () => stayed?.length === 2,
-      'The other follower must follow the new leader',
+    await t.waitFor(
+      () =>
+        assert.ok(
+          stayed?.length === 2,
+          'The other follower must follow the new leader',
+        ),
+      { interval: 5, timeout: 2000 },
     );
 
     // Assert
@@ -622,12 +658,13 @@ describe('Socket store follower failure', () => {
 			`,
         'follower',
       );
-      await waitUntil(
-        t,
-        () => follower.exit !== null,
+      await t.waitFor(
         () =>
-          `The follower must end on its own once its work is done.\n${follower.stderr}`,
-        5000,
+          assert.ok(
+            follower.exit !== null,
+            `The follower must end on its own once its work is done.\n${follower.stderr}`,
+          ),
+        { interval: 5, timeout: 5000 },
       );
 
       // Assert: the failed acquire reported the listener's error, the next one worked, and nothing kept the process alive.
@@ -675,10 +712,13 @@ describe('Socket store follower failure', () => {
         });
 
         // Assert: nothing keeps the connection open after the follower gave it up.
-        await waitUntil(
-          t,
-          () => peerClosed,
-          'The follower must close the connection it gave up',
+        await t.waitFor(
+          () =>
+            assert.ok(
+              peerClosed,
+              'The follower must close the connection it gave up',
+            ),
+          { interval: 5, timeout: 2000 },
         );
       } finally {
         leader.close();
@@ -712,11 +752,13 @@ describe('Socket store after a clean shutdown', () => {
       // Arrange: the first process takes and releases a lock, then disposes its store and exits.
       await using directory = await scratchDirectory();
       await using first = startWorker(loneProcess(directory.path), 'first');
-      await waitUntil(
-        t,
-        () => first.exit !== null,
-        () => `The first process must exit.\n${first.stderr}`,
-        newProcessTimeout,
+      await t.waitFor(
+        () =>
+          assert.ok(
+            first.exit !== null,
+            `The first process must exit.\n${first.stderr}`,
+          ),
+        { interval: 5, timeout: newProcessTimeout },
       );
       assert.deepEqual(
         { exit: first.exit, done: first.has('done') },
@@ -726,11 +768,13 @@ describe('Socket store after a clean shutdown', () => {
 
       // Act
       await using next = startWorker(loneProcess(directory.path), 'next');
-      await waitUntil(
-        t,
-        () => next.exit !== null,
-        () => `The next process must exit.\n${next.stderr}`,
-        newProcessTimeout,
+      await t.waitFor(
+        () =>
+          assert.ok(
+            next.exit !== null,
+            `The next process must exit.\n${next.stderr}`,
+          ),
+        { interval: 5, timeout: newProcessTimeout },
       );
 
       // Assert

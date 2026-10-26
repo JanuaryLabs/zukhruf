@@ -3,7 +3,6 @@ import { randomUUID } from 'node:crypto';
 import { writeFile } from 'node:fs/promises';
 import { delimiter, join } from 'node:path';
 import { describe, test } from 'node:test';
-import { setTimeout } from 'node:timers/promises';
 
 import { ConnectionFailedError, Docker, DockerError } from './index.ts';
 import { fakeEngine } from './testing/fake-engine.ts';
@@ -200,7 +199,7 @@ describe('disposal of a client with open streams', () => {
 });
 
 describe('requests during and after disposal', () => {
-  test('through a Unix socket, a request in flight and a request after disposal started reject with the DockerError of disposal, and the second one reaches no engine', async () => {
+  test('through a Unix socket, a request in flight and a request after disposal started reject with the DockerError of disposal, and the second one reaches no engine', async (t) => {
     // Arrange: the engine never answers /info.
     await using scratch = await scratchDirectory();
     await using engine = await fakeEngine({
@@ -211,7 +210,10 @@ describe('requests during and after disposal', () => {
     const docker = await Docker.connect({ host: engine.host });
     const inFlight = docker.info();
     inFlight.catch(() => undefined);
-    while (!engine.paths.includes('/v1.51/info')) await setTimeout(10);
+    await t.waitFor(() => assert.ok(engine.paths.includes('/v1.51/info')), {
+      interval: 10,
+      timeout: 10_000,
+    });
 
     // Act
     const disposing = docker[Symbol.asyncDispose]();

@@ -14,8 +14,8 @@ import { Docker } from '@zukhruf/docker';
 import { DockerFixtures } from '@zukhruf/testing/docker';
 
 import { Mutex } from '../../index.ts';
+import { newProcessTimeout } from '../../testing/new-process-timeout.ts';
 import { scratchDirectory } from '../../testing/scratch-directory.ts';
-import { newProcessTimeout, waitUntil } from '../../testing/wait-until.ts';
 import { startWorker } from '../../testing/worker-process.ts';
 import { DockerEngineStore } from './index.ts';
 
@@ -233,11 +233,13 @@ test(
       holderSource(fixture.namespace, 'report:daily'),
       'holder',
     );
-    await waitUntil(
-      t,
-      () => holder.has('holding'),
-      () => `The holder did not take the key: ${holder.stderr}`,
-      newProcessTimeout,
+    await t.waitFor(
+      () =>
+        assert.ok(
+          holder.has('holding'),
+          `The holder did not take the key: ${holder.stderr}`,
+        ),
+      { interval: 5, timeout: newProcessTimeout },
     );
     const waiting = new Mutex(fixture.store()).acquire(
       'report:daily',

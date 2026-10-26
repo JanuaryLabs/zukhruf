@@ -12,7 +12,6 @@ import { test } from '@zukhruf/testing/node';
 import { isRecord } from '../../shared/is-record.ts';
 import { scratchDirectory } from '../../testing/scratch-directory.ts';
 import { settle } from '../../testing/store-cases.ts';
-import { waitUntil } from '../../testing/wait-until.ts';
 import { SocketStore } from './index.ts';
 import { socketElection } from './socket-election.ts';
 
@@ -87,10 +86,9 @@ async function rawPeer(t: TestContext, directory: string) {
     received.push(isRecord(message) ? message : { line });
   });
   socket.write(`${JSON.stringify({ op: 'hello', version: 1 })}\n`);
-  await waitUntil(
-    t,
-    () => received.length > 0,
-    'The leader must answer the hello',
+  await t.waitFor(
+    () => assert.ok(received.length > 0, 'The leader must answer the hello'),
+    { interval: 5, timeout: 2000 },
   );
   assert.equal(received.shift()?.op, 'welcome');
   const lines = (requests: unknown[]) =>
@@ -140,10 +138,13 @@ describe('A leader after a failover', () => {
       [],
       'Nothing may be granted during the grace window',
     );
-    await waitUntil(
-      t,
-      () => waiter.received.some((response) => response.op === 'granted'),
-      'The acquire must be granted once the grace window ends',
+    await t.waitFor(
+      () =>
+        assert.ok(
+          waiter.received.some((response) => response.op === 'granted'),
+          'The acquire must be granted once the grace window ends',
+        ),
+      { interval: 5, timeout: 2000 },
     );
   });
 
@@ -157,10 +158,13 @@ describe('A leader after a failover', () => {
     holder.send({ op: 'reassert', id: 'h', key: 'product:42', token: '7' });
 
     // Assert
-    await waitUntil(
-      t,
-      () => holder.received.length > 0,
-      'The leader must answer the reassert',
+    await t.waitFor(
+      () =>
+        assert.ok(
+          holder.received.length > 0,
+          'The leader must answer the reassert',
+        ),
+      { interval: 5, timeout: 2000 },
     );
     assert.deepEqual(holder.received, [{ op: 'rejected', id: 'h' }]);
   });
@@ -190,10 +194,13 @@ describe('A leader after a failover', () => {
       'The waiter was granted a key that a holder reasserted',
     );
     assert.equal(otherKey, 'granted', 'Other keys must not wait');
-    await waitUntil(
-      t,
-      () => waiter.received[0]?.op === 'granted',
-      'The waiter must get the key after the release',
+    await t.waitFor(
+      () =>
+        assert.ok(
+          waiter.received[0]?.op === 'granted',
+          'The waiter must get the key after the release',
+        ),
+      { interval: 5, timeout: 2000 },
     );
   });
 
@@ -207,10 +214,13 @@ describe('A leader after a failover', () => {
     older.send({ op: 'reassert', id: 'o', key: 'product:42', token: '5' });
     await delay(settle);
     newer.send({ op: 'reassert', id: 'n', key: 'product:42', token: '9' });
-    await waitUntil(
-      t,
-      () => older.received.length > 0,
-      'The older claim must be answered',
+    await t.waitFor(
+      () =>
+        assert.ok(
+          older.received.length > 0,
+          'The older claim must be answered',
+        ),
+      { interval: 5, timeout: 2000 },
     );
     const olderAnswers = [...older.received];
     older.drop();
@@ -241,10 +251,13 @@ describe('A leader after a failover', () => {
     first.send({ op: 'acquire', id: 'f', key: 'product:42' });
     await delay(settle);
     second.send({ op: 'acquire', id: 's', key: 'product:42' });
-    await waitUntil(
-      t,
-      () => first.received.length > 0,
-      'The first waiter must be granted when the grace window ends',
+    await t.waitFor(
+      () =>
+        assert.ok(
+          first.received.length > 0,
+          'The first waiter must be granted when the grace window ends',
+        ),
+      { interval: 5, timeout: 2000 },
     );
     await delay(settle);
     const secondBeforeRelease = [...second.received];
@@ -259,10 +272,13 @@ describe('A leader after a failover', () => {
       [],
       'The second waiter must wait for the first',
     );
-    await waitUntil(
-      t,
-      () => second.received.some((response) => response.op === 'granted'),
-      'The second waiter must be granted after the first releases',
+    await t.waitFor(
+      () =>
+        assert.ok(
+          second.received.some((response) => response.op === 'granted'),
+          'The second waiter must be granted after the first releases',
+        ),
+      { interval: 5, timeout: 2000 },
     );
   });
 
@@ -275,10 +291,10 @@ describe('A leader after a failover', () => {
     peer.send({ op: 'try', id: 't', key: 'product:42' });
 
     // Assert: nothing is granted during the grace window, so the key counts as busy.
-    await waitUntil(
-      t,
-      () => peer.received.length > 0,
-      'The leader must answer the try',
+    await t.waitFor(
+      () =>
+        assert.ok(peer.received.length > 0, 'The leader must answer the try'),
+      { interval: 5, timeout: 2000 },
     );
     assert.deepEqual(peer.received, [{ op: 'busy', id: 't' }]);
   });
@@ -293,10 +309,10 @@ describe('A leader after a failover', () => {
     peer.send({ op: 'try', id: 't', key: 'product:42' });
 
     // Assert
-    await waitUntil(
-      t,
-      () => peer.received.length > 0,
-      'The leader must answer the try',
+    await t.waitFor(
+      () =>
+        assert.ok(peer.received.length > 0, 'The leader must answer the try'),
+      { interval: 5, timeout: 2000 },
     );
     assert.equal(peer.received[0]?.op, 'granted');
   });
@@ -372,10 +388,13 @@ describe('A leader after a failover', () => {
 
     // Act: a stale holder from an older term reasserts the same key.
     stale.send({ op: 'reassert', id: 'stale', key: 'product:42', token: '5' });
-    await waitUntil(
-      t,
-      () => stale.received.length > 0,
-      'The stale claim must be answered',
+    await t.waitFor(
+      () =>
+        assert.ok(
+          stale.received.length > 0,
+          'The stale claim must be answered',
+        ),
+      { interval: 5, timeout: 2000 },
     );
 
     // Assert: the highest token seen still decides, so the stale holder cannot take the key.
@@ -489,10 +508,13 @@ describe('Requests that a leader reads in one turn', () => {
       { op: 'acquire', id: 'a', key: 'product:42' },
       { op: 'acquire', id: 'a', key: 'product:42' },
     );
-    await waitUntil(
-      t,
-      () => peer.received.length > 0,
-      'The first acquire must be granted',
+    await t.waitFor(
+      () =>
+        assert.ok(
+          peer.received.length > 0,
+          'The first acquire must be granted',
+        ),
+      { interval: 5, timeout: 2000 },
     );
     peer.send({ op: 'release', id: 'a' });
     await delay(settle);
@@ -520,10 +542,10 @@ describe('Requests that a leader reads in one turn', () => {
       { op: 'try', id: 't', key: 'product:42' },
       { op: 'try', id: 't', key: 'product:42' },
     );
-    await waitUntil(
-      t,
-      () => peer.received.length > 0,
-      'The first try must be granted',
+    await t.waitFor(
+      () =>
+        assert.ok(peer.received.length > 0, 'The first try must be granted'),
+      { interval: 5, timeout: 2000 },
     );
     peer.send({ op: 'release', id: 't' });
     await delay(settle);
@@ -572,10 +594,9 @@ describe('A peer that gives up or leaves', () => {
     await using holder = await rawPeer(t, scene.directory);
     await using quitter = await rawPeer(t, scene.directory);
     holder.send({ op: 'acquire', id: 'h', key: 'product:42' });
-    await waitUntil(
-      t,
-      () => holder.received.length > 0,
-      'The holder must be granted',
+    await t.waitFor(
+      () => assert.ok(holder.received.length > 0, 'The holder must be granted'),
+      { interval: 5, timeout: 2000 },
     );
     quitter.send(
       { op: 'acquire', id: 'q', key: 'product:42' },
@@ -605,18 +626,24 @@ describe('Requests a leader does not know, and looks', () => {
     await using scene = await firstLeader();
     await using peer = await rawPeer(t, scene.directory);
     peer.send({ op: 'acquire', id: 'a', key: 'product:42' });
-    await waitUntil(
-      t,
-      () => peer.received.some((response) => response.op === 'granted'),
-      'The peer must be granted the key',
+    await t.waitFor(
+      () =>
+        assert.ok(
+          peer.received.some((response) => response.op === 'granted'),
+          'The peer must be granted the key',
+        ),
+      { interval: 5, timeout: 2000 },
     );
 
     // Act: 'renew' stands in for a request that a later version adds.
     peer.send({ op: 'renew', id: 'r' });
-    await waitUntil(
-      t,
-      () => peer.received.length === 2,
-      'The leader must answer the request',
+    await t.waitFor(
+      () =>
+        assert.ok(
+          peer.received.length === 2,
+          'The leader must answer the request',
+        ),
+      { interval: 5, timeout: 2000 },
     );
     const stillHeld = await scene.leader.isHeld('product:42');
 
@@ -631,10 +658,13 @@ describe('Requests a leader does not know, and looks', () => {
     await using scene = await firstLeader();
     await using peer = await rawPeer(t, scene.directory);
     peer.send({ op: 'acquire', id: 'a', key: 'product:42' });
-    await waitUntil(
-      t,
-      () => peer.received.some((response) => response.op === 'granted'),
-      'The peer must be granted the key',
+    await t.waitFor(
+      () =>
+        assert.ok(
+          peer.received.some((response) => response.op === 'granted'),
+          'The peer must be granted the key',
+        ),
+      { interval: 5, timeout: 2000 },
     );
 
     // Act: JSON lines that are not requests (no record, no id, no op, neither), then a look.
@@ -645,17 +675,23 @@ describe('Requests a leader does not know, and looks', () => {
       { note: 'not a lock request' },
       { op: 'isHeld', id: 'look', key: 'product:42' },
     );
-    await waitUntil(
-      t,
-      () => peer.received.some((response) => response.id === 'look'),
-      'The leader must answer the look after the lines it cannot read',
+    await t.waitFor(
+      () =>
+        assert.ok(
+          peer.received.some((response) => response.id === 'look'),
+          'The leader must answer the look after the lines it cannot read',
+        ),
+      { interval: 5, timeout: 2000 },
     );
     // Asked after the look was answered, so an answer to any earlier line is in by now.
     peer.send({ op: 'isHeld', id: 'after', key: 'product:7' });
-    await waitUntil(
-      t,
-      () => peer.received.some((response) => response.id === 'after'),
-      'The leader must answer the second look',
+    await t.waitFor(
+      () =>
+        assert.ok(
+          peer.received.some((response) => response.id === 'after'),
+          'The leader must answer the second look',
+        ),
+      { interval: 5, timeout: 2000 },
     );
     const stillHeld = await scene.leader.isHeld('product:42');
 
@@ -682,10 +718,13 @@ describe('Requests a leader does not know, and looks', () => {
     );
     await delay(150);
     const duringGrace = [...looker.received];
-    await waitUntil(
-      t,
-      () => looker.received.length === 2,
-      'The looks must be answered once the grace window ends',
+    await t.waitFor(
+      () =>
+        assert.ok(
+          looker.received.length === 2,
+          'The looks must be answered once the grace window ends',
+        ),
+      { interval: 5, timeout: 2000 },
     );
 
     // Assert
