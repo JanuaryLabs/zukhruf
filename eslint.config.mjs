@@ -118,11 +118,6 @@ export default defineConfig(
     files: ['packages/*/src/testing/docker-global-setup.ts'],
     rules: { 'island/no-process-env': 'off' },
   },
-  // An environment scope changes process.env for a test: the environment is its subject, not its configuration (testing ADR 0009).
-  {
-    files: ['packages/testing/src/process/environment.ts'],
-    rules: { 'island/no-process-env': 'off' },
-  },
   // The tests of the UI packages import them by their names, as an app does,
   // so they check the published entry and not the source files.
   {

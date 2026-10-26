@@ -72,10 +72,6 @@ _Avoid_: Module, entry
 An empty directory that `TemporaryFiles` creates for one test, below a parent directory. Its handle gives the real path. Disposal removes it, and retries the removal for at most 1.8 s.
 _Avoid_: Scratch directory, tmpdir
 
-**Environment scope**:
-The handle of a `set` on `process.env`. It holds its keys alone while it is open, and its disposal gives each key its earlier value or its absence again.
-_Avoid_: Stubbed environment, env override
-
 **Interception**:
 An msw server in the test process that answers requests with the test's handlers, fails each request that no handler answers, and records a clone of each request.
 _Avoid_: Mock server

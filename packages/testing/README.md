@@ -24,7 +24,6 @@ Each area has its own import path, so a test loads only the drivers it uses. The
 | `@zukhruf/testing/http`       | `HttpServer`                                                       |                          |
 | `@zukhruf/testing/streams`    | `StreamHarness`                                                    |                          |
 | `@zukhruf/testing/fs`         | `TemporaryFiles`                                                   |                          |
-| `@zukhruf/testing/process`    | `Environment`                                                      |                          |
 | `@zukhruf/testing/msw`        | `Msw`                                                              | `msw`                    |
 
 ## Parameterized tests
@@ -226,37 +225,28 @@ The only option is `parent`, the directory that holds the new directory. The def
 
 ## Environment variables
 
-`new Environment().set(values)` assigns each key on `process.env` and returns an environment scope. The value `undefined` deletes the key for the scope. Disposal restores each key to its earlier value.
+A test does not change `process.env`. Tests in one file can run at the same time, and `process.env` is one object for the whole process. Thus a value that one test sets is also the value of the other tests. [ADR 0009](./docs/adr/0009-a-test-never-changes-the-environment-of-its-process.md) records this decision.
+
+Give the environment, or the value, to the code under test. `new Postgres({ environment })` takes the environment in this way ([ADR 0007](./docs/adr/0007-a-database-fixture-takes-the-environment.md)). Give a time zone as the `timeZone` of `Intl.DateTimeFormat`. Give a home directory as a parameter. Do not read it from `os.homedir()` in the test.
+
+A child process gets its own environment when it starts. Give the values to the child as `env`:
 
 ```ts
-import { Environment } from '@zukhruf/testing/process';
+import { spawn } from 'node:child_process';
 
-const environment = new Environment();
-
-test('reads the region', (t) => {
-  using scope = environment.set({
-    AWS_REGION: 'eu-west-1',
-    AWS_PROFILE: undefined,
-  });
-  t.assert.equal(region(), 'eu-west-1');
-});
+spawn(command, args, { env: { ...process.env, REGION: 'eu-west-1' } });
 ```
 
-A key that was absent before the scope is deleted at restore. It does not become the string `"undefined"`. An empty string is a value: a key that held `''` holds `''` again. The scope assigns each key on the real `process.env` object. It does not replace the object and does not use `Object.defineProperty`. Native addons read the real object, and Node resets its `TZ` cache only on an assignment.
-
-One scope at a time holds a key. A second `set` that names a key of an open scope throws, and the error names the key. Thus two tests that run at the same time cannot restore each other's values. To set several keys, give them to one `set`. On Windows, the name of a variable is not case-sensitive: `Path` and `PATH` are one variable. Thus there, a scope that holds `PATH` also holds `Path`.
-
-A module that reads a variable when it loads keeps the value that it read. The restore does not change that value, and Node loads a module only once in a process. Thus set the scope first, then load the module with `await import()`. Or run the code in a child process.
-
-A child process copies the environment when it starts. It sees the scope only if it starts while the scope is open and inherits the environment. Thus give the values to the child as `env`, such as `spawn(command, args, { env: { ...process.env, REGION: 'eu-west-1' } })`. Then the test needs no scope.
-
-To put a directory first on `PATH`, join it with `path.delimiter`, which is `:` on Unix and `;` on Windows:
+To put a directory first on the `PATH` of a child, join it with `path.delimiter`, which is `:` on Unix and `;` on Windows:
 
 ```ts
 import path from 'node:path';
 
-using scope = environment.set({
-  PATH: [binDirectory, process.env.PATH ?? ''].join(path.delimiter),
+spawn(command, args, {
+  env: {
+    ...process.env,
+    PATH: [binDirectory, process.env.PATH].join(path.delimiter),
+  },
 });
 ```
 

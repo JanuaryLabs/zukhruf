@@ -55,7 +55,6 @@ test('every area without a driver imports when no driver is installed', async ()
     'http',
     'streams',
     'fs',
-    'process',
   ]) {
     await importArea(area, drivers);
   }
