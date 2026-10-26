@@ -10,6 +10,7 @@ import mysql from 'mysql2/promise';
 import { Mysql, type MysqlDatabase } from '@zukhruf/testing/mysql';
 
 import { LeaseLostError, Mutex } from '../../index.ts';
+import { deadlineFor, storeCases } from '../../testing/store-cases.ts';
 import { type MysqlSession, MysqlStore } from './index.ts';
 
 /**
@@ -221,6 +222,8 @@ test(
  * connection, and tells the store nothing: no `error`, no `end`. The store's
  * listeners hear nothing. A query that fails on the ended connection runs
  * again on the new one. `reconnected` resolves once the new connection is up.
+ * Queries on the new connection wait until `resume()`, so the test
+ * decides when the store sees it.
  */
 async function silentlyReconnectingSession(database: MysqlDatabase) {
   const open = async () => {
@@ -231,27 +234,36 @@ async function silentlyReconnectingSession(database: MysqlDatabase) {
   let current = await open();
   const id = current.threadId;
   const reconnected = Promise.withResolvers<void>();
+  const resumed = Promise.withResolvers<void>();
+  let reconnectedYet = false;
   current.once('end', () => {
     open().then((next) => {
       current = next;
+      reconnectedYet = true;
       reconnected.resolve();
     }, reconnected.reject);
   });
   const session: MysqlSession = {
     query: async (sql, values) => {
       try {
-        return await current.query(sql, values);
+        if (!reconnectedYet) return await current.query(sql, values);
       } catch {
         await reconnected.promise;
-        return current.query(sql, values);
       }
+      await resumed.promise;
+      return current.query(sql, values);
     },
     on: () => session,
     off: () => session,
     release: () => current.destroy(),
     destroy: () => current.destroy(),
   };
-  return { session, id, reconnected: reconnected.promise };
+  return {
+    session,
+    id,
+    reconnected: reconnected.promise,
+    resume: () => resumed.resolve(),
+  };
 }
 
 test(
@@ -259,12 +271,23 @@ test(
   { timeout: 30_000 },
   async () => {
     // Arrange: the holder's session hides the end of its connection and connects again.
+    // The store sees the new connection only after the other store took the key, and
+    // a heartbeat interval longer than a reconnect and a take keeps its beat in time.
+    const interval = 1000;
+    const mysqlCase = storeCases.find(
+      (candidate) => candidate.name === 'MysqlStore',
+    );
+    assert.ok(mysqlCase);
+    const deadline = deadlineFor(mysqlCase, 2 * interval, {
+      grants: 1,
+      releases: 1,
+    });
     await using database = await mysqlDatabase();
     const reconnecting = await silentlyReconnectingSession(database);
     const store = new MysqlStore({
       connect: async () => reconnecting.session,
       table,
-      heartbeatInterval,
+      heartbeatInterval: interval,
     });
     const admin = await mysql.createConnection(database.connectionString);
     const otherPool = poolOf(database);
@@ -273,15 +296,17 @@ test(
     await using other = new AsyncDisposableStack();
     try {
       // Act: the server ends the holder's connection, which frees the key, and another store takes the key.
+      // Listen first, so the deadline counts from the end of the connection.
+      const lost = Promise.race([
+        once(handle.signal, 'abort').then(() => 'lost' as const),
+        delay(deadline, 'still held' as const),
+      ]);
       await admin.query(`KILL ${reconnecting.id}`);
       await reconnecting.reconnected;
       const heldAfterReconnect = !handle.signal.aborted;
       const taken = await storeOver(otherPool).tryAcquire(key);
       if (taken) other.use(taken);
-      const lost = await Promise.race([
-        once(handle.signal, 'abort').then(() => 'lost' as const),
-        delay(2 * heartbeatInterval + 500, 'still held' as const),
-      ]);
+      reconnecting.resume();
 
       // Assert: the heartbeat asks whether this session holds the lock, not whether any session does.
       assert.ok(
@@ -290,14 +315,15 @@ test(
       );
       assert.ok(taken, 'The ended connection must have freed the key');
       assert.equal(
-        lost,
+        await lost,
         'lost',
-        'A session that answers but no longer holds the lock must lose the lease',
+        `A session that answers but no longer holds the lock must lose the lease within ${deadline} ms of the end of its connection`,
       );
       const reason: unknown = handle.signal.reason;
       assert.ok(reason instanceof LeaseLostError);
       assert.match(String(reason.cause), /no longer holds the lock/);
     } finally {
+      reconnecting.resume();
       await other.disposeAsync();
       await handle[Symbol.asyncDispose]();
       await otherPool.end();
