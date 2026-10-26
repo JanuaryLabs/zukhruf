@@ -4,7 +4,7 @@ This record keeps what the research for event grouping found, before a package e
 
 Read this record before you change the design, add a feature, or start a new evaluation. Each limitation tells you what happens, what proves it, why it happens, and what to think about before you fix it.
 
-Status on 2026-10-26: round #3124 failed its gate. Round #3130 is in progress. Add the result of each new round to this record.
+Status on 2026-10-26: round #3124 failed its gate. Round #3130 passed its gate for full articles. It fails on articles that have only a headline. Backlog #3131 builds the packages from the #3130 design. Add the result of each new round to this record.
 
 ## Words in this record
 
@@ -30,14 +30,36 @@ Status on 2026-10-26: round #3124 failed its gate. Round #3130 is in progress. A
 
 All evidence is on the local Mac in `~/.codex/visualizations/2026/10/23/01a16a1c-424c-7793-8ca9-02cc1c715d82/`. The backlog items hold the full reports.
 
-| Round        | Question                                                                                  | Result                                                         | Folder                     |
-| ------------ | ----------------------------------------------------------------------------------------- | -------------------------------------------------------------- | -------------------------- |
-| #2938        | Do embeddings find topics and events on new articles?                                     | Topics: yes. Events: no.                                       | `embedding-heldout-2938`   |
-| #2944        | Can a reranker or a classifier decide the event?                                          | No tested method was ready.                                    | `event-grouping-2944`      |
-| #2947, #2948 | Do event summaries made by a local LLM help? How many neighbours must the shortlist keep? | Summaries lose evidence. 80 neighbours keep 99% of real pairs. | `event-evidence-2947-2948` |
-| #2957        | Can a local LLM compare two full articles?                                                | Good results, but too slow. The user closed this route.        | `event-evidence-2957`      |
-| #3124        | Can cheap features with a logistic regression decide the event?                           | Failed its gate on ECB+.                                       | `feature-scorer-3124`      |
-| #3130        | Same question, with full-article training data and a new grouping step.                   | In progress.                                                   | `feature-scorer-3130`      |
+| Round        | Question                                                                                  | Result                                                           | Folder                     |
+| ------------ | ----------------------------------------------------------------------------------------- | ---------------------------------------------------------------- | -------------------------- |
+| #2938        | Do embeddings find topics and events on new articles?                                     | Topics: yes. Events: no.                                         | `embedding-heldout-2938`   |
+| #2944        | Can a reranker or a classifier decide the event?                                          | No tested method was ready.                                      | `event-grouping-2944`      |
+| #2947, #2948 | Do event summaries made by a local LLM help? How many neighbours must the shortlist keep? | Summaries lose evidence. 80 neighbours keep 99% of real pairs.   | `event-evidence-2947-2948` |
+| #2957        | Can a local LLM compare two full articles?                                                | Good results, but too slow. The user closed this route.          | `event-evidence-2957`      |
+| #3124        | Can cheap features with a logistic regression decide the event?                           | Failed its gate on ECB+.                                         | `feature-scorer-3124`      |
+| #3130        | Same question, with full-article training data and a new grouping step.                   | Passed on the Gun Violence Corpus. Fails on headline-only input. | `feature-scorer-3130`      |
+
+## The design that passed (#3130)
+
+The packages start from this design. Change it only with a new round.
+
+| Part                   | Choice                                                                                                                                                                                |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Text for the embedding | Title and lead. A general rule removes URL and boilerplate segments.                                                                                                                  |
+| Shortlist              | 80 nearest neighbours by raw cosine, published within 7 days.                                                                                                                         |
+| Pair score             | Logistic regression on raw cosine and two number features over the full body: numbers that agree, and numbers that disagree.                                                          |
+| Grouping step          | On each new publish day, group-average clustering of the 7-day window again. Event IDs move forward by the largest overlap. Between those runs, a new article joins by group average. |
+| Cut-off                | 0.5.                                                                                                                                                                                  |
+| Selection              | Cross-validation on ECB+ (5 topic folds) and on #2938 with #2957 (one fold). The score was B-cubed F0.5.                                                                              |
+
+Result on the Gun Violence Corpus, which no earlier round had seen (509 documents, 241 incidents). The baseline is centered title embeddings with complete linkage at 0.6.
+
+| Score                                     | Design                                       | Baseline              |
+| ----------------------------------------- | -------------------------------------------- | --------------------- |
+| Pair precision / recall / F0.5            | 0.918 / 0.712 / 0.868                        | 0.820 / 0.144 / 0.423 |
+| B-cubed precision / recall / F0.5         | 0.977 / 0.849 / 0.948                        | 0.978 / 0.554 / 0.848 |
+| B-cubed F0.5 range over 10 arrival orders | 0                                            | not measured          |
+| Cost for each article                     | About 15 ms, of which 13 ms is the embedding | —                     |
 
 ## Limitations
 
@@ -80,6 +102,8 @@ All evidence is on the local Mac in `~/.codex/visualizations/2026/10/23/01a16a1c
 **Cause.** Dataset shift. 83% of the training pairs were HLGD headlines. The scorer then got article leads, which have lower similarity.
 
 **Before you change it.** Train on the same kind of text that the scorer will get. Consider a similarity that is relative to each article's neighbours: the ratio margin (Artetxe and Schwenk, ACL 2019) or CSLS (Conneau et al., ICLR 2018). Then one cut-off can work for different sources. Check the probability scale on each new source before you trust a fixed cut-off.
+
+**Status after #3130.** Training on full-article leads fixed this for full articles. The ratio margin and CSLS lost in cross-validation (B-cubed F0.5 0.72 to 0.88, against 0.92 for raw cosine). They are not proven wrong. The cross-validation streams were small, so each article had few earlier neighbours. Test them again on a large stream. Limitation 18 is the same shift in the other direction.
 
 ### 5. Some features help and some features hurt
 
@@ -125,6 +149,8 @@ All evidence is on the local Mac in `~/.codex/visualizations/2026/10/23/01a16a1c
 - In batch grouping, yes/no decisions make many pairs equal. `getSmallestDistance` in ml-hclust's `agnes` uses a strict `<`, so the first equal pair in row order wins. Complete linkage then removes the third article of an open triangle (A–B joined, B–C joined, A–C not joined).
 
 **Before you change it.** Prefer pair scores with many values to yes/no decisions. Think about a merge step that can join two events later. Think about a comparison with the whole event (group average or centroid) instead of every member. Yang, Pierce and Carbonell (SIGIR 1998) compare batch group-average clustering with single-pass incremental clustering. Measure order stability for every candidate (#2959).
+
+**Status after #3130.** The cross-validation compared four grouping steps. Online complete linkage scored 0.864 with a range of 0.031 across orders. Online group average scored 0.913 (range 0.022). Group average with a periodic merge scored 0.912 (range 0.019). Group-average clustering of the 7-day window again on each publish day scored 0.923 with a range of 0. The design uses the last one. Inside the window, a new day can still move articles between events. Limitation 8 applies to that window.
 
 ### 8. Batch grouping changes old groups when new articles arrive
 
@@ -207,6 +233,8 @@ All evidence is on the local Mac in `~/.codex/visualizations/2026/10/23/01a16a1c
 
 **Before you change it.** Remove URL and boilerplate segments from the lead with a general rule. Make extraction report an incomplete page (#2952). Do not use a list of publishers.
 
+**Status after #3130.** A general detokenizer joins URL tokens again, and the lead rule removes URL segments. 0 of 982 ECB+ leads contain a URL now. Partial web pages (#2952) are still open. A partial page is close to headline-only input (limitation 18).
+
 ### 15. The test data has limits
 
 **What happens.** Each data set measures only a part of the problem.
@@ -240,6 +268,52 @@ All evidence is on the local Mac in `~/.codex/visualizations/2026/10/23/01a16a1c
 **Evidence.** The saved llama.cpp runtime linked its libraries to `/private/tmp`, and macOS removed that folder. Two runs of #2957 failed before the links were repaired (`event-evidence-2957/results/runtime-link-repair.json`). A closed laptop lid caused 60 timeouts in #2957.
 
 **Before you change it.** Keep every runtime file inside the evaluation folder, with relative links. Record hashes of models and packages. Run long stages on power, with the lid open.
+
+### 18. The design joins too much when an article has only a headline
+
+**What happens.** With headlines only, the #3130 design puts almost everything into a few large events.
+
+**Evidence.** On HLGD test, B-cubed F0.5 was 0.284 against 0.819 for the baseline. Pair F0.5 was 0.100 against 0.572, with 6,326 false joins (#3132).
+
+**Cause.** Dataset shift in the other direction (limitation 4). The design learned the cosine scale of title-and-lead text. Two headlines get higher cosine values, so too many pairs pass the cut-off. A headline also has few numbers, so the number features give no disagreement evidence.
+
+**Before you change it.** Give the package a guard for input without a lead. Choose between: no joins for that article, a second model trained on headlines, or a refusal. A paywall preview or a description-only page (#2952) is the same case in production.
+
+### 19. Late follow-up reports start a new event
+
+**What happens.** A report that comes more than 7 days after the event does not join it.
+
+**Evidence.** On the Gun Violence Corpus, 63 of the 100 false splits were more than 7 days apart. One example: an arrest reported 93 days after the shooting (#3133).
+
+**Cause.** The shortlist and the grouping window keep only 7 days. Only #2938 had dates in the training data, so no date feature was trained.
+
+**Before you change it.** Get training data with dates and late follow-ups. Then learn how the date gap changes the pair score, instead of a hard 7-day limit. A longer window costs more in each re-clustering run (limitation 21).
+
+### 20. Look-alike events close in time still join
+
+**What happens.** Different incidents of one kind, a few days apart, can join.
+
+**Evidence.** Most of the 22 false joins on the Gun Violence Corpus were shootings of teenagers 6 to 7 days apart. 127 of the 510 documents mention more than one incident. The research gave each document the incident with the most labeled mentions.
+
+**Cause.** The pair score has no place or person feature. NER added only 0.003 in cross-validation, under the 0.005 margin, so the design does not use it.
+
+**Before you change it.** Test place and person agreement again on data with many look-alike events. Write the rule for a document that reports several incidents (limitation 13).
+
+### 21. The cost of re-clustering at production size is not measured
+
+**What happens.** Each publish day clusters the whole 7-day window again. The cost grows with the square of the window size.
+
+**Evidence.** The daily windows of the Gun Violence Corpus are small. #3130 measured 0.68 ms for each article for the grouping step, at that size only.
+
+**Before you change it.** Measure one re-clustering run at the window size of the real feeds before you choose the window (#3131).
+
+### 22. Small leaks in the cross-validation
+
+**What happens.** The research calculated the centering mean from all fitting folds, so each fold saw a little of its own test data.
+
+**Cause.** One mean for all folds was simpler.
+
+**Before you change it.** Calculate the mean inside each fold. This leak affects only centered cosine, and centered cosine lost. The design uses raw cosine.
 
 ## Rules for every new round
 
