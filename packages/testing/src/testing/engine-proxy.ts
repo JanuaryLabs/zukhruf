@@ -4,7 +4,7 @@
  * points a runner at `host` and holds, delays or refuses chosen requests.
  */
 import { EventEmitter, once } from 'node:events';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { rm } from 'node:fs/promises';
 import {
   type IncomingMessage,
   type Server,
@@ -13,9 +13,13 @@ import {
   request as forward,
 } from 'node:http';
 import { type Socket, connect } from 'node:net';
-import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { Duplex } from 'node:stream';
+
+import {
+  type TemporaryDirectory,
+  TemporaryFiles,
+} from '../fs/temporary-files.ts';
 
 /** A request that reached the proxy. `path` has no API version and no query. */
 export interface ProxiedRequest {
@@ -32,7 +36,7 @@ const unversioned = (url: string): string =>
 export class EngineProxy implements AsyncDisposable {
   /** The Unix socket of the local engine that the proxy forwards to. */
   readonly #engine: string;
-  readonly #directory: string;
+  readonly #directory: TemporaryDirectory;
   readonly #intercepts: {
     method: string;
     path: string;
@@ -47,7 +51,7 @@ export class EngineProxy implements AsyncDisposable {
   /** Each request in the order it arrived, also the ones refused. */
   readonly requests: ProxiedRequest[] = [];
 
-  private constructor(engine: string, directory: string) {
+  private constructor(engine: string, directory: TemporaryDirectory) {
     this.#engine = engine;
     this.#directory = directory;
     this.#server = createServer({ requestTimeout: 0 }, (request, response) => {
@@ -65,14 +69,14 @@ export class EngineProxy implements AsyncDisposable {
       throw new Error(`The engine proxy forwards to unix:// only: ${engine}`);
     const proxy = new EngineProxy(
       engine.slice('unix://'.length),
-      await mkdtemp(join(tmpdir(), 'zukhruf-proxy-')),
+      await new TemporaryFiles().directory('zukhruf-proxy-'),
     );
     await proxy.listen();
     return proxy;
   }
 
   get #path(): string {
-    return join(this.#directory, 'engine.sock');
+    return join(this.#directory.path, 'engine.sock');
   }
 
   /** The host to put in DOCKER_HOST. */
@@ -105,7 +109,7 @@ export class EngineProxy implements AsyncDisposable {
   async [Symbol.asyncDispose](): Promise<void> {
     while (this.#unanswered > 0) await once(this.#answers, 'answered');
     if (this.#server.listening) await this.close();
-    await rm(this.#directory, { recursive: true, force: true });
+    await this.#directory.cleanup();
   }
 
   #track(socket: Socket | Duplex): void {
