@@ -59,7 +59,7 @@ The rule has the shape of the `zxid` of ZooKeeper and of `EpochTokenSource` of `
 
 - Each grant has one more inspect. The store sends it at the same time as the list, so a grant has no added round trip.
 - Tokens are large numbers, approximately 1.8 × 10^15 in 2026.
-- The names of the rungs are 15 characters longer. The engine accepted a name of 90 characters in a probe. The local volume driver keeps each volume in a directory with the name of the volume, so a name must stay below the limit of a file name, 255 bytes on most file systems. This limit was not probed.
+- The names of the rungs are 15 characters longer. The engine accepted a name of 90 characters in a probe. The local volume driver keeps each volume in a directory with the name of the volume, so a name must stay below the limit of a file name. A probe on 2026-10-26 on Docker Desktop created a volume with a name of 255 characters, and the engine refused 256. A rung name is the namespace and 88 characters: a hyphen, 64 hexadecimal digits of the key digest, `-token-`, and 16 digits. Thus a namespace can have at most 167 characters.
 - An upgrade from 0.3.41 keeps the tokens in order. The times are much higher than the old rung numbers.
 - A 0.3.41 client and a new client on one namespace still give tokens that increase. The old client creates the highest rung + 1. Only the old client restarts at 1 after a lost ladder.
 - The operator rule "exclude the label `zukhruf.mutex.namespace` from prunes" goes away.
