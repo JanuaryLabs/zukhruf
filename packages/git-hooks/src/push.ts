@@ -9,7 +9,7 @@ import { promisify } from 'node:util';
 import { FileLock } from '@zukhruf/fs';
 
 import { type RefUpdate, readRefUpdates } from './ref-update.ts';
-import { writeCommitFiles } from './snapshot/commit-files.ts';
+import { withoutRepoVariables } from './repo-variables.ts';
 import { hasInstallDrift } from './snapshot/drift.ts';
 import { installFor } from './snapshot/installs.ts';
 import { runNx } from './snapshot/nx.ts';
@@ -69,11 +69,14 @@ export class Push {
     );
   }
 
-  // Runs `work` on the snapshot of one commit: its files in a temporary
-  // folder, with a node_modules that a build can use. `environment` makes git
-  // see a clean checkout of the commit there, and holds the nx cache of the
-  // state folder. One snapshot is open at a time in a repo; the snapshot is
-  // deleted after `work`.
+  // Runs `work` on the snapshot of one commit: a clone of the repo in a
+  // temporary folder with a checkout of the commit, and a node_modules that a
+  // build can use. The clone shares the objects of the repo, so it copies
+  // none, and git commands in it see a clean checkout of the commit. The
+  // environment has none of git's variables of the repo, so a tool that runs
+  // git in another folder never reaches the repo, and it holds the nx cache of
+  // the state folder. One snapshot is open at a time in a repo; the snapshot
+  // is deleted after `work`.
   async inSnapshot<T>(
     sha: string,
     work: (folder: string, environment: NodeJS.ProcessEnv) => Promise<T>,
@@ -97,14 +100,19 @@ export class Push {
     await using temporary = await mkdtempDisposable(
       join(tmpdir(), 'git-hooks-push-'),
     );
-    const top = await realpath(temporary.path);
-    const folder = join(top, 'tree');
-    await writeCommitFiles(
-      (...args) => this.#git(...args),
-      { cwd: this.#root, env: this.#environment },
-      sha,
+    const folder = join(await realpath(temporary.path), 'tree');
+    const isolated = await withoutRepoVariables(this.#environment);
+    await gitIn(
+      temporary.path,
+      isolated,
+      'clone',
+      '--shared',
+      '--no-checkout',
+      '--quiet',
+      this.#root,
       folder,
     );
+    await gitIn(folder, isolated, 'checkout', '--detach', '--quiet', sha);
     if (!existsSync(join(folder, 'package-lock.json')))
       throw new MissingLockfileError(sha);
     const installed = (await hasInstallDrift(
@@ -120,18 +128,11 @@ export class Push {
     await linkPackages(installed, folder);
     const cache = join(state, 'nx');
     const environment = {
-      ...this.#environment,
-      GIT_DIR: (await this.#git('rev-parse', '--absolute-git-dir')).trim(),
-      GIT_WORK_TREE: folder,
-      GIT_INDEX_FILE: join(top, 'index'),
+      ...isolated,
       NX_DAEMON: 'false',
       NX_CACHE_DIRECTORY: cache,
       NX_WORKSPACE_DATA_DIRECTORY: join(cache, 'workspace-data'),
     };
-    // A temporary index of the commit, refreshed against the snapshot, so git
-    // finds no changed and no untracked files.
-    await gitIn(folder, environment, 'read-tree', sha);
-    await gitIn(folder, environment, 'update-index', '-q', '--refresh');
     // Awaited here, so the snapshot and the lock stay until `work` ends.
     return await work(folder, environment);
   }

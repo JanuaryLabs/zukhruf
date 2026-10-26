@@ -4,6 +4,8 @@ import { tmpdir } from 'node:os';
 import { join, matchesGlob } from 'node:path';
 import { promisify } from 'node:util';
 
+import { withoutRepoVariables } from './repo-variables.ts';
+
 const execFileAsync = promisify(execFile);
 
 // The staged commit: the index of the repo at `root`. Each read of a staged
@@ -80,14 +82,20 @@ export class Commit {
   }
 
   // Runs the repo's own nx with no daemon, so a hook started from a GUI or an
-  // agent shell does not leave a daemon behind or read its stale graph.
+  // agent shell does not leave a daemon behind or read its stale graph. nx
+  // and its tasks get none of git's variables of the repo, so a task that
+  // runs git in its own folder never reaches the repo. The git commands of
+  // the commit keep them, so they read and write the commit's index.
   async nx(...args: string[]): Promise<string> {
     const { stdout } = await execFileAsync(
       join(this.root, 'node_modules/.bin/nx'),
       args,
       {
         cwd: this.root,
-        env: { ...this.#environment, NX_DAEMON: 'false' },
+        env: {
+          ...(await withoutRepoVariables(this.#environment)),
+          NX_DAEMON: 'false',
+        },
         encoding: 'utf8',
         maxBuffer: 2 ** 30,
       },

@@ -5,6 +5,7 @@ import {
   chmod,
   mkdir,
   mkdtempDisposable,
+  readFile,
   realpath,
   symlink,
   writeFile,
@@ -479,6 +480,78 @@ await prePush([new Affected()]);
       await repo.git('diff', '--cached', '--name-only'),
       'packages/b/index.js\n',
       'The index of the repo must keep what the peer staged',
+    );
+  },
+);
+
+test(
+  'a build task that runs git init and git config in its own temp folder makes a repo there, and the git config of the pushing repo does not change',
+  { timeout: 60_000 },
+  async () => {
+    // Arrange
+    await using folder = await mkdtempDisposable(join(tmpdir(), 'git-hooks-'));
+    const repo = await workspace(
+      folder.path,
+      `import { Build, prePush } from '@zukhruf/git-hooks';
+await prePush([new Build()]);
+`,
+    );
+    const taskRepo = join(repo.top, 'task-repo');
+    // A task such as a CLI test that makes a repo of its own in a temp folder.
+    await repo.write(
+      'tools/git-init.mjs',
+      `import { execFileSync } from 'node:child_process';
+import { mkdirSync, writeFileSync } from 'node:fs';
+const [folder] = process.argv.slice(2);
+mkdirSync(folder);
+execFileSync('git', ['init', '--quiet'], { cwd: folder });
+execFileSync('git', ['config', 'probe.owner', 'task'], { cwd: folder });
+writeFileSync(\`\${folder}/staged.txt\`, 'staged\\n');
+execFileSync('git', ['add', 'staged.txt'], { cwd: folder });
+`,
+    );
+    await repo.write(
+      'packages/a/package.json',
+      `${JSON.stringify({
+        name: '@probe/a',
+        version: '0.0.0',
+        type: 'module',
+        nx: {
+          targets: {
+            build: {
+              executor: 'nx:run-commands',
+              options: { command: `node tools/git-init.mjs ${taskRepo}` },
+            },
+          },
+        },
+      })}\n`,
+    );
+    await repo.commit('a task that runs git in a temp folder');
+    const config = await readFile(join(repo.root, '.git/config'));
+
+    // Act
+    const result = await repo.push('--quiet', 'origin', 'main');
+
+    // Assert
+    assert.equal(result.code, 0, result.stderr);
+    assert.equal(
+      (await readFile(join(repo.root, '.git/config'))).toString(),
+      config.toString(),
+      'The git config of the pushing repo must not change',
+    );
+    assert.equal(
+      (await repo.gitIn(taskRepo, 'config', '--local', 'probe.owner')).trim(),
+      'task',
+      'git init must make a repo in the temp folder, with the config that the task wrote',
+    );
+    assert.equal(
+      (await repo.gitIn(taskRepo, 'rev-parse', '--absolute-git-dir')).trim(),
+      join(taskRepo, '.git'),
+    );
+    assert.equal(
+      await repo.gitIn(taskRepo, 'ls-files'),
+      'staged.txt\n',
+      'git add must write the index of the temp repo',
     );
   },
 );

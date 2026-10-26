@@ -5,6 +5,7 @@ import {
   chmod,
   mkdir,
   mkdtempDisposable,
+  readFile,
   realpath,
   symlink,
   writeFile,
@@ -50,11 +51,19 @@ async function repository(folder: string, hook: string) {
     git,
     write: (path: string, content: string) =>
       writeFile(join(root, path), content),
-    async commit(message: string) {
+    async commit(message: string, ...gitOptions: string[]) {
       try {
         const { stdout, stderr } = await execFileAsync(
           'git',
-          ['-c', 'core.hooksPath=.husky', 'commit', '--quiet', '-m', message],
+          [
+            '-c',
+            'core.hooksPath=.husky',
+            ...gitOptions,
+            'commit',
+            '--quiet',
+            '-m',
+            message,
+          ],
           { cwd: root, env: environment },
         );
         return { code: 0, stdout, stderr };
@@ -360,5 +369,76 @@ await preCommit([new Codegen({ run: ['@probe/backend:broken'], stage: ['openapi.
     await repo.git('rev-list', '--count', 'HEAD'),
     '1\n',
     'Only the base commit may exist',
+  );
+});
+
+test('a codegen target that runs git init and git config in its own temp folder makes a repo there, and the git config of the committing repo does not change', async () => {
+  // Arrange
+  await using folder = await mkdtempDisposable(join(tmpdir(), 'git-hooks-'));
+  await using task = await mkdtempDisposable(join(tmpdir(), 'git-hooks-task-'));
+  const taskRepo = join(await realpath(task.path), 'repo');
+  const repo = await workspace(
+    folder.path,
+    `import { Codegen, preCommit } from '@zukhruf/git-hooks';
+await preCommit([new Codegen({ run: ['@probe/other:git-init'], stage: ['git-init.log'] })]);
+`,
+  );
+  // A target such as a CLI test that makes a repo of its own in a temp folder.
+  await repo.write(
+    'tools/git-init.mjs',
+    `import { execFileSync } from 'node:child_process';
+import { mkdirSync, writeFileSync } from 'node:fs';
+const [folder] = process.argv.slice(2);
+mkdirSync(folder);
+execFileSync('git', ['init', '--quiet'], { cwd: folder });
+execFileSync('git', ['config', 'probe.owner', 'task'], { cwd: folder });
+writeFileSync('git-init.log', 'ran\\n');
+`,
+  );
+  await repo.write(
+    'packages/other/package.json',
+    `${JSON.stringify({
+      name: '@probe/other',
+      version: '0.0.0',
+      type: 'module',
+      nx: {
+        targets: {
+          'git-init': {
+            executor: 'nx:run-commands',
+            options: { command: `node tools/git-init.mjs ${taskRepo}` },
+          },
+        },
+      },
+    })}\n`,
+  );
+  await repo.git('add', 'tools/git-init.mjs', 'packages/other/package.json');
+  const config = await readFile(join(repo.root, '.git/config'), 'utf8');
+
+  // Act
+  // With --git-dir and --work-tree, git gives the hook GIT_DIR and
+  // GIT_WORK_TREE of the committing repo.
+  const result = await repo.commit(
+    'add a target that runs git in a temp folder',
+    `--git-dir=${join(repo.root, '.git')}`,
+    `--work-tree=${repo.root}`,
+  );
+
+  // Assert
+  assert.equal(result.code, 0, result.stderr);
+  assert.equal(
+    await readFile(join(repo.root, '.git/config'), 'utf8'),
+    config,
+    'The git config of the committing repo must not change',
+  );
+  const inTask = async (...args: string[]) =>
+    (await execFileAsync('git', args, { cwd: taskRepo })).stdout.trim();
+  assert.equal(
+    await inTask('config', '--local', 'probe.owner'),
+    'task',
+    'git init must make a repo in the temp folder, with the config that the task wrote',
+  );
+  assert.equal(
+    await inTask('rev-parse', '--absolute-git-dir'),
+    join(taskRepo, '.git'),
   );
 });

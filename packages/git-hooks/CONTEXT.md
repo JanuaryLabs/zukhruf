@@ -49,7 +49,7 @@ The commit that a ref update sends: its local sha. A pre-push step judges the pu
 _Avoid_: HEAD (the branch that is checked out, which a push can leave out), local commit
 
 **Snapshot**:
-The files of one commit in a temporary folder outside the repo. The snapshot of the staged commit (`Commit.inSnapshot`) holds only the files. The snapshot of a pushed commit (`Push.inSnapshot`) also has a `node_modules` that the build can use: its workspace packages resolve to the snapshot, and the other packages are the installed packages. Git commands that nx runs in it see a clean checkout of the pushed commit. The hook deletes a snapshot after use.
+The files of one commit in a temporary folder outside the repo. The snapshot of the staged commit (`Commit.inSnapshot`) holds only the files. The snapshot of a pushed commit (`Push.inSnapshot`) is a clone of the repo that shares its object store, with the files of the pushed commit. It also has a `node_modules` that the build can use: its workspace packages resolve to the snapshot, and the other packages are the installed packages. Git commands that nx runs in it see a clean checkout of the pushed commit. nx and its tasks get none of the variables that tie git to the repo, such as `GIT_DIR`. The hook deletes a snapshot after use.
 _Avoid_: Checkout, worktree (git's word for a working tree that git tracks), copy
 
 **Install drift**:

@@ -83,7 +83,7 @@ await preCommit([
 ]);
 ```
 
-The targets run in the order that `run` gives. When a target fails, the commit stops, and the hook shows the reason that the target gave. Put `Format` after `Codegen`, so that the generated files are checked too.
+The targets run in the order that `run` gives. When a target fails, the commit stops, and the hook shows the reason that the target gave. Put `Format` after `Codegen`, so that the generated files are checked too. nx and its tasks get none of the variables that tie git to one repo (see [Where a pre-push build runs](#where-a-pre-push-build-runs)), so a target that runs git in a folder of its own does not change the repo. The hook's own git commands keep these variables, so they read and write the index of the commit.
 
 ## Add a step of your own
 
@@ -191,9 +191,11 @@ build     waiting for another pre-push build in this repo
 
 ## Where a pre-push build runs
 
-Each pushed commit is built in a snapshot: a copy of the files of that commit in a temporary folder outside the repo. The files come from the object store of git, so the snapshot holds what the commit holds, and nothing that is only in the working tree. A file that `.gitignore` names, such as `.env`, is not in the snapshot.
+Each pushed commit is built in a snapshot: a clone of the repo in a temporary folder outside the repo, with the files of that commit. The hook makes the clone with `git clone --shared --no-checkout`, and then runs `git checkout --detach <sha>` in it. The clone shares the object store of the repo through `objects/info/alternates`, so git copies no objects. The snapshot holds what the commit holds, and nothing that is only in the working tree. A file that `.gitignore` names, such as `.env`, is not in the snapshot. Git writes the files of the commit as in each checkout: it makes the links and the executable files, and it applies `.gitattributes` and the filters of your git config.
 
-nx runs in the snapshot, and git commands in nx work there. The hook sets `GIT_DIR` to the git folder of the repo, `GIT_WORK_TREE` to the snapshot, and `GIT_INDEX_FILE` to a temporary index that it makes from the pushed commit. Thus git sees the snapshot as a clean checkout of that commit, with no changed and no untracked files, and `nx affected --base --head` works.
+nx runs in the snapshot, and git commands in nx work there. The snapshot is a repo of its own, so git sees a clean checkout of the pushed commit, with no changed and no untracked files. `nx affected --base --head` works, because git finds the base commit through the shared object store.
+
+nx and its tasks get none of the variables that tie git to one repo, such as `GIT_DIR`, `GIT_WORK_TREE` and `GIT_INDEX_FILE`. The hook removes each variable that `git rev-parse --local-env-vars` lists. Git removes the same list when it runs a command in another repo, such as a submodule. Thus a task that runs `git init` in a temporary folder of its own makes a repo in that folder, and does not change the repo that pushes. Before 0.3.43, the hook gave nx these variables. In sdk-it, a test ran `git init` in a temporary folder, and git wrote `core.worktree` into the config of the real repo. The snapshot was then deleted, so each git command in the repo failed.
 
 The snapshot uses the packages that the repo installed when they match the `package-lock.json` of the commit. Then the setup takes about 1 s. A workspace package resolves to its folder in the snapshot, not in the working tree.
 
@@ -226,7 +228,7 @@ A create or an update also has a `head` and a `base`. The `head` is the local co
 - When the remote has the `head` already, the `base` is the `head`, and the range is empty.
 - When the remote has no commit of that history, there is no `base`, and the step must check the whole history.
 
-`push.inSnapshot(sha, work)` runs `work` on the snapshot of one commit. `work` gets the folder of the snapshot and an environment for the tools that it runs there: the git environment above, `NX_DAEMON=false`, and the nx cache of the state folder. `push.nx(sha, ...args)` runs nx in the snapshot of one commit, with the git environment above, and gives its standard output. When nx exits with a code other than 0, it throws.
+`push.inSnapshot(sha, work)` runs `work` on the snapshot of one commit. `work` gets the folder of the snapshot and an environment for the tools that it runs there: the environment of the hook without the variables that tie git to one repo, `NX_DAEMON=false`, and the nx cache of the state folder. `push.nx(sha, ...args)` runs nx in the snapshot of one commit, with that environment, and gives its standard output. When nx exits with a code other than 0, it throws.
 
 This step runs the tests of the projects that each pushed range affects:
 
