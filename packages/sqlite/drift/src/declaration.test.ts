@@ -588,6 +588,27 @@ test('with rows keep, a view that was broken before apply does not fail it', asy
   ]);
 });
 
+test('a trigger on another table that was broken before apply does not fail it, with rows keep and with rows replace', async () => {
+  for (const kept of ['keep', 'replace'] as const) {
+    await using scratch = await new TemporaryFiles().directory('drift-');
+    using database = new DatabaseSync(join(scratch.path, 'data.sqlite'));
+    database.exec(`CREATE TABLE runs (id INTEGER PRIMARY KEY) STRICT;
+      CREATE TABLE log (id INTEGER) STRICT;
+      CREATE TRIGGER log_added AFTER INSERT ON log BEGIN
+        SELECT missing FROM runs;
+      END;
+      INSERT INTO runs VALUES (1)`);
+    const declaration = new Declaration(
+      ['CREATE TABLE runs (id INTEGER PRIMARY KEY, name TEXT) STRICT'],
+      { rows: kept },
+    );
+
+    declaration.apply(database);
+
+    assert.equal(declaration.drift(database), 'fits');
+  }
+});
+
 test('with rows keep, a rebuild that drops a column that a trigger on another table reads fails apply with the error of SQLite, and the tables and their rows stay as they were', async () => {
   await using scratch = await new TemporaryFiles().directory('drift-');
   using database = new DatabaseSync(join(scratch.path, 'data.sqlite'));
