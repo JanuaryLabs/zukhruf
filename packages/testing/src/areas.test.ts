@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import spawn, { SubprocessError } from 'nano-spawn';
 
 /**
- * A consumer installs only the drivers of the areas it imports: the three
+ * A consumer installs only the drivers of the areas it imports: the four
  * drivers are optional peers, and the mariadb and mysql2 drivers of this
  * package's own tests are no dependency at all. This child-process hook makes
  * each driver unresolvable, the way a consumer without it sees the package.
@@ -38,6 +38,8 @@ const drivers = [
   'mariadb',
   'mysql2',
   'mysql2/promise',
+  'msw',
+  'msw/node',
 ];
 
 test('every area without a driver imports when no driver is installed', async () => {
@@ -64,13 +66,17 @@ test('an area with a driver needs only its own driver', async () => {
     ['sqlserver', 'mssql'],
     ['duckdb', '@duckdb/node-api'],
     ['bigquery', '@google-cloud/bigquery'],
+    ['msw', 'msw'],
   ] as const) {
+    const own = drivers.filter(
+      (other) => other === driver || other.startsWith(`${driver}/`),
+    );
     await importArea(
       area,
-      drivers.filter((other) => other !== driver),
+      drivers.filter((other) => !own.includes(other)),
     );
     await assert.rejects(
-      importArea(area, [driver]),
+      importArea(area, own),
       (error: unknown) =>
         error instanceof SubprocessError &&
         error.stderr.includes(`not installed: ${driver}`),

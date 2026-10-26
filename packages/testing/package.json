@@ -1,7 +1,7 @@
 {
   "name": "@zukhruf/testing",
   "version": "0.3.41",
-  "description": "Disposable fixtures for integration tests: Docker containers and database servers, SQLite and DuckDB databases, HTTP servers and streams, temporary directories and environment variables. Node's global setup and global teardown remove what a killed test run left behind.",
+  "description": "Disposable fixtures for integration tests: Docker containers and database servers, SQLite and DuckDB databases, HTTP servers and streams, temporary directories, environment variables and intercepted requests. Node's global setup and global teardown remove what a killed test run left behind.",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -116,6 +116,12 @@
       "import": "./dist/process/environment.js",
       "default": "./dist/process/environment.js"
     },
+    "./msw": {
+      "@zukhruf/source": "./src/msw/msw.ts",
+      "types": "./dist/msw/msw.d.ts",
+      "import": "./dist/msw/msw.js",
+      "default": "./dist/msw/msw.js"
+    },
     "./docker-global-setup": {
       "@zukhruf/source": "./src/scripts/docker-global-setup.ts",
       "types": "./dist/scripts/docker-global-setup.d.ts",
@@ -139,6 +145,7 @@
     "@types/pg": "^8.23.1",
     "mariadb": "^3.5.4",
     "mssql": "^12.7.4",
+    "msw": "^3.0.3",
     "mysql2": "^3.24.5",
     "pg": "^8.23.1"
   },
@@ -151,7 +158,8 @@
   "peerDependencies": {
     "@duckdb/node-api": "^1.5.5-r.3",
     "@google-cloud/bigquery": "^8.3.1",
-    "mssql": "^12.7.0"
+    "mssql": "^12.7.0",
+    "msw": "^3.0.3"
   },
   "peerDependenciesMeta": {
     "@duckdb/node-api": {
@@ -161,6 +169,9 @@
       "optional": true
     },
     "mssql": {
+      "optional": true
+    },
+    "msw": {
       "optional": true
     }
   }
