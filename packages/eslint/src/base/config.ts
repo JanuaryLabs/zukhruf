@@ -10,6 +10,7 @@ import noPhaseFlag from '../class-state/no-phase-flag.ts';
 import { type Concept, enable } from '../concept.ts';
 import {
   BUILD_OUTPUT,
+  COMMONJS,
   FIXTURES,
   JAVASCRIPT,
   SOURCE,
@@ -72,6 +73,14 @@ export const base: Concept = {
           '@typescript-eslint/prefer-namespace-keyword': 'error',
           '@typescript-eslint/no-inferrable-types': 'error',
         },
+      },
+      {
+        // In a CommonJS file require() is the only import form: Node runs a
+        // `.cts` with its types stripped, which rejects `import x = require()`,
+        // and `verbatimModuleSyntax` rejects ESM imports there.
+        name: 'zukhruf/base/commonjs',
+        files: COMMONJS,
+        rules: { '@typescript-eslint/no-require-imports': 'off' },
       },
       {
         name: 'zukhruf/base/typescript',

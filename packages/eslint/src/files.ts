@@ -5,6 +5,7 @@
 export const TYPESCRIPT = ['**/*.ts', '**/*.tsx', '**/*.cts', '**/*.mts'];
 export const JAVASCRIPT = ['**/*.js', '**/*.jsx', '**/*.cjs', '**/*.mjs'];
 export const SOURCE = [...TYPESCRIPT, ...JAVASCRIPT];
+export const COMMONJS = ['**/*.cjs', '**/*.cts'];
 export const JSX = ['**/*.tsx', '**/*.jsx'];
 /** The extensions a test file can have: `x.test.<extension>` or `x.spec.<extension>`. */
 export const TEST_EXTENSIONS = [
