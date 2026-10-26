@@ -4,12 +4,12 @@ import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 import { promisify } from 'node:util';
 
-import { DockerFixtures } from '../docker/index.ts';
+import { DockerTestbed } from '../docker/index.ts';
 import { Postgres } from './postgres.ts';
 import { SQL_SERVER_FULL_IMAGE, SqlServer } from './sqlserver.ts';
 
 const execute = promisify(execFile);
-const docker = new DockerFixtures({ environment: process.env });
+const docker = new DockerTestbed({ environment: process.env });
 /** Removes the servers a test created under its own verification label. */
 async function removeScope(scope: string): Promise<void> {
   const client = await docker.client();
@@ -123,13 +123,13 @@ interface DatabaseHandle {
 const worker = `
   import assert from 'node:assert/strict';
   import sql from 'mssql';
-  import { DockerFixtures } from ${JSON.stringify(new URL('../docker/index.ts', import.meta.url).href)};
+  import { DockerTestbed } from ${JSON.stringify(new URL('../docker/index.ts', import.meta.url).href)};
   import { Mariadb } from ${JSON.stringify(new URL('./mariadb.ts', import.meta.url).href)};
   import { Mysql } from ${JSON.stringify(new URL('./mysql.ts', import.meta.url).href)};
   import { Postgres } from ${JSON.stringify(new URL('./postgres.ts', import.meta.url).href)};
   import { SqlServer } from ${JSON.stringify(new URL('./sqlserver.ts', import.meta.url).href)};
   const helpers = { Mariadb, Mysql, Postgres, SqlServer };
-  const docker = new DockerFixtures({ environment: process.env });
+  const docker = new DockerTestbed({ environment: process.env });
   const { helper, config, fail } = JSON.parse(process.argv[1]);
   let handle;
   try {

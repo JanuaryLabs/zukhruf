@@ -2,9 +2,9 @@ import sql from 'mssql';
 import pMemoize from 'p-memoize';
 
 import { timebox } from '../async/timebox.ts';
-import { DockerFixtures } from '../docker/fixtures.ts';
 import type { ServiceContainer } from '../docker/service-container.ts';
 import { TestRun } from '../docker/test-run.ts';
+import { DockerTestbed } from '../docker/testbed.ts';
 import { KIND_LABEL, databaseName } from './collector.ts';
 import type { Database, DatabaseOptions } from './database.ts';
 import {
@@ -21,7 +21,7 @@ export const SQL_SERVER_EDGE_IMAGE = 'mcr.microsoft.com/azure-sql-edge:latest';
 
 /** SQL Server test configuration. Without an image, the engine's architecture picks one. */
 export class SqlServer {
-  readonly #docker: DockerFixtures;
+  readonly #docker: DockerTestbed;
   readonly #run: TestRun | undefined;
   readonly #options;
   readonly #image = pMemoize(async (): Promise<string> => {
@@ -39,7 +39,7 @@ export class SqlServer {
     database = 'testdb',
     labels,
   }: DatabaseOptions) {
-    this.#docker = new DockerFixtures({ environment });
+    this.#docker = new DockerTestbed({ environment });
     this.#run = TestRun.fromEnvironment(environment);
     this.#options = { image, password, database, labels };
   }

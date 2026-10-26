@@ -8,7 +8,7 @@ import pg from 'pg';
 import { Connection, Request, TYPES } from 'tedious';
 
 import { Docker } from '@zukhruf/docker';
-import { DockerFixtures, TestRun } from '@zukhruf/testing/docker';
+import { DockerTestbed, TestRun } from '@zukhruf/testing/docker';
 import { TemporaryFiles } from '@zukhruf/testing/fs';
 import { Mariadb } from '@zukhruf/testing/mariadb';
 import { Mysql } from '@zukhruf/testing/mysql';
@@ -424,7 +424,7 @@ async function dockerEngineFixture(
   const location: DockerEngineLocation = {
     host,
     namespace: `zukhruf-mutex-test-${randomUUID()}`,
-    labels: new DockerFixtures({ environment }).defaults.labels,
+    labels: new DockerTestbed({ environment }).defaults.labels,
     ...(run && { run: { id: run.id, directory: run.directory } }),
   };
   return {

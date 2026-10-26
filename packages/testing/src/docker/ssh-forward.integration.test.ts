@@ -148,9 +148,9 @@ async function scenario(directory: string, body: string, path?: string) {
     import { connect } from 'node:net';
     import { existsSync, readFileSync, writeFileSync } from 'node:fs';
     import { setTimeout as delay } from 'node:timers/promises';
-    import { DockerFixtures } from ${JSON.stringify(new URL('./index.ts', import.meta.url).href)};
+    import { DockerTestbed } from ${JSON.stringify(new URL('./index.ts', import.meta.url).href)};
     const directory = ${JSON.stringify(directory)};
-    const fixtures = new DockerFixtures({ environment: process.env });
+    const testbed = new DockerTestbed({ environment: process.env });
     const failure = (error) => ({
       message: error.message,
       cause: error.cause && { name: error.cause.name, message: error.cause.message, exitCode: error.cause.exitCode, code: error.cause.code, cause: error.cause.cause?.message },
@@ -196,7 +196,7 @@ test(
     const { result, stderr } = await scenario(
       directory.path,
       `
-      const server = await fixtures.serve({ image: 'standin', internalPort: 5432 });
+      const server = await testbed.serve({ image: 'standin', internalPort: 5432 });
       writeFileSync(directory + '/lose', '');
       while (!(await refuses(server.port))) await delay(20);
       console.log(JSON.stringify({ disconnect: await settled(server.disconnect()) }));
@@ -223,7 +223,7 @@ test(
     const { result } = await scenario(
       directory.path,
       `
-      const server = await fixtures.serve({ image: 'standin', internalPort: 5432 });
+      const server = await testbed.serve({ image: 'standin', internalPort: 5432 });
       writeFileSync(directory + '/lose', '');
       while (!(await refuses(server.port))) await delay(20);
       console.log(JSON.stringify({ cleanup: await settled(server.cleanup()) }));
@@ -260,7 +260,7 @@ test(
     const { result, stderr } = await scenario(
       directory.path,
       `console.log(JSON.stringify({
-        serve: await settled(fixtures.serve({ image: 'standin', internalPort: 5432 })),
+        serve: await settled(testbed.serve({ image: 'standin', internalPort: 5432 })),
       }));`,
     );
 
@@ -285,7 +285,7 @@ test(
     const { result } = await scenario(
       directory.path,
       `const started = performance.now();
-      const serve = await settled(fixtures.serve({ image: 'standin', internalPort: 5432 }));
+      const serve = await settled(testbed.serve({ image: 'standin', internalPort: 5432 }));
       console.log(JSON.stringify({ serve, ms: performance.now() - started }));`,
       directory.path,
     );
@@ -313,7 +313,7 @@ test(
     const { result } = await scenario(
       directory.path,
       `const started = performance.now();
-      const serve = await settled(fixtures.serve({ image: 'standin', internalPort: 5432 }));
+      const serve = await settled(testbed.serve({ image: 'standin', internalPort: 5432 }));
       console.log(JSON.stringify({ serve, ms: performance.now() - started, sshAlive: sshAlive() }));`,
     );
 
@@ -339,7 +339,7 @@ test(
     // Act
     const { result, stderr } = await scenario(
       directory.path,
-      `const server = await fixtures.serve({ image: 'standin', internalPort: 5432 });
+      `const server = await testbed.serve({ image: 'standin', internalPort: 5432 });
       const disconnect = await settled(server.disconnect());
       console.log(JSON.stringify({ disconnect, sshAlive: sshAlive() }));`,
     );
@@ -361,7 +361,7 @@ test(
     // Act
     const { result, stderr } = await scenario(
       directory.path,
-      `const server = await fixtures.serve({ image: 'standin', internalPort: 5432 });
+      `const server = await testbed.serve({ image: 'standin', internalPort: 5432 });
       const disconnect = await settled(server.disconnect());
       console.log(JSON.stringify({ disconnect, sshAlive: sshAlive(), stdinEnded: existsSync(directory + '/stdin-ended') }));`,
     );
@@ -385,7 +385,7 @@ test(
     await assert.rejects(
       scenario(
         directory.path,
-        `await fixtures.serve({ image: 'standin', internalPort: 5432 });
+        `await testbed.serve({ image: 'standin', internalPort: 5432 });
         process.kill(process.pid, 'SIGKILL');`,
       ),
       { signalName: 'SIGKILL' },

@@ -1,10 +1,10 @@
 export { DockerDirectory } from './directory.ts';
 export {
   type ContainerOptions,
-  DockerFixtures,
-  type DockerFixturesOptions,
+  DockerTestbed,
+  type DockerTestbedOptions,
   type Mount,
   type ServiceOptions,
-} from './fixtures.ts';
+} from './testbed.ts';
 export { ServiceContainer } from './service-container.ts';
 export { TestRun } from './test-run.ts';

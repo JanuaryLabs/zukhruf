@@ -4,10 +4,10 @@ import { test } from 'node:test';
 
 import mysql, { type RowDataPacket } from 'mysql2/promise';
 
-import { DockerFixtures } from '../docker/index.ts';
+import { DockerTestbed } from '../docker/index.ts';
 import { Mysql } from './mysql.ts';
 
-const docker = new DockerFixtures({ environment: process.env });
+const docker = new DockerTestbed({ environment: process.env });
 test(
   'a dedicated MySQL server gives a driver its requested database and leaves with its container',
   { timeout: 180_000 },

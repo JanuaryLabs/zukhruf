@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { test } from 'node:test';
 
-import { DockerFixtures } from './index.ts';
+import { DockerTestbed } from './index.ts';
 
 const image = 'alpine:latest';
 
@@ -11,9 +11,9 @@ test(
   { timeout: 60_000 },
   async (t) => {
     // Arrange
-    const fixtures = new DockerFixtures({ environment: process.env });
-    const client = await fixtures.client();
-    const container = await fixtures.start({
+    const testbed = new DockerTestbed({ environment: process.env });
+    const client = await testbed.client();
+    const container = await testbed.start({
       image,
       command: ['sh', '-c', 'echo printed; echo complained >&2'],
     });
@@ -46,11 +46,11 @@ test(
   { timeout: 60_000 },
   async (t) => {
     // Arrange
-    const fixtures = new DockerFixtures({ environment: process.env });
-    const client = await fixtures.client();
+    const testbed = new DockerTestbed({ environment: process.env });
+    const client = await testbed.client();
     const scope = randomUUID();
-    await using volume = await fixtures.volume();
-    await using container = await fixtures.start({
+    await using volume = await testbed.volume();
+    await using container = await testbed.start({
       image,
       hostname: 'holder',
       env: { GREETING: 'hello' },
@@ -74,7 +74,7 @@ test(
     const name = `zukhruf-testing-reader-${scope}`;
 
     // Act
-    const read = await fixtures.run({
+    const read = await testbed.run({
       image,
       name,
       mounts: [{ source: volume.name, target: '/data', readOnly: true }],
@@ -102,11 +102,11 @@ test(
   { timeout: 60_000 },
   async () => {
     // Arrange
-    const fixtures = new DockerFixtures({ environment: process.env });
-    await using volume = await fixtures.volume();
+    const testbed = new DockerTestbed({ environment: process.env });
+    await using volume = await testbed.volume();
 
     // Act
-    const result = await fixtures.run({
+    const result = await testbed.run({
       image,
       mounts: [{ source: volume.name, target: '/data', readOnly: true }],
       command: ['touch', '/data/written'],
@@ -125,9 +125,9 @@ test(
     // Arrange: Postgres declares a data volume. Unlike a server, this
     // container is not auto-removed, so only disposal can remove the volume
     // with it.
-    const fixtures = new DockerFixtures({ environment: process.env });
-    const client = await fixtures.client();
-    const container = await fixtures.start({
+    const testbed = new DockerTestbed({ environment: process.env });
+    const client = await testbed.client();
+    const container = await testbed.start({
       image: 'postgres:18-alpine',
       command: ['true'],
     });
@@ -156,8 +156,8 @@ test(
   { timeout: 60_000 },
   async (t) => {
     // Arrange
-    const fixtures = new DockerFixtures({ environment: process.env });
-    await using container = await fixtures.start({
+    const testbed = new DockerTestbed({ environment: process.env });
+    await using container = await testbed.start({
       image,
       command: ['sleep', '600'],
     });
@@ -178,9 +178,9 @@ test(
 
 test('disposing a volume removes it', { timeout: 60_000 }, async () => {
   // Arrange
-  const fixtures = new DockerFixtures({ environment: process.env });
-  const client = await fixtures.client();
-  const volume = await fixtures.volume();
+  const testbed = new DockerTestbed({ environment: process.env });
+  const client = await testbed.client();
+  const volume = await testbed.volume();
   assert.equal((await client.volumes.find(volume.name))?.name, volume.name);
 
   // Act

@@ -4,10 +4,10 @@ import { test } from 'node:test';
 
 import mariadb from 'mariadb';
 
-import { DockerFixtures } from '../docker/index.ts';
+import { DockerTestbed } from '../docker/index.ts';
 import { Mariadb } from './mariadb.ts';
 
-const docker = new DockerFixtures({ environment: process.env });
+const docker = new DockerTestbed({ environment: process.env });
 test(
   'a dedicated MariaDB server gives the official driver its requested database and leaves with its container',
   { timeout: 180_000 },

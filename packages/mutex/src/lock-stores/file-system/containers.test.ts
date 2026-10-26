@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { type TestContext, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
-import { DockerFixtures } from '@zukhruf/testing/docker';
+import { DockerTestbed } from '@zukhruf/testing/docker';
 import { describe } from '@zukhruf/testing/node';
 
 import { isRecord } from '../../shared/is-record.ts';
@@ -14,9 +14,9 @@ import { isRecord } from '../../shared/is-record.ts';
  * hostname and its own PID namespace.
  */
 const image = 'node:lts-alpine';
-const docker = new DockerFixtures({ environment: process.env });
-type Container = Awaited<ReturnType<DockerFixtures['start']>>;
-type OwnedVolume = Awaited<ReturnType<DockerFixtures['volume']>>;
+const docker = new DockerTestbed({ environment: process.env });
+type Container = Awaited<ReturnType<DockerTestbed['start']>>;
+type OwnedVolume = Awaited<ReturnType<DockerTestbed['volume']>>;
 
 const packageRoot = fileURLToPath(new URL('../../../', import.meta.url));
 const mutexInContainer = 'file:///pkg/src/index.ts';

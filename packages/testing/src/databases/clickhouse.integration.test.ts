@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { DockerFixtures } from '../docker/index.ts';
+import { DockerTestbed } from '../docker/index.ts';
 import { ClickHouse } from './clickhouse.ts';
 
-const docker = new DockerFixtures({ environment: process.env });
+const docker = new DockerTestbed({ environment: process.env });
 test(
   'a ClickHouse server answers in its container and over HTTP on this machine, until disposal removes it',
   { timeout: 180_000 },

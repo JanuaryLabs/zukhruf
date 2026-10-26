@@ -1,7 +1,7 @@
 import { timebox } from '../async/timebox.ts';
-import { DockerFixtures } from '../docker/fixtures.ts';
 import type { ServiceContainer } from '../docker/service-container.ts';
 import { TestRun } from '../docker/test-run.ts';
+import { DockerTestbed } from '../docker/testbed.ts';
 import { KIND_LABEL, databaseName } from './collector.ts';
 import type { Database, DatabaseOptions } from './database.ts';
 import { type MysqlFamilyCollector, user } from './mysql-family-collector.ts';
@@ -19,7 +19,7 @@ export interface MysqlFamilyDatabase extends Database {
  * image to this constructor.
  */
 export abstract class MysqlFamilyServer {
-  readonly #docker: DockerFixtures;
+  readonly #docker: DockerTestbed;
   readonly #run: TestRun | undefined;
   readonly #options;
 
@@ -37,7 +37,7 @@ export abstract class MysqlFamilyServer {
     database = 'app',
     labels,
   }: DatabaseOptions & { image: string }) {
-    this.#docker = new DockerFixtures({ environment });
+    this.#docker = new DockerTestbed({ environment });
     this.#run = TestRun.fromEnvironment(environment);
     this.#options = { image, password, database, labels };
   }

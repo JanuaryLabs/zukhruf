@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import { TemporaryFiles } from '../fs/temporary-files.ts';
-import { DockerFixtures, TestRun } from './index.ts';
+import { DockerTestbed, TestRun } from './index.ts';
 
 test('an environment with only one of the two run variables is refused', () => {
   assert.throws(
@@ -21,7 +21,7 @@ test('a process outside a run has no run, and its containers carry no run label'
   const run = TestRun.fromEnvironment(environment);
 
   assert.equal(run, undefined);
-  assert.deepEqual(new DockerFixtures({ environment }).defaults.labels, {});
+  assert.deepEqual(new DockerTestbed({ environment }).defaults.labels, {});
 });
 
 test('a process in a run gets its run, and Docker labels what it creates with the run', async () => {
@@ -39,7 +39,7 @@ test('a process in a run gets its run, and Docker labels what it creates with th
   assert.ok(run);
   assert.equal(run.id, 'run-1');
   assert.equal(run.directory, directory.path);
-  assert.deepEqual(new DockerFixtures({ environment }).defaults.labels, {
+  assert.deepEqual(new DockerTestbed({ environment }).defaults.labels, {
     'dev.zukhruf.testing.run': 'run-1',
   });
 });

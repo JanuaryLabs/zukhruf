@@ -11,9 +11,9 @@ import {
   SQL_SERVER_FULL_IMAGE,
   SqlServer,
 } from '../databases/sqlserver.ts';
-import { DockerFixtures } from './index.ts';
+import { DockerTestbed } from './index.ts';
 
-const docker = new DockerFixtures({ environment: process.env });
+const docker = new DockerTestbed({ environment: process.env });
 test(
   'the selected Docker engine exposes a database to this Node process',
   { timeout: 120_000 },
@@ -42,8 +42,8 @@ test(
   async () => {
     // Arrange
     const environment = { ...process.env };
-    const fixtures = new DockerFixtures({ environment });
-    const client = await fixtures.client();
+    const testbed = new DockerTestbed({ environment });
+    const client = await testbed.client();
     const original = await client.info();
     await using database = await new Postgres({ environment }).start();
 
@@ -62,9 +62,9 @@ test(
     assert.equal(container?.HostConfig?.Memory, 1024 ** 3);
     assert.equal(container?.HostConfig?.NanoCpus, 1_000_000_000);
     assert.notEqual(container?.HostConfig?.IpcMode, 'host');
-    assert.equal((await (await fixtures.client()).info()).ID, original.ID);
+    assert.equal((await (await testbed.client()).info()).ID, original.ID);
     await assert.rejects(
-      new DockerFixtures({ environment }).client(),
+      new DockerTestbed({ environment }).client(),
       /Docker is required for container-backed tests/,
     );
   },

@@ -14,7 +14,7 @@ import { ConnectionFailedError, Docker } from '@zukhruf/docker';
 import { timebox } from '../async/index.ts';
 import { TemporaryFiles } from '../fs/temporary-files.ts';
 import { EngineProxy } from '../testing/engine-proxy.ts';
-import { DockerFixtures } from './index.ts';
+import { DockerTestbed } from './index.ts';
 
 const image = 'alpine:latest';
 /** The host of the engine that this process's context selects. */
@@ -50,10 +50,10 @@ test(
   { timeout: 180_000 },
   async () => {
     // Arrange
-    const fixtures = new DockerFixtures({ environment: process.env });
+    const testbed = new DockerTestbed({ environment: process.env });
 
     // Act
-    await using server = await fixtures.serve({
+    await using server = await testbed.serve({
       image: 'postgres:18-alpine',
       internalPort: 5432,
       env: { POSTGRES_PASSWORD: 'test' },
@@ -101,14 +101,14 @@ test(
   { timeout: 60_000 },
   async () => {
     // Arrange
-    const fixtures = new DockerFixtures({ environment: process.env });
+    const testbed = new DockerTestbed({ environment: process.env });
 
     // Act
-    await using defaults = await fixtures.start({
+    await using defaults = await testbed.start({
       image,
       command: ['sleep', '60'],
     });
-    await using given = await fixtures.start({
+    await using given = await testbed.start({
       image,
       command: ['sleep', '60'],
       memory: '512m',
@@ -136,12 +136,12 @@ test(
   { timeout: 60_000 },
   async () => {
     // Arrange
-    const fixtures = new DockerFixtures({ environment: process.env });
-    await using volume = await fixtures.volume();
+    const testbed = new DockerTestbed({ environment: process.env });
+    await using volume = await testbed.volume();
     const scope = randomUUID();
 
     // Act
-    await using container = await fixtures.start({
+    await using container = await testbed.start({
       image,
       command: ['sleep', '60'],
       hostname: 'fixture-host',
@@ -187,11 +187,11 @@ test(
   { timeout: 60_000 },
   async () => {
     // Arrange
-    const fixtures = new DockerFixtures({ environment: process.env });
+    const testbed = new DockerTestbed({ environment: process.env });
     const scope = randomUUID();
 
     // Act: the container's hostname is the start of its id.
-    const result = await fixtures.run({
+    const result = await testbed.run({
       image,
       command: ['sh', '-c', 'echo printed; hostname >&2; exit 3'],
       labels: { 'dev.zukhruf.testing.verification': scope },
@@ -204,7 +204,7 @@ test(
       { exitCode: result.exitCode, stdout: result.stdout },
       { exitCode: 3, stdout: 'printed\n' },
     );
-    const client = await fixtures.client();
+    const client = await testbed.client();
     assert.equal(await client.containers.find(id), undefined);
   },
 );
@@ -214,15 +214,15 @@ test(
   { timeout: 60_000 },
   async (t) => {
     // Arrange
-    const fixtures = new DockerFixtures({ environment: process.env });
-    const client = await fixtures.client();
+    const testbed = new DockerTestbed({ environment: process.env });
+    const client = await testbed.client();
     const scope = randomUUID();
     const label = `dev.zukhruf.testing.verification=${scope}`;
     const served: string[] = [];
     try {
       // Act
       await assert.rejects(
-        fixtures.serve({
+        testbed.serve({
           image,
           command: ['sleep', '60'],
           internalPort: 8080,
@@ -257,23 +257,23 @@ test(
   async () => {
     // Arrange
     const environment = { ...process.env };
-    const fixtures = new DockerFixtures({ environment });
-    await using first = await fixtures.start({
+    const testbed = new DockerTestbed({ environment });
+    await using first = await testbed.start({
       image,
       command: ['sleep', '60'],
     });
-    const host = (await fixtures.client()).host;
+    const host = (await testbed.client()).host;
 
     // Act: the environment now names an engine that does not exist.
     environment.DOCKER_HOST = 'unix:///nonexistent/docker-test.sock';
     delete environment.DOCKER_CONTEXT;
-    await using second = await fixtures.start({
+    await using second = await testbed.start({
       image,
       command: ['sleep', '60'],
     });
 
     // Assert
-    assert.equal((await fixtures.client()).host, host);
+    assert.equal((await testbed.client()).host, host);
     assert.equal((await second.inspect()).State?.Running, true);
     assert.notEqual(second.id, first.id);
   },
@@ -284,7 +284,7 @@ test(
   { timeout: 30_000 },
   async () => {
     // Arrange
-    const fixtures = new DockerFixtures({
+    const testbed = new DockerTestbed({
       environment: {
         DOCKER_HOST: 'unix:///nonexistent/docker-test.sock',
         DOCKER_CONFIG: process.env.DOCKER_CONFIG,
@@ -292,7 +292,7 @@ test(
     });
 
     // Act
-    const failure = await fixtures.start({ image }).then(
+    const failure = await testbed.start({ image }).then(
       () => assert.fail('the acquisition succeeded'),
       (error: unknown) => error,
     );
@@ -313,13 +313,13 @@ test(
   async () => {
     // Arrange: only this test uses this tag, so it can remove the image.
     const pulled = 'busybox:1.37.0-uclibc';
-    const fixtures = new DockerFixtures({ environment: process.env });
-    const client = await fixtures.client();
+    const testbed = new DockerTestbed({ environment: process.env });
+    const client = await testbed.client();
     await client.images.remove(pulled, { force: true });
     assert.equal(await client.images.inspect(pulled), undefined);
     try {
       // Act
-      await using container = await fixtures.start({
+      await using container = await testbed.start({
         image: pulled,
         command: ['sleep', '60'],
       });
@@ -342,8 +342,8 @@ test(
   { timeout: 120_000 },
   async () => {
     // Arrange
-    const fixtures = new DockerFixtures({ environment: process.env });
-    const client = await fixtures.client();
+    const testbed = new DockerTestbed({ environment: process.env });
+    const client = await testbed.client();
     const scope = randomUUID();
     const label = `dev.zukhruf.testing.verification=${scope}`;
     const options = {
@@ -353,9 +353,9 @@ test(
       labels: { 'dev.zukhruf.testing.verification': scope },
     };
     const reuser = `
-      import { DockerFixtures } from ${library};
-      const fixtures = new DockerFixtures({ environment: process.env });
-      const server = await fixtures.reuse(${JSON.stringify(options)});
+      import { DockerTestbed } from ${library};
+      const testbed = new DockerTestbed({ environment: process.env });
+      const server = await testbed.reuse(${JSON.stringify(options)});
       await server[Symbol.asyncDispose]();
       console.log(server.container.id);
     `;
@@ -383,7 +383,7 @@ test(
 
       // Act + Assert
       await assert.rejects(
-        fixtures.reuse({ ...options, name }),
+        testbed.reuse({ ...options, name }),
         new Error(
           `Container ${name} does not match the shared test configuration`,
         ),
@@ -409,7 +409,7 @@ test(
       arrived.resolve();
       return gate.promise;
     });
-    const fixtures = new DockerFixtures({
+    const testbed = new DockerTestbed({
       environment: {
         DOCKER_HOST: proxy.host,
         DOCKER_CONFIG: process.env.DOCKER_CONFIG,
@@ -423,7 +423,7 @@ test(
       (await readdir(directory.path)).filter((file) =>
         file.startsWith('creating-'),
       );
-    const started = fixtures.start({ image, command: ['sleep', '60'] });
+    const started = testbed.start({ image, command: ['sleep', '60'] });
     try {
       // Act
       await arrived.promise;
@@ -458,9 +458,9 @@ test(
         '--input-type=module',
         '--eval',
         `
-        import { DockerFixtures } from ${library};
-        const fixtures = new DockerFixtures({ environment: process.env });
-        const container = await fixtures.start({ image: ${JSON.stringify(image)}, command: ['sleep', '120'] });
+        import { DockerTestbed } from ${library};
+        const testbed = new DockerTestbed({ environment: process.env });
+        const container = await testbed.start({ image: ${JSON.stringify(image)}, command: ['sleep', '120'] });
         await container.exec({ Cmd: ['true'] });
         console.log(container.id);
         setInterval(() => {}, 1_000);
@@ -469,8 +469,8 @@ test(
       { stdio: ['ignore', 'pipe', 'inherit'] },
     );
     const exited = once(child, 'exit');
-    const fixtures = new DockerFixtures({ environment: process.env });
-    const client = await fixtures.client();
+    const testbed = new DockerTestbed({ environment: process.env });
+    const client = await testbed.client();
     const ssh: number[] = [];
     try {
       const [line] = await once(createInterface(child.stdout), 'line');

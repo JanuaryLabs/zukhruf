@@ -66,7 +66,7 @@ export interface ServiceOptions extends ContainerOptions {
   healthy?: (service: ServiceContainer) => unknown;
 }
 
-export interface DockerFixturesOptions {
+export interface DockerTestbedOptions {
   /** The environment of this process, such as `process.env`: it selects the engine and the run. */
   environment: Environment;
 }
@@ -105,12 +105,12 @@ const generatedName = (image: string): string =>
   `test-${image.replace(/[^a-zA-Z0-9_.-]/g, '-')}-${randomUUID()}`;
 
 /**
- * Container fixtures on the engine that `environment` selects. The engine is
+ * A testbed of containers on the engine that `environment` selects. The engine is
  * connected on the first acquisition and kept: handles keep the engine they
  * were made on. Docker owns cross-process coordination; this instance holds
  * no server cache.
  */
-export class DockerFixtures {
+export class DockerTestbed {
   readonly #environment: Environment;
   readonly #run: TestRun | undefined;
   readonly #engine = pMemoize(async (): Promise<Engine> => {
@@ -132,7 +132,7 @@ export class DockerFixtures {
     }
   });
 
-  constructor({ environment }: DockerFixturesOptions) {
+  constructor({ environment }: DockerTestbedOptions) {
     this.#environment = environment;
     this.#run = TestRun.fromEnvironment(environment);
   }

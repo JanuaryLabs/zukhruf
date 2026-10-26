@@ -11,11 +11,6 @@ import {
   type Kind,
   ownedBy,
 } from '../databases/collector.ts';
-import {
-  PACKAGE_VERSION,
-  SHARED_SERVER_LABEL,
-  VERSION_LABEL,
-} from '../docker/fixtures.ts';
 import { DockerHost, SHELL_TIMEOUT, quote } from '../docker/host.ts';
 import {
   TEST_RUN_LABEL,
@@ -23,6 +18,11 @@ import {
   directoryPrefix,
   forwardPrefix,
 } from '../docker/test-run.ts';
+import {
+  PACKAGE_VERSION,
+  SHARED_SERVER_LABEL,
+  VERSION_LABEL,
+} from '../docker/testbed.ts';
 
 /** How long one Engine API call of the cleanup may take. */
 export const ENGINE_CALL_TIMEOUT = 240_000;

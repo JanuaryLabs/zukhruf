@@ -1,21 +1,18 @@
 import { timebox } from '../async/timebox.ts';
-import {
-  DockerFixtures,
-  type DockerFixturesOptions,
-} from '../docker/fixtures.ts';
 import type { ServiceContainer } from '../docker/service-container.ts';
+import { DockerTestbed, type DockerTestbedOptions } from '../docker/testbed.ts';
 import { succeeded } from './succeeded.ts';
 
 /** Each start owns a dedicated ClickHouse server and its disposable container. */
 export class ClickHouse {
-  readonly #docker: DockerFixtures;
+  readonly #docker: DockerTestbed;
   readonly #image: string;
 
   constructor({
     environment,
     image,
-  }: DockerFixturesOptions & { image: string }) {
-    this.#docker = new DockerFixtures({ environment });
+  }: DockerTestbedOptions & { image: string }) {
+    this.#docker = new DockerTestbed({ environment });
     this.#image = image;
   }
 

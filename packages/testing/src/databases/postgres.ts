@@ -1,7 +1,7 @@
 import { timebox } from '../async/timebox.ts';
-import { DockerFixtures } from '../docker/fixtures.ts';
 import type { ServiceContainer } from '../docker/service-container.ts';
 import { TestRun } from '../docker/test-run.ts';
+import { DockerTestbed } from '../docker/testbed.ts';
 import { KIND_LABEL, databaseName } from './collector.ts';
 import type { Database, DatabaseOptions } from './database.ts';
 import { postgres } from './postgres-collector.ts';
@@ -15,7 +15,7 @@ export interface PostgresOptions extends DatabaseOptions {
 
 /** PostgreSQL test configuration. Each acquisition returns an independent handle. */
 export class Postgres {
-  readonly #docker: DockerFixtures;
+  readonly #docker: DockerTestbed;
   readonly #run: TestRun | undefined;
   readonly #options;
 
@@ -27,7 +27,7 @@ export class Postgres {
     user = 'postgres',
     labels,
   }: PostgresOptions) {
-    this.#docker = new DockerFixtures({ environment });
+    this.#docker = new DockerTestbed({ environment });
     this.#run = TestRun.fromEnvironment(environment);
     this.#options = { image, password, database, user, labels };
   }

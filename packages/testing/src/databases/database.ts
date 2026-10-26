@@ -1,4 +1,4 @@
-import type { DockerFixturesOptions } from '../docker/fixtures.ts';
+import type { DockerTestbedOptions } from '../docker/testbed.ts';
 
 /** Connection and disposal for one server-backed database. */
 export interface Database extends AsyncDisposable {
@@ -14,7 +14,7 @@ export interface Database extends AsyncDisposable {
   cleanup: () => Promise<void>;
 }
 
-export interface DatabaseOptions extends DockerFixturesOptions {
+export interface DatabaseOptions extends DockerTestbedOptions {
   labels?: Record<string, string>;
   image?: string;
   password?: string;

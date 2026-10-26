@@ -5,7 +5,7 @@ import { test } from 'node:test';
 import type { Docker } from '@zukhruf/docker';
 
 import { timebox } from '../async/index.ts';
-import { DockerFixtures } from './index.ts';
+import { DockerTestbed } from './index.ts';
 
 /** Removes each container that carries `label`, shared servers too. */
 async function removeLabelled(client: Docker, label: string): Promise<void> {
@@ -21,9 +21,9 @@ test(
   { timeout: 120_000 },
   async () => {
     // Arrange
-    const fixtures = new DockerFixtures({ environment: process.env });
-    const client = await fixtures.client();
-    await using server = await fixtures.serve({
+    const testbed = new DockerTestbed({ environment: process.env });
+    const client = await testbed.client();
+    await using server = await testbed.serve({
       image: 'postgres:18-alpine',
       internalPort: 5432,
       env: { POSTGRES_PASSWORD: 'test' },
@@ -63,8 +63,8 @@ test(
   { timeout: 120_000 },
   async (t) => {
     // Arrange
-    const fixtures = new DockerFixtures({ environment: process.env });
-    const client = await fixtures.client();
+    const testbed = new DockerTestbed({ environment: process.env });
+    const client = await testbed.client();
     const scope = randomUUID();
     const verification = `dev.zukhruf.testing.verification=${scope}`;
     const labels = {
@@ -82,8 +82,8 @@ test(
       (await (await client.containers.find(id))?.inspect())?.State?.Running;
     try {
       // Act + Assert: the configuration, not the order of its entries, picks the server.
-      await using first = await fixtures.reuse(options);
-      await using reordered = await fixtures.reuse({
+      await using first = await testbed.reuse(options);
+      await using reordered = await testbed.reuse({
         ...options,
         env: { POSTGRES_DB: 'postgres', POSTGRES_PASSWORD: 'testpassword' },
         labels: {
@@ -92,14 +92,14 @@ test(
         },
       });
       assert.equal(reordered.container.id, first.container.id);
-      await using different = await fixtures.reuse({
+      await using different = await testbed.reuse({
         ...options,
         env: { ...options.env, POSTGRES_PASSWORD: 'another-password' },
       });
       assert.notEqual(different.container.id, first.container.id);
 
       await assert.rejects(
-        fixtures.reuse({
+        testbed.reuse({
           ...options,
           healthy: () => {
             throw new Error('readiness failed');
@@ -107,7 +107,7 @@ test(
         }),
         /readiness failed/,
       );
-      await using healthy = await fixtures.reuse({
+      await using healthy = await testbed.reuse({
         ...options,
         healthy: ({ container }) =>
           timebox(
@@ -132,16 +132,16 @@ test(
 
       // Act + Assert: a dedicated server with the name is not a shared one.
       const name = `zukhruf-testing-owned-${scope}`;
-      await using owned = await fixtures.serve({ ...options, name });
+      await using owned = await testbed.serve({ ...options, name });
       await assert.rejects(
-        fixtures.reuse({ ...options, name }),
+        testbed.reuse({ ...options, name }),
         /does not match/,
       );
       assert.equal(await running(owned.container.id), true);
 
       const failedName = `zukhruf-testing-failed-${scope}`;
       await assert.rejects(
-        fixtures.serve({
+        testbed.serve({
           ...options,
           name: failedName,
           healthy: () => {
@@ -187,7 +187,7 @@ test(
       );
 
       // Act
-      await using recovered = await fixtures.reuse(options);
+      await using recovered = await testbed.reuse(options);
 
       // Assert
       assert.notEqual(recovered.container.id, first.container.id);

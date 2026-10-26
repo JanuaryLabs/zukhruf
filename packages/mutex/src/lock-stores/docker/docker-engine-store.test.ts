@@ -11,7 +11,7 @@ import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 
 import { Docker } from '@zukhruf/docker';
-import { DockerFixtures } from '@zukhruf/testing/docker';
+import { DockerTestbed } from '@zukhruf/testing/docker';
 import { TemporaryFiles } from '@zukhruf/testing/fs';
 
 import { Mutex } from '../../index.ts';
@@ -55,8 +55,7 @@ async function engine() {
         image,
         namespace,
         heartbeatInterval,
-        labels: new DockerFixtures({ environment: process.env }).defaults
-          .labels,
+        labels: new DockerTestbed({ environment: process.env }).defaults.labels,
       }),
     [Symbol.asyncDispose]: async () => {
       await docker[Symbol.asyncDispose]();
@@ -192,11 +191,11 @@ async function engineProxy(docker: Docker) {
 const holderSource = (namespace: string, key: string) => `
 	import { Docker } from ${JSON.stringify(import.meta.resolve('@zukhruf/docker'))};
 	import { Mutex } from ${JSON.stringify(new URL('../../index.ts', import.meta.url).href)};
-	import { DockerFixtures } from ${JSON.stringify(import.meta.resolve('@zukhruf/testing/docker'))};
+	import { DockerTestbed } from ${JSON.stringify(import.meta.resolve('@zukhruf/testing/docker'))};
 	import { DockerEngineStore } from ${JSON.stringify(new URL('./index.ts', import.meta.url).href)};
 	setInterval(() => {}, 1000);
 	const docker = await Docker.connect({ environment: process.env });
-	const labels = new DockerFixtures({ environment: process.env }).defaults.labels;
+	const labels = new DockerTestbed({ environment: process.env }).defaults.labels;
 	const store = new DockerEngineStore({ docker, image: ${JSON.stringify(image)}, namespace: ${JSON.stringify(namespace)}, heartbeatInterval: ${heartbeatInterval}, labels });
 	await new Mutex(store).acquire(${JSON.stringify(key)}, async (lease) => {
 		process.send({ type: 'holding', token: String(lease.token.value) });
