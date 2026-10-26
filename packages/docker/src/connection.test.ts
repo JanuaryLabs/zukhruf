@@ -204,28 +204,32 @@ describe('a request that the engine answers with an error', () => {
 });
 
 describe('the connections of a client', () => {
-  test('disposal closes each connection to the engine', async () => {
-    // Arrange
-    await using scratch = await scratchDirectory();
-    await using engine = await fakeEngine({
-      directory: scratch.path,
-      apiVersion: '1.51',
-      answer: (_request, response) => {
-        response.writeHead(200, { 'Content-Type': 'application/json' });
-        response.end('{}');
-      },
-    });
-    const docker = await Docker.connect({ host: engine.host });
-    await docker.info();
-    assert.ok(engine.openConnections > 0, 'the idle connection stays open');
+  test(
+    'disposal closes each connection to the engine',
+    { timeout: 10_000 },
+    async () => {
+      // Arrange
+      await using scratch = await scratchDirectory();
+      await using engine = await fakeEngine({
+        directory: scratch.path,
+        apiVersion: '1.51',
+        answer: (_request, response) => {
+          response.writeHead(200, { 'Content-Type': 'application/json' });
+          response.end('{}');
+        },
+      });
+      const docker = await Docker.connect({ host: engine.host });
+      await docker.info();
+      assert.ok(engine.openConnections > 0, 'the idle connection stays open');
 
-    // Act
-    await docker[Symbol.asyncDispose]();
+      // Act
+      await docker[Symbol.asyncDispose]();
 
-    // Assert
-    await withTimeout(engine.allConnectionsClosed, 10_000);
-    assert.equal(engine.openConnections, 0);
-  });
+      // Assert
+      await engine.allConnectionsClosed;
+      assert.equal(engine.openConnections, 0);
+    },
+  );
 
   test('a process that connects and never disposes the client still exits by itself', async () => {
     // Arrange
@@ -270,18 +274,5 @@ async function waitUntil(condition: () => boolean): Promise<void> {
   while (!condition()) {
     if (Date.now() > deadline) throw new Error('The condition never held.');
     await new Promise((resolve) => setTimeout(resolve, 5));
-  }
-}
-
-async function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
-  const { promise: timeout, reject } = Promise.withResolvers<never>();
-  const timer = setTimeout(
-    () => reject(new Error(`No result after ${ms} ms.`)),
-    ms,
-  );
-  try {
-    return await Promise.race([promise, timeout]);
-  } finally {
-    clearTimeout(timer);
   }
 }
