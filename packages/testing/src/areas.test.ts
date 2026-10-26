@@ -52,6 +52,7 @@ test('every area without a driver imports when no driver is installed', async ()
     'sqlite',
     'http',
     'streams',
+    'fs',
   ]) {
     await importArea(area, drivers);
   }

@@ -1,10 +1,10 @@
 import { once } from 'node:events';
-import { mkdtempDisposable } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 
 import spawn, { SubprocessError } from 'nano-spawn';
+
+import { TemporaryFiles } from '../fs/temporary-files.ts';
 
 export interface SqliteDatabase extends AsyncDisposable {
   path: string;
@@ -71,7 +71,7 @@ export class Sqlite {
   async database(): Promise<SqliteDatabase> {
     await using resources = new AsyncDisposableStack();
     const directory = resources.use(
-      await mkdtempDisposable(join(tmpdir(), 'zukhruf-testing-sqlite-')),
+      await new TemporaryFiles().directory('zukhruf-testing-sqlite-'),
     );
     const path = join(directory.path, 'test.sqlite');
     const connection = resources.use(new DatabaseSync(path));

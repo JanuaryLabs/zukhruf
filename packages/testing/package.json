@@ -1,7 +1,7 @@
 {
   "name": "@zukhruf/testing",
   "version": "0.3.41",
-  "description": "Disposable fixtures for integration tests: Docker containers and database servers, SQLite and DuckDB databases, HTTP servers and streams. Node's global setup and global teardown remove what a killed test run left behind.",
+  "description": "Disposable fixtures for integration tests: Docker containers and database servers, SQLite and DuckDB databases, HTTP servers and streams, temporary directories. Node's global setup and global teardown remove what a killed test run left behind.",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -103,6 +103,12 @@
       "types": "./dist/streams/stream-harness.d.ts",
       "import": "./dist/streams/stream-harness.js",
       "default": "./dist/streams/stream-harness.js"
+    },
+    "./fs": {
+      "@zukhruf/source": "./src/fs/temporary-files.ts",
+      "types": "./dist/fs/temporary-files.d.ts",
+      "import": "./dist/fs/temporary-files.js",
+      "default": "./dist/fs/temporary-files.js"
     },
     "./docker-global-setup": {
       "@zukhruf/source": "./src/scripts/docker-global-setup.ts",
