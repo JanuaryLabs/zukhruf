@@ -418,7 +418,7 @@ void describe.each(
     describe(`Holder check across threads with ${store.name}`, () => {
       test(
         'a look from a worker thread sees a holder in this thread',
-        { timeout: 15000 },
+        { timeout: timeoutForGrants(store, 2) },
         async () => {
           // Arrange: this thread holds the key until the worker has looked.
           await using fixture = await store.fixture(process.env);

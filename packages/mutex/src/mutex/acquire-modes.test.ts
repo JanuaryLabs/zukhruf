@@ -13,6 +13,7 @@ import {
   reaches,
   settle,
   storeCases,
+  timeoutForGrants,
 } from '../testing/store-cases.ts';
 import { waitUntil } from '../testing/wait-until.ts';
 import { startWorker } from '../testing/worker-process.ts';
@@ -53,7 +54,7 @@ void describe.each(storeCases, (store) =>
   describe(`Acquire modes with ${store.name}`, () => {
     test(
       'skipIfBusy gives up at once while another holder has the key, and does not run the task',
-      { timeout: 5000 },
+      { timeout: timeoutForGrants(store, 2) },
       async () => {
         // Arrange
         await using fixture = await store.fixture(process.env);
@@ -64,6 +65,7 @@ void describe.each(storeCases, (store) =>
 
         try {
           // Act
+          const started = performance.now();
           const result = await mutex.acquire(
             'report:daily',
             async () => {
@@ -72,10 +74,16 @@ void describe.each(storeCases, (store) =>
             },
             { mode: Modes.skipIfBusy() },
           );
+          const waited = performance.now() - started;
 
           // Assert
           assert.deepEqual(result, { acquired: false });
           assert.equal(ran, false, 'A skipped caller must not run its task');
+          const limit = deadlineFor(store, 2000, { grants: 1, releases: 0 });
+          assert.ok(
+            waited < limit,
+            `The caller gave up after ${waited.toFixed(0)} ms, not at once (within ${limit} ms)`,
+          );
         } finally {
           await holder.release();
         }
@@ -99,7 +107,7 @@ void describe.each(storeCases, (store) =>
 
     test(
       'skipIfBusy({ waitAtMost }) gives up after the limit while the key stays busy',
-      { timeout: 5000 },
+      { timeout: timeoutForGrants(store, 2) },
       async () => {
         // Arrange
         await using fixture = await store.fixture(process.env);
@@ -133,7 +141,7 @@ void describe.each(storeCases, (store) =>
 
     test(
       'skipIfBusy({ waitAtMost }) acquires when the key is released within the limit',
-      { timeout: 5000 },
+      { timeout: timeoutForGrants(store, 2) },
       async () => {
         // Arrange
         await using fixture = await store.fixture(process.env);
@@ -155,7 +163,7 @@ void describe.each(storeCases, (store) =>
 
     test(
       'a caller that gave up does not block the callers after it',
-      { timeout: 5000 },
+      { timeout: timeoutForGrants(store, 3) },
       async () => {
         // Arrange: a holder, a caller that gives up, and a caller that waits behind it.
         await using fixture = await store.fixture(process.env);
@@ -189,7 +197,7 @@ void describe.each(storeCases, (store) =>
 
     test(
       "a key's default mode applies, and one call can override it",
-      { timeout: 5000 },
+      { timeout: timeoutForGrants(store, 3) },
       async () => {
         // Arrange: callers of this key skip by default.
         await using fixture = await store.fixture(process.env);
@@ -218,7 +226,7 @@ void describe.each(storeCases, (store) =>
 
     test(
       'a waiting caller that cancels rejects with its reason, and the callers after it still get the key',
-      { timeout: 5000 },
+      { timeout: timeoutForGrants(store, 3) },
       async () => {
         // Arrange: a holder, a caller that will cancel, and a caller that waits.
         await using fixture = await store.fixture(process.env);
@@ -266,7 +274,7 @@ void describe.each(storeCases, (store) =>
 
     test(
       'skipIfBusy({ waitAtMost }) rejects with the reason when its caller cancels before the limit',
-      { timeout: 5000 },
+      { timeout: timeoutForGrants(store, 2) },
       async () => {
         // Arrange
         await using fixture = await store.fixture(process.env);
@@ -296,7 +304,7 @@ void describe.each(storeCases, (store) =>
 
     test(
       'skipIfBusy({ waitAtMost }) still gives up after the limit when its caller has a signal that does not abort',
-      { timeout: 5000 },
+      { timeout: timeoutForGrants(store, 2) },
       async () => {
         // Arrange
         await using fixture = await store.fixture(process.env);
@@ -367,7 +375,7 @@ void describe.each(storeCases, (store) =>
 
     test(
       'one signal shared by many calls keeps no abort listeners after they finish',
-      { timeout: 5000 },
+      { timeout: timeoutForGrants(store, 3) },
       async () => {
         // Arrange: a free key, a busy key, and a skip with a limit, all with one signal.
         await using fixture = await store.fixture(process.env);
@@ -700,7 +708,7 @@ void describe.each(
     describe(`Acquire modes across processes with ${store.name}`, () => {
       test(
         'a process that skips or cancels while another process holds gets no key, and leaves the key free',
-        { timeout: 10000 },
+        { timeout: timeoutForGrants(store, 3) },
         async (t) => {
           // Arrange: this process holds the key; a child (kept alive) tries to skip.
           await using fixture = await store.fixture(process.env);
@@ -762,7 +770,7 @@ void describe.each(
     describe(`Acquire modes across threads with ${store.name}`, () => {
       test(
         'a thread that skips or cancels while another thread holds gets no key, and leaves the key free',
-        { timeout: 10000 },
+        { timeout: timeoutForGrants(store, 3) },
         async () => {
           // Arrange: the main thread holds the key; a worker (kept alive) tries to skip.
           await using fixture = await store.fixture(process.env);

@@ -52,7 +52,7 @@ void describe.each(storeCases, (store) =>
   describe(`Single-process mutex with ${store.name}`, () => {
     test(
       'a failed operation rejects its caller and then allows a waiting operation to run',
-      { timeout: 2000 },
+      { timeout: timeoutForGrants(store, 2) },
       async (t) => {
         // Arrange: the first operation holds the product until it encounters a storage failure.
         await using fixture = await store.fixture(process.env);
@@ -111,7 +111,7 @@ void describe.each(storeCases, (store) =>
 
     test(
       'handling a failed operation without a waiter keeps the application alive',
-      { timeout: 15000 },
+      { timeout: timeoutForGrants(store, 2) },
       async (t) => {
         // Arrange: isolate process-level rejection handling from the test runner.
         // All mutex operations still happen inside ONE process and ONE Mutex instance.
@@ -167,7 +167,7 @@ void describe.each(storeCases, (store) =>
 
     test(
       'requests for the same product wait until the current operation finishes',
-      { timeout: 2000 },
+      { timeout: timeoutForGrants(store, 2) },
       async (t) => {
         // Arrange: hold the first operation open until the test releases it.
         await using fixture = await store.fixture(process.env);
@@ -303,7 +303,7 @@ void describe.each(storeCases, (store) =>
 
     test(
       'a blocked product does not prevent another product from being processed',
-      { timeout: 2000 },
+      { timeout: timeoutForGrants(store, 2) },
       async (t) => {
         // Arrange: keep product 42 busy before product 99 is requested.
         await using fixture = await store.fixture(process.env);
@@ -559,7 +559,7 @@ void describe.each(storeCases, (store) =>
 
     test(
       'two HTTP reservations cannot both buy the last item across an async storage step',
-      { timeout: 2000 },
+      { timeout: timeoutForGrants(store, 2) },
       async () => {
         // Arrange: this app and its inventory belong only to this test.
         await using fixture = await store.fixture(process.env);
@@ -701,7 +701,7 @@ void describe.each(
       void test.each(['product:42', longKey], (key) =>
         test(
           `two Node processes using resource name ${label(key)} take turns and both finish`,
-          { timeout: 15000 },
+          { timeout: timeoutForGrants(store, 2) },
           async (t) => {
             // Arrange: the callers have separate memory but share a resource key.
             await using fixture = await store.fixture(process.env);
@@ -814,7 +814,7 @@ void describe.each(
       void test.each(['product:42', longKey], (key) =>
         test(
           `a holder process killed while holding resource name ${label(key)} does not block the next caller`,
-          { timeout: 15000 },
+          { timeout: timeoutForGrants(store, 2) },
           async (t) => {
             // Arrange: another process enters the callback and never leaves it.
             await using fixture = await store.fixture(process.env);
@@ -924,7 +924,7 @@ void describe.each(
       test(
         'a waiter keeps waiting while the holder is frozen, and gets the key once it resumes and releases',
         {
-          timeout: 15000,
+          timeout: timeoutForGrants(store, 3),
           skip:
             process.platform === 'win32'
               ? 'Windows cannot freeze a process with SIGSTOP'
@@ -1047,7 +1047,7 @@ void describe.each(
     describe(`Cross-thread mutex with ${store.name}`, () => {
       test(
         'a thread waits while another thread of the same process holds the key',
-        { timeout: 15000 },
+        { timeout: timeoutForGrants(store, 2) },
         async (t) => {
           // Arrange: the main thread holds the key.
           await using fixture = await store.fixture(process.env);
@@ -1102,7 +1102,7 @@ void describe.each(
 
       test(
         'a thread that dies while holding the key does not block the next caller',
-        { timeout: 5000 },
+        { timeout: timeoutForGrants(store, 2) },
         async () => {
           // Arrange: a worker thread enters and stays inside its callback.
           await using fixture = await store.fixture(process.env);
@@ -1144,7 +1144,7 @@ void describe.each(
 
       test(
         'a thread whose only pending work is waiting for the key still gets it',
-        { timeout: 5000 },
+        { timeout: timeoutForGrants(store, 2) },
         async () => {
           // Arrange: the main thread holds the key, and the worker thread has nothing to do but wait.
           await using fixture = await store.fixture(process.env);
@@ -1188,7 +1188,7 @@ void describe.each(
 
       test(
         'messages of its own and unreadable lock messages from a thread leave its locks working',
-        { timeout: 15000 },
+        { timeout: timeoutForGrants(store, 2) },
         async (t) => {
           // Arrange: the thread posts its own messages to the main thread, and lock envelopes that hold no request.
           await using fixture = await store.fixture(process.env);
@@ -1239,7 +1239,7 @@ void describe.each(
 
       test(
         'a thread that waits for a key ignores a lock message from the main thread that is not a valid answer',
-        { timeout: 15000 },
+        { timeout: timeoutForGrants(store, 2) },
         async (t) => {
           // Arrange: the main thread holds the key, and the thread asks for it.
           await using fixture = await store.fixture(process.env);
@@ -1301,7 +1301,7 @@ void describe.each(
 
       test(
         'four threads incrementing a shared counter never overlap or lose an update',
-        { timeout: 10000 },
+        { timeout: timeoutForGrants(store, 80) },
         async () => {
           // Arrange
           await using fixture = await store.fixture(process.env);
@@ -1352,7 +1352,7 @@ void describe.each(
 
       test(
         'the key of a worker thread that was terminated goes to the next waiter',
-        { timeout: 15000 },
+        { timeout: timeoutForGrants(store, 2) },
         async () => {
           // Arrange: this thread asks first, so a SocketStore leads from here and
           // terminating the holder never ends the leader's term.
