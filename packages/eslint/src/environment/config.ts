@@ -1,5 +1,5 @@
 import { type Concept, enable } from '../concept.ts';
-import { CONFIG_FILES, TESTS, TYPESCRIPT } from '../files.ts';
+import { CONFIG_FILES, TESTS, TEST_SUPPORT, TYPESCRIPT } from '../files.ts';
 import noDefaultForPathEnv from './no-default-for-path-env.ts';
 import noSingleEnvReadWrapper from './no-single-env-read-wrapper.ts';
 import noUndeclaredProcessEnv from './no-undeclared-process-env.ts';
@@ -23,7 +23,7 @@ export const env: Concept = {
       name: 'zukhruf/env',
       files: TYPESCRIPT,
       // A tool config runs at build time, with no startup env schema.
-      ignores: [...TESTS, ...CONFIG_FILES],
+      ignores: [...TESTS, ...TEST_SUPPORT, ...CONFIG_FILES],
       plugins,
       rules: enable(rules),
     },

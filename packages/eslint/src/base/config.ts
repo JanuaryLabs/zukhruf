@@ -15,6 +15,7 @@ import {
   JAVASCRIPT,
   SOURCE,
   TESTS,
+  TEST_SUPPORT,
   TYPESCRIPT,
 } from '../files.ts';
 import noPlaywrightTest from '../imports/no-playwright-test.ts';
@@ -123,7 +124,7 @@ export const base: Concept = {
         // through their signatures. Keep mutable state in its owner.
         name: 'zukhruf/base/module-state',
         files: TYPESCRIPT,
-        ignores: [...TESTS, ...FIXTURES],
+        ignores: [...TESTS, ...TEST_SUPPORT, ...FIXTURES],
         plugins: { functional },
         rules: { 'functional/no-let': ['error', noLet()] },
       },

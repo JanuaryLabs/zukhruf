@@ -1,5 +1,5 @@
 import { type Concept, enable } from '../concept.ts';
-import { TESTS, TYPESCRIPT } from '../files.ts';
+import { TESTS, TEST_SUPPORT, TYPESCRIPT } from '../files.ts';
 import noBareSpawn from './no-bare-spawn.ts';
 
 const rules = { 'no-bare-spawn': noBareSpawn };
@@ -12,7 +12,7 @@ export const packagedApp: Concept = {
     {
       name: 'zukhruf/packaged-app',
       files: TYPESCRIPT,
-      ignores: TESTS,
+      ignores: [...TESTS, ...TEST_SUPPORT],
       plugins,
       rules: enable(rules),
     },

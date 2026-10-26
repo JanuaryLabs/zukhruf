@@ -122,3 +122,28 @@ test('the tests config checks a test helper in src/testing as a test file', () =
   // Assert
   assert.ok(ruleIds(findings).includes('zukhruf/no-test-lifecycle-hooks'));
 });
+
+test('a config that skips test files also skips a test helper in src/testing', () => {
+  // Arrange: the same module-scope `let` in shipped source and in a test
+  // helper (docs/adr/0001 of the workspace: a file in src/testing is a test file).
+  const counter = 'let count = 0;\nexport const next = () => ++count;\n';
+  using workspace = fixtureWorkspace({
+    'nx.json': '{}',
+    'tsconfig.json': tsconfig,
+    'eslint.config.mjs': fixtureConfig(
+      `{ plugins: { zukhruf }, extends: ['zukhruf/base'] }`,
+    ),
+    'src/counter.ts': counter,
+    'src/testing/counter.ts': counter,
+  });
+
+  // Act
+  const findings = lint(workspace.root, ['src']);
+
+  // Assert
+  const noLet = findings.filter(({ ruleId }) => ruleId === 'functional/no-let');
+  assert.deepEqual(
+    noLet.map(({ file }) => file),
+    [workspace.path('src/counter.ts')],
+  );
+});

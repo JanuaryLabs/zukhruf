@@ -1,5 +1,5 @@
 import { type Concept, enable } from '../concept.ts';
-import { SOURCE, TESTS, TYPESCRIPT } from '../files.ts';
+import { SOURCE, TESTS, TEST_SUPPORT, TYPESCRIPT } from '../files.ts';
 import noInternalAnchor from './no-internal-anchor.ts';
 import noRawRoutePath from './no-raw-route-path.ts';
 import { reactRouterOnlyThrowError } from './options.ts';
@@ -25,7 +25,7 @@ export const reactRouter: Concept = {
       // A test renders links to whatever path it sets up.
       name: 'zukhruf/react-router/links',
       files: SOURCE,
-      ignores: TESTS,
+      ignores: [...TESTS, ...TEST_SUPPORT],
       plugins,
       rules: enable({
         'no-raw-route-path': noRawRoutePath,

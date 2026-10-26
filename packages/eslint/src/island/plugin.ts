@@ -10,6 +10,7 @@ import {
   PACKAGE_JSON,
   SCRIPTS,
   TESTS,
+  TEST_SUPPORT,
   TYPESCRIPT,
 } from '../files.ts';
 import { dependencyPolicy } from '../nx-policy/dependency-policy.ts';
@@ -54,7 +55,7 @@ configs['recommended'] = [
   {
     name: 'island/recommended/ports',
     files: TYPESCRIPT,
-    ignores: TESTS,
+    ignores: [...TESTS, ...TEST_SUPPORT],
     plugins,
     rules: {
       'island/no-generic-port': 'error',
@@ -64,7 +65,7 @@ configs['recommended'] = [
   {
     name: 'island/recommended/library',
     files: TYPESCRIPT,
-    ignores: [...TESTS, ...SCRIPTS, ...CONFIG_FILES],
+    ignores: [...TESTS, ...TEST_SUPPORT, ...SCRIPTS, ...CONFIG_FILES],
     plugins,
     rules: {
       'island/no-process-env': 'error',

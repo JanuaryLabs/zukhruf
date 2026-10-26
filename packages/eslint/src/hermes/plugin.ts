@@ -2,7 +2,13 @@ import type { ESLint, Linter } from 'eslint';
 import esx from 'eslint-plugin-es-x';
 import importX from 'eslint-plugin-import-x';
 
-import { CONFIG_FILES, SCRIPTS, SOURCE, TESTS } from '../files.ts';
+import {
+  CONFIG_FILES,
+  SCRIPTS,
+  SOURCE,
+  TESTS,
+  TEST_SUPPORT,
+} from '../files.ts';
 import noMissingConsole from './no-missing-console.ts';
 
 const rules = { 'no-missing-console': noMissingConsole };
@@ -25,7 +31,7 @@ configs['recommended'] = [
   {
     name: 'hermes/recommended',
     files: SOURCE,
-    ignores: [...TESTS, ...CONFIG_FILES, ...SCRIPTS],
+    ignores: [...TESTS, ...TEST_SUPPORT, ...CONFIG_FILES, ...SCRIPTS],
     plugins: { hermes: plugin, 'es-x': esx, 'import-x': importX },
     rules: {
       'hermes/no-missing-console': 'error',
