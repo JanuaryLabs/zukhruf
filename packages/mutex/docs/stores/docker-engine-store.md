@@ -2,9 +2,9 @@
 
 A network lock store that uses a container on one Docker engine as the lock. Each process on each machine that reaches the engine shares the locks. The engine reserves a container name for one container only, so the container of a key is its lock. The container lives only while the attach of its holder lasts.
 
-| Reach   | Order                                                                                                              | Holder stops                  | Token source              |
-| ------- | ------------------------------------------------------------------------------------------------------------------ | ----------------------------- | ------------------------- |
-| Network | First come, first served in one process; no order between processes: the first create after a release gets the key | Released when its attach ends | A ladder of named volumes |
+| Reach   | Order                                                                                                              | Holder stops                  | Token source                                                |
+| ------- | ------------------------------------------------------------------------------------------------------------------ | ----------------------------- | ----------------------------------------------------------- |
+| Network | First come, first served in one process; no order between processes: the first create after a release gets the key | Released when its attach ends | The higher of the engine time and a ladder of named volumes |
 
 ## What
 
@@ -42,11 +42,10 @@ Some machines share no database, but they share one Docker engine. For example, 
 - All callers are on one host. A [host lock store](../concepts/reach.md) needs no engine and no round trip.
 - The callers share a Postgres database. [PostgresStore](./postgres-store.md) grants a key in one round trip. This store needs approximately six round trips for each grant, and over SSH a grant takes approximately 1 second (see [Evidence](#evidence)).
 - Waiters must get the key in the order in which they asked. Between processes, this store has no order.
-- Somebody runs `docker volume prune -a` or `docker system prune -a --volumes` on the engine. These commands remove the token ladder, and the tokens start again at 1. See [Failure modes](#failure-modes).
 
 ## How it works
 
-**The names of a key.** A container name accepts only `[a-zA-Z0-9][a-zA-Z0-9_.-]*`, but a key can be any text. Thus the store calculates the SHA-256 digest of the UTF-16 code units of the key, as `PostgresStore` does, and writes it as 64 hexadecimal digits. The claim is `<namespace>-<digest>`. The rung `n` of the token ladder is the volume `<namespace>-<digest>-token-<n>`. Each claim has the labels `zukhruf.mutex.namespace` and `zukhruf.mutex.key`, with the key as text. Each rung has the labels `zukhruf.mutex.namespace` and `zukhruf.mutex.token`, with the digest. The engine accepted a name of 90 characters for a container and for a volume.
+**The names of a key.** A container name accepts only `[a-zA-Z0-9][a-zA-Z0-9_.-]*`, but a key can be any text. Thus the store calculates the SHA-256 digest of the UTF-16 code units of the key, as `PostgresStore` does, and writes it as 64 hexadecimal digits. The claim is `<namespace>-<digest>`. The rung `n` of the token ladder is the volume `<namespace>-<digest>-token-<n>`. Each claim has the labels `zukhruf.mutex.namespace` and `zukhruf.mutex.key`, with the key as text. Each rung has the labels `zukhruf.mutex.namespace` and `zukhruf.mutex.token`, with the digest. Each claim and each rung also has the labels of the `labels` option. The store writes its own labels after them, so the caller cannot change them ([ADR 0029](../adr/0029-a-docker-engine-store-marks-its-claims-and-rungs-with-the-labels-of-the-caller.md)). The engine accepted a name of 90 characters for a container and for a volume.
 
 **The claim.** The store creates the claim with this body:
 
@@ -58,7 +57,11 @@ Some machines share no database, but they share one Docker engine. For example, 
   OpenStdin: true,
   StdinOnce: true,
   AttachStdin: true,
-  Labels: { 'zukhruf.mutex.namespace': namespace, 'zukhruf.mutex.key': key },
+  Labels: {
+    ...options.labels,
+    'zukhruf.mutex.namespace': namespace,
+    'zukhruf.mutex.key': key,
+  },
   HostConfig: { AutoRemove: true },
 }
 ```
@@ -69,6 +72,7 @@ Each field has a reason:
 - `StdinOnce` closes the standard input of `cat` when the attach ends. Without it, the input stays open after the holder stops, and `cat` runs forever (see [Evidence](#evidence)).
 - `AutoRemove` makes the engine remove the claim when `cat` exits. Without it, the exited claim keeps the name, and nobody gets the key again.
 - `Entrypoint: ['cat']` replaces the entrypoint of the image. The image must have `cat` on its `PATH`.
+- `Labels` lets a cleanup find the claim by the labels of the caller. A cleanup never trusts a name.
 
 **Acquire.**
 
@@ -130,13 +134,21 @@ The heartbeat asks the engine about the claim, not about the connection. The cla
 
 The Docker engine has no counter. Thus the tokens come from a ladder of named volumes, one rung for each grant. The engine gives a volume name to one volume only, as it does for a container name. This is the rule of the Delta Lake transaction log: each commit writes the file of the next version, and the storage refuses a second file with the same version ("mutual exclusion": put-if-absent, [Delta Lake protocol](https://github.com/delta-io/delta/blob/master/PROTOCOL.md)). See [ADR 0027](../adr/0027-docker-engine-tokens-come-from-a-ladder-of-named-volumes.md).
 
+The engine can lose the ladder, for example after `docker volume prune -a` or a wipe of the engine. Then a ladder alone starts again at 1, and a fenced resource accepts the writes of a stale holder with the highest old token. Thus the lowest token that a mint gives is the engine time: the `Created` time of the claim, in microseconds since 1970. This is a hybrid logical clock (Kulkarni et al., OPODIS 2014). See [ADR 0028](../adr/0028-a-docker-engine-token-is-the-higher-of-the-engine-time-and-the-ladder.md).
+
 To mint a token, the holder:
 
-1. Lists the rungs of the key with two label filters, `zukhruf.mutex.namespace=<namespace>` and `zukhruf.mutex.token=<digest>`, and reads the highest number `n`. With no rung, `n` is 0. The namespace filter is necessary: one key in two namespaces has one digest, and step 3 removes each rung that the list gives.
-2. Creates the volume of rung `n + 1` with `docker.volumes.create()`. If it rejects with `NameConflictError`, the holder tries `n + 2`, and so on.
+1. Sends two requests at the same time:
+   - An inspect of its claim by ID. It reads `Created`, the time at which the engine created the claim, and converts it to microseconds since 1970. If the claim is gone, the mint stops, and the caller goes back to step 2 of [Acquire](#how-it-works).
+   - A list of the rungs of the key with two label filters, `zukhruf.mutex.namespace=<namespace>` and `zukhruf.mutex.token=<digest>`. It reads the highest number `n`. With no rung, `n` is 0. The namespace filter is necessary: one key in two namespaces has one digest, and step 3 removes each rung that the list gives.
+2. Creates the volume of the rung with the higher of the time and `n + 1`, with `docker.volumes.create()`. If it rejects with `NameConflictError`, the holder tries the next number, and so on.
 3. Removes the rungs that it listed in step 1. Thus each key keeps one rung. A rung is removed only after a higher rung exists, so a list always finds the highest rung.
 
-The number of the new rung is the token. Each mint is followed by the confirmation of the claim (step 6 of [Acquire](#how-it-works)). Without that confirmation, a stale holder that read the ladder before it lost its claim can climb above the token of the next holder. A probe showed this: the next holder got 1, and the stale holder got 2 (see [Evidence](#evidence)). With the confirmation, the stale holder finds its claim gone and uses no token.
+The number of the new rung is the token. While the ladder is there, `n + 1` keeps the tokens in order, also when the clock of the engine goes back. When the ladder is gone, the time of a later claim is higher than each earlier token. The tokens can fail to increase only after two faults at the same time: the ladder is gone, and the clock of the engine is behind the highest earlier token.
+
+The engine sets `Created`, so each client of one engine reads one clock, locally and over SSH. `Created` has a precision of nanoseconds. A time in microseconds is approximately 2^51, so it fits a signed 64-bit integer and a safe integer of JavaScript. The `CreatedAt` time of a volume has a precision of seconds only, so the store does not use it.
+
+Each mint is followed by the confirmation of the claim (step 6 of [Acquire](#how-it-works)). Without that confirmation, a stale holder that read the ladder before it lost its claim can climb above the token of the next holder. A probe showed this: the next holder got 1, and the stale holder got 2 (see [Evidence](#evidence)). With the confirmation, the stale holder finds its claim gone and uses no token.
 
 The ladder uses volumes, not containers. `docker container prune` removes each container that does not run, also a container in the state `created`. A ladder of created containers would go back to 1 after each prune. `docker volume prune` keeps named volumes, and only `docker volume prune -a` removes them.
 
@@ -158,7 +170,7 @@ The holder can change before the answer arrives. Show the answer, but do not acq
 
 - **A holder process stops:** its kernel closes the connection of the attach. `cat` reads the end of its input and exits, and the engine removes the claim. The next waiter gets the key. Over SSH, the `ssh` process of the attach reads the end of its input and closes the remote side. The claim was removed 75 to 87 ms after a `SIGKILL` on Docker Desktop, and 239 to 260 ms after it over SSH.
 - **The attach ends while the holder runs:** the claim exits and the engine removes it, so another caller can get the key. The attach rejects or its exit code resolves, and the store aborts the signal of the lease with `LeaseLostError`.
-- **The engine restarts:** each attach ends, so each claim ends and each holder gets a lost lease. The volumes of the ladder stay, so the tokens continue to increase.
+- **The engine restarts:** each attach ends, so each claim ends and each holder gets a lost lease. The volumes of the ladder stay, and the engine time continues, so the tokens continue to increase.
 - **A silent partition between the holder and the engine:** nothing reaches the engine, so `cat` continues to run and the key stays held. The [heartbeat](#the-heartbeat) of the holder fails within `heartbeatInterval`, and the signal of the lease aborts. The store tries to remove its claim, but the removal also cannot reach the engine. Waiters then wait until the engine host sees the end of the connection: see the next item.
 - **A holder machine stops with no reset:** the engine sees the end of the attach only when the connection ends on the engine host. On a Unix socket, the engine and the holder are on one machine, so this case does not occur. Over SSH, `sshd` on the engine host ends the connection after `ClientAliveInterval` × `ClientAliveCountMax` seconds. With `ClientAliveInterval 0`, the default, only TCP keep-alive of the engine host ends it: 7200 + 9 × 75 seconds, approximately 2 hours and 11 minutes, with the Linux defaults. Until then, the key stays held, and waiters wait. Set `ClientAliveInterval` on the engine host, for example `ClientAliveInterval 10` with `ClientAliveCountMax 3`.
 - **A waiter behind a silent partition:** its wait by ID ends after `heartbeatInterval`, but its next inspect of the claim does not end. The store sets no time limit on the requests of a waiter. The signal of the caller limits them. Set `ServerAliveInterval` for the engine host in `~/.ssh/config` of the waiter machine, so that `ssh` ends a dead connection within seconds.
@@ -166,7 +178,8 @@ The holder can change before the answer arrives. Show the answer, but do not acq
 - **The engine does not remove an ended claim:** the claim stays `exited` or `dead`. A waiter removes it within `heartbeatInterval`. See [An ended claim](#an-ended-claim).
 - **A holder freezes:** waiters wait while the attach lasts. If the connection ends meanwhile, another holder can get the key. The frozen holder sees the lost lease only when it runs again. A [fenced resource](../concepts/fencing-tokens.md) refuses its late writes.
 - **Somebody removes a claim:** for example `docker rm -f` or `docker container prune`. Another caller can get the key at once. The attach of the holder ends, and the holder gets a lost lease.
-- **Somebody removes the ladder:** `docker volume prune -a` or `docker system prune -a --volumes` removes the named volumes that no container uses. The tokens of the key then start again at 1, and a fenced resource refuses each write until the tokens pass its highest token. Do not run these commands on the engine of the store, or exclude the label `zukhruf.mutex.namespace` with `--filter`.
+- **Somebody removes the ladder:** for example `docker volume prune -a`, `docker system prune -a --volumes`, a wipe of the engine, or a cleanup by the labels of the caller. The next token is the engine time, which is higher than each earlier token. A fenced resource thus accepts the writes of the next holder and refuses the writes of a stale holder. This is not true if the clock of the engine is also behind the highest earlier token at that time. See [The token](#the-token).
+- **The clock of the engine goes back:** the ladder keeps the tokens in order, because each token is at least the highest rung + 1.
 - **The image is not on the engine:** the create rejects with `ImageNotFoundError`, and the call rejects. The store never pulls an image. Pull it before the app starts.
 - **The image has no `cat`:** the start fails, and the call rejects.
 - **Other software uses the same names:** two stores with the same `namespace` on one engine share their locks. That is the purpose of `namespace`. Do not give other containers or volumes names that start with it.
@@ -176,14 +189,15 @@ See [failure modes](../concepts/failure-modes.md).
 
 ## Options
 
-| Option              | Default | Description                                                                                                                                                                                                                                                                                                       |
-| ------------------- | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `docker`            | —       | A `Docker` client of `@zukhruf/docker`. It selects the engine. The caller owns it and disposes of it; a disposal ends each attach, and each held key is lost.                                                                                                                                                     |
-| `image`             | —       | The image of each claim. It must be on the engine, and it must have `cat` on its `PATH`. The store never pulls it. A small image, for example `alpine:3` (8.4 MB), is enough.                                                                                                                                     |
-| `namespace`         | —       | The first part of each name and the value of the label `zukhruf.mutex.namespace`. Stores with the same namespace on one engine share their locks. It must match `[a-zA-Z0-9][a-zA-Z0-9_.-]*`.                                                                                                                     |
-| `heartbeatInterval` | —       | Milliseconds between two heartbeats of a holder, and the time limit of each heartbeat. It is also the time that a waiter gives a `created` claim before it removes it, and the time between two looks of a waiter at the claim. Make it larger than a create, an attach and a start: over SSH, 5 seconds or more. |
+| Option              | Default | Description                                                                                                                                                                                                                                                                                                                                                                                                              |
+| ------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `docker`            | —       | A `Docker` client of `@zukhruf/docker`. It selects the engine. The caller owns it and disposes of it; a disposal ends each attach, and each held key is lost.                                                                                                                                                                                                                                                            |
+| `image`             | —       | The image of each claim. It must be on the engine, and it must have `cat` on its `PATH`. The store never pulls it. A small image, for example `alpine:3` (8.4 MB), is enough.                                                                                                                                                                                                                                            |
+| `namespace`         | —       | The first part of each name and the value of the label `zukhruf.mutex.namespace`. Stores with the same namespace on one engine share their locks. It must match `[a-zA-Z0-9][a-zA-Z0-9_.-]*`.                                                                                                                                                                                                                            |
+| `heartbeatInterval` | —       | Milliseconds between two heartbeats of a holder, and the time limit of each heartbeat. It is also the time that a waiter gives a `created` claim before it removes it, and the time between two looks of a waiter at the claim. Make it larger than a create, an attach and a start: over SSH, 5 seconds or more.                                                                                                        |
+| `labels`            | `{}`    | Labels that the store puts on each claim and each rung, so that a cleanup or an operator can find them. The labels `zukhruf.mutex.namespace`, `zukhruf.mutex.key` and `zukhruf.mutex.token` of the store replace labels with the same names. A test run gives `new DockerFixtures({ environment: process.env }).defaults.labels` of `@zukhruf/testing`, so that its run cleanup removes what a killed test process left. |
 
-All four options are required. No option has a default.
+The first four options are required. `labels` is optional.
 
 ## Changes this design forces in other packages
 
@@ -193,12 +207,13 @@ These existing parts of `@zukhruf/docker` stay, because a probe showed that each
 
 - **`containers.create()`, which rejects with `NameConflictError`.** It is already the create for a lock: it fails and does not join. In 20 rounds of 6 creates at the same time, one create succeeded and 5 rejected in each round, on both engines. `createOrGet()` joins the container that exists, so it cannot claim a key.
 - **`attach({ stdin: true })` on the main process.** It ties the life of the claim to the connection: the claim ended 63 to 74 ms after the holder stopped on Docker Desktop, and 221 to 245 ms after it over SSH. A process from `exec()` cannot do this, because the container continues when an exec process ends. A new `tether()` method in `@zukhruf/docker` would add a lock idea to a client that knows no locks. The three fields that make the attach a lock (`StdinOnce`, `AutoRemove`, `Entrypoint: ['cat']`) are in the body that the store creates.
+- **`container.inspect()`, which gives `Created`.** `ContainerInspectResponse` already has `Created` as RFC 3339 text with nanoseconds. The mint reads the engine time from it, so `@zukhruf/docker` needs no change for [ADR 0028](../adr/0028-a-docker-engine-token-is-the-higher-of-the-engine-time-and-the-ladder.md).
 - **`container.wait({ condition: 'removed' })`.** It has no gap between the check and the wait. `docker.events()` has one, and the store does not use it. A sign that the subscription is in place would remove that gap, but no consumer needs it now.
 
 These changes are not necessary:
 
 - **The `cat` on a stdin pipe in `@zukhruf/testing` (`src/docker/host.ts`).** It ends an `ssh` port forward when the test process stops. The claim ends a container when its attach ends. The two have the same idea, but they use different mechanisms (an `ssh` process and an engine attach) and change for different reasons. They do not share code, so nothing moves to `@zukhruf/docker`.
-- **`TestRun` and the run cleanup of `@zukhruf/testing`.** The store does not need them. The wiring of the cleanup to this store is a separate step (backlog #2843).
+- **`TestRun` and the run cleanup of `@zukhruf/testing`.** The store does not know them. A test gives the labels of its run through `defaults.labels`, the seam that `@zukhruf/testing` already has for other container APIs, and the run cleanup removes resources by these labels. A create that is in progress when its process stops is a separate gap (backlog #2843).
 
 ## Evidence
 

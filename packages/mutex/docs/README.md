@@ -62,6 +62,8 @@ Start with the [project README](../README.md). The glossary is in [CONTEXT.md](.
 25. [A MySQL-family lock belongs to one database](./adr/0025-a-mysql-family-lock-belongs-to-one-database.md)
 26. [A Docker engine key is a named container that lives while its holder attaches](./adr/0026-a-docker-engine-key-is-a-named-container-that-lives-while-its-holder-attaches.md)
 27. [Docker engine tokens come from a ladder of named volumes](./adr/0027-docker-engine-tokens-come-from-a-ladder-of-named-volumes.md)
+28. [A Docker engine token is the higher of the engine time and the ladder](./adr/0028-a-docker-engine-token-is-the-higher-of-the-engine-time-and-the-ladder.md)
+29. [A Docker engine store marks its claims and rungs with the labels of the caller](./adr/0029-a-docker-engine-store-marks-its-claims-and-rungs-with-the-labels-of-the-caller.md)
 
 ## Copied code
 

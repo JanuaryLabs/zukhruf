@@ -125,7 +125,7 @@ The object that makes the fencing tokens of a lock store. See `@zukhruf/fencing`
 _Avoid_: Counter, generator
 
 **Ladder**:
-The named volumes that give the fencing tokens of a Docker engine lock store. Each volume is a rung, and the number in its name is a token. To get a token, a holder creates the rung above the highest rung, and then removes the lower rungs.
+The named volumes that give the fencing tokens of a Docker engine lock store. Each volume is a rung, and the number in its name is a token. To get a token, a holder creates the rung with the higher of two numbers: the engine time of its claim in microseconds, and the highest rung + 1. Then it removes the lower rungs. The engine time keeps the tokens higher than all earlier tokens when somebody removes the ladder.
 _Avoid_: Sequence, counter volume
 
 **Fenced resource**:

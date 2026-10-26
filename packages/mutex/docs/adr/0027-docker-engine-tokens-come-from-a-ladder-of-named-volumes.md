@@ -1,5 +1,7 @@
 # Docker engine tokens come from a ladder of named volumes
 
+Superseded in part on 2026-10-26 by [ADR 0028](./0028-a-docker-engine-token-is-the-higher-of-the-engine-time-and-the-ladder.md). The token is now the higher of the engine time and the highest rung + 1. The Consequences below understate a removed ladder: a fenced resource then refuses the writes of the next holder, and it also accepts the writes of a stale holder. The ladder, the climb, the removal of the listed rungs and the confirmation of the claim stay true.
+
 A network lock store makes its fencing tokens on its server ([ADR 0021](./0021-a-lock-store-can-reach-every-machine-that-reaches-one-server.md)). The Docker engine has no counter. But it gives a volume name to one volume only. Thus the tokens of `DockerEngineStore` come from a **ladder**: rung `n` of a key is the volume `<namespace>-<digest>-token-<n>`. The number of the rung that a holder creates is its token.
 
 This is the rule of the Delta Lake transaction log. Each commit writes the log file of the next version, and the storage must refuse a second file with the same version: "mutual exclusion" with put-if-absent ([Delta Lake protocol](https://github.com/delta-io/delta/blob/master/PROTOCOL.md); Armbrust et al., "Delta Lake: High-Performance ACID Table Storage over Cloud Object Stores", VLDB 2020).
