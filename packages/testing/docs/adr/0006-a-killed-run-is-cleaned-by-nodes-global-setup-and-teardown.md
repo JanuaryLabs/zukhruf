@@ -28,4 +28,5 @@ Disposal removes a fixture when its scope ends, also after a failure. A test pro
 - An SSH forward runs `cat` in a remote shell. When the process that opened the forward dies, its standard input closes and the forward ends. The SSH user thus needs a shell on the engine's host. Closing a forward over a dead connection waits up to one second before it kills `ssh`.
 - The package has no command (`bin`) now.
 - Shared servers outlive runs on purpose. The global teardown never removes a container with the shared-server label.
+- See ADR 0011 for the databases in shared servers.
 - Nothing refuses to start on Windows now, because no process group is used.
