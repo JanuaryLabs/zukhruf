@@ -11,7 +11,7 @@ import { type Outcome, Step } from './step.ts';
 // the file names that the repo's sync generators write. Any other change
 // during the run, or a file that was already modified before it, belongs to
 // another session that edits the same working tree.
-export class Sync extends Step {
+export class Sync extends Step<Commit> {
   readonly name = 'sync';
   readonly #globs: readonly string[];
 

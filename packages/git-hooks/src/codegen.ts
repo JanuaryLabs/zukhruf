@@ -15,7 +15,7 @@ interface CodegenOptions {
 // and stages them. With `when`, it builds only when nx says that one of those
 // projects is affected by the staged files: a hand-kept list of inputs would
 // miss a file, and an edit that is not staged is not part of the commit.
-export class Codegen extends Step {
+export class Codegen extends Step<Commit> {
   readonly name = 'codegen';
   readonly #when: readonly string[] | undefined;
   readonly #run: readonly string[];

@@ -81,20 +81,20 @@ test("a repo's own step stops the commit with its reason when it fails, a step t
   await using folder = await mkdtempDisposable(join(tmpdir(), 'git-hooks-'));
   const repo = await repository(
     folder.path,
-    `import { Step, preCommit } from '@zukhruf/git-hooks';
-class Nothing extends Step {
+    `import { type Commit, Step, preCommit } from '@zukhruf/git-hooks';
+class Nothing extends Step<Commit> {
   readonly name = 'nothing';
   async run() {
     return this.skip('nothing to check here');
   }
 }
-class Refuse extends Step {
+class Refuse extends Step<Commit> {
   readonly name = 'refuse';
   async run() {
     return this.fail('this repo takes no commit today');
   }
 }
-class After extends Step {
+class After extends Step<Commit> {
   readonly name = 'after';
   async run() {
     return this.pass('ran after the failed step');
@@ -141,7 +141,7 @@ test('a step that reads the staged commit in a snapshot sees the staged copy of 
     `import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { type Commit, Step, preCommit } from '@zukhruf/git-hooks';
-class Design extends Step {
+class Design extends Step<Commit> {
   readonly name = 'design';
   async run(commit: Commit) {
     if (!(await commit.touches(['docs/**'])))

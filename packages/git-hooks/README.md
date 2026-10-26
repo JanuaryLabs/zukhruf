@@ -146,10 +146,12 @@ await prePush([
 - `parallel` is the number of tasks that nx runs at the same time. Without it, nx uses its own default.
 - `env` holds more environment variables for nx.
 
-Build runs `nx run-many` with `--configuration=production` and with `NX_DAEMON=false`. `env` goes to nx only, never to `npm ci`: with `NODE_ENV=production`, npm does not install the devDependencies. Build builds each pushed commit one time, also when the push sends it to more than one ref. Each line of the output names the commit:
+Build runs `nx run-many` with `--configuration=production` and with `NX_DAEMON=false`. `env` goes to nx only, never to `npm ci`: with `NODE_ENV=production`, npm does not install the devDependencies. Build builds each pushed commit one time, also when the push sends it to more than one ref. Build gives one line for each pushed commit: built, skipped or failed. Each line names the commit:
 
 ```text
 build     a1b2c3d: built 19 projects, 17 of 20 tasks from cache
+          d4e5f6a: built 19 projects, 20 of 20 tasks from cache
+          skipped: the remote already has 0b1c2d3
 ```
 
 When a task fails, the push stops. The hook names the failed tasks and shows up to 20 lines of the error output of each failed task. When the output has more lines, the last line gives their number, such as `… 12 more lines`:
@@ -199,7 +201,7 @@ When the installed packages do not match the `package-lock.json` of the commit, 
 build     a1b2c3d: the installed packages differ from package-lock.json; installing it with npm ci (first time for this lockfile)
 ```
 
-The install runs `npm ci --ignore-scripts`, and then `npm rebuild`. Thus the install scripts of the dependencies run, such as those of esbuild and prisma, and the lifecycle scripts of the repo, such as `prepare`, do not run. The first push with a new lockfile waits for a full install. The next pushes with that lockfile use the same install. The hook keeps the two installs that it used last. A repo with no `node_modules` gets its install the same way.
+The install runs `npm ci --ignore-scripts`, and then `npm rebuild` with the names of the dependencies that have install scripts. The lockfile marks these dependencies with `hasInstallScript`. Thus the install scripts of the dependencies run, such as those of esbuild and prisma. The scripts of the repo and of its workspace packages, such as `prepare`, do not run. The first push with a new lockfile waits for a full install. The next pushes with that lockfile use the same install. The hook keeps the two installs that it used last. A repo with no `node_modules` gets its install the same way.
 
 The hook keeps the installs and the nx cache of the pre-push builds in its state folder: `git-hooks` in the common git folder of the repo (`git rev-parse --git-common-dir`). Linked worktrees use the same state folder. The nx cache of the working tree (`.nx`) is not used, and the hook does not write to it. A file lock in the state folder lets one pre-push build run at a time. The hook deletes each snapshot after its build.
 

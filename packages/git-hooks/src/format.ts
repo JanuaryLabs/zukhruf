@@ -8,7 +8,7 @@ import { type Outcome, Step } from './step.ts';
 // Checks the staged copy of each staged file with the repo's Prettier config,
 // and changes nothing. A step that formatted and staged files would also stage
 // the edits that another session made to them at the same moment.
-export class Format extends Step {
+export class Format extends Step<Commit> {
   readonly name = 'format';
 
   async run(commit: Commit): Promise<Outcome> {

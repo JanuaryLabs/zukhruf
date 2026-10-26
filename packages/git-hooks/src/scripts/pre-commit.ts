@@ -4,7 +4,7 @@ import type { Step } from '../step.ts';
 // What a repo's `.husky/pre-commit.ts` calls. Git runs the hook at the root of
 // the work tree, so the current folder is the repo. This is the one module
 // that prints and reads the environment, as a script may.
-export async function preCommit(steps: readonly Step[]): Promise<void> {
+export async function preCommit(steps: readonly Step<Commit>[]): Promise<void> {
   const commit = new Commit(process.cwd(), process.env);
   for (const step of steps) {
     const outcome = await step.run(commit);
