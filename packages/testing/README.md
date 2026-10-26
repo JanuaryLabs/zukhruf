@@ -285,27 +285,27 @@ test('sends the token', async (t) => {
 });
 ```
 
-An interception is always strict: the server listens with `onUnhandledFrame: 'error'`. A request that no handler answers fails, and the error names it. There is no option for a different strategy.
+An interception is always strict: the server listens with `onUnhandledFrame: 'error'`. A request that no handler answers fails: `fetch` rejects, and the cause is the msw error "Cannot bypass a request when using the "error" strategy". msw also prints the method and the URL of the request. There is no option for a different strategy.
 
 `requests` holds a clone of each request that the server receives, in the order of arrival. A clone keeps its body, so the test can read the body after a handler read the original.
 
 `server` is the msw `SetupServerApi`. Use `interception.server.use(...handlers)` to add handlers for a part of the test.
 
-An interception also receives the requests to a local server, such as an `HttpServer` of the same test. To send them to that server, give a handler that passes them through:
+An interception also receives the requests to a local server, such as an `HttpServer` of the same test. To send them to that server, give a handler for the origin of that server. The handler passes each of its requests through:
 
 ```ts
 import { http, passthrough } from 'msw';
 
+import { HttpServer } from '@zukhruf/testing/http';
+
+await using local = await new HttpServer().start(handler);
 using interception = msw.intercept(
-  http.all('*', ({ request }) => {
-    const { hostname } = new URL(request.url);
-    if (hostname === '127.0.0.1' || hostname === 'localhost') {
-      return passthrough();
-    }
-  }),
+  http.all(`${local.origin}/*`, () => passthrough()),
   http.get('https://api.example.com/user', () => HttpResponse.json({ id: 1 })),
 );
 ```
+
+Do not use a catch-all handler, such as `http.all('*', …)`, that returns nothing for some requests. msw then sends each of those requests to the network, and the strict strategy has no effect. msw 3.0.2 does this.
 
 The driver is msw 3 (`msw ^3.0.3`), which needs Node.js 22.12 or later. Install it next to this package.
 
