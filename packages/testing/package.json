@@ -1,7 +1,7 @@
 {
   "name": "@zukhruf/testing",
   "version": "0.3.41",
-  "description": "Disposable fixtures for integration tests: Docker containers and database servers, SQLite and DuckDB databases, HTTP servers and streams, temporary directories. Node's global setup and global teardown remove what a killed test run left behind.",
+  "description": "Disposable fixtures for integration tests: Docker containers and database servers, SQLite and DuckDB databases, HTTP servers and streams, temporary directories and environment variables. Node's global setup and global teardown remove what a killed test run left behind.",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -109,6 +109,12 @@
       "types": "./dist/fs/temporary-files.d.ts",
       "import": "./dist/fs/temporary-files.js",
       "default": "./dist/fs/temporary-files.js"
+    },
+    "./process": {
+      "@zukhruf/source": "./src/process/environment.ts",
+      "types": "./dist/process/environment.d.ts",
+      "import": "./dist/process/environment.js",
+      "default": "./dist/process/environment.js"
     },
     "./docker-global-setup": {
       "@zukhruf/source": "./src/scripts/docker-global-setup.ts",
