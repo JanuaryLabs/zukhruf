@@ -24,32 +24,32 @@ test('no-undeclared-process-env accepts keys declared in the startup schema', ()
       {
         code: 'const url = process.env.DATABASE_URL;',
         filename,
-        options: [{ startupFile }],
+        settings: { env: { startupFile } },
       },
       {
         // Computed access resolves to the same key and is equally declared.
         code: "const port = process.env['PORT'];",
         filename,
-        options: [{ startupFile }],
+        settings: { env: { startupFile } },
       },
       {
         // Not process.env at all — a same-named property on another object.
         code: 'const value = config.env.ANYTHING;',
         filename,
-        options: [{ startupFile }],
+        settings: { env: { startupFile } },
       },
     ],
     invalid: [
       {
         code: 'const secret = process.env.SECRET_KEY;',
         filename,
-        options: [{ startupFile }],
+        settings: { env: { startupFile } },
         errors: [{ messageId: 'undeclaredEnv' }],
       },
       {
         code: "const secret = process.env['SECRET_KEY'];",
         filename,
-        options: [{ startupFile }],
+        settings: { env: { startupFile } },
         errors: [{ messageId: 'undeclaredEnv' }],
       },
     ],
@@ -67,7 +67,7 @@ test('no-undeclared-process-env reports once when the startup schema is unreadab
         // with the setup, not one problem per usage site.
         code: 'const a = process.env.ONE;\nconst b = process.env.TWO;',
         filename: workspace.path('server.ts'),
-        options: [{ startupFile: workspace.path('startup.ts') }],
+        settings: { env: { startupFile: workspace.path('startup.ts') } },
         errors: [{ messageId: 'startupUnavailable' }],
       },
     ],
@@ -88,7 +88,7 @@ test('no-undeclared-process-env reports when the startup file has no env schema'
         // failure, and the message has to say so.
         code: 'const a = process.env.ONE;',
         filename: workspace.path('server.ts'),
-        options: [{ startupFile: workspace.path('startup.ts') }],
+        settings: { env: { startupFile: workspace.path('startup.ts') } },
         errors: [{ messageId: 'startupUnavailable' }],
       },
     ],

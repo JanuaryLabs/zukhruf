@@ -1,6 +1,6 @@
 # ESLint
 
-The shared lint rules of several repos, packaged once. A repo picks configs by name and gives its own values as options. The package never takes a rule key that a repo fills with its own entries.
+The shared lint rules of several repos, packaged once. A repo picks configs by name and gives its own values as options or as repo settings. The package never takes a rule key that a repo fills with its own entries.
 
 ## Language
 
@@ -21,6 +21,14 @@ _Avoid_: Preset, profile
 **Repo-owned rule**:
 A rule whose options are one list that each repo fills with its own entries: `no-restricted-syntax`, `no-restricted-imports`, `@typescript-eslint/no-restricted-imports`. The package never sets these rules.
 _Avoid_: Shared rule
+
+**Repo setting**:
+A fact about the repo that a rule reads from `settings`, such as `settings.island.libraries` or `settings.env.startupFile`. A repo gives it once, and does not set the rule again, so the config keeps its `files` and `ignores`.
+_Avoid_: Global option
+
+**Startup file**:
+The file of a project that validates the environment once, at boot, with `const env = z.object({...})`. The default is `src/startup.ts`. `settings.env.startupFile` names a different file.
+_Avoid_: Env file
 
 **Option factory**:
 A function that returns a rule's complete options, with a repo's entries added to the shared ones. Examples are `noLet()`, `reactRouterOnlyThrowError()`, `dependencyPolicy()` and `moduleBoundaries()`.

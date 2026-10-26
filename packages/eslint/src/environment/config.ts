@@ -1,5 +1,5 @@
 import { type Concept, enable } from '../concept.ts';
-import { TESTS, TYPESCRIPT } from '../files.ts';
+import { CONFIG_FILES, TESTS, TYPESCRIPT } from '../files.ts';
 import noDefaultForPathEnv from './no-default-for-path-env.ts';
 import noSingleEnvReadWrapper from './no-single-env-read-wrapper.ts';
 import noUndeclaredProcessEnv from './no-undeclared-process-env.ts';
@@ -13,6 +13,7 @@ const rules = {
 /**
  * A service that validates its environment once, in a startup zod schema
  * (`const env = z.object({...})`), and reads it only through declared keys.
+ * `settings.env.startupFile` names that file when it is not `src/startup.ts`.
  */
 export const env: Concept = {
   name: 'env',
@@ -21,7 +22,8 @@ export const env: Concept = {
     {
       name: 'zukhruf/env',
       files: TYPESCRIPT,
-      ignores: TESTS,
+      // A tool config runs at build time, with no startup env schema.
+      ignores: [...TESTS, ...CONFIG_FILES],
       plugins,
       rules: enable(rules),
     },

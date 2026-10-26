@@ -48,13 +48,26 @@ function isProcessEnvMember(node: unknown): boolean {
   );
 }
 
-function startupFileOption(options: readonly unknown[]): string {
-  const [option] = options;
-  const startupFile = isRecord(option) ? option['startupFile'] : undefined;
-  // meta.defaultOptions supplies it and the schema keeps it a string.
+const DEFAULT_STARTUP_FILE = 'src/startup.ts';
+
+/**
+ * `settings.env.startupFile` names the startup file. It is a fact about the
+ * repo, not a rule option, so a repo gives it without setting the rule again
+ * and the `env` config keeps its files and ignores.
+ */
+function startupFileSetting(context: Rule.RuleContext): string {
+  const envSettings = isRecord(context.settings)
+    ? context.settings['env']
+    : undefined;
+  const startupFile = isRecord(envSettings)
+    ? envSettings['startupFile']
+    : undefined;
+  if (startupFile === undefined) {
+    return DEFAULT_STARTUP_FILE;
+  }
   if (typeof startupFile !== 'string') {
     throw new TypeError(
-      'no-undeclared-process-env: the startupFile option must be a string.',
+      'no-undeclared-process-env: settings.env.startupFile must be a string.',
     );
   }
   return startupFile;
@@ -202,23 +215,12 @@ const rule: Rule.RuleModule = {
       undeclaredEnv:
         'Declare {{key}} in {{startupFile}} before using process.env.{{key}}.',
     },
-    schema: [
-      {
-        type: 'object',
-        additionalProperties: false,
-        properties: {
-          startupFile: {
-            type: 'string',
-          },
-        },
-      },
-    ],
-    defaultOptions: [{ startupFile: 'src/startup.ts' }],
+    schema: [],
   },
   create(context) {
     const startupPath = resolveStartupPath(
       context,
-      startupFileOption(context.options),
+      startupFileSetting(context),
     );
     const declared = declaredEnvOf(startupPath);
     let reportedStartupError = false;
