@@ -64,7 +64,8 @@ export class Commit {
       join(tmpdir(), 'git-hooks-'),
     );
     await this.#git('checkout-index', '--all', `--prefix=${snapshot.path}/`);
-    return work(snapshot.path);
+    // Awaited here, so the folder stays until `work` ends.
+    return await work(snapshot.path);
   }
 
   // The tracked files whose working-tree copy differs from the staged copy.

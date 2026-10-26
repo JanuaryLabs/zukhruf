@@ -355,8 +355,9 @@ test('a repo that installs the packed package runs a hook that imports it by nam
     '.husky/pre-commit.ts',
     `#!/usr/bin/env node\n${formatOnly}`,
   );
-  // npm pack gives the files that npm publish uploads, and the repo's own
-  // Prettier is the peer dependency.
+  // npm pack gives the files that npm publish uploads. The repo's own
+  // Prettier is the peer dependency, and @zukhruf/fs is the dependency that
+  // npm would install beside the package.
   const { stdout } = await execFileAsync(
     'npm',
     ['pack', `--pack-destination=${packed.path}`],
@@ -374,6 +375,10 @@ test('a repo that installs the packed package runs a hook that imports it by nam
   await symlink(
     join(zukhrufModules, 'prettier'),
     join(repo.root, 'node_modules/prettier'),
+  );
+  await symlink(
+    join(zukhrufModules, '@zukhruf/fs'),
+    join(repo.root, 'node_modules/@zukhruf/fs'),
   );
   await repo.write('a.ts', 'const a=1\n');
   await repo.git('add', 'a.ts');

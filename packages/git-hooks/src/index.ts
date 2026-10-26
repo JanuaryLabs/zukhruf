@@ -1,6 +1,9 @@
 export { Codegen } from './codegen.ts';
 export { Commit } from './commit.ts';
 export { Format } from './format.ts';
+export { Push } from './push.ts';
+export type { RefUpdate } from './ref-update.ts';
 export { preCommit } from './scripts/pre-commit.ts';
+export { prePush } from './scripts/pre-push.ts';
 export { type Outcome, Step } from './step.ts';
 export { Sync } from './sync.ts';

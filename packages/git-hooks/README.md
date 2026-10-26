@@ -224,7 +224,7 @@ A create or an update also has a `head` and a `base`. The `head` is the local co
 - When the remote has the `head` already, the `base` is the `head`, and the range is empty.
 - When the remote has no commit of that history, there is no `base`, and the step must check the whole history.
 
-`push.inSnapshot(sha, work)` runs `work` on the snapshot of one commit. `push.nx(sha, ...args)` runs nx in the snapshot of one commit, with the git environment above, and gives its standard output. When nx exits with a code other than 0, it throws.
+`push.inSnapshot(sha, work)` runs `work` on the snapshot of one commit. `work` gets the folder of the snapshot and an environment for the tools that it runs there: the git environment above, `NX_DAEMON=false`, and the nx cache of the state folder. `push.nx(sha, ...args)` runs nx in the snapshot of one commit, with the git environment above, and gives its standard output. When nx exits with a code other than 0, it throws.
 
 This step runs the tests of the projects that each pushed range affects:
 
