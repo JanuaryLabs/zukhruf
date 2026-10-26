@@ -26,4 +26,5 @@ Each context has its own glossary and its own architecture decision records.
 | SQLite data version   | [packages/sqlite/data-version/CONTEXT.md](./packages/sqlite/data-version/CONTEXT.md)     | [packages/sqlite/data-version/docs/adr](./packages/sqlite/data-version/docs/adr)                 |
 | Docker                | [packages/docker/CONTEXT.md](./packages/docker/CONTEXT.md)                               | [packages/docker/docs/adr](./packages/docker/docs/adr)                                           |
 | Embeddings            | [packages/embeddings/CONTEXT.md](./packages/embeddings/CONTEXT.md)                       | [packages/embeddings/docs/adr](./packages/embeddings/docs/adr)                                   |
+| Event grouping        | [packages/event-grouping/CONTEXT.md](./packages/event-grouping/CONTEXT.md)               | [packages/event-grouping/docs/adr](./packages/event-grouping/docs/adr)                           |
 | UI                    | [packages/ui/CONTEXT.md](./packages/ui/CONTEXT.md)                                       | The layer table of the [workspace ADR](./docs/adr/0001-zukhruf-is-a-layered-standard-library.md) |

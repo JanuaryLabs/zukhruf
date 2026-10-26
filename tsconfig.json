@@ -79,6 +79,9 @@
     },
     {
       "path": "./packages/embeddings"
+    },
+    {
+      "path": "./packages/event-grouping"
     }
   ]
 }

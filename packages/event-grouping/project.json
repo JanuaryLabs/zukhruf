@@ -1,0 +1,11 @@
+{
+  "name": "event-grouping",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "packages/event-grouping/src",
+  "projectType": "library",
+  "tags": ["layer:island", "std:domain", "test:node"],
+  "targets": {
+    "format": {},
+    "test": {}
+  }
+}

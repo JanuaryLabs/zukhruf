@@ -1,10 +1,10 @@
 # Event grouping: research record
 
-This record keeps what the research for event grouping found, before a package exists. The research asks one question: can a cheap program put news articles that report one event into one group? The planned packages are an embeddings `Collection` and an `EventDetector`. Neither package is built yet. When a package is built, its limitations move into its own `docs/adr`.
+This record keeps what the research for event grouping found, before a package exists. The research asks one question: can a cheap program put news articles that report one event into one group? The packages are `@zukhruf/embeddings` (`Collection`) and `@zukhruf/event-grouping` (`EventDetector`). The limitations of event grouping (13, 14, 18 to 22) are also in [packages/event-grouping/docs/limitations.md](../../packages/event-grouping/docs/limitations.md), and that copy is the current one. This record keeps the history.
 
 Read this record before you change the design, add a feature, or start a new evaluation. Each limitation tells you what happens, what proves it, why it happens, and what to think about before you fix it.
 
-Status on 2026-10-26: round #3124 failed its gate. Round #3130 passed its gate for full articles. It fails on articles that have only a headline. Backlog #3131 builds the packages from the #3130 design. Add the result of each new round to this record.
+Status on 2026-10-26: round #3124 failed its gate. Round #3130 passed its gate for full articles. It fails on articles that have only a headline. Backlog #3131 built the packages from the #3130 design. A replay of the Gun Violence Corpus through `@zukhruf/event-grouping` gives the events of round #3130. Add the result of each new round to this record.
 
 ## Words in this record
 
