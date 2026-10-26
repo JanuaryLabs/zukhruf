@@ -19,6 +19,7 @@ import {
 } from '../files.ts';
 import noPlaywrightTest from '../imports/no-playwright-test.ts';
 import noStateManagers from '../imports/no-state-managers.ts';
+import noTestFileImport from '../imports/no-test-file-import.ts';
 import noEnum from '../language/no-enum.ts';
 import { workspaceRootOf } from '../workspace/workspace-root.ts';
 import { noFloatingPromises, noLet } from './options.ts';
@@ -26,6 +27,7 @@ import { noFloatingPromises, noLet } from './options.ts';
 const importBans = {
   'no-state-managers': noStateManagers,
   'no-playwright-test': noPlaywrightTest,
+  'no-test-file-import': noTestFileImport,
 };
 
 const rules = {
