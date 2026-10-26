@@ -42,9 +42,7 @@ async function removeOwn(
 async function bytesOf(
   stream: ReadableStream<Uint8Array>,
 ): Promise<Uint8Array> {
-  const chunks: Uint8Array[] = [];
-  for await (const chunk of stream) chunks.push(chunk);
-  return Buffer.concat(chunks);
+  return Buffer.concat(await Array.fromAsync(stream));
 }
 
 describe('docker.images', () => {

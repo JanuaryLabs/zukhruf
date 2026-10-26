@@ -5,6 +5,7 @@ import { defineConfig } from 'eslint/config';
 import globals from 'globals';
 import tseslint from 'typescript-eslint';
 
+import noCollectLoop from '../async-values/no-collect-loop.ts';
 import noPromiseField from '../async-values/no-promise-field.ts';
 import noPhaseFlag from '../class-state/no-phase-flag.ts';
 import { type Concept, enable } from '../concept.ts';
@@ -35,6 +36,7 @@ const rules = {
   'no-enum': noEnum,
   'no-promise-field': noPromiseField,
   'no-phase-flag': noPhaseFlag,
+  'no-collect-loop': noCollectLoop,
   ...importBans,
 };
 
@@ -117,6 +119,14 @@ export const base: Concept = {
           // order; a module you need is a value you bind.
           'import-x/no-unassigned-import': 'error',
         },
+      },
+      {
+        // An async iterable read to its end into an array is Array.fromAsync,
+        // in shipped code and in tests alike.
+        name: 'zukhruf/base/async-values',
+        files: SOURCE,
+        plugins,
+        rules: { 'zukhruf/no-collect-loop': 'error' },
       },
       {
         // A module-scope `let` is a global, and the functions that read it

@@ -110,9 +110,9 @@ export function parseBody<T>(response: EngineResponse): T {
 }
 
 async function readAll(response: IncomingMessage): Promise<Buffer> {
-  const chunks: Buffer[] = [];
-  for await (const chunk of response) chunks.push(Buffer.from(chunk));
-  return Buffer.concat(chunks);
+  return Buffer.concat(
+    await Array.fromAsync(response, (chunk) => Buffer.from(chunk)),
+  );
 }
 
 /** Sends requests of the Engine API to one engine. */

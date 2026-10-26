@@ -124,8 +124,7 @@ export class EngineProxy implements AsyncDisposable {
     this.requests.push(proxied);
     // Read the whole body first: a held request reaches the engine even
     // after its client is gone, as one that the engine already received.
-    const chunks: Buffer[] = [];
-    for await (const chunk of request) chunks.push(chunk);
+    const chunks: Buffer[] = await Array.fromAsync(request);
     const matching = this.#intercepts.filter(
       ({ method, path }) => method === proxied.method && path === proxied.path,
     );
@@ -182,8 +181,7 @@ export class EngineProxy implements AsyncDisposable {
     });
     // Node gives the body of the upgrade request, such as the JSON of an
     // exec start, to the request, and only the bytes after it to `head`.
-    const chunks: Buffer[] = [];
-    for await (const chunk of request) chunks.push(chunk);
+    const chunks: Buffer[] = await Array.fromAsync(request);
     const engine = connect(this.#engine);
     this.#track(engine);
     const headers: string[] = [];

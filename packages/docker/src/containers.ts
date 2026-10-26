@@ -562,8 +562,9 @@ export class Container {
       signal,
       exitCode: async (outputEnded) => {
         outputEnded.catch(() => waiting.destroy());
-        const chunks: Buffer[] = [];
-        for await (const chunk of waiting) chunks.push(Buffer.from(chunk));
+        const chunks = await Array.fromAsync(waiting, (chunk) =>
+          Buffer.from(chunk),
+        );
         const answer: EngineApi.ContainerWaitResponse = JSON.parse(
           Buffer.concat(chunks).toString('utf8'),
         );

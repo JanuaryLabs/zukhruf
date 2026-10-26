@@ -117,12 +117,13 @@ describe('container.followLogs()', () => {
       );
 
       // Act
-      const chunks: { stream: string; text: string }[] = [];
-      for await (const { stream, data } of container.followLogs({
-        signal: AbortSignal.timeout(20_000),
-      })) {
-        chunks.push({ stream, text: new TextDecoder().decode(data) });
-      }
+      const chunks = await Array.fromAsync(
+        container.followLogs({ signal: AbortSignal.timeout(20_000) }),
+        ({ stream, data }) => ({
+          stream,
+          text: new TextDecoder().decode(data),
+        }),
+      );
 
       // Assert
       assert.deepEqual(chunks, [
