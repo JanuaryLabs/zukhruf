@@ -1,0 +1,52 @@
+# A pre-push step builds the pushed commit in a snapshot, not the working tree
+
+The repos of one developer copied their pre-push hooks by hand. A survey on 2026-10-26 found 13 `.husky/pre-push` files and one generator template that writes another. 12 of these places hold one piece of knowledge: build every project with the production configuration before a push. They are factory, text2sql, pm, impact-hub, iworked, gi-backend, thing, virtual-care, education, cold-ambulance, deepagents, and the template of factory. datahub also runs lint. The copies differ only in three ways: the targets (datahub: lint and build), the number of parallel tasks (4 copies use 1), and `NODE_ENV=production` (factory and text2sql). This is the third place and more, so by the Rule of Three the step goes into this package as `Build`, with those three options. The production configuration and `NX_DAEMON=false` are not options, because no copy differs there. sdk-it runs `nx affected -t test,build`, which is a different check in one place. It stays in sdk-it.
+
+Each copy builds the working tree. ADR 0001 found that many sessions edit one working tree at the same time. Thus an edit that a peer did not commit can stop a good push, or let a broken push through. No copy reads the ref updates that git gives the hook (githooks(5)), so no copy knows which commits it judges. ADR 0001 applied to a push gives this rule: a pre-push step judges the pushed commits, never the working tree.
+
+## Decision
+
+`prePush(steps)` reads the remote from the arguments of the hook and one ref update from each line of the standard input: `<local ref> SP <local sha> SP <remote ref> SP <remote sha>` (githooks(5)). It runs the steps in order and stops the push at the first fail, as `preCommit` stops the commit. `Step` takes its subject as a type parameter, so the type checker stops a pre-commit step, such as `Format`, in `prePush`.
+
+For a create, the base is the parent of the first commit from `git rev-list <local sha> --topo-order --reverse --not --remotes=<remote>`. The pre-commit framework finds the "from" ref of its pre-push stage in the same way. When that commit has no parent, there is no base.
+
+`Build` builds each pushed commit in a snapshot:
+
+1. **The files.** The hook writes the files of the commit into a temporary folder outside the repo. It reads them from the object store with `git ls-tree -r -z <sha>` and `git cat-file --batch`. No filter applies (no autocrlf, no smudge, no LFS), and `export-ignore` does not apply. A link in the commit becomes a junction when it points to a folder, or else a text file, as git does with `core.symlinks=false`.
+2. **The packages.** The snapshot gets a `node_modules` that is a real folder: the root one, each `@scope` folder, and the `node_modules` of each workspace that the `workspaces` of the commit's `package.json` name. A link to a workspace package points to the same path in the snapshot. Each other entry is a link, with an absolute path, to the installed entry (a junction on Windows). The hook copies `.bin`: a link keeps its relative text, so it resolves through the snapshot, and a file is copied. Other dot entries, such as `.vite`, are not used. A `node_modules` of a workspace must be a real folder, because tools write there: vite wrote `.vite-temp` into it during the probe.
+3. **Install drift.** The hook compares the `package-lock.json` of the commit with the hidden lockfile, `node_modules/.package-lock.json`, which npm writes on each install and which lists what is installed (npm docs, package-lock.json). With no drift, the snapshot uses the installed packages. With drift, the hook runs `npm ci` for the pushed lockfile in a folder of the state folder, with the hash of the lockfile as its name, and the snapshot links to that install. The hook keeps the two installs that it used last. A repo with no `node_modules` has drift for each package. This is not an option.
+4. **nx.** The hook runs `node_modules/.bin/nx` of the snapshot, with the snapshot as the current folder. The nx cache and its workspace-data database are together in one folder of the state folder. nx exits with 130 when a task fails, so each exit code other than 0 is a fail.
+5. **The state folder.** The hook keeps its state in `git-hooks` in `$(git rev-parse --git-common-dir)`. That folder is for one repo, it is outside the working tree, and linked worktrees use the same one. Git keeps its own state there too, such as `rr-cache` for rerere. A file lock in that folder lets one pre-push build run at a time in a repo. The hook deletes each snapshot after its build.
+
+## Evidence
+
+A probe on deepagents (nx 23.2.1, npm workspaces) on 2026-10-26 proved the mechanism, and it wrote nothing in the repo:
+
+- A marker that was only in the snapshot got into the built bundle. A type error that was only in the snapshot made the build fail.
+- The setup took about 1 s: 0.23 to 0.36 s for 1571 files, and 0.35 to 0.67 s for the links.
+- A cold build of 16 projects took 67.8 s. A second build in a new snapshot took 5.2 s, with 17 of 20 tasks from the cache. The 3 other tasks have no cache. The task hashes do not depend on the path of the snapshot.
+- A cache folder without its workspace-data database gave 0 hits of 20. nx 23 keeps the index of the cache in that database.
+- The cache of the working tree gave 1 hit of 20, because the edits of peers change the hashes. Also, nx would write the project graph of the snapshot into the workspace data of the working tree, which peer nx runs read.
+- The installed packages matched the `package-lock.json` that a peer did not commit: 14 other versions, 1 missing package and 20 extra packages. The build of the commit failed with TS2307 for the missing package. This false fail is the reason for the install on drift.
+
+## Considered Options
+
+- **Keep the copies.** A fix in one copy does not get to the others, and each copy builds the working tree.
+- **Build the working tree, as the copies do.** An edit that is not committed decides the outcome.
+- **Stash the edits that are not committed, and build.** A stash changes the working tree of every session.
+- **`git worktree add` for each push.** It adds an entry to the worktree list of the repo, which peers see, and a new worktree has no `node_modules`.
+- **`git archive`.** It applies `export-ignore`, so the snapshot can miss files of the commit.
+- **Link the whole `node_modules` folder.** vite writes into the nearest `node_modules`, so the build writes into the working tree. A workspace link resolves to the working tree, not to the snapshot.
+- **Use the installed packages always.** Install drift gives false fails, as the probe found.
+- **Run `npm ci` for each push.** Each push waits for a full install.
+- **Install only on drift, and keep the last two installs.** This option was selected. A push with no drift stays fast. Ezz accepts the disk space of two installs.
+- **Use the `.nx` cache of the working tree.** It gives almost no hits, and peer nx runs read the project graph that the snapshot writes there.
+
+## Consequences
+
+- A push with no drift adds about 1 s of setup to the build. The first push with a new lockfile waits for a full `npm ci`.
+- The state folder holds up to two full installs and an nx cache for each repo.
+- A file that is not in the commit is not in the snapshot: `.env` files and other ignored files. A build that needs one fails in the hook. Generated files and folders that a build writes come into the snapshot during the build.
+- Install drift is found from npm's hidden lockfile, so `Build` supports npm workspaces.
+- `Step` has a type parameter. Each pre-commit step is a `Step<Commit>`.
+- On Windows, the snapshot uses junctions for links to folders and copies files, so it needs no administrator rights. The proof on Windows is not done yet. zukhruf #2753 tracks it, as for the other packages.

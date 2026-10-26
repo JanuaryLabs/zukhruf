@@ -1,19 +1,19 @@
 # Git hooks
 
-Git hooks written in TypeScript. A hook runs steps in order against the commit that git is about to make. A step reads the staged copy of each file, never the working tree, and stages only the files that it wrote itself.
+Git hooks written in TypeScript. A pre-commit hook runs steps in order against the commit that git is about to make. A pre-push hook runs steps in order against the commits that git is about to send. A step reads the commit, never the working tree. A pre-commit step stages only the files that it wrote itself.
 
 ## Language
 
 **Hook**:
-A program that git runs at one point of its work, for example before a commit. Here the hook is a TypeScript file, `.husky/pre-commit.ts`, and `.husky/pre-commit` is a link to it.
+A program that git runs at one point of its work, for example before a commit or before a push. Here the hook is a TypeScript file, such as `.husky/pre-commit.ts`, and `.husky/pre-commit` is a link to it.
 _Avoid_: Script, trigger
 
 **Step**:
-One check or one task that a hook runs. A step reads the staged commit and gives an outcome. A repo adds a step of its own as a subclass of `Step`.
+One check or one task that a hook runs. A step reads its subject and gives an outcome. The subject of a pre-commit step is the staged commit (`Step<Commit>`). The subject of a pre-push step is the push (`Step<Push>`). A repo adds a step of its own as a subclass of `Step`.
 _Avoid_: Task, job, plugin
 
 **Outcome**:
-What a step gives: pass, skip, or fail. A fail stops the commit and names the reason. A skip says why the step had nothing to do.
+What a step gives: pass, skip, or fail. A fail stops the commit or the push and names the reason. A skip says why the step had nothing to do.
 _Avoid_: Result, status
 
 **Staged commit**:
@@ -35,3 +35,27 @@ _Avoid_: Generated file (that is the next term)
 **Generated file**:
 A file that a build writes from other files, such as `openapi.json` and the SDK client. The codegen step builds it when nx says that the projects it depends on are affected by the staged commit, and stages it.
 _Avoid_: Synced file, artifact
+
+**Push**:
+What `git push` is about to send: the remote (its name and URL) and the ref updates. Git gives them to the pre-push hook as arguments and as lines on the standard input. `Push` is its object in the code.
+_Avoid_: Upload, publish
+
+**Ref update**:
+One line that git gives to the pre-push hook: the local ref, the local sha, the remote ref and the remote sha. Its kind is create (the remote sha is all zeros), update, or delete (the local sha is all zeros). A create or an update has a head, the local sha, and a base, the newest commit that the remote has. A create has no base when the remote has no commit of that history.
+_Avoid_: Branch (a ref can also be a tag), change
+
+**Pushed commit**:
+The commit that a ref update sends: its local sha. A pre-push step judges the pushed commits. A push that only deletes refs has no pushed commit.
+_Avoid_: HEAD (the branch that is checked out, which a push can leave out), local commit
+
+**Snapshot**:
+The files of one commit in a temporary folder outside the repo. The snapshot of the staged commit (`Commit.inSnapshot`) holds only the files. The snapshot of a pushed commit (`Push.inSnapshot`) also has a `node_modules` that the build can use: its workspace packages resolve to the snapshot, and the other packages are the installed packages. The hook deletes a snapshot after use.
+_Avoid_: Checkout, worktree (git's word for a working tree that git tracks), copy
+
+**Install drift**:
+The installed packages do not match the `package-lock.json` of a pushed commit: a package that the lockfile names is missing, or has a different version. The hook finds it from npm's hidden lockfile, `node_modules/.package-lock.json`. On install drift, the build uses an install of the pushed lockfile in the state folder.
+_Avoid_: Stale install, dependency mismatch
+
+**State folder**:
+The folder `git-hooks` in the common git folder of the repo (`git rev-parse --git-common-dir`). The pre-push hook keeps its installs, its nx cache and its lock there. It is outside the working tree, and linked worktrees use the same one.
+_Avoid_: Cache folder (it holds more than the nx cache), `.nx`
