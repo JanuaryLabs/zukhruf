@@ -104,6 +104,7 @@ The tests use `flightElection` and `flight.sock`, and give no `connected` callba
 
 **`lock-stores/socket/lock-server.test.ts` → `coordinator/flight-server.test.ts`.**
 A single flight has no role event. Thus the test reads `flight.epoch` to see that the next process coordinates, and it checks that a new lease token carries a higher epoch.
+The test helper `listening` is byte-identical in the two files. It connects to a socket path, and gives `true` when something accepts the connection. It stays a copy: its knowledge is only in this repository, and no package exports a shared test module. The test helper `LosableElection` of the two files is in a third place, and [the ledger of the election](../../election/docs/copied-code.md#test-helpers-in-more-than-two-places) records it.
 
 ## Test helpers copied
 

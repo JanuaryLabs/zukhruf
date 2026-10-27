@@ -78,6 +78,15 @@ Backlog #2899 is about this code. A third dialect with a pool is the time to mov
 
 **Not counted: the test helpers.** `proxyTo`, `hold`, `untilASessionWaitsForALock` and `silentlyReconnectingSession` are in the test file of each network lock store. Test helpers stay copied in each test file, so that each file reads from top to bottom.
 
+**The worker thread of the cross-thread tests.**
+
+- Places: `threadSource` and `startThread` in `packages/mutex/src/mutex/is-held.test.ts` and in `packages/mutex/src/mutex/mutex.test.ts`.
+- Same: `threadSource` gives the source of a worker. The worker imports `Mutex` and the store cases with dynamic imports, makes the thread side of the store, and runs `body`. `startThread` starts an eval worker with that source, and the host adopts the worker before it can ask for a key.
+- Differs: nothing in the code. One comment breaks its lines in a different place.
+- Why it stays: this knowledge is only in this repository, and no package exports a shared test module. On 2026-10-26 the maintainer moved into `@zukhruf/testing` only the test helpers whose knowledge is in three or more repositories.
+
+Three test helpers of the mutex are also in other packages. `mountAs` and `LosableElection` are in three places, and [the ledger of the election](../../election/docs/copied-code.md#test-helpers-in-more-than-two-places) records them. `listening` is in two places, and [the note of the single flight](../../single-flight/docs/copied-from-mutex.md#tests-copied) records it.
+
 ## In more than two places
 
 The Rule of Three asks to extract the code below. It is not extracted yet. Until it is, a fix to one place goes into each place, and the commit names each file.
