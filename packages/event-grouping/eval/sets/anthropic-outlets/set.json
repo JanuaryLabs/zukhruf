@@ -1,0 +1,22 @@
+{
+  "role": "training",
+  "frozenAt": "2026-10-27T10:10:59Z",
+  "firstScoredAt": "2026-10-27T10:11:27Z",
+  "labelsSha256": "84afb680406f6a8b1c785f9bf1029e21faf83798f687ff88605c0daf8cdba027",
+  "annotator": "Claude (Opus 5.5), one annotator, from the title and the lead only; no embeddings or detector output. The labels are those of labels.json (sha256 7a34477b6bb103e48be62a811b3ef28328b015e15b88676e9087e85f476b7bab) of the live test of zukhruf backlog #3142.",
+  "boundaryRule": "1. One event is one announced action: a model or product launch, a deal or investment, a funding round or filing,\n   a statement, a policy or report release, a lawsuit filing or ruling, a hire or departure, an incident disclosure.\n2. A report about the reaction to an action (analysis, criticism, follow-up quotes, market moves), published within\n   7 days after the action, belongs to that action. Published later than 7 days, it gets its own label.\n3. A general feature, interview, opinion or round-up with no single action gets its own label (a singleton).\n4. Two actions announced together in one post (one announcement) are one event. Two actions announced separately,\n   even on one day and one topic, are two events.\n5. When a report covers several actions, it gets the action of its title; if its title names none, the action of its\n   lead. If it still has no single action, rule 3.\n6. A later step in one case (a ruling after a filing, an appeal after a ruling) is a new action, so a new event.\n7. Labels come from the title and the lead (first sentences) only, read by one annotator (Claude), without\n   embeddings or detector output. Unclear cases go to the ambiguous list with the alternative label.\n",
+  "text": "web",
+  "source": {
+    "name": "Anthropic news and the Anthropic tags of three outlets, 2026-04-01 to 2026-10-26",
+    "url": "https://www.anthropic.com/news",
+    "licence": "The articles belong to their publishers (Anthropic, The Decoder, Fortune, Ars Technica, Financial Times, ProPublica). This repository holds only their URLs, dates, publishers and our labels. Every URL was allowed by the robots.txt of its site for all user agents when it was crawled.",
+    "attribution": "Articles by anthropic.com, the-decoder.com, fortune.com, arstechnica.com, ft.com and propublica.org. Labels by the zukhruf project."
+  },
+  "weaknesses": [
+    "One annotator (an AI model). No second annotator checked the labels.",
+    "The annotator read the title and the lead only, not the whole article.",
+    "65 articles are ambiguous; each has its alternative label.",
+    "Fortune dates are the URL day at 12:00 UTC, not the publish time.",
+    "The texts in the cache come from elt's article extraction. A text that the runner fetches again is extracted with Readability, so it can differ."
+  ]
+}

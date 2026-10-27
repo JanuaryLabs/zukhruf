@@ -1,0 +1,19 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "eval",
+    "outDir": "out-tsc/eval",
+    "emitDeclarationOnly": true,
+    "rewriteRelativeImportExtensions": false,
+    "tsBuildInfoFile": "out-tsc/eval/tsconfig.eval.tsbuildinfo"
+  },
+  "include": ["eval/**/*.ts"],
+  "references": [
+    {
+      "path": "./tsconfig.lib.json"
+    },
+    {
+      "path": "../embeddings/tsconfig.lib.json"
+    }
+  ]
+}

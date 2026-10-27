@@ -46,7 +46,10 @@
     "ml-hclust": "^4.0.0"
   },
   "devDependencies": {
+    "@ai-sdk/openai-compatible": "3.0.79",
+    "@mozilla/readability": "0.6.0",
     "@zukhruf/embeddings": "^0.3.46",
-    "ai": "^7.0.154"
+    "ai": "^7.0.154",
+    "linkedom": "0.18.14"
   }
 }

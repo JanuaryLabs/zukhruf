@@ -156,3 +156,7 @@ test-results.xml
 
 # TypeScript output of the Vite apps (Vite builds to dist)
 out-tsc
+
+# The downloaded texts, the vectors and the last scores of the event-grouping eval
+packages/event-grouping/eval/cache
+packages/event-grouping/eval/results

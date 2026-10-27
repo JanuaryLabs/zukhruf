@@ -6,6 +6,19 @@
   "tags": ["layer:island", "std:domain", "test:node"],
   "targets": {
     "format": {},
-    "test": {}
+    "test": {
+      "options": {
+        "args": "\"eval/**/*.test.ts\""
+      }
+    },
+    "eval": {
+      "executor": "nx:run-commands",
+      "dependsOn": ["^build"],
+      "cache": false,
+      "options": {
+        "command": "node eval/run.ts",
+        "cwd": "{projectRoot}"
+      }
+    }
   }
 }

@@ -1,0 +1,3565 @@
+[
+  {
+    "id": "gvc-40b69cf630792394ef837aee6c959ece",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#40b69cf630792394ef837aee6c959ece",
+    "publishedAt": "2016-12-04",
+    "event": "gvc-717947",
+    "textSha256": "38ab399ceb0c084ad20831a9e0fe11f0a1a2d4fc286f56121a07598cafff54b8"
+  },
+  {
+    "id": "gvc-c22d0dfcbf660d12fa8dc457a082887d",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#c22d0dfcbf660d12fa8dc457a082887d",
+    "publishedAt": "2016-06-05",
+    "event": "gvc-571210",
+    "textSha256": "502df4c74bd94354ff76767ff6226f40d1a8d3a956389d61e221671c3876d221"
+  },
+  {
+    "id": "gvc-6f9b5494e8f98339a73a1012f7eea4b4",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#6f9b5494e8f98339a73a1012f7eea4b4",
+    "publishedAt": "2016-07-13",
+    "event": "gvc-601037",
+    "textSha256": "452b25d19f55bb282983fd70ede75d51c63cd2b25764be9a7122fa776ee40af0"
+  },
+  {
+    "id": "gvc-81ce9c19bbce91c1111fc1f98ce1c8ca",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#81ce9c19bbce91c1111fc1f98ce1c8ca",
+    "publishedAt": "2016-07-13",
+    "event": "gvc-601037",
+    "textSha256": "a8067fc2fca61ec786a546021e35a3d048e6d9eb38d9f71227a2c4478a29b8c9"
+  },
+  {
+    "id": "gvc-95e01170da8c0929a442ef28b93be9e1",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#95e01170da8c0929a442ef28b93be9e1",
+    "publishedAt": "2016-05-03",
+    "event": "gvc-551295",
+    "textSha256": "ac10f903dfc0bdf0221c514ad28e2c2c3ec897a532c0f5e7c6c7642a8ec657a3"
+  },
+  {
+    "id": "gvc-629abdc877c25f8b93fafd2c08ee17dd",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#629abdc877c25f8b93fafd2c08ee17dd",
+    "publishedAt": "2016-05-21",
+    "event": "gvc-562315",
+    "textSha256": "d7efdba6c9efdc467e6de701e49257f36af2ef136498295b91b9a32ebf0865d7"
+  },
+  {
+    "id": "gvc-510cf6f9e9e3dcbaa913e036b8f671af",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#510cf6f9e9e3dcbaa913e036b8f671af",
+    "publishedAt": "2016-01-19",
+    "event": "gvc-432540",
+    "textSha256": "2deecea34f9ce3528c71f11de13ad2c494b7c8000e722c1b8df09c133c588680"
+  },
+  {
+    "id": "gvc-15eb4550cad2bb8106425e79c9ac1fb2",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#15eb4550cad2bb8106425e79c9ac1fb2",
+    "publishedAt": "2016-04-12",
+    "event": "gvc-525329",
+    "textSha256": "0d91156617a434c333ba3f5897ae97152f69510518983359c9920f9d90c11744"
+  },
+  {
+    "id": "gvc-95569e1202906a0daf698e1d859cacd9",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#95569e1202906a0daf698e1d859cacd9",
+    "publishedAt": "2016-11-21",
+    "event": "gvc-704906",
+    "textSha256": "b55d1feb22779e2237216a66fcb2310675c831a3df6c2c89e00780bac57f27c9"
+  },
+  {
+    "id": "gvc-5a0c56265670498621b7cd2f71e53902",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#5a0c56265670498621b7cd2f71e53902",
+    "publishedAt": "2016-12-12",
+    "event": "gvc-723277",
+    "textSha256": "0eb2999f9035c0d8d3b5c27e8222f896d2500fc8dec829b91b54e4c09b7f9aa5"
+  },
+  {
+    "id": "gvc-34d13cc0d1db9d8b1a1139aea267826e",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#34d13cc0d1db9d8b1a1139aea267826e",
+    "publishedAt": "2014-03-11",
+    "event": "gvc-113480",
+    "textSha256": "70e743e30acb6c36d70649c6c9ff4eefe907cb82601b619b98bb3e7bf27410d1"
+  },
+  {
+    "id": "gvc-89cd74707f3695461502759237df180d",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#89cd74707f3695461502759237df180d",
+    "publishedAt": "2016-06-23",
+    "event": "gvc-583854",
+    "textSha256": "44e0063c1d833c64eedd73c021334cbf8fc66df91de1ec7b6b531a1ff18f85b1"
+  },
+  {
+    "id": "gvc-8b9a4c355f2fa01f8362d613871b55e3",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#8b9a4c355f2fa01f8362d613871b55e3",
+    "publishedAt": "2016-04-27",
+    "event": "gvc-548991",
+    "textSha256": "2c0908e6f4e2bca56bf8e9cbda030e208f51fb1b0c562bfc9b002d929feb0da4"
+  },
+  {
+    "id": "gvc-2029ab4a92e0045e44de6aea89f359fc",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#2029ab4a92e0045e44de6aea89f359fc",
+    "publishedAt": "2016-01-22",
+    "event": "gvc-489149",
+    "textSha256": "c05537121ea405a2504176b5e3dd6522bf35e0a79ca5bb06b862f3d47ce2e2f1"
+  },
+  {
+    "id": "gvc-5add8846056c9b485a7920f9ab991fcb",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#5add8846056c9b485a7920f9ab991fcb",
+    "publishedAt": "2015-10-09",
+    "event": "gvc-427621",
+    "textSha256": "5fa195ac7ca2db2462e7d28441737bfee7d67e57714a32264c1ee2fadc0c8daf"
+  },
+  {
+    "id": "gvc-2b1f309f668e0781682f523994146b8a",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#2b1f309f668e0781682f523994146b8a",
+    "publishedAt": "2015-01-21",
+    "event": "gvc-282561",
+    "textSha256": "aadd007c10e66df8cb8fbda619934940c361688e2cab613136ff28525f80a587"
+  },
+  {
+    "id": "gvc-7d718a5462450d082cf4dd41b3d00e58",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#7d718a5462450d082cf4dd41b3d00e58",
+    "publishedAt": "2016-09-03",
+    "event": "gvc-646995",
+    "textSha256": "02ea1aeee5924c3bb042c4741fe927e5eeb744f4b0417c4de7e4001db537b2fb"
+  },
+  {
+    "id": "gvc-76889e35ee06404b5a5d8bd5083c2e60",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#76889e35ee06404b5a5d8bd5083c2e60",
+    "publishedAt": "2016-11-09",
+    "event": "gvc-696569",
+    "textSha256": "0ca12053d40069297a00b899883a89845b54d61c9d2147d85bb4703f55d18a0f"
+  },
+  {
+    "id": "gvc-b9af533d3a40a6c2dfb2148e45c4ee87",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#b9af533d3a40a6c2dfb2148e45c4ee87",
+    "publishedAt": "2016-09-28",
+    "event": "gvc-662638",
+    "textSha256": "2f1083221c15cb2885fba510471252d56b4e62589b597997779fcb08346a5822"
+  },
+  {
+    "id": "gvc-f29ca88374473dbf2e3cc1a36210078a",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#f29ca88374473dbf2e3cc1a36210078a",
+    "publishedAt": "2015-07-08",
+    "event": "gvc-370966",
+    "textSha256": "c03e8e01610d4173db8f524c5bfb587c32e52e18a758339a4a5d0cc719c307a4"
+  },
+  {
+    "id": "gvc-6168b892e98d4d671bc7cce4ce9ca903",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#6168b892e98d4d671bc7cce4ce9ca903",
+    "publishedAt": "2016-12-21",
+    "event": "gvc-730637",
+    "textSha256": "cf637dc6f4931b5a571c808ffb87704e3baee8d26e580dd90564ac0a8b70fdf6"
+  },
+  {
+    "id": "gvc-19647c86f3ed1ad94cf6d5b6c3419f5d",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#19647c86f3ed1ad94cf6d5b6c3419f5d",
+    "publishedAt": "2014-10-24",
+    "event": "gvc-209733",
+    "textSha256": "fa8849333ac5aa3928d2d5d8090a101c4605dfb0cce635e94b34b70b0b4812fd"
+  },
+  {
+    "id": "gvc-34a41bfbd2227ba8d279b8eb724f46d0",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#34a41bfbd2227ba8d279b8eb724f46d0",
+    "publishedAt": "2016-06-17",
+    "event": "gvc-583177",
+    "textSha256": "b533d1bfacac0cb19e9a98925d5659ece450dab4679ec2d62f758f3fdc2586c0"
+  },
+  {
+    "id": "gvc-bbbeddb4a2eab3f71c4322f7961a60d1",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#bbbeddb4a2eab3f71c4322f7961a60d1",
+    "publishedAt": "2016-08-01",
+    "event": "gvc-618188",
+    "textSha256": "3771f563644b13654a7828f006d324a762e80a6253c734d8f5bc167fd3c1498f"
+  },
+  {
+    "id": "gvc-18f281377ccb875451d9a03ee3c054b1",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#18f281377ccb875451d9a03ee3c054b1",
+    "publishedAt": "2016-10-29",
+    "event": "gvc-688056",
+    "textSha256": "c0e0039623c519be9040ee66fe379a9ea979f4d2a7f5d1966c3de840f30c0a60"
+  },
+  {
+    "id": "gvc-1f7f1bb803b3e4c160f1ed88e011ce7b",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#1f7f1bb803b3e4c160f1ed88e011ce7b",
+    "publishedAt": "2016-11-10",
+    "event": "gvc-695963",
+    "textSha256": "1cde4ffba30284adb72f94cf82ad83b8754ffb9aecac2f9e7d4f2497f01045a9"
+  },
+  {
+    "id": "gvc-a9063d1c576ba6cced5a0b0211ba94be",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#a9063d1c576ba6cced5a0b0211ba94be",
+    "publishedAt": "2015-08-20",
+    "event": "gvc-399019",
+    "textSha256": "21c13d6b0281bc6ff64a6a8cf8f653912e24a3ca9b3def7e3969cef50d357d3d"
+  },
+  {
+    "id": "gvc-826535532ebb50f151e18f0cb8140508",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#826535532ebb50f151e18f0cb8140508",
+    "publishedAt": "2016-03-28",
+    "event": "gvc-368727",
+    "textSha256": "fb20608ad9b8df9f3cdeb13023bce9c0b881baa22e073ad287e3d6720cf96c9b"
+  },
+  {
+    "id": "gvc-e0ff4a5f6b04c10aee0b89f1780455a4",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#e0ff4a5f6b04c10aee0b89f1780455a4",
+    "publishedAt": "2015-01-13",
+    "event": "gvc-272869",
+    "textSha256": "efe134582e47fe677a0c2e367aa6178780a0c234115654e34e05b4fce8114abd"
+  },
+  {
+    "id": "gvc-67992b766530b0afdba4a508f7f74b9f",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#67992b766530b0afdba4a508f7f74b9f",
+    "publishedAt": "2016-08-03",
+    "event": "gvc-621109",
+    "textSha256": "d47c7a4be7ae9b92d8e186c5f880d179c45b5a91628df8bec29bd4a83135195e"
+  },
+  {
+    "id": "gvc-29c699efc4aab321aac2e94febe79b16",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#29c699efc4aab321aac2e94febe79b16",
+    "publishedAt": "2016-11-25",
+    "event": "gvc-711467",
+    "textSha256": "dcddc80bf884ddf4a2ac660016b2e047fd888ca03a96135cd70506a9cd326aec"
+  },
+  {
+    "id": "gvc-67ad5ecc2a075a26c3c77a8414de2762",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#67ad5ecc2a075a26c3c77a8414de2762",
+    "publishedAt": "2016-03-08",
+    "event": "gvc-517940",
+    "textSha256": "e367a4ec565248fa2288be2a4f2b6718a27e3dcf4d2676c3d8b6b5f1fc090a7b"
+  },
+  {
+    "id": "gvc-f7c7fbcf9514fbd5ac8a908532734696",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#f7c7fbcf9514fbd5ac8a908532734696",
+    "publishedAt": "2016-11-19",
+    "event": "gvc-704909",
+    "textSha256": "00499fba36caee3a5163d54e19661bac772c19862e049950694313a02be03d2b"
+  },
+  {
+    "id": "gvc-b4ce20bac7217209a07c56209c44173f",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#b4ce20bac7217209a07c56209c44173f",
+    "publishedAt": "2016-02-26",
+    "event": "gvc-512274",
+    "textSha256": "15f206b51f8cde84020a0d5bdfde7fc94e8439b55f753df0cb2c669d1c7bc2dc"
+  },
+  {
+    "id": "gvc-3ff14dbe98c6b7d81d908f118d5b75c7",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#3ff14dbe98c6b7d81d908f118d5b75c7",
+    "publishedAt": "2014-08-06",
+    "event": "gvc-170442",
+    "textSha256": "5f52630048ea93eb36f237f6dc20c0332f5800550aab26a39c7ae48d13b7154e"
+  },
+  {
+    "id": "gvc-7ff6f40fc1fa1d4ad56771bb4adeb8aa",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#7ff6f40fc1fa1d4ad56771bb4adeb8aa",
+    "publishedAt": "2016-05-12",
+    "event": "gvc-557852",
+    "textSha256": "08b4e68bfead687c524e8fc46e6be0b1b07b51710e058976b9af718284e432e3"
+  },
+  {
+    "id": "gvc-3771bb0647de86fc98c2cb52733405cc",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#3771bb0647de86fc98c2cb52733405cc",
+    "publishedAt": "2016-01-19",
+    "event": "gvc-487996",
+    "textSha256": "e34e7fe3f0db0a8c5958018c599ef5d8f91e31620f96e9ff02f14de2cb2d0b8b"
+  },
+  {
+    "id": "gvc-8d8bfc35b1a4fd5fbea144d7aa1bdf97",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#8d8bfc35b1a4fd5fbea144d7aa1bdf97",
+    "publishedAt": "2016-03-11",
+    "event": "gvc-521706",
+    "textSha256": "bebd72fbd4acf36b45d1b9472d2c2c1874e217c7eb81f1fd190924101d2cfb7a"
+  },
+  {
+    "id": "gvc-c8d02ec56d873583e4fb7d9970f8d2dc",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#c8d02ec56d873583e4fb7d9970f8d2dc",
+    "publishedAt": "2016-07-26",
+    "event": "gvc-613903",
+    "textSha256": "ad934b1fc0ff72074b263c9b65822ce5e5b2136c4e8a3adb96bdd5ffd0946595"
+  },
+  {
+    "id": "gvc-c81c1486a55be344557c9442b8368186",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#c81c1486a55be344557c9442b8368186",
+    "publishedAt": "2016-06-23",
+    "event": "gvc-586609",
+    "textSha256": "3bfe562567cb43d162a53ff45189bd722b24b2f24131a2c09b1a1f5922b0c779"
+  },
+  {
+    "id": "gvc-b00a8290e2f3ea81aec02ca4635f4d92",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#b00a8290e2f3ea81aec02ca4635f4d92",
+    "publishedAt": "2016-02-24",
+    "event": "gvc-508327",
+    "textSha256": "98247c46d0872cb8fe65ac82b9208d227fac81b38f659ee0bd99bb66d4c7228e"
+  },
+  {
+    "id": "gvc-322cf5320761a1776070b66a5d332fac",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#322cf5320761a1776070b66a5d332fac",
+    "publishedAt": "2016-09-26",
+    "event": "gvc-648867",
+    "textSha256": "cc1ed514ae2fd3ef216ba96f26791f2eca5faf047f6641eeaa7e92b509215103"
+  },
+  {
+    "id": "gvc-dc05dfec91926dc4b3bbff8e3620f66f",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#dc05dfec91926dc4b3bbff8e3620f66f",
+    "publishedAt": "2013-10-28",
+    "event": "gvc-492366",
+    "textSha256": "7cc3577db5cc514e5d55eedf020c4b1ea727c79a791b93a2c51068af3808e502"
+  },
+  {
+    "id": "gvc-1ddb2825d2518ee2df29ddae2a66c2e9",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#1ddb2825d2518ee2df29ddae2a66c2e9",
+    "publishedAt": "2016-01-17",
+    "event": "gvc-486434",
+    "textSha256": "a7f6426ccefb7ffe8bfee3853c167b7c5d64ba308fde115709664d0670863861"
+  },
+  {
+    "id": "gvc-61caa6f52efc7c59c1f3c66a61a58a18",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#61caa6f52efc7c59c1f3c66a61a58a18",
+    "publishedAt": "2016-08-25",
+    "event": "gvc-603823",
+    "textSha256": "95b3ce8c4aeb2780ff1494508dd2c97577a89d47a155f67f142555f540f70755"
+  },
+  {
+    "id": "gvc-3a2d2a7dd740f97b82aa5ba729ce1ff6",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#3a2d2a7dd740f97b82aa5ba729ce1ff6",
+    "publishedAt": "2016-07-16",
+    "event": "gvc-603823",
+    "textSha256": "7dd7c9f6d2ddcbf03604e6cac85d767ea5183fd0e38d10d4560e3f10c8ff3fcd"
+  },
+  {
+    "id": "gvc-d1f844f36f140bb5da494dbe47b127fd",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#d1f844f36f140bb5da494dbe47b127fd",
+    "publishedAt": "2016-11-23",
+    "event": "gvc-708277",
+    "textSha256": "4767fd800c692c566467309100086ab37d41240a738ea2c1da5edf6dc1ed706e"
+  },
+  {
+    "id": "gvc-d98f80189434af31028c9ebe5badfa24",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#d98f80189434af31028c9ebe5badfa24",
+    "publishedAt": "2016-10-01",
+    "event": "gvc-667099",
+    "textSha256": "6a64ef53a857e703416da7c7caa2529348d17dcf047653fb04a9c356de4abe3e"
+  },
+  {
+    "id": "gvc-ee574b04da759af58e5d13674a9d64a1",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#ee574b04da759af58e5d13674a9d64a1",
+    "publishedAt": "2016-11-30",
+    "event": "gvc-710200",
+    "textSha256": "0d6f61bfb4a81f9b4ca1725e04d6ce0e754678a94af634923867e16502098b2d"
+  },
+  {
+    "id": "gvc-bd6328f6c543eb4c3b72c2f793806e4b",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#bd6328f6c543eb4c3b72c2f793806e4b",
+    "publishedAt": "2015-12-24",
+    "event": "gvc-470971",
+    "textSha256": "b68a2409eaf34894e83b4f577e783eb1d1d4b59e129ca82e63d893215b9afe55"
+  },
+  {
+    "id": "gvc-9598d8a0acb544fa8469d8ad97af4abc",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#9598d8a0acb544fa8469d8ad97af4abc",
+    "publishedAt": "2016-11-22",
+    "event": "gvc-692025",
+    "textSha256": "436c92b0d45cf4cbfd79c5ec8f78d5593ee8ccc0f6b04b61fe5f653eec42fb79"
+  },
+  {
+    "id": "gvc-476589b970e8c92159263a916a363a61",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#476589b970e8c92159263a916a363a61",
+    "publishedAt": "2016-11-26",
+    "event": "gvc-710885",
+    "textSha256": "92f98eb01377eb1d3446a1de77628f1a1a38b669e40e494f7e7534f2f980466f"
+  },
+  {
+    "id": "gvc-11a3e78be47ec77d135345a13e951468",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#11a3e78be47ec77d135345a13e951468",
+    "publishedAt": "2016-07-28",
+    "event": "gvc-613826",
+    "textSha256": "e9d86a40e7e9e88997b6be7aadf0b217a85d3b35a1df8085958442c48efede6b"
+  },
+  {
+    "id": "gvc-661d2cd287524649d7c39d8a957af3fb",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#661d2cd287524649d7c39d8a957af3fb",
+    "publishedAt": "2016-09-09",
+    "event": "gvc-651827",
+    "textSha256": "cdcc574b3d2952f9473f19a2eb0592efb5606e38d3fce96208289e108daf7841"
+  },
+  {
+    "id": "gvc-2cc9b0377fbf945c7974c61e329b1599",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#2cc9b0377fbf945c7974c61e329b1599",
+    "publishedAt": "2016-10-21",
+    "event": "gvc-680890",
+    "textSha256": "5689d58ef4af583ae35dc8a2d6506acfde1de751cb8047f0f7bf168aad9710aa"
+  },
+  {
+    "id": "gvc-19c7198201879284b96af4533c2bfedf",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#19c7198201879284b96af4533c2bfedf",
+    "publishedAt": "2016-10-29",
+    "event": "gvc-688056",
+    "textSha256": "2614ca9ea8882c1959073f7f0b90fbecab24752c1b0abfad8164a81daf88d474"
+  },
+  {
+    "id": "gvc-f6fe00ab356f2779eb7947484abc2204",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#f6fe00ab356f2779eb7947484abc2204",
+    "publishedAt": "2016-06-13",
+    "event": "gvc-578238",
+    "textSha256": "0e13c48452ae166282f42bda20953a7982a90b184add345b4b1e73bee0ebb6a3"
+  },
+  {
+    "id": "gvc-e186beddd0f3ffe371d8cb36702be2f7",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#e186beddd0f3ffe371d8cb36702be2f7",
+    "publishedAt": "2014-08-04",
+    "event": "gvc-178149",
+    "textSha256": "b720fc1199039e13ccd4a51fc5bb1977f63b0e3a20a2dbf8798660d135cdf6ea"
+  },
+  {
+    "id": "gvc-2dfd80b08df6698e11f752ee381fcccb",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#2dfd80b08df6698e11f752ee381fcccb",
+    "publishedAt": "2016-04-20",
+    "event": "gvc-544535",
+    "textSha256": "96734ad1986949498932d23e5812f84aeb9b26783110e5ab08aa4245de54021a"
+  },
+  {
+    "id": "gvc-c1ec0f094473e56a028650468640db6d",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#c1ec0f094473e56a028650468640db6d",
+    "publishedAt": "2016-11-10",
+    "event": "gvc-693798",
+    "textSha256": "bdd2743f36e85334147a68a64c5a4b4a8107bc8ea9abb0761e61967af9f1f272"
+  },
+  {
+    "id": "gvc-3fe766a046e8650891a2e6803b5055e0",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#3fe766a046e8650891a2e6803b5055e0",
+    "publishedAt": "2016-09-18",
+    "event": "gvc-657926",
+    "textSha256": "37647627680b8979ba64150ff1d50a79befff0f504f7fde983781ce4212c4f2f"
+  },
+  {
+    "id": "gvc-6513f90c9a1010d263072de5f89a9ace",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#6513f90c9a1010d263072de5f89a9ace",
+    "publishedAt": "2016-02-09",
+    "event": "gvc-501412",
+    "textSha256": "182c07e4deb9fd67178480899bdd3a455440d56fbf139ff023d0f28a8c63ca9e"
+  },
+  {
+    "id": "gvc-ffc4a50d591f144f9b43a1931bbe8d6c",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#ffc4a50d591f144f9b43a1931bbe8d6c",
+    "publishedAt": "2016-06-27",
+    "event": "gvc-589488",
+    "textSha256": "34838532f2ad3e7181677350ecb59d3525d645dfdccb2c86ee738394e77eff49"
+  },
+  {
+    "id": "gvc-c7a6b5b3248e67686290db113c26e288",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#c7a6b5b3248e67686290db113c26e288",
+    "publishedAt": "2016-09-17",
+    "event": "gvc-657396",
+    "textSha256": "77c3dce71ed923011b2001e91f902bca56ada81fe674f3d3333f85848bb2e2b7"
+  },
+  {
+    "id": "gvc-1e488aa93055b08e095bc5d23634025a",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#1e488aa93055b08e095bc5d23634025a",
+    "publishedAt": "2016-04-11",
+    "event": "gvc-537545",
+    "textSha256": "b8814362b0b832d71e541352dfda12dc9d25d6dccaaa8745622b42a8ad18dc0c"
+  },
+  {
+    "id": "gvc-49afe22b7a3c52e12c4c6a9043d13cc8",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#49afe22b7a3c52e12c4c6a9043d13cc8",
+    "publishedAt": "2015-01-21",
+    "event": "gvc-281766",
+    "textSha256": "449534876ca38f40294133d8327d75d3d270250192ab300a843152d73a9faac4"
+  },
+  {
+    "id": "gvc-ed785b4fda8a8fb5c1c514f0b8954751",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#ed785b4fda8a8fb5c1c514f0b8954751",
+    "publishedAt": "2015-12-10",
+    "event": "gvc-462496",
+    "textSha256": "2e7357d6b04fe981e9a0e740611a8ac3918b7bbd4a69f866fb2694df35cf79d8"
+  },
+  {
+    "id": "gvc-613631923464203ce2d4dee67f4cf281",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#613631923464203ce2d4dee67f4cf281",
+    "publishedAt": "2015-10-18",
+    "event": "gvc-432540",
+    "textSha256": "03119c86776a4bbb5a574bd397df9a3f5106c09fccb104ea5a37070ae6304144"
+  },
+  {
+    "id": "gvc-7097f0dda6c0bcd7955b56be9a9ab5d0",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#7097f0dda6c0bcd7955b56be9a9ab5d0",
+    "publishedAt": "2016-05-21",
+    "event": "gvc-562315",
+    "textSha256": "274c7cecfba793c6f889a8d471b00f304e7d57fdd1f03ebc8dfd1d240ee2b20e"
+  },
+  {
+    "id": "gvc-13cfb256b828219e85ff3b48d8efb16b",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#13cfb256b828219e85ff3b48d8efb16b",
+    "publishedAt": "2016-11-09",
+    "event": "gvc-695963",
+    "textSha256": "d04654ed8f9f1145bf50bee68685f010159101d177287a5da8be4a4a12906f2c"
+  },
+  {
+    "id": "gvc-533dc1a9518e4defd149a1e1c2a40766",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#533dc1a9518e4defd149a1e1c2a40766",
+    "publishedAt": "2014-06-15",
+    "event": "gvc-146565",
+    "textSha256": "126e2e4be5e444379f1fdc28b1f7fe741e9840b199465cc0f276840d79bfc562"
+  },
+  {
+    "id": "gvc-a43f13d3af31e7f188cfbd2965ca9c25",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#a43f13d3af31e7f188cfbd2965ca9c25",
+    "publishedAt": "2016-09-17",
+    "event": "gvc-657396",
+    "textSha256": "a8a07e5c0a55315a04a5bddee44a5f4c40f5454d729f098b02da6b3e2027d47d"
+  },
+  {
+    "id": "gvc-f642c7314e06cbbe4d2af32736a00f6d",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#f642c7314e06cbbe4d2af32736a00f6d",
+    "publishedAt": "2014-08-25",
+    "event": "gvc-111416",
+    "textSha256": "b91ce2855bb0856aeaf27b5dc9f2ef837ac77bca3d859371c91d4d77c9e30f85"
+  },
+  {
+    "id": "gvc-adb68f9378975999d3becbe519855b9c",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#adb68f9378975999d3becbe519855b9c",
+    "publishedAt": "2013-10-27",
+    "event": "gvc-492366",
+    "textSha256": "ec28a4ab9606d7f7ec7265d9d30a069cf5b2b4036672db230dae510d42365a04"
+  },
+  {
+    "id": "gvc-b6b360cfd901a9e3d7d3940b7487b8ec",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#b6b360cfd901a9e3d7d3940b7487b8ec",
+    "publishedAt": "2015-05-26",
+    "event": "gvc-346621",
+    "textSha256": "afcb4276f66aa71ed6c22837faa62a8d5625bbbaf652569531eed7e513776a8a"
+  },
+  {
+    "id": "gvc-8aaf0296fc3a08a43aa6ecc1eedecc59",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#8aaf0296fc3a08a43aa6ecc1eedecc59",
+    "publishedAt": "2016-07-29",
+    "event": "gvc-617461",
+    "textSha256": "6a1aac4d08d7062fcd6acc6797df2a12e618a399fe35c97370bd1f1128df8e9c"
+  },
+  {
+    "id": "gvc-aa3e80dd03710186613acb45855e687e",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#aa3e80dd03710186613acb45855e687e",
+    "publishedAt": "2013-08-02",
+    "event": "gvc-491438",
+    "textSha256": "4b5efbf0ce71da955dd54fd3e90b13560ac50772d60b95d25d3fd50d334fb9ff"
+  },
+  {
+    "id": "gvc-c7e44056252cdb25cb66f270a3cc8f8d",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#c7e44056252cdb25cb66f270a3cc8f8d",
+    "publishedAt": "2016-05-20",
+    "event": "gvc-562315",
+    "textSha256": "bc2bb42387345931b436a38b3a70b195c46b8a92666ab5f914de1e5809b506b6"
+  },
+  {
+    "id": "gvc-790c31e69e87d98d4f12e850c5dadfa3",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#790c31e69e87d98d4f12e850c5dadfa3",
+    "publishedAt": "2015-08-03",
+    "event": "gvc-386225",
+    "textSha256": "4c099e1217aa4caabf7d5fe717b965b97a540318ef7d64a183ac08466cb83107"
+  },
+  {
+    "id": "gvc-de80e78feda3e0b8780fd01c9244d7f4",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#de80e78feda3e0b8780fd01c9244d7f4",
+    "publishedAt": "2016-02-27",
+    "event": "gvc-512877",
+    "textSha256": "bf1deccd546242269723ea3fa8094b9010c04050116b053819d0dbc5132b8771"
+  },
+  {
+    "id": "gvc-d9db93e223a776e1d34fee85b1b2d470",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#d9db93e223a776e1d34fee85b1b2d470",
+    "publishedAt": "2016-12-06",
+    "event": "gvc-717231",
+    "textSha256": "c613c2e86c5650751b3af984bd4aed22a60f56995c4f975bfca609bf64485c05"
+  },
+  {
+    "id": "gvc-dfb3aed53fc8a4de2c1295bc74555263",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#dfb3aed53fc8a4de2c1295bc74555263",
+    "publishedAt": "2016-05-11",
+    "event": "gvc-556993",
+    "textSha256": "c710f2b31447141b021b33a50d2d3401b59c793f3c1247f1dc7345be91ca37fd"
+  },
+  {
+    "id": "gvc-5a81efa09adf086cfc33bfd501759f9f",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#5a81efa09adf086cfc33bfd501759f9f",
+    "publishedAt": "2015-11-10",
+    "event": "gvc-492366",
+    "textSha256": "60b5de37da798fb1ffdfd2b09d49ca7f296f9263257927c204d724da0d0b731d"
+  },
+  {
+    "id": "gvc-c229ce94825fb0d786f448454aaacc73",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#c229ce94825fb0d786f448454aaacc73",
+    "publishedAt": "2014-05-23",
+    "event": "gvc-138295",
+    "textSha256": "b718447e1afc9ce35fdca2ee7158e40378934f5b299fb9ed26387ff48d54433c"
+  },
+  {
+    "id": "gvc-548f729263219a7b1d2423bdc586969b",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#548f729263219a7b1d2423bdc586969b",
+    "publishedAt": "2014-11-23",
+    "event": "gvc-223936",
+    "textSha256": "3c31391f64244f6c3995c818ed5f7b61cf7f425ea342b644cf14535ef789ba59"
+  },
+  {
+    "id": "gvc-ea8cbcbb36055bba122f0117453b5bf5",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#ea8cbcbb36055bba122f0117453b5bf5",
+    "publishedAt": "2016-09-05",
+    "event": "gvc-648457",
+    "textSha256": "1b57706b927cf7ccc924c4c20b06e4c4441b6b217e53c2fa620ca8d6bd8fba19"
+  },
+  {
+    "id": "gvc-5b50dd6f0dde313fea28987d9fc998be",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#5b50dd6f0dde313fea28987d9fc998be",
+    "publishedAt": "2013-08-19",
+    "event": "gvc-491937",
+    "textSha256": "d18d8a52f6c423778bacf5973db09393f95512a480a8ba4697ce048b2a1d81ac"
+  },
+  {
+    "id": "gvc-acec5282341dea08f524fe1b06b93863",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#acec5282341dea08f524fe1b06b93863",
+    "publishedAt": "2016-11-06",
+    "event": "gvc-693892",
+    "textSha256": "54b7a7fa043f23efdd4b010f465e2bbe8004fb3fb6890735f347a697a87d1a64"
+  },
+  {
+    "id": "gvc-b654dd9c20db958f7cba3b6cff58b7b2",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#b654dd9c20db958f7cba3b6cff58b7b2",
+    "publishedAt": "2014-12-02",
+    "event": "gvc-226600",
+    "textSha256": "f5aa7ee300080d477bbad819c9bf6ddeefbb69a8220dec02ddf371992310cb08"
+  },
+  {
+    "id": "gvc-90f05cdd91998283674d95244279e798",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#90f05cdd91998283674d95244279e798",
+    "publishedAt": "2016-06-15",
+    "event": "gvc-578238",
+    "textSha256": "d14750078ebc289df34944b2e466acc299206c94f4b4c5b3f0080f5d4791ec23"
+  },
+  {
+    "id": "gvc-1d20f1899e74b0a84f852dd00c6af075",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#1d20f1899e74b0a84f852dd00c6af075",
+    "publishedAt": "2016-05-26",
+    "event": "gvc-487094",
+    "textSha256": "3b7bbd074c9d3939144b4dc0fded5fb65e688f7f1e71384e8d14c41e13a5c6ee"
+  },
+  {
+    "id": "gvc-456f3dd976b192f2be0be5d1639cdcc5",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#456f3dd976b192f2be0be5d1639cdcc5",
+    "publishedAt": "2016-10-05",
+    "event": "gvc-663712",
+    "textSha256": "be04cc543b2b9ca1920ef26848e0096e926ab990517e920d3607200ed31f25f9"
+  },
+  {
+    "id": "gvc-492a7204126c61398141dbc4bd8b5d10",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#492a7204126c61398141dbc4bd8b5d10",
+    "publishedAt": "2015-09-30",
+    "event": "gvc-423088",
+    "textSha256": "a2faf061435d1c1a4b4883a501ecb695881bd904beedbbae001fee2af5f07a91"
+  },
+  {
+    "id": "gvc-9bcf77ffa297931ce60806e7a2667d97",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#9bcf77ffa297931ce60806e7a2667d97",
+    "publishedAt": "2015-06-12",
+    "event": "gvc-356646",
+    "textSha256": "e01bb40f29abcae8273f5168cf6c2171cc7c3ce301923f13374aded017c5947f"
+  },
+  {
+    "id": "gvc-67b865339a42a170d6a0d55fde0f2e32",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#67b865339a42a170d6a0d55fde0f2e32",
+    "publishedAt": "2016-10-31",
+    "event": "gvc-688841",
+    "textSha256": "05ce77f4921be1593568f4bde15f0ffc5b1d6d013a4827f3f5e69162f4e49bfb"
+  },
+  {
+    "id": "gvc-17f83f6bfa8deff501219f55c718a22c",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#17f83f6bfa8deff501219f55c718a22c",
+    "publishedAt": "2016-09-13",
+    "event": "gvc-653953",
+    "textSha256": "22d08f259f96946446e3fae675a3fa1d59da934dd7cdd0588b957768131ea423"
+  },
+  {
+    "id": "gvc-43d915481fa420f92d3d015ee37c0c2c",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#43d915481fa420f92d3d015ee37c0c2c",
+    "publishedAt": "2016-01-21",
+    "event": "gvc-490954",
+    "textSha256": "8206e9cae0d8ac9e0c723c1f3a1da58263582bf0c793f3c01e1ec16fe8641a41"
+  },
+  {
+    "id": "gvc-37c64fa8058bb3d46da9d07e0fc88df4",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#37c64fa8058bb3d46da9d07e0fc88df4",
+    "publishedAt": "2016-08-30",
+    "event": "gvc-643219",
+    "textSha256": "6b5c7a58d24e4b16f2892c8376c380531743c43c275c1a53c813e2d9aa5911a3"
+  },
+  {
+    "id": "gvc-5702b7a2108d00fcf2d90e8dfe194ab8",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#5702b7a2108d00fcf2d90e8dfe194ab8",
+    "publishedAt": "2016-08-31",
+    "event": "gvc-643219",
+    "textSha256": "fcf460168770438487250095a1688a814390ac2d3c9fc65b03e1f5a7dbecb7e2"
+  },
+  {
+    "id": "gvc-a0398b62a52732f91f7bfa6a97192824",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#a0398b62a52732f91f7bfa6a97192824",
+    "publishedAt": "2016-03-20",
+    "event": "gvc-525486",
+    "textSha256": "cf110cbfbdfbaa2873eb22971da1016ce1e39581f33f36209eab8d5d8021982d"
+  },
+  {
+    "id": "gvc-82a1900df6c3b3edb458ea8cfefe3c28",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#82a1900df6c3b3edb458ea8cfefe3c28",
+    "publishedAt": "2014-10-24",
+    "event": "gvc-209733",
+    "textSha256": "9b7d333df3f86ee379951fcb9d6ba92181f8ad9693f3af256628c65deddfa273"
+  },
+  {
+    "id": "gvc-1e21932149e13a181bd9ec9dec877f6c",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#1e21932149e13a181bd9ec9dec877f6c",
+    "publishedAt": "2016-08-31",
+    "event": "gvc-640899",
+    "textSha256": "5d8ceb2ff57549384ce62eb83e08ff17b5ce8020831d3c076356a31af2ec83d1"
+  },
+  {
+    "id": "gvc-799cbde95a37b9ad5f40b83231e0d987",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#799cbde95a37b9ad5f40b83231e0d987",
+    "publishedAt": "2016-09-13",
+    "event": "gvc-603253",
+    "textSha256": "c05c2ffe32dca053e1efcb8852146b56704b84c7cfc3ca10465a60cbe07cbb3e"
+  },
+  {
+    "id": "gvc-ff081156a9fb7cb4d3a78d885155d4b7",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#ff081156a9fb7cb4d3a78d885155d4b7",
+    "publishedAt": "2015-04-23",
+    "event": "gvc-321156",
+    "textSha256": "833886c060f24b2d9703dddc0b71f592da81ec9dea24e8115688ed80273317e3"
+  },
+  {
+    "id": "gvc-8cafcf95303727d6460e652787cabb84",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#8cafcf95303727d6460e652787cabb84",
+    "publishedAt": "2014-08-26",
+    "event": "gvc-111416",
+    "textSha256": "25800f567007c374b9f3de3a333c33b43b7eba4fde17037cc9771bb445b6045d"
+  },
+  {
+    "id": "gvc-c7903fc30c417b3fc97b403619a81fa0",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#c7903fc30c417b3fc97b403619a81fa0",
+    "publishedAt": "2014-12-01",
+    "event": "gvc-226600",
+    "textSha256": "b35052be9a4685af970d73fdf7959b992d41d19e855a6fd99018200a3c67f214"
+  },
+  {
+    "id": "gvc-7a51f751ccbd43db404d94ba193943e6",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#7a51f751ccbd43db404d94ba193943e6",
+    "publishedAt": "2016-12-21",
+    "event": "gvc-730637",
+    "textSha256": "a402026f3b4eeb8eb5dbec68b445254befded46b64f05db778be0fffa51770cc"
+  },
+  {
+    "id": "gvc-00f9d7565109c261b4621f09d5934d6f",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#00f9d7565109c261b4621f09d5934d6f",
+    "publishedAt": "2015-07-05",
+    "event": "gvc-368727",
+    "textSha256": "13acd2d057e999459619669f8dbf5d63ae634e2adf5cc5a694dc2b3cd465f317"
+  },
+  {
+    "id": "gvc-bd7e9749d876981b5c1af7b914dbae1d",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#bd7e9749d876981b5c1af7b914dbae1d",
+    "publishedAt": "2014-02-18",
+    "event": "gvc-108112",
+    "textSha256": "0d8ab71c6957e2a83a67eb7abd57e61449904ef646c8525953914265beb9733a"
+  },
+  {
+    "id": "gvc-fda72c151d4a24731047fd42b2c70a62",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#fda72c151d4a24731047fd42b2c70a62",
+    "publishedAt": "2016-08-16",
+    "event": "gvc-630886",
+    "textSha256": "4b30929dc66b3f6d20a71e9c646e2e25d4ca296aa2896496444f41a233418514"
+  },
+  {
+    "id": "gvc-0828d0cc3cc51b392b112155e0ffec98",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#0828d0cc3cc51b392b112155e0ffec98",
+    "publishedAt": "2015-02-17",
+    "event": "gvc-295502",
+    "textSha256": "6200fdaa774003f81fdbef03b0b1838f04011857b2c725a7a65a66084a130dc4"
+  },
+  {
+    "id": "gvc-17b7ffc50e4405be52ad48d002519742",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#17b7ffc50e4405be52ad48d002519742",
+    "publishedAt": "2016-02-15",
+    "event": "gvc-470512",
+    "textSha256": "44eaa3d7a2dae87145888a4a8fbef1e956a0504800078c41bf6bc57b72870ddc"
+  },
+  {
+    "id": "gvc-4cb4e8c2adc7e6a6b545d4ff0264bcc3",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#4cb4e8c2adc7e6a6b545d4ff0264bcc3",
+    "publishedAt": "2016-11-05",
+    "event": "gvc-693359",
+    "textSha256": "bde740803afd9a87273105dd6c4a54cfade34b41362b5616648ab81f4141cd35"
+  },
+  {
+    "id": "gvc-80a7284b5cc6de240f1a55de99628391",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#80a7284b5cc6de240f1a55de99628391",
+    "publishedAt": "2016-04-10",
+    "event": "gvc-537545",
+    "textSha256": "9b69aa3a9ccd6cdd3c74f8c93f876e91a6ec514efdc21aec3d2a0aad8ab3216e"
+  },
+  {
+    "id": "gvc-2882e636369a3cbbabde4e1dabdbdfab",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#2882e636369a3cbbabde4e1dabdbdfab",
+    "publishedAt": "2016-11-23",
+    "event": "gvc-708277",
+    "textSha256": "c5bf31b7eaf55e2f2f9006e978de94bf064b4a50857f8c069e3b2e2400069fa4"
+  },
+  {
+    "id": "gvc-2234f0e17887d5296178b85cb1012bea",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#2234f0e17887d5296178b85cb1012bea",
+    "publishedAt": "2016-10-31",
+    "event": "gvc-688979",
+    "textSha256": "86e5f65f07a435a93145a8db2cad1a770d58887ef1be63002e365e9029424ea5"
+  },
+  {
+    "id": "gvc-a7f521ac7d5da351b0647969f1aaefeb",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#a7f521ac7d5da351b0647969f1aaefeb",
+    "publishedAt": "2015-06-16",
+    "event": "gvc-358286",
+    "textSha256": "9c4660e322bcbe6e3c789c797dd69f1890d971f6cc35157660aa881e85575d15"
+  },
+  {
+    "id": "gvc-6debfa111806778085b8dc1eb2a93243",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#6debfa111806778085b8dc1eb2a93243",
+    "publishedAt": "2015-05-20",
+    "event": "gvc-341451",
+    "textSha256": "8c94f1da8f1614d0bd888a3829a099d0208193568b2b3d6fb2344426e2924ee1"
+  },
+  {
+    "id": "gvc-24e6ce1ddc875cdf4952fdef2515ac06",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#24e6ce1ddc875cdf4952fdef2515ac06",
+    "publishedAt": "2016-07-12",
+    "event": "gvc-601037",
+    "textSha256": "6ed2c319f7aa6fd98a0eeb896ebdf3c649f15271936d810c143d58ae1b5c25c5"
+  },
+  {
+    "id": "gvc-89c968a0ca323864734d2e8ef66dfeb0",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#89c968a0ca323864734d2e8ef66dfeb0",
+    "publishedAt": "2016-09-20",
+    "event": "gvc-659289",
+    "textSha256": "caceab6f1c851eed4566605f4989402d5a6dd00dace0223f63017056b9864f18"
+  },
+  {
+    "id": "gvc-f03d228accae8f19bab8d465c831e930",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#f03d228accae8f19bab8d465c831e930",
+    "publishedAt": "2016-03-12",
+    "event": "gvc-517905",
+    "textSha256": "08222c0b873a6763a248bcbd83b201037413022b9d8d09e7b2c9bb3b6f9819c3"
+  },
+  {
+    "id": "gvc-f123522b3d905fc67cb6f0cc5ba40a64",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#f123522b3d905fc67cb6f0cc5ba40a64",
+    "publishedAt": "2016-06-29",
+    "event": "gvc-591237",
+    "textSha256": "a3a7da5cc3bc71256ff16cfeb485093653a34a7c8cd9813892a48e64a6be9041"
+  },
+  {
+    "id": "gvc-a7a093815bffd66a5f2cfc3f035c392f",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#a7a093815bffd66a5f2cfc3f035c392f",
+    "publishedAt": "2016-03-15",
+    "event": "gvc-522597",
+    "textSha256": "9c1edbc4822e9d7493216adc405598cdee239a771b5c4ff09a6bec466aeddb17"
+  },
+  {
+    "id": "gvc-83f004d5abaf3635c902e33e68c76f63",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#83f004d5abaf3635c902e33e68c76f63",
+    "publishedAt": "2016-11-05",
+    "event": "gvc-693798",
+    "textSha256": "0cc8d4a06bd01b56a0cc8adb333cf98a97294c0529d65d91461561b88f2777f8"
+  },
+  {
+    "id": "gvc-07636323c62c80082b221fb2da3b9a05",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#07636323c62c80082b221fb2da3b9a05",
+    "publishedAt": "2016-01-18",
+    "event": "gvc-487094",
+    "textSha256": "ea0b464b6d78f443b800903c58e2f5b4874b862eaf93f6a1129765f321cf026c"
+  },
+  {
+    "id": "gvc-d8cd93cc59fc1160f63a40c6cd5ba6e3",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#d8cd93cc59fc1160f63a40c6cd5ba6e3",
+    "publishedAt": "2016-11-09",
+    "event": "gvc-693359",
+    "textSha256": "06d878135e285cfbe24ab30873b3d5e150fdf138c4f2d20220159d51c46a7769"
+  },
+  {
+    "id": "gvc-33840bbd5a82d9e0643b6d9f34f9d106",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#33840bbd5a82d9e0643b6d9f34f9d106",
+    "publishedAt": "2016-11-06",
+    "event": "gvc-693798",
+    "textSha256": "03930cb10dde4527ded8b56798ef74e1de4c197e378e85f06f7c15db53b0eb7b"
+  },
+  {
+    "id": "gvc-b2aea77633e77fbe418c2bd87b56c8b3",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#b2aea77633e77fbe418c2bd87b56c8b3",
+    "publishedAt": "2016-04-12",
+    "event": "gvc-537974",
+    "textSha256": "eeb20e97db0638c8d7d76d12a2567d18efdf965f74b77815bd813600913a06ec"
+  },
+  {
+    "id": "gvc-bcd750b6e86828b0ecb50aed4912bcb7",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#bcd750b6e86828b0ecb50aed4912bcb7",
+    "publishedAt": "2016-10-04",
+    "event": "gvc-669506",
+    "textSha256": "da917988233e759a5be7a89f6200aca5e23a410382336ea649ae21999e074280"
+  },
+  {
+    "id": "gvc-f696564cdbe152adf482567704bef8f7",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#f696564cdbe152adf482567704bef8f7",
+    "publishedAt": "2016-12-22",
+    "event": "gvc-730637",
+    "textSha256": "02bc7b8723ebc823de3bc64756412d004cb731326e2b4e7080606df86eab5725"
+  },
+  {
+    "id": "gvc-4d66b13ff0b08d5b9526db234709326b",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#4d66b13ff0b08d5b9526db234709326b",
+    "publishedAt": "2015-03-15",
+    "event": "gvc-306048",
+    "textSha256": "789073abdced0227ea62aa082ca285e0d07e4d9021be87b06207303a605b6d8f"
+  },
+  {
+    "id": "gvc-5cf042b40de55f0e6fdf4c2fe79cc4c0",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#5cf042b40de55f0e6fdf4c2fe79cc4c0",
+    "publishedAt": "2016-03-21",
+    "event": "gvc-525486",
+    "textSha256": "b8740a4f069a5898011bfc94a1786dca58d3e667780dd5893dcaba92ccb73ed8"
+  },
+  {
+    "id": "gvc-5ccc06723ca498f6ef6cfd762104f21d",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#5ccc06723ca498f6ef6cfd762104f21d",
+    "publishedAt": "2016-10-18",
+    "event": "gvc-678245",
+    "textSha256": "1a7656451cf507eababe91f2b7597bc1a72294442d55c67a49e868ec6951ea85"
+  },
+  {
+    "id": "gvc-16d910bec017be537ce3d2ab1042fb12",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#16d910bec017be537ce3d2ab1042fb12",
+    "publishedAt": "2016-11-01",
+    "event": "gvc-688056",
+    "textSha256": "3c5c359a67db11c87b9a772db4315b184545f53e9a359c3a37f58b5f8e0846a7"
+  },
+  {
+    "id": "gvc-b02abc23b6f041f41344a0866c6a5d41",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#b02abc23b6f041f41344a0866c6a5d41",
+    "publishedAt": "2014-08-05",
+    "event": "gvc-168844",
+    "textSha256": "f4c1731a31402da059861d5322bca318317d4e9fdf9523f5b484e73aa280745d"
+  },
+  {
+    "id": "gvc-e53fb3a68425d35010c9c6fc1260a18d",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#e53fb3a68425d35010c9c6fc1260a18d",
+    "publishedAt": "2016-02-23",
+    "event": "gvc-509471",
+    "textSha256": "dfc2b5d017f417bb054558f94171c47931853fab93aa30752915a58bc93aea43"
+  },
+  {
+    "id": "gvc-fcb0c203ad84c3ccc2ffee197750ad82",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#fcb0c203ad84c3ccc2ffee197750ad82",
+    "publishedAt": "2016-09-21",
+    "event": "gvc-659289",
+    "textSha256": "b8c632bac4085bb5217865580f2be35485315f77e9cd21b87aa3beab5f43287f"
+  },
+  {
+    "id": "gvc-622e463d4866570f7c682a6543e4e8b0",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#622e463d4866570f7c682a6543e4e8b0",
+    "publishedAt": "2016-11-19",
+    "event": "gvc-704909",
+    "textSha256": "e60144674850dec8036b94da5bb38c273324a4af72b5ed3a12e09fb44b4e040f"
+  },
+  {
+    "id": "gvc-f2b153b06d80107947dbe64693abb899",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#f2b153b06d80107947dbe64693abb899",
+    "publishedAt": "2016-09-19",
+    "event": "gvc-658161",
+    "textSha256": "cda5494181cbf69f6c476ba3ea89a865c58f8a109fcb9be715855ebd9587199f"
+  },
+  {
+    "id": "gvc-187909d5f77524ca82b6ef7e1fac4a95",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#187909d5f77524ca82b6ef7e1fac4a95",
+    "publishedAt": "2016-04-27",
+    "event": "gvc-548527",
+    "textSha256": "fca471a33aca5f561e1f7e3b3bc1da190a054570ac2e90f6f883f9792302abf5"
+  },
+  {
+    "id": "gvc-1cc16fb2501c720b7ec248dc48607dc9",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#1cc16fb2501c720b7ec248dc48607dc9",
+    "publishedAt": "2014-02-13",
+    "event": "gvc-106394",
+    "textSha256": "6de6e76f3b1c9e83c8a012e55610cf311ce3b85ae07463eb3d57265ed5406c2c"
+  },
+  {
+    "id": "gvc-d06b0ff1216616acef15942d71f19bd8",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#d06b0ff1216616acef15942d71f19bd8",
+    "publishedAt": "2016-04-27",
+    "event": "gvc-548527",
+    "textSha256": "e9f4c30f8b8aa8739e185df0d3ad80f106a6c7ce4f0b9a1c40ae13fd860ed79b"
+  },
+  {
+    "id": "gvc-265c9f2b811ecdcccfc40dd4d7749bb4",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#265c9f2b811ecdcccfc40dd4d7749bb4",
+    "publishedAt": "2016-11-17",
+    "event": "gvc-702958",
+    "textSha256": "28b3486d09c0992b96307543e315c1b9b766147453cff7e4b9676f789fb5fe67"
+  },
+  {
+    "id": "gvc-a11a696e95ec883a2bdda0a9861ebb09",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#a11a696e95ec883a2bdda0a9861ebb09",
+    "publishedAt": "2016-08-22",
+    "event": "gvc-635099",
+    "textSha256": "fc43dea116973bb4b86eb1d02905d7240b1de50bb95f8ed035aa92a0d775e013"
+  },
+  {
+    "id": "gvc-5427240fe9a6199c11f4bfa5667ef9a3",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#5427240fe9a6199c11f4bfa5667ef9a3",
+    "publishedAt": "2015-08-22",
+    "event": "gvc-399367",
+    "textSha256": "40e81db3d36ebaaaf5cafa8ab5f698f0a2f9e2e8ebb01225c14ac91574f41e36"
+  },
+  {
+    "id": "gvc-2804a2b0992e09edb4e94ee531889332",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#2804a2b0992e09edb4e94ee531889332",
+    "publishedAt": "2016-03-12",
+    "event": "gvc-520688",
+    "textSha256": "12407f0a697c33c5c200d545d6b0dc472bd1ce6dc2a2565a298d67bd2b7f1e45"
+  },
+  {
+    "id": "gvc-395296419f082ec314067e9d3d1d1be5",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#395296419f082ec314067e9d3d1d1be5",
+    "publishedAt": "2015-12-22",
+    "event": "gvc-470971",
+    "textSha256": "937b9caa64255429e905b06e685a892417cba6058fe31fc5a4aa9e78d92708ae"
+  },
+  {
+    "id": "gvc-a3478a1a06acd96683bc97358f1a8a1d",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#a3478a1a06acd96683bc97358f1a8a1d",
+    "publishedAt": "2016-05-13",
+    "event": "gvc-558618",
+    "textSha256": "b85d69c51db60d8c2ec42adbb30f449cf0a0f8643426a3f483243e2b145d3975"
+  },
+  {
+    "id": "gvc-9d5ce6898082402fc63c6f1a270dea53",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#9d5ce6898082402fc63c6f1a270dea53",
+    "publishedAt": "2016-12-19",
+    "event": "gvc-727980",
+    "textSha256": "d4849bd8589cf481aa1c317b9ec17e2d6eb86ceabae5faf1408e22766135c0ea"
+  },
+  {
+    "id": "gvc-25f5f30be9489f9c98a13f3d2e850a48",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#25f5f30be9489f9c98a13f3d2e850a48",
+    "publishedAt": "2015-05-17",
+    "event": "gvc-341726",
+    "textSha256": "e5754482396d9e8ffd8963798b520c76c4749536408fea01f98bfde50da4a02e"
+  },
+  {
+    "id": "gvc-74f716a8d52ea0426c3979401a383dac",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#74f716a8d52ea0426c3979401a383dac",
+    "publishedAt": "2016-10-27",
+    "event": "gvc-681768",
+    "textSha256": "08a59102f03b49a723da9d9ee6d92ead93670de99d2716ce037a44e5f7fffd5b"
+  },
+  {
+    "id": "gvc-ba6f142aaceabbe8150f23aa20bd2f73",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#ba6f142aaceabbe8150f23aa20bd2f73",
+    "publishedAt": "2015-12-20",
+    "event": "gvc-468787",
+    "textSha256": "1f6425f8d4aa235c9f186add48fa97007bc119fc9f385f7a048907c4411328b1"
+  },
+  {
+    "id": "gvc-f64b7ec67ac40f724effbe9f05a4ca8a",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#f64b7ec67ac40f724effbe9f05a4ca8a",
+    "publishedAt": "2016-09-19",
+    "event": "gvc-657926",
+    "textSha256": "4229ec75e2b1c98e353dd912a57ef2695aa7ab37c6fe1ac9a8f54b42101a3b46"
+  },
+  {
+    "id": "gvc-64a97e1b658c9da115893ba2ff4f4f6f",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#64a97e1b658c9da115893ba2ff4f4f6f",
+    "publishedAt": "2016-06-29",
+    "event": "gvc-591237",
+    "textSha256": "2644c36b81db524a8d386587fbc02b3d46d6f2ae3e8252150e72ebb8067b0161"
+  },
+  {
+    "id": "gvc-f377c50a132100a1ce6ecb64a6b9d23b",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#f377c50a132100a1ce6ecb64a6b9d23b",
+    "publishedAt": "2016-06-06",
+    "event": "gvc-571479",
+    "textSha256": "74476d28347acc5f7f8e25a9b671c69ea46818927035b069a18e4f04a2615f88"
+  },
+  {
+    "id": "gvc-15d09e57d28a5da15051d475d5681c85",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#15d09e57d28a5da15051d475d5681c85",
+    "publishedAt": "2015-08-27",
+    "event": "gvc-402674",
+    "textSha256": "d87852db3a80cf2fcaa5c0ce90839d26f9143fa7d1b64effa75050ffdce644ab"
+  },
+  {
+    "id": "gvc-d05260c62663cb43d70acca05517725d",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#d05260c62663cb43d70acca05517725d",
+    "publishedAt": "2016-10-06",
+    "event": "gvc-669506",
+    "textSha256": "d92c03bb332afec0e937dc9f05a1a3ea350eabd7694a129eb31189e1f789e94c"
+  },
+  {
+    "id": "gvc-f2aedab9724c967c9a8c38d87d6a39b4",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#f2aedab9724c967c9a8c38d87d6a39b4",
+    "publishedAt": "2016-07-26",
+    "event": "gvc-613903",
+    "textSha256": "7108d8294fca5ed9dec9b29e861073db6211c28a3a24bc6f7381e85d93afe1c5"
+  },
+  {
+    "id": "gvc-63e454389553671dde285f2be333879c",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#63e454389553671dde285f2be333879c",
+    "publishedAt": "2015-01-22",
+    "event": "gvc-281766",
+    "textSha256": "a8e367525e97585bdebc77c87e9371f9c6c27b20d1c6d782ccf2f07fa2d3ffe0"
+  },
+  {
+    "id": "gvc-5f94dfbde0c604bb8552b78b00d7eb80",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#5f94dfbde0c604bb8552b78b00d7eb80",
+    "publishedAt": "2015-03-31",
+    "event": "gvc-315594",
+    "textSha256": "c2f32dedb416b28d7ce45d9e6f3f9289226ac937bf2d0f69933401a4e5c9479d"
+  },
+  {
+    "id": "gvc-e9f49bfb9d70e9d2279dfa496c6317cb",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#e9f49bfb9d70e9d2279dfa496c6317cb",
+    "publishedAt": "2016-06-30",
+    "event": "gvc-593238",
+    "textSha256": "9c4429a58088dc05c11729635ae3476e0b941255158c11d5f46c06a022192b03"
+  },
+  {
+    "id": "gvc-e15d7b9a0056d979c5085ad42cdfe633",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#e15d7b9a0056d979c5085ad42cdfe633",
+    "publishedAt": "2016-10-29",
+    "event": "gvc-688056",
+    "textSha256": "3c09c0c76d053c0ad9493563e003186e331096f592718e4718d60116387ad511"
+  },
+  {
+    "id": "gvc-385b34075ce3dd62cf4f535b724f3056",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#385b34075ce3dd62cf4f535b724f3056",
+    "publishedAt": "2016-12-27",
+    "event": "gvc-735826",
+    "textSha256": "498dd2a40cd97eb92e700cda9bae702379c397560b4f7bec46044ab889ed9be4"
+  },
+  {
+    "id": "gvc-9d1974fb89669b0aa7cf732505a6f230",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#9d1974fb89669b0aa7cf732505a6f230",
+    "publishedAt": "2016-11-21",
+    "event": "gvc-702958",
+    "textSha256": "3c569c27fcc033ce5d242a09db7f11a1cb1720d48ecc7e7588c07e7d4a881b00"
+  },
+  {
+    "id": "gvc-c69d14366d741ecd9e55646f5903fe8c",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#c69d14366d741ecd9e55646f5903fe8c",
+    "publishedAt": "2016-06-03",
+    "event": "gvc-571922",
+    "textSha256": "d79917401c710e138422caef967378fbbab029be16b2fbbf5f1c7bb6cf383db7"
+  },
+  {
+    "id": "gvc-13599b95102988ac8ebab88172e3430e",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#13599b95102988ac8ebab88172e3430e",
+    "publishedAt": "2016-08-16",
+    "event": "gvc-630886",
+    "textSha256": "cdbde4af94fe6dc11fb34385ca5fdb017051e9f9c083fff17d51f9b90ba2b669"
+  },
+  {
+    "id": "gvc-d300930f8b9d61420ed328e33e0cc72f",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#d300930f8b9d61420ed328e33e0cc72f",
+    "publishedAt": "2015-03-31",
+    "event": "gvc-314973",
+    "textSha256": "a4ff46cf2928a9ce9922baa33d26720157dca2a2f761b21eda3bff2ed3918297"
+  },
+  {
+    "id": "gvc-53f242fa4276cc350c0dc16d68a06f25",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#53f242fa4276cc350c0dc16d68a06f25",
+    "publishedAt": "2016-11-25",
+    "event": "gvc-710200",
+    "textSha256": "c5c4f43f0447d6caa3a8cef09e07a790a6ab9ddd2134b4e52819093d15de4f07"
+  },
+  {
+    "id": "gvc-e162ad62b8a8a18663a885f0b050dc7d",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#e162ad62b8a8a18663a885f0b050dc7d",
+    "publishedAt": "2015-01-22",
+    "event": "gvc-282561",
+    "textSha256": "bdc92f7414aafb0954a9d053c2f48656ad09107d0d16a2495d9d8b2e49701e32"
+  },
+  {
+    "id": "gvc-eb18c320af527c52fd840998ed608d93",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#eb18c320af527c52fd840998ed608d93",
+    "publishedAt": "2016-11-07",
+    "event": "gvc-623581",
+    "textSha256": "3f6bb750b0e0ae2127a1535f4ceece31c8bf9155ac9fd9407902b902cc70eac9"
+  },
+  {
+    "id": "gvc-5fa9cb2e3e2095239796c61858786503",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#5fa9cb2e3e2095239796c61858786503",
+    "publishedAt": "2016-08-31",
+    "event": "gvc-643909",
+    "textSha256": "8ffa4d28b3948173062ba243bd6386ee643d06433ed4b461b6c1a3de4da66fe2"
+  },
+  {
+    "id": "gvc-4dc1a52e0e239fd4c96b2d6c08aea9a8",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#4dc1a52e0e239fd4c96b2d6c08aea9a8",
+    "publishedAt": "2014-10-20",
+    "event": "gvc-207542",
+    "textSha256": "93bdb68ca9e726cca498995b72b425f311143723d4037556b6a241891d63101b"
+  },
+  {
+    "id": "gvc-ad727de8f360617f446f880716522420",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#ad727de8f360617f446f880716522420",
+    "publishedAt": "2016-06-20",
+    "event": "gvc-583179",
+    "textSha256": "d54a7fb3d608d234aab8404e362a00831f9ba2853c9f99c3a23ea1d6feb511d7"
+  },
+  {
+    "id": "gvc-a670bf96acee9267204544c8ecda3d10",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#a670bf96acee9267204544c8ecda3d10",
+    "publishedAt": "2016-10-24",
+    "event": "gvc-682143",
+    "textSha256": "1450ce8a92011fc60aa6d879aff3f7e68237ae2f7eba4d79a010fa54063b3360"
+  },
+  {
+    "id": "gvc-18c9c2ab4f33be988e704f7b482b5ed9",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#18c9c2ab4f33be988e704f7b482b5ed9",
+    "publishedAt": "2016-11-11",
+    "event": "gvc-698315",
+    "textSha256": "ea0c30ac6e0d6327369ce04b49e53afef023adc1cea120cac94ed3560f3a652b"
+  },
+  {
+    "id": "gvc-d7206c0e8e72f9b5216e49e7db9e9498",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#d7206c0e8e72f9b5216e49e7db9e9498",
+    "publishedAt": "2016-12-04",
+    "event": "gvc-718272",
+    "textSha256": "6e8ee84d481fc119ce9548dfc5dc473b130516e7bd6807fc126b6ce3e2f4fd91"
+  },
+  {
+    "id": "gvc-9ff9d0e5bdb9675af4e6e062d21496bb",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#9ff9d0e5bdb9675af4e6e062d21496bb",
+    "publishedAt": "2014-05-25",
+    "event": "gvc-138295",
+    "textSha256": "39c22c9946af73305787eb497e31c4c953f6f662f4151ef6a61310934368e24e"
+  },
+  {
+    "id": "gvc-1fb5436beb7049d24897dc7a1ab79baf",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#1fb5436beb7049d24897dc7a1ab79baf",
+    "publishedAt": "2015-06-28",
+    "event": "gvc-365252",
+    "textSha256": "c78d54af2468824e548594c5d92fa2afe0ed3d8b445827896b94fcf79ff77ebd"
+  },
+  {
+    "id": "gvc-82b7f544ffdf3c6a82200ab3791358e3",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#82b7f544ffdf3c6a82200ab3791358e3",
+    "publishedAt": "2016-04-18",
+    "event": "gvc-541769",
+    "textSha256": "7daa01f7e6d4cca015284e502392280dd270246c19478a2628a0d06a5a6bc07d"
+  },
+  {
+    "id": "gvc-150f030a0c018862ea5b3b1604231026",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#150f030a0c018862ea5b3b1604231026",
+    "publishedAt": "2016-12-20",
+    "event": "gvc-730162",
+    "textSha256": "3c6a50847517791ae8ea229e1b285a1fa4ee67de34d1176d11017be4b3dd564c"
+  },
+  {
+    "id": "gvc-391dfcd20328114b6d80eddde7003ab5",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#391dfcd20328114b6d80eddde7003ab5",
+    "publishedAt": "2013-10-26",
+    "event": "gvc-492366",
+    "textSha256": "1c5fd97b9b4a6025ceb2f0cefb9489ade34d34eeb6c21588fa70d290d860015f"
+  },
+  {
+    "id": "gvc-dfa5ecd718ee3b8158e8ca38dcaa4a2c",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#dfa5ecd718ee3b8158e8ca38dcaa4a2c",
+    "publishedAt": "2014-10-18",
+    "event": "gvc-207542",
+    "textSha256": "eb899f7d45d5cf76e034e716ace861276ed6f5e632da9411a4dc4138894082de"
+  },
+  {
+    "id": "gvc-280357b24aa337bad393bec8d53c9b03",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#280357b24aa337bad393bec8d53c9b03",
+    "publishedAt": "2016-08-07",
+    "event": "gvc-623581",
+    "textSha256": "4ed1fc9f06d69bf63bf9c0fdd056174db19c5381283704a867ecd4caca8fa54f"
+  },
+  {
+    "id": "gvc-179fd6d77a569943b19dfb00d0995691",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#179fd6d77a569943b19dfb00d0995691",
+    "publishedAt": "2015-08-24",
+    "event": "gvc-399503",
+    "textSha256": "55f0e0e0eeee69f73b94062523d67f94de85dfcec5331d448b9e081e55eb1dc2"
+  },
+  {
+    "id": "gvc-f6ad20f0ac2e4f6a0461777176619023",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#f6ad20f0ac2e4f6a0461777176619023",
+    "publishedAt": "2015-03-29",
+    "event": "gvc-314973",
+    "textSha256": "6b5b3c07d0c8657691a178ea584c82dfc5ce38fb91d9375aee034484689d7189"
+  },
+  {
+    "id": "gvc-58b6e8c65e7467f6eb2f87373f3710a9",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#58b6e8c65e7467f6eb2f87373f3710a9",
+    "publishedAt": "2016-06-29",
+    "event": "gvc-591218",
+    "textSha256": "2c76d1f2de249938e9246eabd49fbbdd2cb146664569d5675928d32b3a153f13"
+  },
+  {
+    "id": "gvc-91153f512a483bcc383595f6927fd0b5",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#91153f512a483bcc383595f6927fd0b5",
+    "publishedAt": "2016-03-10",
+    "event": "gvc-517905",
+    "textSha256": "c3969608a8b7a96449be544418eba6d1b67a74e7291da96a6d83ec46c2409cfd"
+  },
+  {
+    "id": "gvc-e83b5b13f763f1018dcc3aa2be786f05",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#e83b5b13f763f1018dcc3aa2be786f05",
+    "publishedAt": "2016-09-22",
+    "event": "gvc-660235",
+    "textSha256": "cd538f5f788f6dcdef4b5079b273786c60ecf30fa2e87538bb16d0d3161f409c"
+  },
+  {
+    "id": "gvc-be7dcfcc71880be1e3e8c5be239b3ea4",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#be7dcfcc71880be1e3e8c5be239b3ea4",
+    "publishedAt": "2015-05-16",
+    "event": "gvc-341451",
+    "textSha256": "bfeaa1fccae6f0c748e55bd3754073868047cf15c12426010316847b0785f1a9"
+  },
+  {
+    "id": "gvc-772591405acd0c43d28f61c737d563a0",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#772591405acd0c43d28f61c737d563a0",
+    "publishedAt": "2016-11-18",
+    "event": "gvc-704555",
+    "textSha256": "fe99f0c74335b5e71226d92808dc7062861580835d5f72bbbab4159385089721"
+  },
+  {
+    "id": "gvc-3d510165a54046df800883c4d5b32364",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#3d510165a54046df800883c4d5b32364",
+    "publishedAt": "2016-11-09",
+    "event": "gvc-695963",
+    "textSha256": "2186205a31e71e3cb205c525642d9bf980fde6ae97b14430d2d2df60471fd23a"
+  },
+  {
+    "id": "gvc-e9f889ea233cf99591ffe2211e261aca",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#e9f889ea233cf99591ffe2211e261aca",
+    "publishedAt": "2016-07-05",
+    "event": "gvc-590958",
+    "textSha256": "001e1baf8ee78be13861e1791e4cfe6ae979c54118ebd2f5810cf4c4ffa02455"
+  },
+  {
+    "id": "gvc-7cdf5cbd678bd4a47a3108256818eecc",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#7cdf5cbd678bd4a47a3108256818eecc",
+    "publishedAt": "2016-10-30",
+    "event": "gvc-688841",
+    "textSha256": "173b2d84b093334a77176ded191988430d04f3a2277a962d29af3b1abd9e68fb"
+  },
+  {
+    "id": "gvc-f4dd2ebc0ef2818ff81e983efe973661",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#f4dd2ebc0ef2818ff81e983efe973661",
+    "publishedAt": "2013-08-02",
+    "event": "gvc-491438",
+    "textSha256": "b4227bf0f5f2adbe184ee17479a484d0ffb72ca6b79ed3a3e50ff96903defce6"
+  },
+  {
+    "id": "gvc-3b12e346086679d7014d9bd64c690d1a",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#3b12e346086679d7014d9bd64c690d1a",
+    "publishedAt": "2016-12-05",
+    "event": "gvc-717231",
+    "textSha256": "33d2f97963d2efa3e8d54078c8371cb1a0f44950840bc2a4422db08ac47232f2"
+  },
+  {
+    "id": "gvc-88bb898bbc5681297a5cd8d8ebc9b208",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#88bb898bbc5681297a5cd8d8ebc9b208",
+    "publishedAt": "2015-11-26",
+    "event": "gvc-453738",
+    "textSha256": "aaf3fd967f98740b12e658c6c220dc7d5e59329e78d4b3336d4e676cc9c40064"
+  },
+  {
+    "id": "gvc-fad9833790ef5459f341743a17be6dd0",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#fad9833790ef5459f341743a17be6dd0",
+    "publishedAt": "2016-11-28",
+    "event": "gvc-711973",
+    "textSha256": "9014fe3c7cbe07165d0d77c5d26fffa4b65707850c331839072eb6e51302923f"
+  },
+  {
+    "id": "gvc-540b99e9a20fba9993edad5b565965fa",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#540b99e9a20fba9993edad5b565965fa",
+    "publishedAt": "2015-05-17",
+    "event": "gvc-341726",
+    "textSha256": "e6e914f93358bf16b52158ea515596e21e7739871810bf3cb90f492d038f74ea"
+  },
+  {
+    "id": "gvc-a1eac7c03830c460eafd1f57a95aad8f",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#a1eac7c03830c460eafd1f57a95aad8f",
+    "publishedAt": "2016-10-30",
+    "event": "gvc-688979",
+    "textSha256": "ee4ec011fa1e2ae46e4beb50cd17b3237dc0810237fa91cff6be423b07fb9038"
+  },
+  {
+    "id": "gvc-7d726113c5779da0c25328489ee6cb5f",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#7d726113c5779da0c25328489ee6cb5f",
+    "publishedAt": "2016-08-03",
+    "event": "gvc-619156",
+    "textSha256": "758d539a270ecd8c015f509093bc4e0d0483da5b24db0a970a2746dfcaabd921"
+  },
+  {
+    "id": "gvc-a80596a2f07de8a804f7c6e090b34146",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#a80596a2f07de8a804f7c6e090b34146",
+    "publishedAt": "2016-04-03",
+    "event": "gvc-533658",
+    "textSha256": "7311f960fa1191a6210f7e868835342ef7c98ef4e12acff32892ceb5d205f8ba"
+  },
+  {
+    "id": "gvc-e56fec8e36214f810fd580ab08d3e1b5",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#e56fec8e36214f810fd580ab08d3e1b5",
+    "publishedAt": "2016-11-23",
+    "event": "gvc-698315",
+    "textSha256": "7ba11d09e17bcb01cb66c52fcd1c92e92b4ce3fc5d6881b1dcf6a7abe2899aeb"
+  },
+  {
+    "id": "gvc-62fccefef012fe3ed7b78723cbde30c9",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#62fccefef012fe3ed7b78723cbde30c9",
+    "publishedAt": "2015-12-01",
+    "event": "gvc-449691",
+    "textSha256": "8383ebb429155551481b634f0dc210914afa0a86d4a9ef5231b87b9d66a106c0"
+  },
+  {
+    "id": "gvc-37abefa82f9e7f77423873b1a7bc6f4c",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#37abefa82f9e7f77423873b1a7bc6f4c",
+    "publishedAt": "2015-12-21",
+    "event": "gvc-470044",
+    "textSha256": "a30b694ddbd3c58084a28f50f67065896ea88e8598d199745350599406e4b911"
+  },
+  {
+    "id": "gvc-662672852b984c058a02869c92096d86",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#662672852b984c058a02869c92096d86",
+    "publishedAt": "2016-11-18",
+    "event": "gvc-704555",
+    "textSha256": "361910457fa99350b18fef10aac5e55d7978bb66b3a62594b3726066dca1d461"
+  },
+  {
+    "id": "gvc-ef2ea272bee60865bd48a6bd0eec9feb",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#ef2ea272bee60865bd48a6bd0eec9feb",
+    "publishedAt": "2016-12-12",
+    "event": "gvc-724900",
+    "textSha256": "df9c4d2118f19fc3ccdd04de93b7739b943fb41c4c9a964edfc378eccf7ef5c8"
+  },
+  {
+    "id": "gvc-dcb0f771fd8e87956a7eccafe76b30ea",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#dcb0f771fd8e87956a7eccafe76b30ea",
+    "publishedAt": "2016-07-16",
+    "event": "gvc-604190",
+    "textSha256": "ad31addcb6446fc45c6b9891165ca4d1577c829aa9e6ba9cc8111d07bdbd4e5c"
+  },
+  {
+    "id": "gvc-5e5699b9cfd39b465c5015fc3e86625a",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#5e5699b9cfd39b465c5015fc3e86625a",
+    "publishedAt": "2016-07-12",
+    "event": "gvc-601037",
+    "textSha256": "58cc462f88224e210c94512b03f76a0aeff59a69b730ed71ea0693a433fafdc4"
+  },
+  {
+    "id": "gvc-e158e69a50b790c6023c9592ac204800",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#e158e69a50b790c6023c9592ac204800",
+    "publishedAt": "2016-06-29",
+    "event": "gvc-591218",
+    "textSha256": "a1fc6b38d651b252998ac03da46bd654151380114ba57489af35e55e7569d7ea"
+  },
+  {
+    "id": "gvc-3d8e1ee1b86fc53e42d8d75a16ef5c7f",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#3d8e1ee1b86fc53e42d8d75a16ef5c7f",
+    "publishedAt": "2016-12-07",
+    "event": "gvc-721079",
+    "textSha256": "bc73c275b90b9cbb52fb0c2ccecf00a45a37579fca53a80f73b6cec23b2d50c3"
+  },
+  {
+    "id": "gvc-ed85006a06a8ce4cf83425861e3895fd",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#ed85006a06a8ce4cf83425861e3895fd",
+    "publishedAt": "2013-08-20",
+    "event": "gvc-491937",
+    "textSha256": "5193bfe206cec026b354c5fa346e45a541fbbe496cafce1ff3daebbfce956264"
+  },
+  {
+    "id": "gvc-440118a03d1f1acb04a69774e6070898",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#440118a03d1f1acb04a69774e6070898",
+    "publishedAt": "2014-08-05",
+    "event": "gvc-178149",
+    "textSha256": "fbf21dad864f68f15add4ecf272ac2c3aa6a903ebedf1b94af3cd5274fb92b8f"
+  },
+  {
+    "id": "gvc-9bf144f853be4e0975a100cf7671a924",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#9bf144f853be4e0975a100cf7671a924",
+    "publishedAt": "2015-08-28",
+    "event": "gvc-403084",
+    "textSha256": "5531dd077b78e3bfbde37a2c27b82e896acdc4f070eaed1de42035424e67a0bf"
+  },
+  {
+    "id": "gvc-07a85009c53e962b417cb8b545c51af9",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#07a85009c53e962b417cb8b545c51af9",
+    "publishedAt": "2016-09-27",
+    "event": "gvc-663712",
+    "textSha256": "8a601ff9647c04e5508244a069f97402be8bdb37a2ac5e94b943250d02006d97"
+  },
+  {
+    "id": "gvc-acef7e016c45850a12f618c9dcd2bd34",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#acef7e016c45850a12f618c9dcd2bd34",
+    "publishedAt": "2016-10-31",
+    "event": "gvc-688841",
+    "textSha256": "64aa35ba5cc30079d034641b80851ef9510e04a9b483217fe61596bb0a9a6d72"
+  },
+  {
+    "id": "gvc-789d406fbcfd4834e83c047d1a2d655d",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#789d406fbcfd4834e83c047d1a2d655d",
+    "publishedAt": "2014-03-10",
+    "event": "gvc-113480",
+    "textSha256": "bb60ae62aeacdca86195ce59626251efb80d7cd9167f41c90edf3f5b887d4e70"
+  },
+  {
+    "id": "gvc-159bfdeeff070e2afbf64f17a531a664",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#159bfdeeff070e2afbf64f17a531a664",
+    "publishedAt": "2016-07-24",
+    "event": "gvc-610379",
+    "textSha256": "1aec501fa2f482ac6a16b26bef4e7939180c69b59687c72ca1f261501175439c"
+  },
+  {
+    "id": "gvc-6914efa9e2c86ca494828af26f7dc5a8",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#6914efa9e2c86ca494828af26f7dc5a8",
+    "publishedAt": "2016-06-14",
+    "event": "gvc-577792",
+    "textSha256": "e2959ac122be68f20c62f1aa2ee80017dd62754b1a842d9056fbf393b204052c"
+  },
+  {
+    "id": "gvc-810c1a1ffe404eb28d6bc39dd4f387c6",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#810c1a1ffe404eb28d6bc39dd4f387c6",
+    "publishedAt": "2016-11-19",
+    "event": "gvc-704555",
+    "textSha256": "19c9ca422279ffe179e9f64828938a7e8e793fcff6fddbd81b7cde507a8ed9f3"
+  },
+  {
+    "id": "gvc-b365a8e3325f3b6c11277afceb0ede32",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#b365a8e3325f3b6c11277afceb0ede32",
+    "publishedAt": "2016-06-30",
+    "event": "gvc-591218",
+    "textSha256": "25504331f7bf43e727e97eabe8b0bca510bb2f41bf52f2a5eebef4af86123737"
+  },
+  {
+    "id": "gvc-9a8c518a0c1cd9215b183bd231f0beee",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#9a8c518a0c1cd9215b183bd231f0beee",
+    "publishedAt": "2015-11-09",
+    "event": "gvc-443637",
+    "textSha256": "e215f09a1903f244533041078362affc560b3c10ff9e1ce05198389dce08fa9d"
+  },
+  {
+    "id": "gvc-7619e5444e527988e6a6d2604736c2f0",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#7619e5444e527988e6a6d2604736c2f0",
+    "publishedAt": "2016-12-19",
+    "event": "gvc-727980",
+    "textSha256": "7b2c6ccab48435d0b6c74976e60d259c610defe7af8dd379266b761c3014ed4a"
+  },
+  {
+    "id": "gvc-ca8018d8e2522b294434bce2cdc17b15",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#ca8018d8e2522b294434bce2cdc17b15",
+    "publishedAt": "2016-10-19",
+    "event": "gvc-678245",
+    "textSha256": "fda9df900206d9ba4c766f4605c6829ae1172c45708bf4412e446fbf18302ac8"
+  },
+  {
+    "id": "gvc-f7c3136a447e221159c0f21949398626",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#f7c3136a447e221159c0f21949398626",
+    "publishedAt": "2015-11-18",
+    "event": "gvc-448947",
+    "textSha256": "27caad59e9bb97b84e70effa8b273f3436d0c98870655143b78001a2c2a9df07"
+  },
+  {
+    "id": "gvc-712b5b916c552aeba096516eeee04e46",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#712b5b916c552aeba096516eeee04e46",
+    "publishedAt": "2014-02-15",
+    "event": "gvc-108112",
+    "textSha256": "85ea7165e769fcae68e81eeb02290216809784c6554f3ef2cb9e9b636c1789ae"
+  },
+  {
+    "id": "gvc-6b9d271e03e7912b21ee2223d3682bdc",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#6b9d271e03e7912b21ee2223d3682bdc",
+    "publishedAt": "2015-12-22",
+    "event": "gvc-470971",
+    "textSha256": "fa0f58020007ea8723c0fb9ed59be4e770ae4c6d4adf9df4f37dc8a2e4b6febc"
+  },
+  {
+    "id": "gvc-dfe68af4804fa7ecd623011b5c3d517f",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#dfe68af4804fa7ecd623011b5c3d517f",
+    "publishedAt": "2016-05-19",
+    "event": "gvc-562315",
+    "textSha256": "6f2d22a0e24678a2ed51b2bd344ba18839e5fe5421bce8867384a1cf74b76703"
+  },
+  {
+    "id": "gvc-7880bf8bb9eda31ead3b47135dc10fa0",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#7880bf8bb9eda31ead3b47135dc10fa0",
+    "publishedAt": "2016-10-28",
+    "event": "gvc-685537",
+    "textSha256": "a83ba521b2bd0a2279346c582da97ada9aaa8ea2356a8d8fd2f6de833f2404f1"
+  },
+  {
+    "id": "gvc-41e62644f41e33312e6082c9ac2909df",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#41e62644f41e33312e6082c9ac2909df",
+    "publishedAt": "2015-11-30",
+    "event": "gvc-455891",
+    "textSha256": "93366005eaa12f9cea47ba79809b355a5d5156f9f03faf66d2077b884f017bdb"
+  },
+  {
+    "id": "gvc-22ad8c7b4f32aab9b44d6a6e3f5ca341",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#22ad8c7b4f32aab9b44d6a6e3f5ca341",
+    "publishedAt": "2016-09-26",
+    "event": "gvc-648867",
+    "textSha256": "79da3c803ace016bfc323db4bca3dbede1933dab5741aacdf51096cb3c24b037"
+  },
+  {
+    "id": "gvc-53b97d585a4890c82818045870a999b6",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#53b97d585a4890c82818045870a999b6",
+    "publishedAt": "2016-08-02",
+    "event": "gvc-619156",
+    "textSha256": "4d4a32ab2a79b553a96d6791eb354521d58c4ecea79cc13e0a619e610b1834cf"
+  },
+  {
+    "id": "gvc-0392b3b12110fec786b38335ffb6c713",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#0392b3b12110fec786b38335ffb6c713",
+    "publishedAt": "2016-10-24",
+    "event": "gvc-683045",
+    "textSha256": "19cbc84f88f1d80d98ee7e5aa24daaac125fa412522f25a8d4aa05ac58c28c29"
+  },
+  {
+    "id": "gvc-62cf5e53b2d95289a7084e2606ca4a42",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#62cf5e53b2d95289a7084e2606ca4a42",
+    "publishedAt": "2016-04-20",
+    "event": "gvc-544535",
+    "textSha256": "26f378e2a2f5511ab698fa449117a3f95409ac764cea3888bf1a44d666ae71bc"
+  },
+  {
+    "id": "gvc-d9a89fbea9c88bea5f61de6674329fa1",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#d9a89fbea9c88bea5f61de6674329fa1",
+    "publishedAt": "2016-11-29",
+    "event": "gvc-692025",
+    "textSha256": "ea027f99e861678d078d6bdc9404a861a5269bef5ab4305e808a4d60e040ab51"
+  },
+  {
+    "id": "gvc-4ad939d965121e683adaec5c2421152f",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#4ad939d965121e683adaec5c2421152f",
+    "publishedAt": "2016-09-15",
+    "event": "gvc-655275",
+    "textSha256": "21c75f7fb0a1d00b08f4c807938d232a9b2a84d03fef2c17401d9a482f872738"
+  },
+  {
+    "id": "gvc-19283479bce9a9b60a6b11bec7fbf572",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#19283479bce9a9b60a6b11bec7fbf572",
+    "publishedAt": "2016-09-13",
+    "event": "gvc-653539",
+    "textSha256": "f8e1de9052c5247055bfd33a81124fb39fb0bf37f63a54578edf17e04445acfe"
+  },
+  {
+    "id": "gvc-ca560234a15b381b925899e6bc129c7f",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#ca560234a15b381b925899e6bc129c7f",
+    "publishedAt": "2016-10-17",
+    "event": "gvc-677186",
+    "textSha256": "faf2250cf986d2b15621a1195f50e833592ecc1bbd02148285d8656fa6ab5938"
+  },
+  {
+    "id": "gvc-ab2c181fb050263daef5b60e2a7c094a",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#ab2c181fb050263daef5b60e2a7c094a",
+    "publishedAt": "2015-03-30",
+    "event": "gvc-314763",
+    "textSha256": "dbb1b397c681a2d69215dc59fdf240b47a8f5477e532e3a1ca683b6558eabdc6"
+  },
+  {
+    "id": "gvc-597c86a24d576e67f981059b8258b47c",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#597c86a24d576e67f981059b8258b47c",
+    "publishedAt": "2016-08-07",
+    "event": "gvc-624215",
+    "textSha256": "783e271bbb941c47b3802d197dcfa3e5cc0f3126dc090a0f2999d097b7730986"
+  },
+  {
+    "id": "gvc-3a7877deff4e6e5947a0a1c9aeb0e160",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#3a7877deff4e6e5947a0a1c9aeb0e160",
+    "publishedAt": "2016-09-15",
+    "event": "gvc-655275",
+    "textSha256": "6174ce60aa40511dfbfa10c0f03e7b88865c6055f10a7ed667883145ae20f5a7"
+  },
+  {
+    "id": "gvc-fec757e15cfa223b21328ee5aac44f7e",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#fec757e15cfa223b21328ee5aac44f7e",
+    "publishedAt": "2016-07-24",
+    "event": "gvc-610379",
+    "textSha256": "8f42bcc5475eb46872bdb9500d41526dea79ca8bc568ac7cb7b9042657484291"
+  },
+  {
+    "id": "gvc-8b96c7e08c7e0fe0acab6592bd5094cf",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#8b96c7e08c7e0fe0acab6592bd5094cf",
+    "publishedAt": "2016-11-08",
+    "event": "gvc-696569",
+    "textSha256": "6d6b92147fb13da478792420917c8399803b1770ac82a6635dc1667948fafa90"
+  },
+  {
+    "id": "gvc-bb79649336357438cd7a51d32c8a1f58",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#bb79649336357438cd7a51d32c8a1f58",
+    "publishedAt": "2016-05-26",
+    "event": "gvc-566863",
+    "textSha256": "8615d90f4902fb9ac9e47f5f99eb859a770941a432ba1b61994358c5f3e3c8c9"
+  },
+  {
+    "id": "gvc-c889402ceeb85f1129faf2bbee0fe86c",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#c889402ceeb85f1129faf2bbee0fe86c",
+    "publishedAt": "2016-02-26",
+    "event": "gvc-508327",
+    "textSha256": "0330a70c4b043ce00240aff7073ccfb7fd5378922b4d70a01f23467d043a2835"
+  },
+  {
+    "id": "gvc-084c085e6a47379426a977496ac576c9",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#084c085e6a47379426a977496ac576c9",
+    "publishedAt": "2014-09-20",
+    "event": "gvc-190615",
+    "textSha256": "9b12dd72b3435c72fdbb9befc13822b1f9cca4b5d42f2f3dec087d2ca79489b9"
+  },
+  {
+    "id": "gvc-bcb64082309ae753d74fe57f1d6befa8",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#bcb64082309ae753d74fe57f1d6befa8",
+    "publishedAt": "2016-06-03",
+    "event": "gvc-571210",
+    "textSha256": "ffb315b8113ba67bbd7b44bcf83ab2b4b81d44a4a6a38a3a8f079cebe2e1a00d"
+  },
+  {
+    "id": "gvc-ad409debfb7c92a7ee42d1b9233b1db5",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#ad409debfb7c92a7ee42d1b9233b1db5",
+    "publishedAt": "2016-10-31",
+    "event": "gvc-688305",
+    "textSha256": "b94aa77a27ff954c7557cea97a429cf999dfbf4b062cde4bfe867394d1d04527"
+  },
+  {
+    "id": "gvc-104db82506283933234d28c49929a9cc",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#104db82506283933234d28c49929a9cc",
+    "publishedAt": "2014-06-15",
+    "event": "gvc-146565",
+    "textSha256": "fb88f1d630ab5bf59458d5fafb5107cb418a13dc5510feab36791bc4483da437"
+  },
+  {
+    "id": "gvc-54aafae5ecfb4ea7b63b0feb3cc1f804",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#54aafae5ecfb4ea7b63b0feb3cc1f804",
+    "publishedAt": "2016-05-25",
+    "event": "gvc-556993",
+    "textSha256": "cc844dbf034817c602edadad728dae83169f1ceae7ce9e7d7c9e7340d4dd1132"
+  },
+  {
+    "id": "gvc-418288772a73a04cff88374f948880ae",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#418288772a73a04cff88374f948880ae",
+    "publishedAt": "2013-01-07",
+    "event": "gvc-478948",
+    "textSha256": "f3e872d80e1ad49c98fd23f51b4ced3fe8a7c5705f13e621fda5341ea5568121"
+  },
+  {
+    "id": "gvc-0ef7240fd28199fa55af6e7b8e86b694",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#0ef7240fd28199fa55af6e7b8e86b694",
+    "publishedAt": "2015-06-13",
+    "event": "gvc-356646",
+    "textSha256": "b79c26900d88eb744344f0c2fdae450c3667f74fa552f4ff678938a1ecb6f600"
+  },
+  {
+    "id": "gvc-9e43ee2cb1802aa33eb058bc916ea11e",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#9e43ee2cb1802aa33eb058bc916ea11e",
+    "publishedAt": "2015-03-29",
+    "event": "gvc-314763",
+    "textSha256": "125bf5da42e559f70546720a68e4bfc7d005c21326af04d5dcca11c4ab2227e6"
+  },
+  {
+    "id": "gvc-f9c7b826463a0bd585e32de08d8dacb5",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#f9c7b826463a0bd585e32de08d8dacb5",
+    "publishedAt": "2016-08-17",
+    "event": "gvc-631695",
+    "textSha256": "d5d0b5cf2f61f5e9c2288e0a727f372540d2ae02af8b40cf5be164f0d1a16769"
+  },
+  {
+    "id": "gvc-49da77314307271176f62bd2359bdb47",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#49da77314307271176f62bd2359bdb47",
+    "publishedAt": "2016-07-14",
+    "event": "gvc-603253",
+    "textSha256": "f271ab89f3f85fda4ef4c592670fa4b8bc2c55138648f258e503c22f8c507263"
+  },
+  {
+    "id": "gvc-9c0d088f9268bd3aca1d017b705835f5",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#9c0d088f9268bd3aca1d017b705835f5",
+    "publishedAt": "2015-06-15",
+    "event": "gvc-358286",
+    "textSha256": "4e1075e2e1bf911267bc406de8a2a4ab4855c1fed1eb06b16b3c2f03f9854132"
+  },
+  {
+    "id": "gvc-293f7cee0a46b0d342df6747794e340b",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#293f7cee0a46b0d342df6747794e340b",
+    "publishedAt": "2016-11-19",
+    "event": "gvc-704906",
+    "textSha256": "9753a2075b598c9391be8106ccbe46a3daef7bc7a29bdb4d3b4944b031cb00fe"
+  },
+  {
+    "id": "gvc-d09d10134bc7030ee3e45f840b8e9f9d",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#d09d10134bc7030ee3e45f840b8e9f9d",
+    "publishedAt": "2015-06-12",
+    "event": "gvc-356090",
+    "textSha256": "8d37c53b1b1d73c26fca921492d85ed4dfd243d223aba83cd65841a77bb7ca66"
+  },
+  {
+    "id": "gvc-c0c1941b209d6d8a3cf28c4d83b36097",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#c0c1941b209d6d8a3cf28c4d83b36097",
+    "publishedAt": "2015-08-28",
+    "event": "gvc-402674",
+    "textSha256": "3d05c6628eb48b6998695116819376f8a97050257bc446d7c20895d8889cc494"
+  },
+  {
+    "id": "gvc-effd71dc06ec2b9d996b56aaba8b4100",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#effd71dc06ec2b9d996b56aaba8b4100",
+    "publishedAt": "2016-11-28",
+    "event": "gvc-711973",
+    "textSha256": "9014fe3c7cbe07165d0d77c5d26fffa4b65707850c331839072eb6e51302923f"
+  },
+  {
+    "id": "gvc-7d09bd3dd9c0f3416a33de2f0ee698fa",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#7d09bd3dd9c0f3416a33de2f0ee698fa",
+    "publishedAt": "2013-04-02",
+    "event": "gvc-478948",
+    "textSha256": "2e358fad4ae5eee1759a47b97fe2cf23a5ff151495acc55f25890530c891367b"
+  },
+  {
+    "id": "gvc-5399e69bd065a2140d87b64055a317df",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#5399e69bd065a2140d87b64055a317df",
+    "publishedAt": "2015-08-25",
+    "event": "gvc-401223",
+    "textSha256": "561df41a3f178d3929a4a4d7d476a49e1c0535398fd2512ab46f17c12fc9f7af"
+  },
+  {
+    "id": "gvc-b27405f9afd055f54cdab7c68ccff13e",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#b27405f9afd055f54cdab7c68ccff13e",
+    "publishedAt": "2016-12-10",
+    "event": "gvc-723277",
+    "textSha256": "d5880b77791a46735c77dffb6fd889e88f5674c3b1774e088975f819b8699d0e"
+  },
+  {
+    "id": "gvc-b15d81a7cbace0a86c01328d29ea959b",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#b15d81a7cbace0a86c01328d29ea959b",
+    "publishedAt": "2016-12-08",
+    "event": "gvc-719325",
+    "textSha256": "7e7af80f46b14eb15cdbf4c958ac9c547ee6c07d41cfc1843935c798e3326a96"
+  },
+  {
+    "id": "gvc-944f7eeebccf88c6eafa39bba8d55494",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#944f7eeebccf88c6eafa39bba8d55494",
+    "publishedAt": "2016-11-30",
+    "event": "gvc-715024",
+    "textSha256": "b2012551e3c174b248cebae9fb80fbe9fc57a734cf20175d52d82d0bce82f798"
+  },
+  {
+    "id": "gvc-e551db01676b12da69d056b783f087ba",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#e551db01676b12da69d056b783f087ba",
+    "publishedAt": "2016-03-01",
+    "event": "gvc-512877",
+    "textSha256": "02e3185f95d8d15bfb03cce97d77802f91a1ac2c0c56ede4735fb7e82da20d19"
+  },
+  {
+    "id": "gvc-3096c37a7b8d58c8e92c172536dc4223",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#3096c37a7b8d58c8e92c172536dc4223",
+    "publishedAt": "2015-06-22",
+    "event": "gvc-362259",
+    "textSha256": "b29d18ea3a7da33ca4dad4fc6f2ad4fc22d5f6b41822e3e5f4d63946c6333e56"
+  },
+  {
+    "id": "gvc-84d6e7f7c010f65ec1f61bfa014c3f27",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#84d6e7f7c010f65ec1f61bfa014c3f27",
+    "publishedAt": "2016-11-22",
+    "event": "gvc-692025",
+    "textSha256": "c43d649e067ba441a8150959eba5bf19d318df26d843c8acb3cdf76ed9a104d2"
+  },
+  {
+    "id": "gvc-4764700daccd20ac56675f81f0c10b0e",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#4764700daccd20ac56675f81f0c10b0e",
+    "publishedAt": "2016-08-03",
+    "event": "gvc-621109",
+    "textSha256": "dc21c78a280dfcb83cd83481bf4bb612527552469a7ece38a9f58692fe49f6a2"
+  },
+  {
+    "id": "gvc-e3a837843344e14130937be552c8d9bf",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#e3a837843344e14130937be552c8d9bf",
+    "publishedAt": "2014-11-23",
+    "event": "gvc-223936",
+    "textSha256": "01229e8bbc9ccb79746c10c1f7a3dd9f32799bf49a8dd1d513c440e670674c38"
+  },
+  {
+    "id": "gvc-b4a99b2cfcc3eaaf234732c82226a1e6",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#b4a99b2cfcc3eaaf234732c82226a1e6",
+    "publishedAt": "2016-04-04",
+    "event": "gvc-533658",
+    "textSha256": "69352a7df28daa473efff42e22d772069f93463272e9113728cb55362a21318f"
+  },
+  {
+    "id": "gvc-51dfbd24c13b17a0c7ca70a839c7e94f",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#51dfbd24c13b17a0c7ca70a839c7e94f",
+    "publishedAt": "2016-07-06",
+    "event": "gvc-593238",
+    "textSha256": "c5ead0a8ce4de6fd7a7e1bbfe36e77710e814a09078e8771d87080e06198fa8d"
+  },
+  {
+    "id": "gvc-a36e0e646129a7351955e921084aecee",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#a36e0e646129a7351955e921084aecee",
+    "publishedAt": "2016-04-27",
+    "event": "gvc-549432",
+    "textSha256": "01423229dc7314c9ad613fc2885fddc8a7260aa3825764515025cb9d74618932"
+  },
+  {
+    "id": "gvc-495577bf929ee8684d3fd5f17032f9e3",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#495577bf929ee8684d3fd5f17032f9e3",
+    "publishedAt": "2015-03-25",
+    "event": "gvc-312892",
+    "textSha256": "69cc7d72c648e6766cfe57aa8465e052c31048f2e2bb264b10ff82a55caf7065"
+  },
+  {
+    "id": "gvc-35fc5b57ac126298ce4bbf2f111f4956",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#35fc5b57ac126298ce4bbf2f111f4956",
+    "publishedAt": "2016-01-21",
+    "event": "gvc-487996",
+    "textSha256": "bc70343187d0056c8a883bad3a28c419f20867618fac2163d8a555388ca177fc"
+  },
+  {
+    "id": "gvc-76a54c8f665f1afa68a617d8ed66ec1f",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#76a54c8f665f1afa68a617d8ed66ec1f",
+    "publishedAt": "2015-09-22",
+    "event": "gvc-418318",
+    "textSha256": "0b6dbd913e0a3f32768cc3286358834773c24ab53044d7de62fd23a5c702f23a"
+  },
+  {
+    "id": "gvc-d2a0615a49ba95ce1dd0c1efc096fdbd",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#d2a0615a49ba95ce1dd0c1efc096fdbd",
+    "publishedAt": "2015-09-26",
+    "event": "gvc-418318",
+    "textSha256": "182bec974acd7cabc553c5a50eedde1c64ea7751897d9394df47f8216031a86d"
+  },
+  {
+    "id": "gvc-0fdc81286962479b414eef3bb7465abf",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#0fdc81286962479b414eef3bb7465abf",
+    "publishedAt": "2016-11-28",
+    "event": "gvc-711973",
+    "textSha256": "38e0b3ee0d0ac85f6d2a0767a29f4ae3b9624ebac7ef35ea410ced49803ea36d"
+  },
+  {
+    "id": "gvc-84acb0162ac6240d8d54c9f4534ba7e4",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#84acb0162ac6240d8d54c9f4534ba7e4",
+    "publishedAt": "2016-04-18",
+    "event": "gvc-541769",
+    "textSha256": "7daa01f7e6d4cca015284e502392280dd270246c19478a2628a0d06a5a6bc07d"
+  },
+  {
+    "id": "gvc-b13fbfb51a03184556f27fa028152455",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#b13fbfb51a03184556f27fa028152455",
+    "publishedAt": "2015-07-31",
+    "event": "gvc-384676",
+    "textSha256": "87d32bafb8362d8974c3683720a80676dae9f11340a4fdb780e9fd1a41f03d40"
+  },
+  {
+    "id": "gvc-4c7bfc2342ec83e3c689476346cc6f03",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#4c7bfc2342ec83e3c689476346cc6f03",
+    "publishedAt": "2016-07-16",
+    "event": "gvc-604190",
+    "textSha256": "57cb05f4175f05d0312c0a85b62bbe4174e0b60f519845e88623b66029130ddf"
+  },
+  {
+    "id": "gvc-47cd556677ed22a440ff250b26c27ad9",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#47cd556677ed22a440ff250b26c27ad9",
+    "publishedAt": "2016-06-19",
+    "event": "gvc-583854",
+    "textSha256": "084029a5e1157c00f4a7b58ff05ab6c78900a04e8e53d22810cf594eaa894df3"
+  },
+  {
+    "id": "gvc-30a91b897e071a1916f5108a8f7c1698",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#30a91b897e071a1916f5108a8f7c1698",
+    "publishedAt": "2016-09-13",
+    "event": "gvc-652919",
+    "textSha256": "aed202db6ef9c304ebe34619114b56cb03e719bdf78bb33f7c2ad19d974db703"
+  },
+  {
+    "id": "gvc-f388e76fedca1bc0748e2a1441381475",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#f388e76fedca1bc0748e2a1441381475",
+    "publishedAt": "2016-09-27",
+    "event": "gvc-662638",
+    "textSha256": "a0798d7b9e75f5171eb8e4fadb717a50f8fcabab34e2946466ac362689d71992"
+  },
+  {
+    "id": "gvc-d007340260ed603716bfbcd395c31bde",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#d007340260ed603716bfbcd395c31bde",
+    "publishedAt": "2016-08-25",
+    "event": "gvc-638622",
+    "textSha256": "88d957cdefe017296298633e0ddf00c1149902addddcf713978197e77733f6a7"
+  },
+  {
+    "id": "gvc-6ee08764a91faef9a8a0a75e356b04a3",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#6ee08764a91faef9a8a0a75e356b04a3",
+    "publishedAt": "2016-10-31",
+    "event": "gvc-689518",
+    "textSha256": "2a8ed3f85ba394f5633e6d1366f5001b11aae6a344dd4344bc74adceaa1cdcf6"
+  },
+  {
+    "id": "gvc-f09597b85812fe13d7e7c72f64d1beed",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#f09597b85812fe13d7e7c72f64d1beed",
+    "publishedAt": "2016-08-22",
+    "event": "gvc-628206",
+    "textSha256": "763f834df0292a5866c7d852603bdc8b6812058c014fff80d4355e4d11055e87"
+  },
+  {
+    "id": "gvc-9bd710472278bcdb1ed72e4ffb2aa50a",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#9bd710472278bcdb1ed72e4ffb2aa50a",
+    "publishedAt": "2016-05-11",
+    "event": "gvc-544535",
+    "textSha256": "7390a50f0b66a31b7ede742b949e988ec5222b688fcdf25f76d3883fd0ba69a6"
+  },
+  {
+    "id": "gvc-8968bc93b9233bd4ca8f03709f7c8941",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#8968bc93b9233bd4ca8f03709f7c8941",
+    "publishedAt": "2016-04-27",
+    "event": "gvc-546629",
+    "textSha256": "263fa665aa4b80bc78227f21194e561d89cc55bb9b3b447a6f76e886bebdaaaf"
+  },
+  {
+    "id": "gvc-32b0522ddde45bb70a6d1ba2e2dbf55a",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#32b0522ddde45bb70a6d1ba2e2dbf55a",
+    "publishedAt": "2015-01-25",
+    "event": "gvc-282956",
+    "textSha256": "23e9fb0c7f3c63bcdc96573e2581ae15b95d664e6ec8a2dc28fc2be420b78b60"
+  },
+  {
+    "id": "gvc-0103fecb38fd0263f899b3917555b0d2",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#0103fecb38fd0263f899b3917555b0d2",
+    "publishedAt": "2016-10-23",
+    "event": "gvc-682143",
+    "textSha256": "3f2887613daaa986bf539c1d9a88c8f60b70b33cf3be07ed360cdd748ea16161"
+  },
+  {
+    "id": "gvc-07c507c0a7a8c5abeb0305e74ecec3f8",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#07c507c0a7a8c5abeb0305e74ecec3f8",
+    "publishedAt": "2015-09-25",
+    "event": "gvc-413257",
+    "textSha256": "1fdc045b626b633815dddbca759edff924f9247ca75cc85da20cdc7e760c808e"
+  },
+  {
+    "id": "gvc-69ff270a45c5022007a38a3994cb7f76",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#69ff270a45c5022007a38a3994cb7f76",
+    "publishedAt": "2015-12-08",
+    "event": "gvc-461515",
+    "textSha256": "86fd09570bcac8d869f8d23a07927509d6e6e1c47eb321214a7cfd540833c9dd"
+  },
+  {
+    "id": "gvc-38d766377ded80d9f8720f14c4d265c0",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#38d766377ded80d9f8720f14c4d265c0",
+    "publishedAt": "2016-08-08",
+    "event": "gvc-624533",
+    "textSha256": "66ec7edfdadd84295b81e29b55c1ed4f18b4672caea594ee9cb8b54a9866eb07"
+  },
+  {
+    "id": "gvc-0dbb3827c9a2cd5637ff6643a1d95ae8",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#0dbb3827c9a2cd5637ff6643a1d95ae8",
+    "publishedAt": "2016-06-03",
+    "event": "gvc-571479",
+    "textSha256": "802f612b72985c89f6d784f9240a282685c9d8cbfda38586b7820334c079538e"
+  },
+  {
+    "id": "gvc-ebb6d75dac79a2c652208e6464dcef16",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#ebb6d75dac79a2c652208e6464dcef16",
+    "publishedAt": "2016-12-21",
+    "event": "gvc-724900",
+    "textSha256": "ff64c823f36853fe9e0db45d83e51b2e4bd853ac6640477039580d9d8847da26"
+  },
+  {
+    "id": "gvc-3a81fc725917cbf89cbfab9775e6ba50",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#3a81fc725917cbf89cbfab9775e6ba50",
+    "publishedAt": "2016-05-03",
+    "event": "gvc-551295",
+    "textSha256": "c97b6aee9f99c3d45f6932f57090e8435365140c5ca32c0e2bf2c9889061d1b8"
+  },
+  {
+    "id": "gvc-f61b341b7511062e8912d6d06f70e943",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#f61b341b7511062e8912d6d06f70e943",
+    "publishedAt": "2016-12-28",
+    "event": "gvc-735826",
+    "textSha256": "733349b878c74b223938b540cca9b78799f6fcdf6a8e0a3a637d5df56bbb9206"
+  },
+  {
+    "id": "gvc-886960a9a8458d527166b21a65fd095b",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#886960a9a8458d527166b21a65fd095b",
+    "publishedAt": "2016-04-27",
+    "event": "gvc-548991",
+    "textSha256": "e433a5c400addaf32bbd2f1787fbd9e4825aeb311495a71466eb27422a811070"
+  },
+  {
+    "id": "gvc-a1b95177074febda028536a39ce46864",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#a1b95177074febda028536a39ce46864",
+    "publishedAt": "2016-06-27",
+    "event": "gvc-589488",
+    "textSha256": "d9819ab58e888f45095c745b48b69f3d9cdd65f2b615ab737565c4e53951c668"
+  },
+  {
+    "id": "gvc-1bebb62822642fe3e81da5f1e750a1e0",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#1bebb62822642fe3e81da5f1e750a1e0",
+    "publishedAt": "2016-09-23",
+    "event": "gvc-661322",
+    "textSha256": "758f52d2bc9b23378a2c76724cdb488cd45c7134213e367ec76c4312fd44fb46"
+  },
+  {
+    "id": "gvc-97f7fe6748ec275ec9eef027249e5c64",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#97f7fe6748ec275ec9eef027249e5c64",
+    "publishedAt": "2015-07-08",
+    "event": "gvc-370966",
+    "textSha256": "69dca764b8d6a0a888a0cb29d83aca9f56b7c8a42fd8d95f9493254825f2ce1f"
+  },
+  {
+    "id": "gvc-537e0e89d9a3a430faccb88b762a54be",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#537e0e89d9a3a430faccb88b762a54be",
+    "publishedAt": "2016-06-22",
+    "event": "gvc-586764",
+    "textSha256": "be004532f2421a28c7eebd156175f6bc339bfdd056f14a4cb14f164b90ae2fec"
+  },
+  {
+    "id": "gvc-1d21246a81f31844c435d0dc94f0eea3",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#1d21246a81f31844c435d0dc94f0eea3",
+    "publishedAt": "2016-12-08",
+    "event": "gvc-717231",
+    "textSha256": "92c468a54a8d2ecc94442e76816c5fccd8d71142f9ab72f5c5baa040996d0962"
+  },
+  {
+    "id": "gvc-ee474691fa6d5bc87ff860c0c5633918",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#ee474691fa6d5bc87ff860c0c5633918",
+    "publishedAt": "2016-01-30",
+    "event": "gvc-495938",
+    "textSha256": "64e4fb6ef160a959647163b915d708c93a22fbebc7a63591c6a80c2995478971"
+  },
+  {
+    "id": "gvc-4aa6d6a4650c05985918f54f811b7442",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#4aa6d6a4650c05985918f54f811b7442",
+    "publishedAt": "2016-11-25",
+    "event": "gvc-710885",
+    "textSha256": "6acc2fd3a2316d619919f6320db5128f4abbf0d71de30550e8ef283f94ac927b"
+  },
+  {
+    "id": "gvc-aecaf12bdc3b9b4d16842f9fb1b6aca9",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#aecaf12bdc3b9b4d16842f9fb1b6aca9",
+    "publishedAt": "2016-04-25",
+    "event": "gvc-549432",
+    "textSha256": "240ae7269fed6742bbeb06fef581ea4bd00f4d58f4823c016e871d8cf75f387f"
+  },
+  {
+    "id": "gvc-1f5a0cb5862fc782d4a0e466748db618",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#1f5a0cb5862fc782d4a0e466748db618",
+    "publishedAt": "2016-06-20",
+    "event": "gvc-584156",
+    "textSha256": "ddb3ddb8f0a4bfbc0fdb69db1728df7c81632bf8882893aaac969c8550250bdd"
+  },
+  {
+    "id": "gvc-03785297635b443ce41eb2d3b6a5870e",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#03785297635b443ce41eb2d3b6a5870e",
+    "publishedAt": "2015-09-14",
+    "event": "gvc-413257",
+    "textSha256": "ee759d92d78607a2573116b9a6c8ea6eba4a3be6a67cffaa3439ea26611859d7"
+  },
+  {
+    "id": "gvc-42b38402fdb5a9d4797fa6127a2b0922",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#42b38402fdb5a9d4797fa6127a2b0922",
+    "publishedAt": "2015-03-26",
+    "event": "gvc-312892",
+    "textSha256": "d65e801f4f932eb32264eeff5a2f59e9ddcff00ddebe2697abb0b0b31a5178db"
+  },
+  {
+    "id": "gvc-aa4a14a4183762ec7f0547852f27cc54",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#aa4a14a4183762ec7f0547852f27cc54",
+    "publishedAt": "2015-03-08",
+    "event": "gvc-302749",
+    "textSha256": "5ea113f2f2acb7da26c6350b269a50eca9b7864195a91c41a61238ebda58ad39"
+  },
+  {
+    "id": "gvc-eb24ea8b1825e84a6116cf398524d9f2",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#eb24ea8b1825e84a6116cf398524d9f2",
+    "publishedAt": "2015-06-27",
+    "event": "gvc-364715",
+    "textSha256": "c92ac2661ba1ff46ac9bb1d3948d64849dd228371dc8e3ae3fa8db1e9fa20638"
+  },
+  {
+    "id": "gvc-dee9c098e01ad1fd232a8fe2906372ff",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#dee9c098e01ad1fd232a8fe2906372ff",
+    "publishedAt": "2016-06-23",
+    "event": "gvc-571479",
+    "textSha256": "118d21f87af0abe299879f7b1546d147c3a3e9339188735350c795dfd12c009f"
+  },
+  {
+    "id": "gvc-0b3b5a80431913c99c9776d1accd2906",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#0b3b5a80431913c99c9776d1accd2906",
+    "publishedAt": "2016-08-12",
+    "event": "gvc-619156",
+    "textSha256": "a1c6057987f0e975bdc71ef34870c96dec31ceb7bcfd6661ef2ccb9fd5dd17e9"
+  },
+  {
+    "id": "gvc-548d998def83a0e724c191e16c91a0e3",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#548d998def83a0e724c191e16c91a0e3",
+    "publishedAt": "2015-05-26",
+    "event": "gvc-346621",
+    "textSha256": "3b337db7e30032da1268efbc6ca627a953f39e3d5f9cf22f46de9002a801b5ec"
+  },
+  {
+    "id": "gvc-883f7cd910d00da500f5861c4b4c9e59",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#883f7cd910d00da500f5861c4b4c9e59",
+    "publishedAt": "2015-11-18",
+    "event": "gvc-448947",
+    "textSha256": "13c2c04826cdfd5cb2baa5870f7e7cfea7ab03beb41162a880a92ba847d3966f"
+  },
+  {
+    "id": "gvc-f66894e456e28286767805e82e5f382f",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#f66894e456e28286767805e82e5f382f",
+    "publishedAt": "2016-09-03",
+    "event": "gvc-646995",
+    "textSha256": "02ea1aeee5924c3bb042c4741fe927e5eeb744f4b0417c4de7e4001db537b2fb"
+  },
+  {
+    "id": "gvc-9b98ea8052980d52a83af7ca1b604bb9",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#9b98ea8052980d52a83af7ca1b604bb9",
+    "publishedAt": "2016-11-16",
+    "event": "gvc-701425",
+    "textSha256": "5908255095391a08a5cbce69dd2ba2b9cef25bb950fe1f7e5d2b82ef8bb0505d"
+  },
+  {
+    "id": "gvc-cbf6f9e0ebe15cfe6165ddd88cf74cdf",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#cbf6f9e0ebe15cfe6165ddd88cf74cdf",
+    "publishedAt": "2016-12-02",
+    "event": "gvc-717395",
+    "textSha256": "275a345e33e25586b04109dbde0e95d5d681510645bfbbd03e18ecb4aa6a68a5"
+  },
+  {
+    "id": "gvc-8456423e80cc316ac438efa4e3086bb8",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#8456423e80cc316ac438efa4e3086bb8",
+    "publishedAt": "2016-07-06",
+    "event": "gvc-594187",
+    "textSha256": "95d174451efe29b0b8f025e88d7dc36626ad64701caef59b4f099bbfd7ba9219"
+  },
+  {
+    "id": "gvc-937998114dd67781f1aa763ca061b4f3",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#937998114dd67781f1aa763ca061b4f3",
+    "publishedAt": "2015-05-29",
+    "event": "gvc-346621",
+    "textSha256": "6eefe24fe867f542d830de016342a2ed22854ae945d5146dd1acbc18529e687a"
+  },
+  {
+    "id": "gvc-331238ab1cea6df30dc32cda622d3acf",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#331238ab1cea6df30dc32cda622d3acf",
+    "publishedAt": "2016-01-17",
+    "event": "gvc-487094",
+    "textSha256": "88f2d2a636b7de80919045ee6c7af83159c0b01b01db38f033dd97953331c08c"
+  },
+  {
+    "id": "gvc-0541fb1b283a2cb0d7d9a1c328ce4635",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#0541fb1b283a2cb0d7d9a1c328ce4635",
+    "publishedAt": "2015-09-10",
+    "event": "gvc-111416",
+    "textSha256": "d71f9a8306f176da0caa8e6b3181cc4a51ba3696ec6da578a1481cc7b0bca3d1"
+  },
+  {
+    "id": "gvc-9fd23584f2fbf09714acd59014eaf6a9",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#9fd23584f2fbf09714acd59014eaf6a9",
+    "publishedAt": "2015-11-19",
+    "event": "gvc-449691",
+    "textSha256": "5c5809f9eed16e36595fccd7abb33c4d942896e5b4894391a42bd32d93abb287"
+  },
+  {
+    "id": "gvc-b3566caae6a5679ebafa083d1601828c",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#b3566caae6a5679ebafa083d1601828c",
+    "publishedAt": "2016-01-14",
+    "event": "gvc-486360",
+    "textSha256": "1bdceb74aa20038ce8d9103a0c8c86211c8ea614584c595e94539ce83a77cb17"
+  },
+  {
+    "id": "gvc-bfff595ea1044f6167c226cf15ccbf9a",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#bfff595ea1044f6167c226cf15ccbf9a",
+    "publishedAt": "2016-09-15",
+    "event": "gvc-655478",
+    "textSha256": "24b04a5e1fb445a1547c16d8cc768750b523d68888870962059bcfc13f35c845"
+  },
+  {
+    "id": "gvc-c1703fac2f152d68bf5c435bcc8272a9",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#c1703fac2f152d68bf5c435bcc8272a9",
+    "publishedAt": "2016-12-02",
+    "event": "gvc-716641",
+    "textSha256": "02fa35558f6d351468ff6d2098b497a43c0f9199ea3a8fe0776e14ab4216bcc6"
+  },
+  {
+    "id": "gvc-2bd893f92a71920ea7a391dfcb518090",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#2bd893f92a71920ea7a391dfcb518090",
+    "publishedAt": "2016-09-13",
+    "event": "gvc-653953",
+    "textSha256": "34be1b018a4cd111ce41664e1ed04e117bb8eedeea6abd5b83a299f20f97f6d4"
+  },
+  {
+    "id": "gvc-b0289dddc630b8d63f7f317e3a88888e",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#b0289dddc630b8d63f7f317e3a88888e",
+    "publishedAt": "2016-09-14",
+    "event": "gvc-655478",
+    "textSha256": "46fe162f6515e85b04921297049e8c613f070b4a3cc8f29ec3c74ac278b05675"
+  },
+  {
+    "id": "gvc-c3e8e1bd3f296ac1417ae8ccf3671b4c",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#c3e8e1bd3f296ac1417ae8ccf3671b4c",
+    "publishedAt": "2015-11-26",
+    "event": "gvc-453738",
+    "textSha256": "5e63b2bd211bd01667f02daffc3ebf4b746630383973658babb8c919fb6f6acb"
+  },
+  {
+    "id": "gvc-26a88f183c2bc00a44d7c9d5fb455383",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#26a88f183c2bc00a44d7c9d5fb455383",
+    "publishedAt": "2016-09-07",
+    "event": "gvc-648457",
+    "textSha256": "136dd9b50beb4c6c35ec9759cc075a907c5255308b77f4396870df3ea132cdc0"
+  },
+  {
+    "id": "gvc-254c63ca82173008f14f769c20db88e0",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#254c63ca82173008f14f769c20db88e0",
+    "publishedAt": "2016-12-02",
+    "event": "gvc-716641",
+    "textSha256": "a706c49df4dae8c804a1d55b033a8747e0ee0a9467cf86b25a3a6d5eb5be3a90"
+  },
+  {
+    "id": "gvc-64f3f7fd801a1069a09a90180c2d39fb",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#64f3f7fd801a1069a09a90180c2d39fb",
+    "publishedAt": "2015-08-25",
+    "event": "gvc-401223",
+    "textSha256": "ee232d2ae36c14915658c40d2beab31762d2cc4e53dce6b807f18bcd8e89e615"
+  },
+  {
+    "id": "gvc-aa9f177b256695d5ecf1e0f439772bbd",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#aa9f177b256695d5ecf1e0f439772bbd",
+    "publishedAt": "2016-06-28",
+    "event": "gvc-589488",
+    "textSha256": "654a8d1a478b91629e75e5fd56bbfbe2f39d3f4b482583f3a05f73d48fdf5422"
+  },
+  {
+    "id": "gvc-f8d7d79eea4b747329ba41bbe75a8254",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#f8d7d79eea4b747329ba41bbe75a8254",
+    "publishedAt": "2015-11-06",
+    "event": "gvc-443637",
+    "textSha256": "ca894841a0cb4b455c2b75cdabdec4396b27b4000c9327090672a8cfc170e14e"
+  },
+  {
+    "id": "gvc-2239e24f35066224e146f64e7f88b949",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#2239e24f35066224e146f64e7f88b949",
+    "publishedAt": "2016-06-18",
+    "event": "gvc-583168",
+    "textSha256": "63ccc2be10a1003bacfbe5fafaf5b4671f7dcc68f5c53ed8aea3260fe017815c"
+  },
+  {
+    "id": "gvc-473fecb2553c10b9bc938e06eb94db54",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#473fecb2553c10b9bc938e06eb94db54",
+    "publishedAt": "2016-08-03",
+    "event": "gvc-621109",
+    "textSha256": "894711250cd0c1193f5f7d356a899919c63c0fa5bc5a317051e37cf47bdd72ee"
+  },
+  {
+    "id": "gvc-b73d5b8ddd5404a3f3b66cfbb96e22bb",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#b73d5b8ddd5404a3f3b66cfbb96e22bb",
+    "publishedAt": "2015-05-21",
+    "event": "gvc-341451",
+    "textSha256": "fe48cc7564ba8243b2435353bd71a35a400a14896323f19d284118b12fc3e022"
+  },
+  {
+    "id": "gvc-8efc377c8be902ce0a6ac33f062ef934",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#8efc377c8be902ce0a6ac33f062ef934",
+    "publishedAt": "2016-06-08",
+    "event": "gvc-554759",
+    "textSha256": "f5223a50b6b10b251496522c1c1cff0f169c9f4ec8e6f3b58286ccc5daffe2a3"
+  },
+  {
+    "id": "gvc-76cdb6424709778e519769c1d97c2573",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#76cdb6424709778e519769c1d97c2573",
+    "publishedAt": "2015-10-19",
+    "event": "gvc-432535",
+    "textSha256": "226a07b139cfc64fea058f9e264ccbd00e76fb50e9527459ab34da219f20a2ea"
+  },
+  {
+    "id": "gvc-4643e3a80f38cd21902b56de3a07ea19",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#4643e3a80f38cd21902b56de3a07ea19",
+    "publishedAt": "2016-11-15",
+    "event": "gvc-700468",
+    "textSha256": "a079ce4f9693ce43f44c1e7ea0fad08d0844a805d075dd9fc297a454cc00aacf"
+  },
+  {
+    "id": "gvc-5c24e31c9271a107c04e3618d926a457",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#5c24e31c9271a107c04e3618d926a457",
+    "publishedAt": "2016-11-20",
+    "event": "gvc-704906",
+    "textSha256": "dec7c481614a026f68db60bf64e307f788544f8c8be0e652749c78cffe022d4a"
+  },
+  {
+    "id": "gvc-3ccd3a22edbf133046fa588d466e0740",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#3ccd3a22edbf133046fa588d466e0740",
+    "publishedAt": "2015-08-20",
+    "event": "gvc-390960",
+    "textSha256": "c8c9767ac16d5c5734c4ba6df34b0a8ee39195671c7bbec22cd674ead25a7a6c"
+  },
+  {
+    "id": "gvc-0851f4696efda99543ba36362b6805bf",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#0851f4696efda99543ba36362b6805bf",
+    "publishedAt": "2016-12-04",
+    "event": "gvc-717947",
+    "textSha256": "e124eb3dcffa263a93bc06852ec0c2201ede74602eb009537f1bbe209f302763"
+  },
+  {
+    "id": "gvc-059ad6e444f832093563efa30c6e82b6",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#059ad6e444f832093563efa30c6e82b6",
+    "publishedAt": "2016-03-20",
+    "event": "gvc-525486",
+    "textSha256": "a56d1c84e371bea5b3aa89fc5ed10e84dc40244e2b4ca1125ccd7495c499a568"
+  },
+  {
+    "id": "gvc-f4c5bd7bc18f9ab21c0a64173947a059",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#f4c5bd7bc18f9ab21c0a64173947a059",
+    "publishedAt": "2016-09-13",
+    "event": "gvc-653539",
+    "textSha256": "7a1ec8dce9a1c7213998f34c2e10a31b86836a793e9e9e3f4e0118d717fbf12e"
+  },
+  {
+    "id": "gvc-c50bcb20612a8738f0930d6a2930c8d3",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#c50bcb20612a8738f0930d6a2930c8d3",
+    "publishedAt": "2016-11-26",
+    "event": "gvc-710885",
+    "textSha256": "1389159704ad2449c46f2348f253fe73eadf8212395079d401d66d1bd8a60a88"
+  },
+  {
+    "id": "gvc-59271f8d363fc82500c718e02b7b9abc",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#59271f8d363fc82500c718e02b7b9abc",
+    "publishedAt": "2016-06-03",
+    "event": "gvc-571210",
+    "textSha256": "1d953f7986b5fa655282d02e951dde4216883afae4f3cf43102bacee88d005be"
+  },
+  {
+    "id": "gvc-6f1f729a6be004970678337a8ec008d5",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#6f1f729a6be004970678337a8ec008d5",
+    "publishedAt": "2016-10-26",
+    "event": "gvc-685537",
+    "textSha256": "8b6f0054c35aa469f78ef16ead468ac218eafaa11dd45101fe2b27369c864dd3"
+  },
+  {
+    "id": "gvc-6ddb034c327b7e3fa9aa241fd2940634",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#6ddb034c327b7e3fa9aa241fd2940634",
+    "publishedAt": "2015-03-31",
+    "event": "gvc-315594",
+    "textSha256": "9b83a45b09f0134c717d8e8cfcdfea533f6b603d33c6a867e95015a8a4d3b08a"
+  },
+  {
+    "id": "gvc-7599d2c270380b8c4d56a28eb49d910f",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#7599d2c270380b8c4d56a28eb49d910f",
+    "publishedAt": "2016-09-11",
+    "event": "gvc-652919",
+    "textSha256": "7bb2104675e771e2e6f13f0cc84570b9b15d1aaeda7932f92687bb2d5c647f4d"
+  },
+  {
+    "id": "gvc-47286770c471ff4687a1e978cbdc7c30",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#47286770c471ff4687a1e978cbdc7c30",
+    "publishedAt": "2015-04-02",
+    "event": "gvc-315594",
+    "textSha256": "4fac31b3a6930a75388acfca1abd296133eeaf9d00e829e4cd3a52598d516bc3"
+  },
+  {
+    "id": "gvc-8bce01dec2080b787e78f7bd61c42caa",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#8bce01dec2080b787e78f7bd61c42caa",
+    "publishedAt": "2016-05-06",
+    "event": "gvc-554759",
+    "textSha256": "a719766acef4106e611a80acfdd6fcdb4011be3b646ba606f9a05d075802cb82"
+  },
+  {
+    "id": "gvc-7da17d4e07ebecf5e7da0098ff454398",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#7da17d4e07ebecf5e7da0098ff454398",
+    "publishedAt": "2016-12-23",
+    "event": "gvc-728026",
+    "textSha256": "03cecdd4ca3ced31c54486e5ac26bbd1e501f6b22c8bc61bb069b83dc3c895f4"
+  },
+  {
+    "id": "gvc-ee93f8eb3b34fbd102b2803bcd9413ab",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#ee93f8eb3b34fbd102b2803bcd9413ab",
+    "publishedAt": "2016-03-10",
+    "event": "gvc-517940",
+    "textSha256": "c8e68c8f2f18b4086415abb321f31ac995eb40a86bd3d7e3a8cab36efef5d12a"
+  },
+  {
+    "id": "gvc-92a5a2f664a86c04292a57516747f718",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#92a5a2f664a86c04292a57516747f718",
+    "publishedAt": "2016-12-26",
+    "event": "gvc-734402",
+    "textSha256": "614b132c0d70fe9743a4c0dac38ae0f301a6010422085bb1cfc0d6fedabcc871"
+  },
+  {
+    "id": "gvc-586335b77ec3b8515619fb86f5198876",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#586335b77ec3b8515619fb86f5198876",
+    "publishedAt": "2016-12-04",
+    "event": "gvc-718272",
+    "textSha256": "b24ed2d399735adc186be3051b8e5b4baa544c02ad3c6fd3047251f9982e1e2f"
+  },
+  {
+    "id": "gvc-20451ad9563e2c4d870f7fc84d396c89",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#20451ad9563e2c4d870f7fc84d396c89",
+    "publishedAt": "2016-06-20",
+    "event": "gvc-584156",
+    "textSha256": "40b5b13768a2ae71821302d1946491a4d2975efec32564c29b8448e3672acec9"
+  },
+  {
+    "id": "gvc-ca5616ed1043ae094adddad8168082be",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#ca5616ed1043ae094adddad8168082be",
+    "publishedAt": "2016-03-08",
+    "event": "gvc-517940",
+    "textSha256": "0f3453bb4b0d7c7f7e55cb02601727a8aeff290ea54a7a83ea242487e2465800"
+  },
+  {
+    "id": "gvc-23732dad576a28c889461911c781a2b8",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#23732dad576a28c889461911c781a2b8",
+    "publishedAt": "2016-01-25",
+    "event": "gvc-492546",
+    "textSha256": "82dfd5ee384e2183b0c689be3b1ea89ce739f8c68979e2484e2bfb6dbe9cc406"
+  },
+  {
+    "id": "gvc-413ce5c5973482eb1d88c22c935d29a1",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#413ce5c5973482eb1d88c22c935d29a1",
+    "publishedAt": "2016-05-06",
+    "event": "gvc-554133",
+    "textSha256": "03e6d1d0683f92444482d7f5ac290dc6dfd263c7381b28cfaff777dc2791294b"
+  },
+  {
+    "id": "gvc-593de916f9d63aa4c2568b46b1583fb2",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#593de916f9d63aa4c2568b46b1583fb2",
+    "publishedAt": "2015-11-18",
+    "event": "gvc-449691",
+    "textSha256": "c588bdc4148af1a2ace85b330ad37a9a8b4fa81af1459309c721581215638ae2"
+  },
+  {
+    "id": "gvc-5d047f14c15d8a27e27526e7f8695483",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#5d047f14c15d8a27e27526e7f8695483",
+    "publishedAt": "2013-07-12",
+    "event": "gvc-490954",
+    "textSha256": "0297e1c6bf83e800aea902353e5123a5d529262f32808c3e5634fda9baa812e6"
+  },
+  {
+    "id": "gvc-43ed9cbb9540f5aef57ee54b24c9e45d",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#43ed9cbb9540f5aef57ee54b24c9e45d",
+    "publishedAt": "2016-08-29",
+    "event": "gvc-641499",
+    "textSha256": "9dbbe8df496ed2318e7ab5005a64ff184587302eb7a05756066775ba30600486"
+  },
+  {
+    "id": "gvc-481ef14a85159989117cb3be2b180eee",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#481ef14a85159989117cb3be2b180eee",
+    "publishedAt": "2015-11-14",
+    "event": "gvc-446569",
+    "textSha256": "13395c3c90e7d9746eaaa2efc380eed96629f93119732090b46a0dbb25cd62d4"
+  },
+  {
+    "id": "gvc-f8f77a3731bc14834daa3381af0b519a",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#f8f77a3731bc14834daa3381af0b519a",
+    "publishedAt": "2016-09-19",
+    "event": "gvc-657926",
+    "textSha256": "848b34729676a65b9809749a5b62f8f9b5930868aedce16e825d00ee8fc4c984"
+  },
+  {
+    "id": "gvc-30883b6ba9273903b93665469350f5f4",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#30883b6ba9273903b93665469350f5f4",
+    "publishedAt": "2015-02-23",
+    "event": "gvc-223936",
+    "textSha256": "10fa243f42e6925a6a39614d6f30a6576c72d422689e7822e309f29d255c9aa7"
+  },
+  {
+    "id": "gvc-316932156a3da5a8b02094f0f1c97ec0",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#316932156a3da5a8b02094f0f1c97ec0",
+    "publishedAt": "2016-09-23",
+    "event": "gvc-661322",
+    "textSha256": "7886efb1df5358f65269e13a7f80e191b6c0517661d28909b31d84d0c7a02a80"
+  },
+  {
+    "id": "gvc-7038207f1fe484ae58001c1d7386a598",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#7038207f1fe484ae58001c1d7386a598",
+    "publishedAt": "2016-10-26",
+    "event": "gvc-638622",
+    "textSha256": "3c0e04ccaa113f3ce5be31b3a12845a8c030456191514fb7e11e87260513ea15"
+  },
+  {
+    "id": "gvc-7b04355db2831874d703ea3ca19f5895",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#7b04355db2831874d703ea3ca19f5895",
+    "publishedAt": "2016-10-23",
+    "event": "gvc-682959",
+    "textSha256": "a889da5bf27556d10de44bde87e80dff4b8456c74185a00d002a0c06ceb73f92"
+  },
+  {
+    "id": "gvc-af867d065ca6de60913486f3521162fe",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#af867d065ca6de60913486f3521162fe",
+    "publishedAt": "2016-12-20",
+    "event": "gvc-730157",
+    "textSha256": "4c9f4509e014227cd81eb60ca2715c7da4acd85dd55c5c4ab0e7df3bb750912a"
+  },
+  {
+    "id": "gvc-fbca7e7385db8cf126d7c87bb6abb331",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#fbca7e7385db8cf126d7c87bb6abb331",
+    "publishedAt": "2016-02-07",
+    "event": "gvc-501412",
+    "textSha256": "a2d5a1649fde4a4417c4fe4f930f0595419b3c60e33569623bfe54f4a3437e42"
+  },
+  {
+    "id": "gvc-ef9bfc4231f36766fc90e67e73c82cbf",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#ef9bfc4231f36766fc90e67e73c82cbf",
+    "publishedAt": "2015-03-15",
+    "event": "gvc-306048",
+    "textSha256": "0de41e1d1f9c37dee038387ae4bfd31264ef5c25059a5b33cdcefedfa1b3e6d3"
+  },
+  {
+    "id": "gvc-7b6f28c70a842833b63f6b5cc905ae37",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#7b6f28c70a842833b63f6b5cc905ae37",
+    "publishedAt": "2015-11-13",
+    "event": "gvc-446569",
+    "textSha256": "dff24090877a7b9ffcda21f73fc5549bdd1c32d503f11aca7045e0767c38cbf1"
+  },
+  {
+    "id": "gvc-367a2957d83ab3c5e96933b8b709c7ee",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#367a2957d83ab3c5e96933b8b709c7ee",
+    "publishedAt": "2016-08-15",
+    "event": "gvc-630886",
+    "textSha256": "1edeb86ad2018b3682da931788800e62c735be1fd0f37fafba4c301b7b11de26"
+  },
+  {
+    "id": "gvc-e55ccb952b42e32f84e44f7e802ae82f",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#e55ccb952b42e32f84e44f7e802ae82f",
+    "publishedAt": "2016-07-15",
+    "event": "gvc-603253",
+    "textSha256": "1f4c1fe22a867f5aea86f5d37147e2ab58d114ca1421a5aa6acead7e0aea4ebd"
+  },
+  {
+    "id": "gvc-cd47306135c7f6477f2c3516f9d9631c",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#cd47306135c7f6477f2c3516f9d9631c",
+    "publishedAt": "2015-05-11",
+    "event": "gvc-338580",
+    "textSha256": "c1c8e92150acb0c2e53b98b33f77f655b2a4bfda0c3d4ee6c3703e0391f9d21d"
+  },
+  {
+    "id": "gvc-67c9b7404408dab439d1cd3313083eb5",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#67c9b7404408dab439d1cd3313083eb5",
+    "publishedAt": "2016-06-19",
+    "event": "gvc-583168",
+    "textSha256": "ad2c13ef3e17fd7a495e2db4da66896902a794df30c1810f335adbc12198b389"
+  },
+  {
+    "id": "gvc-b22db6c956ed0014bbf910fb535fd413",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#b22db6c956ed0014bbf910fb535fd413",
+    "publishedAt": "2016-11-28",
+    "event": "gvc-711921",
+    "textSha256": "1ac9263aeb4e171923e5517533685b12a888a81994e58e2e4686f36e028952a3"
+  },
+  {
+    "id": "gvc-3c6621b665992da1dd912cd726284b6b",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#3c6621b665992da1dd912cd726284b6b",
+    "publishedAt": "2016-09-06",
+    "event": "gvc-648867",
+    "textSha256": "15b736fcc5ca2a0e4439e95dbfc8c975b1483b91dd953402ca3ee97c844f9054"
+  },
+  {
+    "id": "gvc-474192e8ed58d492d1bccacae3863c5a",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#474192e8ed58d492d1bccacae3863c5a",
+    "publishedAt": "2016-10-30",
+    "event": "gvc-688979",
+    "textSha256": "b113ca2c3e1b30da5e6bda67445833dfd5207f68f4d2d260fb3f1dde6084cfa5"
+  },
+  {
+    "id": "gvc-38915cfc9c043f00dfb85cf2446e5a7a",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#38915cfc9c043f00dfb85cf2446e5a7a",
+    "publishedAt": "2016-06-03",
+    "event": "gvc-571210",
+    "textSha256": "ba3933b510d2d755fe1db56d1ce8c2ed7fbf06cb80f2240e3b343609fd4ae6d1"
+  },
+  {
+    "id": "gvc-e577d21b7f6fc154b42022aaf582d13f",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#e577d21b7f6fc154b42022aaf582d13f",
+    "publishedAt": "2016-06-03",
+    "event": "gvc-571922",
+    "textSha256": "7bd8f8fd3db19cca22161154f8af1e3112687141923a9344c7d39e3ca30053dc"
+  },
+  {
+    "id": "gvc-d1c2083ddb50d4652df34568ad9bb4b6",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#d1c2083ddb50d4652df34568ad9bb4b6",
+    "publishedAt": "2014-10-17",
+    "event": "gvc-207298",
+    "textSha256": "158404b51f8de1cd23286687aed59fb9ffc9647e72d0fbc3c9a2c326d48daef3"
+  },
+  {
+    "id": "gvc-cd9aff1837ec669115d4b61e99c324c8",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#cd9aff1837ec669115d4b61e99c324c8",
+    "publishedAt": "2016-10-04",
+    "event": "gvc-669251",
+    "textSha256": "52a9d615d87f3bd884df9d5b10adb20dbaa62c1566ea4d47c37a3460aefefe32"
+  },
+  {
+    "id": "gvc-bc1b3a7f460907712248bf91bb3dad60",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#bc1b3a7f460907712248bf91bb3dad60",
+    "publishedAt": "2016-01-19",
+    "event": "gvc-488277",
+    "textSha256": "cbe8ae6a13b8ff0da22956abbee35fa3efdc769010262e7e2633969d51961163"
+  },
+  {
+    "id": "gvc-40e4325dbd1f3acaf268a08ffb61d15d",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#40e4325dbd1f3acaf268a08ffb61d15d",
+    "publishedAt": "2016-02-28",
+    "event": "gvc-512274",
+    "textSha256": "62a3be762e74f2ad649adbe86cecb7b73860dca9ca7c3786bcf594e71a122c53"
+  },
+  {
+    "id": "gvc-fa939c64627e161e5cafe76ef1b42512",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#fa939c64627e161e5cafe76ef1b42512",
+    "publishedAt": "2015-07-30",
+    "event": "gvc-384676",
+    "textSha256": "03bb0ab4d7b4c1438c621beb64beff08c98eb03897209f74e831444fc7f27671"
+  },
+  {
+    "id": "gvc-78356b7876d015bed2c399a3392b0375",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#78356b7876d015bed2c399a3392b0375",
+    "publishedAt": "2016-12-02",
+    "event": "gvc-717395",
+    "textSha256": "21fb43398c7015eeba8a3432eaf4ee3023e321fafe4cb9177005dc2b6804bcc1"
+  },
+  {
+    "id": "gvc-233346d7e9cd3fc1d67cc46ae7ddc410",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#233346d7e9cd3fc1d67cc46ae7ddc410",
+    "publishedAt": "2016-12-07",
+    "event": "gvc-720830",
+    "textSha256": "950286d702055dea23afa77d699d14f3230b5512c9402bcaef8449dae92565de"
+  },
+  {
+    "id": "gvc-48aae1a3e266f1af6cecda03c6048db7",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#48aae1a3e266f1af6cecda03c6048db7",
+    "publishedAt": "2016-01-19",
+    "event": "gvc-486434",
+    "textSha256": "437a5c6492765fe6bbbe83f68cec1d94028ab556a5151b83a2d6ade5ed1a1aab"
+  },
+  {
+    "id": "gvc-af0edf9dd173b49fe8fd957a0f59360b",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#af0edf9dd173b49fe8fd957a0f59360b",
+    "publishedAt": "2015-10-18",
+    "event": "gvc-432535",
+    "textSha256": "171d0ee35d3aea16a93624e41e75a48e9819b1feea05ba433454558574770089"
+  },
+  {
+    "id": "gvc-bbba996c1547b2ca68f18a15cd5258f2",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#bbba996c1547b2ca68f18a15cd5258f2",
+    "publishedAt": "2016-12-14",
+    "event": "gvc-718272",
+    "textSha256": "0f70c2cf0412fa4d6a18049487f87a0a9bc9a8bdac834c2860a8dec577473de0"
+  },
+  {
+    "id": "gvc-471ea29c5998fd1deb08fbaddb292bcc",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#471ea29c5998fd1deb08fbaddb292bcc",
+    "publishedAt": "2015-04-15",
+    "event": "gvc-321156",
+    "textSha256": "d4ed1fa27ec8fdb986398c6540d1c915348576e1fa7eee2c5bf6542c6dd86c60"
+  },
+  {
+    "id": "gvc-c4db3b61a8dd6ca965be60dfc4ff082b",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#c4db3b61a8dd6ca965be60dfc4ff082b",
+    "publishedAt": "2016-08-28",
+    "event": "gvc-640899",
+    "textSha256": "ff0aa50475be185b998aee091b1c2badc4e0204b3bda66470ed5cbe083d78b3c"
+  },
+  {
+    "id": "gvc-6e7b16705f7de357a2d8313fee0fb72e",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#6e7b16705f7de357a2d8313fee0fb72e",
+    "publishedAt": "2014-12-27",
+    "event": "gvc-269677",
+    "textSha256": "b47b249eeb72b9e65471e05ebb7f5ad92354af71e8ba7d9048b685411fd56904"
+  },
+  {
+    "id": "gvc-6569c6e4f286684ac1f45b961e2cdbd9",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#6569c6e4f286684ac1f45b961e2cdbd9",
+    "publishedAt": "2016-07-13",
+    "event": "gvc-541769",
+    "textSha256": "02c8ea4f0c4a633e31d0372ecdb798b9040f07ff9f892d3c748e0c2653d630c0"
+  },
+  {
+    "id": "gvc-fd2ffd8dd9eb47c19fca13d82b955f0b",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#fd2ffd8dd9eb47c19fca13d82b955f0b",
+    "publishedAt": "2016-06-23",
+    "event": "gvc-586609",
+    "textSha256": "058d7d3d7377d892448d9fa302a5278bd00e293071f3671d3a9f46442f019736"
+  },
+  {
+    "id": "gvc-e79dd9e78a42c171077fea46454fd83a",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#e79dd9e78a42c171077fea46454fd83a",
+    "publishedAt": "2016-11-14",
+    "event": "gvc-699070",
+    "textSha256": "e0abdd2bdb85a2f854014758c34a61be5a981a78f3dd21f30899335144cdc00c"
+  },
+  {
+    "id": "gvc-82355068e1e4889529170d05de3df816",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#82355068e1e4889529170d05de3df816",
+    "publishedAt": "2016-09-28",
+    "event": "gvc-664896",
+    "textSha256": "1c2562f663b91debc0ff8301f991d091bf8a67b04ed5f310aeeb8609f84b77ed"
+  },
+  {
+    "id": "gvc-ecc398cc16f22eb1323b4411ef866651",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#ecc398cc16f22eb1323b4411ef866651",
+    "publishedAt": "2016-05-18",
+    "event": "gvc-561245",
+    "textSha256": "e5c6014f59cd3174cddfa61c835c6165f07c47e6e87391ed40529f9ba41c0164"
+  },
+  {
+    "id": "gvc-7eb4d004d1ce5c3700caaf0fded1f53b",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#7eb4d004d1ce5c3700caaf0fded1f53b",
+    "publishedAt": "2016-12-29",
+    "event": "gvc-734402",
+    "textSha256": "15fba8c7e67093ffdfa330c0d9d206d9810623f27955cee5af5075a708241a52"
+  },
+  {
+    "id": "gvc-ff3e1d8a3de2e9c6fc87f832e9478ea5",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#ff3e1d8a3de2e9c6fc87f832e9478ea5",
+    "publishedAt": "2015-08-24",
+    "event": "gvc-399367",
+    "textSha256": "2022b7015fa16b4b82f57a3280455f9b596fe74da037b224fcc03357972ce22a"
+  },
+  {
+    "id": "gvc-4e0fe55187262f0c2a0c313b63d31bee",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#4e0fe55187262f0c2a0c313b63d31bee",
+    "publishedAt": "2016-10-16",
+    "event": "gvc-677186",
+    "textSha256": "e87f3025ab5f352ea695d3c6a28b41de064e624d59838a82ff1be04c546c60a5"
+  },
+  {
+    "id": "gvc-b8bd65e6b28c12bcf19cd1542dfd44c6",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#b8bd65e6b28c12bcf19cd1542dfd44c6",
+    "publishedAt": "2015-12-10",
+    "event": "gvc-462496",
+    "textSha256": "2155f4bd4d4e4d18ebdf833cf221d89b10d35b22a1f22cb5cc51406d60417a95"
+  },
+  {
+    "id": "gvc-03939c2c52a1d4666f5207418302541a",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#03939c2c52a1d4666f5207418302541a",
+    "publishedAt": "2016-12-17",
+    "event": "gvc-727980",
+    "textSha256": "1aec34ba316ba1957f1878bee30c36cb8ae6fa83c3d2a8a6d512d3f2cae2966b"
+  },
+  {
+    "id": "gvc-22ef57eb6fd977dd3049efdb47fb8364",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#22ef57eb6fd977dd3049efdb47fb8364",
+    "publishedAt": "2016-07-06",
+    "event": "gvc-596989",
+    "textSha256": "0ae08a8bc502e56a5f9ba0ae2cc9d9f5750b8a1a3e5085beba0fdc9a569ef6cb"
+  },
+  {
+    "id": "gvc-12e2b810a1fb4038a5869f2e564ddae4",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#12e2b810a1fb4038a5869f2e564ddae4",
+    "publishedAt": "2015-06-22",
+    "event": "gvc-362259",
+    "textSha256": "e8f35a4eb27f50d5e28cbcf55e93514a4e4758b3fa077678ce4a3dd9a1798496"
+  },
+  {
+    "id": "gvc-9b916992459275083ea88313f52c7e8b",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#9b916992459275083ea88313f52c7e8b",
+    "publishedAt": "2016-11-29",
+    "event": "gvc-711467",
+    "textSha256": "8a898bf6a205468ab02f23d6fc80fe93105b79fc91460b9f5b36c8e2e0f5f3d6"
+  },
+  {
+    "id": "gvc-f6c84dc492a877f621ae0be5ba39ffdf",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#f6c84dc492a877f621ae0be5ba39ffdf",
+    "publishedAt": "2016-12-01",
+    "event": "gvc-715024",
+    "textSha256": "40c032937eaf12810ed35c118684a67e15c2020f3336588f1b2558b94c04f3db"
+  },
+  {
+    "id": "gvc-212b11777a3c44e91cbe6ec1e6cd9817",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#212b11777a3c44e91cbe6ec1e6cd9817",
+    "publishedAt": "2015-06-29",
+    "event": "gvc-364715",
+    "textSha256": "65e70a5099a5518668c23f00b55296111b1df8d793ad7260652e74fa0ac7dc6c"
+  },
+  {
+    "id": "gvc-b118a889333c1ee66e206057741ab758",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#b118a889333c1ee66e206057741ab758",
+    "publishedAt": "2015-01-02",
+    "event": "gvc-273773",
+    "textSha256": "58ef71d3cac866787fc0e38eff0ee2fc629d32ca7e628ef631ee52c8295a0e08"
+  },
+  {
+    "id": "gvc-7512c69ea9171bc03f2e935eec798751",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#7512c69ea9171bc03f2e935eec798751",
+    "publishedAt": "2016-12-13",
+    "event": "gvc-725323",
+    "textSha256": "767cef70d2a423606defef922e6f790254f238776b973ea9be58d13e415d04f5"
+  },
+  {
+    "id": "gvc-268559a68e96ad450222fc1f3bbbb987",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#268559a68e96ad450222fc1f3bbbb987",
+    "publishedAt": "2014-10-18",
+    "event": "gvc-207298",
+    "textSha256": "a19115a7c11066c85645ce2dda197cdd764e00892da9dc5f0bcaffa7cc30b67f"
+  },
+  {
+    "id": "gvc-289241ee4fdec83be90bdc1222c10d0c",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#289241ee4fdec83be90bdc1222c10d0c",
+    "publishedAt": "2015-08-03",
+    "event": "gvc-386225",
+    "textSha256": "e8a7f3d77eb011588ee79d1cd6ddde6fc94edd3da530e63235820040283eeb16"
+  },
+  {
+    "id": "gvc-1424b8bc9e983d29ce655860d1d3d380",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#1424b8bc9e983d29ce655860d1d3d380",
+    "publishedAt": "2016-08-08",
+    "event": "gvc-624533",
+    "textSha256": "76ac1fd1e198bcd42707d5e295eb09799c7f9d9df72bfcfa646274c1501dadba"
+  },
+  {
+    "id": "gvc-eee9e97c613d588579bc55f8fc9ad399",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#eee9e97c613d588579bc55f8fc9ad399",
+    "publishedAt": "2016-01-19",
+    "event": "gvc-487996",
+    "textSha256": "3d749b9d4bb48dc455d41851d8fcd34a6b6f0f60a61d70018816ba2eeb5eeae2"
+  },
+  {
+    "id": "gvc-cd1ef59378ca444e31caaeda85aef8d4",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#cd1ef59378ca444e31caaeda85aef8d4",
+    "publishedAt": "2016-06-30",
+    "event": "gvc-586764",
+    "textSha256": "eac9e149eca39f522597766ff701bbf2f0c9de15e9c52b1097c6db17d19b0a33"
+  },
+  {
+    "id": "gvc-5ae549c18a8c71ca742beafb2e14a883",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#5ae549c18a8c71ca742beafb2e14a883",
+    "publishedAt": "2014-08-04",
+    "event": "gvc-168844",
+    "textSha256": "d64f9239da71fdbb8b65620bc60a3115038df7d37902ff66d99e02a715640317"
+  },
+  {
+    "id": "gvc-89b916c6f2481fc374e55b151394c78c",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#89b916c6f2481fc374e55b151394c78c",
+    "publishedAt": "2016-12-12",
+    "event": "gvc-724088",
+    "textSha256": "410c42aebaea206ad8931630822e5751ae5dbbec596dec8910393b2e1c54bb82"
+  },
+  {
+    "id": "gvc-10602afbefa3fef76450b35ca0ef6ea8",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#10602afbefa3fef76450b35ca0ef6ea8",
+    "publishedAt": "2016-04-07",
+    "event": "gvc-525329",
+    "textSha256": "189eb8c80cbd8c3fe2e3fb3c131179715087ccec4ff1d5ed58c9e362c5b5b742"
+  },
+  {
+    "id": "gvc-fccd369b0291a47049bcdded50d0f238",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#fccd369b0291a47049bcdded50d0f238",
+    "publishedAt": "2016-10-01",
+    "event": "gvc-666472",
+    "textSha256": "d450a8c11be587c58251a87990420a44281e1471bffa9824960f461a957479cc"
+  },
+  {
+    "id": "gvc-70c1532bea64188eb0292e85c27d5a67",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#70c1532bea64188eb0292e85c27d5a67",
+    "publishedAt": "2016-11-16",
+    "event": "gvc-701425",
+    "textSha256": "0c79f3fdda8d0680f82cb6e8a995e8af5290e5ba973fe422a54a9bf8b6fb6321"
+  },
+  {
+    "id": "gvc-6d38db1a0b247ddb9e386ac1bb7ffd50",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#6d38db1a0b247ddb9e386ac1bb7ffd50",
+    "publishedAt": "2016-09-26",
+    "event": "gvc-662638",
+    "textSha256": "f6d631fd6b902ed337fe4fce0d39c5a21658b6d5cdcd6f6b6b85bda8e37efc33"
+  },
+  {
+    "id": "gvc-ffb5eb7c1852fb7b5a017f904a19dd31",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#ffb5eb7c1852fb7b5a017f904a19dd31",
+    "publishedAt": "2016-08-15",
+    "event": "gvc-628206",
+    "textSha256": "03acdbbe1fec61756767cdae89794d04f895a8f288fe87d09ad4a0527225d450"
+  },
+  {
+    "id": "gvc-f31dd0affef6590e8f29cc194664a399",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#f31dd0affef6590e8f29cc194664a399",
+    "publishedAt": "2016-12-21",
+    "event": "gvc-730637",
+    "textSha256": "3e803e5003b733d93f63a92cc4a5dbda1dd874190e5379a93585b37eb1b0553b"
+  },
+  {
+    "id": "gvc-f1448cc8275d5f39c8814dc07f5ba877",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#f1448cc8275d5f39c8814dc07f5ba877",
+    "publishedAt": "2016-12-02",
+    "event": "gvc-700468",
+    "textSha256": "ef8ac37b127fb0f4f76c9e07a9951db3d1251432c86ffce83e225a03466fd851"
+  },
+  {
+    "id": "gvc-841d24273177840ae3a468feadf40f69",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#841d24273177840ae3a468feadf40f69",
+    "publishedAt": "2015-05-30",
+    "event": "gvc-338580",
+    "textSha256": "a44d13ccec998770cd8462e352d5b21f2f543cde3365a767f97fce27d7982016"
+  },
+  {
+    "id": "gvc-e47c446239ad705672508103644726df",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#e47c446239ad705672508103644726df",
+    "publishedAt": "2016-11-27",
+    "event": "gvc-711921",
+    "textSha256": "a288828e73c949d7916b4c11d925479fa70746f1bf548fa136b7849067e186ad"
+  },
+  {
+    "id": "gvc-962fcccfe6ed3aee58a83b79b628229b",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#962fcccfe6ed3aee58a83b79b628229b",
+    "publishedAt": "2015-01-26",
+    "event": "gvc-282956",
+    "textSha256": "ec6795f7e1f191f6c09f767d0ca0902d663291df77ab83ed5360d9748cd98e28"
+  },
+  {
+    "id": "gvc-e6c36fb53d390e7287673fb0da8abdda",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#e6c36fb53d390e7287673fb0da8abdda",
+    "publishedAt": "2015-11-11",
+    "event": "gvc-443803",
+    "textSha256": "fba28e91f0dedcba07109a92eebad2ec9793e905d2cf77f99531c8d2a3b3d7ee"
+  },
+  {
+    "id": "gvc-8593406845648ee4facc8ba4532255da",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#8593406845648ee4facc8ba4532255da",
+    "publishedAt": "2015-05-04",
+    "event": "gvc-302749",
+    "textSha256": "971d32743c99f8d5151216fc4448473ce2513c894be653c1240df0544904fdc8"
+  },
+  {
+    "id": "gvc-8a82a70b851c000fd66f5871d2a7c32a",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#8a82a70b851c000fd66f5871d2a7c32a",
+    "publishedAt": "2016-05-25",
+    "event": "gvc-556993",
+    "textSha256": "f50780adc8306cabe36fa63a3839ee63e5ef39da6294bc704b4a36303d1ef3d7"
+  },
+  {
+    "id": "gvc-8b29f7370074f737dc8e3aa6376015be",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#8b29f7370074f737dc8e3aa6376015be",
+    "publishedAt": "2015-06-23",
+    "event": "gvc-362654",
+    "textSha256": "7cb110993c949838723bd1dbea622e8901bec70715885970dfafb1e8b521d6af"
+  },
+  {
+    "id": "gvc-309fcffb73a1bdf875514608a4992044",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#309fcffb73a1bdf875514608a4992044",
+    "publishedAt": "2013-07-16",
+    "event": "gvc-478948",
+    "textSha256": "06276cc8aa809d7474c722b34719fb8d4fff80335b0fa8d3e84437d30fd55a30"
+  },
+  {
+    "id": "gvc-6bb6fc4a33e8039736c0c6ceea18c934",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#6bb6fc4a33e8039736c0c6ceea18c934",
+    "publishedAt": "2016-07-28",
+    "event": "gvc-613826",
+    "textSha256": "761b730a7451179f295b7feaf78de417fb982a0170f482ad4ae067135c73902a"
+  },
+  {
+    "id": "gvc-54aa62d5a6943876832ab8ef5fe820af",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#54aa62d5a6943876832ab8ef5fe820af",
+    "publishedAt": "2016-06-28",
+    "event": "gvc-590958",
+    "textSha256": "6a9b2b104b7291be8701032ea0fd13beadae1f5a5e8c0a51c395c6f864e9d826"
+  },
+  {
+    "id": "gvc-3fb64fb44952dcea0e379ef5acc94ff8",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#3fb64fb44952dcea0e379ef5acc94ff8",
+    "publishedAt": "2016-05-27",
+    "event": "gvc-566863",
+    "textSha256": "da565be6689cd49f40f0fb20ce6e3cc6a0ad8394efbcb8c0f7829afc71896fd3"
+  },
+  {
+    "id": "gvc-1666252d00f7308e49e3563ae802763c",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#1666252d00f7308e49e3563ae802763c",
+    "publishedAt": "2015-03-02",
+    "event": "gvc-273773",
+    "textSha256": "c1d28b11b3c53faccd5f46c1e7ef96a3d171edec08ddd9b4762b0e98d84d7864"
+  },
+  {
+    "id": "gvc-841a827f1a6fcb09b4f9c8080d0d1ffa",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#841a827f1a6fcb09b4f9c8080d0d1ffa",
+    "publishedAt": "2014-12-29",
+    "event": "gvc-269677",
+    "textSha256": "0b074d18334410a94686b03f5f96d153603de3b19bd1f339a943a1df20008f80"
+  },
+  {
+    "id": "gvc-882bee6639aa65b68f74d9c823083299",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#882bee6639aa65b68f74d9c823083299",
+    "publishedAt": "2015-10-09",
+    "event": "gvc-427621",
+    "textSha256": "9484300e4ce79d6a527d5b4b8b20b59bc20f12764c0e6089b51cd601e1da10cd"
+  },
+  {
+    "id": "gvc-bb317d37a0574520b3705ec77510c854",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#bb317d37a0574520b3705ec77510c854",
+    "publishedAt": "2016-03-21",
+    "event": "gvc-525329",
+    "textSha256": "88fd9eb2f1c2855836de301192ed510da7a0d4b9ae9306fb98c484444df08e86"
+  },
+  {
+    "id": "gvc-ad73756afcf6468951e52dd2340fc421",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#ad73756afcf6468951e52dd2340fc421",
+    "publishedAt": "2013-04-18",
+    "event": "gvc-484317",
+    "textSha256": "2df0bd390b5434fe40e937ae04c0932a46c47e208c4d4f98c2603e4cba4c6b44"
+  },
+  {
+    "id": "gvc-cbd025064f7e8e4f763c1fcd8ddd6ef8",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#cbd025064f7e8e4f763c1fcd8ddd6ef8",
+    "publishedAt": "2016-10-31",
+    "event": "gvc-689518",
+    "textSha256": "83b81202a14ad7688e703afa7e2d53c8b96c83ead868e1973f1b44cafe844bb9"
+  },
+  {
+    "id": "gvc-fd54c8aabc7227ebf1db9d56e4c5b185",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#fd54c8aabc7227ebf1db9d56e4c5b185",
+    "publishedAt": "2016-12-28",
+    "event": "gvc-734408",
+    "textSha256": "963609a61bd33723a98572788f0a10b1004690deea9cddf6da39a7b3e72b2f59"
+  },
+  {
+    "id": "gvc-558c3b514b0c387be30701c97c321a14",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#558c3b514b0c387be30701c97c321a14",
+    "publishedAt": "2016-01-19",
+    "event": "gvc-488277",
+    "textSha256": "74aa8f3b131f7a435fa2d96319bf907b71b7e077b54135a45491fedc03e1b395"
+  },
+  {
+    "id": "gvc-1a7b58474fb4a3f6de4e57b77bd85c31",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#1a7b58474fb4a3f6de4e57b77bd85c31",
+    "publishedAt": "2016-01-21",
+    "event": "gvc-490954",
+    "textSha256": "64b422ec7b66ae8e716780878aab3006459a904c135a586581f40a42e9fba704"
+  },
+  {
+    "id": "gvc-5217696ae42be2ed43dd8971ae9f16c9",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#5217696ae42be2ed43dd8971ae9f16c9",
+    "publishedAt": "2016-03-19",
+    "event": "gvc-525119",
+    "textSha256": "b2179a2deb5e0aeb54d24a7d4f8d396f89c948a5a4a269be8f65b138b12ae0b4"
+  },
+  {
+    "id": "gvc-1e5419ea2d9cb57b163788a3e4568300",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#1e5419ea2d9cb57b163788a3e4568300",
+    "publishedAt": "2014-08-15",
+    "event": "gvc-170442",
+    "textSha256": "cafc6dbb0a28f02c0fd9194fba0e84422ff3d1ae3a2b5b59b5a40fb0221acc8e"
+  },
+  {
+    "id": "gvc-8e1b9f90ecbb9f7ec9489c0935594123",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#8e1b9f90ecbb9f7ec9489c0935594123",
+    "publishedAt": "2016-08-31",
+    "event": "gvc-643909",
+    "textSha256": "a3bb382958bfcb8ef648281b06c90945133d20bc68a9afb5bc8660d0b1892548"
+  },
+  {
+    "id": "gvc-e1f1adf88d62e717668e95ef6812bf33",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#e1f1adf88d62e717668e95ef6812bf33",
+    "publishedAt": "2016-03-20",
+    "event": "gvc-525486",
+    "textSha256": "b30e7fc9e25d462bc443bb4f05871a587f29659b8c8641a7b6c10fb1a09eba6e"
+  },
+  {
+    "id": "gvc-d25a1dc04617bc15a9ac905c2390034f",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#d25a1dc04617bc15a9ac905c2390034f",
+    "publishedAt": "2016-04-11",
+    "event": "gvc-537974",
+    "textSha256": "44a5232b10a474a9e36e1f9f1dae1598b1a800aaffd6e8242a92943226740da4"
+  },
+  {
+    "id": "gvc-023a982717b73ede341d0a7a195ab000",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#023a982717b73ede341d0a7a195ab000",
+    "publishedAt": "2016-11-29",
+    "event": "gvc-710200",
+    "textSha256": "559868a27962f43f97d3208909d799a66e04decde04b94a71db5104c4eedb39c"
+  },
+  {
+    "id": "gvc-2346d59014fb7690e58ac59ec525d4d9",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#2346d59014fb7690e58ac59ec525d4d9",
+    "publishedAt": "2016-06-17",
+    "event": "gvc-583179",
+    "textSha256": "c9795c7449358c98612f6f0faf924adba75b385231a0b293454c178509b47664"
+  },
+  {
+    "id": "gvc-b5e597eb2b3d8f49b8de2b8d59a4a3fd",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#b5e597eb2b3d8f49b8de2b8d59a4a3fd",
+    "publishedAt": "2014-11-23",
+    "event": "gvc-223936",
+    "textSha256": "0f93102631eeb8d873ea0d7e56f6094df3f27290b85eadd2b98c8750cbdf955c"
+  },
+  {
+    "id": "gvc-b032a7c77c198520b427a6e978f34eed",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#b032a7c77c198520b427a6e978f34eed",
+    "publishedAt": "2015-10-18",
+    "event": "gvc-432604",
+    "textSha256": "9536c04a178a4dde1b5a281ae2c84b647ba3de67597a05f83b474927ecf1e8a3"
+  },
+  {
+    "id": "gvc-4440cd0bd02b1ebf657260e02627d925",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#4440cd0bd02b1ebf657260e02627d925",
+    "publishedAt": "2016-11-04",
+    "event": "gvc-693003",
+    "textSha256": "36b412a11b97d62490bb025b4fc1daa0954fb311a554ab4a1ac1a8a9745766d4"
+  },
+  {
+    "id": "gvc-c13244c36b5100379053e10aa9fa3257",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#c13244c36b5100379053e10aa9fa3257",
+    "publishedAt": "2016-08-08",
+    "event": "gvc-624215",
+    "textSha256": "4e54e8629b75ec9e119730189b4bc85dbfff6e9527abcce1c596443553db3137"
+  },
+  {
+    "id": "gvc-498dfc4cc1514c050126997864f39b0a",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#498dfc4cc1514c050126997864f39b0a",
+    "publishedAt": "2016-10-18",
+    "event": "gvc-675106",
+    "textSha256": "fa393f0322425b8129d46d0181a310fdc75d13734af155a71585bfd62992ee23"
+  },
+  {
+    "id": "gvc-c657b5e13384a329d6909243da721285",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#c657b5e13384a329d6909243da721285",
+    "publishedAt": "2016-07-27",
+    "event": "gvc-613903",
+    "textSha256": "7286653d3e6c84f5151b9127c0d7a3e3bcca00316dbf11c6729715e00efd0ffa"
+  },
+  {
+    "id": "gvc-01a3575145d10f448d43c04724d4b2af",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#01a3575145d10f448d43c04724d4b2af",
+    "publishedAt": "2015-12-30",
+    "event": "gvc-470044",
+    "textSha256": "57eadfb6cd90b58351932ec9a576f58810695a3c6a40393d3911179afe5a0dd7"
+  },
+  {
+    "id": "gvc-25accaa6aa542d802574075df91ba8d9",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#25accaa6aa542d802574075df91ba8d9",
+    "publishedAt": "2016-07-04",
+    "event": "gvc-594187",
+    "textSha256": "044e0019e1b7bb5180c992b587448e5b5701e2f2f20f1ebf1489d686949a158b"
+  },
+  {
+    "id": "gvc-436247e61eec241a451fbda6c6724131",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#436247e61eec241a451fbda6c6724131",
+    "publishedAt": "2016-02-29",
+    "event": "gvc-513903",
+    "textSha256": "201b22e623588d2ae412f9e7bcab05dff4bdbb3e42bf3be55ed5a925c7af4ed6"
+  },
+  {
+    "id": "gvc-21b11127aeb92591276a5de754759053",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#21b11127aeb92591276a5de754759053",
+    "publishedAt": "2015-02-18",
+    "event": "gvc-295502",
+    "textSha256": "b209109168161bf65bfa97d0bf42cb65fd4f0bf69a1b8c4aec2de2516f5ec472"
+  },
+  {
+    "id": "gvc-017920da87a5daacd48a426e48aed61e",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#017920da87a5daacd48a426e48aed61e",
+    "publishedAt": "2014-09-14",
+    "event": "gvc-190615",
+    "textSha256": "8b33d60f8249281e6e0c6b34b861565b48f0282ea93908fcf41aca17cbef3be5"
+  },
+  {
+    "id": "gvc-f7761e64753f92f2e0b45d800551c148",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#f7761e64753f92f2e0b45d800551c148",
+    "publishedAt": "2016-01-25",
+    "event": "gvc-492546",
+    "textSha256": "d94a899c79cd5479dfe022c4bc011d0246295ae558f39adfe200ce9f434f4d25"
+  },
+  {
+    "id": "gvc-72cae750af330201fc0465cb6a19da7a",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#72cae750af330201fc0465cb6a19da7a",
+    "publishedAt": "2016-10-04",
+    "event": "gvc-669251",
+    "textSha256": "2e8ba44d62efd35910fc85fb0fa04dc5ce60e29947e8515a86726d957e8220ce"
+  },
+  {
+    "id": "gvc-78250909785d59195ea8e014389e8eec",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#78250909785d59195ea8e014389e8eec",
+    "publishedAt": "2015-05-12",
+    "event": "gvc-338580",
+    "textSha256": "1746a39f8df6403d41fe1121c625e261c0859fb6ac8301876f83702bf25f9d2f"
+  },
+  {
+    "id": "gvc-2500ae9282f44f560e3716e4ba117385",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#2500ae9282f44f560e3716e4ba117385",
+    "publishedAt": "2016-08-29",
+    "event": "gvc-641499",
+    "textSha256": "f3fb4457367923492eb38436f16215a57855aa6f88faeb6e2698f10c02b7c6cc"
+  },
+  {
+    "id": "gvc-3ab92e0f10f6bc58b3c7a567787256a6",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#3ab92e0f10f6bc58b3c7a567787256a6",
+    "publishedAt": "2016-10-20",
+    "event": "gvc-681768",
+    "textSha256": "0e3d54361c3e9ea0b95726cb740079fe4dbd51ca83d338e23b7bff86972ba6b2"
+  },
+  {
+    "id": "gvc-65231e1537906dd8538c7c65767b639a",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#65231e1537906dd8538c7c65767b639a",
+    "publishedAt": "2016-07-28",
+    "event": "gvc-613826",
+    "textSha256": "3634c85c6d21b025fadd8bc9980bcb5066a04df3cfc8e29b72d9e89deaaffc78"
+  },
+  {
+    "id": "gvc-daad955f2f679451173e2038e359819b",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#daad955f2f679451173e2038e359819b",
+    "publishedAt": "2016-12-02",
+    "event": "gvc-700468",
+    "textSha256": "207947c3c5866aec6b6d13adab1efe924973d4d701c99181932954ea9bb5de45"
+  },
+  {
+    "id": "gvc-af2169d4613cbdb7219b3c0f177526b2",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#af2169d4613cbdb7219b3c0f177526b2",
+    "publishedAt": "2016-03-01",
+    "event": "gvc-513903",
+    "textSha256": "0ae4d370a736d2c4b905e288a9f673307745ed8b354ba33715c26f09726f3328"
+  },
+  {
+    "id": "gvc-666936c62aa6a5074f151422fe6259c9",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#666936c62aa6a5074f151422fe6259c9",
+    "publishedAt": "2016-12-17",
+    "event": "gvc-728026",
+    "textSha256": "19775f3e6d91fba02a80c61ea5bb6ef71b0f9f0b1a79c75bd23ea4727859b27b"
+  },
+  {
+    "id": "gvc-f968a5d1e4b39725fd236017c480fd75",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#f968a5d1e4b39725fd236017c480fd75",
+    "publishedAt": "2015-12-07",
+    "event": "gvc-461515",
+    "textSha256": "33993c1d92a2f705d76665d2e2cac0801f6e5046516771778c2528f2f45bf58c"
+  },
+  {
+    "id": "gvc-aa1bbe11063a8d8c1abdd478052c9c7a",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#aa1bbe11063a8d8c1abdd478052c9c7a",
+    "publishedAt": "2015-09-13",
+    "event": "gvc-413257",
+    "textSha256": "1504bcb5645e1b247a66e5db99dfd3e27a89f8497cd8bfa733e832c40024ffb8"
+  },
+  {
+    "id": "gvc-df7d6d8d73eefbe05276f782512e2801",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#df7d6d8d73eefbe05276f782512e2801",
+    "publishedAt": "2016-11-12",
+    "event": "gvc-699070",
+    "textSha256": "1d0a963a2c970bd5d757e3aee7afba135bc7e05ca09529295f23cf0bd861f5cf"
+  },
+  {
+    "id": "gvc-c54b9f1c86cde58f421e42ee9a8881c3",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#c54b9f1c86cde58f421e42ee9a8881c3",
+    "publishedAt": "2015-01-24",
+    "event": "gvc-282956",
+    "textSha256": "8b1e25016a7d77c0765eb74e2f0f82dc1ea9ec4c13bca22cfceb336062221bb8"
+  },
+  {
+    "id": "gvc-5565a2d05c26f71871509eb0f6ce67e9",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#5565a2d05c26f71871509eb0f6ce67e9",
+    "publishedAt": "2016-11-23",
+    "event": "gvc-708277",
+    "textSha256": "c6abd3e7f658992d2df298a41b1302a08624872ed581fb6a8c32ca2088ac4652"
+  },
+  {
+    "id": "gvc-9d4df84b7fbea02c3d35c3ee7772b3e6",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#9d4df84b7fbea02c3d35c3ee7772b3e6",
+    "publishedAt": "2016-12-06",
+    "event": "gvc-719606",
+    "textSha256": "a3192de24c45aa5a30e299fcdec6ceeb4ac22d8228ab22a1032de46f012964d1"
+  },
+  {
+    "id": "gvc-4f06cad47295fb9c65ad878b54086b68",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#4f06cad47295fb9c65ad878b54086b68",
+    "publishedAt": "2016-05-18",
+    "event": "gvc-561245",
+    "textSha256": "86f5ebbacbf7797a4d87677781394b22a2eecc33032123976a6e88f21c752228"
+  },
+  {
+    "id": "gvc-8fe5284f62d16842c4b81e47290fd298",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#8fe5284f62d16842c4b81e47290fd298",
+    "publishedAt": "2016-11-03",
+    "event": "gvc-692025",
+    "textSha256": "a3a27af926b3764c7ac5ea5b314adc538f3d41aadd405b12b0007c977ef06088"
+  },
+  {
+    "id": "gvc-734fe95f5141acd505319646f0652898",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#734fe95f5141acd505319646f0652898",
+    "publishedAt": "2015-11-07",
+    "event": "gvc-443803",
+    "textSha256": "777585c04f8fda56e7da642e81aea5ba1a6a825b8a504a83121ec470606d5a1e"
+  },
+  {
+    "id": "gvc-ee195afd2dd19210881ca100b8a506e1",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#ee195afd2dd19210881ca100b8a506e1",
+    "publishedAt": "2015-06-28",
+    "event": "gvc-365252",
+    "textSha256": "6164a58738f2bceab2a3da27ba05188ecb504ec631ee762983670c152c51c92b"
+  },
+  {
+    "id": "gvc-89b219b499113b330454bd27612e4728",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#89b219b499113b330454bd27612e4728",
+    "publishedAt": "2016-12-05",
+    "event": "gvc-719325",
+    "textSha256": "57e6bb4654a0c3c0f6c39c3bf8c19dd0a84c010c31a7786fba9c278211b5dd8f"
+  },
+  {
+    "id": "gvc-8974b84a606f82cac1e7dec3fe72fcba",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#8974b84a606f82cac1e7dec3fe72fcba",
+    "publishedAt": "2016-06-07",
+    "event": "gvc-571922",
+    "textSha256": "02a9c71a0e2601c1aef6d50f8ca1d6cd79dd11e4fe75ef882310b1edc61f0d95"
+  },
+  {
+    "id": "gvc-af848081e21ad60951fb3ee2e951488d",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#af848081e21ad60951fb3ee2e951488d",
+    "publishedAt": "2015-03-13",
+    "event": "gvc-306048",
+    "textSha256": "2b90d6f4e199a81448eb20fc43a633fc2a26de6b95c702c709900e8cb1034019"
+  },
+  {
+    "id": "gvc-be72bc254d808cdf561a42cec76fdeae",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#be72bc254d808cdf561a42cec76fdeae",
+    "publishedAt": "2016-06-29",
+    "event": "gvc-591237",
+    "textSha256": "a55706fe5b79919cba30df66fdc00b7813ce90072c5ef4ea77224c0522d830d7"
+  },
+  {
+    "id": "gvc-d811dcfd1fb745fcd74479902f61ce31",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#d811dcfd1fb745fcd74479902f61ce31",
+    "publishedAt": "2016-02-23",
+    "event": "gvc-509471",
+    "textSha256": "b3176947f0c6aca4f79a0db68e59db831c779b9a2a240490b96abedb5250a0af"
+  },
+  {
+    "id": "gvc-3a3835f884bb6831d5c6145ffc642631",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#3a3835f884bb6831d5c6145ffc642631",
+    "publishedAt": "2013-04-18",
+    "event": "gvc-484317",
+    "textSha256": "823a4fc2b1d784215474fc6a95ca9ecb1115e08d04f081cfb4f96856398895ec"
+  },
+  {
+    "id": "gvc-2bbecd575f30b22c041e138ad53c45f7",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#2bbecd575f30b22c041e138ad53c45f7",
+    "publishedAt": "2015-08-27",
+    "event": "gvc-402674",
+    "textSha256": "766095d107109957c290f6c866f2da0a7380f20208dfa0cb42defa17fa1e3abc"
+  },
+  {
+    "id": "gvc-f273534e3f37b415a5f5e0b03346928a",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#f273534e3f37b415a5f5e0b03346928a",
+    "publishedAt": "2016-12-07",
+    "event": "gvc-721079",
+    "textSha256": "439a2fb8490daf6e24e9bdc0e7fc2bb133987124ceef984829c23c3ca1acae25"
+  },
+  {
+    "id": "gvc-8d1e01e321f3ff22248da27687341838",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#8d1e01e321f3ff22248da27687341838",
+    "publishedAt": "2016-06-19",
+    "event": "gvc-583879",
+    "textSha256": "cdc2c0eac3a35dda299acac988b51af17eb493d879e0c302fcbacbc896592c22"
+  },
+  {
+    "id": "gvc-a9fb9cda2a045c898445aa439256dda6",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#a9fb9cda2a045c898445aa439256dda6",
+    "publishedAt": "2015-01-02",
+    "event": "gvc-272869",
+    "textSha256": "217c9d8652a8d621aa097b22eb6af5f87cac343ba3e6148620bb0fffdefc50ad"
+  },
+  {
+    "id": "gvc-ba36803d6afda32f9eaf33e7cbd70858",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#ba36803d6afda32f9eaf33e7cbd70858",
+    "publishedAt": "2016-06-28",
+    "event": "gvc-590958",
+    "textSha256": "dba251fa6cb5dc4a164183cdeaae8b529d04745e709c8f68b351f58742858c6c"
+  },
+  {
+    "id": "gvc-65f8f3e658c4d7b1600bfb3140ea3d49",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#65f8f3e658c4d7b1600bfb3140ea3d49",
+    "publishedAt": "2016-12-15",
+    "event": "gvc-720830",
+    "textSha256": "21470473b4a80d9b10fea482b974e5d9e3e895b38b31ac7210aeaa0dd1dd2da7"
+  },
+  {
+    "id": "gvc-12a5cf76f14a6703d773b6ed160620f5",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#12a5cf76f14a6703d773b6ed160620f5",
+    "publishedAt": "2016-06-19",
+    "event": "gvc-583879",
+    "textSha256": "ea1153e4f848223d09d208062eba3e0226c146e48ebe733b035539cb8c7b2ecd"
+  },
+  {
+    "id": "gvc-66a712c01e92330e40656beca7ea32e8",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#66a712c01e92330e40656beca7ea32e8",
+    "publishedAt": "2016-10-16",
+    "event": "gvc-677316",
+    "textSha256": "6cfe19ff9e32a1c70d4c81bb2aa265d50fbb136244b6a183aca5f8b78c36f1ac"
+  },
+  {
+    "id": "gvc-08aff8ef3b50b131c5b642353d139cdc",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#08aff8ef3b50b131c5b642353d139cdc",
+    "publishedAt": "2016-04-18",
+    "event": "gvc-541769",
+    "textSha256": "18afd7a8cff3df91b790221eaa5c0c40f5151bd795e32292bf83cd1606213988"
+  },
+  {
+    "id": "gvc-66d30db65488c2b02e5882d7e762b5c3",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#66d30db65488c2b02e5882d7e762b5c3",
+    "publishedAt": "2016-10-23",
+    "event": "gvc-683045",
+    "textSha256": "3bf219f408815f732729001f43b84a95392ad71e526bd6ae85c6892c0650716a"
+  },
+  {
+    "id": "gvc-51016b433f260939b8832089b62ee1d7",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#51016b433f260939b8832089b62ee1d7",
+    "publishedAt": "2015-08-22",
+    "event": "gvc-399503",
+    "textSha256": "d6a2f5e4b0ed01a454d5f1697f987b9d22b141270bd31c77fc24bb9fe5b6d3be"
+  },
+  {
+    "id": "gvc-72c717a5435ebc2cee69630463be25b5",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#72c717a5435ebc2cee69630463be25b5",
+    "publishedAt": "2015-08-09",
+    "event": "gvc-390960",
+    "textSha256": "5fb04f019127a377ed7a6503ad081d74ba5f3bdab041a900455877cfefdbe0b0"
+  },
+  {
+    "id": "gvc-b38b3726bdb8fc28186f88217dfa7c7b",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#b38b3726bdb8fc28186f88217dfa7c7b",
+    "publishedAt": "2016-07-24",
+    "event": "gvc-610379",
+    "textSha256": "35c59da584d748debd73ab4551122890550dcd8e22b972b39e0e05249ca934a7"
+  },
+  {
+    "id": "gvc-28ccf391ab048b2782f326ceee021cbd",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#28ccf391ab048b2782f326ceee021cbd",
+    "publishedAt": "2016-03-21",
+    "event": "gvc-525119",
+    "textSha256": "9cdfebfd6bb2d9a96bee536c05054d33fcd0a89f9376b53f58f052ea9e74c300"
+  },
+  {
+    "id": "gvc-72f807c4088df23c1291c37f7a45113d",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#72f807c4088df23c1291c37f7a45113d",
+    "publishedAt": "2016-05-13",
+    "event": "gvc-558618",
+    "textSha256": "396baa9f6ccbeefbf54a62f0f04178b6aa87d2f7c0226943ce63a8d2a8e084f3"
+  },
+  {
+    "id": "gvc-4a3283c9adfa72dec85f6296ce819c9c",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#4a3283c9adfa72dec85f6296ce819c9c",
+    "publishedAt": "2016-11-07",
+    "event": "gvc-693003",
+    "textSha256": "16e68041948a93f48cbeb3fc9eb117046f6587a935fd2b2748ddf1744d3f0101"
+  },
+  {
+    "id": "gvc-9f47096fc23b0730c1120df0e8d10061",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#9f47096fc23b0730c1120df0e8d10061",
+    "publishedAt": "2015-06-12",
+    "event": "gvc-356090",
+    "textSha256": "b230774355c37175fb14deb360df57df0acbe690c3da2f2bb8344617a351c99b"
+  },
+  {
+    "id": "gvc-4d9687e621267401a4580433e4f8b9b9",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#4d9687e621267401a4580433e4f8b9b9",
+    "publishedAt": "2016-06-20",
+    "event": "gvc-583177",
+    "textSha256": "1c90b7e70b7c6959fb96b1d03952e41e2f8fae1abb13bc401ecfb6457cccfc7d"
+  },
+  {
+    "id": "gvc-f7fb0a9fe3683b68b44a2d3d1f826aa5",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#f7fb0a9fe3683b68b44a2d3d1f826aa5",
+    "publishedAt": "2016-12-11",
+    "event": "gvc-723429",
+    "textSha256": "a45a391bc66270621cc85a6be13d94837ce194a019f647fe397d27fd5cde0743"
+  },
+  {
+    "id": "gvc-4e9255b6f2f5e4cf549f7c6f02b204d0",
+    "source": "https://github.com/cltl/GunViolenceCorpus/blob/1d80c3a21bb896520dae9e047d70d598279c0df6/verbose.conll#4e9255b6f2f5e4cf549f7c6f02b204d0",
+    "publishedAt": "2016-09-30",
+    "event": "gvc-666472",
+    "textSha256": "072645e754276b88d5ccf9b32951d6fefabe1b511fb7c6158e07e8d673d9b30c"
+  }
+]

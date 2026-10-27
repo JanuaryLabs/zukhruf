@@ -1,0 +1,101 @@
+{
+  "entries": [
+    {
+      "design": "3130",
+      "acceptedAt": "2026-10-27T10:51:15.535Z",
+      "embeddingModel": "embeddinggemma-2",
+      "sets": {
+        "anthropic-outlets": {
+          "role": "training",
+          "labelsSha256": "84afb680406f6a8b1c785f9bf1029e21faf83798f687ff88605c0daf8cdba027",
+          "reports": 816,
+          "pair": {
+            "precision": 0.306,
+            "recall": 0.313,
+            "f05": 0.307
+          },
+          "bcubed": {
+            "precision": 0.8,
+            "recall": 0.865,
+            "f05": 0.812
+          }
+        },
+        "dev2938": {
+          "role": "training",
+          "labelsSha256": "f9bb1d77f980eaee174dfad5d89ab9a6420eacee8823c50b1ed076907afed4b6",
+          "reports": 217,
+          "pair": {
+            "precision": 0.235,
+            "recall": 0.286,
+            "f05": 0.244
+          },
+          "bcubed": {
+            "precision": 0.945,
+            "recall": 0.973,
+            "f05": 0.95
+          }
+        },
+        "ecbplus": {
+          "role": "training",
+          "labelsSha256": "f2277218175f2f6ce16c45ec59f527bbb7414120cd95aa915267904a31ca5474",
+          "reports": 982,
+          "pair": {
+            "precision": 0.886,
+            "recall": 0.793,
+            "f05": 0.866
+          },
+          "bcubed": {
+            "precision": 0.949,
+            "recall": 0.798,
+            "f05": 0.915
+          }
+        },
+        "fresh2957": {
+          "role": "training",
+          "labelsSha256": "063bdc6541275fb0bb841401c8b3fdb1d45a12bed388e347acdc2378d4e7c069",
+          "reports": 48,
+          "pair": {
+            "precision": 0.81,
+            "recall": 0.944,
+            "f05": 0.833
+          },
+          "bcubed": {
+            "precision": 0.882,
+            "recall": 0.972,
+            "f05": 0.899
+          }
+        },
+        "gvc": {
+          "role": "regression",
+          "labelsSha256": "2ab7d89462f1df599afa6da5d9e680147b35de0fb05d45d5e84bb6501cd1cec4",
+          "reports": 509,
+          "pair": {
+            "precision": 0.918,
+            "recall": 0.712,
+            "f05": 0.868
+          },
+          "bcubed": {
+            "precision": 0.977,
+            "recall": 0.849,
+            "f05": 0.948
+          }
+        },
+        "hlgd-test": {
+          "role": "regression",
+          "labelsSha256": "27c8d84f5a9b73091d11b6718747a9fd1e2e8a9d0c5e91042a3e9957100c4ea5",
+          "reports": 286,
+          "pair": {
+            "precision": 0.143,
+            "recall": 0.002,
+            "f05": 0.008
+          },
+          "bcubed": {
+            "precision": 0.983,
+            "recall": 0.438,
+            "f05": 0.787
+          }
+        }
+      }
+    }
+  ]
+}

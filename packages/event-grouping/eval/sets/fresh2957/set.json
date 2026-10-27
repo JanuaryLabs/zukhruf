@@ -1,0 +1,21 @@
+{
+  "role": "training",
+  "frozenAt": "2026-10-25T13:02:59Z",
+  "firstScoredAt": "2026-10-25T13:02:59Z",
+  "labelsSha256": "063bdc6541275fb0bb841401c8b3fdb1d45a12bed388e347acdc2378d4e7c069",
+  "annotator": "Codex, one annotator, from the whole body, before any prediction. Not expert consensus (round #2957, fresh-gold.json).",
+  "boundaryRule": "One event is one concrete action. A later step in one case (a motion after a filing) is a new event. An article with no confirmed event (an advance forecast, a round-up) is alone in its event.",
+  "text": "wcep",
+  "source": {
+    "name": "WCEP-10, test split with dense retrieval (allenai/wcep_dense_max, revision fccb66b6d8ecc56df165f9eaf9d105188ad54e90), rows 200 to 219",
+    "url": "https://huggingface.co/datasets/allenai/wcep_dense_max",
+    "licence": "The dataset card says \"license: other\". The articles belong to their publishers and are not in this repository; this repository holds only row and article indexes and our labels.",
+    "attribution": "Demian Gholipour Ghalandari, Chris Hokamp, Nghia The Pham, John Glover and Georgiana Ifrim. 2020. A Large-Scale Multi-Document Summarization Dataset from the Wikipedia Current Events Portal. In Proceedings of ACL 2020. Dense retrieval copy by the Allen Institute for AI."
+  },
+  "weaknesses": [
+    "One annotator (an AI model).",
+    "Only 48 articles in 23 events.",
+    "WCEP gives no dates. The runner gives every article one publish day.",
+    "The datasets-server API serves the latest revision of the dataset. A new revision shows as changed texts."
+  ]
+}

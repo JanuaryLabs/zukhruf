@@ -1,0 +1,1738 @@
+[
+  {
+    "id": "d2938-simon-01",
+    "source": "https://simonwillison.net/2026/Oct/24/battledrones/",
+    "publishedAt": "2026-10-24T03:59:57.000Z",
+    "publisher": "simon",
+    "event": "simon-01",
+    "textSha256": "d2ed4f62e52ff376d6eb0a50cd87eefc7edeb9c189b028c4c7dfbf42e02ef3c5"
+  },
+  {
+    "id": "d2938-simon-02",
+    "source": "https://simonwillison.net/2026/Oct/22/armin-ronacher/",
+    "publishedAt": "2026-10-22T15:34:13.000Z",
+    "publisher": "simon",
+    "event": "simon-02",
+    "textSha256": "6319a02efcaf6562ac57c51b5b82b48b3e8e0d362fb8a1090e8d197831156940"
+  },
+  {
+    "id": "d2938-simon-03",
+    "source": "https://simonwillison.net/2026/Oct/21/php-security-release/",
+    "publishedAt": "2026-10-21T18:41:53.000Z",
+    "publisher": "simon",
+    "event": "php2shell-2026-10",
+    "textSha256": "fdde0ac02ad61953f46ed47405b064c4e95bc128223e2c8c36db7a7997afb93a"
+  },
+  {
+    "id": "d2938-simon-04",
+    "source": "https://simonwillison.net/2026/Oct/21/panache/",
+    "publishedAt": "2026-10-21T16:25:16.000Z",
+    "publisher": "simon",
+    "event": "simon-04",
+    "textSha256": "930f1c8e66f6a7c86f7e6467aa51c57f7e1b20243657d012442ba2b3c643293e"
+  },
+  {
+    "id": "d2938-simon-05",
+    "source": "https://simonwillison.net/2026/Oct/20/emudhra-certificates/",
+    "publishedAt": "2026-10-20T23:50:25.000Z",
+    "publisher": "simon",
+    "event": "emudhra-2026-10",
+    "textSha256": "1e98432159a134cf7bb756a17fbce464dce42989f3ddff7088ac4e052677473d"
+  },
+  {
+    "id": "d2938-simon-06",
+    "source": "https://simonwillison.net/2026/Oct/20/battledrones/",
+    "publishedAt": "2026-10-20T19:34:19.000Z",
+    "publisher": "simon",
+    "event": "simon-06",
+    "textSha256": "36e079f6c6b677c2a6341c9a3b741d3c1393a6c881e75b2806fa99422a17690c"
+  },
+  {
+    "id": "d2938-simon-07",
+    "source": "https://simonwillison.net/2026/Oct/19/my-obituary-for-programming/",
+    "publishedAt": "2026-10-19T23:58:25.000Z",
+    "publisher": "simon",
+    "event": "simon-07",
+    "textSha256": "4d6cfb005d9474ea2b22992a8aa1627d2b193340b736fa21f61096750b20653f"
+  },
+  {
+    "id": "d2938-simon-08",
+    "source": "https://simonwillison.net/2026/Oct/18/llm-tools-datasette/",
+    "publishedAt": "2026-10-18T23:43:09.000Z",
+    "publisher": "simon",
+    "event": "simon-08",
+    "textSha256": "f8c07e9e648f8452b4142e8456a52ec6a6246c31cac311b366852e850d1af00c"
+  },
+  {
+    "id": "d2938-simon-09",
+    "source": "https://simonwillison.net/2026/Oct/18/llm-echo/",
+    "publishedAt": "2026-10-18T23:16:16.000Z",
+    "publisher": "simon",
+    "event": "simon-09",
+    "textSha256": "10258f2fba61a82f3c05f4f55940def2c98f3663196958574811d65044dbf3c5"
+  },
+  {
+    "id": "d2938-simon-10",
+    "source": "https://simonwillison.net/2026/Oct/17/document-currentscript/",
+    "publishedAt": "2026-10-17T21:11:12.000Z",
+    "publisher": "simon",
+    "event": "simon-10",
+    "textSha256": "6f2efca343a7ffff7291f69b83b60b7fff7dd0d12028061d3d2ae23c2d0532f7"
+  },
+  {
+    "id": "d2938-simon-11",
+    "source": "https://simonwillison.net/2026/Oct/17/web-edit/",
+    "publishedAt": "2026-10-17T13:16:49.000Z",
+    "publisher": "simon",
+    "event": "simon-11",
+    "textSha256": "f37bef5aeb648d2ab4112bacdd1a1e1e9f1a7662a8914c62688a174e31a58902"
+  },
+  {
+    "id": "d2938-simon-12",
+    "source": "https://simonwillison.net/2026/Oct/16/code-review/",
+    "publishedAt": "2026-10-16T22:06:37.000Z",
+    "publisher": "simon",
+    "event": "simon-12",
+    "textSha256": "ced2cae2ba88dab42d9e593409b3df65bb0f216abc8eef31aa44b613e6348744"
+  },
+  {
+    "id": "d2938-simon-13",
+    "source": "https://simonwillison.net/2026/Oct/16/sqlite-sparql-rust/",
+    "publishedAt": "2026-10-16T01:58:00.000Z",
+    "publisher": "simon",
+    "event": "simon-13",
+    "textSha256": "66cb4f69dffdcdaf51e73943e876623d668dec4385ec7485ffe6b3a83dea97ec"
+  },
+  {
+    "id": "d2938-simon-14",
+    "source": "https://simonwillison.net/2026/Oct/15/chirp-pong/",
+    "publishedAt": "2026-10-15T19:47:52.000Z",
+    "publisher": "simon",
+    "event": "simon-14",
+    "textSha256": "728c520cbc5c41f1526359a50ea3713612eea2a1a9f131d7891af88fdee0107f"
+  },
+  {
+    "id": "d2938-simon-15",
+    "source": "https://simonwillison.net/2026/Oct/15/anthropic-tells-investors/",
+    "publishedAt": "2026-10-15T13:04:03.000Z",
+    "publisher": "simon",
+    "event": "simon-15",
+    "textSha256": "46cbc36589204e386a998429204dffa58b9e2f6ed8bd45af98b75f21a42037da"
+  },
+  {
+    "id": "d2938-simon-16",
+    "source": "https://simonwillison.net/2026/Oct/15/latex/",
+    "publishedAt": "2026-10-15T02:07:28.000Z",
+    "publisher": "simon",
+    "event": "simon-16",
+    "textSha256": "684e069ed5a13b98fc99757b2aa985c1739aef28cf7d22fdb232a91ed23d1b93"
+  },
+  {
+    "id": "d2938-simon-17",
+    "source": "https://simonwillison.net/2026/Oct/14/tree-appreciator/",
+    "publishedAt": "2026-10-14T21:23:01.000Z",
+    "publisher": "simon",
+    "event": "simon-17",
+    "textSha256": "700bdc8b1628dab55a8788edf95aca461fdd7dc6748ba662e33ff6520f5325ba"
+  },
+  {
+    "id": "d2938-simon-18",
+    "source": "https://simonwillison.net/2026/Oct/14/ai-is-mass-decompiling-games/",
+    "publishedAt": "2026-10-14T16:26:53.000Z",
+    "publisher": "simon",
+    "event": "simon-18",
+    "textSha256": "6816e99bd713e1b491e21e981e3d2cd628c437b6df509d15171037ba9794089c"
+  },
+  {
+    "id": "d2938-simon-19",
+    "source": "https://simonwillison.net/2026/Oct/13/redesigning-source-control-at-anthropic/",
+    "publishedAt": "2026-10-13T23:00:06.000Z",
+    "publisher": "simon",
+    "event": "simon-19",
+    "textSha256": "8d5e4cac59f2331ad6a835ca622956fa199ef1867693ed46988dada2683fad44"
+  },
+  {
+    "id": "d2938-simon-20",
+    "source": "https://simonwillison.net/2026/Oct/13/llm-gemini/",
+    "publishedAt": "2026-10-13T22:28:54.000Z",
+    "publisher": "simon",
+    "event": "simon-20",
+    "textSha256": "29bce21ed5a34b804d2f26cb86e8e23bcc639a83a0b0c7cc18ff1bc0e5caf887"
+  },
+  {
+    "id": "d2938-simon-21",
+    "source": "https://simonwillison.net/2026/Oct/13/geoffrey-huntley/",
+    "publishedAt": "2026-10-13T13:32:00.000Z",
+    "publisher": "simon",
+    "event": "simon-21",
+    "textSha256": "cf2f7dbca22a7ea4a74532261ee58563a1350e43e5edea4a7af03804738c8b53"
+  },
+  {
+    "id": "d2938-simon-22",
+    "source": "https://simonwillison.net/2026/Oct/13/web-edit/",
+    "publishedAt": "2026-10-13T01:40:05.000Z",
+    "publisher": "simon",
+    "event": "simon-22",
+    "textSha256": "ab09dad180f19c48048bb465c46a9b0fb9d4bd9f97e5c01a75351dbadff2760f"
+  },
+  {
+    "id": "d2938-simon-23",
+    "source": "https://simonwillison.net/2026/Oct/12/llm-meta-ai/",
+    "publishedAt": "2026-10-12T23:58:46.000Z",
+    "publisher": "simon",
+    "event": "simon-23",
+    "textSha256": "4087c205572afeb22421062dcddf1c90d0031c8c68d6948b4f89258903971beb"
+  },
+  {
+    "id": "d2938-cloudflare-01",
+    "source": "https://blog.cloudflare.com/full-transaction-waf/",
+    "publishedAt": "2026-10-21T14:10:42.000Z",
+    "publisher": "cloudflare",
+    "event": "cloudflare-01",
+    "textSha256": "a2cc42d617d5f1411dba9341aa5c4b7515fda20b5d62a4cbfd4b4b4d7cb4bd6c"
+  },
+  {
+    "id": "d2938-cloudflare-02",
+    "source": "https://blog.cloudflare.com/php-vulnerabilities-waf-protection/",
+    "publishedAt": "2026-10-21T13:56:45.000Z",
+    "publisher": "cloudflare",
+    "event": "php2shell-2026-10",
+    "textSha256": "9f8a5e5c53a4aeb8e10ae068c9a5e792745abc075a038139b2ac0018d1a25f14"
+  },
+  {
+    "id": "d2938-cloudflare-03",
+    "source": "https://blog.cloudflare.com/webmcp-commerce/",
+    "publishedAt": "2026-10-21T13:00:00.000Z",
+    "publisher": "cloudflare",
+    "event": "cloudflare-03",
+    "textSha256": "eee650f86d88cc4a074b3c40dffa1da22c85fabde63bd23455efd050bb05d38c"
+  },
+  {
+    "id": "d2938-cloudflare-04",
+    "source": "https://blog.cloudflare.com/emudhra-certificate-compromise/",
+    "publishedAt": "2026-10-20T22:20:16.000Z",
+    "publisher": "cloudflare",
+    "event": "emudhra-2026-10",
+    "textSha256": "ed87a7cacb0d5441a49fd3897d55efebac35240cc58b28b10ca69a9ac7b3c098"
+  },
+  {
+    "id": "d2938-cloudflare-05",
+    "source": "https://blog.cloudflare.com/typescript-rust-port/",
+    "publishedAt": "2026-10-20T13:00:00.000Z",
+    "publisher": "cloudflare",
+    "event": "cloudflare-05",
+    "textSha256": "8a14932747625dc644e97fc6b0243d5fcd358b1b3436a7c0e806fbae99c9e193"
+  },
+  {
+    "id": "d2938-cloudflare-06",
+    "source": "https://blog.cloudflare.com/obsessive-inference-optimization/",
+    "publishedAt": "2026-10-19T19:12:53.000Z",
+    "publisher": "cloudflare",
+    "event": "cloudflare-06",
+    "textSha256": "c851d9b494e7902182beb409f0c00f37ca66550c4bc1294ff72f8116949d51c5"
+  },
+  {
+    "id": "d2938-cloudflare-07",
+    "source": "https://blog.cloudflare.com/clairic-extraction-model/",
+    "publishedAt": "2026-10-19T17:48:26.000Z",
+    "publisher": "cloudflare",
+    "event": "cloudflare-07",
+    "textSha256": "6e38f0433886e0e0111eca36691119fda5c0040d39f1b3d313ce7213367916b7"
+  },
+  {
+    "id": "d2938-cloudflare-08",
+    "source": "https://blog.cloudflare.com/protect-your-netscaler-gateway/",
+    "publishedAt": "2026-10-19T13:00:00.000Z",
+    "publisher": "cloudflare",
+    "event": "cloudflare-08",
+    "textSha256": "4338d96f8c29b10f24cc748cc65491a4e12dab754930329b4e57c7c4f3400bec"
+  },
+  {
+    "id": "d2938-cloudflare-09",
+    "source": "https://blog.cloudflare.com/verified-bots-accountability/",
+    "publishedAt": "2026-10-16T13:00:00.000Z",
+    "publisher": "cloudflare",
+    "event": "cloudflare-09",
+    "textSha256": "dad5768cfed295ede9085a8573a668e16cc5ec6687eaa342efdec991bf6e79ca"
+  },
+  {
+    "id": "d2938-cloudflare-10",
+    "source": "https://blog.cloudflare.com/programmable-gateway-dlp/",
+    "publishedAt": "2026-10-15T17:11:12.000Z",
+    "publisher": "cloudflare",
+    "event": "cloudflare-10",
+    "textSha256": "769591277662aa5fb50935f56431d9f7f90764a57bedc73e53900e8074f52d24"
+  },
+  {
+    "id": "d2938-cloudflare-11",
+    "source": "https://blog.cloudflare.com/deploy-with-void/",
+    "publishedAt": "2026-10-15T14:00:00.000Z",
+    "publisher": "cloudflare",
+    "event": "cloudflare-11",
+    "textSha256": "cd51593032ad8b07402de56d7f65f0b74804159bed724fc4040ed0488103d098"
+  },
+  {
+    "id": "d2938-cloudflare-12",
+    "source": "https://blog.cloudflare.com/cloudflare-openai-discovery-agentic-web/",
+    "publishedAt": "2026-10-15T13:00:00.000Z",
+    "publisher": "cloudflare",
+    "event": "cloudflare-12",
+    "textSha256": "e03a720ad32bfdf90db4d9130ded377c8012bbcbf83c4db61257262478400dbd"
+  },
+  {
+    "id": "d2938-cloudflare-13",
+    "source": "https://blog.cloudflare.com/yandex-outage/",
+    "publishedAt": "2026-10-14T20:24:19.000Z",
+    "publisher": "cloudflare",
+    "event": "cloudflare-13",
+    "textSha256": "dddb929288043ed8140c58f185be30a050a60b6661228987d3006007f7e20ecb"
+  },
+  {
+    "id": "d2938-cloudflare-14",
+    "source": "https://blog.cloudflare.com/hyperdrive-mysql/",
+    "publishedAt": "2026-10-14T13:00:00.000Z",
+    "publisher": "cloudflare",
+    "event": "cloudflare-14",
+    "textSha256": "304ae11f16b32e4c53c6fe86a6a2edff81082b6ce2f00d29e85f4b119e1c65a3"
+  },
+  {
+    "id": "d2938-cloudflare-15",
+    "source": "https://blog.cloudflare.com/d1-control-plane/",
+    "publishedAt": "2026-10-13T16:20:18.000Z",
+    "publisher": "cloudflare",
+    "event": "cloudflare-15",
+    "textSha256": "edb9a83a2a20628d254489870bd6cbeb1045f97317bf046dc265be2054e0f80a"
+  },
+  {
+    "id": "d2938-cloudflare-16",
+    "source": "https://blog.cloudflare.com/rewinding-the-exponential/",
+    "publishedAt": "2026-10-13T15:51:41.000Z",
+    "publisher": "cloudflare",
+    "event": "cloudflare-16",
+    "textSha256": "f1838977dbd009331929e9e7f670e33955e034b72e8096e2fab5d9747880f19b"
+  },
+  {
+    "id": "d2938-cloudflare-17",
+    "source": "https://blog.cloudflare.com/transformers-on-logpush/",
+    "publishedAt": "2026-10-12T14:44:59.000Z",
+    "publisher": "cloudflare",
+    "event": "cloudflare-17",
+    "textSha256": "aafe14cdefd8ed2e9bfc4d009f02b1a82b4102d7ea78a55e9ea23fb046b13fe4"
+  },
+  {
+    "id": "d2938-python-01",
+    "source": "https://blog.python.org/2026/10/python-3150-rc3/",
+    "publishedAt": "2026-10-02T00:00:00.000Z",
+    "publisher": "python",
+    "event": "python-01",
+    "textSha256": "ddb47cefc5960f24f15c7d607b41faa5243fd0459538ec8b8fe732c1289dd7e2"
+  },
+  {
+    "id": "d2938-python-05",
+    "source": "https://blog.python.org/2026/09/language-summit-2026-pep-827-type-manipulation/",
+    "publishedAt": "2026-09-30T12:00:09.000Z",
+    "publisher": "python",
+    "event": "python-05",
+    "textSha256": "068dfa80fc40fbe8a3516ac285bc2f2fc7ed7ccf79ef211c8ed12a50c0290247"
+  },
+  {
+    "id": "d2938-python-06",
+    "source": "https://blog.python.org/2026/09/language-summit-2026-free-threading-post-era/",
+    "publishedAt": "2026-09-30T12:00:08.000Z",
+    "publisher": "python",
+    "event": "python-06",
+    "textSha256": "27606d6abed7701cb705ad094e03d2cb744734f33d5de5e0a532631c838522fd"
+  },
+  {
+    "id": "d2938-python-07",
+    "source": "https://blog.python.org/2026/09/language-summit-2026-developer-in-residence-update-and-future/",
+    "publishedAt": "2026-09-30T12:00:07.000Z",
+    "publisher": "python",
+    "event": "python-07",
+    "textSha256": "09a65a704e92cbacca02297096b5d5e954d6fbb0f9775c31f7f494132f87137a"
+  },
+  {
+    "id": "d2938-python-08",
+    "source": "https://blog.python.org/2026/09/language-summit-2026-spicycrab/",
+    "publishedAt": "2026-09-30T12:00:06.000Z",
+    "publisher": "python",
+    "event": "python-08",
+    "textSha256": "a545e9c116ef0e0ab8e1f84b7d01fc5b4fbe99007966c5020681d21d2d461d3d"
+  },
+  {
+    "id": "d2938-python-09",
+    "source": "https://blog.python.org/2026/09/language-summit-2026-rust-for-cpython/",
+    "publishedAt": "2026-09-30T12:00:05.000Z",
+    "publisher": "python",
+    "event": "python-09",
+    "textSha256": "cc2ced9f76e2ef3ccf49b7546a1cf781b37d2ce7b340a78e6801d59955b09f48"
+  },
+  {
+    "id": "d2938-python-10",
+    "source": "https://blog.python.org/2026/09/language-summit-2026-memory-snapshots/",
+    "publishedAt": "2026-09-30T12:00:04.000Z",
+    "publisher": "python",
+    "event": "python-10",
+    "textSha256": "3cb9115a9e7fdbd149fbdc3adb459caf3869690e70e4a355d5e5221668c1b396"
+  },
+  {
+    "id": "d2938-python-11",
+    "source": "https://blog.python.org/2026/09/language-summit-2026-memory-buffer-protocol/",
+    "publishedAt": "2026-09-30T12:00:03.000Z",
+    "publisher": "python",
+    "event": "python-11",
+    "textSha256": "43ec3c5ff22717eb7f42af7a6c9fdd48f490d675d828e701bb6c4cc630e7b516"
+  },
+  {
+    "id": "d2938-python-12",
+    "source": "https://blog.python.org/2026/09/language-summit-2026-garbage-collection-generational-incremental-both/",
+    "publishedAt": "2026-09-30T12:00:02.000Z",
+    "publisher": "python",
+    "event": "python-12",
+    "textSha256": "5a298641d043a897165e93dd191bd0e61c9cecde69c501dda3d54de6b7f6f80d"
+  },
+  {
+    "id": "d2938-python-13",
+    "source": "https://blog.python.org/2026/09/language-summit-2026-macos-python/",
+    "publishedAt": "2026-09-30T12:00:01.000Z",
+    "publisher": "python",
+    "event": "python-13",
+    "textSha256": "af53cafbf32cee5370edcc9324799ac1773c051abb1ea89ee5923092162cc674"
+  },
+  {
+    "id": "d2938-python-14",
+    "source": "https://blog.python.org/2026/09/language-summit-2026-namespaces/",
+    "publishedAt": "2026-09-30T12:00:00.000Z",
+    "publisher": "python",
+    "event": "python-14",
+    "textSha256": "68fb97d4e759f0ee7d8de8440ba673be0ef4f60021919bc3063dc6851fd4953c"
+  },
+  {
+    "id": "d2938-python-15",
+    "source": "https://blog.python.org/2026/09/python-docs-in-german/",
+    "publishedAt": "2026-09-26T00:00:00.000Z",
+    "publisher": "python",
+    "event": "python-15",
+    "textSha256": "5c07fdb3aeeedc3ef16cfa71a9e9318e60f7b5b1897bc9d3c9c8b3034b5e29f3"
+  },
+  {
+    "id": "d2938-python-16",
+    "source": "https://blog.python.org/2026/09/the-python-documentation-is-now-available-in-persian/",
+    "publishedAt": "2026-09-23T00:00:00.000Z",
+    "publisher": "python",
+    "event": "python-16",
+    "textSha256": "64fba6dee5df802692b463e1b41669b6f8f7b4fb76afd433f32f3a17df45fb1a"
+  },
+  {
+    "id": "d2938-python-17",
+    "source": "https://blog.python.org/2026/09/python-3150-rc2/",
+    "publishedAt": "2026-09-01T00:00:00.000Z",
+    "publisher": "python",
+    "event": "python-17",
+    "textSha256": "361c89423f454d5a6e2b32da841c6c28967710a9f51da9ec084eb78f976cffaa"
+  },
+  {
+    "id": "d2938-python-18",
+    "source": "https://blog.python.org/2026/08/riscv-now-officially-supported/",
+    "publishedAt": "2026-08-24T00:00:00.000Z",
+    "publisher": "python",
+    "event": "python-18",
+    "textSha256": "308373ac34493f4db16bac2c282b6682d9727d638aeada4b4e0e326693e8973b"
+  },
+  {
+    "id": "d2938-python-19",
+    "source": "https://blog.python.org/2026/08/the-python-documentation-is-now-available-in-russian/",
+    "publishedAt": "2026-08-22T00:00:00.000Z",
+    "publisher": "python",
+    "event": "python-19",
+    "textSha256": "d67f718b335b482a4df6cba8452cafdbc067a2711bfbeda459a3e86745c15843"
+  },
+  {
+    "id": "d2938-python-20",
+    "source": "https://blog.python.org/2026/08/2026-packaging-council-nominees/",
+    "publishedAt": "2026-08-13T00:00:00.000Z",
+    "publisher": "python",
+    "event": "python-20",
+    "textSha256": "b3f9204a0819e8e26da2d0c05974a0ab8556ec6b076abef948df08e314e9410c"
+  },
+  {
+    "id": "d2938-python-23",
+    "source": "https://blog.python.org/2026/08/python-3150-rc1/",
+    "publishedAt": "2026-08-04T00:00:00.000Z",
+    "publisher": "python",
+    "event": "python-23",
+    "textSha256": "8d585dcc030af4ade922d11ba2262d115c0049cde619163ecc4160cdf883691c"
+  },
+  {
+    "id": "d2938-python-24",
+    "source": "https://blog.python.org/2026/07/2026-packaging-council-nominations/",
+    "publishedAt": "2026-07-23T00:00:00.000Z",
+    "publisher": "python",
+    "event": "python-24",
+    "textSha256": "99d9fbc9751b3f93e135d2516a18e9885af0a109dde3e5c8b0349c8c369090ca"
+  },
+  {
+    "id": "d2938-fowler-03",
+    "source": "https://martinfowler.com/articles/are-harnesses-worth-the-cost.html",
+    "publishedAt": "2026-10-13T13:35:00.000Z",
+    "publisher": "fowler",
+    "event": "fowler-03",
+    "textSha256": "4705bdbca0d5623a83761c3fc996e747166a61b5681dcabd754d63e1ad73b775"
+  },
+  {
+    "id": "d2938-fowler-05",
+    "source": "https://martinfowler.com/articles/never-send-slides/slide-principles.html",
+    "publishedAt": "2026-09-30T14:14:00.000Z",
+    "publisher": "fowler",
+    "event": "fowler-05",
+    "textSha256": "e76afae64eb0bac3001ad8285bcdd1f23fc581a68a76417e670f0b3c5778a37b"
+  },
+  {
+    "id": "d2938-fowler-06",
+    "source": "https://martinfowler.com/bliki/SensibleDefault.html",
+    "publishedAt": "2026-09-29T13:43:00.000Z",
+    "publisher": "fowler",
+    "event": "fowler-06",
+    "textSha256": "7988d174d6f5ce0e892cd0b35e50f8754b62ddda78763643cb9eac704d93134b"
+  },
+  {
+    "id": "d2938-fowler-09",
+    "source": "https://martinfowler.com/articles/healthy-peer-feedback.html",
+    "publishedAt": "2026-09-24T14:10:00.000Z",
+    "publisher": "fowler",
+    "event": "fowler-09",
+    "textSha256": "3db49f69d1176ae976365d3abd193e0bb43c11aa0ad142806079b0bd968a2f15"
+  },
+  {
+    "id": "d2938-fowler-10",
+    "source": "https://martinfowler.com/articles/2026-dont-like-llms.html",
+    "publishedAt": "2026-09-17T13:50:00.000Z",
+    "publisher": "fowler",
+    "event": "fowler-10",
+    "textSha256": "2cd85dfb4dea6f53ce5736dfec67bdfc0007d511cdc2f43078976eb53914b4c3"
+  },
+  {
+    "id": "d2938-fowler-12",
+    "source": "https://martinfowler.com/articles/never-send-slides/nail-your-narrative.html",
+    "publishedAt": "2026-09-15T15:11:00.000Z",
+    "publisher": "fowler",
+    "event": "fowler-12",
+    "textSha256": "505cbc353c548c15f994e64a0ff44b1e1b85c941b5b92a4d673553cbcaf34183"
+  },
+  {
+    "id": "d2938-fowler-13",
+    "source": "https://martinfowler.com/articles/2026-social-traffic.html",
+    "publishedAt": "2026-09-09T16:21:00.000Z",
+    "publisher": "fowler",
+    "event": "fowler-13",
+    "textSha256": "93f6e59ec86310c1aad5ee4e9c43b2aba5e580a3cff393d14eb4f490f94519a6"
+  },
+  {
+    "id": "d2938-fowler-15",
+    "source": "https://martinfowler.com/articles/never-send-slides/need-presentation.html",
+    "publishedAt": "2026-09-08T13:42:00.000Z",
+    "publisher": "fowler",
+    "event": "fowler-15",
+    "textSha256": "8bac9a70a79669decb4908f3f444bf9d987210b258667cd10d13c5d1b58f06be"
+  },
+  {
+    "id": "d2938-fowler-16",
+    "source": "https://martinfowler.com/bliki/ParacelsusMaxim.html",
+    "publishedAt": "2026-09-02T22:03:00.000Z",
+    "publisher": "fowler",
+    "event": "fowler-16",
+    "textSha256": "90e9c3f085def2458b2c690665a2b635a42e39d2534e82cee451810e7baacd95"
+  },
+  {
+    "id": "d2938-fowler-17",
+    "source": "https://martinfowler.com/articles/exploring-gen-ai/an-accidental-blackboard.html",
+    "publishedAt": "2026-09-02T14:45:00.000Z",
+    "publisher": "fowler",
+    "event": "fowler-17",
+    "textSha256": "7fc705b818bba77210b234016239684e501a5a4929032892ca3b6cefdee94296"
+  },
+  {
+    "id": "d2938-fowler-18",
+    "source": "https://martinfowler.com/rachels-ramblings/code-review.html",
+    "publishedAt": "2026-09-02T13:32:00.000Z",
+    "publisher": "fowler",
+    "event": "fowler-18",
+    "textSha256": "54f0ce84792296dee72b57e1f02124b2fec899391235b4ee172ffadbed4112ab"
+  },
+  {
+    "id": "d2938-fowler-20",
+    "source": "https://martinfowler.com/articles/making-data-ready-for-agentic-ai.html",
+    "publishedAt": "2026-08-27T13:11:00.000Z",
+    "publisher": "fowler",
+    "event": "fowler-20",
+    "textSha256": "d303476e98b091bf07fd71b6f69e5f825ccab19fc4e2935a627c733c103998db"
+  },
+  {
+    "id": "d2938-fowler-22",
+    "source": "https://martinfowler.com/rachels-ramblings/citizens-agents-experts.html",
+    "publishedAt": "2026-08-19T18:30:00.000Z",
+    "publisher": "fowler",
+    "event": "fowler-22",
+    "textSha256": "8204fe3fcb094d85329c3d4c3f473347d8d475e0e9456854cfebc603a22fd717"
+  },
+  {
+    "id": "d2938-fowler-24",
+    "source": "https://martinfowler.com/articles/exploring-gen-ai/tdd-in-the-agent-loop.html",
+    "publishedAt": "2026-08-11T11:39:00.000Z",
+    "publisher": "fowler",
+    "event": "fowler-24",
+    "textSha256": "c903584ae2435affbd105bb8ba16bf1309cd180fa4da7694bd10c7bffac6dcb3"
+  },
+  {
+    "id": "d2938-github-01",
+    "source": "https://github.blog/ai-and-ml/github-copilot/how-to-continue-a-github-copilot-app-session-in-vs-code/",
+    "publishedAt": "2026-10-19T18:47:22.000Z",
+    "publisher": "github",
+    "event": "github-01",
+    "textSha256": "834b3d940eb071bdaf1aaf40a10ce5b187712258ad90ec141b90b89f1c4ced1c"
+  },
+  {
+    "id": "d2938-github-02",
+    "source": "https://github.blog/news-insights/company-news/the-next-developer-interface-is-ambient-intelligence/",
+    "publishedAt": "2026-10-15T19:39:27.000Z",
+    "publisher": "github",
+    "event": "github-02",
+    "textSha256": "cd7e63738bf72d4bf9c2a6e6685cd8ee4531b88e4fc8d86f8aa745b4b5ecf648"
+  },
+  {
+    "id": "d2938-github-03",
+    "source": "https://github.blog/engineering/platform-security/staying-evergreen-how-we-automated-secure-access-and-repo-hygiene-in-a-shared-org/",
+    "publishedAt": "2026-10-15T18:00:00.000Z",
+    "publisher": "github",
+    "event": "github-03",
+    "textSha256": "9a0ee657a1594256b706d95ba242aea834f9c3f8f4428126c2a8de26a406b904"
+  },
+  {
+    "id": "d2938-github-05",
+    "source": "https://github.blog/engineering/architecture-optimization/from-2500-requests-to-24-rebuilding-star-history-without-the-stargazers/",
+    "publishedAt": "2026-10-14T19:11:33.000Z",
+    "publisher": "github",
+    "event": "github-05",
+    "textSha256": "6f5c7e749fff36fbee6c43bc1c43a9d33128f4c65b604af36b516e296ea379cb"
+  },
+  {
+    "id": "d2938-github-06",
+    "source": "https://github.blog/ai-and-ml/githubs-model-for-secret-detection-finding-more-secrets-with-less-noise/",
+    "publishedAt": "2026-10-13T17:56:33.000Z",
+    "publisher": "github",
+    "event": "github-06",
+    "textSha256": "d257a79e15e1d5739fc16ca5b0b794b454a60cb307fe8a23ac73675746f57ef5"
+  },
+  {
+    "id": "d2938-github-07",
+    "source": "https://github.blog/ai-and-ml/github-copilot/github-copilot-app-for-beginners-how-to-teach-copilot-about-your-codebase/",
+    "publishedAt": "2026-10-12T17:43:59.000Z",
+    "publisher": "github",
+    "event": "github-07",
+    "textSha256": "761f04a2b03265df238d8493855d95248414f0bbfed26fffe5fdb933f58685f0"
+  },
+  {
+    "id": "d2938-daring-01",
+    "source": "https://music.apple.com/404",
+    "publishedAt": "2026-10-24T15:50:02.000Z",
+    "publisher": "daring",
+    "event": "daring-01",
+    "textSha256": "d3f5bb2cd7b1c45fc0397f3417328471415eb915e17eeb1501f3ecc537a7d43e"
+  },
+  {
+    "id": "d2938-daring-06",
+    "source": "https://sunnny.com/",
+    "publishedAt": "2026-10-20T13:09:38.000Z",
+    "publisher": "daring",
+    "event": "daring-06",
+    "textSha256": "9bd5fff93cade8da5c96e808e69ea3ffe43a4838bde9f050095a7296394cc17e"
+  },
+  {
+    "id": "d2938-daring-07",
+    "source": "https://x.com/BarackObama/status/2111819687524774170",
+    "publishedAt": "2026-10-20T01:12:26.000Z",
+    "publisher": "daring",
+    "event": "daring-07",
+    "textSha256": "cf3d5327c0f3ddfd3b9475b08d402e50b56aafbadd733b19a9be45271bd1fcec"
+  },
+  {
+    "id": "d2938-daring-08",
+    "source": "https://x.com/gregjoz/status/2112212372182249831",
+    "publishedAt": "2026-10-19T22:27:21.000Z",
+    "publisher": "daring",
+    "event": "daring-08",
+    "textSha256": "6b8f80386e2953cf832e4e76829f214c50b8160a04ce10c903d50ff5ac9753d3"
+  },
+  {
+    "id": "d2938-daring-09",
+    "source": "https://deadline.com/2026/10/netflix-dan-lin-out-1237167562/",
+    "publishedAt": "2026-10-19T21:15:57.000Z",
+    "publisher": "daring",
+    "event": "daring-09",
+    "textSha256": "7ca6baccae5dfeeb91b9d6099134006f96816456f9ee65e41d4865b9e5e17d8e"
+  },
+  {
+    "id": "d2938-daring-10",
+    "source": "https://www.linkedin.com/posts/frpotter_tonight-im-looking-back-through-the-photo-share-7515791565718454272-ue-R/",
+    "publishedAt": "2026-10-19T18:05:38.000Z",
+    "publisher": "daring",
+    "event": "homeview-launch-2026-10-13",
+    "textSha256": "593d66aed0a2b6e7f4175ef1661b1df7a42dc097480a03d8a57f3134a829a885"
+  },
+  {
+    "id": "d2938-daring-11",
+    "source": "https://www.wsj.com/business/media/netflix-eliminates-about-6-of-staff-in-biggest-cuts-since-2022-0a2d8ec3?st=NtEg5v&reflink=desktopwebshare_permalink",
+    "publishedAt": "2026-10-19T16:32:06.000Z",
+    "publisher": "daring",
+    "event": "daring-11",
+    "textSha256": "59b5c2583b94870cc4aaaa59d241c71b130d1f545bf6674032665ace23b1496e"
+  },
+  {
+    "id": "d2938-daring-12",
+    "source": "https://time.com/collection/best-inventions/2026/apple-iphone-duo/",
+    "publishedAt": "2026-10-19T16:17:14.000Z",
+    "publisher": "daring",
+    "event": "daring-12",
+    "textSha256": "fee5463a85d82455d5789dbc4b3c6dd5a910a5ae84242a6817401e4de1330373"
+  },
+  {
+    "id": "d2938-daring-13",
+    "source": "https://tomthedancingbug.com/the-inner-hive/",
+    "publishedAt": "2026-10-18T22:53:00.000Z",
+    "publisher": "daring",
+    "event": "daring-13",
+    "textSha256": "37991674711f053050370f7aac059f43bd66fff7dab1f3bacc4ca7ecab8a03f0"
+  },
+  {
+    "id": "d2938-daring-14",
+    "source": "https://workos.com/?utm_source=daringfireball&utm_medium=newsletter&utm_campaign=q42026",
+    "publishedAt": "2026-10-18T22:45:00.000Z",
+    "publisher": "daring",
+    "event": "daring-14",
+    "textSha256": "f006877669a0ec570baf605efaf400e4752636a6f268e0df88670af10d10373f"
+  },
+  {
+    "id": "d2938-daring-16",
+    "source": "https://www.bloomberg.com/news/newsletters/2026-10-18/apple-homeview-with-robotic-arm-new-mac-ipad-mini-nov-6-release-iphone-duo?accessToken=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzb3VyY2UiOiJTdWJzY3JpYmVyR2lmdGVkQXJ0aWNsZSIsImlhdCI6MTc5MjMzMjQwNiwiZXhwIjoxNzkyOTM3MjA2LCJhcnRpY2xlSWQiOiJUTjNXODFLR1pBSjQwMCIsImJjb25uZWN0SWQiOiJDNEVEQ0FFMUZBMDU0MEJFQTI0QTlGMjExQzFFOTA4MCJ9.eu94lgz5qU35YdXhWFRwjbVBeJEKzpwFqF-pzh_GPJU&leadSource=article-gifting",
+    "publishedAt": "2026-10-18T21:58:33.000Z",
+    "publisher": "daring",
+    "event": "homeview-launch-2026-10-13",
+    "textSha256": "f90b2e1606fe8538b77bd960b540a421126e9a549737d4a890dd48410895fcbf"
+  },
+  {
+    "id": "d2938-daring-17",
+    "source": "https://www.theinformation.com/articles/apple-developing-ai-wearable-pin",
+    "publishedAt": "2026-10-18T21:26:32.000Z",
+    "publisher": "daring",
+    "event": "homeview-launch-2026-10-13",
+    "textSha256": "13da64ea473a26511dda915dbc129117970587cd21ad8eec97148e54f9ba652a"
+  },
+  {
+    "id": "d2938-daring-19",
+    "source": "https://www.manton.org/2026/10/17/in-john-grubers-initial-thoughts.html",
+    "publishedAt": "2026-10-18T19:34:45.000Z",
+    "publisher": "daring",
+    "event": "homeview-launch-2026-10-13",
+    "textSha256": "948301fbcf1fa4bbea056f91633ce20f5fade8d6257a2bdb43e2f3d13bcd73c3"
+  },
+  {
+    "id": "d2938-daring-20",
+    "source": "https://x.com/AbdulElSayed/status/2111627277578731885",
+    "publishedAt": "2026-10-18T19:17:01.000Z",
+    "publisher": "daring",
+    "event": "daring-20",
+    "textSha256": "fbf56fda56e50a9cdb0d188309b086b4fca0ff4a3819f1a4848ed72d3b2015da"
+  },
+  {
+    "id": "d2938-daring-21",
+    "source": "https://www.reuters.com/business/retail-consumer/openai-employee-who-left-apple-took-files-about-unreleased-device-openai-alleges-2026-10-14/",
+    "publishedAt": "2026-10-18T00:55:42.000Z",
+    "publisher": "daring",
+    "event": "daring-21",
+    "textSha256": "5161031197d6386957ad81370ecd3272d4edc025f892e283f2510ed29cdfc516"
+  },
+  {
+    "id": "d2938-daring-22",
+    "source": "https://daringfireball.net/2026/10/homeview_thoughts_and_observations",
+    "publishedAt": "2026-10-17T17:25:13.000Z",
+    "publisher": "daring",
+    "event": "homeview-launch-2026-10-13",
+    "textSha256": "cdb343d8b823eb1e9c34987b6bd07cdc70e68e7596eb2a929cc12854531abc78"
+  },
+  {
+    "id": "d2938-daring-23",
+    "source": "https://glog.glennf.com/blog/2026/10/17/apple-tv-price-history/",
+    "publishedAt": "2026-10-17T14:06:18.000Z",
+    "publisher": "daring",
+    "event": "daring-23",
+    "textSha256": "1388e3d35ca48f03e470b6b1748eee13668fae08fd5105ac33cf2ec87ac5f274"
+  },
+  {
+    "id": "d2938-daring-24",
+    "source": "https://www.cnbc.com/make-it/2020/02/14/charlie-munger-shares-opinion-of-tesla-ceo-elon-musk.html",
+    "publishedAt": "2026-10-17T01:22:34.000Z",
+    "publisher": "daring",
+    "event": "daring-24",
+    "textSha256": "0fd6b51c4a88ff6ede1ec6809e5bff56c2bc8aa3737c08d493e77f88068d057e"
+  },
+  {
+    "id": "d2938-jvns-01",
+    "source": "https://jvns.ca/blog/2026/05/15/moving-away-from-tailwind--and-learning-to-structure-my-css-/",
+    "publishedAt": "2026-05-15T00:00:00.000Z",
+    "publisher": "jvns",
+    "event": "jvns-01",
+    "textSha256": "40260542004875a49a2851347f71034f4edad3ecafd2c472dc44a7bfd0035030"
+  },
+  {
+    "id": "d2938-jvns-02",
+    "source": "https://jvns.ca/blog/2026/05/04/css-colour-palettes/",
+    "publishedAt": "2026-05-04T00:00:00.000Z",
+    "publisher": "jvns",
+    "event": "jvns-02",
+    "textSha256": "346d203862ae7723fbd8f3fb187d30eccb3c020ca83894e28ed3d44951b1ba15"
+  },
+  {
+    "id": "d2938-jvns-03",
+    "source": "https://jvns.ca/blog/2026/05/02/testing-vue-components-in-the-browser/",
+    "publishedAt": "2026-05-02T00:00:00.000Z",
+    "publisher": "jvns",
+    "event": "jvns-03",
+    "textSha256": "06cb52f0ada0969cd952f961f2e294613752fefe3f2e7d0e4fdbc80bf631ecc9"
+  },
+  {
+    "id": "d2938-jvns-04",
+    "source": "https://jvns.ca/blog/2026/03/10/examples-for-the-tcpdump-and-dig-man-pages/",
+    "publishedAt": "2026-03-10T00:00:00.000Z",
+    "publisher": "jvns",
+    "event": "jvns-04",
+    "textSha256": "24915774c21f235d0566da1c5c6692671a60d9cfc1b88793198acc5dcbc0145e"
+  },
+  {
+    "id": "d2938-jvns-05",
+    "source": "https://jvns.ca/blog/2026/02/18/man-pages/",
+    "publishedAt": "2026-02-18T00:00:00.000Z",
+    "publisher": "jvns",
+    "event": "jvns-05",
+    "textSha256": "8242b1f40de1d997170cb2a2af72d56fe88e8f0fdd84cf9dace93dd3f6bd24c6"
+  },
+  {
+    "id": "d2938-jvns-06",
+    "source": "https://jvns.ca/blog/2026/01/27/some-notes-on-starting-to-use-django/",
+    "publishedAt": "2026-01-27T00:00:00.000Z",
+    "publisher": "jvns",
+    "event": "jvns-06",
+    "textSha256": "5944e973987e47d93c1c0c436af2f3d460d5159e68dc4ff33f556fcfabba3c8e"
+  },
+  {
+    "id": "d2938-jvns-07",
+    "source": "https://jvns.ca/blog/2026/01/08/a-data-model-for-git/",
+    "publishedAt": "2026-01-08T00:00:00.000Z",
+    "publisher": "jvns",
+    "event": "jvns-07",
+    "textSha256": "1cae8d493676c2316c391feeed31430ebfd9a7cca34ddba431cea7928a4e213a"
+  },
+  {
+    "id": "d2938-anthropic-01",
+    "source": "https://www.anthropic.com/news/christopher-stubbs-joins-long-term-benefit-trust",
+    "publishedAt": "2026-10-20T21:00:00.000Z",
+    "publisher": "anthropic",
+    "event": "anthropic-01",
+    "textSha256": "bbe49d601d5ea88de616120949c841b20a763642f995792de1b8642f761c93f1"
+  },
+  {
+    "id": "d2938-anthropic-02",
+    "source": "https://www.anthropic.com/news/public-benefit-fund",
+    "publishedAt": "2026-10-17T21:00:00.000Z",
+    "publisher": "anthropic",
+    "event": "anthropic-02",
+    "textSha256": "11499710a6b5b9f4e09a8920aca0d8147ad6ce4d8464054902f83802a3e7649d"
+  },
+  {
+    "id": "d2938-anthropic-03",
+    "source": "https://www.anthropic.com/news/an-update-on-independent-evaluators",
+    "publishedAt": "2026-10-14T21:00:00.000Z",
+    "publisher": "anthropic",
+    "event": "anthropic-03",
+    "textSha256": "a3fc174e1a8cd91e852670091322ef7b562bc4389fcc2b7d8bae4b52f58c048d"
+  },
+  {
+    "id": "d2938-anthropic-04",
+    "source": "https://www.anthropic.com/news/2026-us-midterms",
+    "publishedAt": "2026-10-13T21:00:00.000Z",
+    "publisher": "anthropic",
+    "event": "anthropic-04",
+    "textSha256": "fa9db1e02f553f5a8e8455c8640a42acb49442351a5c7797edd6ac4073b8f6ca"
+  },
+  {
+    "id": "d2938-anthropic-05",
+    "source": "https://www.anthropic.com/news/singapore-office-opening",
+    "publishedAt": "2026-10-13T21:00:00.000Z",
+    "publisher": "anthropic",
+    "event": "anthropic-05",
+    "textSha256": "56ec3f5370673f873cace95cf472a34d0bbe87c35dddcc4fb468688320a3fd19"
+  },
+  {
+    "id": "d2938-anthropic-06",
+    "source": "https://www.anthropic.com/news/distillation-defenses",
+    "publishedAt": "2026-10-11T21:00:00.000Z",
+    "publisher": "anthropic",
+    "event": "anthropic-06",
+    "textSha256": "0b7deb1877d9a3b38a92d9c1c3e9dd33f9da5202d4460a78893e7106ad6fdbc5"
+  },
+  {
+    "id": "d2938-anthropic-07",
+    "source": "https://www.anthropic.com/news/2026-usage-policy-update",
+    "publishedAt": "2026-10-07T21:00:00.000Z",
+    "publisher": "anthropic",
+    "event": "anthropic-07",
+    "textSha256": "be3f2ba15dabe0f7db7e9585e58728dbff0ff306d8720bba63a5854e398f9fa6"
+  },
+  {
+    "id": "d2938-anthropic-08",
+    "source": "https://www.anthropic.com/news/anthropic-cyber-mission",
+    "publishedAt": "2026-10-07T21:00:00.000Z",
+    "publisher": "anthropic",
+    "event": "anthropic-08",
+    "textSha256": "6ced85e1f30487ab317c9ba545fe840c449d9e0fe74a6ea35c867a4da7db74f1"
+  },
+  {
+    "id": "d2938-anthropic-09",
+    "source": "https://www.anthropic.com/news/genesis-mission-commitment",
+    "publishedAt": "2026-10-07T21:00:00.000Z",
+    "publisher": "anthropic",
+    "event": "anthropic-09",
+    "textSha256": "c5517957db2f01f7667cea8d9cb5d1c75efbaa39941621362d440a2228ad4e84"
+  },
+  {
+    "id": "d2938-anthropic-10",
+    "source": "https://www.anthropic.com/claude-haiku-5-5",
+    "publishedAt": "2026-10-06T21:00:00.000Z",
+    "publisher": "anthropic",
+    "event": "anthropic-10",
+    "textSha256": "4926f02f4e7452a545d17f402b60ac76b0507fa9aa70ea4d745903e3ebe3dd17"
+  },
+  {
+    "id": "d2938-anthropic-11",
+    "source": "https://www.anthropic.com/news/cyber-verification-program",
+    "publishedAt": "2026-10-05T21:00:00.000Z",
+    "publisher": "anthropic",
+    "event": "anthropic-11",
+    "textSha256": "538a3ee2d14be48fe1babbd78a2fa139bde5b720e64cc80cfe159ab9603f1448"
+  },
+  {
+    "id": "d2938-anthropic-12",
+    "source": "https://www.anthropic.com/news/claude-frontier-academy",
+    "publishedAt": "2026-10-01T21:00:00.000Z",
+    "publisher": "anthropic",
+    "event": "anthropic-12",
+    "textSha256": "e88619ab70513734b19d3816fa84fc3d6ec29e69fe08f996930fa38b7492efd8"
+  },
+  {
+    "id": "d2938-anthropic-13",
+    "source": "https://www.anthropic.com/news/barclays-scales-claude",
+    "publishedAt": "2026-09-30T21:00:00.000Z",
+    "publisher": "anthropic",
+    "event": "anthropic-13",
+    "textSha256": "8e7ff9c5b2bc8e7a3fe15c0b16191636f2a52dac2f88e9a8b624fa8714503d42"
+  },
+  {
+    "id": "d2938-anthropic-14",
+    "source": "https://www.anthropic.com/claude-sonnet-5-5",
+    "publishedAt": "2026-09-27T21:00:00.000Z",
+    "publisher": "anthropic",
+    "event": "anthropic-14",
+    "textSha256": "da93655d647a0f10d9fa91550f8f561c0064267bb30b4691e1e0444a8bad5564"
+  },
+  {
+    "id": "d2938-anthropic-15",
+    "source": "https://www.anthropic.com/claude-opus-5-5",
+    "publishedAt": "2026-09-21T21:00:00.000Z",
+    "publisher": "anthropic",
+    "event": "anthropic-15",
+    "textSha256": "fed06ab551ad948d146e774c4e5e0a02833f051f555e6c3e08bde451ccb00dbb"
+  },
+  {
+    "id": "d2938-anthropic-16",
+    "source": "https://www.anthropic.com/features/ebola-response",
+    "publishedAt": "2026-09-20T21:00:00.000Z",
+    "publisher": "anthropic",
+    "event": "anthropic-16",
+    "textSha256": "8a69b14c5ec3497f8c8a18307ff57d595b628da172fa56d061a70cc1c2a4b23c"
+  },
+  {
+    "id": "d2938-anthropic-17",
+    "source": "https://www.anthropic.com/news/accenture-embedded-evaluation",
+    "publishedAt": "2026-09-17T21:00:00.000Z",
+    "publisher": "anthropic",
+    "event": "anthropic-17",
+    "textSha256": "ba9e97660192cceffb33f9f9b42a161fa42f6d91eecb64c5be6e181529ff438c"
+  },
+  {
+    "id": "d2938-anthropic-18",
+    "source": "https://www.anthropic.com/news/life-sciences-verification-program",
+    "publishedAt": "2026-09-16T21:00:00.000Z",
+    "publisher": "anthropic",
+    "event": "anthropic-18",
+    "textSha256": "3d8a14a6950d4e943e99a144b3993027eac170de1a921ca7168ffde9daf2a9dc"
+  },
+  {
+    "id": "d2938-anthropic-19",
+    "source": "https://www.anthropic.com/claude-fable-and-mythos-5-1",
+    "publishedAt": "2026-09-14T21:00:00.000Z",
+    "publisher": "anthropic",
+    "event": "anthropic-19",
+    "textSha256": "6ad72d28e88b98f95c4e0e973ff95f9d539d322cfe204d4394c4870345f3ce50"
+  },
+  {
+    "id": "d2938-anthropic-20",
+    "source": "https://www.anthropic.com/institute/econ-scenarios",
+    "publishedAt": "2026-09-08T21:00:00.000Z",
+    "publisher": "anthropic",
+    "event": "anthropic-20",
+    "textSha256": "15899c9edfaafd1feb5f3829083c822c47eddc3f363752e916f27de89868a56d"
+  },
+  {
+    "id": "d2938-anthropic-21",
+    "source": "https://www.anthropic.com/news/improving-alignment-security-efforts",
+    "publishedAt": "2026-08-30T21:00:00.000Z",
+    "publisher": "anthropic",
+    "event": "anthropic-21",
+    "textSha256": "1c86ecf2a6088f6336c96b7dcab44a78cad82cb9d91f9cce299aad2ef9237a84"
+  },
+  {
+    "id": "d2938-anthropic-22",
+    "source": "https://www.anthropic.com/news/model-hardware-standard-research-preview",
+    "publishedAt": "2026-08-26T21:00:00.000Z",
+    "publisher": "anthropic",
+    "event": "anthropic-22",
+    "textSha256": "827ee9623cdc8c19db3282818da495a727b6dadb0d036b2c41efad770d93c477"
+  },
+  {
+    "id": "d2938-anthropic-23",
+    "source": "https://www.anthropic.com/features/project-deal",
+    "publishedAt": "2026-04-20T21:00:00.000Z",
+    "publisher": "anthropic",
+    "event": "anthropic-23",
+    "textSha256": "99fb8101f29fe711e3c72f85dde25c8f4d695a6684427ae0bdb5bffcca0c95d7"
+  },
+  {
+    "id": "d2938-anthropic-24",
+    "source": "https://www.anthropic.com/features/making-of-claude-code",
+    "publishedAt": "2026-02-22T21:00:00.000Z",
+    "publisher": "anthropic",
+    "event": "anthropic-24",
+    "textSha256": "bc19c8e4935dcfecd286aa26eea8422abcc6559701fdd939d437a35626f93eb4"
+  },
+  {
+    "id": "d2938-sciencedaily-01",
+    "source": "https://www.sciencedaily.com/releases/2026/10/261023023732.htm",
+    "publishedAt": "2026-10-24T13:15:00.000Z",
+    "publisher": "sciencedaily",
+    "event": "sciencedaily-01",
+    "textSha256": "71ffb52d94c3faf267cca05589729d11eeaa0e3e6daf00d6817e6a1a5758ad71"
+  },
+  {
+    "id": "d2938-sciencedaily-02",
+    "source": "https://www.sciencedaily.com/releases/2026/10/261023023738.htm",
+    "publishedAt": "2026-10-24T13:01:22.000Z",
+    "publisher": "sciencedaily",
+    "event": "sciencedaily-02",
+    "textSha256": "ec5dbf5f22e45bee23f06356d0b317876f419acee97e6580892c72b0aa69c22f"
+  },
+  {
+    "id": "d2938-sciencedaily-03",
+    "source": "https://www.sciencedaily.com/releases/2026/10/261023023734.htm",
+    "publishedAt": "2026-10-24T12:50:06.000Z",
+    "publisher": "sciencedaily",
+    "event": "sciencedaily-03",
+    "textSha256": "42b37567a28c141055a61171010595c82d355dfaa2fd794a103df8c9c779915e"
+  },
+  {
+    "id": "d2938-sciencedaily-04",
+    "source": "https://www.sciencedaily.com/releases/2026/10/261023023726.htm",
+    "publishedAt": "2026-10-24T12:39:16.000Z",
+    "publisher": "sciencedaily",
+    "event": "sciencedaily-04",
+    "textSha256": "0d466ce738fe94005ef308eed6ab8f585daee1dc7ec1c9347a72735ed6dee999"
+  },
+  {
+    "id": "d2938-sciencedaily-05",
+    "source": "https://www.sciencedaily.com/releases/2026/10/261023023723.htm",
+    "publishedAt": "2026-10-24T12:23:38.000Z",
+    "publisher": "sciencedaily",
+    "event": "sciencedaily-05",
+    "textSha256": "938f5b34d7e9d229bd23a8f8267aeb063b497de895eed4693ee6a8b6475a4bc3"
+  },
+  {
+    "id": "d2938-sciencedaily-06",
+    "source": "https://www.sciencedaily.com/releases/2026/10/261023023718.htm",
+    "publishedAt": "2026-10-24T12:12:03.000Z",
+    "publisher": "sciencedaily",
+    "event": "rolling-snakes-2026-cub-08-057",
+    "textSha256": "f145e3fd85d4e0208a1b3de6b1b8db9f4bfc6e53be0f611daf1e46782b6e2a6c"
+  },
+  {
+    "id": "d2938-sciencedaily-07",
+    "source": "https://www.sciencedaily.com/releases/2026/10/261023023713.htm",
+    "publishedAt": "2026-10-24T11:52:47.000Z",
+    "publisher": "sciencedaily",
+    "event": "sciencedaily-07",
+    "textSha256": "5e5a9c12237aa4f4c29784cd5b71a37c782339659185776eb96c9a378f44339e"
+  },
+  {
+    "id": "d2938-sciencedaily-08",
+    "source": "https://www.sciencedaily.com/releases/2026/10/261023002905.htm",
+    "publishedAt": "2026-10-24T11:16:08.000Z",
+    "publisher": "sciencedaily",
+    "event": "sciencedaily-08",
+    "textSha256": "9dcf356e67f77e87aa7193a0de774fe5646d547d6e3414d7443b2b50f9e2d439"
+  },
+  {
+    "id": "d2938-sciencedaily-09",
+    "source": "https://www.sciencedaily.com/releases/2026/10/261023023710.htm",
+    "publishedAt": "2026-10-24T02:42:19.000Z",
+    "publisher": "sciencedaily",
+    "event": "sciencedaily-09",
+    "textSha256": "ad1c2728acde20e8c420a09219be6d8be931f16461553de2f631ff717452ede7"
+  },
+  {
+    "id": "d2938-sciencedaily-10",
+    "source": "https://www.sciencedaily.com/releases/2026/10/261022081300.htm",
+    "publishedAt": "2026-10-24T00:48:21.000Z",
+    "publisher": "sciencedaily",
+    "event": "sciencedaily-10",
+    "textSha256": "1ae566f07b51126a3bcc02eef1890dbbde53d745993c2b125e5532de530aa7bc"
+  },
+  {
+    "id": "d2938-sciencedaily-11",
+    "source": "https://www.sciencedaily.com/releases/2026/10/261023003214.htm",
+    "publishedAt": "2026-10-23T11:23:19.000Z",
+    "publisher": "sciencedaily",
+    "event": "sciencedaily-11",
+    "textSha256": "86fa624d446ccdabd7d0926a3c0d0dbc5a161c5bfdc1f583af589dfd4228e081"
+  },
+  {
+    "id": "d2938-sciencedaily-12",
+    "source": "https://www.sciencedaily.com/releases/2026/10/261022081314.htm",
+    "publishedAt": "2026-10-23T11:12:28.000Z",
+    "publisher": "sciencedaily",
+    "event": "sciencedaily-12",
+    "textSha256": "795ec169f42a5745d6cd01638009c8ffd9131049fabed5741cecb1af19b70e3e"
+  },
+  {
+    "id": "d2938-sciencedaily-13",
+    "source": "https://www.sciencedaily.com/releases/2026/10/261022081309.htm",
+    "publishedAt": "2026-10-23T11:02:25.000Z",
+    "publisher": "sciencedaily",
+    "event": "sciencedaily-13",
+    "textSha256": "e41cbbf30c90e96c093cfdec78c561433a0c48d95997faaa8c236f588ef64e40"
+  },
+  {
+    "id": "d2938-sciencedaily-14",
+    "source": "https://www.sciencedaily.com/releases/2026/10/261022081308.htm",
+    "publishedAt": "2026-10-23T10:33:56.000Z",
+    "publisher": "sciencedaily",
+    "event": "sciencedaily-14",
+    "textSha256": "3f5892fc94f97646af0938e5a4e6287d07296624cd837af43ad1a5f487b030ff"
+  },
+  {
+    "id": "d2938-sciencedaily-15",
+    "source": "https://www.sciencedaily.com/releases/2026/10/261022081302.htm",
+    "publishedAt": "2026-10-23T10:22:55.000Z",
+    "publisher": "sciencedaily",
+    "event": "sciencedaily-15",
+    "textSha256": "0a415d97cf5b4d33c445393558bf20b1a8940ae79301f6484ba2aceb31206839"
+  },
+  {
+    "id": "d2938-sciencedaily-16",
+    "source": "https://www.sciencedaily.com/releases/2026/10/261022081306.htm",
+    "publishedAt": "2026-10-23T10:10:11.000Z",
+    "publisher": "sciencedaily",
+    "event": "sciencedaily-16",
+    "textSha256": "13ebabf0ad45982a442e808605e0377a4cf50fecf0a93d0ee7711b831de7eca3"
+  },
+  {
+    "id": "d2938-sciencedaily-17",
+    "source": "https://www.sciencedaily.com/releases/2026/10/261022081316.htm",
+    "publishedAt": "2026-10-23T09:42:58.000Z",
+    "publisher": "sciencedaily",
+    "event": "sciencedaily-17",
+    "textSha256": "9820313c888e93f6712ebd68f1368307f27029ccb8e717e0f8af7375673cda01"
+  },
+  {
+    "id": "d2938-sciencedaily-18",
+    "source": "https://www.sciencedaily.com/releases/2026/10/261022081304.htm",
+    "publishedAt": "2026-10-23T08:28:22.000Z",
+    "publisher": "sciencedaily",
+    "event": "sciencedaily-18",
+    "textSha256": "13b254e7fc5316815b93f01e679c8149cb4e077763129188cb78463b65518ced"
+  },
+  {
+    "id": "d2938-sciencedaily-19",
+    "source": "https://www.sciencedaily.com/releases/2026/10/261021231241.htm",
+    "publishedAt": "2026-10-23T03:35:13.000Z",
+    "publisher": "sciencedaily",
+    "event": "sciencedaily-19",
+    "textSha256": "dd00da52dc8a85cb2dc907af1f99b99f88c9df074109bd9a999331fcae36bb35"
+  },
+  {
+    "id": "d2938-sciencedaily-20",
+    "source": "https://www.sciencedaily.com/releases/2026/10/261020085427.htm",
+    "publishedAt": "2026-10-22T12:46:24.000Z",
+    "publisher": "sciencedaily",
+    "event": "sciencedaily-20",
+    "textSha256": "34301fa6c8068d5d2678ec43794e0352723fcddcd845cb7688562b4e6188b356"
+  },
+  {
+    "id": "d2938-sciencedaily-21",
+    "source": "https://www.sciencedaily.com/releases/2026/10/261021231250.htm",
+    "publishedAt": "2026-10-22T12:06:14.000Z",
+    "publisher": "sciencedaily",
+    "event": "sciencedaily-21",
+    "textSha256": "6e346968ae1f30e92c01af8e4fc371a29c1761f6f99a53ce7be0c101d6ba7778"
+  },
+  {
+    "id": "d2938-sciencedaily-22",
+    "source": "https://www.sciencedaily.com/releases/2026/10/261021231248.htm",
+    "publishedAt": "2026-10-22T11:42:05.000Z",
+    "publisher": "sciencedaily",
+    "event": "sciencedaily-22",
+    "textSha256": "b6e9c6f67b4f1c7d0dd16fc6f10159eed7e0cca403824429de7725371fcb2c6e"
+  },
+  {
+    "id": "d2938-sciencedaily-23",
+    "source": "https://www.sciencedaily.com/releases/2026/10/261021231230.htm",
+    "publishedAt": "2026-10-22T11:30:49.000Z",
+    "publisher": "sciencedaily",
+    "event": "sciencedaily-23",
+    "textSha256": "3e6214b11e390b57f6928b58565ea917c9acdb55c4d8d13db46ce26bdc0c579a"
+  },
+  {
+    "id": "d2938-sciencedaily-24",
+    "source": "https://www.sciencedaily.com/releases/2026/10/261021231227.htm",
+    "publishedAt": "2026-10-22T11:20:44.000Z",
+    "publisher": "sciencedaily",
+    "event": "sciencedaily-24",
+    "textSha256": "6525b8dc92eabf805d6341c2df4069f205c0c10649f43bedd7966bae45ccd0dd"
+  },
+  {
+    "id": "d2938-nature-01",
+    "source": "https://www.nature.com/articles/d41586-026-02582-6",
+    "publishedAt": "2026-10-23T00:00:00.000Z",
+    "publisher": "nature",
+    "event": "nature-01",
+    "textSha256": "68e7cdafdae9ba173677e6d329ef85c78d94110ff13c82d06d3b282fd52de855"
+  },
+  {
+    "id": "d2938-nature-02",
+    "source": "https://www.nature.com/articles/d41586-026-03108-w",
+    "publishedAt": "2026-10-23T00:00:00.000Z",
+    "publisher": "nature",
+    "event": "nature-02",
+    "textSha256": "e30a1ee5b7ac1623061b5323d82061192cc1c62f6bfa08bb23ee50a53b333699"
+  },
+  {
+    "id": "d2938-nature-03",
+    "source": "https://www.nature.com/articles/d41586-026-03318-2",
+    "publishedAt": "2026-10-23T00:00:00.000Z",
+    "publisher": "nature",
+    "event": "nature-03",
+    "textSha256": "c60e2fbd3eac21507f384588ec153307a01fcb65df9c0751ec25d3efaa9dd69b"
+  },
+  {
+    "id": "d2938-nature-04",
+    "source": "https://www.nature.com/articles/d41586-026-03383-7",
+    "publishedAt": "2026-10-23T00:00:00.000Z",
+    "publisher": "nature",
+    "event": "nature-04",
+    "textSha256": "2f181ac000bec93716a3c91c159efde07908962d55b807929f86bab12e6de9a7"
+  },
+  {
+    "id": "d2938-nature-06",
+    "source": "https://www.nature.com/articles/d41586-026-03416-1",
+    "publishedAt": "2026-10-23T00:00:00.000Z",
+    "publisher": "nature",
+    "event": "nature-06",
+    "textSha256": "965eaf65cfe6b170bc24ff8edd1f227c767f6f7297093c9d4e5e014d4a2f4439"
+  },
+  {
+    "id": "d2938-nature-07",
+    "source": "https://www.nature.com/articles/d41586-026-03417-0",
+    "publishedAt": "2026-10-23T00:00:00.000Z",
+    "publisher": "nature",
+    "event": "nature-07",
+    "textSha256": "38c1687589c24900ffcb66c10e436cff8aff2c59715546926cadeaf0e2a7a6e3"
+  },
+  {
+    "id": "d2938-nature-08",
+    "source": "https://www.nature.com/articles/d41586-026-03418-z",
+    "publishedAt": "2026-10-23T00:00:00.000Z",
+    "publisher": "nature",
+    "event": "single-positron-cyclotron-2026",
+    "textSha256": "b984446ba4eb8d5011a5add207f68f371e4ced910b218fe9a3811aff22ba023e"
+  },
+  {
+    "id": "d2938-nature-09",
+    "source": "https://www.nature.com/articles/s41586-026-11303-y",
+    "publishedAt": "2026-10-23T00:00:00.000Z",
+    "publisher": "nature",
+    "event": "nature-09",
+    "textSha256": "c538e286006c6a031bd6c4dd16e2239f74c494b3dd95185f82fa629c146e50cc"
+  },
+  {
+    "id": "d2938-nature-10",
+    "source": "https://www.nature.com/articles/d41586-026-03357-9",
+    "publishedAt": "2026-10-22T00:00:00.000Z",
+    "publisher": "nature",
+    "event": "nature-10",
+    "textSha256": "5c41e6288e1afc1fa4951c3b6d7202796ddeea33a7c768ec9b8abbe84f80715b"
+  },
+  {
+    "id": "d2938-nature-11",
+    "source": "https://www.nature.com/articles/d41586-026-03371-x",
+    "publishedAt": "2026-10-22T00:00:00.000Z",
+    "publisher": "nature",
+    "event": "nature-11",
+    "textSha256": "19c5844ec270c4d6bfe05fe61b4332fdc3b57b66f84d9c645d23d60d3edadffb"
+  },
+  {
+    "id": "d2938-nature-12",
+    "source": "https://www.nature.com/articles/d41586-026-03389-1",
+    "publishedAt": "2026-10-22T00:00:00.000Z",
+    "publisher": "nature",
+    "event": "nature-12",
+    "textSha256": "e83cb46818504cfe31a0082666deeaf9cdcdcf9ae908b3d7d92f6f69018297e9"
+  },
+  {
+    "id": "d2938-nature-13",
+    "source": "https://www.nature.com/articles/d41586-026-03414-3",
+    "publishedAt": "2026-10-22T00:00:00.000Z",
+    "publisher": "nature",
+    "event": "nature-13",
+    "textSha256": "a0eeeb3cca6d4dde5797b3c3cc235420f62ef13e5de472a89206b648ee34e962"
+  },
+  {
+    "id": "d2938-nature-15",
+    "source": "https://www.nature.com/articles/s41586-026-11312-x",
+    "publishedAt": "2026-10-22T00:00:00.000Z",
+    "publisher": "nature",
+    "event": "nature-15",
+    "textSha256": "dad6ebc60a49ba39ea64c500f9d445d438f591a99103902abeb40186250f6644"
+  },
+  {
+    "id": "d2938-nature-16",
+    "source": "https://www.nature.com/articles/d41586-026-03063-6",
+    "publishedAt": "2026-10-21T00:00:00.000Z",
+    "publisher": "nature",
+    "event": "nature-16",
+    "textSha256": "5985b7ba52ee6308dcb10a482a3d07dd76b1afbb4601685486e2a5be471ad33d"
+  },
+  {
+    "id": "d2938-nature-17",
+    "source": "https://www.nature.com/articles/d41586-026-03064-5",
+    "publishedAt": "2026-10-21T00:00:00.000Z",
+    "publisher": "nature",
+    "event": "nature-17",
+    "textSha256": "08ec7d0da9a7a5264184db313a1015ee12d97226f9807913ae58a823df60ee73"
+  },
+  {
+    "id": "d2938-nature-18",
+    "source": "https://www.nature.com/articles/d41586-026-03065-4",
+    "publishedAt": "2026-10-21T00:00:00.000Z",
+    "publisher": "nature",
+    "event": "nature-18",
+    "textSha256": "1a73c87fd76088fbf31a9f38359710460cbcde6e5735099d645b8d3929e9cad4"
+  },
+  {
+    "id": "d2938-nature-19",
+    "source": "https://www.nature.com/articles/d41586-026-03066-3",
+    "publishedAt": "2026-10-21T00:00:00.000Z",
+    "publisher": "nature",
+    "event": "nature-19",
+    "textSha256": "01fe2d8c4f457a855e861982d6dd96c105aefc48355dc629c29d2a42fea17d96"
+  },
+  {
+    "id": "d2938-nature-20",
+    "source": "https://www.nature.com/articles/d41586-026-03077-0",
+    "publishedAt": "2026-10-21T00:00:00.000Z",
+    "publisher": "nature",
+    "event": "nature-20",
+    "textSha256": "eb746622120907563932f09be13e9ac3e7e8b064959a6112c3c70a5bd025a08c"
+  },
+  {
+    "id": "d2938-nature-21",
+    "source": "https://www.nature.com/articles/d41586-026-03110-2",
+    "publishedAt": "2026-10-21T00:00:00.000Z",
+    "publisher": "nature",
+    "event": "nature-21",
+    "textSha256": "96d8360b963b88e3c2d0c201ba5a1922b765b806903106e526233fd0baf577c6"
+  },
+  {
+    "id": "d2938-nature-22",
+    "source": "https://www.nature.com/articles/d41586-026-03161-5",
+    "publishedAt": "2026-10-21T00:00:00.000Z",
+    "publisher": "nature",
+    "event": "nature-22",
+    "textSha256": "5a2109932c0cabd9128bdbab65d5dd76afbee1375b8c70a36cac26a944b588c2"
+  },
+  {
+    "id": "d2938-nature-23",
+    "source": "https://www.nature.com/articles/d41586-026-03257-y",
+    "publishedAt": "2026-10-21T00:00:00.000Z",
+    "publisher": "nature",
+    "event": "nature-23",
+    "textSha256": "c8cdf0f1fbccf8f7a822346a1fcc73165ab57f4e903d1c9bc87e78cf03dbc2d6"
+  },
+  {
+    "id": "d2938-nature-24",
+    "source": "https://www.nature.com/articles/d41586-026-03282-x",
+    "publishedAt": "2026-10-21T00:00:00.000Z",
+    "publisher": "nature",
+    "event": "nature-24",
+    "textSha256": "8e01280603adb43e91b1fb0ea3e3eaa4cb24340364096e9da26dc36510255e4e"
+  },
+  {
+    "id": "d2938-sciencenews-02",
+    "source": "https://www.sciencenews.org/article/human-chimp-brains-different-virus-dna",
+    "publishedAt": "2026-10-23T18:02:09.000Z",
+    "publisher": "sciencenews",
+    "event": "sciencenews-02",
+    "textSha256": "1217eff32823737cb622af7374ec8fdf8359df07f1a48647ee9b1483dcb3d3c3"
+  },
+  {
+    "id": "d2938-sciencenews-03",
+    "source": "https://www.sciencenews.org/article/sugar-antibiotics-squash-gut-bacteria",
+    "publishedAt": "2026-10-23T15:30:00.000Z",
+    "publisher": "sciencenews",
+    "event": "sciencenews-03",
+    "textSha256": "caca75806e3897a2136dca2bdf983b0a8841951fd285fbee11b6c8b5b5c99236"
+  },
+  {
+    "id": "d2938-sciencenews-04",
+    "source": "https://www.sciencenews.org/article/asthma-symptoms-electric-stove-gas",
+    "publishedAt": "2026-10-23T13:00:00.000Z",
+    "publisher": "sciencenews",
+    "event": "sciencenews-04",
+    "textSha256": "7e68c3366741857035ea3fe872cba68e603782777803f4b3e861ad3455556316"
+  },
+  {
+    "id": "d2938-sciencenews-05",
+    "source": "https://www.sciencenews.org/article/nanoparticle-tiny-impact-gas-atom",
+    "publishedAt": "2026-10-22T17:00:00.000Z",
+    "publisher": "sciencenews",
+    "event": "sciencenews-05",
+    "textSha256": "f541038190719ccb13a48ce6944a478dae2e141a990583bfdc2968b2a5b22ded"
+  },
+  {
+    "id": "d2938-sciencenews-06",
+    "source": "https://www.sciencenews.org/article/van-gogh-starry-night-real-sky-stars",
+    "publishedAt": "2026-10-22T15:16:10.000Z",
+    "publisher": "sciencenews",
+    "event": "sciencenews-06",
+    "textSha256": "50b284cbdaf812c65f43039c6bf01156be1c73f5a39c22e3162f95306b300a3f"
+  },
+  {
+    "id": "d2938-sciencenews-07",
+    "source": "https://www.sciencenews.org/article/car-t-cell-therapy-autoimmune-diseases",
+    "publishedAt": "2026-10-22T13:00:00.000Z",
+    "publisher": "sciencenews",
+    "event": "sciencenews-07",
+    "textSha256": "fd338c723974d7284c208fcbb9f61a4d1714d5ba02134e0465a9cbc317afbe85"
+  },
+  {
+    "id": "d2938-sciencenews-08",
+    "source": "https://www.sciencenews.org/article/ai-scientific-papers-research-assistant",
+    "publishedAt": "2026-10-21T17:00:00.000Z",
+    "publisher": "sciencenews",
+    "event": "sciencenews-08",
+    "textSha256": "fbdebf8834ce4e354123b158400bb32f3ad89f69d181d7195cdb9406fdc5309b"
+  },
+  {
+    "id": "d2938-sciencenews-09",
+    "source": "https://www.sciencenews.org/article/opioid-overdose-deaths-naloxone",
+    "publishedAt": "2026-10-21T15:33:50.000Z",
+    "publisher": "sciencenews",
+    "event": "sciencenews-09",
+    "textSha256": "bf3ca8bde2a1cfc620cb992f0a14646451d8571b952a925f24e73b131aaa7d21"
+  },
+  {
+    "id": "d2938-sciencenews-10",
+    "source": "https://www.sciencenews.org/article/nikon-small-world-contest-2026-photos",
+    "publishedAt": "2026-10-21T14:00:31.000Z",
+    "publisher": "sciencenews",
+    "event": "sciencenews-10",
+    "textSha256": "edaa293b93648d702bdad080fcda3179aa0f8fd215e18a677640ddc7a02c72d8"
+  },
+  {
+    "id": "d2938-sciencenews-11",
+    "source": "https://www.sciencenews.org/article/minerals-earth-geology-gabriela-farfan",
+    "publishedAt": "2026-10-21T11:00:00.000Z",
+    "publisher": "sciencenews",
+    "event": "sciencenews-11",
+    "textSha256": "ac14289def96adbdb4b96e7e2e12dc8be0b3b308a002bb1e48d58062d7a5bea0"
+  },
+  {
+    "id": "d2938-sciencenews-12",
+    "source": "https://www.sciencenews.org/article/rule-breaking-can-be-contagious",
+    "publishedAt": "2026-10-20T23:01:00.000Z",
+    "publisher": "sciencenews",
+    "event": "sciencenews-12",
+    "textSha256": "f176a250d428841c7dc22b318f5fa0cc3fd1986d9d14bd11bc99aef79ef74c63"
+  },
+  {
+    "id": "d2938-sciencenews-13",
+    "source": "https://www.sciencenews.org/article/quantum-computer-megaquops-error-correction",
+    "publishedAt": "2026-10-20T13:00:00.000Z",
+    "publisher": "sciencenews",
+    "event": "sciencenews-13",
+    "textSha256": "6b847cd4a9c6c0ff17b56dc439015a9014091cc677917704f25c6b1474d45f69"
+  },
+  {
+    "id": "d2938-sciencenews-14",
+    "source": "https://www.sciencenews.org/article/ai-voice-restore-identity-the-deep-end",
+    "publishedAt": "2026-10-20T11:00:00.000Z",
+    "publisher": "sciencenews",
+    "event": "sciencenews-14",
+    "textSha256": "cd6017517929788a4ac1790457f7a25be2eabdfe116fb7efdead48dda7983ca0"
+  },
+  {
+    "id": "d2938-sciencenews-15",
+    "source": "https://www.sciencenews.org/article/tiny-snakes-cartwheel-escape-video",
+    "publishedAt": "2026-10-19T15:00:00.000Z",
+    "publisher": "sciencenews",
+    "event": "rolling-snakes-2026-cub-08-057",
+    "textSha256": "9c4a4ee68d886eca12ae00b8d186ccb7ae6694579b14831e8d1b42407cb62834"
+  },
+  {
+    "id": "d2938-sciencenews-16",
+    "source": "https://www.sciencenews.org/article/japan-mission-mars-moon",
+    "publishedAt": "2026-10-19T13:00:00.000Z",
+    "publisher": "sciencenews",
+    "event": "sciencenews-16",
+    "textSha256": "524602a46aa902a2fa137cc10a58caac86bf7f50f675ff3ce9726d0390213473"
+  },
+  {
+    "id": "d2938-sciencenews-17",
+    "source": "https://www.sciencenews.org/article/horned-dinosaur-skull-forces-combat",
+    "publishedAt": "2026-10-16T15:00:00.000Z",
+    "publisher": "sciencenews",
+    "event": "sciencenews-17",
+    "textSha256": "bb123f92b22621895c7ca8b151b5a24303e9f15538b9200a726466e24b3bd25f"
+  },
+  {
+    "id": "d2938-sciencenews-18",
+    "source": "https://www.sciencenews.org/article/artemis-ii-human-moon-science",
+    "publishedAt": "2026-10-16T13:00:00.000Z",
+    "publisher": "sciencenews",
+    "event": "sciencenews-18",
+    "textSha256": "b88ec038d1d3755c859194f5ee1347bebdc40efc54b509b9f5945e8bd2c09d63"
+  },
+  {
+    "id": "d2938-sciencenews-19",
+    "source": "https://www.sciencenews.org/article/crossword-puzzle-november-2026",
+    "publishedAt": "2026-10-16T12:00:00.000Z",
+    "publisher": "sciencenews",
+    "event": "sciencenews-19",
+    "textSha256": "4e08f36209554d0e4d70f426f1eb0259a2203a47e7624605374a6f043316cafd"
+  },
+  {
+    "id": "d2938-sciencenews-20",
+    "source": "https://www.sciencenews.org/article/iodine-salt-brain-development-diets",
+    "publishedAt": "2026-10-15T17:00:00.000Z",
+    "publisher": "sciencenews",
+    "event": "sciencenews-20",
+    "textSha256": "d187c475308ae5d400a174424a9688b2ee35681fb66ebbd3a02049c5002f6bcf"
+  },
+  {
+    "id": "d2938-phys-01",
+    "source": "https://phys.org/news/2026-10-flare-ribbons-reveal-hidden-solar.html",
+    "publishedAt": "2026-10-24T18:00:01.000Z",
+    "publisher": "phys",
+    "event": "phys-01",
+    "textSha256": "f92d9456cc82afc7ed4a991c5fb79afc19570e9d9c80a7cdbf0ea1686143c3d2"
+  },
+  {
+    "id": "d2938-phys-02",
+    "source": "https://phys.org/news/2026-10-positron-cyclotron-key-standard.html",
+    "publishedAt": "2026-10-24T17:20:02.000Z",
+    "publisher": "phys",
+    "event": "single-positron-cyclotron-2026",
+    "textSha256": "19f79a574b4efecff335d2a3e83836ad62e28e75e36169923c896e1cfd8fb90f"
+  },
+  {
+    "id": "d2938-phys-03",
+    "source": "https://phys.org/news/2026-10-newly-protein-pathway-hiv-stay.html",
+    "publishedAt": "2026-10-24T16:00:01.000Z",
+    "publisher": "phys",
+    "event": "phys-03",
+    "textSha256": "b219f8ddd49887d740e20f0f8b5e73c504aefae4bdadad637df459653053bf69"
+  },
+  {
+    "id": "d2938-phys-04",
+    "source": "https://phys.org/news/2026-10-nanoscale-alloy-redesign-tackles-cold.html",
+    "publishedAt": "2026-10-24T15:00:02.000Z",
+    "publisher": "phys",
+    "event": "phys-04",
+    "textSha256": "348775f9f0ef13095b8f8bb89d5b7f4518579798771eb8af742796a616bad7ba"
+  },
+  {
+    "id": "d2938-phys-05",
+    "source": "https://phys.org/news/2026-10-seabird-family-tree-species-accumulate.html",
+    "publishedAt": "2026-10-24T14:00:01.000Z",
+    "publisher": "phys",
+    "event": "phys-05",
+    "textSha256": "5ce829d1e7126ccb2ea4015629ca2a037521ddd7e212d3aed2d232b4615daf55"
+  },
+  {
+    "id": "d2938-phys-06",
+    "source": "https://phys.org/news/2026-10-ancient-stalagmites-reveal-exceptions-asiasouth.html",
+    "publishedAt": "2026-10-24T13:00:01.000Z",
+    "publisher": "phys",
+    "event": "phys-06",
+    "textSha256": "4853ad0d1bf7f022c532051231c539c50a10fcdfae7b8b5ad9b9941b128f257e"
+  },
+  {
+    "id": "d2938-phys-07",
+    "source": "https://phys.org/news/2026-10-cleaner-brick-kilns-pollution-gains.html",
+    "publishedAt": "2026-10-24T12:00:07.000Z",
+    "publisher": "phys",
+    "event": "phys-07",
+    "textSha256": "5a3e07a2a1ccfff9265be674c3e61d3fd80f3eb54b39fb17b27f42676d377e46"
+  },
+  {
+    "id": "d2938-phys-08",
+    "source": "https://phys.org/news/2026-10-longclawed-british-dinosaur-kind-europe.html",
+    "publishedAt": "2026-10-24T12:00:01.000Z",
+    "publisher": "phys",
+    "event": "phys-08",
+    "textSha256": "647f631f40853952a712657932f1265deca3392b4aadb0ff2b0a76e4e21be6d5"
+  },
+  {
+    "id": "d2938-phys-09",
+    "source": "https://phys.org/news/2026-10-virtual-lightsabers-pattern-based-vr.html",
+    "publishedAt": "2026-10-24T10:20:01.000Z",
+    "publisher": "phys",
+    "event": "phys-09",
+    "textSha256": "e16c966f5ee3465941744d08cbd884c6f9f287d89bdf4ea292f8d3a34500bae8"
+  },
+  {
+    "id": "d2938-phys-10",
+    "source": "https://phys.org/news/2026-10-typhoon-champi-power-thousands-taiwan.html",
+    "publishedAt": "2026-10-24T09:40:01.000Z",
+    "publisher": "phys",
+    "event": "phys-10",
+    "textSha256": "647a2bba6d518f9b06b0f1f17c10e850c05affa8f97c18072429fb5f5911a641"
+  },
+  {
+    "id": "d2938-phys-11",
+    "source": "https://phys.org/news/2026-10-nasa-apollo-urgency-moon-base.html",
+    "publishedAt": "2026-10-24T09:28:00.000Z",
+    "publisher": "phys",
+    "event": "phys-11",
+    "textSha256": "1960640bd554fb25f38c72b3c6c57b0cb788be673710e4d71749aac7c2d9bdea"
+  },
+  {
+    "id": "d2938-phys-12",
+    "source": "https://phys.org/news/2026-10-surveying-genetic-battlefield-uncover-rapid.html",
+    "publishedAt": "2026-10-24T03:20:02.000Z",
+    "publisher": "phys",
+    "event": "phys-12",
+    "textSha256": "b29194b9cd34a6454ae7df7e34dbbae2910ed0e2b937d31121e47696da19dd22"
+  },
+  {
+    "id": "d2938-phys-13",
+    "source": "https://phys.org/news/2026-10-child-citizen-science-ecuadorian-community.html",
+    "publishedAt": "2026-10-24T02:20:01.000Z",
+    "publisher": "phys",
+    "event": "phys-13",
+    "textSha256": "d7ceb8ecd8397aaf834f261890b08794674fa06b10d705413ec62849a8ffb282"
+  },
+  {
+    "id": "d2938-phys-14",
+    "source": "https://phys.org/news/2026-10-habitat-finnish-animal-climate.html",
+    "publishedAt": "2026-10-24T01:00:02.000Z",
+    "publisher": "phys",
+    "event": "phys-14",
+    "textSha256": "f52b21a61f24358a4da83bff2f526db050e8a7091c6099aec008065f75752ee2"
+  },
+  {
+    "id": "d2938-phys-15",
+    "source": "https://phys.org/news/2026-10-power-students-link-anxiety-disrupted.html",
+    "publishedAt": "2026-10-23T23:40:04.000Z",
+    "publisher": "phys",
+    "event": "phys-15",
+    "textSha256": "ec397b9626fdb42b6c2dec819c68f2ab6347362288b9abfc3e15aa6b7c3e1601"
+  },
+  {
+    "id": "d2938-phys-16",
+    "source": "https://phys.org/news/2026-10-reveal-immune-responses-infection-sites.html",
+    "publishedAt": "2026-10-23T23:20:01.000Z",
+    "publisher": "phys",
+    "event": "phys-16",
+    "textSha256": "3fe7fed4fafb9947c7809327aa94b0586bdbef1f77c9de3eb136e673dc92cacd"
+  },
+  {
+    "id": "d2938-phys-17",
+    "source": "https://phys.org/news/2026-10-human-side.html",
+    "publishedAt": "2026-10-23T22:20:02.000Z",
+    "publisher": "phys",
+    "event": "phys-17",
+    "textSha256": "c6bca8512f70cd0f679475df355fe730b3201d77754f276d494a8a23633d1a8d"
+  },
+  {
+    "id": "d2938-phys-18",
+    "source": "https://phys.org/news/2026-10-magnetic-flux-quanta-photon.html",
+    "publishedAt": "2026-10-23T21:20:02.000Z",
+    "publisher": "phys",
+    "event": "phys-18",
+    "textSha256": "1345f7381e9c820d3e75b80a8cf6c383d94210b8cfed0d7485b5e63a7ec44942"
+  },
+  {
+    "id": "d2938-phys-19",
+    "source": "https://phys.org/news/2026-10-pretty-toxic-young-men-manosphere.html",
+    "publishedAt": "2026-10-23T21:00:17.000Z",
+    "publisher": "phys",
+    "event": "phys-19",
+    "textSha256": "eeae33dec8dc8d68bab3dd42513e264d0475465eaea3a21f63aab0c7c5ec7ae2"
+  },
+  {
+    "id": "d2938-phys-20",
+    "source": "https://phys.org/news/2026-10-scientists-ai-enzyme-drug-synthesis.html",
+    "publishedAt": "2026-10-23T21:00:13.000Z",
+    "publisher": "phys",
+    "event": "phys-20",
+    "textSha256": "dda12a72a5692b2e475f98e01733aea722d2046dc6cbfac2999d6a040e8384aa"
+  },
+  {
+    "id": "d2938-phys-21",
+    "source": "https://phys.org/news/2026-10-chemically-sugars-enable-nanostructure-formation.html",
+    "publishedAt": "2026-10-23T20:40:08.000Z",
+    "publisher": "phys",
+    "event": "phys-21",
+    "textSha256": "0c8838da6e912da27fdf444d158def6cec28b79f3de02cc6efce3b31f5b014fa"
+  },
+  {
+    "id": "d2938-phys-22",
+    "source": "https://phys.org/news/2026-10-psychology-overpay-cars-left-digit.html",
+    "publishedAt": "2026-10-23T20:40:01.000Z",
+    "publisher": "phys",
+    "event": "phys-22",
+    "textSha256": "c6f800ffa06b407c6ab970a74b0ba2c166be968c1ec3ca4a7b720d514a210c6d"
+  },
+  {
+    "id": "d2938-phys-23",
+    "source": "https://phys.org/news/2026-10-adsorbents-pfas.html",
+    "publishedAt": "2026-10-23T20:20:14.000Z",
+    "publisher": "phys",
+    "event": "phys-23",
+    "textSha256": "9dad518704fd01f3264fe982e589edd9d7150a3e41e4a94e421dd07d13c0957e"
+  },
+  {
+    "id": "d2938-phys-24",
+    "source": "https://phys.org/news/2026-10-plain-silicon-reveals-hidden-electron.html",
+    "publishedAt": "2026-10-23T20:20:08.000Z",
+    "publisher": "phys",
+    "event": "phys-24",
+    "textSha256": "452c0994b77f0ebe4dae19a6a0bc345f3ac9b7c1147ebd6e25bd57e5824f4758"
+  }
+]

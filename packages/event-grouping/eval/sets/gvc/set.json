@@ -1,0 +1,20 @@
+{
+  "role": "regression",
+  "frozenAt": "2026-10-26T19:50:19Z",
+  "firstScoredAt": "2026-10-26T19:59:05Z",
+  "labelsSha256": "2ab7d89462f1df599afa6da5d9e680147b35de0fb05d45d5e84bb6501cd1cec4",
+  "annotator": "The Gun Violence Corpus authors annotated each event mention with its incident. Round #3130 gave each document one incident: the incident with the most annotated mention tokens (verbose.conll, column 4). One document with a tie was left out.",
+  "boundaryRule": "One event is one gun-violence incident of the Gun Violence Archive. A document gets the incident with the most annotated mention tokens.",
+  "text": "gvc",
+  "source": {
+    "name": "Gun Violence Corpus, commit 1d80c3a21bb896520dae9e047d70d598279c0df6",
+    "url": "https://github.com/cltl/GunViolenceCorpus",
+    "licence": "The corpus annotations are licensed CC BY 4.0 (LICENSE.md). The license covers only the rights of the corpus authors; the news texts belong to their publishers and are not in this repository.",
+    "attribution": "Piek Vossen, Filip Ilievski, Marten Postma and Roxane Segers. 2018. Don't Annotate, but Validate: a Data-to-Text Method for Capturing Event Data. In Proceedings of LREC 2018."
+  },
+  "weaknesses": [
+    "127 of 510 documents mention more than one incident. The most-tokens rule can give such a document the wrong incident.",
+    "Suspected label error (zukhruf backlog #3145): incident gvc-338580 holds two Tacoma drive-by articles and the Spokane article \"Teen, 17, charged with murder in accidental shooting\".",
+    "Round #3130 scored this set once as its test. It is a regression set now: do not tune on it."
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "role": "training",
+  "frozenAt": "2026-10-24T18:08:33Z",
+  "firstScoredAt": "2026-10-24T18:31:45Z",
+  "labelsSha256": "f9bb1d77f980eaee174dfad5d89ab9a6420eacee8823c50b1ed076907afed4b6",
+  "annotator": "Codex, one annotator, with a second review of the evidence before any prediction. Not independent human consensus (round #2938, evaluation-set.json version 1).",
+  "boundaryRule": "One event is one concrete announcement, study or event. Different software versions, experiments, dates or policy developments are separate events. Articles with no event label are not in the set.",
+  "text": "web",
+  "source": {
+    "name": "Feeds of twelve technology and science publishers, October 2026 (round #2938). Link posts point to other sites, so the reports come from 27 hosts.",
+    "url": "https://simonwillison.net/",
+    "licence": "The articles belong to their publishers. This repository holds only their URLs, dates, publishers and our labels.",
+    "attribution": "Reports by the hosts of their URLs, mostly simonwillison.net, blog.cloudflare.com, blog.python.org, martinfowler.com, github.blog, daringfireball.net, jvns.ca, anthropic.com, sciencedaily.com, nature.com, sciencenews.org and phys.org. Labels by the zukhruf project."
+  },
+  "weaknesses": [
+    "One annotator (an AI model).",
+    "Most events have one article: 217 articles, 209 events, 14 positive pairs.",
+    "The texts in the cache are elt captures of round #2947. A text that the runner fetches again is extracted with Readability, so it can differ."
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "role": "regression",
+  "frozenAt": "2026-10-24T18:31:45Z",
+  "firstScoredAt": "2026-10-24T18:31:45Z",
+  "labelsSha256": "27c8d84f5a9b73091d11b6718747a9fd1e2e8a9d0c5e91042a3e9957100c4ea5",
+  "annotator": "Five crowd annotators of the HLGD authors; the label is their aggregate group (global_group) in hlgd_original_annotations.json.",
+  "boundaryRule": "Two headlines of one timeline are one event when the annotators put them in one group. The set is the headlines of the HLGD test pairs.",
+  "text": "hlgd",
+  "source": {
+    "name": "Headline Grouping dataset (HLGD), release 0.1, test split",
+    "url": "https://github.com/tingofurro/headline_grouping",
+    "licence": "Apache License 2.0 (LICENSE; Hugging Face card philippelaban/hlgd). The headlines belong to their publishers; the authors distribute them as fair use (LEGAL.md). This repository holds only annotation indexes, dates, publishers and the group labels.",
+    "attribution": "Philippe Laban, Lucas Bandarkar and Marti A. Hearst. 2021. News Headline Grouping as a Challenging NLU Task. In Proceedings of NAACL 2021."
+  },
+  "weaknesses": [
+    "Headlines only. The detector never joins a headline-only report (ADR 0003), so this set measures the cost of that rule, not the grouping."
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "role": "training",
+  "frozenAt": "2026-10-26T19:50:19Z",
+  "firstScoredAt": "2026-10-26T19:58:45Z",
+  "labelsSha256": "f2277218175f2f6ce16c45ec59f527bbb7414120cd95aa915267904a31ca5474",
+  "annotator": "The ECB+ authors annotated the corpus. Round #3130 took the event of a document from its topic and its sub-corpus (ecb or ecbplus): the seminal event of the subtopic.",
+  "boundaryRule": "All documents of one topic and one sub-corpus (ecb or ecbplus) report one event. Each such subtopic was written about one seminal event.",
+  "text": "ecbplus",
+  "source": {
+    "name": "ECB+ (Event Coreference Bank Plus)",
+    "url": "https://github.com/cltl/ecbPlus",
+    "licence": "The ECB+ annotation is licensed CC BY 3.0 (ECB+_LREC2014/LICENSEDATA.TXT and COPYING-CC.TXT). The news texts belong to their publishers and are not in this repository.",
+    "attribution": "Agata Cybulska and Piek Vossen. 2014. Using a sledgehammer to crack a nut? Lexical diversity and event coreference resolution. In Proceedings of LREC 2014. ECB+ annotation copyright Agata Cybulska, Piek Vossen and the VU University of Amsterdam."
+  },
+  "weaknesses": [
+    "The label is the subtopic, not the event of each document. A document that also reports another event keeps the subtopic label.",
+    "ECB+ gives no dates. The runner gives every document one publish day, so one clustering of the window groups the whole set.",
+    "The rows have no titles. The detector takes the first real sentence as the title."
+  ]
+}

@@ -1,0 +1,2290 @@
+[
+  {
+    "id": "hlgd-test-0001",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#227",
+    "publishedAt": "2017-01-10",
+    "publisher": "aa.com.tr",
+    "event": "hlgd-1-9",
+    "textSha256": "dbf5e2ec3af05bf06da7abef6e32466d3fc6f8ad64b7ecaf78b12912c0ba897d"
+  },
+  {
+    "id": "hlgd-test-0002",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#215",
+    "publishedAt": "2017-01-09",
+    "publisher": "aa.com.tr",
+    "event": "hlgd-1-30",
+    "textSha256": "fcf9fbc9aef83f0f670a109c0d42dc8541e15992e49c8b552fff93f3f31f10a2"
+  },
+  {
+    "id": "hlgd-test-0003",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#170",
+    "publishedAt": "2017-01-06",
+    "publisher": "aa.com.tr",
+    "event": "hlgd-1-1",
+    "textSha256": "7821b9a31d1d2431f852430489a5d4a80a0b819f4dde486b61a3f61c7f5387c2"
+  },
+  {
+    "id": "hlgd-test-0004",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#23",
+    "publishedAt": "2017-09-09",
+    "publisher": "aa.com.tr",
+    "event": "hlgd-0-37",
+    "textSha256": "0a8230766a9f6918fcf2711dbd27aea611f371a1fc99448e47fd132c3f69954f"
+  },
+  {
+    "id": "hlgd-test-0005",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#11",
+    "publishedAt": "2017-09-08",
+    "publisher": "aa.com.tr",
+    "event": "hlgd-0-0",
+    "textSha256": "49c555ca9620a073feb025e35a71db2c1529e000479e7bbccad655fac59fd50e"
+  },
+  {
+    "id": "hlgd-test-0006",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#131",
+    "publishedAt": "2017-10-12",
+    "publisher": "aa.com.tr",
+    "event": "hlgd-0-20",
+    "textSha256": "8f3b39b8cdeb5267364bd6e5ce858ae1f56dcb4071ec24499f5333bbe2ab05a3"
+  },
+  {
+    "id": "hlgd-test-0007",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#121",
+    "publishedAt": "2017-10-03",
+    "publisher": "aa.com.tr",
+    "event": "hlgd-0-16",
+    "textSha256": "d423172bd0b11244030758dbdcc47c8e4953511a87a3955942f59cf7e2c9d40f"
+  },
+  {
+    "id": "hlgd-test-0008",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#61",
+    "publishedAt": "2017-09-16",
+    "publisher": "aa.com.tr",
+    "event": "hlgd-0-55",
+    "textSha256": "d1864a6ccfbf8f233e116bd88984fb9fc18d10750c27ef19810d2c92d759ac4c"
+  },
+  {
+    "id": "hlgd-test-0009",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#97",
+    "publishedAt": "2017-09-27",
+    "publisher": "aa.com.tr",
+    "event": "hlgd-0-11",
+    "textSha256": "c7cd4c680f4a3d38e6866f47a5fa80a439ddf99801ba482483e3c15c0a677863"
+  },
+  {
+    "id": "hlgd-test-0010",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#167",
+    "publishedAt": "2017-01-06",
+    "publisher": "allafrica.com",
+    "event": "hlgd-1-1",
+    "textSha256": "2f44e7b731a7f07ceb82c15c6e4c1232f50e517ae8a543ce19ebd1a161ef54ab"
+  },
+  {
+    "id": "hlgd-test-0011",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#181",
+    "publishedAt": "2017-01-07",
+    "publisher": "allafrica.com",
+    "event": "hlgd-1-1",
+    "textSha256": "4c727c691e68f447dfa846420ca372c5b7ec58c04e01ab0f7fdd00237eb84b2c"
+  },
+  {
+    "id": "hlgd-test-0012",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#190",
+    "publishedAt": "2017-01-07",
+    "publisher": "allafrica.com",
+    "event": "hlgd-1-2",
+    "textSha256": "bad1aa58abe220ca0f2c5701f404a138485962eb5f63a5d3ef2ab03c00ce396c"
+  },
+  {
+    "id": "hlgd-test-0013",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#192",
+    "publishedAt": "2017-01-07",
+    "publisher": "allafrica.com",
+    "event": "hlgd-1-4",
+    "textSha256": "63e07bc2faf3183375cb9e324004d5f85fb9272f8f05192c71688f0e294317b1"
+  },
+  {
+    "id": "hlgd-test-0014",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#205",
+    "publishedAt": "2017-01-08",
+    "publisher": "allafrica.com",
+    "event": "hlgd-1-3",
+    "textSha256": "111da235e552ef817d4c4bcac4c2e14ee9a53271a1ed02e556506757b6fcfbc0"
+  },
+  {
+    "id": "hlgd-test-0015",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#206",
+    "publishedAt": "2017-01-08",
+    "publisher": "allafrica.com",
+    "event": "hlgd-1-6",
+    "textSha256": "e77a19355e8649fb002f353dde7cb83268ee18e19878128e962bf744134fa13b"
+  },
+  {
+    "id": "hlgd-test-0016",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#214",
+    "publishedAt": "2017-01-09",
+    "publisher": "allafrica.com",
+    "event": "hlgd-1-7",
+    "textSha256": "440b70275fdc4886abb6bc85c8230ab485fe97af83961ff7cfb831a68d9f71ae"
+  },
+  {
+    "id": "hlgd-test-0017",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#221",
+    "publishedAt": "2017-01-10",
+    "publisher": "allafrica.com",
+    "event": "hlgd-1-8",
+    "textSha256": "6dc36d09c09fc739eab89312458d700b2c9e7fac5502b007b1ae8be0785a6308"
+  },
+  {
+    "id": "hlgd-test-0018",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#258",
+    "publishedAt": "2017-01-14",
+    "publisher": "allafrica.com",
+    "event": "hlgd-1-14",
+    "textSha256": "d39d06358e807ce72a3d6dbbe57e7f9f475c9379dd89e8f95438ea5b23684caa"
+  },
+  {
+    "id": "hlgd-test-0019",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#260",
+    "publishedAt": "2017-01-14",
+    "publisher": "allafrica.com",
+    "event": "hlgd-1-14",
+    "textSha256": "5373d80a6c27c6331290586acfc50a1ced8915d2d442fc1d064f3108751cdba0"
+  },
+  {
+    "id": "hlgd-test-0020",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#154",
+    "publishedAt": "2020-02-11",
+    "publisher": "feeds.reuters.com",
+    "event": "hlgd-0-23",
+    "textSha256": "2e48e4ec16d38686b2c98f577731c100a669a661e7d3834975e17d21e83d4949"
+  },
+  {
+    "id": "hlgd-test-0021",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#155",
+    "publishedAt": "2020-02-11",
+    "publisher": "feeds.reuters.com",
+    "event": "hlgd-0-22",
+    "textSha256": "e142946b9e149b97b0ddde2e7041aab955cdf0560aafd78bdee076a7cfd48040"
+  },
+  {
+    "id": "hlgd-test-0022",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#164",
+    "publishedAt": "2017-01-06",
+    "publisher": "hosted2.ap.org",
+    "event": "hlgd-1-1",
+    "textSha256": "ccb33a300cd27b3aa3488d82d6e55121092d042be1e069e2ffc360094a741320"
+  },
+  {
+    "id": "hlgd-test-0023",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#209",
+    "publishedAt": "2017-01-08",
+    "publisher": "hosted2.ap.org",
+    "event": "hlgd-1-3",
+    "textSha256": "d3adb8c64a9a5769c7a72869989fbfe22824aff86f8f5aec9e3485911295da25"
+  },
+  {
+    "id": "hlgd-test-0024",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#186",
+    "publishedAt": "2017-01-07",
+    "publisher": "hosted2.ap.org",
+    "event": "hlgd-1-2",
+    "textSha256": "66ec5c9955cf70772d5c959df7a42a3fb9e4990649f598e03c43007c2c9fd5b7"
+  },
+  {
+    "id": "hlgd-test-0025",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#187",
+    "publishedAt": "2017-01-07",
+    "publisher": "hosted2.ap.org",
+    "event": "hlgd-1-2",
+    "textSha256": "5b2955bd5f85de5c7ba50d400fbc34a2c1bb2b684ea0af9e50cece71ee8955bb"
+  },
+  {
+    "id": "hlgd-test-0026",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#188",
+    "publishedAt": "2017-01-07",
+    "publisher": "hosted2.ap.org",
+    "event": "hlgd-1-3",
+    "textSha256": "0bac032943bf06da766f44d88af78122f8e1416265c6caed0c49a5aa8214a784"
+  },
+  {
+    "id": "hlgd-test-0027",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#243",
+    "publishedAt": "2017-01-13",
+    "publisher": "hosted2.ap.org",
+    "event": "hlgd-1-14",
+    "textSha256": "75efc646939e95a97b95a76261279638790d9fa0309c1401111335d77d2001da"
+  },
+  {
+    "id": "hlgd-test-0028",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#244",
+    "publishedAt": "2017-01-13",
+    "publisher": "hosted2.ap.org",
+    "event": "hlgd-1-14",
+    "textSha256": "57293fbfbd2679c35b73832e11e26db2979377ff81e8408a534ae63978b75e1f"
+  },
+  {
+    "id": "hlgd-test-0029",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#242",
+    "publishedAt": "2017-01-13",
+    "publisher": "hosted2.ap.org",
+    "event": "hlgd-1-13",
+    "textSha256": "b35f4fd900a1ec388071bdef54dca418225fbdc02445be11c7950abeb3bf4655"
+  },
+  {
+    "id": "hlgd-test-0030",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#233",
+    "publishedAt": "2017-01-11",
+    "publisher": "aljazeera.com",
+    "event": "hlgd-1-8",
+    "textSha256": "dfce3a139f85df56beaa3745830925826caae7e42b1e42c86f8bca4ed5202da5"
+  },
+  {
+    "id": "hlgd-test-0031",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#183",
+    "publishedAt": "2017-01-07",
+    "publisher": "aljazeera.com",
+    "event": "hlgd-1-4",
+    "textSha256": "2ec6b998bc213fcb7877bf785020636cac5bd1b3a3b66752d497ab14d00e4db9"
+  },
+  {
+    "id": "hlgd-test-0032",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#169",
+    "publishedAt": "2017-01-06",
+    "publisher": "aljazeera.com",
+    "event": "hlgd-1-1",
+    "textSha256": "12b4f84ade39f081016e75c00c92ef9263f10a889919b3bb7b20b66055986ab9"
+  },
+  {
+    "id": "hlgd-test-0033",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#257",
+    "publishedAt": "2017-01-14",
+    "publisher": "aljazeera.com",
+    "event": "hlgd-1-14",
+    "textSha256": "79ed0827e1c7eae6216ce02b8c38d50ad11f45341ba2228be9e3b9264bb0bf15"
+  },
+  {
+    "id": "hlgd-test-0034",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#197",
+    "publishedAt": "2017-01-07",
+    "publisher": "aljazeera.com",
+    "event": "hlgd-1-5",
+    "textSha256": "f6a285539d89c8a7d26fe882b2c802576db058ef94cbae39f39d65b1d95edca2"
+  },
+  {
+    "id": "hlgd-test-0035",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#202",
+    "publishedAt": "2017-01-08",
+    "publisher": "aljazeera.com",
+    "event": "hlgd-1-6",
+    "textSha256": "2562b315577d1af82dacd935f844b5b1aecd7c8bb6a81410534c8ebff56033e1"
+  },
+  {
+    "id": "hlgd-test-0036",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#210",
+    "publishedAt": "2017-01-08",
+    "publisher": "aljazeera.com",
+    "event": "hlgd-1-27",
+    "textSha256": "11b851b10eb5f4e644cd99c5f3f7a9d1b9006da7146c2a0f1f5f94c8ff2e6b77"
+  },
+  {
+    "id": "hlgd-test-0037",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#6",
+    "publishedAt": "2017-09-07",
+    "publisher": "bbc.co.uk",
+    "event": "hlgd-0-0",
+    "textSha256": "055d669b5b5ff96d8b35cfffe148126478805736837f5cfc4a3586e1a0cf788f"
+  },
+  {
+    "id": "hlgd-test-0038",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#73",
+    "publishedAt": "2017-09-21",
+    "publisher": "bbc.co.uk",
+    "event": "hlgd-0-9",
+    "textSha256": "23b244980cd5799d9530b7bed2a12af576c7a7b20a78d851a39f11d4eb30045f"
+  },
+  {
+    "id": "hlgd-test-0039",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#92",
+    "publishedAt": "2017-09-26",
+    "publisher": "bbc.co.uk",
+    "event": "hlgd-0-11",
+    "textSha256": "a60859d0f1259aa74a3b652fbf20f216808f3e54449bdd6c40134c5dbe4af9c0"
+  },
+  {
+    "id": "hlgd-test-0040",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#113",
+    "publishedAt": "2017-10-02",
+    "publisher": "bbc.co.uk",
+    "event": "hlgd-0-17",
+    "textSha256": "e6fcb972e2efaf780ad9a364d9e7ab0612cb41cf422efa0d09b7adc769b69862"
+  },
+  {
+    "id": "hlgd-test-0041",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#129",
+    "publishedAt": "2017-10-12",
+    "publisher": "bbc.co.uk",
+    "event": "hlgd-0-20",
+    "textSha256": "2bafcb248d86574d0877ef44d07de682121b6283df097b4ade83fd7e7df5ec60"
+  },
+  {
+    "id": "hlgd-test-0042",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#56",
+    "publishedAt": "2017-09-15",
+    "publisher": "bbc.co.uk",
+    "event": "hlgd-0-53",
+    "textSha256": "9988545391068027be9e07d66f24d99b28c08dc8f63f5e8899fc379c775b8cfb"
+  },
+  {
+    "id": "hlgd-test-0043",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#63",
+    "publishedAt": "2017-09-16",
+    "publisher": "bbc.co.uk",
+    "event": "hlgd-0-7",
+    "textSha256": "2c759c598e325f699d2ca025e5b883367f265f6c3efbb9f44b231ff3e6d25bfb"
+  },
+  {
+    "id": "hlgd-test-0044",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#174",
+    "publishedAt": "2017-01-06",
+    "publisher": "bbc.co.uk",
+    "event": "hlgd-1-1",
+    "textSha256": "710e9a80efeca7dd99c6bcfd0ebaea6425e0b45aa02d6990b6ad40a403ec7bb3"
+  },
+  {
+    "id": "hlgd-test-0045",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#203",
+    "publishedAt": "2017-01-08",
+    "publisher": "bbc.co.uk",
+    "event": "hlgd-1-6",
+    "textSha256": "31f8776e4f9384988b1c282e488d6d042c124b1269fec163e58888e4c0bdb6fa"
+  },
+  {
+    "id": "hlgd-test-0046",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#207",
+    "publishedAt": "2017-01-08",
+    "publisher": "bbc.co.uk",
+    "event": "hlgd-1-3",
+    "textSha256": "0f98408e261ff07141324016b70200f1774359d1ecce411d353de0c5cd0f4af7"
+  },
+  {
+    "id": "hlgd-test-0047",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#208",
+    "publishedAt": "2017-01-08",
+    "publisher": "bbc.co.uk",
+    "event": "hlgd-1-7",
+    "textSha256": "344bba845bd834345d7ea12a1696391bf4c1815007c3292b3ff464af2df3a7a6"
+  },
+  {
+    "id": "hlgd-test-0048",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#217",
+    "publishedAt": "2017-01-09",
+    "publisher": "bbc.co.uk",
+    "event": "hlgd-1-8",
+    "textSha256": "6dae2ba75cd64da3f0ae1489bc7cac71f52ab8a185d8edee2e48821ec4ba87af"
+  },
+  {
+    "id": "hlgd-test-0049",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#255",
+    "publishedAt": "2017-01-14",
+    "publisher": "bbc.co.uk",
+    "event": "hlgd-1-14",
+    "textSha256": "12dd8b32ba0114d42fe04046c40a4e26993b9b4d646db885f62562751271dfb2"
+  },
+  {
+    "id": "hlgd-test-0050",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#248",
+    "publishedAt": "2017-01-13",
+    "publisher": "bbc.co.uk",
+    "event": "hlgd-1-13",
+    "textSha256": "afb94c006dc70ca0ea66efc37e390fc5e1d7bc4f61c27250b5729a2d8f73db7f"
+  },
+  {
+    "id": "hlgd-test-0051",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#159",
+    "publishedAt": "2014-11-18",
+    "publisher": "bloomberg.com",
+    "event": "hlgd-1-0",
+    "textSha256": "5bc6c8910b537bcd69121be99b96dad8e9cbc0b316a17677fb45e150855e6114"
+  },
+  {
+    "id": "hlgd-test-0052",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#62",
+    "publishedAt": "2017-09-16",
+    "publisher": "businessinsider.in",
+    "event": "hlgd-0-7",
+    "textSha256": "f1c04c3ff118a4c7704ece72657f50518f3e6a1efc91cac9ff0130c142df0d98"
+  },
+  {
+    "id": "hlgd-test-0053",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#42",
+    "publishedAt": "2017-09-13",
+    "publisher": "businessinsider.in",
+    "event": "hlgd-0-3",
+    "textSha256": "94c295eaa66bc96e735eaf96efe7633644b91fdfaba8949ea498405619df7440"
+  },
+  {
+    "id": "hlgd-test-0054",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#96",
+    "publishedAt": "2017-09-27",
+    "publisher": "businessinsider.in",
+    "event": "hlgd-0-63",
+    "textSha256": "3773f9cfadba7f043ce6fc65eb9845c5d180dd4c43e967d44e1b2380849f6a1b"
+  },
+  {
+    "id": "hlgd-test-0055",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#93",
+    "publishedAt": "2017-09-26",
+    "publisher": "businessinsider.in",
+    "event": "hlgd-0-11",
+    "textSha256": "d0110562918fae314656cba7cd4f4104ade8a1194aa6d787b8b2d329c0fd2caa"
+  },
+  {
+    "id": "hlgd-test-0056",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#43",
+    "publishedAt": "2017-09-13",
+    "publisher": "businessinsider.in",
+    "event": "hlgd-0-3",
+    "textSha256": "ef05222ab47950df46ce249ff30d8ae17deb515473ec62edb8807da1e5442392"
+  },
+  {
+    "id": "hlgd-test-0057",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#24",
+    "publishedAt": "2017-09-09",
+    "publisher": "businessinsider.in",
+    "event": "hlgd-0-38",
+    "textSha256": "e1e0710b07682b375a850d0eaee25ae8748826938f60d344e33cef490c80a103"
+  },
+  {
+    "id": "hlgd-test-0058",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#101",
+    "publishedAt": "2017-09-27",
+    "publisher": "businessinsider.in",
+    "event": "hlgd-0-66",
+    "textSha256": "e62026215922da01dff21bf096b971d93776252e6c9bc1bdc4414fb3d5b2131a"
+  },
+  {
+    "id": "hlgd-test-0059",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#22",
+    "publishedAt": "2017-09-09",
+    "publisher": "businessinsider.in",
+    "event": "hlgd-0-36",
+    "textSha256": "67a4ef919bd88ab8fa2bf2b21451a7e312ea3164009a102f860ada15133bb2a5"
+  },
+  {
+    "id": "hlgd-test-0060",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#21",
+    "publishedAt": "2017-09-08",
+    "publisher": "businessinsider.in",
+    "event": "hlgd-0-35",
+    "textSha256": "a619f0245654a31fbdc494ef7f85979b18db1dbb24d29c2d97c9df2ba758ec19"
+  },
+  {
+    "id": "hlgd-test-0061",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#59",
+    "publishedAt": "2017-09-15",
+    "publisher": "businessinsider.in",
+    "event": "hlgd-0-54",
+    "textSha256": "0e7b9375cfa1e919d67d4a0cdcb496af1d2e7e71870dbdad02805db1eeca6081"
+  },
+  {
+    "id": "hlgd-test-0062",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#51",
+    "publishedAt": "2017-09-14",
+    "publisher": "businessinsider.in",
+    "event": "hlgd-0-5",
+    "textSha256": "dd1aa4aac0e5ef8ab905a39fa88b89681217545b034ad65a25b4bd1dab6b5010"
+  },
+  {
+    "id": "hlgd-test-0063",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#175",
+    "publishedAt": "2017-01-07",
+    "publisher": "cnn.com",
+    "event": "hlgd-1-3",
+    "textSha256": "10fad314e9b0630ed7c1cc2418beddcb9ca286b764b9139f424a2c7f24f1f7e3"
+  },
+  {
+    "id": "hlgd-test-0064",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#222",
+    "publishedAt": "2017-01-10",
+    "publisher": "cnn.com",
+    "event": "hlgd-1-31",
+    "textSha256": "4307acaac8f796969a88b90c7d307abbdaff1cde45f580ae0d6e6646ea059ec9"
+  },
+  {
+    "id": "hlgd-test-0065",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#239",
+    "publishedAt": "2017-01-13",
+    "publisher": "cnn.com",
+    "event": "hlgd-1-33",
+    "textSha256": "09f2317cecc7dba7ae00af9c38d0190f8ca2aa190a135d17459d968d4a4d9b9d"
+  },
+  {
+    "id": "hlgd-test-0066",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#166",
+    "publishedAt": "2017-01-06",
+    "publisher": "foxnews.com",
+    "event": "hlgd-1-1",
+    "textSha256": "ad495d27819c220cd89031b7f4279f333bba49e43ff9f045454e82ce2c959570"
+  },
+  {
+    "id": "hlgd-test-0067",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#182",
+    "publishedAt": "2017-01-07",
+    "publisher": "foxnews.com",
+    "event": "hlgd-1-2",
+    "textSha256": "1e2f5cb79f6712cf15f0f3f7df41327518aeff94959d01851c4897ed7ce1d92d"
+  },
+  {
+    "id": "hlgd-test-0068",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#240",
+    "publishedAt": "2017-01-13",
+    "publisher": "foxnews.com",
+    "event": "hlgd-1-13",
+    "textSha256": "01aa6f1d27cc44bb60e98e627d166cc91a1c1fbe752424732cb82c6f8c66d437"
+  },
+  {
+    "id": "hlgd-test-0069",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#265",
+    "publishedAt": "2017-01-17",
+    "publisher": "foxnews.com",
+    "event": "hlgd-1-35",
+    "textSha256": "e4c8598f4ca5e27bbadcb635ad841d5b73f2e74c55bb08fb87a220c0bdadb7cd"
+  },
+  {
+    "id": "hlgd-test-0070",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#270",
+    "publishedAt": "2017-01-18",
+    "publisher": "foxnews.com",
+    "event": "hlgd-1-18",
+    "textSha256": "d71338377748b55a441bcf281f4a7263a97c9d07351936a6cc07712e056951d1"
+  },
+  {
+    "id": "hlgd-test-0071",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#165",
+    "publishedAt": "2017-01-06",
+    "publisher": "france24.com",
+    "event": "hlgd-1-1",
+    "textSha256": "4e9e0fa414d77d90ee550883b9e0111b3b09b861dddae97c7f19a8686bb81708"
+  },
+  {
+    "id": "hlgd-test-0072",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#168",
+    "publishedAt": "2017-01-06",
+    "publisher": "france24.com",
+    "event": "hlgd-1-1",
+    "textSha256": "7c83ea63fda382d75ae5eea32b6cc7c8ae3dcc48ba4214d04f089c8ab1af09cd"
+  },
+  {
+    "id": "hlgd-test-0073",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#189",
+    "publishedAt": "2017-01-07",
+    "publisher": "france24.com",
+    "event": "hlgd-1-2",
+    "textSha256": "5a674cf3eb6e73ecd4fe7dd16f10d793bc91fb85f5f95afc9b370f9d41b01288"
+  },
+  {
+    "id": "hlgd-test-0074",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#185",
+    "publishedAt": "2017-01-07",
+    "publisher": "france24.com",
+    "event": "hlgd-1-2",
+    "textSha256": "8835122e6435928cdff2d896081c7ac9551667e5a3f80bb645da29c713635bec"
+  },
+  {
+    "id": "hlgd-test-0075",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#196",
+    "publishedAt": "2017-01-07",
+    "publisher": "france24.com",
+    "event": "hlgd-1-3",
+    "textSha256": "9f22c71cc9f74e9f959f41029cbba348e072eea866e34056205ff4dacd91f091"
+  },
+  {
+    "id": "hlgd-test-0076",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#195",
+    "publishedAt": "2017-01-07",
+    "publisher": "france24.com",
+    "event": "hlgd-1-2",
+    "textSha256": "e9112a6e920a9a26802971f6318bb26e493aa247f75f850c50492ccfae2f0d89"
+  },
+  {
+    "id": "hlgd-test-0077",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#216",
+    "publishedAt": "2017-01-09",
+    "publisher": "france24.com",
+    "event": "hlgd-1-8",
+    "textSha256": "5e555455017298288a32bf87dca31181d873dfe08af4ac43a1881f2de26d5979"
+  },
+  {
+    "id": "hlgd-test-0078",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#213",
+    "publishedAt": "2017-01-09",
+    "publisher": "france24.com",
+    "event": "hlgd-1-29",
+    "textSha256": "9e774125c31357ea5ed45fd85b528733ba2a9a5f32366c1ef57ee9b60828990f"
+  },
+  {
+    "id": "hlgd-test-0079",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#218",
+    "publishedAt": "2017-01-10",
+    "publisher": "france24.com",
+    "event": "hlgd-1-9",
+    "textSha256": "d82eecbb79ebc4391e2820689c47c54ecdf971c797ac1c123fe7519048b7928b"
+  },
+  {
+    "id": "hlgd-test-0080",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#228",
+    "publishedAt": "2017-01-10",
+    "publisher": "france24.com",
+    "event": "hlgd-1-9",
+    "textSha256": "ec2bbc4f63b880bef295c3ed2999417e7be947cbc4098e830c8af418abb7bccf"
+  },
+  {
+    "id": "hlgd-test-0081",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#234",
+    "publishedAt": "2017-01-11",
+    "publisher": "france24.com",
+    "event": "hlgd-1-12",
+    "textSha256": "e623bb1cfacb84dfff35cf21032e6add9e86010e6186e0fec8b0001d2c7c96ca"
+  },
+  {
+    "id": "hlgd-test-0082",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#247",
+    "publishedAt": "2017-01-13",
+    "publisher": "france24.com",
+    "event": "hlgd-1-13",
+    "textSha256": "19ce7b4855571ef17234e1c64bf8cd896b4b74f45460043f030aabb35bf8406b"
+  },
+  {
+    "id": "hlgd-test-0083",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#259",
+    "publishedAt": "2017-01-14",
+    "publisher": "france24.com",
+    "event": "hlgd-1-14",
+    "textSha256": "450aac6365bae47f7128d2abc1ccd8601d01a4e267d8750ef4e941c25befef7a"
+  },
+  {
+    "id": "hlgd-test-0084",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#267",
+    "publishedAt": "2017-01-17",
+    "publisher": "france24.com",
+    "event": "hlgd-1-17",
+    "textSha256": "77c74c407df492ed295f6761ab693e37d773289bc387e755f5db98568cfefa8b"
+  },
+  {
+    "id": "hlgd-test-0085",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#266",
+    "publishedAt": "2017-01-17",
+    "publisher": "france24.com",
+    "event": "hlgd-1-36",
+    "textSha256": "5c13c009b92cc41c64208cfa93ad2d9f8e5763f5d1886d89606973401ca84316"
+  },
+  {
+    "id": "hlgd-test-0086",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#278",
+    "publishedAt": "2017-07-15",
+    "publisher": "france24.com",
+    "event": "hlgd-1-41",
+    "textSha256": "128c10f80585fbfa25303392c2f7bfb00d403fd695ad953dc409344482efb38b"
+  },
+  {
+    "id": "hlgd-test-0087",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#279",
+    "publishedAt": "2017-07-15",
+    "publisher": "france24.com",
+    "event": "hlgd-1-42",
+    "textSha256": "5490689250ef815f052ac789ae771a54ff93e78d42434ad33df0f0b0fdae1a68"
+  },
+  {
+    "id": "hlgd-test-0088",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#4",
+    "publishedAt": "2017-09-07",
+    "publisher": "france24.com",
+    "event": "hlgd-0-0",
+    "textSha256": "3261953e287509d20419d8502e4ec5dc6b853c996d81c08161f42ead0f7d997f"
+  },
+  {
+    "id": "hlgd-test-0089",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#37",
+    "publishedAt": "2017-09-13",
+    "publisher": "france24.com",
+    "event": "hlgd-0-3",
+    "textSha256": "cd409b37f95db7519d3d2b14e64f58e2fe8fdb8e440c6355c7f9b06b3e0acc08"
+  },
+  {
+    "id": "hlgd-test-0090",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#46",
+    "publishedAt": "2017-09-14",
+    "publisher": "france24.com",
+    "event": "hlgd-0-5",
+    "textSha256": "6d8e00476e8e7d97d83e9385c8d9172ccef727078129fa37a2e244f6edd7d923"
+  },
+  {
+    "id": "hlgd-test-0091",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#109",
+    "publishedAt": "2017-10-02",
+    "publisher": "france24.com",
+    "event": "hlgd-0-15",
+    "textSha256": "8e3ebaee59b6d752927cdc93e00ffa4f476024ef087f3e964168bd704d2b5192"
+  },
+  {
+    "id": "hlgd-test-0092",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#117",
+    "publishedAt": "2017-10-03",
+    "publisher": "france24.com",
+    "event": "hlgd-0-19",
+    "textSha256": "f64c059571675cce6c000c8815d2e749b84da2d36484cf345627b88d9ff05898"
+  },
+  {
+    "id": "hlgd-test-0093",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#126",
+    "publishedAt": "2017-10-12",
+    "publisher": "france24.com",
+    "event": "hlgd-0-20",
+    "textSha256": "70d74b075e09510adce74897719a8e02600d0744eece539a2b700d5414b69bd1"
+  },
+  {
+    "id": "hlgd-test-0094",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#191",
+    "publishedAt": "2017-01-07",
+    "publisher": "independent.co.uk",
+    "event": "hlgd-1-2",
+    "textSha256": "94cb0470c37b7e2acd7b3d9675b9e21f7fe017b36fa10dbca1fba7a207e74a0b"
+  },
+  {
+    "id": "hlgd-test-0095",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#89",
+    "publishedAt": "2017-09-26",
+    "publisher": "independent.co.uk",
+    "event": "hlgd-0-11",
+    "textSha256": "92dc26dec98f561ad16eedec9a8c43ac33661c550b6db2e1827314c2021564d6"
+  },
+  {
+    "id": "hlgd-test-0096",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#14",
+    "publishedAt": "2017-09-08",
+    "publisher": "latimes.com",
+    "event": "hlgd-0-29",
+    "textSha256": "b6f935aadcf6cc543d2bbdffc2ca951cf9a7696ed44cd0a2b93541dae254e6b2"
+  },
+  {
+    "id": "hlgd-test-0097",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#88",
+    "publishedAt": "2017-09-26",
+    "publisher": "latimes.com",
+    "event": "hlgd-0-11",
+    "textSha256": "a076b1c8d65dcb4d77d8eae561e45eb6746c66fd819d1cf61e86dcbea6402dcc"
+  },
+  {
+    "id": "hlgd-test-0098",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#106",
+    "publishedAt": "2017-09-29",
+    "publisher": "latimes.com",
+    "event": "hlgd-0-14",
+    "textSha256": "00c41655ee39963dc7dbbceac0c2f985b017281cece163a6df2a90a5d4161563"
+  },
+  {
+    "id": "hlgd-test-0099",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#110",
+    "publishedAt": "2017-10-02",
+    "publisher": "latimes.com",
+    "event": "hlgd-0-16",
+    "textSha256": "774a3f4931af4337bca9377f791c5060c05e1f055b98fa88ac5fb2693cb55324"
+  },
+  {
+    "id": "hlgd-test-0100",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#31",
+    "publishedAt": "2017-09-12",
+    "publisher": "latimes.com",
+    "event": "hlgd-0-3",
+    "textSha256": "42cfbbb28cc9dab196da9c0d7fc35f2051e2d027c4cff3f2cf7722a0de84f074"
+  },
+  {
+    "id": "hlgd-test-0101",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#54",
+    "publishedAt": "2017-09-15",
+    "publisher": "latimes.com",
+    "event": "hlgd-0-6",
+    "textSha256": "01c33095bca8069db15ea46bd036ffab5fce86f8ec4f7450aab44412106fb6f5"
+  },
+  {
+    "id": "hlgd-test-0102",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#12",
+    "publishedAt": "2017-09-08",
+    "publisher": "latimes.com",
+    "event": "hlgd-0-28",
+    "textSha256": "f824cb81115eca63ced27889a005fec00a1bda52aa8d9ab4ef11632af135ca2c"
+  },
+  {
+    "id": "hlgd-test-0103",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#48",
+    "publishedAt": "2017-09-14",
+    "publisher": "latimes.com",
+    "event": "hlgd-0-5",
+    "textSha256": "7a5176a5cc923712bca04d9f2268440c29143a2ef968d0b386bf9d11f9bcf264"
+  },
+  {
+    "id": "hlgd-test-0104",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#118",
+    "publishedAt": "2017-10-03",
+    "publisher": "latimes.com",
+    "event": "hlgd-0-18",
+    "textSha256": "5feee42d71812871a4e601689c63e49c7e4b782bd5c3287036e849a1a69ebb00"
+  },
+  {
+    "id": "hlgd-test-0105",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#127",
+    "publishedAt": "2017-10-12",
+    "publisher": "latimes.com",
+    "event": "hlgd-0-75",
+    "textSha256": "4050d1201d32287b0ec5fe1bebfd68b8be71766f369eaeea970f2a52faaaeba5"
+  },
+  {
+    "id": "hlgd-test-0106",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#87",
+    "publishedAt": "2017-09-26",
+    "publisher": "latimes.com",
+    "event": "hlgd-0-12",
+    "textSha256": "0a4cff7c62d81e153990d4cf043d4c3b2f90109b9f5a22e1cc274e338f8dda16"
+  },
+  {
+    "id": "hlgd-test-0107",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#70",
+    "publishedAt": "2017-09-21",
+    "publisher": "latimes.com",
+    "event": "hlgd-0-8",
+    "textSha256": "d3db011a1c448f7a491874e7c2172ca974d4f773cd8df08c2746c13c2e616f20"
+  },
+  {
+    "id": "hlgd-test-0108",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#30",
+    "publishedAt": "2017-09-12",
+    "publisher": "latimes.com",
+    "event": "hlgd-0-42",
+    "textSha256": "ea9f1ced956e133fd2ce4771b07726962372ae1822a3967b9062c42bc7eebf98"
+  },
+  {
+    "id": "hlgd-test-0109",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#173",
+    "publishedAt": "2017-01-06",
+    "publisher": "nytimes.com",
+    "event": "hlgd-1-23",
+    "textSha256": "ea171ac183b9a44cb598e997f2f8b6b551ef79fb71df991e8a298f7467f7c83d"
+  },
+  {
+    "id": "hlgd-test-0110",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#193",
+    "publishedAt": "2017-01-07",
+    "publisher": "nytimes.com",
+    "event": "hlgd-1-25",
+    "textSha256": "dafd93b0ed80de9f1fdcacfe4b1520591acf153bce9cd5cae4ca6865cf8607e0"
+  },
+  {
+    "id": "hlgd-test-0111",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#276",
+    "publishedAt": "2017-01-20",
+    "publisher": "reuters.com",
+    "event": "hlgd-1-39",
+    "textSha256": "6d0ad1288b92eee6f7c30322b6a6f032441c210d566e2e6f11e98eefe8de5c25"
+  },
+  {
+    "id": "hlgd-test-0112",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#281",
+    "publishedAt": "2017-07-16",
+    "publisher": "reuters.com",
+    "event": "hlgd-1-20",
+    "textSha256": "7b301981315fe42f4e190e662ed3b70997af351edee41c086b1ac6b10202388c"
+  },
+  {
+    "id": "hlgd-test-0113",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#274",
+    "publishedAt": "2017-01-19",
+    "publisher": "reuters.com",
+    "event": "hlgd-1-19",
+    "textSha256": "ef6e861a98af66ff8e4bf1b0c83379dad268c2a3f1b614b127a9fed7baaeb82b"
+  },
+  {
+    "id": "hlgd-test-0114",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#232",
+    "publishedAt": "2017-01-11",
+    "publisher": "reuters.com",
+    "event": "hlgd-1-11",
+    "textSha256": "fc7d884869b205a9a2c2d328a5cf1c0aae274a898c7c389e766b35c71f6375d0"
+  },
+  {
+    "id": "hlgd-test-0115",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#237",
+    "publishedAt": "2017-01-12",
+    "publisher": "reuters.com",
+    "event": "hlgd-1-11",
+    "textSha256": "2986ddc1501935ca04ca1b3d9bd414773db528f0755a75d68078f5d088f062ee"
+  },
+  {
+    "id": "hlgd-test-0116",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#236",
+    "publishedAt": "2017-01-12",
+    "publisher": "reuters.com",
+    "event": "hlgd-1-12",
+    "textSha256": "dcfbd39f464b438d4a856c097c5f833707009eb338334be3f6ed2ae632da9d2e"
+  },
+  {
+    "id": "hlgd-test-0117",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#283",
+    "publishedAt": "2017-07-20",
+    "publisher": "reuters.com",
+    "event": "hlgd-1-21",
+    "textSha256": "9507051334d54f66a57f1b7facfc084247186d9b887d04a9bff6f802cfb90c39"
+  },
+  {
+    "id": "hlgd-test-0118",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#80",
+    "publishedAt": "2017-09-25",
+    "publisher": "reuters.com",
+    "event": "hlgd-0-60",
+    "textSha256": "f891af9591f6053b3303f68c8a586d9e25db92ecff59f04dc1a88326106ebfe6"
+  },
+  {
+    "id": "hlgd-test-0119",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#99",
+    "publishedAt": "2017-09-27",
+    "publisher": "reuters.com",
+    "event": "hlgd-0-65",
+    "textSha256": "04a0fdb8429e614bcd0642fd3b0d722cf205d529951c9c4b32b6aaf3de20eb7f"
+  },
+  {
+    "id": "hlgd-test-0120",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#111",
+    "publishedAt": "2017-10-02",
+    "publisher": "reuters.com",
+    "event": "hlgd-0-15",
+    "textSha256": "cadfeb256f429b52ad40e633ee4a2761858d827b31525186380795afd3fdeabe"
+  },
+  {
+    "id": "hlgd-test-0121",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#130",
+    "publishedAt": "2017-10-12",
+    "publisher": "reuters.com",
+    "event": "hlgd-0-76",
+    "textSha256": "053419ba50c9ca01871815b59bac61ee68c6e2914a26a498f133263f841d1e4e"
+  },
+  {
+    "id": "hlgd-test-0122",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#128",
+    "publishedAt": "2017-10-12",
+    "publisher": "reuters.com",
+    "event": "hlgd-0-20",
+    "textSha256": "69f7e9041cf7f5abace38f10ff9d4f31f9aa1f5a20e277e8f17e055944ec2c7b"
+  },
+  {
+    "id": "hlgd-test-0123",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#124",
+    "publishedAt": "2017-10-12",
+    "publisher": "reuters.com",
+    "event": "hlgd-0-20",
+    "textSha256": "f4bf7c5bc3f7554c75107f697f400b92aafd5ad76c2534788a9b35a5496171c9"
+  },
+  {
+    "id": "hlgd-test-0124",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#94",
+    "publishedAt": "2017-09-26",
+    "publisher": "reuters.com",
+    "event": "hlgd-0-11",
+    "textSha256": "0ad8fd4f8865dc9ee7a86616bab10bb7067b68a18ee08f8f29ace684de6d4292"
+  },
+  {
+    "id": "hlgd-test-0125",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#103",
+    "publishedAt": "2017-09-28",
+    "publisher": "reuters.com",
+    "event": "hlgd-0-14",
+    "textSha256": "5d9bcb64f09af13899c4ffe5ddcad3d1f8be74b694bbcb42f79531963610b96c"
+  },
+  {
+    "id": "hlgd-test-0126",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#29",
+    "publishedAt": "2017-09-12",
+    "publisher": "reuters.com",
+    "event": "hlgd-0-3",
+    "textSha256": "c83ba75fbeae44641c4fb77ea1506e37c903999e3ac7ea00ceb87485cfdcf865"
+  },
+  {
+    "id": "hlgd-test-0127",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#49",
+    "publishedAt": "2017-09-14",
+    "publisher": "reuters.com",
+    "event": "hlgd-0-5",
+    "textSha256": "b64e226ab669f1a9133abdc78200ff3141732c93ab9b99c34561c217ca2adee5"
+  },
+  {
+    "id": "hlgd-test-0128",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#47",
+    "publishedAt": "2017-09-14",
+    "publisher": "reuters.com",
+    "event": "hlgd-0-5",
+    "textSha256": "1bf3b84a61fd31e09fe9b1ef4b6a88a6c840dff38665c0a3f9c5fbe020c5bbcf"
+  },
+  {
+    "id": "hlgd-test-0129",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#53",
+    "publishedAt": "2017-09-14",
+    "publisher": "reuters.com",
+    "event": "hlgd-0-5",
+    "textSha256": "8ad534d09bc792225e55cbe4c12b25f04e398dc68c954d4ce108223e1a0fe82d"
+  },
+  {
+    "id": "hlgd-test-0130",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#35",
+    "publishedAt": "2017-09-12",
+    "publisher": "reuters.com",
+    "event": "hlgd-0-3",
+    "textSha256": "d8379e967eb0d854ee78e8c3cc7780da3aa036e8c28e4f37a45fe867aa5d1951"
+  },
+  {
+    "id": "hlgd-test-0131",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#65",
+    "publishedAt": "2017-09-16",
+    "publisher": "reuters.com",
+    "event": "hlgd-0-7",
+    "textSha256": "3b742101568d34ccf3199b4d8bd5c990330a90939dfab31fc690706f6028a924"
+  },
+  {
+    "id": "hlgd-test-0132",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#100",
+    "publishedAt": "2017-09-27",
+    "publisher": "reuters.com",
+    "event": "hlgd-0-13",
+    "textSha256": "70ab23a7a80dc9e67e283dc29f32213ca2e285c77ed0bea9a29fb3bd26091843"
+  },
+  {
+    "id": "hlgd-test-0133",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#57",
+    "publishedAt": "2017-09-15",
+    "publisher": "reuters.com",
+    "event": "hlgd-0-6",
+    "textSha256": "b8638b72d034b2c2d2ec38078ff289d2eba117fdc63d125ff6efa73b470a30e2"
+  },
+  {
+    "id": "hlgd-test-0134",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#19",
+    "publishedAt": "2017-09-08",
+    "publisher": "reuters.com",
+    "event": "hlgd-0-33",
+    "textSha256": "f1d89b60a422273e74aa98602f6295a7c4f0afc2a07ea6aab37a6da67aeb1c63"
+  },
+  {
+    "id": "hlgd-test-0135",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#40",
+    "publishedAt": "2017-09-13",
+    "publisher": "reuters.com",
+    "event": "hlgd-0-4",
+    "textSha256": "f492d8f81b7b7ec6b1bb53c13adddedff0ea8b3ae42a0a6b45b9304e3c136608"
+  },
+  {
+    "id": "hlgd-test-0136",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#41",
+    "publishedAt": "2017-09-13",
+    "publisher": "reuters.com",
+    "event": "hlgd-0-4",
+    "textSha256": "6ea6ae6f6d7a0a1a4dbbffe81787bbc065b320854e6905bf5d4147fabd43fd73"
+  },
+  {
+    "id": "hlgd-test-0137",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#15",
+    "publishedAt": "2017-09-08",
+    "publisher": "reuters.com",
+    "event": "hlgd-0-2",
+    "textSha256": "445de536e7a1bc1579ab50157a758a636ff2efaa94f262cd082370d6794dc3ab"
+  },
+  {
+    "id": "hlgd-test-0138",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#13",
+    "publishedAt": "2017-09-08",
+    "publisher": "reuters.com",
+    "event": "hlgd-0-2",
+    "textSha256": "e3802c01c5397c9f3f0e39ddbb910ff467499751fd8aab8ee0d36ffd833fc875"
+  },
+  {
+    "id": "hlgd-test-0139",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#104",
+    "publishedAt": "2017-09-28",
+    "publisher": "reuters.com",
+    "event": "hlgd-0-13",
+    "textSha256": "c99c3d466c0c02aaae9913511906170cf91164f81fcc5f61f8538cf192ab0e4d"
+  },
+  {
+    "id": "hlgd-test-0140",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#38",
+    "publishedAt": "2017-09-13",
+    "publisher": "reuters.com",
+    "event": "hlgd-0-47",
+    "textSha256": "7dd941f99f67ad9c51c5919a502ab526f18aaa6a125d99641dfa3ccc1837ef97"
+  },
+  {
+    "id": "hlgd-test-0141",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#160",
+    "publishedAt": "2014-11-19",
+    "publisher": "reuters.com",
+    "event": "hlgd-1-0",
+    "textSha256": "49207411ecc173cb1f61f6adffd64f4b0130a368cd5a5c3cee961384dc1db43f"
+  },
+  {
+    "id": "hlgd-test-0142",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#162",
+    "publishedAt": "2014-11-20",
+    "publisher": "reuters.com",
+    "event": "hlgd-1-0",
+    "textSha256": "c651c41e9ef661f874f02bc11824751d8aa89f06c4483d55e52f3ca21f8be601"
+  },
+  {
+    "id": "hlgd-test-0143",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#163",
+    "publishedAt": "2014-11-21",
+    "publisher": "reuters.com",
+    "event": "hlgd-1-0",
+    "textSha256": "7f2c9a0957deea0b5649475c2c9e3ad49d651112886cb6c64969ceb43cef1dde"
+  },
+  {
+    "id": "hlgd-test-0144",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#161",
+    "publishedAt": "2014-11-19",
+    "publisher": "reuters.com",
+    "event": "hlgd-1-22",
+    "textSha256": "86da0d6d9acf9f08df49ab6b8f9dde43436a972ee6fa7db1b7467a8c98477fa8"
+  },
+  {
+    "id": "hlgd-test-0145",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#199",
+    "publishedAt": "2017-01-08",
+    "publisher": "reuters.com",
+    "event": "hlgd-1-2",
+    "textSha256": "672c56e491297053d6549aed8cbcad7a968ae168a0e0b08955471d81d33e8948"
+  },
+  {
+    "id": "hlgd-test-0146",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#179",
+    "publishedAt": "2017-01-07",
+    "publisher": "reuters.com",
+    "event": "hlgd-1-2",
+    "textSha256": "672c56e491297053d6549aed8cbcad7a968ae168a0e0b08955471d81d33e8948"
+  },
+  {
+    "id": "hlgd-test-0147",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#250",
+    "publishedAt": "2017-01-14",
+    "publisher": "reuters.com",
+    "event": "hlgd-1-14",
+    "textSha256": "332a43b57219a14045911c3d7f2a60dd9aaed6b6e68501103aa26c7a18bea5ce"
+  },
+  {
+    "id": "hlgd-test-0148",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#275",
+    "publishedAt": "2017-01-20",
+    "publisher": "reuters.com",
+    "event": "hlgd-1-38",
+    "textSha256": "57c8ad6a38f3fbe8cc7b869dfaae99cab5b9e2e22ba22bca5ca1fa7369a938a5"
+  },
+  {
+    "id": "hlgd-test-0149",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#251",
+    "publishedAt": "2017-01-14",
+    "publisher": "reuters.com",
+    "event": "hlgd-1-13",
+    "textSha256": "a8e9fbb0ff8714cfe96be1bb634d68c45a7f971e54a37f45f0ac1a9167a41cd0"
+  },
+  {
+    "id": "hlgd-test-0150",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#253",
+    "publishedAt": "2017-01-14",
+    "publisher": "reuters.com",
+    "event": "hlgd-1-15",
+    "textSha256": "e5ed45392b3c2e754976012f1a6b6b8ab9d8c2371fea07076ae7264abab17b64"
+  },
+  {
+    "id": "hlgd-test-0151",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#245",
+    "publishedAt": "2017-01-13",
+    "publisher": "reuters.com",
+    "event": "hlgd-1-15",
+    "textSha256": "680b0a4d275a0528290b2aab695e12e7762a9106e3e9206e9d7c39b02bab5845"
+  },
+  {
+    "id": "hlgd-test-0152",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#246",
+    "publishedAt": "2017-01-13",
+    "publisher": "reuters.com",
+    "event": "hlgd-1-15",
+    "textSha256": "e5ed45392b3c2e754976012f1a6b6b8ab9d8c2371fea07076ae7264abab17b64"
+  },
+  {
+    "id": "hlgd-test-0153",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#254",
+    "publishedAt": "2017-01-14",
+    "publisher": "reuters.com",
+    "event": "hlgd-1-13",
+    "textSha256": "2e30e6a76ca2aa0b7dcbd8cb7767ee32fc7acb03e08abe223d53b062eba1d69c"
+  },
+  {
+    "id": "hlgd-test-0154",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#241",
+    "publishedAt": "2017-01-13",
+    "publisher": "reuters.com",
+    "event": "hlgd-1-13",
+    "textSha256": "2e30e6a76ca2aa0b7dcbd8cb7767ee32fc7acb03e08abe223d53b062eba1d69c"
+  },
+  {
+    "id": "hlgd-test-0155",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#176",
+    "publishedAt": "2017-01-07",
+    "publisher": "reuters.com",
+    "event": "hlgd-1-1",
+    "textSha256": "cc429bfc93c3ce1021544638d0c3a10dadcedbe1712967fe16e3a5bd402b18c8"
+  },
+  {
+    "id": "hlgd-test-0156",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#171",
+    "publishedAt": "2017-01-06",
+    "publisher": "reuters.com",
+    "event": "hlgd-1-1",
+    "textSha256": "cc429bfc93c3ce1021544638d0c3a10dadcedbe1712967fe16e3a5bd402b18c8"
+  },
+  {
+    "id": "hlgd-test-0157",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#211",
+    "publishedAt": "2017-01-09",
+    "publisher": "reuters.com",
+    "event": "hlgd-1-7",
+    "textSha256": "ced3a27ff949b4878cd01dba02707923a22d33640bc031fe07953ef98e941c0c"
+  },
+  {
+    "id": "hlgd-test-0158",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#204",
+    "publishedAt": "2017-01-08",
+    "publisher": "reuters.com",
+    "event": "hlgd-1-7",
+    "textSha256": "ced3a27ff949b4878cd01dba02707923a22d33640bc031fe07953ef98e941c0c"
+  },
+  {
+    "id": "hlgd-test-0159",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#219",
+    "publishedAt": "2017-01-10",
+    "publisher": "reuters.com",
+    "event": "hlgd-1-8",
+    "textSha256": "f5fd373040c77d8b8d49933ba550e8a57837d36f16403662075cb92efa54dc37"
+  },
+  {
+    "id": "hlgd-test-0160",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#230",
+    "publishedAt": "2017-01-11",
+    "publisher": "reuters.com",
+    "event": "hlgd-1-10",
+    "textSha256": "a12c29802054df1ae27e54b9ed79e195d346f3734d5988d036ac1475f5c568c1"
+  },
+  {
+    "id": "hlgd-test-0161",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#225",
+    "publishedAt": "2017-01-10",
+    "publisher": "reuters.com",
+    "event": "hlgd-1-10",
+    "textSha256": "a12c29802054df1ae27e54b9ed79e195d346f3734d5988d036ac1475f5c568c1"
+  },
+  {
+    "id": "hlgd-test-0162",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#252",
+    "publishedAt": "2017-01-14",
+    "publisher": "reuters.com",
+    "event": "hlgd-1-14",
+    "textSha256": "6a8d67d8564a4612594056dfe5bbf64686f8ed4c4d5dfba58f0f9fdacf57c01f"
+  },
+  {
+    "id": "hlgd-test-0163",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#261",
+    "publishedAt": "2017-01-16",
+    "publisher": "reuters.com",
+    "event": "hlgd-1-14",
+    "textSha256": "6a8d67d8564a4612594056dfe5bbf64686f8ed4c4d5dfba58f0f9fdacf57c01f"
+  },
+  {
+    "id": "hlgd-test-0164",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#268",
+    "publishedAt": "2017-01-18",
+    "publisher": "reuters.com",
+    "event": "hlgd-1-17",
+    "textSha256": "1b5d8c794e713655bb0adca33e1ff8c05d5c35ac3ca1a1d49239d722cfd526c6"
+  },
+  {
+    "id": "hlgd-test-0165",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#264",
+    "publishedAt": "2017-01-17",
+    "publisher": "reuters.com",
+    "event": "hlgd-1-34",
+    "textSha256": "25ef5a83cc34b7ae28169ddb1bd20ac27ab3798db4fe911d4dab23c29f33025e"
+  },
+  {
+    "id": "hlgd-test-0166",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#271",
+    "publishedAt": "2017-01-18",
+    "publisher": "reuters.com",
+    "event": "hlgd-1-18",
+    "textSha256": "22f8ec2b17157ae69f115cf1573190563989990825ab38436a366f4abfb453ad"
+  },
+  {
+    "id": "hlgd-test-0167",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#272",
+    "publishedAt": "2017-01-18",
+    "publisher": "reuters.com",
+    "event": "hlgd-1-19",
+    "textSha256": "68c19aaf6c6e1b8150e081a171239715658681f3bfb62658cd06d5b01c7c3507"
+  },
+  {
+    "id": "hlgd-test-0168",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#280",
+    "publishedAt": "2017-07-16",
+    "publisher": "reuters.com",
+    "event": "hlgd-1-20",
+    "textSha256": "3633653429d60cf92d0423fd7fc1c8ff0d2be034d386c45b5c0dd05f097c571a"
+  },
+  {
+    "id": "hlgd-test-0169",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#177",
+    "publishedAt": "2017-01-07",
+    "publisher": "reuters.com",
+    "event": "hlgd-1-2",
+    "textSha256": "9af9282f922a565ffbc7db8a72fb268f1239619b9b6bcd4ecf8fbeb1bfc448ed"
+  },
+  {
+    "id": "hlgd-test-0170",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#178",
+    "publishedAt": "2017-01-07",
+    "publisher": "reuters.com",
+    "event": "hlgd-1-1",
+    "textSha256": "d29008d404337cd1bf6460e09d45a317583f9edcc20b8329c5bcb286eb209cf7"
+  },
+  {
+    "id": "hlgd-test-0171",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#200",
+    "publishedAt": "2017-01-08",
+    "publisher": "reuters.com",
+    "event": "hlgd-1-26",
+    "textSha256": "ea07d9d18750b44fe6fb5b595bf0482148b2a5d546e92f127ede5fc08f8e7103"
+  },
+  {
+    "id": "hlgd-test-0172",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#269",
+    "publishedAt": "2017-01-18",
+    "publisher": "reuters.com",
+    "event": "hlgd-1-37",
+    "textSha256": "ab368d10287f23e251c993cda789a450cf22acee2fe71452bf5a8f226096e5f8"
+  },
+  {
+    "id": "hlgd-test-0173",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#273",
+    "publishedAt": "2017-01-19",
+    "publisher": "reuters.com",
+    "event": "hlgd-1-19",
+    "textSha256": "5a7678ce424f5288696c9ca61f82a4282668e4e0d0e9e64396df45c9501efd40"
+  },
+  {
+    "id": "hlgd-test-0174",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#198",
+    "publishedAt": "2017-01-08",
+    "publisher": "reuters.com",
+    "event": "hlgd-1-5",
+    "textSha256": "e8a2c43128d5770fc207bec0b599324ae95ebff2b336d4b7b9814ece9c394e3d"
+  },
+  {
+    "id": "hlgd-test-0175",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#220",
+    "publishedAt": "2017-01-10",
+    "publisher": "reuters.com",
+    "event": "hlgd-1-8",
+    "textSha256": "f5fd373040c77d8b8d49933ba550e8a57837d36f16403662075cb92efa54dc37"
+  },
+  {
+    "id": "hlgd-test-0176",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#229",
+    "publishedAt": "2017-01-11",
+    "publisher": "reuters.com",
+    "event": "hlgd-1-9",
+    "textSha256": "e3af865b4aac5360d82bdef567a64ec5b2d2c8ee76777b7ec90468aa1c24ca4d"
+  },
+  {
+    "id": "hlgd-test-0177",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#226",
+    "publishedAt": "2017-01-10",
+    "publisher": "reuters.com",
+    "event": "hlgd-1-9",
+    "textSha256": "e3af865b4aac5360d82bdef567a64ec5b2d2c8ee76777b7ec90468aa1c24ca4d"
+  },
+  {
+    "id": "hlgd-test-0178",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#235",
+    "publishedAt": "2017-01-12",
+    "publisher": "reuters.com",
+    "event": "hlgd-1-12",
+    "textSha256": "dcfbd39f464b438d4a856c097c5f833707009eb338334be3f6ed2ae632da9d2e"
+  },
+  {
+    "id": "hlgd-test-0179",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#282",
+    "publishedAt": "2017-07-20",
+    "publisher": "reuters.com",
+    "event": "hlgd-1-21",
+    "textSha256": "a6aee0c96d6679bf2a42511edeaa088abb9b369d677539a08900ee1afe641008"
+  },
+  {
+    "id": "hlgd-test-0180",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#231",
+    "publishedAt": "2017-01-11",
+    "publisher": "reuters.com",
+    "event": "hlgd-1-9",
+    "textSha256": "65e45ab1e3c29f45b629f45ec79ab13fa5ecbcca39ef227a0885b81e3feeeefe"
+  },
+  {
+    "id": "hlgd-test-0181",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#223",
+    "publishedAt": "2017-01-10",
+    "publisher": "reuters.com",
+    "event": "hlgd-1-9",
+    "textSha256": "65e45ab1e3c29f45b629f45ec79ab13fa5ecbcca39ef227a0885b81e3feeeefe"
+  },
+  {
+    "id": "hlgd-test-0182",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#285",
+    "publishedAt": "2017-07-21",
+    "publisher": "reuters.com",
+    "event": "hlgd-1-20",
+    "textSha256": "af27e0d914b9c67fc5f70b515ce894a8c23b11654b3bd98a8c2f63c4e82f768d"
+  },
+  {
+    "id": "hlgd-test-0183",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#286",
+    "publishedAt": "2017-07-23",
+    "publisher": "reuters.com",
+    "event": "hlgd-1-44",
+    "textSha256": "9d9c64df815f97654662c7029801abceb718f24d9cb8a54656e0efc438f28520"
+  },
+  {
+    "id": "hlgd-test-0184",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#263",
+    "publishedAt": "2017-01-17",
+    "publisher": "reuters.com",
+    "event": "hlgd-1-16",
+    "textSha256": "dbfd5aef491b781d4a1bacf1c380f9b7c23158d4a70b8c4d6292548070d6cc2d"
+  },
+  {
+    "id": "hlgd-test-0185",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#262",
+    "publishedAt": "2017-01-16",
+    "publisher": "reuters.com",
+    "event": "hlgd-1-16",
+    "textSha256": "dbfd5aef491b781d4a1bacf1c380f9b7c23158d4a70b8c4d6292548070d6cc2d"
+  },
+  {
+    "id": "hlgd-test-0186",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#34",
+    "publishedAt": "2017-09-12",
+    "publisher": "reuters.com",
+    "event": "hlgd-0-45",
+    "textSha256": "23aeed9de646541accaaa22a83a3e0df5215fb7513d6ee6db76b552cd8e8b67c"
+  },
+  {
+    "id": "hlgd-test-0187",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#17",
+    "publishedAt": "2017-09-08",
+    "publisher": "reuters.com",
+    "event": "hlgd-0-31",
+    "textSha256": "483a7d3df4548f2beff6c6d2d6cc7402e058edb6e3155fdc9a4d33f1031f2290"
+  },
+  {
+    "id": "hlgd-test-0188",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#69",
+    "publishedAt": "2017-09-21",
+    "publisher": "reuters.com",
+    "event": "hlgd-0-8",
+    "textSha256": "efede2a4e90b51c4aa4c0d00361e274b6ed18d6b3206ce81f08f4aadff8a2186"
+  },
+  {
+    "id": "hlgd-test-0189",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#71",
+    "publishedAt": "2017-09-21",
+    "publisher": "reuters.com",
+    "event": "hlgd-0-8",
+    "textSha256": "ff98ff2a457c35c4a3cf6b29153ab5f75ea3c16c9c9be775697b6b79a6f81a12"
+  },
+  {
+    "id": "hlgd-test-0190",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#95",
+    "publishedAt": "2017-09-26",
+    "publisher": "reuters.com",
+    "event": "hlgd-0-12",
+    "textSha256": "7edf1829f551b3d323909c28a54d02d55ea24679705afea00a8274d41dd52eed"
+  },
+  {
+    "id": "hlgd-test-0191",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#86",
+    "publishedAt": "2017-09-26",
+    "publisher": "reuters.com",
+    "event": "hlgd-0-12",
+    "textSha256": "1e438cae96e07f16ac54f51e2920c1f3b65f05488b6668dd149016255bbcf95e"
+  },
+  {
+    "id": "hlgd-test-0192",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#78",
+    "publishedAt": "2017-09-25",
+    "publisher": "reuters.com",
+    "event": "hlgd-0-10",
+    "textSha256": "4c301fccee9cfbd30e8d2be9f39d9b2d47a3e8459433ed462e6cd33fcf47c9b2"
+  },
+  {
+    "id": "hlgd-test-0193",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#79",
+    "publishedAt": "2017-09-25",
+    "publisher": "reuters.com",
+    "event": "hlgd-0-10",
+    "textSha256": "8c85236ec80937a2202b420cf07b94b07348a9039b9e14cc5bf0f1bedebd365a"
+  },
+  {
+    "id": "hlgd-test-0194",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#77",
+    "publishedAt": "2017-09-25",
+    "publisher": "reuters.com",
+    "event": "hlgd-0-10",
+    "textSha256": "518b7c9a7c541df914ad0f93cd4d559e19ee2bf457bf2519392406f807a38fd8"
+  },
+  {
+    "id": "hlgd-test-0195",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#3",
+    "publishedAt": "2017-09-07",
+    "publisher": "telegraph.co.uk",
+    "event": "hlgd-0-0",
+    "textSha256": "faacc7ad5579c82ec8c3cf364795b4ad06e3837fcb1d48dc836f52b9841b4f4a"
+  },
+  {
+    "id": "hlgd-test-0196",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#64",
+    "publishedAt": "2017-09-16",
+    "publisher": "telegraph.co.uk",
+    "event": "hlgd-0-7",
+    "textSha256": "ee475b327fc84edf18fd47db4c729460d26d4d12f3131981ffe90dfc2f47d4a5"
+  },
+  {
+    "id": "hlgd-test-0197",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#144",
+    "publishedAt": "2020-02-10",
+    "publisher": "apnews.com",
+    "event": "hlgd-0-22",
+    "textSha256": "af97293b70e92c5a42b0ffd0955276affed4caf67726d8042288d9ee5f3225ff"
+  },
+  {
+    "id": "hlgd-test-0198",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#135",
+    "publishedAt": "2019-07-22",
+    "publisher": "apnews.com",
+    "event": "hlgd-0-21",
+    "textSha256": "cf1011e28406b9a922cec2cf98a7c3fa532c10b739a57af8c0d8c998b2233363"
+  },
+  {
+    "id": "hlgd-test-0199",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#136",
+    "publishedAt": "2019-07-22",
+    "publisher": "news.yahoo.com",
+    "event": "hlgd-0-21",
+    "textSha256": "20b9c6eb5ad1b6e165c68eaa2c7bf39808e7e0d2b1883108b0d8522971b0c840"
+  },
+  {
+    "id": "hlgd-test-0200",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#146",
+    "publishedAt": "2020-02-10",
+    "publisher": "sg.news.yahoo.com",
+    "event": "hlgd-0-22",
+    "textSha256": "cad92c0129b16c4a108d30cd788177348899eaaa64a3119ada82d652aff5a939"
+  },
+  {
+    "id": "hlgd-test-0201",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#5",
+    "publishedAt": "2017-09-07",
+    "publisher": "techcrunch.com",
+    "event": "hlgd-0-1",
+    "textSha256": "7332297fc1953806ad8ebf6c1a481c631cc447d5deb41bff97fcd59c16886fa4"
+  },
+  {
+    "id": "hlgd-test-0202",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#20",
+    "publishedAt": "2017-09-08",
+    "publisher": "techcrunch.com",
+    "event": "hlgd-0-34",
+    "textSha256": "31d8cbab942f737d4cf8b2f35319dd4e293c9ed830f45a228a4b045acd556ba5"
+  },
+  {
+    "id": "hlgd-test-0203",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#27",
+    "publishedAt": "2017-09-10",
+    "publisher": "techcrunch.com",
+    "event": "hlgd-0-41",
+    "textSha256": "83952da82f683e6b43672a51173af538f0c8fc09297cb91688c8930f488cd01e"
+  },
+  {
+    "id": "hlgd-test-0204",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#28",
+    "publishedAt": "2017-09-11",
+    "publisher": "techcrunch.com",
+    "event": "hlgd-0-3",
+    "textSha256": "82f4da6102afdc6668c62b266f557c50abc0994cd56e36a79a5eb4c85ce43bad"
+  },
+  {
+    "id": "hlgd-test-0205",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#90",
+    "publishedAt": "2017-09-26",
+    "publisher": "techcrunch.com",
+    "event": "hlgd-0-11",
+    "textSha256": "d896554b9d8859a0560c551eb8a61c909c83bafa2a3e11c5f4c5682ec244bf9f"
+  },
+  {
+    "id": "hlgd-test-0206",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#102",
+    "publishedAt": "2017-09-27",
+    "publisher": "techcrunch.com",
+    "event": "hlgd-0-13",
+    "textSha256": "66d6e7aee3005190ffdc8e7c58413a97ea1c5f1d8131e0db6e81186eb633bcb4"
+  },
+  {
+    "id": "hlgd-test-0207",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#119",
+    "publishedAt": "2017-10-03",
+    "publisher": "techcrunch.com",
+    "event": "hlgd-0-71",
+    "textSha256": "cbc329033c2d3663746be5e9db91006773dd1bc0363b57d0ce5e43df5c854c0f"
+  },
+  {
+    "id": "hlgd-test-0208",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#145",
+    "publishedAt": "2020-02-10",
+    "publisher": "techcrunch.com",
+    "event": "hlgd-0-22",
+    "textSha256": "b66c8007e61a128f78ff851b08c74c142c32f162495c6f8bda1a61518c378cc2"
+  },
+  {
+    "id": "hlgd-test-0209",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#153",
+    "publishedAt": "2020-02-11",
+    "publisher": "timesofindia.indiatimes.com",
+    "event": "hlgd-0-22",
+    "textSha256": "60e8ee05534989290f8e90abdebfda6dd52cb8395e506e9867e5e491eda0cb5a"
+  },
+  {
+    "id": "hlgd-test-0210",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#150",
+    "publishedAt": "2020-02-10",
+    "publisher": "aa.com.tr",
+    "event": "hlgd-0-22",
+    "textSha256": "355bb81fcf1aaddb0e7c01c71cbbe25ffeb6be1cb6296e35504a16621e68c5cb"
+  },
+  {
+    "id": "hlgd-test-0211",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#114",
+    "publishedAt": "2017-10-03",
+    "publisher": "bloomberg.com",
+    "event": "hlgd-0-70",
+    "textSha256": "536728c10fb8bb091e6d2d450533376e63c54d02ffacee3e34242d325a7e53b8"
+  },
+  {
+    "id": "hlgd-test-0212",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#125",
+    "publishedAt": "2017-10-12",
+    "publisher": "bloomberg.com",
+    "event": "hlgd-0-74",
+    "textSha256": "a5fab7c289082d19a9614c37d870140094a7dd26321bc0ed474947732329d5e0"
+  },
+  {
+    "id": "hlgd-test-0213",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#180",
+    "publishedAt": "2017-01-07",
+    "publisher": "bloomberg.com",
+    "event": "hlgd-1-24",
+    "textSha256": "abdbc8e3c59a936a9e336aa953881e76d102cf9b1e3b25702328ea0e9199ad29"
+  },
+  {
+    "id": "hlgd-test-0214",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#212",
+    "publishedAt": "2017-01-09",
+    "publisher": "bloomberg.com",
+    "event": "hlgd-1-28",
+    "textSha256": "429b24dbfad5739e7860584e68341159a7e33cae49ad2dfa994426e44d1233f0"
+  },
+  {
+    "id": "hlgd-test-0215",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#238",
+    "publishedAt": "2017-01-12",
+    "publisher": "bloomberg.com",
+    "event": "hlgd-1-32",
+    "textSha256": "1b161a71c2361e12b8921d8ed7faf39a705362eacf53158d7a2d59647fb7c364"
+  },
+  {
+    "id": "hlgd-test-0216",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#277",
+    "publishedAt": "2017-07-15",
+    "publisher": "bloomberg.com",
+    "event": "hlgd-1-40",
+    "textSha256": "237d33c2ac4a76221687ea93eddcd16d318b7a77604e06536f3a027bb3b166d7"
+  },
+  {
+    "id": "hlgd-test-0217",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#1",
+    "publishedAt": "2017-09-07",
+    "publisher": "bloomberg.com",
+    "event": "hlgd-0-0",
+    "textSha256": "93b31e66eda1d130c0fdecb78cd57b4335bc91bd2a2b0ecf0698963168153460"
+  },
+  {
+    "id": "hlgd-test-0218",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#2",
+    "publishedAt": "2017-09-07",
+    "publisher": "bloomberg.com",
+    "event": "hlgd-0-1",
+    "textSha256": "08d21110d8ca4b587efd350ec4ed9ff924c714a434d508e4a1d69d5cc0257e2e"
+  },
+  {
+    "id": "hlgd-test-0219",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#10",
+    "publishedAt": "2017-09-08",
+    "publisher": "bloomberg.com",
+    "event": "hlgd-0-27",
+    "textSha256": "8290862481dca4e182249071d4d19650b6286acf583163194b6932236108dab4"
+  },
+  {
+    "id": "hlgd-test-0220",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#16",
+    "publishedAt": "2017-09-08",
+    "publisher": "bloomberg.com",
+    "event": "hlgd-0-30",
+    "textSha256": "d836625eb81d45cb0994e3a2d4448b09bb0dc4253809732d396a4fa6e37ebd6f"
+  },
+  {
+    "id": "hlgd-test-0221",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#18",
+    "publishedAt": "2017-09-08",
+    "publisher": "bloomberg.com",
+    "event": "hlgd-0-32",
+    "textSha256": "ab4b5d82636da6632583fc3b2699f5e86b3e929578928fe541dcd5e6e50c6a6f"
+  },
+  {
+    "id": "hlgd-test-0222",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#32",
+    "publishedAt": "2017-09-12",
+    "publisher": "bloomberg.com",
+    "event": "hlgd-0-43",
+    "textSha256": "0bd2266906c941b74a045180614a4cedfcb94e6ab40a7d305fa7497655f91170"
+  },
+  {
+    "id": "hlgd-test-0223",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#33",
+    "publishedAt": "2017-09-12",
+    "publisher": "bloomberg.com",
+    "event": "hlgd-0-44",
+    "textSha256": "417952d5fffcb13569bf2d3583e1596ba5d0a83107f1d91864f89f32a9555de3"
+  },
+  {
+    "id": "hlgd-test-0224",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#45",
+    "publishedAt": "2017-09-14",
+    "publisher": "bloomberg.com",
+    "event": "hlgd-0-50",
+    "textSha256": "48ce481c183635a0d0806fded06d2c62e5ea52a662fe7592692dc24a60128f06"
+  },
+  {
+    "id": "hlgd-test-0225",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#52",
+    "publishedAt": "2017-09-14",
+    "publisher": "bloomberg.com",
+    "event": "hlgd-0-5",
+    "textSha256": "b3b21fb66e9b4687fb9b11ae9502d71c06c2ea17b0ed23c4ecc32b9c2c5799b4"
+  },
+  {
+    "id": "hlgd-test-0226",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#58",
+    "publishedAt": "2017-09-15",
+    "publisher": "bloomberg.com",
+    "event": "hlgd-0-6",
+    "textSha256": "fc02f038447d0d537770e694e169d89955a8d6d0a645234996cf34e3ba9621fc"
+  },
+  {
+    "id": "hlgd-test-0227",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#68",
+    "publishedAt": "2017-09-21",
+    "publisher": "bloomberg.com",
+    "event": "hlgd-0-57",
+    "textSha256": "8bc10340c406d2f347dff35cd4aeb8566d9a9c2dd61bc40f92346ed75258a790"
+  },
+  {
+    "id": "hlgd-test-0228",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#67",
+    "publishedAt": "2017-09-21",
+    "publisher": "bloomberg.com",
+    "event": "hlgd-0-8",
+    "textSha256": "633c84dfe277b6a311dab2432bcd9dfe8fba861b677eaebc1eb1548b0923147c"
+  },
+  {
+    "id": "hlgd-test-0229",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#75",
+    "publishedAt": "2017-09-22",
+    "publisher": "bloomberg.com",
+    "event": "hlgd-0-59",
+    "textSha256": "ca2d46e623fd8ac6903a2ac07a44205245a9fcc3cc4a73c428bdccbe252ffc78"
+  },
+  {
+    "id": "hlgd-test-0230",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#74",
+    "publishedAt": "2017-09-22",
+    "publisher": "bloomberg.com",
+    "event": "hlgd-0-58",
+    "textSha256": "1f74d578ce1b2ab8267943a15fe235c452bc8b618bf860fd701f5a65622390d9"
+  },
+  {
+    "id": "hlgd-test-0231",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#76",
+    "publishedAt": "2017-09-25",
+    "publisher": "bloomberg.com",
+    "event": "hlgd-0-10",
+    "textSha256": "00e7ac41d7c5e5b305c5dfe1e78bd1f59b8d5f3203fd3d0d5d3e374418eafbf8"
+  },
+  {
+    "id": "hlgd-test-0232",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#82",
+    "publishedAt": "2017-09-26",
+    "publisher": "bloomberg.com",
+    "event": "hlgd-0-11",
+    "textSha256": "329a9876c8389812ad62c69104157fb283cb1eacb15cd883f79aa4c475950653"
+  },
+  {
+    "id": "hlgd-test-0233",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#83",
+    "publishedAt": "2017-09-26",
+    "publisher": "bloomberg.com",
+    "event": "hlgd-0-61",
+    "textSha256": "043577b1369188f2c1cd9ef7703800327e29f86145e918f82e505fdc2289aec9"
+  },
+  {
+    "id": "hlgd-test-0234",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#85",
+    "publishedAt": "2017-09-26",
+    "publisher": "bloomberg.com",
+    "event": "hlgd-0-62",
+    "textSha256": "33a6e59503fdba404bc65c8cc065a646fefe998c438c7a8f79a49e10f32e8f71"
+  },
+  {
+    "id": "hlgd-test-0235",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#84",
+    "publishedAt": "2017-09-26",
+    "publisher": "bloomberg.com",
+    "event": "hlgd-0-12",
+    "textSha256": "032d9bc4041dcd6bbc38d0b6fe73d729d07332486c9a8fff9ec42d57dc2e245a"
+  },
+  {
+    "id": "hlgd-test-0236",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#105",
+    "publishedAt": "2017-09-29",
+    "publisher": "bloomberg.com",
+    "event": "hlgd-0-67",
+    "textSha256": "73f2d1cd58527ba9b46a68f8e5bab157d272f59e3bd379c2982fc77ffee4a9f7"
+  },
+  {
+    "id": "hlgd-test-0237",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#107",
+    "publishedAt": "2017-10-02",
+    "publisher": "bloomberg.com",
+    "event": "hlgd-0-68",
+    "textSha256": "c9aca3a02413c66fb192b0e30193209ec15487e37a20beaae36383ffb1eabb49"
+  },
+  {
+    "id": "hlgd-test-0238",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#112",
+    "publishedAt": "2017-10-02",
+    "publisher": "bloomberg.com",
+    "event": "hlgd-0-17",
+    "textSha256": "9ac6a7d9666163e94287fdd9009a5b9816a2e5d518f5a2326ca46799c00a3252"
+  },
+  {
+    "id": "hlgd-test-0239",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#108",
+    "publishedAt": "2017-10-02",
+    "publisher": "bloomberg.com",
+    "event": "hlgd-0-69",
+    "textSha256": "7c0ee9de50ce5ae8d9af9647559b3a76be0a3e652e496706cf6d82784888d24e"
+  },
+  {
+    "id": "hlgd-test-0240",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#115",
+    "publishedAt": "2017-10-03",
+    "publisher": "bloomberg.com",
+    "event": "hlgd-0-18",
+    "textSha256": "b4b146d39276969466030e91dafebbbef500d7705fa674e0a98e21424641ddbd"
+  },
+  {
+    "id": "hlgd-test-0241",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#116",
+    "publishedAt": "2017-10-03",
+    "publisher": "bloomberg.com",
+    "event": "hlgd-0-19",
+    "textSha256": "f869b68b0e634480b54375b93fc88faf22fa457566394e87a1d32066c74e2519"
+  },
+  {
+    "id": "hlgd-test-0242",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#122",
+    "publishedAt": "2017-10-04",
+    "publisher": "bloomberg.com",
+    "event": "hlgd-0-72",
+    "textSha256": "1d13be4c15ab61f556d75b3daa07f695b15b21656ea9eb24a155779bb842fbbc"
+  },
+  {
+    "id": "hlgd-test-0243",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#123",
+    "publishedAt": "2017-10-04",
+    "publisher": "bloomberg.com",
+    "event": "hlgd-0-73",
+    "textSha256": "a6f93762cd14949b29e16551fdf085886d8b6a907ab04ea83cbe9bde44cf0117"
+  },
+  {
+    "id": "hlgd-test-0244",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#133",
+    "publishedAt": "2019-07-20",
+    "publisher": "bloomberg.com",
+    "event": "hlgd-0-21",
+    "textSha256": "a348d648e5d15c1a37732f0784d38592a05261b433c8b281f4dcfb8e8189c6ef"
+  },
+  {
+    "id": "hlgd-test-0245",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#138",
+    "publishedAt": "2019-07-22",
+    "publisher": "bloomberg.com",
+    "event": "hlgd-0-21",
+    "textSha256": "f1d25334233c56e3a981f9a2556982e7e558a93514c5df84be198745df334917"
+  },
+  {
+    "id": "hlgd-test-0246",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#157",
+    "publishedAt": "2020-02-11",
+    "publisher": "bloomberg.com",
+    "event": "hlgd-0-80",
+    "textSha256": "b26c2b0a7de6110aed12dd963b4890bc255306629f9fbd008e1aed69f6f5e476"
+  },
+  {
+    "id": "hlgd-test-0247",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#158",
+    "publishedAt": "2020-02-11",
+    "publisher": "cnet.com",
+    "event": "hlgd-0-23",
+    "textSha256": "97c5b9086cbaee542f0b2997164b4686b99768d94953b71e36e0501a172c91a3"
+  },
+  {
+    "id": "hlgd-test-0248",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#151",
+    "publishedAt": "2020-02-10",
+    "publisher": "cnet.com",
+    "event": "hlgd-0-22",
+    "textSha256": "9abe88c1b332580411284126a965ba7134644e1cf3cb26c415b7c0a22f7c1dc2"
+  },
+  {
+    "id": "hlgd-test-0249",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#134",
+    "publishedAt": "2019-07-20",
+    "publisher": "cnn.com",
+    "event": "hlgd-0-21",
+    "textSha256": "3a39eb54e93b24e7c0abfcc24b2d4ddafd05e33a8abce39214b91e756ba569b7"
+  },
+  {
+    "id": "hlgd-test-0250",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#139",
+    "publishedAt": "2019-07-22",
+    "publisher": "cnn.com",
+    "event": "hlgd-0-21",
+    "textSha256": "2080174ae5d6ebf01650c25fd792a852cbb2160f8ac3fc8ba3dfbb81b1d31f70"
+  },
+  {
+    "id": "hlgd-test-0251",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#140",
+    "publishedAt": "2019-07-25",
+    "publisher": "cnn.com",
+    "event": "hlgd-0-21",
+    "textSha256": "28ec5baffae9bb01d95d31a24daf9336cc61f88e65b7cd1563e67ab2de903a6a"
+  },
+  {
+    "id": "hlgd-test-0252",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#141",
+    "publishedAt": "2019-07-26",
+    "publisher": "cnn.com",
+    "event": "hlgd-0-77",
+    "textSha256": "d1045fc3dc385fb8791bf3d9e77e98f026ac952cb1484fcb1e8197250e4d1ed5"
+  },
+  {
+    "id": "hlgd-test-0253",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#142",
+    "publishedAt": "2020-02-10",
+    "publisher": "cnn.com",
+    "event": "hlgd-0-22",
+    "textSha256": "d20892a71a966ba90be3289ef72372bf3066a54734049befa512623837e56c4b"
+  },
+  {
+    "id": "hlgd-test-0254",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#147",
+    "publishedAt": "2020-02-10",
+    "publisher": "engadget.com",
+    "event": "hlgd-0-22",
+    "textSha256": "7eeb1787c878892bdb30ea5aa86989fc459dd05af873107a20c30a2b7ad8365e"
+  },
+  {
+    "id": "hlgd-test-0255",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#39",
+    "publishedAt": "2017-09-13",
+    "publisher": "nerdwallet.com",
+    "event": "hlgd-0-48",
+    "textSha256": "73fb9ce9b7121d860d66aebbf61d0cbb73086c4bbca5771b6fc726550bc95b94"
+  },
+  {
+    "id": "hlgd-test-0256",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#194",
+    "publishedAt": "2017-01-07",
+    "publisher": "nytimes.com",
+    "event": "hlgd-1-3",
+    "textSha256": "67b6541dadd9ab657ca32b4d1d7df861a57e7984427f1328f89634b95fbe4f1c"
+  },
+  {
+    "id": "hlgd-test-0257",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#0",
+    "publishedAt": "2017-09-07",
+    "publisher": "nytimes.com",
+    "event": "hlgd-0-0",
+    "textSha256": "cae422e9d7e9ce6344ba8528ae48be9efd2318a386183b1e585247cb1c709080"
+  },
+  {
+    "id": "hlgd-test-0258",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#9",
+    "publishedAt": "2017-09-08",
+    "publisher": "nytimes.com",
+    "event": "hlgd-0-26",
+    "textSha256": "87ea33fdf886b0a895835ddb5f8a833ccfccc0a5eb531828ecf6a99bef91923a"
+  },
+  {
+    "id": "hlgd-test-0259",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#7",
+    "publishedAt": "2017-09-08",
+    "publisher": "nytimes.com",
+    "event": "hlgd-0-24",
+    "textSha256": "95791af816f6b5b2afd7d4cc4a2ec8af92e4d0e04ac21c3482ae52bb88696503"
+  },
+  {
+    "id": "hlgd-test-0260",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#8",
+    "publishedAt": "2017-09-08",
+    "publisher": "nytimes.com",
+    "event": "hlgd-0-25",
+    "textSha256": "a7868f7192388681ae277ddeb0bf91dcb1ab3982e127f91218c9c5e50279d5db"
+  },
+  {
+    "id": "hlgd-test-0261",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#25",
+    "publishedAt": "2017-09-09",
+    "publisher": "nytimes.com",
+    "event": "hlgd-0-39",
+    "textSha256": "946e107127953cb12ae99db9b1f31935fbe01a07ee3db664d0d038047e2d2958"
+  },
+  {
+    "id": "hlgd-test-0262",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#26",
+    "publishedAt": "2017-09-10",
+    "publisher": "nytimes.com",
+    "event": "hlgd-0-40",
+    "textSha256": "4b18cbd7abc30cc17ca02b5714fc2e370f05f3cd85a4d634ca966c8ae0ba3b42"
+  },
+  {
+    "id": "hlgd-test-0263",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#36",
+    "publishedAt": "2017-09-12",
+    "publisher": "nytimes.com",
+    "event": "hlgd-0-46",
+    "textSha256": "84e9c1e593796e6b07a5c05246c35cf9deccb19516d3e1140ec1f918806c1188"
+  },
+  {
+    "id": "hlgd-test-0264",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#44",
+    "publishedAt": "2017-09-14",
+    "publisher": "nytimes.com",
+    "event": "hlgd-0-49",
+    "textSha256": "71b1008b7816fdabde014908eb81f38d1fc27a57df9fda5a9e169dae8a44d825"
+  },
+  {
+    "id": "hlgd-test-0265",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#50",
+    "publishedAt": "2017-09-14",
+    "publisher": "nytimes.com",
+    "event": "hlgd-0-51",
+    "textSha256": "2db418ebeaf357a4fe32c6a14a9827df944a8ce0d5bf634c439d7036bd27bfaf"
+  },
+  {
+    "id": "hlgd-test-0266",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#55",
+    "publishedAt": "2017-09-15",
+    "publisher": "nytimes.com",
+    "event": "hlgd-0-52",
+    "textSha256": "c5edf09e36bb64daa7e917e0eedae7ac6f97f176d0b37e8af11e306e04aa6902"
+  },
+  {
+    "id": "hlgd-test-0267",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#66",
+    "publishedAt": "2017-09-18",
+    "publisher": "nytimes.com",
+    "event": "hlgd-0-56",
+    "textSha256": "96080d84e39c1f9900e5a97f61ff49f586a539a90c5f0fddd361c81bcaab397a"
+  },
+  {
+    "id": "hlgd-test-0268",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#81",
+    "publishedAt": "2017-09-26",
+    "publisher": "nytimes.com",
+    "event": "hlgd-0-11",
+    "textSha256": "949f62e7babe1cf296d43b7c6eb312fe3ac5e75fa326602a54873aed247a87ea"
+  },
+  {
+    "id": "hlgd-test-0269",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#98",
+    "publishedAt": "2017-09-27",
+    "publisher": "nytimes.com",
+    "event": "hlgd-0-64",
+    "textSha256": "ef3c835566f1cba2e818335a9292ba5b0154a665ce4232f591984da6fc2d9a4b"
+  },
+  {
+    "id": "hlgd-test-0270",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#120",
+    "publishedAt": "2017-10-03",
+    "publisher": "nytimes.com",
+    "event": "hlgd-0-18",
+    "textSha256": "0138da9aa3ecccee7504064ae0cd98911b616a7de390e29101ca98bc9b66529f"
+  },
+  {
+    "id": "hlgd-test-0271",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#132",
+    "publishedAt": "2019-07-19",
+    "publisher": "nytimes.com",
+    "event": "hlgd-0-21",
+    "textSha256": "2e1e6c2cb20f6e1c14e9e8dc75396f18c86eeb5b1917167949192f1b57a6110f"
+  },
+  {
+    "id": "hlgd-test-0272",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#137",
+    "publishedAt": "2019-07-22",
+    "publisher": "nytimes.com",
+    "event": "hlgd-0-21",
+    "textSha256": "55c7751e04cc067e284cfd53d60959fc75bf421f05c4de1546755eca33032e60"
+  },
+  {
+    "id": "hlgd-test-0273",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#143",
+    "publishedAt": "2020-02-10",
+    "publisher": "nytimes.com",
+    "event": "hlgd-0-78",
+    "textSha256": "58ad663d1003e962ca6ea4e7d725c672ab4083253a8ffe4af02858957ede1f10"
+  },
+  {
+    "id": "hlgd-test-0274",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#152",
+    "publishedAt": "2020-02-10",
+    "publisher": "nytimes.com",
+    "event": "hlgd-0-22",
+    "textSha256": "7212485a72e25a0269845953ce5a0fc0656b5c6c571bd3b63dfb51f7899172b8"
+  },
+  {
+    "id": "hlgd-test-0275",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#184",
+    "publishedAt": "2017-01-07",
+    "publisher": "rt.com",
+    "event": "hlgd-1-2",
+    "textSha256": "3796d0db8ebb2ad0d349aa6e7427facb932a779f3fe00724fa86cb63e34c31a0"
+  },
+  {
+    "id": "hlgd-test-0276",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#249",
+    "publishedAt": "2017-01-13",
+    "publisher": "rt.com",
+    "event": "hlgd-1-13",
+    "textSha256": "c137ece81fff3c5f232c0d823644af7714b0cb869ee542656f1eb74a31f969d5"
+  },
+  {
+    "id": "hlgd-test-0277",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#156",
+    "publishedAt": "2020-02-11",
+    "publisher": "rt.com",
+    "event": "hlgd-0-79",
+    "textSha256": "a8b1927a322c1c8ec8485ce0cb60a4c908ab719b2decb1df85008c4b916536de"
+  },
+  {
+    "id": "hlgd-test-0278",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#72",
+    "publishedAt": "2017-09-21",
+    "publisher": "theguardian.com",
+    "event": "hlgd-0-9",
+    "textSha256": "dbca172bcd0633c28c07643161256dfa2bab261889011a486bcedaee59d61e56"
+  },
+  {
+    "id": "hlgd-test-0279",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#91",
+    "publishedAt": "2017-09-26",
+    "publisher": "theguardian.com",
+    "event": "hlgd-0-11",
+    "textSha256": "81a7dddafa25453a412aaf2bf346f3b885402162ec110b3ce2948619bc425ba4"
+  },
+  {
+    "id": "hlgd-test-0280",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#224",
+    "publishedAt": "2017-01-10",
+    "publisher": "theguardian.com",
+    "event": "hlgd-1-9",
+    "textSha256": "b5e1e69e71ded75248d102e898d370067df2b523cca32f26425d18c5ef43ae4c"
+  },
+  {
+    "id": "hlgd-test-0281",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#60",
+    "publishedAt": "2017-09-15",
+    "publisher": "theguardian.com",
+    "event": "hlgd-0-7",
+    "textSha256": "7e29f1d34ee41f33fa0248cc873d6617361c1914d8302ef7abf0e17bb48e08b3"
+  },
+  {
+    "id": "hlgd-test-0282",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#148",
+    "publishedAt": "2020-02-10",
+    "publisher": "theguardian.com",
+    "event": "hlgd-0-22",
+    "textSha256": "d2edaac5f53ad8b8e6fbd480a52d8efd45ef4af7451e9ee960ff0dda41fe7739"
+  },
+  {
+    "id": "hlgd-test-0283",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#172",
+    "publishedAt": "2017-01-06",
+    "publisher": "theguardian.com",
+    "event": "hlgd-1-1",
+    "textSha256": "bb2773a2be86d4533315c0ea0c713f418449c7aa1eb12352933384f22dc0f196"
+  },
+  {
+    "id": "hlgd-test-0284",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#201",
+    "publishedAt": "2017-01-08",
+    "publisher": "theguardian.com",
+    "event": "hlgd-1-6",
+    "textSha256": "f4d271d8b10ab65ab1cef66fe8590f3b4eccbc9aff3fededfba1ae3caf3e4394"
+  },
+  {
+    "id": "hlgd-test-0285",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#256",
+    "publishedAt": "2017-01-14",
+    "publisher": "theguardian.com",
+    "event": "hlgd-1-14",
+    "textSha256": "5b85aa3f842d2f6bf4d7f9c1a1680207ff64b21cf25957a5af529207b48b77d5"
+  },
+  {
+    "id": "hlgd-test-0286",
+    "source": "https://github.com/tingofurro/headline_grouping/releases/download/0.1/hlgd_original_annotations.json#149",
+    "publishedAt": "2020-02-10",
+    "publisher": "theverge.com",
+    "event": "hlgd-0-22",
+    "textSha256": "9e1eef0fd6ee652540f7dcf9f96b239eefe5200c764e621caef098635da1bc83"
+  }
+]

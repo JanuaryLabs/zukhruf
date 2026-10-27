@@ -113,6 +113,19 @@ export default defineConfig(
       '@nx/enforce-module-boundaries': moduleBoundaryRule('tests'),
     },
   },
+  // The event-grouping eval is not shipped. Like the tests, it runs the
+  // package with a real Collection of @zukhruf/embeddings. Its runner is a
+  // command line program: it reads its environment and prints the scores.
+  {
+    files: ['packages/event-grouping/eval/**'],
+    rules: {
+      '@nx/enforce-module-boundaries': moduleBoundaryRule('tests'),
+    },
+  },
+  {
+    files: ['packages/event-grouping/eval/run.ts'],
+    rules: { 'island/no-console': 'off', 'island/no-process-env': 'off' },
+  },
   // @zukhruf/testing depends on docker, and docker on async, so the tests of
   // these two packages cannot import TemporaryFiles: that import would make a
   // cycle in the build (docs/adr/0001, line 29). Docker keeps its own copy of

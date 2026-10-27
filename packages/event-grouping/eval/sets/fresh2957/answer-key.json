@@ -1,0 +1,338 @@
+[
+  {
+    "id": "fresh-wcep-200-0",
+    "source": "https://datasets-server.huggingface.co/rows?dataset=allenai%2Fwcep_dense_max&config=default&split=test&offset=200&length=1#0",
+    "publishedAt": null,
+    "event": "single-fresh-wcep-200-0",
+    "textSha256": "8cf3626484d21887a5c53ab7c4be8317a06a13454a4763c72e4b89642bdb65b8"
+  },
+  {
+    "id": "fresh-wcep-200-1",
+    "source": "https://datasets-server.huggingface.co/rows?dataset=allenai%2Fwcep_dense_max&config=default&split=test&offset=200&length=1#1",
+    "publishedAt": null,
+    "event": "strict-200",
+    "textSha256": "e4b730e5bbda24a262af6f42b4b86a10276965b57241b696d2f95eacb88df170"
+  },
+  {
+    "id": "fresh-wcep-200-2",
+    "source": "https://datasets-server.huggingface.co/rows?dataset=allenai%2Fwcep_dense_max&config=default&split=test&offset=200&length=1#2",
+    "publishedAt": null,
+    "event": "strict-200",
+    "textSha256": "20d75e2f30a37730ada6e198a94c45c25385699cee92a297ed7d4411bd30555f"
+  },
+  {
+    "id": "fresh-wcep-201-0",
+    "source": "https://datasets-server.huggingface.co/rows?dataset=allenai%2Fwcep_dense_max&config=default&split=test&offset=201&length=1#0",
+    "publishedAt": null,
+    "event": "strict-201",
+    "textSha256": "ca99327c282a4437708daece63146ba82a7e04fbaa252c5775957fe5d6998d9a"
+  },
+  {
+    "id": "fresh-wcep-201-1",
+    "source": "https://datasets-server.huggingface.co/rows?dataset=allenai%2Fwcep_dense_max&config=default&split=test&offset=201&length=1#1",
+    "publishedAt": null,
+    "event": "strict-201",
+    "textSha256": "73d288e64f559d40a60c4dc3308857a37af2c8bc05514c7e7c49c867d2a3ae4e"
+  },
+  {
+    "id": "fresh-wcep-201-2",
+    "source": "https://datasets-server.huggingface.co/rows?dataset=allenai%2Fwcep_dense_max&config=default&split=test&offset=201&length=1#2",
+    "publishedAt": null,
+    "event": "strict-201",
+    "textSha256": "e5cc51e55ff6560de4264f8a90d1c20bc86f43f312223a12b83ad2b7d0ef5dc9"
+  },
+  {
+    "id": "fresh-wcep-202-0",
+    "source": "https://datasets-server.huggingface.co/rows?dataset=allenai%2Fwcep_dense_max&config=default&split=test&offset=202&length=1#0",
+    "publishedAt": null,
+    "event": "strict-202",
+    "textSha256": "bb371d6e9e814550f083acae770f4568a12a9e7694c2a6b3d539a4d9fbe15b44"
+  },
+  {
+    "id": "fresh-wcep-202-1",
+    "source": "https://datasets-server.huggingface.co/rows?dataset=allenai%2Fwcep_dense_max&config=default&split=test&offset=202&length=1#1",
+    "publishedAt": null,
+    "event": "strict-202",
+    "textSha256": "3d93271d6be99632b1c5a320df03a215ed9c6bf4584672e0b3b6095db4cedcc9"
+  },
+  {
+    "id": "fresh-wcep-202-2",
+    "source": "https://datasets-server.huggingface.co/rows?dataset=allenai%2Fwcep_dense_max&config=default&split=test&offset=202&length=1#2",
+    "publishedAt": null,
+    "event": "strict-202",
+    "textSha256": "ffdd3f5939b1ac38678de4e15277fa92a78c97a19548ed1158f3c4d85db5e039"
+  },
+  {
+    "id": "fresh-wcep-203-0",
+    "source": "https://datasets-server.huggingface.co/rows?dataset=allenai%2Fwcep_dense_max&config=default&split=test&offset=203&length=1#0",
+    "publishedAt": null,
+    "event": "strict-203",
+    "textSha256": "e2710ae063d7ed2ba29301c227819a64e9bfc3ff81d79c18143008266bb93983"
+  },
+  {
+    "id": "fresh-wcep-203-1",
+    "source": "https://datasets-server.huggingface.co/rows?dataset=allenai%2Fwcep_dense_max&config=default&split=test&offset=203&length=1#1",
+    "publishedAt": null,
+    "event": "strict-203",
+    "textSha256": "343204c5b26b19c935d9890f5f790c38377d6fbf62db2306973464a3e4d22fa1"
+  },
+  {
+    "id": "fresh-wcep-203-2",
+    "source": "https://datasets-server.huggingface.co/rows?dataset=allenai%2Fwcep_dense_max&config=default&split=test&offset=203&length=1#2",
+    "publishedAt": null,
+    "event": "strict-203",
+    "textSha256": "1ef308b08040e090920cd5db216747158b9c456d3f06a891da0f678b45fdf58e"
+  },
+  {
+    "id": "fresh-wcep-204-0",
+    "source": "https://datasets-server.huggingface.co/rows?dataset=allenai%2Fwcep_dense_max&config=default&split=test&offset=204&length=1#0",
+    "publishedAt": null,
+    "event": "strict-204",
+    "textSha256": "2f2c0bcd233859bdf2ec352405a2af1978beab861ff55e633684902f1a00fcfb"
+  },
+  {
+    "id": "fresh-wcep-204-1",
+    "source": "https://datasets-server.huggingface.co/rows?dataset=allenai%2Fwcep_dense_max&config=default&split=test&offset=204&length=1#1",
+    "publishedAt": null,
+    "event": "strict-204",
+    "textSha256": "f9c671d0fc2d247077895e7449cacd60738bd79723aebb4674856fc1b19e5c24"
+  },
+  {
+    "id": "fresh-wcep-204-2",
+    "source": "https://datasets-server.huggingface.co/rows?dataset=allenai%2Fwcep_dense_max&config=default&split=test&offset=204&length=1#2",
+    "publishedAt": null,
+    "event": "strict-204",
+    "textSha256": "89f9e8f8791737e2fa451e0d0a5a78dc697342f6965c34d96dc3ed5febaf80d3"
+  },
+  {
+    "id": "fresh-wcep-205-0",
+    "source": "https://datasets-server.huggingface.co/rows?dataset=allenai%2Fwcep_dense_max&config=default&split=test&offset=205&length=1#0",
+    "publishedAt": null,
+    "event": "strict-205-0",
+    "textSha256": "89f69f09b1dd64d13e925977d72542fd4b079958d92a1ae2c1bed1db3007eb39"
+  },
+  {
+    "id": "fresh-wcep-205-1",
+    "source": "https://datasets-server.huggingface.co/rows?dataset=allenai%2Fwcep_dense_max&config=default&split=test&offset=205&length=1#1",
+    "publishedAt": null,
+    "event": "strict-205-1",
+    "textSha256": "ea7ea65579bf4fc4dc4ba1e4fbdf5a3267692e07ddb7e92bc3724841bd6358a6"
+  },
+  {
+    "id": "fresh-wcep-205-2",
+    "source": "https://datasets-server.huggingface.co/rows?dataset=allenai%2Fwcep_dense_max&config=default&split=test&offset=205&length=1#2",
+    "publishedAt": null,
+    "event": "strict-205-2",
+    "textSha256": "abfff2c729278cae11980e2bf42e76b8b93afa2d5685ebf06f8c211908407081"
+  },
+  {
+    "id": "fresh-wcep-206-0",
+    "source": "https://datasets-server.huggingface.co/rows?dataset=allenai%2Fwcep_dense_max&config=default&split=test&offset=206&length=1#0",
+    "publishedAt": null,
+    "event": "strict-206",
+    "textSha256": "009aa8dd146fe060d96d3516590c69dc182cbaebdde93d9d0c675907d0163df7"
+  },
+  {
+    "id": "fresh-wcep-206-1",
+    "source": "https://datasets-server.huggingface.co/rows?dataset=allenai%2Fwcep_dense_max&config=default&split=test&offset=206&length=1#1",
+    "publishedAt": null,
+    "event": "strict-206",
+    "textSha256": "9525013ae520beb1356a9198a92b37982a01b51a881d1cab95d0c1211680686f"
+  },
+  {
+    "id": "fresh-wcep-206-2",
+    "source": "https://datasets-server.huggingface.co/rows?dataset=allenai%2Fwcep_dense_max&config=default&split=test&offset=206&length=1#2",
+    "publishedAt": null,
+    "event": "strict-206",
+    "textSha256": "e9e420c53ca6301d65ce0104b7785cf1649db2789781807f4d82ae080507c36f"
+  },
+  {
+    "id": "fresh-wcep-207-0",
+    "source": "https://datasets-server.huggingface.co/rows?dataset=allenai%2Fwcep_dense_max&config=default&split=test&offset=207&length=1#0",
+    "publishedAt": null,
+    "event": "strict-207",
+    "textSha256": "274a8206e5f258671b23e9e4ebc982e0e9aefdf10eaeff269d99e82c92e23e5d"
+  },
+  {
+    "id": "fresh-wcep-207-1",
+    "source": "https://datasets-server.huggingface.co/rows?dataset=allenai%2Fwcep_dense_max&config=default&split=test&offset=207&length=1#1",
+    "publishedAt": null,
+    "event": "strict-207",
+    "textSha256": "64d60891ac80caafa123fdfebde0a0b95b81c0a174291db65859196ff0dc45a0"
+  },
+  {
+    "id": "fresh-wcep-207-2",
+    "source": "https://datasets-server.huggingface.co/rows?dataset=allenai%2Fwcep_dense_max&config=default&split=test&offset=207&length=1#2",
+    "publishedAt": null,
+    "event": "strict-207",
+    "textSha256": "3384ce591b080354d38d4debf27c044ba353669de6f21bf74cc383b5c2afea0d"
+  },
+  {
+    "id": "fresh-wcep-208-0",
+    "source": "https://datasets-server.huggingface.co/rows?dataset=allenai%2Fwcep_dense_max&config=default&split=test&offset=208&length=1#0",
+    "publishedAt": null,
+    "event": "strict-208",
+    "textSha256": "a51af01324db995b4b0cce27204623e804548aa3006ae8db29c414b99ca53faa"
+  },
+  {
+    "id": "fresh-wcep-208-1",
+    "source": "https://datasets-server.huggingface.co/rows?dataset=allenai%2Fwcep_dense_max&config=default&split=test&offset=208&length=1#1",
+    "publishedAt": null,
+    "event": "strict-208",
+    "textSha256": "9c74ce70925e0ca8c6fae50ac0bfcc7b7ccdbe72a8365be2a69f5b2dc76a13b7"
+  },
+  {
+    "id": "fresh-wcep-208-2",
+    "source": "https://datasets-server.huggingface.co/rows?dataset=allenai%2Fwcep_dense_max&config=default&split=test&offset=208&length=1#2",
+    "publishedAt": null,
+    "event": "strict-208",
+    "textSha256": "134218b1518a0dfe9b2718aadf261e8a65c00e0052c3fc2f9ea05cc1164d7e62"
+  },
+  {
+    "id": "fresh-wcep-209-0",
+    "source": "https://datasets-server.huggingface.co/rows?dataset=allenai%2Fwcep_dense_max&config=default&split=test&offset=209&length=1#0",
+    "publishedAt": null,
+    "event": "strict-209",
+    "textSha256": "d72228d643eb322d06ecbad85400a437fef3276e581ca1e3698f798d2b0c8585"
+  },
+  {
+    "id": "fresh-wcep-209-1",
+    "source": "https://datasets-server.huggingface.co/rows?dataset=allenai%2Fwcep_dense_max&config=default&split=test&offset=209&length=1#1",
+    "publishedAt": null,
+    "event": "strict-209",
+    "textSha256": "9f60630d20412d9ec4cdf2c03004fcd08550b542db7ec314feebafc03ab5100f"
+  },
+  {
+    "id": "fresh-wcep-209-2",
+    "source": "https://datasets-server.huggingface.co/rows?dataset=allenai%2Fwcep_dense_max&config=default&split=test&offset=209&length=1#2",
+    "publishedAt": null,
+    "event": "strict-209",
+    "textSha256": "c3007ec101002a0213126fa434a49b09fffc73d6e3b6d78f9eaeb84baa70fecc"
+  },
+  {
+    "id": "fresh-wcep-210-0",
+    "source": "https://datasets-server.huggingface.co/rows?dataset=allenai%2Fwcep_dense_max&config=default&split=test&offset=210&length=1#0",
+    "publishedAt": null,
+    "event": "strict-210",
+    "textSha256": "abb499200e7b88efb2a5bc92690fe799e39175999f84e235710464a382ec2184"
+  },
+  {
+    "id": "fresh-wcep-210-1",
+    "source": "https://datasets-server.huggingface.co/rows?dataset=allenai%2Fwcep_dense_max&config=default&split=test&offset=210&length=1#1",
+    "publishedAt": null,
+    "event": "strict-210",
+    "textSha256": "862bc066285d4c1c822ee462781a428008593f7c1d0a31a9a2b46e163cdd2658"
+  },
+  {
+    "id": "fresh-wcep-210-2",
+    "source": "https://datasets-server.huggingface.co/rows?dataset=allenai%2Fwcep_dense_max&config=default&split=test&offset=210&length=1#2",
+    "publishedAt": null,
+    "event": "strict-210",
+    "textSha256": "031aab233c4b7cd39b4987b0200fbe75524ce6df2c5c3ebcd74c95cb1db928be"
+  },
+  {
+    "id": "fresh-wcep-213-0",
+    "source": "https://datasets-server.huggingface.co/rows?dataset=allenai%2Fwcep_dense_max&config=default&split=test&offset=213&length=1#0",
+    "publishedAt": null,
+    "event": "strict-213",
+    "textSha256": "58c95d9e6b8a0ba61ed9efad24895769017a6828952f5d7dab14af12f7a05f7f"
+  },
+  {
+    "id": "fresh-wcep-213-1",
+    "source": "https://datasets-server.huggingface.co/rows?dataset=allenai%2Fwcep_dense_max&config=default&split=test&offset=213&length=1#1",
+    "publishedAt": null,
+    "event": "strict-213",
+    "textSha256": "2a47969ee6c4a2720a0f6170d97c6b66ca1d5e1cb35852155e6f455aa6e9f65c"
+  },
+  {
+    "id": "fresh-wcep-213-2",
+    "source": "https://datasets-server.huggingface.co/rows?dataset=allenai%2Fwcep_dense_max&config=default&split=test&offset=213&length=1#2",
+    "publishedAt": null,
+    "event": "strict-213",
+    "textSha256": "6c768e08696ee3db96e2d5de2d2bd4b29d580098d902147cb56892ea0008983f"
+  },
+  {
+    "id": "fresh-wcep-214-0",
+    "source": "https://datasets-server.huggingface.co/rows?dataset=allenai%2Fwcep_dense_max&config=default&split=test&offset=214&length=1#0",
+    "publishedAt": null,
+    "event": "strict-214",
+    "textSha256": "fabe7f2fcb0ef0a6f215ab9e400e44edd75ec015bfe48db0ca6429ee26f455a5"
+  },
+  {
+    "id": "fresh-wcep-214-1",
+    "source": "https://datasets-server.huggingface.co/rows?dataset=allenai%2Fwcep_dense_max&config=default&split=test&offset=214&length=1#1",
+    "publishedAt": null,
+    "event": "strict-214",
+    "textSha256": "a861a01f4c7d231420ce89bad3b5ee6d658079ac0b747de628b8f56bd853e6cf"
+  },
+  {
+    "id": "fresh-wcep-214-2",
+    "source": "https://datasets-server.huggingface.co/rows?dataset=allenai%2Fwcep_dense_max&config=default&split=test&offset=214&length=1#2",
+    "publishedAt": null,
+    "event": "strict-214",
+    "textSha256": "84bbeb93e71ecf892f1f38bd1b434e26e4270a4ce02c3704792ee4ebb733b9da"
+  },
+  {
+    "id": "fresh-wcep-215-0",
+    "source": "https://datasets-server.huggingface.co/rows?dataset=allenai%2Fwcep_dense_max&config=default&split=test&offset=215&length=1#0",
+    "publishedAt": null,
+    "event": "strict-215",
+    "textSha256": "e710b27a083601e474ab75abafec8a32d2ee0d1685b1f5462ba384529b1da106"
+  },
+  {
+    "id": "fresh-wcep-215-1",
+    "source": "https://datasets-server.huggingface.co/rows?dataset=allenai%2Fwcep_dense_max&config=default&split=test&offset=215&length=1#1",
+    "publishedAt": null,
+    "event": "strict-215",
+    "textSha256": "63fb99c269d7e952c15b073a907b849bf011766006b7f4d50ec372445f656a20"
+  },
+  {
+    "id": "fresh-wcep-215-2",
+    "source": "https://datasets-server.huggingface.co/rows?dataset=allenai%2Fwcep_dense_max&config=default&split=test&offset=215&length=1#2",
+    "publishedAt": null,
+    "event": "single-fresh-wcep-215-2",
+    "textSha256": "b19bb433e4a07b0624aa5e0bffdd03b82f13f9e161d6a52d4aea0158ac76c4ad"
+  },
+  {
+    "id": "fresh-wcep-216-0",
+    "source": "https://datasets-server.huggingface.co/rows?dataset=allenai%2Fwcep_dense_max&config=default&split=test&offset=216&length=1#0",
+    "publishedAt": null,
+    "event": "strict-216",
+    "textSha256": "fad44cb0e07600e1fc3c60efcb65183777621bdc9bdfb6b112357c856bd8c9c4"
+  },
+  {
+    "id": "fresh-wcep-216-1",
+    "source": "https://datasets-server.huggingface.co/rows?dataset=allenai%2Fwcep_dense_max&config=default&split=test&offset=216&length=1#1",
+    "publishedAt": null,
+    "event": "strict-216-motion",
+    "textSha256": "fe57bc7815192bdadebbea616908793571cc25828ab8b8fedeabf5ef04be19b8"
+  },
+  {
+    "id": "fresh-wcep-216-2",
+    "source": "https://datasets-server.huggingface.co/rows?dataset=allenai%2Fwcep_dense_max&config=default&split=test&offset=216&length=1#2",
+    "publishedAt": null,
+    "event": "strict-216",
+    "textSha256": "7b07ccdb79838b971f7c6d052968e70ae4869f68ef0c81c16f61a5ff4ba26d2c"
+  },
+  {
+    "id": "fresh-wcep-217-0",
+    "source": "https://datasets-server.huggingface.co/rows?dataset=allenai%2Fwcep_dense_max&config=default&split=test&offset=217&length=1#0",
+    "publishedAt": null,
+    "event": "strict-217-0",
+    "textSha256": "119c9b51bafffcc38dc0a06713823fe2e2cc924036f71a909af5fe979d70c93d"
+  },
+  {
+    "id": "fresh-wcep-217-1",
+    "source": "https://datasets-server.huggingface.co/rows?dataset=allenai%2Fwcep_dense_max&config=default&split=test&offset=217&length=1#1",
+    "publishedAt": null,
+    "event": "strict-217-1",
+    "textSha256": "f88debf4d1ec9db054eccde4b2aaf369da6db63f34f868741cef93b0cf22f541"
+  },
+  {
+    "id": "fresh-wcep-217-2",
+    "source": "https://datasets-server.huggingface.co/rows?dataset=allenai%2Fwcep_dense_max&config=default&split=test&offset=217&length=1#2",
+    "publishedAt": null,
+    "event": "strict-217-2",
+    "textSha256": "20cd9b2ce52fb003c6a558a9ff21ae23accff02f2aa06362b3b163d30625a096"
+  }
+]
