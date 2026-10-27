@@ -1270,6 +1270,17 @@ test(
   },
 );
 
+/*
+ * The sweep tests below give each test its own version. To every other run
+ * on the same engine, such as a concurrent suite, that version is another
+ * version, so the teardown of that run can sweep it too, earlier than the
+ * test's own teardown. Thus a removal assert holds when any teardown removed
+ * the servers, and a keep assert holds only because a live lease protects
+ * them. A teardown of a release before the leases (0.3.46 and older)
+ * ignores every lease: while one runs on the same engine, a keep assert can
+ * fail.
+ */
+
 /** The name of the sweep lease of `version`: the name every teardown and every test process of the version agree on. */
 const sweepLease = (version: string): string =>
   `zukhruf-testing-sweep-${createHash('sha256').update(version).digest('hex')}`;
@@ -1465,7 +1476,8 @@ test(
 
 test(
   'two teardowns that sweep one version at once both succeed: the second takes the sweep lease after the first removed it, and the servers of that version are removed',
-  { skip: proxyless, timeout: 300_000 },
+  // Two runs of about 5 s each, the 8 s window and the first sweep after it, with margin.
+  { skip: proxyless, timeout: 120_000 },
   async (t) => {
     await using directory = await new TemporaryFiles().directory(
       'zukhruf-testing-two-sweeps-',
@@ -1528,9 +1540,23 @@ test(
       );
       second.catch(() => {});
       await conflicted.promise;
+      // A negative check over a window longer than the 5 s that a waiter gives a created lease:
+      // the second teardown must not take a running sweep lease from the first.
+      // The servers are not checked here: a teardown of a release before the
+      // leases, on the same engine, removes them without a sweep lease.
+      await setTimeout(8_000);
+      const startsDuringWindow = [...starts];
+      const firstLeaseState = (
+        await (
+          await docker.containers.find(startsDuringWindow[0] ?? '')
+        )?.inspect()
+      )?.State?.Status;
 
       release.resolve();
       ids.push(await first, await second);
+
+      assert.equal(startsDuringWindow.length, 1);
+      assert.equal(firstLeaseState, 'running');
 
       // The second teardown took the sweep lease after the first removed its own.
       const [firstLease, secondLease] = starts;
