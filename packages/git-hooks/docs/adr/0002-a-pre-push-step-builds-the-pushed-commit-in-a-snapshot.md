@@ -25,7 +25,7 @@ For an update, the base is the remote sha. For a create, the base is the parent 
 A probe on deepagents (nx 23.2.1, npm workspaces) on 2026-10-26 proved the mechanism, and it wrote nothing in the repo:
 
 - A marker that was only in the snapshot got into the built bundle. A type error that was only in the snapshot made the build fail.
-- The setup took about 1 s: 0.23 to 0.36 s for 1571 files, and 0.35 to 0.67 s for the links.
+- The setup took about 1 s: 0.23 to 0.36 s for 1571 files, and 0.35 to 0.67 s for the links. The time for the files is of the writer before 0.3.43, `git ls-tree` and `git cat-file --batch`. The clone of 0.3.43 and later is not timed yet.
 - A cold build of 16 projects took 67.8 s. A second build in a new snapshot took 5.2 s, with 17 of 20 tasks from the cache. The 3 other tasks have no cache. The task hashes do not depend on the path of the snapshot.
 - A cache folder without its workspace-data database gave 0 hits of 20. nx 23 keeps the index of the cache in that database.
 - The cache of the working tree gave 1 hit of 20, because the edits of peers change the hashes. Also, nx would write the project graph of the snapshot into the workspace data of the working tree, which peer nx runs read.
@@ -47,7 +47,7 @@ A probe on deepagents (nx 23.2.1, npm workspaces) on 2026-10-26 proved the mecha
 
 ## Consequences
 
-- A push with no drift adds about 1 s of setup to the build. The first push with a new lockfile waits for a full `npm ci`.
+- A push with no drift adds about 1 s of setup to the build, as measured with the writer before 0.3.43. The first push with a new lockfile waits for a full `npm ci`.
 - The state folder holds up to two full installs and an nx cache for each repo.
 - A file that is not in the commit is not in the snapshot: `.env` files and other ignored files. A build that needs one fails in the hook. Generated files and folders that a build writes come into the snapshot during the build.
 - Install drift is found from npm's hidden lockfile, so `Build` supports npm workspaces only. A repo without `package-lock.json` sees the fail at its first push.
