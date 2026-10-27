@@ -67,15 +67,21 @@ export class Federation implements Disposable {
   query(sql: string): QueryResult {
     return this.#statement(() => {
       const statement = this.#connection.prepare(sql);
+      // SQLite compiles no statement from a tail of spaces, comments and
+      // semicolons. On Node 26 prepare then throws ERR_INVALID_ARG_VALUE. On
+      // Node 24 prepare gives an empty statement, and its sourceSQL throws
+      // ERR_INVALID_STATE.
       let another: boolean;
       try {
-        this.#connection.prepare(sql.slice(statement.sourceSQL.length));
-        another = true;
+        another =
+          typeof this.#connection.prepare(sql.slice(statement.sourceSQL.length))
+            .sourceSQL === 'string';
       } catch (error) {
         another = !(
           error instanceof Error &&
           'code' in error &&
-          error.code === 'ERR_INVALID_ARG_VALUE'
+          (error.code === 'ERR_INVALID_ARG_VALUE' ||
+            error.code === 'ERR_INVALID_STATE')
         );
       }
       if (another) throw new Error('Run one SQL statement at a time');

@@ -133,6 +133,7 @@ const result = database.query(
 - [0001 Each statement attaches what it names](./docs/adr/0001-each-statement-attaches-what-it-names.md)
 - [0002 The error of SQLite names the database](./docs/adr/0002-the-error-of-sqlite-names-the-database.md)
 - [0003 A statement over the limit fails](./docs/adr/0003-a-statement-over-the-limit-fails.md)
+- [Code copied into this package](./docs/copied-code.md)
 
 ## Development
 
