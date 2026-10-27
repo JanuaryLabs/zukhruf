@@ -1218,12 +1218,17 @@ async function holder(
   }
 }
 
-/** Runs a run of this version whose one test reuses a shared server, and gives the server's id. */
+/**
+ * Runs a run of this version whose one test reuses a shared server, and gives
+ * the server's id. `signal` kills the run with SIGKILL, so its teardown does
+ * not outlive the test.
+ */
 async function currentRun(
   t: TestContext,
   directory: string,
   probe: string,
   env: Record<string, string | undefined>,
+  signal?: AbortSignal,
 ): Promise<string> {
   const statePath = join(directory, `current-${randomUUID()}.json`);
   const file = join(directory, `current-${randomUUID()}.test.ts`);
@@ -1239,6 +1244,8 @@ async function currentRun(
   await spawn(process.execPath, runnerArgs(file), {
     env,
     timeout: 150_000,
+    signal,
+    killSignal: 'SIGKILL',
   }).catch((error: unknown) => {
     throw error instanceof SubprocessError
       ? new Error(`${error.message}\n${error.output}`, { cause: error })
@@ -1352,9 +1359,10 @@ async function ended(
 
 /**
  * Which comes first: `event`, the end of `run`, or a deadline. A run gets to
- * its teardown in about 10 s; the deadline is far above that and far below
- * the timeout of each test, so a test whose event never comes fails and
- * disposes of what it started. A run that fails rejects with its error.
+ * its teardown in about 10 s, and a teardown waits at most 30 s for a taken
+ * sweep lease; the deadline is above both and far below the timeout of each
+ * test, so a test whose event never comes fails and disposes of what it
+ * started. A run that fails rejects with its error.
  */
 async function firstOf(
   event: Promise<void>,
@@ -1372,7 +1380,11 @@ async function firstOf(
   }
 }
 
-/** A process of the docker area at `library` reuses a shared server and exits. Gives the server's id. */
+/**
+ * A process of the docker area at `library` reuses a shared server and exits.
+ * Gives the server's id. A process that does not exit by the deadline of
+ * `firstOf` fails the test, and is killed.
+ */
 async function reusedAndExited(
   t: TestContext,
   directory: string,
@@ -1383,7 +1395,22 @@ async function reusedAndExited(
   const statePath = join(directory, `reused-${randomUUID()}.json`);
   const file = join(directory, `reused-${randomUUID()}.ts`);
   await writeFile(file, reuseSource(library, statePath, probe));
-  await spawn(process.execPath, [file], { env, timeout: 120_000 });
+  const stop = new AbortController();
+  try {
+    const reuse = spawn(process.execPath, [file], {
+      env,
+      signal: stop.signal,
+      killSignal: 'SIGKILL',
+    });
+    reuse.catch(() => {});
+    assert.equal(
+      await firstOf(new Promise<void>(() => {}), reuse),
+      'ended',
+      'the process must reuse the server and exit',
+    );
+  } finally {
+    stop.abort();
+  }
   return (await readState<{ id: string }>(t, statePath)).id;
 }
 
@@ -1850,6 +1877,11 @@ test(
     await using proxy = await EngineProxy.start(engine);
     // The first teardown holds the sweep lease: its look for process leases waits until the second ends.
     const { held, release } = sweepHold(proxy, version);
+    // The second teardown found the sweep lease taken and looks at it.
+    const conflicted = Promise.withResolvers<void>();
+    proxy.intercept('GET', `/containers/${sweepLease(version)}/json`, () => {
+      conflicted.resolve();
+    });
     const first = currentRun(
       t,
       directory.path,
@@ -1857,6 +1889,7 @@ test(
       proxiedEnvironment(join(directory.path, 'state'), proxy),
     );
     first.catch(() => {});
+    const stop = new AbortController();
     try {
       assert.equal(
         await firstOf(held, first),
@@ -1865,14 +1898,26 @@ test(
       );
       await ended(t, other, version);
 
-      ids.push(
-        await currentRun(
-          t,
-          directory.path,
-          randomUUID(),
-          runEnvironment(join(directory.path, 'state-second')),
-        ),
+      const second = currentRun(
+        t,
+        directory.path,
+        randomUUID(),
+        proxiedEnvironment(join(directory.path, 'state-second'), proxy),
+        stop.signal,
       );
+      second.catch(() => {});
+      assert.equal(
+        await firstOf(conflicted.promise, second),
+        'reached',
+        'the second teardown must look at the taken sweep lease',
+      );
+      // From its look, the second teardown waits at most 30 s for the lease and then ends.
+      assert.equal(
+        await firstOf(new Promise<void>(() => {}), second),
+        'ended',
+        'the second teardown must end within its 30 s wait for the sweep lease',
+      );
+      ids.push(await second);
       const keptBySecond = await exists(server);
       release();
       ids.push(await first);
@@ -1880,6 +1925,7 @@ test(
       assert.equal(keptBySecond, true);
       assert.equal(await exists(server), false);
     } finally {
+      stop.abort();
       release();
       other.child.kill('SIGKILL');
       await first.catch(() => {});
