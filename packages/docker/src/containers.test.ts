@@ -9,6 +9,7 @@ import {
   ContainerRunningError,
   Docker,
   DockerEngineError,
+  type EngineApi,
   ImageNotFoundError,
   NameConflictError,
   NetworkNotFoundError,
@@ -729,6 +730,59 @@ describe('containers.list()', () => {
     } finally {
       await removeLabeled(docker, run);
       await removeLabeled(docker, other);
+    }
+  });
+});
+
+describe('HostConfig', () => {
+  test('the engine keeps each field of the docker run flags of a sandbox, and an inspect gives each one back', async () => {
+    // Arrange: values that each engine accepts at the create. The container never
+    // starts: on a host with no GPU, the start of a DeviceRequests entry fails with 500.
+    await using docker = await connect();
+    const run = randomUUID();
+    const hostConfig = {
+      Memory: 256 * 1024 ** 2,
+      MemorySwap: 512 * 1024 ** 2,
+      CpusetCpus: '0',
+      Ulimits: [{ Name: 'nofile', Soft: 1024, Hard: 2048 }],
+      Sysctls: { 'net.ipv4.ip_unprivileged_port_start': '80' },
+      Runtime: 'runc',
+      Dns: ['9.9.9.9'],
+      Devices: [
+        {
+          PathOnHost: '/dev/fuse',
+          PathInContainer: '/dev/fuse',
+          CgroupPermissions: 'rwm',
+        },
+      ],
+      DeviceRequests: [
+        {
+          Driver: '',
+          Count: -1,
+          DeviceIDs: [],
+          Capabilities: [['gpu']],
+          Options: {},
+        },
+      ],
+    } satisfies EngineApi.HostConfig;
+    try {
+      // Act
+      await using container = await docker.containers.create({
+        ...sleeper(run),
+        HostConfig: hostConfig,
+      });
+      const inspected = await container.inspect();
+
+      // Assert
+      const echoed = Object.fromEntries(
+        Object.keys(hostConfig).map((field) => [
+          field,
+          Reflect.get(Object(inspected.HostConfig), field),
+        ]),
+      );
+      assert.deepEqual(echoed, hostConfig);
+    } finally {
+      await removeLabeled(docker, run);
     }
   });
 });

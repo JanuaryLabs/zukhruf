@@ -67,7 +67,7 @@ An error has its own class when a caller does something different after it: star
 | Class                      | When                                                                                                                                          | What the caller does next                          |
 | -------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
 | `ConnectionFailedError`    | The socket does not exist, the engine refuses the connection, or `ssh` cannot log in                                                          | Treat the engine as absent, or ask to start Docker |
-| `UnsupportedEngineError`   | The engine's highest API version is lower than the lowest one that the package supports                                                       | Ask to update Docker                               |
+| `UnsupportedEngineError`   | The engine's highest API version is lower than the lowest one that the package supports, or than the one that a call needs                    | Ask to update Docker                               |
 | `UnsupportedHostError`     | The host is not `unix://`, `npipe://` or `ssh://`, for example `tcp://`                                                                       | Skip that context, or give another host            |
 | `ContextNotFoundError`     | `Docker.connect({ context })` names a context that the context store does not have                                                            | Pick another context from `Docker.contexts()`      |
 | `ContainerNotFoundError`   | A request about a container gets 404, or a start gets 409 and an inspect finds the container gone, removing or dead                           | Create the container again                         |
@@ -156,6 +156,21 @@ await postgres.start();
 const published = await postgres.port(5432);
 // { host: '127.0.0.1', port: 55012 }
 ```
+
+`HostConfig` has the fields of the Engine API reference at API 1.44, with their names and types. A field comes into the type when a caller needs it ([ADR 0008](./docs/adr/0008-hostconfig-grows-field-by-field-from-the-engine-api-reference.md)). The fields that `docker run` flags set are these, for example:
+
+| `docker run` flag | `HostConfig` field                                                                                         |
+| ----------------- | ---------------------------------------------------------------------------------------------------------- |
+| `--memory-swap`   | `MemorySwap`: memory and swap together, in bytes; `-1` for no limit on swap. Set `Memory`.                 |
+| `--cpuset-cpus`   | `CpusetCpus`, such as `'0-1'`                                                                              |
+| `--ulimit`        | `Ulimits`, such as `[{ Name: 'nofile', Soft: 1024, Hard: 2048 }]`                                          |
+| `--sysctl`        | `Sysctls`, such as `{ 'net.ipv4.ip_forward': '1' }`                                                        |
+| `--runtime`       | `Runtime`, such as `'runc'`                                                                                |
+| `--dns`           | `Dns`, such as `['9.9.9.9']`                                                                               |
+| `--device`        | `Devices`, such as `[{ PathOnHost: '/dev/fuse', PathInContainer: '/dev/fuse', CgroupPermissions: 'rwm' }]` |
+| `--gpus all`      | `DeviceRequests: [{ Count: -1, Capabilities: [['gpu']] }]`                                                 |
+
+The engine keeps a `DeviceRequests` entry at the create. On a host with no GPU, the start fails with `DockerEngineError` and 500.
 
 `container.port()` reads the binding of the container's port from an inspect. It gives `undefined` when the port is not published. An address that binds each interface (`0.0.0.0`, `::` or empty) gives the loopback address of the same family. On an SSH engine, the port is on the remote machine. `@zukhruf/testing` forwards it to this machine.
 
@@ -401,13 +416,27 @@ await docker.images.pull('ghcr.io/example/private:1', { auth: ghcr });
 await docker.images.tag('app:1', 'ghcr.io/example/app:1');
 await docker.images.push('ghcr.io/example/app:1', { auth: ghcr });
 
-const archive = await docker.images.save(['alpine:3']);
+const amd64 = { os: 'linux', architecture: 'amd64' };
+const image = await docker.images.inspect('alpine:3', { platform: amd64 });
+const archive = await docker.images.save(['alpine:3'], { platform: amd64 });
 await archive.pipeTo(Writable.toWeb(createWriteStream('alpine.tar')));
 await docker.images.load(Readable.toWeb(createReadStream('alpine.tar')));
 await docker.images.remove('alpine:3');
 ```
 
 `pull()`, `push()` and `load()` read the progress of the engine until the end. They reject with `DockerEngineError` when the engine reports an error in the progress. Then `status` is `undefined`, because the HTTP status was 200. The engine answers a push of an image that it does not have with 200 too, and reports the error in the progress. Thus `push()` inspects the image after an error in the progress: when the engine does not have the image, `push()` rejects with `ImageNotFoundError`.
+
+`pull()` and `containers.create()` take a platform as text, `'linux/amd64'`, because their requests take that form. `inspect()`, `save()` and `load()` take an `EngineApi.OCIPlatform` object, because their requests take a platform as JSON. The package encodes it. Each needs an API version:
+
+| Call               | One platform | More than one platform |
+| ------------------ | ------------ | ---------------------- |
+| `images.inspect()` | 1.49         | -                      |
+| `images.save()`    | 1.48         | 1.52                   |
+| `images.load()`    | 1.48         | 1.52                   |
+
+An engine below that version ignores one platform: a save then writes each platform of the image, and an inspect gives the platform of the host. It refuses more than one platform with 400. Thus, when the API version of the client is lower, the call rejects with `UnsupportedEngineError` before the request ([ADR 0009](./docs/adr/0009-a-platform-below-its-api-version-fails-and-is-not-ignored.md)).
+
+A save with a platform writes only the content of that platform. A load with a platform loads only that platform: when the archive does not have it, the containerd image store rejects with `DockerEngineError`, and the classic image store loads nothing and resolves. An inspect with a platform gives that platform of the image.
 
 `images.remove()` of one name of an image that has more names removes only that name. A removal of an image that a container uses, or a removal by ID of an image with more than one name, rejects with `ImageInUseError`. `auth` holds explicit credentials. The package runs no credential helper, because a helper is a program on the `PATH`.
 
@@ -448,6 +477,8 @@ Each connection of the client is one `ssh` process. The client keeps idle connec
 ## The API version
 
 The path of each request starts with the API version, as in `/v1.51/containers/json`. `Docker.connect()` reads the highest version of the engine from `GET /_ping`. The client then uses the lower of that version and its own highest version. It refuses an engine that is older than its own lowest version with `UnsupportedEngineError`. `docker.apiVersion` gives the version that the client uses.
+
+Some options need a higher version than the lowest one, such as the `platform` of `images.save()`. When the version of the client is lower, the call rejects with `UnsupportedEngineError` before the request, and `minimumVersion` is the version that the call needs. See [Images](#images).
 
 The lowest version is 1.44. From that version on, "`POST /networks/create` with a duplicated name now fails systematically" ([Engine API version history](https://docs.docker.com/reference/api/engine/version-history/)), and `networks.createOrGet()` needs that refusal. The highest version is the highest one that the tests of the package run on.
 
@@ -745,10 +776,10 @@ export class OwnedNetwork extends Network implements AsyncDisposable {
 }
 
 export interface Images {
-  /** undefined for 404. */
+  /** undefined for 404. A platform needs API 1.49. */
   inspect(
     reference: string,
-    options?: CancelOptions,
+    options?: CancelOptions & { platform?: EngineApi.OCIPlatform },
   ): Promise<EngineApi.ImageInspect | undefined>;
   list(
     options?: CancelOptions & { all?: boolean; filters?: Filters },
@@ -770,14 +801,19 @@ export interface Images {
     reference: string,
     options: CancelOptions & { auth: EngineApi.AuthConfig },
   ): Promise<void>;
-  /** A tar archive of the images, as `docker save` writes it. */
+  /** A tar archive of the images, as `docker save` writes it. One platform needs API 1.48, more than one 1.52. */
   save(
     references: string[],
-    options?: CancelOptions,
+    options?: CancelOptions & {
+      platform?: EngineApi.OCIPlatform | EngineApi.OCIPlatform[];
+    },
   ): Promise<ReadableStream<Uint8Array>>;
+  /** One platform needs API 1.48, more than one 1.52. */
   load(
     archive: ReadableStream<Uint8Array> | Uint8Array,
-    options?: CancelOptions,
+    options?: CancelOptions & {
+      platform?: EngineApi.OCIPlatform | EngineApi.OCIPlatform[];
+    },
   ): Promise<void>;
   /** Resolves for 404. */
   remove(
@@ -805,7 +841,7 @@ export class UnsupportedEngineError extends DockerError {
   readonly host: string;
   /** The highest API version of the engine. */
   readonly engineVersion: string;
-  /** The lowest API version that the package supports. */
+  /** The lowest API version that the package, or the call, needs. */
   readonly minimumVersion: string;
 }
 

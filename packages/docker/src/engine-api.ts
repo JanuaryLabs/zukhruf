@@ -76,7 +76,49 @@ export interface Mount {
   TmpfsOptions?: { SizeBytes?: number; Mode?: number };
 }
 
-/** The configuration of a container that depends on the host. */
+/** A device of the host in the container, as HostConfig.Devices takes it. */
+export interface DeviceMapping {
+  PathOnHost?: string;
+  PathInContainer?: string;
+  /** Such as `rwm`: read, write, mknod. */
+  CgroupPermissions?: string;
+}
+
+/** A request for devices to a device driver, such as the GPUs of `docker run --gpus`. */
+export interface DeviceRequest {
+  Driver?: string;
+  /** -1 for each device. */
+  Count?: number;
+  DeviceIDs?: string[];
+  /** An OR list of AND lists, such as [['gpu']]. */
+  Capabilities?: string[][];
+  Options?: Record<string, string>;
+}
+
+/** A resource limit of the container, such as `nofile`. The reference gives the item of HostConfig.Ulimits no name; Moby names it Ulimit. */
+export interface Ulimit {
+  Name?: string;
+  Soft?: number;
+  Hard?: number;
+}
+
+/** The platform of an image, as the OCI image index describes it. */
+export interface OCIPlatform {
+  /** Such as `amd64` or `arm64`. */
+  architecture?: string;
+  /** Such as `linux` or `windows`. */
+  os?: string;
+  'os.version'?: string;
+  'os.features'?: string[];
+  /** Such as `v8` for `arm64`. */
+  variant?: string;
+}
+
+/**
+ * The configuration of a container that depends on the host. Each field has
+ * the name and the type of the Engine API reference at API 1.44, the lowest
+ * version of the package. A field comes into this type when a caller needs it.
+ */
 export interface HostConfig {
   Binds?: string[];
   Mounts?: Mount[];
@@ -89,9 +131,21 @@ export interface HostConfig {
   };
   AutoRemove?: boolean;
   Memory?: number;
+  /** Memory and swap together, in bytes; -1 for no limit on swap. It needs `Memory`. */
+  MemorySwap?: number;
   /** 0 to 100: how much the kernel swaps out the anonymous pages of the container. */
   MemorySwappiness?: number;
   NanoCpus?: number;
+  /** The CPUs that the container can use, such as `0-3` or `0,1`. */
+  CpusetCpus?: string;
+  Ulimits?: Ulimit[];
+  Devices?: DeviceMapping[];
+  DeviceRequests?: DeviceRequest[];
+  /** Kernel parameters, such as { 'net.ipv4.ip_forward': '1' }. */
+  Sysctls?: Record<string, string>;
+  /** The OCI runtime, such as `runc`, or a runtime that the engine names in its configuration. */
+  Runtime?: string;
+  Dns?: string[];
   /** `none`, `private`, `shareable`, `container:<name|id>` or `host`. */
   IpcMode?: string;
   CpuShares?: number;

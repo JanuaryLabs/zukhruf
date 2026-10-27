@@ -6,7 +6,7 @@ export const LOWEST_API_VERSION = '1.44';
 export const HIGHEST_API_VERSION = '1.56';
 
 /** Compares the numbers of two versions, so that 1.9 is lower than 1.10. */
-function compareApiVersions(left: string, right: string): number {
+export function compareApiVersions(left: string, right: string): number {
   const [leftMajor = 0, leftMinor = 0] = left.split('.').map(Number);
   const [rightMajor = 0, rightMinor = 0] = right.split('.').map(Number);
   return leftMajor - rightMajor || leftMinor - rightMinor;
@@ -21,7 +21,12 @@ export function negotiateApiVersion(
     !/^\d+\.\d+$/.test(engineVersion) ||
     compareApiVersions(engineVersion, LOWEST_API_VERSION) < 0
   ) {
-    throw new UnsupportedEngineError(host, engineVersion, LOWEST_API_VERSION);
+    throw new UnsupportedEngineError(
+      host,
+      engineVersion,
+      LOWEST_API_VERSION,
+      'the package',
+    );
   }
   return compareApiVersions(engineVersion, HIGHEST_API_VERSION) < 0
     ? engineVersion

@@ -80,3 +80,10 @@ _Avoid_: Tarball, copy
 **Event**:
 A message of `GET /events`: an action of the engine on a container, image, volume or network, such as `start` or `health_status: healthy`.
 _Avoid_: Notification
+
+**Platform**:
+The operating system and the CPU architecture that an image is for, as the OCI image index names them: `os`, `architecture` and `variant`, such as `linux`, `arm64` and `v8`. A multi-platform image has one manifest for each platform.
+_Avoid_: Arch (one part of a platform)
+
+**Image store**:
+The place where the engine keeps its images. The containerd image store keeps each platform of an image under one name. The classic image store keeps one platform for each name. Docker Desktop uses the containerd image store.

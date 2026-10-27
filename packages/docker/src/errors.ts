@@ -49,12 +49,18 @@ export class UnsupportedEngineError extends DockerError {
   readonly host: string;
   /** The highest API version of the engine. */
   readonly engineVersion: string;
-  /** The lowest API version that the package supports. */
+  /** The lowest API version that the package, or the call, needs. */
   readonly minimumVersion: string;
 
-  constructor(host: string, engineVersion: string, minimumVersion: string) {
+  /** call: what needs the version: 'the package', or a call such as 'images.save() with a platform'. */
+  constructor(
+    host: string,
+    engineVersion: string,
+    minimumVersion: string,
+    call: string,
+  ) {
     super(
-      `The engine at ${host} has API version ${engineVersion}, but the package needs ${minimumVersion} or higher. Update Docker.`,
+      `The engine at ${host} has API version ${engineVersion}, but ${call} needs ${minimumVersion} or higher. Update Docker.`,
     );
     this.name = 'UnsupportedEngineError';
     this.host = host;

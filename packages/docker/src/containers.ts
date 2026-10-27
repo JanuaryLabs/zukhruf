@@ -877,7 +877,8 @@ export class Containers {
     body: EngineApi.ContainerCreateRequest,
     options: CancelOptions & { name?: string; platform?: string } = {},
   ): Promise<OwnedContainer> {
-    const { name, platform, signal } = options;
+    const { name, platform, ...cancel } = options;
+    const { signal } = cancel;
     const method = 'POST';
     const path = '/containers/create';
     const response = await this.#client.exchange(method, path, {
@@ -897,7 +898,7 @@ export class Containers {
       });
     }
     if (response.status === 404 && body.Image !== undefined) {
-      const image = await this.#images.inspect(body.Image, options);
+      const image = await this.#images.inspect(body.Image, cancel);
       if (image === undefined) {
         throw new ImageNotFoundError(error.message, answer, body.Image, {
           cause: error,

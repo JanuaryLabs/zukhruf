@@ -3,10 +3,12 @@ import type { IncomingHttpHeaders, IncomingMessage } from 'node:http';
 import { type Duplex, Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 
+import { compareApiVersions } from './api-version.ts';
 import {
   ConnectionFailedError,
   DockerEngineError,
   DockerError,
+  UnsupportedEngineError,
 } from './errors.ts';
 import type { Filters } from './options.ts';
 import { SshExitError } from './ssh-connection.ts';
@@ -145,6 +147,25 @@ export class EngineClient {
     this.#disposal = disposal;
     // Each request in flight listens to the disposal, so many concurrent requests are not a leak.
     setMaxListeners(0, disposal.signal);
+  }
+
+  /**
+   * Throws UnsupportedEngineError before the request when the API version of
+   * the client is lower than the one that a call needs. An engine below that
+   * version ignores the parameter, so the request must not go.
+   */
+  requireApiVersion(minimumVersion: string, call: string): void {
+    if (
+      this.#apiVersion !== undefined &&
+      compareApiVersions(this.#apiVersion, minimumVersion) < 0
+    ) {
+      throw new UnsupportedEngineError(
+        this.#host,
+        this.#apiVersion,
+        minimumVersion,
+        call,
+      );
+    }
   }
 
   /** The same engine and connections, with the API version in the path of each request. */

@@ -38,6 +38,9 @@ function pullQuery(reference: string, platform: string | undefined) {
   return { fromImage: reference, tag: bare ? 'latest' : undefined, platform };
 }
 
+/** One platform, or from API 1.52 on, more than one. */
+type PlatformOption = EngineApi.OCIPlatform | EngineApi.OCIPlatform[];
+
 /** The images of one engine. Images have no owner, so no handle removes one on disposal. */
 export class Images {
   readonly #client: EngineClient;
@@ -46,14 +49,42 @@ export class Images {
     this.#client = client;
   }
 
-  /** undefined for 404. */
+  /** The platform query of save() and load(): one platform needs API 1.48, more than one needs 1.52. */
+  #platforms(
+    platform: PlatformOption | undefined,
+    call: string,
+  ): string[] | undefined {
+    if (platform === undefined) return undefined;
+    const platforms = Array.isArray(platform) ? platform : [platform];
+    if (platforms.length > 1) {
+      this.#client.requireApiVersion(
+        '1.52',
+        `${call} with more than one platform`,
+      );
+    } else {
+      this.#client.requireApiVersion('1.48', `${call} with a platform`);
+    }
+    return platforms.map((each) => JSON.stringify(each));
+  }
+
+  /** undefined for 404. A platform needs API 1.49. */
   async inspect(
     reference: string,
-    options: CancelOptions = {},
+    options: CancelOptions & { platform?: EngineApi.OCIPlatform } = {},
   ): Promise<EngineApi.ImageInspect | undefined> {
+    const { platform, signal } = options;
+    if (platform !== undefined) {
+      this.#client.requireApiVersion(
+        '1.49',
+        'images.inspect() with a platform',
+      );
+    }
     const method = 'GET';
     const path = `/images/${encodeURIComponent(reference)}/json`;
-    const response = await this.#client.exchange(method, path, options);
+    const response = await this.#client.exchange(method, path, {
+      query: { platform: platform && JSON.stringify(platform) },
+      signal,
+    });
     if (response.status === 404) return undefined;
     if (!isSuccess(response)) throw this.#client.error(response, method, path);
     return parseBody<EngineApi.ImageInspect>(response);
@@ -173,13 +204,16 @@ export class Images {
     }
   }
 
-  /** A tar archive of the images, as `docker save` writes it. */
+  /** A tar archive of the images, as `docker save` writes it. With a platform, only the content of that platform. */
   async save(
     references: string[],
-    options: CancelOptions = {},
+    options: CancelOptions & { platform?: PlatformOption } = {},
   ): Promise<ReadableStream<Uint8Array>> {
     const response = await this.#client.stream('GET', '/images/get', {
-      query: { names: references },
+      query: {
+        names: references,
+        platform: this.#platforms(options.platform, 'images.save()'),
+      },
       signal: options.signal,
     });
     return Readable.toWeb(response);
@@ -188,11 +222,12 @@ export class Images {
   /** Loads the images of a tar archive and reads the progress of the engine to its end. */
   async load(
     archive: ReadableStream<Uint8Array> | Uint8Array,
-    options: CancelOptions = {},
+    options: CancelOptions & { platform?: PlatformOption } = {},
   ): Promise<void> {
     const method = 'POST';
     const path = '/images/load';
     const progress = await this.#client.stream(method, path, {
+      query: { platform: this.#platforms(options.platform, 'images.load()') },
       content: { type: 'application/x-tar', data: archive },
       signal: options.signal,
     });
