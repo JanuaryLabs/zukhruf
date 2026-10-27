@@ -58,7 +58,7 @@ The research for event grouping found these limits. They apply to this package. 
 
 **Evidence.** Round #3130 measured 0.68 ms for each report for the grouping step, but the daily windows of the Gun Violence Corpus are small. Backlog #3131 and #3137 measured one clustering on a synthetic window: 768-dimension vectors with a shared direction, topics and events of 3 reports, through the `Collection` of `@zukhruf/embeddings` in memory, on an Apple M4 Pro with Node.js 26.
 
-| Reports in the window | First measurement | After the faster cosine (51eed3d) | With one neighbour graph of the window |
+| Reports in the window | First measurement | After the faster cosine (d05b825) | With one neighbour graph of the window |
 | --------------------- | ----------------- | --------------------------------- | -------------------------------------- |
 | 1,001                 | 8.2 s             | 3.1 s                             | 1.0 s                                  |
 | 3,500                 | 71 s              | 30 s                              | 9.6 s                                  |
