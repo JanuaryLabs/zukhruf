@@ -5,6 +5,7 @@ import {
   type RequestOptions,
   request,
 } from 'node:http';
+import { Socket } from 'node:net';
 import type { Duplex } from 'node:stream';
 
 /** The connections of a client to its engine. */
@@ -12,6 +13,8 @@ export interface Transport {
   request(options: RequestOptions): ClientRequest;
   /** Ends the input of a hijacked connection, and keeps its output open. */
   endInput(socket: Duplex): void;
+  /** Lets a connection in use, such as a hijacked one, end without the process waiting for it. */
+  unref(socket: Duplex): void;
   /** Closes each connection, idle or in use, and resolves when each one is closed. */
   close(): Promise<void>;
 }
@@ -58,6 +61,10 @@ export class SocketTransport implements Transport {
   endInput(socket: Duplex): void {
     if (this.#kind === 'npipe') socket.write(Buffer.alloc(0));
     socket.end();
+  }
+
+  unref(socket: Duplex): void {
+    if (socket instanceof Socket) socket.unref();
   }
 
   /** Closes each connection, idle, in use or upgraded, and resolves when each one is closed. */

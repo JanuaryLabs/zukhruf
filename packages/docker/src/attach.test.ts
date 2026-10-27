@@ -1,12 +1,21 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
+import { delimiter } from 'node:path';
 import { describe, test } from 'node:test';
 
 import {
+  ContainerNotFoundError,
   ContainerNotRunningError,
   Docker,
   NetworkNotFoundError,
 } from './index.ts';
+import { ENTRY, lastJson, runScenario } from './testing/scenario.ts';
+import { scratchDirectory } from './testing/scratch-directory.ts';
+import {
+  isAlive,
+  localEngineSocket,
+  sshStandIn,
+} from './testing/ssh-stand-in.ts';
 
 const TEST_LABEL = 'dev.zukhruf.docker.test';
 const IMAGE = 'alpine:3';
@@ -188,6 +197,168 @@ describe('container.attach()', () => {
       await removeLabeled(docker, run);
     }
   });
+});
+
+const posixOnly =
+  process.platform === 'win32'
+    ? 'the ssh stand-in is a POSIX executable with a shebang'
+    : false;
+const engineSocket = posixOnly ? undefined : await localEngineSocket();
+const needsLocalEngine =
+  posixOnly ||
+  (engineSocket === undefined
+    ? 'the current context of config.json is not a local unix:// engine'
+    : false);
+
+/**
+ * A scenario that connects with `connect`, creates a labeled `cat` that the
+ * engine removes when it stops, attaches to its standard input with the
+ * options `attach`, starts it, prints its ID, and then has nothing left to do.
+ */
+const holdAttach = (connect: string, run: string, attach: string) => `
+import { Docker } from ${JSON.stringify(ENTRY)};
+const docker = await Docker.connect(${connect});
+const container = await docker.containers.create({
+  Image: ${JSON.stringify(IMAGE)},
+  Entrypoint: ['cat'],
+  Cmd: [],
+  OpenStdin: true,
+  StdinOnce: true,
+  AttachStdin: true,
+  Labels: { ${JSON.stringify(TEST_LABEL)}: ${JSON.stringify(run)} },
+  HostConfig: { AutoRemove: true },
+});
+await container.attach(${attach});
+await container.start();
+console.log(JSON.stringify({ id: container.id }));
+`;
+
+/** Resolves when the container is gone, and rejects when it is still there after 20 s. */
+async function removed(docker: Docker, id: string): Promise<void> {
+  try {
+    await (
+      await docker.containers.find(id)
+    )?.wait({ condition: 'removed', signal: AbortSignal.timeout(20_000) });
+  } catch (error) {
+    if (!(error instanceof ContainerNotFoundError)) throw error;
+  }
+}
+
+describe('container.attach({ ref: false })', () => {
+  test(
+    'through a Unix socket, a process that holds an attach with ref: false exits by itself, and its cat then ends and the engine removes it',
+    { skip: needsLocalEngine },
+    async () => {
+      // Arrange
+      await using home = await scratchDirectory();
+      const host = `unix://${String(engineSocket)}`;
+      await using cleaner = await Docker.connect({ host });
+      if (!(await cleaner.images.inspect(IMAGE)))
+        await cleaner.images.pull(IMAGE);
+      const run = randomUUID();
+      try {
+        // Act
+        const result = await runScenario(
+          holdAttach(
+            JSON.stringify({ host }),
+            run,
+            '{ stdin: true, ref: false }',
+          ),
+          { HOME: home.path },
+          AbortSignal.timeout(30_000),
+        );
+
+        // Assert
+        assert.equal(result.exitCode, 0, result.stderr);
+        const { id } = Object(lastJson(result));
+        await removed(cleaner, String(id));
+        assert.equal(await cleaner.containers.find(String(id)), undefined);
+      } finally {
+        await removeLabeled(cleaner, run);
+      }
+    },
+  );
+
+  test(
+    'without ref: false, the attach keeps the process running',
+    { skip: needsLocalEngine },
+    async () => {
+      // Arrange
+      await using home = await scratchDirectory();
+      const host = `unix://${String(engineSocket)}`;
+      await using cleaner = await Docker.connect({ host });
+      if (!(await cleaner.images.inspect(IMAGE)))
+        await cleaner.images.pull(IMAGE);
+      const run = randomUUID();
+      try {
+        // Act: the scenario with ref: false exits in about 1 s.
+        const result = await runScenario(
+          holdAttach(JSON.stringify({ host }), run, '{ stdin: true }'),
+          { HOME: home.path },
+          AbortSignal.timeout(10_000),
+        );
+
+        // Assert
+        assert.ok(lastJson(result), 'the scenario reached the hold');
+        assert.equal(result.exitCode, null, 'the timeout killed the process');
+      } finally {
+        await removeLabeled(cleaner, run);
+      }
+    },
+  );
+
+  test(
+    'through ssh, a process that holds an attach with ref: false exits by itself, each ssh process ends, and the engine removes the cat',
+    { skip: needsLocalEngine },
+    async (t) => {
+      // Arrange
+      await using home = await scratchDirectory();
+      await using standIn = await sshStandIn({
+        kind: 'engine',
+        socketPath: String(engineSocket),
+      });
+      await using cleaner = await Docker.connect({
+        host: `unix://${String(engineSocket)}`,
+      });
+      if (!(await cleaner.images.inspect(IMAGE)))
+        await cleaner.images.pull(IMAGE);
+      const run = randomUUID();
+      try {
+        // Act
+        const result = await runScenario(
+          holdAttach(
+            JSON.stringify({ host: 'ssh://tester@machine' }),
+            run,
+            '{ stdin: true, ref: false }',
+          ),
+          {
+            PATH: `${standIn.path}${delimiter}${process.env.PATH}`,
+            HOME: home.path,
+          },
+          AbortSignal.timeout(30_000),
+        );
+
+        // Assert
+        assert.equal(result.exitCode, 0, result.stderr);
+        const { id } = Object(lastJson(result));
+        await removed(cleaner, String(id));
+        assert.equal(await cleaner.containers.find(String(id)), undefined);
+        await t.waitFor(
+          async () =>
+            assert.deepEqual(
+              (await standIn.runs()).map(({ pid }) => pid).filter(isAlive),
+              [],
+            ),
+          { interval: 50, timeout: 20_000 },
+        );
+      } finally {
+        for (const { pid } of await standIn.runs()) {
+          if (isAlive(pid)) process.kill(pid, 'SIGKILL');
+        }
+        await removeLabeled(cleaner, run);
+      }
+    },
+  );
 });
 
 describe('containers.run()', () => {

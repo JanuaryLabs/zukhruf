@@ -225,6 +225,21 @@ if ((await output.exitCode) !== 0) throw new Error('The tests failed');
 
 `attach()` reads the state of the container first. For a created container, the exit code is the code of its next exit, so attach before `start()`. For a running container, it is the code when the container stops. An exited or a paused container makes `attach()` reject with `ContainerNotRunningError`.
 
+An attach keeps the process running until it ends, as each request in flight does. With `ref: false`, the attach does not keep the process running, as an idle connection does not. The attach works as before while other work keeps the process running. When the process exits, its hijacked connection closes. A lease uses this: a container that runs `cat` on the standard input of the attach ends when its holder process exits, for any reason. Testcontainers holds its Ryuk session the same way, on an unreferenced socket.
+
+```ts
+const lease = await docker.containers.create({
+  Image: 'busybox:1.37',
+  Entrypoint: ['cat'],
+  Cmd: [],
+  OpenStdin: true,
+  StdinOnce: true,
+  HostConfig: { AutoRemove: true },
+});
+await lease.attach({ stdin: true, ref: false });
+await lease.start();
+```
+
 ## Run a command in a container
 
 `container.exec()` runs a command next to the main process of a running container. It gives the exit code, standard output, standard error, and `output`, the two in the order of the engine. The package does not remove the last newline.
@@ -587,9 +602,9 @@ export class Container {
     body: EngineApi.ExecConfig,
     options?: CancelOptions & { stdin?: boolean },
   ): Promise<ContainerProcess>;
-  /** Attach before start() to get all output. */
+  /** Attach before start() to get all output. `ref: false`: the attach does not keep the process running. */
   attach(
-    options?: CancelOptions & { stdin?: boolean },
+    options?: CancelOptions & { stdin?: boolean; ref?: boolean },
   ): Promise<ContainerProcess>;
 
   /** undefined for 404. */

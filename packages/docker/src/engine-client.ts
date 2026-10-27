@@ -27,6 +27,8 @@ export interface EngineRequestOptions {
     { type: string; data: Uint8Array | AsyncIterable<Uint8Array> } | undefined;
   headers?: Record<string, string> | undefined;
   signal?: AbortSignal | undefined;
+  /** With false, the connection of the request does not keep the process running. */
+  ref?: boolean | undefined;
 }
 
 export interface EngineResponse {
@@ -284,7 +286,7 @@ export class EngineClient {
   async #open(
     method: string,
     path: string,
-    { query, body, content, headers, signal }: EngineRequestOptions,
+    { query, body, content, headers, signal, ref }: EngineRequestOptions,
     upgrades = false,
   ): Promise<Opened> {
     signal?.throwIfAborted();
@@ -338,6 +340,7 @@ export class EngineClient {
       );
     });
     request.on('response', (response) => {
+      if (ref === false) this.#transport.unref(response.socket);
       responses.push(response);
       response.once('close', release);
       resolve({ response });
@@ -345,6 +348,7 @@ export class EngineClient {
     if (upgrades) {
       // The caller owns the socket after the upgrade, and its signal too.
       request.on('upgrade', (response, socket, head) => {
+        if (ref === false) this.#transport.unref(socket);
         release();
         resolve({ response, upgrade: { socket, head } });
       });

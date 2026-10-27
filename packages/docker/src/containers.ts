@@ -517,16 +517,19 @@ export class Container {
    * running container, it is the code when the container stops. An exited or
    * a paused container rejects with ContainerNotRunningError: Moby gives no
    * 409 for an attach to an exited container, so the state of an inspect
-   * decides.
+   * decides. With `ref: false`, the attach does not keep the process
+   * running, as an idle connection does not.
    */
   async attach(
-    options: CancelOptions & { stdin?: boolean } = {},
+    options: CancelOptions & { stdin?: boolean; ref?: boolean } = {},
   ): Promise<ContainerProcess> {
-    const { signal } = options;
+    // Only the wait and the attach let the process exit; each inspect keeps it running.
+    const { ref, ...cancel } = options;
+    const { signal } = cancel;
     const stdin = options.stdin === true;
     const method = 'POST';
     const path = `${this.#path}/attach`;
-    const state = (await this.inspect(options)).State?.Status ?? '';
+    const state = (await this.inspect(cancel)).State?.Status ?? '';
     if (state !== 'created' && state !== 'running') {
       throw new ContainerNotRunningError(
         `The container ${this.id} is ${state}.`,
@@ -541,6 +544,7 @@ export class Container {
       .stream('POST', `${this.#path}/wait`, {
         query: { condition: state === 'created' ? 'next-exit' : 'not-running' },
         signal,
+        ref,
       })
       .catch((error: unknown) => {
         throw this.#notFoundOr(error, 'POST', `${this.#path}/wait`);
@@ -549,11 +553,12 @@ export class Container {
       .hijack(method, path, {
         query: { stream: 1, stdout: 1, stderr: 1, stdin: stdin ? 1 : 0 },
         signal,
+        ref,
       })
       .catch(async (error: unknown) => {
         waiting.destroy();
         if (error instanceof DockerEngineError && error.status === 409) {
-          throw await this.#notRunning(error, options);
+          throw await this.#notRunning(error, cancel);
         }
         throw this.#notFoundOr(error, method, path);
       });

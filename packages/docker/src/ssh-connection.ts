@@ -256,6 +256,11 @@ export class SshTransport implements Transport {
     socket.end();
   }
 
+  /** Unrefs the `ssh` process of the connection and its pipes. */
+  unref(socket: Duplex): void {
+    if (socket instanceof SshConnection) socket.unref();
+  }
+
   async close(): Promise<void> {
     await this.#agent.close();
   }
