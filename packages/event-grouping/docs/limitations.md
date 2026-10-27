@@ -76,6 +76,38 @@ The events did not change: 334 events at 1,001 reports and 1,167 at 3,500, with 
 
 **Before you change it.** Calculate the mean inside each fold. This leak affects only centered similarity, and centered similarity lost. The design uses raw cosine.
 
+## 23. On a real mix of publishers, most joins are false
+
+**What happens.** The design scores well on the Gun Violence Corpus but not on the real shape of its first consumer: one company's posts and the outlets that report about that company.
+
+**Evidence.** A live test on 2026-10-27 (zukhruf #3142) used 816 dated articles from 2026-04-01 to 2026-10-26: anthropic.com/news (83), The Decoder (331), Fortune (340), Ars Technica (52), and FT and ProPublica stories that Ars published again (10). One annotator (an AI agent) labeled each article from its title and lead, with a written boundary rule. The labels were frozen before the detector ran (`labels.json`, sha256 `7a34477b…`, 2026-10-27T10:10:59Z). They give 618 events: 100 with more than one article, and 65 ambiguous articles.
+
+| Score                                         | Precision | Recall | F0.5  |
+| --------------------------------------------- | --------- | ------ | ----- |
+| Pair, all                                     | 0.303     | 0.309  | 0.305 |
+| Pair, across publishers                       | 0.461     | 0.330  | 0.427 |
+| Pair, inside one publisher                    | 0.153     | 0.263  | 0.167 |
+| Pair, an Anthropic post with an outlet report | 0.591     | 0.364  | 0.526 |
+| B-cubed, all                                  | 0.800     | 0.865  | 0.812 |
+
+On the Gun Violence Corpus, pair precision was 0.918 and B-cubed F0.5 was 0.948. The detector made 562 events from the 816 articles. It added each publish day in a median of 81 ms.
+
+**Cause.** These kinds of error occur:
+
+1. **Commentary chains inside one publisher.** Newsletters and features about one company join the story of that week. Then the event grows for up to 18 days, because each day's articles join it one at a time. 227 of the 365 false pairs are inside one publisher.
+2. **Different actions on one theme, days apart.** For example, the Amazon investment and the Google investment four days later.
+3. **Large stories break into many events.** One export directive became 8 events.
+4. **The company's own post stays apart from the outlet reports of the same launch.**
+5. **Noise at the start of leads.** 127 of 331 Decoder leads start with an image credit or a widget line, and 36 Fortune leads start with a newsletter greeting (limitation 14).
+
+**Before you change it.** Use this labeled set as fitting data in a new research round, and label a new, unseen set for the test. Options to measure:
+
+- Discount what all the articles of one source share.
+- Remove image credits and greetings with the lead rule.
+- Limit how many days one event can cover.
+
+The evidence is in the context-compiler session scratchpad, `anthropic-plus-outlets/` (README.md, labels.json, results.json, feed-results.json).
+
 ## The events of the latest publish day are provisional
 
 **What happens.** Between two clusterings, a report joins an event by online assignment. Another arrival order of the same reports can give other events until the day closes.
