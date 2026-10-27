@@ -251,10 +251,10 @@ describe('EventDetector', () => {
     using database = new DatabaseSync(':memory:');
     const events = detector(
       database,
-      model({ A: at(0), B: at(35), C: at(60), D: at(180) }),
+      model({ A: at(0), B: at(35), C: at(65), D: at(180) }),
     );
 
-    // Online, B joins A (0.53), and C cannot join A and B (mean 0.47).
+    // Online, B joins A (0.53), and C cannot join A and B (mean 0.42).
     await events.add([
       report('a', 'A', day(1)),
       report('b', 'B', day(1)),
@@ -266,7 +266,7 @@ describe('EventDetector', () => {
     await events.add([report('d', 'D', day(2))]);
 
     assert.deepEqual(online, [['a', 'b'], ['c'], ['e']]);
-    // Group average joins B and C first (0.95), and A cannot join them (0.27).
+    // Group average joins B and C first (0.84), and A cannot join them (0.27).
     assert.deepEqual(partition(everything(events)), [
       ['a'],
       ['b', 'c'],
@@ -278,10 +278,10 @@ describe('EventDetector', () => {
     using database = new DatabaseSync(':memory:');
     const events = detector(
       database,
-      model({ A: at(0), B: at(35), C: at(60), D: at(180) }),
+      model({ A: at(0), B: at(35), C: at(65), D: at(180) }),
     );
     await events.add([report('a', 'A', day(1))]);
-    // Online, B joins A of day 1, and C cannot join them.
+    // Online, B joins A of day 1, and C cannot join them (mean 0.42).
     await events.add([report('b', 'B', day(2)), report('c', 'C', day(2))]);
 
     await events.add([report('d', 'D', day(3))]);

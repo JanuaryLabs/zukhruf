@@ -1,12 +1,13 @@
-// The parameters of the design of research round #3152. Round #3152 froze them
-// in its plan.json before it scored its exam set. The lead rule, the
-// shortlist, the window and the threshold are those of round #3130
+// The parameters of design 3152b. Round #3152 chose the pair score, and its
+// second selection (3152b) chose the threshold with the CoNLL F0.5 objective.
+// 3152b froze them in its plan.json before it scored its exam set. The lead
+// rule, the shortlist and the window are those of round #3130
 // (docs/adr/0001). Change a parameter only with a new research round
 // (docs/adr/0005).
 
 // The sha256 of that plan.json (eval/scoreboard.json pins the design to it).
 export const PLAN_SHA256 =
-  '78a56767d6d454e1053d28bbcd71b8dcf465a69cc948a13275f74a3a4e464154';
+  'dc26dbd8c26341ca4245552d017161307f30b79aef4bc5ba3a171a72a534c479';
 
 // The lead rule (plan.json design.leadRule, scripts/lead.ts of round #3130).
 export const LEAD_SENTENCES = 2;
@@ -22,7 +23,7 @@ export const WINDOW_DAYS = 7;
 
 // Two reports report one event when their pair score is at least this value
 // (plan.json design.threshold).
-export const THRESHOLD = 0.5;
+export const THRESHOLD = 0.45;
 
 // The logistic regression of the pair score (plan.json design.model). Each
 // term standardizes one feature with the mean and the standard deviation of

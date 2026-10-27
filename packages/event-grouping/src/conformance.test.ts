@@ -15,15 +15,16 @@ import { EventDetector } from './index.ts';
 // Round #3130 holds the Gun Violence Corpus, its vectors and its metric code.
 // The Gun Violence Corpus holds news texts of many publishers. Its CC BY 4.0
 // license covers only the rights of the corpus authors, so neither the texts
-// nor their vectors are in this repository. Round #3152 holds the frozen
-// design (plan.json) and its replica of the detector. Without the bundles,
-// the test is skipped.
+// nor their vectors are in this repository. Round #3152 holds the replica of
+// the detector, and its second selection (3152b) holds the frozen design
+// (plan.json). Without the bundles, the test is skipped.
 const rounds = join(
   homedir(),
   '.codex/visualizations/2026/10/23/01a16a1c-424c-7793-8ca9-02cc1c715d82',
 );
 const round3130 = join(rounds, 'feature-scorer-3130');
 const round3152 = join(rounds, 'feature-scorer-3152');
+const round3152b = join(rounds, 'feature-scorer-3152b');
 
 type Row = {
   id: string;
@@ -153,7 +154,7 @@ async function replicaGroups(
     ...(await import(join(round3152, 'scripts/detector.ts'))),
     ...(await import(join(round3130, 'scripts/model.ts'))),
   };
-  const { design } = read<{ design: Design }>(round3152, 'plan.json');
+  const { design } = read<{ design: Design }>(round3152b, 'plan.json');
   const terms = design.features.map((feature) => {
     const term = design.model.terms[feature];
     if (term === undefined) throw new Error(`plan.json has no ${feature}`);
@@ -336,8 +337,8 @@ test(
     );
     assert.ok(Math.abs(scores.b3.f05 - expectedScores.b3.f05) < 1e-9);
     assert.ok(Math.abs(scores.f05 - expectedScores.f05) < 1e-9);
-    // plan.json implementationCheck.scores.gvc
-    assert.ok(Math.abs(scores.b3.f05 - 0.957) < 0.0005);
-    assert.ok(Math.abs(scores.f05 - 0.898) < 0.0005);
+    // plan.json (3152b) implementationCheck.scores.gvc
+    assert.ok(Math.abs(scores.b3.f05 - 0.947) < 0.0005);
+    assert.ok(Math.abs(scores.f05 - 0.857) < 0.0005);
   },
 );
