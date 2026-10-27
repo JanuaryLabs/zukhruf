@@ -1566,8 +1566,8 @@ test(
 );
 
 test(
-  'two teardowns that sweep one version at once both succeed: the second takes the sweep lease after the first removed it, and the servers of that version are removed',
-  // The holder, two deadlines of 45 s, the 8 s window and the first sweep after it, with margin.
+  'two teardowns that sweep one version at once both succeed: the second waits while the first holds the sweep lease, and the servers of that version are removed',
+  // The holder, two deadlines of 45 s, the 8 s window, the sweeps after it and the wait for the lease to go, with margin.
   { skip: proxyless, timeout: 180_000 },
   async (t) => {
     await using directory = await new TemporaryFiles().directory(
@@ -1614,6 +1614,11 @@ test(
         proxiedEnvironment(join(directory.path, 'state-second'), proxy),
       );
       second.catch(() => {});
+      let secondEnded = false;
+      second.then(
+        () => (secondEnded = true),
+        () => (secondEnded = true),
+      );
       // The second teardown must look at the taken lease before its run ends.
       assert.equal(
         await firstOf(conflicted.promise, second),
@@ -1621,10 +1626,11 @@ test(
         'the second teardown must look at the taken sweep lease',
       );
       // A negative check over a window longer than the 5 s that a waiter gives a created lease:
-      // the second teardown must not take a running sweep lease from the first.
+      // the second teardown waits, and does not take a running sweep lease from the first.
       // The servers are not checked here: a teardown of a release before the
       // leases, on the same engine, removes them without a sweep lease.
       await setTimeout(8_000);
+      const secondEndedDuringWindow = secondEnded;
       const startsDuringWindow = [...starts];
       const firstLeaseState = (
         await (
@@ -1633,27 +1639,37 @@ test(
       )?.State?.Status;
 
       release();
+      // A run whose teardown fails rejects: both teardowns end successfully.
       ids.push(await first, await second);
 
+      assert.equal(secondEndedDuringWindow, false);
       assert.equal(startsDuringWindow.length, 1);
       assert.equal(firstLeaseState, 'running');
 
-      // The second teardown took the sweep lease after the first removed its own.
+      // Who takes the sweep lease after the first is a race: another teardown
+      // on the engine can win it, and then the second skips the version.
+      // When the second took it, it did so after the first removed its own.
       const [firstLease, secondLease] = starts;
-      assert.ok(firstLease !== undefined && secondLease !== undefined);
-      const removed = proxy.requests.findIndex(
-        ({ method, path }) =>
-          method === 'DELETE' && path === `/containers/${firstLease}`,
-      );
-      const started = proxy.requests.findIndex(
-        ({ method, path }) =>
-          method === 'POST' && path === `/containers/${secondLease}/start`,
-      );
-      assert.ok(removed !== -1 && removed < started);
+      if (secondLease !== undefined) {
+        const removed = proxy.requests.findIndex(
+          ({ method, path }) =>
+            method === 'DELETE' && path === `/containers/${firstLease}`,
+        );
+        const started = proxy.requests.findIndex(
+          ({ method, path }) =>
+            method === 'POST' && path === `/containers/${secondLease}/start`,
+        );
+        assert.ok(removed !== -1 && removed < started);
+      }
       assert.equal(await exists(server), false);
-      assert.equal(
-        await docker.containers.find(sweepLease(version)),
-        undefined,
+      // Another teardown on the engine can still hold the lease for a moment.
+      await t.waitFor(
+        async () =>
+          assert.equal(
+            await docker.containers.find(sweepLease(version)),
+            undefined,
+          ),
+        { timeout: 30_000, interval: 100 },
       );
     } finally {
       release();
