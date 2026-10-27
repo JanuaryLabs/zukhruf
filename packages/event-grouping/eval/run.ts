@@ -76,6 +76,7 @@ if (values.help || baseURL === undefined) {
 }
 if (values.accept !== undefined && positionals.length > 0)
   throw new Error('--accept records a design on every set: name no set.');
+const modelId = process.env['EVAL_EMBEDDING_MODEL'] ?? 'embeddinggemma-2';
 
 const scoreboard = Scoreboard.read();
 const pin = currentPin();
@@ -94,7 +95,6 @@ console.log(
     : `The package holds design ${holds.design} (pinned to commit ${holds.pin.commit}).`,
 );
 
-const modelId = process.env['EVAL_EMBEDDING_MODEL'] ?? 'embeddinggemma-2';
 const model = createOpenAICompatible({
   name: 'llama.cpp',
   baseURL,
