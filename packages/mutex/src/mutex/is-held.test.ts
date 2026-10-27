@@ -2,7 +2,6 @@ import assert from 'node:assert/strict';
 import { readdir, stat } from 'node:fs/promises';
 import { join, relative } from 'node:path';
 import { test } from 'node:test';
-import { setImmediate as nextTurn } from 'node:timers/promises';
 import { Worker } from 'node:worker_threads';
 
 import { TemporaryFiles } from '@zukhruf/testing/fs';
@@ -184,15 +183,15 @@ void describe.each(
     describe(`Holder check from a worker thread with ${store.name}`, () => {
       test(
         'looks from another thread never make a caller that skips if busy give up on a free key',
-        // At least 50 attempts, each one a grant of the free key.
-        { timeout: timeoutForGrants(store, 50) },
-        async (t) => {
-          // Arrange: a worker thread looks at the key again and again until it is told to stop.
+        // 50 attempts, each one a grant of the free key, and 50 looks that cost no more than a grant.
+        { timeout: timeoutForGrants(store, 100) },
+        async () => {
+          // Arrange: a worker thread starts one look each time it is asked, and tells when the look is in flight and when it is done.
           await using fixture = await store.fixture(process.env);
           await using host = store.open(fixture.location);
           const mutex = new Mutex(host.store);
-          // [stop, looks made]
-          const shared = new Int32Array(new SharedArrayBuffer(8));
+          // [stop, looks done, looks asked for, looks started]
+          const shared = new Int32Array(new SharedArrayBuffer(16));
           const looker = startThread(
             host,
             threadSource(
@@ -200,42 +199,43 @@ void describe.each(
               fixture.location,
               `
 						const shared = workerData;
+						// A pending Atomics.waitAsync does not keep a thread alive.
+						setInterval(() => {}, 1000);
+						let asked = 0;
 						while (Atomics.load(shared, 0) === 0) {
-							await mutex.isHeld('report:daily');
+							await Atomics.waitAsync(shared, 2, asked).value;
+							asked = Atomics.load(shared, 2);
+							const look = mutex.isHeld('report:daily');
+							Atomics.store(shared, 3, asked);
+							Atomics.notify(shared, 3);
+							await look;
 							Atomics.add(shared, 1, 1);
+							Atomics.notify(shared, 1);
 						}
 					`,
             ),
             shared,
           );
           try {
-            await t.waitFor(
-              () =>
-                assert.ok(
-                  Atomics.load(shared, 1) > 0,
-                  'The worker thread must start looking',
-                ),
-              { interval: 5, timeout: newProcessTimeout },
-            );
-
-            // Act: the key is free each time; the worker thread keeps looking while the 50 attempts run.
-            const looksBefore = Atomics.load(shared, 1);
+            // Act: before each attempt on the free key, one look from the worker thread is in flight.
             const results = [];
-            while (results.length < 50) {
+            for (let attempt = 0; attempt < 50; attempt++) {
+              Atomics.store(shared, 2, attempt + 1);
+              Atomics.notify(shared, 2);
+              await Atomics.waitAsync(shared, 3, attempt).value;
               results.push(
                 await mutex.acquire('report:daily', async () => 'ran', {
                   mode: Modes.skipIfBusy(),
                 }),
               );
-              // A memory coordinator answers in microtasks; the turn lets the looks it serves in.
-              await nextTurn();
+              await Atomics.waitAsync(shared, 1, attempt).value;
             }
-            const looksDuringAttempts = Atomics.load(shared, 1) - looksBefore;
 
             // Assert
-            assert.ok(
-              looksDuringAttempts > 0,
-              'The worker thread must look while the attempts run',
+            assert.equal(
+              Atomics.load(shared, 1),
+              50,
+              'The worker thread must make one look during each attempt',
             );
             assert.deepEqual(
               results.filter((result) => !result.acquired),
