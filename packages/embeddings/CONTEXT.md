@@ -39,3 +39,7 @@ _Avoid_: Range, period
 **Neighbour**:
 A document in the window of a document, with its similarity to that document. The document is not its own neighbour.
 _Avoid_: Match, hit, result
+
+**Neighbour graph**:
+The k nearest neighbours of each document published in a date range. For each document, they are the result of a search of that document.
+_Avoid_: Batch search, kNN matrix

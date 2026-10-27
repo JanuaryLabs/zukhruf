@@ -107,20 +107,57 @@ export class Collection {
   ): Neighbour[] {
     const { vector, publishedAt } = this.#read(id);
     const window = options.withinDays * DAY_MS;
-    return this.#database
+    const candidates = this.#database
       .prepare(
         'SELECT "id", "vector" FROM "embedding_document" WHERE "published_at" BETWEEN ? AND ? AND "id" != ?',
       )
       .all(publishedAt - window, publishedAt + window, id)
       .map((row) => ({
         id: String(row.id),
-        similarity: vector.cosine(UnitVector.fromBlob(blob(row.vector))),
-      }))
-      .toSorted(
-        (left, right) =>
-          right.similarity - left.similarity || compareIds(left.id, right.id),
+        vector: UnitVector.fromBlob(blob(row.vector)),
+      }));
+    return ranked(vector, candidates, options.k);
+  }
+
+  // The k nearest neighbours of each document published from `from` to `to`.
+  // Each entry is what nearest gives for the document with the same k and
+  // withinDays. The call reads and decodes each vector once
+  // (docs/adr/0004). The entries come in the order of the publish dates, then
+  // of the ids.
+  neighbourGraph(options: {
+    readonly from: Date;
+    readonly to: Date;
+    readonly k: number;
+    readonly withinDays: number;
+  }): IteratorObject<[string, Neighbour[]]> {
+    const from = options.from.getTime();
+    const to = options.to.getTime();
+    const window = options.withinDays * DAY_MS;
+    const documents = this.#database
+      .prepare(
+        'SELECT "id", "published_at", "vector" FROM "embedding_document" WHERE "published_at" BETWEEN ? AND ? ORDER BY "published_at", "id"',
       )
-      .slice(0, options.k);
+      .all(from - window, to + window)
+      .map((row) => ({
+        id: String(row.id),
+        publishedAt: Number(row.published_at),
+        vector: UnitVector.fromBlob(blob(row.vector)),
+      }));
+    return documents
+      .values()
+      .filter(({ publishedAt }) => publishedAt >= from && publishedAt <= to)
+      .map((document) => [
+        document.id,
+        ranked(
+          document.vector,
+          documents.filter(
+            (other) =>
+              other.id !== document.id &&
+              Math.abs(other.publishedAt - document.publishedAt) <= window,
+          ),
+          options.k,
+        ),
+      ]);
   }
 
   // The cosine similarity of two stored documents.
@@ -177,6 +214,24 @@ export class Collection {
       if (vector.dimension !== expected)
         throw new DimensionMismatchError(expected, vector.dimension);
   }
+}
+
+// The k candidates most similar to the vector. Equal similarities sort by id.
+function ranked(
+  vector: UnitVector,
+  candidates: readonly { readonly id: string; readonly vector: UnitVector }[],
+  k: number,
+): Neighbour[] {
+  return candidates
+    .map((candidate) => ({
+      id: candidate.id,
+      similarity: vector.cosine(candidate.vector),
+    }))
+    .toSorted(
+      (left, right) =>
+        right.similarity - left.similarity || compareIds(left.id, right.id),
+    )
+    .slice(0, k);
 }
 
 // Compares by code unit, not by locale, so the order is the same on every

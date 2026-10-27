@@ -209,6 +209,94 @@ describe('Collection', () => {
     );
   });
 
+  test('the neighbour graph gives each document of the range exactly what nearest gives it, also for equal similarities and at the window edges', async () => {
+    using database = new DatabaseSync(':memory:');
+    // Equal vectors give equal similarities. The hours put documents exactly
+    // on the edges of the window of 2 days and one minute outside them.
+    const texts = {
+      east: [1, 0],
+      north: [0, 1],
+      diagonal: [1, 1],
+      near: [3, 1],
+      far: [-1, 2],
+    };
+    const collection = new Collection({ database, model: model(texts) });
+    const documents = [
+      ['d01', 'east', 10, 12, 0],
+      ['d02', 'east', 12, 12, 0],
+      ['d03', 'diagonal', 8, 12, 0],
+      ['d04', 'near', 8, 11, 59],
+      ['d05', 'diagonal', 14, 12, 0],
+      ['d06', 'north', 14, 12, 1],
+      ['d07', 'far', 11, 0, 0],
+      ['d08', 'east', 10, 12, 0],
+      ['d09', 'near', 9, 6, 0],
+      ['d10', 'diagonal', 13, 18, 0],
+    ] as const;
+    await collection.upsert(
+      documents.map(([id, text, date, hour, minute]) => ({
+        id,
+        text,
+        publishedAt: new Date(Date.UTC(2026, 9, date, hour, minute)),
+      })),
+    );
+
+    const graph = collection.neighbourGraph({
+      from: new Date(Date.UTC(2026, 9, 8)),
+      to: new Date(Date.UTC(2026, 9, 15)),
+      k: 3,
+      withinDays: 2,
+    });
+
+    assert.deepEqual(
+      new Map(graph),
+      new Map(
+        documents
+          .map(([id]) => id)
+          .toSorted()
+          .map((id) => [id, collection.nearest(id, { k: 3, withinDays: 2 })]),
+      ),
+    );
+  });
+
+  test('a document outside the range of the neighbour graph has no entry, but is a neighbour of the documents in the range', async () => {
+    using database = new DatabaseSync(':memory:');
+    const collection = new Collection({
+      database,
+      model: model({
+        before: [1, 0.2],
+        first: [1, 0],
+        last: [1, 0.1],
+        after: [1, 0.3],
+      }),
+    });
+    await collection.upsert([
+      { id: 'before', text: 'before', publishedAt: day(7) },
+      { id: 'first', text: 'first', publishedAt: day(9) },
+      { id: 'last', text: 'last', publishedAt: day(11) },
+      { id: 'after', text: 'after', publishedAt: day(13) },
+    ]);
+
+    // The range includes the documents exactly on its two edges.
+    const graph = collection.neighbourGraph({
+      from: day(9),
+      to: day(11),
+      k: 10,
+      withinDays: 2,
+    });
+
+    assert.deepEqual(
+      [...graph].map(([id, neighbours]) => [
+        id,
+        neighbours.map(({ id }) => id),
+      ]),
+      [
+        ['first', ['last', 'before']],
+        ['last', ['first', 'after']],
+      ],
+    );
+  });
+
   test('an upsert after the publish date changed moves the document in the window without embedding it again', async () => {
     using database = new DatabaseSync(':memory:');
     const fake = model({ query: [1, 0], doc: [1, 0] });
