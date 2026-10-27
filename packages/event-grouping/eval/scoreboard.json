@@ -3,96 +3,273 @@
     {
       "design": "3130",
       "acceptedAt": "2026-10-27T10:51:15.535Z",
+      "metricsVersion": 2,
       "embeddingModel": "embeddinggemma-2",
+      "pin": {
+        "commit": "73db0ed89276a53c9df1b5dc57b6a1c3ef90bba3",
+        "planSha256": "5ad0b727f8ae67a1f25bd25719e550952ab1449e3dce1fad551714f63a3ade4f",
+        "frozenDesignSha256": "0bf4f19c49731d1cd25655e3041ccf1fdfc4922688a77d396f6b5dfa5de48b62",
+        "constants": {
+          "AGREEING_NUMBERS_TERM": {
+            "weight": 1.1986310686642012,
+            "mean": 0.49545111323470553,
+            "sd": 0.6286163041119666
+          },
+          "DISAGREEING_NUMBERS_TERM": {
+            "weight": -1.140358901882716,
+            "mean": 1.439193455150203,
+            "sd": 0.8065878434833612
+          },
+          "INTERCEPT": -5.45562362357198,
+          "LEAD_SENTENCES": 2,
+          "MAX_URL_SHARE": 0.5,
+          "MIN_LETTER_RATIO": 0.6,
+          "MIN_WORDS": 5,
+          "SHORTLIST_SIZE": 80,
+          "SIMILARITY_TERM": {
+            "weight": 2.554141188012624,
+            "mean": 0.6578909320141326,
+            "sd": 0.08434943813934904
+          },
+          "THRESHOLD": 0.5,
+          "URL_PATTERN": "(?:https?://|www\\.)\\S*",
+          "WINDOW_DAYS": 7
+        }
+      },
+      "note": "Accepted with metric version 1 by the runner at commit 73db0ed. The scores of metric version 2 and accepted/3130.json come from the replica of research round #3152 (feature-scorer-3152/scripts/detector.ts, data.ts and the vector cache of the round) with the pair score and the constants of commit 73db0ed. The replica gives the metric-version-1 scores of this design on all six sets to 3 decimals.",
       "sets": {
         "anthropic-outlets": {
           "role": "training",
           "labelsSha256": "84afb680406f6a8b1c785f9bf1029e21faf83798f687ff88605c0daf8cdba027",
           "reports": 816,
+          "muc": {
+            "precision": 0.451,
+            "recall": 0.581,
+            "f1": 0.508,
+            "f05": 0.472
+          },
+          "bCubed": {
+            "precision": 0.8,
+            "recall": 0.865,
+            "f1": 0.831,
+            "f05": 0.812
+          },
+          "ceafE": {
+            "precision": 0.835,
+            "recall": 0.758,
+            "f1": 0.795,
+            "f05": 0.819
+          },
+          "blanc": {
+            "precision": 0.652,
+            "recall": 0.656,
+            "f1": 0.654,
+            "f05": 0.653
+          },
           "pair": {
             "precision": 0.306,
             "recall": 0.313,
+            "f1": 0.309,
             "f05": 0.307
           },
-          "bcubed": {
-            "precision": 0.8,
-            "recall": 0.865,
-            "f05": 0.812
+          "conll": {
+            "f1": 0.711,
+            "f05": 0.701
           }
         },
         "dev2938": {
           "role": "training",
           "labelsSha256": "f9bb1d77f980eaee174dfad5d89ab9a6420eacee8823c50b1ed076907afed4b6",
           "reports": 217,
+          "muc": {
+            "precision": 0.2,
+            "recall": 0.375,
+            "f1": 0.261,
+            "f05": 0.221
+          },
+          "bCubed": {
+            "precision": 0.945,
+            "recall": 0.973,
+            "f1": 0.959,
+            "f05": 0.95
+          },
+          "ceafE": {
+            "precision": 0.955,
+            "recall": 0.923,
+            "f1": 0.939,
+            "f05": 0.948
+          },
+          "blanc": {
+            "precision": 0.617,
+            "recall": 0.643,
+            "f1": 0.629,
+            "f05": 0.622
+          },
           "pair": {
             "precision": 0.235,
             "recall": 0.286,
+            "f1": 0.258,
             "f05": 0.244
           },
-          "bcubed": {
-            "precision": 0.945,
-            "recall": 0.973,
-            "f05": 0.95
+          "conll": {
+            "f1": 0.719,
+            "f05": 0.706
           }
         },
         "ecbplus": {
           "role": "training",
           "labelsSha256": "f2277218175f2f6ce16c45ec59f527bbb7414120cd95aa915267904a31ca5474",
           "reports": 982,
+          "muc": {
+            "precision": 0.988,
+            "recall": 0.863,
+            "f1": 0.921,
+            "f05": 0.96
+          },
+          "bCubed": {
+            "precision": 0.949,
+            "recall": 0.798,
+            "f1": 0.867,
+            "f05": 0.915
+          },
+          "ceafE": {
+            "precision": 0.364,
+            "recall": 0.847,
+            "f1": 0.51,
+            "f05": 0.411
+          },
+          "blanc": {
+            "precision": 0.942,
+            "recall": 0.896,
+            "f1": 0.918,
+            "f05": 0.932
+          },
           "pair": {
             "precision": 0.886,
             "recall": 0.793,
+            "f1": 0.837,
             "f05": 0.866
           },
-          "bcubed": {
-            "precision": 0.949,
-            "recall": 0.798,
-            "f05": 0.915
+          "conll": {
+            "f1": 0.766,
+            "f05": 0.762
           }
         },
         "fresh2957": {
           "role": "training",
           "labelsSha256": "063bdc6541275fb0bb841401c8b3fdb1d45a12bed388e347acdc2378d4e7c069",
           "reports": 48,
+          "muc": {
+            "precision": 0.828,
+            "recall": 0.96,
+            "f1": 0.889,
+            "f05": 0.851
+          },
+          "bCubed": {
+            "precision": 0.882,
+            "recall": 0.972,
+            "f1": 0.925,
+            "f05": 0.899
+          },
+          "ceafE": {
+            "precision": 0.872,
+            "recall": 0.72,
+            "f1": 0.789,
+            "f05": 0.837
+          },
+          "blanc": {
+            "precision": 0.904,
+            "recall": 0.969,
+            "f1": 0.934,
+            "f05": 0.915
+          },
           "pair": {
             "precision": 0.81,
             "recall": 0.944,
+            "f1": 0.872,
             "f05": 0.833
           },
-          "bcubed": {
-            "precision": 0.882,
-            "recall": 0.972,
-            "f05": 0.899
+          "conll": {
+            "f1": 0.868,
+            "f05": 0.862
           }
         },
         "gvc": {
           "role": "regression",
           "labelsSha256": "2ab7d89462f1df599afa6da5d9e680147b35de0fb05d45d5e84bb6501cd1cec4",
           "reports": 509,
+          "muc": {
+            "precision": 0.957,
+            "recall": 0.743,
+            "f1": 0.836,
+            "f05": 0.905
+          },
+          "bCubed": {
+            "precision": 0.977,
+            "recall": 0.849,
+            "f1": 0.908,
+            "f05": 0.948
+          },
+          "ceafE": {
+            "precision": 0.727,
+            "recall": 0.908,
+            "f1": 0.808,
+            "f05": 0.757
+          },
+          "blanc": {
+            "precision": 0.959,
+            "recall": 0.856,
+            "f1": 0.901,
+            "f05": 0.934
+          },
           "pair": {
             "precision": 0.918,
             "recall": 0.712,
+            "f1": 0.802,
             "f05": 0.868
           },
-          "bcubed": {
-            "precision": 0.977,
-            "recall": 0.849,
-            "f05": 0.948
+          "conll": {
+            "f1": 0.851,
+            "f05": 0.87
           }
         },
         "hlgd-test": {
           "role": "regression",
           "labelsSha256": "27c8d84f5a9b73091d11b6718747a9fd1e2e8a9d0c5e91042a3e9957100c4ea5",
           "reports": 286,
+          "muc": {
+            "precision": 0.167,
+            "recall": 0.006,
+            "f1": 0.012,
+            "f05": 0.027
+          },
+          "bCubed": {
+            "precision": 0.983,
+            "recall": 0.438,
+            "f1": 0.606,
+            "f05": 0.787
+          },
+          "ceafE": {
+            "precision": 0.348,
+            "recall": 0.779,
+            "f1": 0.481,
+            "f05": 0.391
+          },
+          "blanc": {
+            "precision": 0.564,
+            "recall": 0.501,
+            "f1": 0.498,
+            "f05": 0.498
+          },
           "pair": {
             "precision": 0.143,
             "recall": 0.002,
+            "f1": 0.003,
             "f05": 0.008
           },
-          "bcubed": {
-            "precision": 0.983,
-            "recall": 0.438,
-            "f05": 0.787
+          "conll": {
+            "f1": 0.366,
+            "f05": 0.402
           }
         }
       }

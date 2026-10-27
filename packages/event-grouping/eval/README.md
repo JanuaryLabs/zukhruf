@@ -39,16 +39,55 @@ For each set, the runner does these steps:
 
 The vectors are in `cache/vectors/<set>.sqlite`, through the `Collection` of `@zukhruf/embeddings`. The collection embeds a lead again only when its text or the model name changed. Thus a second run embeds nothing.
 
-Each result has these scores:
+Each result has the scores of the coreference literature. The answer key and the detector each put the reports of the set into events, and each metric compares the two partitions:
 
-- Pair precision, recall and F0.5. A pair is two reports. F0.5 counts precision two times as much as recall.
-- B-cubed precision, recall and F0.5.
-- Pair scores for pairs of two publishers and pairs of one publisher, when the set has publishers.
+| Metric  | Definition                                                                                                                             |
+| ------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| MUC     | Vilain et al. 1995. It counts the links that join the reports of one event. It does not see an event of one report.                    |
+| B-cubed | Bagga and Baldwin 1998. It averages a precision and a recall over the reports.                                                         |
+| CEAF-e  | Luo 2005, with the similarity φ4. It aligns each gold event with at most one detector event (Kuhn-Munkres).                            |
+| BLANC   | Recasens and Hovy 2011, in the form of Luo et al. 2014. It averages the scores of the coreference links and the non-coreference links. |
+| Pair    | The precision and the recall of the pairs of reports that the detector joins. It is the coreference part of BLANC.                     |
+| CoNLL   | Pradhan et al. 2014. It is the mean of the MUC, B-cubed and CEAF-e F.                                                                  |
+
+Each metric has a precision P, a recall R, F1 and F0.5. Use F1 to compare with the literature. F0.5 counts precision two times as much as recall, because a false join hides a report from the reader, and a false split only shows a duplicate (ADR 0003). CoNLL has F1 and F0.5 only.
+
+The metrics use the conventions of the reference scorer, github.com/conll/reference-coreference-scorers v8.01 (Pradhan et al. 2014):
+
+- The events of one report count. B-cubed, CEAF-e and BLANC see them. MUC does not see them, by its definition.
+- A ratio with a denominator of 0 is 0.
+- When the answer key has no event of two or more reports, BLANC is the score of the non-coreference links alone. When the answer key has one event only, BLANC is the score of the coreference links alone.
+
+`metrics/reference-scorer.test.ts` holds the 36 test cases of the reference scorer with their published values, and the metrics give each value. On each of the six sets that are not the exam, the reference scorer and the metrics give the same scores for the partition of design 3152 (2026-10-27).
+
+### The main score
+
+The main score is the CoNLL F0.5: the mean of the MUC, B-cubed and CEAF-e F0.5. This is the objective of each research round from 2026-10-27, written before the next round. BLANC, the pair scores and F1 are secondary.
+
+B-cubed F0.5 alone cannot be the objective. On a set where most events have one report, B-cubed gives a high score to a design that joins nothing. On anthropic-outlets, that design has a B-cubed F0.5 of 0.940, and design 3130 has 0.812. MUC gives that design 0, so the CoNLL F0.5 of that design is 0.560, and the CoNLL F0.5 of design 3130 is 0.701.
+
+### Baselines
+
+The runner also scores two partitions that need no detector:
+
+- **All singletons**: each report is an event of its own.
+- **All in one**: all reports are one event.
+
+A design must have a higher main score than both baselines on a set. If it does not, it is not a gain on that set, and `--accept` refuses it.
+
+### The change against the latest accepted design
+
+The runner compares the events of the run with the events of the latest accepted design (`accepted/<design>.json`). It gives the change of the main score and its 95% interval. The interval comes from a paired bootstrap (Efron and Tibshirani 1993; Koehn 2004): 2,000 replicates with the fixed seed 3182. Each replicate draws units with replacement and scores both designs on the same draw.
+
+A unit is a block of whole gold events. A block holds the gold events that one of the two designs joins with each other. Thus a false join stays in its unit, and the units are independent. When neither design joins two gold events, each unit is one gold event. A design that joins many gold events makes few blocks. The runner shows the number of blocks; with few blocks, the interval is narrow and tells you little.
+
+### Other scores in a result
+
+- The pair scores of pairs of two publishers and of pairs of one publisher, when the set has publishers.
 - The scores without the ambiguous reports, when the set has ambiguous reports.
 - The time of each `add`. It includes the embedding only of the leads that are not in the vector cache, so a second run measures the grouping alone.
 - Each false join and each false split, with the titles of the reports.
-
-The runner prints the change of each score against the latest accepted design in `scoreboard.json`.
+- The event of each report (`eventOf`).
 
 ## Sets
 
@@ -70,7 +109,7 @@ Each folder in `sets/` is one set. It has two files:
 ### Roles
 
 - **Training**: you can tune a design on this set.
-- **Regression**: a new design must not have a lower pair F0.5 or B-cubed F0.5 on this set than the latest accepted design. Do not tune on it.
+- **Regression**: a new design must not be worse on this set than the latest accepted design. It is worse only when the whole 95% interval of the change of its main score is below 0. Do not tune on it.
 - **Exam**: no design has seen this set. The runner scores it one time only, with `--exam`, as the test of a frozen design. It then writes the first-scored date into `set.json`, and the set is a regression set from then on. The runner refuses `--exam` on a set that has a first-scored date.
 
 To add a new labelled set, freeze its labels first. Give it the role `exam` and no first-scored date. Score it with `--exam` only when the design is frozen.
@@ -106,18 +145,37 @@ The runner never drops a report without a message:
 
 ## Scoreboard
 
-`scoreboard.json` holds the scores of each accepted design on each set, the oldest first. The diff of this file shows if a design is better or worse on each set.
+`scoreboard.json` holds the scores of each accepted design on each set, the oldest first. The diff of this file shows if a design is better or worse on each set. `accepted/<design>.json` holds the events of each accepted design, in the order of the answer-key rows.
 
-To accept a design, run all sets with `--accept <design>`, for example `--accept 3130`. The runner refuses when:
+Each entry pins its design:
+
+- `pin.commit`: the commit that holds the design.
+- `pin.planSha256`: the sha256 of the `plan.json` of its research round (`PLAN_SHA256` in `src/frozen-design.ts`).
+- `pin.frozenDesignSha256`: the sha256 of `src/frozen-design.ts`.
+- `pin.constants`: the constants of `src/frozen-design.ts`.
+- `metricsVersion`: the version of the metrics that made the scores (`METRICS_VERSION` in `metrics/metrics.ts`).
+
+Before each run, the runner tells you if the package holds an accepted design. It compares the constants and the file sha256 with the pin of each entry.
+
+To accept a design, run all sets with `--accept <design>`, for example `--accept 3152`. The runner refuses when:
 
 - you name sets: an accepted design has scores on every set;
+- `src/` has changes that are not committed;
+- the scoreboard has the design name already: one name is one design;
 - a report vanished or changed;
-- a regression set has a lower pair F0.5 or B-cubed F0.5 than the latest accepted design on the same labels.
+- the main score of a set is not higher than both baselines;
+- a regression set is worse than the latest accepted design (see [Roles](#roles)).
+
+The runner stops when the latest accepted design has scores of another metric version. Score that design again with the current metrics first.
+
+When the metrics change, increase `METRICS_VERSION`, and score each accepted design again.
 
 ## The first entry: design 3130
 
-Design 3130 was the frozen design of the package when the scoreboard started. The run of 2026-10-27 gives the scores of round #3130 where the protocol is the same:
+Design 3130 was the frozen design of the package when the scoreboard started. The runner accepted it on 2026-10-27, at commit 73db0ed, with the old metrics (pair and B-cubed only). Its scores then were those of round #3130 where the protocol is the same:
 
 - gvc: pair F0.5 0.868 and B-cubed F0.5 0.948, as round #3130 and `src/conformance.test.ts` measured.
-- anthropic-outlets: B-cubed F0.5 0.812, as the live test of #3142 measured. The pair scores are P 0.306 and R 0.313; the live test had P 0.303 and R 0.309. The live test did not add the last headline-only report, so it scored the last day before its clustering. Without that report, the partition is the partition of the live test.
+- anthropic-outlets: B-cubed F0.5 0.812, as the live test of #3142 measured. The live test did not add the last headline-only report, so it scored the last day before its clustering.
 - hlgd-test: B-cubed F0.5 0.787 and pair F0.5 0.008. Round #3130 measured 0.284 and 0.100 with its research code, which joined headline-only reports. The package never joins a headline-only report (ADR 0003), so most HLGD headlines stay alone.
+
+On 2026-10-27, metric version 2 replaced those scores. The replica of research round #3152 (`feature-scorer-3152/scripts`) made the new scores and `accepted/3130.json` with the constants of commit 73db0ed. The replica gives the old scores of design 3130 on all six sets, to 3 decimals. It also gives the same events as the package for design 3152 on all six sets.

@@ -50,6 +50,7 @@
     "@mozilla/readability": "0.6.0",
     "@zukhruf/embeddings": "^0.3.46",
     "ai": "^7.0.154",
-    "linkedom": "0.18.14"
+    "linkedom": "0.18.14",
+    "munkres": "2.1.1"
   }
 }

@@ -1,16 +1,11 @@
 import type { AnswerRow, Text } from './answer-key.ts';
+import { baselines } from './baselines.ts';
 import type { Add } from './feed.ts';
-import {
-  type BCubedScore,
-  type PairScore,
-  bcubedScore,
-  pairScore,
-} from './metrics.ts';
-
-export type Scores = {
-  readonly pair: PairScore;
-  readonly bcubed: BCubedScore;
-};
+import { Contingency, type Partition } from './metrics/contingency.ts';
+import type { Score } from './metrics/f-measure.ts';
+import { coreferenceLinks } from './metrics/links.ts';
+import { type Metrics, metrics } from './metrics/metrics.ts';
+import { linkScore } from './metrics/pair.ts';
 
 type Member = {
   readonly id: string;
@@ -20,17 +15,22 @@ type Member = {
   readonly title: string;
 };
 
-export type SetScore = Scores & {
+export type SetScore = Metrics & {
   readonly reports: number;
   readonly goldEvents: number;
   readonly detectorEvents: number;
-  // Pairs of two publishers, and pairs of one publisher. Null when the set
-  // has no publishers.
-  readonly crossPublisher: PairScore | null;
-  readonly samePublisher: PairScore | null;
+  // The two partitions that need no detector (#3181).
+  readonly baselines: {
+    readonly allSingletons: Metrics;
+    readonly allInOne: Metrics;
+  };
+  // Pair scores of the pairs of two publishers, and of the pairs of one
+  // publisher. Null when the set has no publishers.
+  readonly crossPublisher: Score | null;
+  readonly samePublisher: Score | null;
   // The scores on the reports that the annotator was sure of. Null when the
   // set has no ambiguous report.
-  readonly withoutAmbiguous: Scores | null;
+  readonly withoutAmbiguous: Metrics | null;
   readonly addMs: {
     readonly adds: number;
     readonly median: number;
@@ -54,22 +54,29 @@ export type SetScore = Scores & {
   }[];
 };
 
+// The answer key and the events of the detector, on the reports that have a
+// text and an event.
+export function partitions(
+  rows: readonly AnswerRow[],
+  eventOf: Partition,
+): { readonly gold: Partition; readonly predicted: Partition } {
+  const scored = rows.filter((row) => eventOf.has(row.id));
+  return {
+    gold: new Map(scored.map((row) => [row.id, row.event])),
+    predicted: new Map(scored.map((row) => [row.id, eventOf.get(row.id)!])),
+  };
+}
+
 // Scores the events of the detector against the answer key. Only the
 // reports that have a text and an event take part.
 export function score(
   rows: readonly AnswerRow[],
   texts: ReadonlyMap<string, Text>,
-  eventOf: ReadonlyMap<string, string>,
+  eventOf: Partition,
   adds: readonly Add[],
 ): SetScore {
   const scored = rows.filter((row) => eventOf.has(row.id));
-  const gold = new Map(scored.map((row) => [row.id, row.event]));
-  const predicted = new Map(
-    scored.map((row) => [row.id, eventOf.get(row.id) ?? '']),
-  );
-  const publisher = new Map(
-    scored.map((row) => [row.id, row.publisher ?? null]),
-  );
+  const { gold, predicted } = partitions(rows, eventOf);
   const hasPublishers = scored.some((row) => row.publisher !== undefined);
   const sure = scored.filter((row) => row.ambiguous === undefined);
   const member = (row: AnswerRow): Member => ({
@@ -85,29 +92,25 @@ export function score(
   const perReport = adds
     .map((add) => add.ms / add.reports)
     .toSorted((a, b) => a - b);
+  const { allSingletons, allInOne } = baselines(gold);
+  const publishers = hasPublishers
+    ? publisherPairs(scored, gold, predicted)
+    : null;
   return {
     reports: scored.length,
     goldEvents: byGold.size,
     detectorEvents: byPredicted.size,
-    ...scores(gold, predicted),
-    crossPublisher: hasPublishers
-      ? pairScore(
-          gold,
-          predicted,
-          (a, b) => publisher.get(a) !== publisher.get(b),
-        )
-      : null,
-    samePublisher: hasPublishers
-      ? pairScore(
-          gold,
-          predicted,
-          (a, b) => publisher.get(a) === publisher.get(b),
-        )
-      : null,
+    ...metrics(gold, predicted),
+    baselines: {
+      allSingletons: metrics(gold, allSingletons),
+      allInOne: metrics(gold, allInOne),
+    },
+    crossPublisher: publishers?.cross ?? null,
+    samePublisher: publishers?.same ?? null,
     withoutAmbiguous:
       sure.length === scored.length
         ? null
-        : scores(restrict(gold, sure), restrict(predicted, sure)),
+        : metrics(restrict(gold, sure), restrict(predicted, sure)),
     addMs: {
       adds: ms.length,
       median: ms[Math.floor(ms.length / 2)] ?? 0,
@@ -139,21 +142,41 @@ export function score(
   };
 }
 
-function scores(
-  gold: ReadonlyMap<string, string>,
-  predicted: ReadonlyMap<string, string>,
-): Scores {
+// The links of one publisher are the links within each publisher's reports;
+// the links of two publishers are the rest.
+function publisherPairs(
+  scored: readonly AnswerRow[],
+  gold: Partition,
+  predicted: Partition,
+): { readonly same: Score; readonly cross: Score } {
+  const all = coreferenceLinks(new Contingency(gold, predicted));
+  const same = { key: 0, response: 0, both: 0 };
+  for (const rows of Map.groupBy(
+    scored,
+    (row) => row.publisher ?? null,
+  ).values()) {
+    const links = coreferenceLinks(
+      new Contingency(restrict(gold, rows), restrict(predicted, rows)),
+    );
+    same.key += links.key;
+    same.response += links.response;
+    same.both += links.both;
+  }
   return {
-    pair: pairScore(gold, predicted),
-    bcubed: bcubedScore(gold, predicted),
+    same: linkScore(same),
+    cross: linkScore({
+      key: all.key - same.key,
+      response: all.response - same.response,
+      both: all.both - same.both,
+    }),
   };
 }
 
 function restrict(
-  groups: ReadonlyMap<string, string>,
+  groups: Partition,
   rows: readonly AnswerRow[],
 ): Map<string, string> {
-  return new Map(rows.map((row) => [row.id, groups.get(row.id) ?? '']));
+  return new Map(rows.map((row) => [row.id, groups.get(row.id)!]));
 }
 
 function pairs<T>(

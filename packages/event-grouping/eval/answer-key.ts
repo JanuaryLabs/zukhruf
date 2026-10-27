@@ -63,11 +63,15 @@ export function setNames(): string[] {
   return readdirSync(SETS_FOLDER).toSorted();
 }
 
+// The set.json of a set. The runner reads it first, so it does not open the
+// answer key of an exam set that it does not score.
+export function readMetadata(name: string): SetMetadata {
+  return JSON.parse(readFileSync(join(SETS_FOLDER, name, 'set.json'), 'utf8'));
+}
+
 export function readSet(name: string): EvalSet {
   const folder = join(SETS_FOLDER, name);
-  const metadata: SetMetadata = JSON.parse(
-    readFileSync(join(folder, 'set.json'), 'utf8'),
-  );
+  const metadata = readMetadata(name);
   const rows: AnswerRow[] = JSON.parse(
     readFileSync(join(folder, 'answer-key.json'), 'utf8'),
   );
