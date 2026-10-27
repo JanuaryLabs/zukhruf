@@ -35,8 +35,8 @@ const within = (directory: string, path: string) =>
 /**
  * Makes statfs report `type` for `directory` and everything inside it, as a
  * mount of that file system would. Every other path gets the real answer.
- * A copy of the helper in @zukhruf/mutex's network directory tests: test
- * helpers stay in their test files (backlog #2509).
+ * One of three copies, with the tests of @zukhruf/mutex and @zukhruf/election.
+ * The election ledger records them (packages/election/docs/copied-code.md).
  */
 function mountAs(t: TestContext, directory: string, type: bigint) {
   const statfs = fsPromises.statfs;

@@ -26,19 +26,19 @@ What changed from the copies that the mutex and the single flight had:
 
 ## Test helpers in more than two places
 
-Three test helpers are in the tests of this package and in the tests of two other packages. Root ADR 0001 (rule 2) keeps test helpers as copies, also after the third copy. On 2026-10-26 the maintainer made one exception: a test helper moves into `@zukhruf/testing` when three or more repositories have its knowledge and it does not use the `mock` of `node:test`. These three helpers are not in that exception. `recordDiskWrites` and `mountAs` replace functions of `node:fs/promises` with `t.mock`. `LosableElection` is only in this repository. Also, no package exports a shared test module. Thus each helper stays a copy. A fix to one place goes into each place, and the commit names each file.
+Three test helpers are in the tests of this package and in the tests of two other packages. Root ADR 0001 (rule 2) keeps test helpers as copies, also after the third copy. [Testing ADR 0016](../../testing/docs/adr/0016-a-test-helper-goes-into-an-area-when-three-repositories-have-its-knowledge-and-it-does-not-use-mock.md) makes one exception: a test helper goes into `@zukhruf/testing` when three or more repositories have its knowledge and it does not use the `mock` of `node:test`. These three helpers are not in that exception. `recordDiskWrites` and `mountAs` replace functions of `node:fs/promises` with `t.mock`. `LosableElection` is only in this repository. Also, no package exports a shared test module. Thus each helper stays a copy. A fix to one place goes into each place, and the commit names each file.
 
 **`recordDiskWrites`.** Three places.
 
 - Places: `packages/election/src/sqlite/sqlite-election.test.ts`, `packages/fencing/src/file-token-source.test.ts` and `packages/fs/src/replace-in-one-step.test.ts`.
 - Same: the type `DiskEvent`, and the record of each `writeFile` and `sync` of a handle that `open` gives, and of each `rename`. The helper replaces `open` and `rename` of `node:fs/promises` with `t.mock.method`, and then calls `syncBuiltinESMExports`. Each call still goes to the real disk. `Symbol.dispose` restores the mocks.
-- Differs: the copies in fencing and fs are byte-identical, but the comment in fs has two more lines. These lines name a recorder in the durability tests of the mutex, and the mutex has no recorder now. The copy in this package has no `replacementIn`, and its comment does not name the Node APIs that it pins.
+- Differs: the copies in fencing and fs are byte-identical, but the comment in fs has two more lines. These lines name the other two places and this ledger. The copy in this package has no `replacementIn`, and its comment does not name the Node APIs that it pins.
 
 **`mountAs` and `within`.** Three places.
 
 - Places: `packages/election/src/sqlite/sqlite-election.test.ts`, `packages/fs/src/local-directory.test.ts` and `packages/mutex/src/lock-stores/network-directory.test.ts`.
 - Same: `within` tells if a path is a directory or is in that directory. `mountAs` takes `t`, and makes `statfs` give `type` for the directory and for each path in it, as a mount of that file system does. Each other path gets the real answer.
-- Differs: the code is byte-identical. The comment in fs has two more lines that name the copy in the mutex.
+- Differs: the code is byte-identical. The comment in fs has two more lines that name the other two places and this ledger.
 
 **`LosableElection`.** Three places.
 

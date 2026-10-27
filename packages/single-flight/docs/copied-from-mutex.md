@@ -118,7 +118,7 @@ Copied without a change.
 
 The temporary directory of the tests is not a copy: the tests use `TemporaryFiles` of `@zukhruf/testing/fs`, with the prefix `flights-`.
 
-These helpers do not belong in `@zukhruf/coordinator`. A third package that copies them is the time to move them to `@zukhruf/testing` (backlog #2509).
+These helpers do not belong in `@zukhruf/coordinator`. They stay copies, also in a third package: the election has a third copy, and [its ledger](../../election/docs/copied-code.md) records it. Only a test helper whose knowledge is in three or more repositories goes into `@zukhruf/testing` ([testing ADR 0016](../../testing/docs/adr/0016-a-test-helper-goes-into-an-area-when-three-repositories-have-its-knowledge-and-it-does-not-use-mock.md)). The knowledge of these helpers is only in this repository.
 
 ## Not copied
 

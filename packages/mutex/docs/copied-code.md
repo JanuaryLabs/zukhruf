@@ -2,7 +2,7 @@
 
 This repository follows the Rule of Three, and it counts places, not packages. The first place writes the code. A second place copies it, and a note records the copy. A third place extracts the code to one home, and the copies go. Thus the boundary of the shared code comes from three working copies, not from a guess.
 
-This note records the code that is in two places inside the mutex. While both places exist, a fix to one place goes into the other place too, and the commit names both files. A third place is the time to extract the code. The last section records the code that is in more than two places.
+This note records the code that is in two places inside the mutex. While both places exist, a fix to one place goes into the other place too, and the commit names both files. A third place is the time to extract the code. The last two sections record the code and the test helpers that are in more than two places.
 
 The paths are in `packages/mutex/src/lock-stores`. The code that the single flight copied from the mutex has [its own note](../../single-flight/docs/copied-from-mutex.md).
 
@@ -76,16 +76,21 @@ Backlog #2899 is about this code. A third dialect with a pool is the time to mov
 
 **Not counted: the lifecycle of a Docker engine claim.** `Claim` of `DockerEngineStore` (`docker/docker-engine-store.ts`) has a heartbeat, a lost lease, and a release, as the key session of the session core has. But a claim is a container, not a session: it attaches, it climbs a ladder for its token, and a waiter can remove it. Thus it differs in kind, and it stays in its store. It uses only the in-process turn (`shared/in-process-turns.ts`) and the key digest (`shared/key-digest.ts`).
 
-**Not counted: the test helpers.** `proxyTo`, `hold`, `untilASessionWaitsForALock` and `silentlyReconnectingSession` are in the test file of each network lock store. Test helpers stay copied in each test file, so that each file reads from top to bottom.
-
 **The worker thread of the cross-thread tests.**
 
 - Places: `threadSource` and `startThread` in `packages/mutex/src/mutex/is-held.test.ts` and in `packages/mutex/src/mutex/mutex.test.ts`.
 - Same: `threadSource` gives the source of a worker. The worker imports `Mutex` and the store cases with dynamic imports, makes the thread side of the store, and runs `body`. `startThread` starts an eval worker with that source, and the host adopts the worker before it can ask for a key.
 - Differs: nothing in the code. One comment breaks its lines in a different place.
-- Why it stays: this knowledge is only in this repository, and no package exports a shared test module. On 2026-10-26 the maintainer moved into `@zukhruf/testing` only the test helpers whose knowledge is in three or more repositories.
+- Why it stays: this knowledge is only in this repository, and no package exports a shared test module. Only a test helper whose knowledge is in three or more repositories goes into `@zukhruf/testing` ([testing ADR 0016](../../testing/docs/adr/0016-a-test-helper-goes-into-an-area-when-three-repositories-have-its-knowledge-and-it-does-not-use-mock.md)).
 
-Three test helpers of the mutex are also in other packages. `mountAs` and `LosableElection` are in three places, and [the ledger of the election](../../election/docs/copied-code.md#test-helpers-in-more-than-two-places) records them. `listening` is in two places, and [the note of the single flight](../../single-flight/docs/copied-from-mutex.md#tests-copied) records it.
+**The magic numbers of the network file systems.**
+
+- Places: `networkFileSystems` in `packages/mutex/src/lock-stores/network-directory.test.ts`, and in `packages/fs/src/local-directory.test.ts`.
+- Same: the 13 pairs of a name and the `f_type` that the `statfs` of Linux gives for that network file system, from NFS (`0x6969`) to 9p (`0x01021997`). Each test file makes a test for each pair.
+- Differs: nothing in the code.
+- Why it stays: this knowledge is only in this repository, and no package exports a shared test module. `linuxNetworkFileSystems` in `packages/fs/src/local-directory.ts` has the same numbers, but it is the code under test. A test that imports that table cannot find a wrong number in it. Thus each test file keeps its own table.
+
+Three more test helpers of the mutex are also in other packages. `mountAs` and `LosableElection` are in three places, and [the ledger of the election](../../election/docs/copied-code.md#test-helpers-in-more-than-two-places) records them. `listening` is in two places, and [the note of the single flight](../../single-flight/docs/copied-from-mutex.md#tests-copied) records it.
 
 ## In more than two places
 
@@ -97,3 +102,33 @@ The Rule of Three asks to extract the code below. It is not extracted yet. Until
 - Same: a map of requests by id. An entry keeps only what settles the caller's promise. `#take` gets an entry, deletes it, and tells its owner that the map changed, so the owner can `ref` or `unref` its connection. A reject-all takes each entry and rejects it.
 
 The maintainer chose to keep the three places (backlog #2538). The parts that are the same are short, and the parts that differ (the delivery states, what a new connection sends again, what keeps the process alive) stay with each owner. A fourth place, or the coordinator package of backlog #2496, is the time to extract it.
+
+## Test helpers in more than two places
+
+The tests of the lock stores that use a database server have four helpers in more than two places. Root ADR 0001 (rule 2) keeps test helpers as copies, also after the third copy. A test helper goes into `@zukhruf/testing` only when three or more repositories have its knowledge and it does not use the `mock` of `node:test` ([testing ADR 0016](../../testing/docs/adr/0016-a-test-helper-goes-into-an-area-when-three-repositories-have-its-knowledge-and-it-does-not-use-mock.md)). The knowledge of these four helpers is only in this repository. Also, no package exports a shared test module, and each test file reads from top to bottom. Thus each helper stays a copy. A fix to one place goes into each place, and the commit names each file.
+
+The paths are in `packages/mutex/src`.
+
+**`hold`.** Six places.
+
+- Places: `mutex/acquire-modes.test.ts`, `lock-stores/postgres/postgres-store.test.ts`, `lock-stores/mysql/mysql-store.test.ts`, `lock-stores/mariadb/mariadb-store.test.ts`, `lock-stores/sqlite/sqlite-store.test.ts` and `lock-stores/docker/docker-engine-store.test.ts`.
+- Same: `hold` acquires a key with a `Mutex`, and keeps the key until the test calls the release. It gives control back when the work of the lock starts.
+- Differs: the first four places are byte-identical, and they give `{ release }`. The SQLite copy gives the release function itself. The Docker copy also gives the fencing token of the lease, and it rejects when the acquire fails.
+
+**`untilASessionWaitsForALock`.** Four places.
+
+- Places: `lock-stores/postgres/postgres-store.test.ts`, `lock-stores/mysql/mysql-store.test.ts`, `lock-stores/mariadb/mariadb-store.test.ts` and `lock-stores/sqlserver/sqlserver-store.test.ts`.
+- Same: `t.waitFor` with an interval of 10 ms and a timeout of 10 s, until the server shows a session that waits for a lock.
+- Differs: the view of each server. Postgres reads `pg_stat_activity`, MySQL and MariaDB read `information_schema.PROCESSLIST` for the state `User lock`, and SQL Server reads `sys.dm_tran_locks`. The SQL Server copy uses the `observe` helper of its file, and does not open its own connection. MySQL and MariaDB differ only in the driver.
+
+**`proxyTo`.** Four places.
+
+- Places: `lock-stores/postgres/postgres-store.test.ts`, `lock-stores/mysql/mysql-store.test.ts`, `lock-stores/mariadb/mariadb-store.test.ts` and `lock-stores/sqlserver/sqlserver-store.test.ts`.
+- Same: a TCP proxy on `127.0.0.1` to the database server. `partition` stops each byte in both directions and keeps the sockets open, as a network partition does. The disposal destroys the sockets and closes the server.
+- Differs: the input and the output. The Postgres copy takes a connection string and gives one back. The MySQL and MariaDB copies take the database and give the port. They differ only in the type of the database. The SQL Server copy takes an `Endpoint`, and gives the host and the port.
+
+**`silentlyReconnectingSession`.** Three places.
+
+- Places: `lock-stores/postgres/postgres-store.test.ts`, `lock-stores/mysql/mysql-store.test.ts` and `lock-stores/sqlserver/sqlserver-store.test.ts`.
+- Same: a session that opens a new connection when the server ends its connection, and does not tell the lock store: no `error` and no `end`. A query that fails on the ended connection runs again on the new connection. Queries on the new connection wait until the test calls `resume`. Thus the test decides when the lock store sees the new connection.
+- Differs: the driver and the type of the session. Each copy gives the id of the first connection: `pid` for Postgres, `id` for MySQL and SQL Server.

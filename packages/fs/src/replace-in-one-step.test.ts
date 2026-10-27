@@ -27,8 +27,8 @@ type DiskEvent =
  * durable, by patching node:fs/promises `open` (and each handle's `writeFile`
  * and `sync`) and `rename`. It pins those Node APIs: an equivalent call such
  * as `fs.fsync(fd)` would not be seen. Every call still reaches the real disk.
- * A copy of the recorder in @zukhruf/mutex's durability tests: test helpers
- * stay in their test files (backlog #2509).
+ * One of three copies, with the tests of @zukhruf/fencing and @zukhruf/election.
+ * The election ledger records them (packages/election/docs/copied-code.md).
  */
 function recordDiskWrites(t: TestContext) {
   const events: DiskEvent[] = [];
