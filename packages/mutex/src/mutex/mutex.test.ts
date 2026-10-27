@@ -91,7 +91,7 @@ void describe.each(storeCases, (store) =>
               return true;
             }),
           );
-          await delay(settle);
+          await delay(deadlineFor(store, settle, { grants: 1, releases: 0 }));
           failFirst.resolve();
 
           // Assert: the error reaches its caller, and the waiter runs after failure.
@@ -212,7 +212,7 @@ void describe.each(storeCases, (store) =>
               return false;
             }),
           );
-          await delay(settle);
+          await delay(deadlineFor(store, settle, { grants: 1, releases: 0 }));
 
           // Assert: the second callback has not entered while the first is open.
           assert.equal(
@@ -242,78 +242,82 @@ void describe.each(storeCases, (store) =>
       },
     );
 
-    test('three overlapping requests for one product all finish without overlapping callbacks', async (t) => {
-      // Arrange: whichever callback enters first stays active while the other requests queue.
-      await using fixture = await store.fixture(process.env);
-      await using host = store.open(fixture.location);
-      const mutex = new Mutex(host.store);
-      const finishFirst = Promise.withResolvers<void>();
-      let entered = 0;
-      let active = 0;
-      let peakActive = 0;
-      const completed: number[] = [];
+    test(
+      'three overlapping requests for one product all finish without overlapping callbacks',
+      { timeout: timeoutForGrants(store, 3) },
+      async (t) => {
+        // Arrange: whichever callback enters first stays active while the other requests queue.
+        await using fixture = await store.fixture(process.env);
+        await using host = store.open(fixture.location);
+        const mutex = new Mutex(host.store);
+        const finishFirst = Promise.withResolvers<void>();
+        let entered = 0;
+        let active = 0;
+        let peakActive = 0;
+        const completed: number[] = [];
 
-      // Act: submit the entire burst before letting the first callback finish.
-      const outcomes = Promise.allSettled(
-        [true, false, true].map((result, index) => {
-          return mutex.acquire('product:42', async () => {
-            const isFirstToEnter = entered++ === 0;
-            active++;
-            peakActive = Math.max(peakActive, active);
-            try {
-              if (isFirstToEnter) await finishFirst.promise;
-              await nextTurn();
-              completed.push(index);
-              return result;
-            } finally {
-              active--;
-            }
-          });
-        }),
-      );
+        // Act: submit the entire burst before letting the first callback finish.
+        const outcomes = Promise.allSettled(
+          [true, false, true].map((result, index) => {
+            return mutex.acquire('product:42', async () => {
+              const isFirstToEnter = entered++ === 0;
+              active++;
+              peakActive = Math.max(peakActive, active);
+              try {
+                if (isFirstToEnter) await finishFirst.promise;
+                await nextTurn();
+                completed.push(index);
+                return result;
+              } finally {
+                active--;
+              }
+            });
+          }),
+        );
 
-      try {
-        await t.waitFor(
-          () =>
-            assert.ok(
-              entered === 1,
-              'One request must enter while the burst is submitted',
-            ),
-          {
-            interval: 5,
-            timeout: deadlineFor(store, 2000, { grants: 1, releases: 0 }),
-          },
-        );
-        await delay(settle);
-        finishFirst.resolve();
-        // A request that is never granted keeps this await open until the test times out.
-        const results = await outcomes;
+        try {
+          await t.waitFor(
+            () =>
+              assert.ok(
+                entered === 1,
+                'One request must enter while the burst is submitted',
+              ),
+            {
+              interval: 5,
+              timeout: deadlineFor(store, 2000, { grants: 1, releases: 0 }),
+            },
+          );
+          await delay(deadlineFor(store, settle, { grants: 1, releases: 0 }));
+          finishFirst.resolve();
+          // A request that is never granted keeps this await open until the test times out.
+          const results = await outcomes;
 
-        // Assert: exclusion must also allow every waiting request to make progress.
-        assert.deepEqual(
-          results,
-          [
-            { status: 'fulfilled', value: true },
-            { status: 'fulfilled', value: false },
-            { status: 'fulfilled', value: true },
-          ],
-          'Each request in the burst must receive its own callback result',
-        );
-        assert.equal(
-          peakActive,
-          1,
-          'Callbacks for the same product must never be active at the same time',
-        );
-        assert.deepEqual(
-          completed.sort((a, b) => a - b),
-          [0, 1, 2],
-          'Every submitted operation must perform its work exactly once',
-        );
-      } finally {
-        finishFirst.resolve();
-        // Do not await outcomes: a deadlocked mutex would hang here instead of failing.
-      }
-    });
+          // Assert: exclusion must also allow every waiting request to make progress.
+          assert.deepEqual(
+            results,
+            [
+              { status: 'fulfilled', value: true },
+              { status: 'fulfilled', value: false },
+              { status: 'fulfilled', value: true },
+            ],
+            'Each request in the burst must receive its own callback result',
+          );
+          assert.equal(
+            peakActive,
+            1,
+            'Callbacks for the same product must never be active at the same time',
+          );
+          assert.deepEqual(
+            completed.sort((a, b) => a - b),
+            [0, 1, 2],
+            'Every submitted operation must perform its work exactly once',
+          );
+        } finally {
+          finishFirst.resolve();
+          // Do not await outcomes: a deadlocked mutex would hang here instead of failing.
+        }
+      },
+    );
 
     test(
       'a blocked product does not prevent another product from being processed',
@@ -380,110 +384,120 @@ void describe.each(storeCases, (store) =>
       },
     );
 
-    test('an out-of-stock result does not prevent a later reservation for the same product', async () => {
-      // Arrange: initially there is nothing to reserve.
-      await using fixture = await store.fixture(process.env);
-      await using host = store.open(fixture.location);
-      const mutex = new Mutex(host.store);
-      let stock = 0;
+    test(
+      'an out-of-stock result does not prevent a later reservation for the same product',
+      { timeout: timeoutForGrants(store, 2) },
+      async () => {
+        // Arrange: initially there is nothing to reserve.
+        await using fixture = await store.fixture(process.env);
+        await using host = store.open(fixture.location);
+        const mutex = new Mutex(host.store);
+        let stock = 0;
 
-      // Act: one request is declined, then stock arrives before the next request.
-      const outcomes = Promise.allSettled([
-        (async () => {
-          const soldOut = await mutex.acquire('product:42', async () => {
-            await nextTurn();
-            return stock > 0;
-          });
+        // Act: one request is declined, then stock arrives before the next request.
+        const outcomes = Promise.allSettled([
+          (async () => {
+            const soldOut = await mutex.acquire('product:42', async () => {
+              await nextTurn();
+              return stock > 0;
+            });
 
-          stock = 1;
-          const restocked = await mutex.acquire('product:42', async () => {
-            await nextTurn();
-            if (stock === 0) return false;
-            stock--;
-            return true;
-          });
-          return { soldOut, restocked };
-        })(),
-      ]);
+            stock = 1;
+            const restocked = await mutex.acquire('product:42', async () => {
+              await nextTurn();
+              if (stock === 0) return false;
+              stock--;
+              return true;
+            });
+            return { soldOut, restocked };
+          })(),
+        ]);
 
-      // A later request that is never granted keeps this await open until the test times out.
-      const results = await outcomes;
+        // A later request that is never granted keeps this await open until the test times out.
+        const results = await outcomes;
 
-      // Assert: false is a normal result, and the resource remains usable later.
-      assert.deepEqual(
-        results,
-        [{ status: 'fulfilled', value: { soldOut: false, restocked: true } }],
-        'The first caller must receive false and the later caller must receive its fresh true result',
-      );
-      assert.equal(
-        stock,
-        0,
-        'The later callback must actually reserve the newly available item exactly once',
-      );
-    });
+        // Assert: false is a normal result, and the resource remains usable later.
+        assert.deepEqual(
+          results,
+          [{ status: 'fulfilled', value: { soldOut: false, restocked: true } }],
+          'The first caller must receive false and the later caller must receive its fresh true result',
+        );
+        assert.equal(
+          stock,
+          0,
+          'The later callback must actually reserve the newly available item exactly once',
+        );
+      },
+    );
 
     void test.each(
       ['constructor', '__proto__', longKey, 'مخزن'.repeat(75), 'report-\uD800'],
       (key) =>
-        test(`resource name ${label(key)} supports ordinary mutex operations`, async (t) => {
-          // Arrange: resource names may come directly from user-supplied names or slugs.
-          await using fixture = await store.fixture(process.env);
-          await using host = store.open(fixture.location);
-          const mutex = new Mutex(host.store);
-          const finishFirst = Promise.withResolvers<void>();
-          let firstStarted = false;
-          let secondStarted = false;
-          const operations: Array<Promise<boolean>> = [];
+        test(
+          `resource name ${label(key)} supports ordinary mutex operations`,
+          { timeout: timeoutForGrants(store, 2) },
+          async (t) => {
+            // Arrange: resource names may come directly from user-supplied names or slugs.
+            await using fixture = await store.fixture(process.env);
+            await using host = store.open(fixture.location);
+            const mutex = new Mutex(host.store);
+            const finishFirst = Promise.withResolvers<void>();
+            let firstStarted = false;
+            let secondStarted = false;
+            const operations: Array<Promise<boolean>> = [];
 
-          try {
-            // Act: two callers use exactly the same resource name.
-            operations.push(
-              mutex.acquire(key, async () => {
-                firstStarted = true;
-                await finishFirst.promise;
-                return true;
-              }),
-            );
-            await t.waitFor(
-              () =>
-                assert.ok(
-                  firstStarted,
-                  `The first operation for ${label(key)} must start`,
-                ),
-              {
-                interval: 5,
-                timeout: deadlineFor(store, 2000, { grants: 1, releases: 0 }),
-              },
-            );
-            operations.push(
-              mutex.acquire(key, async () => {
-                secondStarted = true;
-                return false;
-              }),
-            );
-            await delay(settle);
-            assert.equal(
-              secondStarted,
-              false,
-              `The second operation for ${label(key)} must wait for the first`,
-            );
-            finishFirst.resolve();
-            // A second operation that is never granted keeps this await open until the test times out.
-            const results = await Promise.allSettled(operations);
+            try {
+              // Act: two callers use exactly the same resource name.
+              operations.push(
+                mutex.acquire(key, async () => {
+                  firstStarted = true;
+                  await finishFirst.promise;
+                  return true;
+                }),
+              );
+              await t.waitFor(
+                () =>
+                  assert.ok(
+                    firstStarted,
+                    `The first operation for ${label(key)} must start`,
+                  ),
+                {
+                  interval: 5,
+                  timeout: deadlineFor(store, 2000, { grants: 1, releases: 0 }),
+                },
+              );
+              operations.push(
+                mutex.acquire(key, async () => {
+                  secondStarted = true;
+                  return false;
+                }),
+              );
+              await delay(
+                deadlineFor(store, settle, { grants: 1, releases: 0 }),
+              );
+              assert.equal(
+                secondStarted,
+                false,
+                `The second operation for ${label(key)} must wait for the first`,
+              );
+              finishFirst.resolve();
+              // A second operation that is never granted keeps this await open until the test times out.
+              const results = await Promise.allSettled(operations);
 
-            // Assert: these strings are valid resource names, just like product:42.
-            assert.deepEqual(
-              results,
-              [
-                { status: 'fulfilled', value: true },
-                { status: 'fulfilled', value: false },
-              ],
-              `Resource name ${label(key)} must work and preserve both callers' results`,
-            );
-          } finally {
-            finishFirst.resolve();
-          }
-        }),
+              // Assert: these strings are valid resource names, just like product:42.
+              assert.deepEqual(
+                results,
+                [
+                  { status: 'fulfilled', value: true },
+                  { status: 'fulfilled', value: false },
+                ],
+                `Resource name ${label(key)} must work and preserve both callers' results`,
+              );
+            } finally {
+              finishFirst.resolve();
+            }
+          },
+        ),
     );
 
     void test.each(
@@ -804,7 +818,11 @@ void describe.each(
             );
             // Both workers are already running. Keep the first callback open briefly
             // so an unprotected second callback has an opportunity to overlap it.
-            await delay(100, undefined, { signal: t.signal });
+            await delay(
+              deadlineFor(store, 100, { grants: 1, releases: 0 }),
+              undefined,
+              { signal: t.signal },
+            );
             first.child.send('finish');
             await waitFor(
               () => first.has('completed') && second.has('entered'),
@@ -1000,7 +1018,9 @@ void describe.each(
           const waiter = watch(
             mutex.acquire('product:42', async (lease) => lease.token),
           );
-          await delay(settle * 10);
+          await delay(
+            deadlineFor(store, settle * 10, { grants: 1, releases: 0 }),
+          );
           const whileFrozen = waiter.now.status;
           holder.child.kill('SIGCONT');
           holder.child.send('release');
@@ -1123,7 +1143,7 @@ void describe.each(
                 ),
               { interval: 5, timeout: newProcessTimeout },
             );
-            await delay(settle);
+            await delay(deadlineFor(store, settle, { grants: 1, releases: 0 }));
             const enteredWhileHeld = events.includes('entered');
             finishMain.resolve();
             await held;
@@ -1173,10 +1193,11 @@ void describe.each(
           );
           const held = once(holder, 'message');
           const mutex = new Mutex(host.store);
-          const deadline = delay(2000, null, { ref: false });
 
           try {
             await held;
+            const limit = deadlineFor(store, 2000, { grants: 1, releases: 1 });
+            const deadline = delay(limit, null, { ref: false });
             const next = mutex.acquire('product:42', async () => true);
 
             // Act: the holding thread is terminated without releasing.
@@ -1186,7 +1207,7 @@ void describe.each(
             assert.equal(
               await Promise.race([next, deadline]),
               true,
-              'The waiter must acquire within two seconds after the holding thread died',
+              `The waiter must acquire within ${limit} ms after the holding thread died`,
             );
           } finally {
             await holder.terminate();
@@ -1333,7 +1354,7 @@ void describe.each(
             thread.postMessage({
               '@lock': { op: 'granted', id: request, token: 'not-a-token' },
             });
-            await delay(settle);
+            await delay(deadlineFor(store, settle, { grants: 1, releases: 0 }));
             const enteredBeforeRelease = events.includes('entered');
             finishMain.resolve();
             await held;

@@ -243,7 +243,13 @@ void describe.each(storeCases, (store) =>
         const next = mutex.acquire('report:daily', async () => 'next');
 
         try {
-          assert.equal(await within(cancelled, settle), 'still waiting');
+          assert.equal(
+            await within(
+              cancelled,
+              deadlineFor(store, settle, { grants: 1, releases: 0 }),
+            ),
+            'still waiting',
+          );
 
           // Act
           cancel.abort(reason);
@@ -283,7 +289,13 @@ void describe.each(storeCases, (store) =>
         });
 
         try {
-          assert.equal(await within(attempt, settle), 'still waiting');
+          assert.equal(
+            await within(
+              attempt,
+              deadlineFor(store, settle, { grants: 1, releases: 0 }),
+            ),
+            'still waiting',
+          );
 
           // Act
           cancel.abort(reason);
