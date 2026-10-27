@@ -2,9 +2,11 @@ import assert from 'node:assert/strict';
 // The default export is the module object itself, which mock.method can patch;
 // syncBuiltinESMExports then copies the patch to the named exports.
 import fsPromises, {
+  chmod,
   mkdir,
   readFile,
   readdir,
+  stat,
   writeFile,
 } from 'node:fs/promises';
 import { syncBuiltinESMExports } from 'node:module';
@@ -113,6 +115,20 @@ const neverOnWindows = {
   skip:
     process.platform === 'win32' ? 'Windows never syncs a directory' : false,
 };
+
+const posixModesOnly = {
+  skip:
+    process.platform === 'win32'
+      ? 'Windows keeps only a read-only flag, not POSIX mode bits'
+      : false,
+};
+
+const modeOf = async (path: string) => (await stat(path)).mode & 0o777;
+
+const writers = [
+  ['an atomic write', atomicWrite],
+  ['a durable write', durableWrite],
+] as const;
 
 describe('A replacement in one step', () => {
   test(
@@ -308,6 +324,88 @@ describe('A replacement in one step', () => {
         } else {
           await assert.rejects(writing, { code });
         }
+      },
+    );
+  }
+
+  for (const [writer, write] of writers) {
+    test(
+      `${writer} puts bytes at the path byte for byte`,
+      { timeout: 2_000 },
+      async () => {
+        // Arrange: bytes that are not valid UTF-8, so a text round trip would change them.
+        await using directory = await new TemporaryFiles().directory(
+          'zukhruf-fs-',
+        );
+        const fromArray = join(directory.path, 'array');
+        const fromBuffer = join(directory.path, 'buffer');
+        const bytes = new Uint8Array([0x00, 0xff, 0xc3, 0x28, 0x0a, 0x80]);
+
+        // Act
+        await write(fromArray, bytes);
+        await write(fromBuffer, Buffer.from(bytes));
+
+        // Assert
+        assert.deepEqual(new Uint8Array(await readFile(fromArray)), bytes);
+        assert.deepEqual(new Uint8Array(await readFile(fromBuffer)), bytes);
+      },
+    );
+
+    test(
+      `${writer} with a mode gives the draft that mode before the rename, also over a file with another mode`,
+      { ...posixModesOnly, timeout: 2_000 },
+      async (t) => {
+        // Arrange: an old file that others can read, and a recorder of the draft's mode at the rename.
+        await using directory = await new TemporaryFiles().directory(
+          'zukhruf-fs-',
+        );
+        const path = join(directory.path, 'secret');
+        await writeFile(path, 'old');
+        await chmod(path, 0o644);
+        const rename = fsPromises.rename;
+        const draftModes: number[] = [];
+        t.mock.method(
+          fsPromises,
+          'rename',
+          async (from: string, to: string) => {
+            draftModes.push(await modeOf(from));
+            return rename(from, to);
+          },
+        );
+        syncBuiltinESMExports();
+
+        try {
+          // Act
+          await write(path, 'new', { mode: 0o600 });
+        } finally {
+          t.mock.restoreAll();
+          syncBuiltinESMExports();
+        }
+
+        // Assert: a mode set only after the rename would leave the new content readable for a moment.
+        assert.deepEqual(draftModes, [0o600]);
+        assert.equal(await modeOf(path), 0o600);
+        assert.equal(await readFile(path, 'utf8'), 'new');
+      },
+    );
+
+    test(
+      `${writer} without a mode gives the file the mode that writeFile gives a new file`,
+      { ...posixModesOnly, timeout: 2_000 },
+      async () => {
+        // Arrange: a file that writeFile creates, so its mode comes from the process umask.
+        await using directory = await new TemporaryFiles().directory(
+          'zukhruf-fs-',
+        );
+        const reference = join(directory.path, 'reference');
+        await writeFile(reference, 'x');
+        const path = join(directory.path, 'plain');
+
+        // Act
+        await write(path, 'x');
+
+        // Assert
+        assert.equal(await modeOf(path), await modeOf(reference));
       },
     );
   }

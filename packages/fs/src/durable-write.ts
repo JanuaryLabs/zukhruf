@@ -10,10 +10,15 @@ import { replaceFile } from './replace-file.ts';
  * the new content and the replacement survive a power loss: a counter that
  * goes back after a crash would hand out a token twice.
  */
-export async function durableWrite(path: string, content: string) {
+export async function durableWrite(
+  path: string,
+  content: string | Uint8Array,
+  options?: { mode?: number },
+) {
   const draft = draftOf(path);
   try {
-    await writeSynced(draft, content);
+    // The rename keeps the draft's mode, so `mode` is set when the draft is created.
+    await writeSynced(draft, content, options?.mode);
     await replaceFile(draft, path);
   } catch (error) {
     // A draft that never replaced `path` would only pile up, one per failed write.
@@ -23,8 +28,12 @@ export async function durableWrite(path: string, content: string) {
   await syncDirectory(dirname(path));
 }
 
-async function writeSynced(path: string, content: string) {
-  await using handle = await open(path, 'wx');
+async function writeSynced(
+  path: string,
+  content: string | Uint8Array,
+  mode: number | undefined,
+) {
+  await using handle = await open(path, 'wx', mode);
   await handle.writeFile(content);
   await handle.sync();
 }

@@ -32,6 +32,29 @@ Use `durableWrite` when a value must never go back after a crash, for example a 
 
 On Windows, a process cannot open a directory to sync it. Some file systems refuse a sync of a directory with `EINVAL` or `ENOTSUP`. In these cases, the rename is as durable as that system makes it. Each other error of the sync reaches the caller.
 
+## Write bytes, and set the mode of the file
+
+`atomicWrite` and `durableWrite` take the same arguments:
+
+```ts
+atomicWrite(path: string, content: string | Uint8Array, options?: { mode?: number })
+durableWrite(path: string, content: string | Uint8Array, options?: { mode?: number })
+```
+
+The content is a string or bytes. A `Buffer` is a `Uint8Array`, so a `Buffer` is bytes too. The write puts the bytes at the path with no change.
+
+`mode` sets the POSIX file mode of the new file, for example `0o600` for a file that only its owner can read. The process umask applies to `mode`, as it does for `writeFile`. The write sets `mode` when it creates the draft, because the rename keeps the mode of the draft. Thus the file at the path never has a different mode, not even for a moment. When you do not give `mode`, the file gets the mode that `writeFile` gives a new file. A write never keeps the mode of the file that it replaces.
+
+```ts
+import { randomBytes } from 'node:crypto';
+
+import { atomicWrite } from '@zukhruf/fs';
+
+await atomicWrite('/var/lib/app/key', randomBytes(32), { mode: 0o600 });
+```
+
+On Windows, a file has no POSIX mode. Node.js uses only the write bit of `mode` there, to make the file read-only.
+
 ## Create a file only when it is absent
 
 `createExclusive` creates the file when no file is at the path, and returns `true`. When a file is there, it changes nothing and returns `false`. It fills a draft first and then links the draft to the path. Thus the file is never empty: a reader of the new file sees all of its content.
