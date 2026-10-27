@@ -11,7 +11,7 @@ The round froze its design in `plan.json`, sha256 `78a56767d6d454e1053d28bbcd71b
 - The weight of the same-publisher term is negative. At the same similarity, two reports of one publisher report one event less often than two reports of two publishers.
 - The round fitted all the weights again, on the pairs of all training sets.
 
-These parts did not change: the lead rule, the vector text, EmbeddingGemma 2, the shortlist of 80 reports, the window of 7 days, the threshold of 0.5 and the clustering.
+These parts did not change: the lead rule, the vector text, EmbeddingGemma 2, the shortlist of 80 reports, the window of 7 days and the clustering. The second selection (3152b, below) changed the threshold from 0.5 to 0.45.
 
 `src/frozen-design.ts` holds the new values (`plan.json` `design.model`):
 
@@ -68,7 +68,25 @@ The round did not measure the arrival order. The package measured it after the r
 
 ### The exam
 
-The exam set is deepmind-outlets: 133 reports in 102 events, labelled and frozen before any design saw it (commit dc1daad). It leaves out the 27 reports that the training set anthropic-outlets also holds, because this round fitted its weights on that set. It is not scored yet. The design passes if its exam B-cubed F0.5 and pair F0.5 are both higher than those of design 3130 on the same labels, and its gvc and hlgd-test scores are not lower than design 3130.
+The exam set is deepmind-outlets: 133 reports in 102 events, labelled and frozen before any design saw it (commit dc1daad). It leaves out the 27 reports that the training set anthropic-outlets also holds, because this round fitted its weights on that set (commit 8c32ca8). It is not scored yet. The second selection (below) wrote the rule that decides the exam.
+
+## The second selection (3152b)
+
+The first selection used B-cubed F0.5. A design that leaves every report alone gave a higher B-cubed F0.5 than design 3130 on anthropic-outlets (0.940 against 0.812), on dev2938 and on hlgd-test. Thus that score cannot tell a good design from a design that does nothing when most events have one report. The evaluation now uses the scores of coreference research (eval/README.md). The objective of every round is CoNLL F0.5: the mean of the MUC, B-cubed and CEAF-e F0.5.
+
+The second selection wrote its rule before any score (`selection-rule.json`, sha256 `7606921c…`, 2026-10-27T15:16:41Z). It used nested cross-validation on the same folds and only the training sets. It froze `plan.json`, sha256 `dc26dbd8c26341ca4245552d017161307f30b79aef4bc5ba3a171a72a534c479`, at 2026-10-27T15:34:54Z, in `feature-scorer-3152b`.
+
+| Design                                                                                   | CoNLL F0.5, cross-validated |
+| ---------------------------------------------------------------------------------------- | --------------------------- |
+| 3130                                                                                     | 0.772                       |
+| The same-publisher term (chosen)                                                         | 0.822                       |
+| The best eligible design: a clean lead, numbers without URLs and the same-publisher term | 0.831                       |
+
+- The same pair score and the same weights won again. The threshold changed to 0.45, the best point of the grid.
+- The best eligible design was not better by more than chance: the bootstrap interval of the difference was −0.009 [−0.021, +0.003]. The rule chose the simpler design.
+- Every design with a limit on the days of an event made gvc lower than design 3130, so none of them was eligible.
+
+The exam rule (`plan.json` `examVerdict`): the design passes if, on deepmind-outlets, (a) the 95% bootstrap interval of its CoNLL F0.5 minus the CoNLL F0.5 of design 3130 is above 0, (b) it beats the two trivial designs (every report alone, and all reports in one event), and (c) on gvc and hlgd-test, the interval of the same difference is not below 0. When the interval of (a) includes 0, the result is "inconclusive", and design 3130 stays the accepted design.
 
 ## Considered Options
 
@@ -81,5 +99,5 @@ The exam set is deepmind-outlets: 133 reports in 102 events, labelled and frozen
 ## Consequences
 
 - A host that knows the publisher must give it. Without publishers, the detector cannot use the same-publisher evidence, and the scores of round #3152 on sets with many publishers do not apply to it.
-- The parameters of round #3130 in ADR 0001 are history. The lead rule, the vector text, the shortlist, the window and the threshold of ADR 0001 are still the parameters of the detector.
+- The parameters of round #3130 in ADR 0001 are history. The lead rule, the vector text, the shortlist and the window of ADR 0001 are still the parameters of the detector. The threshold is 0.45.
 - The exam result goes into this record and the workspace record when the exam is scored.

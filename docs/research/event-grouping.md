@@ -72,6 +72,8 @@ Result on the Gun Violence Corpus, which no earlier round had seen (509 document
 
 Round #3152 kept the #3130 design and changed only the pair score (package ADR 0005). It fitted the weights again on the pairs of anthropic-outlets, ECB+, #2938 and #2957, and it added a term for two reports of the same publisher. The weight of that term is negative. The round froze its selection rule before it scored a candidate, and its `plan.json` (sha256 `78a56767…`) before it scored the exam set.
 
+A design that leaves every report alone then beat design 3130 on B-cubed F0.5 on three sets, so the evaluation moved to the scores of coreference research, with CoNLL F0.5 as the objective (eval/README.md). A second selection (3152b) ran with that objective, with nested cross-validation, on the training sets only. It chose the same pair score and the same weights, with the threshold 0.45 instead of 0.5 (`plan.json` sha256 `dc26dbd8…`). The table below is from the first selection; package ADR 0005 has the table of the second.
+
 | Candidate                                                    | Training objective | gvc pair / B-cubed F0.5 | Eligible |
 | ------------------------------------------------------------ | ------------------ | ----------------------- | -------- |
 | #3130 as it is                                               | 0.892              | 0.868 / 0.948           | yes      |
