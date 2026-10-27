@@ -17,6 +17,7 @@
     "The annotator read the title and the lead only, not the whole article.",
     "65 articles are ambiguous; each has its alternative label.",
     "Fortune dates are the URL day at 12:00 UTC, not the publish time.",
-    "The texts in the cache come from elt's article extraction. A text that the runner fetches again is extracted with Readability, so it can differ."
+    "The texts in the cache come from elt's article extraction. A text that the runner fetches again is extracted with Readability, so it can differ.",
+    "62 articles come from arstechnica.com (52 Ars stories and 10 FT and ProPublica stories that Ars published again). The crawl followed the robots.txt rules for every agent (*), but the robots.txt of Ars Technica disallows ClaudeBot, Claude-User and anthropic-ai. The maintainer chose on 2026-10-27 to keep these articles in this set. Later crawls follow the rules that robots.txt gives for each agent, so the deepmind-outlets set has no Ars Technica article."
   ]
 }
