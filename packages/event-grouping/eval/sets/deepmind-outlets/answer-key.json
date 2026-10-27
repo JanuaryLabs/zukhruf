@@ -1,0 +1,1398 @@
+[
+  {
+    "id": "https://fortune.com/2026/04/01/ai-models-will-secretly-scheme-to-protect-other-ai-models-from-being-shut-down-researchers-find/",
+    "source": "https://fortune.com/2026/04/01/ai-models-will-secretly-scheme-to-protect-other-ai-models-from-being-shut-down-researchers-find/",
+    "publishedAt": "2026-04-01T12:00:00.000Z",
+    "publisher": "fortune",
+    "event": "peer-preservation-study",
+    "textSha256": "e7c77c47715e3e530823e16513b9d1ea8d476b7ee3e6de5bf056fbd22b3301f4"
+  },
+  {
+    "id": "https://fortune.com/2026/04/01/nvidia-ceo-jensen-huang-advice-workers-scared-ai-confusing-job-with-tools-to-do-it/",
+    "source": "https://fortune.com/2026/04/01/nvidia-ceo-jensen-huang-advice-workers-scared-ai-confusing-job-with-tools-to-do-it/",
+    "publishedAt": "2026-04-01T12:00:00.000Z",
+    "publisher": "fortune",
+    "event": "single-1",
+    "textSha256": "3b8c093ee587e92fc493f3d515ceac16b3a54397e62f162202ba49dd4ec1160f"
+  },
+  {
+    "id": "https://blog.google/innovation-and-ai/technology/developers-tools/gemma-4/",
+    "source": "https://blog.google/innovation-and-ai/technology/developers-tools/gemma-4/",
+    "publishedAt": "2026-04-02T16:00:00+00:00",
+    "publisher": "google",
+    "event": "gemma-4",
+    "textSha256": "8451513922bce1a2bf21517e11cfa7da9b01592f29e9059c9ebe3540db61ba6e"
+  },
+  {
+    "id": "https://fortune.com/2026/04/07/openai-drama-sam-altman-ipo-anthropic-cybersecurity-risks-eye-on-ai/",
+    "source": "https://fortune.com/2026/04/07/openai-drama-sam-altman-ipo-anthropic-cybersecurity-risks-eye-on-ai/",
+    "publishedAt": "2026-04-07T12:00:00.000Z",
+    "publisher": "fortune",
+    "event": "single-3",
+    "ambiguous": {
+      "alternative": "gemma-4",
+      "note": "Eye on AI round-up 5 days after Gemma 4; title names OpenAI, lead lists Gemma among others; rule 3 (round-up)"
+    },
+    "textSha256": "660cb44e2e9d7a7fa52a86b2cc6404ab32647003bbf7dd59d35405bf1a040103"
+  },
+  {
+    "id": "https://the-decoder.com/deepmind-ceo-hassabis-says-agi-will-hit-like-ten-industrial-revolutions-compressed-into-a-single-decade/",
+    "source": "https://the-decoder.com/deepmind-ceo-hassabis-says-agi-will-hit-like-ten-industrial-revolutions-compressed-into-a-single-decade/",
+    "publishedAt": "2026-04-10T19:06:18+00:00",
+    "publisher": "decoder",
+    "event": "hassabis-agi-industrial-revolutions",
+    "textSha256": "a9931d0e183dd67e70f3c0fd8f4282f80180b549613bba97c570178a4d76da24"
+  },
+  {
+    "id": "https://deepmind.google/blog/gemini-robotics-er-1-6/",
+    "source": "https://deepmind.google/blog/gemini-robotics-er-1-6/",
+    "publishedAt": "2026-04-14T16:00:00+00:00",
+    "publisher": "deepmind",
+    "event": "gemini-robotics-er-1-6",
+    "textSha256": "114c43101b0559a4ca1c7acb6f2852913b9540fc1bd90e85decc39a2c741aad7"
+  },
+  {
+    "id": "https://fortune.com/2026/04/15/silicon-valley-monopoly-ai-brain-power-demis-hassabis-letter-from-london/",
+    "source": "https://fortune.com/2026/04/15/silicon-valley-monopoly-ai-brain-power-demis-hassabis-letter-from-london/",
+    "publishedAt": "2026-04-15T12:00:00.000Z",
+    "publisher": "fortune",
+    "event": "single-6",
+    "textSha256": "bc9dced5e6b0f71d09ab5f8e9a29509b34a803ff255173e4b6077c63ac68d1ec"
+  },
+  {
+    "id": "https://blog.google/innovation-and-ai/models-and-research/gemini-models/gemini-3-1-flash-tts/",
+    "source": "https://blog.google/innovation-and-ai/models-and-research/gemini-models/gemini-3-1-flash-tts/",
+    "publishedAt": "2026-04-15T15:00:00+00:00",
+    "publisher": "google",
+    "event": "gemini-3-1-flash-tts",
+    "textSha256": "cd4165ff5738dff97ba41b94d58379f4a0568b143ec933393312e22c8905be7d"
+  },
+  {
+    "id": "https://the-decoder.com/google-deepminds-gemini-robotics-er-1-6-gives-robots-a-sharper-brain-for-planning-and-perception/",
+    "source": "https://the-decoder.com/google-deepminds-gemini-robotics-er-1-6-gives-robots-a-sharper-brain-for-planning-and-perception/",
+    "publishedAt": "2026-04-17T18:59:56+00:00",
+    "publisher": "decoder",
+    "event": "gemini-robotics-er-1-6",
+    "textSha256": "cf35dd3990512b329867728de814b70086970f720230222995c0e7bcf27b7f07"
+  },
+  {
+    "id": "https://the-decoder.com/google-builds-elite-team-to-close-the-coding-gap-with-anthropic/",
+    "source": "https://the-decoder.com/google-builds-elite-team-to-close-the-coding-gap-with-anthropic/",
+    "publishedAt": "2026-04-20T16:30:15+00:00",
+    "publisher": "decoder",
+    "event": "google-coding-strike-team",
+    "textSha256": "40f933c16b04d1362b540a2a76c17448bafee3b787e1c09499a98442c0682cf8"
+  },
+  {
+    "id": "https://the-decoder.com/google-launches-deep-research-and-deep-research-max-agents-to-automate-complex-research/",
+    "source": "https://the-decoder.com/google-launches-deep-research-and-deep-research-max-agents-to-automate-complex-research/",
+    "publishedAt": "2026-04-21T18:11:38+00:00",
+    "publisher": "decoder",
+    "event": "deep-research-max",
+    "textSha256": "4a9780a1824f294a4843799fc0fa695634c31a4b8372983f4c818d8fd2732ac7"
+  },
+  {
+    "id": "https://deepmind.google/blog/partnering-with-industry-leaders-to-accelerate-ai-transformation/",
+    "source": "https://deepmind.google/blog/partnering-with-industry-leaders-to-accelerate-ai-transformation/",
+    "publishedAt": "2026-04-22T13:00:00+00:00",
+    "publisher": "deepmind",
+    "event": "industry-partners-ai-transformation",
+    "textSha256": "5deb99d46aee3baa5e90627e908b07c617e381fc94e9951c0f49e47c0c57ef6e"
+  },
+  {
+    "id": "https://deepmind.google/blog/decoupled-diloco/",
+    "source": "https://deepmind.google/blog/decoupled-diloco/",
+    "publishedAt": "2026-04-23T16:00:00+00:00",
+    "publisher": "deepmind",
+    "event": "decoupled-diloco",
+    "textSha256": "f83cdbbc7b772ae6bfb88afc58655c5dc810779e64f7b765774f591ecec0c53d"
+  },
+  {
+    "id": "https://deepmind.google/blog/announcing-our-partnership-with-the-republic-of-korea/",
+    "source": "https://deepmind.google/blog/announcing-our-partnership-with-the-republic-of-korea/",
+    "publishedAt": "2026-04-27T08:00:00+00:00",
+    "publisher": "deepmind",
+    "event": "korea-partnership",
+    "textSha256": "9801113a36f9ccb3663863fedbc760ef6717865942249892f28eac39d8f0b250"
+  },
+  {
+    "id": "https://fortune.com/2026/04/28/musk-v-altman-jury-google-employees-ai-autonomous-weapons-microsoft-openai-deal-terms/",
+    "source": "https://fortune.com/2026/04/28/musk-v-altman-jury-google-employees-ai-autonomous-weapons-microsoft-openai-deal-terms/",
+    "publishedAt": "2026-04-28T12:00:00.000Z",
+    "publisher": "fortune",
+    "event": "single-14",
+    "textSha256": "3f3fb2b1fe0ef9c9cf4ed56b8e3314d85612d7c12d632a289acabdd2ccaee220"
+  },
+  {
+    "id": "https://deepmind.google/blog/ai-co-clinician/",
+    "source": "https://deepmind.google/blog/ai-co-clinician/",
+    "publishedAt": "2026-04-30T16:00:00+00:00",
+    "publisher": "deepmind",
+    "event": "ai-co-clinician",
+    "textSha256": "25252270a36acdeac7d12e9cff77f8f06b83bfc1ad2691015780b6ad736d2c0c"
+  },
+  {
+    "id": "https://the-decoder.com/google-deepminds-ai-co-clinician-beats-gpt-5-4-in-blind-doctor-tests-but-still-trails-experienced-physicians/",
+    "source": "https://the-decoder.com/google-deepminds-ai-co-clinician-beats-gpt-5-4-in-blind-doctor-tests-but-still-trails-experienced-physicians/",
+    "publishedAt": "2026-05-01T09:21:32+00:00",
+    "publisher": "decoder",
+    "event": "ai-co-clinician",
+    "textSha256": "2e45f2053782396c3ad6ab7bed7c279f08fe83c3e242d240e553f83132bbe0d0"
+  },
+  {
+    "id": "https://fortune.com/2026/05/04/google-employee-backlash-pentagon-ai-contract-power-waned-since-project-maven/",
+    "source": "https://fortune.com/2026/05/04/google-employee-backlash-pentagon-ai-contract-power-waned-since-project-maven/",
+    "publishedAt": "2026-05-04T12:00:00.000Z",
+    "publisher": "fortune",
+    "event": "pentagon-deal",
+    "textSha256": "e30df3ca674743d5a203e31115855abe1e3f9e5a139c3226df692246d33361a4"
+  },
+  {
+    "id": "https://fortune.com/2026/05/05/exclusive-nova-intelligence-ai-sap-chemistry-emma-qian/",
+    "source": "https://fortune.com/2026/05/05/exclusive-nova-intelligence-ai-sap-chemistry-emma-qian/",
+    "publishedAt": "2026-05-05T12:00:00.000Z",
+    "publisher": "fortune",
+    "event": "nova-intelligence-raise",
+    "textSha256": "ddbc5492736a40ff560d777cfb0216deefbea251750445e9e538cddce935fb83"
+  },
+  {
+    "id": "https://fortune.com/2026/05/05/google-deepmind-unionize-vote-military-ai-contracts-internal-backlash-pentagon-deal-israeli-defense-forces/",
+    "source": "https://fortune.com/2026/05/05/google-deepmind-unionize-vote-military-ai-contracts-internal-backlash-pentagon-deal-israeli-defense-forces/",
+    "publishedAt": "2026-05-05T12:00:00.000Z",
+    "publisher": "fortune",
+    "event": "deepmind-union-vote",
+    "ambiguous": {
+      "alternative": "pentagon-deal",
+      "note": "union bid is a reaction within 7 days to the Pentagon deal, but it is itself an action by other actors"
+    },
+    "textSha256": "f4e6b27ab0feeafb2996e905196a9b34455b03fb018baceb4ed5bdbeaa2a3598"
+  },
+  {
+    "id": "https://9to5google.com/2026/05/06/google-deepmind-is-partnering-with-eve-online-to-research-player-driven-systems/",
+    "source": "https://9to5google.com/2026/05/06/google-deepmind-is-partnering-with-eve-online-to-research-player-driven-systems/",
+    "publishedAt": "2026-05-06T17:25:00+00:00",
+    "publisher": "9to5google",
+    "event": "eve-online-partnership",
+    "textSha256": "0e50f263fcc555e05745413b94885749051d8f16ce95c837e9ada9a98b20516e"
+  },
+  {
+    "id": "https://the-decoder.com/google-deepmind-takes-a-stake-in-eve-online-studio-to-test-ai-models/",
+    "source": "https://the-decoder.com/google-deepmind-takes-a-stake-in-eve-online-studio-to-test-ai-models/",
+    "publishedAt": "2026-05-07T11:15:37+00:00",
+    "publisher": "decoder",
+    "event": "eve-online-partnership",
+    "textSha256": "f17070f96674a2c65e441eeaff7c67c79ab310e65000eb02c69a369ed4f43cdf"
+  },
+  {
+    "id": "https://deepmind.google/blog/alphaevolve-impact/",
+    "source": "https://deepmind.google/blog/alphaevolve-impact/",
+    "publishedAt": "2026-05-07T16:00:00+00:00",
+    "publisher": "deepmind",
+    "event": "alphaevolve-impact",
+    "textSha256": "92b4b82cc482b94e33f45e232236a667c49ad47e4f84c787af1f7798d8eb28db"
+  },
+  {
+    "id": "https://9to5google.com/2026/05/12/googlebooks-announcement/",
+    "source": "https://9to5google.com/2026/05/12/googlebooks-announcement/",
+    "publishedAt": "2026-05-12T17:01:00+00:00",
+    "publisher": "9to5google",
+    "event": "googlebooks-announcement",
+    "ambiguous": {
+      "alternative": "magic-pointer",
+      "note": "Googlebooks announcement and DeepMind's Magic Pointer post are separate posts on one day (rule 4)"
+    },
+    "textSha256": "64512a977c23451a53e26af620dbcf804f816ca12fe23d9263e3970b0dd1889a"
+  },
+  {
+    "id": "https://the-decoder.com/alphabets-isomorphic-labs-raises-2-1-billion-to-scale-ai-drug-discovery-toward-clinical-trials/",
+    "source": "https://the-decoder.com/alphabets-isomorphic-labs-raises-2-1-billion-to-scale-ai-drug-discovery-toward-clinical-trials/",
+    "publishedAt": "2026-05-12T17:50:40+00:00",
+    "publisher": "decoder",
+    "event": "isomorphic-series-b",
+    "textSha256": "734779d428dd173c88835e77076edaa4b44678b36b39ee43a1b988e1e2df410d"
+  },
+  {
+    "id": "https://deepmind.google/blog/ai-pointer/",
+    "source": "https://deepmind.google/blog/ai-pointer/",
+    "publishedAt": "2026-05-12T18:00:00+00:00",
+    "publisher": "deepmind",
+    "event": "magic-pointer",
+    "textSha256": "eb5a0a1e7777d81ad638f1537218afb080745ace69830db7da0f29fce236c707"
+  },
+  {
+    "id": "https://9to5google.com/2026/05/12/deepmind-googlebook-magic-pointer/",
+    "source": "https://9to5google.com/2026/05/12/deepmind-googlebook-magic-pointer/",
+    "publishedAt": "2026-05-12T23:12:00+00:00",
+    "publisher": "9to5google",
+    "event": "magic-pointer",
+    "textSha256": "cdd430dcaef30eb1e1b3da9342035c417e65e859a857fa9b2feb6396a81d3c6b"
+  },
+  {
+    "id": "https://fortune.com/2026/05/13/behold-the-googlebook/",
+    "source": "https://fortune.com/2026/05/13/behold-the-googlebook/",
+    "publishedAt": "2026-05-13T12:00:00.000Z",
+    "publisher": "fortune",
+    "event": "single-27",
+    "ambiguous": {
+      "alternative": "googlebooks-announcement",
+      "note": "Fortune Tech round-up whose title names the Googlebook first (rule 5 vs rule 3)"
+    },
+    "textSha256": "11fd8f76605b6daae8f5fa29f19933606d0243a216d7efa6ceb9c5b39b5ab723"
+  },
+  {
+    "id": "https://deepmind.google/blog/accelerating-discovery-of-liver-disease-mechanisms/",
+    "source": "https://deepmind.google/blog/accelerating-discovery-of-liver-disease-mechanisms/",
+    "publishedAt": "2026-05-19T10:30:00+00:00",
+    "publisher": "deepmind",
+    "event": "co-scientist-launch",
+    "ambiguous": {
+      "alternative": "S",
+      "note": "Co-Scientist case study posted with the Co-Scientist launch; companion post (rule 4) or feature (rule 3)"
+    },
+    "textSha256": "6ea183ea59164aa3d86bc23f1a74f013b631b934cf86c50709918fab79b241b3"
+  },
+  {
+    "id": "https://deepmind.google/blog/fast-tracking-genetic-leads-to-reverse-cellular-aging/",
+    "source": "https://deepmind.google/blog/fast-tracking-genetic-leads-to-reverse-cellular-aging/",
+    "publishedAt": "2026-05-19T10:30:00+00:00",
+    "publisher": "deepmind",
+    "event": "co-scientist-launch",
+    "ambiguous": {
+      "alternative": "S",
+      "note": "Co-Scientist case study posted with the Co-Scientist launch; companion post (rule 4) or feature (rule 3)"
+    },
+    "textSha256": "713753d5d3e9676c4e640a7b9e50eb0f201340b06f24d43e23bad3e06a97538b"
+  },
+  {
+    "id": "https://deepmind.google/blog/finding-the-molecular-switches-behind-new-infectious-diseases/",
+    "source": "https://deepmind.google/blog/finding-the-molecular-switches-behind-new-infectious-diseases/",
+    "publishedAt": "2026-05-19T10:30:00+00:00",
+    "publisher": "deepmind",
+    "event": "co-scientist-launch",
+    "ambiguous": {
+      "alternative": "S",
+      "note": "Co-Scientist case study posted with the Co-Scientist launch; companion post (rule 4) or feature (rule 3)"
+    },
+    "textSha256": "b40888ab0960df3744905ac088b6fbcf25627b58a1deb9eeaa67bbf8f42be2dd"
+  },
+  {
+    "id": "https://deepmind.google/blog/opening-new-paths-in-aging-research/",
+    "source": "https://deepmind.google/blog/opening-new-paths-in-aging-research/",
+    "publishedAt": "2026-05-19T10:30:00+00:00",
+    "publisher": "deepmind",
+    "event": "co-scientist-launch",
+    "ambiguous": {
+      "alternative": "S",
+      "note": "Co-Scientist case study posted with the Co-Scientist launch; companion post (rule 4) or feature (rule 3)"
+    },
+    "textSha256": "d8507cb67006c41c6956196718c3ba85928fc55058b64e280291df6e69c74536"
+  },
+  {
+    "id": "https://deepmind.google/blog/uncovering-repurposed-medicines-to-fight-liver-fibrosis/",
+    "source": "https://deepmind.google/blog/uncovering-repurposed-medicines-to-fight-liver-fibrosis/",
+    "publishedAt": "2026-05-19T10:30:00+00:00",
+    "publisher": "deepmind",
+    "event": "co-scientist-launch",
+    "ambiguous": {
+      "alternative": "S",
+      "note": "Co-Scientist case study posted with the Co-Scientist launch; companion post (rule 4) or feature (rule 3)"
+    },
+    "textSha256": "152c799b837461f5050a7980b1ece537205ff1755a845f6ca71a16359c14b6f7"
+  },
+  {
+    "id": "https://deepmind.google/blog/uniting-biological-toolkits-for-a-new-approach-to-als/",
+    "source": "https://deepmind.google/blog/uniting-biological-toolkits-for-a-new-approach-to-als/",
+    "publishedAt": "2026-05-19T10:30:00+00:00",
+    "publisher": "deepmind",
+    "event": "co-scientist-launch",
+    "ambiguous": {
+      "alternative": "S",
+      "note": "Co-Scientist case study posted with the Co-Scientist launch; companion post (rule 4) or feature (rule 3)"
+    },
+    "textSha256": "3fd58bb5dc7d0599a83e024afc41f185d5834ff81c5c81b3cbe7991a18d9ef2e"
+  },
+  {
+    "id": "https://deepmind.google/blog/how-weathernext-helped-the-national-hurricane-center-better-predict-hurricane-melissas-historic-landfall-in-jamaica/",
+    "source": "https://deepmind.google/blog/how-weathernext-helped-the-national-hurricane-center-better-predict-hurricane-melissas-historic-landfall-in-jamaica/",
+    "publishedAt": "2026-05-19T10:39:00+00:00",
+    "publisher": "deepmind",
+    "event": "single-34",
+    "ambiguous": {
+      "alternative": "co-scientist-launch",
+      "note": "WeatherNext case study posted on the I/O day; not about a launch, so rule 3"
+    },
+    "textSha256": "2d64a295341143f7b19ba7ad68431007bd48016ee454460c497cedd033f03ab4"
+  },
+  {
+    "id": "https://deepmind.google/blog/co-scientist-a-multi-agent-ai-partner-to-accelerate-research/",
+    "source": "https://deepmind.google/blog/co-scientist-a-multi-agent-ai-partner-to-accelerate-research/",
+    "publishedAt": "2026-05-19T10:42:00+00:00",
+    "publisher": "deepmind",
+    "event": "co-scientist-launch",
+    "textSha256": "aa655d551c22d8286246221b49961f3800af6e5f207557e32a1ab983b70c3e42"
+  },
+  {
+    "id": "https://blog.google/innovation-and-ai/models-and-research/gemini-models/gemini-3-5/",
+    "source": "https://blog.google/innovation-and-ai/models-and-research/gemini-models/gemini-3-5/",
+    "publishedAt": "2026-05-19T17:45:00+00:00",
+    "publisher": "google",
+    "event": "gemini-3-5",
+    "textSha256": "4ad128f917feae878206bdfb27c430f8c757a9995bb6721a3859e41fe551ca3d"
+  },
+  {
+    "id": "https://blog.google/innovation-and-ai/models-and-research/gemini-models/gemini-omni/",
+    "source": "https://blog.google/innovation-and-ai/models-and-research/gemini-models/gemini-omni/",
+    "publishedAt": "2026-05-19T17:45:00+00:00",
+    "publisher": "google",
+    "event": "gemini-omni",
+    "textSha256": "b890e00fbf8da4dd5fdc4b0a1353020da3b505ec15754c6505962257ea31daaa"
+  },
+  {
+    "id": "https://blog.google/innovation-and-ai/models-and-research/google-deepmind/project-genie-expands/",
+    "source": "https://blog.google/innovation-and-ai/models-and-research/google-deepmind/project-genie-expands/",
+    "publishedAt": "2026-05-19T17:45:00+00:00",
+    "publisher": "google",
+    "event": "project-genie-street-view",
+    "textSha256": "ec048d6bb312991326a0a214af84e3da5397c5ea4bd8a7a4d96136061201b94f"
+  },
+  {
+    "id": "https://blog.google/innovation-and-ai/products/identifying-ai-generated-media-online/",
+    "source": "https://blog.google/innovation-and-ai/products/identifying-ai-generated-media-online/",
+    "publishedAt": "2026-05-19T17:45:00+00:00",
+    "publisher": "google",
+    "event": "synthid-content-verification",
+    "textSha256": "075151eb25d052e94ad09f8d03f2f00b25295a3e82b4721e8f2e8357af55b759"
+  },
+  {
+    "id": "https://blog.google/innovation-and-ai/technology/research/gemini-for-science-io-2026/",
+    "source": "https://blog.google/innovation-and-ai/technology/research/gemini-for-science-io-2026/",
+    "publishedAt": "2026-05-19T17:45:00+00:00",
+    "publisher": "google",
+    "event": "gemini-for-science",
+    "ambiguous": {
+      "alternative": "co-scientist-launch",
+      "note": "Gemini for Science tools are built with Co-Scientist; separate post on the same day (rule 4)"
+    },
+    "textSha256": "d8f6ac388b45365490e48c54b8449d50cad0a249358a53c71a476e2c8483510b"
+  },
+  {
+    "id": "https://deepmind.google/blog/strengthening-singapores-ai-future-a-new-national-partnership/",
+    "source": "https://deepmind.google/blog/strengthening-singapores-ai-future-a-new-national-partnership/",
+    "publishedAt": "2026-05-20T10:30:00+00:00",
+    "publisher": "deepmind",
+    "event": "singapore-national-partnership",
+    "textSha256": "a361c9c22c8e832c41d8c605095799fa52cc5a7b938fa726cba3d9be8b283b91"
+  },
+  {
+    "id": "https://fortune.com/2026/05/21/claude-code-london-anthropic-ai-software-engineering/",
+    "source": "https://fortune.com/2026/05/21/claude-code-london-anthropic-ai-software-engineering/",
+    "publishedAt": "2026-05-21T12:00:00.000Z",
+    "publisher": "fortune",
+    "event": "single-42",
+    "textSha256": "304553bf0a6a44c224837cec3c908940cc8dd624a2f7ae265f22abc0b4d2ab17"
+  },
+  {
+    "id": "https://fortune.com/2026/05/21/mckinsey-partner-anu-madgavkar-50-work-hours-could-be-transformed-within-next-5-years/",
+    "source": "https://fortune.com/2026/05/21/mckinsey-partner-anu-madgavkar-50-work-hours-could-be-transformed-within-next-5-years/",
+    "publishedAt": "2026-05-21T12:00:00.000Z",
+    "publisher": "fortune",
+    "event": "single-43",
+    "textSha256": "89d3fefa20a93575b01cb32107ab76b6c994aa178d10d584c87755ace5d6ca51"
+  },
+  {
+    "id": "https://the-decoder.com/google-deepminds-alphaproof-nexus-solves-decades-old-math-problems-for-a-few-hundred-dollars/",
+    "source": "https://the-decoder.com/google-deepminds-alphaproof-nexus-solves-decades-old-math-problems-for-a-few-hundred-dollars/",
+    "publishedAt": "2026-05-25T10:41:19+00:00",
+    "publisher": "decoder",
+    "event": "alphaproof-nexus",
+    "textSha256": "ed3c2a9e6f3511c0bee0c07fa9c69a2ebf5b6f4afa5b367726ff17ae570d3565"
+  },
+  {
+    "id": "https://fortune.com/2026/05/28/exclusive-orbital-industries-raises-50-million-series-b-funding-round-ai-to-discover-exotic-new-materials/",
+    "source": "https://fortune.com/2026/05/28/exclusive-orbital-industries-raises-50-million-series-b-funding-round-ai-to-discover-exotic-new-materials/",
+    "publishedAt": "2026-05-28T12:00:00.000Z",
+    "publisher": "fortune",
+    "event": "orbital-industries-raise",
+    "textSha256": "6de4462961cd112cebf2d99e6b90f16412487763aa1bcd4206ea1bc7d8e6d71f"
+  },
+  {
+    "id": "https://blog.google/innovation-and-ai/technology/developers-tools/introducing-gemma-4-12b/",
+    "source": "https://blog.google/innovation-and-ai/technology/developers-tools/introducing-gemma-4-12b/",
+    "publishedAt": "2026-06-03T16:00:00+00:00",
+    "publisher": "google",
+    "event": "gemma-4-12b",
+    "textSha256": "e76f52f23a94a5cfb87296448a62b10b813d363f9405dc8f258dee0279356bfe"
+  },
+  {
+    "id": "https://fortune.com/2026/06/04/worlds-largest-sovereign-wealth-fund-backs-push-for-google-oversight-on-government-ai-contracts/",
+    "source": "https://fortune.com/2026/06/04/worlds-largest-sovereign-wealth-fund-backs-push-for-google-oversight-on-government-ai-contracts/",
+    "publishedAt": "2026-06-04T12:00:00.000Z",
+    "publisher": "fortune",
+    "event": "nbim-google-oversight-vote",
+    "textSha256": "0bf886849de6070b1e2e4f422761af789ae99acde105e53878f6b0532dd9ca2f"
+  },
+  {
+    "id": "https://blog.google/topics/google-europe/powering-the-future-of-robotics-in-europe/",
+    "source": "https://blog.google/topics/google-europe/powering-the-future-of-robotics-in-europe/",
+    "publishedAt": "2026-06-09T10:00:00+00:00",
+    "publisher": "google",
+    "event": "robotics-accelerator-europe",
+    "textSha256": "b82e69712aa644b54cda6e52cfc18947da5d0d6c8032a43f94be7d100439a40b"
+  },
+  {
+    "id": "https://deepmind.google/blog/measuring-the-impact-of-learning-with-ai-in-sierra-leone-and-beyond/",
+    "source": "https://deepmind.google/blog/measuring-the-impact-of-learning-with-ai-in-sierra-leone-and-beyond/",
+    "publishedAt": "2026-06-09T13:00:00+00:00",
+    "publisher": "deepmind",
+    "event": "sierra-leone-learning-study",
+    "textSha256": "ff3abc1765f5024f29901c13cc38718c7399da1bbf6617830a87ea226189ca94"
+  },
+  {
+    "id": "https://blog.google/innovation-and-ai/models-and-research/gemini-models/gemini-live-3-5-translate/",
+    "source": "https://blog.google/innovation-and-ai/models-and-research/gemini-models/gemini-live-3-5-translate/",
+    "publishedAt": "2026-06-09T15:00:00+00:00",
+    "publisher": "google",
+    "event": "gemini-3-5-live-translate",
+    "textSha256": "493535de1f2e18ad4a22556b91071dd481660295f048a5aeb3ca3a34036aa485"
+  },
+  {
+    "id": "https://blog.google/innovation-and-ai/technology/developers-tools/diffusion-gemma-faster-text-generation/",
+    "source": "https://blog.google/innovation-and-ai/technology/developers-tools/diffusion-gemma-faster-text-generation/",
+    "publishedAt": "2026-06-10T16:00:00+00:00",
+    "publisher": "google",
+    "event": "diffusiongemma",
+    "textSha256": "233475575f325454a5adf57e2ac502229b1a1f501bb7e37e5c83464ab095b399"
+  },
+  {
+    "id": "https://the-decoder.com/googles-new-open-model-diffusiongemma-generates-text-from-noise-instead-of-word-by-word/",
+    "source": "https://the-decoder.com/googles-new-open-model-diffusiongemma-generates-text-from-noise-instead-of-word-by-word/",
+    "publishedAt": "2026-06-10T19:20:46+00:00",
+    "publisher": "decoder",
+    "event": "diffusiongemma",
+    "textSha256": "970e44cc5ca004fee05c5224a2952e957d6a95e1a7b6276b5ae4696fb605b603"
+  },
+  {
+    "id": "https://deepmind.google/blog/investing-in-multi-agent-ai-safety-research/",
+    "source": "https://deepmind.google/blog/investing-in-multi-agent-ai-safety-research/",
+    "publishedAt": "2026-06-11T12:00:00+00:00",
+    "publisher": "deepmind",
+    "event": "multi-agent-safety-fund",
+    "textSha256": "25555fe8f0ca8a2341a2a68ece868e389ed2922fcf8cd821e0dfb20445456c89"
+  },
+  {
+    "id": "https://deepmind.google/blog/unlocking-uk-house-building-with-ai-accelerated-planning/",
+    "source": "https://deepmind.google/blog/unlocking-uk-house-building-with-ai-accelerated-planning/",
+    "publishedAt": "2026-06-16T22:30:00+00:00",
+    "publisher": "deepmind",
+    "event": "uk-planning-prototype",
+    "textSha256": "9ea037a0c4bf6025dbc64a7b25b88ce400993a1492c0f8b35eb44853b959e25e"
+  },
+  {
+    "id": "https://fortune.com/2026/06/17/perplexity-ceo-aravind-srinivas-fear-of-failure-stupidest-thing-have-nothing-to-lose/",
+    "source": "https://fortune.com/2026/06/17/perplexity-ceo-aravind-srinivas-fear-of-failure-stupidest-thing-have-nothing-to-lose/",
+    "publishedAt": "2026-06-17T12:00:00.000Z",
+    "publisher": "fortune",
+    "event": "single-55",
+    "textSha256": "df1299d74701d282dea04fa977978a51eb01affd645c54944423affa12bb74c4"
+  },
+  {
+    "id": "https://the-decoder.com/googles-gemini-co-lead-noam-shazeer-joins-openai-after-two-year-return-stint/",
+    "source": "https://the-decoder.com/googles-gemini-co-lead-noam-shazeer-joins-openai-after-two-year-return-stint/",
+    "publishedAt": "2026-06-18T07:08:29+00:00",
+    "publisher": "decoder",
+    "event": "shazeer-joins-openai",
+    "textSha256": "160970065eb9ab267ba6e9853977c338c3e55490060083b8b9582a7e59bc2166"
+  },
+  {
+    "id": "https://fortune.com/2026/06/18/ai-chiefs-regulation-collaboration-g7-summit/",
+    "source": "https://fortune.com/2026/06/18/ai-chiefs-regulation-collaboration-g7-summit/",
+    "publishedAt": "2026-06-18T12:00:00.000Z",
+    "publisher": "fortune",
+    "event": "single-57",
+    "textSha256": "76314989e8adb2f78d484d131731831d13b39af7a499bc2f987fa5805b782a71"
+  },
+  {
+    "id": "https://fortune.com/2026/06/18/google-deepmind-unveils-plan-to-protect-itself-from-its-own-rogue-ai-agents/",
+    "source": "https://fortune.com/2026/06/18/google-deepmind-unveils-plan-to-protect-itself-from-its-own-rogue-ai-agents/",
+    "publishedAt": "2026-06-18T12:00:00.000Z",
+    "publisher": "fortune",
+    "event": "agent-security-framework",
+    "textSha256": "dc28d45197c53fa8dbfc45c323498fa42770f773c485032dfa03f994ad71f530"
+  },
+  {
+    "id": "https://deepmind.google/blog/securing-the-future-of-ai-agents/",
+    "source": "https://deepmind.google/blog/securing-the-future-of-ai-agents/",
+    "publishedAt": "2026-06-18T14:00:00+00:00",
+    "publisher": "deepmind",
+    "event": "agent-security-framework",
+    "textSha256": "0f041d46e411bbba2109c0974d2e83bf16c377a8f18d131bc93663810c388528"
+  },
+  {
+    "id": "https://the-decoder.com/google-deepmind-treats-its-own-ai-agents-like-rogue-employees-with-office-keys/",
+    "source": "https://the-decoder.com/google-deepmind-treats-its-own-ai-agents-like-rogue-employees-with-office-keys/",
+    "publishedAt": "2026-06-18T18:07:01+00:00",
+    "publisher": "decoder",
+    "event": "agent-security-framework",
+    "textSha256": "670de9e32524fc781db1ef80bf16c3adff08108b20b0c73ce4fba373dd4df984"
+  },
+  {
+    "id": "https://the-decoder.com/google-deepmind-loses-another-top-ai-researcher-as-nobel-laureate-john-jumper-leaves-for-anthropic/",
+    "source": "https://the-decoder.com/google-deepmind-loses-another-top-ai-researcher-as-nobel-laureate-john-jumper-leaves-for-anthropic/",
+    "publishedAt": "2026-06-19T17:54:14+00:00",
+    "publisher": "decoder",
+    "event": "jumper-leaves-for-anthropic",
+    "textSha256": "25bf0a984fd8d354aaeb66ac46b1c99a12ff3b31e8bbab4967a4ba1f643817c9"
+  },
+  {
+    "id": "https://blog.google/innovation-and-ai/models-and-research/google-deepmind/deepmind-a24-research-partnership/",
+    "source": "https://blog.google/innovation-and-ai/models-and-research/google-deepmind/deepmind-a24-research-partnership/",
+    "publishedAt": "2026-06-22T14:30:00+00:00",
+    "publisher": "google",
+    "event": "a24-partnership",
+    "textSha256": "eb7ff44bd14758b7cbf1eb8dee39d393f21aca37d35ec0e5488135b78323b7a1"
+  },
+  {
+    "id": "https://the-decoder.com/google-deepmind-and-a24-team-up-on-ai-filmmaking-research/",
+    "source": "https://the-decoder.com/google-deepmind-and-a24-team-up-on-ai-filmmaking-research/",
+    "publishedAt": "2026-06-22T15:03:46+00:00",
+    "publisher": "decoder",
+    "event": "a24-partnership",
+    "textSha256": "d8fb2af5291f1d8d2ce4207c64a4fe33b896496f36e94f478eac2f6ca1ffa804"
+  },
+  {
+    "id": "https://the-decoder.com/google-makes-interactions-api-the-default-interface-for-gemini-models-and-agents/",
+    "source": "https://the-decoder.com/google-makes-interactions-api-the-default-interface-for-gemini-models-and-agents/",
+    "publishedAt": "2026-06-22T18:11:34+00:00",
+    "publisher": "decoder",
+    "event": "interactions-api-default",
+    "textSha256": "bfdd1412bedbb27afb49f01c9d6c8dd4ca7ca5cab92aaaa8e6fc1c7dca24d5c6"
+  },
+  {
+    "id": "https://fortune.com/2026/06/23/google-deepmind-ai-researcher-departures-raise-doubts-about-ability-to-win-the-ai-race-shazeer-jumper-eye-on-ai/",
+    "source": "https://fortune.com/2026/06/23/google-deepmind-ai-researcher-departures-raise-doubts-about-ability-to-win-the-ai-race-shazeer-jumper-eye-on-ai/",
+    "publishedAt": "2026-06-23T12:00:00.000Z",
+    "publisher": "fortune",
+    "event": "single-65",
+    "ambiguous": {
+      "alternative": "jumper-leaves-for-anthropic",
+      "note": "Eye on AI on the talent drain 4 days after Jumper left; title names no single action"
+    },
+    "textSha256": "d4af63ba7e9bbbd5e97b5475a10b5174ef3848d806d632ec79222cde888eaea5"
+  },
+  {
+    "id": "https://fortune.com/2026/06/23/meta-latest-reverse-acqui-hire-cred-founder-kunal-shah/",
+    "source": "https://fortune.com/2026/06/23/meta-latest-reverse-acqui-hire-cred-founder-kunal-shah/",
+    "publishedAt": "2026-06-23T12:00:00.000Z",
+    "publisher": "fortune",
+    "event": "single-66",
+    "textSha256": "2a6e6c6c92eadf40f22e74e95b5f979a8ade8ecc1a845245eca79d85984d4e8e"
+  },
+  {
+    "id": "https://blog.google/innovation-and-ai/models-and-research/gemini-models/introducing-computer-use-gemini-3-5-flash/",
+    "source": "https://blog.google/innovation-and-ai/models-and-research/gemini-models/introducing-computer-use-gemini-3-5-flash/",
+    "publishedAt": "2026-06-24T16:00:00+00:00",
+    "publisher": "google",
+    "event": "computer-use-gemini-3-5-flash",
+    "textSha256": "ac885fd20d3c28c9d92a77dde63338c9b3f69bdce96187d0f6039c3f67413367"
+  },
+  {
+    "id": "https://the-decoder.com/google-keeps-losing-top-ai-researchers-to-rivals/",
+    "source": "https://the-decoder.com/google-keeps-losing-top-ai-researchers-to-rivals/",
+    "publishedAt": "2026-06-25T10:04:32+00:00",
+    "publisher": "decoder",
+    "event": "adler-pritzel-to-anthropic",
+    "ambiguous": {
+      "alternative": "jumper-leaves-for-anthropic",
+      "note": "another departure report 6 days after Jumper; separate people, so a separate action"
+    },
+    "textSha256": "d25bb20be2f2acaa7fc0bb967ffa021c5db343ea3f36e6fad3ebdc1cc63513c3"
+  },
+  {
+    "id": "https://fortune.com/2026/06/30/ai-is-minting-billion-dollar-companies-faster-than-ever/",
+    "source": "https://fortune.com/2026/06/30/ai-is-minting-billion-dollar-companies-faster-than-ever/",
+    "publishedAt": "2026-06-30T12:00:00.000Z",
+    "publisher": "fortune",
+    "event": "single-69",
+    "textSha256": "feaa61c4064aece96a5620fe52b4ac6c97a469aa6d767eabd9945dc0ef8c19cb"
+  },
+  {
+    "id": "https://blog.google/innovation-and-ai/models-and-research/gemini-models/gemini-omni-flash-nano-banana-2-lite/",
+    "source": "https://blog.google/innovation-and-ai/models-and-research/gemini-models/gemini-omni-flash-nano-banana-2-lite/",
+    "publishedAt": "2026-06-30T16:00:00+00:00",
+    "publisher": "google",
+    "event": "nano-banana-2-lite-omni-flash",
+    "textSha256": "cfc7e2e50a1daebe53e8dac2087778c0c1dc21c14eb53f59de813a5afa9735c4"
+  },
+  {
+    "id": "https://deepmind.google/blog/empowering-indias-next-generation-of-innovators-with-atl-saathi/",
+    "source": "https://deepmind.google/blog/empowering-indias-next-generation-of-innovators-with-atl-saathi/",
+    "publishedAt": "2026-07-14T07:00:00+00:00",
+    "publisher": "deepmind",
+    "event": "atl-saathi",
+    "textSha256": "f9a74f9319de0cf327e81cfe23c84a1aa444cbfc14b415c82cfce7c4842f67be"
+  },
+  {
+    "id": "https://the-decoder.com/deepmind-ceo-hassabis-says-nobody-in-the-world-knows-what-happens-next-so-cautious-optimism-means-building-guardrails-now/",
+    "source": "https://the-decoder.com/deepmind-ceo-hassabis-says-nobody-in-the-world-knows-what-happens-next-so-cautious-optimism-means-building-guardrails-now/",
+    "publishedAt": "2026-07-14T11:49:03+00:00",
+    "publisher": "decoder",
+    "event": "hassabis-governance-framework",
+    "textSha256": "2e4c1eff6b09457b1c46b41f84d92c676b6c52f5ead9adf304974dade4309bd0"
+  },
+  {
+    "id": "https://fortune.com/2026/07/15/we-may-have-just-witnessed-biggest-share-drop-modern-history-ibm/",
+    "source": "https://fortune.com/2026/07/15/we-may-have-just-witnessed-biggest-share-drop-modern-history-ibm/",
+    "publishedAt": "2026-07-15T12:00:00.000Z",
+    "publisher": "fortune",
+    "event": "single-73",
+    "textSha256": "89ea2852fcc1b9e9cba737b6614491fdc4416ac738c2b19c20a5deebfb0a0113"
+  },
+  {
+    "id": "https://deepmind.google/blog/our-approach-to-bioresilience/",
+    "source": "https://deepmind.google/blog/our-approach-to-bioresilience/",
+    "publishedAt": "2026-07-16T11:00:00+00:00",
+    "publisher": "deepmind",
+    "event": "bioresilience-approach",
+    "textSha256": "67bb47fb6d178c47adccc90835a57f744d505e7a41e5f8c7a03600e987ce580d"
+  },
+  {
+    "id": "https://the-decoder.com/just-like-deepseek-chinas-kimi-k3-is-forcing-western-ai-labs-to-question-their-compute-advantage/",
+    "source": "https://the-decoder.com/just-like-deepseek-chinas-kimi-k3-is-forcing-western-ai-labs-to-question-their-compute-advantage/",
+    "publishedAt": "2026-07-17T19:16:07+00:00",
+    "publisher": "decoder",
+    "event": "kimi-k3",
+    "textSha256": "d62b3dc475e26f18bee8888e590ad8148d4c69836c0d2d1542e8e1b0d6c37928"
+  },
+  {
+    "id": "https://the-decoder.com/google-deepmind-argues-video-generators-already-contain-the-world-models-computer-vision-has-been-missing/",
+    "source": "https://the-decoder.com/google-deepmind-argues-video-generators-already-contain-the-world-models-computer-vision-has-been-missing/",
+    "publishedAt": "2026-07-19T10:17:49+00:00",
+    "publisher": "decoder",
+    "event": "genception",
+    "textSha256": "c7e5d6b51b827863ad2b686f7752c8a76d726232e0afeb849c3dbaec30eddd83"
+  },
+  {
+    "id": "https://the-decoder.com/googles-frozen-v2-chip-reportedly-bakes-geminis-architecture-directly-into-silicon-for-efficiency-gains/",
+    "source": "https://the-decoder.com/googles-frozen-v2-chip-reportedly-bakes-geminis-architecture-directly-into-silicon-for-efficiency-gains/",
+    "publishedAt": "2026-07-20T18:08:33+00:00",
+    "publisher": "decoder",
+    "event": "frozen-v2-chip",
+    "textSha256": "01aa35d31365eee393cb78704a4f71893b4f13f1e5215d6ce146c8fb1b225ec1"
+  },
+  {
+    "id": "https://fortune.com/2026/07/21/google-deepmind-ceo-demis-hassabis-finra-for-ai-proposal-gains-momentum-but-is-it-any-good/",
+    "source": "https://fortune.com/2026/07/21/google-deepmind-ceo-demis-hassabis-finra-for-ai-proposal-gains-momentum-but-is-it-any-good/",
+    "publishedAt": "2026-07-21T12:00:00.000Z",
+    "publisher": "fortune",
+    "event": "hassabis-governance-framework",
+    "ambiguous": {
+      "alternative": "S",
+      "note": "reaction to Hassabis's governance proposal at the 7-day edge; Eye on AI essay tone"
+    },
+    "textSha256": "f12227f1000c5ad35956d40008d5efcf39fd82ecc958bcb341ee7016eec265ec"
+  },
+  {
+    "id": "https://blog.google/innovation-and-ai/models-and-research/gemini-models/gemini-3-6-flash-3-5-flash-lite-3-5-flash-cyber/",
+    "source": "https://blog.google/innovation-and-ai/models-and-research/gemini-models/gemini-3-6-flash-3-5-flash-lite-3-5-flash-cyber/",
+    "publishedAt": "2026-07-21T15:00:00+00:00",
+    "publisher": "google",
+    "event": "gemini-3-6-flash",
+    "textSha256": "f6cfc8cb9003f2b64afdde50dd3bf2ebe7c9d93a8e4387bb565c6d3641a5d269"
+  },
+  {
+    "id": "https://deepmind.google/blog/introducing-gemini-3-5-flash-cyber/",
+    "source": "https://deepmind.google/blog/introducing-gemini-3-5-flash-cyber/",
+    "publishedAt": "2026-07-21T16:00:00+00:00",
+    "publisher": "deepmind",
+    "event": "gemini-3-6-flash",
+    "ambiguous": {
+      "alternative": "own event",
+      "note": "DeepMind's own post on 3.5 Flash Cyber; the same launch is in the title of the Gemini 3.6 Flash post"
+    },
+    "textSha256": "fd20310533da6f55cef5b658fce2ca93f90a72f4eb7f6124d5e22775eea0f948"
+  },
+  {
+    "id": "https://the-decoder.com/google-ships-three-new-gemini-flash-models-but-its-frontier-3-5-pro-remains-lost-in-training/",
+    "source": "https://the-decoder.com/google-ships-three-new-gemini-flash-models-but-its-frontier-3-5-pro-remains-lost-in-training/",
+    "publishedAt": "2026-07-21T16:52:51+00:00",
+    "publisher": "decoder",
+    "event": "gemini-3-6-flash",
+    "textSha256": "8da79a244849ed9fbf805c89842a196533de4d19dc37aaeb62ab924a8d14686c"
+  },
+  {
+    "id": "https://fortune.com/2026/07/29/anthropic-deepmind-openai-meta-washington-ai-slowdown-plan/",
+    "source": "https://fortune.com/2026/07/29/anthropic-deepmind-openai-meta-washington-ai-slowdown-plan/",
+    "publishedAt": "2026-07-29T12:00:00.000Z",
+    "publisher": "fortune",
+    "event": "pacing-the-frontier-statement",
+    "textSha256": "0294b2374e112866c124df67889c68a108b7c34d8b4eec34f35090f6654c3074"
+  },
+  {
+    "id": "https://the-decoder.com/deepmind-dismantles-its-alphafold-team-as-key-authors-leave-for-anthropic/",
+    "source": "https://the-decoder.com/deepmind-dismantles-its-alphafold-team-as-key-authors-leave-for-anthropic/",
+    "publishedAt": "2026-07-29T13:47:11+00:00",
+    "publisher": "decoder",
+    "event": "alphafold-team-dismantled",
+    "textSha256": "30b6cef83b772daf9bd82ce5c03016febfc1c503323589d916f316cf9b427793"
+  },
+  {
+    "id": "https://blog.google/innovation-and-ai/models-and-research/google-labs/lyria-3-5/",
+    "source": "https://blog.google/innovation-and-ai/models-and-research/google-labs/lyria-3-5/",
+    "publishedAt": "2026-07-29T16:00:00+00:00",
+    "publisher": "google",
+    "event": "lyria-3-5",
+    "textSha256": "9e71d6b222f0f964f7ac21f4bf5158178f9640a74a1a5a30032e8b7b840692a2"
+  },
+  {
+    "id": "https://the-decoder.com/language-models-cant-spark-scientific-revolutions-but-world-models-might/",
+    "source": "https://the-decoder.com/language-models-cant-spark-scientific-revolutions-but-world-models-might/",
+    "publishedAt": "2026-07-30T14:01:33+00:00",
+    "publisher": "decoder",
+    "event": "single-85",
+    "textSha256": "bc8da5a644e494f3a418a905ec24b332684138fb2332969f214ab8ede1cabe8d"
+  },
+  {
+    "id": "https://blog.google/innovation-and-ai/models-and-research/google-deepmind/gemini-robotics-er-2/",
+    "source": "https://blog.google/innovation-and-ai/models-and-research/google-deepmind/gemini-robotics-er-2/",
+    "publishedAt": "2026-07-30T15:00:00+00:00",
+    "publisher": "google",
+    "event": "gemini-robotics-er-2",
+    "ambiguous": {
+      "alternative": "gemini-robotics-2",
+      "note": "Robotics ER 2 and Robotics 2 are separate posts on one day; may be one family launch"
+    },
+    "textSha256": "e9a514a09dad40a13e23a930586d6c992652357ed148f2c6db810b69a3f8ad3b"
+  },
+  {
+    "id": "https://deepmind.google/blog/gemini-robotics-2-brings-whole-body-intelligence-to-robots/",
+    "source": "https://deepmind.google/blog/gemini-robotics-2-brings-whole-body-intelligence-to-robots/",
+    "publishedAt": "2026-07-30T16:00:00+00:00",
+    "publisher": "deepmind",
+    "event": "gemini-robotics-2",
+    "textSha256": "e71a98bdea4201050df92f69236db4eeab110fdb7ffaa839d87a8e9bf0860343"
+  },
+  {
+    "id": "https://the-decoder.com/google-deepmind-unveils-gemini-robotics-2-to-power-robots-of-all-shapes-from-tabletop-arms-to-humanoids/",
+    "source": "https://the-decoder.com/google-deepmind-unveils-gemini-robotics-2-to-power-robots-of-all-shapes-from-tabletop-arms-to-humanoids/",
+    "publishedAt": "2026-07-31T18:25:08+00:00",
+    "publisher": "decoder",
+    "event": "gemini-robotics-2",
+    "textSha256": "789f879a9978233e0445858288d6cdea9c6a966bf4a4e5ee651d42c0453af6b8"
+  },
+  {
+    "id": "https://fortune.com/2026/08/05/demis-hassabis-steps-down-google-deepmind-ai-shakeup/",
+    "source": "https://fortune.com/2026/08/05/demis-hassabis-steps-down-google-deepmind-ai-shakeup/",
+    "publishedAt": "2026-08-05T12:00:00.000Z",
+    "publisher": "fortune",
+    "event": "hassabis-steps-down",
+    "textSha256": "d6a421a12ecd36536847c8f2551f001314ee5ee6007991965f261c9c0ed95b91"
+  },
+  {
+    "id": "https://9to5google.com/2026/08/05/demis-hassabis-deepmind/",
+    "source": "https://9to5google.com/2026/08/05/demis-hassabis-deepmind/",
+    "publishedAt": "2026-08-05T16:18:20+00:00",
+    "publisher": "9to5google",
+    "event": "hassabis-steps-down",
+    "textSha256": "03a906982c9ef991c867c8764e5e6023d956d66809ce95ec8d3c30f6dd5720e2"
+  },
+  {
+    "id": "https://the-decoder.com/google-deepmind-loses-both-its-ceo-and-chief-scientist-as-demis-hassabis-and-jeff-dean-step-down-simultaneously/",
+    "source": "https://the-decoder.com/google-deepmind-loses-both-its-ceo-and-chief-scientist-as-demis-hassabis-and-jeff-dean-step-down-simultaneously/",
+    "publishedAt": "2026-08-05T18:20:53+00:00",
+    "publisher": "decoder",
+    "event": "hassabis-steps-down",
+    "textSha256": "fd61be6b4afbb5dcd85d244baaee134ccd2bde53b654bc736bc97a872ac10289"
+  },
+  {
+    "id": "https://fortune.com/2026/08/06/google-deepmind-chief-ai-officer-statement-warning-ai-could-cause-human-extinction-odds-are-not-zero-disagrees-with-elon-musk/",
+    "source": "https://fortune.com/2026/08/06/google-deepmind-chief-ai-officer-statement-warning-ai-could-cause-human-extinction-odds-are-not-zero-disagrees-with-elon-musk/",
+    "publishedAt": "2026-08-06T12:00:00.000Z",
+    "publisher": "fortune",
+    "event": "single-92",
+    "textSha256": "5bd66f26006fcf0e113bdfb16f3e55800337a0b95632f5b71f8428ec6aa32a1a"
+  },
+  {
+    "id": "https://fortune.com/2026/08/06/sudden-shakeup-at-google-deepmind/",
+    "source": "https://fortune.com/2026/08/06/sudden-shakeup-at-google-deepmind/",
+    "publishedAt": "2026-08-06T12:00:00.000Z",
+    "publisher": "fortune",
+    "event": "single-93",
+    "ambiguous": {
+      "alternative": "hassabis-steps-down",
+      "note": "Fortune Tech round-up whose title names Demis stepping down first (rule 5 vs rule 3)"
+    },
+    "textSha256": "3ec95cc659a11ab951cb0d93db3583509fe8599ad2a8d5684a3814b9fe4b8864"
+  },
+  {
+    "id": "https://deepmind.google/blog/weathernext-ai-model-achieves-breakthrough-in-forecasting-cyclones/",
+    "source": "https://deepmind.google/blog/weathernext-ai-model-achieves-breakthrough-in-forecasting-cyclones/",
+    "publishedAt": "2026-08-06T16:00:00+00:00",
+    "publisher": "deepmind",
+    "event": "weathernext-cyclone-open-source",
+    "textSha256": "56b177686c16cf27c8a94cb1cce4ba83aff2d95bef2f93d7af04feeeb2cba5eb"
+  },
+  {
+    "id": "https://the-decoder.com/deepminds-talent-drain-likely-comes-down-to-chip-shortages-a-conflict-of-interest-and-googles-bureaucracy/",
+    "source": "https://the-decoder.com/deepminds-talent-drain-likely-comes-down-to-chip-shortages-a-conflict-of-interest-and-googles-bureaucracy/",
+    "publishedAt": "2026-08-06T18:05:54+00:00",
+    "publisher": "decoder",
+    "event": "hassabis-steps-down",
+    "ambiguous": {
+      "alternative": "S",
+      "note": "analysis of the talent drain one day after Hassabis stepped down; rule 2 or rule 3"
+    },
+    "textSha256": "a11e13b4385b6cb4e5f302eb1fa1573bee03ffed40f55585dee53e92ef4eb79d"
+  },
+  {
+    "id": "https://the-decoder.com/google-dismantles-deepmind-and-bets-on-a-fresh-start-as-hassabis-heads-for-the-exit/",
+    "source": "https://the-decoder.com/google-dismantles-deepmind-and-bets-on-a-fresh-start-as-hassabis-heads-for-the-exit/",
+    "publishedAt": "2026-08-09T08:56:12+00:00",
+    "publisher": "decoder",
+    "event": "hassabis-steps-down",
+    "ambiguous": {
+      "alternative": "S",
+      "note": "analysis 4 days after Hassabis stepped down; rule 2 or rule 3"
+    },
+    "textSha256": "04a94df01c00b3a1f066ad9e16682cb257f575ca4e1680abd5d4047fc6f9efaa"
+  },
+  {
+    "id": "https://the-decoder.com/googles-diffusiongemma-proves-you-dont-need-to-train-from-scratch-to-build-a-text-diffusion-model/",
+    "source": "https://the-decoder.com/googles-diffusiongemma-proves-you-dont-need-to-train-from-scratch-to-build-a-text-diffusion-model/",
+    "publishedAt": "2026-08-09T10:01:26+00:00",
+    "publisher": "decoder",
+    "event": "diffusiongemma-retrofit-report",
+    "textSha256": "1e99350245efba6405a3f865736d5b77743a0e246886821cfcb3b4b35343fa57"
+  },
+  {
+    "id": "https://the-decoder.com/google-deepminds-weathernext-predicts-cyclone-tracks-and-intensity-at-the-same-time/",
+    "source": "https://the-decoder.com/google-deepminds-weathernext-predicts-cyclone-tracks-and-intensity-at-the-same-time/",
+    "publishedAt": "2026-08-09T12:29:06+00:00",
+    "publisher": "decoder",
+    "event": "weathernext-cyclone-open-source",
+    "textSha256": "5a5421effc0de0b5c0b12005a2c75702a990e29be476b368f8219baa207b5bf4"
+  },
+  {
+    "id": "https://fortune.com/2026/08/10/how-stalled-models-missed-deadlines-and-staff-burnout-lead-to-the-unraveling-of-googles-deepmind/",
+    "source": "https://fortune.com/2026/08/10/how-stalled-models-missed-deadlines-and-staff-burnout-lead-to-the-unraveling-of-googles-deepmind/",
+    "publishedAt": "2026-08-10T12:00:00.000Z",
+    "publisher": "fortune",
+    "event": "hassabis-steps-down",
+    "textSha256": "a66cf361ee0f7361eb2299334855bb3c7c5194ca4a4b5a893cafb82c63d80b9c"
+  },
+  {
+    "id": "https://fortune.com/2026/08/12/google-deepmind-lila-ibrahim-corn-detasseling-first-chief-ai-officer-career-advice-humble-beginnings/",
+    "source": "https://fortune.com/2026/08/12/google-deepmind-lila-ibrahim-corn-detasseling-first-chief-ai-officer-career-advice-humble-beginnings/",
+    "publishedAt": "2026-08-12T12:00:00.000Z",
+    "publisher": "fortune",
+    "event": "single-100",
+    "textSha256": "b9b92381cd4851677e53ea10f6d5d92101d6309217c713bc0254bebd4076d660"
+  },
+  {
+    "id": "https://deepmind.google/blog/putting-sign-language-ai-into-users-hands/",
+    "source": "https://deepmind.google/blog/putting-sign-language-ai-into-users-hands/",
+    "publishedAt": "2026-08-12T15:00:00+00:00",
+    "publisher": "deepmind",
+    "event": "sign-language-sl2t",
+    "textSha256": "15693435998c9da199caff4c98afa2237d7e5705b54f41375cd24fa87b4d1460"
+  },
+  {
+    "id": "https://the-decoder.com/googles-gemini-is-losing-market-share-to-chatgpt-and-claude-according-to-new-market-data/",
+    "source": "https://the-decoder.com/googles-gemini-is-losing-market-share-to-chatgpt-and-claude-according-to-new-market-data/",
+    "publishedAt": "2026-08-12T15:50:04+00:00",
+    "publisher": "decoder",
+    "event": "gemini-market-share-data",
+    "textSha256": "a037ed75ae2374a9cfe121d0fd705e4893b7a0ecea42a76478ecafd4951ad865"
+  },
+  {
+    "id": "https://fortune.com/2026/08/13/nvidia-wants-your-pension-fund-in-the-ai-trade/",
+    "source": "https://fortune.com/2026/08/13/nvidia-wants-your-pension-fund-in-the-ai-trade/",
+    "publishedAt": "2026-08-13T12:00:00.000Z",
+    "publisher": "fortune",
+    "event": "single-103",
+    "ambiguous": {
+      "alternative": "hassabis-steps-down",
+      "note": "Fortune Tech round-up 8 days later naming DeepMind drama"
+    },
+    "textSha256": "b565c041156104027145fffb44597191447caae36644613009747367459a3167"
+  },
+  {
+    "id": "https://blog.google/innovation-and-ai/models-and-research/gemini-models/introducing-gemini-3-7-flash/",
+    "source": "https://blog.google/innovation-and-ai/models-and-research/gemini-models/introducing-gemini-3-7-flash/",
+    "publishedAt": "2026-08-13T17:00:00+00:00",
+    "publisher": "google",
+    "event": "gemini-3-7-flash",
+    "textSha256": "ad559d17449ee34532130becc2d8f3627504bc6b5cb1bb9fd82afe0cff3dda45"
+  },
+  {
+    "id": "https://the-decoder.com/gemini-3-7-flash-lands-with-coding-gains-and-undercuts-its-three-week-old-predecessors-price-by-50/",
+    "source": "https://the-decoder.com/gemini-3-7-flash-lands-with-coding-gains-and-undercuts-its-three-week-old-predecessors-price-by-50/",
+    "publishedAt": "2026-08-13T18:41:52+00:00",
+    "publisher": "decoder",
+    "event": "gemini-3-7-flash",
+    "textSha256": "ed8b3493549eed8c9a0969ed62b159a72ebd2b4eca5a7447311702b67d0bc5d6"
+  },
+  {
+    "id": "https://fortune.com/2026/08/16/fortune-archives-the-end-of-an-era-at-google-deepmind/",
+    "source": "https://fortune.com/2026/08/16/fortune-archives-the-end-of-an-era-at-google-deepmind/",
+    "publishedAt": "2026-08-16T12:00:00.000Z",
+    "publisher": "fortune",
+    "event": "single-106",
+    "textSha256": "2ed4e1129f6def35ad989cd93b9b4a425020ddbab7760417634df7258b6e23d2"
+  },
+  {
+    "id": "https://the-decoder.com/frontier-radar-4-china-has-caught-up-so-whats-left-of-the-western-ai-lead/",
+    "source": "https://the-decoder.com/frontier-radar-4-china-has-caught-up-so-whats-left-of-the-western-ai-lead/",
+    "publishedAt": "2026-08-20T14:08:14+00:00",
+    "publisher": "decoder",
+    "event": "single-107",
+    "textSha256": "d9c25eec6e8c891d4e2f23b433812771e03f10164a313e8f17fffbe05f3ce4e8"
+  },
+  {
+    "id": "https://deepmind.google/blog/from-atari-to-eve-online-building-on-15-years-of-ai-research-in-games/",
+    "source": "https://deepmind.google/blog/from-atari-to-eve-online-building-on-15-years-of-ai-research-in-games/",
+    "publishedAt": "2026-08-21T13:00:00+00:00",
+    "publisher": "deepmind",
+    "event": "single-108",
+    "ambiguous": {
+      "alternative": "eve-online-partnership",
+      "note": "DeepMind games-research post 3.5 months after the EVE Online deal; rule 2 (later than 7 days) or feature"
+    },
+    "textSha256": "48082183e696f7f13a9eef41c476ef589b3cf82a0c7dc5cab73be80276afa0ab"
+  },
+  {
+    "id": "https://fortune.com/2026/08/25/uk-ai-security-institute-rogue-ai-incident-github-shows-why-agency-needs-more-scrutiny/",
+    "source": "https://fortune.com/2026/08/25/uk-ai-security-institute-rogue-ai-incident-github-shows-why-agency-needs-more-scrutiny/",
+    "publishedAt": "2026-08-25T12:00:00.000Z",
+    "publisher": "fortune",
+    "event": "single-109",
+    "textSha256": "f020a488670207b8191fbf0e9ed8a48f475c0a5c6ddb1765494ea25839e975df"
+  },
+  {
+    "id": "https://blog.google/innovation-and-ai/models-and-research/gemini-models/gemini-3-5-transcribe/",
+    "source": "https://blog.google/innovation-and-ai/models-and-research/gemini-models/gemini-3-5-transcribe/",
+    "publishedAt": "2026-08-26T17:00:00+00:00",
+    "publisher": "google",
+    "event": "gemini-3-5-transcribe",
+    "textSha256": "1becb698705efff8aa00838aa78387d869cad8f2cc4656777d1baa6ec134ed01"
+  },
+  {
+    "id": "https://fortune.com/2026/08/27/google-deepmind-losing-talent-to-rival-ai-labs-startups-new-data-show/",
+    "source": "https://fortune.com/2026/08/27/google-deepmind-losing-talent-to-rival-ai-labs-startups-new-data-show/",
+    "publishedAt": "2026-08-27T12:00:00.000Z",
+    "publisher": "fortune",
+    "event": "single-111",
+    "ambiguous": {
+      "alternative": "hassabis-steps-down",
+      "note": "talent feature 22 days after Hassabis stepped down"
+    },
+    "textSha256": "36c6d0c83a0606146441b211e0d73f62ea171b7b2a4ef1686e5888109ceeb71c"
+  },
+  {
+    "id": "https://fortune.com/2026/08/27/nvidia-stock-q2-earnings-call-i-think-the-whole-market-was-like-whoa-analyst-says/",
+    "source": "https://fortune.com/2026/08/27/nvidia-stock-q2-earnings-call-i-think-the-whole-market-was-like-whoa-analyst-says/",
+    "publishedAt": "2026-08-27T12:00:00.000Z",
+    "publisher": "fortune",
+    "event": "single-112",
+    "textSha256": "e3d8cb077f1faea17fff31740e937bd113669d3a917f2ec365736f4a162a0c78"
+  },
+  {
+    "id": "https://deepmind.google/blog/piloting-the-worlds-first-double-blind-ai-evaluations/",
+    "source": "https://deepmind.google/blog/piloting-the-worlds-first-double-blind-ai-evaluations/",
+    "publishedAt": "2026-08-27T14:00:00+00:00",
+    "publisher": "deepmind",
+    "event": "double-blind-evals",
+    "textSha256": "03ff5895a2a376f5ef3f3e7f1647be4d2ce8f7fb2a610f4eb64c0ffa721e4071"
+  },
+  {
+    "id": "https://fortune.com/2026/08/28/what-hugging-face-means-for-nvidia/",
+    "source": "https://fortune.com/2026/08/28/what-hugging-face-means-for-nvidia/",
+    "publishedAt": "2026-08-28T12:00:00.000Z",
+    "publisher": "fortune",
+    "event": "single-114",
+    "textSha256": "58bf45dc7e3c61dcc5f665aac7fcdbc2ee9a3c1237d4b691f275c6e62a432c9a"
+  },
+  {
+    "id": "https://the-decoder.com/google-deepminds-ai-co-scientist-now-plans-experiments-runs-lab-equipment-and-writes-scientific-papers/",
+    "source": "https://the-decoder.com/google-deepminds-ai-co-scientist-now-plans-experiments-runs-lab-equipment-and-writes-scientific-papers/",
+    "publishedAt": "2026-08-28T18:46:27+00:00",
+    "publisher": "decoder",
+    "event": "co-scientist-lab-expansion",
+    "textSha256": "4f12a7bce99738d46b40c63deadce35f253353d2696f252968f49475b6d2df5c"
+  },
+  {
+    "id": "https://the-decoder.com/google-deepminds-new-chief-says-frontier-ai-leadership-is-the-only-thing-that-matters/",
+    "source": "https://the-decoder.com/google-deepminds-new-chief-says-frontier-ai-leadership-is-the-only-thing-that-matters/",
+    "publishedAt": "2026-09-01T16:49:11+00:00",
+    "publisher": "decoder",
+    "event": "kavukcuoglu-frontier-remarks",
+    "textSha256": "261907918c31b575bbdd8eedee158f970a7dbf6f6a3d90e4b8445b01992ce8ca"
+  },
+  {
+    "id": "https://blog.google/innovation-and-ai/models-and-research/gemini-models/introducing-agentic-video-in-gemini/",
+    "source": "https://blog.google/innovation-and-ai/models-and-research/gemini-models/introducing-agentic-video-in-gemini/",
+    "publishedAt": "2026-09-01T17:00:00+00:00",
+    "publisher": "google",
+    "event": "agentic-video-understanding",
+    "textSha256": "3b42a1c101c1a849751c9b9ce8195f93a2217acdbcfbbf303c270e18d31e722c"
+  },
+  {
+    "id": "https://blog.google/innovation-and-ai/models-and-research/gemini-models/3-8-flash-and-3-8-flash-cyber/",
+    "source": "https://blog.google/innovation-and-ai/models-and-research/gemini-models/3-8-flash-and-3-8-flash-cyber/",
+    "publishedAt": "2026-09-02T15:00:00+00:00",
+    "publisher": "google",
+    "event": "gemini-3-8-flash",
+    "textSha256": "25640ee77d853a728590d977924001676734559db6a0ad9582b34debdb36ecbd"
+  },
+  {
+    "id": "https://blog.google/innovation-and-ai/technology/safety-security/fairwind-program/",
+    "source": "https://blog.google/innovation-and-ai/technology/safety-security/fairwind-program/",
+    "publishedAt": "2026-09-02T15:40:00+00:00",
+    "publisher": "google",
+    "event": "gemini-3-8-flash",
+    "ambiguous": {
+      "alternative": "own event",
+      "note": "Proactive cyber defense post on 3.8 Flash Cyber, whose launch is in the Gemini 3.8 Flash post title"
+    },
+    "textSha256": "8a75f83c810c667abcdc93bf522bee56dba7e17c93d308b39a2a4c3c896fa6da"
+  },
+  {
+    "id": "https://the-decoder.com/gemini-3-8-flash-is-googles-third-budget-model-in-six-weeks-while-frontier-models-remain-mia/",
+    "source": "https://the-decoder.com/gemini-3-8-flash-is-googles-third-budget-model-in-six-weeks-while-frontier-models-remain-mia/",
+    "publishedAt": "2026-09-02T16:59:29+00:00",
+    "publisher": "decoder",
+    "event": "gemini-3-8-flash",
+    "textSha256": "aa74299c51a01735d164c7e00abe5bbec2bb839b1e61c9c691393a052dd0c300"
+  },
+  {
+    "id": "https://fortune.com/2026/09/03/google-shipped-four-gemini-flash-models-in-106-days-but-its-flagship-frontier-model-is-still-nowhere-to-be-seen/",
+    "source": "https://fortune.com/2026/09/03/google-shipped-four-gemini-flash-models-in-106-days-but-its-flagship-frontier-model-is-still-nowhere-to-be-seen/",
+    "publishedAt": "2026-09-03T12:00:00.000Z",
+    "publisher": "fortune",
+    "event": "gemini-3-8-flash",
+    "textSha256": "d3bd803f6161058043a01bd5d8b503159f2b1a6cbdf5d9d9b4aee849426c1f67"
+  },
+  {
+    "id": "https://blog.google/innovation-and-ai/models-and-research/google-deepmind/introducing-weathernext-3/",
+    "source": "https://blog.google/innovation-and-ai/models-and-research/google-deepmind/introducing-weathernext-3/",
+    "publishedAt": "2026-09-03T15:00:00+00:00",
+    "publisher": "google",
+    "event": "weathernext-3",
+    "textSha256": "9162916389269c3efee174357fe4e96e393d511dc88d24eb2ac07cd6132e9f60"
+  },
+  {
+    "id": "https://the-decoder.com/deepmind-put-100-ai-agents-in-a-room-and-they-sorted-into-cheaters-converts-and-whistleblowers/",
+    "source": "https://the-decoder.com/deepmind-put-100-ai-agents-in-a-room-and-they-sorted-into-cheaters-converts-and-whistleblowers/",
+    "publishedAt": "2026-09-05T10:22:38+00:00",
+    "publisher": "decoder",
+    "event": "agents-math-conjectures-study",
+    "textSha256": "f6931bd119001674d0bdc0d917611953882e6ba7f3aa9bacd166a1fb3abe6791"
+  },
+  {
+    "id": "https://the-decoder.com/googles-weathernext-3-ditches-physics-simulations-and-learns-weather-directly-from-live-satellite-data/",
+    "source": "https://the-decoder.com/googles-weathernext-3-ditches-physics-simulations-and-learns-weather-directly-from-live-satellite-data/",
+    "publishedAt": "2026-09-06T10:36:35+00:00",
+    "publisher": "decoder",
+    "event": "weathernext-3",
+    "textSha256": "5d018124acc7feb08c239175d02b5530580f652e0da8c2c37f42665c6bee67fa"
+  },
+  {
+    "id": "https://fortune.com/2026/09/07/ineffable-intelligence-hires-cofounders-hiring-google-deepmind-instadeep-flying-fish/",
+    "source": "https://fortune.com/2026/09/07/ineffable-intelligence-hires-cofounders-hiring-google-deepmind-instadeep-flying-fish/",
+    "publishedAt": "2026-09-07T12:00:00.000Z",
+    "publisher": "fortune",
+    "event": "ineffable-intelligence-hires",
+    "textSha256": "0502107854d71cc7fb68e0574f576484bb68ae975fbb28507d89d4c827c4f928"
+  },
+  {
+    "id": "https://fortune.com/2026/09/08/google-deepmind-ai-predictions-9-billion-mutation-human-genome/",
+    "source": "https://fortune.com/2026/09/08/google-deepmind-ai-predictions-9-billion-mutation-human-genome/",
+    "publishedAt": "2026-09-08T12:00:00.000Z",
+    "publisher": "fortune",
+    "event": "alphagenome-atlas",
+    "textSha256": "39e5427fb3123b48fe31675fc4a6de261a43ce2be7df45274862d3f080c940e2"
+  },
+  {
+    "id": "https://deepmind.google/blog/alphagenome-atlas-a-predictive-map-of-every-possible-dna-letter-change-in-the-human-genome/",
+    "source": "https://deepmind.google/blog/alphagenome-atlas-a-predictive-map-of-every-possible-dna-letter-change-in-the-human-genome/",
+    "publishedAt": "2026-09-08T14:00:15.406594+00:00",
+    "publisher": "deepmind",
+    "event": "alphagenome-atlas",
+    "textSha256": "db6ff8ffd78164c3e9df940bdea6351dba0c2948c1184840298bec0b608dbbc4"
+  },
+  {
+    "id": "https://fortune.com/2026/09/09/widespread-robotaxi-adoption-could-reshape-how-cities-work/",
+    "source": "https://fortune.com/2026/09/09/widespread-robotaxi-adoption-could-reshape-how-cities-work/",
+    "publishedAt": "2026-09-09T12:00:00.000Z",
+    "publisher": "fortune",
+    "event": "single-128",
+    "ambiguous": {
+      "alternative": "alphagenome-atlas",
+      "note": "Fortune Tech round-up one day after AlphaGenome Atlas, naming the gene database"
+    },
+    "textSha256": "defe081898bb659a65e72aa72aa6714b6e85bce19dfc82938b6da6cca859b220"
+  },
+  {
+    "id": "https://the-decoder.com/deepminds-alphagenome-atlas-maps-every-possible-dna-change-in-the-human-genome/",
+    "source": "https://the-decoder.com/deepminds-alphagenome-atlas-maps-every-possible-dna-change-in-the-human-genome/",
+    "publishedAt": "2026-09-09T13:40:40+00:00",
+    "publisher": "decoder",
+    "event": "alphagenome-atlas",
+    "textSha256": "52bbec9ae302551b9769d8cd3c9aed2e9096dc711aca9f0ebffb8c6dcee83164"
+  },
+  {
+    "id": "https://the-decoder.com/former-deepmind-pr-staffer-says-the-lab-once-banned-public-discussion-of-ai-extinction-risk/",
+    "source": "https://the-decoder.com/former-deepmind-pr-staffer-says-the-lab-once-banned-public-discussion-of-ai-extinction-risk/",
+    "publishedAt": "2026-09-10T16:31:02+00:00",
+    "publisher": "decoder",
+    "event": "former-pr-staffer-xrisk-claims",
+    "textSha256": "c9976b4d7d308be0e149d11cf83ec9ab7275760c10be51375ce1507131cf3bd9"
+  },
+  {
+    "id": "https://the-decoder.com/anthropic-ceo-amodei-wants-ai-speed-limits-before-self-improvement-outpaces-human-control/",
+    "source": "https://the-decoder.com/anthropic-ceo-amodei-wants-ai-speed-limits-before-self-improvement-outpaces-human-control/",
+    "publishedAt": "2026-09-12T15:03:21+00:00",
+    "publisher": "decoder",
+    "event": "amodei-speed-limits",
+    "textSha256": "c1d815628cea68816ad4971d95831b2251f2de0c26b418136442cdff3f4c896b"
+  },
+  {
+    "id": "https://blog.google/innovation-and-ai/models-and-research/gemini-models/gemini-3-8-live-gemini-3-8-live-extended-thinking/",
+    "source": "https://blog.google/innovation-and-ai/models-and-research/gemini-models/gemini-3-8-live-gemini-3-8-live-extended-thinking/",
+    "publishedAt": "2026-09-15T17:00:00+00:00",
+    "publisher": "google",
+    "event": "gemini-3-8-live",
+    "textSha256": "aa086789b3ee94f3a282586ed2412eaa7605f02db4f38568269d7349707152bb"
+  },
+  {
+    "id": "https://the-decoder.com/google-launches-gemini-3-8-live-to-take-on-openais-gpt-live-1-at-a-fraction-of-the-cost/",
+    "source": "https://the-decoder.com/google-launches-gemini-3-8-live-to-take-on-openais-gpt-live-1-at-a-fraction-of-the-cost/",
+    "publishedAt": "2026-09-15T18:23:20+00:00",
+    "publisher": "decoder",
+    "event": "gemini-3-8-live",
+    "textSha256": "9e50d86515e20b51f141e36997b5e666bc68165bbfa16cc9b4d495fd19bea204"
+  },
+  {
+    "id": "https://fortune.com/2026/09/16/gm-plans-to-integrate-apple-carplay-android-auto-after-all/",
+    "source": "https://fortune.com/2026/09/16/gm-plans-to-integrate-apple-carplay-android-auto-after-all/",
+    "publishedAt": "2026-09-16T12:00:00.000Z",
+    "publisher": "fortune",
+    "event": "single-134",
+    "textSha256": "b2da930f2f8b78cdd79312c971ed8ab9e8155f9681461b8b7c9245f10f15a422"
+  },
+  {
+    "id": "https://the-decoder.com/google-deepmind-launches-interdisciplinary-institute-to-tackle-the-big-questions-around-agi/",
+    "source": "https://the-decoder.com/google-deepmind-launches-interdisciplinary-institute-to-tackle-the-big-questions-around-agi/",
+    "publishedAt": "2026-09-16T17:00:28+00:00",
+    "publisher": "decoder",
+    "event": "deepmind-institute-launch",
+    "textSha256": "d5b58c6a6cf6cc2ba557d07c3b557bf9966d5ef8be42573f1fc4e4b14ed39677"
+  },
+  {
+    "id": "https://fortune.com/2026/09/17/king-charles-ai-existential-dangers-control/",
+    "source": "https://fortune.com/2026/09/17/king-charles-ai-existential-dangers-control/",
+    "publishedAt": "2026-09-17T12:00:00.000Z",
+    "publisher": "fortune",
+    "event": "king-charles-ai-warning",
+    "textSha256": "fa86c2df3cdd32cd312bad699ee04ef60130fedfd2db7d6fdae56518e11963f7"
+  },
+  {
+    "id": "https://the-decoder.com/visible-chains-of-thought-are-a-safety-advantage-for-ai-but-that-transparency-is-slipping-away/",
+    "source": "https://the-decoder.com/visible-chains-of-thought-are-a-safety-advantage-for-ai-but-that-transparency-is-slipping-away/",
+    "publishedAt": "2026-09-18T14:32:49+00:00",
+    "publisher": "decoder",
+    "event": "cot-monitorability-paper",
+    "textSha256": "8f75726e1cdf06ff68a034670005b694a0ee6c7a424d7861ad23a1e4163881b9"
+  },
+  {
+    "id": "https://fortune.com/2026/09/23/bernie-sanders-superintelligent-ai-ban/",
+    "source": "https://fortune.com/2026/09/23/bernie-sanders-superintelligent-ai-ban/",
+    "publishedAt": "2026-09-23T12:00:00.000Z",
+    "publisher": "fortune",
+    "event": "sanders-asi-bill",
+    "textSha256": "98b190981131dc42c34c677bc3d77aed8dc6b9c6315e31df8c3e985dc80d0d4d"
+  },
+  {
+    "id": "https://blog.google/innovation-and-ai/models-and-research/gemini-models/gemini-3-8-text-to-speech/",
+    "source": "https://blog.google/innovation-and-ai/models-and-research/gemini-models/gemini-3-8-text-to-speech/",
+    "publishedAt": "2026-09-23T15:15:00+00:00",
+    "publisher": "google",
+    "event": "gemini-3-8-tts",
+    "textSha256": "05c8e0b9ae66ff9214486785d8ea05124a7f16c8309eaa57bcefa4f5c23b8f3f"
+  },
+  {
+    "id": "https://deepmind.google/blog/advancing-private-ai-compute-with-secure-server-side-memory/",
+    "source": "https://deepmind.google/blog/advancing-private-ai-compute-with-secure-server-side-memory/",
+    "publishedAt": "2026-09-23T16:00:57.674000+00:00",
+    "publisher": "deepmind",
+    "event": "private-ai-compute-memory",
+    "textSha256": "664198abdd1bfffa251f529db004189ea2e7c74e77a4b2fc5116ea226b0e5ab9"
+  },
+  {
+    "id": "https://the-decoder.com/deepmind-was-built-to-chase-agi-but-its-new-chief-just-wants-gemini-4-out-the-door/",
+    "source": "https://the-decoder.com/deepmind-was-built-to-chase-agi-but-its-new-chief-just-wants-gemini-4-out-the-door/",
+    "publishedAt": "2026-09-24T13:35:44+00:00",
+    "publisher": "decoder",
+    "event": "kavukcuoglu-gemini-4-remarks",
+    "ambiguous": {
+      "alternative": "gemini-4-argon-announcement",
+      "note": "Kavukcuoglu remarks on shipping Gemini 4, six days before the Argon announcement"
+    },
+    "textSha256": "70fa3e4662d47b6d8e254a73b615f3a504e1a2f66922ba750d0c918c4d2ec015"
+  },
+  {
+    "id": "https://blog.google/innovation-and-ai/models-and-research/gemini-models/gemini-3-8-live-with-live-avatar/",
+    "source": "https://blog.google/innovation-and-ai/models-and-research/gemini-models/gemini-3-8-live-with-live-avatar/",
+    "publishedAt": "2026-09-24T15:30:00+00:00",
+    "publisher": "google",
+    "event": "gemini-3-8-live-avatar",
+    "textSha256": "fcc8ad70b49e997998fd234a3a6e2a11a9f5192a255ad1634b9c41b4a1902107"
+  },
+  {
+    "id": "https://deepmind.google/blog/introducing-synthid-bio/",
+    "source": "https://deepmind.google/blog/introducing-synthid-bio/",
+    "publishedAt": "2026-09-30T15:00:00+00:00",
+    "publisher": "deepmind",
+    "event": "synthid-bio",
+    "textSha256": "d714c4aaa1d457eaf2f97356cb41010db578cb585a8f91bc905478dc671526e6"
+  },
+  {
+    "id": "https://blog.google/innovation-and-ai/models-and-research/gemini-models/gemini-4-argon/",
+    "source": "https://blog.google/innovation-and-ai/models-and-research/gemini-models/gemini-4-argon/",
+    "publishedAt": "2026-09-30T20:00:00+00:00",
+    "publisher": "google",
+    "event": "gemini-4-argon-announcement",
+    "ambiguous": {
+      "alternative": "gemini-4-argon-release",
+      "note": "Argon announced on 09-30, released with new posts on 10-13 (rule 6 vs one launch)"
+    },
+    "textSha256": "284a5d9f9b844be2f0306fecade0555d1627f7d2ee067a8f8f7f441206ca11e9"
+  },
+  {
+    "id": "https://the-decoder.com/deepmind-researchers-propose-artificial-symbiotic-intelligence-as-an-alternative-to-the-singularity/",
+    "source": "https://the-decoder.com/deepmind-researchers-propose-artificial-symbiotic-intelligence-as-an-alternative-to-the-singularity/",
+    "publishedAt": "2026-10-03T10:21:23+00:00",
+    "publisher": "decoder",
+    "event": "symbiotic-intelligence-essay",
+    "textSha256": "7c92be80eae69017dacdb049ba846cd237820a41d0c360ce03c0a0a410c63f34"
+  },
+  {
+    "id": "https://fortune.com/2026/10/05/reflection-ai-unveils-beam-a-new-us-based-open-source-model-to-compete-with-china/",
+    "source": "https://fortune.com/2026/10/05/reflection-ai-unveils-beam-a-new-us-based-open-source-model-to-compete-with-china/",
+    "publishedAt": "2026-10-05T12:00:00.000Z",
+    "publisher": "fortune",
+    "event": "reflection-beam",
+    "textSha256": "2596f13d70f7a09635a24b3165fb71d4b82183d27d7c0a3adea7481f1ddf955b"
+  },
+  {
+    "id": "https://blog.google/innovation-and-ai/technology/developers-tools/embeddinggemma-2/",
+    "source": "https://blog.google/innovation-and-ai/technology/developers-tools/embeddinggemma-2/",
+    "publishedAt": "2026-10-06T16:00:00+00:00",
+    "publisher": "google",
+    "event": "embeddinggemma-2",
+    "textSha256": "31985ef82d65c382e383ff061349a4736ba5704c249dcb2df2fc69385bfa7d33"
+  },
+  {
+    "id": "https://fortune.com/2026/10/08/microsoft-revamps-windows-agentic-ai/",
+    "source": "https://fortune.com/2026/10/08/microsoft-revamps-windows-agentic-ai/",
+    "publishedAt": "2026-10-08T12:00:00.000Z",
+    "publisher": "fortune",
+    "event": "single-148",
+    "textSha256": "b21d535fdb0adc72cfcdd61dddec2c711d40a22aee3a81c6d7da7abf476a4f5a"
+  },
+  {
+    "id": "https://the-decoder.com/google-deepminds-alphaproof-nexus-solved-dozens-of-open-math-problems-and-actually-got-peer-reviewed/",
+    "source": "https://the-decoder.com/google-deepminds-alphaproof-nexus-solved-dozens-of-open-math-problems-and-actually-got-peer-reviewed/",
+    "publishedAt": "2026-10-12T09:35:54+00:00",
+    "publisher": "decoder",
+    "event": "alphaproof-nexus-science-paper",
+    "textSha256": "2936c8d5496e2bbfeae8bd4230f205f3223d6928b681597b7f62bb1688c569e0"
+  },
+  {
+    "id": "https://the-decoder.com/metas-new-frontier-model-muse-wonder-full-breaks-into-the-ai-top-tier/",
+    "source": "https://the-decoder.com/metas-new-frontier-model-muse-wonder-full-breaks-into-the-ai-top-tier/",
+    "publishedAt": "2026-10-12T18:48:29+00:00",
+    "publisher": "decoder",
+    "event": "meta-muse-wonder",
+    "textSha256": "39e254abbcf30cde6bde081bbaa32a6bd3b48d43ba2092f8d6635f2a12eefd55"
+  },
+  {
+    "id": "https://blog.google/innovation-and-ai/models-and-research/gemini-models/introducing-gemini-4-argon/",
+    "source": "https://blog.google/innovation-and-ai/models-and-research/gemini-models/introducing-gemini-4-argon/",
+    "publishedAt": "2026-10-13T16:00:00+00:00",
+    "publisher": "google",
+    "event": "gemini-4-argon-release",
+    "textSha256": "d492d1d858b1b432f7712be6d232673637ac67b7695efad3b35b81b4f3d02c91"
+  },
+  {
+    "id": "https://blog.google/innovation-and-ai/technology/safety-security/gemini-4-model-safety-security/",
+    "source": "https://blog.google/innovation-and-ai/technology/safety-security/gemini-4-model-safety-security/",
+    "publishedAt": "2026-10-13T18:00:00+00:00",
+    "publisher": "google",
+    "event": "gemini-4-argon-release",
+    "ambiguous": {
+      "alternative": "own event",
+      "note": "safety post on the Argon release day, separate post (rule 4) on the same action"
+    },
+    "textSha256": "1ccf775c6d11f9bc69a83d48e235284d45a928644a48deecd9c9e54ca8304e7e"
+  },
+  {
+    "id": "https://deepmind.google/blog/on-device-ai-scam-detection-mddi/",
+    "source": "https://deepmind.google/blog/on-device-ai-scam-detection-mddi/",
+    "publishedAt": "2026-10-14T02:00:00+00:00",
+    "publisher": "deepmind",
+    "event": "singapore-scam-detection",
+    "ambiguous": {
+      "alternative": "singapore-national-partnership",
+      "note": "scam-detection model with GovTech Singapore, five months after the national partnership (rule 6)"
+    },
+    "textSha256": "f7277e6f1b918c2c286468da20802687f05569467da3feb22d9e236d25b3db4f"
+  },
+  {
+    "id": "https://deepmind.google/blog/accelerating-antimicrobial-discovery/",
+    "source": "https://deepmind.google/blog/accelerating-antimicrobial-discovery/",
+    "publishedAt": "2026-10-15T16:00:00+00:00",
+    "publisher": "deepmind",
+    "event": "antimicrobial-peptides-antigravity",
+    "textSha256": "ea91e460c02ff37f4bc299529b5a78348a46fbb76713c41848d76691b4d49971"
+  },
+  {
+    "id": "https://the-decoder.com/deepmind-founder-hassabis-shortens-agi-timeline-from-five-to-two-to-three-years/",
+    "source": "https://the-decoder.com/deepmind-founder-hassabis-shortens-agi-timeline-from-five-to-two-to-three-years/",
+    "publishedAt": "2026-10-21T17:10:46+00:00",
+    "publisher": "decoder",
+    "event": "hassabis-agi-timeline",
+    "textSha256": "2b36961a64771e39fe2089e5557baef85a388be21f436199fcda28406cac08ed"
+  },
+  {
+    "id": "https://the-decoder.com/an-ai-agent-in-skynet-mode-hijacks-unprotected-language-models-to-launch-self-sustaining-cyberattacks/",
+    "source": "https://the-decoder.com/an-ai-agent-in-skynet-mode-hijacks-unprotected-language-models-to-launch-self-sustaining-cyberattacks/",
+    "publishedAt": "2026-10-22T11:30:56+00:00",
+    "publisher": "decoder",
+    "event": "skynet-mode-agent",
+    "textSha256": "5958bc47481e1a7111699ef19c87662a29b16a15b10d3fc576b29f8e85af73e3"
+  },
+  {
+    "id": "https://deepmind.google/blog/beyond-tree-cover-mapping-the-worlds-forest-types/",
+    "source": "https://deepmind.google/blog/beyond-tree-cover-mapping-the-worlds-forest-types/",
+    "publishedAt": "2026-10-22T14:30:00+00:00",
+    "publisher": "deepmind",
+    "event": "forest-types-map",
+    "textSha256": "3433bf0c2014c83477a7d486efdf5c25e0a52e21e56c55635249dd2fc5d72e79"
+  },
+  {
+    "id": "https://the-decoder.com/anthropic-co-founder-jack-clark-moves-his-prediction-for-self-improving-ai-forward-to-2027/",
+    "source": "https://the-decoder.com/anthropic-co-founder-jack-clark-moves-his-prediction-for-self-improving-ai-forward-to-2027/",
+    "publishedAt": "2026-10-25T09:37:46+00:00",
+    "publisher": "decoder",
+    "event": "jack-clark-prediction",
+    "textSha256": "c964c0c856244cf03c9062c2549279676836d3c18c78b62e4d555de2523ebf67"
+  },
+  {
+    "id": "https://9to5google.com/2026/10/26/google-fitbit-edge-review/",
+    "source": "https://9to5google.com/2026/10/26/google-fitbit-edge-review/",
+    "publishedAt": "2026-10-26T17:00:00+00:00",
+    "publisher": "9to5google",
+    "event": "single-159",
+    "textSha256": "454e8b53859b8e7e5ebdeff78a16e2be14118bc6b9ae1fdfdfdb441e108c6b86"
+  }
+]

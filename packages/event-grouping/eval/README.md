@@ -60,6 +60,7 @@ Each folder in `sets/` is one set. It has two files:
 | Set               | Reports | Events | Role       | Text                                             |
 | ----------------- | ------- | ------ | ---------- | ------------------------------------------------ |
 | anthropic-outlets | 816     | 618    | training   | Web pages of 6 publishers, April to October 2026 |
+| deepmind-outlets  | 160     | 127    | exam       | Web pages of 5 publishers, April to October 2026 |
 | ecbplus           | 982     | 86     | training   | ECB+ corpus, rebuilt from its tokens             |
 | dev2938           | 217     | 209    | training   | Web pages of 12 publishers, October 2026         |
 | fresh2957         | 48      | 23     | training   | WCEP-10 rows on Hugging Face                     |
