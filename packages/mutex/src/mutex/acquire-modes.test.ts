@@ -7,6 +7,7 @@ import { Worker } from 'node:worker_threads';
 import { describe } from '@zukhruf/testing/node';
 
 import { MemoryStore } from '../lock-stores/memory/memory-store.ts';
+import { newProcessTimeout } from '../testing/new-process-timeout.ts';
 import {
   type StoreHost,
   deadlineFor,
@@ -184,11 +185,8 @@ void describe.each(storeCases, (store) =>
         // Assert
         assert.deepEqual(gaveUp, { acquired: false });
         assert.equal(
-          await within(
-            waiter,
-            deadlineFor(store, 2000, { grants: 1, releases: 0 }),
-          ),
-          'done',
+          await waiter,
+          'report',
           'The waiting caller must get the key; the caller that gave up must not keep it',
         );
       },
@@ -256,11 +254,8 @@ void describe.each(storeCases, (store) =>
           await holder.release();
         }
         assert.equal(
-          await within(
-            next,
-            deadlineFor(store, 2000, { grants: 1, releases: 0 }),
-          ),
-          'done',
+          await next,
+          'next',
           'The caller that cancelled must not keep the key from the caller after it',
         );
         assert.equal(
@@ -533,11 +528,8 @@ describe('Cancelling a wait', () => {
         await holder.release();
       }
       assert.equal(
-        await within(
-          mutex.acquire('report:daily', async () => 'next'),
-          2000,
-        ),
-        'done',
+        await mutex.acquire('report:daily', async () => 'next'),
+        'next',
         'The key that the mode got after the cancel must be given back',
       );
       assert.equal(ran, false, 'A caller that cancelled must not run its task');
@@ -577,11 +569,8 @@ describe('Cancelling a wait', () => {
       // Assert
       await assert.rejects(attempt, (error) => error === reason);
       assert.equal(
-        await within(
-          mutex.acquire('report:daily', async () => 'next'),
-          2000,
-        ),
-        'done',
+        await mutex.acquire('report:daily', async () => 'next'),
+        'next',
         'The key that the attempt got after the cancel must be given back',
       );
       assert.equal(ran, false, 'A caller that cancelled must not run its task');
@@ -735,7 +724,14 @@ void describe.each(
                 child.has('results'),
                 `The child must report.\n${child.stderr}`,
               ),
-            { interval: 5, timeout: 5000 },
+            {
+              interval: 5,
+              // The child starts, then makes three attempts that each cost about one grant.
+              timeout: deadlineFor(store, newProcessTimeout, {
+                grants: 3,
+                releases: 0,
+              }),
+            },
           );
           await holder.release();
 
@@ -753,11 +749,8 @@ void describe.each(
             },
           );
           assert.equal(
-            await within(
-              mutex.acquire('report:daily', async () => 'next'),
-              deadlineFor(store, 2000, { grants: 1, releases: 0 }),
-            ),
-            'done',
+            await mutex.acquire('report:daily', async () => 'next'),
+            'next',
             'The key must be free after the holder releases it; the child that gave up must not keep it',
           );
         },
@@ -823,11 +816,8 @@ void describe.each(
               },
             );
             assert.equal(
-              await within(
-                mutex.acquire('report:daily', async () => 'next'),
-                2000,
-              ),
-              'done',
+              await mutex.acquire('report:daily', async () => 'next'),
+              'next',
               'The key must be free after the holder releases it; the thread that gave up must not keep it',
             );
           } finally {

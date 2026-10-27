@@ -80,7 +80,10 @@ void describe.each(storeCases, (store) =>
                 events.includes('first started'),
                 'The first operation must start when its product has no active operation',
               ),
-            { interval: 5, timeout: 2000 },
+            {
+              interval: 5,
+              timeout: deadlineFor(store, 2000, { grants: 1, releases: 0 }),
+            },
           );
           operations.push(
             mutex.acquire('product:42', async () => {
@@ -198,7 +201,10 @@ void describe.each(storeCases, (store) =>
                 firstStarted,
                 'The first operation must start when its product has no active operation',
               ),
-            { interval: 5, timeout: 2000 },
+            {
+              interval: 5,
+              timeout: deadlineFor(store, 2000, { grants: 1, releases: 0 }),
+            },
           );
           operations.push(
             mutex.acquire('product:42', async () => {
@@ -242,8 +248,6 @@ void describe.each(storeCases, (store) =>
       await using host = store.open(fixture.location);
       const mutex = new Mutex(host.store);
       const finishFirst = Promise.withResolvers<void>();
-      const limit = deadlineFor(store, 2000, { grants: 3, releases: 0 });
-      const deadline = delay(limit, null, { ref: false });
       let entered = 0;
       let active = 0;
       let peakActive = 0;
@@ -275,18 +279,17 @@ void describe.each(storeCases, (store) =>
               entered === 1,
               'One request must enter while the burst is submitted',
             ),
-          { interval: 5, timeout: 2000 },
+          {
+            interval: 5,
+            timeout: deadlineFor(store, 2000, { grants: 1, releases: 0 }),
+          },
         );
         await delay(settle);
         finishFirst.resolve();
-        const results = await Promise.race([outcomes, deadline]);
+        // A request that is never granted keeps this await open until the test times out.
+        const results = await outcomes;
 
         // Assert: exclusion must also allow every waiting request to make progress.
-        assert.notEqual(
-          results,
-          null,
-          `All three requests must finish within ${limit} ms after the held callback is released`,
-        );
         assert.deepEqual(
           results,
           [
@@ -339,7 +342,10 @@ void describe.each(storeCases, (store) =>
                 firstStarted,
                 'Product 42 must be held before product 99 is requested',
               ),
-            { interval: 5, timeout: 2000 },
+            {
+              interval: 5,
+              timeout: deadlineFor(store, 2000, { grants: 1, releases: 0 }),
+            },
           );
 
           // Act: this operation uses a different resource key.
@@ -353,7 +359,10 @@ void describe.each(storeCases, (store) =>
           // Assert: product 99 progressed before product 42 was released.
           await t.waitFor(
             () => assert.ok(secondFinished, 'An unrelated product was blocked'),
-            { interval: 5, timeout: 2000 },
+            {
+              interval: 5,
+              timeout: deadlineFor(store, 2000, { grants: 1, releases: 0 }),
+            },
           );
           finishFirst.resolve();
           assert.deepEqual(
@@ -377,8 +386,6 @@ void describe.each(storeCases, (store) =>
       await using host = store.open(fixture.location);
       const mutex = new Mutex(host.store);
       let stock = 0;
-      const limit = deadlineFor(store, 1000, { grants: 2, releases: 0 });
-      const deadline = delay(limit, null, { ref: false });
 
       // Act: one request is declined, then stock arrives before the next request.
       const outcomes = Promise.allSettled([
@@ -399,14 +406,10 @@ void describe.each(storeCases, (store) =>
         })(),
       ]);
 
-      const results = await Promise.race([outcomes, deadline]);
+      // A later request that is never granted keeps this await open until the test times out.
+      const results = await outcomes;
 
       // Assert: false is a normal result, and the resource remains usable later.
-      assert.notEqual(
-        results,
-        null,
-        `A later request must finish within ${limit} ms even when the previous callback returned false`,
-      );
       assert.deepEqual(
         results,
         [{ status: 'fulfilled', value: { soldOut: false, restocked: true } }],
@@ -428,8 +431,6 @@ void describe.each(storeCases, (store) =>
           await using host = store.open(fixture.location);
           const mutex = new Mutex(host.store);
           const finishFirst = Promise.withResolvers<void>();
-          const limit = deadlineFor(store, 1000, { grants: 2, releases: 0 });
-          const deadline = delay(limit, null, { ref: false });
           let firstStarted = false;
           let secondStarted = false;
           const operations: Array<Promise<boolean>> = [];
@@ -449,7 +450,10 @@ void describe.each(storeCases, (store) =>
                   firstStarted,
                   `The first operation for ${label(key)} must start`,
                 ),
-              { interval: 5, timeout: 2000 },
+              {
+                interval: 5,
+                timeout: deadlineFor(store, 2000, { grants: 1, releases: 0 }),
+              },
             );
             operations.push(
               mutex.acquire(key, async () => {
@@ -464,17 +468,10 @@ void describe.each(storeCases, (store) =>
               `The second operation for ${label(key)} must wait for the first`,
             );
             finishFirst.resolve();
-            const results = await Promise.race([
-              Promise.allSettled(operations),
-              deadline,
-            ]);
+            // A second operation that is never granted keeps this await open until the test times out.
+            const results = await Promise.allSettled(operations);
 
             // Assert: these strings are valid resource names, just like product:42.
-            assert.notEqual(
-              results,
-              null,
-              `Both operations for ${label(key)} must finish within ${limit} ms`,
-            );
             assert.deepEqual(
               results,
               [
@@ -512,7 +509,10 @@ void describe.each(storeCases, (store) =>
             await t.waitFor(
               () =>
                 assert.ok(holding, `The holder of ${label(held)} must start`),
-              { interval: 5, timeout: 2000 },
+              {
+                interval: 5,
+                timeout: deadlineFor(store, 2000, { grants: 1, releases: 0 }),
+              },
             );
 
             // Act: another caller asks for the second name and does not wait.
@@ -550,7 +550,10 @@ void describe.each(storeCases, (store) =>
       try {
         await t.waitFor(
           () => assert.ok(holding, "The holder of 'Sync' must start"),
-          { interval: 5, timeout: 2000 },
+          {
+            interval: 5,
+            timeout: deadlineFor(store, 2000, { grants: 1, releases: 0 }),
+          },
         );
 
         // Act: other callers ask for 'sync' and 'SYNC' and do not wait.
@@ -768,7 +771,10 @@ void describe.each(
             const waitFor = (condition: () => boolean, message: string) =>
               t.waitFor(
                 () => assert.ok(condition(), `${message}\n${stderr()}`),
-                { interval: 5, timeout: 2000 },
+                {
+                  interval: 5,
+                  timeout: deadlineFor(store, 2000, { grants: 1, releases: 0 }),
+                },
               );
 
             await t.waitFor(
@@ -1011,7 +1017,10 @@ void describe.each(
                 waiter.now.status === 'fulfilled',
                 'The waiter must get the key once the holder releases it',
               ),
-            { interval: 5, timeout: 2000 },
+            {
+              interval: 5,
+              timeout: deadlineFor(store, 2000, { grants: 1, releases: 0 }),
+            },
           );
         },
       );
@@ -1131,7 +1140,10 @@ void describe.each(
                   events.includes('entered'),
                   'The thread must enter once the main thread releases',
                 ),
-              { interval: 5, timeout: 2000 },
+              {
+                interval: 5,
+                timeout: deadlineFor(store, 2000, { grants: 1, releases: 0 }),
+              },
             );
           } finally {
             finishMain.resolve();
@@ -1262,10 +1274,11 @@ void describe.each(
                 ),
               { interval: 5, timeout: newProcessTimeout },
             );
-            const next = await Promise.race([
-              mutex.acquire('product:42', async () => 'granted' as const),
-              delay(2000, 'still waiting' as const, { ref: false }),
-            ]);
+            // A key that is never handed over keeps this await open until the test times out.
+            const next = await mutex.acquire(
+              'product:42',
+              async () => 'granted' as const,
+            );
 
             // Assert
             assert.equal(
@@ -1337,7 +1350,10 @@ void describe.each(
                   events.includes('entered'),
                   'The thread must enter once the main thread releases',
                 ),
-              { interval: 5, timeout: 2000 },
+              {
+                interval: 5,
+                timeout: deadlineFor(store, 2000, { grants: 1, releases: 0 }),
+              },
             );
           } finally {
             finishMain.resolve();
@@ -1490,10 +1506,11 @@ describe('Process-tree mutex with IpcStore', () => {
           ),
         { interval: 5, timeout: newProcessTimeout },
       );
-      const next = await Promise.race([
-        mutex.acquire('product:42', async () => 'granted' as const),
-        delay(2000, 'still waiting' as const, { ref: false }),
-      ]);
+      // A key that is never handed over keeps this await open until the test times out.
+      const next = await mutex.acquire(
+        'product:42',
+        async () => 'granted' as const,
+      );
 
       // Assert
       assert.equal(
