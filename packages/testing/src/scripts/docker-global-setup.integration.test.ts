@@ -1539,7 +1539,21 @@ test(
         proxiedEnvironment(join(directory.path, 'state-second'), proxy),
       );
       second.catch(() => {});
-      await conflicted.promise;
+      // The second run reaches its teardown in about 10 s. It must look at the
+      // taken lease before it ends, and before a deadline far below the test's timeout.
+      const reached = await Promise.race([
+        conflicted.promise.then(() => 'looked'),
+        second.then(
+          () => 'ended',
+          () => 'failed',
+        ),
+        setTimeout(45_000, 'deadline'),
+      ]);
+      assert.equal(
+        reached,
+        'looked',
+        'the second teardown must look at the taken sweep lease',
+      );
       // A negative check over a window longer than the 5 s that a waiter gives a created lease:
       // the second teardown must not take a running sweep lease from the first.
       // The servers are not checked here: a teardown of a release before the
