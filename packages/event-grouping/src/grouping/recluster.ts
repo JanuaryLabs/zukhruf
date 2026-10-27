@@ -19,10 +19,16 @@ export function recluster(
   const window = table.withLeadSince(day - WINDOW_DAYS);
   const inWindow = new Set(window);
   const components = new UnionFind(window);
-  for (const id of window)
-    for (const neighbour of shortlist.of(id))
-      if (inWindow.has(neighbour) && scores.score(id, neighbour) >= THRESHOLD)
-        components.union(id, neighbour);
+  // The graph also holds vectors that a failed add left behind. They have no
+  // report in the window.
+  for (const [id, neighbours] of shortlist.ofDays(day - WINDOW_DAYS, day))
+    if (inWindow.has(id))
+      for (const neighbour of neighbours)
+        if (
+          inWindow.has(neighbour.id) &&
+          scores.score(id, neighbour.id, neighbour.similarity) >= THRESHOLD
+        )
+          components.union(id, neighbour.id);
 
   const clusters: string[][] = [];
   for (const component of components.sets()) {

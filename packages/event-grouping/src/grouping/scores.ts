@@ -19,12 +19,14 @@ export class PairScores {
     this.#numbers.set(id, numbers);
   }
 
-  score(a: string, b: string): number {
+  // similarity: the cosine similarity of a and b, when the caller has it
+  // already. Without it, the score asks the vectors.
+  score(a: string, b: string, similarity?: number): number {
     const key = a < b ? JSON.stringify([a, b]) : JSON.stringify([b, a]);
     let score = this.#scores.get(key);
     if (score === undefined) {
       score = pairScore(
-        this.#vectors.similarity(a, b),
+        similarity ?? this.#vectors.similarity(a, b),
         this.#numbersOf(a),
         this.#numbersOf(b),
       );

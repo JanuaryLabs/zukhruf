@@ -52,18 +52,21 @@ The research for event grouping found these limits. They apply to this package. 
 
 ## 21. A clustering at production size takes seconds to minutes
 
-**What happens.** Each new publish day clusters the whole window again. The cost grows with the square of the window size.
+**What happens.** Each new publish day clusters the whole window again. The cost grows with the square of the window size. At the volume of a news aggregator, one clustering takes about 3 minutes.
 
-**Evidence.** Round #3130 measured 0.68 ms for each report for the grouping step, but the daily windows of the Gun Violence Corpus are small. Backlog #3131 measured one clustering on a synthetic window: 768-dimension vectors with a shared direction, topics and events of 3 reports, through the `Collection` of `@zukhruf/embeddings` in memory, on an Apple M4 Pro with Node.js 26.
+**Evidence.** Round #3130 measured 0.68 ms for each report for the grouping step, but the daily windows of the Gun Violence Corpus are small. Backlog #3131 and #3137 measured one clustering on a synthetic window: 768-dimension vectors with a shared direction, topics and events of 3 reports, through the `Collection` of `@zukhruf/embeddings` in memory, on an Apple M4 Pro with Node.js 26.
 
-| Reports in the window | One clustering, first measurement | After the faster cosine of `@zukhruf/embeddings` (51eed3d) |
-| --------------------- | --------------------------------- | ---------------------------------------------------------- |
-| 1,001                 | 8.2 s                             | 2.9 s                                                      |
-| 3,500                 | 71 s                              | 28 s                                                       |
+| Reports in the window | First measurement | After the faster cosine (51eed3d) | With one neighbour graph of the window |
+| --------------------- | ----------------- | --------------------------------- | -------------------------------------- |
+| 1,001                 | 8.2 s             | 3.1 s                             | 1.0 s                                  |
+| 3,500                 | 71 s              | 30 s                              | 9.6 s                                  |
+| 14,000                | not measured      | not measured                      | 175 s                                  |
 
-**Cause.** The clustering asks the vectors port for the shortlist of each report in the window. Each `nearest` call of the `Collection` compares the report with each report in the window. Thus one clustering calculates the square of the window size in similarities. Each call also reads and decodes every vector of the window again. A CPU profile put most of the time in the cosine and the BLOB reads of `nearest`. The faster cosine removed about half of that time.
+The events did not change: 334 events at 1,001 reports and 1,167 at 3,500, with at most 3 reports in an event. At 14,000 reports, the add of one publish day of 2,000 reports took 248 s. That time includes the clustering and one `nearest` call for each new report.
 
-**Before you change it.** Measure one clustering at the window size of the real feeds before you choose the window. A port call that gives the shortlist of every report of the window at one time decodes each vector only once. That is a change to the API of `@zukhruf/embeddings` (backlog #3137).
+**Cause.** The clustering asks the vectors port for one neighbour graph of the window. The graph decodes each vector once, and the clustering uses the similarities of the graph for the pair scores. But the graph still compares each report with each report in its window. Thus one clustering calculates the square of the window size in similarities, and sorts all the reports of a window for each report.
+
+**Before you change it.** Measure one clustering at the window size of the real feeds before you choose the window. A shorter window or another schedule needs a new research round ([ADR 0001](./adr/0001-the-parameters-are-frozen-by-research-round-3130.md)).
 
 ## 22. Small leaks in the cross-validation
 

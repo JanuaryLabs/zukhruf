@@ -2,6 +2,7 @@ import type { DatabaseSync } from 'node:sqlite';
 
 import { transaction } from '@zukhruf/sqlite-transaction';
 
+import { DAY_MS } from './day.ts';
 import { type AnalysedReport, EventTable } from './event-table.ts';
 import { assign } from './grouping/assign.ts';
 import { recluster } from './grouping/recluster.ts';
@@ -11,8 +12,6 @@ import { leadOf } from './lead.ts';
 import { numbersOf } from './numbers.ts';
 import { eventSchema } from './schema.ts';
 import type { Vectors } from './vectors.ts';
-
-const DAY_MS = 86_400_000;
 
 export type Report = {
   readonly id: string;

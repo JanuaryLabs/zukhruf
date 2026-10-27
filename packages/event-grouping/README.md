@@ -53,7 +53,7 @@ detector.events({ since: new Date('2026-10-14') });
 - `new EventDetector({ database, vectors })`. The caller opens and closes `database`. The detector makes its tables `event_report` and `event_clock` in it. `vectors` is the port to the vectors of this detector only.
 - `add(reports)` gives each new report an event. A report has an `id`, a `title`, a `body` and a `publishedAt` date. The detector gives the lead of each report that has one to `vectors.upsert`, as `{ id, text, publishedAt }`. Then it gives the reports their events, in the order of their publish dates. A report whose id the detector has already is skipped.
 - `events({ since })` gives the events with a report published at or after `since`, in the order of their first report. An event has an `id` (a number), its `members` (report ids, in the order of their publish dates), `firstSeen` and `lastSeen`.
-- `Vectors` is the type of the port: `upsert(documents)`, `nearest(id, { k, withinDays })` and `similarity(a, b)`. The `Collection` of `@zukhruf/embeddings` has this shape, with no adapter.
+- `Vectors` is the type of the port: `upsert(documents)`, `nearest(id, { k, withinDays })`, `neighbourGraph({ from, to, k, withinDays })` and `similarity(a, b)`. A clustering asks for one neighbour graph of the window. The `Collection` of `@zukhruf/embeddings` has this shape, with no adapter.
 
 ## How it decides
 
@@ -84,7 +84,7 @@ Read [the limitations](./docs/limitations.md) before you use the events for a de
 - Look-alike occurrences a few days apart can join.
 - Each headline-only report is a duplicate for the reader.
 - The parameters are valid only with EmbeddingGemma 2 and the vector text of round #3130.
-- One clustering of a window of 1,001 reports takes 2.9 s, and of 3,500 reports 28 s, through the `Collection` of `@zukhruf/embeddings`. The cost grows with the square of the window size (limitation 21).
+- One clustering of a window of 1,001 reports takes 1.0 s, of 3,500 reports 9.6 s, and of 14,000 reports 175 s, through the `Collection` of `@zukhruf/embeddings`. The cost grows with the square of the window size (limitation 21).
 
 ## Decisions
 

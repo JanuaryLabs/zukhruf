@@ -432,6 +432,56 @@ describe('EventDetector', () => {
     );
   });
 
+  test('vectors that a failed add left behind take no place in the shortlists of the clustering', async () => {
+    // Dimension 0 is the report, 1 to 79 are 79 decoys, 80 is the target, 81
+    // and 82 are the two vectors that a failed add leaves behind, and 83 is
+    // the report of the next day. For the report and for the target, the
+    // decoys and the two left vectors are nearer than the other one.
+    const vector = (parts: Record<number, number>) =>
+      Array.from({ length: 84 }, (_, at) => parts[at] ?? 0);
+    const name = (index: number) =>
+      `Decoy ${String.fromCodePoint(97 + Math.floor(index / 26), 97 + (index % 26))}`;
+    const decoys = Array.from({ length: 79 }, (_, index) => index + 1);
+    using database = new DatabaseSync(':memory:');
+    const events = detector(
+      database,
+      model({
+        Report: vector({ 0: 1 }),
+        Target: vector({ 0: 0.68, 80: Math.sqrt(1 - 0.68 ** 2) }),
+        'Left one': vector({ 0: 0.8, 80: 0.4, 81: Math.sqrt(0.2) }),
+        'Left two': vector({ 0: 0.8, 80: 0.4, 82: Math.sqrt(0.2) }),
+        'Next day': vector({ 83: 1 }),
+        ...Object.fromEntries(
+          decoys.map((index) => [
+            name(index),
+            vector({ 0: 0.7, 80: 0.3, [index]: Math.sqrt(0.42) }),
+          ]),
+        ),
+      }),
+    );
+    await assert.rejects(
+      events.add([
+        report('left-1', 'Left one', day(1)),
+        report('left-2', 'Left two', day(1)),
+        report('left-2', 'Left two', day(1)),
+      ]),
+    );
+    const numbers = 'The count was 11, 12, 13, 14, 15, 16, 17, 18, 19 and 20.';
+    await events.add([
+      ...decoys.map((index) => report(`decoy-${index}`, name(index), day(1))),
+      report('target', 'Target', day(1), `${BODY} ${numbers}`),
+      report('report', 'Report', day(1), `${BODY} ${numbers}`),
+    ]);
+
+    await events.add([report('next', 'Next day', day(2))]);
+
+    assert.deepEqual(
+      everything(events).find((event) => event.members.includes('report'))
+        ?.members,
+      ['report', 'target'],
+    );
+  });
+
   test('events gives only the events with a report published at or after since', async () => {
     using database = new DatabaseSync(':memory:');
     const events = detector(

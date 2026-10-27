@@ -18,7 +18,7 @@ export function assign(
   if (report.text !== null) {
     scores.remember(report.id, report.numbers);
     const candidates = [
-      ...new Set(shortlist.of(report.id).map((id) => table.eventOf(id))),
+      ...new Set(shortlist.of(report.id).map(({ id }) => table.eventOf(id))),
     ].toSorted((a, b) => a - b);
     for (const event of candidates) {
       const members = table.members(event);
