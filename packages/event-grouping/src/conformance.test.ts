@@ -11,14 +11,19 @@ import { Collection } from '@zukhruf/embeddings';
 
 import { EventDetector } from './index.ts';
 
-// The bundle of research round #3130 on the maintainer's Mac. The Gun Violence
-// Corpus holds news texts of many publishers. Its CC BY 4.0 license covers
-// only the rights of the corpus authors, so neither the texts nor their
-// vectors are in this repository. Without the bundle, the test is skipped.
-const bundle = join(
+// The bundles of research rounds #3130 and #3152 on the maintainer's Mac.
+// Round #3130 holds the Gun Violence Corpus, its vectors and its metric code.
+// The Gun Violence Corpus holds news texts of many publishers. Its CC BY 4.0
+// license covers only the rights of the corpus authors, so neither the texts
+// nor their vectors are in this repository. Round #3152 holds the frozen
+// design (plan.json) and its replica of the detector. Without the bundles,
+// the test is skipped.
+const rounds = join(
   homedir(),
-  '.codex/visualizations/2026/10/23/01a16a1c-424c-7793-8ca9-02cc1c715d82/feature-scorer-3130',
+  '.codex/visualizations/2026/10/23/01a16a1c-424c-7793-8ca9-02cc1c715d82',
 );
+const round3130 = join(rounds, 'feature-scorer-3130');
+const round3152 = join(rounds, 'feature-scorer-3152');
 
 type Row = {
   id: string;
@@ -35,8 +40,8 @@ type Scores = {
   b3: { precision: number; recall: number; f05: number };
 };
 
-// The metric and arrival-order code of the round itself, so that the scores
-// are calculated the same way.
+// The metric and arrival-order code of round #3130, so that the scores are
+// calculated the same way.
 type Research = {
   shuffle: (items: number[], seed: number) => number[];
   metrics: (rows: Row[], groups: string[][]) => Scores;
@@ -46,21 +51,79 @@ type Research = {
   ) => { changedPairs: number };
 };
 
-// The files of the round, as the round wrote them.
-function read<T>(path: string): T {
-  return JSON.parse(readFileSync(join(bundle, path), 'utf8'));
+// One report as the replica of round #3152 sees it (scripts/data.ts).
+type Doc = {
+  id: string;
+  event: string;
+  publisher: string | null;
+  publishedAt: number;
+  day: number;
+  text: string | null;
+  numbers: Set<string>;
+  vector: Float32Array | null;
+  order: number;
+};
+
+// The replica of round #3152: its lead rule, its pair features and its
+// detector, each a file of the round.
+type Replica = {
+  analyse: (
+    title: string,
+    body: string,
+    lead: 'frozen',
+    numbers: 'frozen',
+  ) => { text: string | null; numbers: Set<string> };
+  Context: new (
+    docs: readonly Doc[],
+    sims: Float64Array,
+    entities: null,
+  ) => {
+    features: (i: number, j: number, similarity: number) => object;
+    index: Map<string, number>;
+  };
+  similarityMatrix: (docs: readonly Doc[]) => Float64Array;
+  runDetector: (
+    docs: readonly Doc[],
+    sims: Float64Array,
+    options: {
+      threshold: number;
+      spanDays: null;
+      score: (a: Doc, b: Doc, similarity: number) => number;
+    },
+  ) => Map<string, number>;
+  probability: (
+    model: {
+      features: string[];
+      mean: number[];
+      sd: number[];
+      weights: number[];
+    },
+    features: object,
+  ) => number;
+};
+
+type Design = {
+  features: string[];
+  threshold: number;
+  model: {
+    intercept: number;
+    terms: Record<string, { weight: number; mean: number; sd: number }>;
+  };
+};
+
+// The files of a round, as the round wrote them.
+function read<T>(round: string, path: string): T {
+  return JSON.parse(readFileSync(join(round, path), 'utf8'));
 }
 
-// The EmbeddingGemma 2 vectors of the round, by input text.
+// The EmbeddingGemma 2 vectors of round #3130, by input text.
 function researchVectors(): Map<string, number[]> {
-  const folder = join(bundle, 'results/vectors/gvc');
+  const folder = join(round3130, 'results/vectors/gvc');
   const vectors = new Map<string, number[]>();
   for (const file of readdirSync(folder).filter((name) =>
     name.endsWith('.json'),
   )) {
-    const { inputs } = read<{ inputs: string[] }>(
-      join('results/vectors/gvc', file),
-    );
+    const { inputs } = read<{ inputs: string[] }>(folder, file);
     const bytes = readFileSync(join(folder, file.replace('.json', '.bin')));
     const all = new Float32Array(
       bytes.buffer,
@@ -76,15 +139,136 @@ function researchVectors(): Map<string, number[]> {
   return vectors;
 }
 
-test(
-  'a replay of the Gun Violence Corpus gives the partition and the scores of round #3130',
-  { skip: !existsSync(bundle) && 'the #3130 bundle is not on this machine' },
-  async () => {
-    const research: Research = await import(join(bundle, 'scripts/common.ts'));
-    const rows = read<Row[]>('data/gvc.json');
-    const expected = read<{ metrics: Scores; groups: string[][] }>(
-      'results/test/gvc-design.json',
+// The partition that the replica of round #3152 gives for the reports in
+// this arrival order, with the weights of plan.json.
+async function replicaGroups(
+  order: readonly Row[],
+  idOf: ReadonlyMap<string, string>,
+  vectors: ReadonlyMap<string, number[]>,
+  publisherOf: (row: Row) => string | undefined,
+): Promise<string[][]> {
+  const replica: Replica = {
+    ...(await import(join(round3152, 'scripts/lead.ts'))),
+    ...(await import(join(round3152, 'scripts/features.ts'))),
+    ...(await import(join(round3152, 'scripts/detector.ts'))),
+    ...(await import(join(round3130, 'scripts/model.ts'))),
+  };
+  const { design } = read<{ design: Design }>(round3152, 'plan.json');
+  const terms = design.features.map((feature) => {
+    const term = design.model.terms[feature];
+    if (term === undefined) throw new Error(`plan.json has no ${feature}`);
+    return term;
+  });
+  const model = {
+    features: design.features,
+    mean: terms.map((term) => term.mean),
+    sd: terms.map((term) => term.sd),
+    weights: [design.model.intercept, ...terms.map((term) => term.weight)],
+  };
+  const docs = order.map((row, index): Doc => {
+    const { text, numbers } = replica.analyse(
+      row.title ?? '',
+      row.body,
+      'frozen',
+      'frozen',
     );
+    const vector = text === null ? undefined : vectors.get(text);
+    const length = Math.hypot(...(vector ?? []));
+    const publishedAt = Date.parse(row.published);
+    return {
+      id: idOf.get(row.id) ?? row.id,
+      event: row.event,
+      publisher: publisherOf(row) ?? null,
+      publishedAt,
+      day: Math.floor(publishedAt / 86_400_000),
+      text,
+      numbers,
+      vector:
+        vector === undefined
+          ? null
+          : Float32Array.from(vector, (value) => value / length),
+      order: index,
+    };
+  });
+  const sims = replica.similarityMatrix(docs);
+  const context = new replica.Context(docs, sims, null);
+  const eventOf = replica.runDetector(docs, sims, {
+    threshold: design.threshold,
+    spanDays: null,
+    score: (a, b, similarity) =>
+      replica.probability(
+        model,
+        context.features(
+          context.index.get(a.id) ?? -1,
+          context.index.get(b.id) ?? -1,
+          similarity,
+        ),
+      ),
+  });
+  return [...Map.groupBy(eventOf.keys(), (id) => eventOf.get(id)).values()].map(
+    (members) => members.map((id) => id.slice('000 '.length)),
+  );
+}
+
+// The partition that the detector gives for the reports in this arrival
+// order.
+async function detectorGroups(
+  order: readonly Row[],
+  idOf: ReadonlyMap<string, string>,
+  model: MockEmbeddingModelV4,
+  publisherOf: (row: Row) => string | undefined,
+): Promise<string[][]> {
+  using database = new DatabaseSync(':memory:');
+  const detector = new EventDetector({
+    database,
+    vectors: new Collection({ database, model }),
+  });
+  await detector.add(
+    order.map((row) => {
+      const publisher = publisherOf(row);
+      return {
+        id: idOf.get(row.id) ?? row.id,
+        title: row.title ?? '',
+        body: row.body,
+        publishedAt: new Date(row.published),
+        ...(publisher !== undefined && { publisher }),
+      };
+    }),
+  );
+  // The replica clusters the window again at the end of its stream. The
+  // detector does it when a report of a later day arrives. A headline-only
+  // report stays alone, so it changes no other event.
+  const last = Math.max(...order.map((row) => Date.parse(row.published)));
+  await detector.add([
+    {
+      id: 'next-day',
+      title: 'Next day',
+      body: '',
+      publishedAt: new Date(last + 86_400_000),
+    },
+  ]);
+  return detector
+    .events({ since: new Date(0) })
+    .map((event) =>
+      event.members
+        .filter((id) => id !== 'next-day')
+        .map((id) => id.slice('000 '.length)),
+    )
+    .filter((members) => members.length > 0);
+}
+
+test(
+  'a replay of the Gun Violence Corpus gives the partition and the scores of design 3152',
+  {
+    skip:
+      !(existsSync(round3130) && existsSync(round3152)) &&
+      'the bundles of rounds #3130 and #3152 are not on this machine',
+  },
+  async () => {
+    const research: Research = await import(
+      join(round3130, 'scripts/common.ts')
+    );
+    const rows = read<Row[]>(round3130, 'data/gvc.json');
     const vectors = researchVectors();
     // The model gives the vector of the round for each text, and fails on a
     // text that the round did not embed. So each vector text of the detector
@@ -101,8 +285,8 @@ test(
         warnings: [],
       }),
     });
-    // The arrival order of the round (seed 0): by publish day, and equal days
-    // in a seeded shuffle.
+    // The arrival order of round #3130 (seed 0): by publish day, and equal
+    // days in a seeded shuffle.
     const slots = research.shuffle(
       rows.map((_, index) => index),
       0,
@@ -118,57 +302,42 @@ test(
           a.rank - b.rank,
       )
       .map(({ row }) => row);
-    using database = new DatabaseSync(':memory:');
-    const detector = new EventDetector({
-      database,
-      vectors: new Collection({ database, model }),
-    });
-
-    // The round breaks ties by the row index of the corpus file. The detector
-    // breaks them by report id, so each id starts with the row index.
+    // The rounds break ties by the row index of the corpus file. The
+    // detector breaks them by report id, so each id starts with the row
+    // index.
     const idOf = new Map(
       rows.map((row, index) => [
         row.id,
         `${String(index).padStart(3, '0')} ${row.id}`,
       ]),
     );
-    await detector.add(
-      order.map((row) => ({
-        id: idOf.get(row.id) ?? row.id,
-        title: row.title ?? '',
-        body: row.body,
-        publishedAt: new Date(row.published),
-      })),
-    );
-    // The round clusters the window again at the end of its stream. The
-    // detector does it when a report of a later day arrives. A headline-only
-    // report stays alone, so it changes no other event.
-    const last = Math.max(...rows.map((row) => Date.parse(row.published)));
-    await detector.add([
-      {
-        id: 'next-day',
-        title: 'Next day',
-        body: '',
-        publishedAt: new Date(last + 86_400_000),
-      },
-    ]);
-    const groups = detector
-      .events({ since: new Date(0) })
-      .map((event) =>
-        event.members
-          .filter((id) => id !== 'next-day')
-          .map((id) => id.slice('000 '.length)),
-      )
-      .filter((members) => members.length > 0);
-    const scores = research.metrics(rows, groups);
+    // The corpus gives no publishers. So that the replay also compares the
+    // same-publisher term with plan.json, a second replay gives each report
+    // one of three made-up publishers, by its row index.
+    const none = () => undefined;
+    const three = (row: Row) => `publisher ${rows.indexOf(row) % 3}`;
 
+    const groups = await detectorGroups(order, idOf, model, none);
+    const withPublishers = await detectorGroups(order, idOf, model, three);
+
+    const expected = await replicaGroups(order, idOf, vectors, none);
+    const scores = research.metrics(rows, groups);
+    const expectedScores = research.metrics(rows, expected);
     assert.equal(
-      research.partitionDifference(expected.groups, groups).changedPairs,
+      research.partitionDifference(expected, groups).changedPairs,
       0,
     );
-    assert.ok(Math.abs(scores.b3.f05 - expected.metrics.b3.f05) < 1e-9);
-    assert.ok(Math.abs(scores.f05 - expected.metrics.f05) < 1e-9);
-    assert.ok(Math.abs(scores.b3.f05 - 0.948) < 0.0005);
-    assert.ok(Math.abs(scores.f05 - 0.868) < 0.0005);
+    assert.equal(
+      research.partitionDifference(
+        await replicaGroups(order, idOf, vectors, three),
+        withPublishers,
+      ).changedPairs,
+      0,
+    );
+    assert.ok(Math.abs(scores.b3.f05 - expectedScores.b3.f05) < 1e-9);
+    assert.ok(Math.abs(scores.f05 - expectedScores.f05) < 1e-9);
+    // plan.json implementationCheck.scores.gvc
+    assert.ok(Math.abs(scores.b3.f05 - 0.957) < 0.0005);
+    assert.ok(Math.abs(scores.f05 - 0.898) < 0.0005);
   },
 );

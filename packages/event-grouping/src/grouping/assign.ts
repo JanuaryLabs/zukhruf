@@ -16,7 +16,7 @@ export function assign(
   let best: number | undefined;
   let bestScore = -Infinity;
   if (report.text !== null) {
-    scores.remember(report.id, report.numbers);
+    scores.remember(report.id, report);
     const candidates = [
       ...new Set(shortlist.of(report.id).map(({ id }) => table.eventOf(id))),
     ].toSorted((a, b) => a - b);

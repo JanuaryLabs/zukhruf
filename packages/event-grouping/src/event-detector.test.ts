@@ -42,9 +42,9 @@ function detector(
   return new EventDetector({ database, vectors });
 }
 
-// A unit vector at an angle, in degrees. Without numbers, two reports join
-// when their angle is at most 36 degrees (cosine 0.809, pair score 0.55),
-// and not at 37 degrees (cosine 0.799, pair score 0.47).
+// A unit vector at an angle, in degrees. Without numbers and publishers, two
+// reports join when their angle is at most 35 degrees (cosine 0.819, pair
+// score 0.53), and not at 36 degrees (cosine 0.809, pair score 0.45).
 function at(degrees: number): number[] {
   const radians = (degrees * Math.PI) / 180;
   return [Math.cos(radians), Math.sin(radians)];
@@ -63,8 +63,15 @@ function report(
   title: string,
   publishedAt: Date,
   body = BODY,
+  publisher?: string,
 ): Report {
-  return { id, title, body, publishedAt };
+  return {
+    id,
+    title,
+    body,
+    publishedAt,
+    ...(publisher !== undefined && { publisher }),
+  };
 }
 
 // The members of each event, as sorted lists, in a sorted list.
@@ -147,7 +154,7 @@ describe('EventDetector', () => {
       return partition(everything(events));
     };
 
-    // At a cosine of 0.78, the pair score with no numbers is 0.34.
+    // At a cosine of 0.78, the pair score with no numbers is 0.25.
     const far = await group(0.78, '', '');
     // "143,000" is "143000", and "v14" is "14".
     const farAgree = await group(
@@ -155,7 +162,7 @@ describe('EventDetector', () => {
       'They counted 143,000 votes in v14 of the count.',
       'They counted 143000 votes in 14 of the count.',
     );
-    // At a cosine of 0.85, the pair score with no numbers is 0.81.
+    // At a cosine of 0.85, the pair score with no numbers is 0.76.
     const near = await group(0.85, '', '');
     const nearDisagree = await group(
       0.85,
@@ -167,6 +174,58 @@ describe('EventDetector', () => {
     assert.deepEqual(farAgree, [['first', 'second']]);
     assert.deepEqual(near, [['first', 'second']]);
     assert.deepEqual(nearDisagree, [['first'], ['second']]);
+  });
+
+  test('one publisher splits a pair that two publishers join, and a report without a publisher is never of the same publisher', async () => {
+    const angle = (Math.acos(0.85) * 180) / Math.PI;
+    const group = async (first?: string, second?: string) => {
+      using database = new DatabaseSync(':memory:');
+      const events = detector(
+        database,
+        model({ North: at(0), South: at(angle) }),
+      );
+      await events.add([
+        report('first', 'North', day(1), BODY, first),
+        report('second', 'South', day(1), BODY, second),
+      ]);
+      return partition(everything(events));
+    };
+
+    // At a cosine of 0.85, the pair score is 0.28 for one publisher, and
+    // 0.76 for two publishers or a report without a publisher.
+    const onePublisher = await group('port.example', 'port.example');
+    const twoPublishers = await group('port.example', 'harbour.example');
+    const firstWithout = await group(undefined, 'port.example');
+    const secondWithout = await group('port.example');
+    const bothWithout = await group();
+
+    assert.deepEqual(onePublisher, [['first'], ['second']]);
+    assert.deepEqual(twoPublishers, [['first', 'second']]);
+    assert.deepEqual(firstWithout, [['first', 'second']]);
+    assert.deepEqual(secondWithout, [['first', 'second']]);
+    assert.deepEqual(bothWithout, [['first', 'second']]);
+  });
+
+  test('the detector keeps the publisher of a report for the reports of later adds', async () => {
+    const angle = (Math.acos(0.85) * 180) / Math.PI;
+    const group = async (later: string) => {
+      using database = new DatabaseSync(':memory:');
+      const events = detector(
+        database,
+        model({ North: at(0), South: at(angle) }),
+      );
+      await events.add([
+        report('first', 'North', day(1), BODY, 'port.example'),
+      ]);
+      await events.add([report('second', 'South', day(1, 12), BODY, later)]);
+      return partition(everything(events));
+    };
+
+    const samePublisher = await group('port.example');
+    const otherPublisher = await group('harbour.example');
+
+    assert.deepEqual(samePublisher, [['first'], ['second']]);
+    assert.deepEqual(otherPublisher, [['first', 'second']]);
   });
 
   test('a report joins a report of up to 7 publish days before it, and not of 8 days before it', async () => {
@@ -195,7 +254,7 @@ describe('EventDetector', () => {
       model({ A: at(0), B: at(35), C: at(60), D: at(180) }),
     );
 
-    // Online, B joins A (0.63), and C cannot join A and B (mean 0.48).
+    // Online, B joins A (0.53), and C cannot join A and B (mean 0.47).
     await events.add([
       report('a', 'A', day(1)),
       report('b', 'B', day(1)),
@@ -207,7 +266,7 @@ describe('EventDetector', () => {
     await events.add([report('d', 'D', day(2))]);
 
     assert.deepEqual(online, [['a', 'b'], ['c'], ['e']]);
-    // Group average joins B and C first (0.96), and A cannot join them (0.31).
+    // Group average joins B and C first (0.95), and A cannot join them (0.27).
     assert.deepEqual(partition(everything(events)), [
       ['a'],
       ['b', 'c'],
@@ -309,7 +368,7 @@ describe('EventDetector', () => {
       database,
       model({ Q: at(0), Pa: at(38), Pb: at(21), Far: at(200) }),
     );
-    // Online, P1 cannot join Q (0.40), and P2 joins P1 (0.97) over Q (0.95).
+    // Online, P1 cannot join Q (0.30), and P2 joins P1 (0.99) over Q (0.98).
     // So the old event of Q has the lower id.
     await events.add([
       report('q', 'Q', day(1)),
@@ -318,7 +377,7 @@ describe('EventDetector', () => {
     ]);
     const before = everything(events);
 
-    // Group average joins P1 and P2, and then Q (mean 0.67).
+    // Group average joins P1 and P2, and then Q (mean 0.64).
     await events.add([report('far', 'Far', day(2))]);
     const after = everything(events);
 
@@ -398,11 +457,11 @@ describe('EventDetector', () => {
       database,
       model({
         Report: axis(0, 1),
-        Target: axis(80, 0.68),
+        Target: axis(80, 0.7),
         'Left one': axis(81, 0.95),
         'Left two': axis(82, 0.95),
         ...Object.fromEntries(
-          decoys.map((index) => [name(index), axis(index, 0.7)]),
+          decoys.map((index) => [name(index), axis(index, 0.72)]),
         ),
       }),
     );
@@ -413,8 +472,8 @@ describe('EventDetector', () => {
         report('left-2', 'Left two', day(1)),
       ]),
     );
-    // Ten shared numbers join the report and the target at a cosine of 0.68.
-    // The decoys are nearer, but no decoy can join (0.04).
+    // Ten shared numbers join the report and the target at a cosine of 0.7
+    // (0.60). The decoys are nearer, but no decoy can join (0.05).
     const numbers = 'The count was 11, 12, 13, 14, 15, 16, 17, 18, 19 and 20.';
     await events.add([
       ...decoys.map((index) => report(`decoy-${index}`, name(index), day(1))),
@@ -447,14 +506,18 @@ describe('EventDetector', () => {
       database,
       model({
         Report: vector({ 0: 1 }),
-        Target: vector({ 0: 0.68, 80: Math.sqrt(1 - 0.68 ** 2) }),
+        Target: vector({ 0: 0.7, 80: Math.sqrt(1 - 0.7 ** 2) }),
         'Left one': vector({ 0: 0.8, 80: 0.4, 81: Math.sqrt(0.2) }),
         'Left two': vector({ 0: 0.8, 80: 0.4, 82: Math.sqrt(0.2) }),
         'Next day': vector({ 83: 1 }),
         ...Object.fromEntries(
           decoys.map((index) => [
             name(index),
-            vector({ 0: 0.7, 80: 0.3, [index]: Math.sqrt(0.42) }),
+            vector({
+              0: 0.72,
+              80: 0.3,
+              [index]: Math.sqrt(1 - 0.72 ** 2 - 0.09),
+            }),
           ]),
         ),
       }),

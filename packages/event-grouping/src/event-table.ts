@@ -1,13 +1,14 @@
 import type { DatabaseSync } from 'node:sqlite';
 
+import type { Evidence } from './pair-score.ts';
+
 // A report after the detector read it.
-export type AnalysedReport = {
+export type AnalysedReport = Evidence & {
   readonly id: string;
   readonly publishedAt: number;
   readonly day: number;
   // The text of the vector. Null for a headline-only report.
   readonly text: string | null;
-  readonly numbers: ReadonlySet<string>;
 };
 
 // The rows of the detector in the caller's database.
@@ -43,13 +44,18 @@ export class EventTable {
       .map((row) => String(row.id));
   }
 
-  numbersOf(id: string): Set<string> {
+  evidenceOf(id: string): Evidence {
     const row = this.#database
-      .prepare('SELECT "numbers" FROM "event_report" WHERE "id" = ?')
+      .prepare(
+        'SELECT "numbers", "publisher" FROM "event_report" WHERE "id" = ?',
+      )
       .get(id);
     if (row === undefined) throw new Error(`No report has the id ${id}.`);
     const numbers = String(row.numbers);
-    return new Set(numbers === '' ? [] : numbers.split(' '));
+    return {
+      numbers: new Set(numbers === '' ? [] : numbers.split(' ')),
+      publisher: row.publisher === null ? null : String(row.publisher),
+    };
   }
 
   // The reports with a lead, published on the day or later, in the order of
@@ -66,7 +72,7 @@ export class EventTable {
   insert(report: AnalysedReport, event: number): void {
     this.#database
       .prepare(
-        'INSERT INTO "event_report" ("id", "event", "published_at", "day", "has_lead", "numbers") VALUES (?, ?, ?, ?, ?, ?)',
+        'INSERT INTO "event_report" ("id", "event", "published_at", "day", "has_lead", "numbers", "publisher") VALUES (?, ?, ?, ?, ?, ?, ?)',
       )
       .run(
         report.id,
@@ -75,6 +81,7 @@ export class EventTable {
         report.day,
         report.text === null ? 0 : 1,
         [...report.numbers].join(' '),
+        report.publisher,
       );
   }
 

@@ -16,7 +16,9 @@ export const eventSchema = new Declaration(
   has_lead INTEGER NOT NULL,
   -- The numbers of the title and the body, with a space between them. A
   -- number has no space in it.
-  numbers TEXT NOT NULL
+  numbers TEXT NOT NULL,
+  -- Null when the caller gave no publisher.
+  publisher TEXT
 ) STRICT`,
     `CREATE INDEX event_report_event ON event_report (event)`,
     `CREATE INDEX event_report_day ON event_report (day)`,

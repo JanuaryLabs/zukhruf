@@ -18,6 +18,10 @@ export type Report = {
   readonly title: string;
   readonly body: string;
   readonly publishedAt: Date;
+  // The name of the publisher, for example the host of its site. Two reports
+  // of one publisher are evidence against one event (docs/adr/0005). Without
+  // a publisher, a report is never of the same publisher as another report.
+  readonly publisher?: string;
 };
 
 export type Event = {
@@ -114,5 +118,6 @@ function analyse(report: Report): AnalysedReport {
         ? null
         : `title: ${lead.title} | text: ${lead.title}\n${lead.sentences.join(' ')}`,
     numbers: numbersOf(`${lead.title ?? ''}\n${report.body}`),
+    publisher: report.publisher ?? null,
   };
 }

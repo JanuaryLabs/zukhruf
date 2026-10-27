@@ -45,6 +45,7 @@ export async function feed(
               body: text.body,
               publishedAt:
                 row.publishedAt === null ? UNDATED : new Date(row.publishedAt),
+              ...(row.publisher !== undefined && { publisher: row.publisher }),
             },
           ];
     })

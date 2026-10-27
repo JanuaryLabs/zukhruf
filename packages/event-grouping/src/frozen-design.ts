@@ -1,16 +1,18 @@
-// The parameters of the design that passed research round #3130. Round #3130
-// froze them in its plan.json (sha256 5ad0b727f8ae67a1f25bd25719e550952ab1449e3dce1fad551714f63a3ade4f)
-// before it scored its test set. Change a parameter only with a new research
-// round (docs/adr/0001).
+// The parameters of the design of research round #3152. Round #3152 froze them
+// in its plan.json (sha256 78a56767d6d454e1053d28bbcd71b8dcf465a69cc948a13275f74a3a4e464154)
+// before it scored its exam set. The lead rule, the shortlist, the window and
+// the threshold are those of round #3130 (docs/adr/0001). Change a parameter
+// only with a new research round (docs/adr/0005).
 
-// The lead rule (plan.json leadRule, scripts/lead.ts of the round).
+// The lead rule (plan.json design.leadRule, scripts/lead.ts of round #3130).
 export const LEAD_SENTENCES = 2;
 export const MIN_WORDS = 5;
 export const MIN_LETTER_RATIO = 0.6;
 export const MAX_URL_SHARE = 0.5;
 export const URL_PATTERN = String.raw`(?:https?://|www\.)\S*`;
 
-// The shortlist and the window (plan.json design.k and design.windowDays).
+// The shortlist and the window (plan.json design.shortlistSize and
+// design.windowDays).
 export const SHORTLIST_SIZE = 80;
 export const WINDOW_DAYS = 7;
 
@@ -21,19 +23,26 @@ export const THRESHOLD = 0.5;
 // The logistic regression of the pair score (plan.json design.model). Each
 // term standardizes one feature with the mean and the standard deviation of
 // the training pairs.
-export const INTERCEPT = -5.45562362357198;
+export const INTERCEPT = -5.577353541021158;
 export const SIMILARITY_TERM = {
-  weight: 2.554141188012624,
-  mean: 0.6578909320141326,
-  sd: 0.08434943813934904,
+  weight: 2.463189037261233,
+  mean: 0.6697853674594684,
+  sd: 0.0768108602613357,
 };
 export const AGREEING_NUMBERS_TERM = {
-  weight: 1.1986310686642012,
-  mean: 0.49545111323470553,
-  sd: 0.6286163041119666,
+  weight: 1.2184550356722605,
+  mean: 0.7080452669318389,
+  sd: 0.7146516956780061,
 };
 export const DISAGREEING_NUMBERS_TERM = {
-  weight: -1.140358901882716,
-  mean: 1.439193455150203,
-  sd: 0.8065878434833612,
+  weight: -0.8987930339729852,
+  mean: 1.6871729914951807,
+  sd: 0.8093686065424462,
+};
+// The feature is 1 when the two reports have the same publisher, and 0 when
+// they have different publishers or one of them has no publisher.
+export const SAME_PUBLISHER_TERM = {
+  weight: -0.6864362601504641,
+  mean: 0.12460342227076507,
+  sd: 0.3302686927775403,
 };
