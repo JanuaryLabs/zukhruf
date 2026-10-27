@@ -47,6 +47,23 @@ collection.nearest('a', { k: 10, withinDays: 7 }); // [{ id: 'b', similarity: â€
 collection.similarity('a', 'c');
 ```
 
+### Search a vector table of your own
+
+Another program can write the vectors into its own table. A `VectorSearch` searches that table with the same rules as a collection. The table or view must have the columns `id` (text), `vector` and `published_at` (milliseconds since the Unix epoch). Each `vector` must be a unit vector, as a BLOB of float32 values in the byte order of the platform ([ADR 0005](./docs/adr/0005-a-vector-search-reads-a-vector-table-of-unit-vectors.md)).
+
+```ts
+import { DatabaseSync } from 'node:sqlite';
+
+import { VectorSearch } from '@zukhruf/embeddings';
+
+using database = new DatabaseSync('listings.sqlite');
+const search = new VectorSearch({ database, table: 'listing_vectors' });
+
+search.nearest('listing-42', { k: 10, withinDays: 30 });
+```
+
+To search a table with other column names, make a view that renames the columns, and give the name of the view.
+
 ## API
 
 - `new Collection({ database, model })`. The caller opens and closes `database`. The collection makes its table `embedding_document` in it. `model` is an AI SDK embedding model object.
@@ -54,10 +71,12 @@ collection.similarity('a', 'c');
 - `nearest(id, { k, withinDays })` gives at most `k` neighbours of the document, with the highest similarity first. A neighbour has a publish date at most `withinDays` days before or after the publish date of the document. Equal similarities sort by id.
 - `neighbourGraph({ from, to, k, withinDays })` gives an iterator of `[id, neighbours]` entries, one for each document published from `from` to `to`, in the order of the publish dates and then of the ids. The neighbours of each entry are equal to the result of `nearest(id, { k, withinDays })`. A document outside the range has no entry, but it can be a neighbour of a document in the range. The call reads and decodes each vector one time ([ADR 0004](./docs/adr/0004-a-neighbour-graph-decodes-each-vector-once.md)). Use it when you need the neighbours of many documents.
 - `similarity(a, b)` gives the cosine similarity of two stored documents.
+- `new VectorSearch({ database, table })`. The caller opens and closes `database`. `table` is the name of a table or a view in it, with the columns `id`, `vector` and `published_at`. The vector search only reads it. Each call reads the table again, so the table can change between two calls.
+- `VectorSearch` gives `nearest`, `neighbourGraph` and `similarity`, with the same rules and results as these calls of a collection. A collection gives these calls to a `VectorSearch` over its table `embedding_document`.
 
 ## Errors
 
-- `UnknownDocumentError`: `nearest` or `similarity` got an id that the collection does not store.
+- `UnknownDocumentError`: `nearest` or `similarity` got an id that the vector table does not contain.
 - `DimensionMismatchError`: the model gave a vector with a dimension that is not the dimension of the stored vectors. The upsert stores none of its documents. To change to a model with another dimension, upsert all documents in one call.
 
 ## Limits
@@ -65,6 +84,7 @@ collection.similarity('a', 'c');
 - One database holds one collection.
 - The collection stores the vector of the text, not the text. The caller chooses the text, for example a title and the first sentences.
 - A document has one vector. A long text gives one mean vector, and its details become a small part of it.
+- A vector search requires unit vectors. It does not examine the length or the dimension of a vector.
 - The search reads each document in the window ([ADR 0001](./docs/adr/0001-search-compares-each-document-in-the-window.md)). A window of many thousand documents is slow. A neighbour graph decodes each vector once, but it still calculates a similarity for each pair of documents in a window.
 - After a model change, upsert all documents again ([ADR 0002](./docs/adr/0002-the-hash-includes-the-model.md)).
 
@@ -74,4 +94,5 @@ collection.similarity('a', 'c');
 - [ADR 0002: The hash includes the model](./docs/adr/0002-the-hash-includes-the-model.md)
 - [ADR 0003: All vectors of a collection have one dimension](./docs/adr/0003-all-vectors-of-a-collection-have-one-dimension.md)
 - [ADR 0004: A neighbour graph decodes each vector once](./docs/adr/0004-a-neighbour-graph-decodes-each-vector-once.md)
+- [ADR 0005: A vector search reads a vector table of unit vectors](./docs/adr/0005-a-vector-search-reads-a-vector-table-of-unit-vectors.md)
 - [Code copied from @deepagents/retrieval](./docs/copied-from-deepagents-retrieval.md)

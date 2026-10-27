@@ -5,11 +5,19 @@ A program that compares texts by meaning needs one vector for each text. A model
 ## Language
 
 **Collection**:
-The documents and their vectors in one SQLite database. All vectors of a collection have one dimension.
+The documents and their vectors in one SQLite database. All vectors of a collection have one dimension. A collection keeps its vectors in a vector table.
 _Avoid_: Index, store, table
 
+**Vector table**:
+A SQLite table or view with the columns `id` (text), `vector` (a unit vector as a BLOB of float32 values, in the byte order of the platform) and `published_at` (milliseconds since the Unix epoch). Each row is one document. The table of a collection is a vector table. Another program can write its own vector table.
+_Avoid_: Index, store, collection (for a table that no collection writes)
+
+**Vector search**:
+The search for the neighbours of a document in one vector table. It does not embed and does not write.
+_Avoid_: Index, query, retriever
+
 **Document**:
-An id, a text and a publish date that the caller gives. The collection stores the vector of the text, not the text.
+An id, a text and a publish date that the caller gives. The collection stores the vector of the text, not the text. In a vector table, a document is a row.
 _Avoid_: Article, chunk, record
 
 **Model**:
