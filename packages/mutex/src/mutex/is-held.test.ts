@@ -205,6 +205,7 @@ void describe.each(
 						while (Atomics.load(shared, 0) === 0) {
 							await Atomics.waitAsync(shared, 2, asked).value;
 							asked = Atomics.load(shared, 2);
+							// Start the look before the signal: its request then reaches the coordinator before the attempt does.
 							const look = mutex.isHeld('report:daily');
 							Atomics.store(shared, 3, asked);
 							Atomics.notify(shared, 3);
