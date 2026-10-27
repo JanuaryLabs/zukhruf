@@ -273,6 +273,323 @@
           }
         }
       }
+    },
+    {
+      "design": "3152b",
+      "acceptedAt": "2026-10-27T15:50:26.385Z",
+      "metricsVersion": 2,
+      "embeddingModel": "embeddinggemma-2",
+      "pin": {
+        "commit": "b9f70bbdf80817bd65d09ae36ee31a495d93f38a",
+        "planSha256": "dc26dbd8c26341ca4245552d017161307f30b79aef4bc5ba3a171a72a534c479",
+        "frozenDesignSha256": "47ca6a8b13f593f59972404af5a91407e803564fd1400dbc8d2892841abf8f6f",
+        "constants": {
+          "AGREEING_NUMBERS_TERM": {
+            "weight": 1.2184550356722605,
+            "mean": 0.7080452669318389,
+            "sd": 0.7146516956780061
+          },
+          "DISAGREEING_NUMBERS_TERM": {
+            "weight": -0.8987930339729852,
+            "mean": 1.6871729914951807,
+            "sd": 0.8093686065424462
+          },
+          "INTERCEPT": -5.577353541021158,
+          "LEAD_SENTENCES": 2,
+          "MAX_URL_SHARE": 0.5,
+          "MIN_LETTER_RATIO": 0.6,
+          "MIN_WORDS": 5,
+          "SAME_PUBLISHER_TERM": {
+            "weight": -0.6864362601504641,
+            "mean": 0.12460342227076507,
+            "sd": 0.3302686927775403
+          },
+          "SHORTLIST_SIZE": 80,
+          "SIMILARITY_TERM": {
+            "weight": 2.463189037261233,
+            "mean": 0.6697853674594684,
+            "sd": 0.0768108602613357
+          },
+          "THRESHOLD": 0.45,
+          "URL_PATTERN": "(?:https?://|www\\.)\\S*",
+          "WINDOW_DAYS": 7
+        }
+      },
+      "sets": {
+        "anthropic-outlets": {
+          "role": "training",
+          "labelsSha256": "84afb680406f6a8b1c785f9bf1029e21faf83798f687ff88605c0daf8cdba027",
+          "reports": 816,
+          "muc": {
+            "precision": 0.671,
+            "recall": 0.535,
+            "f1": 0.596,
+            "f05": 0.639
+          },
+          "bCubed": {
+            "precision": 0.927,
+            "recall": 0.858,
+            "f1": 0.891,
+            "f05": 0.912
+          },
+          "ceafE": {
+            "precision": 0.843,
+            "recall": 0.898,
+            "f1": 0.87,
+            "f05": 0.854
+          },
+          "blanc": {
+            "precision": 0.803,
+            "recall": 0.635,
+            "f1": 0.687,
+            "f05": 0.743
+          },
+          "pair": {
+            "precision": 0.607,
+            "recall": 0.27,
+            "f1": 0.374,
+            "f05": 0.486
+          },
+          "conll": {
+            "f1": 0.785,
+            "f05": 0.802
+          }
+        },
+        "deepmind-outlets": {
+          "role": "regression",
+          "labelsSha256": "42c978a5fec954c73da71473a88d09fba9258b172b52b60cde3898962552ad15",
+          "reports": 133,
+          "muc": {
+            "precision": 0.9,
+            "recall": 0.581,
+            "f1": 0.706,
+            "f05": 0.811
+          },
+          "bCubed": {
+            "precision": 0.978,
+            "recall": 0.895,
+            "f1": 0.935,
+            "f05": 0.96
+          },
+          "ceafE": {
+            "precision": 0.86,
+            "recall": 0.952,
+            "f1": 0.904,
+            "f05": 0.877
+          },
+          "blanc": {
+            "precision": 0.895,
+            "recall": 0.705,
+            "f1": 0.769,
+            "f05": 0.833
+          },
+          "pair": {
+            "precision": 0.793,
+            "recall": 0.411,
+            "f1": 0.541,
+            "f05": 0.669
+          },
+          "conll": {
+            "f1": 0.848,
+            "f05": 0.883
+          }
+        },
+        "dev2938": {
+          "role": "training",
+          "labelsSha256": "f9bb1d77f980eaee174dfad5d89ab9a6420eacee8823c50b1ed076907afed4b6",
+          "reports": 217,
+          "muc": {
+            "precision": 0.5,
+            "recall": 0.25,
+            "f1": 0.333,
+            "f05": 0.417
+          },
+          "bCubed": {
+            "precision": 0.991,
+            "recall": 0.972,
+            "f1": 0.981,
+            "f05": 0.987
+          },
+          "ceafE": {
+            "precision": 0.962,
+            "recall": 0.981,
+            "f1": 0.972,
+            "f05": 0.966
+          },
+          "blanc": {
+            "precision": 0.75,
+            "recall": 0.571,
+            "f1": 0.611,
+            "f05": 0.666
+          },
+          "pair": {
+            "precision": 0.5,
+            "recall": 0.143,
+            "f1": 0.222,
+            "f05": 0.333
+          },
+          "conll": {
+            "f1": 0.762,
+            "f05": 0.79
+          }
+        },
+        "ecbplus": {
+          "role": "training",
+          "labelsSha256": "f2277218175f2f6ce16c45ec59f527bbb7414120cd95aa915267904a31ca5474",
+          "reports": 982,
+          "muc": {
+            "precision": 0.986,
+            "recall": 0.864,
+            "f1": 0.921,
+            "f05": 0.959
+          },
+          "bCubed": {
+            "precision": 0.93,
+            "recall": 0.801,
+            "f1": 0.861,
+            "f05": 0.901
+          },
+          "ceafE": {
+            "precision": 0.359,
+            "recall": 0.821,
+            "f1": 0.499,
+            "f05": 0.404
+          },
+          "blanc": {
+            "precision": 0.928,
+            "recall": 0.896,
+            "f1": 0.912,
+            "f05": 0.921
+          },
+          "pair": {
+            "precision": 0.858,
+            "recall": 0.794,
+            "f1": 0.825,
+            "f05": 0.845
+          },
+          "conll": {
+            "f1": 0.76,
+            "f05": 0.755
+          }
+        },
+        "fresh2957": {
+          "role": "training",
+          "labelsSha256": "063bdc6541275fb0bb841401c8b3fdb1d45a12bed388e347acdc2378d4e7c069",
+          "reports": 48,
+          "muc": {
+            "precision": 0.828,
+            "recall": 0.96,
+            "f1": 0.889,
+            "f05": 0.851
+          },
+          "bCubed": {
+            "precision": 0.882,
+            "recall": 0.972,
+            "f1": 0.925,
+            "f05": 0.899
+          },
+          "ceafE": {
+            "precision": 0.872,
+            "recall": 0.72,
+            "f1": 0.789,
+            "f05": 0.837
+          },
+          "blanc": {
+            "precision": 0.904,
+            "recall": 0.969,
+            "f1": 0.934,
+            "f05": 0.915
+          },
+          "pair": {
+            "precision": 0.81,
+            "recall": 0.944,
+            "f1": 0.872,
+            "f05": 0.833
+          },
+          "conll": {
+            "f1": 0.868,
+            "f05": 0.862
+          }
+        },
+        "gvc": {
+          "role": "regression",
+          "labelsSha256": "2ab7d89462f1df599afa6da5d9e680147b35de0fb05d45d5e84bb6501cd1cec4",
+          "reports": 509,
+          "muc": {
+            "precision": 0.962,
+            "recall": 0.746,
+            "f1": 0.84,
+            "f05": 0.909
+          },
+          "bCubed": {
+            "precision": 0.975,
+            "recall": 0.85,
+            "f1": 0.908,
+            "f05": 0.947
+          },
+          "ceafE": {
+            "precision": 0.722,
+            "recall": 0.902,
+            "f1": 0.802,
+            "f05": 0.752
+          },
+          "blanc": {
+            "precision": 0.951,
+            "recall": 0.857,
+            "f1": 0.898,
+            "f05": 0.928
+          },
+          "pair": {
+            "precision": 0.902,
+            "recall": 0.715,
+            "f1": 0.797,
+            "f05": 0.857
+          },
+          "conll": {
+            "f1": 0.85,
+            "f05": 0.869
+          }
+        },
+        "hlgd-test": {
+          "role": "regression",
+          "labelsSha256": "27c8d84f5a9b73091d11b6718747a9fd1e2e8a9d0c5e91042a3e9957100c4ea5",
+          "reports": 286,
+          "muc": {
+            "precision": 0.25,
+            "recall": 0.006,
+            "f1": 0.012,
+            "f05": 0.028
+          },
+          "bCubed": {
+            "precision": 0.99,
+            "recall": 0.438,
+            "f1": 0.607,
+            "f05": 0.79
+          },
+          "ceafE": {
+            "precision": 0.346,
+            "recall": 0.781,
+            "f1": 0.48,
+            "f05": 0.39
+          },
+          "blanc": {
+            "precision": 0.593,
+            "recall": 0.501,
+            "f1": 0.498,
+            "f05": 0.498
+          },
+          "pair": {
+            "precision": 0.2,
+            "recall": 0.002,
+            "f1": 0.003,
+            "f05": 0.008
+          },
+          "conll": {
+            "f1": 0.366,
+            "f05": 0.403
+          }
+        }
+      }
     }
   ]
 }
