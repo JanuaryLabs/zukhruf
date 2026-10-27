@@ -280,16 +280,18 @@ function declare(blank: DatabaseSync, element: string): SchemaObject {
 }
 
 // Whether the text holds a statement. SQLite compiles no statement from a
-// text of spaces, comments and semicolons, and node:sqlite then throws.
+// text of spaces, comments and semicolons. On Node 26 prepare then throws
+// ERR_INVALID_ARG_VALUE. On Node 24 prepare gives an empty statement, and its
+// sourceSQL throws ERR_INVALID_STATE.
 function holds(database: DatabaseSync, text: string): boolean {
   try {
-    database.prepare(text);
-    return true;
+    return typeof database.prepare(text).sourceSQL === 'string';
   } catch (error) {
     return !(
       error instanceof Error &&
       'code' in error &&
-      error.code === 'ERR_INVALID_ARG_VALUE'
+      (error.code === 'ERR_INVALID_ARG_VALUE' ||
+        error.code === 'ERR_INVALID_STATE')
     );
   }
 }
