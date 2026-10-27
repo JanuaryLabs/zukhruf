@@ -38,6 +38,14 @@ _Avoid_: Server container
 A service container that `reuse()` shares between processes and runs, one per configuration and package version.
 _Avoid_: Global container, singleton
 
+**Lease**:
+A container that runs `cat` on the standard input of the attach of its holder process. When the holder exits for any reason, the attach closes and the engine removes the lease. A process lease tells a global teardown that a test process of a version uses its shared servers now. `reuse()` takes one for each process and engine.
+_Avoid_: Heartbeat, lock, Ryuk session
+
+**Sweep lease**:
+The lease that a global teardown holds while it removes the shared servers of another version. Its name comes from that version, so one teardown at a time sweeps a version. A test process of that version waits until the sweep lease is gone.
+_Avoid_: Sweep lock
+
 **Run**:
 One `node --test` invocation with the Docker global setup. What its test processes create carries the run's label, or a record in the run's directory.
 _Avoid_: Session, scope
