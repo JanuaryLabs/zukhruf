@@ -88,7 +88,10 @@ Read [the limitations](./docs/limitations.md) before you use the events for a de
 
 ## Decisions
 
+Before you change a parameter, the similarity source or the model, read ADR 0001, ADR 0004 and the limitations. A change needs a new research round on the evaluation sets.
+
 - [ADR 0001: The parameters are frozen by research round #3130](./docs/adr/0001-the-parameters-are-frozen-by-research-round-3130.md)
 - [ADR 0002: The window is clustered again on each new publish day](./docs/adr/0002-the-window-is-clustered-again-on-each-new-publish-day.md)
 - [ADR 0003: A headline-only report never joins another report](./docs/adr/0003-a-headline-only-report-never-joins-another-report.md)
+- [ADR 0004: The similarity source is a port, and the parameters belong to one source](./docs/adr/0004-the-similarity-source-is-a-port-and-the-parameters-belong-to-one-source.md)
 - [Limitations](./docs/limitations.md)

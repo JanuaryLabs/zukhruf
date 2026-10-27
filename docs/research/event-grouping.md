@@ -4,6 +4,12 @@ This record keeps what the research for event grouping found, before a package e
 
 Read this record before you change the design, add a feature, or start a new evaluation. Each limitation tells you what happens, what proves it, why it happens, and what to think about before you fix it.
 
+## Why this research started
+
+On 2026-10-23 the maintainer started to design a news reader engine, in the way of brutalist.report: it reads many feeds and shows a short list of what is new. The engine has three stages in this order: ingestion, then near-duplicate detection, then content filtering. The elt library does the ingestion (source-web-pages). Event grouping is the second stage. Many outlets report one launch, one lawsuit or one storm. Without event grouping, the reader sees the same story eight times. With it, the reader sees one event and its sources. A false join is worse than a duplicate, because it hides news (the 2020 Equifax indictment under the 2017 breach). That is why the research chose F0.5. The engine is the first consumer. The packages do not know it, so another consumer can use them too.
+
+## Status
+
 Status on 2026-10-26: round #3124 failed its gate. Round #3130 passed its gate for full articles. It fails on articles that have only a headline. Backlog #3131 built the packages from the #3130 design. A replay of the Gun Violence Corpus through `@zukhruf/event-grouping` gives the events of round #3130. Add the result of each new round to this record.
 
 ## Words in this record
