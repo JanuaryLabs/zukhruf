@@ -16,6 +16,7 @@ import {
 } from '@zukhruf/docker';
 
 import { DockerDirectory } from './directory.ts';
+import { EngineLease, LEASE_LABEL, sweepLeaseName } from './engine-lease.ts';
 import { DockerHost } from './host.ts';
 import { type ProcessRun, TEST_RUN_LABEL, readRun } from './run-records.ts';
 import { ServiceContainer } from './service-container.ts';
@@ -54,6 +55,13 @@ interface Engine {
 
 /** The default resources: they protect a shared engine, such as an SSH engine that runs real applications. */
 const RESOURCES = { Memory: 1024 ** 3, NanoCpus: 1e9 };
+
+/**
+ * The process lease of this process on each engine, by the engine's host.
+ * One process builds many testbeds, so the lease belongs to the module. A
+ * lease whose attach ended is taken again by the next reuse().
+ */
+const processLeases = new Map<string, Promise<EngineLease>>();
 
 const byKey = ([a]: [string, unknown], [b]: [string, unknown]): number => {
   if (a < b) return -1;
@@ -198,6 +206,9 @@ export class DockerTestbed {
     options: ServiceOptions,
   ): Promise<ServiceContainer> {
     const engine = await this.#engine();
+    // Publish this process's lease, then read the sweep lease (ADR 0014).
+    await this.#processLease(engine);
+    await EngineLease.gone(engine.client, sweepLeaseName(PACKAGE_VERSION));
     const configured: EngineApi.ContainerCreateRequest = {
       ...body,
       HostConfig: { ...RESOURCES, ...body.HostConfig },
@@ -256,6 +267,31 @@ export class DockerTestbed {
     return this.#creating(engine, () =>
       engine.client.containers.run(owned, options),
     );
+  }
+
+  /** The process lease of this process on the engine: a sweep keeps the shared servers of this version while it runs. */
+  async #processLease(engine: Engine): Promise<EngineLease> {
+    const host = engine.client.host;
+    const taken = processLeases.get(host);
+    if (taken !== undefined) return taken;
+    const taking = this.#creating(engine, async () => {
+      const lease = await EngineLease.take(engine.client, {
+        ...this.defaults.Labels,
+        [LEASE_LABEL]: 'process',
+        [VERSION_LABEL]: PACKAGE_VERSION,
+      });
+      if (lease === undefined)
+        throw new Error(
+          'The engine removed the process lease before its start',
+        );
+      return lease;
+    });
+    processLeases.set(host, taking);
+    const forget = () => {
+      if (processLeases.get(host) === taking) processLeases.delete(host);
+    };
+    taking.then((lease) => lease.closed().then(forget), forget);
+    return taking;
   }
 
   /**

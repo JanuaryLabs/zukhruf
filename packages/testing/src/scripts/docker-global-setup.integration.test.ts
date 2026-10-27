@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawn as spawnProcess } from 'node:child_process';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import {
   access,
   cp,
@@ -1157,6 +1157,418 @@ test(
       await removeContainer(server).catch(() => {});
       await removeContainer(other.id).catch(() => {});
       if (state) await removeContainer(state.id).catch(() => {});
+    }
+  },
+);
+
+/**
+ * Code that reuses one shared server from the docker area at `library`,
+ * writes its id to `statePath`, and then keeps running until its standard
+ * input ends.
+ */
+const holdingSource = (library: string, statePath: string, probe: string) => `
+  const { DockerTestbed } = await import(${JSON.stringify(library)});
+  const { writeFile } = await import('node:fs/promises');
+  const docker = new DockerTestbed({ environment: process.env });
+  const server = await docker.reuse({ Image: 'alpine:latest', Cmd: ['sleep', '3600'], Labels: { 'dev.zukhruf.testing.probe': ${JSON.stringify(probe)} } }, { internalPort: 80 });
+  await writeFile(${JSON.stringify(statePath)}, JSON.stringify({ id: server.container.id }));
+  for await (const _ of process.stdin);
+`;
+
+/** A process of another version that reuses a shared server and keeps running until `end()`. */
+async function holder(
+  t: TestContext,
+  directory: string,
+  library: string,
+  probe: string,
+  env: Record<string, string | undefined>,
+) {
+  const statePath = join(directory, `holder-${randomUUID()}.json`);
+  const file = join(directory, `holder-${randomUUID()}.ts`);
+  await writeFile(file, holdingSource(library, statePath, probe));
+  const child = spawnProcess(process.execPath, [file], {
+    env,
+    stdio: ['pipe', 'inherit', 'inherit'],
+  });
+  const exited = new Promise<void>((resolve) =>
+    child.once('exit', () => resolve()),
+  );
+  const end = async () => {
+    child.stdin.end();
+    await exited;
+  };
+  try {
+    const { id } = await readState<{ id: string }>(t, statePath);
+    return { id, child, exited, end };
+  } catch (error) {
+    child.kill('SIGKILL');
+    throw error;
+  }
+}
+
+/** Runs a run of this version whose one test reuses a shared server, and gives the server's id. */
+async function currentRun(
+  t: TestContext,
+  directory: string,
+  probe: string,
+  env: Record<string, string | undefined>,
+): Promise<string> {
+  const statePath = join(directory, `current-${randomUUID()}.json`);
+  const file = join(directory, `current-${randomUUID()}.test.ts`);
+  await writeFile(
+    file,
+    `
+    import { test } from 'node:test';
+    test('a shared server', { timeout: 120000 }, async () => {
+      ${reuseSource(JSON.parse(library), statePath, probe)}
+    });
+  `,
+  );
+  await spawn(process.execPath, runnerArgs(file), { env, timeout: 150_000 });
+  return (await readState<{ id: string }>(t, statePath)).id;
+}
+
+test(
+  'a shared server of another version is kept through a run that ends while a process of that version still runs',
+  { timeout: 300_000 },
+  async (t) => {
+    await using directory = await new TemporaryFiles().directory(
+      'zukhruf-testing-leased-',
+    );
+    const probe = randomUUID();
+    const env = runEnvironment(join(directory.path, 'state'));
+    const ids: string[] = [];
+    const other = await holder(
+      t,
+      directory.path,
+      await anotherVersion(directory.path, `${manifest.version}-next.0`),
+      probe,
+      env,
+    );
+    ids.push(other.id);
+    try {
+      ids.push(await currentRun(t, directory.path, probe, env));
+
+      assert.equal(await running(other.id), true);
+    } finally {
+      other.child.kill('SIGKILL');
+      await other.exited;
+      for (const id of ids) await removeContainer(id).catch(() => {});
+    }
+  },
+);
+
+/** The name of the sweep lease of `version`: the name every teardown and every test process of the version agree on. */
+const sweepLease = (version: string): string =>
+  `zukhruf-testing-sweep-${createHash('sha256').update(version).digest('hex')}`;
+
+/** The running process leases of `version`. */
+const processLeases = async (version: string): Promise<string[]> =>
+  (
+    await docker.containers.list({
+      filters: {
+        label: [
+          'dev.zukhruf.testing.lease=process',
+          `dev.zukhruf.testing.version=${version}`,
+        ],
+      },
+    })
+  ).map(({ Id }) => Id);
+
+/** A process of the docker area at `library` reuses a shared server and exits. Gives the server's id. */
+async function reusedAndExited(
+  t: TestContext,
+  directory: string,
+  library: string,
+  probe: string,
+  env: Record<string, string | undefined>,
+): Promise<string> {
+  const statePath = join(directory, `reused-${randomUUID()}.json`);
+  const file = join(directory, `reused-${randomUUID()}.ts`);
+  await writeFile(file, reuseSource(library, statePath, probe));
+  await spawn(process.execPath, [file], { env, timeout: 120_000 });
+  return (await readState<{ id: string }>(t, statePath)).id;
+}
+
+/** A version of this package that no other test uses. */
+const uniqueVersion = (): string =>
+  `${manifest.version}-lease.${randomUUID().slice(0, 8)}`;
+
+test(
+  'the process lease of a test process is gone after the process is killed',
+  { skip: signals, timeout: 180_000 },
+  async (t) => {
+    await using directory = await new TemporaryFiles().directory(
+      'zukhruf-testing-killed-lease-',
+    );
+    const version = uniqueVersion();
+    const other = await holder(
+      t,
+      directory.path,
+      await anotherVersion(directory.path, version),
+      randomUUID(),
+      runEnvironment(join(directory.path, 'state')),
+    );
+    try {
+      assert.equal((await processLeases(version)).length, 1);
+
+      other.child.kill('SIGKILL');
+      await other.exited;
+
+      await t.waitFor(
+        async () => assert.deepEqual(await processLeases(version), []),
+        { timeout: 20_000, interval: 100 },
+      );
+    } finally {
+      other.child.kill('SIGKILL');
+      await removeContainer(other.id).catch(() => {});
+    }
+  },
+);
+
+test(
+  'a test process that reuses a shared server while a teardown sweeps its version waits until the sweep ends, then gets a running server',
+  { skip: proxyless, timeout: 300_000 },
+  async (t) => {
+    await using directory = await new TemporaryFiles().directory(
+      'zukhruf-testing-sweep-wait-',
+    );
+    const version = uniqueVersion();
+    const library = await anotherVersion(directory.path, version);
+    const probe = randomUUID();
+    const env = runEnvironment(join(directory.path, 'state'));
+    const ids: string[] = [];
+    const server = await reusedAndExited(
+      t,
+      directory.path,
+      library,
+      probe,
+      env,
+    );
+    ids.push(server);
+    await using proxy = await EngineProxy.start(engine);
+    // The teardown's look for process leases: the first list after it took the sweep lease.
+    const held = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<void>();
+    let holding = false;
+    proxy.intercept('GET', '/containers/json', async () => {
+      if (holding) return;
+      if ((await docker.containers.find(sweepLease(version))) === undefined)
+        return;
+      holding = true;
+      held.resolve();
+      await release.promise;
+    });
+    const sweeping = currentRun(
+      t,
+      directory.path,
+      randomUUID(),
+      proxiedEnvironment(join(directory.path, 'state'), proxy),
+    );
+    sweeping.catch(() => {});
+    let other: Awaited<ReturnType<typeof holder>> | undefined;
+    try {
+      await held.promise;
+      const lease = await docker.containers.find(sweepLease(version));
+      assert.ok(lease);
+      const waiting = holder(
+        t,
+        directory.path,
+        library,
+        probe,
+        proxiedEnvironment(join(directory.path, 'state'), proxy),
+      );
+      waiting.catch(() => {});
+      // The teardown's own attach waits on its lease too; the second wait is the test process's.
+      await t.waitFor(
+        () =>
+          assert.equal(
+            proxy.requests.filter(
+              ({ method, path }) =>
+                method === 'POST' && path === `/containers/${lease.id}/wait`,
+            ).length,
+            2,
+          ),
+        { timeout: 60_000, interval: 100 },
+      );
+
+      release.resolve();
+      ids.push(await sweeping);
+      other = await waiting;
+
+      assert.equal(other.id, server);
+      assert.equal(await running(other.id), true);
+    } finally {
+      release.resolve();
+      other?.child.kill('SIGKILL');
+      await sweeping.catch(() => {});
+      for (const id of ids) await removeContainer(id).catch(() => {});
+    }
+  },
+);
+
+test(
+  'a teardown that sweeps while a test process of that version looks for the sweep lease keeps the servers that process uses',
+  { skip: proxyless, timeout: 300_000 },
+  async (t) => {
+    await using directory = await new TemporaryFiles().directory(
+      'zukhruf-testing-sweep-order-',
+    );
+    const version = uniqueVersion();
+    const library = await anotherVersion(directory.path, version);
+    const probe = randomUUID();
+    const env = runEnvironment(join(directory.path, 'state'));
+    const ids: string[] = [];
+    const server = await reusedAndExited(
+      t,
+      directory.path,
+      library,
+      probe,
+      env,
+    );
+    ids.push(server);
+    await using proxy = await EngineProxy.start(engine);
+    // The test process's look for the sweep lease waits until the teardown ends.
+    const looking = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<void>();
+    proxy.intercept(
+      'GET',
+      `/containers/${sweepLease(version)}/json`,
+      async () => {
+        looking.resolve();
+        await release.promise;
+      },
+    );
+    const holding = holder(
+      t,
+      directory.path,
+      library,
+      probe,
+      proxiedEnvironment(join(directory.path, 'state'), proxy),
+    );
+    holding.catch(() => {});
+    let other: Awaited<ReturnType<typeof holder>> | undefined;
+    try {
+      await looking.promise;
+
+      ids.push(await currentRun(t, directory.path, randomUUID(), env));
+      release.resolve();
+      other = await holding;
+
+      assert.equal(other.id, server);
+      assert.equal(await running(other.id), true);
+    } finally {
+      release.resolve();
+      other?.child.kill('SIGKILL');
+      for (const id of ids) await removeContainer(id).catch(() => {});
+    }
+  },
+);
+
+test(
+  'two teardowns that sweep one version at once both succeed, and the servers of that version are removed',
+  { skip: proxyless, timeout: 300_000 },
+  async (t) => {
+    await using directory = await new TemporaryFiles().directory(
+      'zukhruf-testing-two-sweeps-',
+    );
+    const version = uniqueVersion();
+    const ids: string[] = [];
+    const server = await reusedAndExited(
+      t,
+      directory.path,
+      await anotherVersion(directory.path, version),
+      randomUUID(),
+      runEnvironment(join(directory.path, 'state')),
+    );
+    ids.push(server);
+    await using proxy = await EngineProxy.start(engine);
+    const held = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<void>();
+    let holding = false;
+    proxy.intercept('GET', '/containers/json', async () => {
+      if (holding) return;
+      if ((await docker.containers.find(sweepLease(version))) === undefined)
+        return;
+      holding = true;
+      held.resolve();
+      await release.promise;
+    });
+    const first = currentRun(
+      t,
+      directory.path,
+      randomUUID(),
+      proxiedEnvironment(join(directory.path, 'state'), proxy),
+    );
+    first.catch(() => {});
+    try {
+      await held.promise;
+
+      ids.push(
+        await currentRun(
+          t,
+          directory.path,
+          randomUUID(),
+          runEnvironment(join(directory.path, 'state')),
+        ),
+      );
+      const keptDuringFirstSweep = await exists(server);
+      release.resolve();
+      ids.push(await first);
+
+      assert.equal(keptDuringFirstSweep, true);
+      assert.equal(await exists(server), false);
+    } finally {
+      release.resolve();
+      await first.catch(() => {});
+      for (const id of ids) await removeContainer(id).catch(() => {});
+    }
+  },
+);
+
+test(
+  'a sweep lease that a killed teardown left created does not stop a test process of its version',
+  { timeout: 180_000 },
+  async (t) => {
+    await using directory = await new TemporaryFiles().directory(
+      'zukhruf-testing-stale-sweep-',
+    );
+    const version = uniqueVersion();
+    if ((await docker.images.inspect('busybox:1.37.0')) === undefined)
+      await docker.images.pull('busybox:1.37.0');
+    // A teardown killed between the create and the start of its sweep lease
+    // leaves it created. No operation of the package stops there.
+    const stale = await docker.containers.create(
+      {
+        Image: 'busybox:1.37.0',
+        Entrypoint: ['cat'],
+        Cmd: [],
+        OpenStdin: true,
+        StdinOnce: true,
+        AttachStdin: true,
+        Labels: {
+          'dev.zukhruf.testing.lease': 'sweep',
+          'dev.zukhruf.testing.version': version,
+        },
+        HostConfig: { AutoRemove: true },
+      },
+      { name: sweepLease(version) },
+    );
+    let server: string | undefined;
+    try {
+      server = await reusedAndExited(
+        t,
+        directory.path,
+        await anotherVersion(directory.path, version),
+        randomUUID(),
+        runEnvironment(join(directory.path, 'state')),
+      );
+
+      assert.equal(await running(server), true);
+      assert.equal(await exists(stale.id), false);
+    } finally {
+      await removeContainer(stale.id).catch(() => {});
+      if (server) await removeContainer(server).catch(() => {});
     }
   },
 );

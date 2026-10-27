@@ -7,6 +7,7 @@ import {
   type Container,
   ContainerNotFoundError,
   Docker,
+  ImageNotFoundError,
 } from '@zukhruf/docker';
 
 import {
@@ -15,6 +16,12 @@ import {
   type Kind,
   ownedBy,
 } from '../databases/collector.ts';
+import {
+  EngineLease,
+  LEASE_IMAGE,
+  LEASE_LABEL,
+  sweepLeaseName,
+} from '../docker/engine-lease.ts';
 import { DockerHost, SHELL_TIMEOUT, quote } from '../docker/host.ts';
 import {
   TEST_RUN_LABEL,
@@ -212,23 +219,66 @@ export async function cleanup(
   await dropDatabases(engine, host, previous.id, signal);
 }
 
+/** Takes the sweep lease of `version`, and pulls its image when the engine does not have it. */
+async function takeSweepLease(
+  engine: Docker,
+  version: string,
+  signal: () => AbortSignal,
+): Promise<EngineLease | undefined> {
+  const take = () =>
+    EngineLease.take(
+      engine,
+      { [LEASE_LABEL]: 'sweep', [VERSION_LABEL]: version },
+      { name: sweepLeaseName(version), signal: signal() },
+    );
+  try {
+    return await take();
+  } catch (error) {
+    if (!(error instanceof ImageNotFoundError)) throw error;
+    await engine.images.pull(LEASE_IMAGE, { signal: signal() });
+    return await take();
+  }
+}
+
 /**
  * Removes each shared server whose version label is not this package's
- * version, or that has no version label (ADR 0012).
+ * version (ADR 0012), unless a test process of that version holds a process
+ * lease (ADR 0014). The sweep lease of the version comes first, and the look
+ * for process leases after it. A server with no version label has no lease.
  */
 async function removeOtherVersions(engine: Docker): Promise<void> {
   const signal = () => AbortSignal.timeout(ENGINE_CALL_TIMEOUT);
-  for (const summary of await engine.containers.list({
-    all: true,
-    filters: { label: [`${SHARED_SERVER_LABEL}=1`] },
-    signal: signal(),
-  })) {
-    if (summary.Labels?.[VERSION_LABEL] === PACKAGE_VERSION) continue;
-    // Another run's teardown can remove it first.
-    const container = await engine.containers.find(summary.Id, {
-      signal: signal(),
-    });
-    await container?.remove({ force: true, v: true, signal: signal() });
+  const versions = Map.groupBy(
+    (
+      await engine.containers.list({
+        all: true,
+        filters: { label: [`${SHARED_SERVER_LABEL}=1`] },
+        signal: signal(),
+      })
+    ).filter(({ Labels }) => Labels?.[VERSION_LABEL] !== PACKAGE_VERSION),
+    ({ Labels }) => Labels?.[VERSION_LABEL],
+  );
+  for (const [version, servers] of versions) {
+    await using lease =
+      version === undefined
+        ? undefined
+        : await takeSweepLease(engine, version, signal);
+    if (version !== undefined) {
+      // Another teardown sweeps this version now.
+      if (lease === undefined) continue;
+      const holders = await engine.containers.list({
+        filters: {
+          label: [`${LEASE_LABEL}=process`, `${VERSION_LABEL}=${version}`],
+        },
+        signal: signal(),
+      });
+      if (holders.length > 0) continue;
+    }
+    for (const { Id } of servers) {
+      // Another run's teardown can remove it first.
+      const container = await engine.containers.find(Id, { signal: signal() });
+      await container?.remove({ force: true, v: true, signal: signal() });
+    }
   }
 }
 
