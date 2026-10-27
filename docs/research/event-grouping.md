@@ -36,15 +36,15 @@ Status on 2026-10-26: round #3124 failed its gate. Round #3130 passed its gate f
 
 All evidence is on the local Mac in `~/.codex/visualizations/2026/10/23/01a16a1c-424c-7793-8ca9-02cc1c715d82/`. The backlog items hold the full reports.
 
-| Round        | Question                                                                                  | Result                                                           | Folder                     |
-| ------------ | ----------------------------------------------------------------------------------------- | ---------------------------------------------------------------- | -------------------------- |
-| #2938        | Do embeddings find topics and events on new articles?                                     | Topics: yes. Events: no.                                         | `embedding-heldout-2938`   |
-| #2944        | Can a reranker or a classifier decide the event?                                          | No tested method was ready.                                      | `event-grouping-2944`      |
-| #2947, #2948 | Do event summaries made by a local LLM help? How many neighbours must the shortlist keep? | Summaries lose evidence. 80 neighbours keep 99% of real pairs.   | `event-evidence-2947-2948` |
-| #2957        | Can a local LLM compare two full articles?                                                | Good results, but too slow. The user closed this route.          | `event-evidence-2957`      |
-| #3124        | Can cheap features with a logistic regression decide the event?                           | Failed its gate on ECB+.                                         | `feature-scorer-3124`      |
-| #3130        | Same question, with full-article training data and a new grouping step.                   | Passed on the Gun Violence Corpus. Fails on headline-only input. | `feature-scorer-3130`      |
-| #3152        | Which fix lowers the false joins on one company's news and its outlets (limitation 23)?   | Weights fitted again + a same-publisher term. Exam pending.      | `feature-scorer-3152`      |
+| Round        | Question                                                                                  | Result                                                                                                                 | Folder                     |
+| ------------ | ----------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- | -------------------------- |
+| #2938        | Do embeddings find topics and events on new articles?                                     | Topics: yes. Events: no.                                                                                               | `embedding-heldout-2938`   |
+| #2944        | Can a reranker or a classifier decide the event?                                          | No tested method was ready.                                                                                            | `event-grouping-2944`      |
+| #2947, #2948 | Do event summaries made by a local LLM help? How many neighbours must the shortlist keep? | Summaries lose evidence. 80 neighbours keep 99% of real pairs.                                                         | `event-evidence-2947-2948` |
+| #2957        | Can a local LLM compare two full articles?                                                | Good results, but too slow. The user closed this route.                                                                | `event-evidence-2957`      |
+| #3124        | Can cheap features with a logistic regression decide the event?                           | Failed its gate on ECB+.                                                                                               | `feature-scorer-3124`      |
+| #3130        | Same question, with full-article training data and a new grouping step.                   | Passed on the Gun Violence Corpus. Fails on headline-only input.                                                       | `feature-scorer-3130`      |
+| #3152        | Which fix lowers the false joins on one company's news and its outlets (limitation 23)?   | Weights fitted again + a same-publisher term, threshold 0.45 (3152b). Passed the exam: CoNLL F0.5 0.883 against 0.818. | `feature-scorer-3152`      |
 
 ## The design that passed (#3130)
 

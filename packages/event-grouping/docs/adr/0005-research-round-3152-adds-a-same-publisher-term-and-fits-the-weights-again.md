@@ -68,7 +68,20 @@ The round did not measure the arrival order. The package measured it after the r
 
 ### The exam
 
-The exam set is deepmind-outlets: 133 reports in 102 events, labelled and frozen before any design saw it (commit dc1daad). It leaves out the 27 reports that the training set anthropic-outlets also holds, because this round fitted its weights on that set (commit 8c32ca8). It is not scored yet. The second selection (below) wrote the rule that decides the exam.
+The exam set is deepmind-outlets: 133 reports in 102 events, labelled and frozen before any design saw it (commit dc1daad). It leaves out the 27 reports that the training set anthropic-outlets also holds, because this round fitted its weights on that set (commit 8c32ca8). The second selection (below) wrote the rule that decides the exam. The exam was scored one time, on 2026-10-27 (commit 82c172c), and design 3152b **passed**:
+
+| Design                   | CoNLL F0.5 | B-cubed F0.5 | Pair precision / recall / F0.5 |
+| ------------------------ | ---------- | ------------ | ------------------------------ |
+| 3152b                    | 0.883      | 0.960        | 0.793 / 0.411 / 0.669          |
+| 3130                     | 0.818      | 0.918        | 0.622 / 0.500 / 0.593          |
+| Every report alone       | 0.562      | 0.943        | 0 / 0 / 0                      |
+| All reports in one event | 0.100      | 0.017        | 0.006 / 1.000 / 0.008          |
+
+- (a) CoNLL F0.5 of 3152b minus 3130: +0.065, 95% bootstrap interval [+0.001, +0.144], 93 blocks. The interval is above 0, but its low end is near 0.
+- (b) 3152b beats both trivial designs.
+- (c) gvc −0.001 [−0.012, +0.011] and hlgd-test +0.001 [0.000, +0.004]: neither interval is below 0.
+
+3152b joins fewer real pairs than 3130 (pair recall 0.411 against 0.500), but more of its joins are correct (0.793 against 0.622). F0.5 counts precision two times, so this is the trade that the objective asks for. The research replica scored design 3130 on the exam in the same run, with the constants of the scoreboard pin. The replica gives the accepted events of 3130 on gvc and the package's exam events of 3152b with no changed pair.
 
 ## The second selection (3152b)
 
@@ -100,4 +113,4 @@ The exam rule (`plan.json` `examVerdict`): the design passes if, on deepmind-out
 
 - A host that knows the publisher must give it. Without publishers, the detector cannot use the same-publisher evidence, and the scores of round #3152 on sets with many publishers do not apply to it.
 - The parameters of round #3130 in ADR 0001 are history. The lead rule, the vector text, the shortlist and the window of ADR 0001 are still the parameters of the detector. The threshold is 0.45.
-- The exam result goes into this record and the workspace record when the exam is scored.
+- 3152b is the accepted design of the scoreboard. deepmind-outlets is now a regression set; a later round needs a new exam set.

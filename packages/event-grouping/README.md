@@ -82,7 +82,7 @@ Round #3152 added the same-publisher term and fitted the weights again on the tr
 | anthropic-outlets, design 3130          | 0.306 / 0.313 / 0.307 | 0.800 / 0.865 / 0.812 |
 | anthropic-outlets, design 3152 (fitted) | 0.641 / 0.257 / 0.493 | 0.938 / 0.853 / 0.919 |
 
-The exam set of round #3152 is not scored yet. A replay of the Gun Violence Corpus through the package gives the events of round #3152 ([src/conformance.test.ts](./src/conformance.test.ts)).
+On the exam set of round #3152 (deepmind-outlets, never seen before), the package gives CoNLL F0.5 0.883 against 0.818 for design 3130, and it passed the rule of the round ([ADR 0005](./docs/adr/0005-research-round-3152-adds-a-same-publisher-term-and-fits-the-weights-again.md)). A replay of the Gun Violence Corpus through the package gives the events of round #3152 ([src/conformance.test.ts](./src/conformance.test.ts)).
 
 ## Limits
 
