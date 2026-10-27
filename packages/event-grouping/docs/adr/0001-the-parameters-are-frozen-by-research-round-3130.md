@@ -1,5 +1,7 @@
 # The parameters are frozen by research round #3130
 
+**Superseded in part by [ADR 0005](./0005-research-round-3152-adds-a-same-publisher-term-and-fits-the-weights-again.md).** Round #3152 fitted the weights again and added a same-publisher term. The values of `INTERCEPT` and of the terms in this record are those of round #3130, and they are history. The other parameters, the vector text and the rule to change a parameter only with a new research round are still valid.
+
 The detector decides with many numbers: the lead rule, the size of the shortlist, the window, the weights of the pair score and the threshold. A small change to one of them can change many events, and a test with a few reports cannot show if the change is better. Only a research round on a labeled corpus can show it.
 
 Research round #3130 chose all of them on fitting data, and then froze them in its `plan.json` before it scored its test set. The sha256 of that `plan.json` is `5ad0b727f8ae67a1f25bd25719e550952ab1449e3dce1fad551714f63a3ade4f`. The round kept its files in `~/.codex/visualizations/2026/10/23/01a16a1c-424c-7793-8ca9-02cc1c715d82/feature-scorer-3130` on the maintainer's Mac. The workspace record [docs/research/event-grouping.md](../../../../docs/research/event-grouping.md) tells the history of all rounds.

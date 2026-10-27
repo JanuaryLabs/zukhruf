@@ -52,6 +52,8 @@ With the guard, the package gets B-cubed F0.5 0.787 (precision 0.983, recall 0.4
 
 **Before you change it.** Test place and person agreement again on data with many look-alike occurrences. Write the rule for a report of several occurrences (limitation 13).
 
+**Round #3152 (2026-10-27).** The round measured named entities again, with weights fitted on the training sets ([ADR 0005](./adr/0005-research-round-3152-adds-a-same-publisher-term-and-fits-the-weights-again.md)). The cross-validation objective was 0.921, against 0.932 for the chosen design. The gvc B-cubed F0.5 fell to 0.945, under the 0.948 of design 3130. The model needs 58 to 101 ms for each report. Thus the design still has no place or person feature. The same-publisher term of round #3152 makes fewer look-alike joins inside one publisher: on anthropic-outlets, the cross-validation pair precision of pairs of one publisher went from 0.166 to 0.447. On the Gun Violence Corpus, which gives no publishers, pair precision went from 0.918 to 0.961, because the round fitted the weights again. The exam result is pending.
+
 **Live evidence from one publisher (2026-10-27).** The detector got the 297 dated posts of anthropic.com/news (May 2021 to October 2026), with EmbeddingGemma 2 through llama.cpp. It made 279 events, and 18 of them have two posts. A reading of the titles finds 5 correct events, for example a launch post and its technical post on the same day. It finds 9 false joins of different announcements on one topic a few days apart, for example "Introducing Claude Opus 4.7" and "Introducing Claude Design by Anthropic Labs" one day apart. 4 events are open to argument. That is 28% to 50% correct, against 0.918 pair precision on the Gun Violence Corpus. Every post of one publisher shares names such as "Anthropic" and "Claude", so their similarity is high, and their numbers seldom disagree. This is dataset shift (limitation 4) in a new direction: the design learned reports of external occurrences from many publishers. These titles are a reading by one person, not labeled data. The posts, the script and the result are in the context-compiler session scratchpad (`anthropic-news/`).
 
 ## 21. A clustering at production size takes seconds to minutes
@@ -110,6 +112,16 @@ On the Gun Violence Corpus, pair precision was 0.918 and B-cubed F0.5 was 0.948.
 
 The evidence is in the context-compiler session scratchpad, `anthropic-plus-outlets/` (README.md, labels.json, results.json, feed-results.json).
 
+**Round #3152 (2026-10-27).** The round used this set as training data (`eval/sets/anthropic-outlets`), in 4 folds of whole events in time order, and measured the three options above ([ADR 0005](./adr/0005-research-round-3152-adds-a-same-publisher-term-and-fits-the-weights-again.md)). It chose weights fitted again with a same-publisher term. In cross-validation on this set:
+
+| Score                         | Design 3130   | Design 3152   |
+| ----------------------------- | ------------- | ------------- |
+| B-cubed F0.5                  | 0.820         | 0.918         |
+| Pair precision / recall       | 0.318 / 0.313 | 0.630 / 0.245 |
+| Pair precision, one publisher | 0.166         | 0.447         |
+
+On the full set, with the final weights (in-sample), the package gives pair P 0.641, R 0.257, F0.5 0.493 and B-cubed F0.5 0.919. Pair recall is lower: the design joins fewer real pairs inside one publisher (recall 0.141). A limit on the days of one event gave the best training scores, but it made gvc worse (limitation 19), so the round did not choose it. The clean lead rule gave 0.01 more B-cubed F0.5 on this set, inside the margin. A later round can measure it again. These are training scores. The exam set deepmind-outlets is not scored yet, so the result on unseen data is pending.
+
 ## The events of the latest publish day are provisional
 
 **What happens.** Between two clusterings, a report joins an event by online assignment. Another arrival order of the same reports can give other events until the day closes.
@@ -120,7 +132,7 @@ The evidence is in the context-compiler session scratchpad, `anthropic-plus-outl
 
 **What happens.** With another embedding model, the similarities have another scale, and the pair scores are not correct.
 
-**Cause.** The weights learned the similarities of EmbeddingGemma 2 (Q8_0) on the text `title: <title> | text: <title>\n<lead>` ([ADR 0001](./adr/0001-the-parameters-are-frozen-by-research-round-3130.md)).
+**Cause.** The weights learned the similarities of EmbeddingGemma 2 (Q8_0) on the text `title: <title> | text: <title>\n<lead>` ([ADR 0001](./adr/0001-the-parameters-are-frozen-by-research-round-3130.md), [ADR 0005](./adr/0005-research-round-3152-adds-a-same-publisher-term-and-fits-the-weights-again.md)).
 
 ## A changed report is not grouped again
 

@@ -10,7 +10,7 @@ On 2026-10-23 the maintainer started to design a news reader engine, in the way 
 
 ## Status
 
-Status on 2026-10-26: round #3124 failed its gate. Round #3130 passed its gate for full articles. It fails on articles that have only a headline. Backlog #3131 built the packages from the #3130 design. A replay of the Gun Violence Corpus through `@zukhruf/event-grouping` gives the events of round #3130. Add the result of each new round to this record.
+Status on 2026-10-26: round #3124 failed its gate. Round #3130 passed its gate for full articles. It fails on articles that have only a headline. Backlog #3131 built the packages from the #3130 design. Status on 2026-10-27: round #3152 added a same-publisher term and fitted the weights again on four training sets. The package now holds the #3152 design, and it gives the scores of the round on the six sets that are not the exam set. The exam set (deepmind-outlets) is not scored yet. Add the result of each new round to this record.
 
 ## Words in this record
 
@@ -44,6 +44,7 @@ All evidence is on the local Mac in `~/.codex/visualizations/2026/10/23/01a16a1c
 | #2957        | Can a local LLM compare two full articles?                                                | Good results, but too slow. The user closed this route.          | `event-evidence-2957`      |
 | #3124        | Can cheap features with a logistic regression decide the event?                           | Failed its gate on ECB+.                                         | `feature-scorer-3124`      |
 | #3130        | Same question, with full-article training data and a new grouping step.                   | Passed on the Gun Violence Corpus. Fails on headline-only input. | `feature-scorer-3130`      |
+| #3152        | Which fix lowers the false joins on one company's news and its outlets (limitation 23)?   | Weights fitted again + a same-publisher term. Exam pending.      | `feature-scorer-3152`      |
 
 ## The design that passed (#3130)
 
@@ -66,6 +67,21 @@ Result on the Gun Violence Corpus, which no earlier round had seen (509 document
 | B-cubed precision / recall / F0.5         | 0.977 / 0.849 / 0.948                        | 0.978 / 0.554 / 0.848 |
 | B-cubed F0.5 range over 10 arrival orders | 0                                            | not measured          |
 | Cost for each article                     | About 15 ms, of which 13 ms is the embedding | —                     |
+
+## The design of round #3152
+
+Round #3152 kept the #3130 design and changed only the pair score (package ADR 0005). It fitted the weights again on the pairs of anthropic-outlets, ECB+, #2938 and #2957, and it added a term for two reports of the same publisher. The weight of that term is negative. The round froze its selection rule before it scored a candidate, and its `plan.json` (sha256 `78a56767…`) before it scored the exam set.
+
+| Candidate                                                    | Training objective | gvc pair / B-cubed F0.5 | Eligible |
+| ------------------------------------------------------------ | ------------------ | ----------------------- | -------- |
+| #3130 as it is                                               | 0.892              | 0.868 / 0.948           | yes      |
+| Weights fitted again                                         | 0.916              | 0.892 / 0.953           | yes      |
+| Weights + same publisher (chosen, the cheapest of five tied) | 0.932              | 0.898 / 0.957           | yes      |
+| Weights + clean lead + numbers without URLs + same publisher | 0.936              | 0.911 / 0.960           | yes      |
+| Weights + a limit of 1 day for one event                     | 0.937              | 0.811 / 0.926           | no       |
+| Weights + named entities                                     | 0.921              | 0.871 / 0.945           | no       |
+
+The objective is the mean B-cubed F0.5 of three families of cross-validation folds. A candidate is eligible when gvc and hlgd-test are not lower than #3130. Candidates within 0.005 of the best eligible objective are tied, and the cheapest wins. On anthropic-outlets, cross-validation B-cubed F0.5 went from 0.820 to 0.918, and the pair precision of pairs of one publisher from 0.166 to 0.447. Over five shuffles of the reports of each publish day, B-cubed F0.5 stayed from 0.9186 to 0.9193 on anthropic-outlets and at 0.9572 on gvc. The exam passes if the exam B-cubed F0.5 and pair F0.5 are higher than #3130, and gvc and hlgd-test are not lower.
 
 ## Limitations
 

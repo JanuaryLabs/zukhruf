@@ -7,8 +7,12 @@ Before you change a parameter, run `nx run event-grouping:eval` ([eval/README.md
 ## Language
 
 **Report**:
-An id, a title, a body and a publish date that the caller gives. A news article is one example.
+An id, a title, a body, a publish date and, when the caller knows it, a publisher. The caller gives them. A news article is one example.
 _Avoid_: Article, document, item
+
+**Publisher**:
+The name of the source that published a report, for example the host of its site. Two reports have the same publisher only when both have a publisher and the names are equal.
+_Avoid_: Source (for the publisher), outlet, site
 
 **Event**:
 One real occurrence at one time and place, and the reports that the detector put into it. Two lawsuits by one company are two events.
@@ -39,7 +43,7 @@ The cosine of the vectors of two leads.
 _Avoid_: Distance, score
 
 **Pair score**:
-The probability, from 0 to 1, that two reports report one event. It comes from the similarity and the numbers of the two reports.
+The probability, from 0 to 1, that two reports report one event. It comes from the similarity, the numbers and the publishers of the two reports. Two reports of one publisher get a lower pair score.
 _Avoid_: Similarity, confidence
 
 **Threshold**:

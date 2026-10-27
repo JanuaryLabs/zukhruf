@@ -1,6 +1,6 @@
 # Evaluation of the event detector
 
-The parameters of the detector come from research round #3130 ([ADR 0001](../docs/adr/0001-the-parameters-are-frozen-by-research-round-3130.md)). This folder lets you measure the detector again, on the same labelled sets, before and after a change. It is not in the npm package and not in the build.
+The parameters of the detector come from research rounds #3130 and #3152 ([ADR 0001](../docs/adr/0001-the-parameters-are-frozen-by-research-round-3130.md), [ADR 0005](../docs/adr/0005-research-round-3152-adds-a-same-publisher-term-and-fits-the-weights-again.md)). This folder lets you measure the detector again, on the same labelled sets, before and after a change. It is not in the npm package and not in the build.
 
 Run the evaluation before you change a parameter, the lead rule, the similarity source or the model. Then run it again after the change.
 
@@ -33,7 +33,7 @@ For each set, the runner does these steps:
 
 1. It reads the answer key and checks its hash against `set.json`.
 2. It gets the text of each report (see [Texts](#texts)).
-3. It gives the reports to a new `EventDetector` in an in-memory database, as a host does: one `add` for each publish day, in the order of the publish dates. Reports with equal dates keep the order of the answer key.
+3. It gives the reports to a new `EventDetector` in an in-memory database, as a host does: one `add` for each publish day, in the order of the publish dates. Reports with equal dates keep the order of the answer key. Each report has the publisher of its answer-key row, when the row has one.
 4. After the last day, it adds one headline-only report of the next day. This makes the detector cluster the last window again, so the events of the last day are final. The headline-only report never joins an event (ADR 0003).
 5. It scores the events against the answer key and writes `results/<set>.json`.
 
@@ -116,7 +116,7 @@ To accept a design, run all sets with `--accept <design>`, for example `--accept
 
 ## The first entry: design 3130
 
-Design 3130 is the frozen design of the package. The run of 2026-10-27 gives the scores of round #3130 where the protocol is the same:
+Design 3130 was the frozen design of the package when the scoreboard started. The run of 2026-10-27 gives the scores of round #3130 where the protocol is the same:
 
 - gvc: pair F0.5 0.868 and B-cubed F0.5 0.948, as round #3130 and `src/conformance.test.ts` measured.
 - anthropic-outlets: B-cubed F0.5 0.812, as the live test of #3142 measured. The pair scores are P 0.306 and R 0.313; the live test had P 0.303 and R 0.309. The live test did not add the last headline-only report, so it scored the last day before its clustering. Without that report, the partition is the partition of the live test.
