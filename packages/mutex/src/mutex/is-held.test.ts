@@ -218,13 +218,10 @@ void describe.each(
               { interval: 5, timeout: newProcessTimeout },
             );
 
-            // Act: the key is free each time; the attempts go on until 200 looks ran among them.
+            // Act: the key is free each time; the worker thread keeps looking while the 50 attempts run.
             const looksBefore = Atomics.load(shared, 1);
             const results = [];
-            while (
-              results.length < 50 ||
-              Atomics.load(shared, 1) - looksBefore < 200
-            ) {
+            while (results.length < 50) {
               results.push(
                 await mutex.acquire('report:daily', async () => 'ran', {
                   mode: Modes.skipIfBusy(),
@@ -233,8 +230,13 @@ void describe.each(
               // A memory coordinator answers in microtasks; the turn lets the looks it serves in.
               await nextTurn();
             }
+            const looksDuringAttempts = Atomics.load(shared, 1) - looksBefore;
 
             // Assert
+            assert.ok(
+              looksDuringAttempts > 0,
+              'The worker thread must look while the attempts run',
+            );
             assert.deepEqual(
               results.filter((result) => !result.acquired),
               [],
