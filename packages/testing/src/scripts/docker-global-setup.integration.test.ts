@@ -1464,7 +1464,7 @@ test(
 );
 
 test(
-  'two teardowns that sweep one version at once both succeed, and the servers of that version are removed',
+  'two teardowns that sweep one version at once both succeed: the second takes the sweep lease after the first removed it, and the servers of that version are removed',
   { skip: proxyless, timeout: 300_000 },
   async (t) => {
     await using directory = await new TemporaryFiles().directory(
@@ -1493,6 +1493,18 @@ test(
       held.resolve();
       await release.promise;
     });
+    // The id of each sweep lease of the version, in the order of their starts.
+    const starts: string[] = [];
+    proxy.intercept(
+      'POST',
+      /^\/containers\/[^/]+\/start$/,
+      async ({ path }) => {
+        const id = path.split('/')[2] ?? '';
+        const name = (await (await docker.containers.find(id))?.inspect())
+          ?.Name;
+        if (name === `/${sweepLease(version)}`) starts.push(id);
+      },
+    );
     // The second teardown found the sweep lease taken and looks at it.
     const conflicted = Promise.withResolvers<void>();
     proxy.intercept('GET', `/containers/${sweepLease(version)}/json`, () => {
@@ -1520,6 +1532,18 @@ test(
       release.resolve();
       ids.push(await first, await second);
 
+      // The second teardown took the sweep lease after the first removed its own.
+      const [firstLease, secondLease] = starts;
+      assert.ok(firstLease !== undefined && secondLease !== undefined);
+      const removed = proxy.requests.findIndex(
+        ({ method, path }) =>
+          method === 'DELETE' && path === `/containers/${firstLease}`,
+      );
+      const started = proxy.requests.findIndex(
+        ({ method, path }) =>
+          method === 'POST' && path === `/containers/${secondLease}/start`,
+      );
+      assert.ok(removed !== -1 && removed < started);
       assert.equal(await exists(server), false);
       assert.equal(
         await docker.containers.find(sweepLease(version)),
@@ -1672,6 +1696,68 @@ test(
       )
         ?.remove({ force: true })
         .catch(() => {});
+      for (const id of ids) await removeContainer(id).catch(() => {});
+    }
+  },
+);
+
+test(
+  'a teardown that finds a sweep of the same version running for longer than it waits keeps that version and ends cleanly',
+  { skip: proxyless, timeout: 300_000 },
+  async (t) => {
+    await using directory = await new TemporaryFiles().directory(
+      'zukhruf-testing-slow-sweep-',
+    );
+    const version = uniqueVersion();
+    const ids: string[] = [];
+    const server = await reusedAndExited(
+      t,
+      directory.path,
+      await anotherVersion(directory.path, version),
+      randomUUID(),
+      runEnvironment(join(directory.path, 'state')),
+    );
+    ids.push(server);
+    await using proxy = await EngineProxy.start(engine);
+    // The first teardown holds the sweep lease: its look for process leases waits until the second ends.
+    const held = Promise.withResolvers<void>();
+    const release = Promise.withResolvers<void>();
+    let holding = false;
+    proxy.intercept('GET', '/containers/json', async () => {
+      if (holding) return;
+      if ((await docker.containers.find(sweepLease(version))) === undefined)
+        return;
+      holding = true;
+      held.resolve();
+      await release.promise;
+    });
+    const first = currentRun(
+      t,
+      directory.path,
+      randomUUID(),
+      proxiedEnvironment(join(directory.path, 'state'), proxy),
+    );
+    first.catch(() => {});
+    try {
+      await held.promise;
+
+      ids.push(
+        await currentRun(
+          t,
+          directory.path,
+          randomUUID(),
+          runEnvironment(join(directory.path, 'state-second')),
+        ),
+      );
+      const keptBySecond = await exists(server);
+      release.resolve();
+      ids.push(await first);
+
+      assert.equal(keptBySecond, true);
+      assert.equal(await exists(server), false);
+    } finally {
+      release.resolve();
+      await first.catch(() => {});
       for (const id of ids) await removeContainer(id).catch(() => {});
     }
   },

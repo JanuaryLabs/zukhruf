@@ -222,12 +222,17 @@ export async function cleanup(
 /** The tries of a teardown to take a sweep lease that another holder has. */
 const SWEEP_LEASE_TRIES = 3;
 
+/** How long a teardown waits for the sweep lease of one version that another holder has. */
+const SWEEP_LEASE_WAIT = 30_000;
+
 /**
  * Takes the sweep lease of `version`, and pulls its image when the engine
  * does not have it. When the name is taken, it waits until that lease is
  * gone, as a test process does, and tries again: a teardown killed before
  * the start of its lease leaves it created, and the wait removes it. Gives
- * undefined when each try found the name taken.
+ * undefined when each try found the name taken, or when the wait took
+ * longer than SWEEP_LEASE_WAIT: the servers of the version stay for a
+ * later teardown, and another teardown's sweep never fails this run.
  */
 async function takeSweepLease(
   engine: Docker,
@@ -241,6 +246,7 @@ async function takeSweepLease(
       { [LEASE_LABEL]: 'sweep', [VERSION_LABEL]: version },
       { name, signal: signal() },
     );
+  const wait = AbortSignal.timeout(SWEEP_LEASE_WAIT);
   for (let tries = 0; tries < SWEEP_LEASE_TRIES; tries += 1) {
     let lease: EngineLease | undefined;
     try {
@@ -251,7 +257,12 @@ async function takeSweepLease(
       lease = await take();
     }
     if (lease !== undefined) return lease;
-    await EngineLease.gone(engine, name, { signal: signal() });
+    try {
+      await EngineLease.gone(engine, name, { signal: wait });
+    } catch (error) {
+      if (wait.aborted) return undefined;
+      throw error;
+    }
   }
   return undefined;
 }
