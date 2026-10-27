@@ -26,6 +26,8 @@ The research for event grouping found these limits. They apply to this package. 
 
 **Evidence.** On the HLGD test set, B-cubed F0.5 was 0.284 against 0.819 for the baseline. Pair F0.5 was 0.100 against 0.572, with 6,326 false joins (#3132).
 
+With the guard, the package gets B-cubed F0.5 0.787 (precision 0.983, recall 0.438) and pair F0.5 0.008 on the same set ([eval](../eval/README.md), design 3130). It makes almost no false join, and it joins almost no real pair.
+
 **Cause.** Dataset shift: the design learned the similarity scale of title-and-lead text. Two titles get higher similarities, so too many pairs pass the threshold. A title also has few numbers, so the number features give no disagreement evidence.
 
 **Before you change it.** A second model trained on titles, selected by the shape of the input, can give joins to headline-only reports. It needs a new round.

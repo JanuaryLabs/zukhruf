@@ -40,6 +40,6 @@ The search found no model that takes two reports and tells if they are about one
 
 ## Consequences
 
-- Before you change the source or a parameter, run the evaluation (#3145). Do not use a set as a fresh test after a round has scored it once.
+- Before you change the source or a parameter, run `nx run event-grouping:eval` ([eval/README.md](../../eval/README.md)). Do not use a set as a fresh test after a round has scored it once: the runner scores an exam set one time only, and then the set is a regression set.
 - A new source alone does not fix the false joins between the posts of one publisher (limitation 20). There, every post shares the same names, so every similarity is high.
 - If you add a model in the table above, add its row with the round that measured it.

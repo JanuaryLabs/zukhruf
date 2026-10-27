@@ -2,6 +2,8 @@
 
 Many sources report one real occurrence, and a reader wants to see it one time. This package puts the reports of one real occurrence into one event. It compares the leads of reports by their vectors and by their numbers, and it clusters the reports of the last 7 days again on each new publish day.
 
+Before you change a parameter, run `nx run event-grouping:eval` ([eval/README.md](./eval/README.md)).
+
 ## Language
 
 **Report**:
