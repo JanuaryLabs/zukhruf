@@ -219,25 +219,41 @@ export async function cleanup(
   await dropDatabases(engine, host, previous.id, signal);
 }
 
-/** Takes the sweep lease of `version`, and pulls its image when the engine does not have it. */
+/** The tries of a teardown to take a sweep lease that another holder has. */
+const SWEEP_LEASE_TRIES = 3;
+
+/**
+ * Takes the sweep lease of `version`, and pulls its image when the engine
+ * does not have it. When the name is taken, it waits until that lease is
+ * gone, as a test process does, and tries again: a teardown killed before
+ * the start of its lease leaves it created, and the wait removes it. Gives
+ * undefined when each try found the name taken.
+ */
 async function takeSweepLease(
   engine: Docker,
   version: string,
   signal: () => AbortSignal,
 ): Promise<EngineLease | undefined> {
+  const name = sweepLeaseName(version);
   const take = () =>
     EngineLease.take(
       engine,
       { [LEASE_LABEL]: 'sweep', [VERSION_LABEL]: version },
-      { name: sweepLeaseName(version), signal: signal() },
+      { name, signal: signal() },
     );
-  try {
-    return await take();
-  } catch (error) {
-    if (!(error instanceof ImageNotFoundError)) throw error;
-    await engine.images.pull(LEASE_IMAGE, { signal: signal() });
-    return await take();
+  for (let tries = 0; tries < SWEEP_LEASE_TRIES; tries += 1) {
+    let lease: EngineLease | undefined;
+    try {
+      lease = await take();
+    } catch (error) {
+      if (!(error instanceof ImageNotFoundError)) throw error;
+      await engine.images.pull(LEASE_IMAGE, { signal: signal() });
+      lease = await take();
+    }
+    if (lease !== undefined) return lease;
+    await EngineLease.gone(engine, name, { signal: signal() });
   }
+  return undefined;
 }
 
 /**
@@ -264,7 +280,7 @@ async function removeOtherVersions(engine: Docker): Promise<void> {
         ? undefined
         : await takeSweepLease(engine, version, signal);
     if (version !== undefined) {
-      // Another teardown sweeps this version now.
+      // Other teardowns held the sweep lease on each try.
       if (lease === undefined) continue;
       const holders = await engine.containers.list({
         filters: {

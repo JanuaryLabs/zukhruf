@@ -39,7 +39,7 @@ export class EngineProxy implements AsyncDisposable {
   readonly #directory: TemporaryDirectory;
   readonly #intercepts: {
     method: string;
-    path: string;
+    path: string | RegExp;
     intercept: Intercept;
   }[] = [];
   readonly #sockets = new Set<Socket | Duplex>();
@@ -84,8 +84,8 @@ export class EngineProxy implements AsyncDisposable {
     return `unix://${this.#path}`;
   }
 
-  /** Runs `intercept` before each request with this method and path. */
-  intercept(method: string, path: string, intercept: Intercept): void {
+  /** Runs `intercept` before each request with this method and path. A RegExp path matches a path that has an ID, such as `/containers/<id>/start`. */
+  intercept(method: string, path: string | RegExp, intercept: Intercept): void {
     this.#intercepts.push({ method, path, intercept });
   }
 
@@ -130,7 +130,11 @@ export class EngineProxy implements AsyncDisposable {
     // after its client is gone, as one that the engine already received.
     const chunks: Buffer[] = await Array.fromAsync(request);
     const matching = this.#intercepts.filter(
-      ({ method, path }) => method === proxied.method && path === proxied.path,
+      ({ method, path }) =>
+        method === proxied.method &&
+        (typeof path === 'string'
+          ? path === proxied.path
+          : path.test(proxied.path)),
     );
     let pending = matching.length > 0;
     if (pending) this.#unanswered += 1;
