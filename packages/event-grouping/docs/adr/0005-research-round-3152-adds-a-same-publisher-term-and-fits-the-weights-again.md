@@ -68,7 +68,7 @@ The round did not measure the arrival order. The package measured it after the r
 
 ### The exam
 
-The exam set is deepmind-outlets: 160 reports in 127 events, labelled and frozen before any design saw it (commit dc1daad). It is not scored yet. The design passes if its exam B-cubed F0.5 and pair F0.5 are both higher than those of design 3130 on the same labels, and its gvc and hlgd-test scores are not lower than design 3130.
+The exam set is deepmind-outlets: 133 reports in 102 events, labelled and frozen before any design saw it (commit dc1daad). It leaves out the 27 reports that the training set anthropic-outlets also holds, because this round fitted its weights on that set. It is not scored yet. The design passes if its exam B-cubed F0.5 and pair F0.5 are both higher than those of design 3130 on the same labels, and its gvc and hlgd-test scores are not lower than design 3130.
 
 ## Considered Options
 

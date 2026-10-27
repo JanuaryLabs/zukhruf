@@ -2,7 +2,7 @@
   "role": "exam",
   "frozenAt": "2026-10-27T11:46:24Z",
   "firstScoredAt": null,
-  "labelsSha256": "fbfc7f83647fe8be6dcc2a976b94c1b6f8a2e5310355da2fda40fffc21ea095d",
+  "labelsSha256": "42c978a5fec954c73da71473a88d09fba9258b172b52b60cde3898962552ad15",
   "annotator": "Claude (Opus 5.5), one annotator, from the title and the lead only; no embeddings or detector output. The labels are those of labels.json (sha256 695f4f2e130333627c44ef2549452d075c54041c1bf663d1622b9f486b076dd9) of the exam crawl for zukhruf backlog #3152.",
   "boundaryRule": "1. One event is one announced action: a model or product launch, a deal or investment, a funding round or filing,\n   a statement, a policy or report release, a lawsuit filing or ruling, a hire or departure, an incident disclosure.\n2. A report about the reaction to an action (analysis, criticism, follow-up quotes, market moves), published within\n   7 days after the action, belongs to that action. Published later than 7 days, it gets its own label.\n3. A general feature, interview, opinion or round-up with no single action gets its own label (a singleton).\n4. Two actions announced together in one post (one announcement) are one event. Two actions announced separately,\n   even on one day and one topic, are two events.\n5. When a report covers several actions, it gets the action of its title; if its title names none, the action of its\n   lead. If it still has no single action, rule 3.\n6. A later step in one case (a ruling after a filing, an appeal after a ruling) is a new action, so a new event.\n7. Labels come from the title and the lead (first sentences) only, read by one annotator (Claude), without\n   embeddings or detector output. Unclear cases go to the ambiguous list with the alternative label.\n",
   "text": "web",
@@ -15,7 +15,8 @@
   "weaknesses": [
     "One annotator (an AI model). No second annotator checked the labels.",
     "The annotator read the title and the lead only, not the whole article.",
-    "29 articles are ambiguous; each has its alternative label.",
+    "22 articles are ambiguous; each has its alternative label.",
+    "The set leaves out the 27 outlet reports that the training set anthropic-outlets also holds (18 fortune.com, 9 the-decoder.com), because round 3152 fitted its weights on that set. Thus some events have fewer reports than the outlets published.",
     "Fortune dates are the URL day at 12:00 UTC, not the publish time.",
     "The company posts are the deepmind.google/blog posts and 33 of the 35 blog.google posts that its cards link: one could not be extracted and one was not in the blog.google sitemap.",
     "Outlet articles are kept when they mention DeepMind, Hassabis or Gemini, so a few tag-page sidebar articles are in the set as singletons.",
