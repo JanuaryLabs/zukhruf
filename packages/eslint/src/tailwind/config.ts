@@ -14,6 +14,7 @@ export const tailwind: Concept = {
   name: 'tailwind',
   rules,
   config: (plugins) => [
-    { name: 'zukhruf/tailwind', files: SOURCE, plugins, rules: enable(rules) },
+    { name: 'zukhruf/tailwind/plugins', plugins },
+    { name: 'zukhruf/tailwind', files: SOURCE, rules: enable(rules) },
   ],
 };

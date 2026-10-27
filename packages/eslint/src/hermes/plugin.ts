@@ -29,10 +29,13 @@ const plugin = {
 
 configs['recommended'] = [
   {
+    name: 'hermes/recommended/plugins',
+    plugins: { hermes: plugin, 'es-x': esx, 'import-x': importX },
+  },
+  {
     name: 'hermes/recommended',
     files: SOURCE,
     ignores: [...TESTS, ...TEST_SUPPORT, ...CONFIG_FILES, ...SCRIPTS],
-    plugins: { hermes: plugin, 'es-x': esx, 'import-x': importX },
     rules: {
       'hermes/no-missing-console': 'error',
       // Hermes implements Collator, DateTimeFormat and NumberFormat only.

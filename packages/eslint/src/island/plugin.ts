@@ -52,11 +52,11 @@ const plugin = {
 const plugins = { island: plugin };
 
 configs['recommended'] = [
+  { name: 'island/recommended/plugins', plugins },
   {
     name: 'island/recommended/ports',
     files: TYPESCRIPT,
     ignores: [...TESTS, ...TEST_SUPPORT],
-    plugins,
     rules: {
       'island/no-generic-port': 'error',
       'island/no-explicit-any': 'error',
@@ -66,7 +66,6 @@ configs['recommended'] = [
     name: 'island/recommended/library',
     files: TYPESCRIPT,
     ignores: [...TESTS, ...TEST_SUPPORT, ...SCRIPTS, ...CONFIG_FILES],
-    plugins,
     rules: {
       'island/no-process-env': 'error',
       'island/no-console': 'error',
@@ -76,7 +75,6 @@ configs['recommended'] = [
     name: 'island/recommended/dependencies',
     files: PACKAGE_JSON,
     languageOptions: { parser: jsonc },
-    plugins,
     rules: { 'island/dependency-checks': ['error', dependencyPolicy()] },
   },
 ];

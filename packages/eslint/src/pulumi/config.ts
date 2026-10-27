@@ -8,10 +8,10 @@ export const pulumi: Concept = {
   name: 'pulumi',
   rules,
   config: (plugins) => [
+    { name: 'zukhruf/pulumi/plugins', plugins },
     {
       name: 'zukhruf/pulumi',
       files: TYPESCRIPT,
-      plugins,
       rules: enable(rules),
     },
   ],

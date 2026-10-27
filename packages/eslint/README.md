@@ -84,6 +84,8 @@ A fact about the repo goes in `settings`, not in rule options. If you set a rule
 
 A relative `startupFile` is relative to the project of the linted file. `env` does not check test files or tool configs, such as `vite.config.ts`. A tool config runs at build time and has no startup env schema.
 
+Each config registers its plugins for all files. Each rule keeps its own `files` and `ignores`. So you can set a rule in a folder that its config skips, such as `functional/no-let` in `src/testing`. You do not copy the config's globs.
+
 To extend a `base` rule, use its factory. Do not declare the key again with only your entries: that replaces the base options.
 
 ```js

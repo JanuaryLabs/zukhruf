@@ -20,11 +20,11 @@ const plugin = {
 } satisfies ESLint.Plugin;
 
 configs['recommended'] = [
+  { name: 'manifest/recommended/plugins', plugins: { manifest: plugin } },
   {
     name: 'manifest/recommended',
     files: PACKAGE_JSON,
     languageOptions: { parser: jsonc },
-    plugins: { manifest: plugin },
     rules: { 'manifest/dependency-checks': 'error' },
   },
 ];

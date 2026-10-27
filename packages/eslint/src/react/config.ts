@@ -9,6 +9,7 @@ export const react: Concept = {
   name: 'react',
   rules,
   config: (plugins) => [
-    { name: 'zukhruf/react', files: JSX, plugins, rules: enable(rules) },
+    { name: 'zukhruf/react/plugins', plugins },
+    { name: 'zukhruf/react', files: JSX, rules: enable(rules) },
   ],
 };

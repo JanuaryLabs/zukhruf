@@ -52,6 +52,17 @@ export const base: Concept = {
     defineConfig(
       { name: 'zukhruf/base/ignores', ignores: [...BUILD_OUTPUT, '**/.nx'] },
       {
+        // Plugins apply to every file, and each rule keeps its own scope, so a
+        // repo can set a rule's options in a scope that this config skips.
+        name: 'zukhruf/base/plugins',
+        plugins: {
+          ...plugins,
+          '@typescript-eslint': tseslint.plugin,
+          'import-x': importX,
+          functional,
+        },
+      },
+      {
         name: 'zukhruf/base/recommended',
         files: SOURCE,
         extends: [js.configs.recommended, tseslint.configs.recommended],
@@ -90,7 +101,6 @@ export const base: Concept = {
       {
         name: 'zukhruf/base/typescript',
         files: TYPESCRIPT,
-        plugins,
         rules: {
           // `as X` papers over a type error instead of fixing it: narrow with
           // control flow. `as const` and `satisfies` stay allowed.
@@ -109,7 +119,6 @@ export const base: Concept = {
       {
         name: 'zukhruf/base/imports',
         files: SOURCE,
-        plugins: { ...plugins, 'import-x': importX },
         rules: {
           ...enable(importBans),
           // Two imports of one module read as unrelated; type imports stay a
@@ -125,7 +134,6 @@ export const base: Concept = {
         // in shipped code and in tests alike.
         name: 'zukhruf/base/async-values',
         files: SOURCE,
-        plugins,
         rules: { 'zukhruf/no-collect-loop': 'error' },
       },
       {
@@ -135,7 +143,6 @@ export const base: Concept = {
         name: 'zukhruf/base/module-state',
         files: TYPESCRIPT,
         ignores: [...TESTS, ...TEST_SUPPORT, ...FIXTURES],
-        plugins: { functional },
         rules: { 'functional/no-let': ['error', noLet()] },
       },
       {
@@ -144,7 +151,6 @@ export const base: Concept = {
         // workspace, so it is right under `nx lint` (cwd = the project).
         name: 'zukhruf/base/typed',
         files: TYPESCRIPT,
-        plugins,
         languageOptions: {
           parserOptions: {
             projectService: true,

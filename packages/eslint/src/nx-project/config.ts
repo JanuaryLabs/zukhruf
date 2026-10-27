@@ -11,11 +11,11 @@ export const nxProjectJson: Concept = {
   name: 'nx-project-json',
   rules,
   config: (plugins) => [
+    { name: 'zukhruf/nx-project-json/plugins', plugins },
     {
       name: 'zukhruf/nx-project-json',
       files: PROJECT_JSON,
       languageOptions: { parser: jsonc },
-      plugins,
       rules: enable(rules),
     },
   ],

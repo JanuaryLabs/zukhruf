@@ -24,10 +24,10 @@ export const tests: Concept = {
   name: 'tests',
   rules,
   config: (plugins) => [
+    { name: 'zukhruf/tests/plugins', plugins },
     {
       name: 'zukhruf/tests',
       files: [...TESTS, ...TEST_SUPPORT],
-      plugins,
       rules: enable(rules),
     },
   ],

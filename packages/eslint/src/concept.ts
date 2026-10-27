@@ -9,7 +9,10 @@ export interface Concept {
   /** The config's name; consumers extend `zukhruf/<name>`. */
   readonly name: string;
   readonly rules: Readonly<Record<string, Rule.RuleModule>>;
-  /** Builds the config; `plugins` registers this package's plugin. */
+  /**
+   * Builds the config. Its first object registers `plugins` with no `files`, so
+   * a repo can set a rule's options in any scope; each rule keeps its own scope.
+   */
   config(plugins: Readonly<Record<string, ESLint.Plugin>>): Linter.Config[];
 }
 

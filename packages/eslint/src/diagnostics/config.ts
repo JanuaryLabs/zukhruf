@@ -15,11 +15,11 @@ export const diagnostics: Concept = {
   name: 'diagnostics',
   rules,
   config: (plugins) => [
+    { name: 'zukhruf/diagnostics/plugins', plugins },
     {
       name: 'zukhruf/diagnostics',
       files: SOURCE,
       ignores: [...TESTS, ...TEST_SUPPORT],
-      plugins,
       rules: enable(rules),
     },
   ],

@@ -15,10 +15,10 @@ export const reactRouter: Concept = {
   name: 'react-router',
   rules,
   config: (plugins) => [
+    { name: 'zukhruf/react-router/plugins', plugins },
     {
       name: 'zukhruf/react-router',
       files: SOURCE,
-      plugins,
       rules: { 'zukhruf/require-loader-data-type-argument': 'error' },
     },
     {
@@ -26,7 +26,6 @@ export const reactRouter: Concept = {
       name: 'zukhruf/react-router/links',
       files: SOURCE,
       ignores: [...TESTS, ...TEST_SUPPORT],
-      plugins,
       rules: enable({
         'no-raw-route-path': noRawRoutePath,
         'no-internal-anchor': noInternalAnchor,

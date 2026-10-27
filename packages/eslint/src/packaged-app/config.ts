@@ -9,11 +9,11 @@ export const packagedApp: Concept = {
   name: 'packaged-app',
   rules,
   config: (plugins) => [
+    { name: 'zukhruf/packaged-app/plugins', plugins },
     {
       name: 'zukhruf/packaged-app',
       files: TYPESCRIPT,
       ignores: [...TESTS, ...TEST_SUPPORT],
-      plugins,
       rules: enable(rules),
     },
   ],

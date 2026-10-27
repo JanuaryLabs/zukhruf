@@ -147,3 +147,27 @@ test('a config that skips test files also skips a test helper in src/testing', a
     [workspace.path('src/counter.ts')],
   );
 });
+
+test('a repo turns on a base plugin’s rule in a scope that base skips', async () => {
+  // Arrange: base skips src/testing for functional/no-let; the repo's own
+  // block turns the rule on there with its own options.
+  await using workspace = await fixtureWorkspace({
+    'nx.json': '{}',
+    'tsconfig.json': tsconfig,
+    'eslint.config.mjs': fixtureConfig(`
+      { plugins: { zukhruf }, extends: ['zukhruf/base'] },
+      {
+        files: ['**/src/testing/**'],
+        rules: { 'functional/no-let': ['error', { allowInForLoopInit: true }] },
+      },
+    `),
+    'src/testing/counter.ts':
+      'let count = 0;\nexport const next = () => ++count;\n',
+  });
+
+  // Act
+  const findings = lint(workspace.root, ['src']);
+
+  // Assert
+  assert.deepEqual(ruleIds(findings), ['functional/no-let']);
+});

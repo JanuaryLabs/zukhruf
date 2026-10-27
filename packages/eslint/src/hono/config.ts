@@ -8,11 +8,11 @@ export const hono: Concept = {
   name: 'hono',
   rules,
   config: (plugins) => [
+    { name: 'zukhruf/hono/plugins', plugins },
     {
       name: 'zukhruf/hono',
       files: TYPESCRIPT,
       ignores: [...TESTS, ...TEST_SUPPORT],
-      plugins,
       rules: enable(rules),
     },
   ],

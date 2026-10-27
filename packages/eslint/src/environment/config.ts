@@ -19,12 +19,12 @@ export const env: Concept = {
   name: 'env',
   rules,
   config: (plugins) => [
+    { name: 'zukhruf/env/plugins', plugins },
     {
       name: 'zukhruf/env',
       files: TYPESCRIPT,
       // A tool config runs at build time, with no startup env schema.
       ignores: [...TESTS, ...TEST_SUPPORT, ...CONFIG_FILES],
-      plugins,
       rules: enable(rules),
     },
   ],
