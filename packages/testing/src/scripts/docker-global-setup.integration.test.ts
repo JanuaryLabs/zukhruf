@@ -1236,7 +1236,14 @@ async function currentRun(
     });
   `,
   );
-  await spawn(process.execPath, runnerArgs(file), { env, timeout: 150_000 });
+  await spawn(process.execPath, runnerArgs(file), {
+    env,
+    timeout: 150_000,
+  }).catch((error: unknown) => {
+    throw error instanceof SubprocessError
+      ? new Error(`${error.message}\n${error.output}`, { cause: error })
+      : error;
+  });
   return (await readState<{ id: string }>(t, statePath)).id;
 }
 
@@ -1276,9 +1283,13 @@ test(
  * version, so the teardown of that run can sweep it too, earlier than the
  * test's own teardown. Thus a removal assert holds when any teardown removed
  * the servers, and a keep assert holds only because a live lease protects
- * them. A teardown of a release before the leases (0.3.46 and older)
- * ignores every lease: while one runs on the same engine, a keep assert can
- * fail.
+ * them. So a test keeps its version under a live process lease (`holder`)
+ * until the teardown under test holds the version's sweep lease: while it
+ * holds it, no other teardown of this tree sweeps the version. A teardown of a
+ * release before the leases (0.3.46 and older) ignores every lease: while
+ * one runs on the same engine, a keep assert can fail and a teardown under
+ * test can find its version gone. CI runs only this tree, so there it
+ * cannot happen.
  */
 
 /** The name of the sweep lease of `version`: the name every teardown and every test process of the version agree on. */
@@ -1297,6 +1308,69 @@ const processLeases = async (version: string): Promise<string[]> =>
       },
     })
   ).map(({ Id }) => Id);
+
+/**
+ * Holds a teardown that runs through `proxy` at its look for the process
+ * leases of `version`: the first list after it took the sweep lease of the
+ * version. Other teardowns on the engine take that lease too, while a holder
+ * keeps the version, so only a lease that started through the proxy counts.
+ * Gives the ids of those leases in the order of their starts.
+ */
+function sweepHold(proxy: EngineProxy, version: string) {
+  const starts: string[] = [];
+  const held = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  proxy.intercept('POST', /^\/containers\/[^/]+\/start$/, async ({ path }) => {
+    const id = path.split('/')[2] ?? '';
+    const name = (await (await docker.containers.find(id))?.inspect())?.Name;
+    if (name === `/${sweepLease(version)}`) starts.push(id);
+  });
+  let holding = false;
+  proxy.intercept('GET', '/containers/json', async () => {
+    if (holding) return;
+    const lease = await docker.containers.find(sweepLease(version));
+    if (lease === undefined || !starts.includes(lease.id)) return;
+    holding = true;
+    held.resolve();
+    await release.promise;
+  });
+  return { starts, held: held.promise, release: () => release.resolve() };
+}
+
+/** Ends `other`, a holder of `version`, and waits until its process lease is gone. */
+async function ended(
+  t: TestContext,
+  other: Awaited<ReturnType<typeof holder>>,
+  version: string,
+): Promise<void> {
+  await other.end();
+  await t.waitFor(
+    async () => assert.deepEqual(await processLeases(version), []),
+    { timeout: 20_000, interval: 100 },
+  );
+}
+
+/**
+ * Which comes first: `event`, the end of `run`, or a deadline. A run gets to
+ * its teardown in about 10 s; the deadline is far above that and far below
+ * the timeout of each test, so a test whose event never comes fails and
+ * disposes of what it started. A run that fails rejects with its error.
+ */
+async function firstOf(
+  event: Promise<void>,
+  run: Promise<unknown>,
+): Promise<'reached' | 'ended' | 'deadline'> {
+  const deadline = new AbortController();
+  try {
+    return await Promise.race([
+      event.then(() => 'reached' as const),
+      run.then(() => 'ended' as const),
+      setTimeout(45_000, 'deadline' as const, { signal: deadline.signal }),
+    ]);
+  } finally {
+    deadline.abort();
+  }
+}
 
 /** A process of the docker area at `library` reuses a shared server and exits. Gives the server's id. */
 async function reusedAndExited(
@@ -1361,15 +1435,12 @@ test(
     const probe = randomUUID();
     const env = runEnvironment(join(directory.path, 'state'));
     const ids: string[] = [];
-    const server = await reusedAndExited(
-      t,
-      directory.path,
-      library,
-      probe,
-      env,
-    );
+    const other = await holder(t, directory.path, library, probe, env);
+    const server = other.id;
     ids.push(server);
     await using proxy = await EngineProxy.start(engine);
+    // The sweep holds the sweep lease: its look for process leases waits until the holder ended.
+    const listing = sweepHold(proxy, version);
     // The sweep found no process lease of the version, and holds its sweep lease while it removes the server.
     const held = Promise.withResolvers<void>();
     const release = Promise.withResolvers<void>();
@@ -1389,7 +1460,18 @@ test(
     await writeFile(file, holdingSource(library, statePath, probe));
     let waiting: ReturnType<typeof started> | undefined;
     try {
-      await held.promise;
+      assert.equal(
+        await firstOf(listing.held, sweeping),
+        'reached',
+        'the teardown must hold the sweep lease of the version',
+      );
+      await ended(t, other, version);
+      listing.release();
+      assert.equal(
+        await firstOf(held.promise, sweeping),
+        'reached',
+        'the teardown must be held at its removal of the server',
+      );
       waiting = started([file], env);
       await t.waitFor(
         async () => assert.equal((await processLeases(version)).length, 1),
@@ -1408,7 +1490,9 @@ test(
       assert.notEqual(id, server);
       assert.equal(await running(id), true);
     } finally {
+      listing.release();
       release.resolve();
+      other.child.kill('SIGKILL');
       waiting?.child.kill('SIGKILL');
       await sweeping.catch(() => {});
       for (const id of ids) await removeContainer(id).catch(() => {});
@@ -1428,13 +1512,9 @@ test(
     const probe = randomUUID();
     const env = runEnvironment(join(directory.path, 'state'));
     const ids: string[] = [];
-    const server = await reusedAndExited(
-      t,
-      directory.path,
-      library,
-      probe,
-      env,
-    );
+    // Keeps the version until the test process below published its own process lease.
+    const keeper = await holder(t, directory.path, library, probe, env);
+    const server = keeper.id;
     ids.push(server);
     await using proxy = await EngineProxy.start(engine);
     // The test process's look for the sweep lease waits until the teardown ends.
@@ -1458,7 +1538,17 @@ test(
     holding.catch(() => {});
     let other: Awaited<ReturnType<typeof holder>> | undefined;
     try {
-      await looking.promise;
+      assert.equal(
+        await firstOf(looking.promise, holding),
+        'reached',
+        'the test process must look for the sweep lease',
+      );
+      // The process lease of the test process exists before its look.
+      await keeper.end();
+      await t.waitFor(
+        async () => assert.equal((await processLeases(version)).length, 1),
+        { timeout: 20_000, interval: 100 },
+      );
 
       ids.push(await currentRun(t, directory.path, randomUUID(), env));
       release.resolve();
@@ -1468,6 +1558,7 @@ test(
       assert.equal(await running(other.id), true);
     } finally {
       release.resolve();
+      keeper.child.kill('SIGKILL');
       other?.child.kill('SIGKILL');
       for (const id of ids) await removeContainer(id).catch(() => {});
     }
@@ -1476,47 +1567,26 @@ test(
 
 test(
   'two teardowns that sweep one version at once both succeed: the second takes the sweep lease after the first removed it, and the servers of that version are removed',
-  // Two runs of about 5 s each, the 8 s window and the first sweep after it, with margin.
-  { skip: proxyless, timeout: 120_000 },
+  // The holder, two deadlines of 45 s, the 8 s window and the first sweep after it, with margin.
+  { skip: proxyless, timeout: 180_000 },
   async (t) => {
     await using directory = await new TemporaryFiles().directory(
       'zukhruf-testing-two-sweeps-',
     );
     const version = uniqueVersion();
     const ids: string[] = [];
-    const server = await reusedAndExited(
+    const other = await holder(
       t,
       directory.path,
       await anotherVersion(directory.path, version),
       randomUUID(),
       runEnvironment(join(directory.path, 'state')),
     );
+    const server = other.id;
     ids.push(server);
     await using proxy = await EngineProxy.start(engine);
     // The first teardown holds the sweep lease: its look for process leases waits.
-    const held = Promise.withResolvers<void>();
-    const release = Promise.withResolvers<void>();
-    let holding = false;
-    proxy.intercept('GET', '/containers/json', async () => {
-      if (holding) return;
-      if ((await docker.containers.find(sweepLease(version))) === undefined)
-        return;
-      holding = true;
-      held.resolve();
-      await release.promise;
-    });
-    // The id of each sweep lease of the version, in the order of their starts.
-    const starts: string[] = [];
-    proxy.intercept(
-      'POST',
-      /^\/containers\/[^/]+\/start$/,
-      async ({ path }) => {
-        const id = path.split('/')[2] ?? '';
-        const name = (await (await docker.containers.find(id))?.inspect())
-          ?.Name;
-        if (name === `/${sweepLease(version)}`) starts.push(id);
-      },
-    );
+    const { starts, held, release } = sweepHold(proxy, version);
     // The second teardown found the sweep lease taken and looks at it.
     const conflicted = Promise.withResolvers<void>();
     proxy.intercept('GET', `/containers/${sweepLease(version)}/json`, () => {
@@ -1531,7 +1601,12 @@ test(
     first.catch(() => {});
     let second: Promise<string> | undefined;
     try {
-      await held.promise;
+      assert.equal(
+        await firstOf(held, first),
+        'reached',
+        'the first teardown must be held at its sweep',
+      );
+      await ended(t, other, version);
       second = currentRun(
         t,
         directory.path,
@@ -1539,19 +1614,10 @@ test(
         proxiedEnvironment(join(directory.path, 'state-second'), proxy),
       );
       second.catch(() => {});
-      // The second run reaches its teardown in about 10 s. It must look at the
-      // taken lease before it ends, and before a deadline far below the test's timeout.
-      const reached = await Promise.race([
-        conflicted.promise.then(() => 'looked'),
-        second.then(
-          () => 'ended',
-          () => 'failed',
-        ),
-        setTimeout(45_000, 'deadline'),
-      ]);
+      // The second teardown must look at the taken lease before its run ends.
       assert.equal(
-        reached,
-        'looked',
+        await firstOf(conflicted.promise, second),
+        'reached',
         'the second teardown must look at the taken sweep lease',
       );
       // A negative check over a window longer than the 5 s that a waiter gives a created lease:
@@ -1566,7 +1632,7 @@ test(
         )?.inspect()
       )?.State?.Status;
 
-      release.resolve();
+      release();
       ids.push(await first, await second);
 
       assert.equal(startsDuringWindow.length, 1);
@@ -1590,7 +1656,8 @@ test(
         undefined,
       );
     } finally {
-      release.resolve();
+      release();
+      other.child.kill('SIGKILL');
       await first.catch(() => {});
       await second?.catch(() => {});
       for (const id of ids) await removeContainer(id).catch(() => {});
@@ -1636,7 +1703,11 @@ async function killedSweep(
     proxiedEnvironment(join(directory, `state-${randomUUID()}`), proxy),
   );
   try {
-    await held.promise;
+    assert.equal(
+      await firstOf(held.promise, runner.exited),
+      'reached',
+      'the killed teardown must be held at the start of its sweep lease',
+    );
     runner.child.kill('SIGKILL');
     await runner.exited;
     const { id } = await readState<{ id: string }>(t, statePath);
@@ -1660,13 +1731,8 @@ test(
     const probe = randomUUID();
     const env = runEnvironment(join(directory.path, 'state'));
     const ids: string[] = [];
-    const server = await reusedAndExited(
-      t,
-      directory.path,
-      library,
-      probe,
-      env,
-    );
+    const other = await holder(t, directory.path, library, probe, env);
+    const server = other.id;
     ids.push(server);
     try {
       ids.push(...(await killedSweep(t, directory.path, version)));
@@ -1685,6 +1751,8 @@ test(
       assert.equal(await running(reused), true);
       assert.equal(await exists(stale.id), false);
     } finally {
+      other.child.kill('SIGKILL');
+      await other.exited;
       await (
         await docker.containers.find(sweepLease(version))
       )
@@ -1704,17 +1772,19 @@ test(
     );
     const version = uniqueVersion();
     const ids: string[] = [];
-    const server = await reusedAndExited(
+    const other = await holder(
       t,
       directory.path,
       await anotherVersion(directory.path, version),
       randomUUID(),
       runEnvironment(join(directory.path, 'state')),
     );
+    const server = other.id;
     ids.push(server);
     try {
       ids.push(...(await killedSweep(t, directory.path, version)));
       assert.ok(await docker.containers.find(sweepLease(version)));
+      await ended(t, other, version);
 
       ids.push(
         await currentRun(
@@ -1731,6 +1801,8 @@ test(
         undefined,
       );
     } finally {
+      other.child.kill('SIGKILL');
+      await other.exited;
       await (
         await docker.containers.find(sweepLease(version))
       )
@@ -1750,27 +1822,18 @@ test(
     );
     const version = uniqueVersion();
     const ids: string[] = [];
-    const server = await reusedAndExited(
+    const other = await holder(
       t,
       directory.path,
       await anotherVersion(directory.path, version),
       randomUUID(),
       runEnvironment(join(directory.path, 'state')),
     );
+    const server = other.id;
     ids.push(server);
     await using proxy = await EngineProxy.start(engine);
     // The first teardown holds the sweep lease: its look for process leases waits until the second ends.
-    const held = Promise.withResolvers<void>();
-    const release = Promise.withResolvers<void>();
-    let holding = false;
-    proxy.intercept('GET', '/containers/json', async () => {
-      if (holding) return;
-      if ((await docker.containers.find(sweepLease(version))) === undefined)
-        return;
-      holding = true;
-      held.resolve();
-      await release.promise;
-    });
+    const { held, release } = sweepHold(proxy, version);
     const first = currentRun(
       t,
       directory.path,
@@ -1779,7 +1842,12 @@ test(
     );
     first.catch(() => {});
     try {
-      await held.promise;
+      assert.equal(
+        await firstOf(held, first),
+        'reached',
+        'the first teardown must be held at its sweep',
+      );
+      await ended(t, other, version);
 
       ids.push(
         await currentRun(
@@ -1790,13 +1858,14 @@ test(
         ),
       );
       const keptBySecond = await exists(server);
-      release.resolve();
+      release();
       ids.push(await first);
 
       assert.equal(keptBySecond, true);
       assert.equal(await exists(server), false);
     } finally {
-      release.resolve();
+      release();
+      other.child.kill('SIGKILL');
       await first.catch(() => {});
       for (const id of ids) await removeContainer(id).catch(() => {});
     }
