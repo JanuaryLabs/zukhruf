@@ -50,6 +50,8 @@ The research for event grouping found these limits. They apply to this package. 
 
 **Before you change it.** Test place and person agreement again on data with many look-alike occurrences. Write the rule for a report of several occurrences (limitation 13).
 
+**Live evidence from one publisher (2026-10-27).** The detector got the 297 dated posts of anthropic.com/news (May 2021 to October 2026), with EmbeddingGemma 2 through llama.cpp. It made 279 events, and 18 of them have two posts. A reading of the titles finds 5 correct events, for example a launch post and its technical post on the same day. It finds 9 false joins of different announcements on one topic a few days apart, for example "Introducing Claude Opus 4.7" and "Introducing Claude Design by Anthropic Labs" one day apart. 4 events are open to argument. That is 28% to 50% correct, against 0.918 pair precision on the Gun Violence Corpus. Every post of one publisher shares names such as "Anthropic" and "Claude", so their similarity is high, and their numbers seldom disagree. This is dataset shift (limitation 4) in a new direction: the design learned reports of external occurrences from many publishers. These titles are a reading by one person, not labeled data. The posts, the script and the result are in the context-compiler session scratchpad (`anthropic-news/`).
+
 ## 21. A clustering at production size takes seconds to minutes
 
 **What happens.** Each new publish day clusters the whole window again. The cost grows with the square of the window size. At the volume of a news aggregator, one clustering takes about 3 minutes.
