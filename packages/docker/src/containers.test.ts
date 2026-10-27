@@ -736,17 +736,20 @@ describe('containers.list()', () => {
 
 describe('HostConfig', () => {
   test('the engine keeps each field of the docker run flags of a sandbox, and an inspect gives each one back', async () => {
-    // Arrange: values that each engine accepts at the create. The container never
-    // starts: on a host with no GPU, the start of a DeviceRequests entry fails with 500.
+    // Arrange: values that each engine accepts at the create, and that differ from
+    // what the engine stores for an omitted field, so a field the request drops fails
+    // the test. -1 is the MemorySwap that every engine keeps: with no swap accounting,
+    // the engine changes a positive value to -1. The container never starts: on a host
+    // with no GPU, the start of a DeviceRequests entry fails with 500.
     await using docker = await connect();
     const run = randomUUID();
     const hostConfig = {
       Memory: 256 * 1024 ** 2,
-      MemorySwap: 512 * 1024 ** 2,
+      MemorySwap: -1,
       CpusetCpus: '0',
       Ulimits: [{ Name: 'nofile', Soft: 1024, Hard: 2048 }],
       Sysctls: { 'net.ipv4.ip_unprivileged_port_start': '80' },
-      Runtime: 'runc',
+      Runtime: 'io.containerd.runc.v2',
       Dns: ['9.9.9.9'],
       Devices: [
         {
