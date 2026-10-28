@@ -1,6 +1,6 @@
 {
   "name": "@zukhruf/sqlite-changefeed",
-  "version": "0.3.46",
+  "version": "0.3.52",
   "description": "A changefeed of a SQLite database that another process owns and writes: a change event for each changed row of each table, keyed by the primary key of the row, by a snapshot differential over a read-only connection. The feed keeps its own position, and needs WAL mode.",
   "license": "MIT",
   "repository": {
