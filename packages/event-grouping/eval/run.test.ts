@@ -12,7 +12,10 @@ test('--accept with a design name that the scoreboard has refuses before the run
     [join(import.meta.dirname, 'run.ts'), '--accept', '3130'],
     {
       encoding: 'utf8',
-      env: { ...process.env, EVAL_EMBEDDING_URL: 'http://127.0.0.1:9/v1' },
+      env: {
+        ...process.env,
+        EVAL_EMBEDDING_URL_EMBEDDINGGEMMA_2: 'http://127.0.0.1:9/v1',
+      },
     },
   );
 

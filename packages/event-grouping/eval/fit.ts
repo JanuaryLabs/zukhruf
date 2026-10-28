@@ -9,7 +9,7 @@ import { analyse } from '../src/analyse.ts';
 import { DAY_MS } from '../src/day.ts';
 import { readMetadata, readSet, sha256 } from './answer-key.ts';
 import { changeOfMainScore } from './bootstrap.ts';
-import { embeddingModel } from './embedding-model.ts';
+import { embeddingModel, vectorCache } from './embedding-model.ts';
 import { reportsOf } from './feed.ts';
 import { CrossValidation } from './fit/cross-validation.ts';
 import { type LoadedSet, foldsOf } from './fit/folds.ts';
@@ -22,7 +22,6 @@ import { type Role } from './roles.ts';
 import { partitions, score } from './score.ts';
 import { Scoreboard } from './scoreboard.ts';
 import { SOURCES } from './texts/sources.ts';
-import { CACHE_FOLDER } from './texts/text-source.ts';
 
 // Builds the design of a research round from its selection rule and the
 // training sets alone, with the detector of the package (README.md, "Fit a
@@ -33,20 +32,15 @@ const USAGE = `Usage: nx run event-grouping:fit -- <round>
           and writes its plan.json.
 
 Environment:
-  EVAL_EMBEDDING_URL    The OpenAI-compatible base URL of the embedding server.`;
+  EVAL_EMBEDDING_URL_<MODEL>  The OpenAI-compatible base URL of the llama.cpp
+                              server of each embedding model of the rule.`;
 
 const { values, positionals } = parseArgs({
   allowPositionals: true,
   options: { help: { type: 'boolean', default: false } },
 });
-const baseURL = process.env['EVAL_EMBEDDING_URL'];
 const [round] = positionals;
-if (
-  values.help ||
-  baseURL === undefined ||
-  round === undefined ||
-  positionals.length > 1
-) {
+if (values.help || round === undefined || positionals.length > 1) {
   console.log(USAGE);
   process.exit(values.help ? 0 : 1);
 }
@@ -60,17 +54,30 @@ const reference = Scoreboard.read().entries.find(
 );
 if (reference === undefined)
   throw new Error(`The scoreboard has no design ${rule.reference.design}.`);
-const model = await embeddingModel(baseURL, recipe);
+// The candidate and the reference design, each with its checked model.
+const designs = [
+  { design: recipe, model: await embeddingModel(recipe, process.env) },
+  {
+    design: reference.pin.design,
+    model: await embeddingModel(reference.pin.design, process.env),
+  },
+];
 
 const training = await load(rule.data.training, 'training');
 const regression = await load(rule.data.regression, 'regression');
-const streams = foldsOf(rule.folds, training).map((fold) =>
-  Stream.open(
-    fold,
-    rule.folds.find((folds) => folds.family === fold.family)!.sets,
-    model,
-  ),
-);
+const foldsOfSets = foldsOf(rule.folds, training);
+// The streams of the folds with the vectors of a design's model.
+const streamsOf = ({ design, model }: (typeof designs)[number]) =>
+  foldsOfSets.map((fold) =>
+    Stream.open(
+      fold,
+      rule.folds.find((folds) => folds.family === fold.family)!.sets,
+      design,
+      model,
+    ),
+  );
+const streams = streamsOf(designs[0]!);
+const referenceStreams = streamsOf(designs[1]!);
 
 const cv = new CrossValidation(streams, rule.candidate);
 const flat = await cv.flat();
@@ -136,7 +143,7 @@ const families = Object.fromEntries(
 
 // Eligibility against the reference design of the scoreboard.
 const referenceScores = await Promise.all(
-  streams
+  referenceStreams
     .filter((stream) => stream.fold.family === rule.reference.family)
     .map(async (stream) => {
       const { gold, predicted } = partitions(
@@ -152,16 +159,24 @@ const referenceFamily =
 const checks = Object.fromEntries(
   await Promise.all(
     [...regression.values()].map(async (set) => {
+      const fold = { ...set, family: 'regression' };
       using stream = Stream.open(
-        { ...set, family: 'regression' },
+        fold,
         [set.name],
-        model,
+        designs[0]!.design,
+        designs[0]!.model,
+      );
+      using referenceStream = Stream.open(
+        fold,
+        [set.name],
+        designs[1]!.design,
+        designs[1]!.model,
       );
       const eventOf = await stream.run(design);
       const interval = changeOfMainScore(
         set.rows,
         eventOf,
-        await stream.run(reference.pin.design),
+        await referenceStream.run(reference.pin.design),
       );
       return [
         set.name,
@@ -231,14 +246,16 @@ writeFileSync(
     2,
   )}\n`,
 );
-for (const stream of streams) stream[Symbol.dispose]();
+for (const stream of [...streams, ...referenceStreams])
+  stream[Symbol.dispose]();
 console.log(
   `Round ${round}: threshold ${final.threshold}, nested objective ${nested.toFixed(4)}, eligible ${E1 && E2 && E3} (${Math.round((performance.now() - started) / 1000)} s). Wrote eval/rounds/${round}/plan.json.`,
 );
 
 // The sets of one role, with their texts. The role in set.json is read
 // before the answer key, so the fit never opens a set of another role. Each
-// lead goes into the vector cache of its set, as the runner puts it there.
+// lead of each design goes into the vector cache of its model for the set, as
+// the runner puts it there.
 async function load(
   names: readonly string[],
   role: Role,
@@ -259,17 +276,17 @@ async function load(
       console.log(
         `${name}: ${vanished.length} vanished and ${changed.length} changed texts.`,
       );
-    using cache = new DatabaseSync(
-      join(CACHE_FOLDER, 'vectors', `${name}.sqlite`),
-    );
-    await new Collection({ database: cache, model }).upsert(
-      reportsOf(set.rows, texts).flatMap((report) => {
-        const { text, day } = analyse(report, recipe);
-        return text === null
-          ? []
-          : [{ id: report.id, text, publishedAt: new Date(day * DAY_MS) }];
-      }),
-    );
+    for (const { design, model } of designs) {
+      using cache = new DatabaseSync(vectorCache(design.embeddingModel, name));
+      await new Collection({ database: cache, model }).upsert(
+        reportsOf(set.rows, texts).flatMap((report) => {
+          const { text, day } = analyse(report, design);
+          return text === null
+            ? []
+            : [{ id: report.id, text, publishedAt: new Date(day * DAY_MS) }];
+        }),
+      );
+    }
     sets.set(name, { name, rows: set.rows, texts });
   }
   return sets;

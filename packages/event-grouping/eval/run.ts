@@ -5,11 +5,11 @@ import { parseArgs } from 'node:util';
 
 import { Collection } from '@zukhruf/embeddings';
 
-import { design3152b } from '../src/index.ts';
+import { type Design, design3152b } from '../src/index.ts';
 import { readEvents, writeEvents } from './accepted.ts';
 import { type EvalSet, readMetadata, readSet, setNames } from './answer-key.ts';
 import { type Interval, changeOfMainScore } from './bootstrap.ts';
-import { embeddingModel } from './embedding-model.ts';
+import { embeddingModel, vectorCache } from './embedding-model.ts';
 import { feed } from './feed.ts';
 import type { Partition } from './metrics/contingency.ts';
 import type { Score } from './metrics/f-measure.ts';
@@ -19,7 +19,6 @@ import { decide } from './roles.ts';
 import { type SetScore, score } from './score.ts';
 import { type Entry, Scoreboard, type SetEntry } from './scoreboard.ts';
 import { SOURCES } from './texts/sources.ts';
-import { CACHE_FOLDER } from './texts/text-source.ts';
 import { verdict } from './verdict.ts';
 
 // Runs a design of the package on the evaluation sets, and compares each
@@ -32,7 +31,9 @@ const USAGE = `Usage: nx run event-grouping:eval -- [set ...] [--refresh] [--exa
   --accept <design> Record the scores as an accepted design in scoreboard.json.
 
 Environment:
-  EVAL_EMBEDDING_URL    The OpenAI-compatible base URL of the embedding server.`;
+  EVAL_EMBEDDING_URL_<MODEL>  The OpenAI-compatible base URL of the llama.cpp
+                              server of each embedding model that the run uses,
+                              for example EVAL_EMBEDDING_URL_EMBEDDINGGEMMA_2.`;
 
 // The design that this run scores.
 const DESIGN = design3152b;
@@ -48,10 +49,9 @@ const { values, positionals } = parseArgs({
     help: { type: 'boolean', default: false },
   },
 });
-const baseURL = process.env['EVAL_EMBEDDING_URL'];
-if (values.help || baseURL === undefined) {
+if (values.help) {
   console.log(USAGE);
-  process.exit(values.help ? 0 : 1);
+  process.exit(0);
 }
 if (values.accept !== undefined && positionals.length > 0)
   throw new Error('--accept records a design on every set: name no set.');
@@ -77,7 +77,17 @@ console.log(
     : `Design ${DESIGN.name} is accepted as ${holds.design} (pinned to commit ${holds.pin.commit}).`,
 );
 
-const model = await embeddingModel(baseURL, DESIGN);
+// The model of each design that the run uses, checked against its probe once.
+const models = new Map<string, ReturnType<typeof embeddingModel>>();
+function modelOf(design: Design): ReturnType<typeof embeddingModel> {
+  let model = models.get(design.embeddingModel);
+  if (model === undefined) {
+    model = embeddingModel(design, process.env);
+    models.set(design.embeddingModel, model);
+  }
+  return model;
+}
+await modelOf(DESIGN);
 
 const accepted: Record<string, SetEntry> = {};
 const events: { set: EvalSet; eventOf: Partition }[] = [];
@@ -99,12 +109,21 @@ for (const name of positionals.length > 0 ? positionals : setNames()) {
   }
   const set = readSet(name);
   const texts = await SOURCES[set.metadata.text].texts(set, values.refresh);
-  mkdirSync(join(CACHE_FOLDER, 'vectors'), { recursive: true });
-  using vectorDatabase = new DatabaseSync(
-    join(CACHE_FOLDER, 'vectors', `${name}.sqlite`),
+  using caches = new DisposableStack();
+  // The vectors of a design: the cache of its model for the set.
+  const vectorsOf = async (design: Design) =>
+    new Collection({
+      database: caches.use(
+        new DatabaseSync(vectorCache(design.embeddingModel, name)),
+      ),
+      model: await modelOf(design),
+    });
+  const fed = await feed(
+    set.rows,
+    texts.texts,
+    await vectorsOf(DESIGN),
+    DESIGN,
   );
-  const vectors = new Collection({ database: vectorDatabase, model });
-  const fed = await feed(set.rows, texts.texts, vectors, DESIGN);
   const result = score(set.rows, texts.texts, fed.eventOf, fed.adds);
   const latest = scoreboard.latest(name);
   // The accepted design to compare with: the latest that scored the set, or
@@ -116,8 +135,14 @@ for (const name of positionals.length > 0 ? positionals : setNames()) {
   const live =
     against === null || stored !== null
       ? null
-      : (await feed(set.rows, texts.texts, vectors, against.pin.design))
-          .eventOf;
+      : (
+          await feed(
+            set.rows,
+            texts.texts,
+            await vectorsOf(against.pin.design),
+            against.pin.design,
+          )
+        ).eventOf;
   const againstEvents = stored ?? live;
   const change =
     againstEvents === null

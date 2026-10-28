@@ -18,14 +18,16 @@ The evaluation needs the embedding model of round #3130: EmbeddingGemma 2 Q8_0 o
 2. Run the evaluation:
 
    ```sh
-   EVAL_EMBEDDING_URL=http://127.0.0.1:8096/v1 npx nx run event-grouping:eval
+   EVAL_EMBEDDING_URL_EMBEDDINGGEMMA_2=http://127.0.0.1:8096/v1 npx nx run event-grouping:eval
    ```
 
 3. Stop the server.
 
 Give set names to score only those sets, for example `npx nx run event-grouping:eval -- gvc hlgd-test`. `--help` shows the options.
 
-Before it scores a set, the runner embeds a probe text. If the vector is not the vector of round #3130 (`embedding-probe.json`), the runner stops. Thus a server with another model or another quantization cannot give scores.
+Each embedding model has its own server. The runner and the fit read the base URL of the server of a model from the variable `EVAL_EMBEDDING_URL_` and the name of the model (`embeddingModel` of the design) in capitals, with `_` for each other character. For example, the variable of `embeddinggemma-2` is `EVAL_EMBEDDING_URL_EMBEDDINGGEMMA_2`, and the variable of `qwen3-embedding-0.6b` is `EVAL_EMBEDDING_URL_QWEN3_EMBEDDING_0_6B`. Set the variable of each model that the run uses.
+
+Each model has a probe: `probes/<model>.json`. It holds a text, the vector of the text, the sha256 of the GGUF file, the llama.cpp build and the server arguments. Before the runner or the fit uses a server, it embeds the probe text. If the vector is not the vector of the probe, it stops. Thus a server with another model or another quantization cannot give scores. Two designs of one model, such as 3130 and 3152b, share the probe of the model.
 
 ## What a run does
 
@@ -37,7 +39,7 @@ For each set, the runner does these steps:
 4. After the last day, it adds one headline-only report of the next day. This makes the detector cluster the last window again, so the events of the last day are final. The headline-only report never joins an event (ADR 0003).
 5. It scores the events against the answer key and writes `results/<set>.json`.
 
-The vectors are in `cache/vectors/<set>.sqlite`, through the `Collection` of `@zukhruf/embeddings`. The collection embeds a lead again only when its text or the model name changed. Thus a second run embeds nothing.
+The vectors are in `cache/vectors/<model>/<set>.sqlite`, through the `Collection` of `@zukhruf/embeddings`. A collection keeps one vector for each report, so each model has its own folder. The collection embeds a lead again only when its text or the model name changed. Thus a second run embeds nothing.
 
 Each result has the scores of the coreference literature. The answer key and the detector each put the reports of the set into events, and each metric compares the two partitions:
 
@@ -159,7 +161,7 @@ The runner never drops a report without a message:
 A research round chooses a design on the training sets. `nx run event-grouping:fit -- <round>` does that work in the repository. It reads `rounds/<round>/selection-rule.json` and writes `rounds/<round>/plan.json`. It needs the embedding server of [Run it](#run-it):
 
 ```sh
-EVAL_EMBEDDING_URL=http://127.0.0.1:8096/v1 npx nx run event-grouping:fit -- 3152b
+EVAL_EMBEDDING_URL_EMBEDDINGGEMMA_2=http://127.0.0.1:8096/v1 npx nx run event-grouping:fit -- 3152b
 ```
 
 The fit does these steps:

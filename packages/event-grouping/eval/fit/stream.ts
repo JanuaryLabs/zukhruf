@@ -1,4 +1,3 @@
-import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 
 import type { EmbeddingModel } from 'ai';
@@ -9,9 +8,9 @@ import { analyse } from '../../src/analyse.ts';
 import { DAY_MS } from '../../src/day.ts';
 import type { Design } from '../../src/index.ts';
 import { PAIR_FEATURES, pairFeatures } from '../../src/pair-score.ts';
+import { vectorCache } from '../embedding-model.ts';
 import { feed, reportsOf } from '../feed.ts';
 import type { Partition } from '../metrics/contingency.ts';
-import { CACHE_FOLDER } from '../texts/text-source.ts';
 import type { Fold } from './folds.ts';
 
 export type TrainingPair = {
@@ -23,8 +22,8 @@ export type TrainingPair = {
 
 // The reports of one fold and their vectors, in a database of their own, so
 // a shortlist holds only reports of the fold. The vectors are copies of the
-// rows of the vector caches of the sets of the fold
-// (cache/vectors/<set>.sqlite), which the fit fills first. The model embeds
+// rows of the vector caches of the model for the sets of the fold
+// (cache/vectors/<model>/<set>.sqlite), which the fit fills first. The model embeds
 // nothing then: each lead of the fold is in the copy.
 export class Stream {
   readonly fold: Fold;
@@ -40,6 +39,7 @@ export class Stream {
   static open(
     fold: Fold,
     sets: readonly string[],
+    design: Pick<Design, 'embeddingModel'>,
     model: Exclude<EmbeddingModel, string>,
   ): Stream {
     const database = new DatabaseSync(':memory:');
@@ -48,7 +48,7 @@ export class Stream {
     for (const set of sets) {
       database
         .prepare('ATTACH DATABASE ? AS "cache"')
-        .run(join(CACHE_FOLDER, 'vectors', `${set}.sqlite`));
+        .run(vectorCache(design.embeddingModel, set));
       database
         .prepare(
           `INSERT INTO "embedding_document" ("id", "hash", "published_at", "vector")
