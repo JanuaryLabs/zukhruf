@@ -7,7 +7,13 @@
  * engine, from any project of this user.
  */
 import { randomUUID } from 'node:crypto';
-import { existsSync, readFileSync, readdirSync, rmSync } from 'node:fs';
+import {
+  existsSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  statSync,
+} from 'node:fs';
 import { mkdir, readFile, readdir, rename, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { extname, join } from 'node:path';
@@ -59,6 +65,21 @@ function records(directory: string): {
     }),
     creating: files.filter((file) => file.startsWith('creating-')).length,
   };
+}
+
+/**
+ * Whether the engine can still finish a create of the run's directory: one
+ * of its creating records is younger than one engine call may take. The
+ * process that wrote the record can be dead, as the engine finishes a create
+ * that it received.
+ */
+function createInFlight(directory: string): boolean {
+  const since = Date.now() - ENGINE_CALL_TIMEOUT;
+  return readdirSync(directory).some(
+    (file) =>
+      file.startsWith('creating-') &&
+      statSync(join(directory, file)).mtimeMs > since,
+  );
 }
 
 /**
@@ -161,7 +182,10 @@ async function recover(root: string, endpoint: string): Promise<void> {
     try {
       if (found.processes.length > 0 || found.creating > 0)
         await cleanup(await connection(), previous, claimed);
-      rmSync(claimed, { recursive: true, force: true });
+      // A create that the engine finishes after this sweep is swept by a
+      // later recovery, which finds the run again under its own name.
+      if (createInFlight(claimed)) await rename(claimed, directory);
+      else rmSync(claimed, { recursive: true, force: true });
     } catch (error) {
       throw new Error(
         `Could not recover Docker test resources. Retained ownership record: ${claimed}`,

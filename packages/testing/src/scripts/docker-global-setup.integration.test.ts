@@ -444,7 +444,14 @@ test(
     await using leftovers = new AsyncDisposableStack();
     await using proxy = await EngineProxy.start(engine);
     const gate = Promise.withResolvers<void>();
-    proxy.intercept('POST', '/containers/create', () => gate.promise);
+    // Only the test's create: the teardown creates a sweep lease when the
+    // engine has shared servers of another version.
+    let held = false;
+    proxy.intercept('POST', '/containers/create', () => {
+      if (held) return;
+      held = true;
+      return gate.promise;
+    });
     await writeFile(
       file,
       `
@@ -480,7 +487,8 @@ test(
       await emptyRun(file, env);
 
       assert.deepEqual(await labelled(label), []);
-      await assert.rejects(access(state.record), { code: 'ENOENT' });
+      // The engine can still finish another create of the run: the next run sweeps it again.
+      await access(join(state.record, 'run.json'));
     } finally {
       // Never leave the create held.
       gate.resolve();
@@ -495,8 +503,7 @@ test(
 
 test(
   'a create that the engine finishes after a later run recovered its killed run is removed by the run after it',
-  // The recovery deletes the records while the engine still has the create.
-  { skip: proxyless || signals, timeout: 180_000, todo: '#2825' },
+  { skip: proxyless || signals, timeout: 180_000 },
   async (t) => {
     await using directory = await runsDirectory('zukhruf-testing-late-create-');
     const statePath = join(directory.path, 'state.json');
