@@ -147,6 +147,12 @@ No candidate passed. The design scored 0.697 against the typed keyword's 0.644, 
 
 **Before you change it.** Guard the fit before you change the design: for example, bound the share of relevant articles that the fit may claim, or fall back when the share jumps far above the taught evidence. Pre-register the guard and test it on a fresh slice.
 
+### 14. The rounds teach differently from the product
+
+**What happens.** Rounds 1 to 5 draw the taught articles at random from labelled pools. In the reader (#3205, #3248), a person teaches a profile by answering yes or no on the reader's own best matches for the sentence and keywords. Those articles score high by construction, so the taught relevant and not-relevant articles differ from random draws. This is training-serving skew, and it touches the binormal fit, which the taught scores anchor.
+
+**Before you change it.** Simulate the product's teaching before a design is frozen or the exam is scored: rank the first part of a stream by the sentence and keywords, let the answer key answer yes or no on the top matches, teach from those answers, and score the rest of the stream (the TREC adaptive filtering protocol gives judgments only for delivered articles). Use the same protocol in the exam verdict.
+
 ## Rules for every round
 
 - Freeze the selection rule before any score, and the plan before the exam.
