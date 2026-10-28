@@ -10,7 +10,7 @@ On 2026-10-23 the maintainer started to design a news reader engine, in the way 
 
 ## Status
 
-Status on 2026-10-26: round #3124 failed its gate. Round #3130 passed its gate for full articles. It fails on articles that have only a headline. Backlog #3131 built the packages from the #3130 design. Status on 2026-10-27: round #3152 added a same-publisher term and fitted the weights again on four training sets. The package now holds the #3152 design, and it gives the scores of the round on the six sets that are not the exam set. The exam set (deepmind-outlets) is not scored yet. Add the result of each new round to this record.
+Status on 2026-10-26: round #3124 failed its gate. Round #3130 passed its gate for full articles. It fails on articles that have only a headline. Backlog #3131 built the packages from the #3130 design. Status on 2026-10-28: round #3232 compared Qwen3-Embedding-0.6B with EmbeddingGemma 2, and design 3152b stays. Status on 2026-10-27: round #3152 added a same-publisher term and fitted the weights again on four training sets. The package now holds the #3152 design, and it gives the scores of the round on the six sets that are not the exam set. The exam set (deepmind-outlets) is not scored yet. Add the result of each new round to this record.
 
 ## Words in this record
 
@@ -45,6 +45,7 @@ All evidence is on the local Mac in `~/.codex/visualizations/2026/10/23/01a16a1c
 | #3124        | Can cheap features with a logistic regression decide the event?                           | Failed its gate on ECB+.                                                                                               | `feature-scorer-3124`      |
 | #3130        | Same question, with full-article training data and a new grouping step.                   | Passed on the Gun Violence Corpus. Fails on headline-only input.                                                       | `feature-scorer-3130`      |
 | #3152        | Which fix lowers the false joins on one company's news and its outlets (limitation 23)?   | Weights fitted again + a same-publisher term, threshold 0.45 (3152b). Passed the exam: CoNLL F0.5 0.883 against 0.818. | `feature-scorer-3152`      |
+| #3232        | Is Qwen3-Embedding-0.6B better than EmbeddingGemma 2 when each gets its own weights?      | No. The gain interval includes 0, so design 3152b stays. The exam nvidia-outlets stays unscored.                       | `eval/rounds/3232` (repo)  |
 
 ## The design that passed (#3130)
 
@@ -84,6 +85,23 @@ A design that leaves every report alone then beat design 3130 on B-cubed F0.5 on
 | Weights + named entities                                     | 0.921              | 0.871 / 0.945           | no       |
 
 The objective is the mean B-cubed F0.5 of three families of cross-validation folds. A candidate is eligible when gvc and hlgd-test are not lower than #3130. Candidates within 0.005 of the best eligible objective are tied, and the cheapest wins. On anthropic-outlets, cross-validation B-cubed F0.5 went from 0.820 to 0.918, and the pair precision of pairs of one publisher from 0.166 to 0.447. Over five shuffles of the reports of each publish day, B-cubed F0.5 stayed from 0.9186 to 0.9193 on anthropic-outlets and at 0.9572 on gvc. The exam passes if the exam B-cubed F0.5 and pair F0.5 are higher than #3130, and gvc and hlgd-test are not lower.
+
+## Round #3232: a second embedding model
+
+On 2026-10-28 the maintainer chose one second embedding model to compare with EmbeddingGemma 2: Qwen3-Embedding-0.6B (Q8_0 GGUF, 639 MB, last-token pooling). Its MTEB English v2 score is 70.70, against 68.46 for EmbeddingGemma 2. The larger Qwen3 sizes were not tried, because the model runs on the user's Mac at sync time. This was the first round that ran in the repository, with `nx run event-grouping:fit -- 3232`, and not in a research folder.
+
+The rule (`packages/event-grouping/eval/rounds/3232/selection-rule.json`) was committed before any Qwen score. It keeps the folds, the features, the lead rule, the shortlist, the window, the threshold grid, the nested cross-validation of the CoNLL F0.5 and the eligibility rules of round 3152b. Each candidate got its own fitted weights and threshold. G is the recipe of design 3152b, fitted again under the same rule. Its nested score is the cross-validated score of design 3152b, because the final weights of 3152b saw every fold.
+
+| Candidate                          | Vector text                                                                        | Nested CoNLL F0.5 | anthropic-outlets / ECB+ / small | Final threshold | gvc change against 3152b | Eligible  |
+| ---------------------------------- | ---------------------------------------------------------------------------------- | ----------------- | -------------------------------- | --------------- | ------------------------ | --------- |
+| G (EmbeddingGemma 2, design 3152b) | `title: {title} \| text: {title}\n{lead}`                                          | 0.822             | 0.797 / 0.763 / 0.905            | 0.45            | 0                        | incumbent |
+| Q-plain (Qwen3-Embedding-0.6B)     | `{title}\n{lead}`                                                                  | 0.820             | 0.810 / 0.761 / 0.889            | 0.55            | -0.006 [-0.027, +0.016]  | yes       |
+| Q-instruct (Qwen3-Embedding-0.6B)  | `Instruct: Identify the news event that this report covers\nQuery:{title}\n{lead}` | 0.818             | 0.809 / 0.752 / 0.892            | 0.50            | -0.036 [-0.055, -0.017]  | no (E3)   |
+
+- Q-plain was the challenger. Its change against G on the cross-validated objective was -0.002, with the 95% bootstrap interval [-0.016, +0.011] over 831 blocks. The interval includes 0, so the rule kept design 3152b.
+- Qwen joined more real pairs on anthropic-outlets (+0.012), and lost on the small family and on gvc.
+- Cost (`eval/rounds/3232/cost.json`): one lead took 20.8 ms (median) and 25.6 ms (p90) with Qwen, against 16.8 ms and 18.8 ms with EmbeddingGemma 2. The Qwen server used 1,004 MB (phys_footprint) against 133 MB, at a context of 8,192 tokens.
+- The exam set nvidia-outlets was not scored, because no Qwen design was chosen. It stays the exam of the next round.
 
 ## Limitations
 

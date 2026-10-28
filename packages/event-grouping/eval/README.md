@@ -176,7 +176,7 @@ The fit does these steps:
 
 `plan.json` holds, for each candidate, the fitted design, the cross-validation of each family and the eligibility checks. It also holds the choice and the sha256 of the rule and of the labels. The fit uses the detector of the package, not a copy, so the design that it chooses is the design that the package runs (Google, Rules of Machine Learning, rule 32). A fit runs the detector about 1,600 times for each candidate, and takes about 20 minutes for each candidate.
 
-`rounds/3152b` holds the rule of round 3152b for its chosen candidate only. From the training sets alone, the fit gives the weights of `design3152b` to 1e-6, its threshold 0.45 and its cross-validated CoNLL F0.5 (#3184).
+`rounds/3232` holds round #3232, Qwen3-Embedding-0.6B against design 3152b: its rule, its plan and the cost of each model (`cost.json`). `rounds/3152b` holds the rule of round 3152b for its chosen candidate only. From the training sets alone, the fit gives the weights of `design3152b` to 1e-6, its threshold 0.45 and its cross-validated CoNLL F0.5 (#3184).
 
 ## Scoreboard
 

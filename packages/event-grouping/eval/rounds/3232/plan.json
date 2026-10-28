@@ -1,0 +1,1087 @@
+{
+  "round": "3232",
+  "hashes": {
+    "selection-rule.json": "a53f1ac3d4bcbbd785c5cf0497808caca71161e94ae63085856cb2a337a1416e",
+    "labels": {
+      "anthropic-outlets": "84afb680406f6a8b1c785f9bf1029e21faf83798f687ff88605c0daf8cdba027",
+      "ecbplus": "f2277218175f2f6ce16c45ec59f527bbb7414120cd95aa915267904a31ca5474",
+      "dev2938": "f9bb1d77f980eaee174dfad5d89ab9a6420eacee8823c50b1ed076907afed4b6",
+      "fresh2957": "063bdc6541275fb0bb841401c8b3fdb1d45a12bed388e347acdc2378d4e7c069",
+      "gvc": "2ab7d89462f1df599afa6da5d9e680147b35de0fb05d45d5e84bb6501cd1cec4",
+      "hlgd-test": "27c8d84f5a9b73091d11b6718747a9fd1e2e8a9d0c5e91042a3e9957100c4ea5"
+    }
+  },
+  "candidates": {
+    "G": {
+      "design": {
+        "name": "3152b",
+        "embeddingModel": "embeddinggemma-2",
+        "lead": {
+          "sentences": 2,
+          "minWords": 5,
+          "minLetterRatio": 0.6,
+          "maxUrlShare": 0.5,
+          "urlPattern": "(?:https?://|www\\.)\\S*"
+        },
+        "vectorText": "title: {title} | text: {title}\n{lead}",
+        "shortlistSize": 80,
+        "windowDays": 7,
+        "threshold": 0.45,
+        "pairScore": {
+          "intercept": -5.577353541021177,
+          "similarity": {
+            "weight": 2.46318903726123,
+            "mean": 0.6697853674594678,
+            "sd": 0.07681086026133568
+          },
+          "agreeingNumbers": {
+            "weight": 1.2184550356722763,
+            "mean": 0.7080452669318399,
+            "sd": 0.7146516956780163
+          },
+          "disagreeingNumbers": {
+            "weight": -0.8987930339729907,
+            "mean": 1.6871729914951885,
+            "sd": 0.8093686065424524
+          },
+          "samePublisher": {
+            "weight": -0.6864362601504642,
+            "mean": 0.12460342227076507,
+            "sd": 0.3302686927775402
+          }
+        }
+      },
+      "training": {
+        "method": "IRLS (Newton-Raphson)",
+        "maxIterations": 100,
+        "tolerance": 1e-9,
+        "ridge": 0.000001,
+        "rows": 76908,
+        "positives": 5697,
+        "iterations": 10,
+        "pairs": "batch shortlist pairs (top 80 within 7 days) of all 10 training folds"
+      },
+      "crossValidation": {
+        "objective": 0.8217293655296017,
+        "families": {
+          "anthropic-outlets": {
+            "muc": {
+              "precision": 0.6613464966406143,
+              "recall": 0.5336334168152043,
+              "f1": 0.5903612332765937,
+              "f05": 0.6308977364802448
+            },
+            "bCubed": {
+              "precision": 0.9245104323780795,
+              "recall": 0.8594653540903541,
+              "f1": 0.8905572103194974,
+              "f05": 0.9105560824966233
+            },
+            "ceafE": {
+              "precision": 0.8400094737453957,
+              "recall": 0.8938200486627477,
+              "f1": 0.8658647038385472,
+              "f05": 0.8501181865413758
+            },
+            "blanc": {
+              "precision": 0.7950436548740644,
+              "recall": 0.6428326277830588,
+              "f1": 0.6913415806721996,
+              "f05": 0.7418915711796643
+            },
+            "pair": {
+              "precision": 0.5946137496765838,
+              "recall": 0.2868213499633162,
+              "f1": 0.38552827222151076,
+              "f05": 0.48763796896209793
+            },
+            "conll": {
+              "f1": 0.7822610491448795,
+              "f05": 0.7971906685060812
+            },
+            "baselines": {
+              "allSingletons": 0.5595923515981582,
+              "allInOne": 0.1011846177350239
+            },
+            "thresholds": [0.45, 0.45, 0.45, 0.45]
+          },
+          "ecbplus": {
+            "muc": {
+              "precision": 0.9871210879368478,
+              "recall": 0.8640375538303469,
+              "f1": 0.9209613621264676,
+              "f05": 0.9593880041489451
+            },
+            "bCubed": {
+              "precision": 0.9396726664841234,
+              "recall": 0.7991178240043656,
+              "f1": 0.8629713624484439,
+              "f05": 0.9071942936777301
+            },
+            "ceafE": {
+              "precision": 0.377860668869627,
+              "recall": 0.8332440870327205,
+              "f1": 0.5167552584336897,
+              "f05": 0.4231819686203841
+            },
+            "blanc": {
+              "precision": 0.9362523497991543,
+              "recall": 0.8932401767598355,
+              "f1": 0.9123401869291639,
+              "f05": 0.9260238062725042
+            },
+            "pair": {
+              "precision": 0.8850140301452157,
+              "recall": 0.79348774708935,
+              "f1": 0.8344561622415337,
+              "f05": 0.8634676788840233
+            },
+            "conll": {
+              "f1": 0.7668959943362004,
+              "f05": 0.7632547554823531
+            },
+            "baselines": {
+              "allSingletons": 0.11460726335264475,
+              "allInOne": 0.35015449147180566
+            },
+            "thresholds": [0.45, 0.5, 0.45, 0.45, 0.45]
+          },
+          "small": {
+            "muc": {
+              "precision": 0.7878787878787878,
+              "recall": 0.7878787878787878,
+              "f1": 0.7878787878787878,
+              "f05": 0.7878787878787878
+            },
+            "bCubed": {
+              "precision": 0.9710691823899372,
+              "recall": 0.9723270440251573,
+              "f1": 0.9716977061325844,
+              "f05": 0.9713204942901417
+            },
+            "ceafE": {
+              "precision": 0.955028735632184,
+              "recall": 0.955028735632184,
+              "f1": 0.955028735632184,
+              "f05": 0.9550287356321842
+            },
+            "blanc": {
+              "precision": 0.8911039699707025,
+              "recall": 0.8598568565702834,
+              "f1": 0.8748282377189969,
+              "f05": 0.8844264525965599
+            },
+            "pair": {
+              "precision": 0.782608695652174,
+              "recall": 0.72,
+              "f1": 0.7499999999999999,
+              "f05": 0.7692307692307692
+            },
+            "conll": {
+              "f1": 0.9048684098811854,
+              "f05": 0.9047426726003712
+            },
+            "baselines": {
+              "allSingletons": 0.612425574191383,
+              "allInOne": 0.05292945911216515
+            },
+            "thresholds": [0.45]
+          }
+        },
+        "outer": [
+          {
+            "fold": "anthropic-outlets-0",
+            "family": "anthropic-outlets",
+            "threshold": 0.45,
+            "innerObjective": 0.8245355561412357
+          },
+          {
+            "fold": "anthropic-outlets-1",
+            "family": "anthropic-outlets",
+            "threshold": 0.45,
+            "innerObjective": 0.8280426527763579
+          },
+          {
+            "fold": "anthropic-outlets-2",
+            "family": "anthropic-outlets",
+            "threshold": 0.45,
+            "innerObjective": 0.820215456518973
+          },
+          {
+            "fold": "anthropic-outlets-3",
+            "family": "anthropic-outlets",
+            "threshold": 0.45,
+            "innerObjective": 0.8217605495473426
+          },
+          {
+            "fold": "ecbplus-0",
+            "family": "ecbplus",
+            "threshold": 0.45,
+            "innerObjective": 0.8149019467013342
+          },
+          {
+            "fold": "ecbplus-1",
+            "family": "ecbplus",
+            "threshold": 0.5,
+            "innerObjective": 0.8277239846629922
+          },
+          {
+            "fold": "ecbplus-2",
+            "family": "ecbplus",
+            "threshold": 0.45,
+            "innerObjective": 0.8179926003788474
+          },
+          {
+            "fold": "ecbplus-3",
+            "family": "ecbplus",
+            "threshold": 0.45,
+            "innerObjective": 0.8179396795020396
+          },
+          {
+            "fold": "ecbplus-4",
+            "family": "ecbplus",
+            "threshold": 0.45,
+            "innerObjective": 0.8266988473449365
+          },
+          {
+            "fold": "small-0",
+            "family": "small",
+            "threshold": 0.45,
+            "innerObjective": 0.7820881998818466
+          }
+        ],
+        "flat": {
+          "curve": [
+            {
+              "threshold": 0.2,
+              "value": 0.7860015234116626
+            },
+            {
+              "threshold": 0.25,
+              "value": 0.8017932819261476
+            },
+            {
+              "threshold": 0.3,
+              "value": 0.814780756582388
+            },
+            {
+              "threshold": 0.35,
+              "value": 0.8191140489492592
+            },
+            {
+              "threshold": 0.4,
+              "value": 0.8167218895568676
+            },
+            {
+              "threshold": 0.45,
+              "value": 0.8220995762570773
+            },
+            {
+              "threshold": 0.5,
+              "value": 0.8192293231103602
+            },
+            {
+              "threshold": 0.55,
+              "value": 0.8179110929862895
+            },
+            {
+              "threshold": 0.6,
+              "value": 0.8117353406599915
+            },
+            {
+              "threshold": 0.65,
+              "value": 0.8075983638981156
+            },
+            {
+              "threshold": 0.7,
+              "value": 0.8001543838056797
+            },
+            {
+              "threshold": 0.75,
+              "value": 0.793176625800584
+            },
+            {
+              "threshold": 0.8,
+              "value": 0.7851818465206767
+            },
+            {
+              "threshold": 0.85,
+              "value": 0.7675231335382374
+            },
+            {
+              "threshold": 0.9,
+              "value": 0.7413271345430158
+            },
+            {
+              "threshold": 0.95,
+              "value": 0.7074750199107602
+            }
+          ],
+          "final": {
+            "threshold": 0.45,
+            "value": 0.8220995762570773
+          }
+        }
+      },
+      "eligibility": {
+        "reference": "3152b",
+        "e2": {
+          "family": "anthropic-outlets",
+          "against": {
+            "candidate": "G"
+          },
+          "score": 0.7971906685060812
+        },
+        "regression": {
+          "gvc": {
+            "conllF05": 0.8694516977301353,
+            "interval": {
+              "observed": 0,
+              "low": 0,
+              "high": 0,
+              "blocks": 233,
+              "replicates": 2000,
+              "seed": 3182
+            },
+            "notEntirelyBelow0": true
+          },
+          "hlgd-test": {
+            "conllF05": 0.40276895610809965,
+            "interval": {
+              "observed": 0,
+              "low": 0,
+              "high": 0,
+              "blocks": 122,
+              "replicates": 2000,
+              "seed": 3182
+            },
+            "notEntirelyBelow0": true
+          }
+        },
+        "E1": true,
+        "E2": false,
+        "E3": true,
+        "eligible": false
+      }
+    },
+    "Q-plain": {
+      "design": {
+        "name": "3232-plain",
+        "embeddingModel": "qwen3-embedding-0.6b",
+        "lead": {
+          "sentences": 2,
+          "minWords": 5,
+          "minLetterRatio": 0.6,
+          "maxUrlShare": 0.5,
+          "urlPattern": "(?:https?://|www\\.)\\S*"
+        },
+        "vectorText": "{title}\n{lead}",
+        "shortlistSize": 80,
+        "windowDays": 7,
+        "threshold": 0.55,
+        "pairScore": {
+          "intercept": -6.177546884179066,
+          "similarity": {
+            "weight": 2.8027047855292277,
+            "mean": 0.35628732231302995,
+            "sd": 0.1708890452960402
+          },
+          "agreeingNumbers": {
+            "weight": 1.2191895237050872,
+            "mean": 0.7044951908055544,
+            "sd": 0.7129570945528984
+          },
+          "disagreeingNumbers": {
+            "weight": -0.8308943500880992,
+            "mean": 1.6772496261650376,
+            "sd": 0.8126189277041617
+          },
+          "samePublisher": {
+            "weight": -0.5918027024485948,
+            "mean": 0.12379115293381644,
+            "sd": 0.32934313927713976
+          }
+        }
+      },
+      "training": {
+        "method": "IRLS (Newton-Raphson)",
+        "maxIterations": 100,
+        "tolerance": 1e-9,
+        "ridge": 0.000001,
+        "rows": 76726,
+        "positives": 5697,
+        "iterations": 10,
+        "pairs": "batch shortlist pairs (top 80 within 7 days) of all 10 training folds"
+      },
+      "crossValidation": {
+        "objective": 0.8198176629321133,
+        "families": {
+          "anthropic-outlets": {
+            "muc": {
+              "precision": 0.6810577415416125,
+              "recall": 0.5988338861186946,
+              "f1": 0.6301904175843157,
+              "f05": 0.6580616243493222
+            },
+            "bCubed": {
+              "precision": 0.916427965416936,
+              "recall": 0.8759173804137039,
+              "f1": 0.8948631661188378,
+              "f05": 0.9074707102234555
+            },
+            "ceafE": {
+              "precision": 0.8570357860166611,
+              "recall": 0.8904651827930886,
+              "f1": 0.8725889169705987,
+              "f05": 0.8629882550707975
+            },
+            "blanc": {
+              "precision": 0.783363086847256,
+              "recall": 0.6765285662217821,
+              "f1": 0.707177452681043,
+              "f05": 0.7431540297807093
+            },
+            "pair": {
+              "precision": 0.5707778631165727,
+              "recall": 0.3547708930834389,
+              "f1": 0.4172402236607694,
+              "f05": 0.4898938207761737
+            },
+            "conll": {
+              "f1": 0.7992141668912507,
+              "f05": 0.809506863214525
+            },
+            "baselines": {
+              "allSingletons": 0.5595923515981582,
+              "allInOne": 0.1011846177350239
+            },
+            "thresholds": [0.55, 0.5, 0.35, 0.55]
+          },
+          "ecbplus": {
+            "muc": {
+              "precision": 0.9915121773900399,
+              "recall": 0.8576260258698962,
+              "f1": 0.9194619677390742,
+              "f05": 0.9613012983994137
+            },
+            "bCubed": {
+              "precision": 0.9540415244245614,
+              "recall": 0.789207967890951,
+              "f1": 0.8635333121482525,
+              "f05": 0.9155572240699851
+            },
+            "ceafE": {
+              "precision": 0.35951863959596525,
+              "recall": 0.8421837790685082,
+              "f1": 0.5020793296586598,
+              "f05": 0.40545434427877547
+            },
+            "blanc": {
+              "precision": 0.9443677548516088,
+              "recall": 0.8886837177657838,
+              "f1": 0.9139051637984539,
+              "f05": 0.9314480955351774
+            },
+            "pair": {
+              "precision": 0.9020207589056,
+              "recall": 0.7830979460398566,
+              "f1": 0.8373359398373653,
+              "f05": 0.8746818057928317
+            },
+            "conll": {
+              "f1": 0.7616915365153288,
+              "f05": 0.7607709555827249
+            },
+            "baselines": {
+              "allSingletons": 0.11460726335264475,
+              "allInOne": 0.35015449147180566
+            },
+            "thresholds": [0.55, 0.55, 0.55, 0.5, 0.6]
+          },
+          "small": {
+            "muc": {
+              "precision": 0.7428571428571429,
+              "recall": 0.7878787878787878,
+              "f1": 0.7647058823529412,
+              "f05": 0.7514450867052023
+            },
+            "bCubed": {
+              "precision": 0.9635220125786166,
+              "recall": 0.9723270440251573,
+              "f1": 0.9679045038638995,
+              "f05": 0.9652702381068826
+            },
+            "ceafE": {
+              "precision": 0.952463768115942,
+              "recall": 0.9442528735632184,
+              "f1": 0.9483405483405483,
+              "f05": 0.9508101851851852
+            },
+            "blanc": {
+              "precision": 0.8671465437109545,
+              "recall": 0.8598139135413685,
+              "f1": 0.8634431227723622,
+              "f05": 0.865656125127674
+            },
+            "pair": {
+              "precision": 0.7346938775510204,
+              "recall": 0.72,
+              "f1": 0.7272727272727272,
+              "f05": 0.7317073170731707
+            },
+            "conll": {
+              "f1": 0.8936503115191297,
+              "f05": 0.8891751699990901
+            },
+            "baselines": {
+              "allSingletons": 0.612425574191383,
+              "allInOne": 0.05292945911216515
+            },
+            "thresholds": [0.5]
+          }
+        },
+        "outer": [
+          {
+            "fold": "anthropic-outlets-0",
+            "family": "anthropic-outlets",
+            "threshold": 0.55,
+            "innerObjective": 0.8317991731938239
+          },
+          {
+            "fold": "anthropic-outlets-1",
+            "family": "anthropic-outlets",
+            "threshold": 0.5,
+            "innerObjective": 0.8377881089512483
+          },
+          {
+            "fold": "anthropic-outlets-2",
+            "family": "anthropic-outlets",
+            "threshold": 0.35,
+            "innerObjective": 0.8227529956413107
+          },
+          {
+            "fold": "anthropic-outlets-3",
+            "family": "anthropic-outlets",
+            "threshold": 0.55,
+            "innerObjective": 0.8323437506095365
+          },
+          {
+            "fold": "ecbplus-0",
+            "family": "ecbplus",
+            "threshold": 0.55,
+            "innerObjective": 0.8257326208433167
+          },
+          {
+            "fold": "ecbplus-1",
+            "family": "ecbplus",
+            "threshold": 0.55,
+            "innerObjective": 0.834859000046797
+          },
+          {
+            "fold": "ecbplus-2",
+            "family": "ecbplus",
+            "threshold": 0.55,
+            "innerObjective": 0.8279414606990239
+          },
+          {
+            "fold": "ecbplus-3",
+            "family": "ecbplus",
+            "threshold": 0.5,
+            "innerObjective": 0.8304194854386978
+          },
+          {
+            "fold": "ecbplus-4",
+            "family": "ecbplus",
+            "threshold": 0.6,
+            "innerObjective": 0.832424329295828
+          },
+          {
+            "fold": "small-0",
+            "family": "small",
+            "threshold": 0.5,
+            "innerObjective": 0.7990110148129822
+          }
+        ],
+        "flat": {
+          "curve": [
+            {
+              "threshold": 0.2,
+              "value": 0.7945484084452366
+            },
+            {
+              "threshold": 0.25,
+              "value": 0.8107610965268007
+            },
+            {
+              "threshold": 0.3,
+              "value": 0.8217367916845464
+            },
+            {
+              "threshold": 0.35,
+              "value": 0.8238621068258034
+            },
+            {
+              "threshold": 0.4,
+              "value": 0.824467655929733
+            },
+            {
+              "threshold": 0.45,
+              "value": 0.8250493887229977
+            },
+            {
+              "threshold": 0.5,
+              "value": 0.828410151361661
+            },
+            {
+              "threshold": 0.55,
+              "value": 0.8309388098352368
+            },
+            {
+              "threshold": 0.6,
+              "value": 0.8281401331439727
+            },
+            {
+              "threshold": 0.65,
+              "value": 0.8214613283084543
+            },
+            {
+              "threshold": 0.7,
+              "value": 0.8203482337717575
+            },
+            {
+              "threshold": 0.75,
+              "value": 0.8147739784857734
+            },
+            {
+              "threshold": 0.8,
+              "value": 0.808881759423473
+            },
+            {
+              "threshold": 0.85,
+              "value": 0.793351195363032
+            },
+            {
+              "threshold": 0.9,
+              "value": 0.7685841541715673
+            },
+            {
+              "threshold": 0.95,
+              "value": 0.7382691503417721
+            }
+          ],
+          "final": {
+            "threshold": 0.55,
+            "value": 0.8309388098352368
+          }
+        }
+      },
+      "eligibility": {
+        "reference": "3152b",
+        "e2": {
+          "family": "anthropic-outlets",
+          "against": {
+            "candidate": "G"
+          },
+          "score": 0.7971906685060812
+        },
+        "regression": {
+          "gvc": {
+            "conllF05": 0.8630074217238355,
+            "interval": {
+              "observed": -0.0064442760062998206,
+              "low": -0.027445123585499,
+              "high": 0.015530236534833763,
+              "blocks": 233,
+              "replicates": 2000,
+              "seed": 3182
+            },
+            "notEntirelyBelow0": true
+          },
+          "hlgd-test": {
+            "conllF05": 0.40773216237087784,
+            "interval": {
+              "observed": 0.004963206262778186,
+              "low": 0,
+              "high": 0.014446763442150956,
+              "blocks": 122,
+              "replicates": 2000,
+              "seed": 3182
+            },
+            "notEntirelyBelow0": true
+          }
+        },
+        "E1": true,
+        "E2": true,
+        "E3": true,
+        "eligible": true
+      }
+    },
+    "Q-instruct": {
+      "design": {
+        "name": "3232-instruct",
+        "embeddingModel": "qwen3-embedding-0.6b",
+        "lead": {
+          "sentences": 2,
+          "minWords": 5,
+          "minLetterRatio": 0.6,
+          "maxUrlShare": 0.5,
+          "urlPattern": "(?:https?://|www\\.)\\S*"
+        },
+        "vectorText": "Instruct: Identify the news event that this report covers\nQuery:{title}\n{lead}",
+        "shortlistSize": 80,
+        "windowDays": 7,
+        "threshold": 0.5,
+        "pairScore": {
+          "intercept": -6.312995062766481,
+          "similarity": {
+            "weight": 2.915478015826523,
+            "mean": 0.5322792613470697,
+            "sd": 0.16221147123521087
+          },
+          "agreeingNumbers": {
+            "weight": 1.2905063298758832,
+            "mean": 0.699664624308846,
+            "sd": 0.7116859842503451
+          },
+          "disagreeingNumbers": {
+            "weight": -1.0119354473938946,
+            "mean": 1.6797453171995356,
+            "sd": 0.8126874296683453
+          },
+          "samePublisher": {
+            "weight": -0.55086480515653,
+            "mean": 0.12339689830464738,
+            "sd": 0.32889223735680423
+          }
+        }
+      },
+      "training": {
+        "method": "IRLS (Newton-Raphson)",
+        "maxIterations": 100,
+        "tolerance": 1e-9,
+        "ridge": 0.000001,
+        "rows": 77506,
+        "positives": 5696,
+        "iterations": 10,
+        "pairs": "batch shortlist pairs (top 80 within 7 days) of all 10 training folds"
+      },
+      "crossValidation": {
+        "objective": 0.8176969974818946,
+        "families": {
+          "anthropic-outlets": {
+            "muc": {
+              "precision": 0.7102321215224441,
+              "recall": 0.5103374623015425,
+              "f1": 0.5908651546457231,
+              "f05": 0.6560180719101044
+            },
+            "bCubed": {
+              "precision": 0.9409660274366156,
+              "recall": 0.8507628025569203,
+              "f1": 0.8927107255217692,
+              "f05": 0.9207962070674054
+            },
+            "ceafE": {
+              "precision": 0.8364297091620245,
+              "recall": 0.9128867424198366,
+              "f1": 0.8723143819096513,
+              "f05": 0.8502860596391509
+            },
+            "blanc": {
+              "precision": 0.8210830766169386,
+              "recall": 0.636918069702249,
+              "f1": 0.6877789356598578,
+              "f05": 0.7472272004848713
+            },
+            "pair": {
+              "precision": 0.6468351760113774,
+              "recall": 0.27481224571466684,
+              "f1": 0.37838559726297327,
+              "f05": 0.498388136686009
+            },
+            "conll": {
+              "f1": 0.7852967540257145,
+              "f05": 0.8090334462055536
+            },
+            "baselines": {
+              "allSingletons": 0.5595923515981582,
+              "allInOne": 0.1011846177350239
+            },
+            "thresholds": [0.5, 0.5, 0.5, 0.5]
+          },
+          "ecbplus": {
+            "muc": {
+              "precision": 0.9855370801898206,
+              "recall": 0.8618685591421705,
+              "f1": 0.9190743561512107,
+              "f05": 0.957684968419915
+            },
+            "bCubed": {
+              "precision": 0.9215130863975546,
+              "recall": 0.7865069746425121,
+              "f1": 0.8480084016254082,
+              "f05": 0.8904239050393846
+            },
+            "ceafE": {
+              "precision": 0.36346502318767976,
+              "recall": 0.7977485770760726,
+              "f1": 0.49618131696860235,
+              "f05": 0.406785926901973
+            },
+            "blanc": {
+              "precision": 0.9183289143352864,
+              "recall": 0.8845919020272547,
+              "f1": 0.8994088456188134,
+              "f05": 0.9101604302356536
+            },
+            "pair": {
+              "precision": 0.8501755307348973,
+              "recall": 0.7783382960590116,
+              "f1": 0.8101677185083436,
+              "f05": 0.8329747999296935
+            },
+            "conll": {
+              "f1": 0.7544213582484072,
+              "f05": 0.7516316001204241
+            },
+            "baselines": {
+              "allSingletons": 0.11460726335264475,
+              "allInOne": 0.35015449147180566
+            },
+            "thresholds": [0.45, 0.55, 0.45, 0.5, 0.45]
+          },
+          "small": {
+            "muc": {
+              "precision": 0.7575757575757576,
+              "recall": 0.7575757575757576,
+              "f1": 0.7575757575757576,
+              "f05": 0.7575757575757576
+            },
+            "bCubed": {
+              "precision": 0.9672955974842768,
+              "recall": 0.968553459119497,
+              "f1": 0.9679241196398872,
+              "f05": 0.9675469083695677
+            },
+            "ceafE": {
+              "precision": 0.9521551724137931,
+              "recall": 0.9521551724137931,
+              "f1": 0.952155172413793,
+              "f05": 0.9521551724137932
+            },
+            "blanc": {
+              "precision": 0.8802200920493553,
+              "recall": 0.8498425422273117,
+              "f1": 0.8643972575289134,
+              "f05": 0.8737283788810702
+            },
+            "pair": {
+              "precision": 0.7608695652173914,
+              "recall": 0.7,
+              "f1": 0.7291666666666667,
+              "f05": 0.7478632478632479
+            },
+            "conll": {
+              "f1": 0.8925516832098125,
+              "f05": 0.8924259461197063
+            },
+            "baselines": {
+              "allSingletons": 0.612425574191383,
+              "allInOne": 0.05292945911216515
+            },
+            "thresholds": [0.5]
+          }
+        },
+        "outer": [
+          {
+            "fold": "anthropic-outlets-0",
+            "family": "anthropic-outlets",
+            "threshold": 0.5,
+            "innerObjective": 0.8156724109973802
+          },
+          {
+            "fold": "anthropic-outlets-1",
+            "family": "anthropic-outlets",
+            "threshold": 0.5,
+            "innerObjective": 0.8219437534822132
+          },
+          {
+            "fold": "anthropic-outlets-2",
+            "family": "anthropic-outlets",
+            "threshold": 0.5,
+            "innerObjective": 0.809298300624714
+          },
+          {
+            "fold": "anthropic-outlets-3",
+            "family": "anthropic-outlets",
+            "threshold": 0.5,
+            "innerObjective": 0.8151304622598755
+          },
+          {
+            "fold": "ecbplus-0",
+            "family": "ecbplus",
+            "threshold": 0.45,
+            "innerObjective": 0.8084700360684863
+          },
+          {
+            "fold": "ecbplus-1",
+            "family": "ecbplus",
+            "threshold": 0.55,
+            "innerObjective": 0.8223571798908117
+          },
+          {
+            "fold": "ecbplus-2",
+            "family": "ecbplus",
+            "threshold": 0.45,
+            "innerObjective": 0.8129116062286544
+          },
+          {
+            "fold": "ecbplus-3",
+            "family": "ecbplus",
+            "threshold": 0.5,
+            "innerObjective": 0.81146122550626
+          },
+          {
+            "fold": "ecbplus-4",
+            "family": "ecbplus",
+            "threshold": 0.45,
+            "innerObjective": 0.817938828506586
+          },
+          {
+            "fold": "small-0",
+            "family": "small",
+            "threshold": 0.5,
+            "innerObjective": 0.7774982896721878
+          }
+        ],
+        "flat": {
+          "curve": [
+            {
+              "threshold": 0.2,
+              "value": 0.7711933636846724
+            },
+            {
+              "threshold": 0.25,
+              "value": 0.7870671741510812
+            },
+            {
+              "threshold": 0.3,
+              "value": 0.7965073497883433
+            },
+            {
+              "threshold": 0.35,
+              "value": 0.8006049078313101
+            },
+            {
+              "threshold": 0.4,
+              "value": 0.8087346953664468
+            },
+            {
+              "threshold": 0.45,
+              "value": 0.8152473205110851
+            },
+            {
+              "threshold": 0.5,
+              "value": 0.8158075084880273
+            },
+            {
+              "threshold": 0.55,
+              "value": 0.8107837054066277
+            },
+            {
+              "threshold": 0.6,
+              "value": 0.8046983507969668
+            },
+            {
+              "threshold": 0.65,
+              "value": 0.8017082985305795
+            },
+            {
+              "threshold": 0.7,
+              "value": 0.7909905117623878
+            },
+            {
+              "threshold": 0.75,
+              "value": 0.7764711353474328
+            },
+            {
+              "threshold": 0.8,
+              "value": 0.7687222845701963
+            },
+            {
+              "threshold": 0.85,
+              "value": 0.7412784703390067
+            },
+            {
+              "threshold": 0.9,
+              "value": 0.7135202544161423
+            },
+            {
+              "threshold": 0.95,
+              "value": 0.663131350223977
+            }
+          ],
+          "final": {
+            "threshold": 0.5,
+            "value": 0.8158075084880273
+          }
+        }
+      },
+      "eligibility": {
+        "reference": "3152b",
+        "e2": {
+          "family": "anthropic-outlets",
+          "against": {
+            "candidate": "G"
+          },
+          "score": 0.7971906685060812
+        },
+        "regression": {
+          "gvc": {
+            "conllF05": 0.8330464223244339,
+            "interval": {
+              "observed": -0.036405275405701376,
+              "low": -0.05518808594631519,
+              "high": -0.01723029034117385,
+              "blocks": 222,
+              "replicates": 2000,
+              "seed": 3182
+            },
+            "notEntirelyBelow0": false
+          },
+          "hlgd-test": {
+            "conllF05": 0.4068814578163777,
+            "interval": {
+              "observed": 0.004112501708278038,
+              "low": -0.0019452658690781166,
+              "high": 0.014831880556806232,
+              "blocks": 121,
+              "replicates": 2000,
+              "seed": 3182
+            },
+            "notEntirelyBelow0": true
+          }
+        },
+        "E1": true,
+        "E2": true,
+        "E3": false,
+        "eligible": false
+      }
+    }
+  },
+  "choice": {
+    "chosen": null,
+    "comparison": {
+      "challenger": "Q-plain",
+      "incumbent": "G",
+      "interval": {
+        "observed": -0.0019117025974884072,
+        "low": -0.015743343210941507,
+        "high": 0.011285062905336929,
+        "blocks": 831,
+        "replicates": 2000,
+        "seed": 3182
+      }
+    }
+  }
+}
