@@ -6,28 +6,28 @@ The detector decides with many numbers: the lead rule, the size of the shortlist
 
 Research round #3130 chose all of them on fitting data, and then froze them in its `plan.json` before it scored its test set. The sha256 of that `plan.json` is `5ad0b727f8ae67a1f25bd25719e550952ab1449e3dce1fad551714f63a3ade4f`. The round kept its files in `~/.codex/visualizations/2026/10/23/01a16a1c-424c-7793-8ca9-02cc1c715d82/feature-scorer-3130` on the maintainer's Mac. The workspace record [docs/research/event-grouping.md](../../../../docs/research/event-grouping.md) tells the history of all rounds.
 
-`src/frozen-design.ts` holds each parameter as a named constant:
+The pin of scoreboard entry 3130 (`eval/scoreboard.json`) holds each parameter as a field of a `Design` (`src/design.ts`):
 
-| Constant                        | Value                                      | `plan.json` key           |
-| ------------------------------- | ------------------------------------------ | ------------------------- |
-| `LEAD_SENTENCES`                | 2                                          | `leadRule.sentences`      |
-| `MIN_WORDS`                     | 5                                          | `leadRule.minWords`       |
-| `MIN_LETTER_RATIO`              | 0.6                                        | `leadRule.minLetterRatio` |
-| `MAX_URL_SHARE`                 | 0.5                                        | `leadRule.maxUrlShare`    |
-| `URL_PATTERN`                   | `(?:https?://\|www\.)\S*`                  | `leadRule.url`            |
-| `SHORTLIST_SIZE`                | 80                                         | `design.k`                |
-| `WINDOW_DAYS`                   | 7                                          | `design.windowDays`       |
-| `THRESHOLD`                     | 0.5                                        | `design.threshold`        |
-| `INTERCEPT` and the three terms | the weights, means and standard deviations | `design.model`            |
+| `Design` field        | Value                                      | `plan.json` key           |
+| --------------------- | ------------------------------------------ | ------------------------- |
+| `lead.sentences`      | 2                                          | `leadRule.sentences`      |
+| `lead.minWords`       | 5                                          | `leadRule.minWords`       |
+| `lead.minLetterRatio` | 0.6                                        | `leadRule.minLetterRatio` |
+| `lead.maxUrlShare`    | 0.5                                        | `leadRule.maxUrlShare`    |
+| `lead.urlPattern`     | `(?:https?://\|www\.)\S*`                  | `leadRule.url`            |
+| `shortlistSize`       | 80                                         | `design.k`                |
+| `windowDays`          | 7                                          | `design.windowDays`       |
+| `threshold`           | 0.5                                        | `design.threshold`        |
+| `pairScore`           | the weights, means and standard deviations | `design.model`            |
 
-The vector text is part of the design too. The round embedded `title: <title> | text: <title>\n<lead>` with EmbeddingGemma 2 (Q8_0, llama.cpp b11836). This is the document prompt of EmbeddingGemma. The weights learned the similarity scale of these vectors. Thus the detector gives this text to the vectors port, and the caller must use the same model.
+The vector text is part of the design too (`vectorText`). The round embedded `title: <title> | text: <title>\n<lead>` with EmbeddingGemma 2 (Q8_0, llama.cpp b11836). This is the document prompt of EmbeddingGemma. The weights learned the similarity scale of these vectors. Thus the detector gives this text to the vectors port, and the caller must use the same model.
 
 The round also used `ml-hclust` 4.0.0 `agnes` with the method `average`, and so does the detector.
 
 ## Considered Options
 
 - **Options for the caller.** A caller could set the threshold or the window. But no caller can measure the effect of a change without a labeled corpus, and the weights are valid only for the threshold that the round chose with them.
-- **Constants with their provenance.** This option was selected.
+- **Constants with their provenance.** This option was selected. Since #3184, one `Design` value holds the constants, and the caller gives it to the detector ([ADR 0004](./0004-the-similarity-source-is-a-port-and-the-parameters-belong-to-one-source.md)).
 
 ## Consequences
 

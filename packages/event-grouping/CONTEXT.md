@@ -47,8 +47,12 @@ The probability, from 0 to 1, that two reports report one event. It comes from t
 _Avoid_: Similarity, confidence
 
 **Threshold**:
-The pair score at which two reports report one event: 0.5.
+The pair score at which two reports report one event. The design gives it.
 _Avoid_: Cut-off, limit
+
+**Design**:
+The whole recipe of one research round: the embedding model, the lead rule, the vector text, the shortlist size, the window, the threshold and the weights of the pair score. The caller gives the detector one design. The weights and the threshold are valid only with the embedding model that the design names.
+_Avoid_: Config, settings, parameters (for the whole recipe)
 
 **Shortlist**:
 The 80 nearest reports of a report, by similarity, from the reports that have an event and are inside the window. Only these reports become pairs. The standard term is blocking.

@@ -13,7 +13,7 @@ The round froze its design in `plan.json`, sha256 `78a56767d6d454e1053d28bbcd71b
 
 These parts did not change: the lead rule, the vector text, EmbeddingGemma 2, the shortlist of 80 reports, the window of 7 days and the clustering. The second selection (3152b, below) changed the threshold from 0.5 to 0.45.
 
-`src/frozen-design.ts` holds the new values (`plan.json` `design.model`):
+`design3152b` (`src/design-3152b.ts`) holds the new values (`plan.json` `design.model`):
 
 | Term                | Weight  | Mean    | Standard deviation |
 | ------------------- | ------- | ------- | ------------------ |
@@ -113,4 +113,5 @@ The exam rule (`plan.json` `examVerdict`): the design passes if, on deepmind-out
 
 - A host that knows the publisher must give it. Without publishers, the detector cannot use the same-publisher evidence, and the scores of round #3152 on sets with many publishers do not apply to it.
 - The parameters of round #3130 in ADR 0001 are history. The lead rule, the vector text, the shortlist and the window of ADR 0001 are still the parameters of the detector. The threshold is 0.45.
+- `nx run event-grouping:fit -- 3152b` builds design 3152b again from the training sets, with the detector of the package (`eval/rounds/3152b/plan.json`). It gives the same weights, the threshold 0.45 and the cross-validated CoNLL F0.5 of 0.822.
 - 3152b is the accepted design of the scoreboard. deepmind-outlets is now a regression set; a later round needs a new exam set.

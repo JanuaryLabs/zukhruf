@@ -33,7 +33,7 @@ For each set, the runner does these steps:
 
 1. It reads the answer key and checks its hash against `set.json`.
 2. It gets the text of each report (see [Texts](#texts)).
-3. It gives the reports to a new `EventDetector` in an in-memory database, as a host does: one `add` for each publish day, in the order of the publish dates. Reports with equal dates keep the order of the answer key. Each report has the publisher of its answer-key row, when the row has one.
+3. It gives the reports to a new `EventDetector` in an in-memory database, with the design that the run scores (`DESIGN` in `run.ts`), as a host does: one `add` for each publish day, in the order of the publish dates. Reports with equal dates keep the order of the answer key. Each report has the publisher of its answer-key row, when the row has one.
 4. After the last day, it adds one headline-only report of the next day. This makes the detector cluster the last window again, so the events of the last day are final. The headline-only report never joins an event (ADR 0003).
 5. It scores the events against the answer key and writes `results/<set>.json`.
 
@@ -79,6 +79,8 @@ A design must have a higher main score than both baselines on a set. If it does 
 
 The runner compares the events of the run with the events of the latest accepted design (`accepted/<design>.json`). It gives the change of the main score and its 95% interval. The interval comes from a paired bootstrap (Efron and Tibshirani 1993; Koehn 2004): 2,000 replicates with the fixed seed 3182. Each replicate draws units with replacement and scores both designs on the same draw.
 
+When `accepted/<design>.json` has no events of the accepted design on the labels of the set, the runner runs the accepted design in the same run. It takes the design from the pin of its scoreboard entry, and it runs it through the detector of the package. This is the case for an exam set, a new set and a set with fixed labels. On a set that no accepted design scored, the runner compares with the latest accepted design. `results/<set>.json` then holds the events and the CoNLL F0.5 of the accepted design (`accepted`).
+
 A unit is a block of whole gold events. A block holds the gold events that one of the two designs joins with each other. Thus a false join stays in its unit, and the units are independent. When neither design joins two gold events, each unit is one gold event. A design that joins many gold events makes few blocks. The runner shows the number of blocks; with few blocks, the interval is narrow and tells you little.
 
 ### Other scores in a result
@@ -112,6 +114,14 @@ Each folder in `sets/` is one set. It has two files:
 - **Regression**: a new design must not be worse on this set than the latest accepted design. It is worse only when the whole 95% interval of the change of its main score is below 0. Do not tune on it.
 - **Exam**: no design has seen this set. The runner scores it one time only, with `--exam`, as the test of a frozen design. It then writes the first-scored date into `set.json`, and the set is a regression set from then on. The runner refuses `--exam` on a set that has a first-scored date.
 
+The one score of an exam set also gives the verdict of the design against the accepted design. The runner applies the exam rule of round 3152b (`rounds/3152b/selection-rule.json`, `examVerdict`):
+
+- (a) The 95% interval of the change of the main score on the exam set is entirely above 0.
+- (b) The main score on the exam set is higher than both baselines.
+- (c) No regression set of the run has an interval that is entirely below 0.
+
+The result is "pass" when (a), (b) and (c) hold. It is "fail" when (b) or (c) does not hold, or when the interval of (a) is entirely below 0. Otherwise it is "inconclusive", and the accepted design stays. The runner writes the verdict into `results/<set>.json`. `--exam` needs every regression set in the same run, so it refuses set names.
+
 To add a new labelled set, freeze its labels first. Give it the role `exam` and no first-scored date. Score it with `--exam` only when the design is frozen.
 
 ### Labels
@@ -143,19 +153,37 @@ The runner never drops a report without a message:
 
 `--refresh` gets each text from its source again. Use it to see if the sources changed.
 
+## Fit a design
+
+A research round chooses a design on the training sets. `nx run event-grouping:fit -- <round>` does that work in the repository. It reads `rounds/<round>/selection-rule.json` and writes `rounds/<round>/plan.json`. It needs the embedding server of [Run it](#run-it):
+
+```sh
+EVAL_EMBEDDING_URL=http://127.0.0.1:8096/v1 npx nx run event-grouping:fit -- 3152b
+```
+
+The fit does these steps:
+
+1. It reads `set.json` of each set of the rule first. It refuses a training set whose role is not `training`, and a regression set whose role is not `regression`. Thus it never opens the answer key of an exam set.
+2. It cuts the training sets into the folds of the rule.
+3. For each fold, it gets the training pairs: the shortlist pairs of each report, from the `neighbourGraph` of the vectors of the fold. The pair features come from `pairFeatures` (`src/pair-score.ts`), the function of the pair score.
+4. It fits the weights of the pair score by logistic regression (`fit/irls.ts`), and it chooses the threshold by nested cross-validation of the CoNLL F0.5 (`fit/cross-validation.ts`). Each fold score comes from the `EventDetector` of the package, fed as the runner feeds it.
+5. It checks the eligibility rules against the reference design of the rule, which it runs from its scoreboard pin.
+
+`plan.json` holds the fitted design, the cross-validation of each family, the eligibility checks and the sha256 of the rule and of the labels. The fit uses the detector of the package, not a copy, so the design that it chooses is the design that the package runs (Google, Rules of Machine Learning, rule 32). A full fit runs the detector about 1,600 times and takes about 20 minutes.
+
+`rounds/3152b` holds the rule of round 3152b for its chosen candidate only. From the training sets alone, the fit gives the weights of `design3152b` to 1e-6, its threshold 0.45 and its cross-validated CoNLL F0.5 (#3184).
+
 ## Scoreboard
 
 `scoreboard.json` holds the scores of each accepted design on each set, the oldest first. The diff of this file shows if a design is better or worse on each set. `accepted/<design>.json` holds the events of each accepted design, in the order of the answer-key rows.
 
 Each entry pins its design:
 
-- `pin.commit`: the commit that holds the design.
-- `pin.planSha256`: the sha256 of the `plan.json` of its research round (`PLAN_SHA256` in `src/frozen-design.ts`).
-- `pin.frozenDesignSha256`: the sha256 of `src/frozen-design.ts`.
-- `pin.constants`: the constants of `src/frozen-design.ts`.
+- `pin.commit`: the commit that holds the detector.
+- `pin.design`: the `Design` that the detector ran (`src/design.ts`). It holds the sha256 of the `plan.json` of its research round and the name of its embedding model.
 - `metricsVersion`: the version of the metrics that made the scores (`METRICS_VERSION` in `metrics/metrics.ts`).
 
-Before each run, the runner tells you if the package holds an accepted design. It compares the constants and the file sha256 with the pin of each entry.
+Before each run, the runner tells you if the design of the run is accepted. It compares the design with the design of each pin. The pin of design 3130 holds a same-publisher term with the weight 0, because that design had no such term.
 
 To accept a design, run all sets with `--accept <design>`, for example `--accept 3152`. The runner refuses when:
 

@@ -20,7 +20,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
 
 import { Collection } from '@zukhruf/embeddings';
-import { EventDetector } from '@zukhruf/event-grouping';
+import { EventDetector, design3152b } from '@zukhruf/event-grouping';
 
 const local = createOpenAICompatible({
   name: 'llama.cpp',
@@ -31,8 +31,9 @@ const detector = new EventDetector({
   database,
   vectors: new Collection({
     database,
-    model: local.embeddingModel('embeddinggemma'),
+    model: local.embeddingModel(design3152b.embeddingModel),
   }),
+  design: design3152b,
 });
 
 await detector.add([
@@ -51,7 +52,8 @@ detector.events({ since: new Date('2026-10-14') });
 
 ## API
 
-- `new EventDetector({ database, vectors })`. The caller opens and closes `database`. The detector makes its tables `event_report` and `event_clock` in it. `vectors` is the port to the vectors of this detector only.
+- `new EventDetector({ database, vectors, design })`. The caller opens and closes `database`. The detector makes its tables `event_report` and `event_clock` in it. `vectors` is the port to the vectors of this detector only. `design` is the recipe of one research round. The vectors must come from the embedding model that `design.embeddingModel` names.
+- `design3152b` is the design of research round #3152b ([ADR 0005](./docs/adr/0005-research-round-3152-adds-a-same-publisher-term-and-fits-the-weights-again.md)). `Design` is its type.
 - `add(reports)` gives each new report an event. A report has an `id`, a `title`, a `body`, a `publishedAt` date and, when the caller knows it, a `publisher`. The detector gives the lead of each report that has one to `vectors.upsert`, as `{ id, text, publishedAt }`. Then it gives the reports their events, in the order of their publish dates. A report whose id the detector has already is skipped.
 - `events({ since })` gives the events with a report published at or after `since`, in the order of their first report. An event has an `id` (a number), its `members` (report ids, in the order of their publish dates), `firstSeen` and `lastSeen`.
 - `Vectors` is the type of the port: `upsert(documents)`, `nearest(id, { k, withinDays })`, `neighbourGraph({ from, to, k, withinDays })` and `similarity(a, b)`. A clustering asks for one neighbour graph of the window. The `Collection` of `@zukhruf/embeddings` has this shape, with no adapter.

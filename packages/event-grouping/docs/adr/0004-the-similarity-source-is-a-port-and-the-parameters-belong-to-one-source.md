@@ -36,10 +36,13 @@ The search found no model that takes two reports and tells if they are about one
 
 **The parameters belong to one source.** The weights and the threshold learned the similarity scale of EmbeddingGemma 2 on the vector text of ADR 0001. Another source gives another scale. For example, 30 degrees Celsius and 30 degrees Fahrenheit are very different temperatures. A detector with a new source and the old parameters makes wrong decisions. Thus a new source needs a new research round on the evaluation sets (#3145), and it gets its own parameters.
 
-**The constructor has no option for the design yet.** When a second source has its own tested parameters, the constructor can take a design that holds the source and its parameters as one unit, for example `design: gemma3130`. Before that, such an option can only choose a wrong combination.
+**The constructor takes a design.** A `Design` (`src/design.ts`) holds the source and its parameters as one unit: the name of the embedding model, the lead rule, the vector text, the shortlist size, the window, the threshold and the weights of the pair score. The constructor has no default design, so each caller names the design that it uses, for example `design: design3152b`. A design is a value, not code, so the evaluation can run the accepted design and a new design in one run (#3189). The design names its model, but the detector cannot see the model of the vectors. The caller must give vectors of that model.
+
+**The repository builds a design.** `nx run event-grouping:fit -- <round>` fits a design from the selection rule of a round and the training sets (eval/README.md). It runs the detector of the package, not a copy, so the design that the fit chooses is the design that the package runs. Thus another embedding model gets its own fitted weights and threshold from the same code.
 
 ## Consequences
 
+- A new source needs a new design: fit it with `nx run event-grouping:fit`, then score it with `nx run event-grouping:eval`.
 - Before you change the source or a parameter, run `nx run event-grouping:eval` ([eval/README.md](../../eval/README.md)). Do not use a set as a fresh test after a round has scored it once: the runner scores an exam set one time only, and then the set is a regression set.
 - A new source alone does not fix the false joins between the posts of one publisher (limitation 20). There, every post shares the same names, so every similarity is high.
 - If you add a model in the table above, add its row with the round that measured it.
