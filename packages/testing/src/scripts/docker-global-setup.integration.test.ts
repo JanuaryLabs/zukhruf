@@ -1711,15 +1711,25 @@ test(
 /**
  * Arrange: a run of this version whose teardown sweeps `version` is killed
  * after it created its sweep lease and before the start of that lease. The
- * proxy refuses the start, so the lease stays created. Gives the ids of the
- * run's shared servers.
+ * proxy refuses the start, so the lease stays created. `beforeSweepLeases`
+ * runs after the teardown listed the shared servers of other versions and
+ * before it creates a sweep lease. Gives the ids of the run's shared servers.
  */
 async function killedSweep(
   t: TestContext,
   directory: string,
   version: string,
+  beforeSweepLeases: () => Promise<void> = async () => {},
 ): Promise<string[]> {
   await using proxy = await EngineProxy.start(engine);
+  const statePath = join(directory, `killed-sweep-${randomUUID()}.json`);
+  // The test writes its state after its last create: a create after it is a sweep lease of the teardown.
+  let teardown = false;
+  proxy.intercept('POST', '/containers/create', async () => {
+    if (teardown || !existsSync(statePath)) return;
+    teardown = true;
+    await beforeSweepLeases();
+  });
   const held = Promise.withResolvers<void>();
   const release = Promise.withResolvers<void>();
   proxy.intercept('POST', /^\/containers\/[^/]+\/start$/, async ({ path }) => {
@@ -1730,7 +1740,6 @@ async function killedSweep(
     await release.promise;
     throw new Error('The runner was killed before this start.');
   });
-  const statePath = join(directory, `killed-sweep-${randomUUID()}.json`);
   const file = join(directory, `killed-sweep-${randomUUID()}.test.ts`);
   await writeFile(
     file,
@@ -1778,7 +1787,14 @@ test(
     const server = other.id;
     ids.push(server);
     try {
-      ids.push(...(await killedSweep(t, directory.path, version)));
+      // A teardown sweeps only a version that has shared servers, and one that
+      // finds the sweep lease created removes it. With no server of the
+      // version, only the test process below can remove the stale lease.
+      ids.push(
+        ...(await killedSweep(t, directory.path, version, () =>
+          removeContainer(server),
+        )),
+      );
       const stale = await docker.containers.find(sweepLease(version));
       assert.ok(stale);
 
@@ -1789,8 +1805,9 @@ test(
         probe,
         env,
       );
+      ids.push(reused);
 
-      assert.equal(reused, server);
+      assert.notEqual(reused, server);
       assert.equal(await running(reused), true);
       assert.equal(await exists(stale.id), false);
     } finally {
