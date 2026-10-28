@@ -114,8 +114,9 @@ export default defineConfig(
     },
   },
   // The event-grouping eval is not shipped. Like the tests, it runs the
-  // package with a real Collection of @zukhruf/embeddings. Its runner is a
-  // command line program: it reads its environment and prints the scores.
+  // package with a real Collection of @zukhruf/embeddings. Its runner and its
+  // fitter are command line programs: they read their environment and print
+  // the scores.
   {
     files: ['packages/event-grouping/eval/**'],
     rules: {
@@ -123,7 +124,10 @@ export default defineConfig(
     },
   },
   {
-    files: ['packages/event-grouping/eval/run.ts'],
+    files: [
+      'packages/event-grouping/eval/run.ts',
+      'packages/event-grouping/eval/fit.ts',
+    ],
     rules: { 'island/no-console': 'off', 'island/no-process-env': 'off' },
   },
   // @zukhruf/testing depends on docker, and docker on async, so the tests of

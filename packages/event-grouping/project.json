@@ -19,6 +19,15 @@
         "command": "node eval/run.ts",
         "cwd": "{projectRoot}"
       }
+    },
+    "fit": {
+      "executor": "nx:run-commands",
+      "dependsOn": ["^build"],
+      "cache": false,
+      "options": {
+        "command": "node eval/fit.ts",
+        "cwd": "{projectRoot}"
+      }
     }
   }
 }

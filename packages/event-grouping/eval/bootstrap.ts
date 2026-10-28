@@ -1,4 +1,7 @@
+import type { AnswerRow } from './answer-key.ts';
 import type { Partition } from './metrics/contingency.ts';
+import { mainScore } from './metrics/metrics.ts';
+import { partitions } from './score.ts';
 
 export type Interval = {
   // The difference on the reports as they are: run - latest.
@@ -70,6 +73,26 @@ export function pairedBootstrap(options: {
     replicates,
     seed,
   };
+}
+
+// The change of the main score of a design against another design, on the
+// reports that both partitions hold (#3182). The seed is fixed, so a run
+// gives the same interval each time.
+export function changeOfMainScore(
+  rows: readonly AnswerRow[],
+  run: Partition,
+  latest: Partition,
+): Interval {
+  const both = rows.filter((row) => run.has(row.id) && latest.has(row.id));
+  const { gold, predicted } = partitions(both, run);
+  return pairedBootstrap({
+    gold,
+    run: predicted,
+    latest: partitions(both, latest).predicted,
+    statistic: mainScore,
+    replicates: 2000,
+    seed: 3182,
+  });
 }
 
 // The reports of each block: the connected components of the reports, where

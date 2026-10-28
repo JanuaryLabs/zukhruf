@@ -1,0 +1,67 @@
+{
+  "task": 3152,
+  "round": "3152b: the design selection of round #3152 again, with the main score CoNLL F0.5 that the harness README pre-registers (mutex commit a4431c5)",
+  "source": "This file is a copy of feature-scorer-3152b/selection-rule.json of research round #3152 (sha256 7606921c9f98c19f8a357b96a5ffdd22bb5322f2e324d08cb0c76ea72ca1704e, written 2026-10-27T15:16:41Z). It keeps only what applies to the chosen candidate, C4+2a. The other 20 candidates, the order of simplicity and the bootstrap of each simpler candidate against the best are in the research record (feature-scorer-3152b/selection-rule.json, results/selection.json and plan.json).",
+  "data": {
+    "training": ["anthropic-outlets", "ecbplus", "dev2938", "fresh2957"],
+    "regression": ["gvc", "hlgd-test"],
+    "exam": "The fitter opens no exam set. It reads set.json first and refuses a training set whose role is not training and a regression set whose role is not regression."
+  },
+  "folds": [
+    {
+      "family": "anthropic-outlets",
+      "sets": ["anthropic-outlets"],
+      "split": "time",
+      "count": 4,
+      "rule": "4 contiguous time folds of whole gold events: the events in the order of their first publish date (then of their labels), each in the fold of the reports before it."
+    },
+    {
+      "family": "ecbplus",
+      "sets": ["ecbplus"],
+      "split": "topic",
+      "count": 5,
+      "rule": "5 folds by the rank of the topic number, mod 5."
+    },
+    {
+      "family": "small",
+      "sets": ["dev2938", "fresh2957"],
+      "split": "none",
+      "count": 1,
+      "rule": "dev2938 and fresh2957 as 1 fold."
+    }
+  ],
+  "candidate": {
+    "name": "C4+2a refit + same publisher",
+    "recipe": {
+      "name": "3152b",
+      "embeddingModel": "embeddinggemma-2",
+      "lead": {
+        "sentences": 2,
+        "minWords": 5,
+        "minLetterRatio": 0.6,
+        "maxUrlShare": 0.5,
+        "urlPattern": "(?:https?://|www\\.)\\S*"
+      },
+      "vectorText": "title: {title} | text: {title}\n{lead}",
+      "shortlistSize": 80,
+      "windowDays": 7
+    },
+    "features": "The pair features of the package (src/pair-score.ts pairFeatures): similarity, log1p of the agreeing numbers, log1p of the smaller count of disagreeing numbers, same publisher. No span limit.",
+    "thresholds": [
+      0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8,
+      0.85, 0.9, 0.95
+    ]
+  },
+  "pairModel": "Logistic regression by IRLS (eval/fit/irls.ts) on the batch-shortlist pairs of the training folds: for each report with a lead, its top shortlistSize reports with a lead within windowDays in its fold (the neighbourGraph of the fold's vectors). Refitted for every set of training folds used below.",
+  "foldScore": "The CoNLL F0.5 (eval/metrics mainScore, the mean of the MUC, B-cubed and CEAF-e F0.5) of the fold's partition against its gold events, on the reports that have a text.",
+  "objective": "Nested cross-validated CoNLL F0.5. For each outer fold f: for each other fold g, fit the model on the folds that are neither f nor g and score g at every threshold; choose the threshold with the best inner objective (the mean over the families present among the inner folds of the mean fold score); then fit the model on the folds that are not f and score f at the chosen threshold. Family score = mean of the outer fold scores of the family; objective = mean of the family scores. Ties (equal inner objective) go to the higher threshold.",
+  "flatCurve": "For each threshold, the objective of the folds each scored with the model fitted on the other folds. The final threshold is the best threshold of this curve (same tie rule), and the final model is fitted on all folds.",
+  "baselines": "All singletons and all in one, scored per fold; family baseline = mean over its folds.",
+  "reference": { "design": "3130", "family": "anthropic-outlets" },
+  "eligibility": {
+    "E1": "On every family, the nested-CV family CoNLL F0.5 is greater than the family score of both trivial baselines.",
+    "E2": "On anthropic-outlets, the nested-CV family CoNLL F0.5 is greater than that of the reference design (scoreboard entry 3130, its pinned design) on the same folds.",
+    "E3": "On each regression set, the final design is compared with the reference design by the paired block bootstrap (eval/bootstrap.ts changeOfMainScore: mainScore, 2000 replicates, seed 3182, on the reports both partitions hold). The 95% interval of (candidate - reference) is not entirely below 0."
+  },
+  "examVerdict": "The candidate passes if, on the exam deepmind-outlets (133 reports): (a) the paired block bootstrap 95% interval of (candidate - 3130) CoNLL F0.5 is entirely above 0; (b) the candidate's CoNLL F0.5 is greater than both trivial baselines; (c) on gvc and hlgd-test the interval of (candidate - 3130) is not entirely below 0. If the interval of (a) includes 0, the result is 'inconclusive' and design 3130 stays. If it is entirely below 0, the result is 'fail'. If (b) or (c) does not hold, the result is 'fail'."
+}

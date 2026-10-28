@@ -5,10 +5,13 @@ import type { AnalysedReport } from './event-table.ts';
 import { leadOf } from './lead.ts';
 import { numbersOf } from './numbers.ts';
 
-// A report as the design reads it: its publish day, its vector text and the
+// A report as a design reads it: its publish day, its vector text and the
 // evidence of its pair score. The detector and the fitter (eval/fit) read
 // reports with this one function.
-export function analyse(report: Report, design: Design): AnalysedReport {
+export function analyse(
+  report: Report,
+  design: Pick<Design, 'lead' | 'vectorText'>,
+): AnalysedReport {
   const lead = leadOf(report.title, report.body, design.lead);
   const publishedAt = report.publishedAt.getTime();
   return {
