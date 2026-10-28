@@ -1,6 +1,6 @@
 {
   "name": "@zukhruf/event-grouping",
-  "version": "0.3.46",
+  "version": "0.3.49",
   "description": "Puts reports of one real event into one event. It shortlists the nearest reports by embedding similarity, scores each pair with a frozen logistic model, and clusters the 7-day window again with group average on each new publish day.",
   "license": "MIT",
   "repository": {
@@ -41,14 +41,14 @@
     "access": "public"
   },
   "dependencies": {
-    "@zukhruf/sqlite-drift": "^0.3.46",
-    "@zukhruf/sqlite-transaction": "^0.3.46",
+    "@zukhruf/sqlite-drift": "^0.3.49",
+    "@zukhruf/sqlite-transaction": "^0.3.49",
     "ml-hclust": "^4.0.0"
   },
   "devDependencies": {
     "@ai-sdk/openai-compatible": "3.0.79",
     "@mozilla/readability": "0.6.0",
-    "@zukhruf/embeddings": "^0.3.46",
+    "@zukhruf/embeddings": "^0.3.49",
     "ai": "^7.0.154",
     "linkedom": "0.18.14",
     "munkres": "2.1.1"
