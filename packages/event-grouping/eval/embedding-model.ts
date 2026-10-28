@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -48,10 +49,22 @@ export async function embeddingModel(
   return model;
 }
 
-// The vector cache of a model for a set. A collection keeps one vector for
-// each report, so each model has its own folder.
-export function vectorCache(model: string, set: string): string {
-  const folder = join(CACHE_FOLDER, 'vectors', model);
+// The vector cache of a design for a set. A collection keeps one vector for
+// each report, so each model has its own folder, and in it each way to make
+// the vector text (the lead rule and the vector text) has its own folder.
+export function vectorCache(
+  design: Pick<Design, 'embeddingModel' | 'lead' | 'vectorText'>,
+  set: string,
+): string {
+  const folder = join(
+    CACHE_FOLDER,
+    'vectors',
+    design.embeddingModel,
+    createHash('sha256')
+      .update(JSON.stringify([design.lead, design.vectorText]))
+      .digest('hex')
+      .slice(0, 12),
+  );
   mkdirSync(folder, { recursive: true });
   return join(folder, `${set}.sqlite`);
 }

@@ -113,9 +113,7 @@ for (const name of positionals.length > 0 ? positionals : setNames()) {
   // The vectors of a design: the cache of its model for the set.
   const vectorsOf = async (design: Design) =>
     new Collection({
-      database: caches.use(
-        new DatabaseSync(vectorCache(design.embeddingModel, name)),
-      ),
+      database: caches.use(new DatabaseSync(vectorCache(design, name))),
       model: await modelOf(design),
     });
   const fed = await feed(

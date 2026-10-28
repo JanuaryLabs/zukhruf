@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { best, objective } from './selection.ts';
+import { best, crossValidatedChange, objective } from './selection.ts';
 
 test('the best threshold has the highest value, and equal values go to the higher threshold', () => {
   const ascending = best([
@@ -50,4 +50,48 @@ test('the objective is the mean of the family means, so a family with many folds
 
   assert.ok(Math.abs(all - 0.6) < 1e-12, `${all}`);
   assert.ok(Math.abs(withoutB - 0.7) < 1e-12, `${withoutB}`);
+});
+
+test('the change of the cross-validated objective keeps the folds apart, even when two folds share report ids and event labels', () => {
+  // Two folds with the same ids and labels. The challenger is the gold; the
+  // incumbent leaves every report alone.
+  const gold = new Map([
+    ['a', 'E'],
+    ['b', 'E'],
+  ]);
+  const apart = new Map([
+    ['a', '1'],
+    ['b', '2'],
+  ]);
+  const folds = [
+    { name: 'x-0', family: 'x', gold },
+    { name: 'y-0', family: 'y', gold },
+  ];
+
+  const gain = crossValidatedChange({
+    folds,
+    challenger: new Map([
+      ['x-0', gold],
+      ['y-0', gold],
+    ]),
+    incumbent: new Map([
+      ['x-0', apart],
+      ['y-0', apart],
+    ]),
+  });
+  const none = crossValidatedChange({
+    folds,
+    challenger: new Map([
+      ['x-0', gold],
+      ['y-0', gold],
+    ]),
+    incumbent: new Map([
+      ['x-0', gold],
+      ['y-0', gold],
+    ]),
+  });
+
+  assert.equal(gain.blocks, 2);
+  assert.ok(gain.low > 0, `${gain.low}`);
+  assert.deepEqual([none.observed, none.low, none.high], [0, 0, 0]);
 });

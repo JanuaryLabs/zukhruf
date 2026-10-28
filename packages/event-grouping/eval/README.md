@@ -39,7 +39,7 @@ For each set, the runner does these steps:
 4. After the last day, it adds one headline-only report of the next day. This makes the detector cluster the last window again, so the events of the last day are final. The headline-only report never joins an event (ADR 0003).
 5. It scores the events against the answer key and writes `results/<set>.json`.
 
-The vectors are in `cache/vectors/<model>/<set>.sqlite`, through the `Collection` of `@zukhruf/embeddings`. A collection keeps one vector for each report, so each model has its own folder. The collection embeds a lead again only when its text or the model name changed. Thus a second run embeds nothing.
+The vectors are in `cache/vectors/<model>/<recipe>/<set>.sqlite`, through the `Collection` of `@zukhruf/embeddings`. A collection keeps one vector for each report, so each model has its own folder, and each way to make the vector text has its own folder in it. `<recipe>` is the first 12 characters of the sha256 of the lead rule and the vector text of the design. The collection embeds a lead again only when its text or the model name changed. Thus a second run embeds nothing.
 
 Each result has the scores of the coreference literature. The answer key and the detector each put the reports of the set into events, and each metric compares the two partitions:
 
@@ -170,9 +170,11 @@ The fit does these steps:
 2. It cuts the training sets into the folds of the rule.
 3. For each fold, it gets the training pairs: the shortlist pairs of each report, from the `neighbourGraph` of the vectors of the fold. The pair features come from `pairFeatures` (`src/pair-score.ts`), the function of the pair score.
 4. It fits the weights of the pair score by logistic regression (`fit/irls.ts`), and it chooses the threshold by nested cross-validation of the CoNLL F0.5 (`fit/cross-validation.ts`). Each fold score comes from the `EventDetector` of the package, fed as the runner feeds it.
-5. It checks the eligibility rules against the reference design of the rule, which it runs from its scoreboard pin.
+5. It does steps 3 and 4 for each candidate of the rule. Each candidate gets its own weights and threshold.
+6. It checks the eligibility rules of each candidate. E3 compares with the reference design of the rule, which it runs from its scoreboard pin. E2 compares with the reference design as it is, or with the cross-validated score of a candidate that the rule names.
+7. It applies the choice of the rule. With one candidate, the candidate is chosen when it is eligible. With an incumbent and challengers, the eligible challenger with the best objective is chosen only when the paired bootstrap 95% interval of (challenger - incumbent) on the cross-validated objective is entirely above 0 (`fit/selection.ts`, `crossValidatedChange`).
 
-`plan.json` holds the fitted design, the cross-validation of each family, the eligibility checks and the sha256 of the rule and of the labels. The fit uses the detector of the package, not a copy, so the design that it chooses is the design that the package runs (Google, Rules of Machine Learning, rule 32). A full fit runs the detector about 1,600 times and takes about 20 minutes.
+`plan.json` holds, for each candidate, the fitted design, the cross-validation of each family and the eligibility checks. It also holds the choice and the sha256 of the rule and of the labels. The fit uses the detector of the package, not a copy, so the design that it chooses is the design that the package runs (Google, Rules of Machine Learning, rule 32). A fit runs the detector about 1,600 times for each candidate, and takes about 20 minutes for each candidate.
 
 `rounds/3152b` holds the rule of round 3152b for its chosen candidate only. From the training sets alone, the fit gives the weights of `design3152b` to 1e-6, its threshold 0.45 and its cross-validated CoNLL F0.5 (#3184).
 

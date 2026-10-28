@@ -4,7 +4,7 @@ import type { Partition } from '../metrics/contingency.ts';
 import { mainScore } from '../metrics/metrics.ts';
 import { partitions } from '../score.ts';
 import { type Fitted, fit } from './irls.ts';
-import type { SelectionRule } from './rule.ts';
+import type { Candidate } from './rule.ts';
 import { best, objective } from './selection.ts';
 import type { Stream, TrainingPair } from './stream.ts';
 
@@ -25,14 +25,11 @@ export type Outer = {
 export class CrossValidation {
   readonly #streams: readonly Stream[];
   readonly #pairs: ReadonlyMap<string, readonly TrainingPair[]>;
-  readonly #candidate: SelectionRule['candidate'];
+  readonly #candidate: Candidate;
   readonly #families: ReadonlyMap<string, string>;
   readonly #models = new Map<string, Fitted>();
 
-  constructor(
-    streams: readonly Stream[],
-    candidate: SelectionRule['candidate'],
-  ) {
+  constructor(streams: readonly Stream[], candidate: Candidate) {
     this.#streams = streams;
     this.#candidate = candidate;
     this.#pairs = new Map(

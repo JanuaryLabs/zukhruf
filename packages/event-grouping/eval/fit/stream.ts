@@ -22,8 +22,8 @@ export type TrainingPair = {
 
 // The reports of one fold and their vectors, in a database of their own, so
 // a shortlist holds only reports of the fold. The vectors are copies of the
-// rows of the vector caches of the model for the sets of the fold
-// (cache/vectors/<model>/<set>.sqlite), which the fit fills first. The model embeds
+// rows of the vector caches of the design for the sets of the fold
+// (embedding-model.ts vectorCache), which the fit fills first. The model embeds
 // nothing then: each lead of the fold is in the copy.
 export class Stream {
   readonly fold: Fold;
@@ -39,7 +39,7 @@ export class Stream {
   static open(
     fold: Fold,
     sets: readonly string[],
-    design: Pick<Design, 'embeddingModel'>,
+    design: Pick<Design, 'embeddingModel' | 'lead' | 'vectorText'>,
     model: Exclude<EmbeddingModel, string>,
   ): Stream {
     const database = new DatabaseSync(':memory:');
@@ -48,7 +48,7 @@ export class Stream {
     for (const set of sets) {
       database
         .prepare('ATTACH DATABASE ? AS "cache"')
-        .run(vectorCache(design.embeddingModel, set));
+        .run(vectorCache(design, set));
       database
         .prepare(
           `INSERT INTO "embedding_document" ("id", "hash", "published_at", "vector")

@@ -30,34 +30,42 @@
       "rule": "dev2938 and fresh2957 as 1 fold."
     }
   ],
-  "candidate": {
-    "name": "C4+2a refit + same publisher",
-    "recipe": {
-      "name": "3152b",
-      "embeddingModel": "embeddinggemma-2",
-      "lead": {
-        "sentences": 2,
-        "minWords": 5,
-        "minLetterRatio": 0.6,
-        "maxUrlShare": 0.5,
-        "urlPattern": "(?:https?://|www\\.)\\S*"
-      },
-      "vectorText": "title: {title} | text: {title}\n{lead}",
-      "shortlistSize": 80,
-      "windowDays": 7
-    },
-    "features": "The pair features of the package (src/pair-score.ts pairFeatures): similarity, log1p of the agreeing numbers, log1p of the smaller count of disagreeing numbers, same publisher. No span limit.",
-    "thresholds": [
-      0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8,
-      0.85, 0.9, 0.95
-    ]
-  },
   "pairModel": "Logistic regression by IRLS (eval/fit/irls.ts) on the batch-shortlist pairs of the training folds: for each report with a lead, its top shortlistSize reports with a lead within windowDays in its fold (the neighbourGraph of the fold's vectors). Refitted for every set of training folds used below.",
   "foldScore": "The CoNLL F0.5 (eval/metrics mainScore, the mean of the MUC, B-cubed and CEAF-e F0.5) of the fold's partition against its gold events, on the reports that have a text.",
   "objective": "Nested cross-validated CoNLL F0.5. For each outer fold f: for each other fold g, fit the model on the folds that are neither f nor g and score g at every threshold; choose the threshold with the best inner objective (the mean over the families present among the inner folds of the mean fold score); then fit the model on the folds that are not f and score f at the chosen threshold. Family score = mean of the outer fold scores of the family; objective = mean of the family scores. Ties (equal inner objective) go to the higher threshold.",
   "flatCurve": "For each threshold, the objective of the folds each scored with the model fitted on the other folds. The final threshold is the best threshold of this curve (same tie rule), and the final model is fitted on all folds.",
   "baselines": "All singletons and all in one, scored per fold; family baseline = mean over its folds.",
-  "reference": { "design": "3130", "family": "anthropic-outlets" },
+  "candidates": [
+    {
+      "name": "C4+2a refit + same publisher",
+      "recipe": {
+        "name": "3152b",
+        "embeddingModel": "embeddinggemma-2",
+        "lead": {
+          "sentences": 2,
+          "minWords": 5,
+          "minLetterRatio": 0.6,
+          "maxUrlShare": 0.5,
+          "urlPattern": "(?:https?://|www\\.)\\S*"
+        },
+        "vectorText": "title: {title} | text: {title}\n{lead}",
+        "shortlistSize": 80,
+        "windowDays": 7
+      },
+      "features": "The pair features of the package (src/pair-score.ts pairFeatures): similarity, log1p of the agreeing numbers, log1p of the smaller count of disagreeing numbers, same publisher. No span limit.",
+      "thresholds": [
+        0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8,
+        0.85, 0.9, 0.95
+      ]
+    }
+  ],
+  "reference": {
+    "design": "3130"
+  },
+  "e2": {
+    "family": "anthropic-outlets",
+    "against": "reference"
+  },
   "eligibility": {
     "E1": "On every family, the nested-CV family CoNLL F0.5 is greater than the family score of both trivial baselines.",
     "E2": "On anthropic-outlets, the nested-CV family CoNLL F0.5 is greater than that of the reference design (scoreboard entry 3130, its pinned design) on the same folds.",
