@@ -855,3 +855,40 @@ test('a worker that ran 10 minutes is replaced at once, and ends the back-off', 
   await created[1]!.exited();
   assert.equal(pool.stats.starting, 1);
 });
+
+test('a slot that the sizing stops keeping during its back-off starts no stray worker once the sizing runs it again', async (t) => {
+  const created: EchoWorker[] = [];
+  const sizing = new Steered();
+  await using pool = new Pool({
+    size: sizing,
+    startup: new Parallel(),
+    create: () => {
+      const worker = new EchoWorker();
+      worker.release();
+      created.push(worker);
+      return worker;
+    },
+  });
+  await pool.ready();
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const run = (text: string) => pool.use((worker) => worker.echo(text));
+  created[1]!.kill();
+  await created[1]!.exited();
+  // Slot 1 backs off: its worker is gone and no new one starts yet.
+  assert.deepEqual(pool.stats, { starting: 0, idle: 1, lent: 0, waiting: 0 });
+
+  sizing.current = 1;
+  sizing.kept = 1;
+  assert.equal(await run('a'), 'a');
+  sizing.current = 2;
+  sizing.kept = 2;
+  assert.equal(await run('b'), 'b');
+  assert.deepEqual(await Promise.all([run('c'), run('d')]), ['c', 'd']);
+  assert.equal(created.length, 3);
+
+  t.mock.timers.tick(60_000);
+  assert.deepEqual(pool.stats, { starting: 0, idle: 2, lent: 0, waiting: 0 });
+  // A stray worker would be created a microtask after its slot starts.
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.equal(created.length, 3);
+});
