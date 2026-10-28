@@ -57,7 +57,7 @@ no change
 - Each read of `current` reads the status of the file at the path one time (`stat`).
 - A commit by the same connection does not change the number. The `DataVersion` connection never writes, so each commit that it sees comes from another connection.
 - Dispose closes the connection. Use `using`, or call `[Symbol.dispose]()`.
-- The package throws its own `UnavailableError`. A host that needs its own error translates the error of the package at its boundary, and keeps the error of the package as `cause`. [ADR 0003](./docs/adr/0003-the-package-throws-its-own-errors.md) tells why.
+- The package throws its own `UnavailableError`. It is the class of `@zukhruf/sqlite-reader`, which opens the connection. The package exports it, so a catch with `instanceof` works with either package. A host that needs its own error translates the error of the package at its boundary, and keeps the error of the package as `cause`. [ADR 0003](./docs/adr/0003-the-package-throws-its-own-errors.md) tells why.
 
 ## The last write
 
@@ -105,7 +105,6 @@ console.log(`The owner last wrote at ${written.toISOString()}`);
 - [0001 Poll data_version](./docs/adr/0001-poll-data-version.md)
 - [0002 A replaced file is followed by name](./docs/adr/0002-a-replaced-file-is-followed-by-name.md)
 - [0003 The package throws its own errors](./docs/adr/0003-the-package-throws-its-own-errors.md)
-- [Code copied into this package](./docs/copied-code.md)
 
 ## Development
 
@@ -123,7 +122,6 @@ src/
   index.ts                the exports
   data-version.ts         DataVersion
   followed-database.ts    the connection that follows the path to a replaced file
-  unavailable-error.ts    UnavailableError
   data-version.test.ts    the tests, on real SQLite files
   last-write.ts           lastWrite
   last-write.test.ts      the tests, on real SQLite files

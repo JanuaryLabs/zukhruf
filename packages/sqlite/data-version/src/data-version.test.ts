@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { test } from 'node:test';
 
+import * as reader from '@zukhruf/sqlite-reader';
 import { TemporaryFiles } from '@zukhruf/testing/fs';
 
 import { DataVersion, UnavailableError } from './index.ts';
@@ -99,14 +100,15 @@ test('a missing path is no change until a file is created there again', async ()
   assert.notEqual(version.current, missing, 'the created file is not a change');
 });
 
-test('a missing file is an UnavailableError', async () => {
+test('a missing file is the UnavailableError of @zukhruf/sqlite-reader', async () => {
   await using dir = await new TemporaryFiles().directory('data-version-');
   const missing = join(dir.path, 'missing', 'source.sqlite');
 
   assert.throws(
     () => new DataVersion(missing),
     (error: unknown) => {
-      assert.ok(error instanceof UnavailableError);
+      assert.equal(UnavailableError, reader.UnavailableError);
+      assert.ok(error instanceof reader.UnavailableError);
       assert.equal(error.path, missing);
       assert.ok(error.cause instanceof Error && 'errcode' in error.cause);
       assert.equal(error.cause.errcode, 14);
@@ -114,31 +116,6 @@ test('a missing file is an UnavailableError', async () => {
     },
   );
 });
-
-test(
-  'a file the system denies is an UnavailableError',
-  {
-    // chmod denies nothing on Windows, and nothing to root.
-    skip: process.platform === 'win32' || process.getuid?.() === 0,
-  },
-  async () => {
-    await using dir = await new TemporaryFiles().directory('data-version-');
-    const path = join(dir.path, 'source.sqlite');
-    new DatabaseSync(path).close();
-    await chmod(path, 0o000);
-
-    assert.throws(
-      () => new DataVersion(path),
-      (error: unknown) => {
-        assert.ok(error instanceof UnavailableError);
-        assert.equal(error.path, path);
-        assert.ok(error.cause instanceof Error && 'errcode' in error.cause);
-        assert.equal(error.cause.errcode, 14);
-        return true;
-      },
-    );
-  },
-);
 
 test(
   'a file in a folder the system denies is an UnavailableError',

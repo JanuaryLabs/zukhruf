@@ -1,6 +1,6 @@
 import { statSync } from 'node:fs';
 
-import { UnavailableError } from './unavailable-error.ts';
+import { UnavailableError } from '@zukhruf/sqlite-reader';
 
 // A missing file, or one in a folder whose mode denies this process. macOS
 // privacy controls do not deny it: they stop a read of the file and a list of

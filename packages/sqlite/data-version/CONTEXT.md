@@ -25,5 +25,5 @@ The time when the owner last wrote the database: the later of the modification t
 _Avoid_: Modified time, mtime, last update
 
 **Unavailable**:
-SQLite cannot open the file, or the file system cannot give its times: the file is missing, or the system denies access. The package then throws `UnavailableError`. The caller can fix it, for example with a grant of access. Other failures are not unavailable.
+SQLite cannot open the file, or the file system cannot give its times: the file is missing, or the system denies access. The package then throws `UnavailableError`, the class of `@zukhruf/sqlite-reader`. The caller can fix it, for example with a grant of access. Other failures are not unavailable.
 _Avoid_: Not found, permission error

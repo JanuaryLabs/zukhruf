@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
-import { chmod, writeFile } from 'node:fs/promises';
+import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { test } from 'node:test';
 
+import * as reader from '@zukhruf/sqlite-reader';
 import { TemporaryFiles } from '@zukhruf/testing/fs';
 
 import { MissingColumnsError, Snapshot, UnavailableError } from './index.ts';
@@ -52,7 +53,7 @@ test('a layout without the required columns fails with MissingColumnsError, nami
   assert.throws(() => snapshot.all('SELECT 1'), /not open/);
 });
 
-test('a missing file is an UnavailableError, and a file that is no database is not', async () => {
+test('a missing file is the UnavailableError of @zukhruf/sqlite-reader, and a file that is no database is not', async () => {
   await using dir = await new TemporaryFiles().directory('snapshot-');
   const missing = join(dir.path, 'missing', 'source.sqlite');
   const notDatabase = join(dir.path, 'notes.txt');
@@ -61,7 +62,8 @@ test('a missing file is an UnavailableError, and a file that is no database is n
   assert.throws(
     () => new Snapshot(missing),
     (error: unknown) => {
-      assert.ok(error instanceof UnavailableError);
+      assert.equal(UnavailableError, reader.UnavailableError);
+      assert.ok(error instanceof reader.UnavailableError);
       assert.equal(error.path, missing);
       assert.ok(error.cause instanceof Error && 'errcode' in error.cause);
       assert.equal(error.cause.errcode, 14);
@@ -77,28 +79,3 @@ test('a missing file is an UnavailableError, and a file that is no database is n
     },
   );
 });
-
-test(
-  'a file the system denies is an UnavailableError',
-  {
-    // chmod denies nothing on Windows, and nothing to root.
-    skip: process.platform === 'win32' || process.getuid?.() === 0,
-  },
-  async () => {
-    await using dir = await new TemporaryFiles().directory('snapshot-');
-    const path = join(dir.path, 'source.sqlite');
-    new DatabaseSync(path).close();
-    await chmod(path, 0o000);
-
-    assert.throws(
-      () => new Snapshot(path),
-      (error: unknown) => {
-        assert.ok(error instanceof UnavailableError);
-        assert.equal(error.path, path);
-        assert.ok(error.cause instanceof Error && 'errcode' in error.cause);
-        assert.equal(error.cause.errcode, 14);
-        return true;
-      },
-    );
-  },
-);

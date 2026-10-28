@@ -1,25 +1,7 @@
 import { statSync } from 'node:fs';
-import { DatabaseSync, type StatementSync } from 'node:sqlite';
+import type { DatabaseSync, StatementSync } from 'node:sqlite';
 
-import { UnavailableError } from './unavailable-error.ts';
-
-function open(path: string): DatabaseSync {
-  try {
-    return new DatabaseSync(path, { readOnly: true });
-  } catch (cause) {
-    if (
-      cause instanceof Error &&
-      'errcode' in cause &&
-      // SQLite's CANTOPEN (14). A missing or denied file fails the open()
-      // syscall, and SQLite reports that as CANTOPEN, a privacy denial too.
-      // SQLite gives AUTH only for an authorizer, and this private connection
-      // has none. Any other failure is not one that access can fix.
-      cause.errcode === 14
-    )
-      throw new UnavailableError(path, cause);
-    throw cause;
-  }
-}
+import { openReader } from '@zukhruf/sqlite-reader';
 
 // The device and inode of the file at the path, or undefined when this
 // process cannot see the path: it is missing, or a folder's mode denies it.
@@ -48,7 +30,7 @@ class OpenFile implements Disposable {
     // identity to the old connection, and then the replace is never seen.
     // A path this process cannot see fails the open too, as CANTOPEN.
     this.identity = identify(path);
-    this.#database = open(path);
+    this.#database = openReader(path);
     this.#version = this.#database.prepare('PRAGMA data_version');
   }
 

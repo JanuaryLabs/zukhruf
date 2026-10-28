@@ -25,5 +25,5 @@ The required columns that the layout of the owner does not have, as `table.colum
 _Avoid_: Schema error, missing fields
 
 **Unavailable**:
-SQLite cannot open the file: the file is missing, or the system denies access. The package then throws `UnavailableError`. The caller can fix it, for example with a grant of access. Other failures are not unavailable.
+SQLite cannot open the file: the file is missing, or the system denies access. The package then throws `UnavailableError`, the class of `@zukhruf/sqlite-reader`. The caller can fix it, for example with a grant of access. Other failures are not unavailable.
 _Avoid_: Not found, permission error

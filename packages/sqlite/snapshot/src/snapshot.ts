@@ -1,32 +1,11 @@
-import {
-  DatabaseSync,
-  type SQLInputValue,
-  type SQLOutputValue,
-} from 'node:sqlite';
+import type { DatabaseSync, SQLInputValue, SQLOutputValue } from 'node:sqlite';
+
+import { openReader } from '@zukhruf/sqlite-reader';
 
 import { MissingColumnsError } from './missing-columns-error.ts';
-import { UnavailableError } from './unavailable-error.ts';
 
 // The columns a reader depends on, by table.
 export type SnapshotColumns = Readonly<Record<string, readonly string[]>>;
-
-function open(path: string): DatabaseSync {
-  try {
-    return new DatabaseSync(path, { readOnly: true });
-  } catch (cause) {
-    if (
-      cause instanceof Error &&
-      'errcode' in cause &&
-      // SQLite's CANTOPEN (14). A missing or denied file fails the open()
-      // syscall, and SQLite reports that as CANTOPEN, a privacy denial too.
-      // SQLite gives AUTH only for an authorizer, and this private connection
-      // has none. Any other failure is not one that access can fix.
-      cause.errcode === 14
-    )
-      throw new UnavailableError(path, cause);
-    throw cause;
-  }
-}
 
 // A SQLite database another process owns and writes while it runs, read
 // read-only and pinned to one moment by a read transaction, so its tables
@@ -39,7 +18,7 @@ export class Snapshot implements Disposable {
 
   constructor(path: string) {
     this.path = path;
-    this.#database = open(path);
+    this.#database = openReader(path);
     try {
       // The first read pins the snapshot, so it is taken now rather than at
       // the caller's first query; a file that is no database fails here.

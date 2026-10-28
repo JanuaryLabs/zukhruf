@@ -64,7 +64,7 @@ true
 - `all(sql, ...parameters)` gives all rows. `iterate(sql, ...parameters)` gives the rows one at a time, for a table that is too large to hold in memory.
 - `requireColumns(columns)` checks the columns that the reader needs, as `{ table: [column, ...] }`. When one is missing, it disposes the snapshot and throws `MissingColumnsError`.
 - `missingColumns(columns)` gives the missing columns as `table.column`, and keeps the snapshot open. A reader whose queries use different tables checks each query with it.
-- The package throws its own errors: `UnavailableError` and `MissingColumnsError`. A host that needs its own error translates the error of the package at its boundary, and keeps the error of the package as `cause`. [ADR 0002](./docs/adr/0002-the-package-throws-its-own-errors.md) tells why.
+- The package throws its own errors: `UnavailableError` and `MissingColumnsError`. `UnavailableError` is the class of `@zukhruf/sqlite-reader`, which opens the connection. The package exports it, so a catch with `instanceof` works with either package. A host that needs its own error translates the error of the package at its boundary, and keeps the error of the package as `cause`. [ADR 0002](./docs/adr/0002-the-package-throws-its-own-errors.md) tells why.
 - Dispose commits the read transaction and closes the connection. A second dispose does nothing.
 
 ## Errors
@@ -87,7 +87,6 @@ true
 
 - [0001 Never immutable, and held only while reading](./docs/adr/0001-never-immutable-and-held-only-while-reading.md)
 - [0002 The package throws its own errors](./docs/adr/0002-the-package-throws-its-own-errors.md)
-- [Code copied into this package](./docs/copied-code.md)
 
 ## Development
 
@@ -104,7 +103,6 @@ npx nx run sqlite-snapshot:build       # compiles src/ to dist/
 src/
   index.ts                  the exports
   snapshot.ts               Snapshot and SnapshotColumns
-  unavailable-error.ts      UnavailableError
   missing-columns-error.ts  MissingColumnsError
   snapshot.test.ts          the tests, on real SQLite files
 ```

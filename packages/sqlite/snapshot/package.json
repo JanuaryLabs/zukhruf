@@ -39,6 +39,9 @@
   "publishConfig": {
     "access": "public"
   },
+  "dependencies": {
+    "@zukhruf/sqlite-reader": "^0.3.46"
+  },
   "devDependencies": {
     "@zukhruf/testing": "^0.3.46"
   }

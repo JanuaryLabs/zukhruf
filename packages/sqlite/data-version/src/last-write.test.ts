@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { test } from 'node:test';
 
+import * as reader from '@zukhruf/sqlite-reader';
 import { TemporaryFiles } from '@zukhruf/testing/fs';
 
 import { DataVersion, UnavailableError, lastWrite } from './index.ts';
@@ -96,14 +97,15 @@ test('a WAL that a reader made after the owner removed its own does not count', 
   assert.equal(written.getTime(), 1_000_000_000_000);
 });
 
-test('a missing file is an UnavailableError', async () => {
+test('a missing file is the UnavailableError of @zukhruf/sqlite-reader', async () => {
   await using dir = await new TemporaryFiles().directory('last-write-');
   const missing = join(dir.path, 'missing', 'source.sqlite');
 
   assert.throws(
     () => lastWrite(missing),
     (error: unknown) => {
-      assert.ok(error instanceof UnavailableError);
+      assert.equal(UnavailableError, reader.UnavailableError);
+      assert.ok(error instanceof reader.UnavailableError);
       assert.equal(error.path, missing);
       assert.ok(error.cause instanceof Error && 'code' in error.cause);
       assert.equal(error.cause.code, 'ENOENT');
