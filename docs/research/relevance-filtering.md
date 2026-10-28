@@ -4,7 +4,7 @@ This record keeps what the research for relevance filtering found, before the pa
 
 Read this record before you change the design, add a profile type, or start a new evaluation. Add the result of each new round to this record.
 
-Status on 2026-10-28: rounds 1 to 5 chose no design. On two fresh slices, the profile sentence plus the reader's own keywords beats a typed keyword by about 0.05 F0.5 on average, but the interval across 8 to 11 profiles includes 0 both times. The package waits for a design that passes, as the plan orders. The exam set is sealed.
+Status on 2026-10-28: rounds 1 to 6 chose no design. In three tests, round 6 with the reader's own way of teaching included, the profile sentence plus the reader's keywords beats a typed keyword by about 0.05 F0.5 on average and is never worse by more than 0.05, but the interval across 8 to 11 profiles includes 0. The package waits for a design that passes, as the plan orders. The exam set is sealed.
 
 ## Words in this record
 
@@ -68,6 +68,12 @@ No candidate passed, but the result is the closest so far. The sentence alone pl
 Round 5 tested the round-4 design again, unchanged, on 1,735 articles from October to December 2025, labelled by four blind annotators (`round-5/selection-rule.json`, sha256 `11faab82…`). It also tested one guard for limitation 13: the stream counts as much as the taught articles in the shape of the two bell curves (Nigam et al. 2000).
 
 No candidate passed. The design scored 0.697 against the typed keyword's 0.644, the same lead as in round 4 (+0.05), and its interval was −0.040 to +0.137. It lost again on robotics, regulation and, by a little, chips. The guard made every profile but regulation worse (0.592): the stream holds the information about the base rate that a few taught articles do not.
+
+## Round 6 (2026-10-28): the reader's way of teaching, no design chosen
+
+Round 6 answers limitation 14. On each fresh slice, the reader shows its top matches from the first 14 days (the top 5 or 10 by the sentence, and the top 5 or 10 keyword matches), the answer key says yes or no, and the profile learns only from those answers (`round-6/selection-rule.json`, sha256 `0d145514…`).
+
+No candidate passed. The sentence plus the keywords scored 0.701 against the typed keyword's 0.656 (interval −0.019 to +0.118), with Brier skill +0.512, the best calibration so far. The lead is the same as in rounds 4 and 5. The lower bound is above −0.05, so the design is not worse than the keyword by more than 0.05 (non-inferiority, reported, not the pass rule).
 
 ## Limitations
 
