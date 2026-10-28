@@ -1,0 +1,54 @@
+{
+  "name": "@zukhruf/sqlite-changefeed",
+  "version": "0.3.46",
+  "description": "A changefeed of a SQLite database that another process owns and writes: a change event for each changed row of each table, keyed by the primary key of the row, by a snapshot differential over a read-only connection. The feed keeps its own position, and needs WAL mode.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/JanuaryLabs/zukhruf",
+    "directory": "packages/sqlite/changefeed"
+  },
+  "bugs": {
+    "url": "https://github.com/JanuaryLabs/zukhruf/issues"
+  },
+  "homepage": "https://github.com/JanuaryLabs/zukhruf/tree/main/packages/sqlite/changefeed#readme",
+  "keywords": [
+    "sqlite",
+    "node-sqlite",
+    "changefeed",
+    "change-data-capture",
+    "cdc",
+    "snapshot-differential",
+    "wal"
+  ],
+  "type": "module",
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "@zukhruf/source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "!dist/spec/**",
+    "!**/*.tsbuildinfo",
+    "!**/*.test.*"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "@zukhruf/async": "^0.3.46",
+    "@zukhruf/snapshot-differential": "^0.3.46",
+    "@zukhruf/sqlite-data-version": "^0.3.46",
+    "@zukhruf/sqlite-reader": "^0.3.46",
+    "@zukhruf/sqlite-snapshot": "^0.3.46",
+    "@zukhruf/sqlite-transaction": "^0.3.46"
+  },
+  "devDependencies": {
+    "@zukhruf/testing": "^0.3.46"
+  }
+}
