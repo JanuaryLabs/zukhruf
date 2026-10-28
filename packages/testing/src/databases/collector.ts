@@ -1,6 +1,6 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 
-import type { Container } from '@zukhruf/docker';
+import type { CancelOptions, Container } from '@zukhruf/docker';
 
 import type { DockerHost } from '../docker/host.ts';
 
@@ -37,9 +37,9 @@ export interface Collector<Server> {
     host: DockerHost,
   ): Promise<Server & AsyncDisposable>;
   /** Each database whose name starts with `test`, a superset of a run's. */
-  list(server: Server): Promise<string[]>;
+  list(server: Server, cancel: CancelOptions): Promise<string[]>;
   /** Drops the database `name` if it exists. */
-  drop(server: Server, name: string): Promise<void>;
+  drop(server: Server, name: string, cancel: CancelOptions): Promise<void>;
 }
 
 /**

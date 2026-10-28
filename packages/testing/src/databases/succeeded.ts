@@ -1,4 +1,4 @@
-import type { Container } from '@zukhruf/docker';
+import type { CancelOptions, Container } from '@zukhruf/docker';
 
 /**
  * Runs `command` in `container` and gives its standard output.
@@ -7,8 +7,12 @@ import type { Container } from '@zukhruf/docker';
 export async function succeeded(
   container: Container,
   command: string[],
+  cancel?: CancelOptions,
 ): Promise<string> {
-  const { exitCode, stdout, output } = await container.exec({ Cmd: command });
+  const { exitCode, stdout, output } = await container.exec(
+    { Cmd: command },
+    cancel,
+  );
   if (exitCode !== 0)
     throw new Error(`${command[0]} exited with ${exitCode}: ${output}`);
   return stdout;

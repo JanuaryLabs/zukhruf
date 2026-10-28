@@ -102,7 +102,8 @@ const running = async (container: Container): Promise<boolean> =>
  * Drops the run's databases on each running shared server of a database
  * fixture. A server that stops takes its databases with it. A server that
  * does not answer yet holds none: a fixture creates a database only after
- * the server answered its readiness check.
+ * the server answered its readiness check. Each list and drop has the
+ * deadline of one engine call.
  */
 async function dropDatabases(
   engine: Docker,
@@ -143,16 +144,22 @@ async function dropDatabases(
       server = connection.use(
         await collector.open(container, environment, host),
       );
-      names = await collector.list(server);
+      names = await collector.list(server, { signal: signal() });
     } catch {
       continue;
     }
-    for (const name of names.filter(ownedBy(runId)))
+    for (const name of names.filter(ownedBy(runId))) {
+      const deadline = signal();
       try {
-        await collector.drop(server, name);
+        await collector.drop(server, name, { signal: deadline });
       } catch (error) {
+        // A server that does not answer within the deadline keeps the run's
+        // databases, as one whose list fails: a hung shared server neither
+        // fails nor hangs this cleanup.
+        if (deadline.aborted) break;
         if (await running(container)) throw error;
       }
+    }
   }
 }
 

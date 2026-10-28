@@ -3,7 +3,7 @@ import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { once } from 'node:events';
 import { existsSync } from 'node:fs';
-import { readFile, writeFile } from 'node:fs/promises';
+import { readFile, readdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { type TestContext, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
@@ -409,6 +409,94 @@ test(
       await readState(t, statePath);
       assert.equal(await docker.containers.find(server.Id), undefined);
     } finally {
+      await removeScope(scope);
+    }
+  },
+);
+
+test(
+  'a recovery whose drop of a dead run’s database never gets an answer from its server ends within the engine call timeout, keeps that database and removes the run',
+  // A shared server, the deadline of one engine call (240 s), and margin.
+  { skip: proxyless || signals, timeout: 420_000 },
+  async (t) => {
+    await using directory = await new TemporaryFiles().directory(
+      'zukhruf-testing-database-cleanup-',
+    );
+    await using proxy = await EngineProxy.start(engine);
+    const scope = randomUUID();
+    const release = Promise.withResolvers<void>();
+    let dead: ReturnType<typeof spawn> | undefined;
+    let worker: number | undefined;
+    let killed = false;
+    try {
+      await using own = await postgres.create(process.env, scope);
+      const [server] = await docker.containers.list({
+        filters: { label: [`${VERIFICATION}=${scope}`] },
+      });
+      assert.ok(server);
+      const statePath = join(directory.path, 'state.json');
+      const file = join(directory.path, 'worker.test.ts');
+      await writeFile(
+        file,
+        workerSource(
+          postgres,
+          scope,
+          statePath,
+          `await writeFile(${JSON.stringify(join(directory.path, 'pid.json'))}, JSON.stringify({ pid: process.pid })); await new Promise((resolve) => setTimeout(resolve, 600_000));`,
+        ),
+      );
+      const env = {
+        ...runEnvironment(join(directory.path, 'state')),
+        // A selected context wins over DOCKER_HOST.
+        DOCKER_CONTEXT: undefined,
+        DOCKER_HOST: proxy.host,
+      };
+      // After the kill, the first exec on the server is the recovery's list
+      // of its databases, and the second its drop: the server never answers it.
+      let execs = 0;
+      proxy.intercept('POST', `/containers/${server.Id}/exec`, async () => {
+        if (!killed) return;
+        execs += 1;
+        if (execs === 2) await release.promise;
+      });
+      dead = spawn(
+        process.execPath,
+        ['--test', `--test-global-setup=${setup}`, file],
+        { env, stdio: 'ignore' },
+      );
+      await t.waitFor(() => readFile(join(directory.path, 'pid.json')), {
+        timeout: 120_000,
+        interval: 250,
+      });
+      const { database } = await readState(t, statePath);
+      const { pid }: { pid: number } = JSON.parse(
+        await readFile(join(directory.path, 'pid.json'), 'utf8'),
+      );
+      worker = pid;
+      dead.kill('SIGKILL');
+      process.kill(pid, 'SIGKILL');
+      killed = true;
+      const empty = join(directory.path, 'empty.test.ts');
+      await writeFile(
+        empty,
+        "import { test } from 'node:test';\ntest('no Docker', () => {});\n",
+      );
+
+      const recovery = await runFile(empty, env);
+
+      assert.equal(recovery.code, 0, recovery.output);
+      assert.equal(execs, 2, recovery.output);
+      assert.deepEqual(
+        await readdir(
+          join(directory.path, 'state', 'zukhruf-testing', 'docker-runs'),
+        ),
+        [],
+      );
+      assert.equal(await postgres.exists(own, database), true);
+    } finally {
+      release.resolve();
+      dead?.kill('SIGKILL');
+      if (!killed && worker !== undefined) process.kill(worker, 'SIGKILL');
       await removeScope(scope);
     }
   },

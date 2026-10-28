@@ -57,7 +57,7 @@ export abstract class MysqlFamilyServer {
       throw error;
     }
     return this.#handle(container, database, async () => {
-      await this.collector.drop(server, database).catch(() => {
+      await this.collector.drop(server, database, {}).catch(() => {
         /* Best-effort: the run's cleanup drops a database that disposal left. */
       });
       await container.disconnect();

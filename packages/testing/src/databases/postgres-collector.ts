@@ -1,4 +1,4 @@
-import type { Container } from '@zukhruf/docker';
+import type { CancelOptions, Container } from '@zukhruf/docker';
 
 import type { Collector } from './collector.ts';
 import { succeeded } from './succeeded.ts';
@@ -8,8 +8,12 @@ export interface PostgresServer {
   user: string;
 }
 
-const psql = ({ container, user }: PostgresServer, args: string[]) =>
-  succeeded(container, ['psql', '-U', user, '-d', 'postgres', ...args]);
+const psql = (
+  { container, user }: PostgresServer,
+  args: string[],
+  cancel: CancelOptions,
+) =>
+  succeeded(container, ['psql', '-U', user, '-d', 'postgres', ...args], cancel);
 
 /** Runs `psql` in the server's container. */
 export const postgres: Collector<PostgresServer> = {
@@ -21,18 +25,23 @@ export const postgres: Collector<PostgresServer> = {
       [Symbol.asyncDispose]: async () => {},
     };
   },
-  async list(server) {
-    const stdout = await psql(server, [
-      '-At',
-      '-c',
-      "SELECT datname FROM pg_database WHERE datname LIKE 'test%'",
-    ]);
+  async list(server, cancel) {
+    const stdout = await psql(
+      server,
+      [
+        '-At',
+        '-c',
+        "SELECT datname FROM pg_database WHERE datname LIKE 'test%'",
+      ],
+      cancel,
+    );
     return stdout.split('\n').filter(Boolean);
   },
-  async drop(server, name) {
-    await psql(server, [
-      '-c',
-      `DROP DATABASE IF EXISTS "${name}" WITH (FORCE)`,
-    ]);
+  async drop(server, name, cancel) {
+    await psql(
+      server,
+      ['-c', `DROP DATABASE IF EXISTS "${name}" WITH (FORCE)`],
+      cancel,
+    );
   },
 };

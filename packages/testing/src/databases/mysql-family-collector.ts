@@ -1,4 +1,4 @@
-import type { Container } from '@zukhruf/docker';
+import type { CancelOptions, Container } from '@zukhruf/docker';
 
 import type { Collector, Kind } from './collector.ts';
 import { succeeded } from './succeeded.ts';
@@ -25,7 +25,13 @@ function mysqlFamily(
   const execute = (
     { container, password }: MysqlFamilyServer,
     args: string[],
-  ) => succeeded(container, [client, `-u${user}`, `-p${password}`, ...args]);
+    cancel: CancelOptions,
+  ) =>
+    succeeded(
+      container,
+      [client, `-u${user}`, `-p${password}`, ...args],
+      cancel,
+    );
   return {
     kind,
     client,
@@ -37,20 +43,25 @@ function mysqlFamily(
         );
       return { container, password, [Symbol.asyncDispose]: async () => {} };
     },
-    async list(server) {
-      const stdout = await execute(server, [
-        '--batch',
-        '--skip-column-names',
-        '--execute',
-        "SHOW DATABASES LIKE 'test%'",
-      ]);
+    async list(server, cancel) {
+      const stdout = await execute(
+        server,
+        [
+          '--batch',
+          '--skip-column-names',
+          '--execute',
+          "SHOW DATABASES LIKE 'test%'",
+        ],
+        cancel,
+      );
       return stdout.split('\n').filter(Boolean);
     },
-    async drop(server, name) {
-      await execute(server, [
-        '--execute',
-        `DROP DATABASE IF EXISTS \`${name}\``,
-      ]);
+    async drop(server, name, cancel) {
+      await execute(
+        server,
+        ['--execute', `DROP DATABASE IF EXISTS \`${name}\``],
+        cancel,
+      );
     },
   };
 }

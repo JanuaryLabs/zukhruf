@@ -44,7 +44,7 @@ export class Postgres {
       throw error;
     }
     return this.#handle(container, database, async () => {
-      await postgres.drop(server, database).catch(() => {
+      await postgres.drop(server, database, {}).catch(() => {
         /* Best-effort: the run's cleanup drops a database that disposal left. */
       });
       await container.disconnect();

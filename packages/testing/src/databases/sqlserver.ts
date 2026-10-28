@@ -53,7 +53,7 @@ export class SqlServer {
       await this.#createDatabase(container, database);
       return this.#handle(container, image, database, async () => {
         try {
-          await sqlserver.drop(this.#server(container), database);
+          await sqlserver.drop(this.#server(container), database, {});
         } catch {
           // Best-effort: the run's cleanup drops a database that disposal left.
         } finally {
