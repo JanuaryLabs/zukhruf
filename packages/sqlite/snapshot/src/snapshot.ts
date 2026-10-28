@@ -23,7 +23,7 @@ function open(path: string): DatabaseSync {
       // has none. Any other failure is not one that access can fix.
       cause.errcode === 14
     )
-      throw new UnavailableError(path, { cause });
+      throw new UnavailableError(path, cause);
     throw cause;
   }
 }

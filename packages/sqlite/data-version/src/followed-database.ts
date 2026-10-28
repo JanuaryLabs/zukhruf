@@ -16,7 +16,7 @@ function open(path: string): DatabaseSync {
       // has none. Any other failure is not one that access can fix.
       cause.errcode === 14
     )
-      throw new UnavailableError(path, { cause });
+      throw new UnavailableError(path, cause);
     throw cause;
   }
 }
@@ -35,25 +35,43 @@ function identify(path: string): string | undefined {
   }
 }
 
+// One read-only connection and the identity of the file it opened, which
+// never change: a replaced file gets a new OpenFile.
+class OpenFile implements Disposable {
+  readonly identity: string | undefined;
+  readonly #database: DatabaseSync;
+  readonly #version: StatementSync;
+
+  constructor(path: string) {
+    // Stat before open: a file replaced between the two is one extra change
+    // at the next observation. Stat after open could give the new file's
+    // identity to the old connection, and then the replace is never seen.
+    // A path this process cannot see fails the open too, as CANTOPEN.
+    this.identity = identify(path);
+    this.#database = open(path);
+    this.#version = this.#database.prepare('PRAGMA data_version');
+  }
+
+  get observation(): string {
+    // PRAGMA data_version always gives one row.
+    return `${this.identity}|${String(this.#version.get()!.data_version)}`;
+  }
+
+  [Symbol.dispose](): void {
+    this.#database.close();
+  }
+}
+
 // A connection keeps reading the file it opened, also after the owner
 // replaces the file at the path. This follows the path by name, as tail -F
 // does: when the path names a different file, it opens that file.
 export class FollowedDatabase implements Disposable {
   readonly #path: string;
-  #identity: string;
-  #database: DatabaseSync;
-  #version: StatementSync;
+  #file: OpenFile;
 
   constructor(path: string) {
     this.#path = path;
-    // Stat before open: a file replaced between the two is one extra change
-    // at the next observation. Stat after open could give the new file's
-    // identity to the old connection, and then the replace is never seen.
-    // A path this process cannot see fails the open too, as CANTOPEN.
-    const identity = identify(path);
-    this.#database = open(path);
-    this.#identity = identity ?? '';
-    this.#version = this.#database.prepare('PRAGMA data_version');
+    this.#file = new OpenFile(path);
   }
 
   // The identity of the held file and its data version. A path this process
@@ -61,19 +79,17 @@ export class FollowedDatabase implements Disposable {
   // file again, and the open connection still reads.
   observe(): string {
     const identity = identify(this.#path);
-    if (identity !== undefined && identity !== this.#identity) {
+    if (identity !== undefined && identity !== this.#file.identity) {
       // Open the new file before the old one closes. While the old file is
       // open its inode stays in use, so the new file cannot get the same one.
-      const database = open(this.#path);
-      this.#database.close();
-      this.#database = database;
-      this.#identity = identity;
-      this.#version = database.prepare('PRAGMA data_version');
+      const file = new OpenFile(this.#path);
+      this.#file[Symbol.dispose]();
+      this.#file = file;
     }
-    return `${this.#identity}|${String(this.#version.get()?.data_version)}`;
+    return this.#file.observation;
   }
 
   [Symbol.dispose](): void {
-    this.#database.close();
+    this.#file[Symbol.dispose]();
   }
 }

@@ -26,7 +26,7 @@ export function lastWrite(path: string): Date {
       'code' in cause &&
       unreadable.has(String(cause.code))
     )
-      throw new UnavailableError(path, { cause });
+      throw new UnavailableError(path, cause);
     throw cause;
   }
 }
