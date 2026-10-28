@@ -15,7 +15,7 @@ The feed reads each table of the database:
 The key of a row is the identity that SQLite makes unique and not `NULL`. The feed finds it from the schema of each table:
 
 - A `WITHOUT ROWID` table: its declared primary key. SQLite makes each column of it `NOT NULL`. A probe on SQLite 3.53.4 showed it: an insert of `NULL` failed with "NOT NULL constraint failed". `PRAGMA table_info` also gives `notnull` 1 for each such column, also with no `NOT NULL` in the declaration. Thus the rule for a primary key whose columns are all `NOT NULL` covers this table, and the feed does not read the `wr` flag of `PRAGMA table_list`.
-- A rowid table with an `INTEGER PRIMARY KEY`: that column. It is the `rowid`.
+- A rowid table with an `INTEGER PRIMARY KEY`: that column. It is an alias of the `rowid`. The feed finds an alias by `PRAGMA index_list`: SQLite makes an index with origin `pk` for each other primary key. The declared type does not tell it: `id INTEGER PRIMARY KEY DESC` in a column definition is not an alias. A probe on SQLite 3.53.4 showed it: such a column accepted two rows with `id` `NULL`, and it had an index with origin `pk`.
 - A rowid table with a primary key whose columns are all declared `NOT NULL`: that primary key.
 - Each other rowid table: the key `{ rowid }`. A declared primary key of a rowid table can hold `NULL`, for compatibility with old versions of SQLite. A probe on SQLite 3.53.4 showed it: a table with `code TEXT PRIMARY KEY` accepted two rows with `code` `NULL`. Such a key does not identify a row.
 - The columns of a primary key are in the order of `pk`.

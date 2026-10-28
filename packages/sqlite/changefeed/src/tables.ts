@@ -61,7 +61,7 @@ export function tablesOf(snapshot: Snapshot): Table[] {
 }
 
 // The columns of the declared primary key when SQLite makes it unique and
-// not NULL: as an INTEGER PRIMARY KEY, or when each of its columns is NOT
+// not NULL: as an alias of the rowid, or when each of its columns is NOT
 // NULL. PRAGMA table_info gives NOT NULL for each primary key column of a
 // WITHOUT ROWID table, because SQLite enforces it there. null when the rowid identifies the row: a table
 // with no primary key, or one whose declared primary key can hold NULL in
@@ -71,14 +71,19 @@ function identifyingPrimaryKey(
   table: string,
 ): readonly string[] | null {
   const columns = snapshot.all(
-    'SELECT name, type, "notnull" FROM pragma_table_info(?) WHERE pk > 0 ORDER BY pk',
+    'SELECT name, "notnull" FROM pragma_table_info(?) WHERE pk > 0 ORDER BY pk',
     table,
   );
-  const [first, ...others] = columns;
-  if (first === undefined) return null;
-  const integerPrimaryKey =
-    others.length === 0 && text(first.type).toUpperCase() === 'INTEGER';
-  if (integerPrimaryKey || columns.every((column) => column.notnull === 1))
+  if (columns.length === 0) return null;
+  // SQLite makes an index for each primary key but an alias of the rowid.
+  // The type alone does not tell it: INTEGER PRIMARY KEY DESC in a column
+  // definition is no alias, and can hold NULL.
+  const rowidAlias =
+    snapshot.all(
+      "SELECT 1 FROM pragma_index_list(?) WHERE origin = 'pk'",
+      table,
+    ).length === 0;
+  if (rowidAlias || columns.every((column) => column.notnull === 1))
     return columns.map((column) => text(column.name));
   return null;
 }
