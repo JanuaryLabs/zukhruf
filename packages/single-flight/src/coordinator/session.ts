@@ -1,4 +1,4 @@
-import { FencingToken } from '@zukhruf/fencing';
+import { EpochExhaustedError, FencingToken } from '@zukhruf/fencing';
 
 import type { Connection } from '../connection/connection.ts';
 import {
@@ -17,14 +17,17 @@ import { type Inbox, Party } from './party.ts';
  */
 export class Session implements Inbox {
   readonly #coordinator: FlightCoordinator;
+  readonly #onTokensExhausted: (() => void) | undefined;
   readonly #parties = new Map<string, Party>();
   #phase: SessionPhase;
 
   constructor(
     coordinator: FlightCoordinator,
     connection: Connection<FlightResponse>,
+    onTokensExhausted: (() => void) | undefined,
   ) {
     this.#coordinator = coordinator;
+    this.#onTokensExhausted = onTokensExhausted;
     this.#phase = new Serving(connection);
     connection.on('message', (message) => {
       // A message with no op or no id cannot be answered, so it is ignored, and the peer keeps its flights (ADR 0008).
@@ -57,7 +60,7 @@ export class Session implements Inbox {
         }
         void this.#coordinator
           .run(party, request.key)
-          .catch(() => this.#phase.close());
+          .catch((error: unknown) => this.#fail(error));
         return;
       }
       case 'land': {
@@ -79,6 +82,19 @@ export class Session implements Inbox {
         );
       }
     }
+  }
+
+  /**
+   * A run whose token cannot be minted closes the connection, so the client
+   * sends it again. An exhausted epoch goes to the owner instead: a close
+   * would only send the client back to this coordinator, whose epoch stays
+   * exhausted.
+   */
+  #fail(error: unknown) {
+    if (error instanceof EpochExhaustedError && this.#onTokensExhausted) {
+      return this.#onTokensExhausted();
+    }
+    this.#phase.close();
   }
 
   /** A client never sends one id twice on one connection; a second request with it is ignored. */

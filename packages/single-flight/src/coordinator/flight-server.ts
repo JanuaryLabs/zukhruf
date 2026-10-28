@@ -55,6 +55,11 @@ export class FlightServer {
     const coordinator = new FlightCoordinator({
       tokens: new EpochTokenSource(term.epoch),
       locks,
+      // Only a new term has tokens again, so the coordinator steps down. Its
+      // clients then connect again, and the next term's coordinator answers
+      // their runs. The coordinator mints only for a connection that
+      // `started` serves.
+      onTokensExhausted: () => void started.close(),
     });
     const connections = new Set<Socket>();
     // Serving others never keeps the coordinator alive: when its own work ends, it exits and another process takes over.

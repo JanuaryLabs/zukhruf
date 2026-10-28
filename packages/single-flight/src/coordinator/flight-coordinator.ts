@@ -16,6 +16,14 @@ export interface FlightCoordinatorOptions {
    * work, whether this coordinator knows that flight or not.
    */
   locks: KeyLocks;
+  /**
+   * Called when the epoch of the token source has no tokens left. The run
+   * that found it gets no answer: only a new term can mint its token, so the
+   * owner ends this term, and the run goes again to the next coordinator.
+   * Without it, the session closes the connection, as for any other failed
+   * mint.
+   */
+  onTokensExhausted?: () => void;
 }
 
 /** How a reasserted flight ended, for a rejoin of it that comes after its end. */
@@ -42,15 +50,17 @@ export class FlightCoordinator {
   readonly #locks: KeyLocks;
   readonly #parked: ParkedRuns;
   readonly #closing = new AbortController();
+  readonly #onTokensExhausted: (() => void) | undefined;
 
-  constructor({ tokens, locks }: FlightCoordinatorOptions) {
+  constructor({ tokens, locks, onTokensExhausted }: FlightCoordinatorOptions) {
     this.#tokens = tokens;
+    this.#onTokensExhausted = onTokensExhausted;
     this.#locks = locks;
     this.#parked = new ParkedRuns(locks, this.#closing.signal);
   }
 
   serve(connection: Connection<FlightResponse>): void {
-    new Session(this, connection);
+    new Session(this, connection, this.#onTokensExhausted);
   }
 
   /** Stops watching the locks of the keys whose runs wait. */

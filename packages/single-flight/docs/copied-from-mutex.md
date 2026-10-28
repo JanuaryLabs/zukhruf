@@ -83,6 +83,7 @@ Note: on macOS 27 with Node.js 26, a probe listened and connected on socket path
 - It serves a `FlightCoordinator`, not a `LockCoordinator`. `EpochTokenSource` comes from `@zukhruf/fencing`.
 - `close` ends each connection with `destroySoon`, not `destroy`.
 - It gets the key locks, and gives them to the coordinator. `close` first stops the watches of the coordinator on the key locks of parked runs.
+- The coordinator gets `onTokensExhausted: () => void started.close()`, as in the mutex (`fc8cf7f`, mirrored for backlog #2822). When the epoch of the term has no tokens left, the coordinator steps down, and the next term mints with epoch + 1.
 - `close` resigns the term without options. The lock server resigns clean when its coordinator leaves nothing to recover ([mutex ADR 0018](../../mutex/docs/adr/0018-the-next-leader-skips-the-grace-window-after-a-clean-shutdown.md)). From [ADR 0009](./adr/0009-the-next-coordinator-skips-the-grace-window-after-a-clean-shutdown.md) to [ADR 0010](./adr/0010-a-leader-holds-a-kernel-lock-on-its-key-until-its-outcome-is-handed-over.md), it resigned clean when the coordinator left nothing to recover. Now no coordinator has a grace window, so there is nothing to skip.
 
 Why: a coordinator process can also lead a flight. When it lands the flight and stops at once, `destroy` can drop a `landed` answer that is still on its way to a joiner. `destroySoon` sends what was written first, and then closes.
@@ -95,6 +96,8 @@ They are copied as they are. The rest of that file is the lock protocol, and thi
 ## Tests copied
 
 Three test files test the copies above. Each one is a copy of a mutex test file, so a fix to a test goes into both files too.
+
+The test of an exhausted epoch in `coordinator/flight-coordinator.test.ts` is a copy of the test `A request whose epoch has no tokens left` in `lock-stores/remote/remote-locking.test.ts` (`fc8cf7f`). It sends a `run`, not an `acquire`, and makes its connection inline, because the mutex's `scriptedPeer` is in the mutex's own test folder.
 
 **`lock-stores/socket/socket-connection.test.ts` → `connection/socket-connection.test.ts`.**
 Only the import paths and the prefix of the Windows pipe differ.
@@ -164,6 +167,7 @@ The rules below are not file copies. Each package writes them in its own code, s
   - The session ignores a second request with an id that it already has (`#open` and `#register`).
   - A send that fails is ignored: the client is gone, and `close` comes next.
   - A request whose handling fails closes the connection.
+  - A request whose epoch has no tokens left (`EpochExhaustedError`) gets no answer, and the connection stays open. The session calls `onTokensExhausted` of the coordinator, and the server closes for a new term. A close of the connection only would send the peer back to the same coordinator, and it would fail again in a loop (mutex `fc8cf7f`, single flight backlog #2822).
   - On `close`, the session goes to `Ended` first, so it answers nothing on a connection that is gone.
 - Differs: the mutex's `Ended` gives back each lease that arrives after the end. The single flight's `Ended` answers nothing, and the session withdraws each of its parties. The single flight closes the connection through its phase, and only for a run or a rejoin that fails. Backlog #2544 is about the close after a failed request on the mutex's shared channels. The single flight uses only sockets, so #2544 does not apply to it.
 
