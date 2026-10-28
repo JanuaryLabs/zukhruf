@@ -58,3 +58,50 @@ describe('A run whose epoch has no tokens left', () => {
     );
   });
 });
+
+describe('A run whose token source fails for another reason', () => {
+  test('the coordinator closes the connection once and does not step down', async () => {
+    // Arrange
+    await using directory = await new TemporaryFiles().directory('flights-');
+    const failing: TokenSource = {
+      async next() {
+        throw new Error('the epoch file is not readable');
+      },
+    };
+    let reports = 0;
+    const coordinator = new FlightCoordinator({
+      tokens: failing,
+      locks: new KeyLocks(directory.path, 10),
+      onTokensExhausted: () => reports++,
+    });
+    const sent: FlightResponse[] = [];
+    let closes = 0;
+    const connection: Connection<FlightResponse> = Object.assign(
+      new EventEmitter<ConnectionEvents>(),
+      {
+        async send(message: FlightResponse) {
+          sent.push(message);
+        },
+        ref() {},
+        unref() {},
+        close() {
+          closes++;
+        },
+      },
+    );
+    coordinator.serve(connection);
+
+    // Act
+    connection.emit('message', { op: 'run', id: 'a', key: 'product:42' });
+    await delay(50);
+
+    // Assert: only an exhausted epoch is a reason for the leader to resign; any other failed mint ends this session only.
+    assert.equal(
+      reports,
+      0,
+      'Only an exhausted epoch may make the coordinator step down',
+    );
+    assert.equal(closes, 1, 'The coordinator must close the connection');
+    assert.deepEqual(sent, [], 'The coordinator must not answer the run');
+  });
+});
