@@ -1,17 +1,20 @@
+import type { Design } from '../design.ts';
 import type { EventTable } from '../event-table.ts';
-import { type Evidence, pairScore } from '../pair-score.ts';
+import { type Evidence, pairFeatures, pairScore } from '../pair-score.ts';
 import type { Vectors } from '../vectors.ts';
 
 // The pair scores of one add, each one calculated once.
 export class PairScores {
   readonly #table: EventTable;
   readonly #vectors: Vectors;
+  readonly #model: Design['pairScore'];
   readonly #evidence = new Map<string, Evidence>();
   readonly #scores = new Map<string, number>();
 
-  constructor(table: EventTable, vectors: Vectors) {
+  constructor(table: EventTable, vectors: Vectors, model: Design['pairScore']) {
     this.#table = table;
     this.#vectors = vectors;
+    this.#model = model;
   }
 
   // The evidence of a report that is not in the table yet.
@@ -26,9 +29,12 @@ export class PairScores {
     let score = this.#scores.get(key);
     if (score === undefined) {
       score = pairScore(
-        similarity ?? this.#vectors.similarity(a, b),
-        this.#evidenceOf(a),
-        this.#evidenceOf(b),
+        this.#model,
+        pairFeatures(
+          similarity ?? this.#vectors.similarity(a, b),
+          this.#evidenceOf(a),
+          this.#evidenceOf(b),
+        ),
       );
       this.#scores.set(key, score);
     }

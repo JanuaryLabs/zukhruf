@@ -2,14 +2,14 @@ import type { DatabaseSync } from 'node:sqlite';
 
 import { transaction } from '@zukhruf/sqlite-transaction';
 
+import { analyse } from './analyse.ts';
 import { DAY_MS } from './day.ts';
-import { type AnalysedReport, EventTable } from './event-table.ts';
+import type { Design } from './design.ts';
+import { EventTable } from './event-table.ts';
 import { assign } from './grouping/assign.ts';
 import { recluster } from './grouping/recluster.ts';
 import { PairScores } from './grouping/scores.ts';
 import { Shortlist } from './grouping/shortlist.ts';
-import { leadOf } from './lead.ts';
-import { numbersOf } from './numbers.ts';
 import { eventSchema } from './schema.ts';
 import type { Vectors } from './vectors.ts';
 
@@ -38,6 +38,9 @@ export type EventDetectorOptions = {
   // The vectors of this detector only. The detector upserts each report with
   // a lead into it.
   readonly vectors: Vectors;
+  // The recipe of the grouping. Its weights and threshold belong to the
+  // embedding model that it names, so the vectors must come from that model.
+  readonly design: Design;
 };
 
 // Puts the reports of one real event into one event. Between two publish
@@ -47,11 +50,13 @@ export type EventDetectorOptions = {
 export class EventDetector {
   readonly #database: DatabaseSync;
   readonly #vectors: Vectors;
+  readonly #design: Design;
   readonly #table: EventTable;
 
   constructor(options: EventDetectorOptions) {
     this.#database = options.database;
     this.#vectors = options.vectors;
+    this.#design = options.design;
     this.#table = new EventTable(this.#database);
     eventSchema.apply(this.#database);
   }
@@ -62,7 +67,7 @@ export class EventDetector {
   async add(reports: readonly Report[]): Promise<void> {
     const fresh = reports
       .filter((report) => !this.#table.has(report.id))
-      .map(analyse)
+      .map((report) => analyse(report, this.#design))
       .toSorted((a, b) => a.publishedAt - b.publishedAt);
     const withLead = fresh.flatMap(({ id, day, text }) =>
       text === null ? [] : [{ id, text, publishedAt: new Date(day * DAY_MS) }],
@@ -72,15 +77,25 @@ export class EventDetector {
     transaction(
       this.#database,
       () => {
-        const scores = new PairScores(this.#table, this.#vectors);
+        const design = this.#design;
+        const scores = new PairScores(
+          this.#table,
+          this.#vectors,
+          design.pairScore,
+        );
         let waiting = withLead.length;
         for (const report of fresh) {
-          const shortlist = new Shortlist(this.#table, this.#vectors, waiting);
+          const shortlist = new Shortlist(
+            this.#table,
+            this.#vectors,
+            design,
+            waiting,
+          );
           const current = this.#table.currentDay();
           if (current !== undefined && report.day > current)
-            recluster(current, this.#table, shortlist, scores);
+            recluster(current, this.#table, shortlist, scores, design);
           this.#table.advance(report.day);
-          assign(report, this.#table, shortlist, scores);
+          assign(report, this.#table, shortlist, scores, design.threshold);
           if (report.text !== null) waiting--;
         }
       },
@@ -101,23 +116,4 @@ export class EventDetector {
       }),
     );
   }
-}
-
-// The vector text is the frozen representation of round #3130: the
-// EmbeddingGemma document prompt around the title and the lead
-// (docs/adr/0001).
-function analyse(report: Report): AnalysedReport {
-  const lead = leadOf(report.title, report.body);
-  const publishedAt = report.publishedAt.getTime();
-  return {
-    id: report.id,
-    publishedAt,
-    day: Math.floor(publishedAt / DAY_MS),
-    text:
-      lead.title === null || lead.sentences.length === 0
-        ? null
-        : `title: ${lead.title} | text: ${lead.title}\n${lead.sentences.join(' ')}`,
-    numbers: numbersOf(`${lead.title ?? ''}\n${report.body}`),
-    publisher: report.publisher ?? null,
-  };
 }

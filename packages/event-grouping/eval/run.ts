@@ -8,6 +8,7 @@ import { cosineSimilarity, embed } from 'ai';
 
 import { Collection } from '@zukhruf/embeddings';
 
+import { design3152b } from '../src/index.ts';
 import { readEvents, writeEvents } from './accepted.ts';
 import {
   type EvalSet,
@@ -32,8 +33,8 @@ import { CACHE_FOLDER, type TextSource } from './texts/text-source.ts';
 import { WcepRows } from './texts/wcep.ts';
 import { WebPages } from './texts/web.ts';
 
-// Runs the frozen design of the package on the evaluation sets, and compares
-// each score with the latest accepted design (README.md).
+// Runs a design of the package on the evaluation sets, and compares each
+// score with the latest accepted design (README.md).
 const USAGE = `Usage: nx run event-grouping:eval -- [set ...] [--refresh] [--exam] [--accept <design>]
 
   set               The sets to score. All sets when none is given.
@@ -42,8 +43,10 @@ const USAGE = `Usage: nx run event-grouping:eval -- [set ...] [--refresh] [--exa
   --accept <design> Record the scores as an accepted design in scoreboard.json.
 
 Environment:
-  EVAL_EMBEDDING_URL    The OpenAI-compatible base URL of the embedding server.
-  EVAL_EMBEDDING_MODEL  The model name on that server (default embeddinggemma-2).`;
+  EVAL_EMBEDDING_URL    The OpenAI-compatible base URL of the embedding server.`;
+
+// The design that this run scores.
+const DESIGN = design3152b;
 
 // The paired bootstrap of the change against the latest accepted design
 // (#3182). The seed is fixed, so a run gives the same interval each time.
@@ -76,10 +79,9 @@ if (values.help || baseURL === undefined) {
 }
 if (values.accept !== undefined && positionals.length > 0)
   throw new Error('--accept records a design on every set: name no set.');
-const modelId = process.env['EVAL_EMBEDDING_MODEL'] ?? 'embeddinggemma-2';
 
 const scoreboard = Scoreboard.read();
-const pin = currentPin();
+const pin = currentPin(DESIGN);
 if (values.accept !== undefined) {
   if (!committed())
     throw new Error(
@@ -88,17 +90,17 @@ if (values.accept !== undefined) {
   // Refuses a name that the scoreboard has, before the run.
   scoreboard.with({ ...draft(values.accept), sets: {} });
 }
-const holds = scoreboard.designOf(pin);
+const holds = scoreboard.designOf(DESIGN);
 console.log(
   holds === null
-    ? `The package holds a design that is not accepted (src/frozen-design.ts sha256 ${pin.frozenDesignSha256}).`
-    : `The package holds design ${holds.design} (pinned to commit ${holds.pin.commit}).`,
+    ? `Design ${DESIGN.name} is not accepted.`
+    : `Design ${DESIGN.name} is accepted as ${holds.design} (pinned to commit ${holds.pin.commit}).`,
 );
 
 const model = createOpenAICompatible({
   name: 'llama.cpp',
   baseURL,
-}).embeddingModel(modelId);
+}).embeddingModel(DESIGN.embeddingModel);
 await checkModel();
 
 const accepted: Record<string, SetEntry> = {};
@@ -120,6 +122,7 @@ for (const name of positionals.length > 0 ? positionals : setNames()) {
     set.rows,
     texts.texts,
     new Collection({ database: vectorDatabase, model }),
+    DESIGN,
   );
   const result = score(set.rows, texts.texts, fed.eventOf, fed.adds);
   const latest = scoreboard.latest(name);
@@ -148,7 +151,6 @@ for (const name of positionals.length > 0 ? positionals : setNames()) {
         set: name,
         role: decision.role,
         at: new Date().toISOString(),
-        embeddingModel: modelId,
         metricsVersion: METRICS_VERSION,
         pin,
         vanished: texts.vanished,
@@ -237,7 +239,6 @@ function draft(design: string): Omit<Entry, 'sets'> {
     design,
     acceptedAt: new Date().toISOString(),
     metricsVersion: METRICS_VERSION,
-    embeddingModel: modelId,
     pin,
   };
 }

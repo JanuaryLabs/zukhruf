@@ -1,5 +1,4 @@
 import type { AnalysedReport, EventTable } from '../event-table.ts';
-import { THRESHOLD } from '../frozen-design.ts';
 import type { PairScores } from './scores.ts';
 import type { Shortlist } from './shortlist.ts';
 
@@ -12,6 +11,7 @@ export function assign(
   table: EventTable,
   shortlist: Shortlist,
   scores: PairScores,
+  threshold: number,
 ): void {
   let best: number | undefined;
   let bestScore = -Infinity;
@@ -25,7 +25,7 @@ export function assign(
       const mean =
         members.reduce((sum, id) => sum + scores.score(report.id, id), 0) /
         members.length;
-      if (mean >= THRESHOLD && mean > bestScore) {
+      if (mean >= threshold && mean > bestScore) {
         best = event;
         bestScore = mean;
       }

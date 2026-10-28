@@ -11,6 +11,7 @@ import {
   EventDetector,
   type Report,
   type Vectors,
+  design3152b,
 } from './index.ts';
 
 // A real embedding model cannot run in CI. The AI SDK's own mock model stands
@@ -39,7 +40,7 @@ function detector(
   fake: MockEmbeddingModelV4,
 ): EventDetector {
   const vectors = new Collection({ database, model: fake }) satisfies Vectors;
-  return new EventDetector({ database, vectors });
+  return new EventDetector({ database, vectors, design: design3152b });
 }
 
 // A unit vector at an angle, in degrees. Without numbers and publishers, two

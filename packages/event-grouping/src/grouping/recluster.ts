@@ -1,7 +1,7 @@
 import { agnes } from 'ml-hclust';
 
+import type { Design } from '../design.ts';
 import type { EventTable } from '../event-table.ts';
-import { THRESHOLD, WINDOW_DAYS } from '../frozen-design.ts';
 import type { PairScores } from './scores.ts';
 import type { Shortlist } from './shortlist.ts';
 
@@ -15,18 +15,19 @@ export function recluster(
   table: EventTable,
   shortlist: Shortlist,
   scores: PairScores,
+  { threshold, windowDays }: Design,
 ): void {
-  const window = table.withLeadSince(day - WINDOW_DAYS);
+  const window = table.withLeadSince(day - windowDays);
   const inWindow = new Set(window);
   const components = new UnionFind(window);
   // The graph also holds vectors that a failed add left behind. They have no
   // report in the window.
-  for (const [id, neighbours] of shortlist.ofDays(day - WINDOW_DAYS, day))
+  for (const [id, neighbours] of shortlist.ofDays(day - windowDays, day))
     if (inWindow.has(id))
       for (const neighbour of neighbours)
         if (
           inWindow.has(neighbour.id) &&
-          scores.score(id, neighbour.id, neighbour.similarity) >= THRESHOLD
+          scores.score(id, neighbour.id, neighbour.similarity) >= threshold
         )
           components.union(id, neighbour.id);
 
@@ -42,7 +43,7 @@ export function recluster(
     for (const cluster of agnes(distances, {
       method: 'average',
       isDistanceMatrix: true,
-    }).cut(1 - THRESHOLD))
+    }).cut(1 - threshold))
       clusters.push(cluster.indices().map((index) => component[index] ?? ''));
   }
   carryIds(clusters, table);

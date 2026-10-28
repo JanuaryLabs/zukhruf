@@ -1,10 +1,4 @@
-import {
-  AGREEING_NUMBERS_TERM,
-  DISAGREEING_NUMBERS_TERM,
-  INTERCEPT,
-  SAME_PUBLISHER_TERM,
-  SIMILARITY_TERM,
-} from './frozen-design.ts';
+import type { Design } from './design.ts';
 
 // What the pair score compares of two reports, other than their leads.
 export type Evidence = {
@@ -14,38 +8,50 @@ export type Evidence = {
   readonly publisher: string | null;
 };
 
-// The probability that two reports report one event, from the cosine
-// similarity of their leads, the numbers of their full texts and their
-// publishers. Numbers that both reports give are evidence for one event.
-// Numbers that only one report gives are evidence against it (the Fellegi and
-// Sunter model). One publisher is evidence against one event: at the same
-// similarity, two reports of one publisher report one event less often than
-// two reports of two publishers, because a publisher writes many reports on
-// one topic (docs/adr/0005).
-export function pairScore(
+// The features of the pair score, in the order of its terms.
+export const PAIR_FEATURES = [
+  'similarity',
+  'agreeingNumbers',
+  'disagreeingNumbers',
+  'samePublisher',
+] as const;
+
+export type PairFeatures = Record<(typeof PAIR_FEATURES)[number], number>;
+
+// The features of two reports, from the cosine similarity of their leads, the
+// numbers of their full texts and their publishers. The detector scores a
+// pair with them, and the fitter (eval/fit) fits the weights on them.
+export function pairFeatures(
   similarity: number,
   a: Evidence,
   b: Evidence,
-): number {
+): PairFeatures {
   const shared = [...a.numbers].filter((number) =>
     b.numbers.has(number),
   ).length;
-  const samePublisher = a.publisher !== null && a.publisher === b.publisher;
-  const z =
-    INTERCEPT +
-    term(SIMILARITY_TERM, similarity) +
-    term(AGREEING_NUMBERS_TERM, Math.log1p(shared)) +
-    term(
-      DISAGREEING_NUMBERS_TERM,
-      Math.log1p(Math.min(a.numbers.size - shared, b.numbers.size - shared)),
-    ) +
-    term(SAME_PUBLISHER_TERM, samePublisher ? 1 : 0);
-  return 1 / (1 + Math.exp(-z));
+  return {
+    similarity,
+    agreeingNumbers: Math.log1p(shared),
+    disagreeingNumbers: Math.log1p(
+      Math.min(a.numbers.size - shared, b.numbers.size - shared),
+    ),
+    samePublisher: a.publisher !== null && a.publisher === b.publisher ? 1 : 0,
+  };
 }
 
-function term(
-  { weight, mean, sd }: { weight: number; mean: number; sd: number },
-  value: number,
+// The probability that two reports report one event. Numbers that both
+// reports give are evidence for one event. Numbers that only one report gives
+// are evidence against it (the Fellegi and Sunter model). One publisher is
+// evidence against one event: at the same similarity, two reports of one
+// publisher report one event less often than two reports of two publishers,
+// because a publisher writes many reports on one topic (docs/adr/0005).
+export function pairScore(
+  model: Design['pairScore'],
+  features: PairFeatures,
 ): number {
-  return (weight * (value - mean)) / sd;
+  const z = PAIR_FEATURES.reduce((sum, feature) => {
+    const { weight, mean, sd } = model[feature];
+    return sum + (weight * (features[feature] - mean)) / sd;
+  }, model.intercept);
+  return 1 / (1 + Math.exp(-z));
 }

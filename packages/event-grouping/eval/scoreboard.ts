@@ -1,6 +1,7 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
+import type { Design } from '../src/index.ts';
 import type { Interval } from './bootstrap.ts';
 import { METRICS_VERSION } from './metrics/metrics.ts';
 import type { Role } from './roles.ts';
@@ -28,14 +29,11 @@ export type SetEntry = {
   readonly conll: { readonly f1: number; readonly f05: number };
 };
 
-// What a design name stands for (#3183): the commit that holds the design,
-// the sha256 of the plan.json of its research round, the sha256 of
-// src/frozen-design.ts, and the constants that file exports.
+// What a design name stands for (#3183): the commit that holds the detector,
+// and the design that the detector ran.
 export type Pin = {
   readonly commit: string;
-  readonly planSha256: string;
-  readonly frozenDesignSha256: string;
-  readonly constants: Readonly<Record<string, unknown>>;
+  readonly design: Design;
 };
 
 export type Entry = {
@@ -44,7 +42,6 @@ export type Entry = {
   readonly acceptedAt: string;
   // The METRICS_VERSION that the scores were made with.
   readonly metricsVersion: number;
-  readonly embeddingModel: string;
   readonly pin: Pin;
   // How the scores were made, when not by `--accept` of the runner.
   readonly note?: string;
@@ -105,16 +102,19 @@ export class Scoreboard {
     );
     if (same !== undefined)
       throw new Error(
-        samePin(same.pin, entry.pin)
-          ? `Design ${entry.design} is accepted already, with these constants.`
-          : `Design ${entry.design} is accepted already with other constants (src/frozen-design.ts sha256 ${same.pin.frozenDesignSha256}, now ${entry.pin.frozenDesignSha256}). Give the new design its own name.`,
+        sameDesign(same.pin.design, entry.pin.design)
+          ? `Design ${entry.design} is accepted already, with this design.`
+          : `Design ${entry.design} is accepted already with another design. Give the new design its own name.`,
       );
     return new Scoreboard([...this.entries, entry]);
   }
 
-  // The accepted design whose constants the package holds now, or null.
-  designOf(pin: Pin): Entry | null {
-    return this.entries.findLast((entry) => samePin(entry.pin, pin)) ?? null;
+  // The accepted entry of the design, or null.
+  designOf(design: Design): Entry | null {
+    return (
+      this.entries.findLast((entry) => sameDesign(entry.pin.design, design)) ??
+      null
+    );
   }
 
   write(): void {
@@ -125,9 +125,6 @@ export class Scoreboard {
   }
 }
 
-function samePin(a: Pin, b: Pin): boolean {
-  return (
-    a.frozenDesignSha256 === b.frozenDesignSha256 &&
-    JSON.stringify(a.constants) === JSON.stringify(b.constants)
-  );
+function sameDesign(a: Design, b: Design): boolean {
+  return JSON.stringify(a) === JSON.stringify(b);
 }

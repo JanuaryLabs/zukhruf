@@ -9,7 +9,9 @@ import { MockEmbeddingModelV4 } from 'ai/test';
 
 import { Collection } from '@zukhruf/embeddings';
 
-import { EventDetector } from './index.ts';
+import { EventDetector, design3152b } from './index.ts';
+import { leadOf } from './lead.ts';
+import { numbersOf } from './numbers.ts';
 
 // The bundles of research rounds #3130 and #3152 on the maintainer's Mac.
 // Round #3130 holds the Gun Violence Corpus, its vectors and its metric code.
@@ -65,15 +67,9 @@ type Doc = {
   order: number;
 };
 
-// The replica of round #3152: its lead rule, its pair features and its
-// detector, each a file of the round.
+// The replica of round #3152: its pair features and its detector, each a
+// file of the round.
 type Replica = {
-  analyse: (
-    title: string,
-    body: string,
-    lead: 'frozen',
-    numbers: 'frozen',
-  ) => { text: string | null; numbers: Set<string> };
   Context: new (
     docs: readonly Doc[],
     sims: Float64Array,
@@ -149,7 +145,6 @@ async function replicaGroups(
   publisherOf: (row: Row) => string | undefined,
 ): Promise<string[][]> {
   const replica: Replica = {
-    ...(await import(join(round3152, 'scripts/lead.ts'))),
     ...(await import(join(round3152, 'scripts/features.ts'))),
     ...(await import(join(round3152, 'scripts/detector.ts'))),
     ...(await import(join(round3130, 'scripts/model.ts'))),
@@ -167,12 +162,14 @@ async function replicaGroups(
     weights: [design.model.intercept, ...terms.map((term) => term.weight)],
   };
   const docs = order.map((row, index): Doc => {
-    const { text, numbers } = replica.analyse(
-      row.title ?? '',
-      row.body,
-      'frozen',
-      'frozen',
-    );
+    // The 'frozen' lead and number rules of the replica (its scripts/lead.ts):
+    // the lead and the numbers of the package.
+    const lead = leadOf(row.title ?? '', row.body, design3152b.lead);
+    const text =
+      lead.title === null || lead.sentences.length === 0
+        ? null
+        : `title: ${lead.title} | text: ${lead.title}\n${lead.sentences.join(' ')}`;
+    const numbers = numbersOf(`${lead.title ?? ''}\n${row.body}`);
     const vector = text === null ? undefined : vectors.get(text);
     const length = Math.hypot(...(vector ?? []));
     const publishedAt = Date.parse(row.published);
@@ -223,6 +220,7 @@ async function detectorGroups(
   const detector = new EventDetector({
     database,
     vectors: new Collection({ database, model }),
+    design: design3152b,
   });
   await detector.add(
     order.map((row) => {

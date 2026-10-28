@@ -1,6 +1,6 @@
 import { DatabaseSync } from 'node:sqlite';
 
-import { EventDetector, type Vectors } from '../src/index.ts';
+import { type Design, EventDetector, type Vectors } from '../src/index.ts';
 import type { AnswerRow, Text } from './answer-key.ts';
 
 const DAY_MS = 86_400_000;
@@ -24,14 +24,15 @@ export type Feed = {
 
 // Feeds the reports to a detector as a host does: one add for each publish
 // day, in the order of the publish dates. Equal dates keep the order of the
-// answer key. The detector state is new for each feed; the vectors are
-// those of the caller. After the last day, one headline-only report of the
+// answer key. The detector state is new for each feed; the vectors and the
+// design are those of the caller. After the last day, one headline-only report of the
 // next day makes the detector cluster the last window again, so the events
 // of the last day are final. That report never joins an event (ADR 0003).
 export async function feed(
   rows: readonly AnswerRow[],
   texts: ReadonlyMap<string, Text>,
   vectors: Vectors,
+  design: Design,
 ): Promise<Feed> {
   const reports = rows
     .flatMap((row) => {
@@ -51,7 +52,7 @@ export async function feed(
     })
     .toSorted((a, b) => a.publishedAt.getTime() - b.publishedAt.getTime());
   using database = new DatabaseSync(':memory:');
-  const detector = new EventDetector({ database, vectors });
+  const detector = new EventDetector({ database, vectors, design });
   const adds: Add[] = [];
   for (const [day, batch] of Map.groupBy(reports, (report) =>
     report.publishedAt.toISOString().slice(0, 10),
