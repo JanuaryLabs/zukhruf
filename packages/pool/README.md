@@ -39,8 +39,32 @@ A worker gives `exited()`, `kill()`, `close()`, and optionally `ready()`. A `Cop
 
 The two sizings that learn measure only while jobs wait and every worker is ready, in windows of at least 20 jobs and 2 seconds. They learn once, and never pass what the computer can give. See [ADR 0002](./docs/adr/0002-a-sizing-that-learns-compares-one-more-worker-between-two-windows.md).
 
+## Read the stats
+
+A host can ask the pool how its workers are, for example in a health check:
+
+```ts
+const { starting, idle, lent, waiting } = pool.stats;
+const healthy = idle + lent > 0;
+```
+
+| Count      | Is                                                                         |
+| ---------- | -------------------------------------------------------------------------- |
+| `starting` | the workers that start and are not ready yet                               |
+| `idle`     | the ready workers that no job has                                          |
+| `lent`     | the ready workers that a job has                                           |
+| `waiting`  | the jobs that wait for a worker: in the queue, or for a worker that starts |
+
+A worker that exited is in no count. Each read makes a new object, so the counts of one read agree with each other. See [ADR 0004](./docs/adr/0004-a-pool-reports-its-stats-as-one-snapshot-of-counts.md).
+
+## Replace a worker that exits
+
+A job that needs the slot of an exited worker starts a new worker. An eager startup also replaces an idle worker that exits. After an early exit (a worker that ran less than 10 minutes), the pool waits first: 1 s, then 2 s, 4 s, and so on up to 60 s for each early exit in a row. A worker that runs 10 minutes ends this back-off. A job does not wait for a back-off: its worker starts now. Kubernetes restarts a container in CrashLoopBackOff with the same rule. See [ADR 0005](./docs/adr/0005-an-eager-pool-backs-off-before-it-replaces-a-worker-that-exited-early.md).
+
 ## Decisions
 
 - [ADR 0001](./docs/adr/0001-startups-and-sizings-are-classes-that-a-caller-chooses.md): startups and sizings are classes that a caller chooses.
 - [ADR 0002](./docs/adr/0002-a-sizing-that-learns-compares-one-more-worker-between-two-windows.md): a sizing that learns compares one more worker between two windows.
 - [ADR 0003](./docs/adr/0003-the-pool-learns-that-a-worker-ended-from-its-exit.md): the pool learns that a worker ended from its exit.
+- [ADR 0004](./docs/adr/0004-a-pool-reports-its-stats-as-one-snapshot-of-counts.md): a pool reports its stats as one snapshot of counts.
+- [ADR 0005](./docs/adr/0005-an-eager-pool-backs-off-before-it-replaces-a-worker-that-exited-early.md): an eager pool backs off before it replaces a worker that exited early.

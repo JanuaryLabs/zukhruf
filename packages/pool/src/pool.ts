@@ -2,12 +2,20 @@ import PQueue from 'p-queue';
 
 import { Latch, untilAborted } from '@zukhruf/async';
 
+import type { PoolStats } from './pool-stats.ts';
 import type { Sizing } from './sizing.ts';
 import type { Startup } from './startup.ts';
 import type { Worker } from './worker.ts';
 
+// The back-off before an eager pool replaces a worker that exited early, as
+// Kubernetes restarts a container in CrashLoopBackOff (tuned by KEP-4603):
+// 1 s, doubled for each early exit in a row, up to 60 s. A worker that ran
+// 10 minutes ends the back-off.
+const backoff = { first: 1_000, most: 60_000, reset: 600_000 };
+
 // What a slot holds: nothing, a worker that starts, a worker that is ready
-// since a time, or a worker that ended and waits to be closed.
+// since a time, a worker that ended and waits to be closed, or a back-off
+// before its next worker starts.
 type State<T> =
   | { readonly kind: 'empty' }
   | {
@@ -15,18 +23,22 @@ type State<T> =
       readonly outcome: Latch<PromiseSettledResult<T>>;
     }
   | { readonly kind: 'ready'; readonly worker: T; readonly since: number }
-  | { readonly kind: 'lost'; readonly worker: T };
+  | { readonly kind: 'lost'; readonly worker: T; readonly since: number }
+  | { readonly kind: 'backoff'; readonly timer: NodeJS.Timeout };
 
 interface Slot<T> {
   readonly index: number;
   state: State<T>;
+  // Workers in a row that exited before they ran 10 minutes.
+  early: number;
 }
 
 // Lends workers to jobs, one job per worker at a time. The sizing decides how
 // many workers run and the startup when they start. A worker that exits is
-// replaced: at once when the startup is eager and the worker was idle,
-// otherwise when a job next needs its slot. The owner disposes the pool,
-// which stops every worker.
+// replaced when a job next needs its slot, or sooner when the startup is
+// eager and the worker was idle: at once when it ran 10 minutes, after a
+// back-off when it exited early. The owner disposes the pool, which stops
+// every worker.
 export class Pool<T extends Worker> implements AsyncDisposable {
   readonly #create: () => T;
   readonly #startup: Startup;
@@ -48,6 +60,7 @@ export class Pool<T extends Worker> implements AsyncDisposable {
     this.#slots = Array.from({ length: this.#sizing.ceiling }, (_, index) => ({
       index,
       state: { kind: 'empty' },
+      early: 0,
     }));
     const outcomes = options.startup.eager
       ? this.#running().map((slot) => this.#spawn(slot))
@@ -63,6 +76,21 @@ export class Pool<T extends Worker> implements AsyncDisposable {
   async ready(): Promise<void> {
     const outcome = await this.#started.wait();
     if (outcome.status === 'rejected') throw outcome.reason;
+  }
+
+  get stats(): PoolStats {
+    const stats = { starting: 0, idle: 0, lent: 0, waiting: this.#queue.size };
+    for (const slot of this.#slots) {
+      const lent = this.#lent.has(slot);
+      if (slot.state.kind === 'starting') {
+        stats.starting++;
+        if (lent) stats.waiting++;
+      } else if (slot.state.kind === 'ready') {
+        if (lent) stats.lent++;
+        else stats.idle++;
+      }
+    }
+    return stats;
   }
 
   // A job aborted while it runs kills its worker. A job aborted while its
@@ -116,6 +144,8 @@ export class Pool<T extends Worker> implements AsyncDisposable {
       slot.state = { kind: 'empty' };
       void this.#close(state.worker);
     }
+    // A job does not wait out a back-off: its worker starts now.
+    if (state.kind === 'backoff') clearTimeout(state.timer);
     const worker = await settled(
       state.kind === 'starting' ? state.outcome : this.#spawn(slot),
     );
@@ -193,8 +223,9 @@ export class Pool<T extends Worker> implements AsyncDisposable {
 
   // The pool killed the worker of a slot: no job may borrow it any more.
   #lose(slot: Slot<T>, worker: T): void {
-    if (slot.state.kind === 'ready' && slot.state.worker === worker)
-      slot.state = { kind: 'lost', worker };
+    const state = slot.state;
+    if (state.kind === 'ready' && state.worker === worker)
+      slot.state = { kind: 'lost', worker, since: state.since };
   }
 
   #ended(slot: Slot<T>, worker: T): void {
@@ -204,7 +235,7 @@ export class Pool<T extends Worker> implements AsyncDisposable {
       state.worker !== worker
     )
       return;
-    slot.state = { kind: 'lost', worker };
+    slot.state = { kind: 'lost', worker, since: state.since };
     if (
       this.#lent.has(slot) ||
       this.#stopped.signal.aborted ||
@@ -213,7 +244,21 @@ export class Pool<T extends Worker> implements AsyncDisposable {
       return;
     slot.state = { kind: 'empty' };
     void this.#close(worker);
-    if (slot.index < this.#sizing.current) this.#spawn(slot);
+    slot.early =
+      performance.now() - state.since < backoff.reset ? slot.early + 1 : 0;
+    if (slot.index >= this.#sizing.current) return;
+    if (slot.early === 0) {
+      this.#spawn(slot);
+      return;
+    }
+    const delay = Math.min(backoff.first * 2 ** (slot.early - 1), backoff.most);
+    slot.state = {
+      kind: 'backoff',
+      timer: setTimeout(() => {
+        slot.state = { kind: 'empty' };
+        if (slot.index < this.#sizing.current) this.#spawn(slot);
+      }, delay),
+    };
   }
 
   // Closes the worker of a slot the pool no longer keeps, once its job ends.
@@ -223,6 +268,7 @@ export class Pool<T extends Worker> implements AsyncDisposable {
     slot.state = { kind: 'empty' };
     if (state.kind === 'ready' || state.kind === 'lost')
       void this.#close(state.worker);
+    else if (state.kind === 'backoff') clearTimeout(state.timer);
     else if (state.kind === 'starting')
       void settled(state.outcome).then(
         (worker) => this.#close(worker),
@@ -237,6 +283,8 @@ export class Pool<T extends Worker> implements AsyncDisposable {
 
   async [Symbol.asyncDispose](): Promise<void> {
     this.#stopped.abort();
+    for (const { state } of this.#slots)
+      if (state.kind === 'backoff') clearTimeout(state.timer);
     for (const worker of this.#workers) worker.kill();
     await Promise.all([...this.#workers].map((worker) => worker.close()));
     await this.#queue.onIdle();
