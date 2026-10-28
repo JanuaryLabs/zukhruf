@@ -1,6 +1,6 @@
 import { statSync } from 'node:fs';
 
-import type { UnavailableError } from './data-version.ts';
+import { UnavailableError } from './unavailable-error.ts';
 
 // A missing file, or one in a folder whose mode denies this process. macOS
 // privacy controls do not deny it: they stop a read of the file and a list of
@@ -13,7 +13,7 @@ const unreadable = new Set(['ENOENT', 'EACCES']);
 // it closes, and a reader that opens the database then makes an empty one,
 // timed as it reads; an empty WAL holds nothing the file does not, so only a
 // WAL with frames counts.
-export function lastWrite(path: string, unavailable: UnavailableError): Date {
+export function lastWrite(path: string): Date {
   try {
     const file = statSync(path).mtimeMs;
     const wal = statSync(`${path}-wal`, { throwIfNoEntry: false });
@@ -26,7 +26,7 @@ export function lastWrite(path: string, unavailable: UnavailableError): Date {
       'code' in cause &&
       unreadable.has(String(cause.code))
     )
-      throw new unavailable(path, cause);
+      throw new UnavailableError(path, { cause });
     throw cause;
   }
 }

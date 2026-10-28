@@ -18,19 +18,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 
-import { Snapshot } from '@zukhruf/sqlite-snapshot';
-
-class Unavailable extends Error {
-  constructor(path: string, cause: unknown) {
-    super(`Cannot read ${path}`, { cause });
-  }
-}
-
-class MissingColumns extends Error {
-  constructor(path: string, missing: readonly string[]) {
-    super(`${path} has no ${missing.join(', ')}`);
-  }
-}
+import { Snapshot, UnavailableError } from '@zukhruf/sqlite-snapshot';
 
 await using scratch = await mkdtempDisposable(join(tmpdir(), 'snapshot-'));
 const path = join(scratch.path, 'notes.sqlite');
@@ -42,20 +30,20 @@ owner.exec(`PRAGMA journal_mode = WAL;
   INSERT INTO notes (title) VALUES ('first')`);
 
 {
-  using snapshot = new Snapshot(path, Unavailable);
-  snapshot.requireColumns({ notes: ['id', 'title'] }, MissingColumns);
+  using snapshot = new Snapshot(path);
+  snapshot.requireColumns({ notes: ['id', 'title'] });
   owner.exec("INSERT INTO notes (title) VALUES ('second')");
   console.log(snapshot.all('SELECT title FROM notes'));
 }
 
-using next = new Snapshot(path, Unavailable);
+using next = new Snapshot(path);
 console.log(next.missingColumns({ notes: ['title', 'body'] }));
 console.log(next.all('SELECT count(*) AS notes FROM notes'));
 
 try {
-  new Snapshot(join(scratch.path, 'missing', 'notes.sqlite'), Unavailable);
+  new Snapshot(join(scratch.path, 'missing', 'notes.sqlite'));
 } catch (error) {
-  console.log(error instanceof Unavailable);
+  console.log(error instanceof UnavailableError);
 }
 ```
 
@@ -70,22 +58,22 @@ true
 
 ## The rules
 
-- `new Snapshot(path, unavailable)` opens the database read-only. It runs `BEGIN` and a first read at once, so the snapshot holds the moment when it opens, not the moment of the first query of the caller.
+- `new Snapshot(path)` opens the database read-only. It runs `BEGIN` and a first read at once, so the snapshot holds the moment when it opens, not the moment of the first query of the caller.
 - The snapshot never opens the file with `immutable`. The owner keeps a persistent WAL, and the newest rows are in it. [ADR 0001](./docs/adr/0001-never-immutable-and-held-only-while-reading.md) tells why.
 - Hold a snapshot only while you read. An open read transaction stops the checkpoint of the owner, and then the WAL of the owner grows. Dispose the snapshot with `using`, or call `[Symbol.dispose]()`.
 - `all(sql, ...parameters)` gives all rows. `iterate(sql, ...parameters)` gives the rows one at a time, for a table that is too large to hold in memory.
-- `requireColumns(columns, schema)` checks the columns that the reader needs, as `{ table: [column, ...] }`. When one is missing, it disposes the snapshot and throws `new schema(path, missing)`.
+- `requireColumns(columns)` checks the columns that the reader needs, as `{ table: [column, ...] }`. When one is missing, it disposes the snapshot and throws `MissingColumnsError`.
 - `missingColumns(columns)` gives the missing columns as `table.column`, and keeps the snapshot open. A reader whose queries use different tables checks each query with it.
-- The caller gives the error classes. Thus each error names what the caller needs, for example the access that the user must give.
+- The package throws its own errors: `UnavailableError` and `MissingColumnsError`. A host that needs its own error translates the error of the package at its boundary, and keeps the error of the package as `cause`. [ADR 0002](./docs/adr/0002-the-package-throws-its-own-errors.md) tells why.
 - Dispose commits the read transaction and closes the connection. A second dispose does nothing.
 
 ## Errors
 
-| Error                          | When                                                                                                                            |
-| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------- |
-| `new unavailable(path, cause)` | SQLite cannot open the file: `SQLITE_CANTOPEN` (14), for a missing file or a file that the system denies, a privacy denial too. |
-| `new schema(path, missing)`    | `requireColumns` finds a missing column. The snapshot is closed.                                                                |
-| The error of SQLite            | All other failures, for example a file that is not a database. The constructor closes the connection before it throws.          |
+| Error                 | When                                                                                                                                                                                |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `UnavailableError`    | SQLite cannot open the file: `SQLITE_CANTOPEN` (14), for a missing file or a file that the system denies, a privacy denial too. `path` is the path. `cause` is the error of SQLite. |
+| `MissingColumnsError` | `requireColumns` finds a missing column. `path` is the path, and `missing` gives each missing column as `table.column`. The snapshot is closed.                                     |
+| The error of SQLite   | All other failures, for example a file that is not a database. The constructor closes the connection before it throws.                                                              |
 
 ## The same concepts in other systems
 
@@ -98,6 +86,7 @@ true
 ## Documentation
 
 - [0001 Never immutable, and held only while reading](./docs/adr/0001-never-immutable-and-held-only-while-reading.md)
+- [0002 The package throws its own errors](./docs/adr/0002-the-package-throws-its-own-errors.md)
 - [Code copied into this package](./docs/copied-code.md)
 
 ## Development
@@ -113,7 +102,9 @@ npx nx run sqlite-snapshot:build       # compiles src/ to dist/
 
 ```
 src/
-  index.ts            the exports
-  snapshot.ts         Snapshot, SnapshotColumns, UnavailableError and SchemaError
-  snapshot.test.ts    the tests, on real SQLite files
+  index.ts                  the exports
+  snapshot.ts               Snapshot and SnapshotColumns
+  unavailable-error.ts      UnavailableError
+  missing-columns-error.ts  MissingColumnsError
+  snapshot.test.ts          the tests, on real SQLite files
 ```

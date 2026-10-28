@@ -1,9 +1,9 @@
 import { statSync } from 'node:fs';
 import { DatabaseSync, type StatementSync } from 'node:sqlite';
 
-import type { UnavailableError } from './data-version.ts';
+import { UnavailableError } from './unavailable-error.ts';
 
-function open(path: string, unavailable: UnavailableError): DatabaseSync {
+function open(path: string): DatabaseSync {
   try {
     return new DatabaseSync(path, { readOnly: true });
   } catch (cause) {
@@ -16,7 +16,7 @@ function open(path: string, unavailable: UnavailableError): DatabaseSync {
       // has none. Any other failure is not one that access can fix.
       cause.errcode === 14
     )
-      throw new unavailable(path, cause);
+      throw new UnavailableError(path, { cause });
     throw cause;
   }
 }
@@ -40,20 +40,18 @@ function identify(path: string): string | undefined {
 // does: when the path names a different file, it opens that file.
 export class FollowedDatabase implements Disposable {
   readonly #path: string;
-  readonly #unavailable: UnavailableError;
   #identity: string;
   #database: DatabaseSync;
   #version: StatementSync;
 
-  constructor(path: string, unavailable: UnavailableError) {
+  constructor(path: string) {
     this.#path = path;
-    this.#unavailable = unavailable;
     // Stat before open: a file replaced between the two is one extra change
     // at the next observation. Stat after open could give the new file's
     // identity to the old connection, and then the replace is never seen.
     // A path this process cannot see fails the open too, as CANTOPEN.
     const identity = identify(path);
-    this.#database = open(path, unavailable);
+    this.#database = open(path);
     this.#identity = identity ?? '';
     this.#version = this.#database.prepare('PRAGMA data_version');
   }
@@ -66,7 +64,7 @@ export class FollowedDatabase implements Disposable {
     if (identity !== undefined && identity !== this.#identity) {
       // Open the new file before the old one closes. While the old file is
       // open its inode stays in use, so the new file cannot get the same one.
-      const database = open(this.#path, this.#unavailable);
+      const database = open(this.#path);
       this.#database.close();
       this.#database = database;
       this.#identity = identity;

@@ -1,9 +1,5 @@
 import { FollowedDatabase } from './followed-database.ts';
 
-// The error the caller throws when the file is missing or the system denies
-// access, naming what the caller needs to read it.
-export type UnavailableError = new (path: string, cause: unknown) => Error;
-
 // The owner commits through a WAL it keeps open, and file-change events
 // report a write only when the file closes. SQLite's data_version changes on
 // every commit by another connection, so polling current sees each one.
@@ -15,8 +11,8 @@ export class DataVersion implements Disposable {
   #seen: string;
   #current = 0;
 
-  constructor(path: string, unavailable: UnavailableError) {
-    this.#database = new FollowedDatabase(path, unavailable);
+  constructor(path: string) {
+    this.#database = new FollowedDatabase(path);
     this.#seen = this.#database.observe();
   }
 

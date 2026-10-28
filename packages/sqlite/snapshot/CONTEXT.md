@@ -20,6 +20,10 @@ _Avoid_: Lock, session
 The columns that a reader needs, by table. When one is missing, the owner changed its layout, and a read would put fields in the wrong place.
 _Avoid_: Schema version, migration
 
+**Missing columns**:
+The required columns that the layout of the owner does not have, as `table.column`. `requireColumns` then closes the snapshot and throws `MissingColumnsError`.
+_Avoid_: Schema error, missing fields
+
 **Unavailable**:
-SQLite cannot open the file: the file is missing, or the system denies access. The caller can fix it, for example with a grant of access. Other failures are not unavailable.
+SQLite cannot open the file: the file is missing, or the system denies access. The package then throws `UnavailableError`. The caller can fix it, for example with a grant of access. Other failures are not unavailable.
 _Avoid_: Not found, permission error

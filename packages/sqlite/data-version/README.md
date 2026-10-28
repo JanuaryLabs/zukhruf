@@ -20,12 +20,6 @@ import { DatabaseSync } from 'node:sqlite';
 
 import { DataVersion } from '@zukhruf/sqlite-data-version';
 
-class Unavailable extends Error {
-  constructor(path: string, cause: unknown) {
-    super(`Cannot read ${path}`, { cause });
-  }
-}
-
 await using scratch = await mkdtempDisposable(join(tmpdir(), 'data-version-'));
 const path = join(scratch.path, 'notes.sqlite');
 
@@ -34,7 +28,7 @@ using owner = new DatabaseSync(path);
 owner.exec(`PRAGMA journal_mode = WAL;
   CREATE TABLE notes (id INTEGER PRIMARY KEY, title TEXT)`);
 
-using version = new DataVersion(path, Unavailable);
+using version = new DataVersion(path);
 let seen = version.current;
 for (const title of ['first', 'second']) {
   owner.prepare('INSERT INTO notes (title) VALUES (?)').run(title);
@@ -55,7 +49,7 @@ no change
 
 ## The rules
 
-- `new DataVersion(path, unavailable)` opens its own read-only connection to the database. It does not share a connection with a reader. [ADR 0001](./docs/adr/0001-poll-data-version.md) tells why.
+- `new DataVersion(path)` opens its own read-only connection to the database. It does not share a connection with a reader. [ADR 0001](./docs/adr/0001-poll-data-version.md) tells why.
 - `current` gives the data version now. It is the number of `DataVersion`, not the `PRAGMA data_version` of SQLite. Compare it with the value that you read before from the same `DataVersion`. A different value tells that another connection committed, or that the owner replaced the file. The same value tells that no change occurred.
 - The number tells only that a change occurred. It does not count the commits, and it does not tell what changed.
 - `DataVersion` follows the path. The owner can replace the file at the path: it can rename a new file over it, or delete the file and create it again. A replaced file is a change. Then `DataVersion` reads the new file, and each later commit to the new file is a change too. [ADR 0002](./docs/adr/0002-a-replaced-file-is-followed-by-name.md) tells why.
@@ -63,18 +57,18 @@ no change
 - Each read of `current` reads the status of the file at the path one time (`stat`).
 - A commit by the same connection does not change the number. The `DataVersion` connection never writes, so each commit that it sees comes from another connection.
 - Dispose closes the connection. Use `using`, or call `[Symbol.dispose]()`.
-- The caller gives the error class. Thus the error names what the caller needs, for example the access that the user must give.
+- The package throws its own `UnavailableError`. A host that needs its own error translates the error of the package at its boundary, and keeps the error of the package as `cause`. [ADR 0003](./docs/adr/0003-the-package-throws-its-own-errors.md) tells why.
 
 ## The last write
 
 The data version tells that the owner committed after you read it before. It does not tell when. A new process has no earlier value, so it cannot use the data version to find how old the data is.
 
-`lastWrite(path, unavailable)` gives the time when the owner last wrote the database. Use it when the owner writes only while it runs: a time in the past tells that the data has not changed since then.
+`lastWrite(path)` gives the time when the owner last wrote the database. Use it when the owner writes only while it runs: a time in the past tells that the data has not changed since then.
 
 ```ts
 import { lastWrite } from '@zukhruf/sqlite-data-version';
 
-const written = lastWrite(path, Unavailable);
+const written = lastWrite(path);
 console.log(`The owner last wrote at ${written.toISOString()}`);
 ```
 
@@ -87,13 +81,13 @@ console.log(`The owner last wrote at ${written.toISOString()}`);
 
 ## Errors
 
-| Error                          | When                                                                                                                            |
-| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------- |
-| `new unavailable(path, cause)` | SQLite cannot open the file: `SQLITE_CANTOPEN` (14), for a missing file or a file that the system denies, a privacy denial too. |
-| The error of SQLite            | All other failures.                                                                                                             |
-| The error of the file system   | `current` cannot read the status of the path, for a cause other than a missing path or a folder that denies this process.       |
+| Error                        | When                                                                                                                                                                                                                                                      |
+| ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `UnavailableError`           | SQLite cannot open the file: `SQLITE_CANTOPEN` (14), for a missing file or a file that the system denies, a privacy denial too. `new DataVersion` throws it, and `current` throws it when it cannot open a replaced file. `cause` is the error of SQLite. |
+| The error of SQLite          | All other failures.                                                                                                                                                                                                                                       |
+| The error of the file system | `current` cannot read the status of the path, for a cause other than a missing path or a folder that denies this process.                                                                                                                                 |
 
-`lastWrite` gives `new unavailable(path, cause)` when the file is missing (`ENOENT`) or the mode of its folder denies this process (`EACCES`). It gives the error of the file system for all other failures.
+`UnavailableError` has the `path`. `lastWrite` throws `UnavailableError` when the file is missing (`ENOENT`) or the mode of its folder denies this process (`EACCES`). Then `cause` is the error of the file system. `lastWrite` throws the error of the file system for all other failures.
 
 ## The same concepts in other systems
 
@@ -110,6 +104,7 @@ console.log(`The owner last wrote at ${written.toISOString()}`);
 
 - [0001 Poll data_version](./docs/adr/0001-poll-data-version.md)
 - [0002 A replaced file is followed by name](./docs/adr/0002-a-replaced-file-is-followed-by-name.md)
+- [0003 The package throws its own errors](./docs/adr/0003-the-package-throws-its-own-errors.md)
 - [Code copied into this package](./docs/copied-code.md)
 
 ## Development
@@ -126,8 +121,9 @@ npx nx run sqlite-data-version:build       # compiles src/ to dist/
 ```
 src/
   index.ts                the exports
-  data-version.ts         DataVersion and UnavailableError
+  data-version.ts         DataVersion
   followed-database.ts    the connection that follows the path to a replaced file
+  unavailable-error.ts    UnavailableError
   data-version.test.ts    the tests, on real SQLite files
   last-write.ts           lastWrite
   last-write.test.ts      the tests, on real SQLite files

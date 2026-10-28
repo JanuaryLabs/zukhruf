@@ -7,18 +7,7 @@ import { test } from 'node:test';
 
 import { TemporaryFiles } from '@zukhruf/testing/fs';
 
-import { DataVersion } from './index.ts';
-
-// What a caller passes in: its own error, which names what it needs.
-class SourceUnavailableError extends Error {
-  override name = 'SourceUnavailableError';
-  readonly path: string;
-
-  constructor(path: string, cause: unknown) {
-    super(`The database at ${path} cannot be read.`, { cause });
-    this.path = path;
-  }
-}
+import { DataVersion, UnavailableError } from './index.ts';
 
 test('the version stays the same until the owner commits, then changes', async () => {
   await using dir = await new TemporaryFiles().directory('data-version-');
@@ -29,7 +18,7 @@ test('the version stays the same until the owner commits, then changes', async (
     CREATE TABLE notes (id INTEGER PRIMARY KEY, title TEXT);
     INSERT INTO notes (title) VALUES ('first');
   `);
-  using version = new DataVersion(path, SourceUnavailableError);
+  using version = new DataVersion(path);
   const before = version.current;
   assert.equal(version.current, before);
 
@@ -53,7 +42,7 @@ test('a new file renamed over the path changes the version, and its commits chan
   await using dir = await new TemporaryFiles().directory('data-version-');
   const path = join(dir.path, 'source.sqlite');
   created(path, 'DELETE').close();
-  using version = new DataVersion(path, SourceUnavailableError);
+  using version = new DataVersion(path);
   const before = version.current;
   const replacement = join(dir.path, 'replacement.sqlite');
   created(replacement, 'DELETE').close();
@@ -75,7 +64,7 @@ test('a WAL database deleted with its WAL and shared-memory index and created ag
   await using dir = await new TemporaryFiles().directory('data-version-');
   const path = join(dir.path, 'source.sqlite');
   const first = created(path, 'WAL');
-  using version = new DataVersion(path, SourceUnavailableError);
+  using version = new DataVersion(path);
   const before = version.current;
   first.close();
 
@@ -97,7 +86,7 @@ test('a missing path is no change until a file is created there again', async ()
   await using dir = await new TemporaryFiles().directory('data-version-');
   const path = join(dir.path, 'source.sqlite');
   const first = created(path, 'WAL');
-  using version = new DataVersion(path, SourceUnavailableError);
+  using version = new DataVersion(path);
   const before = version.current;
   first.close();
 
@@ -110,22 +99,24 @@ test('a missing path is no change until a file is created there again', async ()
   assert.notEqual(version.current, missing, 'the created file is not a change');
 });
 
-test('a missing file is the caller’s unavailable error', async () => {
+test('a missing file is an UnavailableError', async () => {
   await using dir = await new TemporaryFiles().directory('data-version-');
   const missing = join(dir.path, 'missing', 'source.sqlite');
 
   assert.throws(
-    () => new DataVersion(missing, SourceUnavailableError),
+    () => new DataVersion(missing),
     (error: unknown) => {
-      assert.ok(error instanceof SourceUnavailableError);
+      assert.ok(error instanceof UnavailableError);
       assert.equal(error.path, missing);
+      assert.ok(error.cause instanceof Error && 'errcode' in error.cause);
+      assert.equal(error.cause.errcode, 14);
       return true;
     },
   );
 });
 
 test(
-  'a file the system denies is the caller’s unavailable error',
+  'a file the system denies is an UnavailableError',
   {
     // chmod denies nothing on Windows, and nothing to root.
     skip: process.platform === 'win32' || process.getuid?.() === 0,
@@ -137,10 +128,12 @@ test(
     await chmod(path, 0o000);
 
     assert.throws(
-      () => new DataVersion(path, SourceUnavailableError),
+      () => new DataVersion(path),
       (error: unknown) => {
-        assert.ok(error instanceof SourceUnavailableError);
+        assert.ok(error instanceof UnavailableError);
         assert.equal(error.path, path);
+        assert.ok(error.cause instanceof Error && 'errcode' in error.cause);
+        assert.equal(error.cause.errcode, 14);
         return true;
       },
     );
@@ -148,7 +141,7 @@ test(
 );
 
 test(
-  'a file in a folder the system denies is the caller’s unavailable error',
+  'a file in a folder the system denies is an UnavailableError',
   {
     // chmod denies nothing on Windows, and nothing to root.
     skip: process.platform === 'win32' || process.getuid?.() === 0,
@@ -162,10 +155,12 @@ test(
     await chmod(folder, 0o000);
     try {
       assert.throws(
-        () => new DataVersion(path, SourceUnavailableError),
+        () => new DataVersion(path),
         (error: unknown) => {
-          assert.ok(error instanceof SourceUnavailableError);
+          assert.ok(error instanceof UnavailableError);
           assert.equal(error.path, path);
+          assert.ok(error.cause instanceof Error && 'errcode' in error.cause);
+          assert.equal(error.cause.errcode, 14);
           return true;
         },
       );
@@ -187,7 +182,7 @@ test(
     await mkdir(folder);
     const path = join(folder, 'source.sqlite');
     created(path, 'DELETE').close();
-    using version = new DataVersion(path, SourceUnavailableError);
+    using version = new DataVersion(path);
     const before = version.current;
     await chmod(folder, 0o000);
     try {
@@ -197,5 +192,35 @@ test(
     } finally {
       await chmod(folder, 0o700);
     }
+  },
+);
+
+test(
+  'a file that replaces the path and that the system denies makes current an UnavailableError',
+  {
+    // chmod denies nothing on Windows, and nothing to root.
+    skip: process.platform === 'win32' || process.getuid?.() === 0,
+  },
+  async () => {
+    await using dir = await new TemporaryFiles().directory('data-version-');
+    const path = join(dir.path, 'source.sqlite');
+    created(path, 'DELETE').close();
+    using version = new DataVersion(path);
+    const replacement = join(dir.path, 'replacement.sqlite');
+    created(replacement, 'DELETE').close();
+    await chmod(replacement, 0o000);
+
+    renameSync(replacement, path);
+
+    assert.throws(
+      () => version.current,
+      (error: unknown) => {
+        assert.ok(error instanceof UnavailableError);
+        assert.equal(error.path, path);
+        assert.ok(error.cause instanceof Error && 'errcode' in error.cause);
+        assert.equal(error.cause.errcode, 14);
+        return true;
+      },
+    );
   },
 );

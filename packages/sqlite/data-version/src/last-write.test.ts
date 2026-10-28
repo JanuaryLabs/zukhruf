@@ -6,18 +6,7 @@ import { test } from 'node:test';
 
 import { TemporaryFiles } from '@zukhruf/testing/fs';
 
-import { DataVersion, lastWrite } from './index.ts';
-
-// What a caller passes in: its own error, which names what it needs.
-class SourceUnavailableError extends Error {
-  override name = 'SourceUnavailableError';
-  readonly path: string;
-
-  constructor(path: string, cause: unknown) {
-    super(`The database at ${path} cannot be read.`, { cause });
-    this.path = path;
-  }
-}
+import { DataVersion, UnavailableError, lastWrite } from './index.ts';
 
 // The owner's connection, as it keeps the database while it runs: it commits
 // into the WAL and does not checkpoint, so the file, the WAL and the
@@ -57,7 +46,7 @@ test('the last write is the later of the database file and its WAL', async () =>
     shm: 1_800_000_000,
   });
 
-  const written = lastWrite(path, SourceUnavailableError);
+  const written = lastWrite(path);
 
   assert.equal(written.getTime(), 1_800_000_060_000);
 });
@@ -72,7 +61,7 @@ test('a later write to the shared-memory index, which readers touch, does not co
     shm: 1_800_000_900,
   });
 
-  const written = lastWrite(path, SourceUnavailableError);
+  const written = lastWrite(path);
 
   assert.equal(written.getTime(), 1_800_000_060_000);
 });
@@ -84,7 +73,7 @@ test('a database whose owner closed it, which removes the WAL, was last written 
   // A time in the past: a WAL with frames left behind would carry a later one.
   await utimes(path, 1_000_000_000 + readLater, 1_000_000_000);
 
-  const written = lastWrite(path, SourceUnavailableError);
+  const written = lastWrite(path);
 
   assert.equal(written.getTime(), 1_000_000_000_000);
 });
@@ -97,32 +86,34 @@ test('a WAL that a reader made after the owner removed its own does not count', 
   {
     // A read-only connection opens the WAL the owner removed, so it makes an
     // empty one, timed as it reads.
-    using reader = new DataVersion(path, SourceUnavailableError);
+    using reader = new DataVersion(path);
     assert.equal(typeof reader.current, 'number');
   }
   assert.equal((await stat(`${path}-wal`)).size, 0);
 
-  const written = lastWrite(path, SourceUnavailableError);
+  const written = lastWrite(path);
 
   assert.equal(written.getTime(), 1_000_000_000_000);
 });
 
-test('a missing file is the caller’s unavailable error', async () => {
+test('a missing file is an UnavailableError', async () => {
   await using dir = await new TemporaryFiles().directory('last-write-');
   const missing = join(dir.path, 'missing', 'source.sqlite');
 
   assert.throws(
-    () => lastWrite(missing, SourceUnavailableError),
+    () => lastWrite(missing),
     (error: unknown) => {
-      assert.ok(error instanceof SourceUnavailableError);
+      assert.ok(error instanceof UnavailableError);
       assert.equal(error.path, missing);
+      assert.ok(error.cause instanceof Error && 'code' in error.cause);
+      assert.equal(error.cause.code, 'ENOENT');
       return true;
     },
   );
 });
 
 test(
-  'a file the system denies is the caller’s unavailable error',
+  'a file the system denies is an UnavailableError',
   {
     // chmod denies nothing on Windows, and nothing to root.
     skip: process.platform === 'win32' || process.getuid?.() === 0,
@@ -137,10 +128,12 @@ test(
     await chmod(folder, 0o000);
     try {
       assert.throws(
-        () => lastWrite(path, SourceUnavailableError),
+        () => lastWrite(path),
         (error: unknown) => {
-          assert.ok(error instanceof SourceUnavailableError);
+          assert.ok(error instanceof UnavailableError);
           assert.equal(error.path, path);
+          assert.ok(error.cause instanceof Error && 'code' in error.cause);
+          assert.equal(error.cause.code, 'EACCES');
           return true;
         },
       );

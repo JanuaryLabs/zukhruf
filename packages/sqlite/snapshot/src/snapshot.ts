@@ -4,21 +4,13 @@ import {
   type SQLOutputValue,
 } from 'node:sqlite';
 
-// The error the caller throws when the file is missing or the system denies
-// access, naming what the caller needs to read it.
-export type UnavailableError = new (path: string, cause: unknown) => Error;
-
-// The error the caller throws when the file lacks columns it reads: the
-// owner changed its layout, and reading on would misplace fields.
-export type SchemaError = new (
-  path: string,
-  missing: readonly string[],
-) => Error;
+import { MissingColumnsError } from './missing-columns-error.ts';
+import { UnavailableError } from './unavailable-error.ts';
 
 // The columns a reader depends on, by table.
 export type SnapshotColumns = Readonly<Record<string, readonly string[]>>;
 
-function open(path: string, unavailable: UnavailableError): DatabaseSync {
+function open(path: string): DatabaseSync {
   try {
     return new DatabaseSync(path, { readOnly: true });
   } catch (cause) {
@@ -31,7 +23,7 @@ function open(path: string, unavailable: UnavailableError): DatabaseSync {
       // has none. Any other failure is not one that access can fix.
       cause.errcode === 14
     )
-      throw new unavailable(path, cause);
+      throw new UnavailableError(path, { cause });
     throw cause;
   }
 }
@@ -45,9 +37,9 @@ export class Snapshot implements Disposable {
   readonly path: string;
   readonly #database: DatabaseSync;
 
-  constructor(path: string, unavailable: UnavailableError) {
+  constructor(path: string) {
     this.path = path;
-    this.#database = open(path, unavailable);
+    this.#database = open(path);
     try {
       // The first read pins the snapshot, so it is taken now rather than at
       // the caller's first query; a file that is no database fails here.
@@ -61,11 +53,11 @@ export class Snapshot implements Disposable {
 
   // Refuses a layout without these columns, and closes the database: the
   // check a reader makes while it opens the snapshot.
-  requireColumns(columns: SnapshotColumns, schema: SchemaError): void {
+  requireColumns(columns: SnapshotColumns): void {
     const missing = this.missingColumns(columns);
     if (missing.length === 0) return;
     this[Symbol.dispose]();
-    throw new schema(this.path, missing);
+    throw new MissingColumnsError(this.path, missing);
   }
 
   // The columns, as table.column, that this layout lacks. A reader whose

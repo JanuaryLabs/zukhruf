@@ -1,2 +1,3 @@
-export { DataVersion, type UnavailableError } from './data-version.ts';
+export { DataVersion } from './data-version.ts';
 export { lastWrite } from './last-write.ts';
+export { UnavailableError } from './unavailable-error.ts';
