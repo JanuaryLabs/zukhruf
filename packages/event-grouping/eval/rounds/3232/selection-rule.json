@@ -1,0 +1,128 @@
+{
+  "task": 3232,
+  "round": "3232: Qwen3-Embedding-0.6B (Q8_0 GGUF, last-token pooling) against EmbeddingGemma 2 (design 3152b). Ezz chose this one second model on 2026-10-28, not the 4B or 8B sizes, because the model runs on the user's Mac at sync time.",
+  "writtenBefore": "any score of a Qwen3-Embedding-0.6B candidate, and before any Qwen vector of a set. Known before writing: round 3152b (its plan, eval/rounds/3152b/plan.json) and the scores of design 3152b on the seven scored sets. No score of any design on nvidia-outlets is known.",
+  "data": {
+    "training": ["anthropic-outlets", "ecbplus", "dev2938", "fresh2957"],
+    "regression": ["gvc", "hlgd-test"],
+    "exam": "nvidia-outlets (3ea92ef: 687 reports, 524 events) is not opened by the fit. The fit reads set.json first and refuses a training set whose role is not training and a regression set whose role is not regression. deepmind-outlets is not in this round, as in round 3152b."
+  },
+  "folds": [
+    {
+      "family": "anthropic-outlets",
+      "sets": ["anthropic-outlets"],
+      "split": "time",
+      "count": 4,
+      "rule": "4 contiguous time folds of whole gold events: the events in the order of their first publish date (then of their labels), each in the fold of the reports before it."
+    },
+    {
+      "family": "ecbplus",
+      "sets": ["ecbplus"],
+      "split": "topic",
+      "count": 5,
+      "rule": "5 folds by the rank of the topic number, mod 5."
+    },
+    {
+      "family": "small",
+      "sets": ["dev2938", "fresh2957"],
+      "split": "none",
+      "count": 1,
+      "rule": "dev2938 and fresh2957 as 1 fold."
+    }
+  ],
+  "candidates": [
+    {
+      "name": "G",
+      "note": "Design 3152b's recipe (EmbeddingGemma 2, its vector text), fitted again under this rule. Its nested-CV objective is the cross-validated score of design 3152b: the final weights of 3152b saw every fold, so its scores on the folds as it is would be in-sample.",
+      "recipe": {
+        "name": "3152b",
+        "embeddingModel": "embeddinggemma-2",
+        "lead": {
+          "sentences": 2,
+          "minWords": 5,
+          "minLetterRatio": 0.6,
+          "maxUrlShare": 0.5,
+          "urlPattern": "(?:https?://|www\\.)\\S*"
+        },
+        "vectorText": "title: {title} | text: {title}\n{lead}",
+        "shortlistSize": 80,
+        "windowDays": 7
+      },
+      "thresholds": [
+        0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8,
+        0.85, 0.9, 0.95
+      ]
+    },
+    {
+      "name": "Q-plain",
+      "note": "Qwen3-Embedding-0.6B on the title and the lead, with no instruction.",
+      "recipe": {
+        "name": "3232-plain",
+        "embeddingModel": "qwen3-embedding-0.6b",
+        "lead": {
+          "sentences": 2,
+          "minWords": 5,
+          "minLetterRatio": 0.6,
+          "maxUrlShare": 0.5,
+          "urlPattern": "(?:https?://|www\\.)\\S*"
+        },
+        "vectorText": "{title}\n{lead}",
+        "shortlistSize": 80,
+        "windowDays": 7
+      },
+      "thresholds": [
+        0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8,
+        0.85, 0.9, 0.95
+      ]
+    },
+    {
+      "name": "Q-instruct",
+      "note": "Qwen3-Embedding-0.6B with the instruction format of the Qwen3 model card (Instruct: <task>\\nQuery:<text>) on both reports of a pair.",
+      "recipe": {
+        "name": "3232-instruct",
+        "embeddingModel": "qwen3-embedding-0.6b",
+        "lead": {
+          "sentences": 2,
+          "minWords": 5,
+          "minLetterRatio": 0.6,
+          "maxUrlShare": 0.5,
+          "urlPattern": "(?:https?://|www\\.)\\S*"
+        },
+        "vectorText": "Instruct: Identify the news event that this report covers\nQuery:{title}\n{lead}",
+        "shortlistSize": 80,
+        "windowDays": 7
+      },
+      "thresholds": [
+        0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8,
+        0.85, 0.9, 0.95
+      ]
+    }
+  ],
+  "features": "The pair features of the package (src/pair-score.ts pairFeatures): similarity, log1p of the agreeing numbers, log1p of the smaller count of disagreeing numbers, same publisher. No span limit.",
+  "pairModel": "Logistic regression by IRLS (eval/fit/irls.ts) on the batch-shortlist pairs of the training folds: for each report with a lead, its top shortlistSize reports with a lead within windowDays in its fold (the neighbourGraph of the fold's vectors). Refitted for every set of training folds used below.",
+  "foldScore": "The CoNLL F0.5 (eval/metrics mainScore, the mean of the MUC, B-cubed and CEAF-e F0.5) of the fold's partition against its gold events, on the reports that have a text.",
+  "objective": "Nested cross-validated CoNLL F0.5. For each outer fold f: for each other fold g, fit the model on the folds that are neither f nor g and score g at every threshold; choose the threshold with the best inner objective (the mean over the families present among the inner folds of the mean fold score); then fit the model on the folds that are not f and score f at the chosen threshold. Family score = mean of the outer fold scores of the family; objective = mean of the family scores. Ties (equal inner objective) go to the higher threshold.",
+  "flatCurve": "For each threshold, the objective of the folds each scored with the model fitted on the other folds. The final threshold is the best threshold of this curve (same tie rule), and the final model is fitted on all folds.",
+  "baselines": "All singletons and all in one, scored per fold; family baseline = mean over its folds.",
+  "reference": {
+    "design": "3152b"
+  },
+  "e2": {
+    "family": "anthropic-outlets",
+    "against": {
+      "candidate": "G"
+    }
+  },
+  "eligibility": {
+    "E1": "On every family, the nested-CV family CoNLL F0.5 is greater than the family score of both trivial baselines.",
+    "E2": "On anthropic-outlets, the nested-CV family CoNLL F0.5 of a Qwen candidate is greater than that of G on the same folds.",
+    "E3": "On each regression set, the final design is compared with design 3152b as it is (scoreboard pin) by the paired block bootstrap (eval/bootstrap.ts changeOfMainScore: mainScore, 2000 replicates, seed 3182). The 95% interval of (candidate - 3152b) is not entirely below 0."
+  },
+  "choice": {
+    "incumbent": "G",
+    "challengers": ["Q-plain", "Q-instruct"],
+    "rule": "The eligible Qwen candidate with the higher nested-CV objective is the challenger. It replaces design 3152b only when the paired block bootstrap 95% interval of (challenger - G) on the nested-CV objective is entirely above 0 (eval/fit/selection.ts crossValidatedChange: the outer partitions of the folds joined into one, ids and gold events prefixed by fold, statistic = the objective, 2000 replicates, seed 3182). Otherwise, and when no Qwen candidate is eligible, design 3152b stays, because it is smaller and already accepted."
+  },
+  "cost": "For each model, the product cost is recorded beside the plan: the embedding time of one report (median and p90, one lead for each request, as a host embeds at sync time) and the resident memory of the llama.cpp server.",
+  "examVerdict": "Only a chosen Qwen design is scored, once, on the exam nvidia-outlets with eval --exam, with the verdict rule of round 3152b: it passes if (a) the paired block bootstrap 95% interval of (candidate - 3152b) CoNLL F0.5 on nvidia-outlets is entirely above 0, (b) its CoNLL F0.5 is greater than both trivial baselines, and (c) no regression set has an interval of (candidate - 3152b) entirely below 0. If the interval of (a) includes 0, the result is inconclusive and 3152b stays. If it is entirely below 0, or (b) or (c) does not hold, the result is fail. If no Qwen design is chosen, the exam is not scored and stays reserved."
+}
