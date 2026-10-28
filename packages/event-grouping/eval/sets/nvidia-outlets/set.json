@@ -1,0 +1,25 @@
+{
+  "role": "exam",
+  "frozenAt": "2026-10-28T08:42:50Z",
+  "firstScoredAt": null,
+  "labelsSha256": "2a4beea5d7d7c204740671c0f62e8bd0e61c18889baa37e5fe77fe696878fe7d",
+  "annotator": "Claude (Opus 5.5), two independent annotators and one adjudicator, from the title and the lead only; no embeddings or detector output. Before adjudication, the annotators agreed with MUC F1 0.936, B-cubed F1 0.981, CEAF-e F1 0.974 and CoNLL F1 0.964; 72 of 687 reports had an event with different members. The adjudicator settled 16 disagreement components and changed one agreed label by rule 15. The labels are those of final-labels.json (sha256 993e67248859e166a126831c5af27adda2e8c8797b80bfa03a9418c2f4547172).",
+  "boundaryRule": "1. One event is one announced action: a model or product launch, a deal or investment, a funding round or filing,\n   a statement, a policy or report release, a lawsuit filing or ruling, a hire or departure, an incident disclosure.\n2. A report about the reaction to an action (analysis, criticism, follow-up quotes, market moves), published within\n   7 days after the action, belongs to that action. Published later than 7 days, it gets its own label.\n3. A general feature, interview, opinion or round-up with no single action gets its own label (a singleton).\n4. Two actions announced together in one post (one announcement) are one event. Two actions announced separately,\n   even on one day and one topic, are two events.\n5. When a report covers several actions, it gets the action of its title; if its title names none, the action of its\n   lead. If it still has no single action, rule 3.\n6. A later step in one case (a ruling after a filing, an appeal after a ruling) is a new action, so a new event.\n7. Labels come from the title and the lead (first sentences) only. Two annotators (Claude) labelled every report\n   independently, without embeddings or detector output. An adjudicator settled each disagreement by these rules.\n   Unclear cases go to the ambiguous list with the alternative label.\n8. A report about a scheduled or announced action, published in the 7 days before it, belongs to that action.\n9. A media report of a deal or plan before the company announces it is its own event. The company's announcement is\n   a separate event.\n10. At a keynote, each separate announcement post is its own event (rule 4). A live blog, recap or opinion piece whose\n   title names no single action is a singleton (rule 3). There is no event for the keynote as a whole. A recap whose\n   title names one or more actions gets the first action of its title (rule 5).\n11. A round-up or podcast whose title names one action gets that action (rule 5). Otherwise it is a singleton (rule 3).\n12. Remarks made at one appearance (one interview, one press Q&A, one summit session) are one statement event.\n   Remarks at separate appearances are separate events.\n13. The 7 days are counted in UTC calendar dates, as the detector's window counts them. A reaction whose UTC date is\n   at most 7 days after the UTC date of the action belongs to the action. A later reaction gets its own label.\n14. A piece published more than 7 days later that repeats an earlier claim is its own event.\n15. A recurring weekly post whose headline is a feature that another publisher reported in the 7 days before it\n   belongs to the event of that report.\n16. Two pages with the same title on one day are judged like any two reports.\n",
+  "text": "web",
+  "source": {
+    "name": "NVIDIA newsroom and blog posts and the NVIDIA reports of four outlets, 2026-04-01 to 2026-10-27",
+    "url": "https://nvidianews.nvidia.com/",
+    "licence": "The articles belong to their publishers (NVIDIA, Fortune, SiliconANGLE, The Next Web, Engadget). This repository holds only their URLs, dates, publishers and our labels. Every URL was allowed by the robots.txt of its site for all user agents when it was crawled.",
+    "attribution": "Articles by nvidianews.nvidia.com, blogs.nvidia.com, fortune.com, siliconangle.com, thenextweb.com and engadget.com. Labels by the zukhruf project."
+  },
+  "weaknesses": [
+    "The annotators and the adjudicator are AI models (Claude), not people.",
+    "The annotators read the title and the lead only, not the whole article.",
+    "43 reports are ambiguous; each has its alternative label.",
+    "Fortune dates come from the JSON-LD of each page.",
+    "Coverage is thin before May: Engadget has 1 report in April, and the other outlets have fewer reports in April than in later months.",
+    "The Decoder and unite.ai were left out, so the set has fewer outlets than the NVIDIA news of the period had.",
+    "The set leaves out 11 Fortune URLs that other sets hold. Thus some events have fewer reports than the outlets published.",
+    "The texts in the cache come from elt’s article extraction. A text that the runner fetches again is extracted with Readability, so it can differ."
+  ]
+}
