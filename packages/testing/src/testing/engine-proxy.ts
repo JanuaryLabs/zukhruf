@@ -113,6 +113,9 @@ export class EngineProxy implements AsyncDisposable {
   }
 
   #track(socket: Socket | Duplex): void {
+    // Node's global agent keeps the connection to the engine alive, so the
+    // same socket comes back for each request; its close listener is already on it.
+    if (this.#sockets.has(socket)) return;
     this.#sockets.add(socket);
     socket.once('close', () => this.#sockets.delete(socket));
   }
