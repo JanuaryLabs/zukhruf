@@ -56,8 +56,11 @@ no change
 ## The rules
 
 - `new DataVersion(path, unavailable)` opens its own read-only connection to the database. It does not share a connection with a reader. [ADR 0001](./docs/adr/0001-poll-data-version.md) tells why.
-- `current` gives the data version now. Compare it with the value that you read before. A different value tells that another connection committed. The same value tells that no other connection committed.
+- `current` gives the data version now. It is the number of `DataVersion`, not the `PRAGMA data_version` of SQLite. Compare it with the value that you read before from the same `DataVersion`. A different value tells that another connection committed, or that the owner replaced the file. The same value tells that no change occurred.
 - The number tells only that a change occurred. It does not count the commits, and it does not tell what changed.
+- `DataVersion` follows the path. The owner can replace the file at the path: it can rename a new file over it, or delete the file and create it again. A replaced file is a change. Then `DataVersion` reads the new file, and each later commit to the new file is a change too. [ADR 0002](./docs/adr/0002-a-replaced-file-is-followed-by-name.md) tells why.
+- A missing path is no change. The owner can delete the file and create it again a short time later. `DataVersion` keeps the old connection until a file comes back, and then that file is a change.
+- Each read of `current` reads the status of the file at the path one time (`stat`).
 - A commit by the same connection does not change the number. The `DataVersion` connection never writes, so each commit that it sees comes from another connection.
 - Dispose closes the connection. Use `using`, or call `[Symbol.dispose]()`.
 - The caller gives the error class. Thus the error names what the caller needs, for example the access that the user must give.
@@ -84,24 +87,29 @@ console.log(`The owner last wrote at ${written.toISOString()}`);
 
 ## Errors
 
-| Error                          | When                                                                                                                            |
-| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------- |
-| `new unavailable(path, cause)` | SQLite cannot open the file: `SQLITE_CANTOPEN` (14), for a missing file or a file that the system denies, a privacy denial too. |
-| The error of SQLite            | All other failures.                                                                                                             |
+| Error                          | When                                                                                                                                                                                                                                                          |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `new unavailable(path, cause)` | SQLite cannot open the file: `SQLITE_CANTOPEN` (14), for a missing file or a file that the system denies, a privacy denial too. Also when `new DataVersion` cannot read the status of the path because the mode of its folder denies this process (`EACCES`). |
+| The error of SQLite            | All other failures.                                                                                                                                                                                                                                           |
+| The error of the file system   | `current` cannot read the status of the path, for a cause other than a missing file.                                                                                                                                                                          |
 
 `lastWrite` gives `new unavailable(path, cause)` when the file is missing (`ENOENT`) or the mode of its folder denies this process (`EACCES`). It gives the error of the file system for all other failures.
 
 ## The same concepts in other systems
 
-| System                                 | What it does                                                                                                                                   |
-| -------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| SQLite `PRAGMA data_version`           | It gives a number that changes when another connection commits. The SQLite documentation tells to use it to find out when to read again.       |
-| File-change events (FSEvents, inotify) | They tell that a file changed. A process that keeps the file open and writes a WAL can commit many times before a write that an event reports. |
-| Datasette `immutable` mode             | It opens a file that nobody writes, so the data never changes. This package is the opposite case: the owner writes the file.                   |
+| System                                 | What it does                                                                                                                                                                                                                                                                |
+| -------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| SQLite `PRAGMA data_version`           | It gives a number that changes when another connection commits. The SQLite documentation tells to use it to find out when to read again.                                                                                                                                    |
+| File-change events (FSEvents, inotify) | They tell that a file changed. A process that keeps the file open and writes a WAL can commit many times before a write that an event reports.                                                                                                                              |
+| Datasette `immutable` mode             | It opens a file that nobody writes, so the data never changes. This package is the opposite case: the owner writes the file.                                                                                                                                                |
+| GNU `tail -F`                          | It follows a file by name. `tail.c` compares the device and inode of the name with the open file. When they differ, it prints "has been replaced; following new file" and opens the new file. `DataVersion` does the same.                                                  |
+| SQLite `SQLITE_FCNTL_HAS_MOVED`        | `fileHasMoved` in `os_unix.c` compares the inode of the path with the inode of the open file. SQLite only gives a warning. It never opens the new file. `node:sqlite` has no `file_control`, so `DataVersion` reads the status of the path itself.                          |
+| Filebeat native file identity          | It identifies a file by its device and inode. After a file closes, the system can give its inode to a new file, and Filebeat then sees no new file. `DataVersion` keeps the old file open until the new file is open, so the system cannot give that inode to the new file. |
 
 ## Documentation
 
 - [0001 Poll data_version](./docs/adr/0001-poll-data-version.md)
+- [0002 A replaced file is followed by name](./docs/adr/0002-a-replaced-file-is-followed-by-name.md)
 - [Code copied into this package](./docs/copied-code.md)
 
 ## Development
@@ -119,6 +127,7 @@ npx nx run sqlite-data-version:build       # compiles src/ to dist/
 src/
   index.ts                the exports
   data-version.ts         DataVersion and UnavailableError
+  followed-database.ts    the connection that follows the path to a replaced file
   data-version.test.ts    the tests, on real SQLite files
   last-write.ts           lastWrite
   last-write.test.ts      the tests, on real SQLite files
