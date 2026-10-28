@@ -1,4 +1,4 @@
-export type KeyValue = string | number | boolean;
+export type KeyValue = string | number | boolean | Uint8Array;
 
 // A key the last committed scan saw and this scan did not.
 export type VanishedRecord = {

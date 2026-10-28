@@ -6,7 +6,7 @@ The words in these documents have one meaning each. See the glossary in [CONTEXT
 
 ## A diff yields the changes, then the snapshot
 
-Make one `SnapshotDifferential` for each scan. Give it the primary key fields, a function that makes the key of a record, and a deletion policy. Then give `diff` the scan and the snapshot that the last committed scan saved:
+Make one `SnapshotDifferential` for each scan. Give it the primary key fields, a function that gives the primary key values of a record in the same order, and a deletion policy. Then give `diff` the scan and the snapshot that the last committed scan saved:
 
 ```ts
 import {
@@ -19,18 +19,21 @@ type Contact = { id: string; name: string };
 const differential = new SnapshotDifferential<Contact>({
   name: 'contacts',
   primaryKey: ['id'],
-  key: (contact) => JSON.stringify([contact.id]),
+  key: (contact) => [contact.id],
   policy: new ClosedWorld(),
 });
 for await (const change of differential.diff(contacts, saved)) {
-  if (change.type === 'upsert') await upsert(change.record);
+  if (change.type === 'insert') await insert(change.record);
+  else if (change.type === 'update') await update(change.record);
   else if (change.type === 'delete') await remove(change.key);
   else await save(change.state);
 }
 ```
 
 - Give `null` as the snapshot for the first scan.
-- The diff yields an upsert for each new or changed record, and nothing for a record that did not change.
+- The diff yields an insert for each record whose key the snapshot does not have.
+- The diff yields an update for each record whose key the snapshot has with a different fingerprint.
+- The diff yields nothing for a record that did not change.
 - The diff yields the new snapshot last. Save it only after you applied the changes before it.
 - Equal scans give byte-identical snapshots, in any order of records.
 - A failed read must throw. An empty scan makes every key a vanished key.
@@ -80,7 +83,8 @@ class OpenChannels extends DeletionPolicy {
 The policy judges an unknown key again at each scan:
 
 - When a later scan covers the key and does not list it, the verdict is `deleted`, and the diff yields a delete.
-- When a later scan lists the record again with the same fingerprint, the diff yields no upsert.
+- When a later scan lists the record again with the same fingerprint, the diff yields nothing.
+- When a later scan lists the record again with a different fingerprint, the diff yields an update, because the snapshot has the key ([ADR 0005](./docs/adr/0005-a-change-is-an-insert-or-an-update.md)).
 
 For example, a chat app drops a thread from its cache. Then a reply in that thread is deleted. Then the app loads the thread again. The reply is not in the thread, and the scan covers it, so the diff deletes it.
 
@@ -106,7 +110,7 @@ for await (const change of differential.diffGroups(
 - A group with the same fingerprint as in the snapshot keeps its records. The diff does not call its `records`.
 - A group with a `null` fingerprint is always read.
 - A kept group, `{ key, kept: true }`, keeps its saved fingerprint and records. Give it when you know that the input did not change but you cannot fingerprint it, such as a page that a crawl did not request. A kept group that the snapshot does not have is an error ([ADR 0004](./docs/adr/0004-a-scan-can-keep-a-group-without-reading-it.md)).
-- A record that moves to a different group, with the same fingerprint, gets no upsert.
+- A record that moves to a different group, with the same fingerprint, gets no change. With a different fingerprint, it gets an update.
 - The policy judges the vanished keys of the complete scan, also the keys of groups that are not in the scan.
 
 ## A lookback window keeps only what the next scan reads again
@@ -133,7 +137,7 @@ for await (const page of profile.pages(after)) {
 }
 ```
 
-- A part yields an upsert for each new or changed record that it lists. It does not wait for the last part.
+- A part yields an insert or an update for each new or changed record that it lists. It does not wait for the last part.
 - A part that continues the scan judges no vanished key. Its snapshot keeps every key, and the keys that the open scan listed so far.
 - The last part judges each saved key that no part of the scan listed.
 - In `diffGroups`, a record that leaves a group that a part reads again waits in the snapshot for the last part's judgment.
@@ -141,13 +145,36 @@ for await (const page of profile.pages(after)) {
 - The parts can be in different runs. Save the snapshot after each part, and give it to the next part.
 - The next scan starts with no listed keys.
 
+## A record and a key can hold bytes
+
+A `Uint8Array` is bytes, and a `Buffer` is a `Uint8Array`. A `BLOB` column of SQLite gives bytes. A record can hold bytes at any depth, and a key value can be bytes:
+
+```ts
+type Attachment = { id: Uint8Array; body: Uint8Array };
+
+const attachments = new SnapshotDifferential<Attachment>({
+  name: 'attachments',
+  primaryKey: ['id'],
+  key: (attachment) => [attachment.id],
+  policy: new ClosedWorld(),
+});
+```
+
+- Equal bytes give equal fingerprints, in a `Buffer` or in a `Uint8Array`, and also in a view of a larger buffer.
+- Bytes and a string or an array of numbers with the same content give different fingerprints.
+- The snapshot keeps a key value of bytes as `{"bytes": "<base64url>"}`. No other key value is an object, so no string key has this form.
+- A delete gives a key value of bytes back as a `Uint8Array`.
+- Other typed arrays, such as `Uint16Array`, are not bytes. A record that holds one fails.
+
+See [ADR 0006](./docs/adr/0006-a-record-and-a-key-can-hold-bytes.md).
+
 ## When something fails
 
 Each failure is a `TypeError`, and the diff yields no snapshot:
 
 - One call lists one key twice: `Snapshot <name> returned <key> twice in one scan`. In a scan in parts, this applies to each part.
 - `diffGroups` gets one group key twice: `Snapshot <name> returned group <key> twice in one scan`.
-- A record has a value that JSON cannot hold without a change, such as `undefined` or a `Date`.
+- A record has a value that JSON cannot hold without a change and that is not bytes, such as `undefined`, a `Date` or a `Uint16Array`.
 - A record has no timestamp in its `expiresBy` field, in the format of `Date#toISOString`.
 - The saved state is not a snapshot that this package wrote.
 - `Retention` gets a horizon that is not a timestamp.
@@ -173,6 +200,8 @@ Airbyte has no equivalent. Outside change data capture, it deletes only when it 
 - [ADR 0002: A scan can be listed in parts](./docs/adr/0002-a-scan-can-be-listed-in-parts.md)
 - [ADR 0003: The differential is a zukhruf package](./docs/adr/0003-the-differential-is-a-zukhruf-package.md)
 - [ADR 0004: A scan can keep a group without reading it](./docs/adr/0004-a-scan-can-keep-a-group-without-reading-it.md)
+- [ADR 0005: A change is an insert or an update](./docs/adr/0005-a-change-is-an-insert-or-an-update.md)
+- [ADR 0006: A record and a key can hold bytes](./docs/adr/0006-a-record-and-a-key-can-hold-bytes.md)
 
 ## Development
 
@@ -191,7 +220,7 @@ src/
   closed-world.ts            ClosedWorld
   retention.ts               Retention
   coverage.ts                Coverage
-  fingerprint.ts             fingerprints over canonical JSON
+  fingerprint.ts             fingerprints over canonical JSON, with bytes
   timestamp.ts               the timestamp check
   index.ts                   the public exports
   snapshot-differential.test.ts   the tests

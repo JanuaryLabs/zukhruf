@@ -13,11 +13,11 @@ One item of a scan. Its key identifies it.
 _Avoid_: Row (a row is in a destination), document
 
 **Key**:
-The JSON array of the primary key values of a record, in the order of the primary key fields.
+The JSON array of the primary key values of a record, in the order of the primary key fields. A key value is a string, a number, a boolean, or bytes. The JSON holds bytes as `{"bytes": "<base64url>"}`.
 _Avoid_: ID (an ID is one primary key field)
 
 **Fingerprint**:
-The SHA-256 of the canonical JSON of a record. Equal records have equal fingerprints.
+The SHA-256 of the canonical form of a record: its JSON with sorted object keys, and each bytes value as `#` and its base64url. Equal records have equal fingerprints.
 _Avoid_: Hash (a hash can be of anything), version
 
 **Snapshot**:
@@ -25,8 +25,20 @@ The keys that the last committed scan saw, each with the fingerprint of its reco
 _Avoid_: Cache (a cache is one kind of upstream), checkpoint (an ELT pipeline's word for all saved state)
 
 **Change**:
-What a diff yields: an upsert of a new or changed record, a delete of a key, and the new snapshot last.
+What a diff yields: an insert, an update, a delete of a key, and the new snapshot last.
 _Avoid_: Event, message (an ELT pipeline's word for what a source yields)
+
+**Insert**:
+The change for a record whose key the snapshot does not have.
+_Avoid_: Create, add, upsert (an upsert does not tell an insert from an update)
+
+**Update**:
+The change for a record whose key the snapshot has with a different fingerprint. A key that the policy judged unknown is in the snapshot, so a changed record with that key is an update.
+_Avoid_: Modify, upsert
+
+**Bytes**:
+A `Uint8Array` value, such as a `Buffer` or a `BLOB` of SQLite. A record and a key can hold bytes.
+_Avoid_: Binary, blob (a blob is the SQLite type), buffer (a buffer is one kind of bytes)
 
 **Vanished key**:
 A key that the snapshot has and the scan does not list.

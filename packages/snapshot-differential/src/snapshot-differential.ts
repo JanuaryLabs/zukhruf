@@ -10,6 +10,8 @@ import {
   type SavedGroup,
   type SnapshotState,
   fingerprintIn,
+  keyOf,
+  keyValuesOf,
   readGroups,
   readSnapshot,
   sorted,
@@ -20,8 +22,8 @@ export type SnapshotDifferentialOptions<Data> = {
   // Names the snapshot in errors.
   readonly name: string;
   readonly primaryKey: readonly string[];
-  // The JSON array of a record's primary key values, in primaryKey order.
-  readonly key: (record: Data) => string;
+  // A record's primary key values, in primaryKey order.
+  readonly key: (record: Data) => readonly KeyValue[];
   // The field holding the timestamp at which the upstream drops a record,
   // kept with its key for the policy to read.
   readonly expiresBy?: string | undefined;
@@ -45,7 +47,8 @@ export type KeptGroup = {
 };
 
 export type SnapshotChange<Data, State> =
-  | { readonly type: 'upsert'; readonly record: Data }
+  | { readonly type: 'insert'; readonly record: Data }
+  | { readonly type: 'update'; readonly record: Data }
   | {
       readonly type: 'delete';
       readonly key: Readonly<Record<string, KeyValue>>;
@@ -54,15 +57,17 @@ export type SnapshotChange<Data, State> =
 
 // A snapshot differential (Labio and Garcia-Molina, VLDB 1996): change data
 // capture for an upstream with no change log. It compares one complete scan
-// with the previous snapshot and yields each new or changed record, a delete
-// for each key the policy judges deleted, and the new snapshot last. An empty
+// with the previous snapshot and yields an insert for each record whose key
+// the snapshot does not have, an update for each record whose key it has with
+// another fingerprint, a delete for each key the policy judges deleted, and
+// the new snapshot last. An empty
 // scan judges every key, so a failed read must throw, never yield nothing.
 export class SnapshotDifferential<Data extends Record<string, unknown>> {
   readonly name: string;
   readonly primaryKey: readonly string[];
   readonly expiresBy: string | undefined;
   readonly policy: DeletionPolicy;
-  readonly #key: (record: Data) => string;
+  readonly #key: (record: Data) => readonly KeyValue[];
 
   constructor({
     name,
@@ -104,8 +109,10 @@ export class SnapshotDifferential<Data extends Record<string, unknown>> {
       const fingerprint = fingerprintOf(this.name, record);
       if (rereads?.(record) ?? true)
         current.set(key, this.#entry(record, fingerprint));
-      if (fingerprintIn(previous.get(key)) !== fingerprint)
-        yield { type: 'upsert', record };
+      const before = previous.get(key);
+      if (before === undefined) yield { type: 'insert', record };
+      else if (fingerprintIn(before) !== fingerprint)
+        yield { type: 'update', record };
     }
     const listedSoFar = new Set([...listed, ...seen]);
     for (const [key, entry] of previous)
@@ -173,8 +180,10 @@ export class SnapshotDifferential<Data extends Record<string, unknown>> {
         const key = this.#claim(seen, record);
         const fingerprint = fingerprintOf(this.name, record);
         snapshot.set(key, this.#entry(record, fingerprint));
-        if (fingerprintIn(saved.get(key)) !== fingerprint)
-          yield { type: 'upsert', record };
+        const before = saved.get(key);
+        if (before === undefined) yield { type: 'insert', record };
+        else if (fingerprintIn(before) !== fingerprint)
+          yield { type: 'update', record };
       }
       current.set(group.key, {
         fingerprint: group.fingerprint,
@@ -239,7 +248,7 @@ export class SnapshotDifferential<Data extends Record<string, unknown>> {
   }
 
   #claim(seen: Set<string>, record: Data): string {
-    const key = this.#key(record);
+    const key = keyOf(this.#key(record));
     this.#claimKey(seen, key);
     return key;
   }
@@ -264,7 +273,7 @@ export class SnapshotDifferential<Data extends Record<string, unknown>> {
 
   // A key as its primary key fields, from the JSON of its values.
   #keyObject(key: string): Record<string, KeyValue> {
-    const values: KeyValue[] = JSON.parse(key);
+    const values = keyValuesOf(key);
     return Object.fromEntries(
       this.primaryKey.map((field, index) => {
         const value = values[index];
@@ -277,13 +286,17 @@ export class SnapshotDifferential<Data extends Record<string, unknown>> {
     );
   }
 
-  // A key as people read it: each field with its value, a string as it is.
+  // A key as people read it: each field with its value, a string as it is
+  // and bytes in hex.
   #keyText(key: string): string {
     return Object.entries(this.#keyObject(key))
-      .map(
-        ([field, value]) =>
-          `${field} ${typeof value === 'string' ? value : JSON.stringify(value)}`,
-      )
+      .map(([field, value]) => `${field} ${valueText(value)}`)
       .join(', ');
   }
+}
+
+function valueText(value: KeyValue): string {
+  if (typeof value === 'string') return value;
+  if (value instanceof Uint8Array) return `bytes ${value.toHex()}`;
+  return JSON.stringify(value);
 }

@@ -24,26 +24,33 @@ function items(
   return new SnapshotDifferential<Item>({
     name: 'items',
     primaryKey: ['id'],
-    key: (record) => JSON.stringify([record.id]),
+    key: (record) => [record.id],
     expiresBy,
     policy,
   });
 }
 
-// The ids one diff upserted and deleted, and the state it saved last.
+// The ids one diff inserted, updated and deleted, and the state it saved last.
 async function changes<State>(
   diff: AsyncIterable<SnapshotChange<Item, State>>,
-): Promise<{ upserted: string[]; deleted: string[]; state: State }> {
-  const upserted: string[] = [];
+): Promise<{
+  inserted: string[];
+  updated: string[];
+  deleted: string[];
+  state: State;
+}> {
+  const inserted: string[] = [];
+  const updated: string[] = [];
   const deleted: string[] = [];
   const states: State[] = [];
   for await (const change of diff)
-    if (change.type === 'upsert') upserted.push(change.record.id);
+    if (change.type === 'insert') inserted.push(change.record.id);
+    else if (change.type === 'update') updated.push(change.record.id);
     else if (change.type === 'delete') deleted.push(String(change.key.id));
     else states.push(change.state);
   const [state, ...more] = states;
   assert.ok(state !== undefined && more.length === 0, 'one state, last');
-  return { upserted, deleted, state };
+  return { inserted, updated, deleted, state };
 }
 
 function group(
@@ -54,7 +61,7 @@ function group(
   return { key, fingerprint, records: () => records };
 }
 
-test('a scan yields new and changed records, and an identical rescan yields nothing and saves the same state', async () => {
+test('a scan inserts the records whose keys the snapshot does not have and updates the changed ones, and an identical rescan yields nothing and saves the same state', async () => {
   const policy = new ClosedWorld();
 
   const first = await changes(
@@ -85,9 +92,9 @@ test('a scan yields new and changed records, and an identical rescan yields noth
     ),
   );
 
-  assert.deepEqual(first.upserted, ['a', 'b']);
-  assert.deepEqual(changed.upserted, ['b']);
-  assert.deepEqual(again.upserted, []);
+  assert.deepEqual([first.inserted, first.updated], [['a', 'b'], []]);
+  assert.deepEqual([changed.inserted, changed.updated], [[], ['b']]);
+  assert.deepEqual([again.inserted, again.updated], [[], []]);
   assert.equal(JSON.stringify(again.state), JSON.stringify(changed.state));
 });
 
@@ -121,7 +128,7 @@ test('under retention a key that vanished before the horizon expired and one aft
     new SnapshotDifferential<Seen>({
       name: 'seen',
       primaryKey: ['id'],
-      key: (record) => JSON.stringify([record.id]),
+      key: (record) => [record.id],
       expiresBy: 'seenAt',
       policy,
     });
@@ -195,7 +202,7 @@ test('under coverage a key outside what the scan covers stays unknown until a sc
   assert.deepEqual(Object.keys(evicted.state.snapshot), ['["a"]', '["b"]']);
   assert.deepEqual(covered.deleted, ['b']);
   assert.deepEqual(Object.keys(covered.state.snapshot), ['["a"]']);
-  assert.deepEqual(returned.upserted, []);
+  assert.deepEqual([returned.inserted, returned.updated], [[], []]);
   assert.deepEqual(returned.deleted, []);
 });
 
@@ -218,7 +225,7 @@ test('a record outside the lookback window leaves the snapshot and is never dele
   );
 
   assert.deepEqual(Object.keys(first.state.snapshot), ['["restated"]']);
-  assert.deepEqual(second.upserted, []);
+  assert.deepEqual([second.inserted, second.updated], [[], []]);
   assert.deepEqual(second.deleted, []);
 });
 
@@ -280,7 +287,7 @@ test('the part that ends a scan deletes only the keys that no part listed', asyn
   });
 });
 
-test('a changed record upserts in the part that lists it, before its scan ends', async () => {
+test('a changed record updates in the part that lists it, before its scan ends', async () => {
   const policy = new ClosedWorld();
   const loaded = await changes(
     items(policy).diff(
@@ -301,8 +308,8 @@ test('a changed record upserts in the part that lists it, before its scan ends',
     items(policy).diff([{ id: 'b', value: '1' }], part.state),
   );
 
-  assert.deepEqual(part.upserted, ['a']);
-  assert.deepEqual(last.upserted, []);
+  assert.deepEqual([part.inserted, part.updated], [[], ['a']]);
+  assert.deepEqual([last.inserted, last.updated], [[], []]);
   assert.deepEqual(last.deleted, []);
 });
 
@@ -316,7 +323,7 @@ test('two parts of one scan may list the same key, and one part may not list it 
     items(policy).diff([{ id: 'a', value: '1' }], first.state),
   );
 
-  assert.deepEqual(overlap.upserted, []);
+  assert.deepEqual([overlap.inserted, overlap.updated], [[], []]);
   assert.deepEqual(Object.keys(overlap.state.snapshot), ['["a"]']);
   await assert.rejects(
     Array.fromAsync(
@@ -402,8 +409,8 @@ test('a grouped scan keeps an unchanged group unread, follows a record that move
     ),
   );
 
-  assert.deepEqual(first.upserted, ['a', 'b']);
-  assert.deepEqual(moved.upserted, []);
+  assert.deepEqual([first.inserted, first.updated], [['a', 'b'], []]);
+  assert.deepEqual([moved.inserted, moved.updated], [[], []]);
   assert.deepEqual(moved.deleted, []);
   assert.deepEqual(evicted.deleted, []);
   assert.deepEqual(Object.keys(evicted.state.unknown ?? {}), ['["b"]']);
@@ -430,7 +437,7 @@ test('a kept group keeps its saved fingerprint and records unread, so the scan d
     ),
   );
 
-  assert.deepEqual(kept.upserted, []);
+  assert.deepEqual([kept.inserted, kept.updated], [[], []]);
   assert.deepEqual(kept.deleted, []);
   assert.deepEqual(kept.state, first.state);
 });
@@ -491,7 +498,7 @@ test('a grouped scan in parts keeps the groups it has not reached and, at its la
     ),
   );
 
-  assert.deepEqual(first.upserted, ['a']);
+  assert.deepEqual([first.inserted, first.updated], [[], ['a']]);
   assert.deepEqual(first.deleted, []);
   assert.deepEqual(last.deleted, ['c']);
   assert.deepEqual(Object.keys(last.state.groups), ['one', 'two']);
@@ -601,9 +608,217 @@ test('a record that moves into a group a later part lists is judged with that gr
     ),
   );
 
-  assert.deepEqual(moved.upserted, []);
+  assert.deepEqual([moved.inserted, moved.updated], [[], []]);
   assert.deepEqual(moved.deleted, []);
   assert.deepEqual(removed.deleted, ['b']);
+});
+
+test('a grouped scan inserts a record whose key no group had and updates a changed record, also when it moves to another group', async () => {
+  const policy = new ClosedWorld();
+  const first = await changes(
+    items(policy).diffGroups(
+      [
+        group('one', 'v1', [
+          { id: 'a', value: '1' },
+          { id: 'b', value: '1' },
+        ]),
+      ],
+      null,
+    ),
+  );
+
+  const second = await changes(
+    items(policy).diffGroups(
+      [
+        group('one', 'v2', [{ id: 'a', value: '2' }]),
+        group('two', 'v1', [
+          { id: 'b', value: '2' },
+          { id: 'c', value: '1' },
+        ]),
+      ],
+      first.state,
+    ),
+  );
+
+  assert.deepEqual([first.inserted, first.updated], [['a', 'b'], []]);
+  assert.deepEqual([second.inserted, second.updated], [['c'], ['a', 'b']]);
+});
+
+test('a key judged unknown that a later scan lists changed is an update, since the snapshot still has it', async () => {
+  const outside = new Coverage(({ key }) => key.id !== 'b');
+  const everything = new Coverage(() => true);
+  const loaded = await changes(
+    items(everything).diff(
+      [
+        { id: 'a', value: '1' },
+        { id: 'b', value: '1' },
+      ],
+      null,
+    ),
+  );
+  const groupsLoaded = await changes(
+    items(everything).diffGroups(
+      [
+        group('one', 'v1', [{ id: 'a', value: '1' }]),
+        group('two', 'v1', [{ id: 'b', value: '1' }]),
+      ],
+      null,
+    ),
+  );
+  const evicted = await changes(
+    items(outside).diff([{ id: 'a', value: '1' }], loaded.state),
+  );
+  const groupsEvicted = await changes(
+    items(outside).diffGroups(
+      [group('one', 'v1', [{ id: 'a', value: '1' }])],
+      groupsLoaded.state,
+    ),
+  );
+
+  const returned = await changes(
+    items(everything).diff(
+      [
+        { id: 'a', value: '1' },
+        { id: 'b', value: '2' },
+      ],
+      evicted.state,
+    ),
+  );
+  const groupsReturned = await changes(
+    items(everything).diffGroups(
+      [
+        group('one', 'v1', [{ id: 'a', value: '1' }]),
+        group('two', 'v2', [{ id: 'b', value: '2' }]),
+      ],
+      groupsEvicted.state,
+    ),
+  );
+
+  assert.deepEqual(Object.keys(groupsEvicted.state.unknown ?? {}), ['["b"]']);
+  assert.deepEqual([returned.inserted, returned.updated], [[], ['b']]);
+  assert.deepEqual(
+    [groupsReturned.inserted, groupsReturned.updated],
+    [[], ['b']],
+  );
+});
+
+test('a record that holds bytes diffs by its bytes: equal bytes in a Buffer or a view change nothing, and other bytes or a string or numbers in their place update', async () => {
+  type Attachment = { readonly id: string; readonly body: unknown };
+  const attachments = new SnapshotDifferential<Attachment>({
+    name: 'attachments',
+    primaryKey: ['id'],
+    key: (record) => [record.id],
+    policy: new ClosedWorld(),
+  });
+  const kinds = async (
+    diff: AsyncIterable<SnapshotChange<Attachment, unknown>>,
+  ) => {
+    const yielded: string[] = [];
+    let saved: unknown = null;
+    for await (const change of diff)
+      if (change.type === 'state') saved = change.state;
+      else if (change.type === 'delete')
+        yielded.push(`delete ${String(change.key.id)}`);
+      else yielded.push(`${change.type} ${change.record.id}`);
+    return { yielded, saved };
+  };
+  const first = await kinds(
+    attachments.diff(
+      [
+        { id: 'same', body: new Uint8Array([1, 2, 3]) },
+        { id: 'bytes', body: { nested: [new Uint8Array([1, 2, 3])] } },
+        { id: 'string', body: new Uint8Array([1, 2, 3]) },
+        { id: 'numbers', body: new Uint8Array([1, 2, 3]) },
+      ],
+      null,
+    ),
+  );
+
+  const second = await kinds(
+    attachments.diff(
+      [
+        { id: 'same', body: Buffer.from([0, 1, 2, 3]).subarray(1) },
+        { id: 'bytes', body: { nested: [new Uint8Array([1, 2, 4])] } },
+        { id: 'string', body: 'AQID' },
+        { id: 'numbers', body: [1, 2, 3] },
+      ],
+      JSON.parse(JSON.stringify(first.saved)),
+    ),
+  );
+
+  assert.deepEqual(second.yielded, [
+    'update bytes',
+    'update string',
+    'update numbers',
+  ]);
+});
+
+test('a record that holds a value JSON cannot hold with no change, other than bytes, fails', async () => {
+  const loose = new SnapshotDifferential<Record<string, unknown>>({
+    name: 'loose',
+    primaryKey: ['id'],
+    key: () => ['a'],
+    policy: new ClosedWorld(),
+  });
+
+  for (const value of [
+    new Uint16Array([1]),
+    new Uint8ClampedArray([1]),
+    new Date(0),
+    -0,
+    Number.NaN,
+    { inner: undefined },
+  ])
+    await assert.rejects(
+      Array.fromAsync(loose.diff([{ id: 'a', value }], null)),
+      /Snapshot loose records must be losslessly JSON serializable, or bytes/,
+    );
+});
+
+test('a key of bytes survives the saved state: the next scan finds it, and a delete gives it back as bytes', async () => {
+  type Row = { readonly id: Uint8Array | string; readonly value: string };
+  const rows = new SnapshotDifferential<Row>({
+    name: 'rows',
+    primaryKey: ['id'],
+    key: (record) => [record.id],
+    policy: new ClosedWorld(),
+  });
+  const run = async (records: Row[], state: unknown) => {
+    const yielded: unknown[] = [];
+    let saved: unknown = null;
+    for await (const change of rows.diff(records, state))
+      if (change.type === 'state')
+        saved = JSON.parse(JSON.stringify(change.state));
+      else if (change.type === 'delete') yielded.push(change.key.id);
+      else yielded.push(`${change.type} ${String(change.record.id)}`);
+    return { yielded, saved };
+  };
+  const first = await run(
+    [
+      { id: new Uint8Array([1, 2]), value: '1' },
+      { id: '{"bytes":"AQI"}', value: '1' },
+      { id: 'AQI', value: '1' },
+    ],
+    null,
+  );
+
+  const unchanged = await run(
+    [
+      { id: Buffer.from([1, 2]), value: '1' },
+      { id: '{"bytes":"AQI"}', value: '1' },
+      { id: 'AQI', value: '1' },
+    ],
+    first.saved,
+  );
+  const vanished = await run([], unchanged.saved);
+
+  assert.equal(first.yielded.length, 3);
+  assert.deepEqual(unchanged.yielded, []);
+  assert.deepEqual(vanished.yielded, [
+    'AQI',
+    '{"bytes":"AQI"}',
+    new Uint8Array([1, 2]),
+  ]);
 });
 
 test('a scan that lists a key or a group twice, holds a record JSON cannot hold, or reads foreign state fails', async () => {
@@ -611,7 +826,7 @@ test('a scan that lists a key or a group twice, holds a record JSON cannot hold,
   const loose = new SnapshotDifferential<Record<string, unknown>>({
     name: 'loose',
     primaryKey: ['id'],
-    key: (record) => JSON.stringify([record.id]),
+    key: () => ['a'],
     policy,
   });
 
@@ -625,6 +840,18 @@ test('a scan that lists a key or a group twice, holds a record JSON cannot hold,
         null,
       ),
       /Snapshot items returned id a twice in one scan/,
+    ],
+    [
+      new SnapshotDifferential<{ readonly id: Uint8Array }>({
+        name: 'blobs',
+        primaryKey: ['id'],
+        key: (record) => [record.id],
+        policy,
+      }).diff(
+        [{ id: new Uint8Array([1, 255]) }, { id: Buffer.from([1, 255]) }],
+        null,
+      ),
+      /Snapshot blobs returned id bytes 01ff twice in one scan/,
     ],
     [
       items(policy).diffGroups(
@@ -668,7 +895,7 @@ test('a grouped scan reads its saved snapshot where it lies, so a large snapshot
     const headers = new SnapshotDifferential({
       name: 'headers',
       primaryKey: ['id'],
-      key: (record) => JSON.stringify([record.id]),
+      key: (record) => [record.id],
       policy: new ClosedWorld(),
     });
     function* mailbox(first, last) {
@@ -687,9 +914,10 @@ test('a grouped scan reads its saved snapshot where it lies, so a large snapshot
         if (change.type === 'state') return JSON.stringify(change.state);
     }
     async function changes(state) {
-      const counts = { upserts: 0, deletes: 0 };
+      const counts = { inserts: 0, updates: 0, deletes: 0 };
       for await (const change of headers.diffGroups(mailbox(1, 50_000), state))
-        if (change.type === 'upsert') counts.upserts++;
+        if (change.type === 'insert') counts.inserts++;
+        else if (change.type === 'update') counts.updates++;
         else if (change.type === 'delete') counts.deletes++;
       return counts;
     }
@@ -702,5 +930,9 @@ test('a grouped scan reads its saved snapshot where it lies, so a large snapshot
     { timeout: 50_000 },
   );
 
-  assert.deepEqual(JSON.parse(stdout), { upserts: 10, deletes: 10 });
+  assert.deepEqual(JSON.parse(stdout), {
+    inserts: 10,
+    updates: 0,
+    deletes: 10,
+  });
 });

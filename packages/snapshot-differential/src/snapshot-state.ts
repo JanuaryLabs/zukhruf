@@ -1,3 +1,4 @@
+import type { KeyValue } from './deletion-policy.ts';
 import { isPlainObject } from './fingerprint.ts';
 
 // What the last committed scan saw of one key: the fingerprint of its record,
@@ -6,7 +7,7 @@ import { isPlainObject } from './fingerprint.ts';
 export type SavedEntry =
   string | readonly [fingerprint: string, expiresBy: string];
 
-// Each key (the JSON of its primary key values) mapped to what the last
+// Each key (the JSON of its primary key values, see keyOf) mapped to what the last
 // committed scan saw of it. Keys judged unknown stay here too. While a scan
 // in parts is open, listed holds the keys its earlier parts listed.
 export type SnapshotState = {
@@ -93,10 +94,38 @@ function compareKeys(a: string, b: string): number {
   return 0;
 }
 
-export function fingerprintIn(
-  entry: SavedEntry | undefined,
-): string | undefined {
-  return typeof entry === 'string' ? entry : entry?.[0];
+export function fingerprintIn(entry: SavedEntry): string {
+  return typeof entry === 'string' ? entry : entry[0];
+}
+
+// A key value as the JSON of a key holds it. Bytes are an object, and no
+// other key value is one, so no string key has the form of bytes.
+type SavedKeyValue = string | number | boolean | { readonly bytes: string };
+
+// The JSON array of a record's primary key values.
+export function keyOf(values: readonly KeyValue[]): string {
+  return JSON.stringify(
+    values.map((value): SavedKeyValue =>
+      value instanceof Uint8Array
+        ? {
+            bytes: value.toBase64({
+              alphabet: 'base64url',
+              omitPadding: true,
+            }),
+          }
+        : value,
+    ),
+  );
+}
+
+// The primary key values of a key that keyOf wrote.
+export function keyValuesOf(key: string): KeyValue[] {
+  const values: SavedKeyValue[] = JSON.parse(key);
+  return values.map((value) =>
+    typeof value === 'object'
+      ? Uint8Array.fromBase64(value.bytes, { alphabet: 'base64url' })
+      : value,
+  );
 }
 
 function entries(name: string, snapshot: unknown): Map<string, SavedEntry> {
