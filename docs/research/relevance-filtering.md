@@ -4,7 +4,7 @@ This record keeps what the research for relevance filtering found, before the pa
 
 Read this record before you change the design, add a profile type, or start a new evaluation. Add the result of each new round to this record.
 
-Status on 2026-10-28: rounds 1, 2 and 3 chose no design. The best design so far ranks as well as a typed keyword, or better, but its threshold accepts too many articles. The exam set is sealed.
+Status on 2026-10-28: rounds 1 to 4 chose no design. Round 4 came closest: the profile sentence plus the reader's own keywords beat a typed keyword on 8 of 11 profiles, but not on all profiles with enough certainty. The exam set is sealed.
 
 ## Words in this record
 
@@ -56,6 +56,12 @@ No candidate passed. The narrow keyword rule (a stem that a person types first, 
 Round 3 added what round 2 lacked: Rocchio over stemmed tf-idf words, with the profile name and sentence as the query, the classic filtering profile (Buckley, Salton and Allan 1994). It fused it with the dense Rocchio by adding the two scores after z-score normalisation (Lee 1997). Same labels, draws and pass rule as round 2 (`round-3/selection-rule.json`, sha256 `f846855f…`). The dense Rocchio gave exactly the round-2 score, so the two runs agree.
 
 No candidate passed. The fused design scored 0.557 against the keyword rule's 0.569 (interval of the difference −0.080 to +0.052), and it beats the broad keyword rule. Its ranking is the best of every design on most profiles (average precision: chips 0.73, courts 0.82, robotics 0.86, company results 0.96). Its threshold fails. Most articles share no stemmed word with a profile, so the scores fall into two groups: articles with no shared word, and articles with one or more. The binormal model takes the second group for the relevant curve, and the profile accepts 300 to 1,000 articles where 50 to 100 are relevant.
+
+## Round 4 (2026-10-28): the reader's keywords as evidence, no design chosen
+
+On 2026-10-28 the maintainer agreed that a profile can hold optional keywords next to its sentence. Round 4 adds the keywords to the probability as evidence, with naive Bayes (Lewis 1998): a matching article gets the odds ratio of a keyword match among relevant and among all articles. It does not use the keywords as a gate, because the post-hoc check in round 3 showed that "keyword or filter" adds the wrong picks of both. To stop the reuse of one labelled set (limitation 12), round 4 tests on a fresh set: 1,675 articles from The Decoder and SiliconANGLE, January to March 2026, labelled by four blind annotators. It teaches from the whole round-2 set. Its rule was frozen before the fresh articles were crawled (`round-4/selection-rule.json`, sha256 `ead2b9f6…`).
+
+No candidate passed, but the result is the closest so far. The sentence alone plus the keywords scored 0.733 against the typed keyword's 0.679, and its Brier skill is +0.475. It beats the broad keyword rule and the trivial designs. Against the narrow keyword, the interval is −0.012 to +0.118, so the rule does not choose it. It wins on 8 of 11 profiles, ties on chips, and loses on robotics (0.833 against 0.860) and regulation (0.117 against 0.303). On regulation, the binormal fit is unstable: in some draws it takes the cluster of government stories for the relevant curve and accepts hundreds of articles. Fitting the binormal model inside each keyword group did not help, because the groups are too small. Biology had 7 relevant fresh articles, too few to count: 0.782 against the keyword's 0.667.
 
 ## Limitations
 
@@ -127,7 +133,13 @@ No candidate passed. The fused design scored 0.557 against the keyword rule's 0.
 
 **What happens.** Round 3 was designed after round 2's results on the same labels. Each round that reuses a development set fits it a little more (Dwork et al. 2015).
 
-**Before you change it.** For a round 4, label a fresh month of the same feeds with the same rule, or count the reuse as a known risk. The sealed exam stays the final check.
+**Before you change it.** For a round 4, label a fresh month of the same feeds with the same rule, or count the reuse as a known risk. The sealed exam stays the final check. Round 4 did this with January to March 2026.
+
+### 13. The binormal fit can take a wrong cluster
+
+**What happens.** In round 4, the binormal model for regulation sometimes fitted its relevant curve to a large group of government stories, most of them labelled not relevant or ambiguous. The profile then accepted hundreds of articles in that draw.
+
+**Before you change it.** Guard the fit before you change the design: for example, bound the share of relevant articles that the fit may claim, or fall back when the share jumps far above the taught evidence. Pre-register the guard and test it on a fresh slice.
 
 ## Rules for every round
 
