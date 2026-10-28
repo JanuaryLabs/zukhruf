@@ -1898,6 +1898,69 @@ test(
 );
 
 test(
+  'a teardown whose removal of a shared server of another version fails ends successfully and removes its run',
+  { skip: proxyless, timeout: 300_000 },
+  async (t) => {
+    await using directory = await runsDirectory(
+      'zukhruf-testing-refused-removal-',
+    );
+    const version = uniqueVersion();
+    const ids: string[] = [];
+    const other = await holder(
+      t,
+      directory.path,
+      await anotherVersion(directory.path, version),
+      randomUUID(),
+      runEnvironment(join(directory.path, 'state')),
+    );
+    const server = other.id;
+    ids.push(server);
+    await using proxy = await EngineProxy.start(engine);
+    // The teardown holds the sweep lease: its look for process leases waits until the holder ended.
+    const { held, release } = sweepHold(proxy, version);
+    proxy.intercept('DELETE', `/containers/${server}`, () => {
+      throw new Error('The engine refuses this removal.');
+    });
+    const state = join(directory.path, 'state-teardown');
+    const sweeping = currentRun(
+      t,
+      directory.path,
+      randomUUID(),
+      proxiedEnvironment(state, proxy),
+    );
+    sweeping.catch(() => {});
+    try {
+      assert.equal(
+        await firstOf(held, sweeping),
+        'reached',
+        'the teardown must hold the sweep lease of the version',
+      );
+      await ended(t, other, version);
+      release();
+
+      // A run whose teardown fails rejects with its output.
+      ids.push(await sweeping);
+
+      assert.ok(
+        proxy.requests.some(
+          ({ method, path }) =>
+            method === 'DELETE' && path === `/containers/${server}`,
+        ),
+      );
+      assert.deepEqual(
+        await readdir(join(state, 'zukhruf-testing', 'docker-runs')),
+        [],
+      );
+    } finally {
+      release();
+      other.child.kill('SIGKILL');
+      await sweeping.catch(() => {});
+      for (const id of ids) await removeContainer(id).catch(() => {});
+    }
+  },
+);
+
+test(
   'a teardown that finds a sweep of the same version running for longer than it waits keeps that version and ends cleanly',
   { skip: proxyless, timeout: 300_000 },
   async (t) => {

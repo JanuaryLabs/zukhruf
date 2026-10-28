@@ -279,6 +279,7 @@ async function takeSweepLease(
  * version (ADR 0012), unless a test process of that version holds a process
  * lease (ADR 0014). The sweep lease of the version comes first, and the look
  * for process leases after it. A server with no version label has no lease.
+ * A removal that fails keeps the server, and the teardown goes on.
  */
 async function removeOtherVersions(engine: Docker): Promise<void> {
   const signal = () => AbortSignal.timeout(ENGINE_CALL_TIMEOUT);
@@ -311,7 +312,11 @@ async function removeOtherVersions(engine: Docker): Promise<void> {
     for (const { Id } of servers) {
       // Another run's teardown can remove it first.
       const container = await engine.containers.find(Id, { signal: signal() });
-      await container?.remove({ force: true, v: true, signal: signal() });
+      // A server that the engine does not remove stays for a later
+      // teardown: the servers of another version never fail this run.
+      await container
+        ?.remove({ force: true, v: true, signal: signal() })
+        .catch(() => {});
     }
   }
 }
