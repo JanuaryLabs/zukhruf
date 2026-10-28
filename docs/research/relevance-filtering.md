@@ -4,7 +4,7 @@ This record keeps what the research for relevance filtering found, before the pa
 
 Read this record before you change the design, add a profile type, or start a new evaluation. Add the result of each new round to this record.
 
-Status on 2026-10-28: rounds 1 to 4 chose no design. Round 4 came closest: the profile sentence plus the reader's own keywords beat a typed keyword on 8 of 11 profiles, but not on all profiles with enough certainty. The exam set is sealed.
+Status on 2026-10-28: rounds 1 to 5 chose no design. On two fresh slices, the profile sentence plus the reader's own keywords beats a typed keyword by about 0.05 F0.5 on average, but the interval across 8 to 11 profiles includes 0 both times. The package waits for a design that passes, as the plan orders. The exam set is sealed.
 
 ## Words in this record
 
@@ -62,6 +62,12 @@ No candidate passed. The fused design scored 0.557 against the keyword rule's 0.
 On 2026-10-28 the maintainer agreed that a profile can hold optional keywords next to its sentence. Round 4 adds the keywords to the probability as evidence, with naive Bayes (Lewis 1998): a matching article gets the odds ratio of a keyword match among relevant and among all articles. It does not use the keywords as a gate, because the post-hoc check in round 3 showed that "keyword or filter" adds the wrong picks of both. To stop the reuse of one labelled set (limitation 12), round 4 tests on a fresh set: 1,675 articles from The Decoder and SiliconANGLE, January to March 2026, labelled by four blind annotators. It teaches from the whole round-2 set. Its rule was frozen before the fresh articles were crawled (`round-4/selection-rule.json`, sha256 `ead2b9f6…`).
 
 No candidate passed, but the result is the closest so far. The sentence alone plus the keywords scored 0.733 against the typed keyword's 0.679, and its Brier skill is +0.475. It beats the broad keyword rule and the trivial designs. Against the narrow keyword, the interval is −0.012 to +0.118, so the rule does not choose it. It wins on 8 of 11 profiles, ties on chips, and loses on robotics (0.833 against 0.860) and regulation (0.117 against 0.303). On regulation, the binormal fit is unstable: in some draws it takes the cluster of government stories for the relevant curve and accepts hundreds of articles. Fitting the binormal model inside each keyword group did not help, because the groups are too small. Biology had 7 relevant fresh articles, too few to count: 0.782 against the keyword's 0.667.
+
+## Round 5 (2026-10-28): replication on a second fresh slice, no design chosen
+
+Round 5 tested the round-4 design again, unchanged, on 1,735 articles from October to December 2025, labelled by four blind annotators (`round-5/selection-rule.json`, sha256 `11faab82…`). It also tested one guard for limitation 13: the stream counts as much as the taught articles in the shape of the two bell curves (Nigam et al. 2000).
+
+No candidate passed. The design scored 0.697 against the typed keyword's 0.644, the same lead as in round 4 (+0.05), and its interval was −0.040 to +0.137. It lost again on robotics, regulation and, by a little, chips. The guard made every profile but regulation worse (0.592): the stream holds the information about the base rate that a few taught articles do not.
 
 ## Limitations
 
