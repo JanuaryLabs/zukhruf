@@ -85,6 +85,9 @@
     },
     {
       "path": "./packages/sqlite/reader"
+    },
+    {
+      "path": "./packages/sqlite/changefeed"
     }
   ]
 }
