@@ -1,6 +1,6 @@
 {
   "name": "@zukhruf/docker",
-  "version": "0.3.46",
+  "version": "0.3.51",
   "description": "A client for the Docker Engine API on Node.js. It selects the engine that the Docker CLI selects, and it sends HTTP requests to that engine through a Unix socket, a Windows named pipe or SSH, with no Docker CLI and no third-party dependencies.",
   "license": "MIT",
   "repository": {
@@ -40,6 +40,6 @@
     "access": "public"
   },
   "dependencies": {
-    "@zukhruf/async": "^0.3.46"
+    "@zukhruf/async": "^0.3.51"
   }
 }
