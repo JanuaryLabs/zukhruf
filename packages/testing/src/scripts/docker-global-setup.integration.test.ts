@@ -23,7 +23,10 @@ import { BindSourceNotFoundError, Docker } from '@zukhruf/docker';
 
 import { DockerTestbed } from '../docker/index.ts';
 import { RunRecords } from '../docker/run-records.ts';
-import { TemporaryFiles } from '../fs/temporary-files.ts';
+import {
+  type TemporaryDirectory,
+  TemporaryFiles,
+} from '../fs/temporary-files.ts';
 import { EngineProxy } from '../testing/engine-proxy.ts';
 
 const docker = await Docker.connect({ environment: process.env });
@@ -209,6 +212,45 @@ async function removeLeftovers(state: State | undefined): Promise<void> {
     await removeVolume(name).catch(() => {});
 }
 
+/**
+ * A temporary directory for the state of the runs that a test starts. A run
+ * that the test kills can leave a container that only its records name, such
+ * as a process lease that the engine created after the kill, and the records
+ * go with the directory. Disposal removes what carries the label of each run
+ * recorded below the directory, except a shared server, and then the
+ * directory.
+ */
+async function runsDirectory(prefix: string): Promise<TemporaryDirectory> {
+  const directory = await new TemporaryFiles().directory(prefix);
+  const cleanup = async () => {
+    try {
+      for (const entry of await readdir(directory.path, { recursive: true })) {
+        if (
+          !/(^|\/)zukhruf-testing\/docker-runs\/[^/]+\/run\.json$/.test(entry)
+        )
+          continue;
+        const { id }: { id: string } = JSON.parse(
+          await readFile(join(directory.path, entry), 'utf8'),
+        );
+        const label = `dev.zukhruf.testing.run=${id}`;
+        for (const { Id, Labels } of await docker.containers.list({
+          all: true,
+          filters: { label: [label] },
+        }))
+          if (Labels?.['dev.zukhruf.testing.shared'] !== '1')
+            await removeContainer(Id).catch(() => {});
+        for (const { Name } of await docker.volumes.list({
+          filters: { label: [label] },
+        }))
+          await removeVolume(Name).catch(() => {});
+      }
+    } finally {
+      await directory.cleanup();
+    }
+  };
+  return { path: directory.path, cleanup, [Symbol.asyncDispose]: cleanup };
+}
+
 /** The pid of a process that has ended. */
 async function endedPid(): Promise<number> {
   const { child, exited } = started(['--eval', ''], process.env);
@@ -256,9 +298,7 @@ for (const mode of [
       timeout: 180_000,
     },
     async (t) => {
-      await using directory = await new TemporaryFiles().directory(
-        'zukhruf-testing-cleanup-',
-      );
+      await using directory = await runsDirectory('zukhruf-testing-cleanup-');
       // Another run's container and volume: the sweep must match the run id,
       // not only the label.
       const unrelated = new DockerTestbed({
@@ -457,9 +497,7 @@ test(
   'recovery leaves a dead runner’s run alone while one of its test processes lives',
   { timeout: 180_000 },
   async (t) => {
-    await using directory = await new TemporaryFiles().directory(
-      'zukhruf-testing-orphan-',
-    );
+    await using directory = await runsDirectory('zukhruf-testing-orphan-');
     const statePath = join(directory.path, 'state.json');
     const file = join(directory.path, 'worker.test.ts');
     await writeFile(
@@ -602,9 +640,7 @@ test(
   'two runs that start together recover a dead run, and both succeed',
   { skip: proxyless, timeout: 180_000 },
   async (t) => {
-    await using directory = await new TemporaryFiles().directory(
-      'zukhruf-testing-recovery-',
-    );
+    await using directory = await runsDirectory('zukhruf-testing-recovery-');
     await using proxy = await EngineProxy.start(engine);
     const { state, recover, root } = await killedRun(t, directory.path, proxy);
     // The first volume list passes; every later one waits two seconds, so a
@@ -631,9 +667,7 @@ test(
   'a run that starts while another recovers a dead run leaves the run to it',
   { skip: proxyless, timeout: 180_000 },
   async (t) => {
-    await using directory = await new TemporaryFiles().directory(
-      'zukhruf-testing-recovery-',
-    );
+    await using directory = await runsDirectory('zukhruf-testing-recovery-');
     await using proxy = await EngineProxy.start(engine);
     const { state, recover, root } = await killedRun(t, directory.path, proxy);
     // Every container list marks that a recovery has claimed its run and is
@@ -1258,9 +1292,7 @@ test(
   'a shared server of another version is kept through a run that ends while a process of that version still runs',
   { timeout: 300_000 },
   async (t) => {
-    await using directory = await new TemporaryFiles().directory(
-      'zukhruf-testing-leased-',
-    );
+    await using directory = await runsDirectory('zukhruf-testing-leased-');
     const probe = randomUUID();
     const env = runEnvironment(join(directory.path, 'state'));
     const ids: string[] = [];
@@ -1454,9 +1486,7 @@ test(
   'a test process that reuses a shared server while a teardown sweeps its version waits until the sweep ends, then gets a running server',
   { skip: proxyless, timeout: 300_000 },
   async (t) => {
-    await using directory = await new TemporaryFiles().directory(
-      'zukhruf-testing-sweep-wait-',
-    );
+    await using directory = await runsDirectory('zukhruf-testing-sweep-wait-');
     const version = uniqueVersion();
     const library = await anotherVersion(directory.path, version);
     const probe = randomUUID();
@@ -1531,9 +1561,7 @@ test(
   'a teardown that sweeps while a test process of that version looks for the sweep lease keeps the servers that process uses',
   { skip: proxyless, timeout: 300_000 },
   async (t) => {
-    await using directory = await new TemporaryFiles().directory(
-      'zukhruf-testing-sweep-order-',
-    );
+    await using directory = await runsDirectory('zukhruf-testing-sweep-order-');
     const version = uniqueVersion();
     const library = await anotherVersion(directory.path, version);
     const probe = randomUUID();
@@ -1597,9 +1625,7 @@ test(
   // The holder, two deadlines of 45 s, the 8 s window, the sweeps after it and the wait for the lease to go, with margin.
   { skip: proxyless, timeout: 180_000 },
   async (t) => {
-    await using directory = await new TemporaryFiles().directory(
-      'zukhruf-testing-two-sweeps-',
-    );
+    await using directory = await runsDirectory('zukhruf-testing-two-sweeps-');
     const version = uniqueVersion();
     const ids: string[] = [];
     const other = await holder(
@@ -1775,9 +1801,7 @@ test(
   'a sweep lease that a killed teardown left created does not stop a test process of its version',
   { skip: proxyless || signals, timeout: 300_000 },
   async (t) => {
-    await using directory = await new TemporaryFiles().directory(
-      'zukhruf-testing-stale-sweep-',
-    );
+    await using directory = await runsDirectory('zukhruf-testing-stale-sweep-');
     const version = uniqueVersion();
     const library = await anotherVersion(directory.path, version);
     const probe = randomUUID();
@@ -1827,7 +1851,7 @@ test(
   'a sweep lease that a killed teardown left created does not stop the next teardown from removing the servers of its version',
   { skip: proxyless || signals, timeout: 300_000 },
   async (t) => {
-    await using directory = await new TemporaryFiles().directory(
+    await using directory = await runsDirectory(
       'zukhruf-testing-stale-sweep-teardown-',
     );
     const version = uniqueVersion();
@@ -1877,9 +1901,7 @@ test(
   'a teardown that finds a sweep of the same version running for longer than it waits keeps that version and ends cleanly',
   { skip: proxyless, timeout: 300_000 },
   async (t) => {
-    await using directory = await new TemporaryFiles().directory(
-      'zukhruf-testing-slow-sweep-',
-    );
+    await using directory = await runsDirectory('zukhruf-testing-slow-sweep-');
     const version = uniqueVersion();
     const ids: string[] = [];
     const other = await holder(
