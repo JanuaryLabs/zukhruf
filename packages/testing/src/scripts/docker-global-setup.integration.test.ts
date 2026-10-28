@@ -494,6 +494,131 @@ test(
 );
 
 test(
+  'a create that the engine finishes after a later run recovered its killed run is removed by the run after it',
+  // The recovery deletes the records while the engine still has the create.
+  { skip: proxyless || signals, timeout: 180_000, todo: '#2825' },
+  async (t) => {
+    await using directory = await runsDirectory('zukhruf-testing-late-create-');
+    const statePath = join(directory.path, 'state.json');
+    const file = join(directory.path, 'worker.test.ts');
+    // The image must not be pulled behind the held create.
+    if ((await docker.images.inspect('alpine:latest')) === undefined)
+      await docker.images.pull('alpine:latest');
+    // Disposed after the proxy, which waits until the engine answered the
+    // held create.
+    await using leftovers = new AsyncDisposableStack();
+    await using proxy = await EngineProxy.start(engine);
+    // A create that the engine has, and finishes only after the recovery.
+    const reached = Promise.withResolvers<void>();
+    const gate = Promise.withResolvers<void>();
+    proxy.intercept('POST', '/containers/create', async () => {
+      reached.resolve();
+      await gate.promise;
+    });
+    await writeFile(
+      file,
+      `
+      import { test } from 'node:test';
+      import { writeFile } from 'node:fs/promises';
+      import { DockerTestbed } from ${library};
+      test('a slow create', { timeout: 120000 }, async () => {
+        await writeFile(${JSON.stringify(statePath)}, JSON.stringify({ run: process.env.ZUKHRUF_TESTING_RUN_ID, record: process.env.ZUKHRUF_TESTING_RUN_DIR, pid: process.pid }));
+        await new DockerTestbed({ environment: process.env }).start({ Image: 'alpine:latest', Cmd: ['sleep', '600'] });
+      });
+    `,
+    );
+    const env = proxiedEnvironment(join(directory.path, 'state'), proxy);
+    const killed = started(runnerArgs(file), env);
+    let run: string | undefined;
+    try {
+      assert.equal(
+        await firstOf(reached.promise, killed.exited),
+        'reached',
+        killed.output(),
+      );
+      const state = await readState<Omit<SmallState, 'id'>>(t, statePath);
+      run = state.run;
+      killed.child.kill('SIGKILL');
+      process.kill(state.pid, 'SIGKILL');
+      await killed.exited;
+      const { pid } = state;
+      await t.waitFor(() => assert.equal(alive(pid), false), {
+        timeout: 5_000,
+      });
+      const label = `dev.zukhruf.testing.run=${state.run}`;
+      // A later run recovers the killed run while the engine still has its create.
+      await emptyRun(file, env);
+      gate.resolve();
+      await t.waitFor(
+        async () => assert.notDeepEqual(await labelled(label), []),
+        { timeout: 60_000, interval: 250 },
+      );
+
+      await emptyRun(file, env);
+
+      assert.deepEqual(await labelled(label), []);
+    } finally {
+      gate.resolve();
+      if (killed.child.exitCode === null && killed.child.signalCode === null)
+        killed.child.kill('SIGKILL');
+      leftovers.defer(async () => {
+        if (run === undefined) return;
+        for (const id of await labelled(`dev.zukhruf.testing.run=${run}`))
+          await removeContainer(id).catch(() => {});
+      });
+    }
+  },
+);
+
+test(
+  'a global teardown whose cleanup takes longer than 250 s keeps the run’s records and sets exit code 1',
+  // The 250 s of the teardown, and margin.
+  { skip: proxyless, timeout: 420_000 },
+  async (t) => {
+    await using directory = await runsDirectory(
+      'zukhruf-testing-slow-teardown-',
+    );
+    const statePath = join(directory.path, 'state.json');
+    const file = join(directory.path, 'worker.test.ts');
+    await writeFile(file, smallWorkerSource(statePath, ''));
+    await using proxy = await EngineProxy.start(engine);
+    // After the test wrote its state, the lists are the teardown's. Each
+    // one waits 150 s, below the 240 s of one engine call, so the teardown
+    // gets no error and runs out of its 250 s.
+    const stop = new AbortController();
+    const slow = async () => {
+      if (existsSync(statePath))
+        await setTimeout(150_000, undefined, { signal: stop.signal }).catch(
+          () => {},
+        );
+    };
+    proxy.intercept('GET', '/containers/json', slow);
+    proxy.intercept('GET', '/volumes', slow);
+    const run = started(
+      runnerArgs(file),
+      proxiedEnvironment(join(directory.path, 'state'), proxy),
+    );
+    try {
+      const code = await run.exited;
+
+      // The test passed, so only the teardown sets the exit code.
+      assert.equal(code, 1, run.output());
+      assert.match(
+        run.output(),
+        /The Docker cleanup did not finish within 250 s/,
+      );
+      assert.match(run.output(), /retained ownership record/);
+      const state = await readState<SmallState>(t, statePath);
+      await access(join(state.record, 'run.json'));
+    } finally {
+      stop.abort();
+      if (run.child.exitCode === null && run.child.signalCode === null)
+        run.child.kill('SIGKILL');
+    }
+  },
+);
+
+test(
   'recovery leaves a dead runner’s run alone while one of its test processes lives',
   { timeout: 180_000 },
   async (t) => {
