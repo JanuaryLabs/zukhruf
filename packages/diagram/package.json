@@ -1,6 +1,6 @@
 {
   "name": "@zukhruf/diagram",
-  "version": "0.3.46",
+  "version": "0.3.50",
   "description": "Architecture and sequence diagrams as React components: declare nodes, edges, lanes and signals, and render them as SVG, HTML or canvas.",
   "license": "MIT",
   "repository": {
