@@ -1,37 +1,26 @@
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { parseArgs } from 'node:util';
-
-import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
-import { cosineSimilarity, embed } from 'ai';
 
 import { Collection } from '@zukhruf/embeddings';
 
 import { design3152b } from '../src/index.ts';
 import { readEvents, writeEvents } from './accepted.ts';
-import {
-  type EvalSet,
-  type TextKind,
-  readMetadata,
-  readSet,
-  setNames,
-} from './answer-key.ts';
-import { type Interval, pairedBootstrap } from './bootstrap.ts';
+import { type EvalSet, readMetadata, readSet, setNames } from './answer-key.ts';
+import { type Interval, changeOfMainScore } from './bootstrap.ts';
+import { embeddingModel } from './embedding-model.ts';
 import { feed } from './feed.ts';
 import type { Partition } from './metrics/contingency.ts';
 import type { Score } from './metrics/f-measure.ts';
-import { METRICS_VERSION, mainScore } from './metrics/metrics.ts';
+import { METRICS_VERSION } from './metrics/metrics.ts';
 import { committed, currentPin } from './pin.ts';
 import { decide } from './roles.ts';
-import { type SetScore, partitions, score } from './score.ts';
+import { type SetScore, score } from './score.ts';
 import { type Entry, Scoreboard, type SetEntry } from './scoreboard.ts';
-import { EcbPlusCorpus } from './texts/ecbplus.ts';
-import { GunViolenceCorpus } from './texts/gvc.ts';
-import { HeadlineGroupingRelease } from './texts/hlgd.ts';
-import { CACHE_FOLDER, type TextSource } from './texts/text-source.ts';
-import { WcepRows } from './texts/wcep.ts';
-import { WebPages } from './texts/web.ts';
+import { SOURCES } from './texts/sources.ts';
+import { CACHE_FOLDER } from './texts/text-source.ts';
+import { verdict } from './verdict.ts';
 
 // Runs a design of the package on the evaluation sets, and compares each
 // score with the latest accepted design (README.md).
@@ -47,19 +36,6 @@ Environment:
 
 // The design that this run scores.
 const DESIGN = design3152b;
-
-// The paired bootstrap of the change against the latest accepted design
-// (#3182). The seed is fixed, so a run gives the same interval each time.
-const REPLICATES = 2000;
-const SEED = 3182;
-
-const SOURCES: Record<TextKind, TextSource> = {
-  gvc: new GunViolenceCorpus(),
-  ecbplus: new EcbPlusCorpus(),
-  hlgd: new HeadlineGroupingRelease(),
-  wcep: new WcepRows(),
-  web: new WebPages(),
-};
 
 const RESULTS_FOLDER = join(import.meta.dirname, 'results');
 
@@ -79,6 +55,10 @@ if (values.help || baseURL === undefined) {
 }
 if (values.accept !== undefined && positionals.length > 0)
   throw new Error('--accept records a design on every set: name no set.');
+if (values.exam && positionals.length > 0)
+  throw new Error(
+    '--exam gives a verdict that needs every regression set in the same run: name no set.',
+  );
 
 const scoreboard = Scoreboard.read();
 const pin = currentPin(DESIGN);
@@ -97,15 +77,20 @@ console.log(
     : `Design ${DESIGN.name} is accepted as ${holds.design} (pinned to commit ${holds.pin.commit}).`,
 );
 
-const model = createOpenAICompatible({
-  name: 'llama.cpp',
-  baseURL,
-}).embeddingModel(DESIGN.embeddingModel);
-await checkModel();
+const model = await embeddingModel(baseURL, DESIGN);
 
 const accepted: Record<string, SetEntry> = {};
 const events: { set: EvalSet; eventOf: Partition }[] = [];
 const refusals: string[] = [];
+const regressionSets: Record<string, Interval> = {};
+// The exam sets of this run, scored for the first time.
+const exams: {
+  file: string;
+  payload: Record<string, unknown>;
+  mainScore: number;
+  baselines: number[];
+  change: Interval;
+}[] = [];
 for (const name of positionals.length > 0 ? positionals : setNames()) {
   const decision = decide(readMetadata(name), values.exam);
   if (!decision.run) {
@@ -118,18 +103,35 @@ for (const name of positionals.length > 0 ? positionals : setNames()) {
   using vectorDatabase = new DatabaseSync(
     join(CACHE_FOLDER, 'vectors', `${name}.sqlite`),
   );
-  const fed = await feed(
-    set.rows,
-    texts.texts,
-    new Collection({ database: vectorDatabase, model }),
-    DESIGN,
-  );
+  const vectors = new Collection({ database: vectorDatabase, model });
+  const fed = await feed(set.rows, texts.texts, vectors, DESIGN);
   const result = score(set.rows, texts.texts, fed.eventOf, fed.adds);
   const latest = scoreboard.latest(name);
-  const latestEvents =
-    latest === null ? null : readEvents(latest.entry.design, set);
+  // The accepted design to compare with: the latest that scored the set, or
+  // else the latest accepted design.
+  const against = latest?.entry ?? scoreboard.entries.at(-1) ?? null;
+  const stored = against === null ? null : readEvents(against.design, set);
+  // A design with no events on these labels, as on an exam set, runs from
+  // its pin in this run (#3189).
+  const live =
+    against === null || stored !== null
+      ? null
+      : (await feed(set.rows, texts.texts, vectors, against.pin.design))
+          .eventOf;
+  const againstEvents = stored ?? live;
   const change =
-    latestEvents === null ? null : bootstrap(set, fed.eventOf, latestEvents);
+    againstEvents === null
+      ? null
+      : changeOfMainScore(set.rows, fed.eventOf, againstEvents);
+  // The main score of that design on the set.
+  const againstF05 =
+    live === null
+      ? (latest?.score.conll.f05 ?? null)
+      : score(set.rows, texts.texts, live, []).conll.f05;
+  const acceptedScore =
+    against === null || againstF05 === null
+      ? null
+      : { design: against.design, f05: againstF05 };
   if (decision.firstScore) recordFirstScore(set);
 
   const entry: SetEntry = {
@@ -143,28 +145,44 @@ for (const name of positionals.length > 0 ? positionals : setNames()) {
     pair: rounded(result.pair),
     conll: { f1: round(result.conll.f1), f05: round(result.conll.f05) },
   };
+  const payload = {
+    set: name,
+    role: decision.role,
+    at: new Date().toISOString(),
+    metricsVersion: METRICS_VERSION,
+    pin,
+    vanished: texts.vanished,
+    changed: texts.changed,
+    change: change === null ? null : { against: against!.design, ...change },
+    ...result,
+    eventOf: Object.fromEntries(fed.eventOf),
+    adds: fed.adds,
+    // The events of the accepted design when it ran in this run.
+    accepted:
+      live === null
+        ? null
+        : {
+            design: against!.design,
+            conllF05: againstF05,
+            eventOf: Object.fromEntries(live),
+          },
+  };
+  const file = join(RESULTS_FOLDER, `${name}.json`);
   mkdirSync(RESULTS_FOLDER, { recursive: true });
-  writeFileSync(
-    join(RESULTS_FOLDER, `${name}.json`),
-    JSON.stringify(
-      {
-        set: name,
-        role: decision.role,
-        at: new Date().toISOString(),
-        metricsVersion: METRICS_VERSION,
-        pin,
-        vanished: texts.vanished,
-        changed: texts.changed,
-        change:
-          change === null ? null : { against: latest!.entry.design, ...change },
-        ...result,
-        eventOf: Object.fromEntries(fed.eventOf),
-        adds: fed.adds,
-      },
-      null,
-      1,
-    ),
-  );
+  writeFileSync(file, JSON.stringify(payload, null, 1));
+  if (change !== null && decision.role === 'regression')
+    regressionSets[name] = change;
+  if (change !== null && decision.role === 'exam')
+    exams.push({
+      file,
+      payload,
+      mainScore: result.conll.f05,
+      baselines: [
+        result.baselines.allSingletons.conll.f05,
+        result.baselines.allInOne.conll.f05,
+      ],
+      change,
+    });
 
   console.log(
     `\n${name} (${decision.role}): ${result.reports} of ${set.rows.length} reports, ${texts.vanished.length} vanished, ${texts.changed.length} changed text`,
@@ -174,7 +192,7 @@ for (const name of positionals.length > 0 ? positionals : setNames()) {
   for (const { id } of texts.changed.slice(0, 5))
     console.log(`  changed ${id}`);
   console.log(
-    `  ${'CoNLL F0.5 (main)'.padEnd(20)} ${mainLine(result, latest, change)}`,
+    `  ${'CoNLL F0.5 (main)'.padEnd(20)} ${mainLine(result, acceptedScore, change)}`,
   );
   console.log(`  ${''.padEnd(20)}     P      R      F1     F0.5`);
   for (const [label, metric] of [
@@ -209,19 +227,29 @@ for (const name of positionals.length > 0 ? positionals : setNames()) {
     refusals.push(
       `${name}: the CoNLL F0.5 ${result.conll.f05.toFixed(3)} does not beat both baselines (all singletons ${allSingletons.conll.f05.toFixed(3)}, all in one ${allInOne.conll.f05.toFixed(3)}).`,
     );
-  if (
-    latest !== null &&
-    latest.score.labelsSha256 === entry.labelsSha256 &&
-    change === null
-  )
-    refusals.push(
-      `${name}: accepted/${latest.entry.design}.json has no events on these labels, so no change can be computed.`,
-    );
   const worse = change === null ? null : scoreboard.worse(name, entry, change);
   if (worse !== null) {
     refusals.push(worse);
     console.log(`  WORSE: ${worse}`);
   }
+}
+
+// The exam's one score gives the verdict of the candidate against the
+// accepted design (README.md, "Roles").
+for (const exam of exams) {
+  const result = verdict({
+    exam: exam.change,
+    mainScore: exam.mainScore,
+    baselines: exam.baselines,
+    regressionSets,
+  });
+  writeFileSync(
+    exam.file,
+    JSON.stringify({ ...exam.payload, verdict: result }, null, 1),
+  );
+  console.log(
+    `\nExam verdict of design ${DESIGN.name}: ${result.result} (interval ${signed(result.exam.low)} to ${signed(result.exam.high)}; beats both baselines: ${result.beatsBaselines}; no regression set worse: ${result.noRegression}).`,
+  );
 }
 
 if (values.accept !== undefined) {
@@ -241,41 +269,6 @@ function draft(design: string): Omit<Entry, 'sets'> {
     metricsVersion: METRICS_VERSION,
     pin,
   };
-}
-
-// The change of the main score against the latest accepted design, on the
-// reports that both designs scored.
-function bootstrap(
-  set: EvalSet,
-  eventOf: Partition,
-  latest: Partition,
-): Interval {
-  const both = set.rows.filter(
-    (row) => eventOf.has(row.id) && latest.has(row.id),
-  );
-  const { gold, predicted } = partitions(both, eventOf);
-  return pairedBootstrap({
-    gold,
-    run: predicted,
-    latest: partitions(both, latest).predicted,
-    statistic: mainScore,
-    replicates: REPLICATES,
-    seed: SEED,
-  });
-}
-
-// The endpoint must serve the model that the parameters were frozen for
-// (ADR 0001): its vector of the probe text must be the vector of the round.
-async function checkModel(): Promise<void> {
-  const probe: { text: string; vector: number[] } = JSON.parse(
-    readFileSync(join(import.meta.dirname, 'embedding-probe.json'), 'utf8'),
-  );
-  const { embedding } = await embed({ model, value: probe.text });
-  const agreement = cosineSimilarity(embedding, probe.vector);
-  if (agreement < 0.99999)
-    throw new Error(
-      `${baseURL} does not serve the EmbeddingGemma 2 Q8_0 model of round #3130 (probe cosine ${agreement}).`,
-    );
 }
 
 function recordFirstScore(set: EvalSet): void {
@@ -305,7 +298,7 @@ function signed(value: number): string {
 // The main score beside the two baselines and the latest accepted design.
 function mainLine(
   result: SetScore,
-  latest: ReturnType<Scoreboard['latest']>,
+  accepted: { readonly design: string; readonly f05: number } | null,
   change: Interval | null,
 ): string {
   const parts = [
@@ -313,10 +306,8 @@ function mainLine(
     `all singletons ${result.baselines.allSingletons.conll.f05.toFixed(3)}`,
     `all in one ${result.baselines.allInOne.conll.f05.toFixed(3)}`,
   ];
-  if (latest !== null)
-    parts.push(
-      `design ${latest.entry.design} ${latest.score.conll.f05.toFixed(3)}`,
-    );
+  if (accepted !== null)
+    parts.push(`design ${accepted.design} ${accepted.f05.toFixed(3)}`);
   if (change !== null)
     parts.push(
       `change ${signed(change.observed)}, 95% interval ${signed(change.low)} to ${signed(change.high)} (${change.blocks} blocks)`,
