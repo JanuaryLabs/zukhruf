@@ -4,7 +4,7 @@ This record keeps what the research for relevance filtering found, before the pa
 
 Read this record before you change the design, add a profile type, or start a new evaluation. Add the result of each new round to this record.
 
-Status on 2026-10-27: round 1 chose no design. A larger realistic stream is in labelling (pooling). The exam set is sealed.
+Status on 2026-10-28: rounds 1, 2 and 3 chose no design. The best design so far ranks as well as a typed keyword, or better, but its threshold accepts too many articles. The exam set is sealed.
 
 ## Words in this record
 
@@ -17,19 +17,23 @@ Status on 2026-10-27: round 1 chose no design. A larger realistic stream is in l
 | Brier score | The mean squared error of the probabilities. Lower is better.                                                                                                                     |
 | F0.5        | A score that counts precision two times as much as recall. TREC-11 used it for filtering (T11F).                                                                                  |
 | Pooling     | The TREC method to label a large stream: label the articles that some method or a keyword search nominates, and a random sample of the rest.                                      |
+| Macro mean  | The mean of a score over profiles, each profile with the same weight. TREC reports filtering this way.                                                                            |
+| Binormal    | A calibration that fits two bell curves to the scores of the stream: one for relevant articles, one for the rest. The probability is the share of the relevant curve.             |
 
 ## The data
 
 All files are on the maintainer's Mac in `~/.codex/visualizations/2026/10/23/01a16a1c-424c-7793-8ca9-02cc1c715d82/relevance-biology/`. The labelling rule (`rule.md`, sha256 `7e6aa431…`) was frozen before the first label.
 
-| Set                                                       | Articles     | Relevant | Ambiguous | Role                                 |
-| --------------------------------------------------------- | ------------ | -------- | --------- | ------------------------------------ |
-| anthropic-outlets (AI news)                               | 816          | 4        | 11        | Training, realistic base rate (0.5%) |
-| training-extra (MIT News, Arc Institute, Isomorphic Labs) | 83           | 42       | 13        | Training, enriched base rate (51%)   |
-| deepmind-outlets                                          | 133          | 11       | 8         | Exam, sealed                         |
-| pooled (AI news, about 2,000)                             | in labelling |          |           | Training, realistic base rate        |
+| Set                                                       | Articles | Relevant | Ambiguous | Role                                 |
+| --------------------------------------------------------- | -------- | -------- | --------- | ------------------------------------ |
+| anthropic-outlets (AI news)                               | 816      | 4        | 11        | Training, realistic base rate (0.5%) |
+| training-extra (MIT News, Arc Institute, Isomorphic Labs) | 83       | 42       | 13        | Training, enriched base rate (51%)   |
+| deepmind-outlets                                          | 133      | 11       | 8         | Exam, sealed                         |
+| pooled (The Decoder + SiliconANGLE)                       | 3,838    | 7        | 10        | Training, realistic base rate (0.2%) |
 
-One annotator (an AI model) labelled every set. No second annotator checked the labels.
+One annotator (an AI model) labelled every set above. No second annotator checked those labels.
+
+From round 2, a second answer key holds 16 profiles in `relevance-profiles/` (beside `relevance-biology/`). The profiles are Biology and 15 that the agent chose for an AI-news reader: chips, security, funding, regulation, courts, robotics, safety, open models, jobs, energy, quantum, health, education, coding and company results (`profiles.json`, sha256 `a5932290…`). Every article of the pooled stream and anthropic-outlets (4,654) has a label for every profile, so no pooling is necessary. Eight blind annotators did the main pass. A second annotator labelled 400 random articles again: Cohen's kappa is 0.89 to 1.00 for 14 profiles and 0.66 for jobs, and only 1 of 6,400 judgments is relevant against not relevant. The other differences are relevant against ambiguous. The exam (deepmind-outlets) has labels for the 15 new profiles too, sealed by their annotator.
 
 ## Round 1 (2026-10-27): no design chosen
 
@@ -37,13 +41,29 @@ Round 1 simulated a reader who teaches a profile with 3 or 10 relevant and 3 or 
 
 No candidate passed. On the realistic stream, every candidate scored below the keyword rule `biolog OR scienc` (F0.5 0.106), and no Brier score beat the base-rate predictor (0.0050). The exam was not opened.
 
+## Pooling (2026-10-27): a larger AI-news stream has no more Biology
+
+The Decoder and SiliconANGLE gave 3,838 articles from April to October 2026. Pooling found 7 relevant articles. The random stratum found none in 300 (base rate 0.18%, 95% interval 0.18% to 1.33%). About 25,000 such articles would give 50 relevant ones. One profile alone cannot give the statistical power to compare designs.
+
+## Round 2 (2026-10-28): 16 profiles, no design chosen
+
+The standard answer to low power in filtering research is more topics, not more articles for one topic: for the same labelling work, many topics judged shallowly compare systems more reliably than one topic judged deeply (Sanderson and Zobel 2005; Carterette et al. 2008). TREC-11 used 100 topics. Round 2 uses the 16 profiles above. It teaches from articles before June and tests on June to October. It compares 14 candidates: the profile sentence alone, two Rocchio forms, the nearest taught articles and a logistic probe, each with Platt scaling, Platt scaling with a prior correction, or the binormal calibration. A candidate must beat both keyword rules and both trivial designs on the macro mean F0.5 over the 11 profiles with enough relevant articles, with a profile-level bootstrap interval above 0. Its rule was frozen before any label was read (`round-2/selection-rule.json`, sha256 `d4913ede…`).
+
+No candidate passed. The narrow keyword rule (a stem that a person types first, for example `robot`) scored 0.569. The textbook Rocchio with the sentence as the query scored 0.538 and the sentence alone 0.532, both with the binormal calibration. Their intervals against the keyword rule include 0. The binormal calibration roughly doubled every design's score over Platt scaling, and the sentence alone with it is the only design whose Brier score beats the base-rate predictor (skill +0.111). The designs win on profiles with varied words (security, company results, coding, jobs) and lose on profiles that one stem names (chips, robotics, courts, quantum). Biology had too few relevant articles to count (12), but there Rocchio with the sentence scored 0.507 against the keyword rule's 0.417.
+
+## Round 3 (2026-10-28): a lexical signal, no design chosen
+
+Round 3 added what round 2 lacked: Rocchio over stemmed tf-idf words, with the profile name and sentence as the query, the classic filtering profile (Buckley, Salton and Allan 1994). It fused it with the dense Rocchio by adding the two scores after z-score normalisation (Lee 1997). Same labels, draws and pass rule as round 2 (`round-3/selection-rule.json`, sha256 `f846855f…`). The dense Rocchio gave exactly the round-2 score, so the two runs agree.
+
+No candidate passed. The fused design scored 0.557 against the keyword rule's 0.569 (interval of the difference −0.080 to +0.052), and it beats the broad keyword rule. Its ranking is the best of every design on most profiles (average precision: chips 0.73, courts 0.82, robotics 0.86, company results 0.96). Its threshold fails. Most articles share no stemmed word with a profile, so the scores fall into two groups: articles with no shared word, and articles with one or more. The binormal model takes the second group for the relevant curve, and the profile accepts 300 to 1,000 articles where 50 to 100 are relevant.
+
 ## Limitations
 
 ### 1. A realistic stream has few relevant articles
 
 **What happens.** The realistic stream had 4 relevant articles in 816. With so few, no score can tell a good design from a keyword rule.
 
-**Before you change it.** Label a larger stream with pooling, and estimate the misses from the random stratum. A score on fewer than about 20 relevant articles is not a result.
+**Before you change it.** Label a larger stream with pooling, and estimate the misses from the random stratum. A score on fewer than about 20 relevant articles is not a result. Pooling 3,838 articles found only 7 for Biology, so round 2 answered this with many profiles instead.
 
 ### 2. Taught articles from another kind of source make the profile worse
 
@@ -55,7 +75,7 @@ No candidate passed. On the realistic stream, every candidate scored below the k
 
 **What happens.** Platt scaling fitted on 6 to 20 taught scores was too sharp, and its probabilities assumed a base rate of 23% to 77%. On the realistic stream, the profile then accepted 200 to 800 of 803 articles. The prior correction (Saerens, Latinne and Decaestecker 2002) then collapsed to 0 or 1.
 
-**Before you change it.** Calibrate with information from the stream, not only from the taught set. Options to measure: a base rate that the reader states, a bounded prior estimate from the stream, or adaptive filtering from the reader's later yes and no. A base rate that the host gives is an input of the package. Raise it as a package question before you add it.
+**Before you change it.** Calibrate with information from the stream, not only from the taught set. Options to measure: a base rate that the reader states, a bounded prior estimate from the stream, or adaptive filtering from the reader's later yes and no. A base rate that the host gives is an input of the package. Raise it as a package question before you add it. Round 2: the binormal model, fitted on the unlabelled stream, works for dense scores (limitation 10 for its limit).
 
 ### 4. Round 1 had two setup errors
 
@@ -85,9 +105,33 @@ No candidate passed. On the realistic stream, every candidate scored below the k
 
 **Before you change it.** Keep one written rule per profile, and record each change to it with a reason.
 
+### 9. A typed keyword is a strong baseline
+
+**What happens.** The narrow keyword rules were written by a person who knows the topic (`robot`, `quantum`, `lawsuit|court`). On profiles that one word names, they are close to the answer key, and no design beat them across profiles (rounds 2 and 3). The same words from the profile name and sentence, used automatically, scored far lower (0.230).
+
+**Before you change it.** Keep the typed keyword as a baseline: it is what a reader can do without the package. If a design cannot beat it, a profile could hold keywords from the reader as well as a sentence. That is a product question for the maintainer, not a research default.
+
+### 10. The binormal threshold needs scores shaped like two bell curves
+
+**What happens.** The binormal calibration works for dense scores (round 2) and fails for lexical and fused scores, which are zero for most articles (round 3). The fused design has the best ranking but the worst threshold.
+
+**Before you change it.** Measure a threshold rule that does not assume a score shape, or a score model for scores that are often zero, before you change the fused ranking.
+
+### 11. Some profiles are mostly ambiguous
+
+**What happens.** In the test period, safety has 141 ambiguous articles and 81 relevant; chips 137 and 134. Opinion on AI risk, safety statements without results, chip-company results and compute deals that name chips are the usual cases. Scores leave the ambiguous articles out, so these profiles have fewer test articles than their size suggests.
+
+**Before you change it.** Read the annotators' boundary cases in the round notes before you change a profile's rule.
+
+### 12. Rounds 2 and 3 used the same labelled set
+
+**What happens.** Round 3 was designed after round 2's results on the same labels. Each round that reuses a development set fits it a little more (Dwork et al. 2015).
+
+**Before you change it.** For a round 4, label a fresh month of the same feeds with the same rule, or count the reuse as a known risk. The sealed exam stays the final check.
+
 ## Rules for every round
 
 - Freeze the selection rule before any score, and the plan before the exam.
 - Never open the exam before a design is frozen. Score it one time.
-- Report the realistic stream and the enriched stream apart. A design must beat the keyword rules and the trivial designs on the realistic stream.
+- Choose a design across profiles, with the same parameters for every profile. A design must beat the keyword rules and the trivial designs on the macro mean, with a profile-level bootstrap interval above 0.
 - Put the result of the round in this record.
