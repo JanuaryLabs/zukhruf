@@ -59,7 +59,7 @@ no change
 - `current` gives the data version now. It is the number of `DataVersion`, not the `PRAGMA data_version` of SQLite. Compare it with the value that you read before from the same `DataVersion`. A different value tells that another connection committed, or that the owner replaced the file. The same value tells that no change occurred.
 - The number tells only that a change occurred. It does not count the commits, and it does not tell what changed.
 - `DataVersion` follows the path. The owner can replace the file at the path: it can rename a new file over it, or delete the file and create it again. A replaced file is a change. Then `DataVersion` reads the new file, and each later commit to the new file is a change too. [ADR 0002](./docs/adr/0002-a-replaced-file-is-followed-by-name.md) tells why.
-- A missing path is no change. The owner can delete the file and create it again a short time later. `DataVersion` keeps the old connection until a file comes back, and then that file is a change.
+- A path that this process cannot see is no change. The path is missing, or the mode of a folder denies this process. The owner can delete the file and create it again a short time later. `DataVersion` keeps the old connection until it can see a file at the path again, and then a replaced file is a change.
 - Each read of `current` reads the status of the file at the path one time (`stat`).
 - A commit by the same connection does not change the number. The `DataVersion` connection never writes, so each commit that it sees comes from another connection.
 - Dispose closes the connection. Use `using`, or call `[Symbol.dispose]()`.
@@ -87,11 +87,11 @@ console.log(`The owner last wrote at ${written.toISOString()}`);
 
 ## Errors
 
-| Error                          | When                                                                                                                                                                                                                                                          |
-| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `new unavailable(path, cause)` | SQLite cannot open the file: `SQLITE_CANTOPEN` (14), for a missing file or a file that the system denies, a privacy denial too. Also when `new DataVersion` cannot read the status of the path because the mode of its folder denies this process (`EACCES`). |
-| The error of SQLite            | All other failures.                                                                                                                                                                                                                                           |
-| The error of the file system   | `current` cannot read the status of the path, for a cause other than a missing file.                                                                                                                                                                          |
+| Error                          | When                                                                                                                            |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------- |
+| `new unavailable(path, cause)` | SQLite cannot open the file: `SQLITE_CANTOPEN` (14), for a missing file or a file that the system denies, a privacy denial too. |
+| The error of SQLite            | All other failures.                                                                                                             |
+| The error of the file system   | `current` cannot read the status of the path, for a cause other than a missing path or a folder that denies this process.       |
 
 `lastWrite` gives `new unavailable(path, cause)` when the file is missing (`ENOENT`) or the mode of its folder denies this process (`EACCES`). It gives the error of the file system for all other failures.
 

@@ -174,3 +174,28 @@ test(
     }
   },
 );
+
+test(
+  'a folder whose mode comes to deny this process is no change',
+  {
+    // chmod denies nothing on Windows, and nothing to root.
+    skip: process.platform === 'win32' || process.getuid?.() === 0,
+  },
+  async () => {
+    await using dir = await new TemporaryFiles().directory('data-version-');
+    const folder = join(dir.path, 'denied');
+    await mkdir(folder);
+    const path = join(folder, 'source.sqlite');
+    created(path, 'DELETE').close();
+    using version = new DataVersion(path, SourceUnavailableError);
+    const before = version.current;
+    await chmod(folder, 0o000);
+    try {
+      const denied = version.current;
+
+      assert.equal(denied, before);
+    } finally {
+      await chmod(folder, 0o700);
+    }
+  },
+);

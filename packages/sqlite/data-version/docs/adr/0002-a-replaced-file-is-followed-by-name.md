@@ -12,7 +12,7 @@ This occurred. On 2026-10-15, while the machine ran, WhatsApp deleted `ChatStora
 - Each read of `current` reads the status of the path. When the path names a file with a different identity, `FollowedDatabase` opens the new file. Then it closes the old file.
 - It opens the new file first. While the old file is open, the system cannot give its inode to a new file. A probe on Linux overlayfs gave the inode of a closed file to the next file 200 times in 200. With the old file open, it did so 0 times in 200.
 - It reads the status before it opens the file. If the owner replaces the file between the two, the next read of `current` gives one extra change. In the other order, the old connection can get the identity of the new file, and then `DataVersion` never sees the replaced file.
-- A missing path is no change. The owner deletes the file and then creates it again, and `DataVersion` keeps the old connection until the file comes back.
+- A path that this process cannot see is no change: the path is missing, or the mode of a folder denies this process. The owner deletes the file and then creates it again, and `DataVersion` keeps the old connection until the file comes back. The open connection still reads, so a denied folder does not stop a poll. In `new DataVersion`, the open of SQLite then fails with `SQLITE_CANTOPEN`, and the caller gets its unavailable error, as before.
 - `DataVersion` gives its own number. It adds one each time the identity or the data version of the held file changes. The data version of a new connection starts again at 1 or 2, so it can be equal to a value from the old connection. The number of `DataVersion` only goes up, so a caller can compare values from before and after a replaced file.
 
 `current` stays a `number`. The 14 consumers in elt need no change.
@@ -30,5 +30,5 @@ This occurred. On 2026-10-15, while the machine ran, WhatsApp deleted `ChatStora
 
 - A caller sees a replaced file at the next poll, and each later commit to the new file.
 - Each poll reads the status of the path one time.
-- A read of the status that fails for a cause other than a missing file gives the error of the file system.
+- A read of the status that fails for a cause other than a missing path or a denied folder gives the error of the file system.
 - A file that the owner creates between the status read and the open of `new DataVersion` gives one extra change at the first poll.

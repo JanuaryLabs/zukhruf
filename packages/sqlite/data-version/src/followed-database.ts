@@ -21,11 +21,18 @@ function open(path: string, unavailable: UnavailableError): DatabaseSync {
   }
 }
 
-// The device and inode of the file at the path, or undefined when the path
-// names no file. Bigint, because inode numbers on NTFS and ReFS exceed 2^53.
+// The device and inode of the file at the path, or undefined when this
+// process cannot see the path: it is missing, or a folder's mode denies it.
+// Bigint, because inode numbers on NTFS and ReFS exceed 2^53.
 function identify(path: string): string | undefined {
-  const stats = statSync(path, { bigint: true, throwIfNoEntry: false });
-  return stats === undefined ? undefined : `${stats.dev}:${stats.ino}`;
+  try {
+    const stats = statSync(path, { bigint: true, throwIfNoEntry: false });
+    return stats === undefined ? undefined : `${stats.dev}:${stats.ino}`;
+  } catch (cause) {
+    if (cause instanceof Error && 'code' in cause && cause.code === 'EACCES')
+      return undefined;
+    throw cause;
+  }
 }
 
 // A connection keeps reading the file it opened, also after the owner
@@ -44,23 +51,16 @@ export class FollowedDatabase implements Disposable {
     // Stat before open: a file replaced between the two is one extra change
     // at the next observation. Stat after open could give the new file's
     // identity to the old connection, and then the replace is never seen.
-    let identity: string | undefined;
-    try {
-      identity = identify(path);
-    } catch (cause) {
-      // A folder whose mode denies this process. SQLite reported it as
-      // CANTOPEN when the open came first.
-      if (cause instanceof Error && 'code' in cause && cause.code === 'EACCES')
-        throw new unavailable(path, cause);
-      throw cause;
-    }
+    // A path this process cannot see fails the open too, as CANTOPEN.
+    const identity = identify(path);
     this.#database = open(path, unavailable);
     this.#identity = identity ?? '';
     this.#version = this.#database.prepare('PRAGMA data_version');
   }
 
-  // The identity of the held file and its data version. A missing path keeps
-  // the old connection: the owner may be about to create the file again.
+  // The identity of the held file and its data version. A path this process
+  // cannot see keeps the old connection: the owner may be about to create the
+  // file again, and the open connection still reads.
   observe(): string {
     const identity = identify(this.#path);
     if (identity !== undefined && identity !== this.#identity) {
