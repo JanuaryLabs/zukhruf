@@ -10,7 +10,7 @@ On 2026-10-23 the maintainer started to design a news reader engine, in the way 
 
 ## Status
 
-Status on 2026-10-26: round #3124 failed its gate. Round #3130 passed its gate for full articles. It fails on articles that have only a headline. Backlog #3131 built the packages from the #3130 design. Status on 2026-10-28: round #3232 compared Qwen3-Embedding-0.6B with EmbeddingGemma 2, and design 3152b stays. Status on 2026-10-27: round #3152 added a same-publisher term and fitted the weights again on four training sets. The package now holds the #3152 design, and it gives the scores of the round on the six sets that are not the exam set. The exam set (deepmind-outlets) is not scored yet. Add the result of each new round to this record.
+Status on 2026-10-26: round #3124 failed its gate. Round #3130 passed its gate for full articles. It fails on articles that have only a headline. Backlog #3131 built the packages from the #3130 design. Status on 2026-10-28: round #3232 compared Qwen3-Embedding-0.6B with EmbeddingGemma 2, and design 3152b stays. Status on 2026-10-29: round #3142 chose a clean body with the template segments of each publisher removed; its exam was inconclusive, so design 3152b stays, and no unscored exam set is left. Status on 2026-10-27: round #3152 added a same-publisher term and fitted the weights again on four training sets. The package now holds the #3152 design, and it gives the scores of the round on the six sets that are not the exam set. The exam set (deepmind-outlets) is not scored yet. Add the result of each new round to this record.
 
 ## Words in this record
 
@@ -36,16 +36,17 @@ Status on 2026-10-26: round #3124 failed its gate. Round #3130 passed its gate f
 
 All evidence is on the local Mac in `~/.codex/visualizations/2026/10/23/01a16a1c-424c-7793-8ca9-02cc1c715d82/`. The backlog items hold the full reports.
 
-| Round        | Question                                                                                  | Result                                                                                                                 | Folder                     |
-| ------------ | ----------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- | -------------------------- |
-| #2938        | Do embeddings find topics and events on new articles?                                     | Topics: yes. Events: no.                                                                                               | `embedding-heldout-2938`   |
-| #2944        | Can a reranker or a classifier decide the event?                                          | No tested method was ready.                                                                                            | `event-grouping-2944`      |
-| #2947, #2948 | Do event summaries made by a local LLM help? How many neighbours must the shortlist keep? | Summaries lose evidence. 80 neighbours keep 99% of real pairs.                                                         | `event-evidence-2947-2948` |
-| #2957        | Can a local LLM compare two full articles?                                                | Good results, but too slow. The user closed this route.                                                                | `event-evidence-2957`      |
-| #3124        | Can cheap features with a logistic regression decide the event?                           | Failed its gate on ECB+.                                                                                               | `feature-scorer-3124`      |
-| #3130        | Same question, with full-article training data and a new grouping step.                   | Passed on the Gun Violence Corpus. Fails on headline-only input.                                                       | `feature-scorer-3130`      |
-| #3152        | Which fix lowers the false joins on one company's news and its outlets (limitation 23)?   | Weights fitted again + a same-publisher term, threshold 0.45 (3152b). Passed the exam: CoNLL F0.5 0.883 against 0.818. | `feature-scorer-3152`      |
-| #3232        | Is Qwen3-Embedding-0.6B better than EmbeddingGemma 2 when each gets its own weights?      | No. The gain interval includes 0, so design 3152b stays. The exam nvidia-outlets stays unscored.                       | `eval/rounds/3232` (repo)  |
+| Round        | Question                                                                                    | Result                                                                                                                 | Folder                     |
+| ------------ | ------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- | -------------------------- |
+| #2938        | Do embeddings find topics and events on new articles?                                       | Topics: yes. Events: no.                                                                                               | `embedding-heldout-2938`   |
+| #2944        | Can a reranker or a classifier decide the event?                                            | No tested method was ready.                                                                                            | `event-grouping-2944`      |
+| #2947, #2948 | Do event summaries made by a local LLM help? How many neighbours must the shortlist keep?   | Summaries lose evidence. 80 neighbours keep 99% of real pairs.                                                         | `event-evidence-2947-2948` |
+| #2957        | Can a local LLM compare two full articles?                                                  | Good results, but too slow. The user closed this route.                                                                | `event-evidence-2957`      |
+| #3124        | Can cheap features with a logistic regression decide the event?                             | Failed its gate on ECB+.                                                                                               | `feature-scorer-3124`      |
+| #3130        | Same question, with full-article training data and a new grouping step.                     | Passed on the Gun Violence Corpus. Fails on headline-only input.                                                       | `feature-scorer-3130`      |
+| #3152        | Which fix lowers the false joins on one company's news and its outlets (limitation 23)?     | Weights fitted again + a same-publisher term, threshold 0.45 (3152b). Passed the exam: CoNLL F0.5 0.883 against 0.818. | `feature-scorer-3152`      |
+| #3232        | Is Qwen3-Embedding-0.6B better than EmbeddingGemma 2 when each gets its own weights?        | No. The gain interval includes 0, so design 3152b stays. The exam nvidia-outlets stays unscored.                       | `eval/rounds/3232` (repo)  |
+| #3142        | Does a clean body without the template segments of each publisher stop one-publisher joins? | Chosen on training (+0.029 over a refit). Exam nvidia-outlets inconclusive (+0.003 [−0.010, +0.017]), 3152b stays.     | `eval/rounds/3142` (repo)  |
 
 ## The design that passed (#3130)
 
@@ -102,6 +103,26 @@ The rule (`packages/event-grouping/eval/rounds/3232/selection-rule.json`) was co
 - Qwen joined more real pairs on anthropic-outlets (+0.012), and lost on the small family and on gvc.
 - Cost (`eval/rounds/3232/cost.json`): one lead took 20.8 ms (median) and 25.6 ms (p90) with Qwen, against 16.8 ms and 18.8 ms with EmbeddingGemma 2. The Qwen server used 1,004 MB (phys_footprint) against 133 MB, at a context of 8,192 tokens.
 - The exam set nvidia-outlets was not scored, because no Qwen design was chosen. It stays the exam of the next round.
+
+## Round #3142: the template segments of one publisher
+
+On 2026-10-29 the reader app 'What is going on' ran design 3152b on the feeds and blogs of 41 AI labs and outlets. One publisher's different posts joined one event: 19 ElevenLabs posts, 5 Together AI benchmark posts, 4 xAI "Grok 4.6 on <platform>" posts. The diagnosis (pair-score terms of the live events) found the cause in the lead and the numbers. The sentence split cut the ElevenLabs banner URL at its "?", the rest of the URL and the site promotion were the lead of every post, and URL fragments gave about 15 agreeing numbers to each pair. The same-publisher term took away 2.1 from the logit; the similarity added 5.3.
+
+The round labelled the live reports as the training set labs-outlets (745 reports, 677 events, two blind annotators, CoNLL F1 agreement 0.995 on 253 reports). It froze its rule (`eval/rounds/3142/selection-rule.json`, sha256 `673d03a8f12944cc571cb99a361929c6c90acc983ea8d6c948c2c3abc82dc950`) before any score, and ran in the repository with `nx run event-grouping:fit -- 3142` (plan.json sha256 `aaaa1fce…`).
+
+| Candidate                                                   | Nested CoNLL F0.5 | Threshold |
+| ----------------------------------------------------------- | ----------------- | --------- |
+| R: design 3152b fitted again, with labs-outlets (incumbent) | 0.798             | 0.35      |
+| U: clean body (URLs before the split, numbers without URLs) | 0.813             | 0.50      |
+| T: U and the template segments of each publisher (chosen)   | 0.827             | 0.45      |
+| TI: T and a same-publisher similarity term                  | 0.825             | 0.50      |
+
+- A segment is a template when two reports of one publisher hold it. This is site-level template detection (Bar-Yossef and Rajagopalan, WWW 2002; Vieira et al., CIKM 2006). jusText and Boilerpipe classify the blocks of one page; they do not see what a site repeats.
+- T beat R by +0.029 [+0.004, +0.043] (1,469 blocks). On labs-outlets it gave 0.813 against 0.727 for design 3152b as it is. The regression intervals against 3152b: gvc +0.006 [0.000, +0.015], hlgd-test −0.001 [−0.004, 0.000], deepmind-outlets −0.013 [−0.067, +0.029].
+- The exam nvidia-outlets (687 reports) was scored one time: CoNLL F0.5 0.777 against 0.774 for 3152b, +0.003 [−0.010, +0.017] (426 blocks). Inconclusive: design 3152b stays. nvidia-outlets is a regression set now, so the next round needs a new exam set.
+- Live cases, in sample on labs-outlets: the ElevenLabs posts split (one pair still joins), the Grok posts become two pairs, the true cross-publisher events stay. The 5 DeepSWE posts and the Nemotron fine-tuning post still join: their leads and numbers really are alike.
+- The package keeps `lead.clean` and the same-publisher similarity term as options of a design, so `fit -- 3142` builds T again. Design 3152b uses neither.
+- Two harness bugs were fixed on the way: the fit refused a scored exam set as a regression set, and `eval --exam` stopped at the first scored exam set before it reached an unscored one.
 
 ## Limitations
 

@@ -20,6 +20,8 @@ The research for event grouping found these limits. They apply to this package. 
 
 **Before you change it.** Make extraction report an incomplete page (#2952). A partial page is close to a headline-only report (limitation 18). Change the lead rule only with a new round: the weights learned its output.
 
+**Round #3142 (2026-10-29).** On the reader app, every ElevenLabs post had the same lead: the rest of a banner URL, because the sentence split cut the URL at its "?", and the site promotion "Introducing Eleven v4 … our most emotive model yet." URL fragments such as `2f` and `384` gave each pair about 15 agreeing numbers. Round #3142 measured a clean body: the URLs go away before the sentence split, the numbers come from the body without URLs, and a segment that two reports of one publisher hold is in no lead and gives no number (`lead.clean` in `src/design.ts`, `src/templates.ts`). It was the best design of the round, but its exam was inconclusive, so design 3152b does not use it (limitation 23).
+
 ## 18. A headline-only report gets no join
 
 **What happens.** Without a guard, the design puts almost all headline-only reports into a few large events. With the guard, each headline-only report is alone in its event ([ADR 0003](./adr/0003-a-headline-only-report-never-joins-another-report.md)).
@@ -121,6 +123,18 @@ The evidence is in the context-compiler session scratchpad, `anthropic-plus-outl
 | Pair precision, one publisher | 0.166         | 0.447         |
 
 On the full set, with the final weights (in-sample), the package gives pair P 0.641, R 0.257, F0.5 0.493 and B-cubed F0.5 0.919. Pair recall is lower: the design joins fewer real pairs inside one publisher (recall 0.141). A limit on the days of one event gave the best training scores, but it made gvc worse (limitation 19), so the round did not choose it. The clean lead rule gave 0.01 more B-cubed F0.5 on this set, inside the margin. A later round can measure it again. These are training scores. On unseen data, the exam set deepmind-outlets (one AI company and the outlets that report about it), design 3152b (the same weights, threshold 0.45) gave CoNLL F0.5 0.883 against 0.818 for design 3130, with pair precision 0.793 against 0.622 and pair recall 0.411 against 0.500 ([ADR 0005](./adr/0005-research-round-3152-adds-a-same-publisher-term-and-fits-the-weights-again.md)). The false joins of this limitation are fewer, not gone: about one join in five on the exam is still false.
+
+**Round #3142 (2026-10-29).** The reader app 'What is going on' ran design 3152b on 41 AI labs and outlets. It put 19 different ElevenLabs posts into one event, 5 Together AI "X vs Y on DeepSWE" posts into one, 4 xAI "Grok 4.6 on <platform>" posts into one, and NVIDIA's Nemotron fine-tuning post into the Nemotron 3.5 Transcribe event. In the ElevenLabs pairs, the similarity (0.835) added +5.3 to the logit and 15 agreeing numbers added +3.5. The same-publisher term took away only 2.1, and the leads were the same banner and promotion (limitation 14). The round labelled these reports as a new training set, labs-outlets (745 reports, 677 events; two blind annotators agreed with CoNLL F1 0.995 on 253 reports), and froze its rule before any score (`eval/rounds/3142`, sha256 `673d03a8…`).
+
+| Candidate                                                     | Nested CoNLL F0.5 | labs-outlets |
+| ------------------------------------------------------------- | ----------------- | ------------ |
+| R: design 3152b fitted again                                  | 0.798             | 0.713        |
+| U: clean body (URLs before the split, numbers without URLs)   | 0.813             | 0.789        |
+| T: U and the template segments of each publisher (**chosen**) | 0.827             | 0.813        |
+| TI: T and a same-publisher similarity term                    | 0.825             | 0.802        |
+| Design 3152b as it is, on the labs-outlets folds              |                   | 0.727        |
+
+T beat R by +0.029 [+0.004, +0.043], and no regression set got worse. On the exam nvidia-outlets (scored one time, 2026-10-29), T gave CoNLL F0.5 0.777 against 0.774 for design 3152b: +0.003 [−0.010, +0.017], 426 blocks. The interval includes 0, so the verdict is inconclusive, and design 3152b stays. On labs-outlets (in sample), T splits the ElevenLabs posts (19 events, one pair joined) and two of the four Grok posts, and keeps Gemini 4 Carbon, Genie 4, LFM3 and Muse Spark Open. It still joins the 5 DeepSWE posts, whose leads and benchmark numbers really are alike, and the Nemotron fine-tuning post, which shares 3.5, 30b and GB300 with the launch. A pair score that sees only the lead and the numbers cannot tell two posts of one series apart. A later round needs evidence of what differs: the model names of the title, or a feature of the title alone.
 
 ## The events of the latest publish day are provisional
 

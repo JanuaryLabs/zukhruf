@@ -105,19 +105,20 @@ Each folder in `sets/` is one set. It has two files:
 | Set               | Reports | Events | Role       | Text                                             |
 | ----------------- | ------- | ------ | ---------- | ------------------------------------------------ |
 | anthropic-outlets | 816     | 618    | training   | Web pages of 6 publishers, April to October 2026 |
-| deepmind-outlets  | 133     | 102    | exam       | Web pages of 5 publishers, April to October 2026 |
-| nvidia-outlets    | 687     | 524    | exam       | Web pages of 6 publishers, April to October 2026 |
+| deepmind-outlets  | 133     | 102    | regression | Web pages of 5 publishers, April to October 2026 |
+| nvidia-outlets    | 687     | 524    | regression | Web pages of 6 publishers, April to October 2026 |
 | ecbplus           | 982     | 86     | training   | ECB+ corpus, rebuilt from its tokens             |
 | dev2938           | 217     | 209    | training   | Web pages of 12 publishers, October 2026         |
 | fresh2957         | 48      | 23     | training   | WCEP-10 rows on Hugging Face                     |
 | gvc               | 509     | 241    | regression | Gun Violence Corpus, rebuilt from its tokens     |
 | hlgd-test         | 286     | 125    | regression | HLGD headlines                                   |
+| labs-outlets      | 745     | 677    | training   | Reports of the reader app, 41 labs and outlets   |
 
 ### Roles
 
 - **Training**: you can tune a design on this set.
 - **Regression**: a new design must not be worse on this set than the latest accepted design. It is worse only when the whole 95% interval of the change of its main score is below 0. Do not tune on it.
-- **Exam**: no design has seen this set. The runner scores it one time only, with `--exam`, as the test of a frozen design. It then writes the first-scored date into `set.json`, and the set is a regression set from then on. The runner refuses `--exam` on a set that has a first-scored date.
+- **Exam**: no design has seen this set. The runner scores it one time only, with `--exam`, as the test of a frozen design. It then writes the first-scored date into `set.json`, and the set is a regression set from then on. A run with `--exam` scores a set that has a first-scored date as a regression set.
 
 The one score of an exam set also gives the verdict of the design against the accepted design. The runner applies the exam rule of round 3152b (`rounds/3152b/selection-rule.json`, `examVerdict`):
 
@@ -168,7 +169,7 @@ EVAL_EMBEDDING_URL_EMBEDDINGGEMMA_2=http://127.0.0.1:8096/v1 npx nx run event-gr
 
 The fit does these steps:
 
-1. It reads `set.json` of each set of the rule first. It refuses a training set whose role is not `training`, and a regression set whose role is not `regression`. Thus it never opens the answer key of an exam set.
+1. It reads `set.json` of each set of the rule first. It refuses a training set whose role is not `training`, and a regression set whose role is not `regression`. An exam set that was scored once is a regression set. Thus it never opens the answer key of an exam set that was never scored.
 2. It cuts the training sets into the folds of the rule.
 3. For each fold, it gets the training pairs: the shortlist pairs of each report, from the `neighbourGraph` of the vectors of the fold. The pair features come from `pairFeatures` (`src/pair-score.ts`), the function of the pair score.
 4. It fits the weights of the pair score by logistic regression (`fit/irls.ts`), and it chooses the threshold by nested cross-validation of the CoNLL F0.5 (`fit/cross-validation.ts`). Each fold score comes from the `EventDetector` of the package, fed as the runner feeds it.
@@ -178,7 +179,7 @@ The fit does these steps:
 
 `plan.json` holds, for each candidate, the fitted design, the cross-validation of each family and the eligibility checks. It also holds the choice and the sha256 of the rule and of the labels. The fit uses the detector of the package, not a copy, so the design that it chooses is the design that the package runs (Google, Rules of Machine Learning, rule 32). A fit runs the detector about 1,600 times for each candidate, and takes about 20 minutes for each candidate.
 
-`rounds/3232` holds round #3232, Qwen3-Embedding-0.6B against design 3152b: its rule, its plan and the cost of each model (`cost.json`). `rounds/3152b` holds the rule of round 3152b for its chosen candidate only. From the training sets alone, the fit gives the weights of `design3152b` to 1e-6, its threshold 0.45 and its cross-validated CoNLL F0.5 (#3184).
+`rounds/3232` holds round #3232, Qwen3-Embedding-0.6B against design 3152b: its rule, its plan and the cost of each model (`cost.json`). `rounds/3142` holds round #3142, a clean body and the template segments of each publisher against a refit of design 3152b, with the training set labs-outlets. Its design T was chosen, and its exam on nvidia-outlets was inconclusive, so design 3152b stays. `rounds/3152b` holds the rule of round 3152b for its chosen candidate only. From the training sets alone, the fit gives the weights of `design3152b` to 1e-6, its threshold 0.45 and its cross-validated CoNLL F0.5 (#3184).
 
 ## Scoreboard
 
