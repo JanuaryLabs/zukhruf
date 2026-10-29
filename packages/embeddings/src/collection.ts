@@ -7,8 +7,9 @@ import { transaction } from '@zukhruf/sqlite-transaction';
 
 import { DimensionMismatchError } from './dimension-mismatch-error.ts';
 import { collectionSchema } from './schema.ts';
+import { UnknownDocumentError } from './unknown-document-error.ts';
 import { type Neighbour, VectorSearch } from './vector-search.ts';
-import { UnitVector } from './vector.ts';
+import { UnitVector, blob } from './vector.ts';
 
 export type Document = {
   readonly id: string;
@@ -116,6 +117,48 @@ export class Collection {
   // The cosine similarity of two stored documents.
   similarity(a: string, b: string): number {
     return this.#search.similarity(a, b);
+  }
+
+  // The similarity of a vector of the caller to each document published from
+  // `from` to `to`, the highest first (docs/adr/0006).
+  query(
+    vector: readonly number[],
+    options: { readonly from: Date; readonly to: Date },
+  ): Neighbour[] {
+    return this.#search.query(vector, options);
+  }
+
+  // The stored unit vector of each id, in the order of the ids. One unknown id
+  // fails the call (docs/adr/0006).
+  fetch(ids: readonly string[]): Map<string, Float32Array> {
+    const read = this.#database.prepare(
+      'SELECT "vector" FROM "embedding_document" WHERE "id" = ?',
+    );
+    return new Map(
+      ids.map((id) => {
+        const row = read.get(id);
+        if (row === undefined) throw new UnknownDocumentError(id);
+        return [id, UnitVector.fromBlob(blob(row.vector)).toFloat32Array()];
+      }),
+    );
+  }
+
+  // Removes the documents. An id that the collection does not store is not an
+  // error, so a second delete of the same ids does nothing (docs/adr/0006).
+  delete(ids: readonly string[]): void {
+    this.#database
+      .prepare(
+        'DELETE FROM "embedding_document" WHERE "id" IN (SELECT "value" FROM json_each(?))',
+      )
+      .run(JSON.stringify(ids));
+  }
+
+  // The number of stored documents.
+  count(): number {
+    const row = this.#database
+      .prepare('SELECT count(*) AS "count" FROM "embedding_document"')
+      .get();
+    return Number(row?.count);
   }
 
   // No texts make no call to the model.

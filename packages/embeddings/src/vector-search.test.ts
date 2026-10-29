@@ -20,7 +20,7 @@ function unitBlob(values: readonly number[]): Uint8Array {
 }
 
 describe('VectorSearch', () => {
-  test('a search over a plain table and over a view that renames columns gives the same neighbours as a collection with the same vectors', async () => {
+  test('a search over a plain table and over a view that renames columns gives the same neighbours and query matches as a collection with the same vectors', async () => {
     // Equal similarities (b, c, e) test the id order; f and g sit on and
     // past the edge of the 7-day window of a.
     const documents = [
@@ -98,6 +98,10 @@ describe('VectorSearch', () => {
       assert.equal(
         search.similarity('a', 'f'),
         collection.similarity('a', 'f'),
+      );
+      assert.deepEqual(
+        search.query([1, 0.5], { from: day(9), to: day(15) }),
+        collection.query([1, 0.5], { from: day(9), to: day(15) }),
       );
     }
   });

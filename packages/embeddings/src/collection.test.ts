@@ -405,4 +405,163 @@ describe('Collection', () => {
     assert.ok(Math.abs(collection.similarity('a', 'b') - 0.96) < 1e-6);
     assert.ok(Math.abs(collection.similarity('b', 'a') - 0.96) < 1e-6);
   });
+
+  test('query gives the similarity of a vector of any length to each document published in the range, the highest first and equal similarities in id order', async () => {
+    using database = new DatabaseSync(':memory:');
+    const collection = new Collection({
+      database,
+      model: model({
+        east: [1, 0],
+        north: [0, 1],
+        near: [3, 1],
+        diagonal: [1, 1],
+      }),
+    });
+    await collection.upsert([
+      { id: 'before', text: 'east', publishedAt: day(7) },
+      { id: 'first', text: 'north', publishedAt: day(8) },
+      { id: 'tie-b', text: 'diagonal', publishedAt: day(9) },
+      { id: 'near', text: 'near', publishedAt: day(9) },
+      { id: 'tie-a', text: 'diagonal', publishedAt: day(10) },
+      {
+        id: 'after',
+        text: 'east',
+        publishedAt: new Date(day(10).getTime() + 1),
+      },
+    ]);
+
+    const matches = collection.query([4, 0], { from: day(8), to: day(10) });
+
+    assert.deepEqual(
+      matches.map(({ id }) => id),
+      ['near', 'tie-a', 'tie-b', 'first'],
+    );
+    assert.ok(
+      Math.abs((matches[0]?.similarity ?? 0) - 3 / Math.sqrt(10)) < 1e-6,
+    );
+    assert.ok(Math.abs((matches[1]?.similarity ?? 0) - Math.SQRT1_2) < 1e-6);
+    assert.equal(matches[1]?.similarity, matches[2]?.similarity);
+    assert.ok(Math.abs(matches[3]?.similarity ?? 1) < 1e-6);
+  });
+
+  test('a query vector of another dimension is a DimensionMismatchError, and an empty collection gives no match', async () => {
+    using database = new DatabaseSync(':memory:');
+    const collection = new Collection({
+      database,
+      model: model({ a: [1, 0] }),
+    });
+    const range = { from: day(1), to: day(30) };
+    const empty = collection.query([1, 0, 0], range);
+    await collection.upsert([{ id: 'a', text: 'a', publishedAt: day(1) }]);
+
+    assert.deepEqual(empty, []);
+    assert.throws(
+      () => collection.query([1, 0, 0], range),
+      (error) =>
+        error instanceof DimensionMismatchError &&
+        error.expected === 2 &&
+        error.actual === 3,
+    );
+  });
+
+  test('fetch gives the stored unit vector of each id in the order of the ids, and one unknown id fails the call', async () => {
+    using database = new DatabaseSync(':memory:');
+    const collection = new Collection({
+      database,
+      model: model({ a: [3, 4], b: [0, 2] }),
+    });
+    await collection.upsert([
+      { id: 'a', text: 'a', publishedAt: day(1) },
+      { id: 'b', text: 'b', publishedAt: day(2) },
+    ]);
+
+    const vectors = collection.fetch(['b', 'a']);
+
+    assert.deepEqual(
+      [...vectors].map(([id, vector]) => [id, [...vector]]),
+      [
+        ['b', [0, 1]],
+        ['a', [Math.fround(0.6), Math.fround(0.8)]],
+      ],
+    );
+    assert.throws(
+      () => collection.fetch(['a', 'missing']),
+      (error) =>
+        error instanceof UnknownDocumentError && error.id === 'missing',
+    );
+  });
+
+  test('a vector that fetch gives is a copy, so a change to it does not change the stored vector', async () => {
+    using database = new DatabaseSync(':memory:');
+    const collection = new Collection({
+      database,
+      model: model({ a: [1, 0], b: [1, 0] }),
+    });
+    await collection.upsert([
+      { id: 'a', text: 'a', publishedAt: day(1) },
+      { id: 'b', text: 'b', publishedAt: day(1) },
+    ]);
+
+    collection.fetch(['a']).get('a')?.fill(0);
+
+    assert.ok(Math.abs(collection.similarity('a', 'b') - 1) < 1e-6);
+  });
+
+  test('delete removes the documents from every search and from the count, and a delete of an unknown or deleted id does nothing', async () => {
+    using database = new DatabaseSync(':memory:');
+    const collection = new Collection({
+      database,
+      model: model({ a: [1, 0], b: [1, 1], c: [0, 1] }),
+    });
+    await collection.upsert(
+      ['a', 'b', 'c'].map((id) => ({ id, text: id, publishedAt: day(1) })),
+    );
+
+    collection.delete(['b', 'missing']);
+    collection.delete(['b']);
+
+    assert.equal(collection.count(), 2);
+    assert.deepEqual(
+      collection.nearest('a', { k: 10, withinDays: 1 }).map(({ id }) => id),
+      ['c'],
+    );
+    assert.deepEqual(
+      collection
+        .query([1, 0], { from: day(1), to: day(1) })
+        .map(({ id }) => id),
+      ['a', 'c'],
+    );
+    assert.throws(() => collection.fetch(['b']), UnknownDocumentError);
+  });
+
+  test('an upsert after a delete embeds the text again', async () => {
+    using database = new DatabaseSync(':memory:');
+    const fake = model({ a: [1, 0] });
+    const collection = new Collection({ database, model: fake });
+    await collection.upsert([{ id: 'a', text: 'a', publishedAt: day(1) }]);
+    collection.delete(['a']);
+
+    await collection.upsert([{ id: 'a', text: 'a', publishedAt: day(1) }]);
+
+    assert.deepEqual(embedded(fake), ['a', 'a']);
+    assert.equal(collection.count(), 1);
+  });
+
+  test('count gives the number of stored documents, and an upsert of a stored id does not add one', async () => {
+    using database = new DatabaseSync(':memory:');
+    const collection = new Collection({
+      database,
+      model: model({ a: [1, 0], b: [0, 1], new: [1, 1] }),
+    });
+    const empty = collection.count();
+
+    await collection.upsert([
+      { id: 'a', text: 'a', publishedAt: day(1) },
+      { id: 'b', text: 'b', publishedAt: day(1) },
+    ]);
+    await collection.upsert([{ id: 'a', text: 'new', publishedAt: day(2) }]);
+
+    assert.equal(empty, 0);
+    assert.equal(collection.count(), 2);
+  });
 });

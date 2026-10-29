@@ -1,7 +1,8 @@
 import type { DatabaseSync } from 'node:sqlite';
 
+import { DimensionMismatchError } from './dimension-mismatch-error.ts';
 import { UnknownDocumentError } from './unknown-document-error.ts';
-import { UnitVector } from './vector.ts';
+import { UnitVector, blob } from './vector.ts';
 
 const DAY_MS = 86_400_000;
 
@@ -94,6 +95,33 @@ export class VectorSearch {
       ]);
   }
 
+  // The similarity of a vector from outside the table to each document
+  // published from `from` to `to`, the highest first. Equal similarities sort
+  // by id (docs/adr/0006).
+  query(
+    vector: readonly number[],
+    options: { readonly from: Date; readonly to: Date },
+  ): Neighbour[] {
+    const query = UnitVector.normalize(vector);
+    const stored = this.#database
+      .prepare(`SELECT length("vector") AS "bytes" FROM ${this.#table} LIMIT 1`)
+      .get();
+    if (stored === undefined) return [];
+    const dimension = Number(stored.bytes) / Float32Array.BYTES_PER_ELEMENT;
+    if (dimension !== query.dimension)
+      throw new DimensionMismatchError(dimension, query.dimension);
+    const documents = this.#database
+      .prepare(
+        `SELECT "id", "vector" FROM ${this.#table} WHERE "published_at" BETWEEN ? AND ?`,
+      )
+      .all(options.from.getTime(), options.to.getTime())
+      .map((row) => ({
+        id: String(row.id),
+        vector: UnitVector.fromBlob(blob(row.vector)),
+      }));
+    return ranked(query, documents, documents.length);
+  }
+
   // The cosine similarity of two documents.
   similarity(a: string, b: string): number {
     return this.#read(a).vector.cosine(this.#read(b).vector);
@@ -137,10 +165,4 @@ function compareIds(left: string, right: string): number {
   if (left < right) return -1;
   if (left > right) return 1;
   return 0;
-}
-
-function blob(value: unknown): Uint8Array {
-  if (!(value instanceof Uint8Array))
-    throw new TypeError('A stored vector must be a BLOB.');
-  return value;
 }

@@ -13,8 +13,8 @@ A SQLite table or view with the columns `id` (text), `vector` (a unit vector as 
 _Avoid_: Index, store, collection (for a table that no collection writes)
 
 **Vector search**:
-The search for the neighbours of a document in one vector table. It does not embed and does not write.
-_Avoid_: Index, query, retriever
+The search for the neighbours of a document, or for the similarities of a query, in one vector table. It does not embed and does not write.
+_Avoid_: Index, retriever
 
 **Document**:
 An id, a text and a publish date that the caller gives. The collection stores the vector of the text, not the text. In a vector table, a document is a row.
@@ -47,6 +47,10 @@ _Avoid_: Range, period
 **Neighbour**:
 A document in the window of a document, with its similarity to that document. The document is not its own neighbour.
 _Avoid_: Match, hit, result
+
+**Query**:
+The similarity of a vector that the caller gives, not a stored document, to each document of a date range. The caller embeds the text of the query with its model.
+_Avoid_: Search (for a query), lookup
 
 **Neighbour graph**:
 The k nearest neighbours of each document published in a date range. For each document, they are the result of a search of that document.

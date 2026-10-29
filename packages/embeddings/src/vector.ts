@@ -29,6 +29,11 @@ export class UnitVector {
     return this.#values.length;
   }
 
+  // A copy of the values, so the caller cannot change the vector.
+  toFloat32Array(): Float32Array {
+    return this.#values.slice();
+  }
+
   toBlob(): Uint8Array {
     return new Uint8Array(
       this.#values.buffer,
@@ -48,4 +53,11 @@ export class UnitVector {
       sum += (values[index] ?? 0) * (others[index] ?? 0);
     return sum;
   }
+}
+
+// The value of a vector column, which SQLite gives as a Uint8Array.
+export function blob(value: unknown): Uint8Array {
+  if (!(value instanceof Uint8Array))
+    throw new TypeError('A stored vector must be a BLOB.');
+  return value;
 }
