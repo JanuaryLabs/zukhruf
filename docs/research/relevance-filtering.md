@@ -4,7 +4,7 @@ This record keeps what the research for relevance filtering found, before the pa
 
 Read this record before you change the design, add a profile type, or start a new evaluation. Add the result of each new round to this record.
 
-Status on 2026-10-29: after nine rounds no design beats a typed keyword with confidence. Round 9, the confirmation on July to September 2025, failed every design, the frozen one too. The package exists with the design that round 6 froze; it ranks well, but its threshold from a few taught answers is not reliable. The exam set is sealed.
+Status on 2026-10-29: the reader ranks instead of deciding yes or no (the user's choice after round 9). Round 10 chose the ranker desc+kw, which beats a keyword ranking clearly in both teaching protocols; it is frozen with an exam rule (freeze-ranking/plan.json). The exam set is sealed until the package ranks through its API.
 
 ## Words in this record
 
@@ -88,6 +88,12 @@ Rounds 6 to 8 used the same labelled slices, so round 9 tests round 7's design u
 Round 9 (`round-9/selection-rule.json`, sha256 `6909823c…`) tested round 7's design unchanged, a variant with a safer fallback, and the frozen design on 1,617 articles from July to September 2025, labelled by four blind annotators. With teaching from the first 14 days, the designs scored 0.48 to 0.58 against the typed keyword's 0.68. With teaching from the large pool, round 7's design tied the keyword (0.632 against 0.633) and the frozen design lost (0.472). The leads of rounds 4 to 7 did not hold on new months.
 
 Post hoc, the main failure moved: with one or two relevant answers in the shown articles (earnings, courts), the fit sets the relevant share to its floor and accepts two or three articles. The ranking is still strong (the fused and pool fits put the right articles on top), but a yes/no threshold from a few selected answers is not reliable. TREC's adaptive filtering work found the same: setting the threshold is the hard part of filtering (Robertson 2002).
+
+## Round 10 (2026-10-29): rank, do not decide
+
+Round 9 showed that the ranking is strong and the yes/no threshold is not. On 2026-10-29 the user chose a ranked reader: each profile shows its best N articles a day, best first, and the person sets N. TREC calls this task routing and scores it by mean average precision (MAP). Round 10 (`round-10/selection-rule.json`, sha256 `37952976…`) compared three rankers with a keyword ranking (matches first, newest first) on July to September 2025.
+
+All three passed in both protocols. The chosen ranker, the frozen design's probability used as the order (desc+kw), scored MAP 0.717 against the keyword's 0.514 with teaching from the first 14 days (interval of the difference +0.082 to +0.296), and 0.766 against 0.476 with teaching from the pool (+0.215 to +0.374). It is frozen with its exam rule in `freeze-ranking/plan.json` (sha256 `c43a44d0…`). The round's daily top-N precision table is not a fair comparison with a keyword list, which shows only that day's matches; per-day recall was not measured. July to September served rounds 9 and 10, so the exam is the confirmation.
 
 ## Limitations
 
