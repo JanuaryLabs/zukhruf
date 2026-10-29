@@ -4,7 +4,7 @@ This record keeps what the research for relevance filtering found, before the pa
 
 Read this record before you change the design, add a profile type, or start a new evaluation. Add the result of each new round to this record.
 
-Status on 2026-10-28: rounds 1 to 6 chose no design. In three tests, round 6 with the reader's own way of teaching included, the profile sentence plus the reader's keywords beats a typed keyword by about 0.05 F0.5 on average and is never worse by more than 0.05, but the interval across 8 to 11 profiles includes 0. The package waits for a design that passes, as the plan orders. The exam set is sealed.
+Status on 2026-10-29: the package exists (commit 9a5ea94) with the design that round 6 froze, and it reproduces round 6. Its rehearsal of the exam protocol failed (limitation 15), so the exam stays sealed until the design models how taught answers are selected.
 
 ## Words in this record
 
@@ -158,6 +158,12 @@ No candidate passed. The sentence plus the keywords scored 0.701 against the typ
 **What happens.** Rounds 1 to 5 draw the taught articles at random from labelled pools. In the reader (#3205, #3248), a person teaches a profile by answering yes or no on the reader's own best matches for the sentence and keywords. Those articles score high by construction, so the taught relevant and not-relevant articles differ from random draws. This is training-serving skew, and it touches the binormal fit, which the taught scores anchor.
 
 **Before you change it.** Simulate the product's teaching before a design is frozen or the exam is scored: rank the first part of a stream by the sentence and keywords, let the answer key answer yes or no on the top matches, teach from those answers, and score the rest of the stream (the TREC adaptive filtering protocol gives judgments only for delivered articles). Use the same protocol in the exam verdict.
+
+### 15. Taught answers from the top of a large pool break the binormal fit
+
+**What happens.** The package (`packages/information-filtering/relevance-filtering`, commit 9a5ea94) rehearsed the frozen exam protocol on development data before the exam: teach from the top 5 or 10 matches of a 6,300-article pool, decide on October to December 2025. It failed: macro F0.5 0.376 against the typed keyword's 0.524, Brier skill −0.019. The research code gives the same numbers. The top matches of a large pool have the most extreme scores, so the fit puts the relevant curve 3 to 4.4 standard deviations up and the relevant share at its floor; security accepted nothing. Round 6 taught from about 250 articles, so it did not show this. In the reader the pool grows every day, so this is a defect of the design, not of the exam.
+
+**Before you change it.** Do not score the exam with this design. The taught answers are a selected sample: a person judges only what the reader shows. The standard fix models that selection: fit the score distributions by maximum likelihood with the taught scores as samples above the cut-off of what was shown (Zhang and Callan, SIGIR 2001, for adaptive filtering thresholds). Pre-register it and test it under both teaching protocols (a small window and a large pool).
 
 ## Rules for every round
 
