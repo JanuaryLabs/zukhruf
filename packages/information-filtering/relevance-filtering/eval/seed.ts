@@ -70,6 +70,16 @@ const sources: Record<
         ]),
       ),
   },
+  'fresh-4': {
+    items: 'fresh-4/items.json',
+    vectors: () =>
+      new Map(
+        rows(join(research, 'fresh-4/vectors.json')).map((r) => [
+          r.id,
+          r.vector,
+        ]),
+      ),
+  },
   exam: {
     items: 'exam/items.json',
     vectors: () => {

@@ -89,6 +89,8 @@ Implementation choices, fixed before the real labels (the rule leaves them open)
 
 The results go to `results/daily-<set>.json` (`daily-smoke-<set>.json` for a smoke run).
 
+**The score of fresh-4 (2026-10-29).** `daily fresh-4` ran one time, after all 25 files of `round-11/evaluator.sha256` matched. `round-11-result.json` holds the copy of the result. 8 profiles had at least 20 days with a relevant article (chips, security, funding, regulation, courts, open-models, coding, earnings). Macro daily recall: ranker 0.906, keyword 0.595, newest 0.360. The intervals are [+0.238, +0.388] for (ranker - keyword) and [+0.458, +0.636] for (ranker - newest), so the best-N-a-day list **passes**. Secondary: precision 0.188 for the ranker, 0.622 for the keyword list and 0.065 for newest; the keyword list showed nothing on 50.1% of the days and missed 27.5% of the days with a relevant article (ranker 4.7%, newest 52.5%); at the keyword list's count k_day, the ranker gives recall 0.634 and precision 0.657 against 0.595 and 0.622.
+
 ### Round 6 on the fresh slices
 
 Each slice teaches from the articles of its first 14 days and decides on the rest. For each profile and each N in {5, 10}, the reader shows the N articles most similar to the description and the N most similar matches of the narrow keyword. The answer key answers: relevant is a yes, not relevant is a no, and an ambiguous article is skipped. A profile is scored on a slice when the rest of the slice holds at least 15 strict relevant articles.
