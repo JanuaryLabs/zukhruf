@@ -52,5 +52,11 @@
     "typescript": "6.0.3",
     "typescript-eslint": "8.71.0",
     "vite": "8.1.5"
+  },
+  "allowScripts": {
+    "webgpu": true,
+    "@vgpu/adapter-node": true,
+    "nx": false,
+    "unrs-resolver": false
   }
 }
