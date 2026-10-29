@@ -5,7 +5,6 @@
   "projectType": "library",
   "tags": ["layer:island", "std:domain", "test:node"],
   "targets": {
-    "format": {},
     "test": {
       "options": {
         "args": "\"eval/**/*.test.ts\""

@@ -5,7 +5,6 @@
   "projectType": "application",
   "tags": ["std:host"],
   "targets": {
-    "format": {},
     "dev": {
       "executor": "nx:run-commands",
       "continuous": true,

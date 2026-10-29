@@ -5,7 +5,6 @@
   "projectType": "library",
   "tags": ["layer:island", "std:ui", "test:node"],
   "targets": {
-    "format": {},
     "test": {},
     "sync": {
       "executor": "nx:run-commands",

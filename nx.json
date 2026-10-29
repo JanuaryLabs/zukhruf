@@ -19,14 +19,11 @@
       "options": {
         "targetName": "lint"
       }
-    }
+    },
+    "./packages/nx/src/format/plugin.ts"
   ],
   "targetDefaults": {
-    "format": {
-      "command": "prettier --write {projectRoot}"
-    },
     "lint": {
-      "dependsOn": ["format"],
       "inputs": [
         "default",
         "^default",
@@ -52,7 +49,7 @@
       ]
     },
     "typecheck": {
-      "dependsOn": ["lint", "..."]
+      "dependsOn": ["lint", "format:check", "..."]
     },
     "test": [
       {
