@@ -1,9 +1,10 @@
+import { ESLintUtils, type TSESTree } from '@typescript-eslint/utils';
 import type { Rule } from 'eslint';
-import type { Expression, Statement } from 'estree';
 
+import { eslintRule } from '../authoring/rule-module.ts';
 import { scopedRule } from '../authoring/scoped-rule.ts';
 
-function isNextCall(expression: Expression | null | undefined): boolean {
+function isNextCall(expression: TSESTree.Expression | null): boolean {
   return (
     expression?.type === 'CallExpression' &&
     expression.callee.type === 'Identifier' &&
@@ -12,13 +13,13 @@ function isNextCall(expression: Expression | null | undefined): boolean {
   );
 }
 
-function isAwaitedNext(expression: Expression | null | undefined): boolean {
+function isAwaitedNext(expression: TSESTree.Expression | null): boolean {
   return (
     expression?.type === 'AwaitExpression' && isNextCall(expression.argument)
   );
 }
 
-function onlyCallsNext([statement, ...rest]: Statement[]): boolean {
+function onlyCallsNext([statement, ...rest]: TSESTree.Statement[]): boolean {
   if (statement === undefined || rest.length > 0) return false;
   if (statement.type === 'ExpressionStatement') {
     return isAwaitedNext(statement.expression);
@@ -44,28 +45,28 @@ function importsHono(context: Rule.RuleContext): boolean {
  * or read `c.error` after `next()`. The rule runs only in a file that imports
  * Hono: in Koa, the same `catch` is the documented error handler.
  */
-export default scopedRule(
-  {
-    meta: {
-      type: 'problem',
-      docs: {
-        description: 'Disallow a catch around only next() in Hono middleware',
-      },
-      schema: [],
-      messages: {
-        deadCatch:
-          "Hono catches a handler's error before next() returns, so this catch never runs. Translate the error where it is thrown, or read c.error after next().",
-      },
+const rule = ESLintUtils.RuleCreator.withoutDocs({
+  meta: {
+    type: 'problem',
+    docs: {
+      description: 'Disallow a catch around only next() in Hono middleware',
     },
-    create(context) {
-      return {
-        TryStatement(node) {
-          if (node.handler && onlyCallsNext(node.block.body)) {
-            context.report({ node: node.handler, messageId: 'deadCatch' });
-          }
-        },
-      };
+    schema: [],
+    messages: {
+      deadCatch:
+        "Hono catches a handler's error before next() returns, so this catch never runs. Translate the error where it is thrown, or read c.error after next().",
     },
   },
-  importsHono,
-);
+  defaultOptions: [],
+  create(context) {
+    return {
+      TryStatement(node) {
+        if (node.handler && onlyCallsNext(node.block.body)) {
+          context.report({ node: node.handler, messageId: 'deadCatch' });
+        }
+      },
+    };
+  },
+});
+
+export default scopedRule(eslintRule(rule), importsHono);
