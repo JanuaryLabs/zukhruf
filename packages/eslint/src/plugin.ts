@@ -4,6 +4,7 @@ import { findPackageJSON } from 'node:module';
 import type { ESLint, Linter } from 'eslint';
 
 import { base } from './base/config.ts';
+import { betterAuth } from './better-auth/config.ts';
 import type { Concept } from './concept.ts';
 import { diagnostics } from './diagnostics/config.ts';
 import { env } from './environment/config.ts';
@@ -26,6 +27,7 @@ const concepts: Concept[] = [
   react,
   reactRouter,
   hono,
+  betterAuth,
   tailwind,
   pulumi,
   nxProjectJson,

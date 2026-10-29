@@ -171,3 +171,46 @@ test('a repo turns on a base plugin’s rule in a scope that base skips', async 
   // Assert
   assert.deepEqual(ruleIds(findings), ['functional/no-let']);
 });
+
+test('a repo that extends the better-auth and hono configs gets their HTTP error checks', async () => {
+  // Arrange: one file for each mistake, in a server that uses both packages.
+  await using workspace = await fixtureWorkspace({
+    'nx.json': '{}',
+    'tsconfig.json': tsconfig,
+    'eslint.config.mjs': fixtureConfig(`{
+      plugins: { zukhruf },
+      extends: ['zukhruf/base', 'zukhruf/better-auth', 'zukhruf/hono'],
+    }`),
+    'src/auth.ts': [
+      `import { APIError } from 'better-auth/api';`,
+      `export const options = { onAPIError: { throw: true } };`,
+      `export const isAuthError = (error: unknown) => error instanceof APIError;`,
+    ].join('\n'),
+    'src/errors.ts': [
+      `import { HTTPException } from 'hono/http-exception';`,
+      `export const invalidSource = (detail: string) =>`,
+      `  new HTTPException(400, { cause: { code: 'invalid_source', detail } });`,
+    ].join('\n'),
+    'src/middleware.ts': [
+      `import { createMiddleware } from 'hono/factory';`,
+      `export const translate = createMiddleware(async (c, next) => {`,
+      `  try {`,
+      `    await next();`,
+      `  } catch {`,
+      `    c.status(500);`,
+      `  }`,
+      `});`,
+    ].join('\n'),
+  });
+
+  // Act
+  const findings = lint(workspace.root, ['src']);
+
+  // Assert
+  assert.deepEqual(ruleIds(findings).toSorted(), [
+    'zukhruf/no-api-error-instanceof',
+    'zukhruf/no-catch-around-next',
+    'zukhruf/no-http-exception-factory',
+    'zukhruf/no-on-api-error-throw',
+  ]);
+});
