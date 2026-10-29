@@ -4,7 +4,7 @@ This record keeps what the research for relevance filtering found, before the pa
 
 Read this record before you change the design, add a profile type, or start a new evaluation. Add the result of each new round to this record.
 
-Status on 2026-10-29: the package exists (commit 9a5ea94) with the design that round 6 froze, and it reproduces round 6. Its rehearsal of the exam protocol failed (limitation 15), so the exam stays sealed until the design models how taught answers are selected.
+Status on 2026-10-29: after nine rounds no design beats a typed keyword with confidence. Round 9, the confirmation on July to September 2025, failed every design, the frozen one too. The package exists with the design that round 6 froze; it ranks well, but its threshold from a few taught answers is not reliable. The exam set is sealed.
 
 ## Words in this record
 
@@ -82,6 +82,12 @@ Round 7 (`round-7/selection-rule.json`, sha256 `c615b539…`) fitted the two bel
 Round 8 (`round-8/selection-rule.json`, sha256 `6249268c…`) made the wrong solution of round 7 impossible to write (relevant mean = other mean + a positive gap) and kept the best of three starts. It failed all three tests. With few answers, the likelihood itself often prefers a broad relevant curve that takes most articles above the cut-off, so the best start chose it.
 
 Rounds 6 to 8 used the same labelled slices, so round 9 tests round 7's design unchanged on July to September 2025, which no round has seen.
+
+## Round 9 (2026-10-29): confirmation on a slice no round had seen, every design failed
+
+Round 9 (`round-9/selection-rule.json`, sha256 `6909823c…`) tested round 7's design unchanged, a variant with a safer fallback, and the frozen design on 1,617 articles from July to September 2025, labelled by four blind annotators. With teaching from the first 14 days, the designs scored 0.48 to 0.58 against the typed keyword's 0.68. With teaching from the large pool, round 7's design tied the keyword (0.632 against 0.633) and the frozen design lost (0.472). The leads of rounds 4 to 7 did not hold on new months.
+
+Post hoc, the main failure moved: with one or two relevant answers in the shown articles (earnings, courts), the fit sets the relevant share to its floor and accepts two or three articles. The ranking is still strong (the fused and pool fits put the right articles on top), but a yes/no threshold from a few selected answers is not reliable. TREC's adaptive filtering work found the same: setting the threshold is the hard part of filtering (Robertson 2002).
 
 ## Limitations
 
