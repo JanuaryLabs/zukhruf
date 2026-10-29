@@ -1,5 +1,10 @@
-import type { Rule, Scope } from 'eslint';
-import type { Expression, PrivateIdentifier, Super } from 'estree';
+import {
+  ESLintUtils,
+  type TSESLint,
+  type TSESTree,
+} from '@typescript-eslint/utils';
+
+import { eslintRule } from '../authoring/rule-module.ts';
 
 const SOURCES = new Set([
   'better-auth',
@@ -10,22 +15,22 @@ const SOURCES = new Set([
 ]);
 
 function importOf(
-  scope: Scope.Scope,
-  identifier: Expression | PrivateIdentifier | Super,
-): Extract<Scope.Definition, { type: 'ImportBinding' }> | undefined {
-  const variable = scope.references.find(
-    (reference) => reference.identifier === identifier,
-  )?.resolved;
-  const definition = variable?.defs[0];
+  scope: TSESLint.Scope.Scope,
+  node: TSESTree.Node,
+): TSESTree.Node | undefined {
+  const definition = scope.references.find(
+    (reference) => reference.identifier === node,
+  )?.resolved?.defs[0];
   return definition?.type === 'ImportBinding' &&
-    SOURCES.has(String(definition.parent.source.value))
-    ? definition
+    definition.parent.type === 'ImportDeclaration' &&
+    SOURCES.has(definition.parent.source.value)
+    ? definition.node
     : undefined;
 }
 
 function isApiErrorClass(
-  scope: Scope.Scope,
-  right: Expression | PrivateIdentifier,
+  scope: TSESLint.Scope.Scope,
+  right: TSESTree.Expression,
 ): boolean {
   if (
     right.type === 'MemberExpression' &&
@@ -33,11 +38,9 @@ function isApiErrorClass(
     right.property.type === 'Identifier' &&
     right.property.name === 'APIError'
   ) {
-    return (
-      importOf(scope, right.object)?.node.type === 'ImportNamespaceSpecifier'
-    );
+    return importOf(scope, right.object)?.type === 'ImportNamespaceSpecifier';
   }
-  const node = importOf(scope, right)?.node;
+  const node = importOf(scope, right);
   return (
     node?.type === 'ImportSpecifier' &&
     node.imported.type === 'Identifier' &&
@@ -52,7 +55,7 @@ function isApiErrorClass(
  * classes and the error's name, which also covers a second copy of
  * better-call (its CommonJS and ESM builds have separate classes).
  */
-const rule: Rule.RuleModule = {
+const rule = ESLintUtils.RuleCreator.withoutDocs({
   meta: {
     type: 'problem',
     docs: {
@@ -65,6 +68,7 @@ const rule: Rule.RuleModule = {
         "instanceof misses an APIError of another class: better-auth's APIError subclasses better-call's, so an APIError that better-call throws is not an instance of it. Use isAPIError(error) from 'better-auth/api'.",
     },
   },
+  defaultOptions: [],
   create(context) {
     return {
       BinaryExpression(node) {
@@ -75,6 +79,6 @@ const rule: Rule.RuleModule = {
       },
     };
   },
-};
+});
 
-export default rule;
+export default eslintRule(rule);
