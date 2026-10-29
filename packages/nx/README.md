@@ -50,14 +50,15 @@ The plugin takes no options. The target names and the commands are the same in e
 
 ## What each target runs
 
-| Target         | Command                                                          | Writes? | Cached | Inputs                                                                                                                                                      |
-| -------------- | ---------------------------------------------------------------- | ------- | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `format`       | `prettier --write {projectRoot}`                                 | yes     | no     | —                                                                                                                                                           |
-| `format:check` | `prettier --check --no-error-on-unmatched-pattern {projectRoot}` | no      | yes    | the files of the project, the root `.prettierrc*` and `.prettierignore`, `prettier` and each Prettier plugin that the config names (`externalDependencies`) |
+| Target         | Command                          | Writes? | Cached | Inputs                                                                                                                                                                                                                    |
+| -------------- | -------------------------------- | ------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `format`       | `prettier --write {projectRoot}` | yes     | no     | —                                                                                                                                                                                                                         |
+| `format:check` | `prettier --check {projectRoot}` | no      | yes    | the files of the project; the root `.prettierignore` and `.editorconfig`; the config file that Prettier finds from the workspace root; `prettier` and each Prettier plugin that the config names (`externalDependencies`) |
 
 - `format` writes. It runs only when you run it on purpose: `nx run <project>:format`. No target depends on it.
 - `format:check` only reads. It fails when a file is not formatted.
-- A project with no file that Prettier can format passes `format:check`. Prettier 3.9.9 passes a folder whose files are all ignored or of an unknown type. It stops with an error only for a folder with no file, and the flag `--no-error-on-unmatched-pattern` stops that error.
+- A project with no file that Prettier can format passes `format:check`. Prettier 3.9.9 passes a folder whose files are all ignored or of an unknown type. It stops with an error only for a folder with no file, and a project root always has a `project.json` or a `package.json`. Thus the command has no `--no-error-on-unmatched-pattern`.
+- The plugin finds the config file with `resolveConfigFile` of Prettier, as the Prettier CLI does. It can be `.prettierrc`, `prettier.config.mjs` or the `prettier` key of the root `package.json`. That file is an input, so a change to it runs the check again. The Prettier CLI also reads `.editorconfig`, so that file is an input too. When Prettier finds no config file, no config file is an input.
 
 To format only your own files, give their paths: `npx prettier --write <files>`. See [ADR 0002](./docs/adr/0002-a-check-never-writes.md).
 

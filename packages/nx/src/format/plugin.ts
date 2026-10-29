@@ -1,4 +1,4 @@
-import { basename, dirname, isAbsolute, join } from 'node:path';
+import { basename, dirname, isAbsolute, join, relative } from 'node:path';
 
 import {
   type CreateNodes,
@@ -10,7 +10,7 @@ import {
   buildPackageJsonPatterns,
   buildPackageJsonWorkspacesMatcher,
 } from '@nx/devkit/internal';
-import { resolveConfig } from 'prettier';
+import { resolveConfig, resolveConfigFile } from 'prettier';
 
 /**
  * Gives each Nx project `format` (writes) and `format:check` (only reads,
@@ -40,18 +40,13 @@ export const createNodes: CreateNodes = [
         : !projectJsonRoots.has(dirname(file)) && isInWorkspaces(file),
     );
     const formatCheck: TargetConfiguration = {
-      command: 'prettier --check --no-error-on-unmatched-pattern {projectRoot}',
+      command: 'prettier --check {projectRoot}',
       cache: true,
       inputs: [
         'default',
-        '{workspaceRoot}/.prettierrc*',
         '{workspaceRoot}/.prettierignore',
-        {
-          externalDependencies: [
-            'prettier',
-            ...(await prettierPlugins(context.workspaceRoot)),
-          ],
-        },
+        '{workspaceRoot}/.editorconfig',
+        ...(await prettierConfigInputs(context.workspaceRoot)),
       ],
     };
     return createNodesFromFiles(
@@ -72,22 +67,35 @@ export const createNodes: CreateNodes = [
   },
 ];
 
-async function prettierPlugins(workspaceRoot: string) {
-  // `Options.plugins` is optional, and `resolveConfig` gives null when no
-  // config file exists (prettier/index.d.ts:649-652, 807).
-  const plugins = (await resolveConfig(join(workspaceRoot, 'package.json')))
-    ?.plugins;
-  return (plugins ?? [])
-    .filter(
-      (plugin): plugin is string =>
-        typeof plugin === 'string' &&
-        !plugin.startsWith('.') &&
-        !isAbsolute(plugin),
-    )
-    .map((plugin) =>
-      plugin
-        .split('/')
-        .slice(0, plugin.startsWith('@') ? 2 : 1)
-        .join('/'),
-    );
+async function prettierConfigInputs(workspaceRoot: string) {
+  // `resolveConfigFile` gives null when no config file exists
+  // (prettier/index.d.ts:661).
+  const file = await resolveConfigFile(join(workspaceRoot, 'package.json'));
+  if (file === null) {
+    return [{ externalDependencies: ['prettier'] }];
+  }
+  // `resolveConfig` is typed as nullable (prettier/index.d.ts:649-652), and
+  // `Options.plugins` is optional (prettier/index.d.ts:807).
+  const plugins = (await resolveConfig(file, { config: file }))?.plugins ?? [];
+  return [
+    `{workspaceRoot}/${relative(workspaceRoot, file)}`,
+    {
+      externalDependencies: [
+        'prettier',
+        ...plugins
+          .filter(
+            (plugin): plugin is string =>
+              typeof plugin === 'string' &&
+              !plugin.startsWith('.') &&
+              !isAbsolute(plugin),
+          )
+          .map((plugin) =>
+            plugin
+              .split('/')
+              .slice(0, plugin.startsWith('@') ? 2 : 1)
+              .join('/'),
+          ),
+      ],
+    },
+  ];
 }

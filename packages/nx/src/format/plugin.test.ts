@@ -104,7 +104,12 @@ async function workspace(
     } = JSON.parse(shown.stdout);
     return configuration.targets;
   };
-  return { nx, targets, read: (path: string) => readFile(join(root, path)) };
+  return {
+    nx,
+    targets,
+    write,
+    read: (path: string) => readFile(join(root, path)),
+  };
 }
 
 const packageJson = (name: string) =>
@@ -129,7 +134,7 @@ test('each workspace project gets format and format:check', async () => {
     ),
     ['a', 'b', 'c'].map((project) => [
       `prettier --write packages/${project}`,
-      `prettier --check --no-error-on-unmatched-pattern packages/${project}`,
+      `prettier --check packages/${project}`,
     ]),
   );
 });
@@ -176,16 +181,51 @@ test('format:check fails on an unformatted file and leaves it as it was', async 
   );
 });
 
-test('format:check passes a project with no file that Prettier formats', async () => {
+test('format:check runs again when the Prettier config changes', async () => {
   await using folder = await new TemporaryFiles().directory('zukhruf-nx-');
   const probe = await workspace(folder.path, {
-    'packages/a/project.json': '{ "name": "a" }\n',
-    '.prettierignore': 'packages/a/project.json\n',
+    'packages/a/package.json': packageJson('a'),
+    'packages/a/index.ts': 'export const value = "a";\n',
+    'prettier.config.mjs': 'export default { singleQuote: false };\n',
+  });
+  const first = await probe.nx('run', 'a:format:check');
+
+  await probe.write(
+    'prettier.config.mjs',
+    'export default { singleQuote: true };\n',
+  );
+  const second = await probe.nx('run', 'a:format:check');
+
+  assert.equal(first.code, 0, first.output);
+  assert.notEqual(second.code, 0, second.output);
+  assert.match(second.output, /packages\/a\/index\.ts/);
+});
+
+test('format:check reads the Prettier plugins that the config names', async () => {
+  await using folder = await new TemporaryFiles().directory('zukhruf-nx-');
+  const probe = await workspace(folder.path, {
+    'packages/a/package.json': packageJson('a'),
+    '.prettierrc': `${JSON.stringify({ plugins: ['@trivago/prettier-plugin-sort-imports'] })}\n`,
   });
 
-  const run = await probe.nx('run', 'a:format:check', '--skip-nx-cache');
+  const shown = await probe.nx('show', 'project', 'a', '--json');
 
-  assert.equal(run.code, 0, run.output);
+  const configuration: {
+    targets: { 'format:check': { inputs: unknown[] } };
+  } = JSON.parse(shown.stdout);
+  assert.deepEqual(
+    configuration.targets['format:check'].inputs.filter(
+      (input) => typeof input === 'object',
+    ),
+    [
+      {
+        externalDependencies: [
+          'prettier',
+          '@trivago/prettier-plugin-sort-imports',
+        ],
+      },
+    ],
+  );
 });
 
 test('a project.json target replaces the inferred target', async () => {
