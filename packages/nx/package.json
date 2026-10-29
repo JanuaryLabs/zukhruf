@@ -1,0 +1,52 @@
+{
+  "name": "@zukhruf/nx",
+  "version": "0.3.56",
+  "description": "The Nx part of the monorepo standard. Each area is a subpath. @zukhruf/nx/format is an Nx inference plugin that gives each project two targets: format, which writes the files with Prettier, and format:check, which only reads them and is cached.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/JanuaryLabs/zukhruf",
+    "directory": "packages/nx"
+  },
+  "bugs": {
+    "url": "https://github.com/JanuaryLabs/zukhruf/issues"
+  },
+  "homepage": "https://github.com/JanuaryLabs/zukhruf/tree/main/packages/nx#readme",
+  "keywords": [
+    "nx",
+    "nx-plugin",
+    "inference",
+    "createNodes",
+    "monorepo",
+    "prettier",
+    "format",
+    "check"
+  ],
+  "type": "module",
+  "exports": {
+    "./package.json": "./package.json",
+    "./format": {
+      "@zukhruf/source": "./src/format/plugin.ts",
+      "types": "./dist/format/plugin.d.ts",
+      "import": "./dist/format/plugin.js",
+      "default": "./dist/format/plugin.js"
+    }
+  },
+  "files": [
+    "dist",
+    "!dist/spec/**",
+    "!**/*.tsbuildinfo",
+    "!**/*.test.*"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "peerDependencies": {
+    "@nx/devkit": ">=23.0.0 <25.0.0",
+    "nx": ">=23.0.0 <25.0.0",
+    "prettier": "^3.0.0"
+  },
+  "devDependencies": {
+    "@zukhruf/testing": "^0.3.46"
+  }
+}

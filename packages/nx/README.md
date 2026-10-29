@@ -1,18 +1,30 @@
-# @zukhruf/prettier
+# @zukhruf/nx
 
-An Nx workspace formats its files with Prettier. This package is an Nx inference plugin. It gives each project of the workspace two targets: `format`, which writes the files, and `format:check`, which only reads them. You list the plugin one time in `nx.json`. You do not copy targets into each project.
-
-> **Status: design for review.** No code exists yet. This README, [CONTEXT.md](./CONTEXT.md) and the [ADRs](./docs/adr) are the API on paper. The package has no `package.json`, so it is not an Nx project and it cannot be released.
+This package is the Nx part of the monorepo standard. Each workspace copied the same Nx configuration into each project. This package gives that configuration one time, in areas. Each area has its own import path, and the package has no root entry point. Lint stays in `@zukhruf/eslint`, and the Git hooks stay in `@zukhruf/git-hooks`.
 
 The words in these documents have one meaning each. See the glossary in [CONTEXT.md](./CONTEXT.md).
 
+## Areas
+
+| Area       | Import path          | Status                                                     |
+| ---------- | -------------------- | ---------------------------------------------------------- |
+| format     | `@zukhruf/nx/format` | This README                                                |
+| test       | `@zukhruf/nx/test`   | Planned (#3328): one `node:test` target, copied in 5 repos |
+| generators | —                    | Later, when their own count is due                         |
+
+## format
+
+An Nx workspace formats its files with Prettier. The `format` area is an Nx inference plugin. It gives each project of the workspace two targets: `format`, which writes the files, and `format:check`, which only reads them. You list the plugin one time in `nx.json`. You do not copy targets into each project.
+
 ## Use it
+
+You need Nx 23 or 24 and Prettier 3. `nx`, `@nx/devkit` and `prettier` are peer dependencies.
 
 Add the plugin to `plugins` in `nx.json`. Then add `format:check` to the `dependsOn` of `typecheck` that the workspace already has:
 
 ```jsonc
 {
-  "plugins": ["@zukhruf/prettier/plugin"],
+  "plugins": ["@zukhruf/nx/format"],
   "targetDefaults": {
     "typecheck": {
       "dependsOn": ["lint", "format:check", "..."],
@@ -23,12 +35,14 @@ Add the plugin to `plugins` in `nx.json`. Then add `format:check` to the `depend
 
 Keep the entries that are already in the list. A `dependsOn` array replaces the array of an earlier source, and only `"..."` keeps the dependencies that `@nx/js/typescript` gives `typecheck`.
 
+zukhruf builds this package, so it lists the plugin by path: `"plugins": ["./packages/nx/src/format/plugin.ts"]`. The package name resolves to `dist/`, and a fresh clone has no build before Nx makes the project graph.
+
 The plugin does not change `typecheck`. That target belongs to `@nx/js/typescript`, and each workspace adds its own dependencies to it, for example `^sdk`. See [ADR 0001](./docs/adr/0001-inferred-targets-not-copied-defaults.md).
 
 ## Signature
 
 ```ts
-// @zukhruf/prettier/plugin
+// @zukhruf/nx/format
 export const createNodes: CreateNodes;
 ```
 
@@ -43,7 +57,7 @@ The plugin takes no options. The target names and the commands are the same in e
 
 - `format` writes. It runs only when you run it on purpose: `nx run <project>:format`. No target depends on it.
 - `format:check` only reads. It fails when a file is not formatted.
-- A project with no file that Prettier can format passes `format:check`. The flag `--no-error-on-unmatched-pattern` (Prettier 3.9 CLI) stops the error for an empty match.
+- A project with no file that Prettier can format passes `format:check`. Prettier 3.9.9 passes a folder whose files are all ignored or of an unknown type. It stops with an error only for a folder with no file, and the flag `--no-error-on-unmatched-pattern` stops that error.
 
 To format only your own files, give their paths: `npx prettier --write <files>`. See [ADR 0002](./docs/adr/0002-a-check-never-writes.md).
 
@@ -62,13 +76,21 @@ A target in the `project.json` of a project replaces the inferred target. Nx app
 
 ## Leave fixtures out
 
-The plugin gives targets to each folder with a `project.json` or a `package.json`, except the workspace root. The root files stay checked by the `Format` step of `@zukhruf/git-hooks` and by `npx prettier --check .` in CI. A fixture can have a `package.json` too. Use the standard `exclude` of an Nx plugin entry to leave fixtures out:
+The plugin gives targets only to the projects that Nx finds, by the rule and the matcher of Nx itself:
+
+- Each folder with a `project.json` is a project.
+- A folder with a `package.json` is a project only when the workspace globs of the package manager match its path, or when it has a `project.json` too. The globs are `workspaces` in the root `package.json`, `pnpm-workspace.yaml` and `lerna.json`, with their `!` negations.
+- The workspace root is a project only when it has a `project.json`, or its `package.json` has an `nx` key.
+
+Thus a fixture outside the workspace globs gets no targets, and you do not add it to `exclude`. The root files stay checked by the `Format` step of `@zukhruf/git-hooks` and by `npx prettier --check .` in CI.
+
+A fixture inside the workspace globs is a project of Nx. Use the standard `exclude` of an Nx plugin entry to give it no format targets:
 
 ```json
 {
   "plugins": [
     {
-      "plugin": "@zukhruf/prettier/plugin",
+      "plugin": "@zukhruf/nx/format",
       "exclude": ["packages/connectors/manifest/src/fixtures/**"]
     }
   ]

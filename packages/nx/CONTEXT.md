@@ -1,8 +1,12 @@
-# Prettier
+# Nx
 
-An Nx workspace formats its files with Prettier. Each project needs two targets: one that writes the files, and one that only reads them. This package infers both targets for each project, so no workspace copies them. A check target never writes.
+This package is the Nx part of the monorepo standard. Each area gives one part of the Nx configuration that the workspaces copied. The `format` area gives each project two targets: one that writes the files with Prettier, and one that only reads them. No workspace copies them. A check target never writes.
 
 ## Language
+
+**Area**:
+One part of the package, with its own import path, for example `@zukhruf/nx/format`. The package has no root entry point. An area comes into the package when its own count is due under the Rule of Three.
+_Avoid_: Module, feature, sub-package
 
 **Format target**:
 The target `format`. It runs `prettier --write` on the project root. It writes files. It runs only when a person or an agent runs it on purpose. No target depends on it.
@@ -25,9 +29,9 @@ A target in the `project.json` of a project that replaces an inferred target, fo
 _Avoid_: Customization, patch
 
 **Project root**:
-A folder with a `project.json` or a `package.json`. Nx and `@nx/eslint/plugin` use the same rule. The plugin gives the two targets to each project root that the plugin entry does not exclude.
+A folder that Nx makes a project: each folder with a `project.json`, and a folder with a `package.json` when the workspace globs match it or it has a `project.json` too. The workspace root is one only with a `project.json` or an `nx` key in its `package.json`. The plugin uses the matcher of Nx itself, and it gives the two targets to each project root that the plugin entry does not exclude.
 _Avoid_: Package folder (a project root can have no package), workspace (the workspace is the whole repo)
 
 **Fixture**:
-A folder that a test uses as input. It can have a `package.json`, but it is not a project of the workspace. The `exclude` of the plugin entry in `nx.json` leaves it out.
+A folder that a test uses as input. It can have a `package.json`, but it is not a project of the workspace. Outside the workspace globs, it gets no targets. Inside them, the `exclude` of the plugin entry in `nx.json` leaves it out.
 _Avoid_: Sample, mock project

@@ -1,0 +1,10 @@
+{
+  "name": "nx",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "packages/nx/src",
+  "projectType": "library",
+  "tags": ["layer:island", "std:tool", "test:node"],
+  "targets": {
+    "test": {}
+  }
+}

@@ -21,13 +21,14 @@ This is strike 7 of the Rule of Three (6 with targets), so the copies move into 
 
 npm has no maintained Nx inference plugin for Prettier. `@nx/prettier`, `nx-prettier`, `@nx-tools/nx-prettier`, `@nxkit/prettier` and `nx-plugin-prettier` do not exist, and `npm search "nx prettier plugin"` finds none.
 
-The package is `@zukhruf/prettier`, and the plugin is its export `./plugin`, as `@nx/eslint` exports `@nx/eslint/plugin`.
+The package is `@zukhruf/nx`, the Nx part of the monorepo standard. The plugin is its area `./format`, so a workspace lists `@zukhruf/nx/format`. Each area has its own import path and the package has no root entry point, as in `@zukhruf/testing` ([ADR 0002](../../../testing/docs/adr/0002-each-area-has-its-own-import-path.md)). The second area is already counted: one `node:test` target, copied in 5 repos (#3328). The generators of the private `@factory/foundation` come later, when their own count is due. Lint stays in `@zukhruf/eslint`, and the Git hooks stay in `@zukhruf/git-hooks`.
 
 ## Considered Options
 
 - **A shared `nx.json` that each workspace `extends`.** REJECTED. `extends` is a shallow merge of the top-level keys, `{ ...base, ...workspace }`, and a base cannot extend another base (`config/nx-json.js:14-22`). A workspace with its own `targetDefaults` replaces the shared `targetDefaults` fully.
 - **Copied `targetDefaults`, as today.** REJECTED. It is strike 7. Each project still needs an opt-in, and a forgotten opt-in silently drops the check.
 - **A mirror in each workspace, with a ledger.** REJECTED. The Rule of Three allows a mirror at strike 2 only. A mirror at strike 7 adds copies.
+- **A package with the name of the tool, `@zukhruf/prettier`, with the export `./plugin`.** REJECTED. The name fits one area only. The second area (the `node:test` target, 5 copies) and the generators are already counted, and they are Nx configuration, not Prettier.
 - **The plugin also adds `format:check` to `typecheck.dependsOn`.** REJECTED. `typecheck` belongs to `@nx/js/typescript`, another plugin. Each workspace adds its own dependencies to it, for example `^sdk`. The plugin would change the target of another plugin, and a workspace's own `targetDefaults` would replace that change again.
 
 ## Consequences
