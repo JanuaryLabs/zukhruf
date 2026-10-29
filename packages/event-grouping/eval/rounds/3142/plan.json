@@ -1,0 +1,1755 @@
+{
+  "round": "3142",
+  "hashes": {
+    "selection-rule.json": "673d03a8f12944cc571cb99a361929c6c90acc983ea8d6c948c2c3abc82dc950",
+    "labels": {
+      "anthropic-outlets": "84afb680406f6a8b1c785f9bf1029e21faf83798f687ff88605c0daf8cdba027",
+      "ecbplus": "f2277218175f2f6ce16c45ec59f527bbb7414120cd95aa915267904a31ca5474",
+      "dev2938": "f9bb1d77f980eaee174dfad5d89ab9a6420eacee8823c50b1ed076907afed4b6",
+      "fresh2957": "063bdc6541275fb0bb841401c8b3fdb1d45a12bed388e347acdc2378d4e7c069",
+      "labs-outlets": "1968da27df5ebb89dc98e39b79941bc47fdace9b10e4dce0960e4c11ce9365c4",
+      "gvc": "2ab7d89462f1df599afa6da5d9e680147b35de0fb05d45d5e84bb6501cd1cec4",
+      "hlgd-test": "27c8d84f5a9b73091d11b6718747a9fd1e2e8a9d0c5e91042a3e9957100c4ea5",
+      "deepmind-outlets": "42c978a5fec954c73da71473a88d09fba9258b172b52b60cde3898962552ad15"
+    }
+  },
+  "candidates": {
+    "R": {
+      "design": {
+        "name": "3142-R",
+        "embeddingModel": "embeddinggemma-2",
+        "lead": {
+          "sentences": 2,
+          "minWords": 5,
+          "minLetterRatio": 0.6,
+          "maxUrlShare": 0.5,
+          "urlPattern": "(?:https?://|www\\.)\\S*"
+        },
+        "vectorText": "title: {title} | text: {title}\n{lead}",
+        "shortlistSize": 80,
+        "windowDays": 7,
+        "threshold": 0.35,
+        "pairScore": {
+          "intercept": -5.797539502078501,
+          "similarity": {
+            "weight": 2.350630310419536,
+            "mean": 0.6698993650509367,
+            "sd": 0.07117344161522485
+          },
+          "agreeingNumbers": {
+            "weight": 1.122587265367197,
+            "mean": 0.8215691486442224,
+            "sd": 0.759057425736463
+          },
+          "disagreeingNumbers": {
+            "weight": -0.9587075763221548,
+            "mean": 1.8489957591687538,
+            "sd": 0.8883560758112806
+          },
+          "samePublisher": {
+            "weight": -0.8267166746153154,
+            "mean": 0.1192750629001575,
+            "sd": 0.32411189776163624
+          }
+        }
+      },
+      "training": {
+        "method": "IRLS (Newton-Raphson)",
+        "maxIterations": 100,
+        "tolerance": 1e-9,
+        "ridge": 0.000001,
+        "rows": 97774,
+        "positives": 5831,
+        "iterations": 10,
+        "pairs": "batch shortlist pairs (top 80 within 7 days) of all 14 training folds"
+      },
+      "crossValidation": {
+        "objective": 0.7982986950196097,
+        "families": {
+          "anthropic-outlets": {
+            "muc": {
+              "precision": 0.6709430209430209,
+              "recall": 0.5240894083316411,
+              "f1": 0.5852629818147059,
+              "f05": 0.6326169576668239
+            },
+            "bCubed": {
+              "precision": 0.9300669306184013,
+              "recall": 0.8559824032176973,
+              "f1": 0.8905441765846411,
+              "f05": 0.9135743956587458
+            },
+            "ceafE": {
+              "precision": 0.8359657640405969,
+              "recall": 0.8988840866365808,
+              "f1": 0.8654606550741415,
+              "f05": 0.847350816937563
+            },
+            "blanc": {
+              "precision": 0.8078610721720323,
+              "recall": 0.641166736549579,
+              "f1": 0.6905178467193385,
+              "f05": 0.7447119785546722
+            },
+            "pair": {
+              "precision": 0.6203434198779945,
+              "recall": 0.2833092943373574,
+              "f1": 0.3838392015982536,
+              "f05": 0.49331930937970747
+            },
+            "conll": {
+              "f1": 0.7804226044911629,
+              "f05": 0.7978473900877109
+            },
+            "baselines": {
+              "allSingletons": 0.5595923515981582,
+              "allInOne": 0.1011846177350239
+            },
+            "thresholds": [0.35, 0.5, 0.35, 0.35]
+          },
+          "ecbplus": {
+            "muc": {
+              "precision": 0.9862077915576736,
+              "recall": 0.8827137026572682,
+              "f1": 0.9311225164744215,
+              "f05": 0.9632710032585962
+            },
+            "bCubed": {
+              "precision": 0.9195885086239013,
+              "recall": 0.8234666058181028,
+              "f1": 0.8682012787756491,
+              "f05": 0.8981315070831583
+            },
+            "ceafE": {
+              "precision": 0.40929663410769795,
+              "recall": 0.8196702508674771,
+              "f1": 0.5420842213215987,
+              "f05": 0.4534820203656498
+            },
+            "blanc": {
+              "precision": 0.9213124926599882,
+              "recall": 0.9057191921392134,
+              "f1": 0.9122093241815261,
+              "f05": 0.9173364238869628
+            },
+            "pair": {
+              "precision": 0.8535291977820763,
+              "recall": 0.8208632692975673,
+              "f1": 0.834594766122595,
+              "f05": 0.8452885965668304
+            },
+            "conll": {
+              "f1": 0.7804693388572231,
+              "f05": 0.7716281769024681
+            },
+            "baselines": {
+              "allSingletons": 0.11460726335264475,
+              "allInOne": 0.35015449147180566
+            },
+            "thresholds": [0.35, 0.4, 0.35, 0.35, 0.35]
+          },
+          "small": {
+            "muc": {
+              "precision": 0.7941176470588235,
+              "recall": 0.8181818181818182,
+              "f1": 0.8059701492537314,
+              "f05": 0.7988165680473371
+            },
+            "bCubed": {
+              "precision": 0.9710691823899372,
+              "recall": 0.9761006289308177,
+              "f1": 0.9735784050834513,
+              "f05": 0.9720713177690806
+            },
+            "ceafE": {
+              "precision": 0.9606060606060607,
+              "recall": 0.9564655172413793,
+              "f1": 0.9585313174946004,
+              "f05": 0.9597750865051905
+            },
+            "blanc": {
+              "precision": 0.8934309507988241,
+              "recall": 0.8698568565702834,
+              "f1": 0.8812786910936589,
+              "f05": 0.8884779765268602
+            },
+            "pair": {
+              "precision": 0.7872340425531915,
+              "recall": 0.74,
+              "f1": 0.7628865979381443,
+              "f05": 0.7773109243697479
+            },
+            "conll": {
+              "f1": 0.9126932906105943,
+              "f05": 0.9102209907738694
+            },
+            "baselines": {
+              "allSingletons": 0.612425574191383,
+              "allInOne": 0.05292945911216515
+            },
+            "thresholds": [0.35]
+          },
+          "labs-outlets": {
+            "muc": {
+              "precision": 0.2622282608695652,
+              "recall": 0.30208333333333337,
+              "f1": 0.27739361702127663,
+              "f05": 0.26747229064039413
+            },
+            "bCubed": {
+              "precision": 0.9431971517834896,
+              "recall": 0.9551810802522377,
+              "f1": 0.9487703447440211,
+              "f05": 0.9453283898568942
+            },
+            "ceafE": {
+              "precision": 0.931357262045146,
+              "recall": 0.9141516160015755,
+              "f1": 0.9224122325306057,
+              "f05": 0.9276939864458832
+            },
+            "blanc": {
+              "precision": 0.7199005257891862,
+              "recall": 0.7570551974515671,
+              "f1": 0.726345821776455,
+              "f05": 0.721167420508776
+            },
+            "pair": {
+              "precision": 0.190865943432778,
+              "recall": 0.26587301587301587,
+              "f1": 0.2041058921801709,
+              "f05": 0.1935395938394439
+            },
+            "conll": {
+              "f1": 0.7161920647653012,
+              "f05": 0.7134982223143904
+            },
+            "baselines": {
+              "allSingletons": 0.6265900958284043,
+              "allInOne": 0.03990141134893272
+            },
+            "thresholds": [0.4, 0.4, 0.45, 0.45]
+          }
+        },
+        "outer": [
+          {
+            "fold": "anthropic-outlets-0",
+            "family": "anthropic-outlets",
+            "threshold": 0.35,
+            "innerObjective": 0.8024748368917223
+          },
+          {
+            "fold": "anthropic-outlets-1",
+            "family": "anthropic-outlets",
+            "threshold": 0.5,
+            "innerObjective": 0.8047795053473927
+          },
+          {
+            "fold": "anthropic-outlets-2",
+            "family": "anthropic-outlets",
+            "threshold": 0.35,
+            "innerObjective": 0.795690466252599
+          },
+          {
+            "fold": "anthropic-outlets-3",
+            "family": "anthropic-outlets",
+            "threshold": 0.35,
+            "innerObjective": 0.8069972563258159
+          },
+          {
+            "fold": "ecbplus-0",
+            "family": "ecbplus",
+            "threshold": 0.35,
+            "innerObjective": 0.7989702977430847
+          },
+          {
+            "fold": "ecbplus-1",
+            "family": "ecbplus",
+            "threshold": 0.4,
+            "innerObjective": 0.8071949152210319
+          },
+          {
+            "fold": "ecbplus-2",
+            "family": "ecbplus",
+            "threshold": 0.35,
+            "innerObjective": 0.8004717568163394
+          },
+          {
+            "fold": "ecbplus-3",
+            "family": "ecbplus",
+            "threshold": 0.35,
+            "innerObjective": 0.7978200533834746
+          },
+          {
+            "fold": "ecbplus-4",
+            "family": "ecbplus",
+            "threshold": 0.35,
+            "innerObjective": 0.8086957906679008
+          },
+          {
+            "fold": "small-0",
+            "family": "small",
+            "threshold": 0.35,
+            "innerObjective": 0.7631245118843065
+          },
+          {
+            "fold": "labs-outlets-0",
+            "family": "labs-outlets",
+            "threshold": 0.4,
+            "innerObjective": 0.8023051054581484
+          },
+          {
+            "fold": "labs-outlets-1",
+            "family": "labs-outlets",
+            "threshold": 0.4,
+            "innerObjective": 0.809175686548801
+          },
+          {
+            "fold": "labs-outlets-2",
+            "family": "labs-outlets",
+            "threshold": 0.45,
+            "innerObjective": 0.8079282481995456
+          },
+          {
+            "fold": "labs-outlets-3",
+            "family": "labs-outlets",
+            "threshold": 0.45,
+            "innerObjective": 0.8065288975105415
+          }
+        ],
+        "flat": {
+          "curve": [
+            {
+              "threshold": 0.2,
+              "value": 0.7709919294690599
+            },
+            {
+              "threshold": 0.25,
+              "value": 0.7935190787936577
+            },
+            {
+              "threshold": 0.3,
+              "value": 0.7987159625236062
+            },
+            {
+              "threshold": 0.35,
+              "value": 0.8002897161846487
+            },
+            {
+              "threshold": 0.4,
+              "value": 0.7974383553467865
+            },
+            {
+              "threshold": 0.45,
+              "value": 0.7971768943150568
+            },
+            {
+              "threshold": 0.5,
+              "value": 0.7969737859377507
+            },
+            {
+              "threshold": 0.55,
+              "value": 0.7916950644902125
+            },
+            {
+              "threshold": 0.6,
+              "value": 0.7899158213258745
+            },
+            {
+              "threshold": 0.65,
+              "value": 0.7864978251668124
+            },
+            {
+              "threshold": 0.7,
+              "value": 0.7853511846356718
+            },
+            {
+              "threshold": 0.75,
+              "value": 0.7798211172963294
+            },
+            {
+              "threshold": 0.8,
+              "value": 0.7688107511138221
+            },
+            {
+              "threshold": 0.85,
+              "value": 0.7468037051969194
+            },
+            {
+              "threshold": 0.9,
+              "value": 0.7309015937744687
+            },
+            {
+              "threshold": 0.95,
+              "value": 0.7017855263181921
+            }
+          ],
+          "final": {
+            "threshold": 0.35,
+            "value": 0.8002897161846487
+          }
+        }
+      },
+      "eligibility": {
+        "reference": "3152b",
+        "e2": {
+          "family": "labs-outlets",
+          "against": "reference",
+          "score": 0.7268043368509107
+        },
+        "regression": {
+          "gvc": {
+            "conllF05": 0.864999526125708,
+            "interval": {
+              "observed": -0.004452171604427346,
+              "low": -0.014407389716236452,
+              "high": 0.004444911580306021,
+              "blocks": 229,
+              "replicates": 2000,
+              "seed": 3182
+            },
+            "notEntirelyBelow0": true
+          },
+          "hlgd-test": {
+            "conllF05": 0.40238129443441784,
+            "interval": {
+              "observed": -0.00038766167368181614,
+              "low": -0.0011686343517821607,
+              "high": 0,
+              "blocks": 121,
+              "replicates": 2000,
+              "seed": 3182
+            },
+            "notEntirelyBelow0": true
+          },
+          "deepmind-outlets": {
+            "conllF05": 0.8826063372138893,
+            "interval": {
+              "observed": 0,
+              "low": 0,
+              "high": 0,
+              "blocks": 100,
+              "replicates": 2000,
+              "seed": 3182
+            },
+            "notEntirelyBelow0": true
+          }
+        },
+        "E1": true,
+        "E2": false,
+        "E3": true,
+        "eligible": false
+      }
+    },
+    "U": {
+      "design": {
+        "name": "3142-U",
+        "embeddingModel": "embeddinggemma-2",
+        "lead": {
+          "sentences": 2,
+          "minWords": 5,
+          "minLetterRatio": 0.6,
+          "maxUrlShare": 0.5,
+          "urlPattern": "(?:https?://|www\\.)\\S*",
+          "clean": {
+            "templateReports": null
+          }
+        },
+        "vectorText": "title: {title} | text: {title}\n{lead}",
+        "shortlistSize": 80,
+        "windowDays": 7,
+        "threshold": 0.5,
+        "pairScore": {
+          "intercept": -5.936108199078245,
+          "similarity": {
+            "weight": 2.4021702760671433,
+            "mean": 0.6714755319385031,
+            "sd": 0.07134715299197263
+          },
+          "agreeingNumbers": {
+            "weight": 1.0674540509935353,
+            "mean": 0.5582610133498878,
+            "sd": 0.6527198678533491
+          },
+          "disagreeingNumbers": {
+            "weight": -0.960183202025765,
+            "mean": 1.509689748054905,
+            "sd": 0.817321707200131
+          },
+          "samePublisher": {
+            "weight": -0.7061018665315341,
+            "mean": 0.12029307916811233,
+            "sd": 0.3253039413726238
+          }
+        }
+      },
+      "training": {
+        "method": "IRLS (Newton-Raphson)",
+        "maxIterations": 100,
+        "tolerance": 1e-9,
+        "ridge": 0.000001,
+        "rows": 97994,
+        "positives": 5831,
+        "iterations": 10,
+        "pairs": "batch shortlist pairs (top 80 within 7 days) of all 14 training folds"
+      },
+      "crossValidation": {
+        "objective": 0.8133273892378277,
+        "families": {
+          "anthropic-outlets": {
+            "muc": {
+              "precision": 0.7887175324675324,
+              "recall": 0.47301128885479415,
+              "f1": 0.5865426263880744,
+              "f05": 0.6907299610084892
+            },
+            "bCubed": {
+              "precision": 0.9651096656611363,
+              "recall": 0.845914188752424,
+              "f1": 0.9002524161272787,
+              "f05": 0.9376651999641561
+            },
+            "ceafE": {
+              "precision": 0.8244371791366283,
+              "recall": 0.9324407202805779,
+              "f1": 0.8741343778184241,
+              "f05": 0.843434771723777
+            },
+            "blanc": {
+              "precision": 0.8754286906365418,
+              "recall": 0.6260311771192266,
+              "f1": 0.6841192106645334,
+              "f05": 0.7607834642630736
+            },
+            "pair": {
+              "precision": 0.7556706476543433,
+              "recall": 0.25254885613286204,
+              "f1": 0.3708948732905567,
+              "f05": 0.5255190357748694
+            },
+            "conll": {
+              "f1": 0.7869764734445924,
+              "f05": 0.8239433108988075
+            },
+            "baselines": {
+              "allSingletons": 0.5595923515981582,
+              "allInOne": 0.1011846177350239
+            },
+            "thresholds": [0.5, 0.6, 0.5, 0.5]
+          },
+          "ecbplus": {
+            "muc": {
+              "precision": 0.9880776029545224,
+              "recall": 0.849548505914725,
+              "f1": 0.9130665619283175,
+              "f05": 0.9564769748369628
+            },
+            "bCubed": {
+              "precision": 0.9482012958811732,
+              "recall": 0.7709699493630895,
+              "f1": 0.849773455368722,
+              "f05": 0.9060032976115371
+            },
+            "ceafE": {
+              "precision": 0.3511265601334509,
+              "recall": 0.8311197556151712,
+              "f1": 0.49114421810024317,
+              "f05": 0.3961774739271384
+            },
+            "blanc": {
+              "precision": 0.940035775231349,
+              "recall": 0.8774346479059567,
+              "f1": 0.9049064013723582,
+              "f05": 0.9248770098495843
+            },
+            "pair": {
+              "precision": 0.8945513205214602,
+              "recall": 0.7610634381597016,
+              "f1": 0.8201753231668105,
+              "f05": 0.862592963511861
+            },
+            "conll": {
+              "f1": 0.7513280784657608,
+              "f05": 0.7528859154585461
+            },
+            "baselines": {
+              "allSingletons": 0.11460726335264475,
+              "allInOne": 0.35015449147180566
+            },
+            "thresholds": [0.5, 0.55, 0.5, 0.45, 0.55]
+          },
+          "small": {
+            "muc": {
+              "precision": 0.7666666666666667,
+              "recall": 0.696969696969697,
+              "f1": 0.7301587301587302,
+              "f05": 0.7516339869281047
+            },
+            "bCubed": {
+              "precision": 0.9710691823899372,
+              "recall": 0.9597484276729561,
+              "f1": 0.9653756171511688,
+              "f05": 0.9687837162179943
+            },
+            "ceafE": {
+              "precision": 0.939148936170213,
+              "recall": 0.9512931034482761,
+              "f1": 0.945182012847966,
+              "f05": 0.9415529010238911
+            },
+            "blanc": {
+              "precision": 0.8806947817766984,
+              "recall": 0.8198568565702835,
+              "f1": 0.8476257091011373,
+              "f05": 0.8667377648443005
+            },
+            "pair": {
+              "precision": 0.7619047619047619,
+              "recall": 0.64,
+              "f1": 0.6956521739130435,
+              "f05": 0.7339449541284403
+            },
+            "conll": {
+              "f1": 0.8802387867192882,
+              "f05": 0.88732353472333
+            },
+            "baselines": {
+              "allSingletons": 0.612425574191383,
+              "allInOne": 0.05292945911216515
+            },
+            "thresholds": [0.55]
+          },
+          "labs-outlets": {
+            "muc": {
+              "precision": 0.48903508771929827,
+              "recall": 0.42708333333333337,
+              "f1": 0.45166112956810633,
+              "f05": 0.47228260869565214
+            },
+            "bCubed": {
+              "precision": 0.9557419546508732,
+              "recall": 0.9579468786537096,
+              "f1": 0.9560700886241652,
+              "f05": 0.9556865955805411
+            },
+            "ceafE": {
+              "precision": 0.9410911044019133,
+              "recall": 0.9352368568460221,
+              "f1": 0.9375124077280356,
+              "f05": 0.9395011833356866
+            },
+            "blanc": {
+              "precision": 0.8564000537189375,
+              "recall": 0.8142336305820372,
+              "f1": 0.8231729211048571,
+              "f05": 0.8395330205450775
+            },
+            "pair": {
+              "precision": 0.46374743927421713,
+              "recall": 0.37976190476190474,
+              "f1": 0.3974675324675324,
+              "f05": 0.4300832848385322
+            },
+            "conll": {
+              "f1": 0.781747875306769,
+              "f05": 0.7891567958706267
+            },
+            "baselines": {
+              "allSingletons": 0.6265900958284043,
+              "allInOne": 0.03990141134893272
+            },
+            "thresholds": [0.5, 0.5, 0.6, 0.5]
+          }
+        },
+        "outer": [
+          {
+            "fold": "anthropic-outlets-0",
+            "family": "anthropic-outlets",
+            "threshold": 0.5,
+            "innerObjective": 0.8160992371403782
+          },
+          {
+            "fold": "anthropic-outlets-1",
+            "family": "anthropic-outlets",
+            "threshold": 0.6,
+            "innerObjective": 0.8171672831362836
+          },
+          {
+            "fold": "anthropic-outlets-2",
+            "family": "anthropic-outlets",
+            "threshold": 0.5,
+            "innerObjective": 0.8123176419472238
+          },
+          {
+            "fold": "anthropic-outlets-3",
+            "family": "anthropic-outlets",
+            "threshold": 0.5,
+            "innerObjective": 0.8152842314816142
+          },
+          {
+            "fold": "ecbplus-0",
+            "family": "ecbplus",
+            "threshold": 0.5,
+            "innerObjective": 0.8163765330020762
+          },
+          {
+            "fold": "ecbplus-1",
+            "family": "ecbplus",
+            "threshold": 0.55,
+            "innerObjective": 0.8210258883125088
+          },
+          {
+            "fold": "ecbplus-2",
+            "family": "ecbplus",
+            "threshold": 0.5,
+            "innerObjective": 0.8150709065967674
+          },
+          {
+            "fold": "ecbplus-3",
+            "family": "ecbplus",
+            "threshold": 0.45,
+            "innerObjective": 0.8141508090820827
+          },
+          {
+            "fold": "ecbplus-4",
+            "family": "ecbplus",
+            "threshold": 0.55,
+            "innerObjective": 0.8212512814875317
+          },
+          {
+            "fold": "small-0",
+            "family": "small",
+            "threshold": 0.55,
+            "innerObjective": 0.7893723647555676
+          },
+          {
+            "fold": "labs-outlets-0",
+            "family": "labs-outlets",
+            "threshold": 0.5,
+            "innerObjective": 0.8089046397188913
+          },
+          {
+            "fold": "labs-outlets-1",
+            "family": "labs-outlets",
+            "threshold": 0.5,
+            "innerObjective": 0.82842296711642
+          },
+          {
+            "fold": "labs-outlets-2",
+            "family": "labs-outlets",
+            "threshold": 0.6,
+            "innerObjective": 0.8137253496709189
+          },
+          {
+            "fold": "labs-outlets-3",
+            "family": "labs-outlets",
+            "threshold": 0.5,
+            "innerObjective": 0.8060919603055903
+          }
+        ],
+        "flat": {
+          "curve": [
+            {
+              "threshold": 0.2,
+              "value": 0.7756039187022965
+            },
+            {
+              "threshold": 0.25,
+              "value": 0.7980922751685269
+            },
+            {
+              "threshold": 0.3,
+              "value": 0.8081512488267998
+            },
+            {
+              "threshold": 0.35,
+              "value": 0.8111894066384091
+            },
+            {
+              "threshold": 0.4,
+              "value": 0.8080576857819961
+            },
+            {
+              "threshold": 0.45,
+              "value": 0.8107179699934264
+            },
+            {
+              "threshold": 0.5,
+              "value": 0.8159422907867024
+            },
+            {
+              "threshold": 0.55,
+              "value": 0.8147164983529696
+            },
+            {
+              "threshold": 0.6,
+              "value": 0.8091384381994052
+            },
+            {
+              "threshold": 0.65,
+              "value": 0.812174006500337
+            },
+            {
+              "threshold": 0.7,
+              "value": 0.8072149926841544
+            },
+            {
+              "threshold": 0.75,
+              "value": 0.7988781010505498
+            },
+            {
+              "threshold": 0.8,
+              "value": 0.793243744582719
+            },
+            {
+              "threshold": 0.85,
+              "value": 0.7764053364274756
+            },
+            {
+              "threshold": 0.9,
+              "value": 0.760587751709063
+            },
+            {
+              "threshold": 0.95,
+              "value": 0.7304574871485126
+            }
+          ],
+          "final": {
+            "threshold": 0.5,
+            "value": 0.8159422907867024
+          }
+        }
+      },
+      "eligibility": {
+        "reference": "3152b",
+        "e2": {
+          "family": "labs-outlets",
+          "against": "reference",
+          "score": 0.7268043368509107
+        },
+        "regression": {
+          "gvc": {
+            "conllF05": 0.8753511705120567,
+            "interval": {
+              "observed": 0.005899472781921378,
+              "low": -0.0062088162966388305,
+              "high": 0.018757034861344835,
+              "blocks": 233,
+              "replicates": 2000,
+              "seed": 3182
+            },
+            "notEntirelyBelow0": true
+          },
+          "hlgd-test": {
+            "conllF05": 0.40276895610809965,
+            "interval": {
+              "observed": 0,
+              "low": 0,
+              "high": 0,
+              "blocks": 122,
+              "replicates": 2000,
+              "seed": 3182
+            },
+            "notEntirelyBelow0": true
+          },
+          "deepmind-outlets": {
+            "conllF05": 0.8743495610808383,
+            "interval": {
+              "observed": -0.00825677613305098,
+              "low": -0.0465092004692339,
+              "high": 0.014334711671741274,
+              "blocks": 99,
+              "replicates": 2000,
+              "seed": 3182
+            },
+            "notEntirelyBelow0": true
+          }
+        },
+        "E1": true,
+        "E2": true,
+        "E3": true,
+        "eligible": true
+      }
+    },
+    "T": {
+      "design": {
+        "name": "3142-T",
+        "embeddingModel": "embeddinggemma-2",
+        "lead": {
+          "sentences": 2,
+          "minWords": 5,
+          "minLetterRatio": 0.6,
+          "maxUrlShare": 0.5,
+          "urlPattern": "(?:https?://|www\\.)\\S*",
+          "clean": {
+            "templateReports": 2
+          }
+        },
+        "vectorText": "title: {title} | text: {title}\n{lead}",
+        "shortlistSize": 80,
+        "windowDays": 7,
+        "threshold": 0.45,
+        "pairScore": {
+          "intercept": -6.00930628601825,
+          "similarity": {
+            "weight": 2.421115134533651,
+            "mean": 0.6705475837316417,
+            "sd": 0.07141367676299294
+          },
+          "agreeingNumbers": {
+            "weight": 1.1047124180570962,
+            "mean": 0.5220741623456666,
+            "sd": 0.6288076141901435
+          },
+          "disagreeingNumbers": {
+            "weight": -0.9948611611230535,
+            "mean": 1.479057356408442,
+            "sd": 0.8191251607818617
+          },
+          "samePublisher": {
+            "weight": -0.5503556625404615,
+            "mean": 0.11965654894994232,
+            "sd": 0.3245594849073258
+          }
+        }
+      },
+      "training": {
+        "method": "IRLS (Newton-Raphson)",
+        "maxIterations": 100,
+        "tolerance": 1e-9,
+        "ridge": 0.000001,
+        "rows": 97947,
+        "positives": 5831,
+        "iterations": 10,
+        "pairs": "batch shortlist pairs (top 80 within 7 days) of all 14 training folds"
+      },
+      "crossValidation": {
+        "objective": 0.8269589047845318,
+        "families": {
+          "anthropic-outlets": {
+            "muc": {
+              "precision": 0.7707584604826773,
+              "recall": 0.5745827786677496,
+              "f1": 0.6541581907289411,
+              "f05": 0.7177192079743322
+            },
+            "bCubed": {
+              "precision": 0.9432150787665493,
+              "recall": 0.8713439856711915,
+              "f1": 0.9057151242524204,
+              "f05": 0.927810620159087
+            },
+            "ceafE": {
+              "precision": 0.8584785507323315,
+              "recall": 0.9226677658371241,
+              "f1": 0.8892924570612204,
+              "f05": 0.8705175757357236
+            },
+            "blanc": {
+              "precision": 0.8581573342066074,
+              "recall": 0.6683186184451886,
+              "f1": 0.7254788491290396,
+              "f05": 0.7873002396127382
+            },
+            "pair": {
+              "precision": 0.7204348378866435,
+              "recall": 0.33764640165410525,
+              "f1": 0.45352519255133733,
+              "f05": 0.5781002549147074
+            },
+            "conll": {
+              "f1": 0.8163885906808607,
+              "f05": 0.8386824679563809
+            },
+            "baselines": {
+              "allSingletons": 0.5595923515981582,
+              "allInOne": 0.1011846177350239
+            },
+            "thresholds": [0.5, 0.4, 0.45, 0.5]
+          },
+          "ecbplus": {
+            "muc": {
+              "precision": 0.9870874454627374,
+              "recall": 0.8612562386326879,
+              "f1": 0.919423719217318,
+              "f05": 0.9587202665792306
+            },
+            "bCubed": {
+              "precision": 0.9377294770346329,
+              "recall": 0.7906858858635466,
+              "f1": 0.8573080138615332,
+              "f05": 0.9036167308822302
+            },
+            "ceafE": {
+              "precision": 0.3700105892888073,
+              "recall": 0.828366716801273,
+              "f1": 0.5085511722622666,
+              "f05": 0.41506858134188374
+            },
+            "blanc": {
+              "precision": 0.931079082891501,
+              "recall": 0.8878857020417563,
+              "f1": 0.9071364066584227,
+              "f05": 0.9208287236861832
+            },
+            "pair": {
+              "precision": 0.8753345048619501,
+              "recall": 0.7831688638599956,
+              "f1": 0.8245760345172155,
+              "f05": 0.8536884190872112
+            },
+            "conll": {
+              "f1": 0.7617609684470393,
+              "f05": 0.7591351929344482
+            },
+            "baselines": {
+              "allSingletons": 0.11460726335264475,
+              "allInOne": 0.35015449147180566
+            },
+            "thresholds": [0.45, 0.5, 0.45, 0.45, 0.55]
+          },
+          "small": {
+            "muc": {
+              "precision": 0.7647058823529411,
+              "recall": 0.7878787878787878,
+              "f1": 0.7761194029850745,
+              "f05": 0.7692307692307692
+            },
+            "bCubed": {
+              "precision": 0.9672955974842768,
+              "recall": 0.9723270440251573,
+              "f1": 0.9698047948837173,
+              "f05": 0.9682977167253898
+            },
+            "ceafE": {
+              "precision": 0.9533910533910535,
+              "recall": 0.9492816091954024,
+              "f1": 0.9513318934485241,
+              "f05": 0.9525663206459055
+            },
+            "blanc": {
+              "precision": 0.8827783398128088,
+              "recall": 0.8598425422273117,
+              "f1": 0.8709550990148466,
+              "f05": 0.8779594614866706
+            },
+            "pair": {
+              "precision": 0.7659574468085106,
+              "recall": 0.72,
+              "f1": 0.7422680412371133,
+              "f05": 0.7563025210084033
+            },
+            "conll": {
+              "f1": 0.8990853637724386,
+              "f05": 0.8966982688673548
+            },
+            "baselines": {
+              "allSingletons": 0.612425574191383,
+              "allInOne": 0.05292945911216515
+            },
+            "thresholds": [0.45]
+          },
+          "labs-outlets": {
+            "muc": {
+              "precision": 0.5428259141494436,
+              "recall": 0.5,
+              "f1": 0.5179812834224599,
+              "f05": 0.5318877551020408
+            },
+            "bCubed": {
+              "precision": 0.9615663274107298,
+              "recall": 0.9622383704214823,
+              "f1": 0.9610536337175533,
+              "f05": 0.9611570854243252
+            },
+            "ceafE": {
+              "precision": 0.9481390360606706,
+              "recall": 0.9444234883128599,
+              "f1": 0.9455318271407764,
+              "f05": 0.9469142276134639
+            },
+            "blanc": {
+              "precision": 0.9079461131713109,
+              "recall": 0.8654004439011183,
+              "f1": 0.8816948920785959,
+              "f05": 0.8957297017798216
+            },
+            "pair": {
+              "precision": 0.5667377398720682,
+              "recall": 0.48174603174603176,
+              "f1": 0.5142857142857142,
+              "f05": 0.5423252279635259
+            },
+            "conll": {
+              "f1": 0.8081889147602632,
+              "f05": 0.8133196893799434
+            },
+            "baselines": {
+              "allSingletons": 0.6265900958284043,
+              "allInOne": 0.03990141134893272
+            },
+            "thresholds": [0.45, 0.5, 0.45, 0.45]
+          }
+        },
+        "outer": [
+          {
+            "fold": "anthropic-outlets-0",
+            "family": "anthropic-outlets",
+            "threshold": 0.5,
+            "innerObjective": 0.82974477813716
+          },
+          {
+            "fold": "anthropic-outlets-1",
+            "family": "anthropic-outlets",
+            "threshold": 0.4,
+            "innerObjective": 0.8268335081485911
+          },
+          {
+            "fold": "anthropic-outlets-2",
+            "family": "anthropic-outlets",
+            "threshold": 0.45,
+            "innerObjective": 0.8265289936408572
+          },
+          {
+            "fold": "anthropic-outlets-3",
+            "family": "anthropic-outlets",
+            "threshold": 0.5,
+            "innerObjective": 0.8258344276762569
+          },
+          {
+            "fold": "ecbplus-0",
+            "family": "ecbplus",
+            "threshold": 0.45,
+            "innerObjective": 0.8246055263851672
+          },
+          {
+            "fold": "ecbplus-1",
+            "family": "ecbplus",
+            "threshold": 0.5,
+            "innerObjective": 0.8303784504000223
+          },
+          {
+            "fold": "ecbplus-2",
+            "family": "ecbplus",
+            "threshold": 0.45,
+            "innerObjective": 0.8268769971439458
+          },
+          {
+            "fold": "ecbplus-3",
+            "family": "ecbplus",
+            "threshold": 0.45,
+            "innerObjective": 0.8270724648413476
+          },
+          {
+            "fold": "ecbplus-4",
+            "family": "ecbplus",
+            "threshold": 0.55,
+            "innerObjective": 0.8272828175682116
+          },
+          {
+            "fold": "small-0",
+            "family": "small",
+            "threshold": 0.45,
+            "innerObjective": 0.805089577781874
+          },
+          {
+            "fold": "labs-outlets-0",
+            "family": "labs-outlets",
+            "threshold": 0.45,
+            "innerObjective": 0.8199480347694643
+          },
+          {
+            "fold": "labs-outlets-1",
+            "family": "labs-outlets",
+            "threshold": 0.5,
+            "innerObjective": 0.8406062120780006
+          },
+          {
+            "fold": "labs-outlets-2",
+            "family": "labs-outlets",
+            "threshold": 0.45,
+            "innerObjective": 0.8281228624917714
+          },
+          {
+            "fold": "labs-outlets-3",
+            "family": "labs-outlets",
+            "threshold": 0.45,
+            "innerObjective": 0.8172222949217517
+          }
+        ],
+        "flat": {
+          "curve": [
+            {
+              "threshold": 0.2,
+              "value": 0.7832509031164989
+            },
+            {
+              "threshold": 0.25,
+              "value": 0.8006680674134483
+            },
+            {
+              "threshold": 0.3,
+              "value": 0.8055237335177219
+            },
+            {
+              "threshold": 0.35,
+              "value": 0.8153266643101108
+            },
+            {
+              "threshold": 0.4,
+              "value": 0.8210138570120016
+            },
+            {
+              "threshold": 0.45,
+              "value": 0.8281989217238517
+            },
+            {
+              "threshold": 0.5,
+              "value": 0.8278223241181073
+            },
+            {
+              "threshold": 0.55,
+              "value": 0.8186952659338304
+            },
+            {
+              "threshold": 0.6,
+              "value": 0.8156311794627156
+            },
+            {
+              "threshold": 0.65,
+              "value": 0.8125402236533269
+            },
+            {
+              "threshold": 0.7,
+              "value": 0.8076527894025781
+            },
+            {
+              "threshold": 0.75,
+              "value": 0.8014919933486291
+            },
+            {
+              "threshold": 0.8,
+              "value": 0.7986113504385546
+            },
+            {
+              "threshold": 0.85,
+              "value": 0.7874027851433978
+            },
+            {
+              "threshold": 0.9,
+              "value": 0.7693708352818325
+            },
+            {
+              "threshold": 0.95,
+              "value": 0.7299296474642163
+            }
+          ],
+          "final": {
+            "threshold": 0.45,
+            "value": 0.8281989217238517
+          }
+        }
+      },
+      "eligibility": {
+        "reference": "3152b",
+        "e2": {
+          "family": "labs-outlets",
+          "against": "reference",
+          "score": 0.7268043368509107
+        },
+        "regression": {
+          "gvc": {
+            "conllF05": 0.8758452173436474,
+            "interval": {
+              "observed": 0.006393519613512089,
+              "low": 0,
+              "high": 0.01484291975321883,
+              "blocks": 233,
+              "replicates": 2000,
+              "seed": 3182
+            },
+            "notEntirelyBelow0": true
+          },
+          "hlgd-test": {
+            "conllF05": 0.4015575517848073,
+            "interval": {
+              "observed": -0.0012114043232923644,
+              "low": -0.0035786947845856676,
+              "high": 0,
+              "blocks": 120,
+              "replicates": 2000,
+              "seed": 3182
+            },
+            "notEntirelyBelow0": true
+          },
+          "deepmind-outlets": {
+            "conllF05": 0.8695349223173586,
+            "interval": {
+              "observed": -0.013071414896530631,
+              "low": -0.0667118987843377,
+              "high": 0.028719110558255267,
+              "blocks": 98,
+              "replicates": 2000,
+              "seed": 3182
+            },
+            "notEntirelyBelow0": true
+          }
+        },
+        "E1": true,
+        "E2": true,
+        "E3": true,
+        "eligible": true
+      }
+    },
+    "TI": {
+      "design": {
+        "name": "3142-TI",
+        "embeddingModel": "embeddinggemma-2",
+        "lead": {
+          "sentences": 2,
+          "minWords": 5,
+          "minLetterRatio": 0.6,
+          "maxUrlShare": 0.5,
+          "urlPattern": "(?:https?://|www\\.)\\S*",
+          "clean": {
+            "templateReports": 2
+          }
+        },
+        "vectorText": "title: {title} | text: {title}\n{lead}",
+        "shortlistSize": 80,
+        "windowDays": 7,
+        "threshold": 0.5,
+        "pairScore": {
+          "intercept": -5.99904895742176,
+          "similarity": {
+            "weight": 2.434460981260857,
+            "mean": 0.6705475837316417,
+            "sd": 0.07141367676299294
+          },
+          "agreeingNumbers": {
+            "weight": 1.1071543704282985,
+            "mean": 0.5220741623456666,
+            "sd": 0.6288076141901435
+          },
+          "disagreeingNumbers": {
+            "weight": -0.9956426882782313,
+            "mean": 1.479057356408442,
+            "sd": 0.8191251607818617
+          },
+          "samePublisher": {
+            "weight": 0.29818189496536684,
+            "mean": 0.11965654894994232,
+            "sd": 0.3245594849073258
+          },
+          "samePublisherSimilarity": {
+            "weight": -0.7592032665989468,
+            "mean": 0.08382497455673654,
+            "sd": 0.22813266939836943
+          }
+        }
+      },
+      "training": {
+        "method": "IRLS (Newton-Raphson)",
+        "maxIterations": 100,
+        "tolerance": 1e-9,
+        "ridge": 0.000001,
+        "rows": 97947,
+        "positives": 5831,
+        "iterations": 10,
+        "pairs": "batch shortlist pairs (top 80 within 7 days) of all 14 training folds"
+      },
+      "crossValidation": {
+        "objective": 0.8244619809095326,
+        "families": {
+          "anthropic-outlets": {
+            "muc": {
+              "precision": 0.7884439359267735,
+              "recall": 0.5515180914991389,
+              "f1": 0.6462724878683868,
+              "f05": 0.7234955174012665
+            },
+            "bCubed": {
+              "precision": 0.9555008798391152,
+              "recall": 0.8626143880629176,
+              "f1": 0.906333818259484,
+              "f05": 0.9351090717868922
+            },
+            "ceafE": {
+              "precision": 0.8504647878836779,
+              "recall": 0.9297510822717104,
+              "f1": 0.8881307578828327,
+              "f05": 0.8650965931145588
+            },
+            "blanc": {
+              "precision": 0.8742720342479008,
+              "recall": 0.6488283519595288,
+              "f1": 0.7102878480614117,
+              "f05": 0.7834064883676091
+            },
+            "pair": {
+              "precision": 0.7529846696513364,
+              "recall": 0.2983125458547322,
+              "f1": 0.42312860243969097,
+              "f05": 0.5704996188560789
+            },
+            "conll": {
+              "f1": 0.8135790213369012,
+              "f05": 0.8412337274342392
+            },
+            "baselines": {
+              "allSingletons": 0.5595923515981582,
+              "allInOne": 0.1011846177350239
+            },
+            "thresholds": [0.5, 0.5, 0.5, 0.5]
+          },
+          "ecbplus": {
+            "muc": {
+              "precision": 0.9860999335339192,
+              "recall": 0.8696276870041363,
+              "f1": 0.9236311184743554,
+              "f05": 0.9599517748605395
+            },
+            "bCubed": {
+              "precision": 0.9192196490635265,
+              "recall": 0.8058054381791763,
+              "f1": 0.8570541539625568,
+              "f05": 0.8928026049476507
+            },
+            "ceafE": {
+              "precision": 0.3784456552373664,
+              "recall": 0.8087909617814392,
+              "f1": 0.5116409805386767,
+              "f05": 0.4221635005959481
+            },
+            "blanc": {
+              "precision": 0.9201948248861553,
+              "recall": 0.895525152871411,
+              "f1": 0.9052470191166317,
+              "f05": 0.9134993959313619
+            },
+            "pair": {
+              "precision": 0.8524900289462259,
+              "recall": 0.8006276503500429,
+              "f1": 0.8213544170631193,
+              "f05": 0.8386083165849569
+            },
+            "conll": {
+              "f1": 0.7641087509918629,
+              "f05": 0.7583059601347129
+            },
+            "baselines": {
+              "allSingletons": 0.11460726335264475,
+              "allInOne": 0.35015449147180566
+            },
+            "thresholds": [0.4, 0.5, 0.4, 0.45, 0.4]
+          },
+          "small": {
+            "muc": {
+              "precision": 0.7647058823529411,
+              "recall": 0.7878787878787878,
+              "f1": 0.7761194029850745,
+              "f05": 0.7692307692307692
+            },
+            "bCubed": {
+              "precision": 0.9672955974842768,
+              "recall": 0.9723270440251573,
+              "f1": 0.9698047948837173,
+              "f05": 0.9682977167253898
+            },
+            "ceafE": {
+              "precision": 0.9533910533910535,
+              "recall": 0.9492816091954024,
+              "f1": 0.9513318934485241,
+              "f05": 0.9525663206459055
+            },
+            "blanc": {
+              "precision": 0.8827783398128088,
+              "recall": 0.8598425422273117,
+              "f1": 0.8709550990148466,
+              "f05": 0.8779594614866706
+            },
+            "pair": {
+              "precision": 0.7659574468085106,
+              "recall": 0.72,
+              "f1": 0.7422680412371133,
+              "f05": 0.7563025210084033
+            },
+            "conll": {
+              "f1": 0.8990853637724386,
+              "f05": 0.8966982688673548
+            },
+            "baselines": {
+              "allSingletons": 0.612425574191383,
+              "allInOne": 0.05292945911216515
+            },
+            "thresholds": [0.45]
+          },
+          "labs-outlets": {
+            "muc": {
+              "precision": 0.6112132352941176,
+              "recall": 0.359375,
+              "f1": 0.4235518292682927,
+              "f05": 0.500679347826087
+            },
+            "bCubed": {
+              "precision": 0.9655913978494624,
+              "recall": 0.9548178655626474,
+              "f1": 0.9591819197455291,
+              "f05": 0.9627743392796488
+            },
+            "ceafE": {
+              "precision": 0.9405077915518115,
+              "recall": 0.9477031501866786,
+              "f1": 0.9432077293073653,
+              "f05": 0.9413762144997342
+            },
+            "blanc": {
+              "precision": 0.9388688311302339,
+              "recall": 0.7823493914786388,
+              "f1": 0.8200768765202188,
+              "f05": 0.8664700724249174
+            },
+            "pair": {
+              "precision": 0.6287280701754385,
+              "recall": 0.315542328042328,
+              "f1": 0.39107142857142857,
+              "f05": 0.4839016273650115
+            },
+            "conll": {
+              "f1": 0.7753138261070623,
+              "f05": 0.8016099672018233
+            },
+            "baselines": {
+              "allSingletons": 0.6265900958284043,
+              "allInOne": 0.03990141134893272
+            },
+            "thresholds": [0.5, 0.5, 0.5, 0.55]
+          }
+        },
+        "outer": [
+          {
+            "fold": "anthropic-outlets-0",
+            "family": "anthropic-outlets",
+            "threshold": 0.5,
+            "innerObjective": 0.8258871884655326
+          },
+          {
+            "fold": "anthropic-outlets-1",
+            "family": "anthropic-outlets",
+            "threshold": 0.5,
+            "innerObjective": 0.8293118958547603
+          },
+          {
+            "fold": "anthropic-outlets-2",
+            "family": "anthropic-outlets",
+            "threshold": 0.5,
+            "innerObjective": 0.8222082705183128
+          },
+          {
+            "fold": "anthropic-outlets-3",
+            "family": "anthropic-outlets",
+            "threshold": 0.5,
+            "innerObjective": 0.8207655603017588
+          },
+          {
+            "fold": "ecbplus-0",
+            "family": "ecbplus",
+            "threshold": 0.4,
+            "innerObjective": 0.82382356624616
+          },
+          {
+            "fold": "ecbplus-1",
+            "family": "ecbplus",
+            "threshold": 0.5,
+            "innerObjective": 0.8264346067398487
+          },
+          {
+            "fold": "ecbplus-2",
+            "family": "ecbplus",
+            "threshold": 0.4,
+            "innerObjective": 0.821560066378024
+          },
+          {
+            "fold": "ecbplus-3",
+            "family": "ecbplus",
+            "threshold": 0.45,
+            "innerObjective": 0.8267906574190768
+          },
+          {
+            "fold": "ecbplus-4",
+            "family": "ecbplus",
+            "threshold": 0.4,
+            "innerObjective": 0.8292312518113103
+          },
+          {
+            "fold": "small-0",
+            "family": "small",
+            "threshold": 0.45,
+            "innerObjective": 0.8050670589029156
+          },
+          {
+            "fold": "labs-outlets-0",
+            "family": "labs-outlets",
+            "threshold": 0.5,
+            "innerObjective": 0.8192415558938958
+          },
+          {
+            "fold": "labs-outlets-1",
+            "family": "labs-outlets",
+            "threshold": 0.5,
+            "innerObjective": 0.8403817855702921
+          },
+          {
+            "fold": "labs-outlets-2",
+            "family": "labs-outlets",
+            "threshold": 0.5,
+            "innerObjective": 0.8165627793182619
+          },
+          {
+            "fold": "labs-outlets-3",
+            "family": "labs-outlets",
+            "threshold": 0.55,
+            "innerObjective": 0.8142710729346982
+          }
+        ],
+        "flat": {
+          "curve": [
+            {
+              "threshold": 0.2,
+              "value": 0.782986718722879
+            },
+            {
+              "threshold": 0.25,
+              "value": 0.7965354975604219
+            },
+            {
+              "threshold": 0.3,
+              "value": 0.8036466262709016
+            },
+            {
+              "threshold": 0.35,
+              "value": 0.8127421507195929
+            },
+            {
+              "threshold": 0.4,
+              "value": 0.8204237583486998
+            },
+            {
+              "threshold": 0.45,
+              "value": 0.8167905376739928
+            },
+            {
+              "threshold": 0.5,
+              "value": 0.824544388362838
+            },
+            {
+              "threshold": 0.55,
+              "value": 0.820024545328422
+            },
+            {
+              "threshold": 0.6,
+              "value": 0.816690143024797
+            },
+            {
+              "threshold": 0.65,
+              "value": 0.8113821785255766
+            },
+            {
+              "threshold": 0.7,
+              "value": 0.8061001685371811
+            },
+            {
+              "threshold": 0.75,
+              "value": 0.8048377350382896
+            },
+            {
+              "threshold": 0.8,
+              "value": 0.7984602524706028
+            },
+            {
+              "threshold": 0.85,
+              "value": 0.7876921210114511
+            },
+            {
+              "threshold": 0.9,
+              "value": 0.768218150816838
+            },
+            {
+              "threshold": 0.95,
+              "value": 0.7305667209627666
+            }
+          ],
+          "final": {
+            "threshold": 0.5,
+            "value": 0.824544388362838
+          }
+        }
+      },
+      "eligibility": {
+        "reference": "3152b",
+        "e2": {
+          "family": "labs-outlets",
+          "against": "reference",
+          "score": 0.7268043368509107
+        },
+        "regression": {
+          "gvc": {
+            "conllF05": 0.8769773203658202,
+            "interval": {
+              "observed": 0.007525622635684903,
+              "low": -0.0039015195577946082,
+              "high": 0.020227363741826432,
+              "blocks": 233,
+              "replicates": 2000,
+              "seed": 3182
+            },
+            "notEntirelyBelow0": true
+          },
+          "hlgd-test": {
+            "conllF05": 0.40276895610809965,
+            "interval": {
+              "observed": 0,
+              "low": 0,
+              "high": 0,
+              "blocks": 122,
+              "replicates": 2000,
+              "seed": 3182
+            },
+            "notEntirelyBelow0": true
+          },
+          "deepmind-outlets": {
+            "conllF05": 0.888447440733239,
+            "interval": {
+              "observed": 0.005841103519349744,
+              "low": 0,
+              "high": 0.017261067830210197,
+              "blocks": 100,
+              "replicates": 2000,
+              "seed": 3182
+            },
+            "notEntirelyBelow0": true
+          }
+        },
+        "E1": true,
+        "E2": true,
+        "E3": true,
+        "eligible": true
+      }
+    }
+  },
+  "choice": {
+    "chosen": "T",
+    "comparison": {
+      "challenger": "T",
+      "incumbent": "R",
+      "interval": {
+        "observed": 0.028660209764922118,
+        "low": 0.004084146665952693,
+        "high": 0.043093342411155366,
+        "blocks": 1469,
+        "replicates": 2000,
+        "seed": 3182
+      }
+    }
+  }
+}
