@@ -1,6 +1,6 @@
 # @zukhruf/embeddings
 
-A program that compares texts by meaning needs a vector for each text, and the model call that makes the vector is slow. This package keeps the vectors of documents in a SQLite database. An upsert calls the model only for new or changed text. A search gives the nearest documents of a document, by exact cosine similarity, from the documents published near it. A query gives the similarity of a vector of another text, for example a search sentence, to each document of a date range. This kind of package is also known as a vector store.
+A program that compares texts by meaning needs a vector for each text, and the model call that makes the vector is slow. This package keeps the vectors of documents in a SQLite database. An upsert calls the model only for new or changed text. A search gives the nearest documents of a document, by exact cosine similarity, from the documents published near it. A query gives the similarity of a vector of another text, for example a search sentence, to each document, or to each document of a date range. This kind of package is also known as a vector store.
 
 The words in these documents have one meaning each. See the glossary in [CONTEXT.md](./CONTEXT.md).
 
@@ -64,7 +64,7 @@ collection.count(); // 2
 
 ### Search a vector table of your own
 
-Another program can write the vectors into its own table. A `VectorSearch` searches that table with the same rules as a collection. The table or view must have the columns `id` (text), `vector` and `published_at` (milliseconds since the Unix epoch). Each `vector` must be a unit vector, as a BLOB of float32 values in the byte order of the platform ([ADR 0005](./docs/adr/0005-a-vector-search-reads-a-vector-table-of-unit-vectors.md)).
+Another program can write the vectors into its own table. A `VectorSearch` searches that table with the same rules as a collection. The table or view must have the columns `id` (text) and `vector`. Each `vector` must be a unit vector, as a BLOB of float32 values in the byte order of the platform ([ADR 0005](./docs/adr/0005-a-vector-search-reads-a-vector-table-of-unit-vectors.md)). Each call except a query without a date range also reads the column `published_at` (milliseconds since the Unix epoch). Thus a table of documents with no publish date supports a query without a date range ([ADR 0007](./docs/adr/0007-a-query-without-a-date-range-compares-every-document.md)).
 
 ```ts
 import { DatabaseSync } from 'node:sqlite';
@@ -86,11 +86,11 @@ To search a table with other column names, make a view that renames the columns,
 - `nearest(id, { k, withinDays })` gives at most `k` neighbours of the document, with the highest similarity first. A neighbour has a publish date at most `withinDays` days before or after the publish date of the document. Equal similarities sort by id.
 - `neighbourGraph({ from, to, k, withinDays })` gives an iterator of `[id, neighbours]` entries, one for each document published from `from` to `to`, in the order of the publish dates and then of the ids. The neighbours of each entry are equal to the result of `nearest(id, { k, withinDays })`. A document outside the range has no entry, but it can be a neighbour of a document in the range. The call reads and decodes each vector one time ([ADR 0004](./docs/adr/0004-a-neighbour-graph-decodes-each-vector-once.md)). Use it when you need the neighbours of many documents.
 - `similarity(a, b)` gives the cosine similarity of two stored documents.
-- `query(vector, { from, to })` gives the similarity of a vector of the caller to each document published from `from` to `to`, as `{ id, similarity }` entries. The highest similarity is first, and equal similarities sort by id. The call makes the vector a unit vector first. The vector must come from the model of the stored vectors ([ADR 0006](./docs/adr/0006-query-fetch-delete-and-count-follow-the-vector-stores.md)).
+- `query(vector, range?)` gives the similarity of a vector of the caller to each document, as `{ id, similarity }` entries. With a date range `{ from, to }`, it gives only the documents published from `from` to `to`. The highest similarity is first, and equal similarities sort by id. The call makes the vector a unit vector first. The vector must come from the model of the stored vectors ([ADR 0006](./docs/adr/0006-query-fetch-delete-and-count-follow-the-vector-stores.md), [ADR 0007](./docs/adr/0007-a-query-without-a-date-range-compares-every-document.md)).
 - `fetch(ids)` gives a `Map` from each id to a copy of its stored unit vector, as a `Float32Array`, in the order of the ids.
 - `delete(ids)` removes the documents. An id that the collection does not store is not an error, so you can delete the same ids again.
 - `count()` gives the number of stored documents.
-- `new VectorSearch({ database, table })`. The caller opens and closes `database`. `table` is the name of a table or a view in it, with the columns `id`, `vector` and `published_at`. The vector search only reads it. Each call reads the table again, so the table can change between two calls.
+- `new VectorSearch({ database, table })`. The caller opens and closes `database`. `table` is the name of a table or a view in it, with the columns `id` and `vector`, and `published_at` for each call except a query without a date range. The vector search only reads it. Each call reads the table again, so the table can change between two calls.
 - `VectorSearch` gives `nearest`, `neighbourGraph`, `similarity` and `query`, with the same rules and results as these calls of a collection. A collection gives these calls to a `VectorSearch` over its table `embedding_document`.
 
 ## Errors
@@ -115,4 +115,5 @@ To search a table with other column names, make a view that renames the columns,
 - [ADR 0004: A neighbour graph decodes each vector once](./docs/adr/0004-a-neighbour-graph-decodes-each-vector-once.md)
 - [ADR 0005: A vector search reads a vector table of unit vectors](./docs/adr/0005-a-vector-search-reads-a-vector-table-of-unit-vectors.md)
 - [ADR 0006: Query, fetch, delete and count follow the vector stores](./docs/adr/0006-query-fetch-delete-and-count-follow-the-vector-stores.md)
+- [ADR 0007: A query without a date range compares every document](./docs/adr/0007-a-query-without-a-date-range-compares-every-document.md)
 - [Code copied from @deepagents/retrieval](./docs/copied-from-deepagents-retrieval.md)

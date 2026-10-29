@@ -91,6 +91,9 @@
     },
     {
       "path": "./packages/sqlite/changefeed"
+    },
+    {
+      "path": "./packages/nx"
     }
   ]
 }

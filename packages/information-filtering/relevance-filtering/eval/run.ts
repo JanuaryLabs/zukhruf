@@ -2,7 +2,12 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parseArgs } from 'node:util';
 
-import { EVAL_FOLDER, SETS_FOLDER, readMetadata } from './answer-key.ts';
+import {
+  EVAL_FOLDER,
+  SETS_FOLDER,
+  readArticles,
+  readMetadata,
+} from './answer-key.ts';
 import {
   type Interval,
   articleBootstrap,
@@ -11,6 +16,7 @@ import {
 } from './bootstrap.ts';
 import { descriptionVectors } from './cache.ts';
 import { implementationCheck } from './check.ts';
+import { daily, randomLabels } from './daily.ts';
 import { joined } from './design.ts';
 import { mean, nanMean } from './metrics.ts';
 import { type EvalProfile, readProfiles } from './profiles.ts';
@@ -49,6 +55,11 @@ const USAGE = `Usage: nx run relevance-filtering:eval -- [check | slices | ranki
   slices    Round 6 again: yes/no decisions on the fresh slices (default).
   ranking   Round 10 again: MAP of the ranking in the window and pool
             protocols on fresh-3.
+  daily [set] [--smoke]
+            Round 11: the best-N-a-day list against the keyword list on the
+            test slice (default fresh-4), teaching from every other labelled
+            slice. --smoke gives the test slice random labels in memory and
+            never reads its label files.
   rehearse  The ranking exam protocol with fresh-3 as the stream and the
             collection, fresh and fresh-2 as the teaching pool. It gives no
             verdict and reads no exam label.
@@ -64,6 +75,7 @@ const { values, positionals } = parseArgs({
   allowPositionals: true,
   options: {
     exam: { type: 'boolean', default: false },
+    smoke: { type: 'boolean', default: false },
     help: { type: 'boolean', default: false },
   },
 });
@@ -115,6 +127,7 @@ if (values.exam) {
     throw new Error('The exam needs a passing ranking check.');
   exam();
 } else if (command === 'ranking') rankingRounds();
+else if (command === 'daily') dailyRound();
 else if (command === 'rehearse') {
   const result = examProtocol('fresh-3', ['collection', 'fresh', 'fresh-2']);
   writeFileSync(
@@ -444,4 +457,36 @@ function examProtocol(streamName: string, poolNames: readonly string[]) {
     ),
     runs,
   };
+}
+
+// Round 11 (#3308): the lists of each day on the test slice.
+function dailyRound(): void {
+  const testName = positionals[1] ?? 'fresh-4';
+  const poolNames = ['collection', 'fresh', 'fresh-2', 'fresh-3'].filter(
+    (name) => name !== testName,
+  );
+  using stack = new DisposableStack();
+  const test = stack.use(
+    new LoadedSet(
+      testName,
+      values.smoke
+        ? randomLabels(readArticles(testName).length, profiles)
+        : undefined,
+    ),
+  );
+  const pool = poolNames.map((name) => stack.use(new LoadedSet(name)));
+  const result = {
+    test: testName,
+    smoke: values.smoke,
+    pool: poolNames,
+    ...daily({ profiles, descriptionOf, test, pool }),
+  };
+  writeFileSync(
+    join(
+      RESULTS_FOLDER,
+      values.smoke ? `daily-smoke-${testName}.json` : `daily-${testName}.json`,
+    ),
+    JSON.stringify(result, null, 1),
+  );
+  console.log(JSON.stringify({ ...result, perProfile: undefined }, null, 1));
 }

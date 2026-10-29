@@ -5,7 +5,6 @@
   "projectType": "library",
   "tags": ["layer:island", "std:tool", "test:node", "test:docker"],
   "targets": {
-    "format": {},
     "test": {
       "parallelism": false
     }

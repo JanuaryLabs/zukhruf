@@ -444,6 +444,27 @@ describe('Collection', () => {
     assert.ok(Math.abs(matches[3]?.similarity ?? 1) < 1e-6);
   });
 
+  test('a query with no date range gives the similarity of a vector to every document, whatever its publish date', async () => {
+    using database = new DatabaseSync(':memory:');
+    const collection = new Collection({
+      database,
+      model: model({ east: [1, 0], north: [0, 1] }),
+    });
+    // The ids sort the other way from the similarities, so an order by id
+    // alone fails.
+    await collection.upsert([
+      { id: 'earlier', text: 'east', publishedAt: new Date(0) },
+      { id: 'later', text: 'north', publishedAt: day(30) },
+    ]);
+
+    const matches = collection.query([0, 1]);
+
+    assert.deepEqual(
+      matches.map(({ id }) => id),
+      ['later', 'earlier'],
+    );
+  });
+
   test('a query vector of another dimension is a DimensionMismatchError, and an empty collection gives no match', async () => {
     using database = new DatabaseSync(':memory:');
     const collection = new Collection({

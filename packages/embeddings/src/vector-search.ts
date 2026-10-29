@@ -95,12 +95,14 @@ export class VectorSearch {
       ]);
   }
 
-  // The similarity of a vector from outside the table to each document
-  // published from `from` to `to`, the highest first. Equal similarities sort
-  // by id (docs/adr/0006).
+  // The similarity of a vector from outside the table to each document, the
+  // highest first. A date range keeps the documents published from `from` to
+  // `to`; only a date range needs published_at, as a vector store filters on
+  // metadata only when the query names it. Equal similarities sort by id
+  // (docs/adr/0006, docs/adr/0007).
   query(
     vector: readonly number[],
-    options: { readonly from: Date; readonly to: Date },
+    range?: { readonly from: Date; readonly to: Date },
   ): Neighbour[] {
     const query = UnitVector.normalize(vector);
     const stored = this.#database
@@ -110,15 +112,20 @@ export class VectorSearch {
     const dimension = Number(stored.bytes) / Float32Array.BYTES_PER_ELEMENT;
     if (dimension !== query.dimension)
       throw new DimensionMismatchError(dimension, query.dimension);
-    const documents = this.#database
-      .prepare(
-        `SELECT "id", "vector" FROM ${this.#table} WHERE "published_at" BETWEEN ? AND ?`,
-      )
-      .all(options.from.getTime(), options.to.getTime())
-      .map((row) => ({
-        id: String(row.id),
-        vector: UnitVector.fromBlob(blob(row.vector)),
-      }));
+    const rows =
+      range === undefined
+        ? this.#database
+            .prepare(`SELECT "id", "vector" FROM ${this.#table}`)
+            .all()
+        : this.#database
+            .prepare(
+              `SELECT "id", "vector" FROM ${this.#table} WHERE "published_at" BETWEEN ? AND ?`,
+            )
+            .all(range.from.getTime(), range.to.getTime());
+    const documents = rows.map((row) => ({
+      id: String(row.id),
+      vector: UnitVector.fromBlob(blob(row.vector)),
+    }));
     return ranked(query, documents, documents.length);
   }
 
