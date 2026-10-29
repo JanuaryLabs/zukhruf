@@ -75,6 +75,14 @@ Round 6 answers limitation 14. On each fresh slice, the reader shows its top mat
 
 No candidate passed. The sentence plus the keywords scored 0.701 against the typed keyword's 0.656 (interval −0.019 to +0.118), with Brier skill +0.512, the best calibration so far. The lead is the same as in rounds 4 and 5. The lower bound is above −0.05, so the design is not worse than the keyword by more than 0.05 (non-inferiority, reported, not the pass rule).
 
+## Rounds 7 and 8 (2026-10-29): fits that model the selection of taught answers, no design chosen
+
+Round 7 (`round-7/selection-rule.json`, sha256 `c615b539…`) fitted the two bell curves by maximum likelihood with the taught answers as samples above the cut-off of what the reader showed (Zhang and Callan 2001). It was tested three ways: teach from the first 14 days of a slice (window), or from the top of the large labelled pool (two pools). It won both pool tests (0.711 against the keyword's 0.659, and 0.742 against 0.679) and missed the window test: lower bound −0.061 against the −0.05 margin. The frozen design passed the window test and failed both pool tests.
+
+Round 8 (`round-8/selection-rule.json`, sha256 `6249268c…`) made the wrong solution of round 7 impossible to write (relevant mean = other mean + a positive gap) and kept the best of three starts. It failed all three tests. With few answers, the likelihood itself often prefers a broad relevant curve that takes most articles above the cut-off, so the best start chose it.
+
+Rounds 6 to 8 used the same labelled slices, so round 9 tests round 7's design unchanged on July to September 2025, which no round has seen.
+
 ## Limitations
 
 ### 1. A realistic stream has few relevant articles
