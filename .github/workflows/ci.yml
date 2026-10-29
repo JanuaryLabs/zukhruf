@@ -46,3 +46,16 @@ jobs:
 
       - name: Lint, type check, test and build what changed
         run: npx nx affected -t lint typecheck test build
+        env:
+          NX_PROFILE: nx-profile.json
+
+      # CI hides the output of tasks that pass, so the Nx task profile and the
+      # junit file of each project are kept to find the slow tasks and tests.
+      - name: Keep the task profile and test results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          path: |
+            nx-profile.json
+            packages/**/test-results.xml
+            apps/**/test-results.xml
