@@ -20,7 +20,7 @@ import type { SelectionRule } from './fit/rule.ts';
 import { crossValidatedChange } from './fit/selection.ts';
 import { Stream } from './fit/stream.ts';
 import { mainScore } from './metrics/metrics.ts';
-import type { Role } from './roles.ts';
+import { type Role, decide } from './roles.ts';
 import { partitions, score } from './score.ts';
 import { Scoreboard } from './scoreboard.ts';
 import { SOURCES } from './texts/sources.ts';
@@ -253,7 +253,9 @@ async function referenceScore(name: string): Promise<number> {
 }
 
 // The sets of one role, with their texts. The role in set.json is read
-// before the answer key, so the fit never opens a set of another role. Each
+// before the answer key, so the fit never opens a set of another role. An
+// exam set that was scored once is a regression set (roles.ts decide), and
+// an exam set that was never scored is refused. Each
 // lead of each design goes into the vector cache of the design for the set,
 // as the runner puts it there.
 async function load(
@@ -263,9 +265,10 @@ async function load(
   const sets = new Map<string, LoadedSet>();
   for (const name of names) {
     const metadata = readMetadata(name);
-    if (metadata.role !== role)
+    const decision = decide(metadata, false);
+    if (!decision.run || decision.role !== role)
       throw new Error(
-        `${name} has the role ${metadata.role}, and the rule names it a ${role} set. The fit refuses it.`,
+        `${name} has the role ${decision.run ? decision.role : metadata.role}, and the rule names it a ${role} set. The fit refuses it.`,
       );
     const set = readSet(name);
     const { texts, vanished, changed } = await SOURCES[metadata.text].texts(
