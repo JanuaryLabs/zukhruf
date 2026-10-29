@@ -4,7 +4,7 @@ This record keeps what the research for relevance filtering found, before the pa
 
 Read this record before you change the design, add a profile type, or start a new evaluation. Add the result of each new round to this record.
 
-Status on 2026-10-29: the reader ranks instead of deciding yes or no (the user's choice after round 9). Round 10 chose the ranker desc+kw, which beats a keyword ranking clearly in both teaching protocols; it is frozen with an exam rule (freeze-ranking/plan.json). The exam set is sealed until the package ranks through its API.
+Status on 2026-10-29: DONE. The ranker desc+kw passed the sealed exam (MAP 0.867 against the keyword list's 0.649, interval of the difference +0.105 to +0.331; commit 31698d2). The package `@zukhruf/relevance-filtering` ranks each profile's stream through `ranked()`; its yes/no threshold is kept but not recommended. The exam is a regression set now.
 
 ## Words in this record
 
@@ -94,6 +94,10 @@ Post hoc, the main failure moved: with one or two relevant answers in the shown 
 Round 9 showed that the ranking is strong and the yes/no threshold is not. On 2026-10-29 the user chose a ranked reader: each profile shows its best N articles a day, best first, and the person sets N. TREC calls this task routing and scores it by mean average precision (MAP). Round 10 (`round-10/selection-rule.json`, sha256 `37952976…`) compared three rankers with a keyword ranking (matches first, newest first) on July to September 2025.
 
 All three passed in both protocols. The chosen ranker, the frozen design's probability used as the order (desc+kw), scored MAP 0.717 against the keyword's 0.514 with teaching from the first 14 days (interval of the difference +0.082 to +0.296), and 0.766 against 0.476 with teaching from the pool (+0.215 to +0.374). It is frozen with its exam rule in `freeze-ranking/plan.json` (sha256 `c43a44d0…`). The round's daily top-N precision table is not a fair comparison with a keyword list, which shows only that day's matches; per-day recall was not measured. July to September served rounds 9 and 10, so the exam is the confirmation.
+
+## Exam (2026-10-29): the ranker passed
+
+The exam was scored one time, through the package, by the rule frozen in `freeze-ranking/plan.json` before it was opened: deepmind-outlets (133 articles), teaching from the whole labelled pool by the reader's own way of teaching, the 5 profiles with at least 3 relevant exam articles (biology, funding, robotics, safety, open models). MAP: desc+kw 0.867, typed keyword 0.649, broad keyword 0.651, newest first 0.075. Intervals of the difference (paired article bootstrap): against the typed keyword +0.105 to +0.331, against the broad keyword +0.042 to +0.342, against newest first +0.656 to +0.877. All three pass conditions hold. Biology: 0.790 against 0.579. With 5 profiles and 133 articles the intervals are wide; the margin against the broad keyword is the thinnest.
 
 ## Limitations
 
