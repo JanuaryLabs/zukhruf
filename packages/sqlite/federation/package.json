@@ -1,6 +1,6 @@
 {
   "name": "@zukhruf/sqlite-federation",
-  "version": "0.3.54",
+  "version": "0.3.55",
   "description": "One read-only handle over many SQLite databases. Each statement attaches the databases it names and detaches them when it ends. So a host can keep more databases than the SQLite attach limit, and one statement can read 10 plus the primary database.",
   "license": "MIT",
   "repository": {
@@ -41,6 +41,6 @@
     "access": "public"
   },
   "devDependencies": {
-    "@zukhruf/testing": "^0.3.54"
+    "@zukhruf/testing": "^0.3.55"
   }
 }
