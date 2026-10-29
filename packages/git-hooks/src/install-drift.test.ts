@@ -104,6 +104,9 @@ async function repository(top: string, hook: string) {
 // install reaches the registry: probe-dep 1.0.0 and 2.0.0, scripted-dep with
 // an install script that writes built.txt into its folder, and extra-dep. The
 // root and the workspace package @probe/ws have scripts that leave a mark.
+// The repo approves scripted-dep in `allowScripts` of package.json, with the
+// key that `npm install-scripts approve` writes. npm 12 runs no install script
+// of a dependency that the repo does not approve. npm 11 ignores the field.
 // `install(dependencies)` sets the dependencies of package.json and runs
 // `npm install` the way a person does, with no scripts.
 async function workspace(folder: string, hook: string) {
@@ -160,6 +163,7 @@ async function workspace(folder: string, hook: string) {
           postinstall: mark('root-postinstall'),
         },
         dependencies,
+        allowScripts: { [tarball.scripted]: true },
       })}\n`,
     );
     await npm(repo.root, 'install', '--ignore-scripts');
