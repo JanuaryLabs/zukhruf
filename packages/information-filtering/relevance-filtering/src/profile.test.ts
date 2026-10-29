@@ -314,6 +314,86 @@ describe('train', () => {
     );
   });
 
+  test('a calibrated filter ranks the stream by probability, and equal vectors by id', async () => {
+    using database = new DatabaseSync(':memory:');
+    const { collection, articles } = await stored(
+      database,
+      [
+        { id: 'far', degrees: 70, text: 'News' },
+        { id: 'twin-b', degrees: 12, text: 'News' },
+        { id: 'near', degrees: 3, text: 'News' },
+        { id: 'twin-a', degrees: 12, text: 'News' },
+        ...Array.from({ length: 20 }, (_, index) => ({
+          id: `s${index}`,
+          degrees: 30 + index * 2,
+          text: 'News',
+        })),
+      ],
+      new Map([
+        ['yes', 5],
+        ['no', 60],
+      ]),
+    );
+
+    const filter = new Profile({
+      name: 'topic',
+      description: 'A topic.',
+      relevant: ['yes'],
+      notRelevant: ['no'],
+    }).train({
+      vectors: collection,
+      descriptionVector: DESCRIPTION,
+      stream: articles,
+      taughtText: noText,
+    });
+
+    const ranked = filter.ranked();
+    assert.deepEqual(ranked.slice(0, 3), ['near', 'twin-a', 'twin-b']);
+    assert.equal(ranked.length, articles.length);
+    assert.ok(
+      ranked.every(
+        (id, index) =>
+          index === 0 ||
+          filter.probability(ranked[index - 1] ?? id) >= filter.probability(id),
+      ),
+    );
+  });
+
+  test('a keyword filter ranks the matches first, the newest first, then the other articles by similarity, and a range keeps that order for its days', async () => {
+    using database = new DatabaseSync(':memory:');
+    // stored() gives article n the publish day 10 + n.
+    const { collection, articles } = await stored(database, [
+      { id: 'old-match', degrees: 0, text: 'Security news' },
+      { id: 'far', degrees: 80, text: 'Markets' },
+      { id: 'new-match', degrees: 60, text: 'Securing data' },
+      { id: 'near', degrees: 5, text: 'Chips' },
+    ]);
+
+    const filter = new Profile({
+      name: 'security',
+      description: 'Attacks and breaches.',
+      keywords: ['secur'],
+      relevant: [],
+      notRelevant: [],
+    }).train({
+      vectors: collection,
+      descriptionVector: DESCRIPTION,
+      stream: articles,
+      taughtText: noText,
+    });
+
+    assert.deepEqual(filter.ranked(), [
+      'new-match',
+      'old-match',
+      'near',
+      'far',
+    ]);
+    assert.deepEqual(filter.ranked({ from: day(10), to: day(11) }), [
+      'old-match',
+      'far',
+    ]);
+  });
+
   test('a profile with no relevant answer and no keyword is a NoEvidenceError', async () => {
     using database = new DatabaseSync(':memory:');
     const { collection, articles } = await stored(database, [

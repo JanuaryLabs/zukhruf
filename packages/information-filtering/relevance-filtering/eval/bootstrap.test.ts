@@ -1,12 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import {
-  articleWeights,
-  percentile,
-  topicBootstrap,
-  weightedF05,
-} from './bootstrap.ts';
+import { articleWeights, percentile, topicBootstrap } from './bootstrap.ts';
 
 test('a percentile interpolates as numpy.percentile', () => {
   const sorted = [0.1, 0.2, 0.33, 0.5, 0.9];
@@ -43,17 +38,4 @@ test('each replicate of the article bootstrap draws as many articles of each str
       );
     assert.deepEqual([drawn(true), drawn(false)], [2, 5]);
   }
-});
-
-test('a weighted T11F counts each article as many times as its weight, and leaves out the ambiguous articles', () => {
-  const run = {
-    accepted: [true, true, false, true],
-    relevant: [true, false, true, false],
-    ambiguous: [false, false, false, true],
-  };
-
-  const value = weightedF05(run, [2, 1, 1, 5]);
-
-  // tp 2, fp 1, fn 1: 1.25 * 2 / (1.25 * 2 + 0.25 * 1 + 1).
-  assert.equal(value, 2.5 / 3.75);
 });

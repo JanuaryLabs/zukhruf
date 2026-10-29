@@ -12,6 +12,7 @@ import {
   CalibratedFilter,
   type Calibration,
   KeywordFilter,
+  type RankedArticle,
   type RelevanceFilter,
 } from './relevance-filter.ts';
 import type { Vectors } from './vectors.ts';
@@ -85,15 +86,21 @@ export class Profile {
     });
   }
 
-  // Learns from the answers and decides on the stream (docs/adr/0002).
+  // Learns from the answers and ranks and decides on the stream
+  // (docs/adr/0002, docs/adr/0004).
   train(options: TrainOptions): RelevanceFilter {
     const { stream } = options;
     if (new Set(stream.map(({ id }) => id)).size !== stream.length)
       throw new RangeError('Each article of the stream must have its own id.');
+    const scores = streamScores(options);
+    const ranked = stream.map(({ id, publishedAt }, index) => ({
+      id,
+      publishedAt,
+      similarity: scores[index] ?? 0,
+    }));
     const matches = () =>
       stream.map(({ text }) => matchesAny(this.keywords, text));
-    if (this.relevant.length === 0) return this.#keywordFilter(stream, matches);
-    const scores = streamScores(options);
+    if (this.relevant.length === 0) return this.#keywordFilter(ranked, matches);
     const taught = taughtScores(options, this.relevant, this.notRelevant);
     const fitted = binormal(scores, taught.relevant, taught.notRelevant);
     let probabilities: number[];
@@ -105,7 +112,7 @@ export class Profile {
       const fit = platt(taught.relevant, taught.notRelevant);
       probabilities = scores.map((score) => plattProbability(fit, score));
       calibration = fit;
-    } else return this.#keywordFilter(stream, matches);
+    } else return this.#keywordFilter(ranked, matches);
     if (this.keywords.length > 0)
       probabilities = withKeywordEvidence(
         probabilities,
@@ -115,6 +122,7 @@ export class Profile {
         ),
       );
     return new CalibratedFilter({
+      stream: ranked,
       probabilities: new Map(
         stream.map(({ id }, index) => [id, probabilities[index] ?? 0]),
       ),
@@ -124,14 +132,17 @@ export class Profile {
   }
 
   #keywordFilter(
-    stream: readonly Article[],
+    stream: readonly RankedArticle[],
     matches: () => boolean[],
   ): KeywordFilter {
     if (this.keywords.length === 0) throw new NoEvidenceError(this.name);
     const matched = matches();
-    return new KeywordFilter(
-      new Map(stream.map(({ id }, index) => [id, matched[index] ?? false])),
-    );
+    return new KeywordFilter({
+      stream,
+      matches: new Map(
+        stream.map(({ id }, index) => [id, matched[index] ?? false]),
+      ),
+    });
   }
 }
 

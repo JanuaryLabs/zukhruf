@@ -1,6 +1,6 @@
 # Relevance filtering
 
-A reader wants the new articles of a feed that are about an interest, and not the others. This package decides, for each article of a stream, if it matches a profile of the reader. It gives a probability for each article and the decision to show it.
+A reader wants the new articles of a feed that are about an interest, and not the others. This package ranks the articles of a stream for a profile of the reader, the best first. It gives a probability for each article, and a yes/no decision that is not recommended.
 
 ## Language
 
@@ -52,12 +52,16 @@ _Avoid_: Boost, bonus
 The calibrated chance, from 0 to 1, that an article is relevant to the profile.
 _Avoid_: Confidence, score
 
+**Ranking**:
+The articles of the stream, the best first. The reader shows the best N of each day. The standard term is routing (TREC).
+_Avoid_: Sort, feed (for the ranking), score list
+
 **Threshold**:
-The lowest probability that the filter accepts. It maximises the expected F0.5 of the stream.
+The lowest probability that the filter accepts. It maximises the expected F0.5 of the stream. It is not recommended for decisions.
 _Avoid_: Cut-off, limit
 
 **Accepted article**:
-An article that the filter shows to the reader.
+An article that the threshold accepts. A reader shows the ranking, not the accepted articles.
 _Avoid_: Match, hit, positive
 
 **Calibrated filter**:

@@ -1,6 +1,6 @@
-# Recipe: Filter the new articles of a feed with a taught profile
+# Recipe: Show the best articles of each day with a taught profile
 
-**Use case.** A news reader stores the articles of its feeds. A reader has an interest, "Security". Last week, the reader answered yes or no for some articles. Today, 24 new articles came. The reader wants only the new articles about security, with the most probable first.
+**Use case.** A news reader stores the articles of its feeds. A reader has an interest, "Security". Last week, the reader answered yes or no for some articles. This week, 24 new articles came. For each day, the reader wants to see the best 2 articles for security, the best first.
 
 **What you need.** An embedding model that is ready, for example EmbeddingGemma 2 on a llama.cpp server, and a SQLite database for the vectors.
 
@@ -10,7 +10,7 @@
 2. Make the profile: the name, the description, the keywords and the answers of the reader.
 3. Embed the description with the query prompt of the model.
 4. Call `profile.train` with the collection, the description vector, the new articles and the texts of the answered articles.
-5. Show `filter.accepted()`. Each id has its probability.
+5. For each day, show `filter.ranked({ from, to }).slice(0, n)`. Each id has its probability.
 
 ## The program
 
@@ -255,8 +255,17 @@ const filter = profile.train({
 });
 
 console.log(filter.kind);
-for (const id of filter.accepted())
-  console.log(filter.probability(id).toFixed(2), id);
+const best = 2;
+for (let day = 8; day <= 12; day++) {
+  const from = new Date(Date.UTC(2026, 9, day));
+  const to = new Date(Date.UTC(2026, 9, day + 1) - 1);
+  for (const id of filter.ranked({ from, to }).slice(0, best))
+    console.log(
+      from.toISOString().slice(0, 10),
+      filter.probability(id).toFixed(3),
+      id,
+    );
+}
 ```
 
 ## What it prints
@@ -265,15 +274,25 @@ The filter is calibrated, because the profile has relevant answers. With Embeddi
 
 ```text
 calibrated
-0.76 botnet-takedown
-0.67 spyware-phones
-0.64 phishing-kits
+2026-10-08 0.637 phishing-kits
+2026-10-08 0.000 breach-retailer
+2026-10-09 0.764 botnet-takedown
+2026-10-09 0.000 cybersecurity-merger
+2026-10-10 0.675 spyware-phones
+2026-10-10 0.000 energy-datacenter
+2026-10-11 0.000 quantum-qubits
+2026-10-11 0.000 health-diagnosis
+2026-10-12 0.000 safety-eval
+2026-10-12 0.000 coding-agent
 ```
 
-Each article about another interest gets a probability below 0.001. The filter also gives a probability below 0.001 to four security articles: the retailer breach, the VPN flaw, the merger and the password manager. A stream of 24 articles gives a weak binormal fit: the relevant component has the standard deviation 0.10 of the standardised scale, so only the articles nearest to the answers get a high probability. The research streams had about 1,700 articles.
+On the days with security articles, they come first. The days 11 and 12 have no security article, so their best articles are about other interests. A reader can hide an article with a low probability, but that is a threshold again.
+
+The probabilities are low for most security articles: a stream of 24 articles gives a weak binormal fit, and the relevant component has the standard deviation 0.10 of the standardised scale. The order still puts them first. The research streams had about 1,700 articles.
 
 ## Notes
 
-- The calibration is fitted on the articles of `stream`. A stream of 24 articles gives a weak fit. A real feed has hundreds of articles in a day.
+- The calibration is fitted on the articles of `stream`, so rank the stream of the whole period, and cut it into days with `ranked({ from, to })`. A stream of 24 articles gives a weak fit. A real feed has hundreds of articles in a day.
+- Do not show `filter.accepted()`: the yes/no threshold is not recommended ([ADR 0004](../adr/0004-the-reader-ranks-and-does-not-decide-yes-or-no.md)).
 - Give `publishedAt` as the collection stores it. The filter reads the similarities of the stream with one `query` over the publish dates of the stream.
 - To add an answer, call `profile.with({ relevant: [...profile.relevant, id] })` and train again.

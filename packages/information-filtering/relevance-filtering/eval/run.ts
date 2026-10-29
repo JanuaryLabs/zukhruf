@@ -8,13 +8,24 @@ import {
   articleBootstrap,
   articleWeights,
   topicBootstrap,
-  weightedF05,
 } from './bootstrap.ts';
 import { descriptionVectors } from './cache.ts';
 import { implementationCheck } from './check.ts';
 import { joined } from './design.ts';
 import { mean, nanMean } from './metrics.ts';
 import { type EvalProfile, readProfiles } from './profiles.ts';
+import { rankingCheck } from './ranking-check.ts';
+import {
+  RANKER,
+  RANKING_BASELINES,
+  type RankName,
+  type RankingUnit,
+  averagePrecision,
+  byRank,
+  poolOf,
+  runRankingUnit,
+  streamOf,
+} from './ranking.ts';
 import { decide } from './roles.ts';
 import {
   BASELINES,
@@ -31,19 +42,23 @@ import { verdict } from './verdict.ts';
 
 // Runs the frozen design through the package on the labelled sets
 // (README.md).
-const USAGE = `Usage: nx run relevance-filtering:eval -- [check | slices | rehearse | --exam]
+const USAGE = `Usage: nx run relevance-filtering:eval -- [check | slices | ranking | rehearse | --exam]
 
-  check     The implementation check: the package against the frozen record.
-  slices    Round 6 again: product teaching on the fresh slices (default).
-  rehearse  The exam protocol with fresh-2 as the stream and the collection
-            and fresh as the teaching pool. It gives no verdict.
-  --exam    Score the sealed exam one time, with the verdict rule of
-            freeze/plan.json. It needs a passing implementation check.`;
+  check     The implementation checks: the decisions of freeze/plan.json and
+            the ranking of freeze-ranking/plan.json.
+  slices    Round 6 again: yes/no decisions on the fresh slices (default).
+  ranking   Round 10 again: MAP of the ranking in the window and pool
+            protocols on fresh-3.
+  rehearse  The ranking exam protocol with fresh-3 as the stream and the
+            collection, fresh and fresh-2 as the teaching pool. It gives no
+            verdict and reads no exam label.
+  --exam    Score the sealed exam one time, with the ranking verdict rule of
+            freeze-ranking/plan.json. It needs a passing ranking check.`;
 
 const RESULTS_FOLDER = join(EVAL_FOLDER, 'results');
 const CELLS = [5, 10] as const;
 const SLICES = ['fresh', 'fresh-2'] as const;
-const POOL = ['collection', 'fresh', 'fresh-2'] as const;
+const EXAM_POOL = ['collection', 'fresh', 'fresh-2', 'fresh-3'] as const;
 
 const { values, positionals } = parseArgs({
   allowPositionals: true,
@@ -85,14 +100,23 @@ console.log(
     ? 'Implementation check: the package gives the decisions of the record, and the probabilities of the research code on stored vectors to 1e-9.'
     : 'Implementation check: FAILED.',
 );
-if (command === 'check') process.exit(passed && exact ? 0 : 1);
+const ranking = rankingCheck();
+console.log(JSON.stringify(ranking));
+const rankingPassed = ranking.float32.same && ranking.float64.same;
+console.log(
+  rankingPassed
+    ? `Ranking check: the package gives the order of round 10 for all ${ranking.articles} articles.`
+    : 'Ranking check: FAILED.',
+);
+if (command === 'check') process.exit(passed && exact && rankingPassed ? 0 : 1);
 
 if (values.exam) {
-  if (!passed || !exact)
-    throw new Error('The exam needs a passing implementation check.');
+  if (!rankingPassed)
+    throw new Error('The exam needs a passing ranking check.');
   exam();
-} else if (command === 'rehearse') {
-  const result = examProtocol('fresh-2', ['collection', 'fresh']);
+} else if (command === 'ranking') rankingRounds();
+else if (command === 'rehearse') {
+  const result = examProtocol('fresh-3', ['collection', 'fresh', 'fresh-2']);
   writeFileSync(
     join(RESULTS_FOLDER, 'rehearsal.json'),
     JSON.stringify(result, null, 1),
@@ -206,13 +230,116 @@ function slices(): void {
   );
 }
 
-// The one score of the sealed exam (freeze/plan.json, examVerdictRule).
+// Round 10 on fresh-3: the window protocol teaches from its first 14 days
+// and ranks the rest; the pool protocol teaches from the collection, fresh
+// and fresh-2 and ranks all of fresh-3.
+function rankingRounds(): void {
+  using stack = new DisposableStack();
+  const slice = stack.use(new LoadedSet('fresh-3'));
+  const earlier = ['collection', 'fresh', 'fresh-2'].map((name) =>
+    stack.use(new LoadedSet(name)),
+  );
+  const window = windowOf(slice);
+  const vectors = joined(
+    slice.collection,
+    earlier.map(({ collection }) => collection),
+  );
+  const textOf = (id: string) =>
+    [slice, ...earlier].find(({ texts }) => texts.has(id))?.textOf(id) ?? '';
+  const protocols = {
+    window: (profile: EvalProfile, d: readonly number[]) => ({
+      pool: poolOf([slice], profile, d, (_, index) => window[index] ?? false),
+      stream: streamOf(slice, profile, (index) => !window[index]),
+    }),
+    pool: (profile: EvalProfile, d: readonly number[]) => ({
+      pool: poolOf(earlier, profile, d),
+      stream: streamOf(slice, profile),
+    }),
+  };
+  const result = Object.fromEntries(
+    Object.entries(protocols).map(([name, parts]) => {
+      const units: Record<string, RankingUnit[]> = {};
+      for (const profile of profiles) {
+        const descriptionVector = descriptionOf(profile);
+        const { pool, stream } = parts(profile, descriptionVector);
+        units[profile.id] = CELLS.map((n) =>
+          runRankingUnit({
+            profile,
+            pool,
+            n,
+            stream,
+            vectors,
+            descriptionVector,
+            textOf,
+          }),
+        );
+      }
+      const perProfile: Record<string, Record<RankName, number>> = {};
+      for (const [profile, list] of Object.entries(units)) {
+        const used = list.filter(({ scoredRelevant }) => scoredRelevant >= 15);
+        if (used.length > 0)
+          perProfile[profile] = byRank((rank) =>
+            mean(used.map(({ ap }) => ap[rank])),
+          );
+      }
+      const scored = Object.keys(perProfile);
+      const intervals = Object.fromEntries(
+        RANKING_BASELINES.map((baseline) => [
+          baseline,
+          topicBootstrap(
+            scored.map(
+              (profile) =>
+                (perProfile[profile]?.[RANKER] ?? Number.NaN) -
+                (perProfile[profile]?.[baseline] ?? Number.NaN),
+            ),
+            31962,
+          ),
+        ]),
+      );
+      return [
+        name,
+        {
+          scoredProfiles: scored,
+          MAP: byRank((rank) =>
+            mean(
+              scored.map(
+                (profile) => perProfile[profile]?.[rank] ?? Number.NaN,
+              ),
+            ),
+          ),
+          intervals,
+          pass: verdict(intervals).result === 'pass',
+          perProfileAP: perProfile,
+        },
+      ];
+    }),
+  );
+  writeFileSync(
+    join(RESULTS_FOLDER, 'ranking.json'),
+    JSON.stringify(result, null, 1),
+  );
+  console.log(
+    JSON.stringify(
+      Object.fromEntries(
+        Object.entries(result).map(([name, { perProfileAP: _, ...rest }]) => [
+          name,
+          rest,
+        ]),
+      ),
+      null,
+      1,
+    ),
+  );
+}
+
+// The one score of the sealed exam (freeze-ranking/plan.json,
+// examVerdictRule).
 function exam(): void {
   const decision = decide(readMetadata('exam'), true);
   if (!decision.run || decision.role !== 'exam')
     throw new Error('The exam set is not an exam that was never scored.');
   const firstScoredAt = new Date().toISOString();
-  const result = { firstScoredAt, ...examProtocol('exam', POOL) };
+  const result = { firstScoredAt, ...examProtocol('exam', EXAM_POOL) };
   writeFileSync(
     join(RESULTS_FOLDER, 'exam.json'),
     JSON.stringify(result, null, 1),
@@ -225,116 +352,96 @@ function exam(): void {
   console.log(JSON.stringify({ ...result, runs: undefined }, null, 1));
 }
 
-// The exam protocol: product teaching from the pool, the design and the
-// baselines on the stream, and the verdict with the label-stratified article
-// bootstrap.
+// The ranking exam protocol: product teaching from the whole pool, the
+// ranking and the baselines on the stream, MAP over the profiles with at
+// least 3 strict relevant stream articles, and the paired two-strata
+// article bootstrap (seed 31963).
 function examProtocol(streamName: string, poolNames: readonly string[]) {
-  using examSet = new LoadedSet(streamName);
   using stack = new DisposableStack();
+  const streamSet = stack.use(new LoadedSet(streamName));
   const pool = poolNames.map((name) => stack.use(new LoadedSet(name)));
   const vectors = joined(
-    examSet.collection,
+    streamSet.collection,
     pool.map(({ collection }) => collection),
   );
-  const runs: Record<string, Record<number, Unit>> = {};
-  for (const profile of profiles) {
-    const descriptionVector = descriptionOf(profile);
-    const candidates: Candidate[] = pool.flatMap((set) => {
-      const similarities = set.similarities(descriptionVector);
-      const narrow = set.matches(profile.narrow);
-      const labels = set.labelsFor(profile.id);
-      return set.articles.map(({ id }, index) => ({
+  const textOf = (id: string) =>
+    [streamSet, ...pool].find(({ texts }) => texts.has(id))?.textOf(id) ?? '';
+  const labelsOf = (profile: string) =>
+    new Map(
+      streamSet.articles.map(({ id }, index) => [
         id,
-        similarity: similarities[index] ?? Number.NaN,
-        match: narrow[index] ?? false,
-        label: labels[index],
-      }));
-    });
-    const narrow = examSet.matches(profile.narrow);
-    const broad = examSet.matches(profile.broad);
-    const labels = examSet.labelsFor(profile.id);
-    const [first, ...rest] = examSet.articles.map((article, index) => ({
-      ...article,
-      text: examSet.textOf(article.id),
-      label: labels[index],
-      narrow: narrow[index] ?? false,
-      broad: broad[index] ?? false,
-    }));
-    if (first === undefined) throw new Error('The exam has no article.');
-    for (const n of CELLS)
-      (runs[profile.id] ??= {})[n] = runUnit({
+        streamSet.labelsFor(profile)[index],
+      ]),
+    );
+  const verdictProfiles = profiles.filter(
+    ({ id }) =>
+      streamSet.labelsFor(id).filter((label) => label === true).length >= 3,
+  );
+  const runs: Record<string, RankingUnit[]> = {};
+  for (const profile of verdictProfiles) {
+    const descriptionVector = descriptionOf(profile);
+    const candidates = poolOf(pool, profile, descriptionVector);
+    const stream = streamOf(streamSet, profile);
+    runs[profile.id] = CELLS.map((n) =>
+      runRankingUnit({
         profile,
         pool: candidates,
         n,
-        stream: [first, ...rest],
+        stream,
         vectors,
         descriptionVector,
-        textOf: (id) =>
-          [examSet, ...pool].find(({ texts }) => texts.has(id))?.textOf(id) ??
-          examSet.textOf(id),
-      });
-  }
-  const labelsOf = (profile: string) => examSet.labelsFor(profile);
-  const verdictProfiles = profiles
-    .map(({ id }) => id)
-    .filter(
-      (id) =>
-        id !== 'biology' &&
-        labelsOf(id).filter((label) => label === true).length >= 3,
-    );
-  const unitsOf = (profile: string) => Object.values(runs[profile] ?? {});
-  const point = (profile: string, name: Name) =>
-    mean(unitsOf(profile).map(({ rows }) => rows[name].strict.f05));
-  const macro = (name: Name) =>
-    mean(verdictProfiles.map((profile) => point(profile, name)));
-  const skill = mean(
-    verdictProfiles.map((profile) =>
-      nanMean(
-        unitsOf(profile).map(({ rows }) => rows[DESIGN].strict.brierSkill),
-      ),
-    ),
-  );
-  const relevantToAny = examSet.articles.map((_, index) =>
-    verdictProfiles.some((profile) => labelsOf(profile)[index] === true),
-  );
-  const weights = articleWeights(relevantToAny, 31958);
-  const weightedMacro = (name: Name, replicate: readonly number[]) =>
-    mean(
-      verdictProfiles.map((profile) => {
-        const labels = labelsOf(profile);
-        return mean(
-          unitsOf(profile).map((unit) =>
-            weightedF05(
-              {
-                accepted: unit.accepted[name],
-                relevant: labels.map((label) => label === true),
-                ambiguous: labels.map((label) => label === null),
-              },
-              replicate,
-            ),
-          ),
-        );
+        textOf,
       }),
     );
-  const intervals: Record<string, Interval> = Object.fromEntries(
-    BASELINES.map((baseline) => [
-      baseline,
-      articleBootstrap(
-        weights,
-        macro(DESIGN) - macro(baseline),
-        (replicate) =>
-          weightedMacro(DESIGN, replicate) - weightedMacro(baseline, replicate),
+  }
+  const ids = verdictProfiles.map(({ id }) => id);
+  const labels = new Map(ids.map((id) => [id, labelsOf(id)]));
+  // The MAP of a list: AP per profile with the weights of a replicate, mean
+  // over N, mean over the profiles. A profile whose relevant articles a
+  // replicate does not draw has no AP, and is left out of that replicate.
+  const map = (name: RankName, weights?: ReadonlyMap<string, number>) =>
+    nanMean(
+      ids.map((profile) =>
+        nanMean(
+          (runs[profile] ?? []).map(({ orders }) =>
+            averagePrecision(
+              orders[name],
+              labels.get(profile) ?? new Map(),
+              weights,
+            ),
+          ),
+        ),
       ),
+    );
+  const relevantToAny = streamSet.articles.map(({ id }) =>
+    ids.some((profile) => labels.get(profile)?.get(id) === true),
+  );
+  const weights = articleWeights(relevantToAny, 31963);
+  const intervals: Record<string, Interval> = Object.fromEntries(
+    RANKING_BASELINES.map((baseline) => [
+      baseline,
+      articleBootstrap(weights, map(RANKER) - map(baseline), (row) => {
+        const replicate = new Map(
+          streamSet.articles.map(({ id }, index) => [id, row[index] ?? 0]),
+        );
+        return map(RANKER, replicate) - map(baseline, replicate);
+      }),
     ]),
   );
   return {
     stream: streamName,
     pool: poolNames,
-    profiles: verdictProfiles,
-    macroF05: byName(macro),
-    macroBrierSkill: skill,
-    verdict: verdict({ intervals, macroBrierSkill: skill }),
-    biology: byName((name) => point('biology', name)),
+    profiles: ids,
+    MAP: byRank((name) => map(name)),
+    verdict: verdict(intervals),
+    perProfileAP: Object.fromEntries(
+      ids.map((profile) => [
+        profile,
+        byRank((name) =>
+          nanMean((runs[profile] ?? []).map(({ ap }) => ap[name])),
+        ),
+      ]),
+    ),
     runs,
   };
 }

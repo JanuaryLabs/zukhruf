@@ -6,9 +6,9 @@
 
 ## The steps
 
-1. Make the profile with keywords and no answers. `train` gives a `KeywordFilter`: it accepts the articles that match a keyword, with the probability 1.
+1. Make the profile with keywords and no answers. `train` gives a `KeywordFilter`: it ranks the articles that match a keyword first, the newest first, and then the other articles by similarity.
 2. The reader answers yes or no for the shown articles.
-3. Make the corrected profile with `profile.with`. `train` now gives a `CalibratedFilter`, with calibrated probabilities.
+3. Make the corrected profile with `profile.with`. `train` now gives a `CalibratedFilter`, which ranks by calibrated probabilities.
 
 ## The program
 
@@ -134,7 +134,7 @@ const options = {
 };
 
 const keywords = profile.train(options);
-console.log(keywords.kind, keywords.accepted());
+console.log(keywords.kind, keywords.ranked().slice(0, 5));
 
 // The reader says yes to two shown articles and no to one.
 const taught = profile.with({
@@ -143,8 +143,8 @@ const taught = profile.with({
 });
 const calibrated = taught.train(options);
 console.log(calibrated.kind);
-for (const id of calibrated.accepted())
-  console.log(calibrated.probability(id).toFixed(2), id);
+for (const id of calibrated.ranked().slice(0, 5))
+  console.log(calibrated.probability(id).toFixed(3), id);
 ```
 
 ## What it prints
@@ -152,13 +152,22 @@ for (const id of calibrated.accepted())
 With EmbeddingGemma 2 Q8_0 on llama.cpp b11836, it prints:
 
 ```text
-keywords [ 'humanoid-factory', 'robotaxi-city', 'warehouse-arms', 'robot-vacuum' ]
+keywords [
+  'humanoid-factory',
+  'robot-vacuum',
+  'robotaxi-city',
+  'warehouse-arms',
+  'school-chatbot'
+]
 calibrated
-0.96 humanoid-factory
-0.93 warehouse-arms
+0.961 humanoid-factory
+0.927 warehouse-arms
+0.000 robot-vacuum
+0.000 robotaxi-city
+0.000 school-chatbot
 ```
 
-The keyword filter accepts each article with "robot" at the start of a word, also the price cut of the vacuum maker. It does not see the drone article, which has no keyword. The calibrated filter learns from the answers: it accepts the two articles that the reader said yes to, and no other article of this stream of 12.
+The keyword filter puts the four articles with "robot" at the start of a word first. They have one publish date, so they sort by id. Then the other articles come by similarity: the drone article has no keyword, and it is not in the top 5. The calibrated filter puts the two articles that the reader said yes to first, and gives a low probability to the vacuum article that the reader said no to.
 
 ## Notes
 

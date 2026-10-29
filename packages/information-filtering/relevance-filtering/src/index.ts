@@ -17,6 +17,8 @@ export {
   type Calibration,
   CalibratedFilter,
   KeywordFilter,
+  type PublishRange,
+  type RankedArticle,
   type RelevanceFilter,
 } from './relevance-filter.ts';
 export type { Similarity, Vectors } from './vectors.ts';

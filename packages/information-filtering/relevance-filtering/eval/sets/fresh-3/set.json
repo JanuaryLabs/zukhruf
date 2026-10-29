@@ -1,0 +1,15 @@
+{
+  "role": "training",
+  "sliceStart": "2025-07-01",
+  "frozenAt": "2026-10-29T12:23:11Z",
+  "firstScoredAt": "2026-10-29T12:23:36Z",
+  "labelsSha256": {
+    "labels.json": "a5a871b628f7d96c742216e7568f8802874038fd5c2baf32db8784290e58599c"
+  },
+  "annotator": "4 blind Claude (Opus 5.5) annotators, one queue each.",
+  "source": "The Decoder and SiliconANGLE, 2025-07-01 to 2025-09-30 (1,617). labels.json is fresh-3/labels.json of the relevance-profiles bundle of zukhruf #3195 (~/.codex/visualizations/2026/10/23/01a16a1c-424c-7793-8ca9-02cc1c715d82/relevance-profiles); articles.json holds the q, id and publish date of fresh-3/items.json.",
+  "weaknesses": [
+    "Annotators are one AI model.",
+    "Rounds 9 and 10 scored this set (adaptive reuse): it is a development set, and in the exam it is a teaching pool only."
+  ]
+}

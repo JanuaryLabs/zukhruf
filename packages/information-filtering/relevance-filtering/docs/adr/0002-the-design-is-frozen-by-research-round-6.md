@@ -1,5 +1,7 @@
 # The design is frozen by research round 6
 
+**Amended by [ADR 0004](./0004-the-reader-ranks-and-does-not-decide-yes-or-no.md).** The reader ranks by the probabilities of this design. The threshold of this record is not recommended for decisions.
+
 The filter decides with many steps: the score, the calibration, the keyword evidence and the threshold. A test with a few articles cannot show if a change of a step is better. Only labelled streams can show it. Six research rounds (#3195) compared designs on 16 profiles, with every article labelled for every profile by blind annotators. The workspace record [docs/research/relevance-filtering.md](../../../../../docs/research/relevance-filtering.md) tells the history.
 
 The user accepted the bar of non-inferiority on 2026-10-29: a design passes when it is not worse than the reader's typed keyword by more than 0.05 macro T11F, beats the other baselines, and gives calibrated probabilities (Brier skill above 0). Round 6 met that bar, and the design was frozen in `freeze/plan.json` (sha256 `d49b589b…`, 2026-10-29T06:18:09Z), before its exam. The research folder is `~/.codex/visualizations/2026/10/23/01a16a1c-424c-7793-8ca9-02cc1c715d82/relevance-profiles` on the maintainer's Mac.
@@ -45,5 +47,5 @@ On the two fresh slices, the package gives the macro T11F of round 6 to 16 digit
 ## Consequences
 
 - Change a step only with a new research round on labelled streams. Freeze its plan before its test.
-- The exam of the plan runs once, through the eval of this package (`--exam`), after the implementation check passes.
+- The yes/no exam of this plan was never scored. Round 10 replaced it with the ranking exam of `freeze-ranking/plan.json`, which ranks with this design ([ADR 0004](./0004-the-reader-ranks-and-does-not-decide-yes-or-no.md)).
 - With another embedding model, the similarity scale changes, and the design must be measured again.

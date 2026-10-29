@@ -1,4 +1,4 @@
-import { f05, mean } from './metrics.ts';
+import { mean } from './metrics.ts';
 import { NumpyGenerator } from './numpy-random.ts';
 
 // A 95% percentile interval of a difference (Efron and Tibshirani 1993).
@@ -43,18 +43,9 @@ export function topicBootstrap(
   };
 }
 
-// One run of a design for one profile on the exam stream: its decision and
-// the label of each exam article, in the order of the stream.
-export type Run = {
-  readonly accepted: readonly boolean[];
-  readonly relevant: readonly boolean[];
-  // An ambiguous article is left out of the scores of this profile.
-  readonly ambiguous: readonly boolean[];
-};
-
 // The weights of the paired, label-stratified article bootstrap of the exam
 // verdict rule: one weight for each exam article in each replicate, shared
-// by every profile, cell and design. The strata are the articles that are
+// by every profile, N and list. The strata are the articles that are
 // relevant to a profile of the verdict and the other articles, as in the
 // round-1 bootstrap (relevant and not relevant), and each stratum draws as
 // many articles as it holds, with replacement (README.md, "Exam").
@@ -82,22 +73,6 @@ export function articleWeights(
       }
   }
   return weights;
-}
-
-// The T11F of a run with the article weights of one replicate.
-export function weightedF05(run: Run, weights: readonly number[]): number {
-  let tp = 0;
-  let fp = 0;
-  let fn = 0;
-  for (const [index, weight] of weights.entries()) {
-    if (run.ambiguous[index]) continue;
-    const accept = run.accepted[index] ?? false;
-    const relevant = run.relevant[index] ?? false;
-    if (accept && relevant) tp += weight;
-    else if (accept) fp += weight;
-    else if (relevant) fn += weight;
-  }
-  return f05(tp, fp, fn);
 }
 
 // The interval of (design - baseline) of a statistic that each replicate

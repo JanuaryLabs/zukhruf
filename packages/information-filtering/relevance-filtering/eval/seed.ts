@@ -60,6 +60,16 @@ const sources: Record<
         ]),
       ),
   },
+  'fresh-3': {
+    items: 'fresh-3/items.json',
+    vectors: () =>
+      new Map(
+        rows(join(research, 'fresh-3/vectors.json')).map((r) => [
+          r.id,
+          r.vector,
+        ]),
+      ),
+  },
   exam: {
     items: 'exam/items.json',
     vectors: () => {
