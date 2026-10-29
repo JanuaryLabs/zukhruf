@@ -6,11 +6,15 @@ The words in these documents have one meaning each. See the glossary in [CONTEXT
 
 ## Areas
 
-| Area       | Import path          | Status                                                     |
-| ---------- | -------------------- | ---------------------------------------------------------- |
-| format     | `@zukhruf/nx/format` | This README                                                |
-| test       | `@zukhruf/nx/test`   | Planned (#3328): one `node:test` target, copied in 5 repos |
-| generators | —                    | Later, when their own count is due                         |
+| Area             | Import path            | Status                                                                                        |
+| ---------------- | ---------------------- | --------------------------------------------------------------------------------------------- |
+| format           | `@zukhruf/nx/format`   | This README                                                                                   |
+| test             | `@zukhruf/nx/test`     | Planned (#3328): one `node:test` target, copied in 7 repos                                    |
+| portless         | `@zukhruf/nx/portless` | Candidate (#3336): 14 projects in 3 repos                                                     |
+| opentofu, prisma | —                      | Candidates (#3339): 5 places each                                                             |
+| generators       | —                      | Candidates: the workspace generator of `@factory/foundation` (#3337); app kinds later (#3338) |
+
+The lint inputs (7 copies) are #3335; their home (`@zukhruf/eslint` or an area here) is still open.
 
 ## format
 

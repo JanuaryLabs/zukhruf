@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { spawn as spawnProcess } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { access, readFile, readdir, writeFile } from 'node:fs/promises';
+import { access, readFile, readdir, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { type TestContext, test } from 'node:test';
 import { setTimeout } from 'node:timers/promises';
@@ -194,9 +194,18 @@ test(
     );
     try {
       const code = await run.exited;
+      const endedAt = Date.now();
 
       // The test passed, so only the teardown sets the exit code.
       assert.equal(code, 1, run.output());
+      // The teardown starts after the test wrote its state, so the time from
+      // that write to the run's end holds the whole 250 s wait, and load
+      // cannot break the lower bound. The upper bound leaves 60 s for load.
+      const seconds = (endedAt - (await stat(statePath)).mtimeMs) / 1000;
+      assert.ok(
+        seconds >= 250 && seconds <= 250 + 60,
+        `the teardown ended ${seconds.toFixed(1)} s after the test wrote its state, not within 60 s after its 250 s`,
+      );
       assert.match(
         run.output(),
         /The Docker cleanup did not finish within 250 s/,
