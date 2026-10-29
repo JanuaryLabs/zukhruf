@@ -1,6 +1,6 @@
 {
   "name": "@zukhruf/testing",
-  "version": "0.3.53",
+  "version": "0.3.54",
   "description": "Disposable fixtures for integration tests: Docker containers, database servers, SQLite and DuckDB databases, HTTP servers, streams, temporary directories and intercepted requests. Node's global setup and teardown remove what a killed test run left behind.",
   "license": "MIT",
   "repository": {
@@ -144,7 +144,7 @@
     "pg": "^8.23.1"
   },
   "dependencies": {
-    "@zukhruf/docker": "^0.3.53",
+    "@zukhruf/docker": "^0.3.54",
     "nano-spawn": "^2.1.0",
     "p-memoize": "^8.0.0",
     "p-retry": "^8.0.1"
