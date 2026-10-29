@@ -5,6 +5,8 @@ import {
   type Article,
   type EvalSet,
   type Label,
+  readArticles,
+  readMetadata,
   readSet,
 } from './answer-key.ts';
 import { type Text, collectionOf, keywordText, textsOf } from './cache.ts';
@@ -16,8 +18,22 @@ export class LoadedSet implements Disposable {
   readonly collection: Collection;
   readonly #dispose: () => void;
 
-  constructor(name: string) {
-    this.set = readSet(name);
+  // labels: labels made in memory, in the order of the articles, in place of
+  // the label files of the set. A smoke test uses them, so the label files are
+  // never read.
+  constructor(
+    name: string,
+    labels?: readonly Readonly<Record<string, Label>>[],
+  ) {
+    this.set =
+      labels === undefined
+        ? readSet(name)
+        : {
+            name,
+            metadata: readMetadata(name),
+            articles: readArticles(name),
+            labels,
+          };
     this.texts = textsOf(name);
     const { database, collection } = collectionOf(name);
     this.collection = collection;

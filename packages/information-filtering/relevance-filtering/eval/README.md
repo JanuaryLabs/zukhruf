@@ -34,6 +34,7 @@ node eval/seed.ts ~/.codex/visualizations/2026/10/23/01a16a1c-424c-7793-8ca9-02c
 npx nx run relevance-filtering:eval              # round 6 on the fresh slices (yes/no)
 npx nx run relevance-filtering:eval -- ranking   # round 10 on fresh-3 (ranking)
 npx nx run relevance-filtering:eval -- check     # the two implementation checks only
+npx nx run relevance-filtering:eval -- daily     # round 11 on fresh-4 (best N a day)
 npx nx run relevance-filtering:eval -- rehearse  # the ranking exam protocol on fresh-3
 ```
 
@@ -67,6 +68,26 @@ On 2026-10-29 the package gave the MAP, the per-profile AP and the intervals of 
 | ------------------- | ------- | ------------- | ------------ | ------- | ------------------------- |
 | window (9 profiles) | 0.71667 | 0.51429       | 0.48591      | 0.06541 | [+0.0817, +0.2963]        |
 | pool (11 profiles)  | 0.76571 | 0.47632       | 0.46183      | 0.05509 | [+0.2155, +0.3742]        |
+
+### Round 11: the best N articles of a day
+
+`daily [set] [--smoke]` implements `round-11/selection-rule.json` (sha256 `7d555bdf…`, #3308). The test slice is `set`, by default fresh-4 (2025-04 to 2025-06). The teaching pool is every other labelled slice: the collection, fresh, fresh-2 and fresh-3. The sha256 of each source file of the command is in `round-11/evaluator.sha256` of the research folder, written before the fresh-4 labels existed.
+
+Implementation choices, fixed before the real labels (the rule leaves them open):
+
+- **Training.** For each profile and N_teach in {5, 10}, product teaching from the pool (as round 10, pool order collection, fresh, fresh-2, fresh-3), then one `train` on the whole test slice. The binormal model is fitted on the whole slice, and each day is cut from the one order.
+- **Days.** A day is the UTC publish date (`publishedAt` ISO, first 10 characters). The days are the days that hold an article of the slice. The ranker shows `ranked({ from: day 00:00:00.000Z, to: day 23:59:59.999Z }).slice(0, N_day)`.
+- **Lists.** The keyword list shows the day's narrow matches (`keywords.json`, the research regex), newest first, equal times by id, at most N_day. Newest shows the day's N_day newest articles, equal times by id.
+- **Recall (main).** For each profile, N_teach, N_day and day with at least one strict relevant article: relevant shown / strict relevant of the day. Mean over those days, then mean over the 6 (N_teach, N_day) cells, then macro mean over the scored profiles. A scored profile has at least 20 days with a strict relevant article in the test slice.
+- **Precision.** Relevant shown / shown articles that are not ambiguous, over the days where the list shows at least one article that is not ambiguous. A cell with no such day has no precision and is left out of the mean over cells.
+- **Empty days.** The share of the days of the slice where the list shows nothing.
+- **Missed days.** The share of the days with a strict relevant article where the list shows none of them.
+- **Equal count.** On each day, k_day = the number of articles that the keyword list showed that day for the N_day. The ranker is cut to k_day; recall and precision of the ranker and of the keyword list at k_day, as above.
+- **Ambiguous articles** are shown or not like any article. They are never relevant, and never in the denominator of precision.
+- **Pass.** The topic bootstrap of the research (2,000 replicates, `numpy.random.default_rng(31964)`, each interval from a fresh generator) on the per-profile differences of macro daily recall: the low end of (ranker - keyword) above -0.05 and the low end of (ranker - newest) above 0. The secondary metrics are reported only.
+- **Smoke.** `--smoke` gives the test slice labels made in memory (for each profile in turn, `default_rng(9)` integers in [0, 100): below 6 relevant, 6 and 7 ambiguous), and never reads its label files. `daily fresh-3 --smoke` ran on 2026-10-29: 16 profiles scored, macro recall ranker 0.356, keyword 0.032, newest 0.360. With random labels the ranker is no better than newest, as it must be; the result was not a pass.
+
+The results go to `results/daily-<set>.json` (`daily-smoke-<set>.json` for a smoke run).
 
 ### Round 6 on the fresh slices
 
