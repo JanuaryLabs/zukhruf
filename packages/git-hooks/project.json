@@ -3,8 +3,5 @@
   "$schema": "../../node_modules/nx/schemas/project-schema.json",
   "sourceRoot": "packages/git-hooks/src",
   "projectType": "library",
-  "tags": ["layer:island", "std:tool", "test:node"],
-  "targets": {
-    "test": {}
-  }
+  "tags": ["layer:island", "std:tool"]
 }

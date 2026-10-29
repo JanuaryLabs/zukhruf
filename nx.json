@@ -20,7 +20,13 @@
         "targetName": "lint"
       }
     },
-    "./packages/nx/src/format/plugin.ts"
+    "./packages/nx/src/format/plugin.ts",
+    {
+      "plugin": "./packages/nx/src/test/plugin.ts",
+      "options": {
+        "flags": ["--test-force-exit"]
+      }
+    }
   ],
   "targetDefaults": {
     "lint": {
@@ -51,32 +57,9 @@
     "typecheck": {
       "dependsOn": ["lint", "format:check", "..."]
     },
-    "test": [
-      {
-        "executor": "nx:run-commands",
-        "dependsOn": ["build", "^build"],
-        "outputs": ["{projectRoot}/test-results.xml"],
-        "options": {
-          "cwd": "{projectRoot}"
-        }
-      },
-      {
-        "filter": {
-          "projects": ["tag:test:node"]
-        },
-        "options": {
-          "command": "node --test --test-force-exit --test-timeout=60000 --test-reporter=spec --test-reporter-destination=stdout --test-reporter=junit --test-reporter-destination=test-results.xml \"src/**/*.test.ts\""
-        }
-      },
-      {
-        "filter": {
-          "projects": ["tag:test:docker"]
-        },
-        "options": {
-          "command": "node --test --test-force-exit --test-timeout=60000 --test-reporter=spec --test-reporter-destination=stdout --test-reporter=junit --test-reporter-destination=test-results.xml --test-global-setup=src/testing/docker-global-setup.ts \"src/**/*.test.ts\""
-        }
-      }
-    ]
+    "test": {
+      "dependsOn": ["...", "build"]
+    }
   },
   "release": {
     "projects": ["tag:npm:public"],

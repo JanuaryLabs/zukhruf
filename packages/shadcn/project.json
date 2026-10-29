@@ -3,9 +3,8 @@
   "$schema": "../../node_modules/nx/schemas/project-schema.json",
   "sourceRoot": "packages/shadcn/src",
   "projectType": "library",
-  "tags": ["layer:island", "std:ui", "test:node"],
+  "tags": ["layer:island", "std:ui"],
   "targets": {
-    "test": {},
     "sync": {
       "executor": "nx:run-commands",
       "cache": false,

@@ -3,8 +3,5 @@
   "$schema": "../../node_modules/nx/schemas/project-schema.json",
   "sourceRoot": "apps/reservation-app/src",
   "projectType": "application",
-  "tags": ["std:host", "test:node"],
-  "targets": {
-    "test": {}
-  }
+  "tags": ["std:host"]
 }

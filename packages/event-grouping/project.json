@@ -3,13 +3,8 @@
   "$schema": "../../node_modules/nx/schemas/project-schema.json",
   "sourceRoot": "packages/event-grouping/src",
   "projectType": "library",
-  "tags": ["layer:island", "std:domain", "test:node"],
+  "tags": ["layer:island", "std:domain"],
   "targets": {
-    "test": {
-      "options": {
-        "args": "\"eval/**/*.test.ts\""
-      }
-    },
     "eval": {
       "executor": "nx:run-commands",
       "dependsOn": ["^build"],

@@ -3,9 +3,8 @@
   "$schema": "../../node_modules/nx/schemas/project-schema.json",
   "sourceRoot": "packages/ui/src",
   "projectType": "library",
-  "tags": ["layer:island", "std:ui-extension", "test:node"],
+  "tags": ["layer:island", "std:ui-extension"],
   "targets": {
-    "test": {},
     "build": {
       "dependsOn": ["^build", "compile"]
     },

@@ -3,7 +3,7 @@
   "$schema": "../../../node_modules/nx/schemas/project-schema.json",
   "sourceRoot": "packages/sqlite/queue/src",
   "projectType": "library",
-  "tags": ["layer:island", "std:domain", "test:node"],
+  "tags": ["layer:island", "std:domain"],
   "targets": {
     "test": {
       "options": {

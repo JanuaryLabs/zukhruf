@@ -3,7 +3,7 @@
   "$schema": "../../node_modules/nx/schemas/project-schema.json",
   "sourceRoot": "packages/testing/src",
   "projectType": "library",
-  "tags": ["layer:island", "std:tool", "test:node", "test:docker"],
+  "tags": ["layer:island", "std:tool", "test:docker"],
   "targets": {
     "test": {
       "parallelism": false
