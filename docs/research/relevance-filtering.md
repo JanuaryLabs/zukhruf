@@ -99,6 +99,12 @@ All three passed in both protocols. The chosen ranker, the frozen design's proba
 
 The exam was scored one time, through the package, by the rule frozen in `freeze-ranking/plan.json` before it was opened: deepmind-outlets (133 articles), teaching from the whole labelled pool by the reader's own way of teaching, the 5 profiles with at least 3 relevant exam articles (biology, funding, robotics, safety, open models). MAP: desc+kw 0.867, typed keyword 0.649, broad keyword 0.651, newest first 0.075. Intervals of the difference (paired article bootstrap): against the typed keyword +0.105 to +0.331, against the broad keyword +0.042 to +0.342, against newest first +0.656 to +0.877. All three pass conditions hold. Biology: 0.790 against 0.579. With 5 profiles and 133 articles the intervals are wide; the margin against the broad keyword is the thinnest.
 
+## Round 11 (2026-10-29): the best-N-a-day list, measured as a reader sees it
+
+The exam scored the ranking over the whole stream; the reader shows each profile's best N articles of a day. Round 11 (`round-11/selection-rule.json`, sha256 `7d555bdf…`; evaluator files hashed before the labels existed) compared, day by day on April to June 2025 (1,647 new articles, four blind annotators), the ranker's best N (3, 5, 10) with that day's keyword matches (newest first, at most N) and the day's newest N. On the 8 profiles with at least 20 days that hold a relevant article, the ranker showed 91% of each day's relevant articles (daily recall 0.906), the keyword list 59% (0.595), newest first 36%. The interval of the difference against the keyword list is +0.239 to +0.388, so the list passes (commit afdbb28).
+
+What the reader trades: the ranker always fills N, so most of what it shows is not relevant on a quiet day (precision 0.19, against the keyword list's 0.62). The keyword list shows nothing on half of the days and misses 28% of the days that hold a relevant article; the ranker misses 5%. When the ranker shows only as many articles as the keyword list did that day, it is still a little better on both recall (0.634 against 0.595) and precision (0.657 against 0.622). The user's N controls this trade: a small N keeps the list short, a large N misses less.
+
 ## Limitations
 
 ### 1. A realistic stream has few relevant articles
