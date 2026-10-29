@@ -1,7 +1,7 @@
 {
   "role": "exam",
   "frozenAt": "2026-10-28T08:16:12Z",
-  "firstScoredAt": null,
+  "firstScoredAt": "2026-10-29T12:47:21.508Z",
   "labelsSha256": {
     "labels.jsonl": "2bba54068128acabd10bc5a4e65fcae99200add2c57fad42e08e7fe0b624a66b",
     "biology-labels.json": "4cb90b03eb351076bb0219721773e83fd754790bcc232cc430e21c685a1ecd67"

@@ -89,7 +89,22 @@ On 2026-10-29 the package gave the numbers of round 6: macro T11F 0.701489659225
 - The interval is a paired article bootstrap: 2,000 replicates with `numpy.random.default_rng(31963)`, in two strata: the articles that are strict relevant to a verdict profile, and the other articles. Each stratum draws as many articles as it holds. One weight for each exam article is shared by every profile, N and list. An article drawn w times takes w ranks next to each other in each list, and an article that is not drawn takes none. A profile whose relevant articles a replicate does not draw has no AP, and is left out of the MAP of that replicate.
 - The ranker passes when the low end of its interval against keywordNarrow is above -0.05, and its intervals against keywordBroad and newest lie entirely above 0.
 
-The run writes `results/exam.json` and the first-scored date into `sets/exam/set.json`. After that, `--exam` refuses the set (`roles.ts`), and the exam is a regression set. The yes/no exam rule of `freeze/plan.json` is not in the runner any more: the ranking rule replaced it, and an exam is scored one time only.
+The run writes `results/exam.json` and the first-scored date into `sets/exam/set.json`. After that, `--exam` refuses the set (`roles.ts`), and the exam is a regression set.
+
+### The score of 2026-10-29
+
+The exam was scored one time, on 2026-10-29T12:47:21Z, after both checks passed in the same run. `exam-result.json` holds the copy of `results/exam.json`. The verdict is **pass**.
+
+| Profile     | desc+kw | keywordNarrow | keywordBroad | newest |
+| ----------- | ------- | ------------- | ------------ | ------ |
+| biology     | 0.790   | 0.579         | 0.380        | 0.134  |
+| funding     | 0.875   | 0.759         | 0.525        | 0.023  |
+| robotics    | 0.967   | 0.915         | 0.877        | 0.038  |
+| safety      | 0.803   | 0.683         | 0.683        | 0.095  |
+| open-models | 0.901   | 0.310         | 0.787        | 0.085  |
+| MAP         | 0.867   | 0.649         | 0.650        | 0.075  |
+
+The 95% intervals of (desc+kw - baseline) are [+0.105, +0.331] against keywordNarrow, [+0.042, +0.342] against keywordBroad and [+0.656, +0.877] against newest. Only 5 profiles had at least 3 strict relevant exam articles, so the interval rests on few profiles and 133 articles. The exam is a regression set from now on. The yes/no exam rule of `freeze/plan.json` is not in the runner any more: the ranking rule replaced it, and an exam is scored one time only.
 
 ## Sets
 
