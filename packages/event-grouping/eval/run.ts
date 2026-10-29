@@ -5,7 +5,7 @@ import { parseArgs } from 'node:util';
 
 import { Collection } from '@zukhruf/embeddings';
 
-import { type Design, design3142 } from '../src/index.ts';
+import { type Design, design3152b } from '../src/index.ts';
 import { readEvents, writeEvents } from './accepted.ts';
 import { type EvalSet, readMetadata, readSet, setNames } from './answer-key.ts';
 import { type Interval, changeOfMainScore } from './bootstrap.ts';
@@ -36,7 +36,7 @@ Environment:
                               for example EVAL_EMBEDDING_URL_EMBEDDINGGEMMA_2.`;
 
 // The design that this run scores.
-const DESIGN = design3142;
+const DESIGN = design3152b;
 
 const RESULTS_FOLDER = join(import.meta.dirname, 'results');
 
