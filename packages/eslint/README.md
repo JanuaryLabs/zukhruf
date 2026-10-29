@@ -216,3 +216,21 @@ npx nx run eslint:test        # builds, then runs the rule and composition tests
 ```
 
 The composition tests run the real ESLint CLI on temporary workspaces. They load the built package, which is what consumers install.
+
+### Add a check
+
+A check is a rule under its own key ([ADR 0001](./docs/adr/0001-one-key-per-check.md)). Before you write a visitor by hand, use the builders in `src/authoring/`:
+
+- `importBanRule()` bans packages and their subpaths. It reports static imports, re-exports and literal dynamic imports, type-only ones included.
+- `selectorRule()` reports each node that one of its esquery selectors matches. The substring operator `*=` never matches a Literal's `value`, so write a regex selector (`[value=/…/]`).
+- `scopedRule()` turns a rule on only for the files that its function accepts. Build that function from `isTestFile()`, `inRoots()` and `matchesAnyGlob()` in `path-scope.ts`. A rule finds its scope from the linted file, not from a config glob ([ADR 0002](./docs/adr/0002-scope-from-the-linted-file.md)).
+- `ast.ts` has the type guards for a visitor: `isAstNode()`, `isType()` and `identifierName()`.
+
+Folders that differ from repo to repo are `roots` options. A fact about the repo is a repo setting. A rule whose options a repo extends gets an option factory ([ADR 0004](./docs/adr/0004-option-factories.md)).
+
+1. Put the rule in the folder of the subject that it checks, such as `src/async-values/` or `src/imports/`. The file exports the rule as its default.
+2. Put `<rule>.test.ts` next to it. Use `typescriptRuleTester()` from `src/testing/rule-tester.ts`, or `typedRuleTester(root)` when the rule reads types. Call `run()` inside a node:test `test()`.
+3. Add the rule to the `rules` map in the `config.ts` of its concept, and turn on `zukhruf/<rule>` in that concept's config. A new concept also goes into the `concepts` list in `src/plugin.ts`. The composition tests fail when not exactly one config turns on a rule, when a config sets a repo-owned rule, or when a shipped glob does not start with `**`.
+4. Add the rule to its concept's row in the Configs table. Below the table, write a paragraph that tells why the check exists.
+5. Fix the findings that the new rule reports in the other packages of this workspace, in the same commit (for example 20b34e0). The workspace lints itself with this source. When a package must keep its code, turn the rule off for those files in the root `eslint.config.mjs`, with a comment that tells why (for example 495f19d).
+6. Run `npx nx run eslint:test` and `npx nx run eslint:typecheck`.
