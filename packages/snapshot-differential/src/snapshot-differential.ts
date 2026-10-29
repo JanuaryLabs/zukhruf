@@ -1,3 +1,4 @@
+import { hex } from './bytes.ts';
 import type {
   DeletionPolicy,
   KeyValue,
@@ -297,6 +298,6 @@ export class SnapshotDifferential<Data extends Record<string, unknown>> {
 
 function valueText(value: KeyValue): string {
   if (typeof value === 'string') return value;
-  if (value instanceof Uint8Array) return `bytes ${value.toHex()}`;
+  if (value instanceof Uint8Array) return `bytes ${hex(value)}`;
   return JSON.stringify(value);
 }

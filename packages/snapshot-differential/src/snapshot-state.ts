@@ -1,3 +1,4 @@
+import { base64url, fromBase64url } from './bytes.ts';
 import type { KeyValue } from './deletion-policy.ts';
 import { isPlainObject } from './fingerprint.ts';
 
@@ -106,14 +107,7 @@ type SavedKeyValue = string | number | boolean | { readonly bytes: string };
 export function keyOf(values: readonly KeyValue[]): string {
   return JSON.stringify(
     values.map((value): SavedKeyValue =>
-      value instanceof Uint8Array
-        ? {
-            bytes: value.toBase64({
-              alphabet: 'base64url',
-              omitPadding: true,
-            }),
-          }
-        : value,
+      value instanceof Uint8Array ? { bytes: base64url(value) } : value,
     ),
   );
 }
@@ -122,9 +116,7 @@ export function keyOf(values: readonly KeyValue[]): string {
 export function keyValuesOf(key: string): KeyValue[] {
   const values: SavedKeyValue[] = JSON.parse(key);
   return values.map((value) =>
-    typeof value === 'object'
-      ? Uint8Array.fromBase64(value.bytes, { alphabet: 'base64url' })
-      : value,
+    typeof value === 'object' ? fromBase64url(value.bytes) : value,
   );
 }
 
