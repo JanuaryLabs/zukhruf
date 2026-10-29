@@ -23,13 +23,10 @@ export function decide(
 ): Decision {
   const firstScore = set.firstScoredAt === null;
   if (set.role !== 'exam') return { run: true, role: set.role, firstScore };
-  if (set.firstScoredAt !== null) {
-    if (exam)
-      throw new Error(
-        `This exam set was scored on ${set.firstScoredAt}. It is a regression set now, and it cannot be an exam again.`,
-      );
+  // A scored exam set is a regression set, also in an exam run, so no run
+  // scores it as an exam again.
+  if (set.firstScoredAt !== null)
     return { run: true, role: 'regression', firstScore };
-  }
   if (!exam)
     return {
       run: false,

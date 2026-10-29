@@ -47,9 +47,15 @@ test('an exam set that was scored once runs as a regression set', () => {
   });
 });
 
-test('an exam set that was scored once refuses to be an exam again', () => {
-  assert.throws(
-    () => decide({ role: 'exam', firstScoredAt: '2026-10-28T00:00:00Z' }, true),
-    /cannot be an exam again/u,
+test('in an exam run, an exam set that was scored once runs as a regression set, so it is never an exam again', () => {
+  const decision = decide(
+    { role: 'exam', firstScoredAt: '2026-10-28T00:00:00Z' },
+    true,
   );
+
+  assert.deepEqual(decision, {
+    run: true,
+    role: 'regression',
+    firstScore: false,
+  });
 });
