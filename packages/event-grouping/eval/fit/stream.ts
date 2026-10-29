@@ -4,17 +4,17 @@ import type { EmbeddingModel } from 'ai';
 
 import { Collection } from '@zukhruf/embeddings';
 
-import { analyse } from '../../src/analyse.ts';
 import { DAY_MS } from '../../src/day.ts';
 import type { Design } from '../../src/index.ts';
-import { PAIR_FEATURES, pairFeatures } from '../../src/pair-score.ts';
+import { type PairFeature, pairFeatures } from '../../src/pair-score.ts';
 import { vectorCache } from '../embedding-model.ts';
 import { feed, reportsOf } from '../feed.ts';
 import type { Partition } from '../metrics/contingency.ts';
+import { analysedAsFed } from './analysed.ts';
 import type { Fold } from './folds.ts';
 
 export type TrainingPair = {
-  // The pair features, in the order of PAIR_FEATURES.
+  // The pair features, in the order of the features of the candidate.
   readonly features: readonly number[];
   // 1 when the answer key puts the two reports in one event.
   readonly label: number;
@@ -63,18 +63,18 @@ export class Stream {
 
   // The batch shortlist pairs: for each report with a lead, its nearest
   // shortlistSize reports with a lead within windowDays, from the neighbour
-  // graph of the fold. Each pair once.
+  // graph of the fold. Each pair once. The reports are read as the detector
+  // reads them when the fold is fed to it.
   trainingPairs(
     design: Pick<
       Design,
       'lead' | 'vectorText' | 'shortlistSize' | 'windowDays'
     >,
+    features: readonly PairFeature[],
   ): TrainingPair[] {
-    const reports = new Map(
-      reportsOf(this.fold.rows, this.fold.texts).map((report) => [
-        report.id,
-        analyse(report, design),
-      ]),
+    const reports = analysedAsFed(
+      reportsOf(this.fold.rows, this.fold.texts),
+      design,
     );
     const eventOf = new Map(this.fold.rows.map((row) => [row.id, row.event]));
     const days = [...reports.values()].map((report) => report.day);
@@ -90,13 +90,13 @@ export class Stream {
         const key = JSON.stringify([id, neighbour.id].toSorted());
         if (seen.has(key)) continue;
         seen.add(key);
-        const features = pairFeatures(
+        const values = pairFeatures(
           neighbour.similarity,
           reports.get(id)!,
           reports.get(neighbour.id)!,
         );
         pairs.push({
-          features: PAIR_FEATURES.map((feature) => features[feature]),
+          features: features.map((feature) => values[feature]),
           label: Number(eventOf.get(id) === eventOf.get(neighbour.id)),
         });
       }

@@ -1,0 +1,196 @@
+{
+  "task": 3142,
+  "round": "3142: one publisher's different reports join one event on the live reader 'What is going on' (2026-10-29): 19 ElevenLabs posts in one event, 5 Together AI 'X vs Y on DeepSWE' posts, 4 xAI 'Grok 4.6 on <platform>' posts, NVIDIA's Nemotron fine-tuning post in the Nemotron 3.5 Transcribe event.",
+  "writtenBefore": "any score of any candidate of this rule, and before any design was scored on labs-outlets. Known before writing: the diagnosis of the live run with design 3152b (pair-score terms of the joined events), round 3152b and round 3232 with their plans, and the scores of the accepted designs on the scored sets. No score of any design on nvidia-outlets is known.",
+  "diagnosis": "Live events of design 3152b, terms of the logit (weight x standardized feature), means over the pairs of each event. ElevenLabs (19 posts, 171 pairs): similarity 0.835, +5.29; agreeing numbers 15.0, +3.48; disagreeing 10.0, -0.61; same publisher -1.82; 77% of pairs at or above 0.45. The lead of every post is the same two segments: the rest of the banner URL after the sentence split at the '?' of '_next/image?url=' (the URL pattern does not match 'url=https%3A%2F%2F...'), and the site promotion 'Introducing Eleven v4Meet Eleven v4, our most emotive model yet.'. The shared numbers are URL fragments and widgets ('2f', '2feleven', '2fs74wyvms6k', '384', '80', '0:00'). Together AI (5): similarity 0.860, +6.09; agreeing 42.5, +5.18; same publisher -1.82. xAI (4): similarity 0.855, +5.95; templated leads ('Today, we're excited to announce that Grok 4.6 is now available on <platform>. Grok 4.6 is our latest flagship model...'). True cross-publisher folds of the same run (Gemini 4 Carbon, Genie 4, LFM3, Muse Spark Open) score 0.71 to 0.89 on average, with similarity terms of +4.9 to +6.5.",
+  "data": {
+    "training": [
+      "anthropic-outlets",
+      "ecbplus",
+      "dev2938",
+      "fresh2957",
+      "labs-outlets"
+    ],
+    "regression": ["gvc", "hlgd-test", "deepmind-outlets"],
+    "exam": "nvidia-outlets (3ea92ef: 687 reports, 524 events) is not opened by the fit. labs-outlets holds no report of nvidia-outlets (checked by id only), and leaves out the 34 reports that anthropic-outlets and deepmind-outlets hold."
+  },
+  "folds": [
+    {
+      "family": "anthropic-outlets",
+      "sets": ["anthropic-outlets"],
+      "split": "time",
+      "count": 4,
+      "rule": "4 contiguous time folds of whole gold events: the events in the order of their first publish date (then of their labels), each in the fold of the reports before it."
+    },
+    {
+      "family": "ecbplus",
+      "sets": ["ecbplus"],
+      "split": "topic",
+      "count": 5,
+      "rule": "5 folds by the rank of the topic number, mod 5."
+    },
+    {
+      "family": "small",
+      "sets": ["dev2938", "fresh2957"],
+      "split": "none",
+      "count": 1,
+      "rule": "dev2938 and fresh2957 as 1 fold."
+    },
+    {
+      "family": "labs-outlets",
+      "sets": ["labs-outlets"],
+      "split": "time",
+      "count": 4,
+      "rule": "4 contiguous time folds of whole gold events, as anthropic-outlets."
+    }
+  ],
+  "candidates": [
+    {
+      "name": "R",
+      "note": "Design 3152b's recipe fitted again on the training sets of this rule, with labs-outlets. The incumbent.",
+      "recipe": {
+        "name": "3142-R",
+        "embeddingModel": "embeddinggemma-2",
+        "lead": {
+          "sentences": 2,
+          "minWords": 5,
+          "minLetterRatio": 0.6,
+          "maxUrlShare": 0.5,
+          "urlPattern": "(?:https?://|www\\.)\\S*"
+        },
+        "vectorText": "title: {title} | text: {title}\n{lead}",
+        "shortlistSize": 80,
+        "windowDays": 7
+      },
+      "thresholds": [
+        0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8,
+        0.85, 0.9, 0.95
+      ],
+      "features": [
+        "similarity",
+        "agreeingNumbers",
+        "disagreeingNumbers",
+        "samePublisher"
+      ]
+    },
+    {
+      "name": "U",
+      "note": "Clean body: the URLs go away from the body before the sentence split, and the numbers come from the title and the body without URLs. Fixes the banner remainder and the URL-fragment numbers; keeps the site promotion.",
+      "recipe": {
+        "name": "3142-U",
+        "embeddingModel": "embeddinggemma-2",
+        "lead": {
+          "sentences": 2,
+          "minWords": 5,
+          "minLetterRatio": 0.6,
+          "maxUrlShare": 0.5,
+          "urlPattern": "(?:https?://|www\\.)\\S*",
+          "clean": {
+            "templateReports": null
+          }
+        },
+        "vectorText": "title: {title} | text: {title}\n{lead}",
+        "shortlistSize": 80,
+        "windowDays": 7
+      },
+      "thresholds": [
+        0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8,
+        0.85, 0.9, 0.95
+      ],
+      "features": [
+        "similarity",
+        "agreeingNumbers",
+        "disagreeingNumbers",
+        "samePublisher"
+      ]
+    },
+    {
+      "name": "T",
+      "note": "U and site-level template removal (Bar-Yossef and Rajagopalan, WWW 2002; Vieira et al., CIKM 2006): a segment that at least 2 reports of one publisher hold (in the detector, the reports of earlier adds and of the same add) is in no lead and gives no number.",
+      "recipe": {
+        "name": "3142-T",
+        "embeddingModel": "embeddinggemma-2",
+        "lead": {
+          "sentences": 2,
+          "minWords": 5,
+          "minLetterRatio": 0.6,
+          "maxUrlShare": 0.5,
+          "urlPattern": "(?:https?://|www\\.)\\S*",
+          "clean": {
+            "templateReports": 2
+          }
+        },
+        "vectorText": "title: {title} | text: {title}\n{lead}",
+        "shortlistSize": 80,
+        "windowDays": 7
+      },
+      "thresholds": [
+        0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8,
+        0.85, 0.9, 0.95
+      ],
+      "features": [
+        "similarity",
+        "agreeingNumbers",
+        "disagreeingNumbers",
+        "samePublisher"
+      ]
+    },
+    {
+      "name": "TI",
+      "note": "T and an interaction term: the similarity of two reports of one publisher (0 for other pairs), so that pairs of one publisher get their own slope on the similarity (a non-linear same-publisher term).",
+      "recipe": {
+        "name": "3142-TI",
+        "embeddingModel": "embeddinggemma-2",
+        "lead": {
+          "sentences": 2,
+          "minWords": 5,
+          "minLetterRatio": 0.6,
+          "maxUrlShare": 0.5,
+          "urlPattern": "(?:https?://|www\\.)\\S*",
+          "clean": {
+            "templateReports": 2
+          }
+        },
+        "vectorText": "title: {title} | text: {title}\n{lead}",
+        "shortlistSize": 80,
+        "windowDays": 7
+      },
+      "thresholds": [
+        0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8,
+        0.85, 0.9, 0.95
+      ],
+      "features": [
+        "similarity",
+        "agreeingNumbers",
+        "disagreeingNumbers",
+        "samePublisher",
+        "samePublisherSimilarity"
+      ]
+    }
+  ],
+  "features": "The pair features of the package (src/pair-score.ts pairFeatures) that each candidate names. No span limit.",
+  "pairModel": "Logistic regression by IRLS (eval/fit/irls.ts) on the batch-shortlist pairs of the training folds: for each report with a lead, its top shortlistSize reports with a lead within windowDays in its fold (the neighbourGraph of the fold's vectors). Refitted for every set of training folds used below. The reports of a fold are read as the detector reads them when the fold is fed day by day (eval/fit/analysed.ts), so the template segments of a training pair are those that the detector would see.",
+  "foldScore": "The CoNLL F0.5 (eval/metrics mainScore, the mean of the MUC, B-cubed and CEAF-e F0.5) of the fold's partition against its gold events, on the reports that have a text.",
+  "objective": "Nested cross-validated CoNLL F0.5. For each outer fold f: for each other fold g, fit the model on the folds that are neither f nor g and score g at every threshold; choose the threshold with the best inner objective (the mean over the families present among the inner folds of the mean fold score); then fit the model on the folds that are not f and score f at the chosen threshold. Family score = mean of the outer fold scores of the family; objective = mean of the family scores. Ties (equal inner objective) go to the higher threshold.",
+  "flatCurve": "For each threshold, the objective of the folds each scored with the model fitted on the other folds. The final threshold is the best threshold of this curve (same tie rule), and the final model is fitted on all folds.",
+  "baselines": "All singletons and all in one, scored per fold; family baseline = mean over its folds.",
+  "reference": {
+    "design": "3152b"
+  },
+  "e2": {
+    "family": "labs-outlets",
+    "against": "reference"
+  },
+  "eligibility": {
+    "E1": "On every family, the nested-CV family CoNLL F0.5 is greater than the family score of both trivial baselines.",
+    "E2": "On labs-outlets, the nested-CV family CoNLL F0.5 is greater than that of design 3152b as it is (scoreboard pin) on the same folds. 3152b never saw labs-outlets, so its score there is out of sample.",
+    "E3": "On each regression set (gvc, hlgd-test, deepmind-outlets), the final design is compared with design 3152b as it is by the paired block bootstrap (eval/bootstrap.ts changeOfMainScore, 2000 replicates, seed 3182). The 95% interval of (candidate - 3152b) is not entirely below 0."
+  },
+  "choice": {
+    "incumbent": "R",
+    "challengers": ["U", "T", "TI"],
+    "rule": "The eligible challenger with the highest nested-CV objective is the challenger. It is chosen only when the paired block bootstrap 95% interval of (challenger - R) on the nested-CV objective is entirely above 0 (eval/fit/selection.ts crossValidatedChange, 2000 replicates, seed 3182). Otherwise no design is chosen, the round records no design, design 3152b stays, and the exam stays reserved."
+  },
+  "liveCases": "Reported for the chosen design, not a gate: the events of the final design on labs-outlets for the ElevenLabs, Together AI DeepSWE, xAI Grok 4.6 platform and NVIDIA Nemotron reports, and for the cross-publisher folds Gemini 4 Carbon, Genie 4, LFM3, Muse Spark Open and TorchNeuron.",
+  "examVerdict": "Only a chosen design is scored, once, on the exam nvidia-outlets with eval --exam, with the verdict rule of round 3152b against the accepted design 3152b: pass if (a) the paired block bootstrap 95% interval of (candidate - 3152b) CoNLL F0.5 on nvidia-outlets is entirely above 0, (b) its CoNLL F0.5 is greater than both trivial baselines, and (c) no regression set has an interval of (candidate - 3152b) entirely below 0. If the interval of (a) includes 0, the result is inconclusive and 3152b stays. If it is entirely below 0, or (b) or (c) does not hold, the result is fail. A pass makes the candidate the accepted design (--accept)."
+}

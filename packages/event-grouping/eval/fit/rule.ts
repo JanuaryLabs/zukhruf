@@ -1,4 +1,5 @@
 import type { Design } from '../../src/index.ts';
+import type { PairFeature } from '../../src/pair-score.ts';
 
 // The parts of a selection rule (eval/rounds/<round>/selection-rule.json)
 // that the fitter runs. The other parts are prose for the reader.
@@ -35,7 +36,21 @@ export type Candidate = {
   // fit gives.
   readonly recipe: Omit<Design, 'planSha256' | 'threshold' | 'pairScore'>;
   readonly thresholds: readonly number[];
+  // The terms of the pair score that the fit gives weights. Without it, the
+  // four terms of design 3152b (FOUR_FEATURES).
+  readonly features?: readonly PairFeature[];
 };
+
+export const FOUR_FEATURES: readonly PairFeature[] = [
+  'similarity',
+  'agreeingNumbers',
+  'disagreeingNumbers',
+  'samePublisher',
+];
+
+export function featuresOf(candidate: Candidate): readonly PairFeature[] {
+  return candidate.features ?? FOUR_FEATURES;
+}
 
 export type FoldRule = {
   readonly family: string;

@@ -1,6 +1,7 @@
 import { Declaration } from '@zukhruf/sqlite-drift';
 
-// The event of each report, and the clock of the detector. The rows derive
+// The event of each report, the clock of the detector, and the segments of
+// the reports of each publisher (src/templates.ts). The rows derive
 // from the reports, so a stale table is replaced with its rows: the caller
 // adds the reports again.
 export const eventSchema = new Declaration(
@@ -29,6 +30,13 @@ export const eventSchema = new Declaration(
   -- The id of the next new event. An event id is never used again.
   next_event INTEGER NOT NULL
 ) STRICT`,
+    `CREATE TABLE event_segment (
+  publisher TEXT NOT NULL,
+  -- A hash of the segment in lower case, with one space between words.
+  segment TEXT NOT NULL,
+  report TEXT NOT NULL,
+  PRIMARY KEY (publisher, segment, report)
+) STRICT, WITHOUT ROWID`,
   ],
   { rows: 'replace' },
 );

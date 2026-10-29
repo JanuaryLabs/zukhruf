@@ -11,6 +11,7 @@ import { recluster } from './grouping/recluster.ts';
 import { PairScores } from './grouping/scores.ts';
 import { Shortlist } from './grouping/shortlist.ts';
 import { eventSchema } from './schema.ts';
+import { Templates } from './templates.ts';
 import type { Vectors } from './vectors.ts';
 
 export type Report = {
@@ -52,12 +53,14 @@ export class EventDetector {
   readonly #vectors: Vectors;
   readonly #design: Design;
   readonly #table: EventTable;
+  readonly #templates: Templates;
 
   constructor(options: EventDetectorOptions) {
     this.#database = options.database;
     this.#vectors = options.vectors;
     this.#design = options.design;
     this.#table = new EventTable(this.#database);
+    this.#templates = new Templates(this.#database, this.#design.lead);
     eventSchema.apply(this.#database);
   }
 
@@ -65,9 +68,17 @@ export class EventDetector {
   // publish dates keep the order of the array. A report whose id the detector
   // has already is skipped.
   async add(reports: readonly Report[]): Promise<void> {
-    const fresh = reports
-      .filter((report) => !this.#table.has(report.id))
-      .map((report) => analyse(report, this.#design))
+    const unseen = reports.filter((report) => !this.#table.has(report.id));
+    this.#templates.observe(unseen);
+    const templates = new Map(
+      [...new Set(unseen.map((report) => report.publisher))].map(
+        (publisher) => [publisher, this.#templates.of(publisher)],
+      ),
+    );
+    const fresh = unseen
+      .map((report) =>
+        analyse(report, this.#design, templates.get(report.publisher)),
+      )
       .toSorted((a, b) => a.publishedAt - b.publishedAt);
     const withLead = fresh.flatMap(({ id, day, text }) =>
       text === null ? [] : [{ id, text, publishedAt: new Date(day * DAY_MS) }],

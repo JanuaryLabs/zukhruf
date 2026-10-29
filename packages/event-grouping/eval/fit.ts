@@ -7,13 +7,13 @@ import type { EmbeddingModel } from 'ai';
 
 import { Collection } from '@zukhruf/embeddings';
 
-import { analyse } from '../src/analyse.ts';
 import { DAY_MS } from '../src/day.ts';
 import type { Design } from '../src/index.ts';
 import { readMetadata, readSet, sha256 } from './answer-key.ts';
 import { changeOfMainScore } from './bootstrap.ts';
 import { embeddingModel, vectorCache } from './embedding-model.ts';
 import { reportsOf } from './feed.ts';
+import { analysedAsFed } from './fit/analysed.ts';
 import { type Evaluation, evaluate } from './fit/candidate.ts';
 import { type Fold, type LoadedSet, foldsOf } from './fit/folds.ts';
 import type { SelectionRule } from './fit/rule.ts';
@@ -282,12 +282,12 @@ async function load(
     ]) {
       using cache = new DatabaseSync(vectorCache(design, name));
       await new Collection({ database: cache, model: modelOf(design) }).upsert(
-        reportsOf(set.rows, texts).flatMap((report) => {
-          const { text, day } = analyse(report, design);
-          return text === null
-            ? []
-            : [{ id: report.id, text, publishedAt: new Date(day * DAY_MS) }];
-        }),
+        [...analysedAsFed(reportsOf(set.rows, texts), design).values()].flatMap(
+          ({ id, text, day }) =>
+            text === null
+              ? []
+              : [{ id, text, publishedAt: new Date(day * DAY_MS) }],
+        ),
       );
     }
     sets.set(name, { name, rows: set.rows, texts });

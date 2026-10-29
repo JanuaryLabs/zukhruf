@@ -575,4 +575,129 @@ describe('EventDetector', () => {
     assert.deepEqual(everything(events), [before]);
     assert.equal(fake.doEmbedCalls.flatMap(({ values }) => values).length, 1);
   });
+
+  test('with a clean lead rule, a segment that two reports of one publisher hold is in no lead, also in later adds, and a URL does not split a sentence', async () => {
+    using database = new DatabaseSync(':memory:');
+    const fake = model({
+      Office: at(0),
+      Speech: at(90),
+      Guide: at(180),
+      Coverage: at(270),
+    });
+    const design = {
+      ...design3152b,
+      lead: { ...design3152b.lead, clean: { templateReports: 2 } },
+    };
+    const vectors = new Collection({ database, model: fake });
+    const events = new EventDetector({ database, vectors, design });
+    const banner =
+      '[https://lab.example/_next/image?url=https%3A%2F%2Fcdn.lab.example%2Fbanner-v4.png&w=384&q=80]\nIntroducing Model v4, our most emotive model yet.';
+
+    await events.add([
+      report(
+        'office',
+        'Office',
+        day(1),
+        `${banner}\nThe company opened a new office in Paris this week.`,
+        'lab.example',
+      ),
+      report(
+        'speech',
+        'Speech',
+        day(1),
+        `${banner}\nEngineers shipped a faster speech model to all users.`,
+        'lab.example',
+      ),
+    ]);
+    await events.add([
+      report(
+        'guide',
+        'Guide',
+        day(2),
+        `${banner}\nThe team published a guide to voice agents for banks.`,
+        'lab.example',
+      ),
+      report(
+        'coverage',
+        'Coverage',
+        day(2),
+        'Introducing Model v4, our most emotive model yet. A reporter wrote about the new model today.',
+        'news.example',
+      ),
+    ]);
+
+    assert.deepEqual(
+      fake.doEmbedCalls.flatMap(({ values }) => values),
+      [
+        'title: Office | text: Office\nThe company opened a new office in Paris this week.',
+        'title: Speech | text: Speech\nEngineers shipped a faster speech model to all users.',
+        'title: Guide | text: Guide\nThe team published a guide to voice agents for banks.',
+        'title: Coverage | text: Coverage\nIntroducing Model v4, our most emotive model yet. A reporter wrote about the new model today.',
+      ],
+    );
+  });
+
+  test('a same-publisher similarity term gives pairs of one publisher their own slope, and leaves pairs of two publishers as they are', async () => {
+    const angle = (Math.acos(0.95) * 180) / Math.PI;
+    const design = {
+      ...design3152b,
+      pairScore: {
+        ...design3152b.pairScore,
+        samePublisherSimilarity: { weight: -3, mean: 0, sd: 1 },
+      },
+    };
+    const group = async (chosen: typeof design3152b, second: string) => {
+      using database = new DatabaseSync(':memory:');
+      const vectors = new Collection({
+        database,
+        model: model({ North: at(0), South: at(angle) }),
+      });
+      const events = new EventDetector({ database, vectors, design: chosen });
+      await events.add([
+        report('first', 'North', day(1), BODY, 'port.example'),
+        report('second', 'South', day(1), BODY, second),
+      ]);
+      return partition(everything(events));
+    };
+
+    // At a cosine of 0.95, the pair score of one publisher is 0.91 without
+    // the term and 0.36 with it. Two publishers have the value 0.
+    const without = await group(design3152b, 'port.example');
+    const onePublisher = await group(design, 'port.example');
+    const twoPublishers = await group(design, 'harbour.example');
+
+    assert.deepEqual(without, [['first', 'second']]);
+    assert.deepEqual(onePublisher, [['first'], ['second']]);
+    assert.deepEqual(twoPublishers, [['first', 'second']]);
+  });
+
+  test('with a clean lead rule, the URLs go away before the sentence split, so a question mark in a URL splits no sentence and the sentence keeps its words', async () => {
+    const text = async (design: typeof design3152b) => {
+      using database = new DatabaseSync(':memory:');
+      const fake = model({ 'Storm closes port': at(0) });
+      const vectors = new Collection({ database, model: fake });
+      await new EventDetector({ database, vectors, design }).add([
+        report(
+          'storm',
+          'Storm closes port',
+          day(1),
+          'Officials posted the notice at https://port.example/notice?id=7 for all ships in the harbour. Ships waited outside the harbour for many hours.',
+        ),
+      ]);
+      return fake.doEmbedCalls.flatMap(({ values }) => values);
+    };
+
+    const split = await text(design3152b);
+    const whole = await text({
+      ...design3152b,
+      lead: { ...design3152b.lead, clean: { templateReports: null } },
+    });
+
+    assert.deepEqual(split, [
+      'title: Storm closes port | text: Storm closes port\nid=7 for all ships in the harbour. Ships waited outside the harbour for many hours.',
+    ]);
+    assert.deepEqual(whole, [
+      'title: Storm closes port | text: Storm closes port\nOfficials posted the notice at for all ships in the harbour. Ships waited outside the harbour for many hours.',
+    ]);
+  });
 });

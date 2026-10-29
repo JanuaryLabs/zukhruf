@@ -1,10 +1,10 @@
 import type { Design } from '../../src/index.ts';
-import { PAIR_FEATURES } from '../../src/pair-score.ts';
+import type { PairFeature } from '../../src/pair-score.ts';
 import type { Partition } from '../metrics/contingency.ts';
 import { mainScore } from '../metrics/metrics.ts';
 import { partitions } from '../score.ts';
 import { type Fitted, fit } from './irls.ts';
-import type { Candidate } from './rule.ts';
+import { type Candidate, featuresOf } from './rule.ts';
 import { best, objective } from './selection.ts';
 import type { Stream, TrainingPair } from './stream.ts';
 
@@ -35,7 +35,7 @@ export class CrossValidation {
     this.#pairs = new Map(
       streams.map((stream) => [
         stream.fold.name,
-        stream.trainingPairs(candidate.recipe),
+        stream.trainingPairs(candidate.recipe, featuresOf(candidate)),
       ]),
     );
     this.#families = new Map(
@@ -68,14 +68,18 @@ export class CrossValidation {
   // The design of the candidate with the model and the threshold. A fitted
   // design has no plan yet: the plan.json of the fit is its record.
   design(model: Fitted, threshold: number): Design {
-    const term = (feature: (typeof PAIR_FEATURES)[number]) => {
-      const index = PAIR_FEATURES.indexOf(feature);
+    const features = featuresOf(this.#candidate);
+    const term = (feature: PairFeature) => {
+      const index = features.indexOf(feature);
       return {
         weight: model.weights[index + 1]!,
         mean: model.mean[index]!,
         sd: model.sd[index]!,
       };
     };
+    const optional = features.includes('samePublisherSimilarity')
+      ? { samePublisherSimilarity: term('samePublisherSimilarity') }
+      : {};
     return {
       ...this.#candidate.recipe,
       planSha256: '',
@@ -86,6 +90,7 @@ export class CrossValidation {
         agreeingNumbers: term('agreeingNumbers'),
         disagreeingNumbers: term('disagreeingNumbers'),
         samePublisher: term('samePublisher'),
+        ...optional,
       },
     };
   }

@@ -26,6 +26,17 @@ export type Design = {
     readonly maxUrlShare: number;
     // A regular expression source. It matches one URL.
     readonly urlPattern: string;
+    // Without clean, the URLs go away inside each sentence, and the numbers
+    // come from the title and the whole body. With clean, the URLs go away
+    // from the body before the sentence split, and the numbers come from the
+    // title and the body without its URLs and its template segments.
+    readonly clean?: {
+      // A segment is a template of its publisher when at least this many
+      // reports of the publisher hold it (src/templates.ts). A template
+      // segment is in no lead and gives no number. Null: no segment is a
+      // template.
+      readonly templateReports: number | null;
+    };
   };
   // The text that the model embeds. {title} is the title of the lead, and
   // {lead} is its sentences, with a space between them.
@@ -45,5 +56,9 @@ export type Design = {
     readonly agreeingNumbers: Term;
     readonly disagreeingNumbers: Term;
     readonly samePublisher: Term;
+    // The similarity of two reports of one publisher, and 0 for other pairs.
+    // With it, the pair score of two reports of one publisher has its own
+    // slope on the similarity. Without it, the term is not in the score.
+    readonly samePublisherSimilarity?: Term;
   };
 };
