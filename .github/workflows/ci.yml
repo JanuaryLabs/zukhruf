@@ -14,8 +14,6 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
-  # nx-set-shas reads this workflow's runs to find the last green commit.
-  actions: read
   contents: read
 
 jobs:
@@ -30,8 +28,14 @@ jobs:
       - name: Set up the workspace
         uses: ./.github/actions/setup-workspace
 
-      - name: Find what changed since the last green commit
-        uses: nrwl/nx-set-shas@v5
+      # The release commit changes every package.json and gets no CI run, so a
+      # compare with the last green commit always sees every project changed.
+      - name: Find what changed since the last release
+        run: |
+          base=$(git describe --tags --abbrev=0 --match 'release/*')
+          head=$(git rev-parse HEAD)
+          echo "NX_BASE=$base" >> "$GITHUB_ENV"
+          echo "NX_HEAD=$head" >> "$GITHUB_ENV"
 
       - parallel:
           - name: Check Nx workspace sync
