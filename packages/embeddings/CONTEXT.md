@@ -9,7 +9,7 @@ The documents and their vectors in one SQLite database. All vectors of a collect
 _Avoid_: Index, store, table
 
 **Vector table**:
-A SQLite table or view with the columns `id` (text), `vector` (a unit vector as a BLOB of float32 values, in the byte order of the platform) and `published_at` (milliseconds since the Unix epoch). Each row is one document. The table of a collection is a vector table. Another program can write its own vector table.
+A SQLite table or view with the columns `id` (text) and `vector` (a unit vector as a BLOB of float32 values, in the byte order of the platform). Each call except a query without a date range also reads `published_at` (milliseconds since the Unix epoch). Each row is one document. The table of a collection is a vector table. Another program can write its own vector table.
 _Avoid_: Index, store, collection (for a table that no collection writes)
 
 **Vector search**:
@@ -49,7 +49,7 @@ A document in the window of a document, with its similarity to that document. Th
 _Avoid_: Match, hit, result
 
 **Query**:
-The similarity of a vector that the caller gives, not a stored document, to each document of a date range. The caller embeds the text of the query with its model.
+The similarity of a vector that the caller gives, not a stored document, to each document, or to each document of a date range. The caller embeds the text of the query with its model.
 _Avoid_: Search (for a query), lookup
 
 **Neighbour graph**:

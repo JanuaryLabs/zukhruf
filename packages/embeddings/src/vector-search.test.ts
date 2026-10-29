@@ -106,6 +106,31 @@ describe('VectorSearch', () => {
     }
   });
 
+  test('a query with no date range compares every document of a vector table that has only an id and a vector, the highest first', () => {
+    using database = new DatabaseSync(':memory:');
+    database.exec(
+      'CREATE TABLE passages (id TEXT PRIMARY KEY, vector BLOB NOT NULL) STRICT',
+    );
+    // The ids sort the other way from the similarities, so an order by id
+    // alone fails.
+    for (const [id, vector] of [
+      ['c-east', [1, 0]],
+      ['a-north', [0, 1]],
+      ['b-near', [3, 1]],
+    ] as const)
+      database
+        .prepare('INSERT INTO passages VALUES (?, ?)')
+        .run(id, unitBlob(vector));
+    const search = new VectorSearch({ database, table: 'passages' });
+
+    const matches = search.query([4, 0]);
+
+    assert.deepEqual(
+      matches.map(({ id }) => id),
+      ['c-east', 'b-near', 'a-north'],
+    );
+  });
+
   test('an id that the vector table does not contain is an UnknownDocumentError', () => {
     using database = new DatabaseSync(':memory:');
     database.exec(

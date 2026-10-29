@@ -119,13 +119,14 @@ export class Collection {
     return this.#search.similarity(a, b);
   }
 
-  // The similarity of a vector of the caller to each document published from
-  // `from` to `to`, the highest first (docs/adr/0006).
+  // The similarity of a vector of the caller to each document, or with a date
+  // range to each document published from `from` to `to`, the highest first
+  // (docs/adr/0006, docs/adr/0007).
   query(
     vector: readonly number[],
-    options: { readonly from: Date; readonly to: Date },
+    range?: { readonly from: Date; readonly to: Date },
   ): Neighbour[] {
-    return this.#search.query(vector, options);
+    return this.#search.query(vector, range);
   }
 
   // The stored unit vector of each id, in the order of the ids. One unknown id
