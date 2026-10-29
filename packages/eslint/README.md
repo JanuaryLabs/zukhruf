@@ -188,6 +188,8 @@ export default defineConfig({
 
 The rule decides each manifest's options itself, so your options add to the shared policy and never replace it. `projects` keys are folders relative to the workspace root. Like Nx's own rule, it needs the project graph that `nx` caches; without it, the rule checks nothing. It needs `@nx/devkit`, which `@nx/eslint-plugin` installs.
 
+`manifest/recommended` also has `manifest/no-truncated-description`. The npm registry keeps only the first 255 characters of a package's `description`. `npm view` and the npm search do not show the rest. The rule reports a `description` that is longer than 255 characters. It does not check a manifest with `"private": true`, because npm does not publish it. Put the key fact in the description, and put the details in the README.
+
 ## React Native: Hermes
 
 `@zukhruf/eslint/react-native` needs `eslint-plugin-es-x`. es-x 10 needs ESLint 10.6 or later; on ESLint 9, install `eslint-plugin-es-x@9`. `hermes/recommended` checks the code that ships in the app, and leaves tests, config files and scripts alone, because those run in Node:

@@ -1,7 +1,7 @@
 {
   "name": "@zukhruf/git-hooks",
-  "version": "0.3.46",
-  "description": "Git hooks written in TypeScript. A pre-commit hook runs steps in order against the staged commit: it checks the staged copy of each file with Prettier and changes nothing, runs nx sync and stages only the files that sync wrote, and builds generated files when nx says their projects are affected. A pre-push hook runs steps in order against the push: its build step builds each pushed commit with nx in a snapshot, never the working tree. A repo adds a step of its own as a class.",
+  "version": "0.3.54",
+  "description": "Git hooks in TypeScript. Pre-commit checks staged files with Prettier, runs nx sync and stages only what it wrote, and builds affected generated files. Pre-push builds each pushed commit in a snapshot, not the working tree. A repo adds a step as a class.",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -46,7 +46,7 @@
     "access": "public"
   },
   "dependencies": {
-    "@zukhruf/fs": "^0.3.46"
+    "@zukhruf/fs": "^0.3.54"
   },
   "peerDependencies": {
     "nx": ">=21.0.0",
@@ -58,7 +58,7 @@
     }
   },
   "devDependencies": {
-    "@zukhruf/testing": "^0.3.46",
+    "@zukhruf/testing": "^0.3.54",
     "prettier": "^3.9.9"
   }
 }

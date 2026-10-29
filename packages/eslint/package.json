@@ -1,6 +1,6 @@
 {
   "name": "@zukhruf/eslint",
-  "version": "0.3.46",
+  "version": "0.3.54",
   "description": "ESLint rules and configs shared across workspaces. Every check is its own named rule, so a repo's own config cannot silently erase it.",
   "license": "MIT",
   "repository": {
@@ -56,7 +56,7 @@
     "ts-api-utils": "^2.5.0"
   },
   "devDependencies": {
-    "@zukhruf/testing": "^0.3.46"
+    "@zukhruf/testing": "^0.3.54"
   },
   "peerDependencies": {
     "@eslint/js": "^9.30.0 || ^10.0.0",
