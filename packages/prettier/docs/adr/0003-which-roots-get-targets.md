@@ -4,7 +4,8 @@ The plugin must find the projects, tell what each target reads, and let a projec
 
 ## Considered Options
 
-- **Roots: each folder with a `project.json` or a `package.json`.** ACCEPTED. It is the rule of Nx and `@nx/eslint/plugin`, so each project gets the targets and no other folder gets them.
+- **Roots: each folder with a `project.json` or a `package.json`, except the workspace root.** ACCEPTED. It is the rule of Nx and `@nx/eslint/plugin`, so each project gets the targets and no other folder gets them. The workspace root `.` gets no targets: `@nx/eslint/plugin` also skips the root of a monorepo (`plugin.js:264-266`), and the root `package.json` of a monorepo is not a project (in zukhruf, `nx show project zukhruf` finds none). A root target would be `prettier --check .`, which checks each project again. The files at the root stay checked by the `Format` step of `@zukhruf/git-hooks` (staged files) and by `npx prettier --check .` in CI.
+- **Roots: each folder with a `project.json` or a `package.json`, the workspace root too.** REJECTED. A plugin that returns targets for a folder makes that folder a project. The root would become a project whose check reads the whole workspace.
 - **Roots: each folder with a Prettier config.** REJECTED. The config is at the workspace root, so no project would get a target.
 - **An option of the plugin with the folders to skip.** REJECTED. The `exclude` of a plugin entry already does this for each Nx plugin: `{ "plugin": "@zukhruf/prettier/plugin", "exclude": ["…/fixtures/**"] }`.
 - **`format:check` fails when a project has no file that Prettier can format.** REJECTED. Prettier stops with an error when a pattern matches no file. Such a project is formatted, so it passes. The command adds `--no-error-on-unmatched-pattern` (Prettier 3.9 CLI).

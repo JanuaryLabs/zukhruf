@@ -8,18 +8,20 @@ The words in these documents have one meaning each. See the glossary in [CONTEXT
 
 ## Use it
 
-Add the plugin to `plugins` in `nx.json`. Then make `typecheck` depend on the check target:
+Add the plugin to `plugins` in `nx.json`. Then add `format:check` to the `dependsOn` of `typecheck` that the workspace already has:
 
 ```jsonc
 {
   "plugins": ["@zukhruf/prettier/plugin"],
   "targetDefaults": {
     "typecheck": {
-      "dependsOn": ["format:check"],
+      "dependsOn": ["lint", "format:check", "..."],
     },
   },
 }
 ```
+
+Keep the entries that are already in the list. A `dependsOn` array replaces the array of an earlier source, and only `"..."` keeps the dependencies that `@nx/js/typescript` gives `typecheck`.
 
 The plugin does not change `typecheck`. That target belongs to `@nx/js/typescript`, and each workspace adds its own dependencies to it, for example `^sdk`. See [ADR 0001](./docs/adr/0001-inferred-targets-not-copied-defaults.md).
 
@@ -60,7 +62,7 @@ A target in the `project.json` of a project replaces the inferred target. Nx app
 
 ## Leave fixtures out
 
-The plugin gives targets to each folder with a `project.json` or a `package.json`. A fixture can have a `package.json` too. Use the standard `exclude` of an Nx plugin entry to leave fixtures out:
+The plugin gives targets to each folder with a `project.json` or a `package.json`, except the workspace root. The root files stay checked by the `Format` step of `@zukhruf/git-hooks` and by `npx prettier --check .` in CI. A fixture can have a `package.json` too. Use the standard `exclude` of an Nx plugin entry to leave fixtures out:
 
 ```json
 {
