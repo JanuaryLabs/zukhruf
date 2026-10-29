@@ -1,0 +1,53 @@
+# The plugin gives the test target to each project root that owns node:test files
+
+Seven workspaces run `node --test` through Nx: zukhruf, factory, whatisgoingon, deepagents, elt, context-compiler and text2sql. Each one copies the `test` target. The audit of 2026-10-29 found that only `--test` is the same in all copies:
+
+- `--no-warnings`: 5 of 7 repos.
+- `--test-timeout`: 10 s to 120 s. zukhruf and deepagents use 60 s. The other repos have no time limit.
+- `--test-force-exit`: 3 of 7 repos.
+- `--experimental-test-module-mocks`: deepagents and the text2sql electron app.
+- The reporters `spec` and `junit`: zukhruf, deepagents and text2sql.
+- `--test-global-setup`: the Docker tests (see [ADR 0005](./0005-docker-tests-get-the-global-setup.md)).
+- No repo caches a `node:test` run.
+
+This is strike 7 of the Rule of Three, so the target moves into the area `./test`. As for `./format`, a target default never makes a target, and a forgotten opt-in drops the tests with no warning ([ADR 0001](./0001-inferred-targets-not-copied-defaults.md)). Thus the area is a `createNodes` plugin.
+
+These facts select the rule and the command:
+
+- zukhruf has `"src/**/*.test.ts"` at the end of its command. `node --test "x.test.ts" --test-timeout=1` reads the flag as a file name and stops with exit code 1: `Could not find 'x.test.ts, --test-timeout=1'`. Thus `--args` cannot narrow a zukhruf run today.
+- Node's default pattern is `**/{test,test/**/*,test-*,*[._-]test}.{js,mjs,cjs,ts,mts,cts}`. It matches `dist/spec/test/*`, `test/helpers/*` and `*.e2e.test.ts`.
+- A glob that matches no file gives exit code 0.
+- `@nx/vitest` gives a Vitest target to a root with a `vitest.config.*`, or a `vite.config.*` with a `test` key (`@nx/vitest/dist/src/plugins/plugin.js:132`).
+- For a `run-commands` command that ends with `{args}`, Nx puts the CLI flags and the positional words first, then `args` (`nx/dist/src/executors/run-commands/run-commands.impl.js:136-142`). Without `{args}`, Nx puts a CLI flag after `args` (`run-commands.impl.js:117-119` and `145-162`). A probe on Nx 23.2.1 (2026-10-29), with `args` `DEFAULT`: with `{args}`, `--test-name-pattern=login` gave `--test-name-pattern=login DEFAULT` and `--args=X` gave `X`; without `{args}`, `--test-name-pattern=login` gave `DEFAULT --test-name-pattern=login`.
+- Node uses the last of two `--test-timeout` flags. A probe on Node 26.10.0 (2026-10-29): `--test-timeout=50 --test-timeout=60000` passed a test of 300 ms, and the reverse order failed it.
+- In Nx 23.2.1, a target default with its own `command` replaces the command of a plugin (`nx/dist/src/project-graph/utils/project-configuration/target-defaults.js:201-229`). Nx 23.1.0 does not do this.
+
+## Considered Options
+
+- **Roots from the test files.** ACCEPTED (user, 2026-10-29). A root gets `test` when it owns at least one `*.test.{ts,mts,cts,js,mjs}` file, has no `vitest.config.*`, has no `vite.config.*` with a `test` key, and is not the workspace root `.`. A file belongs to its nearest project root. The glob of `createNodes` adds `**/*.test.{ts,mts,cts,js,mjs}` and `**/{vite,vitest}.config.{js,ts,mjs,mts,cjs,cts}` (the glob of `@nx/vitest`) to the files of the project roots. Nx does not give the plugin the paths in `.gitignore`, so `dist` is not seen. The audit measured the effect: the rule matches each `node:test` target in use; a project with Vitest files and `node:test` files stays with Vitest only, as today; 11 targets that test nothing go (context-compiler connectors `call-history`, `contacts`, `messages`, `slack`, `teams`; text2sql `backend/inputs`, `harness/runs`, `toolkit/dashboards`, `reports`, `rpc`, `threads`); text2sql `.agents` and `.claude` get a target.
+- **A tag opt-in, `test:node`, as in zukhruf and deepagents today.** REJECTED (user, 2026-10-29). A tag is an opt-in. A project that forgets it loses its tests, and no run reports it. With the accepted rule, a repo can delete its `test:node` tags.
+- **Roots from the imports of the test files (`node:test`).** REJECTED. Exceptions exist in 4 repos. mutex `packages/mutex/src/mutex/mutex.test.ts` imports `@zukhruf/testing/node`. deepagents `packages/text2sql/src/lib/adapters/bigquery/test-helpers.test.ts` imports no runner. factory Vitest files import nothing, because Vitest has `globals: true`. text2sql electron `tests/*.e2e.test.ts` are Playwright tests.
+- **Roots: a copy of the project-root rule of `./format`.** ACCEPTED. The rule and the matcher of Nx are the same as in [ADR 0003](./0003-which-roots-get-targets.md). This is strike 2 inside the package, so the Rule of Three keeps a copy on the record: a ledger, [`docs/copied-code.md`](../copied-code.md), and a backlog item (#3361) with the trigger "a third area". The third area is `./portless` (#3336). The rule is extracted then. Until then, a fix goes into both copies, and the commit names both files.
+- **Roots: an import of the rule from `./format`.** REJECTED. It is an extraction at strike 2.
+- **The selection: Node's default pattern, with no glob.** REJECTED. It matches build output, helpers and e2e files.
+- **The selection: a fixed glob at the end of the command, as in zukhruf.** REJECTED. A flag after it is read as a file, so a run cannot narrow.
+- **The selection in `options.args`, which `--args` replaces.** ACCEPTED (user, 2026-10-29). The default is one glob for each top-level folder of the project where the plugin found test files, for example `"src/**/*.test.ts" "eval/**/*.test.ts"`. When test files are directly in the project root, the selection also has a glob with no `**` for them, for example `"*.test.ts"`. Files outside these globs never run. `nx run <project>:test --args="src/x.test.ts"` replaces the selection. The command ends with `{args}`, so a Node flag on the CLI, `nx run <project>:test --test-name-pattern=login`, comes before `args`. It keeps the selection and selects the tests by name. A positional file, `nx run <project>:test src/x.test.ts`, is added before the selection, so it does not narrow. A probe proved both facts: a CLI `--args` replaces `options.args`, and a CLI flag comes before `options.args` only when the command has `{args}`.
+- **The command:** `node --test --no-warnings --test-timeout=<timeout> <flags> --test-reporter=spec --test-reporter-destination=stdout --test-reporter=junit --test-reporter-destination=test-results.xml {args}`, with `cwd` `{projectRoot}`, `outputs` `["{projectRoot}/test-results.xml"]` and `dependsOn` `["^build"]`. ACCEPTED. `--no-warnings` is in 5 of 7 repos. 60 s, the default `timeout`, is the time limit of zukhruf and deepagents, and no time limit is drift. zukhruf, deepagents and text2sql use both reporters. factory, whatisgoingon and text2sql test from the source, so `^build` is sufficient for them.
+- **Options of the plugin entry: `timeout` (default `60000`) and `flags` (default `[]`).** ACCEPTED. The Rule of Three makes each difference between the copies a parameter. `timeout` gives the value of `--test-timeout`. `flags` gives more Node flags to each project of the workspace, for example `["--test-force-exit"]` or `["--experimental-test-module-mocks"]`. One project puts its own flags in its `args`, before its own selection, for example the text2sql backends `"--test-timeout=120000 \"src/**/*.test.ts\""`. A flag must come before a glob, and `args` comes after the command.
+- **An override of the whole `command` in a project or in `targetDefaults`.** REJECTED. Each override is a new copy of the target, and the copies drift again.
+- **An override of `args` with only the flags.** REJECTED. It replaces the selection, so Node uses its default pattern.
+- **`dependsOn` `["build", "^build"]`, as in zukhruf.** REJECTED as the default. factory, whatisgoingon and text2sql do not need the project's own `build`. zukhruf, deepagents, elt and context-compiler add it with `["...", "build"]`. Nx skips a dependency on a target that the project does not have, so this is safe for a project with no `build`.
+- **`--test-force-exit` in the base command.** REJECTED. Only Docker tests and tests with open handles need it. Docker tests get it from the tag ([ADR 0005](./0005-docker-tests-get-the-global-setup.md)). A repo adds it with `flags`, and one project with its `args`.
+- **`--experimental-test-module-mocks` in the base command.** REJECTED. Only deepagents and the text2sql electron app use it. They add it with `flags` or with the `args` of the project.
+- **A cached test target.** REJECTED. No repo caches a `node:test` run today.
+- **Nx 23.1.0 and later.** REJECTED. On 23.1.0, the `command` of a repo's `targetDefaults.test` does not replace the plugin's command. The peer range of `nx` and `@nx/devkit` becomes `>=23.2.1 <25`.
+
+## Consequences
+
+- A new project with `node:test` files gets `test` with no opt-in, and no tag.
+- Each repo deletes the `command` of its `targetDefaults.test` (zukhruf, factory, whatisgoingon, deepagents, text2sql). It writes each extra dependency with `"..."`, for example factory `["...", "^sdk"]`, and zukhruf, deepagents, elt and context-compiler `["...", "build"]`. For the text2sql daemon, `["image"]` stays, or it becomes `["...", "image"]`.
+- A `scripts.test` in a `package.json` replaces the inferred target, and Nx runs it with `nx:run-script`. The 4 demo projects of deepagents keep their scripts.
+- Merge order: plugins, then `targetDefaults`, then the project files. A repo sets its flags with the options of the plugin entry. A project puts its flags and its selection in its `args`: a time limit of 10 s or 120 s, module mocks, `--test-force-exit`, `--env-file`, or a split like text2sql `"src/**/!(*.integration).test.ts"`.
+- Rules of a different kind stay in their repo: the Docker context script of deepagents, the runs from the workspace root in elt and context-compiler, and the list of e2e files of the context-compiler desktop app.
+- A person selects tests by name with a Node flag on the CLI, `nx run <project>:test --test-name-pattern=login`, and by file with `--args`.
+- Unlike `./format`, this area takes options.

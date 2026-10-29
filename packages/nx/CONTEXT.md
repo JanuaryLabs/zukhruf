@@ -1,6 +1,6 @@
 # Nx
 
-This package is the Nx part of the monorepo standard. Each area gives one part of the Nx configuration that the workspaces copied. The `format` area gives each project two targets: one that writes the files with Prettier, and one that only reads them. No workspace copies them. A check target never writes.
+This package is the Nx part of the monorepo standard. Each area gives one part of the Nx configuration that the workspaces copied. The `format` area gives each project two targets: one that writes the files with Prettier, and one that only reads them. No workspace copies them. A check target never writes. The `test` area gives the test target to each project that owns test files.
 
 ## Language
 
@@ -35,3 +35,23 @@ _Avoid_: Package folder (a project root can have no package), workspace (the wor
 **Fixture**:
 A folder that a test uses as input. It can have a `package.json`, but it is not a project of the workspace. Outside the workspace globs, it gets no targets. Inside them, the `exclude` of the plugin entry in `nx.json` leaves it out.
 _Avoid_: Sample, mock project
+
+**Test file**:
+A file whose name ends with `.test.ts`, `.test.mts`, `.test.cts`, `.test.js` or `.test.mjs`. It belongs to its nearest project root.
+_Avoid_: Spec file, test suite
+
+**Test target**:
+The target `test` that the `test` area gives. It runs `node --test` in the project root. A project root gets it when it owns a test file, has no Vitest config, and is not the workspace root. It has no cache. The `timeout` and `flags` options of the plugin entry change it for each project. The `args` of one project change it for that project.
+_Avoid_: Unit target, node test target, `test:node` (that is an old tag)
+
+**Test selection**:
+The files that the test target runs, in `options.args`. By default it is one glob for each top-level folder that has test files, for example `"src/**/*.test.ts"`, and a glob with no `**` for test files directly in the project root. `--args` replaces it. A Node flag on the CLI, for example `--test-name-pattern`, keeps it.
+_Avoid_: Test pattern (Node's default pattern is a different thing), filter
+
+**Docker test**:
+A test that starts containers through `@zukhruf/testing`. Its project has the tag `test:docker`. Its test target also gets the global setup, `--test-force-exit` and `cache: false`.
+_Avoid_: Integration test (not all integration tests use Docker), container test
+
+**Global setup**:
+The module that `node --test` runs one time before the test processes, and whose teardown runs after them. For a Docker test it is `@zukhruf/testing/docker-global-setup`, or the project's own `src/testing/docker-global-setup.ts`. Its value is a path, not a package name.
+_Avoid_: Setup file, bootstrap, shim

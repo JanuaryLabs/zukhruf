@@ -138,7 +138,11 @@ The engine removes a server when it stops, so stopping also removes it. The imag
 
 ## A killed run
 
-Disposal cleans up after a test that ends. A test process that is killed (a timeout with `--test-force-exit`, Ctrl-C, an out-of-memory kill) does not dispose its handles. A running container does not stop by itself. Thus Node's global setup and global teardown make the test processes of one `node --test` invocation into one run. Re-export the two functions from one file in your project:
+Disposal cleans up after a test that ends. A test process that is killed (a timeout with `--test-force-exit`, Ctrl-C, an out-of-memory kill) does not dispose its handles. A running container does not stop by itself. Thus Node's global setup and global teardown make the test processes of one `node --test` invocation into one run.
+
+In an Nx workspace with the `test` area of `@zukhruf/nx`, give the project the tag `test:docker`. The plugin adds the global setup of this package and `--test-force-exit` to the `test` target of the project. You do not write a file ([`@zukhruf/nx` test area](../nx/README.md#docker-tests)).
+
+With no Nx plugin, re-export the two functions from one file in your project:
 
 ```ts
 // src/testing/docker-global-setup.ts

@@ -1,7 +1,7 @@
 {
   "name": "@zukhruf/nx",
   "version": "0.3.56",
-  "description": "The Nx part of the monorepo standard. Each area is a subpath. @zukhruf/nx/format is an Nx inference plugin that gives each project two targets: format, which writes the files with Prettier, and format:check, which only reads them and is cached.",
+  "description": "The Nx part of the monorepo standard. Each area is a subpath. @zukhruf/nx/format is an Nx inference plugin that gives each project two targets: format, which writes the files with Prettier, and format:check, which only reads them and is cached. @zukhruf/nx/test gives a test target, a node --test run, to each project that has node:test files.",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -20,7 +20,9 @@
     "monorepo",
     "prettier",
     "format",
-    "check"
+    "check",
+    "node-test",
+    "test"
   ],
   "type": "module",
   "exports": {
@@ -30,6 +32,12 @@
       "types": "./dist/format/plugin.d.ts",
       "import": "./dist/format/plugin.js",
       "default": "./dist/format/plugin.js"
+    },
+    "./test": {
+      "@zukhruf/source": "./src/test/plugin.ts",
+      "types": "./dist/test/plugin.d.ts",
+      "import": "./dist/test/plugin.js",
+      "default": "./dist/test/plugin.js"
     }
   },
   "files": [
@@ -42,8 +50,8 @@
     "access": "public"
   },
   "peerDependencies": {
-    "@nx/devkit": ">=23.0.0 <25.0.0",
-    "nx": ">=23.0.0 <25.0.0",
+    "@nx/devkit": ">=23.2.1 <25.0.0",
+    "nx": ">=23.2.1 <25.0.0",
     "prettier": "^3.0.0"
   },
   "devDependencies": {
