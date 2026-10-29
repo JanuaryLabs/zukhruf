@@ -1,6 +1,6 @@
 {
   "name": "@zukhruf/sqlite-reader",
-  "version": "0.3.56",
+  "version": "0.3.57",
   "description": "A read-only connection to a SQLite database that another process owns and writes. It opens the database with node:sqlite, and gives UnavailableError when the file is missing or the system denies access, a failure that the caller can fix.",
   "license": "MIT",
   "repository": {
@@ -39,6 +39,6 @@
     "access": "public"
   },
   "devDependencies": {
-    "@zukhruf/testing": "^0.3.56"
+    "@zukhruf/testing": "^0.3.57"
   }
 }

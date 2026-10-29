@@ -1,6 +1,6 @@
 {
   "name": "@zukhruf/relevance-filtering",
-  "version": "0.3.56",
+  "version": "0.3.57",
   "description": "Decides which articles of a stream match a reader's profile: embedding similarity to the profile's description, calibrated by a semi-supervised binormal model on the reader's yes and no answers, naive-Bayes keyword evidence and an expected-F0.5 threshold.",
   "license": "MIT",
   "repository": {
@@ -40,7 +40,7 @@
     "access": "public"
   },
   "devDependencies": {
-    "@zukhruf/embeddings": "^0.3.56",
+    "@zukhruf/embeddings": "^0.3.57",
     "ai": "^7.0.154"
   }
 }
