@@ -1,0 +1,133 @@
+{"q": 1, "labels": {"safety": null}, "reasons": {"safety": "double-blind evaluation method for frontier models with AISI; evaluation integrity, no misbehaviour result"}, "alternatives": {"safety": true}}
+{"q": 2, "labels": {"chips": true}, "reasons": {"chips": "Google's Frozen v2 server chip is the subject"}, "alternatives": {}}
+{"q": 3, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 4, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 5, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 6, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 7, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 8, "labels": {"regulation": true}, "reasons": {"regulation": "proposed FINRA-style self-regulatory body for AI"}, "alternatives": {}}
+{"q": 9, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 10, "labels": {"safety": true, "security": null}, "reasons": {"safety": "Gemini 4 Argon safety report findings on misuse and misalignment", "security": "model's cyberdefense capabilities and misuse guardrails discussed, but safety report is the frame"}, "alternatives": {"security": false}}
+{"q": 11, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 12, "labels": {"jobs": true}, "reasons": {"jobs": "Huang's advice to workers fearing AI job loss"}, "alternatives": {}}
+{"q": 13, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 14, "labels": {"regulation": true}, "reasons": {"regulation": "Sanders bill to ban superintelligence"}, "alternatives": {}}
+{"q": 15, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 16, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 17, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 18, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 19, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 20, "labels": {"open-models": true}, "reasons": {"open-models": "Reflection AI releases open model Beam"}, "alternatives": {}}
+{"q": 21, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 22, "labels": {"robotics": true}, "reasons": {"robotics": "Gemini Robotics 2 robot model"}, "alternatives": {}}
+{"q": 23, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 24, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 25, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 26, "labels": {"courts": null}, "reasons": {"courts": "newsletter roundup whose headline lists the Musk v. Altman trial as one of three items"}, "alternatives": {"courts": false}}
+{"q": 27, "labels": {"jobs": null}, "reasons": {"jobs": "newsletter roundup whose headline lists AI's four-day workweek as one of three items"}, "alternatives": {"jobs": false}}
+{"q": 28, "labels": {"safety": null}, "reasons": {"safety": "DeepMind's communication ban on extinction risk; no research result"}, "alternatives": {"safety": false}}
+{"q": 29, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 30, "labels": {"regulation": null}, "reasons": {"regulation": "DeepMind partnership with Korea's science ministry; government use of AI, no policy"}, "alternatives": {"regulation": false}}
+{"q": 31, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 32, "labels": {"funding": true}, "reasons": {"funding": "Isomorphic Labs $2.1B Series B"}, "alternatives": {}}
+{"q": 33, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 34, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 35, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 36, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 37, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 38, "labels": {"health": null}, "reasons": {"health": "review of a Fitbit fitness wearable; consumer health product but mainly a gadget review"}, "alternatives": {"health": true}}
+{"q": 39, "labels": {"robotics": true}, "reasons": {"robotics": "Gemini Robotics-ER 1.6 embodied reasoning model for robots"}, "alternatives": {}}
+{"q": 40, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 41, "labels": {"coding": null}, "reasons": {"coding": "model launch whose headline leads with coding gains"}, "alternatives": {"coding": false}}
+{"q": 42, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 43, "labels": {"open-models": true}, "reasons": {"open-models": "Gemma 4 open-weight model release"}, "alternatives": {}}
+{"q": 44, "labels": {"regulation": null}, "reasons": {"regulation": "UK government AI planning prototype; government use of AI, no policy"}, "alternatives": {"regulation": false}}
+{"q": 45, "labels": {"coding": true}, "reasons": {"coding": "Google team to improve AI coding models"}, "alternatives": {}}
+{"q": 46, "labels": {"security": null}, "reasons": {"security": "encrypted Private AI Compute memory architecture; privacy security design, no attack"}, "alternatives": {"security": false}}
+{"q": 47, "labels": {"safety": true}, "reasons": {"safety": "funding programme for multi-agent AI safety research"}, "alternatives": {}}
+{"q": 48, "labels": {"funding": null}, "reasons": {"funding": "research partnership with A24 plus reported $75M Google investment"}, "alternatives": {"funding": false}}
+{"q": 49, "labels": {"open-models": true}, "reasons": {"open-models": "DiffusionGemma released with open weights"}, "alternatives": {}}
+{"q": 50, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 51, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 52, "labels": {"funding": null, "earnings": null}, "reasons": {"funding": "newsletter roundup; Airtable sale one of three items", "earnings": "newsletter roundup; DoorDash growth prospects one of three items"}, "alternatives": {"funding": false, "earnings": false}}
+{"q": 53, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 54, "labels": {"safety": true}, "reasons": {"safety": "study of AI agents cheating and whistleblowing in multi-agent setting"}, "alternatives": {}}
+{"q": 55, "labels": {"earnings": true, "chips": null}, "reasons": {"earnings": "Nvidia stock jump after Q2 earnings", "chips": "chip company's financial results"}, "alternatives": {"chips": false}}
+{"q": 56, "labels": {"safety": null}, "reasons": {"safety": "DeepMind exec's view on AI extinction risk; no research"}, "alternatives": {"safety": false}}
+{"q": 57, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 58, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 59, "labels": {"security": true}, "reasons": {"security": "Fairwind cyber defense programme using AI for vulnerability remediation"}, "alternatives": {}}
+{"q": 60, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 61, "labels": {"safety": null}, "reasons": {"safety": "lab biosecurity misuse-prevention approach; policy, no new result"}, "alternatives": {"safety": false}}
+{"q": 62, "labels": {"regulation": null}, "reasons": {"regulation": "Hassabis proposes AI governance framework; company leader proposal, not government action"}, "alternatives": {"regulation": true}}
+{"q": 63, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 64, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 65, "labels": {"safety": null}, "reasons": {"safety": "new AGI institute that will study safety among other questions; no result"}, "alternatives": {"safety": false}}
+{"q": 66, "labels": {"robotics": true}, "reasons": {"robotics": "accelerator programme for European robotics startups"}, "alternatives": {}}
+{"q": 67, "labels": {"safety": true, "security": null}, "reasons": {"safety": "framework to control rogue AI agents if alignment fails", "security": "insider-threat security controls applied to AI agents"}, "alternatives": {"security": true}}
+{"q": 68, "labels": {"coding": null}, "reasons": {"coding": "budget model launch that leads with coding gains"}, "alternatives": {"coding": false}}
+{"q": 69, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 70, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 71, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 72, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 73, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 74, "labels": {"education": true}, "reasons": {"education": "Gemini assistant for Atal Tinkering Lab educators in Indian schools"}, "alternatives": {}}
+{"q": 75, "labels": {"coding": null}, "reasons": {"coding": "AlphaEvolve coding agent, but article is about scientific impact"}, "alternatives": {"coding": false}}
+{"q": 76, "labels": {"safety": true, "security": null}, "reasons": {"safety": "safety framework for agents that go off script", "security": "security-style controls treating agents as insider threats"}, "alternatives": {"security": true}}
+{"q": 77, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 78, "labels": {"open-models": true}, "reasons": {"open-models": "DiffusionGemma open model under Apache 2.0"}, "alternatives": {}}
+{"q": 79, "labels": {"open-models": true}, "reasons": {"open-models": "Gemma 4 12B open model release"}, "alternatives": {}}
+{"q": 80, "labels": {"robotics": true}, "reasons": {"robotics": "Gemini Robotics 2 VLA model"}, "alternatives": {}}
+{"q": 81, "labels": {"health": true}, "reasons": {"health": "AI co-clinician for healthcare"}, "alternatives": {}}
+{"q": 82, "labels": {"regulation": null}, "reasons": {"regulation": "national AI partnership with Singapore government; no policy"}, "alternatives": {"regulation": false}}
+{"q": 83, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 84, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 85, "labels": {"health": true}, "reasons": {"health": "AI co-clinician evaluated in blind doctor tests"}, "alternatives": {}}
+{"q": 86, "labels": {"jobs": true}, "reasons": {"jobs": "McKinsey on AI transforming work hours"}, "alternatives": {}}
+{"q": 87, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 88, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 89, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 90, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 91, "labels": {"open-models": true}, "reasons": {"open-models": "analysis of open DiffusionGemma model"}, "alternatives": {}}
+{"q": 92, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 93, "labels": {"security": null}, "reasons": {"security": "AI scam-detection model; fraud with no computer intrusion"}, "alternatives": {"security": true}}
+{"q": 94, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 95, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 96, "labels": {"security": null}, "reasons": {"security": "model launch whose headline includes a cyber-specialised Flash model"}, "alternatives": {"security": false}}
+{"q": 97, "labels": {"robotics": true}, "reasons": {"robotics": "Gemini Robotics ER 2 robot reasoning model"}, "alternatives": {}}
+{"q": 98, "labels": {"safety": true}, "reasons": {"safety": "chain-of-thought monitorability as a safety advantage"}, "alternatives": {}}
+{"q": 99, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 100, "labels": {"health": null}, "reasons": {"health": "antimicrobial peptide candidate found in silico; drug discovery before clinical study"}, "alternatives": {"health": false}}
+{"q": 101, "labels": {"security": true}, "reasons": {"security": "Gemini 3.5 Flash Cyber model for vulnerability discovery"}, "alternatives": {}}
+{"q": 102, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 103, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 104, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 105, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 106, "labels": {"robotics": true}, "reasons": {"robotics": "Gemini Robotics-ER 1.6 embodied reasoning"}, "alternatives": {}}
+{"q": 107, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 108, "labels": {"coding": null}, "reasons": {"coding": "model launch pitched for coding and agents"}, "alternatives": {"coding": false}}
+{"q": 109, "labels": {"jobs": null}, "reasons": {"jobs": "union bid at AI lab over military contracts, not AI's effect on work"}, "alternatives": {"jobs": false}}
+{"q": 110, "labels": {"safety": true, "security": null}, "reasons": {"safety": "AI Control Roadmap for imperfectly aligned agents", "security": "securing internal systems against AI agents"}, "alternatives": {"security": true}}
+{"q": 111, "labels": {"open-models": true}, "reasons": {"open-models": "EmbeddingGemma 2 open embedding model"}, "alternatives": {}}
+{"q": 112, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 113, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 114, "labels": {"funding": true, "coding": true}, "reasons": {"funding": "Nova Intelligence $31.5M Series A", "coding": "agentic AI that analyses and generates SAP code"}, "alternatives": {}}
+{"q": 115, "labels": {"jobs": null}, "reasons": {"jobs": "AlphaFold researchers leave for Anthropic; AI talent competition"}, "alternatives": {"jobs": false}}
+{"q": 116, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 117, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 118, "labels": {"coding": null, "security": null}, "reasons": {"coding": "model launch pitched as best coding model", "security": "headline includes cyber-specialised Flash model"}, "alternatives": {"coding": false, "security": false}}
+{"q": 119, "labels": {"education": true}, "reasons": {"education": "RCT of Gemini Guided Learning in Sierra Leone schools"}, "alternatives": {}}
+{"q": 120, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 121, "labels": {"jobs": null}, "reasons": {"jobs": "DeepMind researcher departures; AI talent competition"}, "alternatives": {"jobs": false}}
+{"q": 122, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 123, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 124, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 125, "labels": {"funding": null}, "reasons": {"funding": "newsletter roundup; Nvidia-Hugging Face acquisition one of three items"}, "alternatives": {"funding": false}}
+{"q": 126, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 127, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 128, "labels": {"health": null}, "reasons": {"health": "drug repurposing for liver fibrosis tested in cells; no clinical study"}, "alternatives": {"health": false}}
+{"q": 129, "labels": {"funding": true}, "reasons": {"funding": "DeepMind minority stake in EVE Online studio and its buyback"}, "alternatives": {}}
+{"q": 130, "labels": {"funding": true}, "reasons": {"funding": "Orbital Industries $50M Series B"}, "alternatives": {}}
+{"q": 131, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 132, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 133, "labels": {}, "reasons": {}, "alternatives": {}}

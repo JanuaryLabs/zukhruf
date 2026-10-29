@@ -130,6 +130,22 @@ export default defineConfig(
     ],
     rules: { 'island/no-console': 'off', 'island/no-process-env': 'off' },
   },
+  // The relevance-filtering eval is not shipped. Like the tests, it runs the
+  // package with real Collections of @zukhruf/embeddings. Its runner and its
+  // seed are command line programs: they print what they did.
+  {
+    files: ['packages/information-filtering/relevance-filtering/eval/**'],
+    rules: {
+      '@nx/enforce-module-boundaries': moduleBoundaryRule('tests'),
+    },
+  },
+  {
+    files: [
+      'packages/information-filtering/relevance-filtering/eval/run.ts',
+      'packages/information-filtering/relevance-filtering/eval/seed.ts',
+    ],
+    rules: { 'island/no-console': 'off' },
+  },
   // @zukhruf/testing depends on docker, and docker on async, so the tests of
   // these two packages cannot import TemporaryFiles: that import would make a
   // cycle in the build (docs/adr/0001, line 29). Docker keeps its own copy of

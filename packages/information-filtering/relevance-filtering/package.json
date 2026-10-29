@@ -1,0 +1,46 @@
+{
+  "name": "@zukhruf/relevance-filtering",
+  "version": "0.3.52",
+  "description": "Decides which articles of a stream match a reader's profile. It scores each article by its embedding similarity to the profile's description, calibrates the scores with a semi-supervised binormal model taught by the reader's yes and no answers, adds naive-Bayes keyword evidence, and accepts the articles that maximise the expected F0.5.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/JanuaryLabs/zukhruf",
+    "directory": "packages/information-filtering/relevance-filtering"
+  },
+  "bugs": {
+    "url": "https://github.com/JanuaryLabs/zukhruf/issues"
+  },
+  "homepage": "https://github.com/JanuaryLabs/zukhruf/tree/main/packages/information-filtering/relevance-filtering#readme",
+  "keywords": [
+    "information-filtering",
+    "relevance-feedback",
+    "adaptive-filtering",
+    "calibration",
+    "embeddings",
+    "news"
+  ],
+  "type": "module",
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "@zukhruf/source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "!dist/spec/**",
+    "!**/*.tsbuildinfo",
+    "!**/*.test.*"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "devDependencies": {
+    "@zukhruf/embeddings": "^0.3.46",
+    "ai": "^7.0.154"
+  }
+}

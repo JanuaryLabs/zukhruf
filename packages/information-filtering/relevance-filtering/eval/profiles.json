@@ -1,0 +1,200 @@
+{
+  "about": "Profiles (TREC topics) for the multi-profile relevance answer key of zukhruf #3195. A design sees only id, title and description. Annotators see the full statement. Written 2026-10-28 before any article of the collection was read.",
+  "common": [
+    "Main-subject test: the headline, or the lead when the headline is unclear, must be about the profile's subject. A subject that is one item in a list, a passing mention or background does not count.",
+    "An article can be relevant to several profiles, or to none.",
+    "Opinion, analysis and interviews count when their main subject is the profile's subject.",
+    "A business article (funding, deal, acquisition, results, hire) is relevant to a subject profile only when it describes the subject's work (the product, technology, research or problem). An article that only names a company in the field is not relevant. The biology profile keeps its own stricter rule.",
+    "Ambiguous (relevant: null): the main-subject test gives two answers. Record the alternative label and the reason."
+  ],
+  "profiles": [
+    {
+      "id": "biology",
+      "title": "Biology",
+      "description": "New biology science, even when it comes from tech companies.",
+      "statementSource": "relevance-biology/rule.md, sha256 7e6aa431f2c9e0e781dadd528f06b31b9b4694adc038830255365419b6c1824a, copied word for word",
+      "relevant": "An article is relevant when its main subject is a biological or life-science result, method, model, dataset or tool. Examples: protein design, genomics, drug-discovery science, neuroscience findings, ecology, AlphaFold-type models, and lab or biosecurity research results. The publisher does not matter: biology from an AI company (example: Anthropic's post on a designed protein that blocks scorpion venom) is relevant.",
+      "notRelevant": [
+        "it is about the business or finance of bio or health companies and the article holds no science (funding, stocks, deals, partnerships, hires). Example: \"biotech stocks fall 5%\"",
+        "it is about policy or regulation and biology is only mentioned",
+        "it is a product launch that only names health or life-science customers",
+        "it is general AI news (models, safety, agents, chips, lawsuits) where biology is at most one item in a list"
+      ],
+      "mainSubject": "The headline, or the lead when the headline is unclear, must be about the biological or life-science work. A science result inside a business article counts only when that result is the article's subject.",
+      "ambiguous": "an AI-for-science programme that names biology among other sciences; a biosecurity policy or evaluation that reports no lab result; a health product whose article reports clinical or study results; a bio partnership that describes the science it will do."
+    },
+    {
+      "id": "chips",
+      "title": "Chips and AI hardware",
+      "description": "New computer chips and AI hardware, and how chips are made and supplied.",
+      "relevant": "The main subject is processors, GPUs, AI accelerators, memory chips, chip design, chip manufacturing (fabs, foundries, packaging), chip supply or shortages, rules on chip exports, or AI servers and supercomputers as hardware.",
+      "notRelevant": [
+        "a data-center project, lease or cloud deal where the chips are not the subject",
+        "a consumer device (phone, laptop, headset) launch, unless the chip inside it is the subject",
+        "AI model or software news that names the hardware it runs on"
+      ],
+      "ambiguous": "a chip company's financial results; a cloud-capacity deal that names the number and type of chips; a device launch that leads with its new chip."
+    },
+    {
+      "id": "security",
+      "title": "Cybersecurity",
+      "description": "Cybersecurity: attacks, breaches, vulnerabilities and the tools and research that defend against them.",
+      "relevant": "The main subject is a cyberattack, data breach, ransomware, a vulnerability or patch, threat research, a security product or service, AI used to attack or defend systems, or attacks on AI systems (for example prompt injection against agents).",
+      "notRelevant": [
+        "research on how AI models behave that reports no attack or defence (that is the safety profile)",
+        "physical security, public safety or national defence with no computer-security subject",
+        "privacy policy or regulation with no attack, breach or security tool"
+      ],
+      "ambiguous": "a privacy failure (data exposed by a bug) that nobody attacked; fraud or scams that use AI with no computer intrusion; a general platform launch with one security feature in the headline."
+    },
+    {
+      "id": "funding",
+      "title": "Funding and acquisitions",
+      "description": "Startup funding rounds, investments and company acquisitions.",
+      "relevant": "The main subject is a funding round, a venture or strategic investment in a company, a valuation, an IPO, or an acquisition or merger (rumoured, announced, completed or blocked).",
+      "notRelevant": [
+        "company financial results (that is the company-results profile)",
+        "government grants, subsidies or public spending programmes",
+        "a company's own capital spending (for example a plan to spend billions on data centers)",
+        "a partnership with no equity or purchase"
+      ],
+      "ambiguous": "a compute or cloud deal described as an investment; a fund (a venture firm raising its own fund) with no company named; a share sale by employees (tender offer)."
+    },
+    {
+      "id": "regulation",
+      "title": "Tech regulation and policy",
+      "description": "Government laws, regulations and policy on AI and technology.",
+      "relevant": "The main subject is a law, bill, regulation, executive order, government policy, a regulator's action (fine, investigation, ruling by an agency), export controls, or an international agreement on AI or technology.",
+      "notRelevant": [
+        "a lawsuit between private parties or a court ruling (that is the lawsuits profile), unless a government brought the case",
+        "a company's own policy, terms or principles",
+        "politics or elections with no technology policy"
+      ],
+      "ambiguous": "AI-company lobbying or political spending; a government contract to buy or use AI; a government lawsuit (relevant here and to lawsuits)."
+    },
+    {
+      "id": "courts",
+      "title": "Lawsuits and court rulings",
+      "description": "Lawsuits, court cases and legal rulings that involve AI or tech companies.",
+      "relevant": "The main subject is a lawsuit, a court ruling, a trial, a settlement or a legal dispute (copyright, antitrust, privacy, defamation, contract, employment) that involves an AI or tech company, or a court case about the use of AI (for example invented citations in a filing).",
+      "notRelevant": [
+        "a law or regulation with no court case (that is the regulation profile)",
+        "a patent granted or a contract signed with no dispute"
+      ],
+      "ambiguous": "a threat to sue or a legal letter; an investigation by a regulator that is not in a court; a criminal arrest with no AI or tech subject."
+    },
+    {
+      "id": "robotics",
+      "title": "Robotics",
+      "description": "Robots and autonomous machines: humanoids, industrial robots, drones and self-driving vehicles.",
+      "relevant": "The main subject is a physical robot, a robot AI model (for example vision-language-action models), humanoids, industrial or warehouse robots, drones, self-driving cars or robotaxis.",
+      "notRelevant": [
+        "software bots, chatbots, or AI agents that act only in software",
+        "robotic process automation (RPA) software"
+      ],
+      "ambiguous": "world-model or simulation research that names robots as one use; a factory-automation product with no robot in the article."
+    },
+    {
+      "id": "safety",
+      "title": "AI safety research",
+      "description": "Research on AI safety and alignment: how AI models misbehave, how to test them and how to make them safe.",
+      "relevant": "The main subject is alignment research, interpretability, evaluations of dangerous capabilities, studies of model misbehaviour (scheming, deception, sycophancy, reward hacking), red-teaming or jailbreak results, or the safety findings of a system card.",
+      "notRelevant": [
+        "AI policy or regulation that reports no research result (that is the regulation profile)",
+        "cyberattacks or security products with no model-behaviour subject (that is the cybersecurity profile)",
+        "a product safety feature (for example parental controls) with no research",
+        "a model launch that mentions safety in passing"
+      ],
+      "ambiguous": "an AI lab's safety policy or framework update with no new result; a case where a chatbot harmed a user that reports only the case or the lawsuit, not the model's behaviour."
+    },
+    {
+      "id": "open-models",
+      "title": "Open-weight models",
+      "description": "New AI models released with open weights that anyone can download.",
+      "relevant": "The main subject is the release of an AI model whose weights anyone can download (open weights, open source, or a research licence), or tests and analysis of such a released model.",
+      "notRelevant": [
+        "models available only through an API or an app",
+        "open-source software that is not a model (frameworks, tools, agents)",
+        "datasets"
+      ],
+      "ambiguous": "a plan or promise to release open weights later; a model family where only some sizes are open and the article is about a closed one."
+    },
+    {
+      "id": "jobs",
+      "title": "AI and jobs",
+      "description": "How AI changes work: jobs, hiring, layoffs, wages and skills.",
+      "relevant": "The main subject is the effect of AI on employment, layoffs or hiring linked to AI, studies of the workforce, wages or productivity of workers who use AI, skills and retraining, or unions and AI.",
+      "notRelevant": [
+        "layoffs or hiring that the article does not link to AI",
+        "executive appointments or departures"
+      ],
+      "ambiguous": "the competition for AI researchers (pay packages, poaching); training courses for professionals with no work-effect subject."
+    },
+    {
+      "id": "energy",
+      "title": "Energy for computing",
+      "description": "Electricity and energy for computing: power supply, power plants and the energy use of data centers and AI.",
+      "relevant": "The main subject is how power for data centers or AI is produced, bought or delivered (power plants, nuclear, renewables, grid connections), power demand of data centers, or studies of the energy use of AI.",
+      "notRelevant": [
+        "a data-center project that gives its size in megawatts or gigawatts but is not about the power supply",
+        "climate or energy news with no computing subject"
+      ],
+      "ambiguous": "data-center cooling and water use; an energy company's AI software product."
+    },
+    {
+      "id": "quantum",
+      "title": "Quantum computing",
+      "description": "Quantum computing hardware, software and research.",
+      "relevant": "The main subject is quantum computers, qubits, quantum algorithms or error correction, or the products and research of quantum-computing companies.",
+      "notRelevant": [
+        "the word quantum used for something that is not quantum computing"
+      ],
+      "ambiguous": "post-quantum cryptography; quantum sensing or quantum networking with no computer."
+    },
+    {
+      "id": "health",
+      "title": "Health and medicine",
+      "description": "AI and technology in medicine and healthcare: diagnosis, clinical care, hospitals and health products.",
+      "relevant": "The main subject is medical AI (diagnosis, imaging), a clinical study of an AI tool, health apps or products, hospitals or health systems that use technology, health data, or medical advice from chatbots.",
+      "notRelevant": [
+        "life-science research with no care or clinical use (that is the biology profile)",
+        "a product launch that only names health customers"
+      ],
+      "ambiguous": "a drug-discovery result before any clinical study; mental-health effects of chatbots on users; a case where a chatbot harmed a user."
+    },
+    {
+      "id": "education",
+      "title": "Education",
+      "description": "AI and technology in education: schools, universities, teachers, students and learning tools.",
+      "relevant": "The main subject is AI or technology in schools or universities, students or teachers who use AI, cheating, education products, or AI-literacy programmes for students.",
+      "notRelevant": [
+        "the word learning in the machine-learning sense",
+        "research done at a university that is not about education"
+      ],
+      "ambiguous": "training courses for professionals; an AI company's free programme for students that is mainly a promotion."
+    },
+    {
+      "id": "coding",
+      "title": "AI for software development",
+      "description": "AI for software development: coding assistants, coding agents and developer tools.",
+      "relevant": "The main subject is an AI coding assistant or coding agent, a developer tool that uses AI, an app builder that writes code from prompts, studies of AI-assisted programming, or coding benchmark results.",
+      "notRelevant": [
+        "developer tools or platforms with no AI subject",
+        "a model launch that reports coding scores among other results"
+      ],
+      "ambiguous": "security flaws in code written by AI; a general agent platform whose main example is coding."
+    },
+    {
+      "id": "earnings",
+      "title": "Company results",
+      "description": "Company financial results: quarterly earnings, revenue, profit and forecasts.",
+      "relevant": "The main subject is a company's earnings report, revenue or profit figures, a revenue run-rate, a forecast or guidance, or a stock move caused by results.",
+      "notRelevant": [
+        "funding rounds and valuations (that is the funding profile)",
+        "market-share studies or analyst predictions with no company result"
+      ],
+      "ambiguous": "a stock move with no results; spending plans announced in an earnings call when the article is about the spending."
+    }
+  ],
+  "inclusion": "A profile is scored in round 2 only when the collection holds at least 10 strict relevant articles in the teaching period (2026-04-01 to 2026-05-31) and at least 20 in the test period (2026-06-01 to 2026-10-26). Other profiles are reported one by one with their intervals, outside the mean. Biology keeps its own teaching source (training-extra) and its own sealed exam."
+}

@@ -1,0 +1,15 @@
+{
+  "role": "training",
+  "frozenAt": "2026-10-28T08:21:46Z",
+  "firstScoredAt": "2026-10-28T08:26:15Z",
+  "labelsSha256": {
+    "labels.json": "69a540c1ae2075ddaff71b5a039791bf90b6c6868a317ec3d58443e29037d406"
+  },
+  "annotator": "8 blind Claude (Opus 5.5) annotators, one queue each, every article read; a second annotator on 400 random articles: kappa 0.89 to 1.00 (jobs 0.66).",
+  "source": "The round-2 collection: The Decoder and SiliconANGLE (3,838) and anthropic-outlets (816), 2026-04-01 to 2026-10-26. labels.json is the bundle's labels.json; articles.json holds the q, id and publish date of collection/items.json. relevance-profiles bundle of zukhruf #3195 (~/.codex/visualizations/2026/10/23/01a16a1c-424c-7793-8ca9-02cc1c715d82/relevance-profiles)",
+  "weaknesses": [
+    "Annotators are one AI model.",
+    "Chip-company results and compute deals that name chips are mostly chips: null; safety statements with no research result are safety: null.",
+    "Rounds 2 to 6 used this set: it is a development set, and in the exam it is a teaching pool only."
+  ]
+}

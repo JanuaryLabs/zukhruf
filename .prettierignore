@@ -5,3 +5,9 @@
 **/dist
 *.tsbuildinfo
 package-lock.json
+# The answer keys of the relevance-filtering eval are copies of frozen files,
+# checked by the sha256 of their bytes.
+/packages/information-filtering/relevance-filtering/eval/sets
+/packages/information-filtering/relevance-filtering/eval/profiles.*
+/packages/information-filtering/relevance-filtering/eval/keywords.json
+/packages/information-filtering/relevance-filtering/eval/implementation-check

@@ -4,6 +4,8 @@ The parameters of the detector come from research rounds #3130 and #3152 ([ADR 0
 
 Run the evaluation before you change a parameter, the lead rule, the similarity source or the model. Then run it again after the change.
 
+The eval of `@zukhruf/relevance-filtering` copies `roles.ts`, `answer-key.ts`, `bootstrap.ts`, `verdict.ts` and `run.ts` of this folder ([its ledger](../../information-filtering/relevance-filtering/docs/copied-code.md), backlog #3261). Make each fix in both copies, and name both files in the commit.
+
 ## Run it
 
 The evaluation needs the embedding model of round #3130: EmbeddingGemma 2 Q8_0 on llama.cpp b11836. CI does not have the model, so the `eval` target runs only on a machine with the model. CI does not run it.

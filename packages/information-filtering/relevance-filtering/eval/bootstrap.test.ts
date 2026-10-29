@@ -1,0 +1,59 @@
+import assert from 'node:assert/strict';
+import { test } from 'node:test';
+
+import {
+  articleWeights,
+  percentile,
+  topicBootstrap,
+  weightedF05,
+} from './bootstrap.ts';
+
+test('a percentile interpolates as numpy.percentile', () => {
+  const sorted = [0.1, 0.2, 0.33, 0.5, 0.9];
+
+  assert.deepEqual(
+    [2.5, 50, 97.5].map((q) => percentile(sorted, q)),
+    [0.11000000000000001, 0.33, 0.86],
+  );
+});
+
+// The values come from round-2 evaluate.py topic_boot with numpy 2.3.4.
+test('the topic bootstrap gives the interval of the research code for the same differences and seed', () => {
+  const differences = [0.1, -0.05, 0.2, 0.03, 0, 0.12, -0.2, 0.07, 0.15, 0.01];
+
+  const interval = topicBootstrap(differences, 31957);
+
+  assert.ok(Math.abs(interval.low - -0.026000000000000006) < 1e-15);
+  assert.ok(Math.abs(interval.high - 0.10402499999999987) < 1e-15);
+  assert.ok(Math.abs(interval.observed - 0.043) < 1e-15);
+});
+
+test('each replicate of the article bootstrap draws as many articles of each stratum as the stratum holds', () => {
+  const relevantToAny = [true, false, false, true, false, false, false];
+
+  const weights = articleWeights(relevantToAny, 31958);
+
+  assert.equal(weights.length, 2000);
+  for (const row of weights) {
+    const drawn = (inStratum: boolean) =>
+      row.reduce(
+        (sum, weight, index) =>
+          relevantToAny[index] === inStratum ? sum + weight : sum,
+        0,
+      );
+    assert.deepEqual([drawn(true), drawn(false)], [2, 5]);
+  }
+});
+
+test('a weighted T11F counts each article as many times as its weight, and leaves out the ambiguous articles', () => {
+  const run = {
+    accepted: [true, true, false, true],
+    relevant: [true, false, true, false],
+    ambiguous: [false, false, false, true],
+  };
+
+  const value = weightedF05(run, [2, 1, 1, 5]);
+
+  // tp 2, fp 1, fn 1: 1.25 * 2 / (1.25 * 2 + 0.25 * 1 + 1).
+  assert.equal(value, 2.5 / 3.75);
+});

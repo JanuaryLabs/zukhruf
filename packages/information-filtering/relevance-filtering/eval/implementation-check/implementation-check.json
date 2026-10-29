@@ -1,0 +1,208 @@
+{
+ "profile": "security",
+ "slice": "fresh",
+ "nShow": 10,
+ "shownIds": [
+  "https://siliconangle.com/2026/01/04/resecurity-denies-shinyhunters-breach-claim-says-attackers-hit-synthetic-honeypot/",
+  "https://siliconangle.com/2026/01/14/depthfirst-secures-40m-expand-agentic-approach-software-security/",
+  "https://siliconangle.com/2026/01/14/novee-launches-51-5m-bring-continuous-ai-offensive-security-enterprises/",
+  "https://siliconangle.com/2026/01/14/aikido-security-raises-60m-series-b-1b-valuation-unify-application-security/",
+  "https://siliconangle.com/2026/01/07/cyera-researchers-detail-critical-ni8mare-vulnerability-allowing-full-takeover-n8n-instances/",
+  "https://siliconangle.com/2026/01/05/brightspeed-probes-alleged-cyberattack-crimson-collective-threatens-data-release/",
+  "https://siliconangle.com/2026/01/05/sedgwick-confirms-cyberattack-subsidiary-tridentlocker-claims-data-theft/",
+  "https://siliconangle.com/2026/01/07/record-cybersecurity-deal-activity-2025-sets-aggressive-tone-2026-says-momentum-cyber/",
+  "https://siliconangle.com/2026/01/05/securonix-warns-phaltblyx-malware-campaign-targeting-hospitality-sector/",
+  "https://siliconangle.com/2026/01/05/agentic-resilience-faces-off-ai-powered-cybercrime-rubrikresilience/",
+  "https://siliconangle.com/2026/01/07/barracuda-report-finds-phishing-kits-doubled-2025-attacks-grew-evasive/",
+  "https://siliconangle.com/2026/01/09/cybersecurity-resilience-takes-center-stage-thecube-rsac26/",
+  "https://siliconangle.com/2026/01/08/upwind-rolls-choppy-ai-bring-transparent-natural-language-security-cloud-workloads/",
+  "https://siliconangle.com/2026/01/11/torq-raises-140m-1-2b-valuation-scale-ai-driven-security-hyperautomation/"
+ ],
+ "taughtRelevant": [
+  "https://siliconangle.com/2026/01/04/resecurity-denies-shinyhunters-breach-claim-says-attackers-hit-synthetic-honeypot/",
+  "https://siliconangle.com/2026/01/14/depthfirst-secures-40m-expand-agentic-approach-software-security/",
+  "https://siliconangle.com/2026/01/14/novee-launches-51-5m-bring-continuous-ai-offensive-security-enterprises/",
+  "https://siliconangle.com/2026/01/14/aikido-security-raises-60m-series-b-1b-valuation-unify-application-security/",
+  "https://siliconangle.com/2026/01/07/cyera-researchers-detail-critical-ni8mare-vulnerability-allowing-full-takeover-n8n-instances/",
+  "https://siliconangle.com/2026/01/05/brightspeed-probes-alleged-cyberattack-crimson-collective-threatens-data-release/",
+  "https://siliconangle.com/2026/01/05/sedgwick-confirms-cyberattack-subsidiary-tridentlocker-claims-data-theft/",
+  "https://siliconangle.com/2026/01/05/securonix-warns-phaltblyx-malware-campaign-targeting-hospitality-sector/",
+  "https://siliconangle.com/2026/01/05/agentic-resilience-faces-off-ai-powered-cybercrime-rubrikresilience/",
+  "https://siliconangle.com/2026/01/07/barracuda-report-finds-phishing-kits-doubled-2025-attacks-grew-evasive/",
+  "https://siliconangle.com/2026/01/09/cybersecurity-resilience-takes-center-stage-thecube-rsac26/",
+  "https://siliconangle.com/2026/01/08/upwind-rolls-choppy-ai-bring-transparent-natural-language-security-cloud-workloads/",
+  "https://siliconangle.com/2026/01/11/torq-raises-140m-1-2b-valuation-scale-ai-driven-security-hyperautomation/"
+ ],
+ "taughtNotRelevant": [],
+ "binormal": {
+  "pi": 0.189152504512151,
+  "mu1": 1.561143507124842,
+  "s1": 0.9381099433021389,
+  "mu0": -0.35642730617182583,
+  "s0": 0.5978147650701745
+ },
+ "threshold": 0.7477455117033052,
+ "accepted": 196,
+ "articles": {
+  "https://siliconangle.com/2026/02/23/ubicquia-raises-106m-expand-ai-enabled-infrastructure-platform/": [
+   0.009969544224078364,
+   false
+  ],
+  "https://siliconangle.com/2026/02/11/gitguardian-raises-50m-expand-non-human-identity-ai-agent-security/": [
+   0.9546771254672473,
+   true
+  ],
+  "https://siliconangle.com/2026/03/05/google-threat-intelligence-group-warns-enterprise-systems-increasingly-targeted-zero-day-exploits/": [
+   0.9995399980439055,
+   true
+  ],
+  "https://siliconangle.com/2026/03/13/ai-startups-funding-frenzy-aws-goes-next-whats-coming-nvidias-gtc-event/": [
+   0.02764967963792969,
+   false
+  ],
+  "https://the-decoder.com/microsoft-brings-anthropics-claude-cowork-into-copilot-to-run-tasks-across-outlook-teams-and-excel/": [
+   0.005092567754110211,
+   false
+  ],
+  "https://siliconangle.com/2026/02/12/didero-raises-30m-series-expand-agentic-ai-enterprise-procurement/": [
+   0.02261243523213302,
+   false
+  ],
+  "https://siliconangle.com/2026/03/10/meta-told-oversight-board-better-moderation-needed-ai-generated-deepfakes/": [
+   0.027689814236028287,
+   false
+  ],
+  "https://the-decoder.com/gtc-2026-with-groq-3-lpx-nvidia-adds-dedicated-inference-hardware-to-its-platform-for-the-first-time/": [
+   0.03210911376746012,
+   false
+  ],
+  "https://siliconangle.com/2026/02/26/coreweaves-stock-drops-mixed-results-plans-scale-ai-spending/": [
+   0.0020190169112209166,
+   false
+  ],
+  "https://siliconangle.com/2026/02/18/world-labs-closes-1b-investment-backed-nvidia-amd-autodesk/": [
+   0.010717573094147226,
+   false
+  ],
+  "https://siliconangle.com/2026/03/11/zymtrace-raises-12-2m-optimize-ai-workload-performance-across-gpu-infrastructure/": [
+   0.01714049931961048,
+   false
+  ],
+  "https://the-decoder.com/altman-claims-chatgpt-has-more-users-in-texas-alone-than-claude-has-across-the-entire-us/": [
+   0.0029818466973344226,
+   false
+  ],
+  "https://siliconangle.com/2026/03/26/operational-resilience-emerges-ai-eras-key-enterprise-standard-rsac26/": [
+   0.5834290693184506,
+   false
+  ],
+  "https://siliconangle.com/2026/02/01/oracle-unveils-50b-fundraising-plan-fuel-ai-data-center-ambitions/": [
+   0.19386817116474853,
+   false
+  ],
+  "https://siliconangle.com/2026/03/16/teens-launch-lawsuit-xai-grok-deepfakes/": [
+   0.004235003618086375,
+   false
+  ],
+  "https://the-decoder.com/nvidia-is-reportedly-investing-20-billion-in-openai-says-it-will-proceed-one-step-at-a-time/": [
+   0.0017462868430175305,
+   false
+  ],
+  "https://siliconangle.com/2026/02/26/google-launches-nano-banana-2-speed-image-quality-improvements/": [
+   0.0017781300678068601,
+   false
+  ],
+  "https://siliconangle.com/2026/02/25/c3-ai-shares-plunge-earnings-miss-shrinking-sales-weak-outlook-rattle-investors/": [
+   0.0034981419108269796,
+   false
+  ],
+  "https://siliconangle.com/2026/03/20/vera-rubin-targets-every-wasted-watt-ai-nvidiagtcai/": [
+   0.005658946211740401,
+   false
+  ],
+  "https://siliconangle.com/2026/03/30/modernizing-siem-bottom-data-lake-strategy-rsac26/": [
+   0.99975615247868,
+   true
+  ],
+  "https://siliconangle.com/2026/01/30/anthropic-debuts-claude-cowork-plugins-help-users-automate-tasks/": [
+   0.0038379382248396876,
+   false
+  ],
+  "https://the-decoder.com/german-court-says-its-ai-isnt-enough-to-void-copyright/": [
+   0.002333982082401209,
+   false
+  ],
+  "https://siliconangle.com/2026/03/31/acre-security-launches-acre-via-ai-assistant-physical-access-control-systems/": [
+   0.5390148475778923,
+   false
+  ],
+  "https://siliconangle.com/2026/01/15/openai-quietly-launches-chatgpt-translate-support-25-languages/": [
+   0.0020259936442907356,
+   false
+  ],
+  "https://siliconangle.com/2026/02/03/western-digital-outlines-new-hdd-capacity-performance-power-gains-ai-workloads/": [
+   0.027124863522538456,
+   false
+  ],
+  "https://the-decoder.com/google-pulls-back-on-browser-ai-as-the-industry-bets-on-coding-tools/": [
+   0.015174982784040225,
+   false
+  ],
+  "https://siliconangle.com/2026/03/11/xscape-debuts-first-laser-based-optical-interconnect-raising-37m-fresh-funding/": [
+   0.010684699131401187,
+   false
+  ],
+  "https://the-decoder.com/tech-giants-make-non-binding-white-house-pledge-to-cover-ai-data-center-energy-costs/": [
+   0.04423389955541496,
+   false
+  ],
+  "https://the-decoder.com/openai-ceo-sam-altman-reportedly-teases-a-very-strong-model-internally-that-can-really-accelerate-the-economy/": [
+   0.0038573600120025975,
+   false
+  ],
+  "https://siliconangle.com/2026/01/20/ethernovia-raises-90m-advance-ethernet-packet-processors-automotive-edge-ai/": [
+   0.005937485111356389,
+   false
+  ],
+  "https://the-decoder.com/mistrals-new-small-4-model-punches-above-its-weight-with-128-expert-modules/": [
+   0.01272940873996381,
+   false
+  ],
+  "https://siliconangle.com/2026/01/16/data-retrieval-embeddings-enhancements-mongodb-set-stage-year-specialized-ai/": [
+   0.017024160415012146,
+   false
+  ],
+  "https://siliconangle.com/2026/01/27/swimlane-unleashes-agentic-ai-fleet-agent-builder-cybersecurity/": [
+   0.9306013635221189,
+   true
+  ],
+  "https://siliconangle.com/2026/03/26/cloud-native-diversity-gets-boost-cncf-initiative-kubeconeu/": [
+   0.03951756000505158,
+   false
+  ],
+  "https://siliconangle.com/2026/03/03/teramind-launches-agentic-ai-visibility-policy-platform-ai-tools/": [
+   0.6054040034220551,
+   false
+  ],
+  "https://siliconangle.com/2026/03/04/rambus-targets-ai-memory-bottlenecks-new-hbm4e-controller-ip-1/": [
+   0.007547590843264063,
+   false
+  ],
+  "https://the-decoder.com/anthropic-partners-with-leading-research-institutes-to-tackle-biologys-data-bottleneck/": [
+   0.04588557604668536,
+   false
+  ],
+  "https://siliconangle.com/2026/01/29/lorikeet-launches-coach-analytics-agent-perk-ai-customer-support/": [
+   0.029911851932673705,
+   false
+  ],
+  "https://siliconangle.com/2026/01/21/ey-ai-native-rethinking-work-not-tools-ces2026/": [
+   0.008155391826091374,
+   false
+  ],
+  "https://the-decoder.com/anthropic-brings-its-ai-agent-software-claude-cowork-to-windows/": [
+   0.0030055356763814545,
+   false
+  ]
+ }
+}

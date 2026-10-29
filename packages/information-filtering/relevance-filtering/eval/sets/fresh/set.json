@@ -1,0 +1,15 @@
+{
+  "role": "training",
+  "sliceStart": "2026-01-01",
+  "frozenAt": "2026-10-28T09:48:41Z",
+  "firstScoredAt": "2026-10-28T09:50:16Z",
+  "labelsSha256": {
+    "labels.json": "a2802bbe8303534f916b7e8292393b7bdaebf02a14855652147953a887ed7f5d"
+  },
+  "annotator": "4 blind Claude (Opus 5.5) annotators, one queue each.",
+  "source": "The Decoder and SiliconANGLE, 2026-01-01 to 2026-03-31 (1,675). labels.json is fresh/labels.json of the bundle. relevance-profiles bundle of zukhruf #3195 (~/.codex/visualizations/2026/10/23/01a16a1c-424c-7793-8ca9-02cc1c715d82/relevance-profiles)",
+  "weaknesses": [
+    "Annotators are one AI model.",
+    "Rounds 4 and 6 scored this set: it is a development set."
+  ]
+}

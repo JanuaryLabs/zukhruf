@@ -84,6 +84,9 @@
       "path": "./packages/event-grouping"
     },
     {
+      "path": "./packages/information-filtering/relevance-filtering"
+    },
+    {
       "path": "./packages/sqlite/reader"
     },
     {
