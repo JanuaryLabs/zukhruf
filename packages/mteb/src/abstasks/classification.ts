@@ -16,7 +16,7 @@ import {
   SklearnEvaluator,
   labelsOf,
 } from '../evaluators/sklearn-evaluator.ts';
-import { isEncoder } from '../models/models-protocols.ts';
+import { type EncoderProtocol, isEncoder } from '../models/models-protocols.ts';
 import type { TimingStack } from '../timing.ts';
 import type { Embeddings, EncodeKwargs } from '../types/encoder-io.ts';
 import type { Score } from '../types/result.ts';
@@ -62,13 +62,12 @@ export type Undersampling = {
   readonly selected: number[];
 };
 
-// A classification task: an evaluator model (LogisticRegression) learns the
-// labels from the embeddings of samplesPerLabel training rows of each label,
-// then predicts the labels of the evaluation split. The task runs
-// nExperiments experiments on other training rows and reports the mean of
-// their scores.
-export abstract class AbsTaskClassification extends AbsTask<Dataset> {
-  evaluatorModel: ClassifierModel = new LogisticRegression({ maxIter: 100 });
+// What AbsTaskClassification and AbsTaskMultilabelClassification share: the
+// fields of the training rows, the prompt, the loading of the data, and the
+// checks of evaluate. In Python the multilabel task subclasses
+// AbsTaskClassification and replaces its evaluator model with one of another
+// type; here each task type declares its own evaluator model.
+export abstract class ClassificationTaskBase extends AbsTask<Dataset> {
   samplesPerLabel = 8;
   nExperiments = 10;
   trainSplit = 'train';
@@ -83,22 +82,15 @@ export abstract class AbsTaskClassification extends AbsTask<Dataset> {
     return this.loadDatasets();
   }
 
-  protected override async evaluateSubset(
+  // The checks of evaluate for a subset, then its training split.
+  protected trainSplitOf(
     model: MTEBModels,
-    evalSplit: Dataset,
-    options: {
-      readonly hfSplit: string;
-      readonly hfSubset: string;
-      readonly encodeKwargs: EncodeKwargs;
-      readonly predictionFolder: string | null;
-      readonly timer: TimingStack;
-    },
-  ): Promise<Record<string, Score>> {
+    hfSubset: string,
+  ): { readonly model: EncoderProtocol; readonly trainSplit: Dataset } {
     if (!isEncoder(model))
       throw new TypeError(
         'Expected model to be an instance of EncoderProtocol',
       );
-    const { hfSplit, hfSubset, encodeKwargs, timer } = options;
     const splits = this.dataset?.get(hfSubset);
     const available = splits?.values().next().value?.columnNames ?? [];
     const missing = [this.inputColumnName, this.labelColumnName].filter(
@@ -116,6 +108,31 @@ export abstract class AbsTaskClassification extends AbsTask<Dataset> {
       throw new Error(
         `The ${modalities.join(', ')} modality is not supported yet.`,
       );
+    return { model, trainSplit };
+  }
+}
+
+// A classification task: an evaluator model (LogisticRegression) learns the
+// labels from the embeddings of samplesPerLabel training rows of each label,
+// then predicts the labels of the evaluation split. The task runs
+// nExperiments experiments on other training rows and reports the mean of
+// their scores.
+export abstract class AbsTaskClassification extends ClassificationTaskBase {
+  evaluatorModel: ClassifierModel = new LogisticRegression({ maxIter: 100 });
+
+  protected override async evaluateSubset(
+    mtebModel: MTEBModels,
+    evalSplit: Dataset,
+    options: {
+      readonly hfSplit: string;
+      readonly hfSubset: string;
+      readonly encodeKwargs: EncodeKwargs;
+      readonly predictionFolder: string | null;
+      readonly timer: TimingStack;
+    },
+  ): Promise<Record<string, Score>> {
+    const { hfSplit, hfSubset, encodeKwargs, timer } = options;
+    const { model, trainSplit } = this.trainSplitOf(mtebModel, hfSubset);
 
     const allSelectedIdxs = this.undersampleExperiments(trainSplit).map(
       ({ selected }) => selected,

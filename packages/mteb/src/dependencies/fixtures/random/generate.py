@@ -11,8 +11,10 @@
 #   random() and getrandbits(k), in the order of the calls;
 # - numpy.random.RandomState(seed): randint, random_sample, uniform(size),
 #   choice(n, size, p=p) with the float32 weights of scikit-learn, choice(n,
-#   size, replace=False), permutation and shuffle of a list range(n), in
-#   the order of the calls.
+#   size, replace=False), choice(a, size) of the array a = 3 * arange(n) + 1,
+#   permutation and shuffle of a list range(n), in the order of the calls;
+# - numpy.random.default_rng(seed): shuffle of a list range(n) and
+#   integers(low, high, size), in the order of the calls.
 # Never edit expected.json by hand: run this script again.
 import importlib.metadata
 import json
@@ -66,12 +68,29 @@ def numpy_case(case, seed, calls):
             results.append(generator.choice(call[1], call[2], p=float32_weights(call[1]), replace=True).tolist())
         elif name == "choice_no_replace":
             results.append(generator.choice(call[1], replace=False, size=call[2]).tolist())
+        elif name == "choice":
+            results.append(generator.choice(3 * np.arange(call[1]) + 1, call[2]).tolist())
         elif name == "permutation":
             results.append(generator.permutation(call[1]).tolist())
         elif name == "shuffle":
             values = list(range(call[1]))
             generator.shuffle(values)
             results.append(values)
+    return {"case": case, "seed": seed, "calls": calls, "results": results}
+
+
+def generator_case(case, seed, calls):
+    generator = np.random.default_rng(seed)
+    results = []
+    for call in calls:
+        name = call[0]
+        if name == "shuffle":
+            # MTEB shuffles a list of numpy integers: list(np.arange(n)).
+            values = list(np.arange(call[1]))
+            generator.shuffle(values)
+            results.append([int(value) for value in values])
+        elif name == "integers":
+            results.append(generator.integers(call[1], call[2], call[3]).tolist())
     return {"case": case, "seed": seed, "calls": calls, "results": results}
 
 
@@ -110,12 +129,24 @@ numpy_cases = [
     numpy_case("shuffles of lists, as MTEB's classification tasks undersample", 42, [
         ["shuffle", 0], ["shuffle", 1], ["shuffle", 2], ["shuffle", 30], ["shuffle", 1000], ["permutation", 5],
     ]),
+    numpy_case("choices of one item from arrays, as the iterative stratification breaks ties", 42, [
+        ["choice", 2, 1], ["choice", 2, 1], ["choice", 1, 1], ["choice", 3, 4], ["choice", 2, 30], ["choice", 5, 0],
+    ]),
     numpy_case("more than 624 words: the state twists again", 1, [["random_sample", 400], ["randint", 0, 1000, 10]]),
+]
+
+generator_cases = [
+    generator_case("seed 42: the shuffles of MTEB's multilabel undersampling", 42, [
+        ["shuffle", 0], ["shuffle", 1], ["shuffle", 2], ["shuffle", 30], ["shuffle", 30], ["shuffle", 1000],
+    ]),
+    generator_case("shuffles and integers share the buffered half of a 64-bit draw", 7, [
+        ["shuffle", 3], ["integers", 0, 10, 1], ["shuffle", 4], ["integers", 0, 1000, 3], ["shuffle", 70000],
+    ]),
 ]
 
 generator = f"generate.py: numpy {np.__version__}, CPython {platform.python_version()}"
 (HERE / "expected.json").write_text(
-    json.dumps({"generator": generator, "python": python_cases, "numpy": numpy_cases}) + "\n",
+    json.dumps({"generator": generator, "python": python_cases, "numpy": numpy_cases, "generator_cases": generator_cases}) + "\n",
     encoding="utf-8",
 )
-print(f"{generator}: {len(python_cases)} CPython cases, {len(numpy_cases)} numpy cases", file=sys.stderr)
+print(f"{generator}: {len(python_cases)} CPython cases, {len(numpy_cases)} numpy cases, {len(generator_cases)} Generator cases", file=sys.stderr)

@@ -1,8 +1,8 @@
 import type { Embeddings } from '../types/encoder-io.ts';
 import { log } from './libm.ts';
-import { sum, sumFloat32 } from './numpy.ts';
+import { mean, sum, sumFloat32 } from './numpy.ts';
 import { compareStrings } from './python.ts';
-import { gammaln } from './scipy.ts';
+import { gammaln, rankdata } from './scipy.ts';
 
 // sklearn.metrics.auc of scikit-learn 1.9: the area under a curve by the
 // trapezoidal rule (np.trapezoid), for x that only rises or only falls.
@@ -273,8 +273,8 @@ function contingencyMatrix(
 }
 
 function checkClusterings(
-  labelsTrue: readonly ClusterLabel[],
-  labelsPred: readonly ClusterLabel[],
+  labelsTrue: readonly unknown[],
+  labelsPred: readonly unknown[],
 ): void {
   if (labelsTrue.length !== labelsPred.length)
     throw new Error(
@@ -442,11 +442,30 @@ function checkTargets(
   return uniqueInverse(labels).unique;
 }
 
-// sklearn.metrics.accuracy_score: the share of equal labels.
+// sklearn.metrics.accuracy_score: the share of equal labels. For label
+// indicator matrices, the share of rows with the same labels (subset
+// accuracy).
 export function accuracyScore(
   yTrue: readonly ClassLabel[],
   yPred: readonly ClassLabel[],
+): number;
+export function accuracyScore(
+  yTrue: LabelIndicator,
+  yPred: LabelIndicator,
+): number;
+export function accuracyScore(
+  yTrue: readonly ClassLabel[] | LabelIndicator,
+  yPred: readonly ClassLabel[] | LabelIndicator,
 ): number {
+  if (isIndicator(yTrue) || isIndicator(yPred)) {
+    const [indicatorTrue, indicatorPred] = checkIndicators(yTrue, yPred);
+    let equal = 0;
+    for (const [index, row] of indicatorTrue.entries()) {
+      const predicted = indicatorPred[index] ?? [];
+      if (row.every((value, column) => value === predicted[column])) equal += 1;
+    }
+    return equal / indicatorTrue.length;
+  }
   checkTargets(yTrue, yPred);
   let equal = 0;
   for (const [index, label] of yTrue.entries())
@@ -481,6 +500,22 @@ export function precisionRecallFscore(
     if (label === predicted)
       tpSum[truePosition] = (tpSum[truePosition] ?? 0) + 1;
   }
+  return scoresOfCounts({ tpSum, predSum, trueSum }, average);
+}
+
+// The counts of multilabel_confusion_matrix for each label: the true
+// positives, the predicted and the true count.
+type LabelCounts = {
+  readonly tpSum: readonly number[];
+  readonly predSum: readonly number[];
+  readonly trueSum: readonly number[];
+};
+
+// The precision, recall and F1 of each label from its counts, averaged.
+function scoresOfCounts(
+  { tpSum, predSum, trueSum }: LabelCounts,
+  average: ClassificationAverage,
+): { precision: number; recall: number; fScore: number } {
   const divide = (numerator: number, denominator: number) =>
     denominator === 0 ? 0 : numerator / denominator;
   const precision = tpSum.map((tp, index) => divide(tp, predSum[index] ?? 0));
@@ -502,12 +537,25 @@ export function precisionRecallFscore(
   };
 }
 
-// sklearn.metrics.f1_score.
+// sklearn.metrics.f1_score. For label indicator matrices, each column is a
+// label.
 export function f1Score(
   yTrue: readonly ClassLabel[],
   yPred: readonly ClassLabel[],
   average: ClassificationAverage,
+): number;
+export function f1Score(
+  yTrue: LabelIndicator,
+  yPred: LabelIndicator,
+  average: ClassificationAverage,
+): number;
+export function f1Score(
+  yTrue: readonly ClassLabel[] | LabelIndicator,
+  yPred: readonly ClassLabel[] | LabelIndicator,
+  average: ClassificationAverage,
 ): number {
+  if (isIndicator(yTrue) || isIndicator(yPred))
+    return scoresOfCounts(indicatorCounts(yTrue, yPred), average).fScore;
   return precisionRecallFscore(yTrue, yPred, average).fScore;
 }
 
@@ -527,4 +575,149 @@ export function recallScore(
   average: ClassificationAverage,
 ): number {
   return precisionRecallFscore(yTrue, yPred, average).recall;
+}
+
+// A label indicator matrix: a row of 0 and 1 for each sample, with a column
+// for each label.
+export type LabelIndicator = readonly (readonly number[])[];
+
+function isIndicator(
+  y: readonly ClassLabel[] | LabelIndicator,
+): y is LabelIndicator {
+  return Array.isArray(y[0]);
+}
+
+// _check_targets of two label indicator matrices of the same shape, with
+// only 0 and 1.
+function checkIndicators(
+  yTrue: readonly ClassLabel[] | LabelIndicator,
+  yPred: readonly ClassLabel[] | LabelIndicator,
+): [LabelIndicator, LabelIndicator] {
+  if (!isIndicator(yTrue) || !isIndicator(yPred))
+    throw new Error(
+      "Classification metrics can't handle a mix of multilabel-indicator and multiclass targets",
+    );
+  checkClusterings(yTrue, yPred);
+  const columns = yTrue[0]?.length ?? 0;
+  for (const row of [...yTrue, ...yPred]) {
+    if (row.length !== columns)
+      throw new Error(
+        `y_true and y_pred have rows of ${columns} and ${row.length} labels.`,
+      );
+    if (row.some((value) => value !== 0 && value !== 1))
+      throw new Error('A label indicator holds only 0 and 1.');
+  }
+  return [yTrue, yPred];
+}
+
+// multilabel_confusion_matrix of label indicator matrices: the counts of
+// each column. A matrix of one column is a column of binary labels for
+// scikit-learn, which this port does not read here.
+function indicatorCounts(
+  yTrue: readonly ClassLabel[] | LabelIndicator,
+  yPred: readonly ClassLabel[] | LabelIndicator,
+): LabelCounts {
+  const [indicatorTrue, indicatorPred] = checkIndicators(yTrue, yPred);
+  const columns = indicatorTrue[0]?.length ?? 0;
+  if (columns < 2)
+    throw new Error(
+      'This port scores label indicator matrices of 2 columns or more only.',
+    );
+  const tpSum = new Array<number>(columns).fill(0);
+  const predSum = new Array<number>(columns).fill(0);
+  const trueSum = new Array<number>(columns).fill(0);
+  for (const [index, row] of indicatorTrue.entries()) {
+    const predicted = indicatorPred[index] ?? [];
+    for (let column = 0; column < columns; column++) {
+      const isTrue = row[column] === 1;
+      const isPredicted = predicted[column] === 1;
+      if (isTrue) trueSum[column] = (trueSum[column] ?? 0) + 1;
+      if (isPredicted) predSum[column] = (predSum[column] ?? 0) + 1;
+      if (isTrue && isPredicted) tpSum[column] = (tpSum[column] ?? 0) + 1;
+    }
+  }
+  return { tpSum, predSum, trueSum };
+}
+
+// sklearn.metrics.label_ranking_average_precision_score without sample
+// weights (metrics/_ranking.py): for each sample, the mean over its true
+// labels of the share of true labels among the labels scored at least as
+// high. A sample with no true label or only true labels scores 1.
+export function labelRankingAveragePrecisionScore(
+  yTrue: LabelIndicator,
+  yScore: readonly (readonly number[])[],
+): number {
+  checkClusterings(yTrue, yScore);
+  const columns = yTrue[0]?.length ?? 0;
+  if (yScore.some((row) => row.length !== columns))
+    throw new Error('y_true and y_score have different shape');
+  if (
+    yTrue.some(
+      (row) =>
+        row.length !== columns ||
+        row.some((value) => value !== 0 && value !== 1),
+    )
+  )
+    throw new Error('y_true holds labels other than 0 and 1.');
+  let out = 0;
+  for (const [i, row] of yTrue.entries()) {
+    const relevant = row.flatMap((value, column) =>
+      value === 1 ? [column] : [],
+    );
+    if (relevant.length === 0 || relevant.length === columns) {
+      out += 1;
+      continue;
+    }
+    const scores = (yScore[i] ?? []).map((score) => -score);
+    const allRanks = rankdata(scores, 'max');
+    const rank = relevant.map((column) => allRanks[column] ?? 0);
+    const L = rankdata(
+      relevant.map((column) => scores[column] ?? 0),
+      'max',
+    );
+    out += mean(L.map((value, index) => value / (rank[index] ?? 1)));
+  }
+  return out / yTrue.length;
+}
+
+// sklearn.preprocessing.MultiLabelBinarizer with its defaults: fitTransform
+// learns the sorted labels of the label sets and gives their indicator
+// matrix; transform gives the indicator matrix of other label sets and
+// leaves out the labels that it did not learn (scikit-learn warns).
+export class MultiLabelBinarizer {
+  #classes: ClassLabel[] | null = null;
+
+  get classes(): readonly ClassLabel[] {
+    if (this.#classes === null)
+      throw new Error(
+        "This MultiLabelBinarizer instance is not fitted yet. Call 'fit' with appropriate arguments before using this estimator.",
+      );
+    return this.#classes;
+  }
+
+  fitTransform(y: readonly (readonly ClassLabel[])[]): number[][] {
+    const labels = y.flat();
+    if (
+      labels.some((label) => typeof label === 'string') &&
+      labels.some((label) => typeof label === 'number')
+    )
+      throw new TypeError(
+        "'<' not supported between instances of 'str' and 'int'",
+      );
+    this.#classes = uniqueInverse(labels).unique;
+    return this.transform(y);
+  }
+
+  transform(y: readonly (readonly ClassLabel[])[]): number[][] {
+    const classes = this.classes;
+    const column = new Map(classes.map((label, index) => [label, index]));
+    return y.map((labels) => {
+      const row = new Array<number>(classes.length).fill(0);
+      for (const label of labels) {
+        const index = column.get(label);
+        if (index !== undefined) row[index] = 1;
+      }
+      return row;
+    });
+  }
 }

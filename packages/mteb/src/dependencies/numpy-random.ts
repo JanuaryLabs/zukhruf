@@ -1,8 +1,10 @@
-// numpy.random.default_rng(seed).integers(low, high, size) for a seed and a
-// range below 2^32, bit for bit: SeedSequence, PCG64 (XSL-RR) and Lemire's
-// bounded integers, as numpy 2 implements them. The paired bootstrap test
-// (significance/paired-bootstrap.ts) draws its replicates with it, so a
-// verdict is the verdict of the same test in NumPy.
+// numpy.random.default_rng(seed) for a seed and a range below 2^32, bit for
+// bit: SeedSequence, PCG64 (XSL-RR), Lemire's bounded integers for
+// integers(low, high, size), and masked rejection for shuffle of a list, as
+// numpy 2 implements them. The paired bootstrap test
+// (significance/paired-bootstrap.ts) draws its replicates with integers, so
+// a verdict is the verdict of the same test in NumPy. MTEB's multilabel
+// classification tasks undersample with shuffle.
 
 const MASK32 = 0xffff_ffffn;
 const MASK64 = (1n << 64n) - 1n;
@@ -88,6 +90,29 @@ export class NumpyGenerator {
     return Array.from({ length: size }, () =>
       range === 0 ? low : low + this.#bounded(range),
     );
+  }
+
+  // shuffle(x) of a Python list, in place (_generator.pyx): from the last
+  // index down, each item swaps with the item at random_interval(i). An
+  // ndarray takes another path (Lemire's bounded integers) that this port
+  // does not have.
+  shuffle(values: unknown[]): void {
+    for (let i = values.length - 1; i >= 1; i--) {
+      const j = this.#interval(i);
+      [values[i], values[j]] = [values[j], values[i]];
+    }
+  }
+
+  // random_interval(max) of distributions.c: an integer in [0, max] by
+  // masked rejection on 32-bit draws. RandomState has a copy.
+  #interval(max: number): number {
+    if (max === 0) return 0;
+    if (max > 0xffff_ffff)
+      throw new RangeError('This port draws intervals below 2^32 only.');
+    const mask = smallestMask(max);
+    let value = (this.#next32() & mask) >>> 0;
+    while (value > max) value = (this.#next32() & mask) >>> 0;
+    return value;
   }
 
   // buffered_bounded_lemire_uint32: an integer in [0, range].
@@ -204,6 +229,14 @@ export class RandomState {
     );
   }
 
+  // choice(a, size) of a 1-D array, with replace=True and without p: the
+  // items of a at randint(0, len(a), size).
+  choice(a: readonly number[], size: number): number[] {
+    if (a.length === 0 && size !== 0)
+      throw new Error("'a' cannot be empty unless no samples are taken");
+    return this.randint(0, a.length, size).map((index) => a[index] ?? 0);
+  }
+
   // choice(n, size, replace=False) without p: permutation(n)[:size].
   choiceWithoutReplacement(n: number, size: number): number[] {
     if (size > n)
@@ -231,6 +264,7 @@ export class RandomState {
   }
 
   // random_interval(max): an integer in [0, max] by masked rejection.
+  // NumpyGenerator has a copy.
   #interval(max: number): number {
     if (max === 0) return 0;
     if (max > 0xffff_ffff)

@@ -6,7 +6,7 @@ The words in these documents have one meaning each. See the glossary in [CONTEXT
 
 ## Use it
 
-This package has the retrieval, reranking, pair classification, STS, clustering and classification tasks, for text. MTEB's tasks ArguAna, SCIDOCS, SprintDuplicateQuestions, STSBenchmark, BiorxivClusteringS2S, BiorxivClusteringS2S.v2, Banking77Classification and Banking77Classification.v2 are ported, with their datasets from the HuggingFace Hub, and so are the models EmbeddingGemma 2 and Qwen3-Embedding with the prompts of MTEB. A task of your own keeps its dataset in a folder on disk, and its metadata names that folder as the dataset path.
+This package has the retrieval, reranking, pair classification, STS, clustering, classification and multilabel classification tasks, for text. MTEB's tasks ArguAna, SCIDOCS, SprintDuplicateQuestions, STSBenchmark, BiorxivClusteringS2S, BiorxivClusteringS2S.v2, Banking77Classification, Banking77Classification.v2 and KorHateSpeechMLClassification are ported, with their datasets from the HuggingFace Hub, and so are the models EmbeddingGemma 2 and Qwen3-Embedding with the prompts of MTEB. A task of your own keeps its dataset in a folder on disk, and its metadata names that folder as the dataset path.
 
 The package is private: it is not on npm. A project of this workspace names it in the dependencies of its `package.json`, with `ai`, and npm links the workspace package:
 
@@ -215,6 +215,18 @@ const result = await evaluate(encoder, new Banking77ClassificationV2());
 ```
 
 A task of your own extends `AbsTaskClassification`. Its dataset has a `train` split and the columns `text` and `label`. For other columns, set `inputColumnName` and `labelColumnName`. For another training split, set `trainSplit`. `samplesPerLabel` sets the number of training rows of each label, and `nExperiments` the number of experiments.
+
+## Multilabel classification
+
+In a multilabel classification task, each row of a split is a text and its label set: a list of zero or more labels. The task selects training rows in a random order until each label has 8 rows. Then it trains a classifier (`KNeighborsClassifier` of scikit-learn, with 5 neighbours) on their embeddings, and the classifier predicts the label set of each row of the evaluation split. An evaluation split of more than 3000 rows keeps 3000 rows, with the same mix of labels. The task does this 10 times, with other training rows each time, and gives the mean of the scores. The scores are the accuracy (the share of rows with all labels right), the label ranking average precision (`lrap`), the F1 with the macro average, and the Hamming score (`hamming`: the labels that the prediction and the row share, divided by the labels that one of them has). The main score of KorHateSpeechMLClassification is `accuracy`.
+
+```ts
+import { KorHateSpeechMLClassification, evaluate } from '@zukhruf/mteb';
+
+const result = await evaluate(encoder, new KorHateSpeechMLClassification());
+```
+
+A task of your own extends `AbsTaskMultilabelClassification`. Its dataset has a `train` split, a column `text` and a column `label` with a list of labels in each row. The fields of a classification task set the columns, the training split, the rows of each label and the number of experiments. `maxEvalSamples` sets the largest evaluation split, and `null` keeps the whole split.
 
 ## Compare models on MTEB's tasks
 

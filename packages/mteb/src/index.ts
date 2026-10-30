@@ -19,6 +19,12 @@ export {
   type ClassificationMetrics,
   type Undersampling,
 } from './abstasks/classification.ts';
+export {
+  AbsTaskMultilabelClassification,
+  type MultilabelClassificationMetrics,
+  type MultilabelClassifierModel,
+  type MultilabelUndersampling,
+} from './abstasks/multilabel-classification.ts';
 export { RetrievalDatasetLoader } from './abstasks/retrieval-dataset-loaders.ts';
 export {
   DEFAULT_DATASET_CACHE,
@@ -34,7 +40,7 @@ export * from './abstasks/task-metadata.ts';
 export type { PairClassificationDistances } from './evaluators/pair-classification-evaluator.ts';
 export type { STSEvaluatorScores } from './evaluators/any-sts-evaluator.ts';
 export type { ClassifierModel } from './evaluators/sklearn-evaluator.ts';
-export type { ClassLabel } from './dependencies/sklearn.ts';
+export type { ClassLabel, LabelIndicator } from './dependencies/sklearn.ts';
 export * from './cache/result-cache.ts';
 export {
   OVERWRITE_STRATEGIES,
@@ -125,4 +131,5 @@ export {
   Banking77Classification,
   Banking77ClassificationV2,
 } from './tasks/classification/eng/banking77-classification.ts';
+export { KorHateSpeechMLClassification } from './tasks/multilabel-classification/kor/kor-hate-speech-ml-classification.ts';
 export * from './types/index.ts';

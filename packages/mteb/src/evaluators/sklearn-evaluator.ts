@@ -55,6 +55,18 @@ export function labelsOf(dataset: Dataset, column: string): ClassLabel[] {
   return dataset.rows.map((row) => classLabel(row[column]));
 }
 
+// The label sets of a split, for a multilabel task: a list of labels each.
+export function labelSetsOf(dataset: Dataset, column: string): ClassLabel[][] {
+  return dataset.rows.map((row) => {
+    const value = row[column];
+    if (!Array.isArray(value))
+      throw new TypeError(
+        `A multilabel label must be a list of labels, not ${String(value)}.`,
+      );
+    return value.map((label: DatasetValue) => classLabel(label));
+  });
+}
+
 function classLabel(value: DatasetValue | undefined): ClassLabel {
   if (typeof value === 'number' || typeof value === 'string') return value;
   throw new TypeError(

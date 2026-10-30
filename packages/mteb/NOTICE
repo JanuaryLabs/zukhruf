@@ -13,9 +13,10 @@ It also ports the semantics of parts of these dependencies of MTEB:
   Van Gysel, MIT License, and the trec_eval measures that it binds
   (https://github.com/usnistgov/trec_eval).
 - NumPy 2.5.4 (sum, mean, standard deviation, add.reduceat, stable argsort,
-  linspace, corrcoef, the sum of float32 values, and the MT19937 generator,
+  linspace, corrcoef, the sum of float32 values, the MT19937 generator,
   randint, random_sample, choice, permutation and shuffle of the legacy
-  RandomState),
+  RandomState, and the PCG64 generator, integers and shuffle of
+  default_rng),
   Copyright (c) NumPy Developers, BSD 3-Clause License. The pairwise summation of float64 values
   is the npm dependency @stdlib/blas-ext-base-gsumpw, Copyright (c) The Stdlib
   Authors, Apache License 2.0. The package does not include its code.
@@ -23,8 +24,13 @@ It also ports the semantics of parts of these dependencies of MTEB:
   paired_cosine_distances, paired_euclidean_distances,
   paired_manhattan_distances, normalize, row_norms, v_measure_score,
   adjusted_mutual_info_score, MiniBatchKMeans, accuracy_score, f1_score,
-  precision_score, recall_score and LogisticRegression with the lbfgs solver),
-  Copyright (c) scikit-learn developers, BSD 3-Clause License.
+  precision_score, recall_score, LogisticRegression with the lbfgs solver,
+  KNeighborsClassifier, MultiLabelBinarizer and
+  label_ranking_average_precision_score), Copyright (c) scikit-learn
+  developers, BSD 3-Clause License.
+- scikit-multilearn (the iterative stratification, which MTEB copies in
+  mteb/abstasks/_stratification.py), Copyright (c) Piotr Szymański and
+  contributors, BSD 2-Clause License.
 - SciPy 1.18.1 (scipy.stats.rankdata, pearsonr and spearmanr, and
   scipy.special.gammaln, the lgam of Cephes by Stephen L. Moshier, and
   scipy.optimize.minimize with L-BFGS-B: lbfgsb.c, the C port of L-BFGS-B 3.0
@@ -34,8 +40,9 @@ It also ports the semantics of parts of these dependencies of MTEB:
 - packaging 26.3 (packaging.version), Copyright (c) Donald Stufft and
   individual contributors, Apache License 2.0 or BSD 2-Clause License.
 - CPython 3.12 (the float sum, round, repr, format and heapq algorithms,
-  random.Random, and the repr, strip and splitlines of a str), Copyright (c)
-  Python Software Foundation, PSF License Agreement.
+  random.Random, the repr, strip and splitlines of a str, and the order of a
+  set of ints), Copyright (c) Python Software Foundation, PSF License
+  Agreement.
 - bm25s 0.3.16 (tokenize and the Lucene BM25), Copyright (c) 2024 Xing Han Lu,
   MIT License.
 - PyStemmer 3.1.0 (Stemmer.Stemmer), Copyright (c) 2006 Richard Boulton, MIT

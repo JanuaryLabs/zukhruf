@@ -40,6 +40,10 @@ _Avoid_: Group, class (the label of an input)
 The class of an input in a classification task: an int or a string. The task trains a classifier on the embeddings of some inputs of each label. Then the classifier predicts the label of each input of the evaluation split, and the metrics compare the predictions with the labels.
 _Avoid_: Category, target, ground truth
 
+**Label set**:
+The labels of an input in a multilabel classification task: a list of zero or more labels. The classifier predicts a label set for each input of the evaluation split.
+_Avoid_: Tags, multi-label target
+
 **Encoder**:
 The model wrapper that gives one embedding for each input. `AiSdkEncoder` is an encoder over an AI SDK embedding model.
 _Avoid_: Embedder, model (for the wrapper)

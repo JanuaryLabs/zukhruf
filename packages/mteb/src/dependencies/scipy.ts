@@ -5,10 +5,13 @@ import { pythonRoundToInteger } from './python.ts';
 // The SciPy 1.18 statistics that MTEB's STS task uses, for 1-D arrays of
 // float64.
 
-// scipy.stats.rankdata with method="average": the rank of each value from 1,
-// and the mean rank for equal values. With a NaN, each rank is NaN
-// (nan_policy="propagate").
-export function rankdata(values: ArrayLike<number>): number[] {
+// scipy.stats.rankdata: the rank of each value from 1. Equal values get
+// their mean rank with method "average", and their largest rank with "max".
+// With a NaN, each rank is NaN (nan_policy="propagate").
+export function rankdata(
+  values: ArrayLike<number>,
+  method: 'average' | 'max' = 'average',
+): number[] {
   if (Array.from(values).some(Number.isNaN))
     return Array.from(values, () => Number.NaN);
   const order = argsortStable(values);
@@ -18,7 +21,7 @@ export function rankdata(values: ArrayLike<number>): number[] {
     const value = values[order[start] ?? 0];
     let end = start + 1;
     while (end < order.length && values[order[end] ?? 0] === value) end++;
-    const rank = start + 1 + (end - start - 1) / 2;
+    const rank = method === 'max' ? end : start + 1 + (end - start - 1) / 2;
     for (let index = start; index < end; index++)
       ranks[order[index] ?? 0] = rank;
     start = end;

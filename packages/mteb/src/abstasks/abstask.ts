@@ -3,9 +3,12 @@ import { join } from 'node:path';
 
 import {
   type Dataset,
+  type DatasetDict,
   type HubOptions,
   loadDataset,
 } from '../dependencies/datasets.ts';
+import { MultiLabelBinarizer } from '../dependencies/sklearn.ts';
+import { labelSetsOf } from '../evaluators/sklearn-evaluator.ts';
 import type {
   EncoderProtocol,
   SearchProtocol,
@@ -15,13 +18,14 @@ import { jsonLoadsInOrder, pythonJsonDumps } from '../results/json.ts';
 import { TimingStack, monotonic } from '../timing.ts';
 import type { EncodeKwargs } from '../types/encoder-io.ts';
 import type { HFSubset, Score } from '../types/result.ts';
+import { iterativeTrainTestSplit } from './stratification.ts';
 import type { TaskMetadata } from './task-metadata.ts';
 
 // mteb/abstasks/abstask.py. Python declares the metadata of a task on its
 // class; a subclass here gives it to the constructor, because the field
 // initializers of a subclass run only after the constructor of AbsTask.
-// Fast loading, descriptive statistics, the push to the Hub and stratified
-// subsampling are not ported.
+// Fast loading, descriptive statistics, the push to the Hub and the stratified
+// subsampling of single labels are not ported.
 
 // The models that a task evaluates.
 export type MTEBModels = EncoderProtocol | SearchProtocol;
@@ -41,6 +45,36 @@ const taskNameToPrompt = new Map<string, string>();
 // The prompt of the abstract task class of a task, or an empty string.
 export function getAbstaskPrompt(taskName: string): string {
   return taskNameToPrompt.get(taskName) ?? '';
+}
+
+// _multilabel_subsampling: each split of splits keeps nSamples of its rows,
+// the test side of an iterative stratification over the label sets of the
+// label column, in the order of the split.
+export function multilabelSubsampling(
+  datasetDict: DatasetDict,
+  seed: number,
+  splits: readonly string[] = ['test'],
+  label = 'label',
+  nSamples = 2048,
+): DatasetDict {
+  const subsampled = new Map(datasetDict);
+  for (const split of splits) {
+    const dataset = subsampled.get(split);
+    if (dataset === undefined) throw new Error(`KeyError: '${split}'`);
+    const labels = new MultiLabelBinarizer().fitTransform(
+      labelSetsOf(dataset, label),
+    );
+    const { test } = iterativeTrainTestSplit(
+      labels,
+      nSamples / dataset.rows.length,
+      seed,
+    );
+    subsampled.set(split, {
+      columnNames: dataset.columnNames,
+      rows: test.map((index) => dataset.rows[index] ?? {}),
+    });
+  }
+  return subsampled;
 }
 
 // One task: its metadata, its data by subset and split, and the evaluation
