@@ -186,7 +186,7 @@ async function postgresFixture(
  * app to. A child or a thread never ends its pool, so its pool lets it exit
  * once its sessions are idle.
  */
-function postgresStore(pool: pg.Pool) {
+function postgresStore(pool: Pick<pg.Pool, 'connect'>) {
   return new PostgresStore({
     connect: () => pool.connect(),
     sequence: 'mutex_tokens',
@@ -205,21 +205,24 @@ const postgresPoolConfig = (
 });
 
 /**
- * A pool, and an end that resolves once the server has no session of it.
+ * A pool whose disposal resolves once the server has no session of it, and
+ * whose type has no `end`, so the disposal is the only way to end it.
  * `pool.end()` resolves before the sockets of its clients close, so a
  * `DROP DATABASE … WITH (FORCE)` right after it can end a session the pool
  * still owns, and the pool's unhandled 'error' fails the running test (#3305).
  * A pool emits 'remove' when the socket of a client has closed, and the
  * server's backend has left by then.
  */
-export function postgresPool(config: pg.PoolConfig) {
+export function postgresPool(config: pg.PoolConfig): AsyncDisposable & {
+  pool: Pick<pg.Pool, 'connect'>;
+} {
   const pool = new pg.Pool(config);
   const sessions = new Set<pg.PoolClient>();
   pool.on('connect', (client) => sessions.add(client));
   pool.on('remove', (client) => sessions.delete(client));
   return {
     pool,
-    end: async () => {
+    [Symbol.asyncDispose]: async () => {
       // No client connects once pool.end() resolves.
       await pool.end();
       while (sessions.size > 0) {
@@ -619,12 +622,12 @@ export const storeCases: StoreCase[] = [
     releaseLatency: 10,
     fixture: postgresFixture,
     open: (location) => {
-      const { pool, end } = postgresPool(postgresPoolConfig(location, false));
+      const host = postgresPool(postgresPoolConfig(location, false));
       return {
-        store: postgresStore(pool),
+        store: postgresStore(host.pool),
         adoptProcess() {},
         adoptThread() {},
-        [Symbol.asyncDispose]: end,
+        [Symbol.asyncDispose]: () => host[Symbol.asyncDispose](),
       };
     },
     openInChild: (location) =>
