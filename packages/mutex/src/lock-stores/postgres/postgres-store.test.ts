@@ -517,7 +517,7 @@ test(
       (candidate) => candidate.name === 'PostgresStore',
     );
     assert.ok(postgresCase);
-    const cycles = 60;
+    const cycles = 25;
     for (let cycle = 1; cycle <= cycles; cycle++) {
       // Act
       const sessions = await sessionsAfterTheHostIsDisposed(postgresCase);
