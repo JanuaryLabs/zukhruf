@@ -64,6 +64,11 @@ export type ToDataFrameOptions = {
   readonly aggregationFn?: AggregationFn;
   // A column for each model and revision, in place of each model.
   readonly includeModelRevision?: boolean;
+  // A column for each experiment of a model (wide: a column level
+  // "experiment" under the model; long: an "experiment" column), in place of
+  // one column that averages the experiments with the default run, as MTEB
+  // does. The default run is the experiment "". Not in MTEB.
+  readonly includeExperiments?: boolean;
   // wide: a column for each model; long: a row for each model and a score
   // column.
   readonly format?: 'wide' | 'long';
@@ -229,12 +234,15 @@ export class ModelResult implements Iterable<TaskResult> {
       task_name: rows.map((row) => row.taskName),
       split: rows.map((row) => row.split),
       language: rows.map((row) => row.language),
+      experiment: rows.map(() => this.experimentName ?? ''),
       subset: rows.map((row) => row.subset),
       score: rows.map((row) => row.score),
     });
     const columns = ['model_name'];
     if (options.includeModelRevision) columns.push('model_revision');
     else df = df.drop(['model_revision']);
+    if (options.includeExperiments) columns.push('experiment');
+    else df = df.drop(['experiment']);
     return aggregateAndPivot(
       df,
       columns,

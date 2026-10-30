@@ -157,7 +157,16 @@ Each model finds the best `subModelTopK` documents of each query (100 by default
 
 `weights` gives one weight to each model. By default, each model has the same weight. The fused scores are the scores of MTEB to the last bit.
 
-The hybrid has the name `mteb/baseline-hybrid-<fusion>-<names>`. The names are the last parts of the model names, so the hybrid above is `mteb/baseline-hybrid-rrf-baseline-bm25s-Qwen3-Embedding-0.6B`. The result cache keeps the result of the hybrid under this name, and a table shows it in a column with this name. The name does not include the experiment arguments of the models, as in MTEB. Thus two hybrids of the same models with different `k1` values have one result in the cache.
+The hybrid has the name `mteb/baseline-hybrid-<fusion>-<names>`. The names are the last parts of the model names, so the hybrid above is `mteb/baseline-hybrid-rrf-baseline-bm25s-Qwen3-Embedding-0.6B`. The result cache keeps the result of the hybrid under this name, and a table shows it in a column with this name.
+
+The settings of a hybrid that are not the defaults are its experiment arguments:
+
+- `sub_models`: the experiment name of each model, or `None` for a model without one. The hybrid has this argument when one or more models have an experiment name.
+- `weights`: the weights, when you give them.
+- `rrf_k`: `rrfK`, when the fusion is `'rrf'` and `rrfK` is not 60.
+- `sub_model_top_k`: `subModelTopK`, when you give it.
+
+Thus the hybrid of `bm25S.loadModel()` and `bm25S.loadModel({ k1: 1.2 })` has the experiment name `sub_models_[None,k1_1.2]`, and its result does not replace the result of the hybrid of two default BM25 models. A hybrid with all the default settings has no experiment arguments, so its name and its result folder are those of MTEB. MTEB gives a hybrid no experiment arguments.
 
 ## Compare models on MTEB's tasks
 
@@ -219,7 +228,7 @@ SCIDOCS    True                        0.243560                 0.180830
 
 `aggregationLevel` gives a row for each subset, split, task or language. `format: 'long'` gives a row for each model and a `score` column. `includeModelRevision` gives a column for each model and revision. `getAggregatedScores` reads the task type of each result, so give the results their tasks with `selectTasks` first.
 
-A table averages the experiments of one model with its default run, as MTEB does: the results of a quantized model and of its full weights share one column.
+By default, a table averages the experiments of one model with its default run, as MTEB does: the results of a quantized model and of its full weights share one column. `includeExperiments: true` gives a column for each experiment of a model. See [Compare a change with its baseline](#compare-a-change-with-its-baseline).
 
 `examples/table.ts` prints the table and the means of the results in `~/.cache/mteb`. An argument names another cache folder.
 
@@ -232,3 +241,25 @@ To see the scores as a bar chart for each task, run the command below. It needs 
 ```sh
 npx nx run mteb:chart
 ```
+
+## Compare a change with its baseline
+
+A change of a setting, such as `k1` of BM25 or the weights of a hybrid, is an experiment of a model. The default run of the model is the baseline. Evaluate both with the same result cache. Then load the results with their experiments, and make a table with `includeExperiments: true`:
+
+```ts
+import { ResultCache, bm25S, evaluate } from '@zukhruf/mteb';
+
+const cache = new ResultCache('mteb-results');
+await evaluate(bm25S.loadModel(), new Faq(), { cache });
+await evaluate(bm25S.loadModel({ k1: 1.2 }), new Faq(), { cache });
+
+const results = cache
+  .loadResults({ includeRemote: false, loadExperiments: 'match_name' })
+  .selectTasks([new Faq()]);
+console.log(results.toDataFrame({ includeExperiments: true }).toString());
+console.log(results.getAggregatedScores({ includeExperiments: true }));
+```
+
+The wide table has a second column level, `experiment`, below the model name. The experiment of the default run is `""`. The long table has an `experiment` column. `getAggregatedScores({ includeExperiments: true })` gives the means of each model by experiment: `{ [model]: { [experiment]: { 'Mean(Task)', 'Mean(TaskType)' } } }`. The column of each experiment has the scores that MTEB gives for the results of that experiment alone, but for the last bit of a mean. MTEB has no such option. Without it, the table and the means are those of MTEB.
+
+`nx run mteb:table` prints the table and the means with the experiments.

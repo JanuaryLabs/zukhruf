@@ -98,9 +98,28 @@ export class HybridSearch implements SearchProtocol {
       this.#fuseFn = strategy;
     }
 
+    // MTEB gives a hybrid no experiment arguments, so two hybrids of the
+    // same models with other settings share one name and one cached result.
+    // Here the settings that are not the defaults are its experiment
+    // arguments: the hybrid with all defaults keeps the identity of MTEB.
+    const subModels = this.wrappedModels.map(
+      ({ mtebModelMeta }) => mtebModelMeta.experimentName,
+    );
+    const experimentKwargs = {
+      ...(subModels.some((name) => name !== null) && {
+        sub_models: subModels,
+      }),
+      ...(options.weights !== undefined && { weights: this.weights }),
+      ...(strategy === 'rrf' && this.rrfK !== 60 && { rrf_k: this.rrfK }),
+      ...(this.subModelTopK !== null && {
+        sub_model_top_k: this.subModelTopK,
+      }),
+    };
     this.mtebModelMeta = ModelMeta.createEmpty({
       name: `mteb/baseline-hybrid-${this.fusionName}-${names.join('-')}`,
       modelType: ['hybrid'],
+      experimentKwargs:
+        Object.keys(experimentKwargs).length > 0 ? experimentKwargs : null,
     });
   }
 

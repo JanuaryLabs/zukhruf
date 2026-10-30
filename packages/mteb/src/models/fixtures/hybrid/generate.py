@@ -9,7 +9,10 @@
 # fuse_relative_score_fusion for score maps made here, and the search results
 # and the main score of mteb.evaluate of five HybridSearch models on the
 # folder task of the BM25 fixture (../../model-implementations/fixtures/bm25),
-# without the instruction of its query q10.
+# without the instruction of its query q10. It also writes the experiment
+# names that _serialize_experiment_kwargs_to_name gives the experiment
+# arguments of a hybrid with settings that are not the defaults (MTEB gives a
+# hybrid none; this package does).
 # Never edit expected.json by hand: run this script again.
 #
 # The one-hot encoder gives each text the vector with a 1 at
@@ -109,7 +112,7 @@ with tempfile.TemporaryDirectory() as cache:
         fuse_rrf,
     )
     from mteb.models.model_implementations.bm25 import bm25_s
-    from mteb.models.model_meta import ModelMeta
+    from mteb.models.model_meta import ModelMeta, _serialize_experiment_kwargs_to_name
 
     def as_pairs(scores) -> list:
         return [[doc, score] for doc, score in scores.items()]
@@ -223,6 +226,21 @@ with tempfile.TemporaryDirectory() as cache:
             }
         )
 
+    k1 = bm25_s.load_model(k1=1.2).mteb_model_meta.experiment_name
+    k1_b = bm25_s.load_model(k1=1.2, b=0.5).mteb_model_meta.experiment_name
+    # The experiment arguments of each case, as hybrid.test.ts makes them.
+    EXPERIMENTS = {
+        "a sub-model setting": {"sub_models": [None, k1]},
+        "weights": {"weights": [0.6, 0.4]},
+        "rrf_k": {"rrf_k": 10},
+        "sub_model_top_k": {"sub_model_top_k": 5},
+        "all": {"sub_models": [k1_b, None], "weights": [0.7, 0.3], "rrf_k": 0, "sub_model_top_k": 50},
+    }
+    experiment_names = [
+        {"case": case, "experiment_name": _serialize_experiment_kwargs_to_name(kwargs)}
+        for case, kwargs in EXPERIMENTS.items()
+    ]
+
 generator = (
     f"generate.py: mteb {VERSIONS['mteb']}, bm25s {VERSIONS['bm25s']}, "
     f"PyStemmer {VERSIONS['PyStemmer']}, numpy {VERSIONS['numpy']}, "
@@ -237,6 +255,7 @@ generator = (
             "fusions": fusions,
             "searches": searches,
             "evaluations": evaluations,
+            "experiment_names": experiment_names,
         },
         ensure_ascii=False,
         indent=1,

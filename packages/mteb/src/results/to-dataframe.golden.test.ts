@@ -42,6 +42,18 @@ type Expected = {
     'match_name' | 'no_experiments',
     readonly [string, readonly [string, number | string | null][]][],
   ][];
+  readonly experiment_tables: readonly {
+    readonly experiment: string;
+    readonly options: Options;
+    readonly table: Table;
+  }[];
+  readonly experiment_aggregated: readonly [
+    'match_name' | 'no_experiments',
+    readonly [
+      string,
+      readonly [string, readonly [string, number | string | null][]][],
+    ][],
+  ][];
 };
 
 const expected: Expected = JSON.parse(
@@ -67,6 +79,51 @@ function options(python: Options) {
     format: python.format,
     includeModelRevision: python.include_model_revision,
   };
+}
+
+const INDEX_COLUMNS = new Set([
+  'task_name',
+  'split',
+  'subset',
+  'is_public',
+  'language',
+]);
+
+// The columns and rows of one experiment of a table with experiments, with
+// the experiment level or column taken out: wide, the columns whose last
+// level is the experiment, and the rows with a score in them; long, the rows
+// of the experiment.
+function experimentOf(table: DataFrame, experiment: string): Table {
+  const level = (label: ColumnLabel): readonly Cell[] =>
+    typeof label === 'object' && label !== null ? label : [label];
+  const withoutLast = (label: ColumnLabel): ColumnLabel => {
+    const rest = level(label).slice(0, -1);
+    return rest.length === 1 ? (rest[0] ?? null) : rest;
+  };
+  if (table.columns.includes('experiment')) {
+    const at = table.columns.indexOf('experiment');
+    return plain({
+      columns: table.columns.filter((_, index) => index !== at),
+      rows: table.rows
+        .filter((row) => row[at] === experiment)
+        .map((row) => row.filter((_, index) => index !== at)),
+    });
+  }
+  const kept = table.columns.flatMap((label, index) => {
+    const levels = level(label);
+    return INDEX_COLUMNS.has(String(levels[0])) || levels.at(-1) === experiment
+      ? [index]
+      : [];
+  });
+  const scores = kept.filter(
+    (index) => !INDEX_COLUMNS.has(String(level(table.columns[index] ?? '')[0])),
+  );
+  return plain({
+    columns: kept.map((index) => withoutLast(table.columns[index] ?? '')),
+    rows: table.rows
+      .filter((row) => scores.some((index) => !Number.isNaN(row[index] ?? NaN)))
+      .map((row) => kept.map((index) => row[index] ?? null)),
+  });
 }
 
 function load(loadExperiments: 'match_name' | 'no_experiments' = 'match_name') {
@@ -186,5 +243,102 @@ test('the aggregated scores equal those of MTEB, over task types, and a NaN scor
       ]),
       loadExperiments,
     );
+  }
+});
+
+test('with includeExperiments, each experiment of each model result keeps the table of MTEB under its experiment', () => {
+  const results = load();
+
+  for (const { model, options: python, table } of expected.model_results) {
+    const [name, revision, experiment] = model;
+    const result = results.modelResults.find(
+      (candidate) =>
+        candidate.modelName === name &&
+        candidate.modelRevision === revision &&
+        candidate.experimentName === experiment,
+    );
+    assert.ok(result, `${model.join(' ')} is loaded`);
+    assert.deepEqual(
+      experimentOf(
+        result.toDataFrame({ ...options(python), includeExperiments: true }),
+        experiment ?? '',
+      ),
+      plain(table),
+      `${model.join(' ')} ${JSON.stringify(python)}`,
+    );
+  }
+});
+
+test('with includeExperiments, each experiment of the benchmark results equals the table of MTEB of that experiment alone, to the last bit', () => {
+  const results = load();
+
+  for (const {
+    experiment,
+    options: python,
+    table,
+  } of expected.experiment_tables)
+    assert.deepEqual(
+      experimentOf(
+        results.toDataFrame({ ...options(python), includeExperiments: true }),
+        experiment,
+      ),
+      plain(table),
+      `${experiment} ${JSON.stringify(python)}`,
+    );
+  assert.deepEqual(
+    [...new Set(expected.experiment_tables.map((entry) => entry.experiment))],
+    ['', 'k1_1.2'],
+  );
+});
+
+test('with includeExperiments, the aggregated scores of each experiment equal those of MTEB for that experiment alone', () => {
+  const tasks: ResultTask[] = [
+    ['ArguAna', 'Retrieval', ['test'], ['default']] as const,
+    ['SCIDOCS', 'Retrieval', ['test'], ['default']] as const,
+    [
+      'AmazonCounterfactualClassification',
+      'Classification',
+      ['validation', 'test', 'train'],
+      ['en', 'de', 'ja', 'en-ext'],
+    ] as const,
+  ].map(([name, type, evalSplits, hfSubsets]) => ({
+    metadata: {
+      name,
+      revision: 'fixture',
+      hfSubsetsToLangscripts: new Map(),
+      domains: null,
+      modalities: ['text'],
+      type,
+      isPublic: true,
+    },
+    evalSplits: [...evalSplits],
+    hfSubsets: [...hfSubsets],
+    isAggregate: false,
+  }));
+
+  for (const [
+    loadExperiments,
+    byExperiment,
+  ] of expected.experiment_aggregated) {
+    const scores = load(loadExperiments)
+      .selectModels(['zukhruf/model-a', 'zukhruf/model-b'])
+      .selectTasks(tasks)
+      .getAggregatedScores({ includeExperiments: true });
+
+    for (const [experiment, byModel] of byExperiment)
+      assert.deepEqual(
+        Object.entries(scores).flatMap(([model, experiments]) => {
+          const means = experiments[experiment];
+          return means === undefined ? [] : [[model, Object.entries(means)]];
+        }),
+        byModel.map(([model, means]) => [
+          model,
+          means.map(([key, mean]) => [
+            key,
+            typeof mean === 'string' ? Number(mean) : mean,
+          ]),
+        ]),
+        `${loadExperiments} ${experiment}`,
+      );
   }
 });

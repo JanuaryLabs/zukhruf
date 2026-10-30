@@ -186,3 +186,71 @@ test('a fusion with another number of weights than score maps stops, as zip(stri
     new RangeError('zip() argument 2 is shorter than argument 1'),
   );
 });
+
+test('a hybrid with the default settings has no experiment arguments, and its name is that of MTEB', () => {
+  const models = () => [bm25S.loadModel(), bm25S.loadModel()];
+
+  const hybrids = [
+    new HybridSearch({ models: models() }),
+    new HybridSearch({ models: models(), rrfK: 60 }),
+    // rrfK reaches only the Reciprocal Rank Fusion.
+    new HybridSearch({ models: models(), fusionStrategy: 'dbsf', rrfK: 10 }),
+    new HybridSearch({
+      models: models(),
+      fusionStrategy: sumOfScores,
+      rrfK: 10,
+    }),
+  ];
+
+  assert.deepEqual(
+    hybrids.map(({ mtebModelMeta }) => [
+      mtebModelMeta.name,
+      mtebModelMeta.experimentKwargs,
+    ]),
+    [
+      ['mteb/baseline-hybrid-rrf-baseline-bm25s-baseline-bm25s', null],
+      ['mteb/baseline-hybrid-rrf-baseline-bm25s-baseline-bm25s', null],
+      ['mteb/baseline-hybrid-dbsf-baseline-bm25s-baseline-bm25s', null],
+      ['mteb/baseline-hybrid-sumOfScores-baseline-bm25s-baseline-bm25s', null],
+    ],
+  );
+});
+
+test('evaluate keeps two hybrids that differ in a sub-model setting apart, and the table with experiments shows both', async () => {
+  await using directory = await new TemporaryFiles().directory('mteb-hybrid-');
+  const cache = new ResultCache(directory.path);
+
+  for (const model of [bm25S.loadModel(), bm25S.loadModel({ k1: 1.2 })])
+    await evaluate(
+      new HybridSearch({ models: [bm25S.loadModel(), model] }),
+      new FolderTask(),
+      { cache },
+    );
+
+  const folder = join(
+    directory.path,
+    'results/mteb__baseline-hybrid-rrf-baseline-bm25s-baseline-bm25s/no_revision_available',
+  );
+  assert.deepEqual(
+    [
+      existsSync(join(folder, 'HybridFixture.json')),
+      existsSync(
+        join(folder, 'experiments/sub_models_[None,k1_1.2]/HybridFixture.json'),
+      ),
+    ],
+    [true, true],
+  );
+  const table = cache
+    .loadResults({ includeRemote: false, loadExperiments: 'match_name' })
+    .toDataFrame({ includeExperiments: true });
+  assert.deepEqual(table.columns, [
+    ['task_name', ''],
+    ['is_public', ''],
+    ['mteb/baseline-hybrid-rrf-baseline-bm25s-baseline-bm25s', ''],
+    [
+      'mteb/baseline-hybrid-rrf-baseline-bm25s-baseline-bm25s',
+      'sub_models_[None,k1_1.2]',
+    ],
+  ]);
+  assert.equal(table.rows.length, 1);
+});

@@ -31,7 +31,7 @@ test('toString aligns the columns: text to the left, floats to the right with 6 
   );
 });
 
-test('the table example prints the scores of a cache folder and the mean of each model', async () => {
+test('the table example prints a column and the means of each model and experiment of a cache folder', async () => {
   const root = join(import.meta.dirname, '../..');
   const folder = join(import.meta.dirname, 'fixtures/to-dataframe');
 
@@ -44,14 +44,15 @@ test('the table example prints the scores of a cache folder and the mean of each
   // console.table colors the values when the environment asks for colors.
   const stdout = stripVTControlCharacters(output);
   const lines = stdout.split('\n');
-  assert.deepEqual(lines.slice(0, 3), [
-    'task_name  is_public  zukhruf/model-a  zukhruf/model-b  zukhruf/model-c',
-    'ArguAna    True              0.777635         0.132956         0.996818',
-    'SCIDOCS    True              0.340330         0.100000              NaN',
+  assert.deepEqual(lines.slice(0, 4), [
+    'task_name  is_public  zukhruf/model-a  zukhruf/model-b  zukhruf/model-b  zukhruf/model-c',
+    '                                                                 k1_1.2',
+    'ArguAna    True              0.777635         0.200000         0.065912         0.996818',
+    'SCIDOCS    True              0.340330         0.100000              NaN              NaN',
   ]);
   assert.match(
     stdout,
-    /│ zukhruf\/model-a │ 0\.5589824999999999 │ 0\.5589824999999999 │/u,
+    /│ 'zukhruf\/model-b' │ '' +│ 0\.15000000000000002 │ 0\.15000000000000002 │/u,
   );
-  assert.match(stdout, /│ zukhruf\/model-b │ null +│ null +│/u);
+  assert.match(stdout, /│ 'zukhruf\/model-b' │ 'k1_1\.2' +│ null +│ null +│/u);
 });

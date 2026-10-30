@@ -10,8 +10,10 @@
 # writes expected.json: each table of ModelResult.to_dataframe and
 # BenchmarkResults.to_dataframe (4 aggregation levels, 2 formats, with and
 # without the model revision), two tables with np.max as the aggregation, and
-# get_aggregated_scores. Never edit expected.json by hand: run this script
-# again.
+# get_aggregated_scores. For each experiment ("" is the default run), the
+# tables and the aggregated scores of the results of that experiment alone:
+# they test the experiment columns of includeExperiments, which MTEB does not
+# have. Never edit expected.json by hand: run this script again.
 #
 # The results test the tables: a model with 2 revisions whose join takes
 # tasks from both, a model with an experiment (MTEB averages it with the
@@ -211,6 +213,50 @@ aggregated = {
     for load_experiments in ("match_name", "no_experiments")
 }
 
+
+
+def experiment(model):
+    return model.experiment_name or ""
+
+
+def only(results, name):
+    return BenchmarkResults(model_results=[model for model in results if experiment(model) == name])
+
+
+experiment_names = sorted({experiment(model) for model in results})
+experiment_tables = [
+    {
+        "experiment": name,
+        "options": options(*combination),
+        "table": table(only(results, name).to_dataframe(**options(*combination))),
+    }
+    for name in experiment_names
+    for combination in COMBINATIONS
+]
+experiment_aggregated = [
+    [
+        load_experiments,
+        [
+            [
+                name,
+                [
+                    [model, [[key, cell(value)] for key, value in scores.items()]]
+                    for model, scores in only(
+                        cache.load_results(include_remote=False, load_experiments=load_experiments).select_models(
+                            ["zukhruf/model-a", "zukhruf/model-b"]
+                        ),
+                        name,
+                    )
+                    .get_aggregated_scores()
+                    .items()
+                ],
+            ]
+            for name in experiment_names
+        ],
+    ]
+    for load_experiments in ("match_name", "no_experiments")
+]
+
 generator = (
     f"generate.py: mteb {VERSIONS['mteb']}, pandas {VERSIONS['pandas']}, "
     f"numpy {VERSIONS['numpy']}, CPython {platform.python_version()}"
@@ -233,6 +279,8 @@ generator = (
                 ]
                 for load_experiments, by_model in aggregated.items()
             ],
+            "experiment_tables": experiment_tables,
+            "experiment_aggregated": experiment_aggregated,
         },
         ensure_ascii=False,
         indent=1,
@@ -240,7 +288,7 @@ generator = (
     + "\n",
     encoding="utf-8",
 )
-tables = [entry["table"] for entry in model_results + benchmark_results + maximum]
+tables = [entry["table"] for entry in model_results + benchmark_results + maximum + experiment_tables]
 print(
     f"{generator}: {len(tables)} tables, {sum(len(t['rows']) * len(t['columns']) for t in tables)} cells",
     file=sys.stderr,

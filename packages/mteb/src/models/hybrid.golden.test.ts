@@ -21,7 +21,8 @@ import { ModelMeta } from './model-meta.ts';
 
 // fixtures/hybrid/expected.json holds what Python MTEB 2.26.28 gave for
 // fuse_rrf, fuse_dbsf and fuse_relative_score_fusion on score maps, and for
-// five HybridSearch models on the folder task of the BM25 fixture.
+// five HybridSearch models on the folder task of the BM25 fixture, and the
+// experiment names that MTEB gives the experiment arguments of a hybrid.
 // fixtures/hybrid/generate.py makes it.
 type Pairs = [string, number][];
 
@@ -47,6 +48,10 @@ type Expected = {
     readonly model: ModelName;
     readonly name: string;
     readonly main_score: number;
+  }[];
+  readonly experiment_names: readonly {
+    readonly case: string;
+    readonly experiment_name: string;
   }[];
 };
 
@@ -234,3 +239,44 @@ for (const evaluation of expected.evaluations)
       [evaluation.name, evaluation.main_score],
     );
   });
+
+// The hybrid of each case of the experiment names of generate.py.
+const EXPERIMENT_HYBRIDS: Record<string, () => HybridSearch> = {
+  'a sub-model setting': () =>
+    new HybridSearch({
+      models: [bm25S.loadModel(), bm25S.loadModel({ k1: 1.2 })],
+    }),
+  weights: () =>
+    new HybridSearch({
+      models: [bm25S.loadModel(), bm25S.loadModel()],
+      weights: [0.6, 0.4],
+    }),
+  rrf_k: () =>
+    new HybridSearch({
+      models: [bm25S.loadModel(), bm25S.loadModel()],
+      rrfK: 10,
+    }),
+  sub_model_top_k: () =>
+    new HybridSearch({
+      models: [bm25S.loadModel(), bm25S.loadModel()],
+      subModelTopK: 5,
+    }),
+  all: () =>
+    new HybridSearch({
+      models: [bm25S.loadModel({ k1: 1.2, b: 0.5 }), bm25S.loadModel()],
+      weights: [0.7, 0.3],
+      rrfK: 0,
+      subModelTopK: 50,
+    }),
+};
+
+test('a hybrid with settings that are not the defaults gets the experiment name that MTEB gives its experiment arguments', () => {
+  const names = expected.experiment_names.map(({ case: name }) => {
+    const make = EXPERIMENT_HYBRIDS[name];
+    assert.ok(make, name);
+    return { case: name, experiment_name: make().mtebModelMeta.experimentName };
+  });
+
+  assert.deepEqual(names, expected.experiment_names);
+  assert.equal(names.length, Object.keys(EXPERIMENT_HYBRIDS).length);
+});

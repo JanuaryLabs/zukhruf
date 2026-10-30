@@ -22343,5 +22343,27 @@
    "name": "mteb/baseline-hybrid-rrf-baseline-bm25s-one-hot",
    "main_score": 0.30074
   }
+ ],
+ "experiment_names": [
+  {
+   "case": "a sub-model setting",
+   "experiment_name": "sub_models_[None,k1_1.2]"
+  },
+  {
+   "case": "weights",
+   "experiment_name": "weights_[0.6,0.4]"
+  },
+  {
+   "case": "rrf_k",
+   "experiment_name": "rrf_k_10"
+  },
+  {
+   "case": "sub_model_top_k",
+   "experiment_name": "sub_model_top_k_5"
+  },
+  {
+   "case": "all",
+   "experiment_name": "rrf_k_0__sub_model_top_k_50__sub_models_[b_0.5__k1_1.2,None]__weights_[0.7,0.3]"
+  }
  ]
 }

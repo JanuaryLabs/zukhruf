@@ -172,15 +172,18 @@ export class BenchmarkResults implements Iterable<ModelResult> {
   // A table of the scores of all models: a row for each task (or subset,
   // split or language) and a column for each model, or a row for each score
   // with the long format. Without the revision, the revisions of a model are
-  // joined first (joinRevisions), and the results of a model with the same
-  // name share its column: MTEB averages the experiments of a model with its
-  // default run. Without scores, an empty table.
+  // joined first (joinRevisions). Without includeExperiments, the results of
+  // a model with the same name share its column: MTEB averages the
+  // experiments of a model with its default run. Without scores, an empty
+  // table.
   toDataFrame(options: ToDataFrameOptions = {}): DataFrame {
     const includeModelRevision = options.includeModelRevision ?? false;
-    const df = this.#buildPreAggDf(includeModelRevision);
+    const includeExperiments = options.includeExperiments ?? false;
+    const df = this.#buildPreAggDf(includeModelRevision, includeExperiments);
     if (df === null) return new DataFrame();
     const columns = ['model_name'];
     if (includeModelRevision) columns.push('model_revision');
+    if (includeExperiments) columns.push('experiment');
     return aggregateAndPivot(
       df,
       columns,
@@ -193,20 +196,24 @@ export class BenchmarkResults implements Iterable<ModelResult> {
   // MTEB reads is_public from its task registry and true for a task outside
   // it. This package has no registry, so every task is public. The columns
   // experiments and trained_on never reach a table and are not built.
-  #buildPreAggDf(includeModelRevision: boolean): Frame | null {
+  #buildPreAggDf(
+    includeModelRevision: boolean,
+    includeExperiments: boolean,
+  ): Frame | null {
     const results = includeModelRevision ? this : this.joinRevisions();
     const rows = results.modelResults.flatMap((modelResult) =>
       modelResult.taskResults.flatMap((taskResult) =>
         Object.entries(taskResult.scores).flatMap(([split, scoresList]) =>
-          scoresList.map((scores) =>
-            tableRow(
+          scoresList.map((scores) => ({
+            ...tableRow(
               modelResult.modelName,
               modelResult.modelRevision,
               taskResult.taskName,
               split,
               scores,
             ),
-          ),
+            experiment: modelResult.experimentName ?? '',
+          })),
         ),
       ),
     );
@@ -217,25 +224,53 @@ export class BenchmarkResults implements Iterable<ModelResult> {
       task_name: rows.map((row) => row.taskName),
       split: rows.map((row) => row.split),
       language: rows.map((row) => row.language),
+      experiment: rows.map((row) => row.experiment),
       subset: rows.map((row) => row.subset),
       score: rows.map((row) => row.score),
       is_public: rows.map(() => true),
     });
-    return includeModelRevision ? df : df.drop(['model_revision']);
+    return df.drop([
+      ...(includeModelRevision ? [] : ['model_revision']),
+      ...(includeExperiments ? [] : ['experiment']),
+    ]);
   }
 
   // Mean(Task) and Mean(TaskType) of each model, over the joined revisions.
   // A later result of the same model name replaces an earlier one, as in a
-  // Python dict. MTEB scores a benchmark when the results have one; this
-  // package has no benchmarks. Each result needs its task (taskType).
-  getAggregatedScores(): Record<string, AggregatedScores> {
-    const scores: Record<string, AggregatedScores> = {};
-    for (const modelResult of this.joinRevisions())
-      scores[modelResult.modelName] = {
+  // Python dict. With includeExperiments, the scores of each experiment of a
+  // model, under its experiment name ("" for the default run); not in MTEB.
+  // MTEB scores a benchmark when the results have one; this package has no
+  // benchmarks. Each result needs its task (taskType).
+  getAggregatedScores(options?: {
+    readonly includeExperiments?: false;
+  }): Record<string, AggregatedScores>;
+  getAggregatedScores(options: {
+    readonly includeExperiments: true;
+  }): Record<string, Record<string, AggregatedScores>>;
+  getAggregatedScores(
+    options: { readonly includeExperiments?: boolean } = {},
+  ):
+    | Record<string, AggregatedScores>
+    | Record<string, Record<string, AggregatedScores>> {
+    const joined = this.joinRevisions().modelResults.map((modelResult) => ({
+      modelResult,
+      scores: {
         'Mean(Task)': computeMeanTask(modelResult.taskResults),
         'Mean(TaskType)': computeMeanTaskType(modelResult.taskResults),
-      };
-    return scores;
+      },
+    }));
+    if (options.includeExperiments) {
+      const byExperiment: Record<string, Record<string, AggregatedScores>> = {};
+      for (const { modelResult, scores } of joined)
+        (byExperiment[modelResult.modelName] ??= {})[
+          modelResult.experimentName ?? ''
+        ] = scores;
+      return byExperiment;
+    }
+    const byModel: Record<string, AggregatedScores> = {};
+    for (const { modelResult, scores } of joined)
+      byModel[modelResult.modelName] = scores;
+    return byModel;
   }
 
   [Symbol.iterator](): Iterator<ModelResult> {
