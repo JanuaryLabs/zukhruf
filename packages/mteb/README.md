@@ -8,8 +8,10 @@ The words in these documents have one meaning each. See the glossary in [CONTEXT
 
 This package has the retrieval and reranking tasks, for text. MTEB's tasks ArguAna and SCIDOCS are ported, with their datasets from the HuggingFace Hub, and so are the models EmbeddingGemma 2 and Qwen3-Embedding with the prompts of MTEB. A task of your own keeps its dataset in a folder on disk, and its metadata names that folder as the dataset path.
 
-```sh
-npm install @zukhruf/mteb ai
+The package is private: it is not on npm. A project of this workspace names it in the dependencies of its `package.json`, with `ai`, and npm links the workspace package:
+
+```json
+{ "dependencies": { "@zukhruf/mteb": "*", "ai": "^7.0.154" } }
 ```
 
 ```ts
