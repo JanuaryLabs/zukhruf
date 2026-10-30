@@ -20,6 +20,7 @@
         "targetName": "lint"
       }
     },
+    "./packages/nx/src/lint/plugin.ts",
     "./packages/nx/src/format/plugin.ts",
     {
       "plugin": "./packages/nx/src/test/plugin.ts",
@@ -29,31 +30,6 @@
     }
   ],
   "targetDefaults": {
-    "lint": {
-      "inputs": [
-        "default",
-        "^default",
-        "{workspaceRoot}/eslint.config.mjs",
-        "{workspaceRoot}/packages/eslint/src/**/*.ts",
-        {
-          "externalDependencies": [
-            "eslint",
-            "@eslint/js",
-            "typescript-eslint",
-            "typescript",
-            "eslint-plugin-import-x",
-            "eslint-plugin-functional",
-            "eslint-plugin-es-x",
-            "@typescript-eslint/utils",
-            "ts-api-utils",
-            "@nx/eslint-plugin",
-            "jsonc-eslint-parser",
-            "globals",
-            "ignore"
-          ]
-        }
-      ]
-    },
     "typecheck": {
       "dependsOn": ["lint", "format:check", "..."]
     },
