@@ -52,7 +52,8 @@ export const predictionsFile = z
     subsets,
   }));
 
-// MTEB evaluates only the queries that have a relevant document.
+// MTEB evaluates only the queries that have qrels. A query whose qrels all
+// have the grade 0 stays in, and each model scores 0 on it.
 function filterQueriesWithoutPositives(
   relevantDocs: RelevantDocumentsType,
   queries: QueryDatasetType,
