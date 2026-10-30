@@ -208,7 +208,7 @@ export type ClusterLabel = number | string;
 // np.unique(labels, return_inverse=True): the sorted distinct labels, and the
 // index of each label among them. Strings sort by code point, as numpy's
 // unicode strings do.
-function uniqueInverse(labels: readonly ClusterLabel[]): {
+export function uniqueInverse(labels: readonly ClusterLabel[]): {
   readonly unique: ClusterLabel[];
   readonly inverse: number[];
 } {

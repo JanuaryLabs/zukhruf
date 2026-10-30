@@ -23,11 +23,14 @@ It also ports the semantics of parts of these dependencies of MTEB:
   paired_cosine_distances, paired_euclidean_distances,
   paired_manhattan_distances, normalize, row_norms, v_measure_score,
   adjusted_mutual_info_score, MiniBatchKMeans, accuracy_score, f1_score,
-  precision_score and recall_score), Copyright (c) scikit-learn developers,
-  BSD 3-Clause License.
+  precision_score, recall_score and LogisticRegression with the lbfgs solver),
+  Copyright (c) scikit-learn developers, BSD 3-Clause License.
 - SciPy 1.18.1 (scipy.stats.rankdata, pearsonr and spearmanr, and
-  scipy.special.gammaln, the lgam of Cephes by Stephen L. Moshier), Copyright
-  (c) 2001-2002 Enthought, Inc. 2003, SciPy Developers, BSD 3-Clause License.
+  scipy.special.gammaln, the lgam of Cephes by Stephen L. Moshier, and
+  scipy.optimize.minimize with L-BFGS-B: lbfgsb.c, the C port of L-BFGS-B 3.0
+  by Ciyou Zhu, Richard Byrd, Peihuang Lu and Jorge Nocedal, with dcsrch and
+  dcstep of MINPACK-2), Copyright (c) 2001-2002 Enthought, Inc. 2003, SciPy
+  Developers, BSD 3-Clause License.
 - packaging 26.3 (packaging.version), Copyright (c) Donald Stufft and
   individual contributors, Apache License 2.0 or BSD 2-Clause License.
 - CPython 3.12 (the float sum, round, repr and heapq algorithms, and

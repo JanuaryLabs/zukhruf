@@ -1,4 +1,5 @@
 import type { Embeddings } from '../types/encoder-io.ts';
+import { ddot } from './blas.ts';
 import { log } from './libm.ts';
 import { RandomState } from './numpy-random.ts';
 import { argsortStable } from './numpy.ts';
@@ -208,13 +209,6 @@ function rowOf(x: Embeddings, index: number): Float32Array {
   return row;
 }
 
-function dot(a: ArrayLike<number>, b: ArrayLike<number>): number {
-  let result = 0;
-  for (let index = 0; index < a.length; index++)
-    result += (a[index] ?? 0) * (b[index] ?? 0);
-  return result;
-}
-
 // _kmeans_plusplus with unit weights: the first center drawn uniformly, then
 // for each center the best of 2 + int(log(k)) candidates drawn in proportion
 // to the squared distance to the closest center.
@@ -231,7 +225,7 @@ function kmeansPlusPlus(
     1,
   );
   const centers = [rowOf(x, first)];
-  const norms = x.map((row) => dot(row, row));
+  const norms = x.map((row) => ddot(row.length, row, 0, row, 0));
   let closest = squaredDistances(rowOf(x, first), x, norms);
   let currentPot = float32Sum(closest);
   for (let c = 1; c < nClusters; c++) {
@@ -277,9 +271,14 @@ function squaredDistances(
   x: Embeddings,
   norms: readonly number[],
 ): Float32Array {
-  const centerNorm = dot(center, center);
+  const centerNorm = ddot(center.length, center, 0, center, 0);
   return Float32Array.from(x, (row, index) =>
-    Math.max(-2 * dot(center, row) + centerNorm + (norms[index] ?? 0), 0),
+    Math.max(
+      -2 * ddot(center.length, center, 0, row, 0) +
+        centerNorm +
+        (norms[index] ?? 0),
+      0,
+    ),
   );
 }
 
@@ -318,7 +317,7 @@ function labelsInertia(
     let smallest = Infinity;
     for (const [cluster, center] of centers.entries()) {
       const distance = Math.fround(
-        (centerNorms[cluster] ?? 0) - 2 * dot(row, center),
+        (centerNorms[cluster] ?? 0) - 2 * ddot(row.length, row, 0, center, 0),
       );
       if (cluster === 0 || distance < smallest) {
         smallest = distance;

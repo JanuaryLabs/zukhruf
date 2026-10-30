@@ -1,0 +1,643 @@
+{
+ "generator": "generate.py: numpy 2.5.4, scipy 1.18.1, CPython 3.12.9",
+ "cases": [
+  {
+   "case": "a quadratic from zero",
+   "function": "quadratic",
+   "x0": [
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0
+   ],
+   "options": {},
+   "bounds": null,
+   "result": {
+    "x": [
+     1.5611971569212746,
+     -2.244785331622062,
+     0.39708399274121986,
+     3.4797668286270023,
+     -1.3566173084683064,
+     2.2261045813068905
+    ],
+    "fun": -4.210388778227231,
+    "jac": [
+     1.64803151814219e-06,
+     -7.516570010301926e-07,
+     -5.295050210740726e-06,
+     1.7076345892874656e-07,
+     -2.7627795049500747e-06,
+     5.089686518244818e-06
+    ],
+    "nit": 12,
+    "nfev": 14,
+    "status": 0,
+    "message": "CONVERGENCE: NORM OF PROJECTED GRADIENT <= PGTOL"
+   }
+  },
+  {
+   "case": "a quadratic with the tolerances of LogisticRegression",
+   "function": "quadratic",
+   "x0": [
+    5.0,
+    -5.0,
+    5.0,
+    -5.0,
+    5.0,
+    -5.0
+   ],
+   "options": {
+    "maxiter": 100,
+    "maxls": 50,
+    "gtol": 0.0001,
+    "ftol": 1.4210854715202004e-14
+   },
+   "bounds": null,
+   "result": {
+    "x": [
+     1.5611966481945603,
+     -2.244786132526149,
+     0.3970842512931044,
+     3.479765205420491,
+     -1.3566170875626269,
+     2.226101832952735
+    ],
+    "fun": -4.210388778229721,
+    "jac": [
+     2.3012604599692565e-07,
+     -4.080360764130431e-06,
+     -4.9557942030098445e-06,
+     -1.2127142704487781e-06,
+     -3.1813144021342055e-06,
+     -3.0449231080975636e-06
+    ],
+    "nit": 12,
+    "nfev": 13,
+    "status": 0,
+    "message": "CONVERGENCE: NORM OF PROJECTED GRADIENT <= PGTOL"
+   }
+  },
+  {
+   "case": "Rosenbrock in 2 variables",
+   "function": "rosenbrock",
+   "x0": [
+    -1.2,
+    1.0
+   ],
+   "options": {},
+   "bounds": null,
+   "result": {
+    "x": [
+     0.9999989453492616,
+     0.9999980209056968
+    ],
+    "fun": 2.807650019071083e-12,
+    "jac": [
+     -5.419167105454277e-05,
+     2.604121225324718e-05
+    ],
+    "nit": 36,
+    "nfev": 44,
+    "status": 0,
+    "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH"
+   }
+  },
+  {
+   "case": "Rosenbrock in 7 variables: more updates than maxcor 5",
+   "function": "rosenbrock",
+   "x0": [
+    -1.2,
+    1.0,
+    -1.2,
+    1.0,
+    -1.2,
+    1.0,
+    -1.2
+   ],
+   "options": {
+    "maxcor": 5
+   },
+   "bounds": null,
+   "result": {
+    "x": [
+     1.000000246341346,
+     1.000000138153994,
+     0.9999996017179231,
+     0.9999984926070727,
+     0.9999962652512748,
+     0.9999920428547618,
+     0.999983644193578
+    ],
+    "fun": 2.8349476234032327e-10,
+    "jac": [
+     0.00014230422105508165,
+     0.00019920662715863373,
+     0.00014861687866298847,
+     0.0001428050507400951,
+     4.3601439950596236e-05,
+     6.318366152573506e-05,
+     -8.831585236457329e-05
+    ],
+    "nit": 59,
+    "nfev": 75,
+    "status": 0,
+    "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH"
+   }
+  },
+  {
+   "case": "Rosenbrock stops at maxiter",
+   "function": "rosenbrock",
+   "x0": [
+    -1.2,
+    1.0,
+    -1.2,
+    1.0
+   ],
+   "options": {
+    "maxiter": 7
+   },
+   "bounds": null,
+   "result": {
+    "x": [
+     -0.07926406096548547,
+     0.08808489980137146,
+     -0.06715529409695015,
+     -0.0266224648764599
+    ],
+    "fun": 4.4625153703560425,
+    "jac": [
+     0.43505880228640903,
+     17.17611694667485,
+     -17.95343878421974,
+     -6.226459680341553
+    ],
+    "nit": 7,
+    "nfev": 8,
+    "status": 1,
+    "message": "STOP: TOTAL NO. OF ITERATIONS REACHED LIMIT"
+   }
+  },
+  {
+   "case": "Rosenbrock stops at maxfun",
+   "function": "rosenbrock",
+   "x0": [
+    -1.2,
+    1.0,
+    -1.2,
+    1.0
+   ],
+   "options": {
+    "maxfun": 10
+   },
+   "bounds": null,
+   "result": {
+    "x": [
+     0.020695233956880194,
+     0.004054142601625297,
+     0.016636326448230376,
+     0.001163760321319057
+    ],
+    "fun": 2.946965520132476,
+    "jac": [
+     -1.988624656818294,
+     -1.2936734984207585,
+     1.3513482062956006,
+     0.17739859272539352
+    ],
+    "nit": 10,
+    "nfev": 11,
+    "status": 1,
+    "message": "STOP: TOTAL NO. OF F,G EVALUATIONS EXCEEDS LIMIT"
+   }
+  },
+  {
+   "case": "a quadratic in a box: the minimum is on bounds",
+   "function": "quadratic",
+   "x0": [
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0
+   ],
+   "options": {},
+   "bounds": [
+    [
+     0.0,
+     0.5
+    ],
+    [
+     -1.0,
+     "inf"
+    ],
+    [
+     "-inf",
+     0.2
+    ],
+    [
+     2.0,
+     2.0
+    ],
+    [
+     "-inf",
+     "inf"
+    ],
+    [
+     0.0,
+     1.0
+    ]
+   ],
+   "result": {
+    "x": [
+     0.5,
+     -1.0,
+     0.2,
+     2.0,
+     -1.1875,
+     1.0
+    ],
+    "fun": 2.729375,
+    "jac": [
+     -1.5,
+     4.35,
+     -1.2999999999999998,
+     -1.49375,
+     0.0,
+     -3.59375
+    ],
+    "nit": 5,
+    "nfev": 6,
+    "status": 0,
+    "message": "CONVERGENCE: NORM OF PROJECTED GRADIENT <= PGTOL"
+   }
+  },
+  {
+   "case": "Rosenbrock with lower, upper and two-sided bounds",
+   "function": "rosenbrock",
+   "x0": [
+    -1.2,
+    1.0,
+    -1.2,
+    1.0,
+    0.3
+   ],
+   "options": {},
+   "bounds": [
+    [
+     -2.0,
+     0.5
+    ],
+    [
+     0.5,
+     "inf"
+    ],
+    [
+     "-inf",
+     0.8
+    ],
+    [
+     -1.0,
+     1.0
+    ],
+    [
+     0.0,
+     0.25
+    ]
+   ],
+   "result": {
+    "x": [
+     -0.9098967599593437,
+     0.8384072984608144,
+     0.7082220875030952,
+     0.5032570437782169,
+     0.25
+    ],
+    "fun": 4.020874146268429,
+    "jac": [
+     2.0292938474941735e-05,
+     7.823120763639224e-06,
+     -3.5116806667012668e-06,
+     5.374622271236973e-06,
+     -0.6535304224780214
+    ],
+    "nit": 26,
+    "nfev": 34,
+    "status": 0,
+    "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH"
+   }
+  },
+  {
+   "case": "x0 outside the bounds is clipped",
+   "function": "rosenbrock",
+   "x0": [
+    3.0,
+    -3.0,
+    3.0
+   ],
+   "options": {},
+   "bounds": [
+    [
+     -1.0,
+     1.0
+    ],
+    [
+     -1.0,
+     1.0
+    ],
+    [
+     -1.0,
+     1.0
+    ]
+   ],
+   "result": {
+    "x": [
+     1.0,
+     1.0,
+     1.0
+    ],
+    "fun": 0.0,
+    "jac": [
+     0.0,
+     0.0,
+     0.0
+    ],
+    "nit": 37,
+    "nfev": 51,
+    "status": 0,
+    "message": "CONVERGENCE: NORM OF PROJECTED GRADIENT <= PGTOL"
+   }
+  },
+  {
+   "case": "a start at the minimum converges at once",
+   "function": "quadratic",
+   "x0": [
+    0.7,
+    -0.9,
+    0.4,
+    2.8,
+    -0.85,
+    1.3
+   ],
+   "options": {
+    "gtol": 10.0
+   },
+   "bounds": null,
+   "result": {
+    "x": [
+     0.7,
+     -0.9,
+     0.4,
+     2.8,
+     -0.85,
+     1.3
+    ],
+    "fun": 1.7074999999999998,
+    "jac": [
+     -1.05,
+     4.95,
+     0.3500000000000001,
+     -0.42500000000000016,
+     3.25,
+     -2.5249999999999995
+    ],
+    "nit": 0,
+    "nfev": 1,
+    "status": 0,
+    "message": "CONVERGENCE: NORM OF PROJECTED GRADIENT <= PGTOL"
+   }
+  },
+  {
+   "case": "a quadratic near its minimum with one-sided bounds: the first step stays below 1",
+   "function": "quadratic",
+   "x0": [
+    1.02,
+    -1.97,
+    0.53,
+    2.96,
+    -0.98,
+    1.97
+   ],
+   "options": {},
+   "bounds": [
+    [
+     1.01,
+     "inf"
+    ],
+    [
+     "-inf",
+     -1.95
+    ],
+    [
+     0.0,
+     "inf"
+    ],
+    [
+     "-inf",
+     3.5
+    ],
+    [
+     -1.0,
+     "inf"
+    ],
+    [
+     "-inf",
+     1.99
+    ]
+   ],
+   "result": {
+    "x": [
+     1.5617095436322168,
+     -2.246805784605293,
+     0.41276610264291674,
+     3.2936237278007887,
+     -1.0,
+     1.99
+    ],
+    "fun": -3.6767648935138175,
+    "jac": [
+     1.6194961787174833e-05,
+     1.4684716395180208e-05,
+     5.5874552482571005e-06,
+     6.779122247113634e-06,
+     2.6418118639003945,
+     -0.53
+    ],
+    "nit": 8,
+    "nfev": 10,
+    "status": 0,
+    "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH"
+   }
+  },
+  {
+   "case": "Rosenbrock with upper bounds that the line search meets",
+   "function": "rosenbrock",
+   "x0": [
+    -1.2,
+    1.0,
+    -1.2,
+    1.0,
+    -1.2,
+    1.0
+   ],
+   "options": {},
+   "bounds": [
+    [
+     "-inf",
+     0.6
+    ],
+    [
+     "-inf",
+     0.6
+    ],
+    [
+     "-inf",
+     0.6
+    ],
+    [
+     "-inf",
+     0.6
+    ],
+    [
+     "-inf",
+     0.6
+    ],
+    [
+     "-inf",
+     0.6
+    ]
+   ],
+   "result": {
+    "x": [
+     0.6,
+     0.37496601611737934,
+     0.15222147187054633,
+     0.03349897974664485,
+     0.011012063477816426,
+     0.00012128223516807979
+    ],
+    "fun": 3.2379693457332785,
+    "jac": [
+     -4.391843868171045,
+     -5.54719371770318e-07,
+     1.482327616653123e-06,
+     -1.7713630504623268e-06,
+     4.201753771582162e-07,
+     3.3386257242774874e-06
+    ],
+    "nit": 35,
+    "nfev": 45,
+    "status": 0,
+    "message": "CONVERGENCE: NORM OF PROJECTED GRADIENT <= PGTOL"
+   }
+  },
+  {
+   "case": "Rosenbrock with lower bounds that the line search meets",
+   "function": "rosenbrock",
+   "x0": [
+    2.5,
+    2.0,
+    2.5,
+    2.0,
+    2.5
+   ],
+   "options": {},
+   "bounds": [
+    [
+     1.3,
+     "inf"
+    ],
+    [
+     "-inf",
+     "inf"
+    ],
+    [
+     1.3,
+     "inf"
+    ],
+    [
+     "-inf",
+     "inf"
+    ],
+    [
+     1.1,
+     "inf"
+    ]
+   ],
+   "result": {
+    "x": [
+     1.3,
+     1.4031554762649054,
+     1.8680682487860012,
+     3.4650285324429912,
+     12.006422911616308
+    ],
+    "fun": 16.38678625009272,
+    "jac": [
+     149.75915234224925,
+     -0.0002505688599043765,
+     0.00021708609168413773,
+     -0.00028370063925997613,
+     3.619445578806335e-05
+    ],
+    "nit": 36,
+    "nfev": 43,
+    "status": 0,
+    "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH"
+   }
+  },
+  {
+   "case": "Rosenbrock in a box that holds the start only",
+   "function": "rosenbrock",
+   "x0": [
+    0.0,
+    0.0,
+    0.0,
+    0.0
+   ],
+   "options": {
+    "maxcor": 3
+   },
+   "bounds": [
+    [
+     -0.5,
+     0.4
+    ],
+    [
+     -0.5,
+     0.3
+    ],
+    [
+     -0.5,
+     0.5
+    ],
+    [
+     -0.5,
+     0.35
+    ]
+   ],
+   "result": {
+    "x": [
+     0.4,
+     0.17158169098089382,
+     0.039049972233045606,
+     0.0015248261685223672
+    ],
+    "fun": 1.9923500320441132,
+    "jac": [
+     -3.0530705569430063,
+     -3.75469901179315e-05,
+     4.021352597516348e-05,
+     -1.4832575853098925e-05
+    ],
+    "nit": 12,
+    "nfev": 16,
+    "status": 0,
+    "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH"
+   }
+  }
+ ]
+}
