@@ -529,3 +529,61 @@ test(
     }
   },
 );
+
+test(
+  "postgresPool's disposal resolves only after every client of its pool has ended, including one that was checked out when the disposal began",
+  { timeout: 30_000 },
+  async () => {
+    // Arrange: five clients of the pool; two go back idle, and three stay checked out.
+    await using database = await postgresDatabase();
+    const helper = postgresPool({
+      connectionString: database.connectionString,
+    });
+    const idle = [await helper.pool.connect(), await helper.pool.connect()];
+    const held = [
+      await helper.pool.connect(),
+      await helper.pool.connect(),
+      await helper.pool.connect(),
+    ];
+    const order: string[] = [];
+    for (const [index, client] of [...idle, ...held].entries()) {
+      client.once('end', () => order.push(`client ${index + 1}`));
+    }
+    for (const client of idle) client.release();
+
+    // Act
+    const disposal = helper[Symbol.asyncDispose]().then(() =>
+      order.push('disposal'),
+    );
+    try {
+      await Promise.all(idle.map((client) => once(client, 'end')));
+
+      // Assert
+      assert.ok(
+        !order.includes('disposal'),
+        'The disposal must not resolve while clients of the pool are checked out',
+      );
+    } finally {
+      // All at once: pool.end() then resolves at the first 'remove', while two sockets are still open.
+      for (const client of held) client.release();
+      await disposal;
+    }
+    assert.equal(
+      order.indexOf('disposal'),
+      idle.length + held.length,
+      `Every client of the pool must have ended when the disposal resolves; the order was ${order.join(', ')}`,
+    );
+  },
+);
+
+test(
+  'a pool of postgresPool has no end, so its disposal is the only way to end it',
+  { timeout: 30_000 },
+  () => {
+    // A function that is never called: the type checker reads it.
+    const end = (helper: ReturnType<typeof postgresPool>) =>
+      // @ts-expect-error a helper pool has no end; its disposal is the only end (#3305).
+      helper.pool.end();
+    assert.equal(typeof end, 'function');
+  },
+);
