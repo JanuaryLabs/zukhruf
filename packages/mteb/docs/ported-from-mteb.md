@@ -6,43 +6,47 @@ The first step ports the core and the retrieval and reranking tasks, for text. T
 
 ## Modules
 
-| MTEB 2.26.28 (`mteb/`)                                                     | This package (`src/`)                                   |
-| -------------------------------------------------------------------------- | ------------------------------------------------------- |
-| `types/_encoder_io.py`                                                     | `types/encoder-io.ts`                                   |
-| `types/_result.py`                                                         | `types/result.ts`                                       |
-| `types/_metadata.py`                                                       | `types/metadata.ts`                                     |
-| `timing.py`                                                                | `timing.ts`                                             |
-| `similarity_functions.py` (`cos_sim`, `dot_score`)                         | `similarity-functions.ts`                               |
-| `_create_dataloaders.py` (text)                                            | `create-dataloaders.ts`                                 |
-| `abstasks/task_metadata.py`                                                | `abstasks/task-metadata.ts`                             |
-| `abstasks/abstask.py`                                                      | `abstasks/abstask.ts`                                   |
-| `abstasks/retrieval.py`                                                    | `abstasks/retrieval.ts`                                 |
-| `abstasks/retrieval_dataset_loaders.py`                                    | `abstasks/retrieval-dataset-loaders.ts`                 |
-| `tasks/retrieval/eng/argu_ana_retrieval.py`                                | `tasks/retrieval/eng/argu-ana-retrieval.ts`             |
-| `tasks/retrieval/eng/scidocs_retrieval.py`                                 | `tasks/retrieval/eng/scidocs-retrieval.ts`              |
-| `_evaluators/evaluator.py`                                                 | `evaluators/evaluator.ts`                               |
-| `_evaluators/retrieval_evaluator.py`                                       | `evaluators/retrieval-evaluator.ts`                     |
-| `_evaluators/retrieval_metrics.py`                                         | `evaluators/retrieval-metrics.ts`                       |
-| `models/models_protocols.py`                                               | `models/models-protocols.ts`                            |
-| `models/abs_encoder.py`                                                    | `models/abs-encoder.ts`                                 |
-| `models/search_wrappers.py` (`SearchEncoderWrapper`)                       | `models/search-wrappers.ts`                             |
-| `models/openai_wrappers.py` (`OpenAIAPIEncodeWrapper`)                     | `models/ai-sdk-encoder.ts`                              |
-| `models/instruct_wrapper.py` (`InstructSentenceTransformerModel`)          | `models/instruct-wrapper.ts`                            |
-| `models/model_implementations/qwen3_models.py`                             | `models/model-implementations/qwen3-models.ts`          |
-| `models/model_implementations/google_embeddinggemma.py` (EmbeddingGemma 2) | `models/model-implementations/google-embeddinggemma.ts` |
-| `models/model_meta.py`                                                     | `models/model-meta.ts`                                  |
-| `results/task_result.py`                                                   | `results/task-result.ts`                                |
-| Python's `json` module (`NaN` tokens, float repr)                          | `results/json.ts`                                       |
-| `results/model_result.py`                                                  | `results/model-result.ts`                               |
-| `results/benchmark_results.py`                                             | `results/benchmark-results.ts`                          |
-| `cache/result_cache.py` (local folder)                                     | `cache/result-cache.ts`                                 |
-| `evaluate.py`                                                              | `evaluate.ts`                                           |
-| pytrec_eval 0.5.11 (`RelevanceEvaluator`, trec_eval)                       | `dependencies/pytrec-eval.ts`                           |
-| NumPy 2.5.4 (pairwise sum, mean, std, argsort, linspace)                   | `dependencies/numpy.ts`                                 |
-| scikit-learn 1.9.1 (`sklearn.metrics.auc`)                                 | `dependencies/sklearn.ts`                               |
-| packaging 26.3 (`packaging.version.Version`)                               | `dependencies/packaging.ts`                             |
-| CPython 3.12 (`sum`, `round`, `repr`, string order)                        | `dependencies/python.ts`                                |
-| CPython 3.12 `heapq`                                                       | `dependencies/heapq.ts`                                 |
+| MTEB 2.26.28 (`mteb/`)                                                                            | This package (`src/`)                                   |
+| ------------------------------------------------------------------------------------------------- | ------------------------------------------------------- |
+| `types/_encoder_io.py`                                                                            | `types/encoder-io.ts`                                   |
+| `types/_result.py`                                                                                | `types/result.ts`                                       |
+| `types/_metadata.py`                                                                              | `types/metadata.ts`                                     |
+| `timing.py`                                                                                       | `timing.ts`                                             |
+| `similarity_functions.py` (`cos_sim`, `dot_score`)                                                | `similarity-functions.ts`                               |
+| `_create_dataloaders.py` (text)                                                                   | `create-dataloaders.ts`                                 |
+| `abstasks/task_metadata.py`                                                                       | `abstasks/task-metadata.ts`                             |
+| `abstasks/abstask.py`                                                                             | `abstasks/abstask.ts`                                   |
+| `abstasks/retrieval.py`                                                                           | `abstasks/retrieval.ts`                                 |
+| `abstasks/retrieval_dataset_loaders.py`                                                           | `abstasks/retrieval-dataset-loaders.ts`                 |
+| `tasks/retrieval/eng/argu_ana_retrieval.py`                                                       | `tasks/retrieval/eng/argu-ana-retrieval.ts`             |
+| `tasks/retrieval/eng/scidocs_retrieval.py`                                                        | `tasks/retrieval/eng/scidocs-retrieval.ts`              |
+| `_evaluators/evaluator.py`                                                                        | `evaluators/evaluator.ts`                               |
+| `_evaluators/retrieval_evaluator.py`                                                              | `evaluators/retrieval-evaluator.ts`                     |
+| `_evaluators/retrieval_metrics.py`                                                                | `evaluators/retrieval-metrics.ts`                       |
+| `models/models_protocols.py`                                                                      | `models/models-protocols.ts`                            |
+| `models/abs_encoder.py`                                                                           | `models/abs-encoder.ts`                                 |
+| `models/search_wrappers.py` (`SearchEncoderWrapper`)                                              | `models/search-wrappers.ts`                             |
+| `models/openai_wrappers.py` (`OpenAIAPIEncodeWrapper`)                                            | `models/ai-sdk-encoder.ts`                              |
+| `models/instruct_wrapper.py` (`InstructSentenceTransformerModel`)                                 | `models/instruct-wrapper.ts`                            |
+| `models/model_implementations/qwen3_models.py`                                                    | `models/model-implementations/qwen3-models.ts`          |
+| `models/model_implementations/google_embeddinggemma.py` (EmbeddingGemma 2)                        | `models/model-implementations/google-embeddinggemma.ts` |
+| `models/model_implementations/bm25.py` (`mteb/baseline-bm25s`, English)                           | `models/model-implementations/bm25.ts`                  |
+| `models/model_meta.py`                                                                            | `models/model-meta.ts`                                  |
+| `results/task_result.py`                                                                          | `results/task-result.ts`                                |
+| Python's `json` module (`NaN` tokens, float repr)                                                 | `results/json.ts`                                       |
+| `results/model_result.py`                                                                         | `results/model-result.ts`                               |
+| `results/benchmark_results.py`                                                                    | `results/benchmark-results.ts`                          |
+| `cache/result_cache.py` (local folder)                                                            | `cache/result-cache.ts`                                 |
+| `evaluate.py`                                                                                     | `evaluate.ts`                                           |
+| pytrec_eval 0.5.11 (`RelevanceEvaluator`, trec_eval)                                              | `dependencies/pytrec-eval.ts`                           |
+| NumPy 2.5.4 (pairwise sum, mean, std, argsort, linspace)                                          | `dependencies/numpy.ts`                                 |
+| scikit-learn 1.9.1 (`sklearn.metrics.auc`)                                                        | `dependencies/sklearn.ts`                               |
+| packaging 26.3 (`packaging.version.Version`)                                                      | `dependencies/packaging.ts`                             |
+| CPython 3.12 (`sum`, `round`, `repr`, string order)                                               | `dependencies/python.ts`                                |
+| CPython 3.12 `heapq`                                                                              | `dependencies/heapq.ts`                                 |
+| bm25s 0.3.16 (`tokenize`, `STOPWORDS_EN`, the Lucene method of `BM25.index` and `BM25.retrieve`)  | `dependencies/bm25s.ts`                                 |
+| PyStemmer 3.1.0 (`Stemmer.Stemmer`, English)                                                      | `dependencies/pystemmer.ts`                             |
+| Snowball 3.1.0 (`base-stemmer.js`, `english-stemmer.js` of `jsstemmer-3.1.0.tar.gz`, not changed) | `dependencies/snowball/`                                |
 
 ## Conventions
 
@@ -70,6 +74,12 @@ The first step ports the core and the retrieval and reranking tasks, for text. T
 - `filter_languages` and `validate_task_to_prompt_name` are not ported: the first needs MTEB's language table, the second its task registry.
 - An evaluator does not seed global random generators: JavaScript has no seeded global generator.
 - `torch.topk` does not fix the order of equal scores; here the lower index comes first. The order changes only the position of a document in the result map, because the metrics sort the scores again.
+- BM25 (`mteb/baseline-bm25s`): English only. MTEB reads the language of the subset from the task metadata, and reads a subset with more than one language as English. This package does the same, and stops the index with an error for a subset in another language. Not ported: the other languages, the stopwords from the document frequency of a token, the `char` tokenizer, a HuggingFace tokenizer and `mteb/baseline-bm25s-subword`, the bm25s methods other than `lucene`, and the keyword arguments other than `k1` and `b`.
+- BM25 keeps the `topK` best documents of each query. When a document outside the `topK` has the score of the last document in it, numpy's `argpartition` has no fixed choice between them; here the document with the lower position in the corpus stays. With `topK` not smaller than the corpus, each document stays.
+- BM25 splits a text into tokens with the Unicode tables of Node. CPython 3.12 uses Unicode 15.0. Thus a code point that Unicode 15.0 does not assign can be a letter here and not in Python.
+- BM25 calculates the idf of a token with `Math.log`, and MTEB with the `log` of the C library. The two can differ in the last float64 bit. The idf is float32, so such a difference almost never changes a score.
+- BM25 reads a document without a title as a document with an empty title. In Python, a row without a title in a corpus where other rows have one makes the index raise.
+- The stemmer is the JavaScript of Snowball 3.1.0, the version of libstemmer_c that PyStemmer 3.1.0 binds. The files are not changed. Their sha256 values: `jsstemmer-3.1.0.tar.gz` `3a2e93de0dff7b91893af85b71b8f54281e933b6b333af8250c3fe5e5f4d069b`, `base-stemmer.js` `bf6f03e1a0d29d9e6e669a3a13069187e4095a8c67251e475f5b6b2102974e26`, `english-stemmer.js` `5cd32ab2f71dde18be28d026e92654f3117aaada83ae67849bd711ca19b3b36e`. `base-stemmer.js` starts with `// @ts-check` and fails `noUncheckedIndexedAccess`, so `tsconfig.snowball.json` compiles the two files without that option, and `tsconfig.lib.json` reads their declarations.
 - `instruction_template.format(instruction=...)` replaces `{instruction}` only; Python's `str.format` also reads `{{` and other fields.
 - Task metadata: a language code is checked by its shape (three lowercase letters), not against MTEB's table of 7,922 codes; the 223 script codes are checked exactly. A date is `YYYY-MM-DD` or a datetime at midnight; pydantic also takes Unix timestamps. A validation error names the camelCase field.
 - Model metadata: `ScoringFunction` is a const object, and `'euclidean'`, `'manhattan'` and `'custom'` are plain strings. A whole float in the experiment arguments gives its integer form in the experiment name (`1.0` is `"1"`). `fromDict` always sets the loader to null, because there is no model registry. `hashKey()` and `equals()` stand for `__hash__` and `__eq__`. The training datasets keep their insertion order; in Python a set has no fixed order. Not ported: `load_model`, the Hub constructors and calculations, zero-shot checks, model cards.
@@ -91,6 +101,8 @@ Two pydantic rules have two copies each: the alias of a field (`eval_langs` to `
 `src/evaluators/fixtures/retrieval-metrics.json` holds random qrels and runs and their scores from MTEB 2.26.28, pytrec_eval-terrier 0.5.11, NumPy 2.5.4 and CPython 3.12.9: graded, negative and unjudged relevance, equal scores, scores that are equal only as float32, and cutoffs out of order. `retrieval-metrics.golden.test.ts` requires the same numbers to the last bit. A change to the summation, the rounding, the float32 conversion or the order of equal scores fails it.
 
 `src/abstasks/fixtures/retrieval-task.json` holds a small retrieval task and its scores from MTEB, as a full corpus search and as a reranking. Its vectors make every similarity exact in float32, so `retrieval.test.ts` compares the whole path, from the encoder to the scores, to the last bit. `src/results/fixtures/python-mteb-2.26.28/` holds result files that MTEB wrote, which this package reads and writes back.
+
+`src/models/model-implementations/fixtures/bm25/` holds a task in a folder and what MTEB 2.26.28 with bm25s 0.3.16, PyStemmer 3.1.0 and NumPy 2.5.4 gave for it: the score of each document for each query, a reranking, the main score of `mteb.evaluate`, and the stem of each word. The texts have an empty title, an empty document, stopwords only, repeated words, unknown words, digits and `_`, `İ`, `ß`, `ï`, `ﬁ`, the Greek final sigma, a letter outside the Basic Multilingual Plane, and words whose stems Snowball 3.0.0 or 3.1.0 changed. `bm25.golden.test.ts` and `bm25.test.ts` require the same numbers to the last bit. `generate.py` writes the folder and `expected.json`: run `uv run packages/mteb/src/models/model-implementations/fixtures/bm25/generate.py`, and do not edit `expected.json` by hand.
 
 On 2026-10-28, a retrieval task on the event-detection sets gvc and anthropic-outlets ran with EmbeddingGemma 2 on llama.cpp, once with MTEB and once with this package. All 112 scores of each set, the nAUC values among them, were equal.
 

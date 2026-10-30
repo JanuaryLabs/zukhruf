@@ -1,5 +1,5 @@
 import nx from '@nx/eslint-plugin';
-import { defineConfig } from 'eslint/config';
+import { defineConfig, globalIgnores } from 'eslint/config';
 
 import { TESTS, TEST_SUPPORT } from './packages/eslint/src/files.ts';
 import zukhruf from './packages/eslint/src/index.ts';
@@ -69,6 +69,9 @@ const DIAGRAM_OUTPUTS = ['svg', 'canvas', 'html'];
 
 export default defineConfig(
   nx.configs['flat/base'],
+  // Snowball's JavaScript stemmers, kept byte for byte (sha256 in
+  // packages/mteb/docs/ported-from-mteb.md).
+  globalIgnores(['packages/mteb/src/dependencies/snowball/']),
   {
     plugins: { zukhruf, island, manifest },
     extends: [

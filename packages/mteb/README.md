@@ -96,6 +96,23 @@ The task reads the files of the folder at each load. It does not use the revisio
 
 Give a task `topRanked` to make it a reranking task: each query then ranks only its candidates.
 
+## BM25 as a baseline on your own folder dataset
+
+MTEB's BM25 baseline `mteb/baseline-bm25s` is a search model: it needs no embedding model and no server. Run it on your task first. Its score is the score that an encoder must beat.
+
+```ts
+import { ResultCache, bm25S, evaluate } from '@zukhruf/mteb';
+
+const result = await evaluate(bm25S.loadModel(), new Faq(), {
+  cache: new ResultCache('mteb-results'),
+});
+console.log(result.taskResults[0]?.scores.test?.[0]?.main_score);
+```
+
+`Faq` is the task of the section above. The search model splits each document (its title and its text) and each query into English words, removes the English stopwords of bm25s and stems each word with the English Snowball stemmer. Then it scores each document with BM25, as bm25s does. The scores are the scores of MTEB to the last bit.
+
+`k1` and `b` are the keyword arguments of `loadModel`, as in MTEB. They are experiment arguments, so `bm25S.loadModel({ k1: 1.2 })` keeps its results apart from the results of the defaults (`k1` 1.5, `b` 0.75). The search model supports English only: a task in another language stops with an error.
+
 ## Compare models on MTEB's tasks
 
 A ported model gives its encoder through `loadModel`, with the AI SDK embedding model of a server that serves its weights. The encoder adds the prompts that MTEB's numbers used, so the scores can be compared with MTEB's leaderboard.

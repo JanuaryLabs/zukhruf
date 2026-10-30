@@ -1,0 +1,11 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src/dependencies/snowball",
+    "outDir": "dist/dependencies/snowball",
+    "tsBuildInfoFile": "dist/dependencies/snowball/tsconfig.snowball.tsbuildinfo",
+    "allowJs": true,
+    "noUncheckedIndexedAccess": false
+  },
+  "include": ["src/dependencies/snowball/*.js"]
+}

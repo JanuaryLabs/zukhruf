@@ -21,6 +21,8 @@
     "retrieval",
     "ndcg",
     "trec-eval",
+    "bm25",
+    "bm25s",
     "ai-sdk"
   ],
   "type": "module",

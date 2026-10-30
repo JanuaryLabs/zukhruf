@@ -1,0 +1,40 @@
+{"_id": "d01", "title": "Connection basics", "text": "A connection connects two connected systems; connections fail."}
+{"_id": "d02", "title": "", "text": "The cat sat on the mat. Cats like mats."}
+{"_id": "d03", "title": "", "text": "It is not that they will be there or then."}
+{"_id": "d04", "title": "Geology", "text": "A geologist studies geology and geological layers."}
+{"_id": "d05", "title": "Doubles", "text": "Add an egg, then off we go: added eggs, offing."}
+{"_id": "d06", "title": "Emergency", "text": "The emergency team emerged; emergencies emerge at evening, even evenings."}
+{"_id": "d07", "title": "Anatomy", "text": "Lateral organs: organic organization, later the organ organizes."}
+{"_id": "d08", "title": "Paste", "text": "Past the paste, pasted pasting."}
+{"_id": "d09", "title": "Universe", "text": "The universe, universal truths and the university."}
+{"_id": "d10", "title": "Skiing", "text": "Skis, ski, skies and the sky; skiing skied."}
+{"_id": "d11", "title": "Internals", "text": "Intern, internal, international, internment."}
+{"_id": "d12", "title": "Interference", "text": "Interfere, interferes, interference, interfered, interfering; the interval."}
+{"_id": "d13", "title": "Vying", "text": "Vying and hying, dying, lying, tying; agreed, proceed, exceed."}
+{"_id": "d14", "title": "Numbers", "text": "COVID_19 reached 42 cases in 2020; x y z a1 b_ _ 7z"}
+{"_id": "d15", "title": "İstanbul", "text": "İstanbul and ISTANBUL by the Bosphorus."}
+{"_id": "d16", "title": "Straße", "text": "Die Straße and STRASSE are streets."}
+{"_id": "d17", "title": "Naïve", "text": "A naïve naive approach; naïvely."}
+{"_id": "d18", "title": "Ligature", "text": "The ﬁnance ﬁle ﬁnal; finance file final."}
+{"_id": "d19", "title": "Greek", "text": "ΟΔΟΣ ΟΔΟΣ ΣΟΦΟΣ and σοφός."}
+{"_id": "d20", "title": "Deseret", "text": "The word 𐐀bout has one letter outside the plane; runs."}
+{"_id": "d21", "title": "Running", "text": "Running runners run; the runner ran."}
+{"_id": "d22", "title": "Retrieval", "text": "Lexical retrieval ranks documents by BM25 scores."}
+{"_id": "d23", "title": "Embeddings", "text": "Dense embeddings encode documents as vectors."}
+{"_id": "d24", "title": "Repeated", "text": "search search search engine engine"}
+{"_id": "d25", "title": "Long document", "text": "Search engines index documents, tokenize text, stem words, remove stopwords and score each document against each query with BM25, a ranking function based on term frequency and inverse document frequency."}
+{"_id": "d26", "title": "Short", "text": "BM25"}
+{"_id": "d27", "title": "Only a title here", "text": ""}
+{"_id": "d28", "title": "", "text": ""}
+{"_id": "d29", "title": "Mixed CASE", "text": "HELLO hello HeLLo World"}
+{"_id": "d30", "title": "Apostrophes", "text": "The dog's bone, the dogs' bones, don't won't."}
+{"_id": "d31", "title": "Ranking words", "text": "Rank words, score words, rank documents."}
+{"_id": "d32", "title": "A query", "text": "Each query has words; each word has a score in each document of the search."}
+{"_id": "d33", "title": "Scores", "text": "score scores scored scoring"}
+{"_id": "d34", "title": "Documents and queries", "text": "Documents answer queries. A query finds documents, and documents hold words."}
+{"_id": "d35", "title": "Search engine notes", "text": "The engine ranks the corpus. The engine scores each document for each query, then it sorts the scores and keeps the best documents of the search."}
+{"_id": "d36", "title": "Text", "text": "text"}
+{"_id": "d37", "title": "Words of a text", "text": "A text has words and each word has a stem: the stem of running is run, the stem of documents is document."}
+{"_id": "d38", "title": "Frequency", "text": "Term frequency counts a word in a document; document frequency counts the documents that hold the word; frequency matters."}
+{"_id": "d39", "title": "Retrieval engine", "text": "A retrieval engine searches documents with queries and ranks them by score."}
+{"_id": "d40", "title": "A long text about search", "text": "Search is old. Library catalogs searched cards, and early engines searched words in documents. Each engine kept a list of documents for each word, and each query read the lists of its words. Then the engine scored each document and ranked the documents by score. BM25 is one such score: it counts each word of the query in the document, weights rare words more, and divides by the length of the document, so that a long document does not win only by its length."}

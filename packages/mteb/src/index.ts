@@ -32,6 +32,13 @@ export {
 export { AiSdkTextEncoder } from './models/ai-sdk-text-encoder.ts';
 export { InstructAiSdkEncoder } from './models/instruct-wrapper.ts';
 export {
+  BM25Search,
+  BM25Tokenizer,
+  type BM25Kwargs,
+  bm25Loader,
+  bm25S,
+} from './models/model-implementations/bm25.ts';
+export {
   EMBEDDING_GEMMA_2_TASK_INSTRUCTIONS,
   EmbeddingGemma2Encoder,
   embeddingGemma2,

@@ -38,7 +38,7 @@ function corpusToDict(row: CorpusRow): PreparedRow {
 }
 
 // query keeps the text of each query; text gets its instruction after it.
-function combineQueriesWithInstructionText(
+export function combineQueriesWithInstructionText(
   rows: readonly (QueryRow & { readonly text: string })[],
 ): PreparedRow[] {
   const hasInstruction = rows.some((row) => 'instruction' in row);
