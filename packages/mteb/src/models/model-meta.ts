@@ -28,7 +28,7 @@ import type {
   Licenses,
   Modalities,
 } from '../types/metadata.ts';
-import type { EncoderProtocol } from './models-protocols.ts';
+import type { EncoderProtocol, SearchProtocol } from './models-protocols.ts';
 
 export const FRAMEWORKS = [
   'Sentence Transformers',
@@ -129,21 +129,35 @@ export const OUTPUT_DTYPES = [
 
 export type OutputDType = (typeof OUTPUT_DTYPES)[number];
 
-// What a loader gets besides the name and the revision of the model: the
-// keyword arguments of loadModel, the AI SDK embedding model that serves the
-// weights (MTEB loads the weights itself), and the metadata that the encoder
-// reports (MTEB sets it on the model after the loader returns).
-export type LoaderOptions = Readonly<Record<string, unknown>> & {
+// The model that a loader makes: an encoder or a search model.
+type MTEBModels = EncoderProtocol | SearchProtocol;
+
+// The keyword arguments of loadModel.
+export type LoadKwargs = Readonly<Record<string, unknown>>;
+
+// The keyword arguments of an encoder that an AI SDK embedding model serves
+// (MTEB loads the weights itself): the model, then the experiment arguments.
+export type EncoderKwargs = LoadKwargs & {
   readonly model: Exclude<EmbeddingModel, string>;
-  readonly modelMeta: ModelMeta;
 };
 
-// A function that makes the encoder of a model.
-export type ModelLoader = (
+// The metadata that the model reports. MTEB sets it on the model after the
+// loader returns.
+export type LoaderContext = { readonly modelMeta: ModelMeta };
+
+// What a loader gets besides the name and the revision of the model.
+export type LoaderOptions<Kwargs extends LoadKwargs> = Kwargs & LoaderContext;
+
+// A function that makes the model. Without Kwargs, no call can load the
+// model, as MTEB raises for a metadata without a loader.
+export type ModelLoader<
+  Kwargs extends LoadKwargs = never,
+  Model extends MTEBModels = MTEBModels,
+> = (
   name: string,
   revision: string | null,
-  options: LoaderOptions,
-) => EncoderProtocol;
+  options: LoaderOptions<Kwargs>,
+) => Model;
 
 // A Python int: an integral number.
 const int = z.number().int();
@@ -154,10 +168,7 @@ const float = z.custom<number>(
   'Input should be a valid number',
 );
 
-const modelMetaSchema = z.strictObject({
-  loader: z
-    .custom<ModelLoader>((value) => typeof value === 'function')
-    .nullable(),
+const FIELD_SCHEMAS = {
   loaderKwargs: z.record(z.string(), z.unknown()).default(() => ({})),
   name: z
     .string()
@@ -218,15 +229,35 @@ const modelMetaSchema = z.strictObject({
     .nullable()
     .default(null),
   extraRequirementsGroups: z.array(z.string()).nullable().default(null),
-});
+};
+
+function modelMetaSchema<
+  Kwargs extends LoadKwargs = never,
+  Model extends MTEBModels = MTEBModels,
+>() {
+  return z.strictObject({
+    loader: z
+      .custom<ModelLoader<Kwargs, Model>>(
+        (value) => typeof value === 'function',
+      )
+      .nullable(),
+    ...FIELD_SCHEMAS,
+  });
+}
 
 // The fields of the metadata of a model, as the constructor of ModelMeta
 // takes them. The deprecated isCrossEncoder sets modelType.
-export type ModelMetaInput = z.input<typeof modelMetaSchema> & {
+export type ModelMetaInput<
+  Kwargs extends LoadKwargs = never,
+  Model extends MTEBModels = MTEBModels,
+> = z.input<ReturnType<typeof modelMetaSchema<Kwargs, Model>>> & {
   readonly isCrossEncoder?: boolean | null;
 };
 
-export type ModelMetaFields = z.output<typeof modelMetaSchema>;
+export type ModelMetaFields<
+  Kwargs extends LoadKwargs = never,
+  Model extends MTEBModels = MTEBModels,
+> = z.output<ReturnType<typeof modelMetaSchema<Kwargs, Model>>>;
 
 // The fields in MTEB's order, which is the order of model_meta.json.
 const FIELD_NAMES = [
@@ -292,7 +323,9 @@ function withoutIsCrossEncoder(
 
 // The input with the defaults of the fields it leaves out, without
 // validation.
-function withDefaults(input: ModelMetaInput): ModelMetaFields {
+function withDefaults<Kwargs extends LoadKwargs, Model extends MTEBModels>(
+  input: ModelMetaInput<Kwargs, Model>,
+): ModelMetaFields<Kwargs, Model> {
   return {
     ...input,
     loaderKwargs: input.loaderKwargs ?? {},
@@ -322,9 +355,13 @@ function copyField<Field extends keyof ModelMetaFields>(
 }
 
 // The metadata of a model: its name and revision, its similarity function,
-// its modalities and the facts that describe it.
-export class ModelMeta {
-  readonly loader: ModelLoader | null;
+// its modalities and the facts that describe it. Kwargs are the keyword
+// arguments of loadModel and Model is the model that it returns.
+export class ModelMeta<
+  Kwargs extends LoadKwargs = never,
+  Model extends MTEBModels = MTEBModels,
+> {
+  readonly loader: ModelLoader<Kwargs, Model> | null;
   readonly loaderKwargs: Record<string, unknown>;
   // The name, as "organization/model_name", ideally the name on HuggingFace.
   readonly name: string | null;
@@ -364,14 +401,14 @@ export class ModelMeta {
   // Validates the input, as pydantic does. With validate false, it takes the
   // input as it is and fills the defaults (pydantic's model_construct).
   constructor(
-    input: ModelMetaInput,
+    input: ModelMetaInput<Kwargs, Model>,
     options: { readonly validate?: boolean } = {},
   ) {
     const fields =
       options.validate === false
         ? withDefaults(input)
         : validateModel(
-            modelMetaSchema,
+            modelMetaSchema<Kwargs, Model>(),
             'ModelMeta',
             withoutIsCrossEncoder(input),
           );
@@ -456,7 +493,11 @@ export class ModelMeta {
       ]),
     );
     return new ModelMeta(
-      validateModel(modelMetaSchema, 'ModelMeta', withoutIsCrossEncoder(input)),
+      validateModel(
+        modelMetaSchema(),
+        'ModelMeta',
+        withoutIsCrossEncoder(input),
+      ),
       { validate: false },
     );
   }
@@ -503,20 +544,21 @@ export class ModelMeta {
     };
   }
 
-  // A copy with some fields changed. As pydantic's model_copy, it does not
-  // validate the changed fields.
-  // The encoder of the model, through its loader. The keyword arguments with
-  // a value become the experiment arguments of the copy of the metadata that
-  // the encoder reports, and so name the folder of its results.
+  // The model, through its loader. The keyword arguments with a value, but
+  // the AI SDK model of an encoder, become the experiment arguments of the
+  // copy of the metadata that the model reports, and so name the folder of
+  // its results.
   loadModel(
-    model: Exclude<EmbeddingModel, string>,
-    kwargs: Readonly<Record<string, unknown>> = {},
-  ): EncoderProtocol {
+    ...[kwargs]: Record<string, never> extends Kwargs
+      ? [kwargs?: Kwargs]
+      : [kwargs: Kwargs]
+  ): Model {
     if (this.loader === null)
       throw new Error('No model implementation is available for this model.');
     if (this.name === null)
       throw new Error('name is not set for ModelMeta. Cannot load model.');
-    const merged = { ...this.experimentKwargs, ...kwargs };
+    const { model, ...rest }: LoadKwargs = kwargs ?? {};
+    const merged = { ...this.experimentKwargs, ...rest };
     const meaningful = Object.fromEntries(
       Object.entries(merged).filter(([, value]) => hasMeaningfulValue(value)),
     );
@@ -525,15 +567,24 @@ export class ModelMeta {
       experimentKwargs: Object.keys(meaningful).length > 0 ? meaningful : null,
       loaderKwargs,
     });
-    return this.loader(this.name, this.revision, {
-      ...loaderKwargs,
-      model,
-      modelMeta,
-    });
+    // Object.assign skips kwargs when the call leaves them out, which the
+    // parameter type allows only for keyword arguments that are all optional.
+    return this.loader(
+      this.name,
+      this.revision,
+      Object.assign({}, loaderKwargs, kwargs, { modelMeta }),
+    );
   }
 
-  modelCopy(update: Partial<ModelMetaFields> = {}): ModelMeta {
-    return new ModelMeta({ ...this, ...update }, { validate: false });
+  // A copy with some fields changed. As pydantic's model_copy, it does not
+  // validate the changed fields.
+  modelCopy(
+    update: Partial<ModelMetaFields<Kwargs, Model>> = {},
+  ): ModelMeta<Kwargs, Model> {
+    return new ModelMeta<Kwargs, Model>(
+      { ...this, ...update },
+      { validate: false },
+    );
   }
 
   // True when the other metadata has the same fields (ModelMeta.__eq__).

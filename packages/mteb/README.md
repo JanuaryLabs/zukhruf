@@ -115,10 +115,10 @@ const llamaCpp = createOpenAICompatible({
   name: 'llama.cpp',
   baseURL: 'http://127.0.0.1:8080/v1',
 });
-const encoder = qwen3Embedding0B6.loadModel(
-  llamaCpp.embeddingModel('qwen3-embedding-0.6b'),
-  { quantization: 'Q8_0' },
-);
+const encoder = qwen3Embedding0B6.loadModel({
+  model: llamaCpp.embeddingModel('qwen3-embedding-0.6b'),
+  quantization: 'Q8_0',
+});
 const result = await evaluate(encoder, [new ArguAna(), new SCIDOCS()], {
   cache: new ResultCache('mteb-results'),
 });
@@ -132,7 +132,7 @@ Serve the model so that it takes the longest text of a task whole. llama.cpp ref
 npx nx run mteb:compare
 ```
 
-A task downloads its files once, to `~/.cache/mteb/datasets`. The keyword arguments of `loadModel` are experiment arguments: a quantized model keeps its results apart from the results of the full weights.
+A task downloads its files once, to `~/.cache/mteb/datasets`. The keyword arguments of `loadModel`, but `model`, are experiment arguments: a quantized model keeps its results apart from the results of the full weights.
 
 To see the scores as a bar chart for each task, run the command below. It needs [uv](https://docs.astral.sh/uv/). Python MTEB reads the result files in `~/.cache/mteb` and does not download its results repository. The command writes `~/.cache/mteb/chart.html` and prints its path.
 

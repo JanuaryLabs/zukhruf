@@ -80,7 +80,7 @@ test('EmbeddingGemma 2 embeds a query as "task: <instruction of the task> | quer
   await using server = await hub();
   await using cache = await new TemporaryFiles().directory('mteb-models-');
   const { model, texts } = recordingModel();
-  const encoder = embeddingGemma2.loadModel(model);
+  const encoder = embeddingGemma2.loadModel({ model });
 
   await evaluate(
     encoder,
@@ -102,7 +102,7 @@ test('Qwen3-Embedding puts "Instruct: <prompt of the task>\\nQuery:" before a qu
   const { model, texts } = recordingModel();
 
   await evaluate(
-    qwen3Embedding0B6.loadModel(model),
+    qwen3Embedding0B6.loadModel({ model }),
     new ArguAna({ hub: { endpoint: server.origin, cacheFolder: cache.path } }),
     { cache: null },
   );
@@ -117,7 +117,8 @@ test('Qwen3-Embedding puts "Instruct: <prompt of the task>\\nQuery:" before a qu
 test('loadModel makes the keyword arguments with a value the experiment arguments of the encoder', () => {
   const { model } = recordingModel();
 
-  const encoder = qwen3Embedding0B6.loadModel(model, {
+  const encoder = qwen3Embedding0B6.loadModel({
+    model,
     quantization: 'Q8_0',
     unused: '',
   });

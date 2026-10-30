@@ -38,7 +38,8 @@ const cache = new ResultCache();
 console.log('Model                        Task      nDCG@10  Seconds');
 for (const { baseURL, meta, id } of models) {
   const provider = createOpenAICompatible({ name: 'llama.cpp', baseURL });
-  const encoder = meta.loadModel(provider.embeddingModel(id), {
+  const encoder = meta.loadModel({
+    model: provider.embeddingModel(id),
     quantization: 'Q8_0',
   });
   const result = await evaluate(encoder, [new ArguAna(), new SCIDOCS()], {

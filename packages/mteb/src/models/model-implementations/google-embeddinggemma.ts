@@ -6,7 +6,11 @@ import {
 } from '../../abstasks/task-metadata.ts';
 import type { BatchedInput } from '../../types/encoder-io.ts';
 import { AiSdkTextEncoder } from '../ai-sdk-text-encoder.ts';
-import { type LoaderOptions, ModelMeta } from '../model-meta.ts';
+import {
+  type EncoderKwargs,
+  type LoaderOptions,
+  ModelMeta,
+} from '../model-meta.ts';
 import type { EncodeOptions } from '../models-protocols.ts';
 
 // mteb/models/model_implementations/google_embeddinggemma.py: the text path of
@@ -354,7 +358,7 @@ export class EmbeddingGemma2Encoder extends AiSdkTextEncoder {
     this: void,
     _name: string,
     _revision: string | null,
-    options: LoaderOptions,
+    options: LoaderOptions<EncoderKwargs>,
   ): EmbeddingGemma2Encoder {
     return new EmbeddingGemma2Encoder({
       model: options.model,

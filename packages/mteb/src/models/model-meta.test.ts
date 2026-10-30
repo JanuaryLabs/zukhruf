@@ -1,14 +1,20 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 
+import type { EmbeddingModelV4 } from '@ai-sdk/provider';
+
 import { ValidationError } from '../abstasks/task-metadata.ts';
+import { qwen3Embedding0B6 } from './model-implementations/qwen3-models.ts';
 import {
+  type LoadKwargs,
+  type LoaderOptions,
   ModelMeta,
   type ModelMetaInput,
   ScoringFunction,
   mergePrecisionIntoExperimentKwargs,
   serializeExperimentKwargsToName,
 } from './model-meta.ts';
+import type { SearchProtocol } from './models-protocols.ts';
 
 // The fields of ModelMeta that have no default, all empty.
 const REQUIRED: Omit<ModelMetaInput, 'name'> = {
@@ -349,6 +355,74 @@ describe('ModelMeta', () => {
     assert.throws(
       () => ModelMeta.createEmpty().modelCopy({ name: null }).modelNameAsPath(),
       /Model name is not set/u,
+    );
+  });
+});
+
+// The keyword arguments of a search model that takes options of its own and
+// no AI SDK model, as MTEB's BM25.
+type SearchKwargs = LoadKwargs & {
+  readonly k1?: number;
+  readonly model?: never;
+};
+
+describe('ModelMeta.loadModel', () => {
+  test('an encoder does not load without its AI SDK model, and a search model does not take one', () => {
+    const search = new ModelMeta<SearchKwargs, SearchProtocol>({
+      ...REQUIRED,
+      name: 'test/search',
+      loader: (_name, _revision, { modelMeta }) => ({
+        index: async () => {},
+        search: async () => new Map(),
+        mtebModelMeta: modelMeta,
+      }),
+    });
+    // A function that is never called: the type checker reads it.
+    const loads = (model: EmbeddingModelV4) => [
+      // @ts-expect-error an encoder needs the AI SDK model that serves it.
+      qwen3Embedding0B6.loadModel(),
+      // @ts-expect-error a search model takes no AI SDK model.
+      search.loadModel({ model }),
+    ];
+
+    assert.equal(typeof loads, 'function');
+  });
+
+  test('a search model loads with the experiment arguments in its metadata, as MTEB does', () => {
+    const received: LoaderOptions<SearchKwargs>[] = [];
+    const meta = new ModelMeta<SearchKwargs, SearchProtocol>({
+      ...REQUIRED,
+      name: 'test/search',
+      revision: 'r1',
+      loader: (_name, _revision, options) => {
+        received.push(options);
+        return {
+          index: async () => {},
+          search: async () => new Map(),
+          mtebModelMeta: options.modelMeta,
+        };
+      },
+    });
+
+    const plain = meta.loadModel();
+    const tuned = meta.loadModel({ k1: 1.2 });
+
+    assert.equal(plain.mtebModelMeta.name, 'test/search');
+    assert.equal(plain.mtebModelMeta.experimentKwargs, null);
+    assert.deepEqual(tuned.mtebModelMeta.experimentKwargs, { k1: 1.2 });
+    assert.deepEqual(tuned.mtebModelMeta.loaderKwargs, { k1: 1.2 });
+    assert.equal(tuned.mtebModelMeta.experimentName, 'k1_1.2');
+    assert.equal(received[1]?.k1, 1.2);
+    assert.equal(meta.experimentKwargs, null);
+  });
+
+  test('a metadata without a loader cannot load a model, as MTEB raises', () => {
+    const meta = ModelMeta.createEmpty({ name: 'test/empty' });
+
+    assert.throws(
+      // @ts-expect-error a metadata without a loader takes no keyword arguments.
+      () => meta.loadModel(),
+      /No model implementation is available for this model\./u,
     );
   });
 });

@@ -1,6 +1,10 @@
 import type { PromptType } from '../../types/encoder-io.ts';
 import { InstructAiSdkEncoder } from '../instruct-wrapper.ts';
-import { type LoaderOptions, ModelMeta } from '../model-meta.ts';
+import {
+  type EncoderKwargs,
+  type LoaderOptions,
+  ModelMeta,
+} from '../model-meta.ts';
 
 // mteb/models/model_implementations/qwen3_models.py. The loader takes the AI
 // SDK embedding model of a server that serves the weights (llama.cpp with
@@ -119,7 +123,7 @@ const TRAINING_DATA = [
 function q3eInstructLoader(
   _name: string,
   _revision: string | null,
-  options: LoaderOptions,
+  options: LoaderOptions<EncoderKwargs>,
 ): InstructAiSdkEncoder {
   return new InstructAiSdkEncoder({
     model: options.model,
