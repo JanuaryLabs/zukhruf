@@ -21,6 +21,14 @@
         "cwd": "{projectRoot}"
       }
     },
+    "report": {
+      "executor": "nx:run-commands",
+      "cache": false,
+      "options": {
+        "command": "node examples/report.ts",
+        "cwd": "{projectRoot}"
+      }
+    },
     "chart": {
       "executor": "nx:run-commands",
       "cache": false,

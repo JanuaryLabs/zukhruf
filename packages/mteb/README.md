@@ -458,4 +458,10 @@ writeFileSync('verdicts.tex', report.verdicts.toLatex({ escape: true }));
 
 By default, the report compares each model with the baseline on the main score of the task. When the main score has no value for each query (MRR, for example), the queries and the verdicts use nDCG@10. `comparisons` gives other pairs, as `[baseline, change]`, and `tested` gives other scores. `holm` corrects the p-values of all the comparisons together. `primary` names one comparison and one score that you chose before you saw the scores: the report tests it alone and corrects the others. A difference counts when its deciding p-value (the corrected p-value, or the p-value of the primary comparison) is below 0.05.
 
-`scores` and `verdicts` are tables (`DataFrame`), so `toCsv`, `toMarkdown` and `toLatex` write them. A model without predictions gives an error that names its folder: `evaluate` writes no predictions when it reads a result from the cache.
+`scores` and `verdicts` are tables (`DataFrame`), so `toCsv`, `toMarkdown` and `toLatex` write them. A model without predictions gives an error that names its folder: `evaluate` writes no predictions when it reads a result from the cache. Predictions of another run give an error too: the main score of their queries must average to the score in the result, as the evaluation calculates it.
+
+The table of all scores also shows how long `evaluate` took for each model, as its result records it. That time counts loading the data of the task, which `evaluate` does for each model unless the task was loaded before it ran. To see a report without a task of your own, run the example. It evaluates BM25 and BM25 with `k1` 1.2 and `b` 0.5 on the BM25 fixture, writes the report to a new temporary folder, and prints the path of the page:
+
+```sh
+npx nx run mteb:report
+```

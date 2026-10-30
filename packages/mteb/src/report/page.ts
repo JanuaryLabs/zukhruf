@@ -60,6 +60,15 @@ const signed = (value: number, digits: number) => {
 // The bootstrap p-value has steps of 1/1000 for 2000 resamples.
 const pValue = (value: number) =>
   value < 0.001 ? '< 0.001' : value.toFixed(3);
+// Seconds as seconds, minutes or hours.
+const duration = (seconds: number | null) =>
+  seconds === null
+    ? '—'
+    : seconds < 60
+      ? `${seconds.toFixed(1)} s`
+      : seconds < 3600
+        ? `${(seconds / 60).toFixed(1)} min`
+        : `${(seconds / 3600).toFixed(1)} h`;
 const day = new Intl.DateTimeFormat('en-GB', {
   day: 'numeric',
   month: 'short',
@@ -602,6 +611,14 @@ function queries(view: View): string {
     rows.filter(({ id }) => sign(gain(id)) === wanted).length;
   const grid = rows
     .map(({ id, text }) => {
+      const title = text === '' ? id : `${id} · ${text}`;
+      // A row is one tab stop: its tooltip has the score of each model, so
+      // the keyboard reaches what the cells show to a pointer.
+      const rowTip: TipRow[] = ranked.map((model) => [
+        fixed(scoreAt(model, id)),
+        model.label,
+        role(model),
+      ]);
       const cells = ranked
         .map((model) => {
           const cell = scoreAt(model, id);
@@ -611,12 +628,12 @@ function queries(view: View): string {
               signed(cell - scoreAt(baseline, id), 3),
               `vs ${baseline.label}`,
             ]);
-          return `<span class="heat-cell" style="--v:${(Number.isNaN(cell) ? 0 : cell).toFixed(3)}"${tip(text === '' ? id : `${id} · ${text}`, tipRows)}></span>`;
+          return `<span class="heat-cell" style="--v:${(Number.isNaN(cell) ? 0 : cell).toFixed(3)}"${tip(title, tipRows)}></span>`;
         })
         .join('');
       const delta = gain(id);
       return `
-      <div class="heat-row">
+      <div class="heat-row" tabindex="0"${tip(title, rowTip)}>
         <span class="heat-q"><span class="q-id">${esc(id)}</span>${esc(text)}</span>
         ${cells}
         <span class="heat-delta" data-sign="${sign(delta)}">${{ up: results.better.icon, down: results.worse.icon, flat: '' }[sign(delta)]} ${sign(delta) === 'flat' ? (0).toFixed(3) : signed(delta, 3)}</span>
@@ -721,13 +738,14 @@ function scoreTable(view: View): string {
   const terms = TERMS.filter(([prefix]) =>
     columns.some((score) => score.startsWith(prefix)),
   );
+  const timed = ranked.some((model) => model.evaluationTime !== null);
   return section(
     'All scores',
     led > 0
       ? `${esc(best.label)} leads on ${led} of ${columns.length} scores.${others}`
       : others.trim(),
     `<div class="table-scroll"><table class="scores">
-      <thead><tr><th scope="col">Model</th>${columns.map((score) => `<th scope="col">${label(score)}</th>`).join('')}</tr></thead>
+      <thead><tr><th scope="col">Model</th>${columns.map((score) => `<th scope="col">${label(score)}</th>`).join('')}${timed ? '<th scope="col">Evaluation time, all splits</th>' : ''}</tr></thead>
       <tbody>${ranked
         .map(
           (model) => `<tr data-role="${role(model)}">
@@ -737,13 +755,15 @@ function scoreTable(view: View): string {
               const text = value(score, scoreOf(model, score));
               return `<td>${leaders[index]?.leaders.includes(model) ? `<strong>${text}</strong>` : text}</td>`;
             })
-            .join('')}
+            .join(
+              '',
+            )}${timed ? `<td>${duration(model.evaluationTime)}</td>` : ''}
         </tr>`,
         )
         .join('')}</tbody>
     </table></div>
     <dl class="terms">
-      ${terms.map(([, name, text]) => `<div><dt>${name}</dt><dd>${text}</dd></div>`).join('')}
+      ${terms.map(([, name, text]) => `<div><dt>${name}</dt><dd>${text}</dd></div>`).join('')}${timed ? '<div><dt>Evaluation time</dt><dd>How long evaluate took for the model on the task, over all its splits, as its result records it: indexing the corpus, the search of the queries and the scores. It also counts loading the data of the task, which evaluate does for each model unless the task was loaded before it ran.</dd></div>' : ''}
       <div><dt>95% interval</dt><dd>The likely range of the true difference: the queries are resampled many times. A difference counts when its deciding p-value is below 0.05.</dd></div>
     </dl>`,
   );

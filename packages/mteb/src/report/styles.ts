@@ -150,6 +150,8 @@ h2 { font-size: clamp(1.25rem, 2.6vw, 1.625rem); line-height: 1.25; font-weight:
 .heat-col[data-role="best"] span, .heat-col[data-role="baseline"] span { color: var(--ink); font-weight: 600; }
 .heat-q { font-size: 0.8125rem; line-height: 1.35; padding: 0.375rem 0.75rem 0.375rem 0; display: flex; gap: 0.5rem; align-items: baseline; }
 .q-id { font: 0.6875rem var(--mono); color: var(--muted); flex: none; white-space: nowrap; }
+/* The heatmap scrolls on its own, so a focused row draws its outline inside. */
+.heat-row:focus-visible { outline-offset: -2px; }
 .heat-cell { min-height: 2.25rem; border-radius: 2px; background: color-mix(in oklab, var(--heat-hi) calc(var(--v) * 100%), var(--heat-lo)); }
 .heat-cell:hover { outline: 2px solid var(--ink); outline-offset: -2px; }
 .heat-delta { align-self: center; justify-self: end; font: 500 0.75rem var(--mono); font-variant-numeric: tabular-nums; color: var(--ink-2); white-space: nowrap; }

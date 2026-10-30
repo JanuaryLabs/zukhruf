@@ -2,6 +2,7 @@ import type { MTEBModels } from '../abstasks/abstask.ts';
 import type { AbsTaskRetrieval } from '../abstasks/retrieval.ts';
 import type { ResultCache } from '../cache/result-cache.ts';
 import { DataFrame } from '../dependencies/pandas.ts';
+import { pythonRound, pythonSum } from '../dependencies/python.ts';
 import { perQueryScores } from '../significance/per-query-scores.ts';
 import { page } from './page.ts';
 import {
@@ -25,6 +26,10 @@ export type ModelScores = {
   // The query score (SplitReport.queryScore) of each query that has a
   // relevant document.
   readonly perQuery: ReadonlyMap<string, number>;
+  // The seconds that evaluate took on the task, over all its splits, as the
+  // result records it; it counts loading the data of the task, which
+  // evaluate does for each model unless the task was loaded before.
+  readonly evaluationTime: number | null;
 };
 
 // What the report shows for one split and subset.
@@ -182,15 +187,29 @@ export class Report {
               subset,
               label(model),
             );
+            const scores = new Map(
+              Object.entries(dict).flatMap(([key, value]) =>
+                typeof value === 'number' ? [[key, value] as const] : [],
+              ),
+            );
+            // The result is the mean of the scores of the queries, rounded to
+            // 5 digits, as the evaluation calculates it. Predictions of
+            // another run give another mean: the page would then draw the
+            // queries and the verdicts of one run and the scores of another.
+            const averaged = pythonRound(
+              pythonSum(values.values()) / values.size,
+              5,
+            );
+            if (!Object.is(averaged, scores.get(score)))
+              throw new Error(
+                `The predictions of ${label(model)} in ${options.predictionFolder(model)} do not match its result on ${split} (subset ${subset}): the ${score} of their queries averages ${averaged}, and the result has ${scores.has(score) ? String(scores.get(score)) : `no ${score}`}. They come from another run, or the qrels changed after the run. Run evaluate again with predictionFolder set to this folder and overwriteStrategy 'always'.`,
+              );
             const entry: ModelScores = {
               model,
               label: label(model),
-              scores: new Map(
-                Object.entries(dict).flatMap(([key, value]) =>
-                  typeof value === 'number' ? [[key, value] as const] : [],
-                ),
-              ),
+              scores,
               perQuery: values,
+              evaluationTime: result.evaluationTime,
             };
             return { queryScore: score, entry };
           }),
