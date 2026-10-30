@@ -9,8 +9,12 @@ import pg from 'pg';
 
 import { Postgres } from '@zukhruf/testing/postgres';
 
-import { LeaseLostError, Mutex } from '../../index.ts';
-import { deadlineFor, storeCases } from '../../testing/store-cases.ts';
+import { LeaseLostError, Modes, Mutex } from '../../index.ts';
+import {
+  type StoreCase,
+  deadlineFor,
+  storeCases,
+} from '../../testing/store-cases.ts';
 import { type PostgresSession, PostgresStore } from './index.ts';
 
 /**
@@ -460,6 +464,71 @@ test(
       }
     } finally {
       await pool.end();
+    }
+  },
+);
+
+/**
+ * One test of the shared store suites over the PostgresStore case: a holder
+ * and a skipped try give the host's pool two sessions, then the host is
+ * disposed. Returns how many sessions the server still has on the fixture's
+ * database at that moment, before the fixture drops it.
+ */
+async function sessionsAfterTheHostIsDisposed(
+  postgresCase: StoreCase,
+): Promise<number> {
+  await using fixture = await postgresCase.fixture(process.env);
+  // Connected before the host opens, so the count is read right after the disposal.
+  const server = new URL(fixture.location);
+  const database = decodeURIComponent(server.pathname.slice(1));
+  server.pathname = '/postgres';
+  const observer = new pg.Client({ connectionString: server.toString() });
+  await observer.connect();
+  try {
+    {
+      await using host = postgresCase.open(fixture.location);
+      const mutex = new Mutex(host.store);
+      const holder = await hold(mutex, 'report:daily');
+      const skipped = await mutex.acquire('report:daily', async () => 'ran', {
+        mode: Modes.skipIfBusy(),
+      });
+      await holder.release();
+      assert.deepEqual(
+        skipped,
+        { acquired: false },
+        'The try must find the key busy',
+      );
+    }
+    const { rows } = await observer.query(
+      'SELECT count(*)::int AS sessions FROM pg_stat_activity WHERE datname = $1',
+      [database],
+    );
+    return rows[0].sessions;
+  } finally {
+    await observer.end();
+  }
+}
+
+test(
+  "a disposed PostgresStore case host leaves no session of its pool on the server, so the fixture's drop cannot end a connection the pool still owns",
+  { timeout: 120_000, todo: '#3305' },
+  async () => {
+    // Arrange: the case of the shared store suites. A cycle that leaves a session is a race, so it runs many times.
+    const postgresCase = storeCases.find(
+      (candidate) => candidate.name === 'PostgresStore',
+    );
+    assert.ok(postgresCase);
+    const cycles = 60;
+    for (let cycle = 1; cycle <= cycles; cycle++) {
+      // Act
+      const sessions = await sessionsAfterTheHostIsDisposed(postgresCase);
+
+      // Assert
+      assert.equal(
+        sessions,
+        0,
+        `Cycle ${cycle} of ${cycles}: ${sessions} session(s) of the disposed host's pool were still on the server`,
+      );
     }
   },
 );
