@@ -6,6 +6,7 @@ import {
   type DatasetDict,
   type HubOptions,
   loadDataset,
+  select,
 } from '../dependencies/datasets.ts';
 import { MultiLabelBinarizer } from '../dependencies/sklearn.ts';
 import { labelSetsOf } from '../evaluators/sklearn-evaluator.ts';
@@ -69,10 +70,7 @@ export function multilabelSubsampling(
       nSamples / dataset.rows.length,
       seed,
     );
-    subsampled.set(split, {
-      columnNames: dataset.columnNames,
-      rows: test.map((index) => dataset.rows[index] ?? {}),
-    });
+    subsampled.set(split, select(dataset, test));
   }
   return subsampled;
 }

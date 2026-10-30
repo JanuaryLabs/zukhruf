@@ -1,5 +1,5 @@
 import { createDataloaderFromTexts } from '../create-dataloaders.ts';
-import type { Dataset } from '../dependencies/datasets.ts';
+import { type Dataset, select } from '../dependencies/datasets.ts';
 import { NumpyGenerator } from '../dependencies/numpy-random.ts';
 import { mean } from '../dependencies/numpy.ts';
 import { pythonIntSetOrder } from '../dependencies/python-set.ts';
@@ -115,7 +115,7 @@ export abstract class AbsTaskMultilabelClassification extends ClassificationTask
     {
       using _ = timer.phase('Encoding training samples', location);
       uniqueTrainEmbeddings = await encode(
-        uniqueTrainIndices.map((index) => trainSplit.rows[index] ?? {}),
+        select(trainSplit, uniqueTrainIndices).rows,
         this.trainSplit,
       );
     }

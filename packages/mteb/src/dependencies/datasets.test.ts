@@ -12,7 +12,12 @@ import { HttpServer } from '@zukhruf/testing/http';
 import { AbsTask, type MTEBModels } from '../abstasks/abstask.ts';
 import { TaskMetadata } from '../abstasks/task-metadata.ts';
 import type { Score } from '../types/result.ts';
-import { type Dataset, type DatasetDict, loadDataset } from './datasets.ts';
+import {
+  type Dataset,
+  type DatasetDict,
+  loadDataset,
+  select,
+} from './datasets.ts';
 
 const FIXTURES = join(import.meta.dirname, 'fixtures', 'datasets');
 
@@ -69,6 +74,42 @@ test('each layout of data files loads the splits, columns and rows that load_dat
     }
 
   assert.equal(loads, 9);
+});
+
+// What Dataset.select of datasets 5.1.0 gave in the reference environment of
+// the fixtures for a dataset of the values 1, 2 and 3 in the column a, and
+// for an empty dataset.
+test('select gives the rows at the indices in their order, and an index out of range throws the error of datasets 5.1.0', () => {
+  const dataset: Dataset = {
+    columnNames: ['a'],
+    rows: [{ a: 1 }, { a: 2 }, { a: 3 }],
+  };
+  const values = (indices: number[]) =>
+    select(dataset, indices).rows.map((row) => row['a']);
+
+  assert.deepEqual(
+    {
+      shuffled: values([2, 0, 1]),
+      none: values([]),
+      empty: select({ columnNames: ['a'], rows: [] }, [4]).rows,
+    },
+    { shuffled: [3, 1, 2], none: [], empty: [] },
+  );
+  assert.throws(() => values([5, 0]), {
+    message: 'IndexError: Index 5 out of range for dataset of size 3.',
+  });
+  assert.throws(() => values([3, 0]), {
+    message: 'IndexError: Index 3 out of range for dataset of size 3.',
+  });
+  assert.throws(() => values([-5, 5]), {
+    message: 'IndexError: Index 5 out of range for dataset of size 3.',
+  });
+  assert.throws(() => values([0, -5]), {
+    message: 'IndexError: Index -5 out of range for dataset of size 3.',
+  });
+  assert.throws(() => values([-1, 0]), {
+    message: "OverflowError: can't convert negative value to unsigned int",
+  });
 });
 
 test('a dataset of CSV files throws, because this port reads JSON and parquet files only', async () => {

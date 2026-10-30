@@ -1,5 +1,5 @@
 import { createDataloaderFromTexts } from '../create-dataloaders.ts';
-import type { Dataset } from '../dependencies/datasets.ts';
+import { type Dataset, select } from '../dependencies/datasets.ts';
 import { RandomState } from '../dependencies/numpy-random.ts';
 import { mean } from '../dependencies/numpy.ts';
 import { LogisticRegression } from '../dependencies/sklearn-logistic.ts';
@@ -159,7 +159,7 @@ export abstract class AbsTaskClassification extends ClassificationTaskBase {
     {
       using _ = timer.phase('Encoding training samples', location);
       unionCache = await encode(
-        unionIdxs.map((index) => trainSplit.rows[index] ?? {}),
+        select(trainSplit, unionIdxs).rows,
         this.trainSplit,
       );
     }
@@ -183,7 +183,7 @@ export abstract class AbsTaskClassification extends ClassificationTaskBase {
           location,
         );
         const [scoresExp, predictions] = this.runExperiment(
-          selectRows(trainSplit, selected),
+          select(trainSplit, selected),
           evalSplit,
           trainEmbeddings,
           testEmbeddings,
@@ -315,12 +315,4 @@ function averagePrecision(
       );
     });
   return averagePrecisionScore(numbers(yTest), numbers(yPred));
-}
-
-// Dataset.select(indices).
-function selectRows(dataset: Dataset, indices: readonly number[]): Dataset {
-  return {
-    columnNames: dataset.columnNames,
-    rows: indices.map((index) => dataset.rows[index] ?? {}),
-  };
 }

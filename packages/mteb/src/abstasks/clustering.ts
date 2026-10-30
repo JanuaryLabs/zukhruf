@@ -1,5 +1,9 @@
 import { createDataloaderFromTexts } from '../create-dataloaders.ts';
-import type { Dataset, DatasetValue } from '../dependencies/datasets.ts';
+import {
+  type Dataset,
+  type DatasetValue,
+  select,
+} from '../dependencies/datasets.ts';
 import { mean, std } from '../dependencies/numpy.ts';
 import { PythonRandom } from '../dependencies/python-random.ts';
 import { MiniBatchKMeans } from '../dependencies/sklearn-kmeans.ts';
@@ -164,7 +168,7 @@ export abstract class AbsTaskClustering extends AbsTask<Dataset> {
         rows.length,
         maxDocumentsToEmbed,
       );
-      rows = exampleIndices.map((index) => dataSplit.rows[index] ?? {});
+      rows = select(dataSplit, exampleIndices).rows;
     }
     const missing = [this.inputColumnName, this.labelColumnName].filter(
       (column) => !dataSplit.columnNames.includes(column),

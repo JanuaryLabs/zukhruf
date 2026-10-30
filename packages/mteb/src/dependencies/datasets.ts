@@ -1276,6 +1276,37 @@ export function renameColumn(
   };
 }
 
+// Dataset.select(indices): the rows at the indices, in their order. An empty
+// dataset gives itself. The largest index, then the smallest, must be in
+// range; then pyarrow refuses a negative index as a uint64.
+export function select(dataset: Dataset, indices: readonly number[]): Dataset {
+  const size = dataset.rows.length;
+  if (size === 0) return dataset;
+  let largest = -Infinity;
+  let smallest = Infinity;
+  for (const index of indices) {
+    largest = Math.max(largest, index);
+    smallest = Math.min(smallest, index);
+  }
+  if (indices.length > 0)
+    for (const index of [largest, smallest])
+      if ((index < 0 && index + size < 0) || index >= size)
+        throw new Error(
+          `IndexError: Index ${index} out of range for dataset of size ${size}.`,
+        );
+  return {
+    columnNames: dataset.columnNames,
+    rows: indices.map((index) => {
+      const row = dataset.rows[index];
+      if (row === undefined)
+        throw new Error(
+          "OverflowError: can't convert negative value to unsigned int",
+        );
+      return row;
+    }),
+  };
+}
+
 // Dataset.from_dict: a dataset with a column for each key; each value is the
 // list of the values of its column.
 export function datasetFromDict(mapping: DatasetRow): Dataset {
