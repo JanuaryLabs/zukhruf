@@ -1,24 +1,17 @@
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
-import { once } from 'node:events';
-import {
-  mkdir,
-  readFile,
-  realpath,
-  symlink,
-  writeFile,
-} from 'node:fs/promises';
-import { dirname, join, relative } from 'node:path';
+import { mkdir, realpath, symlink } from 'node:fs/promises';
+import { join, relative } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
 import { TemporaryFiles } from '@zukhruf/testing/fs';
 
+import {
+  workspace as temporaryWorkspace,
+  zukhrufModules,
+} from '../testing/workspace.ts';
+
 const pluginEntry = fileURLToPath(import.meta.resolve('@zukhruf/nx/test'));
-const zukhrufModules = fileURLToPath(
-  new URL('../../../../node_modules', import.meta.url),
-);
-const nxBin = join(zukhrufModules, 'nx/dist/bin/nx.js');
 
 interface TestTarget {
   executor: string;
@@ -28,87 +21,19 @@ interface TestTarget {
   dependsOn: string[];
 }
 
-// An npm workspace in a temp folder with `packages/*` as its workspace globs,
-// Nx and Vite linked from zukhruf, and the plugin entry in `nx.json`. Nx sees
-// none of the user's config and no environment of the Nx task that runs this
-// test.
-async function workspace(
+// Nx and Vite linked from zukhruf, and the plugin entry in `nx.json`.
+const workspace = (
   root: string,
   files: Record<string, string>,
   plugin: string | object = pluginEntry,
-) {
-  const write = async (path: string, content: string) => {
-    await mkdir(dirname(join(root, path)), { recursive: true });
-    await writeFile(join(root, path), content);
-  };
-  await write(
-    'package.json',
-    '{ "name": "probe", "private": true, "workspaces": ["packages/*"] }\n',
-  );
-  await write(
-    'nx.json',
-    `${JSON.stringify({ useDaemonProcess: false, plugins: [plugin] })}\n`,
-  );
-  for (const [path, content] of Object.entries(files)) {
-    await write(path, content);
-  }
-  await mkdir(join(root, 'home'));
-  await mkdir(join(root, 'node_modules'));
-  for (const name of ['nx', 'vite']) {
-    await symlink(join(zukhrufModules, name), join(root, 'node_modules', name));
-  }
-  const packages = {
-    'node_modules/nx': { version: '23.2.1', license: 'MIT' },
-  };
-  await write(
-    'package-lock.json',
-    `${JSON.stringify(
-      {
-        name: 'probe',
-        lockfileVersion: 3,
-        requires: true,
-        packages: {
-          '': { name: 'probe', workspaces: ['packages/*'] },
-          ...packages,
-        },
-      },
-      null,
-      2,
-    )}\n`,
-  );
-  const environment = {
-    PATH: `${dirname(process.execPath)}:/usr/bin:/bin`,
-    HOME: join(root, 'home'),
-    NX_DAEMON: 'false',
-    NX_NO_CLOUD: 'true',
-  };
-  const nx = async (...args: string[]) => {
-    const child = spawn(process.execPath, [nxBin, ...args], {
-      cwd: root,
-      env: environment,
-      timeout: 60_000,
-    });
-    const stdoutChunks = child.stdout.toArray();
-    const stderrChunks = child.stderr.toArray();
-    const [code] = await once(child, 'close');
-    const stdout = Buffer.concat(await stdoutChunks).toString();
-    const stderr = Buffer.concat(await stderrChunks).toString();
-    return { code, stdout, output: stdout + stderr };
-  };
-  const targets = async (project: string) => {
-    const shown = await nx('show', 'project', project, '--json');
-    assert.equal(shown.code, 0, shown.output);
-    const configuration: { targets: Record<string, TestTarget> } = JSON.parse(
-      shown.stdout,
-    );
-    return configuration.targets;
-  };
-  return {
-    nx,
-    targets,
-    read: (path: string) => readFile(join(root, path)).then(String),
-  };
-}
+) =>
+  temporaryWorkspace<TestTarget>({
+    root,
+    files,
+    plugins: [plugin],
+    links: ['nx', 'vite'],
+    packages: {},
+  });
 
 const packageJson = (name: string, tags: string[] = []) =>
   `${JSON.stringify({ name, version: '0.0.0', nx: { tags } }, null, 2)}\n`;
