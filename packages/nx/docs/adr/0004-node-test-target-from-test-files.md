@@ -1,5 +1,7 @@
 # The plugin gives the test target to each project root that owns node:test files
 
+Superseded in part on 2026-10-30 by [ADR 0006](./0006-lint-inputs-from-the-eslint-package.md) for the project roots. The `lint` area is the third place of the project-root rule, so the rule is extracted before `./lint` is built. `./format` and `./test` call one internal module, `src/project-roots.ts`, and `./lint` calls it too. The rule and the matcher of Nx below stay true.
+
 Seven workspaces run `node --test` through Nx: zukhruf, factory, whatisgoingon, deepagents, elt, context-compiler and text2sql. Each one copies the `test` target. The audit of 2026-10-29 found that only `--test` is the same in all copies:
 
 - `--no-warnings`: 5 of 7 repos.

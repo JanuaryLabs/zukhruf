@@ -9,10 +9,8 @@ import {
   createNodesFromFiles,
   readJsonFile,
 } from '@nx/devkit';
-import {
-  buildPackageJsonPatterns,
-  buildPackageJsonWorkspacesMatcher,
-} from '@nx/devkit/internal';
+
+import { projectRootFiles } from '../project-roots.ts';
 
 export interface TestOptions {
   timeout?: number;
@@ -28,8 +26,7 @@ const ownGlobalSetup = 'src/testing/docker-global-setup.ts';
  * Gives the `test` target, a `node --test` run, to each project root that
  * owns test files and is not a Vitest project (ADR 0004). A project with the
  * tag `test:docker` also gets the global setup of `@zukhruf/testing` (ADR
- * 0005). The project roots are the roots of `./format`: a copy of its rule,
- * on the record in docs/copied-code.md.
+ * 0005).
  */
 export const createNodes: CreateNodes<TestOptions> = [
   '{package.json,**/package.json,project.json,**/project.json,**/*.test.{ts,mts,cts,js,mjs},**/{vite,vitest}.config.{js,ts,mjs,mts,cjs,cts}}',
@@ -40,21 +37,7 @@ export const createNodes: CreateNodes<TestOptions> = [
     const configFiles = files.filter((file) =>
       ['package.json', 'project.json'].includes(basename(file)),
     );
-    const projectJsonRoots = new Set(
-      configFiles
-        .filter((file) => basename(file) === 'project.json')
-        .map((file) => dirname(file)),
-    );
-    const isInWorkspaces = buildPackageJsonWorkspacesMatcher(
-      buildPackageJsonPatterns(context.workspaceRoot, (file: string) =>
-        readJsonFile(join(context.workspaceRoot, file)),
-      ),
-    );
-    const rootFiles = configFiles.filter((file) =>
-      basename(file) === 'project.json'
-        ? true
-        : !projectJsonRoots.has(dirname(file)) && isInWorkspaces(file),
-    );
+    const rootFiles = projectRootFiles(configFiles, context.workspaceRoot);
     const roots = new Set(rootFiles.map((file) => dirname(file)));
     const owned = new Map<string, string[]>();
     for (const file of files.filter((file) => testFile.test(file))) {

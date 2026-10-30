@@ -1,44 +1,22 @@
-import { basename, dirname, isAbsolute, join, relative } from 'node:path';
+import { dirname, isAbsolute, join, relative } from 'node:path';
 
 import {
   type CreateNodes,
   type TargetConfiguration,
   createNodesFromFiles,
-  readJsonFile,
 } from '@nx/devkit';
-import {
-  buildPackageJsonPatterns,
-  buildPackageJsonWorkspacesMatcher,
-} from '@nx/devkit/internal';
 import { resolveConfig, resolveConfigFile } from 'prettier';
+
+import { projectRootFiles } from '../project-roots.ts';
 
 /**
  * Gives each Nx project `format` (writes) and `format:check` (only reads,
- * cached). Any root that a plugin returns becomes a project, and no plugin
- * hook receives the projects that Nx found. So the plugin selects roots with
- * the rule and the matcher of Nx's own package.json plugin: each folder with a
- * `project.json`, and a `package.json` folder only when the package-manager
- * workspace globs match it. It returns targets only; the default plugins name
- * the project.
+ * cached). It returns targets only; the default plugins name the project.
  */
 export const createNodes: CreateNodes = [
   '{package.json,**/package.json,project.json,**/project.json}',
   async (configFiles, options, context) => {
-    const projectJsonRoots = new Set(
-      configFiles
-        .filter((file) => basename(file) === 'project.json')
-        .map((file) => dirname(file)),
-    );
-    const isInWorkspaces = buildPackageJsonWorkspacesMatcher(
-      buildPackageJsonPatterns(context.workspaceRoot, (file: string) =>
-        readJsonFile(join(context.workspaceRoot, file)),
-      ),
-    );
-    const rootFiles = configFiles.filter((file) =>
-      basename(file) === 'project.json'
-        ? true
-        : !projectJsonRoots.has(dirname(file)) && isInWorkspaces(file),
-    );
+    const rootFiles = projectRootFiles(configFiles, context.workspaceRoot);
     const formatCheck: TargetConfiguration = {
       command: 'prettier --check {projectRoot}',
       cache: true,
