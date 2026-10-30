@@ -1,6 +1,6 @@
 {
   "name": "@zukhruf/mteb",
-  "version": "0.3.58",
+  "version": "0.4.0",
   "description": "A TypeScript port of the MTEB evaluation engine (Massive Text Embedding Benchmark, version 2.26.28): tasks, evaluators, metrics, search, results and the result cache. Retrieval and reranking first; the encoder is an AI SDK embedding model.",
   "license": "Apache-2.0",
   "private": true,
@@ -53,6 +53,6 @@
   "devDependencies": {
     "@ai-sdk/openai-compatible": "3.0.79",
     "@ai-sdk/provider": "^4.0.34",
-    "@zukhruf/testing": "^0.3.46"
+    "@zukhruf/testing": "^0.4.0"
   }
 }
