@@ -115,6 +115,50 @@ console.log(result.taskResults[0]?.scores.test?.[0]?.main_score);
 
 `k1` and `b` are the keyword arguments of `loadModel`, as in MTEB. They are experiment arguments, so `bm25S.loadModel({ k1: 1.2 })` keeps its results apart from the results of the defaults (`k1` 1.5, `b` 0.75). The search model supports English only: a task in another language stops with an error.
 
+## Hybrid search: BM25 with an embedding model
+
+BM25 finds the documents that share words with the query. An encoder finds the documents with a similar meaning. A hybrid search uses both and fuses their scores. `HybridSearch` is MTEB's hybrid search. Give it two or more models: an encoder or a search model.
+
+```ts
+import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
+
+import {
+  HybridSearch,
+  ResultCache,
+  bm25S,
+  evaluate,
+  qwen3Embedding0B6,
+} from '@zukhruf/mteb';
+
+const llamaCpp = createOpenAICompatible({
+  name: 'llama.cpp',
+  baseURL: 'http://127.0.0.1:8080/v1',
+});
+const hybrid = new HybridSearch({
+  models: [
+    bm25S.loadModel(),
+    qwen3Embedding0B6.loadModel({
+      model: llamaCpp.embeddingModel('qwen3-embedding-0.6b'),
+    }),
+  ],
+  fusionStrategy: 'rrf',
+});
+const result = await evaluate(hybrid, new Faq(), {
+  cache: new ResultCache('mteb-results'),
+});
+```
+
+Each model finds the best `subModelTopK` documents of each query (100 by default, or `topK` of the search when it is greater). Then the fusion gives each document one score:
+
+- `'rrf'` (the default): Reciprocal Rank Fusion. Each model adds `weight / (rrfK + rank)`. `rrfK` is 60 by default.
+- `'dbsf'`: Distribution-Based Score Fusion. Each model places its scores between the mean minus 3 standard deviations and the mean plus 3 standard deviations, and clips them to 0 to 1.
+- `'rsf'`: Relative Score Fusion. Each model places its scores between its lowest and its highest score.
+- A function of your own, with the type `FusionFunction`.
+
+`weights` gives one weight to each model. By default, each model has the same weight. The fused scores are the scores of MTEB to the last bit.
+
+The hybrid has the name `mteb/baseline-hybrid-<fusion>-<names>`. The names are the last parts of the model names, so the hybrid above is `mteb/baseline-hybrid-rrf-baseline-bm25s-Qwen3-Embedding-0.6B`. The result cache keeps the result of the hybrid under this name, and a table shows it in a column with this name. The name does not include the experiment arguments of the models, as in MTEB. Thus two hybrids of the same models with different `k1` values have one result in the cache.
+
 ## Compare models on MTEB's tasks
 
 A ported model gives its encoder through `loadModel`, with the AI SDK embedding model of a server that serves its weights. The encoder adds the prompts that MTEB's numbers used, so the scores can be compared with MTEB's leaderboard.

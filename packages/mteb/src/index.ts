@@ -30,6 +30,15 @@ export {
   type AiSdkEncoderOptions,
 } from './models/ai-sdk-encoder.ts';
 export { AiSdkTextEncoder } from './models/ai-sdk-text-encoder.ts';
+export {
+  type FusionFunction,
+  type FusionStrategy,
+  HybridSearch,
+  type HybridSearchOptions,
+  fuseDbsf,
+  fuseRelativeScoreFusion,
+  fuseRrf,
+} from './models/hybrid-wrappers.ts';
 export { InstructAiSdkEncoder } from './models/instruct-wrapper.ts';
 export {
   BM25Search,
