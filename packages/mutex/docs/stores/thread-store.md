@@ -98,7 +98,7 @@ The token sources come from `@zukhruf/fencing`, for example `import { CounterTok
 ## Evidence
 
 - A message round trip between the main thread and a worker took 8.7 µs on average.
-- `src/mutex/mutex.test.ts` (`Cross-thread mutex with ThreadStore`):
+- `src/mutex/cross-thread.test.ts` (`Cross-thread mutex with ThreadStore`):
   - A thread waits while another thread holds the key.
   - A thread that stops while it holds the key does not block the next caller.
   - A thread whose only work is to wait for a key stays alive and gets it.

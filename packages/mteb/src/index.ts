@@ -83,6 +83,7 @@ export {
   type ToDataFrameOptions,
 } from './results/model-result.ts';
 export { type TaskError, TaskResult } from './results/task-result.ts';
+export { holm } from './significance/holm.ts';
 export { perQueryScores } from './significance/per-query-scores.ts';
 export {
   type ChangeVerdict,

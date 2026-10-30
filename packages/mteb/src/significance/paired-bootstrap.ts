@@ -6,12 +6,14 @@ import { compareStrings } from '../dependencies/python.ts';
 
 // The verdict of a paired bootstrap test on a change and its baseline.
 // observed is the mean of (change - baseline) over the queries, and low and
-// high are the bounds of its 95% percentile interval.
+// high are the bounds of its 95% percentile interval. p is the two-sided
+// percentile-bootstrap p-value of the same replicates.
 export type ChangeVerdict = {
   readonly result: 'better' | 'worse' | 'inconclusive';
   readonly observed: number;
   readonly low: number;
   readonly high: number;
+  readonly p: number;
   readonly queries: number;
   readonly replicates: number;
   readonly seed: number;
@@ -24,7 +26,9 @@ const SEED = 31957;
 // 2006 for retrieval): each replicate draws as many queries as there are,
 // with replacement, and takes the mean of their differences. The change is
 // better when the whole interval is above 0, worse when it is below 0, and
-// inconclusive else. The differences are in the order of the sorted query
+// inconclusive else. p is twice the smaller share of replicate means at or
+// below 0 and at or above 0, at most 1, so p < 0.05 agrees with the 95%
+// interval but for its interpolation. The differences are in the order of the sorted query
 // ids, and the replicates are those of numpy.random.default_rng(seed).
 export function pairedBootstrapTest(
   baseline: ReadonlyMap<string, number>,
@@ -55,6 +59,16 @@ export function pairedBootstrapTest(
   ).toSorted((a, b) => a - b);
   const low = percentile(means, 2.5);
   const high = percentile(means, 97.5);
+  const share = (side: (value: number) => boolean) =>
+    means.filter(side).length / replicates;
+  const p = Math.min(
+    1,
+    2 *
+      Math.min(
+        share((value) => value <= 0),
+        share((value) => value >= 0),
+      ),
+  );
   let result: ChangeVerdict['result'] = 'inconclusive';
   if (low > 0) result = 'better';
   else if (high < 0) result = 'worse';
@@ -63,6 +77,7 @@ export function pairedBootstrapTest(
     observed: mean(differences),
     low,
     high,
+    p,
     queries: queries.length,
     replicates,
     seed,

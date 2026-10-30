@@ -11,6 +11,7 @@ import { percentile } from '../dependencies/numpy.ts';
 import { pythonRound, pythonSum } from '../dependencies/python.ts';
 import { evaluate } from '../evaluate.ts';
 import { bm25S } from '../models/model-implementations/bm25.ts';
+import { holm } from './holm.ts';
 import { type ChangeVerdict, pairedBootstrapTest } from './paired-bootstrap.ts';
 import { perQueryScores } from './per-query-scores.ts';
 
@@ -18,7 +19,8 @@ import { perQueryScores } from './per-query-scores.ts';
 // for the folder task of the BM25 fixture with mteb/baseline-bm25s (the
 // default settings and k1=1.2, b=0.5): the main score and the ndcg_cut_10 of
 // each query, and the paired bootstrap of the two in NumPy. It also holds
-// the bootstrap of synthetic pairs and np.percentile of a few arrays.
+// the bootstrap of synthetic pairs, np.percentile of a few arrays, and the
+// Holm adjusted p-values of statsmodels 0.15.0 for a few p vectors.
 // fixtures/generate.py makes it. A float that JSON cannot hold is a string.
 type JsonNumber = number | string;
 
@@ -27,6 +29,7 @@ type Verdict = {
   readonly observed: JsonNumber;
   readonly low: JsonNumber;
   readonly high: JsonNumber;
+  readonly p: JsonNumber;
   readonly queries: number;
   readonly replicates: number;
   readonly seed: number;
@@ -53,6 +56,11 @@ type Expected = {
     readonly sorted: number[];
     readonly q: number[];
     readonly values: number[];
+  }[];
+  readonly holm: readonly {
+    readonly case: string;
+    readonly p: number[];
+    readonly adjusted: number[];
   }[];
 };
 
@@ -90,6 +98,7 @@ function plain(verdict: Verdict): ChangeVerdict {
     observed: value(verdict.observed),
     low: value(verdict.low),
     high: value(verdict.high),
+    p: value(verdict.p),
   };
 }
 
@@ -141,7 +150,7 @@ test('perQueryScores gives the ndcg_cut_10 of each query that MTEB gives for BM2
   );
 });
 
-test('the paired bootstrap test of BM25 and BM25 with k1 1.2 and b 0.5 gives the interval and the result of NumPy, to the last bit', () => {
+test('the paired bootstrap test of BM25 and BM25 with k1 1.2 and b 0.5 gives the interval, the p and the result of NumPy, to the last bit', () => {
   const { baseline, change, verdict } = expected.bm25;
 
   const actual = pairedBootstrapTest(
@@ -153,7 +162,7 @@ test('the paired bootstrap test of BM25 and BM25 with k1 1.2 and b 0.5 gives the
 });
 
 for (const synthetic of expected.synthetic)
-  test(`the paired bootstrap test of "${synthetic.case}" gives the interval and the result of NumPy, to the last bit`, () => {
+  test(`the paired bootstrap test of "${synthetic.case}" gives the interval, the p and the result of NumPy, to the last bit`, () => {
     const { seed, replicates } = synthetic.verdict;
 
     const actual = pairedBootstrapTest(
@@ -175,6 +184,13 @@ test('a percentile interpolates as np.percentile, to the last bit', () => {
     expected.percentiles.map(({ values }) => values),
   );
 });
+
+for (const { case: name, p, adjusted } of expected.holm)
+  test(`holm adjusts the p-values of "${name}" as multipletests of statsmodels with method holm, to the last bit`, () => {
+    const actual = holm(p);
+
+    assert.deepEqual(actual, adjusted);
+  });
 
 test('a paired bootstrap test refuses a baseline and a change with different queries', () => {
   const baseline = new Map([

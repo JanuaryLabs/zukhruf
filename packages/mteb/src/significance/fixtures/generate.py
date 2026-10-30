@@ -1,15 +1,17 @@
 # /// script
 # requires-python = "==3.12.9"
-# dependencies = ["mteb==2.26.28", "bm25s==0.3.16", "PyStemmer==3.1.0", "numpy==2.5.4", "torch==2.14.1", "datasets==5.1.0"]
+# dependencies = ["mteb==2.26.28", "bm25s==0.3.16", "PyStemmer==3.1.0", "numpy==2.5.4", "torch==2.14.1", "datasets==5.1.0", "statsmodels==0.15.0"]
 # ///
-# Makes the fixture of paired-bootstrap.golden.test.ts with Python MTEB and
-# NumPy: uv run packages/mteb/src/significance/fixtures/generate.py
+# Makes the fixture of paired-bootstrap.golden.test.ts with Python MTEB,
+# NumPy and statsmodels: uv run packages/mteb/src/significance/fixtures/generate.py
 #
 # MTEB has no significance test, so the bootstrap here is plain NumPy:
 # default_rng(seed).integers(0, n, n) for each replicate, np.mean of the
 # differences it draws, and np.percentile(..., [2.5, 97.5]) of the replicate
 # means. The differences are change - baseline, in the order of the sorted
-# query ids.
+# query ids. The p of a bootstrap is the two-sided percentile-bootstrap p of
+# the same replicate means (Efron and Tibshirani 1993):
+# min(1, 2 * min(np.mean(means <= 0), np.mean(means >= 0))).
 #
 # It writes expected.json:
 # - for mteb/baseline-bm25s with the default settings (the baseline) and with
@@ -21,7 +23,11 @@
 # - the bootstrap of synthetic pairs: all differences 0, all above 0, all
 #   below 0, one query, and query ids whose Python order is not the order of
 #   UTF-16 code units, with another seed and number of replicates;
-# - np.percentile of a few arrays at 11 percentiles.
+# - np.percentile of a few arrays at 11 percentiles;
+# - the Holm adjusted p-values of statsmodels' multipletests(method="holm")
+#   for a few p vectors: one value, values out of order, equal values, values
+#   that come out above 1, values whose adjusted order needs the running
+#   maximum, the p of each bootstrap above, and 28 random values.
 # Never edit expected.json by hand: run this script again. A float that JSON
 # cannot hold is a string.
 import importlib.metadata
@@ -46,12 +52,14 @@ VERSIONS = {
     "PyStemmer": "3.1.0",
     "numpy": "2.5.4",
     "datasets": "5.1.0",
+    "statsmodels": "0.15.0",
 }
 for name, version in VERSIONS.items():
     assert importlib.metadata.version(name) == version, (name, importlib.metadata.version(name))
 assert platform.python_version() == "3.12.9", platform.python_version()
 
 import numpy as np  # noqa: E402
+from statsmodels.stats.multitest import multipletests  # noqa: E402
 
 HERE = Path(__file__).resolve().parent
 BM25_FOLDER = HERE.parent.parent / "models" / "model-implementations" / "fixtures" / "bm25"
@@ -73,12 +81,14 @@ def bootstrap(baseline: dict[str, float], change: dict[str, float], seed: int, r
     generator = np.random.default_rng(seed)
     means = np.array([np.mean(differences[generator.integers(0, n, n)]) for _ in range(replicates)])
     low, high = np.percentile(means, [2.5, 97.5])
+    p = min(1.0, 2.0 * min(float(np.mean(means <= 0)), float(np.mean(means >= 0))))
     observed = float(np.mean(differences))
     result = "better" if low > 0 else "worse" if high < 0 else "inconclusive"
     return {
         "observed": number(observed),
         "low": number(float(low)),
         "high": number(float(high)),
+        "p": number(p),
         "result": result,
         "queries": n,
         "replicates": replicates,
@@ -117,6 +127,16 @@ PERCENTILES = [
     sorted(rng.uniform(-1.0, 1.0) for _ in range(2000)),
     *(sorted(rng.uniform(-1.0, 1.0) for _ in range(n)) for n in (3, 7, 50, 333)),
 ]
+# (case, p-values) for holm.
+HOLM = [
+    ("one value", [0.03]),
+    ("out of order", [0.04, 0.001, 0.03, 0.2, 0.01]),
+    ("equal values", [0.01, 0.02, 0.01, 0.02, 0.5, 0.01]),
+    ("above 1", [0.6, 0.4, 0.9, 0.35]),
+    ("running maximum", [0.01, 0.012, 0.3, 0.0125]),
+    ("28 random", [rng.uniform(0.0, 0.1) if i % 3 == 0 else rng.uniform(0.0, 1.0) for i in range(28)]),
+]
+
 QUANTILES = [0.0, 2.5, 10.0, 25.0, 33.3, 50.0, 66.7, 75.0, 90.0, 97.5, 100.0]
 
 # The datasets library keeps the Arrow files of a local dataset in its cache.
@@ -163,10 +183,23 @@ with tempfile.TemporaryDirectory() as cache:
     baseline_main, baseline = per_query(bm25_s.load_model())
     change_main, change = per_query(bm25_s.load_model(k1=1.2, b=0.5))
 
+bm25_verdict = bootstrap(baseline, change, SEED, REPLICATES)
+synthetic = [
+    {
+        "case": case,
+        "baseline": list(left.items()),
+        "change": list(right.items()),
+        "verdict": bootstrap(left, right, seed, replicates),
+    }
+    for case, left, right, seed, replicates in SYNTHETIC
+]
+HOLM.insert(5, ("bootstrap p", [bm25_verdict["p"], *(case["verdict"]["p"] for case in synthetic)]))
+
 generator = (
     f"generate.py: mteb {VERSIONS['mteb']}, bm25s {VERSIONS['bm25s']}, "
     f"PyStemmer {VERSIONS['PyStemmer']}, numpy {VERSIONS['numpy']}, "
-    f"datasets {VERSIONS['datasets']}, CPython {platform.python_version()}"
+    f"datasets {VERSIONS['datasets']}, statsmodels {VERSIONS['statsmodels']}, "
+    f"CPython {platform.python_version()}"
 )
 (HERE / "expected.json").write_text(
     json.dumps(
@@ -175,20 +208,16 @@ generator = (
             "bm25": {
                 "baseline": {"main_score": baseline_main, "per_query": baseline},
                 "change": {"main_score": change_main, "per_query": change},
-                "verdict": bootstrap(baseline, change, SEED, REPLICATES),
+                "verdict": bm25_verdict,
             },
-            "synthetic": [
-                {
-                    "case": case,
-                    "baseline": list(left.items()),
-                    "change": list(right.items()),
-                    "verdict": bootstrap(left, right, seed, replicates),
-                }
-                for case, left, right, seed, replicates in SYNTHETIC
-            ],
+            "synthetic": synthetic,
             "percentiles": [
                 {"sorted": values, "q": QUANTILES, "values": [float(v) for v in np.percentile(values, QUANTILES)]}
                 for values in PERCENTILES
+            ],
+            "holm": [
+                {"case": case, "p": p, "adjusted": [float(v) for v in multipletests(p, method="holm")[1]]}
+                for case, p in HOLM
             ],
         },
         ensure_ascii=False,
@@ -197,4 +226,4 @@ generator = (
     + "\n",
     encoding="utf-8",
 )
-print(f"{generator}: {len(baseline)} queries, {len(SYNTHETIC)} synthetic cases", file=sys.stderr)
+print(f"{generator}: {len(baseline)} queries, {len(SYNTHETIC)} synthetic cases, {len(HOLM)} holm cases", file=sys.stderr)

@@ -184,6 +184,9 @@ export function bm25Loader(
 ): BM25Search {
   return new BM25Search(options);
 }
+// model_meta.json names a loader by MTEB's __name__, and MTEB finds the loader
+// in its registry by that name.
+Object.defineProperty(bm25Loader, 'name', { value: 'bm25_loader' });
 
 const BM25_CITATION = `@misc{bm25s,
       title={BM25S: Orders of magnitude faster lexical search via eager sparse scoring},

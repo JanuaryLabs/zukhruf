@@ -92,7 +92,7 @@ The token sources come from `@zukhruf/fencing`, for example `import { CounterTok
 ## Evidence
 
 - The parent saw the channel close 0.96 ms after a child got `SIGKILL`. The next waiter got the key 1.7 ms after the `SIGKILL`.
-- The single-process and cross-process tests in `src/mutex/mutex.test.ts` run against `IpcStore`.
+- The single-process tests in `src/mutex/mutex.test.ts` and the cross-process tests in `src/mutex/cross-process.test.ts` run against `IpcStore`.
 - `Process-tree mutex with IpcStore`: a child that waits gets `CoordinatorUnavailableError` when its parent stops.
 - `A worker or child whose token cannot be minted`: a child gets `GrantFailedError` for a failed token, takes another key, and that key is free after the child exits.
 - A child that uses `IpcStore` stops by itself after its work, with exit code 0.
