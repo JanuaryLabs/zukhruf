@@ -1,6 +1,6 @@
 {
   "name": "@zukhruf/relevance-filtering",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "Ranks a stream of articles for a reader's profile through a scorer port (a decision model, or embedding similarity calibrated on the reader's answers), with thresholds that turn the probabilities into yes or no.",
   "license": "MIT",
   "repository": {
@@ -44,6 +44,6 @@
   },
   "devDependencies": {
     "@stdlib/blas-ext-base-gsumpw": "^0.3.1",
-    "@zukhruf/embeddings": "^0.5.0"
+    "@zukhruf/embeddings": "^0.5.1"
   }
 }
