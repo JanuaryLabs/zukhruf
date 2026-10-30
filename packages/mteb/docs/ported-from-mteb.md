@@ -41,7 +41,8 @@ The first step ports the core and the retrieval and reranking tasks, for text. T
 | `cache/result_cache.py` (local folder)                                                              | `cache/result-cache.ts`                                 |
 | `evaluate.py`                                                                                       | `evaluate.ts`                                           |
 | pytrec_eval 0.5.11 (`RelevanceEvaluator`, trec_eval)                                                | `dependencies/pytrec-eval.ts`                           |
-| NumPy 2.5.4 (pairwise sum, mean, std, argsort, linspace)                                            | `dependencies/numpy.ts`                                 |
+| NumPy 2.5.4 (pairwise sum, mean, std, argsort, linspace, percentile)                                | `dependencies/numpy.ts`                                 |
+| NumPy 2 (`default_rng(seed).integers`: SeedSequence, PCG64, Lemire's bounded integers)              | `dependencies/numpy-random.ts`                          |
 | pandas 3.1.0 (`DataFrame`, `explode`, `pivot_table`, `groupby` mean)                                | `dependencies/pandas.ts`                                |
 | scikit-learn 1.9.1 (`sklearn.metrics.auc`)                                                          | `dependencies/sklearn.ts`                               |
 | packaging 26.3 (`packaging.version.Version`)                                                        | `dependencies/packaging.ts`                             |
@@ -96,6 +97,15 @@ The first step ports the core and the retrieval and reranking tasks, for text. T
 - MTEB treats a result folder as an experiment when any part of its absolute path is `experiments` (`"experiments" in path.parts`). So a cache below a folder such as `~/Desktop/experiments` reads its results as experiments. This package looks for `experiments` only in the folder layout below `results/`.
 - pytrec_eval keeps the relevance of the last query in a static cache (`form_res_rels.c`). When one call ends with the query id that the next call starts with, the next call reads the old relevance. This package computes each call again. For a query whose judgments are all negative, trec_eval keeps the number of relevance levels of the query before it; here such a query has no levels.
 
+## Not from MTEB
+
+MTEB has no significance test. The modules in `src/significance/` are not a port, and they have no Python source module in MTEB. A change in MTEB does not change them.
+
+- `significance/per-query-scores.ts` (`perQueryScores`): the value of a score for each query, from the predictions file that `evaluate` writes. It calls `calculateRetrievalScores` of `evaluators/retrieval-metrics.ts`, and does not export it. The predictions file holds only the queries that the evaluation scored (the queries with a relevant document), and `perQueryScores` applies `ignoreIdenticalIds` and `skipFirstResult`, as `AbsTaskRetrieval` does, so the mean of the values, rounded to 5 digits, is the score in the result. `abstasks/retrieval.ts` exports its schema of the predictions file (`predictionsFile`) for it.
+- `significance/paired-bootstrap.ts` (`pairedBootstrapTest`): the paired bootstrap test over queries (Efron and Tibshirani 1993; Sakai 2006 for retrieval). The replicates are those of `numpy.random.default_rng(seed)`, the means are NumPy means, and the interval is `np.percentile(..., [2.5, 97.5])`. Thus a verdict is the verdict of the same test in NumPy, to the last bit.
+
+The test and its generator are copies of code from other packages of this repository. See [copied-code.md](./copied-code.md).
+
 ## Behavior kept from MTEB on purpose
 
 - `OpenAIAPIEncodeWrapper` finds the prompt name in `model_prompts`, which it never sets, so `prompt_dict` alone gives no prompt. `AiSdkEncoder` does the same, so both give the same embeddings for the same options.
@@ -115,6 +125,8 @@ Two pydantic rules have two copies each: the alias of a field (`eval_langs` to `
 `src/models/fixtures/hybrid/` holds what MTEB 2.26.28 gave for its three fusions and for `HybridSearch`. The fusions get score maps with equal scores, equal scores only, an empty map, one document, negative scores, outliers, a large mean, uneven weights and three models, with `rrf_k` 60 and 0. Five hybrids search the folder task of the BM25 fixture: BM25 with BM25 (`k1` 1.2, `b` 0.5) for each fusion and for a fusion function, and BM25 with a one-hot encoder. The one-hot encoder makes each cosine exactly 0 or 1. `hybrid.golden.test.ts` requires the same fused scores in the same order, the same search results and the same main scores, to the last bit. `generate.py` writes `expected.json`: run `uv run packages/mteb/src/models/fixtures/hybrid/generate.py`, and do not edit `expected.json` by hand.
 
 `src/results/fixtures/to-dataframe/` holds a result cache that MTEB 2.26.28 wrote and each table that MTEB with pandas 3.1.0 and NumPy 2.5.4 made of it: 3 models, one with 2 revisions and one with an experiment, 3 tasks, 3 splits, a subset of 2 languages, a subset without a language, a NaN main score and a main score of None. `to-dataframe.golden.test.ts` requires the same tables to the last bit: each aggregation level, format and revision option for each model result and for the benchmark results, two tables with `np.max`, and the aggregated scores. `generate.py` writes the cache and `expected.json`: run `uv run packages/mteb/src/results/fixtures/to-dataframe/generate.py`, and do not edit `expected.json` by hand.
+
+`src/significance/fixtures/` holds what MTEB 2.26.28 and NumPy 2.5.4 gave for the folder task of the BM25 fixture with `mteb/baseline-bm25s`, once with the default settings and once with `k1` 1.2 and `b` 0.5: the main score of `mteb.evaluate`, the `ndcg_cut_10` of each query that `calculate_retrieval_scores` gives for the predictions file, and a paired bootstrap test of the two in NumPy. It also holds the bootstrap of synthetic pairs (all differences 0, all above 0, all below 0, one query, and query ids whose Python order is not the order of UTF-16 code units, with another seed and number of replicates) and `np.percentile` of 8 arrays at 11 percentiles. `paired-bootstrap.golden.test.ts` requires the same values, intervals and results, to the last bit. `generate.py` writes `expected.json`: run `uv run packages/mteb/src/significance/fixtures/generate.py`, and do not edit `expected.json` by hand.
 
 On 2026-10-28, a retrieval task on the event-detection sets gvc and anthropic-outlets ran with EmbeddingGemma 2 on llama.cpp, once with MTEB and once with this package. All 112 scores of each set, the nAUC values among them, were equal.
 

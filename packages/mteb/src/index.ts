@@ -83,6 +83,11 @@ export {
   type ToDataFrameOptions,
 } from './results/model-result.ts';
 export { type TaskError, TaskResult } from './results/task-result.ts';
+export { perQueryScores } from './significance/per-query-scores.ts';
+export {
+  type ChangeVerdict,
+  pairedBootstrapTest,
+} from './significance/paired-bootstrap.ts';
 export { cosSim, dotScore } from './similarity-functions.ts';
 export { type PhaseTiming, TimingStack } from './timing.ts';
 export { ArguAna } from './tasks/retrieval/eng/argu-ana-retrieval.ts';

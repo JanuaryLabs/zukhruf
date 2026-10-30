@@ -37,7 +37,7 @@ export type RetrievalSplitData = {
 
 // The predictions file of a task: the model, and the score of each document
 // of each query, by subset and split.
-const predictionsFile = z
+export const predictionsFile = z
   .object({
     mteb_model_meta: z.record(z.string(), z.json()),
   })

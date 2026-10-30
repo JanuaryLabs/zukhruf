@@ -263,3 +263,54 @@ console.log(results.getAggregatedScores({ includeExperiments: true }));
 The wide table has a second column level, `experiment`, below the model name. The experiment of the default run is `""`. The long table has an `experiment` column. `getAggregatedScores({ includeExperiments: true })` gives the means of each model by experiment: `{ [model]: { [experiment]: { 'Mean(Task)', 'Mean(TaskType)' } } }`. The column of each experiment has the scores that MTEB gives for the results of that experiment alone, but for the last bit of a mean. MTEB has no such option. Without it, the table and the means are those of MTEB.
 
 `nx run mteb:table` prints the table and the means with the experiments.
+
+A table does not say if a difference is more than chance. See [Is the change real?](#is-the-change-real).
+
+## Is the change real?
+
+A table shows that a change scores higher or lower than its baseline. It does not show if the difference is more than chance: with other queries, the order can be the reverse. `pairedBootstrapTest` answers that question. MTEB has no such test.
+
+The test compares the score of each query, so it needs the predictions of each model. Give `evaluate` a `predictionFolder`, one folder for each model, because the file name is the name of the task. Use `overwriteStrategy: 'always'`: `evaluate` writes no predictions when it reads a result from the cache. Then `perQueryScores` gives the main score of each query, as the evaluation of the task calculates it.
+
+```ts
+import {
+  bm25S,
+  evaluate,
+  pairedBootstrapTest,
+  perQueryScores,
+} from '@zukhruf/mteb';
+
+const task = new Faq();
+await evaluate(bm25S.loadModel(), task, {
+  predictionFolder: 'predictions/baseline',
+  overwriteStrategy: 'always',
+});
+await evaluate(bm25S.loadModel({ k1: 1.2, b: 0.5 }), task, {
+  predictionFolder: 'predictions/change',
+  overwriteStrategy: 'always',
+});
+
+const verdict = pairedBootstrapTest(
+  await perQueryScores(task, 'predictions/baseline'),
+  await perQueryScores(task, 'predictions/change'),
+);
+console.log(verdict);
+```
+
+```
+{
+  result: 'inconclusive',
+  observed: -0.0004332032713899203,
+  low: -0.013840414128031475,
+  high: 0.01024766985882517,
+  queries: 20,
+  replicates: 2000,
+  seed: 31957
+}
+```
+
+`observed` is the mean of (change - baseline) over the queries. `low` and `high` are the bounds of its 95% interval. The test draws as many queries as there are, with replacement, 2000 times, and takes the mean difference of each draw (a paired bootstrap test, Efron and Tibshirani 1993). The result is `better` when `low` is above 0, `worse` when `high` is below 0, and `inconclusive` when the interval contains 0. The output above is for the 20 queries of the BM25 fixture (`src/models/model-implementations/fixtures/bm25/`), not for a real task.
+
+The seed is fixed, so the same scores give the same verdict. `replicates` and `seed` are options. `perQueryScores` takes `split`, `subset` and `score` options; a score must have a value for each query, such as `ndcg_at_10` or `recall_at_100`. The test refuses a baseline and a change with different queries.
+
+With few queries, the interval is wide, and most changes are `inconclusive`. Add queries to the task to make the test stronger. To try more changes on the same queries does not help.

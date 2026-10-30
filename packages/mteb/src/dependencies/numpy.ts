@@ -90,3 +90,15 @@ export function linspace(start: number, stop: number, num: number): number[] {
     index === num - 1 && num > 1 ? stop : index * step + start,
   );
 }
+
+// np.percentile(values, q) with the default method "linear", for values
+// sorted in increasing order.
+export function percentile(sorted: readonly number[], q: number): number {
+  const position = (sorted.length - 1) * (q / 100);
+  const below = Math.floor(position);
+  const a = sorted[below] ?? Number.NaN;
+  const b = sorted[Math.min(below + 1, sorted.length - 1)] ?? Number.NaN;
+  const t = position - below;
+  const difference = b - a;
+  return t >= 0.5 ? b - difference * (1 - t) : a + difference * t;
+}
