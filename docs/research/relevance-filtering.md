@@ -6,7 +6,7 @@ Read this record before you change the design, add a profile type, or start a ne
 
 Status on 2026-10-29: DONE. The ranker desc+kw passed the sealed exam (MAP 0.867 against the keyword list's 0.649, interval of the difference +0.105 to +0.331; commit 31698d2). The package `@zukhruf/relevance-filtering` ranks each profile's stream through `ranked()`; its yes/no threshold is kept but not recommended. The exam is a regression set now.
 
-Status on 2026-10-30: round 13 found a better ranker, the decision model d1-2B (MAP 0.924 against desc+kw's 0.782 on January to March 2025). The package does not use it yet: its port for more than one ranker waits for the maintainer's approval (#3383).
+Status on 2026-10-30: round 13 found a better ranker, the decision model d1-2B (MAP 0.924 against desc+kw's 0.782 on January to March 2025), and round 14 found the same lead with an answer key from a second model family. The package does not use it yet: its port for more than one ranker waits for the maintainer's approval (#3383).
 
 ## Words in this record
 
@@ -121,6 +121,14 @@ On this slice, the probabilities of d1 are also calibrated. A fixed threshold of
 
 The cost is time. One call with all 16 questions takes 3.45 s (median) on the Mac mini, so the 1,370 articles took 82 minutes. One day of the stream (about 15 articles) takes less than one minute. desc+kw needs only one embedding for each article. The plans are `round-12/plan.json` (sha256 `090198db…`) and `round-13/plan.json` (`7859cb7c…`). Limitation 16 applies to this result.
 
+## Round 14 (2026-10-30): the lead holds with a second answer key
+
+Limitation 16 says that an answer key from a language model can prefer a language-model ranker. Round 14 (`round-14/selection-rule.json`, sha256 `08e4956e…`) asked if d1's lead holds when a second model family writes the key. Four blind annotators of OpenAI's family (the Codex CLI) labelled all of fresh-5 again, with the same rule and the same brief (`round-14/labels-gpt.json`, `4bd63834…`). The orders of the rankers do not change; only the labels change.
+
+The lead holds. On the new key, 12 profiles have at least 20 relevant articles. d1 has MAP 0.808 against desc+kw's 0.634 (interval +0.094 to +0.278), and d1 is better on each of the 12 profiles. The daily recall is 0.941 against 0.884 (+0.013 to +0.114). The two keys mostly agree on the strict relevant articles (Cohen's kappa 0.78 to 1.00 for 10 profiles). Where they differ, the second key usually includes more: coding has 62 relevant articles against 17, jobs 23 against 7, and chips 91 against 49.
+
+The calibration of d1 changed more than its ranking. The macro Brier skill is +0.356 on the new key, against +0.726 on the first key, and health has −1.61. A probability is calibrated to one boundary of relevance, and the two keys draw the boundary in different places. The plan is `round-14/plan.json` (`6939f5f8…`).
+
 ## Limitations
 
 ### 1. A realistic stream has few relevant articles
@@ -213,9 +221,9 @@ The cost is time. One call with all 16 questions takes 3.45 s (median) on the Ma
 
 ### 16. An answer key from a language model can prefer a language-model ranker
 
-**What happens.** In each round, the annotators are an AI model (Claude Opus 5.5). d1 is also a language model, and round 13 asks it the main-subject question of the labelling rule. Studies of relevance labels from language models warn that such labels can agree more with a language-model ranker than human labels do (Faggioli et al., ICTIR 2023; Clarke and Dietz 2024). Part of d1's lead can come from this effect. No person labelled fresh-5.
+**What happens.** In each round, the annotators are an AI model (Claude Opus 5.5). d1 is also a language model, and round 13 asks it the main-subject question of the labelling rule. Studies of relevance labels from language models warn that such labels can agree more with a language-model ranker than human labels do (Faggioli et al., ICTIR 2023; Clarke and Dietz 2024). Part of d1's lead can come from this effect. No person labelled fresh-5. Round 14 removed one part of the risk: with a key from a second model family, d1's lead holds. A bias that all language models share stays possible.
 
-**Before you change it.** Before the package depends on d1 alone, let a person label a random sample of fresh-5, and compare the MAP of d1 and desc+kw on that sample.
+**Before you change it.** Before the package depends on d1 alone, let a person label a random sample of fresh-5, and compare the MAP of d1 and desc+kw on that sample. Do not use a fixed threshold on d1's probability: its calibration changed with the key (round 14).
 
 ## Rules for every round
 
