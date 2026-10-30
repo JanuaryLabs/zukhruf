@@ -6,12 +6,7 @@ import {
   Experimental_DecisionRefusalError,
 } from 'ai';
 
-import {
-  type Article,
-  DecisionScorer,
-  Profile,
-  UtilityThreshold,
-} from './index.ts';
+import { DecisionScorer, type Stream, UtilityThreshold } from './index.ts';
 
 // No decision model can run in a test, and ai/test has no mock decision
 // model. This stand-in is a decision model of the provider interface, under
@@ -59,20 +54,22 @@ function day(n: number): Date {
   return new Date(Date.UTC(2026, 9, n));
 }
 
-function article(id: string, text: string, published: number): Article {
-  return { id, publishedAt: day(published), text };
+// The stream in the order of the list: id, text and publish day.
+function stream(
+  ...articles: readonly (readonly [string, string, number])[]
+): Stream {
+  return new Map(
+    articles.map(([id, text, published]) => [
+      id,
+      { publishedAt: day(published), text },
+    ]),
+  );
 }
 
 // The chips profile of research round 13, whose question to d1-2B was
 // 'Is the main subject of this article: <description>?' word for word.
-const chips = new Profile({
-  name: 'chips',
-  description:
-    'New computer chips and AI hardware, and how chips are made and supplied.',
-  keywords: ['chip'],
-  relevant: ['an-answer'],
-  notRelevant: ['another-answer'],
-});
+const DESCRIPTION =
+  'New computer chips and AI hardware, and how chips are made and supplied.';
 const QUESTION =
   'Is the main subject of this article: New computer chips and AI hardware, and how chips are made and supplied.?';
 
@@ -88,14 +85,17 @@ describe('DecisionScorer', () => {
           ['A chip of paint falls off a bridge', 0.1],
         ]),
       ),
+      description: DESCRIPTION,
     });
 
-    const scores = await scorer.score(chips, [
-      article('paint', 'A chip of paint falls off a bridge', 10),
-      article('tsmc', 'TSMC raises chip output', 11),
-      article('gpu', 'Nvidia ships a new GPU', 12),
-      article('arizona', 'A chip plant opens in Arizona', 13),
-    ]);
+    const scores = await scorer.score(
+      stream(
+        ['paint', 'A chip of paint falls off a bridge', 10],
+        ['tsmc', 'TSMC raises chip output', 11],
+        ['gpu', 'Nvidia ships a new GPU', 12],
+        ['arizona', 'A chip plant opens in Arizona', 13],
+      ),
+    );
 
     assert.deepEqual(scores.ranked(), ['gpu', 'arizona', 'tsmc', 'paint']);
     assert.deepEqual(
@@ -118,16 +118,28 @@ describe('DecisionScorer', () => {
           ['A bank raises rates', 0.2],
         ]),
       ),
-    }).score(chips, [
-      article('gpu', 'Nvidia ships a new GPU', 10),
-      article('intel', 'Intel delays a chip', 11),
-      article('bank', 'A bank raises rates', 12),
-    ]);
+      description: DESCRIPTION,
+    }).score(
+      stream(
+        ['gpu', 'Nvidia ships a new GPU', 10],
+        ['intel', 'Intel delays a chip', 11],
+        ['bank', 'A bank raises rates', 12],
+      ),
+    );
 
     assert.deepEqual(
       scores.accepted(new UtilityThreshold({ falseAlarm: 1, miss: 3 })),
       ['gpu', 'intel'],
     );
+  });
+
+  test('an empty stream gives empty scores and asks the model nothing', async () => {
+    const scores = await new DecisionScorer({
+      model: model(QUESTION, new Map()),
+      description: DESCRIPTION,
+    }).score(new Map());
+
+    assert.deepEqual(scores.ranked(), []);
   });
 
   test('a question that the model refuses fails the score with the refusal error of the AI SDK, and does not rank the article', async () => {
@@ -139,13 +151,16 @@ describe('DecisionScorer', () => {
           ['A leaked chip roadmap', 'refusal'],
         ]),
       ),
+      description: DESCRIPTION,
     });
 
     await assert.rejects(
-      scorer.score(chips, [
-        article('gpu', 'Nvidia ships a new GPU', 10),
-        article('leak', 'A leaked chip roadmap', 11),
-      ]),
+      scorer.score(
+        stream(
+          ['gpu', 'Nvidia ships a new GPU', 10],
+          ['leak', 'A leaked chip roadmap', 11],
+        ),
+      ),
       Experimental_DecisionRefusalError,
     );
   });
@@ -160,23 +175,17 @@ describe('DecisionScorer', () => {
           ['A chip plant opens in Arizona', failure],
         ]),
       ),
+      description: DESCRIPTION,
     });
 
     await assert.rejects(
-      scorer.score(chips, [
-        article('gpu', 'Nvidia ships a new GPU', 10),
-        article('arizona', 'A chip plant opens in Arizona', 11),
-      ]),
+      scorer.score(
+        stream(
+          ['gpu', 'Nvidia ships a new GPU', 10],
+          ['arizona', 'A chip plant opens in Arizona', 11],
+        ),
+      ),
       (error) => error === failure,
     );
-  });
-
-  test('a stream with one id two times is a RangeError', async () => {
-    const scorer = new DecisionScorer({
-      model: model(QUESTION, new Map([['Nvidia ships a new GPU', 0.95]])),
-    });
-    const gpu = article('gpu', 'Nvidia ships a new GPU', 10);
-
-    await assert.rejects(scorer.score(chips, [gpu, gpu]), RangeError);
   });
 });

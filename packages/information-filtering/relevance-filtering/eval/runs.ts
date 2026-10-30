@@ -48,6 +48,7 @@ export type Unit = {
 };
 
 export type StreamArticle = Article & {
+  readonly id: string;
   readonly label: Label | undefined;
   readonly narrow: boolean;
   readonly broad: boolean;
@@ -68,7 +69,6 @@ export async function runUnit(options: {
   const { stream } = options;
   const answers = teach(options.pool, options.n);
   const design = await runDesign({
-    profile: options.profile,
     keyword: options.profile.narrow,
     answers,
     vectors: options.vectors,

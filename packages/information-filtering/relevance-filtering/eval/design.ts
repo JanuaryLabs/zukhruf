@@ -3,38 +3,56 @@ import { type Collection, UnknownDocumentError } from '@zukhruf/embeddings';
 import {
   type Article,
   type Keyword,
-  Profile,
+  KeywordScorer,
   type Scores,
   SimilarityScorer,
+  TaughtAnswers,
   type Vectors,
 } from '../src/index.ts';
 import type { Answers } from './teaching.ts';
 
 // The frozen design (freeze/plan.json, desc|binormal+kw) through the API of
-// the package: the similarity scorer scores the stream for a profile with
-// the reader's keyword and answers.
+// the package: the similarity scorer learns from the reader's answers and
+// keyword, and a profile with no yes answer starts with the keyword scorer.
+// The stream and the answers keep their order, which the binormal fit's sums
+// follow to the last bit.
 export function runDesign(options: {
-  readonly profile: { readonly id: string; readonly description: string };
   readonly keyword: Keyword;
   readonly answers: Answers;
   readonly vectors: Vectors;
   readonly descriptionVector: readonly number[];
-  readonly stream: readonly [Article, ...Article[]];
+  readonly stream: readonly (Article & { readonly id: string })[];
   readonly textOf: (id: string) => string;
 }): Promise<Scores> {
-  return new SimilarityScorer({
-    vectors: options.vectors,
-    embedDescription: async () => options.descriptionVector,
-    taughtText: options.textOf,
-  }).score(
-    new Profile({
-      name: options.profile.id,
-      description: options.profile.description,
-      keywords: [options.keyword],
-      relevant: options.answers.relevant,
-      notRelevant: options.answers.notRelevant,
-    }),
-    options.stream,
+  const { vectors, descriptionVector, textOf } = options;
+  const answer = (relevant: boolean) => (id: string) =>
+    [id, { relevant, text: textOf(id) }] as const;
+  const taught = TaughtAnswers.parse(
+    new Map([
+      ...options.answers.relevant.map(answer(true)),
+      ...options.answers.notRelevant.map(answer(false)),
+    ]),
+  );
+  const scorer =
+    taught === undefined
+      ? new KeywordScorer({
+          vectors,
+          descriptionVector,
+          keywords: [options.keyword],
+        })
+      : new SimilarityScorer({
+          vectors,
+          descriptionVector,
+          answers: taught,
+          keywords: [options.keyword],
+        });
+  return scorer.score(
+    new Map(
+      options.stream.map(({ id, publishedAt, text }) => [
+        id,
+        { publishedAt, text },
+      ]),
+    ),
   );
 }
 

@@ -7,12 +7,12 @@ import { MockEmbeddingModelV4 } from 'ai/test';
 import { Collection, UnknownDocumentError } from '@zukhruf/embeddings';
 
 import {
-  type Article,
+  type Answer,
   ExpectedFThreshold,
   MissingVectorError,
-  NoEvidenceError,
-  Profile,
   SimilarityScorer,
+  type Stream,
+  TaughtAnswers,
   UnknownArticleError,
   type Vectors,
 } from './index.ts';
@@ -42,15 +42,7 @@ function day(n: number): Date {
   return new Date(Date.UTC(2026, 9, n));
 }
 
-// The description vector [1, 0], given only for the description of the
-// profile, so a scorer that embeds another text fails.
-function descriptionOf(profile: Profile) {
-  return async (description: string): Promise<readonly number[]> => {
-    if (description !== profile.description)
-      throw new Error(`The scorer embedded ${description}`);
-    return [1, 0];
-  };
-}
+const DESCRIPTION = [1, 0];
 
 // Stores the stream at days 10 to 49 and the taught articles at day 1, and
 // gives the stream in the order of the angles.
@@ -58,29 +50,44 @@ async function stored(
   database: DatabaseSync,
   stream: readonly { id: string; degrees: number; text: string }[],
   taught: ReadonlyMap<string, number> = new Map(),
-): Promise<{ collection: Collection; articles: [Article, ...Article[]] }> {
+): Promise<{ collection: Collection; articles: Stream }> {
   const angles = new Map([
     ...stream.map(({ id, degrees }) => [id, degrees] as const),
     ...taught,
   ]);
   const collection = new Collection({ database, model: model(angles) });
-  const articles = stream.map(({ id, text }, index) => ({
-    id,
-    publishedAt: day(10 + index),
-    text,
-  }));
+  const articles = new Map(
+    stream.map(({ id, text }, index) => [
+      id,
+      { publishedAt: day(10 + index), text },
+    ]),
+  );
   await collection.upsert([
-    ...articles.map(({ id, publishedAt }) => ({ id, text: id, publishedAt })),
+    ...[...articles].map(([id, { publishedAt }]) => ({
+      id,
+      text: id,
+      publishedAt,
+    })),
     ...[...taught.keys()].map((id) => ({ id, text: id, publishedAt: day(1) })),
   ]);
-  const [first, ...rest] = articles;
-  if (first === undefined) throw new Error('The test needs a stream.');
-  return { collection, articles: [first, ...rest] };
+  return { collection, articles };
 }
 
-const noText = (id: string): string => {
-  throw new Error(`The scorer asked for the text of ${id}`);
-};
+// The reader's answers, each with the text of its article. The test names
+// at least one yes answer.
+function answers(
+  yes: readonly (readonly [string, string])[],
+  no: readonly string[] = [],
+): TaughtAnswers {
+  const taught = TaughtAnswers.parse(
+    new Map<string, Answer>([
+      ...yes.map(([id, text]) => [id, { relevant: true, text }] as const),
+      ...no.map((id) => [id, { relevant: false, text: '' }] as const),
+    ]),
+  );
+  if (taught === undefined) throw new Error('The test needs a yes answer.');
+  return taught;
+}
 
 const expectedF05 = new ExpectedFThreshold({ beta: 0.5 });
 
@@ -112,19 +119,20 @@ describe('SimilarityScorer', () => {
         ['no-80', 80],
       ]),
     );
-    const profile = new Profile({
-      name: 'security',
-      description: 'Attacks and breaches.',
-      keywords: ['secur'],
-      relevant: ['yes-4', 'yes-8', 'yes-12'],
-      notRelevant: ['no-50', 'no-70', 'no-80'],
-    });
 
     const scores = await new SimilarityScorer({
       vectors: collection,
-      embedDescription: descriptionOf(profile),
-      taughtText: (id) => (id === 'yes-4' ? 'A security flaw' : 'A new chip'),
-    }).score(profile, articles);
+      descriptionVector: DESCRIPTION,
+      answers: answers(
+        [
+          ['yes-4', 'A security flaw'],
+          ['yes-8', 'A new chip'],
+          ['yes-12', 'A new chip'],
+        ],
+        ['no-50', 'no-70', 'no-80'],
+      ),
+      keywords: ['secur'],
+    }).score(articles);
 
     const expected = new Map([
       ['s0', 0.9439102938642018],
@@ -168,21 +176,16 @@ describe('SimilarityScorer', () => {
         ['no', 60],
       ]),
     );
-    const profile = new Profile({
-      name: 'topic',
-      description: 'A topic.',
-      relevant: ['yes'],
-      notRelevant: ['no'],
-    });
 
     const scores = await new SimilarityScorer({
       vectors: collection,
-      embedDescription: descriptionOf(profile),
-      taughtText: noText,
-    }).score(profile, articles);
+      descriptionVector: DESCRIPTION,
+      answers: answers([['yes', 'News']], ['no']),
+      keywords: [],
+    }).score(articles);
 
-    const probabilities = articles
-      .map(({ id }) => scores.probability(id))
+    const probabilities = [...articles.keys()]
+      .map((id) => scores.probability(id))
       .toSorted((a, b) => b - a);
     const total = probabilities.reduce((sum, p) => sum + p, 0);
     const expectedF = probabilities.map(
@@ -194,14 +197,14 @@ describe('SimilarityScorer', () => {
     const best = expectedF.indexOf(Math.max(...expectedF)) + 1;
     const accepted = scores.accepted(expectedF05);
     assert.equal(accepted.length, best);
-    assert.ok(best > 0 && best < articles.length);
+    assert.ok(best > 0 && best < articles.size);
     assert.deepEqual(
       accepted.map((id) => scores.probability(id)),
       probabilities.slice(0, best),
     );
   });
 
-  test('a keyword match raises the probability of an article above an equally similar article without one', async () => {
+  test('a keyword that the yes answers match raises the probability of an article above an equally similar article without the keyword', async () => {
     using database = new DatabaseSync(':memory:');
     const { collection, articles } = await stored(
       database,
@@ -215,64 +218,23 @@ describe('SimilarityScorer', () => {
         ['no', 70],
       ]),
     );
-    const fields = {
-      name: 'security',
-      description: 'Attacks and breaches.',
-      relevant: ['yes'],
-      notRelevant: ['no'],
-    };
-    const withoutProfile = new Profile(fields);
-    const scorer = new SimilarityScorer({
-      vectors: collection,
-      embedDescription: descriptionOf(withoutProfile),
-      taughtText: () => 'Security flaw found',
-    });
+    const taught = answers([['yes', 'Security flaw found']], ['no']);
+    const scorer = (keywords: readonly string[]) =>
+      new SimilarityScorer({
+        vectors: collection,
+        descriptionVector: DESCRIPTION,
+        answers: taught,
+        keywords,
+      });
 
-    const withKeyword = await scorer.score(
-      withoutProfile.with({ keywords: ['secur'] }),
-      articles,
-    );
-    const without = await scorer.score(withoutProfile, articles);
+    const withKeyword = await scorer(['secur']).score(articles);
+    const without = await scorer([]).score(articles);
 
     assert.ok(withKeyword.probability('s0') > withKeyword.probability('s1'));
     assert.equal(without.probability('s0'), without.probability('s1'));
   });
 
-  test('a profile with no relevant answer gives the articles that match a keyword at the start of a word, in any case, the probability 1, and a threshold accepts them', async () => {
-    using database = new DatabaseSync(':memory:');
-    const { collection, articles } = await stored(database, [
-      { id: 'title', degrees: 80, text: 'SECURITY firms merge' },
-      { id: 'inside', degrees: 0, text: 'A cybersecurity startup' },
-      { id: 'word', degrees: 0, text: 'Firms are securing data' },
-      { id: 'none', degrees: 0, text: 'Chips are cheaper' },
-      { id: 'pattern', degrees: 0, text: 'A new ransomware strain' },
-    ]);
-    const profile = new Profile({
-      name: 'security',
-      description: 'Attacks and breaches.',
-      keywords: ['secur', /ransom/u],
-      relevant: [],
-      notRelevant: ['none'],
-    });
-
-    const scores = await new SimilarityScorer({
-      vectors: collection,
-      embedDescription: descriptionOf(profile),
-      taughtText: noText,
-    }).score(profile, articles);
-
-    assert.deepEqual(scores.accepted(expectedF05), [
-      'pattern',
-      'word',
-      'title',
-    ]);
-    assert.deepEqual(
-      articles.map(({ id }) => scores.probability(id)),
-      [1, 0, 1, 0, 1],
-    );
-  });
-
-  test('a profile with relevant answers ranks the stream by probability, equal vectors by id, and a range keeps that order for its days', async () => {
+  test('ranks the stream by probability, equal vectors by id, and a range keeps that order for its days', async () => {
     using database = new DatabaseSync(':memory:');
     // stored() gives article n the publish day 10 + n.
     const { collection, articles } = await stored(
@@ -293,22 +255,17 @@ describe('SimilarityScorer', () => {
         ['no', 60],
       ]),
     );
-    const profile = new Profile({
-      name: 'topic',
-      description: 'A topic.',
-      relevant: ['yes'],
-      notRelevant: ['no'],
-    });
 
     const scores = await new SimilarityScorer({
       vectors: collection,
-      embedDescription: descriptionOf(profile),
-      taughtText: noText,
-    }).score(profile, articles);
+      descriptionVector: DESCRIPTION,
+      answers: answers([['yes', 'News']], ['no']),
+      keywords: [],
+    }).score(articles);
 
     const ranked = scores.ranked();
     assert.deepEqual(ranked.slice(0, 3), ['near', 'twin-a', 'twin-b']);
-    assert.equal(ranked.length, articles.length);
+    assert.equal(ranked.length, articles.size);
     assert.ok(
       ranked.every(
         (id, index) =>
@@ -324,65 +281,7 @@ describe('SimilarityScorer', () => {
     ]);
   });
 
-  test('a profile with no relevant answer ranks the matches first, the newest first, then the other articles by similarity, and a range keeps that order for its days', async () => {
-    using database = new DatabaseSync(':memory:');
-    // stored() gives article n the publish day 10 + n.
-    const { collection, articles } = await stored(database, [
-      { id: 'old-match', degrees: 0, text: 'Security news' },
-      { id: 'far', degrees: 80, text: 'Markets' },
-      { id: 'new-match', degrees: 60, text: 'Securing data' },
-      { id: 'near', degrees: 5, text: 'Chips' },
-    ]);
-    const profile = new Profile({
-      name: 'security',
-      description: 'Attacks and breaches.',
-      keywords: ['secur'],
-      relevant: [],
-      notRelevant: [],
-    });
-
-    const scores = await new SimilarityScorer({
-      vectors: collection,
-      embedDescription: descriptionOf(profile),
-      taughtText: noText,
-    }).score(profile, articles);
-
-    assert.deepEqual(scores.ranked(), [
-      'new-match',
-      'old-match',
-      'near',
-      'far',
-    ]);
-    assert.deepEqual(scores.ranked({ from: day(11), to: day(13) }), [
-      'new-match',
-      'near',
-      'far',
-    ]);
-  });
-
-  test('a profile with no relevant answer and no keyword is a NoEvidenceError', async () => {
-    using database = new DatabaseSync(':memory:');
-    const { collection, articles } = await stored(database, [
-      { id: 'a', degrees: 0, text: 'A' },
-    ]);
-    const profile = new Profile({
-      name: 'empty',
-      description: 'Something.',
-      relevant: [],
-      notRelevant: ['a'],
-    });
-
-    await assert.rejects(
-      new SimilarityScorer({
-        vectors: collection,
-        embedDescription: descriptionOf(profile),
-        taughtText: noText,
-      }).score(profile, articles),
-      NoEvidenceError,
-    );
-  });
-
-  test('when the stream scores cannot hold a binormal fit, Platt calibrates on the answers, a constant probability stands in when the answers rank backwards, and the keywords decide when no answer is a no', async () => {
+  test('when the stream scores cannot hold a binormal fit, Platt calibrates on the answers, a constant probability stands in when the answers rank backwards, and the keyword matches come first when no answer is a no', async () => {
     using database = new DatabaseSync(':memory:');
     // Every stream article has one similarity, so the scores have no spread.
     const { collection, articles } = await stored(
@@ -399,31 +298,38 @@ describe('SimilarityScorer', () => {
         ['no-2', 70],
       ]),
     );
-    const profile = new Profile({
-      name: 'security',
-      description: 'Attacks and breaches.',
-      keywords: ['secur'],
-      relevant: ['yes-1', 'yes-2'],
-      notRelevant: ['no-1', 'no-2'],
-    });
-    const scorer = new SimilarityScorer({
-      vectors: collection,
-      embedDescription: descriptionOf(profile),
-      taughtText: () => 'Security',
-    });
+    const scorer = (taught: TaughtAnswers) =>
+      new SimilarityScorer({
+        vectors: collection,
+        descriptionVector: DESCRIPTION,
+        answers: taught,
+        keywords: ['secur'],
+      });
 
-    const platt = await scorer.score(profile, articles);
-    const reversed = await scorer.score(
-      profile.with({
-        relevant: ['no-1', 'no-2'],
-        notRelevant: ['yes-1', 'yes-2'],
-      }),
-      articles,
-    );
-    const keywords = await scorer.score(
-      profile.with({ notRelevant: [] }),
-      articles,
-    );
+    const platt = await scorer(
+      answers(
+        [
+          ['yes-1', 'Security'],
+          ['yes-2', 'Security'],
+        ],
+        ['no-1', 'no-2'],
+      ),
+    ).score(articles);
+    const reversed = await scorer(
+      answers(
+        [
+          ['no-1', 'Security'],
+          ['no-2', 'Security'],
+        ],
+        ['yes-1', 'yes-2'],
+      ),
+    ).score(articles);
+    const onlyYes = await scorer(
+      answers([
+        ['yes-1', 'Security'],
+        ['yes-2', 'Security'],
+      ]),
+    ).score(articles);
 
     // Every stream article and every relevant answer match the keyword, so
     // the keyword evidence multiplies the odds by
@@ -432,7 +338,7 @@ describe('SimilarityScorer', () => {
     // platt_apply) on the float32 similarities gives a = -3.751, b = 2.658
     // and p = 0.6435 before the evidence. Backwards answers: each article
     // gets the mean smoothed target, 0.5.
-    for (const { id } of articles) {
+    for (const id of articles.keys()) {
       assert.ok(
         Math.abs(platt.probability(id) - 0.6285610115091318) < 1e-9,
         id,
@@ -441,9 +347,87 @@ describe('SimilarityScorer', () => {
         Math.abs(reversed.probability(id) - 0.9375 / 1.9375) < 1e-12,
         id,
       );
-      assert.equal(keywords.probability(id), 1);
+      assert.equal(onlyYes.probability(id), 1);
     }
-    assert.deepEqual(keywords.accepted(expectedF05), ['c', 'b', 'a']);
+    assert.deepEqual(onlyYes.accepted(expectedF05), ['c', 'b', 'a']);
+  });
+
+  test('when the fit cannot hold, no answer is a no and there is no keyword, the stream is ranked by similarity, with no error', async () => {
+    using database = new DatabaseSync(':memory:');
+    // The yes answer is less similar than the whole stream, so the relevant
+    // mean is below the other mean and the binormal fit cannot hold.
+    const { collection, articles } = await stored(
+      database,
+      [
+        { id: 'middle', degrees: 30, text: 'A' },
+        { id: 'near', degrees: 10, text: 'B' },
+        { id: 'far', degrees: 50, text: 'C' },
+      ],
+      new Map([['yes', 85]]),
+    );
+
+    const scores = await new SimilarityScorer({
+      vectors: collection,
+      descriptionVector: DESCRIPTION,
+      answers: answers([['yes', 'D']]),
+      keywords: [],
+    }).score(articles);
+
+    assert.deepEqual(scores.ranked(), ['near', 'middle', 'far']);
+  });
+
+  test('the length of the description vector does not change the probabilities: a scorer reads its direction only', async () => {
+    using database = new DatabaseSync(':memory:');
+    const { collection, articles } = await stored(
+      database,
+      [
+        { id: 'a', degrees: 10, text: 'A' },
+        { id: 'b', degrees: 30, text: 'B' },
+        { id: 'c', degrees: 50, text: 'C' },
+        { id: 'd', degrees: 70, text: 'D' },
+        { id: 'e', degrees: 20, text: 'E' },
+      ],
+      new Map([
+        ['yes', 5],
+        ['no', 60],
+      ]),
+    );
+    const scored = (descriptionVector: readonly number[]) =>
+      new SimilarityScorer({
+        vectors: collection,
+        descriptionVector,
+        answers: answers([['yes', 'A']], ['no']),
+        keywords: [],
+      }).score(articles);
+
+    const unit = await scored([1, 0]);
+    const long = await scored([2, 0]);
+
+    for (const id of articles.keys())
+      assert.equal(long.probability(id), unit.probability(id), id);
+    assert.ok(unit.probability('a') > 0.5);
+  });
+
+  test('an empty stream gives empty scores and reads no vector', async () => {
+    // A vectors port that fails on every call: a scorer that reads it for an
+    // empty stream fails the test.
+    const unread: Vectors = {
+      query: () => {
+        throw new Error('The scorer queried the vectors.');
+      },
+      fetch: () => {
+        throw new Error('The scorer fetched vectors.');
+      },
+    };
+
+    const scores = await new SimilarityScorer({
+      vectors: unread,
+      descriptionVector: DESCRIPTION,
+      answers: answers([['yes', 'A']]),
+      keywords: ['a'],
+    }).score(new Map());
+
+    assert.deepEqual(scores.ranked(), []);
   });
 
   test('a stream article that the vectors do not hold with its publish date is a MissingVectorError', async () => {
@@ -456,51 +440,22 @@ describe('SimilarityScorer', () => {
       ],
       new Map([['yes', 0]]),
     );
-    const profile = new Profile({
-      name: 'topic',
-      description: 'A topic.',
-      relevant: ['yes'],
-      notRelevant: [],
-    });
     const scorer = new SimilarityScorer({
       vectors: collection,
-      embedDescription: descriptionOf(profile),
-      taughtText: noText,
+      descriptionVector: DESCRIPTION,
+      answers: answers([['yes', 'A']]),
+      keywords: [],
     });
 
     await assert.rejects(
-      scorer.score(profile, [
-        ...articles,
-        { id: 'missing', publishedAt: day(11), text: '' },
-      ]),
+      scorer.score(
+        new Map([...articles, ['missing', { publishedAt: day(11), text: '' }]]),
+      ),
       (error) => error instanceof MissingVectorError && error.id === 'missing',
     );
     await assert.rejects(
-      scorer.score(profile, [{ ...articles[0], publishedAt: day(30) }]),
+      scorer.score(new Map([['a', { publishedAt: day(30), text: 'A' }]])),
       (error) => error instanceof MissingVectorError && error.id === 'a',
-    );
-  });
-
-  test('a stream with one id two times is a RangeError', async () => {
-    using database = new DatabaseSync(':memory:');
-    const { collection, articles } = await stored(database, [
-      { id: 'a', degrees: 0, text: 'Security' },
-    ]);
-    const profile = new Profile({
-      name: 'security',
-      description: 'Attacks and breaches.',
-      keywords: ['secur'],
-      relevant: [],
-      notRelevant: [],
-    });
-
-    await assert.rejects(
-      new SimilarityScorer({
-        vectors: collection,
-        embedDescription: descriptionOf(profile),
-        taughtText: noText,
-      }).score(profile, [...articles, ...articles]),
-      RangeError,
     );
   });
 
@@ -509,42 +464,32 @@ describe('SimilarityScorer', () => {
     const { collection, articles } = await stored(database, [
       { id: 'a', degrees: 0, text: 'A' },
     ]);
-    const vectors: Vectors = collection;
-    const profile = new Profile({
-      name: 'topic',
-      description: 'A topic.',
-      relevant: ['gone'],
-      notRelevant: [],
-    });
 
     await assert.rejects(
       new SimilarityScorer({
-        vectors,
-        embedDescription: descriptionOf(profile),
-        taughtText: noText,
-      }).score(profile, articles),
+        vectors: collection,
+        descriptionVector: DESCRIPTION,
+        answers: answers([['gone', 'A']]),
+        keywords: [],
+      }).score(articles),
       (error) => error instanceof UnknownDocumentError && error.id === 'gone',
     );
   });
 
   test('a question about an article that is not in the stream is an UnknownArticleError', async () => {
     using database = new DatabaseSync(':memory:');
-    const { collection, articles } = await stored(database, [
-      { id: 'a', degrees: 0, text: 'Security' },
-    ]);
-    const profile = new Profile({
-      name: 'security',
-      description: 'Attacks and breaches.',
-      keywords: ['secur'],
-      relevant: [],
-      notRelevant: [],
-    });
+    const { collection, articles } = await stored(
+      database,
+      [{ id: 'a', degrees: 0, text: 'A' }],
+      new Map([['yes', 5]]),
+    );
 
     const scores = await new SimilarityScorer({
       vectors: collection,
-      embedDescription: descriptionOf(profile),
-      taughtText: noText,
-    }).score(profile, articles);
+      descriptionVector: DESCRIPTION,
+      answers: answers([['yes', 'A']]),
+      keywords: [],
+    }).score(articles);
 
     assert.throws(
       () => scores.probability('other'),

@@ -1,25 +1,18 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 
-import { ExpectedFThreshold, Profile, Scores } from './index.ts';
-
-const profile = new Profile({
-  name: 'chips',
-  description: 'New computer chips.',
-  relevant: [],
-  notRelevant: [],
-});
+import { ExpectedFThreshold, Scores } from './index.ts';
 
 // The scores of a stream that a scorer ranked, the best first.
 function scored(...probabilities: number[]): Scores {
-  return new Scores({
-    profile,
-    ranked: probabilities.map((probability, index) => ({
-      id: `p${probability}`,
-      publishedAt: new Date(Date.UTC(2026, 9, index + 1)),
-      probability,
-    })),
-  });
+  return new Scores(
+    new Map(
+      probabilities.map((probability, index) => [
+        `p${probability}`,
+        { publishedAt: new Date(Date.UTC(2026, 9, index + 1)), probability },
+      ]),
+    ),
+  );
 }
 
 describe('ExpectedFThreshold', () => {
@@ -44,6 +37,18 @@ describe('ExpectedFThreshold', () => {
       'p0.8',
       'p0.6',
       'p0.2',
+    ]);
+  });
+
+  test('accepts the m that maximises the expected F0.5 exactly, also when two m nearly tie', () => {
+    // Expected F0.5 with the sum of all p 2.55: m = 2 gives
+    // 1.25 * 1.85 / (0.6375 + 2) = 0.8768, m = 3 gives
+    // 1.25 * 2.55 / (0.6375 + 3) = 0.8763.
+    const scores = scored(0.95, 0.9, 0.7);
+
+    assert.deepEqual(scores.accepted(new ExpectedFThreshold({ beta: 0.5 })), [
+      'p0.95',
+      'p0.9',
     ]);
   });
 

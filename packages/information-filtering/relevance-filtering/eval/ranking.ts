@@ -102,7 +102,6 @@ export async function runRankingUnit(options: {
   const { stream } = options;
   const answers = teach(options.pool, options.n);
   const scores = await runDesign({
-    profile: options.profile,
     keyword: options.profile.narrow,
     answers,
     vectors: options.vectors,

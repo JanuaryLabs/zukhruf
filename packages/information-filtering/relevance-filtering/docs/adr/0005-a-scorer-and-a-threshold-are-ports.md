@@ -1,5 +1,7 @@
 # A scorer and a threshold are ports
 
+**Superseded in part by [ADR 0006](./0006-a-scorer-is-made-for-one-interest-and-its-inputs-rule-out-illegal-states.md).** A scorer is now made for one interest with only its own inputs, and `Profile` is removed. The ports, the two adapters and the thresholds of this record are still valid.
+
 Research round 13 (#3383) found a better ranker than the frozen design of [ADR 0002](./0002-the-design-is-frozen-by-research-round-6.md). A decision model, Liquid AI's d1-2B, answered one question for each article and each profile: "Is the main subject of this article: <description>?". Its probability, with no taught answer and no keyword, ranked January to March 2025 with MAP 0.924 against desc+kw's 0.782. Round 14 labelled the same articles again with annotators of a second model family, and the lead held (0.808 against 0.634). The workspace record [docs/research/relevance-filtering.md](../../../../../docs/research/relevance-filtering.md) has the numbers.
 
 Until this record, `profile.train` could rank only by embedding similarity. On 2026-10-30 the user chose ports and adapters: each method of ranking is an adapter of one port, and no method is removed.

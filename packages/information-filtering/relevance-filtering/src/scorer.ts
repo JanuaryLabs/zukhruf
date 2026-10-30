@@ -1,9 +1,7 @@
-import type { Profile } from './profile.ts';
 import type { Scores } from './scores.ts';
 
 // An article of the stream that a scorer scores.
 export type Article = {
-  readonly id: string;
   // The publish date of the article. A similarity scorer reads the vectors
   // of this date.
   readonly publishedAt: Date;
@@ -12,10 +10,11 @@ export type Article = {
   readonly text: string;
 };
 
-// The articles to score: one or more.
-export type Stream = readonly [Article, ...Article[]];
+// The articles to score, by id: one entry for each id. It can be empty.
+export type Stream = ReadonlyMap<string, Article>;
 
-// The port of a method that scores the stream for a profile (docs/adr/0005).
+// The port of a method that scores a stream for the one interest it was made
+// for (docs/adr/0005).
 export interface Scorer {
-  score(profile: Profile, stream: Stream): Promise<Scores>;
+  score(stream: Stream): Promise<Scores>;
 }

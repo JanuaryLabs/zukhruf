@@ -1,23 +1,23 @@
 # Relevance filtering
 
-A reader wants the new articles of a feed that are about an interest, and not the others. This package ranks the articles of a stream for a profile of the reader, the best first. A scorer gives a probability for each article, and a threshold that the host chooses turns the probabilities into a yes or no.
+A reader wants the new articles of a feed that are about an interest, and not the others. This package ranks the articles of a stream for one interest of the reader, the best first. A scorer gives a probability for each article, and a threshold that the host chooses turns the probabilities into a yes or no.
 
 ## Language
 
-**Profile**:
-An interest of the reader: a name, a description, optional keywords, and the answers that taught it. A profile is a value. It does no I/O, and the host stores it.
-_Avoid_: Topic, query, filter (for the profile)
+**Interest**:
+What the reader wants to read, said in one sentence, the description. The host keeps its interests and makes one scorer for each. TREC calls an interest a profile.
+_Avoid_: Topic, query, filter, profile (for the package's input)
 
 **Description**:
 One sentence that says what the reader wants to read, for example "Cybersecurity: attacks, breaches, vulnerabilities and the tools that stop them."
 _Avoid_: Query, prompt
 
 **Scorer**:
-A method that gives the probability of each article of a stream for a profile, and the ranking. The package has a similarity scorer and a decision scorer. The host decides when a scorer runs.
+A method that gives the probability of each article of a stream for the one interest it was made for, and the ranking. The package has a decision scorer, a similarity scorer and a keyword scorer. The host decides when a scorer runs.
 _Avoid_: Filter, classifier, judge
 
 **Scores**:
-What a scorer gives for one profile and one stream: the ranking and the probability of each article.
+What a scorer gives for one stream: the ranking and the probability of each article.
 _Avoid_: Filter, result
 
 **Decision model**:
@@ -25,7 +25,7 @@ A model that answers a typed question about a text with a calibrated probability
 _Avoid_: LLM, judge, classifier
 
 **Description vector**:
-The vector of the description from the embedding model of the stored articles, made with the prompt that the model uses for a query. The caller makes it for the similarity scorer.
+The vector of the description from the embedding model of the stored articles, made with the prompt that the model uses for a query. The host makes it for the similarity scorer and the keyword scorer.
 _Avoid_: Query embedding, profile vector
 
 **Keyword**:
@@ -33,15 +33,15 @@ A word or a part of a word that the reader types. It matches at the start of a w
 _Avoid_: Tag, term
 
 **Answer**:
-The yes (relevant) or no (not relevant) of the reader for one article that the reader saw. The answers are the taught articles.
+The yes (relevant) or no (not relevant) of the reader for one article that the reader saw, with the text of that article.
 _Avoid_: Label (for the reader's answer), feedback, rating
 
-**Taught article**:
-An article with an answer. The similarity scorer compares its similarity with the similarities of the stream.
-_Avoid_: Training example, sample
+**Taught answers**:
+The answers of an interest with at least one yes, which the similarity scorer learns from. `TaughtAnswers.parse` gives none when no answer is a yes.
+_Avoid_: Training set, examples
 
 **Stream**:
-The articles that a scorer scores, for example the new articles of the feed since the last time. The similarity scorer fits its calibration on the similarities of the stream.
+The articles that a scorer scores, by id, for example the new articles of the feed since the last time. It can be empty. The similarity scorer fits its calibration on the similarities of the stream.
 _Avoid_: Feed (for the articles to score), batch, corpus
 
 **Similarity**:
@@ -61,7 +61,7 @@ The change of the probability of an article when it matches a keyword, or does n
 _Avoid_: Boost, bonus
 
 **Probability**:
-The chance, from 0 to 1, that an article is relevant to the profile. The similarity scorer calibrates it on the answers, and a decision model gives it. For a profile with no relevant answer, the similarity scorer gives 1 for a keyword match and 0 for the others, and that probability is not calibrated.
+The chance, from 0 to 1, that an article is relevant to the interest. The similarity scorer calibrates it on the answers, and a decision model gives it. The keyword scorer gives 1 for a keyword match and 0 for the others, and that probability is not calibrated.
 _Avoid_: Confidence, score
 
 **Ranking**:

@@ -1,6 +1,5 @@
 import { type Experimental_DecisionModel, experimental_decide } from 'ai';
 
-import type { Profile } from './profile.ts';
 import type { Scorer, Stream } from './scorer.ts';
 import { Scores, compareIds } from './scores.ts';
 
@@ -11,29 +10,42 @@ import { Scores, compareIds } from './scores.ts';
 // The question is the one that round 13 asked, word for word.
 export class DecisionScorer implements Scorer {
   readonly #model: Experimental_DecisionModel;
+  readonly #instructions: string;
 
-  constructor(options: { readonly model: Experimental_DecisionModel }) {
+  constructor(options: {
+    readonly model: Experimental_DecisionModel;
+    // One sentence that says what the reader wants to read.
+    readonly description: string;
+  }) {
     this.#model = options.model;
+    this.#instructions = `Is the main subject of this article: ${options.description}?`;
   }
 
-  async score(profile: Profile, stream: Stream): Promise<Scores> {
-    const instructions = `Is the main subject of this article: ${profile.description}?`;
+  async score(stream: Stream): Promise<Scores> {
     const scored = await Array.fromAsync(
       stream,
-      async ({ id, publishedAt, text }) => {
+      async ([id, { publishedAt, text }]) => {
         const { answers } = await experimental_decide({
           model: this.#model,
           state: text,
-          questions: { relevant: { type: 'boolean', instructions } },
+          questions: {
+            relevant: { type: 'boolean', instructions: this.#instructions },
+          },
         });
         return { id, publishedAt, probability: answers.relevant.probability };
       },
     );
-    return new Scores({
-      profile,
-      ranked: scored.toSorted(
-        (a, b) => b.probability - a.probability || compareIds(a.id, b.id),
+    return new Scores(
+      new Map(
+        scored
+          .toSorted(
+            (a, b) => b.probability - a.probability || compareIds(a.id, b.id),
+          )
+          .map(({ id, publishedAt, probability }) => [
+            id,
+            { publishedAt, probability },
+          ]),
       ),
-    });
+    );
   }
 }

@@ -6,9 +6,9 @@
 
 ## The steps
 
-1. Make a `DecisionScorer` with the decision model.
-2. Make the profiles: the name and the description. The decision scorer reads only the description.
-3. Score the articles for each profile. The scorer asks the model one question for each article.
+1. Make the AI SDK decision model once.
+2. For each interest, make a `DecisionScorer` with the model and the description of the interest. The scorer reads nothing else.
+3. Score the articles, a map by article id. The scorer asks the model one question for each article.
 4. For each day, show `scores.ranked({ from, to }).slice(0, n)`.
 5. For the notification, choose a threshold from what a miss and a false alarm cost.
 
@@ -27,19 +27,12 @@ npm install @zukhruf/relevance-filtering ai @ai-sdk/typesafe-ai zod
 ```ts title="rank-with-a-decision-model.ts"
 import { createTypeSafeAi } from '@ai-sdk/typesafe-ai';
 
-import {
-  type Article,
-  DecisionScorer,
-  Profile,
-  UtilityThreshold,
-} from '@zukhruf/relevance-filtering';
+import { DecisionScorer, UtilityThreshold } from '@zukhruf/relevance-filtering';
 
-const scorer = new DecisionScorer({
-  model: createTypeSafeAi({
-    baseURL: process.env.DECISION_URL ?? 'http://127.0.0.1:9931/v1',
-    apiKey: 'none',
-  }).decisionModel('LiquidAI/d1-2B-GGUF:Q8_0'),
-});
+const model = createTypeSafeAi({
+  baseURL: process.env.DECISION_URL ?? 'http://127.0.0.1:9931/v1',
+  apiKey: 'none',
+}).decisionModel('LiquidAI/d1-2B-GGUF:Q8_0');
 
 const items = [
   [
@@ -92,47 +85,43 @@ const items = [
   ],
 ] as const;
 
-const stream = items.map(([day, id, title, lead]): Article => ({
-  id,
-  publishedAt: new Date(Date.UTC(2026, 9, day)),
-  text: `${title} ${lead}`,
-}));
-const [first, ...rest] = stream;
-if (first === undefined) throw new Error('No article.');
+const stream = new Map(
+  items.map(([day, id, title, lead]) => [
+    id,
+    { publishedAt: new Date(Date.UTC(2026, 9, day)), text: `${title} ${lead}` },
+  ]),
+);
 
-const profiles = [
-  new Profile({
+// The reader's interests: a name to show, and the sentence that the model reads.
+const interests = [
+  {
     name: 'Security',
     description:
       'Cybersecurity: attacks, breaches, vulnerabilities and the tools and research that defend against them.',
-    relevant: [],
-    notRelevant: [],
-  }),
-  new Profile({
+  },
+  {
     name: 'Chips',
     description:
       'New computer chips and AI hardware, and how chips are made and supplied.',
-    relevant: [],
-    notRelevant: [],
-  }),
+  },
 ];
 // A missed article costs three times as much as a false notification.
 const notify = new UtilityThreshold({ falseAlarm: 1, miss: 3 });
 
-for (const profile of profiles) {
-  const scores = await scorer.score(profile, [first, ...rest]);
+for (const { name, description } of interests) {
+  const scores = await new DecisionScorer({ model, description }).score(stream);
   for (const day of [8, 9]) {
     const from = new Date(Date.UTC(2026, 9, day));
     const to = new Date(Date.UTC(2026, 9, day + 1) - 1);
     for (const id of scores.ranked({ from, to }).slice(0, 2))
       console.log(
-        profile.name,
+        name,
         from.toISOString().slice(0, 10),
         scores.probability(id).toFixed(3),
         id,
       );
   }
-  console.log(profile.name, 'notify:', scores.accepted(notify));
+  console.log(name, 'notify:', scores.accepted(notify));
 }
 ```
 

@@ -131,7 +131,6 @@ export async function daily(options: {
     };
     for (const nTeach of N_TEACH) {
       const scores = await runDesign({
-        profile,
         keyword: profile.narrow,
         answers: teach(candidates, nTeach),
         vectors,

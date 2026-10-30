@@ -1,4 +1,4 @@
-# Recipe: Show the best articles of each day with a taught profile
+# Recipe: Show the best articles of each day with taught answers
 
 **Use case.** A news reader stores the articles of its feeds. A reader has an interest, "Security". Last week, the reader answered yes or no for some articles. This week, 24 new articles came. For each day, the reader wants to see the best 2 articles for security, the best first.
 
@@ -7,9 +7,9 @@
 ## The steps
 
 1. Upsert each article into a `Collection` of `@zukhruf/embeddings`, with the document prompt of the model as its text.
-2. Make the profile: the name, the description, the keywords and the answers of the reader.
-3. Make a `SimilarityScorer` with the collection, a function that embeds a description with the query prompt of the model, and the texts of the answered articles.
-4. Score the new articles for the profile.
+2. Embed the description of the interest with the query prompt of the model.
+3. Parse the reader's answers, each with the text of its article, into `TaughtAnswers`.
+4. Make a `SimilarityScorer` for the interest with the collection, the description vector, the answers and the keywords, and score the new articles.
 5. For each day, show `scores.ranked({ from, to }).slice(0, n)`. Each id has its probability.
 
 ## The program
@@ -27,7 +27,7 @@ import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
 import { embed } from 'ai';
 
 import { Collection } from '@zukhruf/embeddings';
-import { Profile, SimilarityScorer } from '@zukhruf/relevance-filtering';
+import { SimilarityScorer, TaughtAnswers } from '@zukhruf/relevance-filtering';
 
 const model = createOpenAICompatible({
   name: 'llama.cpp',
@@ -223,37 +223,48 @@ await collection.upsert(
   })),
 );
 
-const profile = new Profile({
-  name: 'Security',
-  description:
-    'Cybersecurity: attacks, breaches, vulnerabilities and the tools that stop them.',
-  keywords: ['secur', 'cyber', 'hack'],
-  relevant: ['ransomware-hospital', 'patch-tuesday', 'security-funding'],
-  notRelevant: ['chip-plant'],
+const description =
+  'Cybersecurity: attacks, breaches, vulnerabilities and the tools that stop them.';
+const { embedding: descriptionVector } = await embed({
+  model,
+  value: `task: search result | query: ${description}`,
 });
-const textOf = (id: string) => {
-  const item = all.find((article) => article.id === id);
-  return item === undefined ? '' : `${item.title} ${item.lead}`;
-};
-const [first, ...rest] = today.map(({ id, day }) => ({
-  id,
-  publishedAt: new Date(Date.UTC(2026, 9, day)),
-  text: textOf(id),
-}));
-if (first === undefined) throw new Error('No new article.');
+const textOf = (item: Item) => `${item.title} ${item.lead}`;
+// The reader said yes to three articles and no to one, by article id.
+const yes = new Set([
+  'ransomware-hospital',
+  'patch-tuesday',
+  'security-funding',
+]);
+const answers = TaughtAnswers.parse(
+  new Map(
+    answered
+      .filter(({ id }) => yes.has(id) || id === 'chip-plant')
+      .map((item) => [
+        item.id,
+        { relevant: yes.has(item.id), text: textOf(item) },
+      ]),
+  ),
+);
+if (answers === undefined) throw new Error('The reader said yes to nothing.');
 
 const scorer = new SimilarityScorer({
   vectors: collection,
-  embedDescription: async (description) =>
-    (
-      await embed({
-        model,
-        value: `task: search result | query: ${description}`,
-      })
-    ).embedding,
-  taughtText: textOf,
+  descriptionVector,
+  answers,
+  keywords: ['secur', 'cyber', 'hack'],
 });
-const scores = await scorer.score(profile, [first, ...rest]);
+const scores = await scorer.score(
+  new Map(
+    today.map((item) => [
+      item.id,
+      {
+        publishedAt: new Date(Date.UTC(2026, 9, item.day)),
+        text: textOf(item),
+      },
+    ]),
+  ),
+);
 
 const best = 2;
 for (let day = 8; day <= 12; day++) {
@@ -270,7 +281,7 @@ for (let day = 8; day <= 12; day++) {
 
 ## What it prints
 
-The probabilities are calibrated, because the profile has relevant answers. With EmbeddingGemma 2 Q8_0 on llama.cpp b11960, it prints:
+The probabilities are calibrated, because the reader said yes to some articles. With EmbeddingGemma 2 Q8_0 on llama.cpp b11960, it prints:
 
 ```text
 2026-10-08 0.639 phishing-kits
@@ -294,4 +305,4 @@ The probabilities are low for most security articles: a stream of 24 articles gi
 - The calibration is fitted on the articles of `stream`, so rank the stream of the whole period, and cut it into days with `ranked({ from, to })`. A stream of 24 articles gives a weak fit. A real feed has hundreds of articles in a day.
 - Show the ranking. Use `scores.accepted(threshold)` only for an action that needs a yes or no, with a threshold from the costs of that action ([ADR 0005](../adr/0005-a-scorer-and-a-threshold-are-ports.md)).
 - Give `publishedAt` as the collection stores it. The scorer reads the similarities of the stream with one `query` over the publish dates of the stream.
-- To add an answer, call `profile.with({ relevant: [...profile.relevant, id] })` and score again.
+- To add an answer, add it to the map, parse it again, and make a new scorer.

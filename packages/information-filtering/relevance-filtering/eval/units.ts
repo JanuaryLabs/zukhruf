@@ -18,7 +18,10 @@ export function windowOf(slice: LoadedSet): boolean[] {
 export function scoredStream(
   slice: LoadedSet,
   window: readonly boolean[],
-): [Article, ...Article[]] {
+): [
+  Article & { readonly id: string },
+  ...(Article & { readonly id: string })[],
+] {
   const [first, ...rest] = slice.articles
     .filter((_, index) => !window[index])
     .map(({ id, publishedAt }) => ({

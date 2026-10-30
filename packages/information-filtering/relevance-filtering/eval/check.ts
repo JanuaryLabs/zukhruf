@@ -67,7 +67,6 @@ export async function implementationCheck(): Promise<CheckResult[]> {
   const answers = teach(pool, 10);
   const stream = scoredStream(slice, window);
   const scores = await runDesign({
-    profile,
     keyword: profile.narrow,
     answers,
     vectors: slice.collection,

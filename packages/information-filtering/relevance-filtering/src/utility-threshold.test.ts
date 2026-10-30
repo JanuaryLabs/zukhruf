@@ -1,25 +1,18 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 
-import { Profile, Scores, UtilityThreshold } from './index.ts';
-
-const profile = new Profile({
-  name: 'chips',
-  description: 'New computer chips.',
-  relevant: [],
-  notRelevant: [],
-});
+import { Scores, UtilityThreshold } from './index.ts';
 
 // The scores of a stream that a scorer ranked, the best first.
 function scored(...probabilities: number[]): Scores {
-  return new Scores({
-    profile,
-    ranked: probabilities.map((probability, index) => ({
-      id: `p${probability}`,
-      publishedAt: new Date(Date.UTC(2026, 9, index + 1)),
-      probability,
-    })),
-  });
+  return new Scores(
+    new Map(
+      probabilities.map((probability, index) => [
+        `p${probability}`,
+        { publishedAt: new Date(Date.UTC(2026, 9, index + 1)), probability },
+      ]),
+    ),
+  );
 }
 
 describe('UtilityThreshold', () => {
