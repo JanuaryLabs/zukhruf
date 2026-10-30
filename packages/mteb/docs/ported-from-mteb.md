@@ -167,6 +167,12 @@ MTEB has no significance test. The modules in `src/significance/` are not a port
 
 The test and its generator are copies of code from other packages of this repository. See [copied-code.md](./copied-code.md).
 
+MTEB has no report either: its leaderboard compares models over many tasks. `src/report/` (the subpath `@zukhruf/mteb/report`) is not a port, and a change in MTEB does not change it.
+
+- `report/report.ts` (`Report`): `Report.from` reads the results of a task with `loadResults`, the main score of each query with `perQueryScores`, and the queries and qrels of the task, for each split and subset. It gives a page (`toHtml`), the two tables as Markdown (`toMarkdown`), and the tables `scores` (`toDataFrame` at the split level, or the subset level for a task with more than one subset) and `verdicts`. The score of each query is the main score, or nDCG@10 when `perQueryScores` has no value of the main score for each query (MRR). A recall at a cut-off above the size of the corpus is 1 for each model, so the tables and the page leave it out. A model without predictions, a model without a result and a baseline that is not one of the models are errors.
+- `report/verdicts.ts` (`verdicts`, `decide`): a `pairedBootstrapTest` for each comparison and tested score; `holm` corrects the p-values of all the comparisons but the primary one, which is tested alone; a difference counts when its deciding p-value is below 0.05.
+- `report/page.ts`, `styles.ts`, `script.ts`: one HTML page without `<html>`, `<head>` or `<body>`, with its CSS and script inline and the IBM Plex fonts of Google Fonts. The page uses the words of this package (query, document, baseline) and the model names of the results.
+
 ## Behavior kept from MTEB on purpose
 
 - `OpenAIAPIEncodeWrapper` finds the prompt name in `model_prompts`, which it never sets, so `prompt_dict` alone gives no prompt. `AiSdkEncoder` does the same, so both give the same embeddings for the same options.

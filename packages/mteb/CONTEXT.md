@@ -63,3 +63,7 @@ _Avoid_: Partition, fold
 **Table**:
 The scores of one or more models in rows and columns, made by `toDataFrame`. By default, a table has a row for each task and a column for each model, and it shows the main score. A table can show other scores side by side. The class of a table is `DataFrame`, as in pandas. A table can be written as Markdown, CSV or LaTeX.
 _Avoid_: Leaderboard (MTEB's web page), report
+
+**Report**:
+The results of one task for each split, with the verdict of each comparison and the score of each query: one page and two tables (scores and verdicts), made by `Report.from`. Not from MTEB.
+_Avoid_: Dashboard, summary, leaderboard

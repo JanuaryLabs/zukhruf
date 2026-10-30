@@ -33,6 +33,12 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "default": "./dist/index.js"
+    },
+    "./report": {
+      "@zukhruf/source": "./src/report/index.ts",
+      "types": "./dist/report/index.d.ts",
+      "import": "./dist/report/index.js",
+      "default": "./dist/report/index.js"
     }
   },
   "files": [

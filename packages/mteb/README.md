@@ -401,3 +401,47 @@ const corrected = holm(verdicts.map((verdict) => verdict.p));
 The seed is fixed, so the same scores give the same verdict. `replicates` and `seed` are options. `perQueryScores` takes `split`, `subset` and `score` options; a score must have a value for each query, such as `ndcg_at_10` or `recall_at_100`. The test refuses a baseline and a change with different queries.
 
 With few queries, the interval is wide, and most changes are `inconclusive`. Add queries to the task to make the test stronger. To try more changes on the same queries does not help.
+
+## Report a task
+
+A table and a verdict each answer one question. A report puts the results of a task, the verdicts and the score of each query on one page, for each split. It is not from MTEB: MTEB has its leaderboard, which compares models over many tasks.
+
+`Report.from` reads what `evaluate` saved: the results in the result cache and the predictions of each model. Give it the same `predictionFolder` function that you gave `evaluate`, and the model that the other models must beat (`baseline`).
+
+```ts
+import { writeFileSync } from 'node:fs';
+
+import { type MTEBModels, ResultCache, bm25S, evaluate } from '@zukhruf/mteb';
+import { Report } from '@zukhruf/mteb/report';
+
+const task = new Faq();
+const cache = new ResultCache('mteb-results');
+const baseline = bm25S.loadModel();
+const change = bm25S.loadModel({ k1: 1.2, b: 0.5 });
+const predictionFolder = (model: MTEBModels) =>
+  `predictions/${model.mtebModelMeta.modelNameAsPath()}${model.mtebModelMeta.experimentName ?? ''}`;
+for (const model of [baseline, change])
+  await evaluate(model, task, {
+    cache,
+    predictionFolder: predictionFolder(model),
+    overwriteStrategy: 'always',
+  });
+
+const report = await Report.from({
+  task,
+  models: [baseline, change],
+  cache,
+  predictionFolder,
+  baseline,
+});
+writeFileSync('report.html', report.toHtml());
+writeFileSync('report.md', report.toMarkdown());
+writeFileSync('scores.csv', report.scores.toCsv());
+writeFileSync('verdicts.tex', report.verdicts.toLatex({ escape: true }));
+```
+
+`toHtml` gives one page. A switch at the top selects the split. For each split, the page shows the models ranked by the main score, the verdict of each comparison, the recall at each cut-off next to the recall of a perfect ranking, the main score of each query, a table of the scores, and how the models were tested. Each section title is a claim that comes from the numbers.
+
+By default, the report compares each model with the baseline on the main score of the task. When the main score has no value for each query (MRR, for example), the queries and the verdicts use nDCG@10. `comparisons` gives other pairs, as `[baseline, change]`, and `tested` gives other scores. `holm` corrects the p-values of all the comparisons together. `primary` names one comparison and one score that you chose before you saw the scores: the report tests it alone and corrects the others. A difference counts when its deciding p-value (the corrected p-value, or the p-value of the primary comparison) is below 0.05.
+
+`scores` and `verdicts` are tables (`DataFrame`), so `toCsv`, `toMarkdown` and `toLatex` write them. A model without predictions gives an error that names its folder: `evaluate` writes no predictions when it reads a result from the cache.
