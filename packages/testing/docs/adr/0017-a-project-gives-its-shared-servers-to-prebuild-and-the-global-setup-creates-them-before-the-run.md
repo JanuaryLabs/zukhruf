@@ -1,6 +1,6 @@
 # A project gives its shared servers to `prebuild`, and the global setup creates them before the run
 
-Status: design for review (#3404). The code does not exist yet.
+Rejected on 2026-10-30 (user, #3404). The code is not written. The cold starts below failed at the 60 s per-test limit of `@zukhruf/nx/test`, and that limit was shorter than the readiness bounds of this package: Postgres 60 s, MySQL and MariaDB 90 s, SQL Server 180 s. The default limit of `@zukhruf/nx/test` is now 240 s, the slowest readiness bound plus 60 s for the test ([ADR 0004 of `@zukhruf/nx`](../../../nx/docs/adr/0004-node-test-target-from-test-files.md)). Thus the option "A longer time limit" below is the decision. A prebuilt fixture is also against the design of this package, which starts a shared server on demand: it starts servers that a run possibly does not use, and each project repeats the options of its tests in its global setup. The design below stays as the record.
 
 A shared server starts on the first `reuse()` that needs it. Each database fixture calls `reuse()` in `database()`, and a test calls `database()`. Thus the time limit of the first test that needs a server also counts the start of that server: the pull of the image and the boot. Node's time limit counts the test function, and the acquisition is in the test function. Meszaros (_xUnit Test Patterns_, 2007) calls this Lazy Setup of a Shared Fixture.
 
