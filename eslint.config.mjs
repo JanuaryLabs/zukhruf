@@ -146,6 +146,16 @@ export default defineConfig(
     ],
     rules: { 'island/no-console': 'off' },
   },
+  // The examples of @zukhruf/mteb are not shipped. They are command line
+  // programs: they read their arguments and print the scores.
+  {
+    files: ['packages/mteb/examples/**'],
+    rules: {
+      '@nx/enforce-module-boundaries': moduleBoundaryRule('tests'),
+      'island/no-console': 'off',
+      'island/no-process-env': 'off',
+    },
+  },
   // @zukhruf/testing depends on docker, and docker on async, so the tests of
   // these two packages cannot import TemporaryFiles: that import would make a
   // cycle in the build (docs/adr/0001, line 29). Docker keeps its own copy of

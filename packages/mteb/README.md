@@ -1,0 +1,128 @@
+# @zukhruf/mteb
+
+A TypeScript port of the evaluation engine of [MTEB](https://github.com/embeddings-benchmark/mteb) 2.26.28. Use it to measure if an embedding model finds the right documents, and to compare models on your own data. The scores, their names and the result files are those of MTEB.
+
+The words in these documents have one meaning each. See the glossary in [CONTEXT.md](./CONTEXT.md). The port and its differences from MTEB are in [docs/ported-from-mteb.md](./docs/ported-from-mteb.md).
+
+## Use it
+
+This package has the retrieval and reranking tasks, for text. MTEB's tasks ArguAna and SCIDOCS are ported, with their datasets from the HuggingFace Hub, and so are the models EmbeddingGemma 2 and Qwen3-Embedding with the prompts of MTEB. A task of your own loads its data in `loadData`.
+
+```sh
+npm install @zukhruf/mteb ai
+```
+
+```ts
+import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
+
+import {
+  AbsTaskRetrieval,
+  AiSdkEncoder,
+  ModelMeta,
+  ResultCache,
+  TaskMetadata,
+  evaluate,
+} from '@zukhruf/mteb';
+
+class Faq extends AbsTaskRetrieval {
+  constructor() {
+    super({
+      metadata: new TaskMetadata({
+        name: 'Faq',
+        description: 'Questions and the answers that answer them.',
+        dataset: { path: 'local/faq', revision: '1' },
+        type: 'Retrieval',
+        category: 't2t',
+        modalities: ['text'],
+        evalSplits: ['test'],
+        evalLangs: ['eng-Latn'],
+        mainScore: 'ndcg_at_10',
+      }),
+    });
+  }
+
+  override async loadData(): Promise<void> {
+    this.dataset = new Map([
+      [
+        'default',
+        new Map([
+          [
+            'test',
+            {
+              corpus: [{ id: 'a1', text: 'Reset the password from Settings.' }],
+              queries: [{ id: 'q1', text: 'How do I change my password?' }],
+              relevantDocs: new Map([['q1', new Map([['a1', 1]])]]),
+              topRanked: null,
+            },
+          ],
+        ]),
+      ],
+    ]);
+  }
+}
+
+const local = createOpenAICompatible({
+  name: 'llama.cpp',
+  baseURL: 'http://127.0.0.1:8080/v1',
+});
+const encoder = new AiSdkEncoder({
+  model: local.embeddingModel('embeddinggemma'),
+  modelMeta: ModelMeta.createEmpty({
+    name: 'llama.cpp/embeddinggemma',
+    revision: 'Q8_0',
+  }),
+});
+const result = await evaluate(encoder, new Faq(), {
+  cache: new ResultCache('mteb-results'),
+});
+console.log(result.taskResults[0]?.scores.test?.[0]?.main_score);
+console.log(encoder.tokens);
+```
+
+`evaluate` keeps each result in the cache, in MTEB's folder layout. A second run of the same model on the same task loads the result and does not call the model; `overwriteStrategy: 'always'` runs it again. MTEB reads these files, and this package reads the files of MTEB.
+
+Give a task `topRanked` to make it a reranking task: each query then ranks only its candidates.
+
+## Compare models on MTEB's tasks
+
+A ported model gives its encoder through `loadModel`, with the AI SDK embedding model of a server that serves its weights. The encoder adds the prompts that MTEB's numbers used, so the scores can be compared with MTEB's leaderboard.
+
+```ts
+import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
+
+import {
+  ArguAna,
+  ResultCache,
+  SCIDOCS,
+  evaluate,
+  qwen3Embedding0B6,
+} from '@zukhruf/mteb';
+
+const llamaCpp = createOpenAICompatible({
+  name: 'llama.cpp',
+  baseURL: 'http://127.0.0.1:8080/v1',
+});
+const encoder = qwen3Embedding0B6.loadModel(
+  llamaCpp.embeddingModel('qwen3-embedding-0.6b'),
+  { quantization: 'Q8_0' },
+);
+const result = await evaluate(encoder, [new ArguAna(), new SCIDOCS()], {
+  cache: new ResultCache('mteb-results'),
+});
+```
+
+Serve the model so that it takes the longest text of a task whole. llama.cpp refuses a text with more tokens than its physical batch (`-ub`, 512 by default), and MTEB does not cut the texts for EmbeddingGemma 2 or Qwen3-Embedding: start llama.cpp with `-c 8192 -b 8192 -ub 8192 --embedding`, and `--pooling last` for Qwen3-Embedding.
+
+`examples/compare-models.ts` runs both ported models on ArguAna and SCIDOCS and prints their scores. It sends the texts to two llama.cpp servers that serve the Q8_0 weights: EmbeddingGemma 2 on port 8110 and Qwen3-Embedding on port 8111. The file has the commands that start the servers.
+
+```sh
+npx nx run mteb:compare
+```
+
+A task downloads its files once, to `~/.cache/mteb/datasets`. The keyword arguments of `loadModel` are experiment arguments: a quantized model keeps its results apart from the results of the full weights.
+
+To see the scores as a bar chart for each task, run the command below. It needs [uv](https://docs.astral.sh/uv/). Python MTEB reads the result files in `~/.cache/mteb` and does not download its results repository. The command writes `~/.cache/mteb/chart.html` and prints its path.
+
+```sh
+npx nx run mteb:chart
+```

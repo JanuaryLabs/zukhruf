@@ -1,0 +1,61 @@
+export {
+  AbsTask,
+  type EvaluateTaskOptions,
+  type MTEBModels,
+} from './abstasks/abstask.ts';
+export {
+  AbsTaskRetrieval,
+  type RetrievalSplitData,
+} from './abstasks/retrieval.ts';
+export {
+  DEFAULT_DATASET_CACHE,
+  type HubOptions,
+  RetrievalDatasetLoader,
+} from './abstasks/retrieval-dataset-loaders.ts';
+export * from './abstasks/task-metadata.ts';
+export * from './cache/result-cache.ts';
+export {
+  OVERWRITE_STRATEGIES,
+  type EvaluateOptions,
+  type OverwriteStrategy,
+  evaluate,
+} from './evaluate.ts';
+export {
+  AbsEncoder,
+  type InstructionTemplate,
+  type PromptSource,
+} from './models/abs-encoder.ts';
+export {
+  AiSdkEncoder,
+  type AiSdkEncoderOptions,
+} from './models/ai-sdk-encoder.ts';
+export { AiSdkTextEncoder } from './models/ai-sdk-text-encoder.ts';
+export { InstructAiSdkEncoder } from './models/instruct-wrapper.ts';
+export {
+  EMBEDDING_GEMMA_2_TASK_INSTRUCTIONS,
+  EmbeddingGemma2Encoder,
+  embeddingGemma2,
+} from './models/model-implementations/google-embeddinggemma.ts';
+export {
+  instructionTemplate as qwen3InstructionTemplate,
+  qwen3Embedding0B6,
+  qwen3Embedding4B,
+  qwen3Embedding8B,
+} from './models/model-implementations/qwen3-models.ts';
+export * from './models/model-meta.ts';
+export type {
+  EncodeOptions,
+  EncoderProtocol,
+  IndexOptions,
+  SearchOptions,
+  SearchProtocol,
+} from './models/models-protocols.ts';
+export { SearchEncoderWrapper } from './models/search-wrappers.ts';
+export { BenchmarkResults } from './results/benchmark-results.ts';
+export { ModelResult } from './results/model-result.ts';
+export { type TaskError, TaskResult } from './results/task-result.ts';
+export { cosSim, dotScore } from './similarity-functions.ts';
+export { type PhaseTiming, TimingStack } from './timing.ts';
+export { ArguAna } from './tasks/retrieval/eng/argu-ana-retrieval.ts';
+export { SCIDOCS } from './tasks/retrieval/eng/scidocs-retrieval.ts';
+export * from './types/index.ts';

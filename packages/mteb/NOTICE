@@ -1,0 +1,22 @@
+@zukhruf/mteb
+Copyright 2026 ezzabuzaid
+
+This package is a TypeScript port of parts of MTEB (Massive Text Embedding
+Benchmark), version 2.26.28, https://github.com/embeddings-benchmark/mteb,
+licensed under the Apache License, Version 2.0 (see LICENSE). The ported files
+were changed: docs/ported-from-mteb.md lists each source module and each
+difference.
+
+It also ports the semantics of parts of these dependencies of MTEB:
+
+- pytrec_eval (terrierteam/pytrec_eval 0.5.11), Copyright (c) 2017 Christophe
+  Van Gysel, MIT License, and the trec_eval measures that it binds
+  (https://github.com/usnistgov/trec_eval).
+- NumPy 2.5.4 (pairwise summation, mean, standard deviation, stable argsort,
+  linspace), Copyright (c) NumPy Developers, BSD 3-Clause License.
+- scikit-learn 1.9.1 (sklearn.metrics.auc), Copyright (c) scikit-learn
+  developers, BSD 3-Clause License.
+- packaging 26.3 (packaging.version), Copyright (c) Donald Stufft and
+  individual contributors, Apache License 2.0 or BSD 2-Clause License.
+- CPython 3.12 (the float sum, round, repr and heapq algorithms), Copyright (c)
+  Python Software Foundation, PSF License Agreement.

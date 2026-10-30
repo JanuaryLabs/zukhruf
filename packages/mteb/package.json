@@ -1,0 +1,55 @@
+{
+  "name": "@zukhruf/mteb",
+  "version": "0.3.58",
+  "description": "A TypeScript port of the MTEB evaluation engine (Massive Text Embedding Benchmark, version 2.26.28): tasks, evaluators, metrics, search, results and the result cache. Retrieval and reranking first; the encoder is an AI SDK embedding model.",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/JanuaryLabs/zukhruf",
+    "directory": "packages/mteb"
+  },
+  "bugs": {
+    "url": "https://github.com/JanuaryLabs/zukhruf/issues"
+  },
+  "homepage": "https://github.com/JanuaryLabs/zukhruf/tree/main/packages/mteb#readme",
+  "keywords": [
+    "mteb",
+    "embeddings",
+    "benchmark",
+    "evaluation",
+    "retrieval",
+    "ndcg",
+    "trec-eval",
+    "ai-sdk"
+  ],
+  "type": "module",
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "@zukhruf/source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "NOTICE",
+    "!dist/spec/**",
+    "!**/*.tsbuildinfo",
+    "!**/*.test.*"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "ai": "^7.0.154",
+    "yaml": "^2.9.1",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@ai-sdk/openai-compatible": "3.0.79",
+    "@ai-sdk/provider": "^4.0.34",
+    "@zukhruf/testing": "^0.3.46"
+  }
+}

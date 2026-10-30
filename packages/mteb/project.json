@@ -1,0 +1,25 @@
+{
+  "name": "mteb",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "packages/mteb/src",
+  "projectType": "library",
+  "tags": ["layer:island", "std:domain"],
+  "targets": {
+    "compare": {
+      "executor": "nx:run-commands",
+      "cache": false,
+      "options": {
+        "command": "node examples/compare-models.ts",
+        "cwd": "{projectRoot}"
+      }
+    },
+    "chart": {
+      "executor": "nx:run-commands",
+      "cache": false,
+      "options": {
+        "command": "uv run examples/chart.py",
+        "cwd": "{projectRoot}"
+      }
+    }
+  }
+}

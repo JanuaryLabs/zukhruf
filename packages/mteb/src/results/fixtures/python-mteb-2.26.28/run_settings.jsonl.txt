@@ -1,0 +1,1 @@
+{"task": "zukhruf-gvc", "splits": ["test"], "version": {"mteb": "2.26.28", "torch": "2.14.1", "sentence-transformers": "6.2.0", "flash-attn": null, "transformers": "5.21.0"}, "encode_kwargs": {}, "subsets": ["default"]}
