@@ -13,6 +13,7 @@ import { LeaseLostError, Modes, Mutex } from '../../index.ts';
 import {
   type StoreCase,
   deadlineFor,
+  postgresPool,
   storeCases,
 } from '../../testing/store-cases.ts';
 import { type PostgresSession, PostgresStore } from './index.ts';
@@ -246,7 +247,7 @@ test(
       connectionString: database.connectionString,
     });
     await admin.connect();
-    const otherPool = new pg.Pool({
+    const otherPool = postgresPool({
       connectionString: database.connectionString,
     });
     const handle = await store.acquire('report:daily');
@@ -261,7 +262,7 @@ test(
       await admin.query('SELECT pg_terminate_backend($1)', [reconnecting.pid]);
       await reconnecting.reconnected;
       const heldAfterReconnect = !handle.signal.aborted;
-      const taken = await storeOver(otherPool).tryAcquire('report:daily');
+      const taken = await storeOver(otherPool.pool).tryAcquire('report:daily');
       if (taken) other.use(taken);
       reconnecting.resume();
 
@@ -295,19 +296,19 @@ test(
   async (t) => {
     // Arrange: another pool holds the key, and the waiter's only session waits for it.
     await using database = await postgresDatabase();
-    const holderPool = new pg.Pool({
+    const holderPool = postgresPool({
       connectionString: database.connectionString,
     });
-    const waiterPool = new pg.Pool({
+    const waiterPool = postgresPool({
       connectionString: database.connectionString,
       max: 1,
     });
     try {
       const holder = await hold(
-        new Mutex(storeOver(holderPool)),
+        new Mutex(storeOver(holderPool.pool)),
         'report:daily',
       );
-      const waiter = new Mutex(storeOver(waiterPool));
+      const waiter = new Mutex(storeOver(waiterPool.pool));
       const cancel = new AbortController();
       const reason = new Error('cancelled');
       const waiting = waiter.acquire('report:daily', async () => 'ran', {
@@ -351,18 +352,18 @@ test(
   async (t) => {
     // Arrange: a holder, and a waiter in another pool that cancels while the server keeps its place in the queue.
     await using database = await postgresDatabase();
-    const pools = [1, 2, 3].map(
-      () => new pg.Pool({ connectionString: database.connectionString }),
+    const pools = [1, 2, 3].map(() =>
+      postgresPool({ connectionString: database.connectionString }),
     );
     const [holderPool, waiterPool, nextPool] = pools;
     assert.ok(holderPool && waiterPool && nextPool);
     try {
       const holder = await hold(
-        new Mutex(storeOver(holderPool)),
+        new Mutex(storeOver(holderPool.pool)),
         'report:daily',
       );
       const cancel = new AbortController();
-      const waiting = new Mutex(storeOver(waiterPool)).acquire(
+      const waiting = new Mutex(storeOver(waiterPool.pool)).acquire(
         'report:daily',
         async () => 'ran',
         { signal: cancel.signal },
@@ -374,7 +375,7 @@ test(
       // Act: the holder releases, so the server can grant the cancelled waiter's place first.
       await holder.release();
       const next = await Promise.race([
-        new Mutex(storeOver(nextPool)).acquire(
+        new Mutex(storeOver(nextPool.pool)).acquire(
           'report:daily',
           async () => 'granted' as const,
         ),
@@ -411,7 +412,9 @@ test(
       const asApp = new URL(database.connectionString);
       asApp.username = role;
       asApp.password = 'app';
-      const pool = new pg.Pool({ connectionString: asApp.toString() });
+      const { pool, end } = postgresPool({
+        connectionString: asApp.toString(),
+      });
       try {
         // Act
         const token = await new Mutex(storeOver(pool)).acquire(
@@ -422,7 +425,7 @@ test(
         // Assert
         assert.equal(token.value, 1n);
       } finally {
-        await pool.end();
+        await end();
       }
     } finally {
       // A role belongs to the server, not to the database of the test.
@@ -439,7 +442,7 @@ test(
   async () => {
     // Arrange: a pool of one session, so the next borrower gets the session that held the key.
     await using database = await postgresDatabase();
-    const pool = new pg.Pool({
+    const { pool, end } = postgresPool({
       connectionString: database.connectionString,
       max: 1,
     });
@@ -463,16 +466,16 @@ test(
         borrower.release();
       }
     } finally {
-      await pool.end();
+      await end();
     }
   },
 );
 
 /**
- * One test of the shared store suites over the PostgresStore case: a holder
- * and a skipped try give the host's pool two sessions, then the host is
- * disposed. Returns how many sessions the server still has on the fixture's
- * database at that moment, before the fixture drops it.
+ * One test of the shared store suites over the PostgresStore case: four
+ * holders and a skipped try give the host's pool five sessions, then the host
+ * is disposed. Returns how many sessions the server still has on the
+ * fixture's database at that moment, before the fixture drops it.
  */
 async function sessionsAfterTheHostIsDisposed(
   postgresCase: StoreCase,
@@ -488,11 +491,13 @@ async function sessionsAfterTheHostIsDisposed(
     {
       await using host = postgresCase.open(fixture.location);
       const mutex = new Mutex(host.store);
-      const holder = await hold(mutex, 'report:daily');
-      const skipped = await mutex.acquire('report:daily', async () => 'ran', {
+      const holders = await Promise.all(
+        [1, 2, 3, 4].map((day) => hold(mutex, `report:${day}`)),
+      );
+      const skipped = await mutex.acquire('report:1', async () => 'ran', {
         mode: Modes.skipIfBusy(),
       });
-      await holder.release();
+      await Promise.all(holders.map((holder) => holder.release()));
       assert.deepEqual(
         skipped,
         { acquired: false },
@@ -511,9 +516,9 @@ async function sessionsAfterTheHostIsDisposed(
 
 test(
   "a disposed PostgresStore case host leaves no session of its pool on the server, so the fixture's drop cannot end a connection the pool still owns",
-  { timeout: 120_000, todo: '#3305' },
+  { timeout: 120_000 },
   async () => {
-    // Arrange: the case of the shared store suites. A cycle that leaves a session is a race, so it runs many times.
+    // Arrange: the case of the shared store suites. A session left behind is a race, so the cycle runs many times.
     const postgresCase = storeCases.find(
       (candidate) => candidate.name === 'PostgresStore',
     );

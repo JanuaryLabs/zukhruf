@@ -194,13 +194,40 @@ function postgresStore(pool: pg.Pool) {
   });
 }
 
-const postgresPool = (location: string, allowExitOnIdle: boolean) =>
-  new pg.Pool({
-    connectionString: location,
-    keepAlive: true,
-    keepAliveInitialDelayMillis: 10_000,
-    allowExitOnIdle,
-  });
+const postgresPoolConfig = (
+  location: string,
+  allowExitOnIdle: boolean,
+): pg.PoolConfig => ({
+  connectionString: location,
+  keepAlive: true,
+  keepAliveInitialDelayMillis: 10_000,
+  allowExitOnIdle,
+});
+
+/**
+ * A pool, and an end that resolves once the server has no session of it.
+ * `pool.end()` resolves before the sockets of its clients close, so a
+ * `DROP DATABASE … WITH (FORCE)` right after it can end a session the pool
+ * still owns, and the pool's unhandled 'error' fails the running test (#3305).
+ * A pool emits 'remove' when the socket of a client has closed, and the
+ * server's backend has left by then.
+ */
+export function postgresPool(config: pg.PoolConfig) {
+  const pool = new pg.Pool(config);
+  const sessions = new Set<pg.PoolClient>();
+  pool.on('connect', (client) => sessions.add(client));
+  pool.on('remove', (client) => sessions.delete(client));
+  return {
+    pool,
+    end: async () => {
+      // No client connects once pool.end() resolves.
+      await pool.end();
+      while (sessions.size > 0) {
+        await new Promise((removed) => pool.once('remove', removed));
+      }
+    },
+  };
+}
 
 /** How a store of a server case reaches its database. The location of the fixture is this object as JSON. */
 interface Server {
@@ -592,16 +619,18 @@ export const storeCases: StoreCase[] = [
     releaseLatency: 10,
     fixture: postgresFixture,
     open: (location) => {
-      const pool = postgresPool(location, false);
+      const { pool, end } = postgresPool(postgresPoolConfig(location, false));
       return {
         store: postgresStore(pool),
         adoptProcess() {},
         adoptThread() {},
-        [Symbol.asyncDispose]: () => pool.end(),
+        [Symbol.asyncDispose]: end,
       };
     },
-    openInChild: (location) => postgresStore(postgresPool(location, true)),
-    openInThread: (location) => postgresStore(postgresPool(location, true)),
+    openInChild: (location) =>
+      postgresStore(new pg.Pool(postgresPoolConfig(location, true))),
+    openInThread: (location) =>
+      postgresStore(new pg.Pool(postgresPoolConfig(location, true))),
   },
   {
     name: 'SqlServerStore',
