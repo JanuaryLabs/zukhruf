@@ -303,6 +303,7 @@ console.log(verdict);
   observed: -0.0004332032713899203,
   low: -0.013840414128031475,
   high: 0.01024766985882517,
+  p: 0.98,
   queries: 20,
   replicates: 2000,
   seed: 31957
@@ -310,6 +311,15 @@ console.log(verdict);
 ```
 
 `observed` is the mean of (change - baseline) over the queries. `low` and `high` are the bounds of its 95% interval. The test draws as many queries as there are, with replacement, 2000 times, and takes the mean difference of each draw (a paired bootstrap test, Efron and Tibshirani 1993). The result is `better` when `low` is above 0, `worse` when `high` is below 0, and `inconclusive` when the interval contains 0. The output above is for the 20 queries of the BM25 fixture (`src/models/model-implementations/fixtures/bm25/`), not for a real task.
+
+`p` is the two-sided p-value of the same 2000 means (Efron and Tibshirani 1993). It is two times the smaller share of the means that are at or below 0, or at or above 0, and it is at most 1. Thus `p` is below 0.05 when the interval does not contain 0, but for the interpolation of the interval bounds.
+
+When you compare more than one change, some changes are `better` or `worse` by chance. `holm` corrects the p-values of all the comparisons together (Holm 1979). A comparison is significant at the 5% level when its corrected p-value is 0.05 or less. `holm` gives the values of `multipletests(pvals, method="holm")` of statsmodels 0.15.0, in the order of the p-values that you give it:
+
+```ts
+const verdicts = changes.map((change) => pairedBootstrapTest(baseline, change));
+const corrected = holm(verdicts.map((verdict) => verdict.p));
+```
 
 The seed is fixed, so the same scores give the same verdict. `replicates` and `seed` are options. `perQueryScores` takes `split`, `subset` and `score` options; a score must have a value for each query, such as `ndcg_at_10` or `recall_at_100`. The test refuses a baseline and a change with different queries.
 
