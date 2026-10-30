@@ -6,7 +6,7 @@ The words in these documents have one meaning each. See the glossary in [CONTEXT
 
 ## Use it
 
-This package has the retrieval, reranking, pair classification, STS, clustering, classification and multilabel classification tasks, for text. MTEB's tasks ArguAna, SCIDOCS, SprintDuplicateQuestions, STSBenchmark, BiorxivClusteringS2S, BiorxivClusteringS2S.v2, Banking77Classification, Banking77Classification.v2 and KorHateSpeechMLClassification are ported, with their datasets from the HuggingFace Hub, and so are the models EmbeddingGemma 2 and Qwen3-Embedding with the prompts of MTEB. A task of your own keeps its dataset in a folder on disk, and its metadata names that folder as the dataset path.
+This package has the retrieval, reranking, pair classification, STS, clustering, classification, multilabel classification and regression tasks, for text. MTEB's tasks ArguAna, SCIDOCS, SprintDuplicateQuestions, STSBenchmark, BiorxivClusteringS2S, BiorxivClusteringS2S.v2, Banking77Classification, Banking77Classification.v2, KorHateSpeechMLClassification, RuSciBenchCitedCountRegression and RuSciBenchYearPublRegression are ported, with their datasets from the HuggingFace Hub, and so are the models EmbeddingGemma 2 and Qwen3-Embedding with the prompts of MTEB. A task of your own keeps its dataset in a folder on disk, and its metadata names that folder as the dataset path.
 
 The package is private: it is not on npm. A project of this workspace names it in the dependencies of its `package.json`, with `ai`, and npm links the workspace package:
 
@@ -227,6 +227,20 @@ const result = await evaluate(encoder, new KorHateSpeechMLClassification());
 ```
 
 A task of your own extends `AbsTaskMultilabelClassification`. Its dataset has a `train` split, a column `text` and a column `label` with a list of labels in each row. The fields of a classification task set the columns, the training split, the rows of each label and the number of experiments. `maxEvalSamples` sets the largest evaluation split, and `null` keeps the whole split.
+
+## Regression
+
+In a regression task, each row of a split is a text and its value: a number. The task trains a linear model (`LinearRegression` of scikit-learn) on the embeddings of the training rows. Then the model predicts the value of each row of the evaluation split. When the training split has more than 2048 rows, the task keeps 2048 of them, with the same share of each tenth of the values. The task does this 10 times, with other training rows each time, and gives the mean of the scores. The scores are the mean squared error (`mse`), the mean absolute error (`mae`), the coefficient of determination (`r2`), Kendall's tau (`kendalltau`) and the square root of `mse` (`rmse`). The main score of the RuSciBench tasks is `kendalltau`.
+
+```ts
+import { RuSciBenchCitedCountRegression, evaluate } from '@zukhruf/mteb';
+
+const result = await evaluate(encoder, new RuSciBenchCitedCountRegression());
+```
+
+A task of your own extends `AbsTaskRegression`. Its dataset has a `train` split and the columns `text` and `value`. The fields of a classification task set the columns, the training split and the number of experiments. `nSamples` sets the largest number of training rows of an experiment.
+
+The linear model can predict values that differ from MTEB's in their last float32 bits, so `mse`, `mae`, `r2` and `rmse` can differ from MTEB's in their last bits (by less than 1e-5 of their size on the data of the tests). When the embeddings have as many dimensions as the training split has rows, or more, the model of MTEB depends on the LAPACK library, and the scores of this package can differ more. See [docs/ported-from-mteb.md](./docs/ported-from-mteb.md).
 
 ## Compare models on MTEB's tasks
 

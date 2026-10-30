@@ -44,6 +44,10 @@ _Avoid_: Category, target, ground truth
 The labels of an input in a multilabel classification task: a list of zero or more labels. The classifier predicts a label set for each input of the evaluation split.
 _Avoid_: Tags, multi-label target
 
+**Value**:
+The number of an input in a regression task, such as the citations of an article. The task trains a linear model on the embeddings of the training inputs. Then the model predicts the value of each input of the evaluation split, and the scores compare the predictions with the values.
+_Avoid_: Label, target, score (a score is a number of a result)
+
 **Encoder**:
 The model wrapper that gives one embedding for each input. `AiSdkEncoder` is an encoder over an AI SDK embedding model.
 _Avoid_: Embedder, model (for the wrapper)

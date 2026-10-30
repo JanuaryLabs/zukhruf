@@ -70,6 +70,7 @@ export abstract class AbsTaskMultilabelClassification extends ClassificationTask
   evaluatorModel: MultilabelClassifierModel = new KNeighborsClassifier({
     nNeighbors: 5,
   });
+  samplesPerLabel = 8;
   maxEvalSamples: number | null = 3000;
   // np_rng of AbsTask: default_rng(seed), made with the task. The shuffles of
   // every evaluation of the task draw from it in turn.

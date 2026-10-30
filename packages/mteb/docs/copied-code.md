@@ -14,11 +14,11 @@ Paths on the left are in `packages/information-filtering/`. Paths on the right a
 
 **`relevance-filtering/eval/numpy-random.ts` → `dependencies/numpy-random.ts`.**
 Both give `numpy.random.default_rng(seed).integers(low, high, size)` bit for bit: SeedSequence, PCG64 and Lemire's bounded integers.
-Changes: the first comment names the paired bootstrap test of this package, not the research code and the exam rule of the eval. The code is the same.
+Changes: the first comment names the paired bootstrap test of this package and the tasks that draw from the generator, not the research code and the exam rule of the eval. The code of `integers` is the same. This copy also has `shuffle` and `permutation` (`random_interval`), `choiceWithoutReplacement` (Floyd's algorithm, which draws with the same Lemire's bounded integers as `integers`), and the legacy `RandomState`, which the eval does not have.
 
-**`relevance-filtering/eval/bootstrap.ts` `percentile` → `dependencies/numpy.ts` `percentile`.**
+**`relevance-filtering/eval/bootstrap.ts` `percentile` → `dependencies/numpy.ts` `percentile` and `quantile`.**
 Both give `np.percentile` with the method `linear` for sorted values, with the two formulas of NumPy's `_lerp`.
-Changes: none. Both calculate the position as NumPy does, `(n - 1) * (q / 100)` (`q` divided by 100 first, then the `get_virtual_index` of `linear`). The eval calculated `((n - 1) * q) / 100` until #3412: for 2000 values and `q` 97.5, that gives 1949.025, and NumPy gives 1949.0249999999999. The golden test of each copy has an array of 2000 values at 97.5 that shows the difference.
+Changes: here `percentile(sorted, q)` calls `quantile(sorted, q / 100)`. `quantile` has the body of the eval's `percentile`, with `(n - 1) * q` as the position, and `qcut` of `dependencies/pandas.ts` also calls it. The arithmetic is the same: both calculate the position as NumPy does, `(n - 1) * (q / 100)` (`q` divided by 100 first, then the `get_virtual_index` of `linear`). The eval calculated `((n - 1) * q) / 100` until #3412: for 2000 values and `q` 97.5, that gives 1949.025, and NumPy gives 1949.0249999999999. The golden test of each copy has an array of 2000 values at 97.5 that shows the difference.
 
 **`relevance-filtering/eval/bootstrap.ts` `topicBootstrap` → `significance/paired-bootstrap.ts` `pairedBootstrapTest`.**
 Both draw as many units as there are, with replacement, with `generator.integers(0, n, n)` for each replicate, take the mean of the differences of each draw, and give the 2.5 and 97.5 percentiles of the sorted means.

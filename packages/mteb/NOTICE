@@ -13,10 +13,11 @@ It also ports the semantics of parts of these dependencies of MTEB:
   Van Gysel, MIT License, and the trec_eval measures that it binds
   (https://github.com/usnistgov/trec_eval).
 - NumPy 2.5.4 (sum, mean, standard deviation, add.reduceat, stable argsort,
-  linspace, corrcoef, the sum of float32 values, the MT19937 generator,
-  randint, random_sample, choice, permutation and shuffle of the legacy
-  RandomState, and the PCG64 generator, integers and shuffle of
-  default_rng),
+  linspace, corrcoef, quantile, the sum of float32 values, the mean of
+  float32 values and along an axis, the MT19937 generator, randint,
+  random_sample, choice, permutation and shuffle of the legacy RandomState,
+  and the PCG64 generator, integers, shuffle, permutation and choice without
+  replacement of default_rng),
   Copyright (c) NumPy Developers, BSD 3-Clause License. The pairwise summation of float64 values
   is the npm dependency @stdlib/blas-ext-base-gsumpw, Copyright (c) The Stdlib
   Authors, Apache License 2.0. The package does not include its code.
@@ -25,13 +26,15 @@ It also ports the semantics of parts of these dependencies of MTEB:
   paired_manhattan_distances, normalize, row_norms, v_measure_score,
   adjusted_mutual_info_score, MiniBatchKMeans, accuracy_score, f1_score,
   precision_score, recall_score, LogisticRegression with the lbfgs solver,
-  KNeighborsClassifier, MultiLabelBinarizer and
-  label_ranking_average_precision_score), Copyright (c) scikit-learn
+  KNeighborsClassifier, MultiLabelBinarizer,
+  label_ranking_average_precision_score, LinearRegression,
+  mean_squared_error, mean_absolute_error and r2_score), Copyright (c) scikit-learn
   developers, BSD 3-Clause License.
 - scikit-multilearn (the iterative stratification, which MTEB copies in
   mteb/abstasks/_stratification.py), Copyright (c) Piotr Szymański and
   contributors, BSD 2-Clause License.
-- SciPy 1.18.1 (scipy.stats.rankdata, pearsonr and spearmanr, and
+- SciPy 1.18.1 (scipy.stats.rankdata, pearsonr, spearmanr and kendalltau,
+  scipy.linalg.lstsq, and
   scipy.special.gammaln, the lgam of Cephes by Stephen L. Moshier, and
   scipy.optimize.minimize with L-BFGS-B: lbfgsb.c, the C port of L-BFGS-B 3.0
   by Ciyou Zhu, Richard Byrd, Peihuang Lu and Jorge Nocedal, with dcsrch and
@@ -48,14 +51,16 @@ It also ports the semantics of parts of these dependencies of MTEB:
 - PyStemmer 3.1.0 (Stemmer.Stemmer), Copyright (c) 2006 Richard Boulton, MIT
   License.
 - pandas 3.1.0 (DataFrame, explode, pivot_table, the groupby mean, to_csv,
-  to_markdown and to_latex), Copyright (c) 2008-2011 AQR Capital Management,
+  to_markdown, to_latex and qcut), Copyright (c) 2008-2011 AQR Capital Management,
   LLC, Lambda Foundry, Inc. and PyData Development Team, and 2011-2026 Open
   source contributors, BSD 3-Clause License.
 - tabulate 0.10.0 (tabulate with the pipe format), Copyright (c) 2011-2020
   Sergey Astanin and contributors, MIT License.
-- datasets 5.1.0 (load_dataset of JSON and parquet files, rename_column and
-  from_dict of a Dataset), Copyright 2020 The HuggingFace Datasets Authors,
-  Apache License 2.0.
+- datasets 5.1.0 (load_dataset of JSON and parquet files, rename_column,
+  from_dict, select and train_test_split with stratify_by_column of a
+  Dataset, and datasets/utils/stratify.py, which adapts the
+  StratifiedShuffleSplit of scikit-learn), Copyright 2020 The HuggingFace
+  Datasets Authors, Apache License 2.0.
 - huggingface_hub 2.3.0 (list_repo_tree), Copyright 2020 The HuggingFace
   Team, Apache License 2.0.
 - fsspec 2026.7.0 (glob_translate, which copies CPython's glob.translate),
@@ -63,6 +68,9 @@ It also ports the semantics of parts of these dependencies of MTEB:
 
 The npm dependency hyparquet (Hyperparam, MIT License) reads the parquet
 files. The package does not include its code.
+
+The npm dependency ml-matrix (mljs, MIT License) calculates the singular value
+decomposition of the least squares. The package does not include its code.
 
 It includes two files of Snowball 3.1.0 (https://snowballstem.org/) without
 change: dist/dependencies/snowball/base-stemmer.js and english-stemmer.js,
