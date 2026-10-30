@@ -57,7 +57,7 @@ The module that `node --test` runs one time before the test processes, and whose
 _Avoid_: Setup file, bootstrap, shim
 
 **Lint target**:
-The target `lint` that `@nx/eslint/plugin` gives. It runs `eslint .` in the project root, and Nx caches it. The `lint` area does not make it and does not change its command. It adds only inputs.
+The target `lint` that `@nx/eslint/plugin` gives. Its name is the `targetName` of the `@nx/eslint/plugin` entry, and `lint` when the entry has none. It runs `eslint .` in the project root, and Nx caches it. The `lint` area does not make it and does not change its command. It adds only inputs.
 _Avoid_: Lint check, eslint target
 
 **Lint inputs**:

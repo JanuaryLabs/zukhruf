@@ -1,7 +1,7 @@
 {
   "name": "@zukhruf/nx",
   "version": "0.3.58",
-  "description": "The Nx part of the monorepo standard, one area per subpath. @zukhruf/nx/format gives each project format and a cached format:check, both with Prettier. @zukhruf/nx/test gives each project that has node:test files a test target, a node --test run.",
+  "description": "The Nx part of the monorepo standard, one area per subpath: format gives each project format and a cached format:check with Prettier, test gives node --test targets, and lint adds the packages of @zukhruf/eslint to the inputs of lint.",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -22,7 +22,9 @@
     "format",
     "check",
     "node-test",
-    "test"
+    "test",
+    "eslint",
+    "lint"
   ],
   "type": "module",
   "exports": {
@@ -38,6 +40,12 @@
       "types": "./dist/test/plugin.d.ts",
       "import": "./dist/test/plugin.js",
       "default": "./dist/test/plugin.js"
+    },
+    "./lint": {
+      "@zukhruf/source": "./src/lint/plugin.ts",
+      "types": "./dist/lint/plugin.d.ts",
+      "import": "./dist/lint/plugin.js",
+      "default": "./dist/lint/plugin.js"
     }
   },
   "files": [
