@@ -1,6 +1,6 @@
 {
   "name": "@zukhruf/nx",
-  "version": "0.3.57",
+  "version": "0.3.58",
   "description": "The Nx part of the monorepo standard, one area per subpath. @zukhruf/nx/format gives each project format and a cached format:check, both with Prettier. @zukhruf/nx/test gives each project that has node:test files a test target, a node --test run.",
   "license": "MIT",
   "repository": {
@@ -55,6 +55,6 @@
     "prettier": "^3.0.0"
   },
   "devDependencies": {
-    "@zukhruf/testing": "^0.3.57"
+    "@zukhruf/testing": "^0.3.58"
   }
 }
