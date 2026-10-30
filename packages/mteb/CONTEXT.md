@@ -32,6 +32,10 @@ _Avoid_: Sample, example, couple
 The similarity of the two inputs of a pair in an STS task, from human annotators. It is a number from the minimum score to the maximum score of the task (0 to 5 for STSBenchmark). The task scales each gold score to 0 to 1, and calculates the Pearson and Spearman correlations of the gold scores with each score of the pairs.
 _Avoid_: Label, target, ground truth
 
+**Cluster**:
+A group of inputs that k-means makes in a clustering task. Each input has a label, or a list of labels for the levels of a hierarchy. The V-measure compares the clusters with the labels. It is 1 when each cluster holds the inputs of one label only and each label is in one cluster only.
+_Avoid_: Group, class (the label of an input)
+
 **Encoder**:
 The model wrapper that gives one embedding for each input. `AiSdkEncoder` is an encoder over an AI SDK embedding model.
 _Avoid_: Embedder, model (for the wrapper)

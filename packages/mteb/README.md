@@ -6,7 +6,7 @@ The words in these documents have one meaning each. See the glossary in [CONTEXT
 
 ## Use it
 
-This package has the retrieval, reranking, pair classification and STS tasks, for text. MTEB's tasks ArguAna, SCIDOCS, SprintDuplicateQuestions and STSBenchmark are ported, with their datasets from the HuggingFace Hub, and so are the models EmbeddingGemma 2 and Qwen3-Embedding with the prompts of MTEB. A task of your own keeps its dataset in a folder on disk, and its metadata names that folder as the dataset path.
+This package has the retrieval, reranking, pair classification, STS and clustering tasks, for text. MTEB's tasks ArguAna, SCIDOCS, SprintDuplicateQuestions, STSBenchmark, BiorxivClusteringS2S and BiorxivClusteringS2S.v2 are ported, with their datasets from the HuggingFace Hub, and so are the models EmbeddingGemma 2 and Qwen3-Embedding with the prompts of MTEB. A task of your own keeps its dataset in a folder on disk, and its metadata names that folder as the dataset path.
 
 The package is private: it is not on npm. A project of this workspace names it in the dependencies of its `package.json`, with `ai`, and npm links the workspace package:
 
@@ -191,6 +191,18 @@ const result = await evaluate(encoder, new STSBenchmarkSTS());
 ```
 
 A task of your own extends `AbsTaskSTS`. Its dataset has the columns `sentence1`, `sentence2` and `score`. For other text columns, set `columnNames`. For another range of gold scores, set `minScore` and `maxScore`.
+
+## Clustering
+
+In a clustering task, each row of a split is a text and its label. The task embeds a sample of the texts. Then it clusters the embeddings with k-means (`MiniBatchKMeans` of scikit-learn), and compares the clusters with the labels. The V-measure is 1 when each cluster holds the texts of one label only and each label is in one cluster only. `AbsTaskClustering` (MTEB's v2 tasks) embeds 4% of the split, and clusters 10 samples of 16384 embeddings. Its main score is `v_measure`, the mean V-measure of the 10 samples. `ami` is the mean adjusted mutual information. When a text has a list of labels, one for each level of a hierarchy, the task scores each level.
+
+```ts
+import { BiorxivClusteringS2SFast, evaluate } from '@zukhruf/mteb';
+
+const result = await evaluate(encoder, new BiorxivClusteringS2SFast());
+```
+
+A task of your own extends `AbsTaskClustering`. Its dataset has the columns `sentences` and `labels`. For other columns, set `inputColumnName` and `labelColumnName`. To embed another part of the split, set `maxFractionOfDocumentsToEmbed` or `maxDocumentToEmbed`. `nClusters` sets the number of samples to cluster, and `maxDocumentsPerCluster` the size of each sample. `AbsTaskClusteringLegacy` is MTEB's older form: each row is a set of texts with a list of labels, and the task clusters each set.
 
 ## Compare models on MTEB's tasks
 

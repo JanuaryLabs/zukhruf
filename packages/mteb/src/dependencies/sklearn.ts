@@ -1,5 +1,8 @@
 import type { Embeddings } from '../types/encoder-io.ts';
+import { log } from './libm.ts';
 import { sum, sumFloat32 } from './numpy.ts';
+import { compareStrings } from './python.ts';
+import { gammaln } from './scipy.ts';
 
 // sklearn.metrics.auc of scikit-learn 1.9: the area under a curve by the
 // trapezoidal rule (np.trapezoid), for x that only rises or only falls.
@@ -197,4 +200,221 @@ export function pairedManhattanDistances(
   return Float32Array.from(difference(x, y), (row) =>
     sumFloat32(row.map(Math.abs)),
   );
+}
+
+// A cluster label: an int, or a string as numpy keeps it.
+export type ClusterLabel = number | string;
+
+// np.unique(labels, return_inverse=True): the sorted distinct labels, and the
+// index of each label among them. Strings sort by code point, as numpy's
+// unicode strings do.
+function uniqueInverse(labels: readonly ClusterLabel[]): {
+  readonly unique: ClusterLabel[];
+  readonly inverse: number[];
+} {
+  const unique = [...new Set(labels)].sort((a, b) =>
+    typeof a === 'number' && typeof b === 'number'
+      ? a - b
+      : compareStrings(String(a), String(b)),
+  );
+  const position = new Map(unique.map((label, index) => [label, index]));
+  return { unique, inverse: labels.map((label) => position.get(label) ?? 0) };
+}
+
+// The counts of the distinct labels, in their sorted order.
+function uniqueCounts(labels: readonly ClusterLabel[]): number[] {
+  const { unique, inverse } = uniqueInverse(labels);
+  const counts = new Array<number>(unique.length).fill(0);
+  for (const index of inverse) counts[index] = (counts[index] ?? 0) + 1;
+  return counts;
+}
+
+// contingency_matrix(labels_true, labels_pred, sparse=True): the count of
+// each pair of a class and a cluster, as rows of the classes. The nonzero
+// counts come in the order of the rows, then the columns, as sp.find gives
+// them.
+type Contingency = {
+  readonly rows: number[];
+  readonly columns: number[];
+  readonly nonzero: readonly {
+    readonly row: number;
+    readonly column: number;
+    readonly count: number;
+  }[];
+  readonly total: number;
+};
+
+function contingencyMatrix(
+  labelsTrue: readonly ClusterLabel[],
+  labelsPred: readonly ClusterLabel[],
+): Contingency {
+  const classes = uniqueInverse(labelsTrue);
+  const clusters = uniqueInverse(labelsPred);
+  const nClusters = clusters.unique.length;
+  const counts = new Map<number, number>();
+  classes.inverse.forEach((row, index) => {
+    const cell = row * nClusters + (clusters.inverse[index] ?? 0);
+    counts.set(cell, (counts.get(cell) ?? 0) + 1);
+  });
+  const nonzero = [...counts]
+    .sort(([a], [b]) => a - b)
+    .map(([cell, count]) => ({
+      row: Math.floor(cell / nClusters),
+      column: cell % nClusters,
+      count,
+    }));
+  const rows = new Array<number>(classes.unique.length).fill(0);
+  const columns = new Array<number>(nClusters).fill(0);
+  for (const { row, column, count } of nonzero) {
+    rows[row] = (rows[row] ?? 0) + count;
+    columns[column] = (columns[column] ?? 0) + count;
+  }
+  return { rows, columns, nonzero, total: labelsTrue.length };
+}
+
+function checkClusterings(
+  labelsTrue: readonly ClusterLabel[],
+  labelsPred: readonly ClusterLabel[],
+): void {
+  if (labelsTrue.length !== labelsPred.length)
+    throw new Error(
+      `Found input variables with inconsistent numbers of samples: [${labelsTrue.length}, ${labelsPred.length}]`,
+    );
+}
+
+// _entropy(labels): the entropy of the label counts, in nats.
+function entropy(labels: readonly ClusterLabel[]): number {
+  if (labels.length === 0) return 1;
+  const pi = uniqueCounts(labels);
+  if (pi.length === 1) return 0;
+  const piSum = sum(pi);
+  const logSum = log(piSum);
+  return -sum(pi.map((count) => (count / piSum) * (log(count) - logSum)));
+}
+
+const FLOAT64_EPS = 2 ** -52;
+
+// mutual_info_score(None, None, contingency=contingency).
+function mutualInfo(contingency: Contingency): number {
+  const { rows, columns, nonzero, total } = contingency;
+  if (rows.length === 1 || columns.length === 1) return 0;
+  const logTotal = log(total);
+  const logRows = log(sum(rows));
+  const logColumns = log(sum(columns));
+  const terms = nonzero.map(({ row, column, count }) => {
+    const share = count / total;
+    const logOuter =
+      -log((rows[row] ?? 0) * (columns[column] ?? 0)) + logRows + logColumns;
+    const mi = share * (log(count) - logTotal) + share * logOuter;
+    return Math.abs(mi) < FLOAT64_EPS ? 0 : mi;
+  });
+  return Math.max(sum(terms), 0);
+}
+
+// sklearn.metrics.cluster.homogeneity_completeness_v_measure with beta 1.
+export function homogeneityCompletenessVMeasure(
+  labelsTrue: readonly ClusterLabel[],
+  labelsPred: readonly ClusterLabel[],
+): readonly [homogeneity: number, completeness: number, vMeasure: number] {
+  const beta = 1;
+  checkClusterings(labelsTrue, labelsPred);
+  if (labelsTrue.length === 0) return [1, 1, 1];
+  const entropyC = entropy(labelsTrue);
+  const entropyK = entropy(labelsPred);
+  const mi = mutualInfo(contingencyMatrix(labelsTrue, labelsPred));
+  const homogeneity = entropyC ? mi / entropyC : 1;
+  const completeness = entropyK ? mi / entropyK : 1;
+  const vMeasure =
+    homogeneity + completeness === 0
+      ? 0
+      : ((1 + beta) * homogeneity * completeness) /
+        (beta * homogeneity + completeness);
+  return [homogeneity, completeness, vMeasure];
+}
+
+// sklearn.metrics.v_measure_score(labels_true, labels_pred).
+export function vMeasureScore(
+  labelsTrue: readonly ClusterLabel[],
+  labelsPred: readonly ClusterLabel[],
+): number {
+  return homogeneityCompletenessVMeasure(labelsTrue, labelsPred)[2];
+}
+
+// expected_mutual_information (_expected_mutual_info_fast.pyx). Python calls
+// scipy's gammaln for the arrays and the C library's lgamma, exp and log in
+// the loop; this port calls gammaln of scipy.ts for both, and Math.exp.
+function expectedMutualInformation(
+  contingency: Contingency,
+  nSamples: number,
+): number {
+  const a = contingency.rows;
+  const b = contingency.columns;
+  if (a.length === 1 || b.length === 1) return 0;
+  const largest = Math.max(...a, ...b);
+  const nijs = Array.from({ length: largest + 1 }, (_, nij) =>
+    nij === 0 ? 1 : nij,
+  );
+  const term1 = nijs.map((nij) => nij / nSamples);
+  const logA = a.map(log);
+  const logB = b.map(log);
+  const logN = log(nSamples);
+  const logNnij = nijs.map((nij) => logN + log(nij));
+  const glnA = a.map((value) => gammaln(value + 1));
+  const glnB = b.map((value) => gammaln(value + 1));
+  const glnNa = a.map((value) => gammaln(nSamples - value + 1));
+  const glnNb = b.map((value) => gammaln(nSamples - value + 1));
+  const glnN = gammaln(nSamples + 1);
+  const glnNnij = nijs.map((nij) => gammaln(nij + 1) + glnN);
+  // The loop takes gammaln of the integers 1 to nSamples + 1 only.
+  const glnIntegers = Array.from({ length: nSamples + 2 }, (_, m) =>
+    m === 0 ? Infinity : gammaln(m),
+  );
+  let emi = 0;
+  for (const [i, ai] of a.entries())
+    for (const [j, bj] of b.entries()) {
+      const end = Math.min(ai, bj) + 1;
+      for (let nij = Math.max(1, ai - nSamples + bj); nij < end; nij++) {
+        const term2 = (logNnij[nij] ?? 0) - (logA[i] ?? 0) - (logB[j] ?? 0);
+        const gln =
+          (glnA[i] ?? 0) +
+          (glnB[j] ?? 0) +
+          (glnNa[i] ?? 0) +
+          (glnNb[j] ?? 0) -
+          (glnNnij[nij] ?? 0) -
+          (glnIntegers[ai - nij + 1] ?? 0) -
+          (glnIntegers[bj - nij + 1] ?? 0) -
+          (glnIntegers[nSamples - ai - bj + nij + 1] ?? 0);
+        emi += (term1[nij] ?? 0) * term2 * Math.exp(gln);
+      }
+    }
+  return emi;
+}
+
+// sklearn.metrics.adjusted_mutual_info_score with the arithmetic mean.
+export function adjustedMutualInfoScore(
+  labelsTrue: readonly ClusterLabel[],
+  labelsPred: readonly ClusterLabel[],
+): number {
+  checkClusterings(labelsTrue, labelsPred);
+  const nSamples = labelsTrue.length;
+  const classes = new Set(labelsTrue).size;
+  const clusters = new Set(labelsPred).size;
+  if ((classes === 1 && clusters === 1) || (classes === 0 && clusters === 0))
+    return 1;
+  if (classes === 1 || clusters === 1) return 0;
+  const contingency = contingencyMatrix(labelsTrue, labelsPred);
+  const mi = mutualInfo(contingency);
+  const emi = expectedMutualInformation(contingency, nSamples);
+  const normalizer = (entropy(labelsTrue) + entropy(labelsPred)) / 2;
+  let denominator = normalizer - emi;
+  denominator =
+    denominator < 0
+      ? Math.min(denominator, -FLOAT64_EPS)
+      : Math.max(denominator, FLOAT64_EPS);
+  let numerator = mi - emi;
+  numerator =
+    numerator < 0
+      ? Math.min(numerator, -FLOAT64_EPS)
+      : Math.max(numerator, FLOAT64_EPS);
+  return numerator / denominator;
 }

@@ -13,16 +13,19 @@ It also ports the semantics of parts of these dependencies of MTEB:
   Van Gysel, MIT License, and the trec_eval measures that it binds
   (https://github.com/usnistgov/trec_eval).
 - NumPy 2.5.4 (sum, mean, standard deviation, add.reduceat, stable argsort,
-  linspace, corrcoef, and the sum of float32 values), Copyright (c) NumPy
-  Developers, BSD 3-Clause License. The pairwise summation of float64 values
+  linspace, corrcoef, the sum of float32 values, and the MT19937 generator,
+  randint, random_sample, choice and permutation of the legacy RandomState),
+  Copyright (c) NumPy Developers, BSD 3-Clause License. The pairwise summation of float64 values
   is the npm dependency @stdlib/blas-ext-base-gsumpw, Copyright (c) The Stdlib
   Authors, Apache License 2.0. The package does not include its code.
 - scikit-learn 1.9.1 (sklearn.metrics.auc and average_precision_score,
   paired_cosine_distances, paired_euclidean_distances,
-  paired_manhattan_distances, normalize and row_norms), Copyright (c)
-  scikit-learn developers, BSD 3-Clause License.
-- SciPy 1.18.1 (scipy.stats.rankdata, pearsonr and spearmanr), Copyright (c)
-  2001-2002 Enthought, Inc. 2003, SciPy Developers, BSD 3-Clause License.
+  paired_manhattan_distances, normalize, row_norms, v_measure_score,
+  adjusted_mutual_info_score and MiniBatchKMeans), Copyright (c) scikit-learn
+  developers, BSD 3-Clause License.
+- SciPy 1.18.1 (scipy.stats.rankdata, pearsonr and spearmanr, and
+  scipy.special.gammaln, the lgam of Cephes by Stephen L. Moshier), Copyright
+  (c) 2001-2002 Enthought, Inc. 2003, SciPy Developers, BSD 3-Clause License.
 - packaging 26.3 (packaging.version), Copyright (c) Donald Stufft and
   individual contributors, Apache License 2.0 or BSD 2-Clause License.
 - CPython 3.12 (the float sum, round, repr and heapq algorithms), Copyright (c)

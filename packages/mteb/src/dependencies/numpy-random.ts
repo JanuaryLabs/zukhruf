@@ -126,3 +126,158 @@ export class NumpyGenerator {
     this.#state = (this.#state * MULTIPLIER + this.#increment) & MASK128;
   }
 }
+
+// numpy.random.RandomState(seed), the legacy generator that
+// sklearn.utils.check_random_state(seed) gives: MT19937 seeded by
+// init_genrand (mt19937_seed of numpy/random/src/mt19937/mt19937.c), and the
+// draws of mtrand.pyx that scikit-learn's MiniBatchKMeans calls. CPython's
+// random.Random (python-random.ts) has its own copy of the generator: it
+// seeds with init_by_array.
+const MT_N = 624;
+const MT_M = 397;
+const MATRIX_A = 0x9908_b0df;
+const UPPER_MASK = 0x8000_0000;
+const LOWER_MASK = 0x7fff_ffff;
+
+export class RandomState {
+  readonly #key = new Uint32Array(MT_N);
+  #pos = MT_N;
+
+  constructor(seed: number) {
+    if (!Number.isInteger(seed) || seed < 0 || seed > 0xffff_ffff)
+      throw new RangeError('Seed must be between 0 and 2**32 - 1');
+    let value = seed >>> 0;
+    for (let pos = 0; pos < MT_N; pos++) {
+      this.#key[pos] = value;
+      value =
+        (Math.imul(1_812_433_253, value ^ (value >>> 30)) + pos + 1) >>> 0;
+    }
+  }
+
+  // random_sample(size): size floats in [0, 1) of 53 bits.
+  randomSample(size: number): number[] {
+    return Array.from({ length: size }, () => this.#nextDouble());
+  }
+
+  // uniform(size=size), with low 0 and high 1: low + (high - low) *
+  // random_sample(). numpy's C code can fuse the multiply and the add (an
+  // FMA on arm64); with 0 and 1 both give random_sample().
+  uniform(size: number): number[] {
+    return this.randomSample(size);
+  }
+
+  // randint(low, high, size) of int64 for a range below 2^32: masked
+  // rejection sampling with 32-bit draws (random_bounded_uint64_fill with
+  // use_masked).
+  randint(low: number, high: number, size: number): number[] {
+    const range = high - low - 1;
+    if (range < 0) throw new RangeError('low >= high');
+    if (range > 0xffff_ffff)
+      throw new RangeError('This port draws ranges below 2^32 only.');
+    if (range === 0) return new Array<number>(size).fill(low);
+    if (range === 0xffff_ffff)
+      return Array.from({ length: size }, () => low + this.#next32());
+    const mask = smallestMask(range);
+    return Array.from({ length: size }, () => {
+      let value = (this.#next32() & mask) >>> 0;
+      while (value > range) value = (this.#next32() & mask) >>> 0;
+      return low + value;
+    });
+  }
+
+  // choice(n, size, p=p) with replace=True: the cumulative sum of p in
+  // float64, divided by its last value, searched on the right for each
+  // random_sample.
+  choiceWithProbabilities(p: ArrayLike<number>, size: number): number[] {
+    const cdf = new Float64Array(p.length);
+    let total = 0;
+    for (let index = 0; index < p.length; index++) {
+      total += p[index] ?? 0;
+      cdf[index] = total;
+    }
+    const last = cdf[cdf.length - 1] ?? 1;
+    for (let index = 0; index < cdf.length; index++)
+      cdf[index] = (cdf[index] ?? 0) / last;
+    return this.randomSample(size).map((value) =>
+      searchsortedRight(cdf, value),
+    );
+  }
+
+  // choice(n, size, replace=False) without p: permutation(n)[:size].
+  choiceWithoutReplacement(n: number, size: number): number[] {
+    if (size > n)
+      throw new RangeError(
+        "Cannot take a larger sample than population when 'replace=False'",
+      );
+    return this.permutation(n).slice(0, size);
+  }
+
+  // permutation(n): shuffle of arange(n), from the last index down, each
+  // swap with random_interval(i).
+  permutation(n: number): number[] {
+    const values = Array.from({ length: n }, (_, index) => index);
+    for (let i = n - 1; i >= 1; i--) {
+      const j = this.#interval(i);
+      const swapped = values[j] ?? 0;
+      values[j] = values[i] ?? 0;
+      values[i] = swapped;
+    }
+    return values;
+  }
+
+  // random_interval(max): an integer in [0, max] by masked rejection.
+  #interval(max: number): number {
+    if (max === 0) return 0;
+    if (max > 0xffff_ffff)
+      throw new RangeError('This port draws intervals below 2^32 only.');
+    const mask = smallestMask(max);
+    let value = (this.#next32() & mask) >>> 0;
+    while (value > max) value = (this.#next32() & mask) >>> 0;
+    return value;
+  }
+
+  #nextDouble(): number {
+    const a = this.#next32() >>> 5;
+    const b = this.#next32() >>> 6;
+    return (a * 67_108_864 + b) / 9_007_199_254_740_992;
+  }
+
+  #next32(): number {
+    const key = this.#key;
+    if (this.#pos === MT_N) {
+      const twist = (i: number, next: number, source: number) => {
+        const y =
+          ((key[i] ?? 0) & UPPER_MASK) | ((key[next] ?? 0) & LOWER_MASK);
+        key[i] = (key[source] ?? 0) ^ (y >>> 1) ^ (y & 1 ? MATRIX_A : 0);
+      };
+      let i = 0;
+      for (; i < MT_N - MT_M; i++) twist(i, i + 1, i + MT_M);
+      for (; i < MT_N - 1; i++) twist(i, i + 1, i + (MT_M - MT_N));
+      twist(MT_N - 1, 0, MT_M - 1);
+      this.#pos = 0;
+    }
+    let y = key[this.#pos++] ?? 0;
+    y ^= y >>> 11;
+    y ^= (y << 7) & 0x9d2c_5680;
+    y ^= (y << 15) & 0xefc6_0000;
+    y ^= y >>> 18;
+    return y >>> 0;
+  }
+}
+
+// The smallest mask of ones that covers max.
+function smallestMask(max: number): number {
+  return max >= 0x8000_0000 ? 0xffff_ffff : 2 ** (32 - Math.clz32(max)) - 1;
+}
+
+// np.searchsorted(sorted, value, side="right").
+function searchsortedRight(sorted: ArrayLike<number>, value: number): number {
+  let low = 0;
+  let high = sorted.length;
+  while (low < high) {
+    const middle = (low + high) >>> 1;
+    if ((sorted[middle] ?? 0) <= value) low = middle + 1;
+    else high = middle;
+  }
+  return low;
+}

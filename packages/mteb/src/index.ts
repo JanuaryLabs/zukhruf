@@ -12,6 +12,8 @@ export {
   type PairClassificationMetrics,
 } from './abstasks/pair-classification.ts';
 export { AbsTaskSTS, type STSMetrics } from './abstasks/sts.ts';
+export { AbsTaskClustering } from './abstasks/clustering.ts';
+export { AbsTaskClusteringLegacy } from './abstasks/clustering-legacy.ts';
 export { RetrievalDatasetLoader } from './abstasks/retrieval-dataset-loaders.ts';
 export {
   DEFAULT_DATASET_CACHE,
@@ -108,4 +110,8 @@ export { ArguAna } from './tasks/retrieval/eng/argu-ana-retrieval.ts';
 export { SCIDOCS } from './tasks/retrieval/eng/scidocs-retrieval.ts';
 export { SprintDuplicateQuestionsPC } from './tasks/pair-classification/eng/sprint-duplicate-questions-pc.ts';
 export { STSBenchmarkSTS } from './tasks/sts/eng/sts-benchmark-sts.ts';
+export {
+  BiorxivClusteringS2S,
+  BiorxivClusteringS2SFast,
+} from './tasks/clustering/eng/biorxiv-clustering-s2s.ts';
 export * from './types/index.ts';
