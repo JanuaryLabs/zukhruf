@@ -18,6 +18,11 @@ test('no-collect-loop reports a for await loop that only pushes each value', () 
       { code: `for await (const data of ticks) out.push(event.data);` },
       { code: `for await (const x of stream) out.push(x, x);` },
       { code: `for await (const x of stream) out.push(...x);` },
+      // One stream split into two arrays: Array.fromAsync makes one array.
+      {
+        code: `for await (const { stream, data } of process) (stream === 'stdout' ? stdout : stderr).push(data);`,
+      },
+      { code: `for await (const x of stream) buckets[x.kind].push(x);` },
       // A plain for...of over an array is not an async iterable.
       { code: `for (const x of list) out.push(x);` },
     ],
@@ -95,6 +100,72 @@ test('no-collect-loop leaves a loop that fills an outer array inside a detached 
           }
         `,
       },
+      // Read before the statement that awaits the stored promise.
+      {
+        code: `
+          const received = [];
+          const consume = (async () => {
+            for await (const chunk of stream) received.push(chunk);
+          })();
+          log(received.length);
+          await consume;
+        `,
+      },
+      // A function can read the array while the loop runs, wherever it sits.
+      {
+        code: `
+          const received = [];
+          const consume = (async () => {
+            for await (const chunk of stream) received.push(chunk);
+          })();
+          await poll(check);
+          await consume;
+          function check() {
+            return received.length > 0;
+          }
+        `,
+      },
+      // The awaited call does not take the stored promise.
+      {
+        code: `
+          const received = [];
+          const consume = (async () => {
+            for await (const chunk of stream) received.push(chunk);
+          })();
+          await other;
+          use(received);
+          await consume;
+        `,
+      },
+      // The array outlives one run of the block: a skipped await leaves an
+      // earlier loop pushing while a later run reads.
+      {
+        code: `
+          const received = [];
+          for (const stream of streams) {
+            const consume = (async () => {
+              for await (const chunk of stream) received.push(chunk);
+            })();
+            if (stream.skip) continue;
+            await consume;
+            use(received);
+          }
+        `,
+      },
+      // A var is one binding for every run of the loop body.
+      {
+        code: `
+          for (const stream of streams) {
+            var received = [];
+            const consume = (async () => {
+              for await (const chunk of stream) received.push(chunk);
+            })();
+            if (stream.skip) continue;
+            await consume;
+            use(received);
+          }
+        `,
+      },
     ],
     invalid: [
       {
@@ -126,6 +197,45 @@ test('no-collect-loop leaves a loop that fills an outer array inside a detached 
             })(),
             'drain',
           );
+        `,
+        errors: [{ messageId: 'plain' }],
+      },
+      // Stored, but `received` is read only after the promise settles.
+      {
+        code: `
+          it('watches', async () => {
+            const received = [];
+            const consume = (async () => {
+              for await (const chunk of manager.watch(id)) {
+                received.push(chunk);
+              }
+            })();
+            await store.appendChunks([chunk]);
+            await settleWithin(consume, 'polling stream watch');
+            assert.deepStrictEqual(received, [chunk]);
+          });
+        `,
+        errors: [{ messageId: 'plain' }],
+      },
+      {
+        code: `
+          const received = [];
+          const consume = (async () => {
+            for await (const chunk of stream) received.push(chunk);
+          })();
+          await consume;
+          use(received);
+        `,
+        errors: [{ messageId: 'plain' }],
+      },
+      {
+        code: `
+          const received = [];
+          const consume = (async () => {
+            for await (const chunk of stream) received.push(chunk);
+          })();
+          const outcome = await settle(consume);
+          use(received, outcome);
         `,
         errors: [{ messageId: 'plain' }],
       },
