@@ -1,6 +1,6 @@
 {
   "name": "@zukhruf/sqlite-data-version",
-  "version": "0.6.1",
+  "version": "0.6.2",
   "description": "The data version of a SQLite database that another process owns and writes. It polls PRAGMA data_version on its own read-only connection, which changes on each commit by another connection, also while the owner keeps the file open.",
   "license": "MIT",
   "repository": {
@@ -40,9 +40,9 @@
     "access": "public"
   },
   "dependencies": {
-    "@zukhruf/sqlite-reader": "^0.6.1"
+    "@zukhruf/sqlite-reader": "^0.6.2"
   },
   "devDependencies": {
-    "@zukhruf/testing": "^0.6.1"
+    "@zukhruf/testing": "^0.6.2"
   }
 }
