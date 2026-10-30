@@ -92,7 +92,7 @@ export function dayScores(
 
 // Round 11 for every profile: teach from the pool, rank the whole test slice
 // through the package, and compare the lists of each day.
-export function daily(options: {
+export async function daily(options: {
   readonly profiles: readonly EvalProfile[];
   readonly descriptionOf: (profile: EvalProfile) => readonly number[];
   readonly test: LoadedSet;
@@ -130,7 +130,7 @@ export function daily(options: {
       keyword: { recall: [], precision: [] },
     };
     for (const nTeach of N_TEACH) {
-      const filter = runDesign({
+      const scores = await runDesign({
         profile,
         keyword: profile.narrow,
         answers: teach(candidates, nTeach),
@@ -144,7 +144,7 @@ export function daily(options: {
           const from = new Date(`${day}T00:00:00.000Z`);
           return [
             day,
-            filter.ranked({ from, to: new Date(from.getTime() + DAY_MS - 1) }),
+            scores.ranked({ from, to: new Date(from.getTime() + DAY_MS - 1) }),
           ];
         }),
       );

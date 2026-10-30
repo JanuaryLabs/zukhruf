@@ -90,7 +90,7 @@ export function streamOf(
 // Teaches the profile from the pool, ranks the stream through the package,
 // and scores the ranking and the baselines by average precision (round-10
 // evaluate.py, unit_run).
-export function runRankingUnit(options: {
+export async function runRankingUnit(options: {
   readonly profile: EvalProfile;
   readonly pool: readonly Candidate[];
   readonly n: number;
@@ -98,10 +98,10 @@ export function runRankingUnit(options: {
   readonly vectors: Vectors;
   readonly descriptionVector: readonly number[];
   readonly textOf: (id: string) => string;
-}): RankingUnit {
+}): Promise<RankingUnit> {
   const { stream } = options;
   const answers = teach(options.pool, options.n);
-  const filter = runDesign({
+  const scores = await runDesign({
     profile: options.profile,
     keyword: options.profile.narrow,
     answers,
@@ -111,7 +111,7 @@ export function runRankingUnit(options: {
     textOf: options.textOf,
   });
   const orders = byRank((name) => {
-    if (name === RANKER) return filter.ranked();
+    if (name === RANKER) return scores.ranked();
     if (name === 'newest') return newestFirst(stream, () => false);
     return newestFirst(stream, (article) => article[narrowOrBroad(name)]);
   });

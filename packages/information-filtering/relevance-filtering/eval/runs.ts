@@ -1,4 +1,8 @@
-import type { Article, RelevanceFilter, Vectors } from '../src/index.ts';
+import {
+  type Article,
+  ExpectedFThreshold,
+  type Vectors,
+} from '../src/index.ts';
 import type { Label } from './answer-key.ts';
 import { runDesign } from './design.ts';
 import { type Scores, scores } from './metrics.ts';
@@ -31,8 +35,6 @@ export type Unit = {
   readonly taughtRelevant: number;
   readonly taughtNotRelevant: number;
   readonly scoredRelevant: number;
-  // The design had no relevant answer, so it accepted the keyword matches.
-  readonly keywordFallback: boolean;
   // Strict: ambiguous articles are left out. ambiguousRelevant: they count as
   // relevant.
   readonly rows: Readonly<
@@ -54,7 +56,7 @@ export type StreamArticle = Article & {
 // Teaches the profile from the pool by product teaching, runs the design on
 // the stream, and scores it with the baselines (round-6 evaluate.py,
 // unit_run).
-export function runUnit(options: {
+export async function runUnit(options: {
   readonly profile: EvalProfile;
   readonly pool: readonly Candidate[];
   readonly n: number;
@@ -62,10 +64,10 @@ export function runUnit(options: {
   readonly vectors: Vectors;
   readonly descriptionVector: readonly number[];
   readonly textOf: (id: string) => string;
-}): Unit {
+}): Promise<Unit> {
   const { stream } = options;
   const answers = teach(options.pool, options.n);
-  const filter: RelevanceFilter = runDesign({
+  const design = await runDesign({
     profile: options.profile,
     keyword: options.profile.narrow,
     answers,
@@ -74,6 +76,9 @@ export function runUnit(options: {
     stream,
     textOf: options.textOf,
   });
+  const accepted = new Set(
+    design.accepted(new ExpectedFThreshold({ beta: 0.5 })),
+  );
   const decisions: Record<Name, { p: number[]; accepted: boolean[] }> = {
     alwaysNo: { p: stream.map(() => 0), accepted: stream.map(() => false) },
     alwaysYes: { p: stream.map(() => 1), accepted: stream.map(() => true) },
@@ -86,8 +91,8 @@ export function runUnit(options: {
       accepted: stream.map(({ broad }) => broad),
     },
     [DESIGN]: {
-      p: stream.map(({ id }) => filter.probability(id)),
-      accepted: stream.map(({ id }) => filter.accepts(id)),
+      p: stream.map(({ id }) => design.probability(id)),
+      accepted: stream.map(({ id }) => accepted.has(id)),
     },
   };
   const labelled = stream.map(({ label }) => label !== null);
@@ -99,7 +104,6 @@ export function runUnit(options: {
     taughtRelevant: answers.relevant.length,
     taughtNotRelevant: answers.notRelevant.length,
     scoredRelevant: relevant.filter(Boolean).length,
-    keywordFallback: filter.kind === 'keywords',
     rows: byName((name) => {
       const { p, accepted } = decisions[name];
       return {

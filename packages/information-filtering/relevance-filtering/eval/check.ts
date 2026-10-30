@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { CalibratedFilter } from '../src/index.ts';
+import { ExpectedFThreshold } from '../src/index.ts';
 import { EVAL_FOLDER } from './answer-key.ts';
 import { descriptionVectors } from './cache.ts';
 import { runDesign } from './design.ts';
@@ -17,13 +17,6 @@ export type CheckRecord = {
   readonly shownIds: readonly string[];
   readonly taughtRelevant: readonly string[];
   readonly taughtNotRelevant: readonly string[];
-  readonly binormal: {
-    readonly pi: number;
-    readonly mu1: number;
-    readonly s1: number;
-    readonly mu0: number;
-    readonly s0: number;
-  };
   readonly threshold: number;
   readonly accepted: number;
   readonly articles: Readonly<Record<string, readonly [number, boolean]>>;
@@ -38,7 +31,6 @@ export type CheckResult = {
   readonly maxDifference: {
     readonly probability: number;
     readonly threshold: number;
-    readonly binormal: number;
   };
 };
 
@@ -48,7 +40,7 @@ const FOLDER = join(EVAL_FOLDER, 'implementation-check');
 // with each record file: the frozen record of the research, and the record
 // of the research code on the vectors rounded to float32 as a collection
 // stores them (README.md, "Implementation check").
-export function implementationCheck(): CheckResult[] {
+export async function implementationCheck(): Promise<CheckResult[]> {
   const profile = readProfiles().find(({ id }) => id === 'security');
   const descriptionVector = descriptionVectors().get('security');
   if (profile === undefined || descriptionVector === undefined)
@@ -74,7 +66,7 @@ export function implementationCheck(): CheckResult[] {
   );
   const answers = teach(pool, 10);
   const stream = scoredStream(slice, window);
-  const filter = runDesign({
+  const scores = await runDesign({
     profile,
     keyword: profile.narrow,
     answers,
@@ -83,19 +75,8 @@ export function implementationCheck(): CheckResult[] {
     stream,
     textOf: slice.textOf,
   });
-  if (
-    !(filter instanceof CalibratedFilter) ||
-    filter.calibration.method !== 'binormal'
-  )
-    throw new Error('The check expects a binormal fit.');
-  const fit = filter.calibration;
-  const actual = [
-    fit.share,
-    fit.relevant.mean,
-    fit.relevant.sd,
-    fit.other.mean,
-    fit.other.sd,
-  ];
+  const threshold = new ExpectedFThreshold({ beta: 0.5 });
+  const accepted = new Set(scores.accepted(threshold));
   return ['implementation-check.json', 'float32-reference.json'].map((file) => {
     const record: CheckRecord = JSON.parse(
       readFileSync(join(FOLDER, file), 'utf8'),
@@ -108,29 +89,16 @@ export function implementationCheck(): CheckResult[] {
         equal(answers.relevant, record.taughtRelevant) &&
         equal(answers.notRelevant, record.taughtNotRelevant),
       sameDecisions: entries.every(
-        ([id, [, accept]]) => filter.accepts(id) === accept,
+        ([id, [, accept]]) => accepted.has(id) === accept,
       ),
-      accepted: { expected: record.accepted, actual: filter.accepted().length },
+      accepted: { expected: record.accepted, actual: accepted.size },
       maxDifference: {
         probability: Math.max(
           ...entries.map(([id, [probability]]) =>
-            Math.abs(filter.probability(id) - probability),
+            Math.abs(scores.probability(id) - probability),
           ),
         ),
-        threshold: Math.abs(
-          (filter.threshold ?? Number.NaN) - record.threshold,
-        ),
-        binormal: Math.max(
-          ...[
-            record.binormal.pi,
-            record.binormal.mu1,
-            record.binormal.s1,
-            record.binormal.mu0,
-            record.binormal.s0,
-          ].map((value, index) =>
-            Math.abs((actual[index] ?? Number.NaN) - value),
-          ),
-        ),
+        threshold: Math.abs(threshold.cut(scores) - record.threshold),
       },
     };
   });

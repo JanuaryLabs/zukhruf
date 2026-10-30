@@ -1,5 +1,7 @@
 # The reader ranks, and does not decide yes or no
 
+**Superseded in part by [ADR 0005](./0005-a-scorer-and-a-threshold-are-ports.md).** The ranking of this record is still valid, and `scores.ranked({ from, to })` gives it. The yes/no API is now a threshold port: `scores.accepted(threshold)`, with an expected-F threshold or an expected-utility threshold that the host chooses.
+
 Research round 9 (#3195) tested the yes/no designs on a slice of the feed that no round had seen: July to September 2025. Every design failed, the frozen design of [ADR 0002](./0002-the-design-is-frozen-by-research-round-6.md) too. The ranking of the articles was strong. The weak part was the threshold, which a few taught answers must set. The workspace record [docs/research/relevance-filtering.md](../../../../../docs/research/relevance-filtering.md) has the numbers.
 
 On 2026-10-29 the user chose a ranked reader: each interest shows its best N articles a day, the best first. The person sets N. The keywords count as evidence. There is no yes/no threshold. TREC calls this task routing, and scores it by mean average precision (MAP) (Harman, TREC 1993 to 1998).

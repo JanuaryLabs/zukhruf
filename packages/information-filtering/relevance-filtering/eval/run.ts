@@ -94,7 +94,7 @@ const descriptionOf = (profile: EvalProfile) => {
   return vector;
 };
 
-const checks = implementationCheck();
+const checks = await implementationCheck();
 for (const check of checks) console.log(JSON.stringify(check));
 const passed = checks.every(
   (check) =>
@@ -112,7 +112,7 @@ console.log(
     ? 'Implementation check: the package gives the decisions of the record, and the probabilities of the research code on stored vectors to 1e-9.'
     : 'Implementation check: FAILED.',
 );
-const ranking = rankingCheck();
+const ranking = await rankingCheck();
 console.log(JSON.stringify(ranking));
 const rankingPassed = ranking.float32.same && ranking.float64.same;
 console.log(
@@ -125,21 +125,25 @@ if (command === 'check') process.exit(passed && exact && rankingPassed ? 0 : 1);
 if (values.exam) {
   if (!rankingPassed)
     throw new Error('The exam needs a passing ranking check.');
-  exam();
-} else if (command === 'ranking') rankingRounds();
-else if (command === 'daily') dailyRound();
+  await exam();
+} else if (command === 'ranking') await rankingRounds();
+else if (command === 'daily') await dailyRound();
 else if (command === 'rehearse') {
-  const result = examProtocol('fresh-3', ['collection', 'fresh', 'fresh-2']);
+  const result = await examProtocol('fresh-3', [
+    'collection',
+    'fresh',
+    'fresh-2',
+  ]);
   writeFileSync(
     join(RESULTS_FOLDER, 'rehearsal.json'),
     JSON.stringify(result, null, 1),
   );
   console.log(JSON.stringify({ ...result, runs: undefined }, null, 1));
-} else slices();
+} else await slices();
 
 // Round 6 on the fresh slices: each slice teaches from its first 14 days and
 // decides on the rest.
-function slices(): void {
+async function slices(): Promise<void> {
   const units: Record<string, Record<string, Unit>> = {};
   for (const name of SLICES) {
     using slice = new LoadedSet(name);
@@ -174,7 +178,7 @@ function slices(): void {
       if (first === undefined || stream.length !== articles.length)
         throw new Error(`${name} has no stream.`);
       for (const n of CELLS)
-        (units[profile.id] ??= {})[`${name}|${n}`] = runUnit({
+        (units[profile.id] ??= {})[`${name}|${n}`] = await runUnit({
           profile,
           pool,
           n,
@@ -246,7 +250,7 @@ function slices(): void {
 // Round 10 on fresh-3: the window protocol teaches from its first 14 days
 // and ranks the rest; the pool protocol teaches from the collection, fresh
 // and fresh-2 and ranks all of fresh-3.
-function rankingRounds(): void {
+async function rankingRounds(): Promise<void> {
   using stack = new DisposableStack();
   const slice = stack.use(new LoadedSet('fresh-3'));
   const earlier = ['collection', 'fresh', 'fresh-2'].map((name) =>
@@ -270,12 +274,12 @@ function rankingRounds(): void {
     }),
   };
   const result = Object.fromEntries(
-    Object.entries(protocols).map(([name, parts]) => {
+    await Array.fromAsync(Object.entries(protocols), async ([name, parts]) => {
       const units: Record<string, RankingUnit[]> = {};
       for (const profile of profiles) {
         const descriptionVector = descriptionOf(profile);
         const { pool, stream } = parts(profile, descriptionVector);
-        units[profile.id] = CELLS.map((n) =>
+        units[profile.id] = await Array.fromAsync(CELLS, (n) =>
           runRankingUnit({
             profile,
             pool,
@@ -347,12 +351,12 @@ function rankingRounds(): void {
 
 // The one score of the sealed exam (freeze-ranking/plan.json,
 // examVerdictRule).
-function exam(): void {
+async function exam(): Promise<void> {
   const decision = decide(readMetadata('exam'), true);
   if (!decision.run || decision.role !== 'exam')
     throw new Error('The exam set is not an exam that was never scored.');
   const firstScoredAt = new Date().toISOString();
-  const result = { firstScoredAt, ...examProtocol('exam', EXAM_POOL) };
+  const result = { firstScoredAt, ...(await examProtocol('exam', EXAM_POOL)) };
   writeFileSync(
     join(RESULTS_FOLDER, 'exam.json'),
     JSON.stringify(result, null, 1),
@@ -369,7 +373,7 @@ function exam(): void {
 // ranking and the baselines on the stream, MAP over the profiles with at
 // least 3 strict relevant stream articles, and the paired two-strata
 // article bootstrap (seed 31963).
-function examProtocol(streamName: string, poolNames: readonly string[]) {
+async function examProtocol(streamName: string, poolNames: readonly string[]) {
   using stack = new DisposableStack();
   const streamSet = stack.use(new LoadedSet(streamName));
   const pool = poolNames.map((name) => stack.use(new LoadedSet(name)));
@@ -395,7 +399,7 @@ function examProtocol(streamName: string, poolNames: readonly string[]) {
     const descriptionVector = descriptionOf(profile);
     const candidates = poolOf(pool, profile, descriptionVector);
     const stream = streamOf(streamSet, profile);
-    runs[profile.id] = CELLS.map((n) =>
+    runs[profile.id] = await Array.fromAsync(CELLS, (n) =>
       runRankingUnit({
         profile,
         pool: candidates,
@@ -460,7 +464,7 @@ function examProtocol(streamName: string, poolNames: readonly string[]) {
 }
 
 // Round 11 (#3308): the lists of each day on the test slice.
-function dailyRound(): void {
+async function dailyRound(): Promise<void> {
   const testName = positionals[1] ?? 'fresh-4';
   const poolNames = ['collection', 'fresh', 'fresh-2', 'fresh-3'].filter(
     (name) => name !== testName,
@@ -479,7 +483,7 @@ function dailyRound(): void {
     test: testName,
     smoke: values.smoke,
     pool: poolNames,
-    ...daily({ profiles, descriptionOf, test, pool }),
+    ...(await daily({ profiles, descriptionOf, test, pool })),
   };
   writeFileSync(
     join(

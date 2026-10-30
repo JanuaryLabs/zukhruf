@@ -1,6 +1,6 @@
 # Relevance filtering
 
-A reader wants the new articles of a feed that are about an interest, and not the others. This package ranks the articles of a stream for a profile of the reader, the best first. It gives a probability for each article, and a yes/no decision that is not recommended.
+A reader wants the new articles of a feed that are about an interest, and not the others. This package ranks the articles of a stream for a profile of the reader, the best first. A scorer gives a probability for each article, and a threshold that the host chooses turns the probabilities into a yes or no.
 
 ## Language
 
@@ -12,8 +12,20 @@ _Avoid_: Topic, query, filter (for the profile)
 One sentence that says what the reader wants to read, for example "Cybersecurity: attacks, breaches, vulnerabilities and the tools that stop them."
 _Avoid_: Query, prompt
 
+**Scorer**:
+A method that gives the probability of each article of a stream for a profile, and the ranking. The package has a similarity scorer and a decision scorer. The host decides when a scorer runs.
+_Avoid_: Filter, classifier, judge
+
+**Scores**:
+What a scorer gives for one profile and one stream: the ranking and the probability of each article.
+_Avoid_: Filter, result
+
+**Decision model**:
+A model that answers a typed question about a text with a calibrated probability, for example Liquid AI's d1-2B. The decision scorer asks it, through the AI SDK, if the main subject of the article is the description.
+_Avoid_: LLM, judge, classifier
+
 **Description vector**:
-The vector of the description from the embedding model of the stored articles, made with the prompt that the model uses for a query. The caller makes it.
+The vector of the description from the embedding model of the stored articles, made with the prompt that the model uses for a query. The caller makes it for the similarity scorer.
 _Avoid_: Query embedding, profile vector
 
 **Keyword**:
@@ -25,19 +37,19 @@ The yes (relevant) or no (not relevant) of the reader for one article that the r
 _Avoid_: Label (for the reader's answer), feedback, rating
 
 **Taught article**:
-An article with an answer. The filter compares its similarity with the similarities of the stream.
+An article with an answer. The similarity scorer compares its similarity with the similarities of the stream.
 _Avoid_: Training example, sample
 
 **Stream**:
-The articles that the filter decides on, for example the new articles of the feed since the last decision. The calibration is fitted on the similarities of the stream.
-_Avoid_: Feed (for the articles to decide on), batch, corpus
+The articles that a scorer scores, for example the new articles of the feed since the last time. The similarity scorer fits its calibration on the similarities of the stream.
+_Avoid_: Feed (for the articles to score), batch, corpus
 
 **Similarity**:
 The cosine of the vector of an article and the description vector.
 _Avoid_: Score (for the cosine), distance
 
 **Calibration**:
-The step that makes a similarity a probability. The filter fits a binormal model on the stream and the taught similarities. When that fit cannot hold, it uses Platt's method on the taught similarities.
+The step that makes a similarity a probability. The similarity scorer fits a binormal model on the stream and the taught similarities. When that fit cannot hold, it uses Platt's method on the taught similarities.
 _Avoid_: Normalisation, scaling
 
 **Binormal model**:
@@ -49,7 +61,7 @@ The change of the probability of an article when it matches a keyword, or does n
 _Avoid_: Boost, bonus
 
 **Probability**:
-The calibrated chance, from 0 to 1, that an article is relevant to the profile.
+The chance, from 0 to 1, that an article is relevant to the profile. The similarity scorer calibrates it on the answers, and a decision model gives it. For a profile with no relevant answer, the similarity scorer gives 1 for a keyword match and 0 for the others, and that probability is not calibrated.
 _Avoid_: Confidence, score
 
 **Ranking**:
@@ -57,17 +69,9 @@ The articles of the stream, the best first. The reader shows the best N of each 
 _Avoid_: Sort, feed (for the ranking), score list
 
 **Threshold**:
-The lowest probability that the filter accepts. It maximises the expected F0.5 of the stream. It is not recommended for decisions.
+A rule that gives the lowest probability to accept. An expected-F threshold maximises the expected F-beta of the stream. An expected-utility threshold accepts when the expected cost of a miss is at least the expected cost of a false alarm.
 _Avoid_: Cut-off, limit
 
 **Accepted article**:
-An article that the threshold accepts. A reader shows the ranking, not the accepted articles.
+An article that a threshold accepts. The accepted articles come in the order of the ranking.
 _Avoid_: Match, hit, positive
-
-**Calibrated filter**:
-The decisions of a profile with at least one relevant answer. Its probabilities are calibrated.
-_Avoid_: Classifier, model
-
-**Keyword filter**:
-The decisions of a profile with no relevant answer. It accepts the articles that match a keyword. Its probability is 1 for a match and 0 for the others, and it is not calibrated.
-_Avoid_: Fallback filter

@@ -8,9 +8,9 @@
 
 1. Upsert each article into a `Collection` of `@zukhruf/embeddings`, with the document prompt of the model as its text.
 2. Make the profile: the name, the description, the keywords and the answers of the reader.
-3. Embed the description with the query prompt of the model.
-4. Call `profile.train` with the collection, the description vector, the new articles and the texts of the answered articles.
-5. For each day, show `filter.ranked({ from, to }).slice(0, n)`. Each id has its probability.
+3. Make a `SimilarityScorer` with the collection, a function that embeds a description with the query prompt of the model, and the texts of the answered articles.
+4. Score the new articles for the profile.
+5. For each day, show `scores.ranked({ from, to }).slice(0, n)`. Each id has its probability.
 
 ## The program
 
@@ -27,7 +27,7 @@ import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
 import { embed } from 'ai';
 
 import { Collection } from '@zukhruf/embeddings';
-import { Profile } from '@zukhruf/relevance-filtering';
+import { Profile, SimilarityScorer } from '@zukhruf/relevance-filtering';
 
 const model = createOpenAICompatible({
   name: 'llama.cpp',
@@ -231,11 +231,6 @@ const profile = new Profile({
   relevant: ['ransomware-hospital', 'patch-tuesday', 'security-funding'],
   notRelevant: ['chip-plant'],
 });
-const { embedding } = await embed({
-  model,
-  value: `task: search result | query: ${profile.description}`,
-});
-
 const textOf = (id: string) => {
   const item = all.find((article) => article.id === id);
   return item === undefined ? '' : `${item.title} ${item.lead}`;
@@ -247,22 +242,27 @@ const [first, ...rest] = today.map(({ id, day }) => ({
 }));
 if (first === undefined) throw new Error('No new article.');
 
-const filter = profile.train({
+const scorer = new SimilarityScorer({
   vectors: collection,
-  descriptionVector: embedding,
-  stream: [first, ...rest],
+  embedDescription: async (description) =>
+    (
+      await embed({
+        model,
+        value: `task: search result | query: ${description}`,
+      })
+    ).embedding,
   taughtText: textOf,
 });
+const scores = await scorer.score(profile, [first, ...rest]);
 
-console.log(filter.kind);
 const best = 2;
 for (let day = 8; day <= 12; day++) {
   const from = new Date(Date.UTC(2026, 9, day));
   const to = new Date(Date.UTC(2026, 9, day + 1) - 1);
-  for (const id of filter.ranked({ from, to }).slice(0, best))
+  for (const id of scores.ranked({ from, to }).slice(0, best))
     console.log(
       from.toISOString().slice(0, 10),
-      filter.probability(id).toFixed(3),
+      scores.probability(id).toFixed(3),
       id,
     );
 }
@@ -270,15 +270,14 @@ for (let day = 8; day <= 12; day++) {
 
 ## What it prints
 
-The filter is calibrated, because the profile has relevant answers. With EmbeddingGemma 2 Q8_0 on llama.cpp b11836, it prints:
+The probabilities are calibrated, because the profile has relevant answers. With EmbeddingGemma 2 Q8_0 on llama.cpp b11960, it prints:
 
 ```text
-calibrated
-2026-10-08 0.637 phishing-kits
+2026-10-08 0.639 phishing-kits
 2026-10-08 0.000 breach-retailer
-2026-10-09 0.764 botnet-takedown
+2026-10-09 0.765 botnet-takedown
 2026-10-09 0.000 cybersecurity-merger
-2026-10-10 0.675 spyware-phones
+2026-10-10 0.673 spyware-phones
 2026-10-10 0.000 energy-datacenter
 2026-10-11 0.000 quantum-qubits
 2026-10-11 0.000 health-diagnosis
@@ -293,6 +292,6 @@ The probabilities are low for most security articles: a stream of 24 articles gi
 ## Notes
 
 - The calibration is fitted on the articles of `stream`, so rank the stream of the whole period, and cut it into days with `ranked({ from, to })`. A stream of 24 articles gives a weak fit. A real feed has hundreds of articles in a day.
-- Do not show `filter.accepted()`: the yes/no threshold is not recommended ([ADR 0004](../adr/0004-the-reader-ranks-and-does-not-decide-yes-or-no.md)).
-- Give `publishedAt` as the collection stores it. The filter reads the similarities of the stream with one `query` over the publish dates of the stream.
-- To add an answer, call `profile.with({ relevant: [...profile.relevant, id] })` and train again.
+- Show the ranking. Use `scores.accepted(threshold)` only for an action that needs a yes or no, with a threshold from the costs of that action ([ADR 0005](../adr/0005-a-scorer-and-a-threshold-are-ports.md)).
+- Give `publishedAt` as the collection stores it. The scorer reads the similarities of the stream with one `query` over the publish dates of the stream.
+- To add an answer, call `profile.with({ relevant: [...profile.relevant, id] })` and score again.

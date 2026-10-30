@@ -42,21 +42,21 @@ Each run does both implementation checks first. The scores go to `results/`.
 
 ### Implementation check
 
-`check.ts` runs the record of `freeze/plan.json` through the package: profile security, the fresh slice, product teaching with N = 10. It compares the result with two files in `implementation-check/`:
+`check.ts` runs the record of `freeze/plan.json` through the package's `SimilarityScorer` and `ExpectedFThreshold({ beta: 0.5 })`: profile security, the fresh slice, product teaching with N = 10. It compares the result with two files in `implementation-check/`:
 
 - `implementation-check.json`: the frozen record (sha256 `3daacace…`). The research used float64 vectors.
 - `float32-reference.json`: the same record from the frozen research code on the vectors rounded to float32, as a collection stores them. `float32-reference.py` makes it from the research folder.
 
-The check passes when the shown, taught and accepted articles and each decision are those of both files, and the probabilities, the threshold and the binormal parameters are those of the float32 reference to 1e-9. On 2026-10-29 the package gave:
+The check passes when the shown, taught and accepted articles and each decision are those of both files, and the probabilities and the threshold are those of the float32 reference to 1e-9. The package does not publish the binormal parameters (ADR 0005), so the check reads the probabilities, which the parameters give. On 2026-10-30 the package gave:
 
-| Against               | Probabilities | Threshold | Binormal parameters | Decisions              |
-| --------------------- | ------------- | --------- | ------------------- | ---------------------- |
-| The frozen record     | 1.6e-7        | 1.5e-7    | 1.5e-8              | The same, 196 accepted |
-| The float32 reference | 2.2e-14       | 1.0e-15   | 2.0e-15             | The same, 196 accepted |
+| Against               | Probabilities | Threshold | Decisions              |
+| --------------------- | ------------- | --------- | ---------------------- |
+| The frozen record     | 1.6e-7        | 1.5e-7    | The same, 196 accepted |
+| The float32 reference | 2.2e-14       | 1.0e-15   | The same, 196 accepted |
 
 ### Ranking check
 
-`ranking-check.ts` runs one unit of round 10 through `filter.ranked()`: profile security, the pool protocol, N = 10. The order of all 1,617 articles of fresh-3 must equal the order of the research code in `implementation-check/ranking-reference.json`. `ranking-reference.py` makes that file from the research folder, with two orders: round 10 as it ran on float64 vectors, and the same code on float32 vectors, as a collection stores them. On 2026-10-29 the package gave both orders exactly. The exam needs this check.
+`ranking-check.ts` runs one unit of round 10 through `SimilarityScorer` and `scores.ranked()`: profile security, the pool protocol, N = 10. The order of all 1,617 articles of fresh-3 must equal the order of the research code in `implementation-check/ranking-reference.json`. `ranking-reference.py` makes that file from the research folder, with two orders: round 10 as it ran on float64 vectors, and the same code on float32 vectors, as a collection stores them. On 2026-10-30 the package gave both orders exactly. The exam needs this check.
 
 ### Round 10 on fresh-3
 

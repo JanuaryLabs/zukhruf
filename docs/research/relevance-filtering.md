@@ -6,7 +6,7 @@ Read this record before you change the design, add a profile type, or start a ne
 
 Status on 2026-10-29: DONE. The ranker desc+kw passed the sealed exam (MAP 0.867 against the keyword list's 0.649, interval of the difference +0.105 to +0.331; commit 31698d2). The package `@zukhruf/relevance-filtering` ranks each profile's stream through `ranked()`; its yes/no threshold is kept but not recommended. The exam is a regression set now.
 
-Status on 2026-10-30: round 13 found a better ranker, the decision model d1-2B (MAP 0.924 against desc+kw's 0.782 on January to March 2025), and round 14 found the same lead with an answer key from a second model family. The package does not use it yet: its port for more than one ranker waits for the maintainer's approval (#3383).
+Status on 2026-10-30: round 13 found a better ranker, the decision model d1-2B (MAP 0.924 against desc+kw's 0.782 on January to March 2025), and round 14 found the same lead with an answer key from a second model family. The package now ranks through a scorer port: `DecisionScorer` asks a decision model the question of round 13, and `SimilarityScorer` is the frozen design (ADR 0005 of the package, #3383). Its thresholds are a separate port. A recalibration of the decision model from the taught answers waits for round 15 (#3421).
 
 ## Words in this record
 

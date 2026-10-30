@@ -26,7 +26,7 @@ export type RankingCheck = {
 // profile security, the pool protocol of round 10 and N = 10, through the
 // package, against the order of the research code
 // (implementation-check/ranking-reference.json).
-export function rankingCheck(): RankingCheck {
+export async function rankingCheck(): Promise<RankingCheck> {
   const profile = readProfiles().find(({ id }) => id === 'security');
   const descriptionVector = descriptionVectors().get('security');
   if (profile === undefined || descriptionVector === undefined)
@@ -38,7 +38,7 @@ export function rankingCheck(): RankingCheck {
     stack.use(new LoadedSet(name)),
   );
   const slice = stack.use(new LoadedSet('fresh-3'));
-  const unit = runRankingUnit({
+  const unit = await runRankingUnit({
     profile,
     pool: poolOf(pool, profile, descriptionVector),
     n: 10,

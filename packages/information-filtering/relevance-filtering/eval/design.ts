@@ -4,14 +4,15 @@ import {
   type Article,
   type Keyword,
   Profile,
-  type RelevanceFilter,
+  type Scores,
+  SimilarityScorer,
   type Vectors,
 } from '../src/index.ts';
 import type { Answers } from './teaching.ts';
 
 // The frozen design (freeze/plan.json, desc|binormal+kw) through the API of
-// the package: a profile with the reader's keyword learns from the answers
-// and decides on the stream.
+// the package: the similarity scorer scores the stream for a profile with
+// the reader's keyword and answers.
 export function runDesign(options: {
   readonly profile: { readonly id: string; readonly description: string };
   readonly keyword: Keyword;
@@ -20,19 +21,21 @@ export function runDesign(options: {
   readonly descriptionVector: readonly number[];
   readonly stream: readonly [Article, ...Article[]];
   readonly textOf: (id: string) => string;
-}): RelevanceFilter {
-  return new Profile({
-    name: options.profile.id,
-    description: options.profile.description,
-    keywords: [options.keyword],
-    relevant: options.answers.relevant,
-    notRelevant: options.answers.notRelevant,
-  }).train({
+}): Promise<Scores> {
+  return new SimilarityScorer({
     vectors: options.vectors,
-    descriptionVector: options.descriptionVector,
-    stream: options.stream,
+    embedDescription: async () => options.descriptionVector,
     taughtText: options.textOf,
-  });
+  }).score(
+    new Profile({
+      name: options.profile.id,
+      description: options.profile.description,
+      keywords: [options.keyword],
+      relevant: options.answers.relevant,
+      notRelevant: options.answers.notRelevant,
+    }),
+    options.stream,
+  );
 }
 
 // The vectors of several collections as one port: a query reads the

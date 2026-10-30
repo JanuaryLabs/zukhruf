@@ -6,9 +6,9 @@
 
 ## The steps
 
-1. Make the profile with keywords and no answers. `train` gives a `KeywordFilter`: it ranks the articles that match a keyword first, the newest first, and then the other articles by similarity.
+1. Make the profile with keywords and no answers. The similarity scorer ranks the articles that match a keyword first, the newest first, and then the other articles by similarity.
 2. The reader answers yes or no for the shown articles.
-3. Make the corrected profile with `profile.with`. `train` now gives a `CalibratedFilter`, which ranks by calibrated probabilities.
+3. Make the corrected profile with `profile.with`, and score again. Now the scorer ranks by calibrated probabilities.
 
 ## The program
 
@@ -25,7 +25,11 @@ import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
 import { embed } from 'ai';
 
 import { Collection } from '@zukhruf/embeddings';
-import { type Article, Profile } from '@zukhruf/relevance-filtering';
+import {
+  type Article,
+  Profile,
+  SimilarityScorer,
+} from '@zukhruf/relevance-filtering';
 
 const model = createOpenAICompatible({
   name: 'llama.cpp',
@@ -122,54 +126,53 @@ const profile = new Profile({
   relevant: [],
   notRelevant: [],
 });
-const { embedding } = await embed({
-  model,
-  value: `task: search result | query: ${profile.description}`,
-});
-const options = {
+const scorer = new SimilarityScorer({
   vectors: collection,
-  descriptionVector: embedding,
-  stream: [first, ...rest] as const,
+  embedDescription: async (description) =>
+    (
+      await embed({
+        model,
+        value: `task: search result | query: ${description}`,
+      })
+    ).embedding,
   taughtText: textOf,
-};
+});
 
-const keywords = profile.train(options);
-console.log(keywords.kind, keywords.ranked().slice(0, 5));
+const keywords = await scorer.score(profile, [first, ...rest]);
+console.log(keywords.ranked().slice(0, 5));
 
 // The reader says yes to two shown articles and no to one.
 const taught = profile.with({
   relevant: ['humanoid-factory', 'warehouse-arms'],
   notRelevant: ['robot-vacuum'],
 });
-const calibrated = taught.train(options);
-console.log(calibrated.kind);
+const calibrated = await scorer.score(taught, [first, ...rest]);
 for (const id of calibrated.ranked().slice(0, 5))
   console.log(calibrated.probability(id).toFixed(3), id);
 ```
 
 ## What it prints
 
-With EmbeddingGemma 2 Q8_0 on llama.cpp b11836, it prints:
+With EmbeddingGemma 2 Q8_0 on llama.cpp b11960, it prints:
 
 ```text
-keywords [
+[
   'humanoid-factory',
   'robot-vacuum',
   'robotaxi-city',
   'warehouse-arms',
   'school-chatbot'
 ]
-calibrated
 0.961 humanoid-factory
-0.927 warehouse-arms
+0.928 warehouse-arms
 0.000 robot-vacuum
 0.000 robotaxi-city
 0.000 school-chatbot
 ```
 
-The keyword filter puts the four articles with "robot" at the start of a word first. They have one publish date, so they sort by id. Then the other articles come by similarity: the drone article has no keyword, and it is not in the top 5. The calibrated filter puts the two articles that the reader said yes to first, and gives a low probability to the vacuum article that the reader said no to.
+With no answer, the scorer puts the four articles with "robot" at the start of a word first. They have one publish date, so they sort by id. Then the other articles come by similarity: the drone article has no keyword, and it is not in the top 5. With the answers, the scorer puts the two articles that the reader said yes to first, and gives a low probability to the vacuum article that the reader said no to.
 
 ## Notes
 
-- A keyword filter gives the probability 1 or 0. It is not calibrated, so do not compare its probabilities with those of a calibrated filter.
+- With no relevant answer, the probability is 1 or 0. It is not calibrated, so do not compare it with the probabilities of a taught profile.
 - In this program the stream also holds the answered articles. A real reader answers for articles that it showed before, and decides on new ones.

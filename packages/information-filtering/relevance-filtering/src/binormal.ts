@@ -1,14 +1,5 @@
 import { logAddExp, logistic, mean, populationSd, sum } from './statistics.ts';
 
-// The fitted binormal model, on the scores standardised by the mean and the
-// standard deviation of the stream.
-export type BinormalFit = {
-  // The share of relevant articles in the stream.
-  readonly share: number;
-  readonly relevant: { readonly mean: number; readonly sd: number };
-  readonly other: { readonly mean: number; readonly sd: number };
-};
-
 const SD_FLOOR = 0.05;
 const ITERATIONS = 500;
 const TOLERANCE = 1e-9;
@@ -19,15 +10,16 @@ function logNormal(x: number, mu: number, sd: number): number {
   return -0.5 * ((x - mu) / sd) ** 2 - Math.log(sd) - LOG_ROOT_TWO_PI;
 }
 
-// A two-normal mixture of the stream's scores, fitted by semi-supervised EM:
-// the taught scores stay in their component (docs/adr/0002). Undefined when
-// the fit cannot hold: the stream's scores are all equal, or the relevant
-// mean is not above the other mean.
+// The probability of each stream score from a two-normal mixture of the
+// stream's scores, standardised by their mean and standard deviation, and
+// fitted by semi-supervised EM: the taught scores stay in their component
+// (docs/adr/0002). Undefined when the fit cannot hold: the stream's scores
+// are all equal, or the relevant mean is not above the other mean.
 export function binormal(
   stream: readonly number[],
   relevant: readonly number[],
   notRelevant: readonly number[],
-): { readonly probabilities: number[]; readonly fit: BinormalFit } | undefined {
+): number[] | undefined {
   const centre = mean(stream);
   const spread = populationSd(stream);
   if (spread === 0) return undefined;
@@ -77,14 +69,7 @@ export function binormal(
     );
     if (mu1 <= mu0) return undefined;
   }
-  return {
-    probabilities: posterior(),
-    fit: {
-      share,
-      relevant: { mean: mu1, sd: s1 },
-      other: { mean: mu0, sd: s0 },
-    },
-  };
+  return posterior();
 }
 
 // The mean and the floored standard deviation of the stream scores with

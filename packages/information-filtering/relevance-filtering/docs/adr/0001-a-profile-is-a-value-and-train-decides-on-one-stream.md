@@ -1,5 +1,7 @@
 # A profile is a value, and train decides on one stream
 
+**Superseded in part by [ADR 0005](./0005-a-scorer-and-a-threshold-are-ports.md).** `profile.train` is now `SimilarityScorer.score(profile, stream)`, and it gives a `Scores` in place of a `CalibratedFilter` or a `KeywordFilter`. The facts that the design needs, the vectors port, the stream as a list of articles, the text of a taught article from a function, the errors, and the profile as a value with no I/O, are still valid.
+
 The shape of the API was agreed in #3195: `new Profile({ name, description, keywords?, relevant, notRelevant })` makes an immutable value with no I/O, `profile.with({...})` gives a corrected copy, and `profile.train(...)` gives a classifier with `probability(id)` and the expected-F0.5 decision. This record says what `train` takes and gives, because the frozen design ([ADR 0002](./0002-the-design-is-frozen-by-research-round-6.md)) needs facts that the agreed shape did not name.
 
 ## What train needs
