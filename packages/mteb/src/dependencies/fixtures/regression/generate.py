@@ -20,7 +20,9 @@
 #   ClassLabel column, in their order, or its error;
 # - linear_regression: LinearRegression().fit on float32 data: coef_,
 #   intercept_, rank_, singular_ and predict of the test data. Each case has
-#   full rank, but one with a copied column, which loses exactly one rank. The data of a
+#   full rank, but one with a copied column, which loses exactly one rank.
+#   One case has values near 1e8, which the float32 cast of scikit-learn
+#   rounds. The data of a
 #   case is inline, or "generated": default_rng(seed).integers(0, 1000)
 #   values minus 500, over 100, as float32, so that the test makes the same
 #   data without a large file.
@@ -266,7 +268,15 @@ copied[:, 4] = copied[:, 3]
 copied_test = rng.normal(size=(15, 5)).astype(f32)
 copied_test[:, 4] = copied_test[:, 3]
 copied_column = inline("a copied column", copied, floats(copied @ rng.normal(size=5) + rng.normal(size=40)), copied_test, rank=4)
-linear_regressions = [overdetermined, counts_like, big, duplicated, one_feature, int_y, year_y, copied_column]
+# Large values of small variance: the float32 cast rounds each value to a
+# multiple of 8, and the coefficients fit the rounded values. A generator of
+# its own leaves the data of the other cases as they were.
+large_rng = np.random.default_rng(31)
+large_x = large_rng.normal(size=(200, 6)).astype(f32)
+large_values = floats(1e8 + large_rng.uniform(0, 5, 200))
+assert any(value != float(f32(value)) for value in large_values)
+large_y = inline("large values of small variance", large_x, large_values, large_rng.normal(size=(40, 6)))
+linear_regressions = [overdetermined, counts_like, big, duplicated, one_feature, int_y, year_y, copied_column, large_y]
 
 generator = (
     f"generate.py: numpy {VERSIONS['numpy']}, scipy {VERSIONS['scipy']}, "
