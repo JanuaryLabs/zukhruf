@@ -39,3 +39,7 @@ _Avoid_: Run, report
 **Split** and **subset**:
 A split is a part of a dataset, such as `test`. A subset is a language or a part of the data, such as `default`.
 _Avoid_: Partition, fold
+
+**Table**:
+The scores of one or more models in rows and columns, made by `toDataFrame`. By default, a table has a row for each task and a column for each model. The class of a table is `DataFrame`, as in pandas.
+_Avoid_: Leaderboard (MTEB's web page), report

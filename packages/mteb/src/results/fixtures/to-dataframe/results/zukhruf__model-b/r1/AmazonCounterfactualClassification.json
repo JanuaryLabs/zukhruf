@@ -1,0 +1,116 @@
+{
+  "dataset_revision": "fixture",
+  "task_name": "AmazonCounterfactualClassification",
+  "mteb_version": "2.26.28",
+  "scores": {
+    "validation": [
+      {
+        "hf_subset": "en",
+        "languages": [
+          "eng-Latn"
+        ],
+        "main_score": 0.7,
+        "mteb_version": "2.26.28"
+      },
+      {
+        "hf_subset": "de",
+        "languages": [
+          "deu-Latn"
+        ],
+        "main_score": 0.7,
+        "mteb_version": "2.26.28"
+      },
+      {
+        "hf_subset": "ja",
+        "languages": [
+          "jpn-Jpan"
+        ],
+        "main_score": 0.7,
+        "mteb_version": "2.26.28"
+      },
+      {
+        "hf_subset": "en-ext",
+        "languages": [
+          "eng-Latn",
+          "deu-Latn"
+        ],
+        "main_score": 0.7,
+        "mteb_version": "2.26.28"
+      }
+    ],
+    "test": [
+      {
+        "hf_subset": "en",
+        "languages": [
+          "eng-Latn"
+        ],
+        "main_score": 0.7,
+        "mteb_version": "2.26.28"
+      },
+      {
+        "hf_subset": "de",
+        "languages": [
+          "deu-Latn"
+        ],
+        "main_score": 0.7,
+        "mteb_version": "2.26.28"
+      },
+      {
+        "hf_subset": "ja",
+        "languages": [
+          "jpn-Jpan"
+        ],
+        "main_score": 0.7,
+        "mteb_version": "2.26.28"
+      },
+      {
+        "hf_subset": "en-ext",
+        "languages": [
+          "eng-Latn",
+          "deu-Latn"
+        ],
+        "main_score": 0.7,
+        "mteb_version": "2.26.28"
+      }
+    ],
+    "train": [
+      {
+        "hf_subset": "en",
+        "languages": [
+          "eng-Latn"
+        ],
+        "main_score": 0.7,
+        "mteb_version": "2.26.28"
+      },
+      {
+        "hf_subset": "de",
+        "languages": [
+          "deu-Latn"
+        ],
+        "main_score": 0.7,
+        "mteb_version": "2.26.28"
+      },
+      {
+        "hf_subset": "ja",
+        "languages": [
+          "jpn-Jpan"
+        ],
+        "main_score": 0.7,
+        "mteb_version": "2.26.28"
+      },
+      {
+        "hf_subset": "en-ext",
+        "languages": [
+          "eng-Latn",
+          "deu-Latn"
+        ],
+        "main_score": 0.7,
+        "mteb_version": "2.26.28"
+      }
+    ]
+  },
+  "evaluation_time": 1.0,
+  "kg_co2_emissions": null,
+  "date": null,
+  "evaluation_phases": null
+}

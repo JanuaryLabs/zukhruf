@@ -159,6 +159,23 @@ export default defineConfig(
       'island/no-process-env': 'off',
     },
   },
+  // pg-pool's end() resolves before the sockets of its clients close, so the
+  // FORCE drop of a test database can end a session the pool still owns
+  // (#3305). postgresPool waits for every socket, and its type has no end.
+  {
+    files: ['packages/mutex/src/**/*.test.ts'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector:
+            "NewExpression[callee.object.name='pg'][callee.property.name='Pool']",
+          message:
+            'Use postgresPool of src/testing/store-cases.ts with `await using`: it ends once the server has no session of the pool, so the database can be dropped (#3305).',
+        },
+      ],
+    },
+  },
   // @zukhruf/testing depends on docker, and docker on async, so the tests of
   // these two packages cannot import TemporaryFiles: that import would make a
   // cycle in the build (docs/adr/0001, line 29). Docker keeps its own copy of

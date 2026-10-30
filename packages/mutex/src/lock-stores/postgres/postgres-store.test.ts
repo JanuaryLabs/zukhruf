@@ -39,7 +39,7 @@ async function postgresDatabase() {
   return database;
 }
 
-const storeOver = (pool: pg.Pool) =>
+const storeOver = (pool: Pick<pg.Pool, 'connect'>) =>
   new PostgresStore({
     connect: () => pool.connect(),
     sequence,
@@ -133,8 +133,9 @@ test(
     await using database = await postgresDatabase();
     await using cleanup = new AsyncDisposableStack();
     const proxy = await proxyTo(database.connectionString);
-    const pool = new pg.Pool({ connectionString: proxy.connectionString });
-    cleanup.defer(() => pool.end());
+    const { pool } = cleanup.use(
+      postgresPool({ connectionString: proxy.connectionString }),
+    );
     // Closed first: the closed sockets end a release that waits for an answer, so the pool can end.
     cleanup.use(proxy);
     const mutex = new Mutex(storeOver(pool));
@@ -247,7 +248,7 @@ test(
       connectionString: database.connectionString,
     });
     await admin.connect();
-    const otherPool = postgresPool({
+    await using otherPool = postgresPool({
       connectionString: database.connectionString,
     });
     const handle = await store.acquire('report:daily');
@@ -284,7 +285,6 @@ test(
       reconnecting.resume();
       await other.disposeAsync();
       await handle[Symbol.asyncDispose]();
-      await otherPool.end();
       await admin.end();
     }
   },
@@ -296,53 +296,48 @@ test(
   async (t) => {
     // Arrange: another pool holds the key, and the waiter's only session waits for it.
     await using database = await postgresDatabase();
-    const holderPool = postgresPool({
+    await using holderPool = postgresPool({
       connectionString: database.connectionString,
     });
-    const waiterPool = postgresPool({
+    await using waiterPool = postgresPool({
       connectionString: database.connectionString,
       max: 1,
     });
-    try {
-      const holder = await hold(
-        new Mutex(storeOver(holderPool.pool)),
-        'report:daily',
-      );
-      const waiter = new Mutex(storeOver(waiterPool.pool));
-      const cancel = new AbortController();
-      const reason = new Error('cancelled');
-      const waiting = waiter.acquire('report:daily', async () => 'ran', {
-        signal: cancel.signal,
-      });
-      const outcome = waiting.then(
-        (value) => value,
-        (error: unknown) => error,
-      );
-      await untilASessionWaitsForALock(t, database.connectionString);
-      cancel.abort(reason);
-      await holder.release();
+    const holder = await hold(
+      new Mutex(storeOver(holderPool.pool)),
+      'report:daily',
+    );
+    const waiter = new Mutex(storeOver(waiterPool.pool));
+    const cancel = new AbortController();
+    const reason = new Error('cancelled');
+    const waiting = waiter.acquire('report:daily', async () => 'ran', {
+      signal: cancel.signal,
+    });
+    const outcome = waiting.then(
+      (value) => value,
+      (error: unknown) => error,
+    );
+    await untilASessionWaitsForALock(t, database.connectionString);
+    cancel.abort(reason);
+    await holder.release();
 
-      // Act
-      const next = await Promise.race([
-        waiter.acquire('report:daily', async () => 'ran' as const),
-        delay(300, 'still waiting' as const),
-      ]);
+    // Act
+    const next = await Promise.race([
+      waiter.acquire('report:daily', async () => 'ran' as const),
+      delay(300, 'still waiting' as const),
+    ]);
 
-      // Assert: first the next acquire, because a cancel that waits for a second session never settles.
-      assert.equal(
-        next,
-        'ran',
-        'A cancel must give back its turn and its session at once',
-      );
-      assert.equal(
-        await outcome,
-        reason,
-        'The cancelled call must reject with the reason of its signal',
-      );
-    } finally {
-      await holderPool.end();
-      await waiterPool.end();
-    }
+    // Assert: first the next acquire, because a cancel that waits for a second session never settles.
+    assert.equal(
+      next,
+      'ran',
+      'A cancel must give back its turn and its session at once',
+    );
+    assert.equal(
+      await outcome,
+      reason,
+      'The cancelled call must reject with the reason of its signal',
+    );
   },
 );
 
@@ -352,45 +347,45 @@ test(
   async (t) => {
     // Arrange: a holder, and a waiter in another pool that cancels while the server keeps its place in the queue.
     await using database = await postgresDatabase();
-    const pools = [1, 2, 3].map(() =>
-      postgresPool({ connectionString: database.connectionString }),
+    await using holderPool = postgresPool({
+      connectionString: database.connectionString,
+    });
+    await using waiterPool = postgresPool({
+      connectionString: database.connectionString,
+    });
+    await using nextPool = postgresPool({
+      connectionString: database.connectionString,
+    });
+    const holder = await hold(
+      new Mutex(storeOver(holderPool.pool)),
+      'report:daily',
     );
-    const [holderPool, waiterPool, nextPool] = pools;
-    assert.ok(holderPool && waiterPool && nextPool);
-    try {
-      const holder = await hold(
-        new Mutex(storeOver(holderPool.pool)),
-        'report:daily',
-      );
-      const cancel = new AbortController();
-      const waiting = new Mutex(storeOver(waiterPool.pool)).acquire(
-        'report:daily',
-        async () => 'ran',
-        { signal: cancel.signal },
-      );
-      await untilASessionWaitsForALock(t, database.connectionString);
-      cancel.abort(new Error('cancelled'));
-      await assert.rejects(waiting);
+    const cancel = new AbortController();
+    const waiting = new Mutex(storeOver(waiterPool.pool)).acquire(
+      'report:daily',
+      async () => 'ran',
+      { signal: cancel.signal },
+    );
+    await untilASessionWaitsForALock(t, database.connectionString);
+    cancel.abort(new Error('cancelled'));
+    await assert.rejects(waiting);
 
-      // Act: the holder releases, so the server can grant the cancelled waiter's place first.
-      await holder.release();
-      const next = await Promise.race([
-        new Mutex(storeOver(nextPool.pool)).acquire(
-          'report:daily',
-          async () => 'granted' as const,
-        ),
-        delay(2000, 'still waiting' as const),
-      ]);
+    // Act: the holder releases, so the server can grant the cancelled waiter's place first.
+    await holder.release();
+    const next = await Promise.race([
+      new Mutex(storeOver(nextPool.pool)).acquire(
+        'report:daily',
+        async () => 'granted' as const,
+      ),
+      delay(2000, 'still waiting' as const),
+    ]);
 
-      // Assert
-      assert.equal(
-        next,
-        'granted',
-        'A grant to a cancelled waiter must be released, so the next waiter gets the key',
-      );
-    } finally {
-      await Promise.all(pools.map((pool) => pool.end()));
-    }
+    // Assert
+    assert.equal(
+      next,
+      'granted',
+      'A grant to a cancelled waiter must be released, so the next waiter gets the key',
+    );
   },
 );
 
@@ -412,21 +407,18 @@ test(
       const asApp = new URL(database.connectionString);
       asApp.username = role;
       asApp.password = 'app';
-      const { pool, end } = postgresPool({
+      await using app = postgresPool({
         connectionString: asApp.toString(),
       });
-      try {
-        // Act
-        const token = await new Mutex(storeOver(pool)).acquire(
-          'report:daily',
-          async (lease) => lease.token,
-        );
 
-        // Assert
-        assert.equal(token.value, 1n);
-      } finally {
-        await end();
-      }
+      // Act
+      const token = await new Mutex(storeOver(app.pool)).acquire(
+        'report:daily',
+        async (lease) => lease.token,
+      );
+
+      // Assert
+      assert.equal(token.value, 1n);
     } finally {
       // A role belongs to the server, not to the database of the test.
       await owner.query(`DROP OWNED BY ${role}`);
@@ -442,31 +434,31 @@ test(
   async () => {
     // Arrange: a pool of one session, so the next borrower gets the session that held the key.
     await using database = await postgresDatabase();
-    const { pool, end } = postgresPool({
+    await using oneSession = postgresPool({
       connectionString: database.connectionString,
       max: 1,
     });
-    try {
-      // Act
-      await new Mutex(storeOver(pool)).acquire('report:daily', async () => {});
-      const borrower = await pool.connect();
-      try {
-        const { rows } = await borrower.query(
-          `SELECT count(*)::int AS locks FROM pg_locks
-           WHERE locktype = 'advisory' AND pid = pg_backend_pid()`,
-        );
 
-        // Assert
-        assert.equal(
-          rows[0].locks,
-          0,
-          'The next borrower of the session must not hold the released key',
-        );
-      } finally {
-        borrower.release();
-      }
+    // Act
+    await new Mutex(storeOver(oneSession.pool)).acquire(
+      'report:daily',
+      async () => {},
+    );
+    const borrower = await oneSession.pool.connect();
+    try {
+      const { rows } = await borrower.query(
+        `SELECT count(*)::int AS locks FROM pg_locks
+         WHERE locktype = 'advisory' AND pid = pg_backend_pid()`,
+      );
+
+      // Assert
+      assert.equal(
+        rows[0].locks,
+        0,
+        'The next borrower of the session must not hold the released key',
+      );
     } finally {
-      await end();
+      borrower.release();
     }
   },
 );

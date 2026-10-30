@@ -115,6 +115,59 @@ console.log(result.taskResults[0]?.scores.test?.[0]?.main_score);
 
 `k1` and `b` are the keyword arguments of `loadModel`, as in MTEB. They are experiment arguments, so `bm25S.loadModel({ k1: 1.2 })` keeps its results apart from the results of the defaults (`k1` 1.5, `b` 0.75). The search model supports English only: a task in another language stops with an error.
 
+## Hybrid search: BM25 with an embedding model
+
+BM25 finds the documents that share words with the query. An encoder finds the documents with a similar meaning. A hybrid search uses both and fuses their scores. `HybridSearch` is MTEB's hybrid search. Give it two or more models: an encoder or a search model.
+
+```ts
+import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
+
+import {
+  HybridSearch,
+  ResultCache,
+  bm25S,
+  evaluate,
+  qwen3Embedding0B6,
+} from '@zukhruf/mteb';
+
+const llamaCpp = createOpenAICompatible({
+  name: 'llama.cpp',
+  baseURL: 'http://127.0.0.1:8080/v1',
+});
+const hybrid = new HybridSearch({
+  models: [
+    bm25S.loadModel(),
+    qwen3Embedding0B6.loadModel({
+      model: llamaCpp.embeddingModel('qwen3-embedding-0.6b'),
+    }),
+  ],
+  fusionStrategy: 'rrf',
+});
+const result = await evaluate(hybrid, new Faq(), {
+  cache: new ResultCache('mteb-results'),
+});
+```
+
+Each model finds the best `subModelTopK` documents of each query (100 by default, or `topK` of the search when it is greater). Then the fusion gives each document one score:
+
+- `'rrf'` (the default): Reciprocal Rank Fusion. Each model adds `weight / (rrfK + rank)`. `rrfK` is 60 by default.
+- `'dbsf'`: Distribution-Based Score Fusion. Each model places its scores between the mean minus 3 standard deviations and the mean plus 3 standard deviations, and clips them to 0 to 1.
+- `'rsf'`: Relative Score Fusion. Each model places its scores between its lowest and its highest score.
+- A function of your own, with the type `FusionFunction`.
+
+`weights` gives one weight to each model. By default, each model has the same weight. The fused scores are the scores of MTEB to the last bit.
+
+The hybrid has the name `mteb/baseline-hybrid-<fusion>-<names>`. The names are the last parts of the model names, so the hybrid above is `mteb/baseline-hybrid-rrf-baseline-bm25s-Qwen3-Embedding-0.6B`. The result cache keeps the result of the hybrid under this name, and a table shows it in a column with this name.
+
+The settings of a hybrid that are not the defaults are its experiment arguments:
+
+- `sub_models`: the experiment name of each model, or `None` for a model without one. The hybrid has this argument when one or more models have an experiment name.
+- `weights`: the weights, when you give them.
+- `rrf_k`: `rrfK`, when the fusion is `'rrf'` and `rrfK` is not 60.
+- `sub_model_top_k`: `subModelTopK`, when you give it.
+
+Thus the hybrid of `bm25S.loadModel()` and `bm25S.loadModel({ k1: 1.2 })` has the experiment name `sub_models_[None,k1_1.2]`, and its result does not replace the result of the hybrid of two default BM25 models. A hybrid with all the default settings has no experiment arguments, so its name and its result folder are those of MTEB. MTEB gives a hybrid no experiment arguments.
+
 ## Compare models on MTEB's tasks
 
 A ported model gives its encoder through `loadModel`, with the AI SDK embedding model of a server that serves its weights. The encoder adds the prompts that MTEB's numbers used, so the scores can be compared with MTEB's leaderboard.
@@ -153,8 +206,60 @@ npx nx run mteb:compare
 
 A task downloads its files once, to `~/.cache/mteb/datasets`. The keyword arguments of `loadModel`, but `model`, are experiment arguments: a quantized model keeps its results apart from the results of the full weights.
 
+## Compare the results in a table
+
+The result cache keeps the results of each model. `toDataFrame` puts them in a table, as MTEB's `to_dataframe` does: a row for each task and a column for each model. `getAggregatedScores` gives the mean score of each model over its tasks (`Mean(Task)`) and over the task types (`Mean(TaskType)`).
+
+```ts
+import { ArguAna, ResultCache, SCIDOCS } from '@zukhruf/mteb';
+
+const results = new ResultCache('mteb-results')
+  .loadResults({ includeRemote: false, loadExperiments: 'match_name' })
+  .selectTasks([new ArguAna(), new SCIDOCS()]);
+console.log(results.toDataFrame().toString());
+console.log(results.getAggregatedScores());
+```
+
+```
+task_name  is_public  Qwen/Qwen3-Embedding-0.6B  google/embeddinggemma-2
+ArguAna    True                        0.694170                 0.597370
+SCIDOCS    True                        0.243560                 0.180830
+```
+
+`aggregationLevel` gives a row for each subset, split, task or language. `format: 'long'` gives a row for each model and a `score` column. `includeModelRevision` gives a column for each model and revision. `getAggregatedScores` reads the task type of each result, so give the results their tasks with `selectTasks` first.
+
+By default, a table averages the experiments of one model with its default run, as MTEB does: the results of a quantized model and of its full weights share one column. `includeExperiments: true` gives a column for each experiment of a model. See [Compare a change with its baseline](#compare-a-change-with-its-baseline).
+
+`examples/table.ts` prints the table and the means of the results in `~/.cache/mteb`. An argument names another cache folder.
+
+```sh
+npx nx run mteb:table
+```
+
 To see the scores as a bar chart for each task, run the command below. It needs [uv](https://docs.astral.sh/uv/). Python MTEB reads the result files in `~/.cache/mteb` and does not download its results repository. The command writes `~/.cache/mteb/chart.html` and prints its path.
 
 ```sh
 npx nx run mteb:chart
 ```
+
+## Compare a change with its baseline
+
+A change of a setting, such as `k1` of BM25 or the weights of a hybrid, is an experiment of a model. The default run of the model is the baseline. Evaluate both with the same result cache. Then load the results with their experiments, and make a table with `includeExperiments: true`:
+
+```ts
+import { ResultCache, bm25S, evaluate } from '@zukhruf/mteb';
+
+const cache = new ResultCache('mteb-results');
+await evaluate(bm25S.loadModel(), new Faq(), { cache });
+await evaluate(bm25S.loadModel({ k1: 1.2 }), new Faq(), { cache });
+
+const results = cache
+  .loadResults({ includeRemote: false, loadExperiments: 'match_name' })
+  .selectTasks([new Faq()]);
+console.log(results.toDataFrame({ includeExperiments: true }).toString());
+console.log(results.getAggregatedScores({ includeExperiments: true }));
+```
+
+The wide table has a second column level, `experiment`, below the model name. The experiment of the default run is `""`. The long table has an `experiment` column. `getAggregatedScores({ includeExperiments: true })` gives the means of each model by experiment: `{ [model]: { [experiment]: { 'Mean(Task)', 'Mean(TaskType)' } } }`. The column of each experiment has the scores that MTEB gives for the results of that experiment alone, but for the last bit of a mean. MTEB has no such option. Without it, the table and the means are those of MTEB.
+
+`nx run mteb:table` prints the table and the means with the experiments.
