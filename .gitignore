@@ -157,9 +157,9 @@ test-results.xml
 # TypeScript output of the Vite apps (Vite builds to dist)
 out-tsc
 
-# The downloaded texts, the vectors and the last scores of the event-grouping eval
-packages/event-grouping/eval/cache
-packages/event-grouping/eval/results
+# The downloaded texts, the vectors and the last scores of the event-detection eval
+packages/information-filtering/event-detection/eval/cache
+packages/information-filtering/event-detection/eval/results
 
 # The texts, the vectors and the last scores of the relevance-filtering eval
 packages/information-filtering/relevance-filtering/eval/cache

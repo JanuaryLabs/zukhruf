@@ -1,6 +1,6 @@
 # The package is a port of MTEB
 
-A retrieval evaluation of embedding models on the labelled sets of `@zukhruf/event-grouping` ran MTEB, a Python framework. MTEB's command line cannot load a task that is not in its registry, so the evaluation needed a Python launcher, a virtual environment of 1.4 GB (MTEB requires torch) and a second toolchain beside Node. Of MTEB, the evaluation used the engine only: the task, the search, the metrics, the results and the cache. It did not use MTEB's datasets, its model registry or its leaderboard.
+A retrieval evaluation of embedding models on the labelled sets of `@zukhruf/event-detection` ran MTEB, a Python framework. MTEB's command line cannot load a task that is not in its registry, so the evaluation needed a Python launcher, a virtual environment of 1.4 GB (MTEB requires torch) and a second toolchain beside Node. Of MTEB, the evaluation used the engine only: the task, the search, the metrics, the results and the cache. It did not use MTEB's datasets, its model registry or its leaderboard.
 
 Thus this package ports the engine of MTEB 2.26.28 to TypeScript, module by module (`docs/ported-from-mteb.md`). It does not write a new benchmark framework. The names, the score keys and the files on disk stay those of MTEB, so a result of one can be compared with a result of the other.
 
@@ -18,4 +18,4 @@ The encoder is an AI SDK embedding model, as in `@zukhruf/embeddings`. It takes 
 
 - A change of MTEB is a change here: compare the source modules at the new tag, as the ledger describes.
 - The first step has the retrieval and reranking tasks, for text. The other task types need ports of scikit-learn and SciPy algorithms (logistic regression, k-means, correlations); their numbers can differ from MTEB in the last digits.
-- The similarity scores of real models can differ from MTEB in their last float32 bit, because the order of a BLAS sum depends on the library. On two of the labelled sets of `@zukhruf/event-grouping`, all scores were equal.
+- The similarity scores of real models can differ from MTEB in their last float32 bit, because the order of a BLAS sum depends on the library. On two of the labelled sets of `@zukhruf/event-detection`, all scores were equal.

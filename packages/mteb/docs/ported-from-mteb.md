@@ -92,7 +92,7 @@ Two pydantic rules have two copies each: the alias of a field (`eval_langs` to `
 
 `src/abstasks/fixtures/retrieval-task.json` holds a small retrieval task and its scores from MTEB, as a full corpus search and as a reranking. Its vectors make every similarity exact in float32, so `retrieval.test.ts` compares the whole path, from the encoder to the scores, to the last bit. `src/results/fixtures/python-mteb-2.26.28/` holds result files that MTEB wrote, which this package reads and writes back.
 
-On 2026-10-28, a retrieval task on the event-grouping sets gvc and anthropic-outlets ran with EmbeddingGemma 2 on llama.cpp, once with MTEB and once with this package. All 112 scores of each set, the nAUC values among them, were equal.
+On 2026-10-28, a retrieval task on the event-detection sets gvc and anthropic-outlets ran with EmbeddingGemma 2 on llama.cpp, once with MTEB and once with this package. All 112 scores of each set, the nAUC values among them, were equal.
 
 On 2026-10-28, `examples/compare-models.ts` ran the ported models on MTEB's tasks, with the Q8_0 weights on llama.cpp b11836. The main scores (nDCG@10) and MTEB's published scores:
 

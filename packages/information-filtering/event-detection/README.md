@@ -1,4 +1,4 @@
-# @zukhruf/event-grouping
+# @zukhruf/event-detection
 
 Many sources report one real occurrence, and a reader wants to see it one time. This package puts the reports of one real occurrence into one event. It finds the nearest reports of each report by the vectors of their leads. It scores each pair with a frozen logistic model on the similarity, the numbers and the publishers of the two reports. On each new publish day, it clusters the reports of the last 7 days again with group average. This kind of program is also known as event detection, or event coreference across documents.
 
@@ -11,7 +11,7 @@ This project is an experiment. It uses `node:sqlite`. The package does not start
 The parameters come from research rounds #3130 and #3152, and they are valid only with EmbeddingGemma 2 ([ADR 0001](./docs/adr/0001-the-parameters-are-frozen-by-research-round-3130.md), [ADR 0005](./docs/adr/0005-research-round-3152-adds-a-same-publisher-term-and-fits-the-weights-again.md)). Give the publisher of each report when you know it.
 
 ```sh
-npm install @zukhruf/event-grouping @zukhruf/embeddings ai
+npm install @zukhruf/event-detection @zukhruf/embeddings ai
 ```
 
 ```ts
@@ -20,7 +20,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
 
 import { Collection } from '@zukhruf/embeddings';
-import { EventDetector, design3152b } from '@zukhruf/event-grouping';
+import { EventDetector, design3152b } from '@zukhruf/event-detection';
 
 const local = createOpenAICompatible({
   name: 'llama.cpp',
@@ -101,7 +101,7 @@ Read [the limitations](./docs/limitations.md) before you use the events for a de
 
 Before you change a parameter, the similarity source or the model, read ADR 0001, ADR 0004, ADR 0005 and the limitations. A change needs a new research round on the evaluation sets.
 
-Before you change a parameter, run `nx run event-grouping:eval`, and run it again after the change. It scores the detector on the labelled sets and compares each score with the accepted designs ([eval/README.md](./eval/README.md)).
+Before you change a parameter, run `nx run event-detection:eval`, and run it again after the change. It scores the detector on the labelled sets and compares each score with the accepted designs ([eval/README.md](./eval/README.md)).
 
 - [ADR 0001: The parameters are frozen by research round #3130](./docs/adr/0001-the-parameters-are-frozen-by-research-round-3130.md)
 - [ADR 0002: The window is clustered again on each new publish day](./docs/adr/0002-the-window-is-clustered-again-on-each-new-publish-day.md)

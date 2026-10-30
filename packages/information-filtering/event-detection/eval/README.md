@@ -4,7 +4,7 @@ The parameters of the detector come from research rounds #3130 and #3152 ([ADR 0
 
 Run the evaluation before you change a parameter, the lead rule, the similarity source or the model. Then run it again after the change.
 
-The eval of `@zukhruf/relevance-filtering` copies `roles.ts`, `answer-key.ts`, `bootstrap.ts`, `verdict.ts` and `run.ts` of this folder ([its ledger](../../information-filtering/relevance-filtering/docs/copied-code.md), backlog #3261). Make each fix in both copies, and name both files in the commit.
+The eval of `@zukhruf/relevance-filtering` copies `roles.ts`, `answer-key.ts`, `bootstrap.ts`, `verdict.ts` and `run.ts` of this folder ([its ledger](../../relevance-filtering/docs/copied-code.md), backlog #3261). Make each fix in both copies, and name both files in the commit.
 
 ## Run it
 
@@ -20,12 +20,12 @@ The evaluation needs the embedding model of round #3130: EmbeddingGemma 2 Q8_0 o
 2. Run the evaluation:
 
    ```sh
-   EVAL_EMBEDDING_URL_EMBEDDINGGEMMA_2=http://127.0.0.1:8096/v1 npx nx run event-grouping:eval
+   EVAL_EMBEDDING_URL_EMBEDDINGGEMMA_2=http://127.0.0.1:8096/v1 npx nx run event-detection:eval
    ```
 
 3. Stop the server.
 
-Give set names to score only those sets, for example `npx nx run event-grouping:eval -- gvc hlgd-test`. `--help` shows the options.
+Give set names to score only those sets, for example `npx nx run event-detection:eval -- gvc hlgd-test`. `--help` shows the options.
 
 Each embedding model has its own server. The runner and the fit read the base URL of the server of a model from the variable `EVAL_EMBEDDING_URL_` and the name of the model (`embeddingModel` of the design) in capitals, with `_` for each other character. For example, the variable of `embeddinggemma-2` is `EVAL_EMBEDDING_URL_EMBEDDINGGEMMA_2`, and the variable of `qwen3-embedding-0.6b` is `EVAL_EMBEDDING_URL_QWEN3_EMBEDDING_0_6B`. Set the variable of each model that the run uses.
 
@@ -161,10 +161,10 @@ The runner never drops a report without a message:
 
 ## Fit a design
 
-A research round chooses a design on the training sets. `nx run event-grouping:fit -- <round>` does that work in the repository. It reads `rounds/<round>/selection-rule.json` and writes `rounds/<round>/plan.json`. It needs the embedding server of [Run it](#run-it):
+A research round chooses a design on the training sets. `nx run event-detection:fit -- <round>` does that work in the repository. It reads `rounds/<round>/selection-rule.json` and writes `rounds/<round>/plan.json`. It needs the embedding server of [Run it](#run-it):
 
 ```sh
-EVAL_EMBEDDING_URL_EMBEDDINGGEMMA_2=http://127.0.0.1:8096/v1 npx nx run event-grouping:fit -- 3152b
+EVAL_EMBEDDING_URL_EMBEDDINGGEMMA_2=http://127.0.0.1:8096/v1 npx nx run event-detection:fit -- 3152b
 ```
 
 The fit does these steps:

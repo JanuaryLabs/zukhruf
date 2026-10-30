@@ -1,6 +1,6 @@
 # The window is clustered again on each new publish day
 
-A detector that decides when a report arrives cannot change that decision later. Then the same reports in a different arrival order give different events. Yang, Pierce and Carbonell (SIGIR 1998, "A study on retrospective and on-line event detection") show this for single-pass clustering. Research round #3130 measured four grouping steps. Group-average clustering of the 7-day window on each publish day had the best score and the same score in 10 arrival orders. Limitation 7 of the [workspace record](../../../../docs/research/event-grouping.md) has the numbers.
+A detector that decides when a report arrives cannot change that decision later. Then the same reports in a different arrival order give different events. Yang, Pierce and Carbonell (SIGIR 1998, "A study on retrospective and on-line event detection") show this for single-pass clustering. Research round #3130 measured four grouping steps. Group-average clustering of the 7-day window on each publish day had the best score and the same score in 10 arrival orders. Limitation 7 of the [workspace record](../../../../../docs/research/event-detection.md) has the numbers.
 
 Thus the detector does two steps:
 

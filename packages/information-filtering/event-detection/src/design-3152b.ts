@@ -4,7 +4,7 @@ import type { Design } from './design.ts';
 // (3152b) chose the threshold with the CoNLL F0.5 objective. 3152b froze them
 // in its plan.json before it scored its exam set. The lead rule, the vector
 // text, the shortlist and the window are those of round #3130
-// (docs/adr/0001). `nx run event-grouping:fit -- 3152b` fits this design
+// (docs/adr/0001). `nx run event-detection:fit -- 3152b` fits this design
 // again from the training sets (docs/adr/0005).
 export const design3152b: Design = {
   name: '3152b',

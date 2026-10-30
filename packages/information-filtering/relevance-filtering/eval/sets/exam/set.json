@@ -7,7 +7,7 @@
     "biology-labels.json": "4cb90b03eb351076bb0219721773e83fd754790bcc232cc430e21c685a1ecd67"
   },
   "annotator": "labels.jsonl: one blind Claude (Opus 5.5) annotator, the 15 profiles other than Biology; the research lead never read it. biology-labels.json: the Biology exam of round 1 (relevance-biology/exam/labels.json).",
-  "source": "deepmind-outlets: Google DeepMind blog posts and the DeepMind tags of three outlets, 2026-04-01 to 2026-10-26 (133), the set of the event-grouping exam. articles.json holds the q and id of exam/items.json and the publish date of the event-grouping answer key. relevance-profiles bundle of zukhruf #3195 (~/.codex/visualizations/2026/10/23/01a16a1c-424c-7793-8ca9-02cc1c715d82/relevance-profiles)",
+  "source": "deepmind-outlets: Google DeepMind blog posts and the DeepMind tags of three outlets, 2026-04-01 to 2026-10-26 (133), the set of the event-detection exam. articles.json holds the q and id of exam/items.json and the publish date of the event-detection answer key. relevance-profiles bundle of zukhruf #3195 (~/.codex/visualizations/2026/10/23/01a16a1c-424c-7793-8ca9-02cc1c715d82/relevance-profiles)",
   "weaknesses": [
     "One annotator (an AI model) for each file.",
     "Fortune dates are the URL day at 12:00 UTC.",

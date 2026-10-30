@@ -1,6 +1,6 @@
 # Limitations
 
-The research for event grouping found these limits. They apply to this package. The numbers are the numbers of the [workspace record](../../../docs/research/event-grouping.md), which keeps the history of each round and the limits that apply to all designs (1 to 12, 15 to 17). Read a limit before you change the design, and add the result of each new round to the workspace record.
+The research for event detection found these limits. They apply to this package. The numbers are the numbers of the [workspace record](../../../../docs/research/event-detection.md), which keeps the history of each round and the limits that apply to all designs (1 to 12, 15 to 17). Read a limit before you change the design, and add the result of each new round to the workspace record.
 
 ## 13. The boundary of an event has no written rule
 

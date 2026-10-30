@@ -6,7 +6,7 @@ Read this record before you change the similarity source, add a model, or change
 
 ## Considered Options
 
-Each row is a way to tell if two reports are about one occurrence. The numbers come from the research rounds in the workspace record [docs/research/event-grouping.md](../../../../docs/research/event-grouping.md).
+Each row is a way to tell if two reports are about one occurrence. The numbers come from the research rounds in the workspace record [docs/research/event-detection.md](../../../../../docs/research/event-detection.md).
 
 | Way                                        | Models that the research tried                                               | Result                                                                                                                                                                                                                                                                                                                                                                                                           | Use in the detector                                          |
 | ------------------------------------------ | ---------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
@@ -39,11 +39,11 @@ The search found no model that takes two reports and tells if they are about one
 
 **The constructor takes a design.** A `Design` (`src/design.ts`) holds the source and its parameters as one unit: the name of the embedding model, the lead rule, the vector text, the shortlist size, the window, the threshold and the weights of the pair score. The constructor has no default design, so each caller names the design that it uses, for example `design: design3152b`. A design is a value, not code, so the evaluation can run the accepted design and a new design in one run (#3189). The design names its model, but the detector cannot see the model of the vectors. The caller must give vectors of that model.
 
-**The repository builds a design.** `nx run event-grouping:fit -- <round>` fits a design from the selection rule of a round and the training sets (eval/README.md). It runs the detector of the package, not a copy, so the design that the fit chooses is the design that the package runs. Thus another embedding model gets its own fitted weights and threshold from the same code.
+**The repository builds a design.** `nx run event-detection:fit -- <round>` fits a design from the selection rule of a round and the training sets (eval/README.md). It runs the detector of the package, not a copy, so the design that the fit chooses is the design that the package runs. Thus another embedding model gets its own fitted weights and threshold from the same code.
 
 ## Consequences
 
-- A new source needs a new design: fit it with `nx run event-grouping:fit`, then score it with `nx run event-grouping:eval`.
-- Before you change the source or a parameter, run `nx run event-grouping:eval` ([eval/README.md](../../eval/README.md)). Do not use a set as a fresh test after a round has scored it once: the runner scores an exam set one time only, and then the set is a regression set.
+- A new source needs a new design: fit it with `nx run event-detection:fit`, then score it with `nx run event-detection:eval`.
+- Before you change the source or a parameter, run `nx run event-detection:eval` ([eval/README.md](../../eval/README.md)). Do not use a set as a fresh test after a round has scored it once: the runner scores an exam set one time only, and then the set is a regression set.
 - A new source alone does not fix the false joins between the posts of one publisher (limitation 20). There, every post shares the same names, so every similarity is high.
 - If you add a model in the table above, add its row with the round that measured it.

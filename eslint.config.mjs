@@ -113,20 +113,20 @@ export default defineConfig(
       '@nx/enforce-module-boundaries': moduleBoundaryRule('tests'),
     },
   },
-  // The event-grouping eval is not shipped. Like the tests, it runs the
+  // The event-detection eval is not shipped. Like the tests, it runs the
   // package with a real Collection of @zukhruf/embeddings. Its runner and its
   // fitter are command line programs: they read their environment and print
   // the scores.
   {
-    files: ['packages/event-grouping/eval/**'],
+    files: ['packages/information-filtering/event-detection/eval/**'],
     rules: {
       '@nx/enforce-module-boundaries': moduleBoundaryRule('tests'),
     },
   },
   {
     files: [
-      'packages/event-grouping/eval/run.ts',
-      'packages/event-grouping/eval/fit.ts',
+      'packages/information-filtering/event-detection/eval/run.ts',
+      'packages/information-filtering/event-detection/eval/fit.ts',
     ],
     rules: { 'island/no-console': 'off', 'island/no-process-env': 'off' },
   },

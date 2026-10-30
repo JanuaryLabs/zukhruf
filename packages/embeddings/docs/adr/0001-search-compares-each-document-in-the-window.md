@@ -2,7 +2,7 @@
 
 A search gives the nearest neighbours of a document. A vector index, such as HNSW in sqlite-vec or pgvector, finds neighbours fast in a large collection. But an index gives approximate results: it can miss a near document, and its result can change with the order of the inserts. An index also needs a SQLite extension that each connection must load.
 
-The first consumer compares a document only with documents published near it. The research for event grouping used a window of 7 days and 80 neighbours. In a window, the number of documents is small. Thus `nearest` reads each document in the window, calculates the similarity of each one, and sorts them. Equal similarities sort by id, so two calls on the same collection give the same result. FAISS does the same in its flat index (`IndexFlatIP`): an exact search over all vectors. The FAISS guidelines to choose an index name the flat index when the results must be exact.
+The first consumer compares a document only with documents published near it. The research for event detection used a window of 7 days and 80 neighbours. In a window, the number of documents is small. Thus `nearest` reads each document in the window, calculates the similarity of each one, and sorts them. Equal similarities sort by id, so two calls on the same collection give the same result. FAISS does the same in its flat index (`IndexFlatIP`): an exact search over all vectors. The FAISS guidelines to choose an index name the flat index when the results must be exact.
 
 The publish date has a B-tree index, so SQLite reads only the rows of the window.
 

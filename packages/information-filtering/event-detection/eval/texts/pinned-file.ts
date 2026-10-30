@@ -5,7 +5,7 @@ import { sha256 } from '../answer-key.ts';
 import { CACHE_FOLDER } from './text-source.ts';
 
 export const USER_AGENT =
-  'zukhruf-event-grouping-eval/1 (+https://github.com/JanuaryLabs/zukhruf)';
+  'zukhruf-event-detection-eval/1 (+https://github.com/JanuaryLabs/zukhruf)';
 
 // A file of a public corpus at one revision. The first use downloads it into
 // the cache. Each use checks its sha256, so a corpus that changed stops the

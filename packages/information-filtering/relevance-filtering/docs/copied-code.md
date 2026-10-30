@@ -1,10 +1,10 @@
-# Code copied from the event-grouping eval
+# Code copied from the event-detection eval
 
-The eval of this package and the eval of `@zukhruf/event-grouping` (`packages/event-grouping/eval`) both score a frozen design of a package on labelled sets, with roles, frozen label hashes and one exam. This eval keeps its own copy of that knowledge, and does not share it yet.
+The eval of this package and the eval of `@zukhruf/event-detection` (`packages/information-filtering/event-detection/eval`) both score a frozen design of a package on labelled sets, with roles, frozen label hashes and one exam. This eval keeps its own copy of that knowledge, and does not share it yet.
 
 The reason is the Rule of Three (workspace ADR 0001, rule 2). This is the second place. A third eval of a frozen design starts the extraction, and the three working copies then give the boundary of the shared code (backlog #3261). Until then, make each fix in both copies, and name both files in the commit.
 
-Paths on the left are in `packages/event-grouping/eval`. Paths on the right are in `packages/information-filtering/relevance-filtering/eval`.
+Paths on the left are in `packages/information-filtering/event-detection/eval`. Paths on the right are in `packages/information-filtering/relevance-filtering/eval`.
 
 ## Copied without changes
 
@@ -31,7 +31,7 @@ Changes: the commands are `check`, `slices`, `ranking`, `rehearse` and `--exam`.
 
 ## Not copied
 
-The scoreboard, the pins, the accepted events, the text sources, the probes and the coreference metrics. They are about the partitions of event grouping or about a live model, and this eval has neither.
+The scoreboard, the pins, the accepted events, the text sources, the probes and the coreference metrics. They are about the partitions of event detection or about a live model, and this eval has neither.
 
 ## Backlog
 

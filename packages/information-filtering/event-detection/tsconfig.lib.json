@@ -1,5 +1,5 @@
 {
-  "extends": "../../tsconfig.base.json",
+  "extends": "../../../tsconfig.base.json",
   "compilerOptions": {
     "rootDir": "src",
     "outDir": "dist",
@@ -9,13 +9,13 @@
   "exclude": ["src/**/*.test.ts"],
   "references": [
     {
-      "path": "../sqlite/transaction/tsconfig.lib.json"
+      "path": "../../sqlite/transaction/tsconfig.lib.json"
     },
     {
-      "path": "../sqlite/drift/tsconfig.lib.json"
+      "path": "../../sqlite/drift/tsconfig.lib.json"
     },
     {
-      "path": "../embeddings/tsconfig.lib.json"
+      "path": "../../embeddings/tsconfig.lib.json"
     }
   ]
 }

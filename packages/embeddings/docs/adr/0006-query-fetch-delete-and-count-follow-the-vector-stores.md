@@ -2,7 +2,7 @@
 
 A collection could only compare two stored documents. Two consumers need more:
 
-- Relevance filtering (#3195) compares each article with the vector of one sentence, the description of a profile. The sentence is not a document. If the host stores it as a document, event grouping sees it as a report of the window.
+- Relevance filtering (#3195) compares each article with the vector of one sentence, the description of a profile. The sentence is not a document. If the host stores it as a document, event detection sees it as a report of the window.
 - A search by description (#3155) needs the documents that are most similar to the vector of a text that the user types.
 
 A host also needs to read a stored vector, remove a document, and know the size of the collection. The user chose the four calls on 2026-10-29. Their names and their rules come from the top vector stores, so that a reader who knows one of them knows this package.
@@ -29,7 +29,7 @@ The vector must have the dimension of the stored vectors (ADR 0003). Another dim
 ## Considered Options
 
 - **`vectorOf(id)`, one vector for one id.** This was the first proposal for relevance filtering. `fetch(ids)` does the same for one id or many, and has the name of the vector stores.
-- **The host stores the description as a document.** No new call is necessary, but the description then is a report for event grouping, and a neighbour in each search.
+- **The host stores the description as a document.** No new call is necessary, but the description then is a report for event detection, and a neighbour in each search.
 - **`query` with a `k`.** Pinecone requires `topK`. Relevance filtering needs the similarity of every article of the stream, so a `k` must then be the size of the range. The caller can cut the result.
 - **The four calls with the rules of the vector stores.** This option was selected.
 

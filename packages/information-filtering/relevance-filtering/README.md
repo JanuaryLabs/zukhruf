@@ -107,7 +107,7 @@ A keyword list puts the matches first, the newest first. The 95% interval of (pa
 
 ## Limits
 
-- The design is valid only with EmbeddingGemma 2, the vector text of event grouping (`title: <title> | text: <title>\n<lead>`) for the articles and the query prompt for the description. Another model gives another similarity scale.
+- The design is valid only with EmbeddingGemma 2, the vector text of event detection (`title: <title> | text: <title>\n<lead>`) for the articles and the query prompt for the description. Another model gives another similarity scale.
 - The binormal model is fitted on the stream. A stream of a few articles gives a weak fit. The research streams held 1,600 to 1,700 articles.
 - When the answers are only the most similar articles of a large pool, the taught relevant similarities are far above the relevant articles of the stream. Then the probabilities are too low, and the yes/no threshold accepts too few articles. The order stays good.
 - With one relevant answer, the relevant standard deviation sits at its floor, and the keyword evidence sets most of the order.
@@ -122,7 +122,7 @@ Before you change a step of the design, read ADR 0002, and run `nx run relevance
 - [ADR 0002: The design is frozen by research round 6](./docs/adr/0002-the-design-is-frozen-by-research-round-6.md)
 - [ADR 0003: A keyword is a word start or a regular expression](./docs/adr/0003-a-keyword-is-a-word-start-or-a-regular-expression.md)
 - [ADR 0004: The reader ranks, and does not decide yes or no](./docs/adr/0004-the-reader-ranks-and-does-not-decide-yes-or-no.md)
-- [Code copied from the event-grouping eval](./docs/copied-code.md)
+- [Code copied from the event-detection eval](./docs/copied-code.md)
 
 ## Recipes
 

@@ -1,6 +1,6 @@
 # Relevance filtering: research record
 
-This record keeps what the research for relevance filtering found, before the package exists. The research asks one question: can a cheap program tell if a new article matches a reader's standing interest, and give a probability that the reader can trust? The planned package is `@zukhruf/relevance-filtering`, in `packages/information-filtering/` (backlog #3195). Event detection (`docs/research/event-grouping.md`) is the other half of the reader. Event detection removes duplicates. Relevance filtering keeps what matches the reader's interests.
+This record keeps what the research for relevance filtering found, before the package exists. The research asks one question: can a cheap program tell if a new article matches a reader's standing interest, and give a probability that the reader can trust? The planned package is `@zukhruf/relevance-filtering`, in `packages/information-filtering/` (backlog #3195). Event detection (`docs/research/event-detection.md`) is the other half of the reader. Event detection removes duplicates. Relevance filtering keeps what matches the reader's interests.
 
 Read this record before you change the design, add a profile type, or start a new evaluation. Add the result of each new round to this record.
 

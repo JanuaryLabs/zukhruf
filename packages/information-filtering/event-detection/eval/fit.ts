@@ -28,7 +28,7 @@ import { SOURCES } from './texts/sources.ts';
 // Builds the designs of a research round from its selection rule and the
 // training sets alone, with the detector of the package, and applies the
 // choice of the rule (README.md, "Fit a design").
-const USAGE = `Usage: nx run event-grouping:fit -- <round>
+const USAGE = `Usage: nx run event-detection:fit -- <round>
 
   round   The folder eval/rounds/<round>. The fit reads its selection-rule.json
           and writes its plan.json.

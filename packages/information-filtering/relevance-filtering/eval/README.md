@@ -12,7 +12,7 @@ The repository holds no publisher text and no vector. The cache holds them, in `
 - `cache/vectors/<set>.sqlite`: a `Collection` of `@zukhruf/embeddings` with the frozen vector of each article.
 - `cache/descriptions.json`: the vector of the description of each profile, embedded with `task: search result | query: <description>`.
 
-EmbeddingGemma 2 Q8_0 on llama.cpp b11836 made every vector, with the vector text of event grouping (`title: <title> | text: <title>\n<lead>`). No model runs in the eval. A stand-in model gives the frozen vector of each article id, so the text of each document in the collection is its id.
+EmbeddingGemma 2 Q8_0 on llama.cpp b11836 made every vector, with the vector text of event detection (`title: <title> | text: <title>\n<lead>`). No model runs in the eval. A stand-in model gives the frozen vector of each article id, so the text of each document in the collection is its id.
 
 Write the cache one time from the research folder:
 
@@ -20,13 +20,13 @@ Write the cache one time from the research folder:
 node eval/seed.ts ~/.codex/visualizations/2026/10/23/01a16a1c-424c-7793-8ca9-02cc1c715d82/relevance-profiles
 ```
 
-| Set        | Vectors from                                                                                                                                          |
-| ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
-| collection | `relevance-biology/pooled/vectors.json` (3,838), and `relevance-biology/round-1/vectors.json` for anthropic-outlets (816)                             |
-| fresh      | `fresh/vectors.json`                                                                                                                                  |
-| fresh-2    | `fresh-2/vectors.json`                                                                                                                                |
-| fresh-3    | `fresh-3/vectors.json`                                                                                                                                |
-| exam       | the vector cache of the event-grouping eval (`deepmind-outlets.sqlite`), which embedded the 133 articles with the same model and the same vector text |
+| Set        | Vectors from                                                                                                                                           |
+| ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| collection | `relevance-biology/pooled/vectors.json` (3,838), and `relevance-biology/round-1/vectors.json` for anthropic-outlets (816)                              |
+| fresh      | `fresh/vectors.json`                                                                                                                                   |
+| fresh-2    | `fresh-2/vectors.json`                                                                                                                                 |
+| fresh-3    | `fresh-3/vectors.json`                                                                                                                                 |
+| exam       | the vector cache of the event-detection eval (`deepmind-outlets.sqlite`), which embedded the 133 articles with the same model and the same vector text |
 
 ## Run it
 

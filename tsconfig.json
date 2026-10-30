@@ -81,7 +81,7 @@
       "path": "./packages/embeddings"
     },
     {
-      "path": "./packages/event-grouping"
+      "path": "./packages/information-filtering/event-detection"
     },
     {
       "path": "./packages/information-filtering/relevance-filtering"

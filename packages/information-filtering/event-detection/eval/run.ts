@@ -23,7 +23,7 @@ import { verdict } from './verdict.ts';
 
 // Runs a design of the package on the evaluation sets, and compares each
 // score with the latest accepted design (README.md).
-const USAGE = `Usage: nx run event-grouping:eval -- [set ...] [--refresh] [--exam] [--accept <design>]
+const USAGE = `Usage: nx run event-detection:eval -- [set ...] [--refresh] [--exam] [--accept <design>]
 
   set               The sets to score. All sets when none is given.
   --refresh         Get each text from its source again, not from the cache.

@@ -1,8 +1,8 @@
 # A neighbour graph decodes each vector once
 
-A consumer can need the neighbours of each document in a date range, not of one document. Event grouping clusters a window of 7 days again on each new publish day. It needs the 80 nearest neighbours of each report in the window.
+A consumer can need the neighbours of each document in a date range, not of one document. Event detection clusters a window of 7 days again on each new publish day. It needs the 80 nearest neighbours of each report in the window.
 
-With `nearest`, the consumer makes one call for each document. Each call reads and decodes every vector in the window of its document. Thus a range of n documents reads and decodes about n² BLOBs. Backlog #3137 measured one clustering of event grouping at 2.9 s for 1,001 reports and at 28 s for 3,500 reports, with `nearest` for each report.
+With `nearest`, the consumer makes one call for each document. Each call reads and decodes every vector in the window of its document. Thus a range of n documents reads and decodes about n² BLOBs. Backlog #3137 measured one clustering of event detection at 2.9 s for 1,001 reports and at 28 s for 3,500 reports, with `nearest` for each report.
 
 Thus `neighbourGraph({ from, to, k, withinDays })` gives the neighbours of each document published from `from` to `to`. The call reads and decodes each vector of the range and of its window one time. Then it calculates the neighbours of each document from the decoded vectors. Each entry is equal to the result of `nearest` for that document, with the same `k` and `withinDays`: the same window, no document as its own neighbour, and equal similarities in id order. `nearest` and `neighbourGraph` sort with one function, so the order is the same.
 

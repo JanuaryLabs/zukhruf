@@ -1,5 +1,5 @@
 {
-  "extends": "../../tsconfig.base.json",
+  "extends": "../../../tsconfig.base.json",
   "compilerOptions": {
     "rootDir": "eval",
     "outDir": "out-tsc/eval",
@@ -13,7 +13,7 @@
       "path": "./tsconfig.lib.json"
     },
     {
-      "path": "../embeddings/tsconfig.lib.json"
+      "path": "../../embeddings/tsconfig.lib.json"
     }
   ]
 }

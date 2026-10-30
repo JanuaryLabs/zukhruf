@@ -1,7 +1,7 @@
 {
-  "name": "event-grouping",
-  "$schema": "../../node_modules/nx/schemas/project-schema.json",
-  "sourceRoot": "packages/event-grouping/src",
+  "name": "event-detection",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "packages/information-filtering/event-detection/src",
   "projectType": "library",
   "tags": ["layer:island", "std:domain"],
   "targets": {
