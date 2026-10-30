@@ -61,3 +61,85 @@ test('no-collect-loop reports a for await loop that only pushes each value', () 
     ],
   });
 });
+
+test('no-collect-loop leaves a loop that fills an outer array inside a detached async function', () => {
+  typescriptRuleTester().run('no-collect-loop', rule, {
+    valid: [
+      // Other code reads `chunks` while the loop runs; Array.fromAsync would
+      // give the array only when the stream ends.
+      {
+        code: `
+          const chunks = [];
+          const reading = (async () => {
+            for await (const chunk of pending.stream) chunks.push(chunk);
+          })();
+          await waitFor(() => chunks.length > 0);
+          await reading;
+        `,
+      },
+      {
+        code: `
+          async function collect(source) {
+            const events = [];
+            const subscription = await source.subscribe();
+            const done = (async () => {
+              try {
+                for await (const event of subscription) {
+                  events.push(event);
+                }
+              } catch (error) {
+                if (error.name !== 'AbortError') throw error;
+              }
+            })();
+            return { hints: events, done };
+          }
+        `,
+      },
+    ],
+    invalid: [
+      {
+        code: `
+          const chunks = [];
+          for await (const chunk of pending.stream) chunks.push(chunk);
+        `,
+        errors: [{ messageId: 'plain' }],
+      },
+      // Awaited in place: nothing reads `chunks` before the loop ends.
+      {
+        code: `
+          const chunks = [];
+          await (async () => {
+            for await (const chunk of pending.stream) chunks.push(chunk);
+          })();
+        `,
+        errors: [{ messageId: 'plain' }],
+      },
+      // Handed to a helper that awaits it before the array is read.
+      {
+        code: `
+          const received = [];
+          await settleWithin(
+            (async () => {
+              for await (const chunk of manager.watch(id)) {
+                received.push(chunk);
+              }
+            })(),
+            'drain',
+          );
+        `,
+        errors: [{ messageId: 'plain' }],
+      },
+      // The array lives inside the detached function: no other code sees it.
+      {
+        code: `
+          const reading = (async () => {
+            const chunks = [];
+            for await (const chunk of pending.stream) chunks.push(chunk);
+            return chunks;
+          })();
+        `,
+        errors: [{ messageId: 'plain' }],
+      },
+    ],
+  });
+});

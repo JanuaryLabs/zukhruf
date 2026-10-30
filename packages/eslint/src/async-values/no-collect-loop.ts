@@ -14,8 +14,8 @@ function onlyStatement(body: unknown): unknown {
   return statements.length === 1 ? statements[0] : undefined;
 }
 
-/** The argument of `<array>.push(<argument>)`, the whole statement. */
-function pushedValue(statement: unknown): AstNode | undefined {
+/** The `<array>.push(<argument>)` call that is the whole statement. */
+function pushCall(statement: unknown): AstNode | undefined {
   if (!isType(statement, 'ExpressionStatement')) return undefined;
   const call = statement['expression'];
   if (!isType(call, 'CallExpression')) return undefined;
@@ -30,7 +30,66 @@ function pushedValue(statement: unknown): AstNode | undefined {
   ) {
     return undefined;
   }
-  return args[0];
+  return call;
+}
+
+/** The function whose body holds `node`, nearest first. */
+function enclosingFunction(node: AstNode): AstNode | undefined {
+  for (let current: unknown = node['parent']; isAstNode(current);) {
+    if (
+      isType(current, 'FunctionExpression') ||
+      isType(current, 'ArrowFunctionExpression') ||
+      isType(current, 'FunctionDeclaration')
+    ) {
+      return current;
+    }
+    current = current['parent'];
+  }
+  return undefined;
+}
+
+function contains(outer: AstNode, node: unknown): boolean {
+  for (let current = node; isAstNode(current); current = current['parent']) {
+    if (current === outer) return true;
+  }
+  return false;
+}
+
+/**
+ * Other code can read the array while the loop runs when the loop sits in a
+ * function called in place whose promise is stored or returned, and the array
+ * is declared outside that function. `Array.fromAsync` gives the array only
+ * when the iterable ends. A promise awaited in place, or handed to a call,
+ * ends before the next statement reads the array, as far as the AST shows.
+ */
+function readWhileFilling(
+  context: Rule.RuleContext,
+  loop: AstNode,
+  push: AstNode,
+): boolean {
+  const fn = enclosingFunction(loop);
+  const call = fn?.['parent'];
+  if (
+    fn === undefined ||
+    !isType(call, 'CallExpression') ||
+    call['callee'] !== fn ||
+    !(
+      isType(call['parent'], 'VariableDeclarator') ||
+      isType(call['parent'], 'AssignmentExpression') ||
+      isType(call['parent'], 'ReturnStatement')
+    )
+  ) {
+    return false;
+  }
+  const callee = push['callee'];
+  const array = isType(callee, 'MemberExpression')
+    ? callee['object']
+    : undefined;
+  if (!isType(array, 'Identifier')) return false;
+  const variable = context.sourceCode
+    .getScope(array)
+    .references.find(({ identifier }) => identifier === array)?.resolved;
+  return !contains(fn, variable?.scope.block);
 }
 
 /** The identifiers in `node`, a binding pattern or an expression. */
@@ -53,7 +112,8 @@ function identifiers(node: unknown): string[] {
 /**
  * A `for await` loop whose only statement pushes each value into an array is
  * `Array.fromAsync`, with the push's expression as its map function. A loop
- * that pushes on a condition, adds to a Set, or does more stays a loop.
+ * that pushes on a condition, adds to a Set, or does more stays a loop, and so
+ * does a loop whose array other code reads before the loop ends.
  */
 const rule: Rule.RuleModule = {
   meta: {
@@ -82,8 +142,18 @@ const rule: Rule.RuleModule = {
           declarations.length === 1 && isAstNode(declarations[0])
             ? declarations[0]['id']
             : undefined;
-        const value = pushedValue(onlyStatement(loop['body']));
-        if (pattern === undefined || value === undefined) return;
+        const push = pushCall(onlyStatement(loop['body']));
+        const args = Array.isArray(push?.['arguments'])
+          ? push['arguments']
+          : [];
+        const value = args[0];
+        if (
+          pattern === undefined ||
+          push === undefined ||
+          readWhileFilling(context, loop, push)
+        ) {
+          return;
+        }
         const bound = identifiers(pattern);
         if (
           isType(pattern, 'Identifier') &&
