@@ -496,8 +496,10 @@ async function sessionsAfterTheHostIsDisposed(
         'The try must find the key busy',
       );
     }
+    // An autovacuum worker on the database is a backend too, not a session of
+    // the pool.
     const { rows } = await observer.query(
-      'SELECT count(*)::int AS sessions FROM pg_stat_activity WHERE datname = $1',
+      "SELECT count(*)::int AS sessions FROM pg_stat_activity WHERE datname = $1 AND backend_type = 'client backend'",
       [database],
     );
     return rows[0].sessions;
