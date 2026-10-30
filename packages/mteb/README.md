@@ -6,7 +6,7 @@ The words in these documents have one meaning each. See the glossary in [CONTEXT
 
 ## Use it
 
-This package has the retrieval, reranking and pair classification tasks, for text. MTEB's tasks ArguAna, SCIDOCS and SprintDuplicateQuestions are ported, with their datasets from the HuggingFace Hub, and so are the models EmbeddingGemma 2 and Qwen3-Embedding with the prompts of MTEB. A task of your own keeps its dataset in a folder on disk, and its metadata names that folder as the dataset path.
+This package has the retrieval, reranking, pair classification and STS tasks, for text. MTEB's tasks ArguAna, SCIDOCS, SprintDuplicateQuestions and STSBenchmark are ported, with their datasets from the HuggingFace Hub, and so are the models EmbeddingGemma 2 and Qwen3-Embedding with the prompts of MTEB. A task of your own keeps its dataset in a folder on disk, and its metadata names that folder as the dataset path.
 
 The package is private: it is not on npm. A project of this workspace names it in the dependencies of its `package.json`, with `ai`, and npm links the workspace package:
 
@@ -179,6 +179,18 @@ const result = await evaluate(encoder, new SprintDuplicateQuestionsPC());
 ```
 
 A task of your own extends `AbsTaskPairClassification`. Its dataset has the columns `sentence1`, `sentence2` and `labels`. For other column names, set `input1ColumnName`, `input2ColumnName` and `labelColumnName`, or change the names with `renameColumn` in `datasetTransform`.
+
+## STS
+
+In an STS (semantic textual similarity) task, each row of a split is a pair: two texts and a gold score. The gold score tells how similar the texts are, from `minScore` to `maxScore` (by default 0 to 5). The task gives each pair four scores: the cosine similarity, the negative Manhattan distance, the negative Euclidean distance and the similarity of the model. For each score, it calculates the Pearson and the Spearman correlation with the gold scores. The main score of MTEB's STS tasks is `cosine_spearman`.
+
+```ts
+import { STSBenchmarkSTS, evaluate } from '@zukhruf/mteb';
+
+const result = await evaluate(encoder, new STSBenchmarkSTS());
+```
+
+A task of your own extends `AbsTaskSTS`. Its dataset has the columns `sentence1`, `sentence2` and `score`. For other text columns, set `columnNames`. For another range of gold scores, set `minScore` and `maxScore`.
 
 ## Compare models on MTEB's tasks
 

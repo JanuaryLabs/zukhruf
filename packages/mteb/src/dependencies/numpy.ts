@@ -116,3 +116,28 @@ function pairwiseSumFloat32(
       pairwiseSumFloat32(values, start + half, n - half),
   );
 }
+
+// np.corrcoef(np.column_stack((x, y)), rowvar=False)[1, 0]: the covariance
+// matrix of np.cov (ddof 1, scaled by 1 / (n - 1)), each entry divided by the
+// standard deviation of its row and then of its column, clipped to [-1, 1].
+// np.cov multiplies the centred rows with BLAS, whose order of addition this
+// port does not copy. Thus the result equals numpy's only when each sum of
+// products is exact, as for the ranks of fewer than 2 ** 18 values: centred
+// ranks are multiples of 0.5.
+export function corrcoef(x: ArrayLike<number>, y: ArrayLike<number>): number {
+  const xMean = mean(x);
+  const yMean = mean(y);
+  let xx = 0;
+  let yy = 0;
+  let yx = 0;
+  for (let index = 0; index < x.length; index++) {
+    const xm = (x[index] ?? 0) - xMean;
+    const ym = (y[index] ?? 0) - yMean;
+    xx += xm * xm;
+    yy += ym * ym;
+    yx += ym * xm;
+  }
+  const scale = 1 / Math.max(x.length - 1, 0);
+  const r = (yx * scale) / Math.sqrt(yy * scale) / Math.sqrt(xx * scale);
+  return Math.min(1, Math.max(-1, r));
+}

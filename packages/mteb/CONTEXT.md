@@ -25,8 +25,12 @@ The candidates of each query in a reranking task. The model ranks only these doc
 _Avoid_: Shortlist, candidates list
 
 **Pair**:
-Two inputs and a label in a pair classification task. The label is 1 when the two inputs are similar, and 0 when they are not. The task gives each pair five scores and measures how well a threshold on each score separates the labels.
+Two inputs and a label in a pair classification task. The label is 1 when the two inputs are similar, and 0 when they are not. The task gives each pair five scores and measures how well a threshold on each score separates the labels. In an STS task, a pair has two inputs and a gold score.
 _Avoid_: Sample, example, couple
+
+**Gold score**:
+The similarity of the two inputs of a pair in an STS task, from human annotators. It is a number from the minimum score to the maximum score of the task (0 to 5 for STSBenchmark). The task scales each gold score to 0 to 1, and calculates the Pearson and Spearman correlations of the gold scores with each score of the pairs.
+_Avoid_: Label, target, ground truth
 
 **Encoder**:
 The model wrapper that gives one embedding for each input. `AiSdkEncoder` is an encoder over an AI SDK embedding model.
