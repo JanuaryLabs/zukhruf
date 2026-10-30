@@ -54,7 +54,8 @@ export async function installFor(
 // third-party packages that have install scripts, such as esbuild. The
 // scripts of the repo and of its workspace packages, such as `prepare`,
 // would act on the repo from the state folder, so they do not run. Without
-// names, `npm rebuild` runs them too.
+// names, `npm rebuild` runs them too. npm 12 runs only the dependency
+// scripts that `allowScripts` in the copied package.json approves.
 async function install(
   snapshot: string,
   folder: string,

@@ -1,7 +1,7 @@
 {
   "name": "@zukhruf/nx",
-  "version": "0.3.56",
-  "description": "The Nx part of the monorepo standard. Each area is a subpath. @zukhruf/nx/format is an Nx inference plugin that gives each project two targets: format, which writes the files with Prettier, and format:check, which only reads them and is cached. @zukhruf/nx/test gives a test target, a node --test run, to each project that has node:test files.",
+  "version": "0.3.58",
+  "description": "The Nx part of the monorepo standard, one area per subpath. @zukhruf/nx/format gives each project format and a cached format:check, both with Prettier. @zukhruf/nx/test gives each project that has node:test files a test target, a node --test run.",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -55,6 +55,6 @@
     "prettier": "^3.0.0"
   },
   "devDependencies": {
-    "@zukhruf/testing": "^0.3.46"
+    "@zukhruf/testing": "^0.3.58"
   }
 }
