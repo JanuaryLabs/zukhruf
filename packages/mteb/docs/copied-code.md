@@ -18,7 +18,7 @@ Changes: the first comment names the paired bootstrap test of this package, not 
 
 **`relevance-filtering/eval/bootstrap.ts` `percentile` → `dependencies/numpy.ts` `percentile`.**
 Both give `np.percentile` with the method `linear` for sorted values, with the two formulas of NumPy's `_lerp`.
-Changes: the position is `(n - 1) * (q / 100)`, as NumPy calculates it (`q` divided by 100 first, then the `get_virtual_index` of `linear`). The eval calculates `((n - 1) * q) / 100`, which can differ in the last bit: for 2000 values and `q` 97.5, it gives 1949.025, and NumPy gives 1949.0249999999999. In the golden test of this package, the array of 2000 values at 97.5 shows the difference. The copy in the eval is not changed.
+Changes: none. Both calculate the position as NumPy does, `(n - 1) * (q / 100)` (`q` divided by 100 first, then the `get_virtual_index` of `linear`). The eval calculated `((n - 1) * q) / 100` until #3412: for 2000 values and `q` 97.5, that gives 1949.025, and NumPy gives 1949.0249999999999. The golden test of each copy has an array of 2000 values at 97.5 that shows the difference.
 
 **`relevance-filtering/eval/bootstrap.ts` `topicBootstrap` → `significance/paired-bootstrap.ts` `pairedBootstrapTest`.**
 Both draw as many units as there are, with replacement, with `generator.integers(0, n, n)` for each replicate, take the mean of the differences of each draw, and give the 2.5 and 97.5 percentiles of the sorted means.

@@ -12,6 +12,18 @@ test('a percentile interpolates as numpy.percentile', () => {
   );
 });
 
+// numpy 2.5.4: np.percentile(np.arange(2000) / 997, [2.5, 97.5]). numpy puts
+// the 97.5th percentile at (n - 1) * (q / 100) = 1949.0249999999999, not at
+// 1949.025.
+test('a percentile takes its position as numpy does, (n - 1) * (q / 100)', () => {
+  const sorted = Array.from({ length: 2000 }, (_, index) => index / 997);
+
+  assert.deepEqual(
+    [2.5, 97.5].map((q) => percentile(sorted, q)),
+    [0.050125376128385156, 1.954889669007021],
+  );
+});
+
 // The values come from round-2 evaluate.py topic_boot with numpy 2.3.4.
 test('the topic bootstrap gives the interval of the research code for the same differences and seed', () => {
   const differences = [0.1, -0.05, 0.2, 0.03, 0, 0.12, -0.2, 0.07, 0.15, 0.01];

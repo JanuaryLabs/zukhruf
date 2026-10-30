@@ -12,7 +12,7 @@ const REPLICATES = 2000;
 
 // numpy.percentile with its default linear interpolation, on sorted values.
 export function percentile(sorted: readonly number[], q: number): number {
-  const position = ((sorted.length - 1) * q) / 100;
+  const position = (sorted.length - 1) * (q / 100);
   const below = Math.floor(position);
   const a = sorted[below] ?? Number.NaN;
   const b = sorted[Math.min(below + 1, sorted.length - 1)] ?? Number.NaN;
