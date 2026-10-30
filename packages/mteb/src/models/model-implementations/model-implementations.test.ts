@@ -1,4 +1,7 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { readFile } from 'node:fs/promises';
+import { dirname, join } from 'node:path';
 import { test } from 'node:test';
 
 import type { EmbeddingModelV4 } from '@ai-sdk/provider';
@@ -6,10 +9,25 @@ import type { EmbeddingModelV4 } from '@ai-sdk/provider';
 import { TemporaryFiles } from '@zukhruf/testing/fs';
 import { HttpServer } from '@zukhruf/testing/http';
 
+import { ResultCache } from '../../cache/result-cache.ts';
 import { evaluate } from '../../evaluate.ts';
 import { ArguAna } from '../../tasks/retrieval/eng/argu-ana-retrieval.ts';
+import { bm25S } from './bm25.ts';
 import { embeddingGemma2 } from './google-embeddinggemma.ts';
-import { qwen3Embedding0B6 } from './qwen3-models.ts';
+import {
+  qwen3Embedding0B6,
+  qwen3Embedding4B,
+  qwen3Embedding8B,
+} from './qwen3-models.ts';
+
+// The loader name that Python MTEB 2.26.28 writes for each model
+// (fixtures/loader-names/generate.py).
+const MTEB_LOADER_NAMES: Readonly<Record<string, string>> = JSON.parse(
+  readFileSync(
+    join(import.meta.dirname, 'fixtures/loader-names/expected.json'),
+    'utf8',
+  ),
+);
 
 // A dataset in the layout of mteb/arguana, served as the Hub serves it.
 const FILES: Readonly<Record<string, string>> = {
@@ -127,4 +145,45 @@ test('loadModel makes the keyword arguments with a value the experiment argument
     quantization: 'Q8_0',
   });
   assert.equal(qwen3Embedding0B6.experimentKwargs, null);
+});
+
+test('toDict writes the loader name of MTEB, so that MTEB finds the loader in its registry', () => {
+  const metas = [
+    qwen3Embedding0B6,
+    qwen3Embedding4B,
+    qwen3Embedding8B,
+    embeddingGemma2,
+    bm25S,
+  ];
+
+  const names = Object.fromEntries(
+    metas.map((meta) => [meta.name, meta.toDict()['loader']]),
+  );
+
+  assert.deepEqual(names, MTEB_LOADER_NAMES);
+});
+
+test('evaluate writes model_meta.json with the loader name of MTEB', async () => {
+  await using server = await hub();
+  await using cache = await new TemporaryFiles().directory('mteb-models-');
+  await using results = await new TemporaryFiles().directory('mteb-results-');
+  const resultCache = new ResultCache(results.path);
+  const { model } = recordingModel();
+
+  await evaluate(
+    embeddingGemma2.loadModel({ model }),
+    new ArguAna({ hub: { endpoint: server.origin, cacheFolder: cache.path } }),
+    { cache: resultCache },
+  );
+
+  const modelMeta = JSON.parse(
+    await readFile(
+      join(
+        dirname(resultCache.getTaskResultPath('ArguAna', embeddingGemma2)),
+        'model_meta.json',
+      ),
+      'utf8',
+    ),
+  );
+  assert.equal(modelMeta.loader, MTEB_LOADER_NAMES['google/embeddinggemma-2']);
 });

@@ -395,6 +395,13 @@ export class EmbeddingGemma2Encoder extends AiSdkTextEncoder {
   }
 }
 
+// model_meta.json names a loader by MTEB's __name__, and MTEB finds the loader
+// in its registry by that name. MTEB's loader is the class
+// EmbeddingGemma2Wrapper.
+Object.defineProperty(EmbeddingGemma2Encoder.load, 'name', {
+  value: 'EmbeddingGemma2Wrapper',
+});
+
 const MULTILINGUAL_EVALUATED_LANGUAGES = [
   'arb-Arab',
   'ben-Beng',

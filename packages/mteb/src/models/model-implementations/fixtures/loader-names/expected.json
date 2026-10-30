@@ -1,0 +1,7 @@
+{
+  "Qwen/Qwen3-Embedding-0.6B": "q3e_instruct_loader",
+  "Qwen/Qwen3-Embedding-4B": "q3e_instruct_loader",
+  "Qwen/Qwen3-Embedding-8B": "q3e_instruct_loader",
+  "google/embeddinggemma-2": "EmbeddingGemma2Wrapper",
+  "mteb/baseline-bm25s": "bm25_loader"
+}

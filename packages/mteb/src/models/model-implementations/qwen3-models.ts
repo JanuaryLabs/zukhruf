@@ -132,6 +132,11 @@ function q3eInstructLoader(
     applyInstructionToPassages: false,
   });
 }
+// model_meta.json names a loader by MTEB's __name__, and MTEB finds the loader
+// in its registry by that name.
+Object.defineProperty(q3eInstructLoader, 'name', {
+  value: 'q3e_instruct_loader',
+});
 
 export const qwen3Embedding0B6 = new ModelMeta({
   loader: q3eInstructLoader,
