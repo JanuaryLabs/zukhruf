@@ -14,6 +14,9 @@ import {
   type Vectors,
 } from './index.ts';
 
+// A signal that no test aborts.
+const running = new AbortController().signal;
+
 // A real embedding model cannot run in CI. The AI SDK's own mock model stands
 // in for it: the text of each document is its id, and the model gives the
 // unit vector at the angle that the test names for the id, in degrees. The
@@ -81,7 +84,7 @@ describe('KeywordScorer', () => {
       vectors: collection,
       descriptionVector: DESCRIPTION,
       keywords: ['secur', /ransom/u],
-    }).score(articles);
+    }).score(articles, { signal: running });
 
     assert.deepEqual(
       [...articles.keys()].map((id) => scores.probability(id)),
@@ -108,7 +111,7 @@ describe('KeywordScorer', () => {
       vectors: collection,
       descriptionVector: DESCRIPTION,
       keywords: ['secur'],
-    }).score(articles);
+    }).score(articles, { signal: running });
 
     assert.deepEqual(scores.ranked(), [
       'new-match',
@@ -139,7 +142,7 @@ describe('KeywordScorer', () => {
       vectors: unread,
       descriptionVector: DESCRIPTION,
       keywords: ['secur'],
-    }).score(new Map());
+    }).score(new Map(), { signal: running });
 
     assert.deepEqual(scores.ranked(), []);
   });
@@ -157,8 +160,42 @@ describe('KeywordScorer', () => {
         keywords: ['secur'],
       }).score(
         new Map([...articles, ['missing', { publishedAt: day(10), text: '' }]]),
+        { signal: running },
       ),
       (error) => error instanceof MissingVectorError && error.id === 'missing',
+    );
+  });
+
+  test('a stopped score fails with the reason of the signal and reads no vector, also for an empty stream', async () => {
+    const reason = new Error('The reader stops.');
+    // A vectors port that fails on every call: a scorer that reads it after
+    // the stop fails the test with another error.
+    const unread: Vectors = {
+      query: () => {
+        throw new Error('The scorer queried the vectors.');
+      },
+      fetch: () => {
+        throw new Error('The scorer fetched vectors.');
+      },
+    };
+
+    await assert.rejects(
+      new KeywordScorer({
+        vectors: unread,
+        descriptionVector: DESCRIPTION,
+        keywords: ['secur'],
+      }).score(new Map([['a', { publishedAt: day(10), text: 'Security' }]]), {
+        signal: AbortSignal.abort(reason),
+      }),
+      (error) => error === reason,
+    );
+    await assert.rejects(
+      new KeywordScorer({
+        vectors: unread,
+        descriptionVector: DESCRIPTION,
+        keywords: ['secur'],
+      }).score(new Map(), { signal: AbortSignal.abort(reason) }),
+      (error) => error === reason,
     );
   });
 });

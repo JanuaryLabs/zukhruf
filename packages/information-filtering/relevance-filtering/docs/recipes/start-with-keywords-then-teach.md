@@ -122,11 +122,13 @@ const { embedding: descriptionVector } = await embed({
   value: `task: search result | query: ${description}`,
 });
 
+// The program does not stop, so its signal never aborts.
+const signal = new AbortController().signal;
 const keywords = await new KeywordScorer({
   vectors: collection,
   descriptionVector,
   keywords: ['robot'],
-}).score(stream);
+}).score(stream, { signal });
 console.log(keywords.ranked().slice(0, 5));
 
 // The reader says yes to two shown articles and no to one.
@@ -145,7 +147,7 @@ const calibrated = await new SimilarityScorer({
   descriptionVector,
   answers,
   keywords: ['robot'],
-}).score(stream);
+}).score(stream, { signal });
 for (const id of calibrated.ranked().slice(0, 5))
   console.log(calibrated.probability(id).toFixed(3), id);
 ```

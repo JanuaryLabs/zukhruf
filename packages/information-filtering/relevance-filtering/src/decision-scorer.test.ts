@@ -8,6 +8,9 @@ import {
 
 import { DecisionScorer, type Stream, UtilityThreshold } from './index.ts';
 
+// A signal that no test aborts.
+const running = new AbortController().signal;
+
 // No decision model can run in a test, and ai/test has no mock decision
 // model. This stand-in is a decision model of the provider interface, under
 // the real experimental_decide. It answers one boolean question with the
@@ -95,6 +98,7 @@ describe('DecisionScorer', () => {
         ['gpu', 'Nvidia ships a new GPU', 12],
         ['arizona', 'A chip plant opens in Arizona', 13],
       ),
+      { signal: running },
     );
 
     assert.deepEqual(scores.ranked(), ['gpu', 'arizona', 'tsmc', 'paint']);
@@ -125,6 +129,7 @@ describe('DecisionScorer', () => {
         ['intel', 'Intel delays a chip', 11],
         ['bank', 'A bank raises rates', 12],
       ),
+      { signal: running },
     );
 
     assert.deepEqual(
@@ -137,7 +142,7 @@ describe('DecisionScorer', () => {
     const scores = await new DecisionScorer({
       model: model(QUESTION, new Map()),
       description: DESCRIPTION,
-    }).score(new Map());
+    }).score(new Map(), { signal: running });
 
     assert.deepEqual(scores.ranked(), []);
   });
@@ -160,6 +165,7 @@ describe('DecisionScorer', () => {
           ['gpu', 'Nvidia ships a new GPU', 10],
           ['leak', 'A leaked chip roadmap', 11],
         ),
+        { signal: running },
       ),
       Experimental_DecisionRefusalError,
     );
@@ -184,8 +190,64 @@ describe('DecisionScorer', () => {
           ['gpu', 'Nvidia ships a new GPU', 10],
           ['arizona', 'A chip plant opens in Arizona', 11],
         ),
+        { signal: running },
       ),
       (error) => error === failure,
     );
+  });
+
+  test('a stop while the model answers ends the score with the reason of the signal, and the model is asked about no later article', async () => {
+    const stop = new AbortController();
+    const reason = new Error('The reader stops.');
+    const asked: string[] = [];
+    // Answers the first article, and raises the stop from a timer while the
+    // second is asked. It rejects the second when its signal aborts, as fetch
+    // rejects a pending request.
+    const stopping: Experimental_DecisionModel = {
+      specificationVersion: 'v4',
+      provider: 'test',
+      modelId: 'decision-stand-in',
+      supportedQuestionTypes: ['boolean'],
+      doDecide: async ({ state, questions, abortSignal }) => {
+        if (abortSignal === undefined)
+          throw new Error('The scorer gave the model no signal.');
+        const [part] = state;
+        asked.push(part?.type === 'text' ? part.text : '');
+        if (asked.length > 1)
+          return new Promise((_, reject) =>
+            abortSignal.addEventListener(
+              'abort',
+              () => reject(abortSignal.reason),
+              { once: true },
+            ),
+          );
+        setTimeout(() => stop.abort(reason), 10);
+        return {
+          answers: Object.fromEntries(
+            Object.keys(questions).map((id) => [
+              id,
+              { type: 'boolean', probability: 0.9 },
+            ]),
+          ),
+          warnings: [],
+        };
+      },
+    };
+
+    await assert.rejects(
+      new DecisionScorer({ model: stopping, description: DESCRIPTION }).score(
+        stream(
+          ['gpu', 'Nvidia ships a new GPU', 10],
+          ['tsmc', 'TSMC raises chip output', 11],
+          ['paint', 'A chip of paint falls off a bridge', 12],
+        ),
+        { signal: stop.signal },
+      ),
+      (error) => error === reason,
+    );
+    assert.deepEqual(asked, [
+      'Nvidia ships a new GPU',
+      'TSMC raises chip output',
+    ]);
   });
 });

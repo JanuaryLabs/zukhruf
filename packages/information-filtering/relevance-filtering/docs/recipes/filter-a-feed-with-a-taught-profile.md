@@ -9,7 +9,7 @@
 1. Upsert each article into a `Collection` of `@zukhruf/embeddings`, with the document prompt of the model as its text.
 2. Embed the description of the interest with the query prompt of the model.
 3. Parse the reader's answers, each with the text of its article, into `TaughtAnswers`.
-4. Make a `SimilarityScorer` for the interest with the collection, the description vector, the answers and the keywords, and score the new articles.
+4. Make a `SimilarityScorer` for the interest with the collection, the description vector, the answers and the keywords, and score the new articles. This program does not stop, so it gives a signal that never aborts.
 5. For each day, show `scores.ranked({ from, to }).slice(0, n)`. Each id has its probability.
 
 ## The program
@@ -264,6 +264,7 @@ const scores = await scorer.score(
       },
     ]),
   ),
+  { signal: new AbortController().signal },
 );
 
 const best = 2;

@@ -53,6 +53,7 @@ export function runDesign(options: {
         { publishedAt, text },
       ]),
     ),
+    { signal: new AbortController().signal },
   );
 }
 

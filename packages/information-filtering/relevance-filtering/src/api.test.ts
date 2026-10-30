@@ -12,7 +12,7 @@ import {
 } from './index.ts';
 
 describe('the API', () => {
-  test('makes illegal inputs fail the type check: answers that were not parsed, no keyword for cold start, and a stream that can repeat an id', () => {
+  test('makes illegal inputs fail the type check: answers that were not parsed, no keyword for cold start, a stream that can repeat an id, and a score that cannot be stopped', () => {
     // A function that is never called: the type checker reads it.
     const illegal = (vectors: Vectors, model: Experimental_DecisionModel) => [
       new SimilarityScorer({
@@ -27,7 +27,10 @@ describe('the API', () => {
       new DecisionScorer({ model, description: 'Chips.' }).score(
         // @ts-expect-error a stream is a map by id, so no id repeats (#3383).
         [{ id: 'a', publishedAt: new Date(), text: 'A' }],
+        { signal: new AbortController().signal },
       ),
+      // @ts-expect-error a score takes a signal, so a host can stop it (#3430).
+      new DecisionScorer({ model, description: 'Chips.' }).score(new Map()),
     ];
     assert.equal(typeof illegal, 'function');
   });

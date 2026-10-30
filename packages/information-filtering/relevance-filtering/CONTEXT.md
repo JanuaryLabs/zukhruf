@@ -13,7 +13,7 @@ One sentence that says what the reader wants to read, for example "Cybersecurity
 _Avoid_: Query, prompt
 
 **Scorer**:
-A method that gives the probability of each article of a stream for the one interest it was made for, and the ranking. The package has a decision scorer, a similarity scorer and a keyword scorer. The host decides when a scorer runs.
+A method that gives the probability of each article of a stream for the one interest it was made for, and the ranking. The package has a decision scorer, a similarity scorer and a keyword scorer. The host decides when a scorer runs, and gives each score a signal that stops it.
 _Avoid_: Filter, classifier, judge
 
 **Scores**:

@@ -35,8 +35,9 @@ const scorer = new DecisionScorer({
   description: 'Cybersecurity: attacks, breaches and the tools that stop them.',
 });
 
-// The new articles by id: { publishedAt, text: `${title} ${lead}` }.
-const scores = await scorer.score(newArticles);
+// The new articles by id: { publishedAt, text: `${title} ${lead}` }. The
+// signal stops the questions to the model, for example when the host stops.
+const scores = await scorer.score(newArticles, { signal });
 
 // The best 5 articles of one day, the best first.
 scores.ranked({ from: dayStart, to: dayEnd }).slice(0, 5);
@@ -99,14 +100,15 @@ const scorer =
         keywords: ['secur', 'cyber'],
       });
 
-const scores = await scorer.score(newArticles);
+const scores = await scorer.score(newArticles, { signal });
 scores.ranked({ from: dayStart, to: dayEnd }).slice(0, 5);
 ```
 
 ## API
 
-- A `Scorer` has `score(stream)`, which gives a `Promise` of `Scores`. A scorer is made for one interest ([ADR 0006](./docs/adr/0006-a-scorer-is-made-for-one-interest-and-its-inputs-rule-out-illegal-states.md)). The `stream` is a map from article id to `{ publishedAt, text }`; `text` is, for example, the title and the lead. It can be empty.
-- `new DecisionScorer({ model, description })` takes an AI SDK decision model and the description. For each article, it asks the model "Is the main subject of this article: <description>?" about `text`, one article at a time.
+- A `Scorer` has `score(stream, { signal })`, which gives a `Promise` of `Scores`. A scorer is made for one interest ([ADR 0006](./docs/adr/0006-a-scorer-is-made-for-one-interest-and-its-inputs-rule-out-illegal-states.md)). The `stream` is a map from article id to `{ publishedAt, text }`; `text` is, for example, the title and the lead. It can be empty.
+- The `signal` is an `AbortSignal`, and it is required ([ADR 0007](./docs/adr/0007-a-score-takes-a-signal.md)). When it aborts, the score rejects with the reason of the signal. Give the signal of the request or of the host's stop. A host that cannot stop a score gives `new AbortController().signal`.
+- `new DecisionScorer({ model, description })` takes an AI SDK decision model and the description. For each article, it asks the model "Is the main subject of this article: <description>?" about `text`, one article at a time. It gives the signal to the AI SDK, so a stop ends the question that runs, and the scorer asks about no later article.
 - `new SimilarityScorer({ vectors, descriptionVector, answers, keywords })` is the frozen design for an interest with at least one yes answer.
   - `vectors` is the port to the vectors of the articles: `query(vector, { from, to })` and `fetch(ids)`. The `Collection` of `@zukhruf/embeddings` has this shape. The stream and the taught articles must be in it, and `publishedAt` must be the date that the vectors store for the article.
   - `descriptionVector` is the vector of the description from the model of the stored vectors, made with the prompt that the model uses for a query.

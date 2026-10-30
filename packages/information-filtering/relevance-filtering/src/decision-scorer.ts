@@ -21,12 +21,16 @@ export class DecisionScorer implements Scorer {
     this.#instructions = `Is the main subject of this article: ${options.description}?`;
   }
 
-  async score(stream: Stream): Promise<Scores> {
+  async score(
+    stream: Stream,
+    { signal }: { readonly signal: AbortSignal },
+  ): Promise<Scores> {
     const scored = await Array.fromAsync(
       stream,
       async ([id, { publishedAt, text }]) => {
         const { answers } = await experimental_decide({
           model: this.#model,
+          abortSignal: signal,
           state: text,
           questions: {
             relevant: { type: 'boolean', instructions: this.#instructions },

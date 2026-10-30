@@ -34,7 +34,11 @@ export class SimilarityScorer implements Scorer {
     this.#keywords = options.keywords;
   }
 
-  async score(stream: Stream): Promise<Scores> {
+  async score(
+    stream: Stream,
+    { signal }: { readonly signal: AbortSignal },
+  ): Promise<Scores> {
+    signal.throwIfAborted();
     if (stream.size === 0) return new Scores(new Map());
     const similar = similarities(
       this.#vectors,

@@ -8,7 +8,7 @@
 
 1. Make the AI SDK decision model once.
 2. For each interest, make a `DecisionScorer` with the model and the description of the interest. The scorer reads nothing else.
-3. Score the articles, a map by article id. The scorer asks the model one question for each article.
+3. Score the articles, a map by article id, with a signal. The scorer asks the model one question for each article. Ctrl-C aborts the signal and stops the questions.
 4. For each day, show `scores.ranked({ from, to }).slice(0, n)`.
 5. For the notification, choose a threshold from what a miss and a false alarm cost.
 
@@ -107,9 +107,15 @@ const interests = [
 ];
 // A missed article costs three times as much as a false notification.
 const notify = new UtilityThreshold({ falseAlarm: 1, miss: 3 });
+// Ctrl-C stops the questions to the model.
+const stop = new AbortController();
+process.once('SIGINT', () => stop.abort());
 
 for (const { name, description } of interests) {
-  const scores = await new DecisionScorer({ model, description }).score(stream);
+  const scores = await new DecisionScorer({ model, description }).score(
+    stream,
+    { signal: stop.signal },
+  );
   for (const day of [8, 9]) {
     const from = new Date(Date.UTC(2026, 9, day));
     const to = new Date(Date.UTC(2026, 9, day + 1) - 1);

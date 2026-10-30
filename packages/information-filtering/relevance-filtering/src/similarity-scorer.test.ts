@@ -17,6 +17,9 @@ import {
   type Vectors,
 } from './index.ts';
 
+// A signal that no test aborts.
+const running = new AbortController().signal;
+
 // A real embedding model cannot run in CI. The AI SDK's own mock model stands
 // in for it: the text of each document is its id, and the model gives the
 // unit vector at the angle that the test names for the id, in degrees. The
@@ -132,7 +135,7 @@ describe('SimilarityScorer', () => {
         ['no-50', 'no-70', 'no-80'],
       ),
       keywords: ['secur'],
-    }).score(articles);
+    }).score(articles, { signal: running });
 
     const expected = new Map([
       ['s0', 0.9439102938642018],
@@ -182,7 +185,7 @@ describe('SimilarityScorer', () => {
       descriptionVector: DESCRIPTION,
       answers: answers([['yes', 'News']], ['no']),
       keywords: [],
-    }).score(articles);
+    }).score(articles, { signal: running });
 
     const probabilities = [...articles.keys()]
       .map((id) => scores.probability(id))
@@ -227,8 +230,10 @@ describe('SimilarityScorer', () => {
         keywords,
       });
 
-    const withKeyword = await scorer(['secur']).score(articles);
-    const without = await scorer([]).score(articles);
+    const withKeyword = await scorer(['secur']).score(articles, {
+      signal: running,
+    });
+    const without = await scorer([]).score(articles, { signal: running });
 
     assert.ok(withKeyword.probability('s0') > withKeyword.probability('s1'));
     assert.equal(without.probability('s0'), without.probability('s1'));
@@ -261,7 +266,7 @@ describe('SimilarityScorer', () => {
       descriptionVector: DESCRIPTION,
       answers: answers([['yes', 'News']], ['no']),
       keywords: [],
-    }).score(articles);
+    }).score(articles, { signal: running });
 
     const ranked = scores.ranked();
     assert.deepEqual(ranked.slice(0, 3), ['near', 'twin-a', 'twin-b']);
@@ -314,7 +319,7 @@ describe('SimilarityScorer', () => {
         ],
         ['no-1', 'no-2'],
       ),
-    ).score(articles);
+    ).score(articles, { signal: running });
     const reversed = await scorer(
       answers(
         [
@@ -323,13 +328,13 @@ describe('SimilarityScorer', () => {
         ],
         ['yes-1', 'yes-2'],
       ),
-    ).score(articles);
+    ).score(articles, { signal: running });
     const onlyYes = await scorer(
       answers([
         ['yes-1', 'Security'],
         ['yes-2', 'Security'],
       ]),
-    ).score(articles);
+    ).score(articles, { signal: running });
 
     // Every stream article and every relevant answer match the keyword, so
     // the keyword evidence multiplies the odds by
@@ -371,7 +376,7 @@ describe('SimilarityScorer', () => {
       descriptionVector: DESCRIPTION,
       answers: answers([['yes', 'D']]),
       keywords: [],
-    }).score(articles);
+    }).score(articles, { signal: running });
 
     assert.deepEqual(scores.ranked(), ['near', 'middle', 'far']);
   });
@@ -398,7 +403,7 @@ describe('SimilarityScorer', () => {
         descriptionVector,
         answers: answers([['yes', 'A']], ['no']),
         keywords: [],
-      }).score(articles);
+      }).score(articles, { signal: running });
 
     const unit = await scored([1, 0]);
     const long = await scored([2, 0]);
@@ -425,7 +430,7 @@ describe('SimilarityScorer', () => {
       descriptionVector: DESCRIPTION,
       answers: answers([['yes', 'A']]),
       keywords: ['a'],
-    }).score(new Map());
+    }).score(new Map(), { signal: running });
 
     assert.deepEqual(scores.ranked(), []);
   });
@@ -450,11 +455,14 @@ describe('SimilarityScorer', () => {
     await assert.rejects(
       scorer.score(
         new Map([...articles, ['missing', { publishedAt: day(11), text: '' }]]),
+        { signal: running },
       ),
       (error) => error instanceof MissingVectorError && error.id === 'missing',
     );
     await assert.rejects(
-      scorer.score(new Map([['a', { publishedAt: day(30), text: 'A' }]])),
+      scorer.score(new Map([['a', { publishedAt: day(30), text: 'A' }]]), {
+        signal: running,
+      }),
       (error) => error instanceof MissingVectorError && error.id === 'a',
     );
   });
@@ -471,7 +479,7 @@ describe('SimilarityScorer', () => {
         descriptionVector: DESCRIPTION,
         answers: answers([['gone', 'A']]),
         keywords: [],
-      }).score(articles),
+      }).score(articles, { signal: running }),
       (error) => error instanceof UnknownDocumentError && error.id === 'gone',
     );
   });
@@ -489,11 +497,46 @@ describe('SimilarityScorer', () => {
       descriptionVector: DESCRIPTION,
       answers: answers([['yes', 'A']]),
       keywords: [],
-    }).score(articles);
+    }).score(articles, { signal: running });
 
     assert.throws(
       () => scores.probability('other'),
       (error) => error instanceof UnknownArticleError && error.id === 'other',
+    );
+  });
+
+  test('a stopped score fails with the reason of the signal and reads no vector, also for an empty stream', async () => {
+    const reason = new Error('The reader stops.');
+    // A vectors port that fails on every call: a scorer that reads it after
+    // the stop fails the test with another error.
+    const unread: Vectors = {
+      query: () => {
+        throw new Error('The scorer queried the vectors.');
+      },
+      fetch: () => {
+        throw new Error('The scorer fetched vectors.');
+      },
+    };
+
+    await assert.rejects(
+      new SimilarityScorer({
+        vectors: unread,
+        descriptionVector: DESCRIPTION,
+        answers: answers([['yes', 'A']]),
+        keywords: ['a'],
+      }).score(new Map([['a', { publishedAt: day(10), text: 'A' }]]), {
+        signal: AbortSignal.abort(reason),
+      }),
+      (error) => error === reason,
+    );
+    await assert.rejects(
+      new SimilarityScorer({
+        vectors: unread,
+        descriptionVector: DESCRIPTION,
+        answers: answers([['yes', 'A']]),
+        keywords: ['a'],
+      }).score(new Map(), { signal: AbortSignal.abort(reason) }),
+      (error) => error === reason,
     );
   });
 });

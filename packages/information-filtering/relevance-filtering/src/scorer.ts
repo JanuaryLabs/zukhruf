@@ -14,7 +14,12 @@ export type Article = {
 export type Stream = ReadonlyMap<string, Article>;
 
 // The port of a method that scores a stream for the one interest it was made
-// for (docs/adr/0005).
+// for (docs/adr/0005). The signal stops the score: a scorer that calls a
+// model stops its calls, and the score rejects with the reason of the signal
+// (docs/adr/0007).
 export interface Scorer {
-  score(stream: Stream): Promise<Scores>;
+  score(
+    stream: Stream,
+    options: { readonly signal: AbortSignal },
+  ): Promise<Scores>;
 }
