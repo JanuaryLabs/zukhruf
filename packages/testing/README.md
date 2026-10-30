@@ -170,6 +170,51 @@ On an SSH engine, run one test file at a time with `--test-concurrency=1` if the
 
 Another Docker client can create containers for the run, for example a sandbox launcher. Give it `testbed.defaults`: its `Labels` are the run's labels, and its `HostConfig` has the default `Memory` and `NanoCpus`. A client that takes the Engine API body uses them as they are. Map them to the options of a client that has its own options. Reading `defaults` writes a process record for this process, so the global teardown keeps the run's records while this process lives.
 
+## Shared servers before the first test
+
+Status: design for review (#3404). The code does not exist yet.
+
+A shared server starts on the first `database()` call that needs it. When that call is in a test, the time limit of the test also counts the start of the server. A cold start pulls the image and boots the server, and on a slow engine that takes tens of seconds. SQL Server takes the longest. A cold start happens on each CI run, and on each machine after a new version of this package, because a new version selects new shared servers (see [Shared servers](#shared-servers)). Then the first test of a file can fail at the time limit, for example at the 60 s default of `@zukhruf/nx/test`.
+
+To prevent this, make a prebuilt fixture of each shared server: the global setup creates the server before the run starts. Write one global setup file in your project. Give `prebuild` one acquisition for each shared server that your tests use. Use the same options as your tests, because different options select a different server.
+
+```ts
+// src/testing/docker-global-setup.ts
+import { prebuild } from '@zukhruf/testing/docker-global-setup';
+import { Postgres } from '@zukhruf/testing/postgres';
+import { SQL_SERVER_FULL_IMAGE, SqlServer } from '@zukhruf/testing/sqlserver';
+
+export { globalTeardown } from '@zukhruf/testing/docker-global-setup';
+
+export const globalSetup = prebuild([
+  () => new Postgres({ environment: process.env }).database(),
+  () =>
+    new SqlServer({
+      environment: process.env,
+      image: SQL_SERVER_FULL_IMAGE,
+    }).database(),
+]);
+```
+
+`@zukhruf/nx/test` uses this file when it is at `src/testing/docker-global-setup.ts` of the project. With no Nx plugin, give its path to `--test-global-setup` (see [A killed run](#a-killed-run)). You must write the file, because Node takes a path there, not a package name, and only your project knows which servers its tests use.
+
+```ts
+function prebuild(
+  acquisitions: readonly (() => Promise<AsyncDisposable>)[],
+): () => Promise<void>;
+```
+
+An acquisition is a function that creates a fixture and returns its handle. It can be a `database()` call, or a fixture of your own that starts a shared server. `prebuild` returns a global setup. Node calls it one time for each `node --test` process. It does these steps:
+
+1. It calls all the acquisitions at the same time.
+2. It disposes each handle when its acquisition resolves. The database drops, and the shared server stays.
+3. It waits until all the acquisitions and disposals end. When one or more acquisitions fail, it rejects with an `AggregateError` of the errors, and no test runs.
+4. It calls `globalSetup`, which starts the run.
+
+The acquisitions run before the run starts. Thus the runner writes no process record, and the global teardown, which runs in the runner, can delete the run's records. The databases of the acquisitions have no run id in their names, and disposal drops them. The runner holds a process lease while it lives, so a teardown of another version keeps these servers during your run.
+
+A test still calls `database()`. The server already answers, so the call only creates a database.
+
 ## Databases
 
 `Postgres`, `Mysql`, `Mariadb`, `SqlServer` and `ClickHouse` take the `environment`, such as `process.env`. The environment selects the engine and the run. Each instance makes its own `DockerTestbed` from it. Each `database()` call creates a fresh database on a shared server; disposal drops it. In a run, the name of the database has the run's id. When a test process is killed before its disposal, or a drop in disposal fails, the global teardown drops the database (see [A killed run](#a-killed-run)). Outside a run, only disposal drops it. `start()` creates a dedicated server; disposal stops it.

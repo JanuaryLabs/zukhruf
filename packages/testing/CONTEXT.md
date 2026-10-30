@@ -38,6 +38,10 @@ _Avoid_: Server container
 A service container that `reuse()` shares between processes and runs, one per configuration and package version.
 _Avoid_: Global container, singleton
 
+**Prebuilt fixture**:
+A shared server that the global setup creates before the run starts, so that the time limit of a test does not count its start. `prebuild` makes one from each acquisition that a project gives it: it acquires the fixture and disposes it. The term is from Meszaros, _xUnit Test Patterns_ (2007). Without it, `reuse()` creates the server in the first test that needs it: Meszaros calls this Lazy Setup.
+_Avoid_: Warm-up, prewarm, preheat
+
 **Lease**:
 A container that runs `cat` on the standard input of the attach of its holder process. When the holder exits for any reason, the attach closes and the engine removes the lease. A process lease tells a global teardown that a test process of a version uses its shared servers now. `reuse()` takes one for each process and engine.
 _Avoid_: Heartbeat, lock, Ryuk session
