@@ -55,6 +55,6 @@
   "devDependencies": {
     "@ai-sdk/openai-compatible": "3.0.79",
     "@ai-sdk/provider": "^4.0.34",
-    "@zukhruf/testing": "^0.4.0"
+    "@zukhruf/testing": "*"
   }
 }
