@@ -8,6 +8,7 @@
     "tsBuildInfoFile": "dist/spec/tsconfig.spec.tsbuildinfo"
   },
   "include": ["src/**/*.test.ts", "src/**/*.json"],
+  "exclude": ["src/results/fixtures/to-dataframe/results"],
   "references": [
     {
       "path": "./tsconfig.lib.json"

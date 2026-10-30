@@ -153,6 +153,36 @@ npx nx run mteb:compare
 
 A task downloads its files once, to `~/.cache/mteb/datasets`. The keyword arguments of `loadModel`, but `model`, are experiment arguments: a quantized model keeps its results apart from the results of the full weights.
 
+## Compare the results in a table
+
+The result cache keeps the results of each model. `toDataFrame` puts them in a table, as MTEB's `to_dataframe` does: a row for each task and a column for each model. `getAggregatedScores` gives the mean score of each model over its tasks (`Mean(Task)`) and over the task types (`Mean(TaskType)`).
+
+```ts
+import { ArguAna, ResultCache, SCIDOCS } from '@zukhruf/mteb';
+
+const results = new ResultCache('mteb-results')
+  .loadResults({ includeRemote: false, loadExperiments: 'match_name' })
+  .selectTasks([new ArguAna(), new SCIDOCS()]);
+console.log(results.toDataFrame().toString());
+console.log(results.getAggregatedScores());
+```
+
+```
+task_name  is_public  Qwen/Qwen3-Embedding-0.6B  google/embeddinggemma-2
+ArguAna    True                        0.694170                 0.597370
+SCIDOCS    True                        0.243560                 0.180830
+```
+
+`aggregationLevel` gives a row for each subset, split, task or language. `format: 'long'` gives a row for each model and a `score` column. `includeModelRevision` gives a column for each model and revision. `getAggregatedScores` reads the task type of each result, so give the results their tasks with `selectTasks` first.
+
+A table averages the experiments of one model with its default run, as MTEB does: the results of a quantized model and of its full weights share one column.
+
+`examples/table.ts` prints the table and the means of the results in `~/.cache/mteb`. An argument names another cache folder.
+
+```sh
+npx nx run mteb:table
+```
+
 To see the scores as a bar chart for each task, run the command below. It needs [uv](https://docs.astral.sh/uv/). Python MTEB reads the result files in `~/.cache/mteb` and does not download its results repository. The command writes `~/.cache/mteb/chart.html` and prints its path.
 
 ```sh

@@ -58,8 +58,21 @@ export type {
   SearchProtocol,
 } from './models/models-protocols.ts';
 export { SearchEncoderWrapper } from './models/search-wrappers.ts';
-export { BenchmarkResults } from './results/benchmark-results.ts';
-export { ModelResult } from './results/model-result.ts';
+export {
+  type AggregationFn,
+  type Cell,
+  type ColumnLabel,
+  DataFrame,
+} from './dependencies/pandas.ts';
+export {
+  type AggregatedScores,
+  BenchmarkResults,
+} from './results/benchmark-results.ts';
+export {
+  type AggregationLevel,
+  ModelResult,
+  type ToDataFrameOptions,
+} from './results/model-result.ts';
 export { type TaskError, TaskResult } from './results/task-result.ts';
 export { cosSim, dotScore } from './similarity-functions.ts';
 export { type PhaseTiming, TimingStack } from './timing.ts';

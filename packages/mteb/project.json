@@ -13,6 +13,14 @@
         "cwd": "{projectRoot}"
       }
     },
+    "table": {
+      "executor": "nx:run-commands",
+      "cache": false,
+      "options": {
+        "command": "node examples/table.ts",
+        "cwd": "{projectRoot}"
+      }
+    },
     "chart": {
       "executor": "nx:run-commands",
       "cache": false,

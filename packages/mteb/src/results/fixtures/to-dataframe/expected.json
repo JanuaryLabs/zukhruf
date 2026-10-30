@@ -1,0 +1,6930 @@
+{
+ "generator": "generate.py: mteb 2.26.28, pandas 3.1.0, numpy 2.5.4, CPython 3.12.9",
+ "model_results": [
+  {
+   "model": [
+    "zukhruf/model-b",
+    "r1",
+    null
+   ],
+   "options": {
+    "aggregation_level": "subset",
+    "format": "wide",
+    "include_model_revision": false
+   },
+   "table": {
+    "columns": [
+     "task_name",
+     "split",
+     "subset",
+     "zukhruf/model-b"
+    ],
+    "rows": [
+     [
+      "AmazonCounterfactualClassification",
+      "test",
+      "de",
+      0.7
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "test",
+      "en",
+      0.7
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "test",
+      "en-ext",
+      0.7
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "test",
+      "ja",
+      0.7
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "train",
+      "de",
+      0.7
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "train",
+      "en",
+      0.7
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "train",
+      "en-ext",
+      0.7
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "train",
+      "ja",
+      0.7
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "validation",
+      "de",
+      0.7
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "validation",
+      "en",
+      0.7
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "validation",
+      "en-ext",
+      0.7
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "validation",
+      "ja",
+      0.7
+     ],
+     [
+      "ArguAna",
+      "test",
+      "default",
+      0.2
+     ],
+     [
+      "SCIDOCS",
+      "test",
+      "default",
+      0.1
+     ]
+    ]
+   }
+  },
+  {
+   "model": [
+    "zukhruf/model-b",
+    "r1",
+    null
+   ],
+   "options": {
+    "aggregation_level": "subset",
+    "format": "wide",
+    "include_model_revision": true
+   },
+   "table": {
+    "columns": [
+     [
+      "task_name",
+      ""
+     ],
+     [
+      "split",
+      ""
+     ],
+     [
+      "subset",
+      ""
+     ],
+     [
+      "zukhruf/model-b",
+      "r1"
+     ]
+    ],
+    "rows": [
+     [
+      "AmazonCounterfactualClassification",
+      "test",
+      "de",
+      0.7
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "test",
+      "en",
+      0.7
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "test",
+      "en-ext",
+      0.7
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "test",
+      "ja",
+      0.7
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "train",
+      "de",
+      0.7
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "train",
+      "en",
+      0.7
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "train",
+      "en-ext",
+      0.7
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "train",
+      "ja",
+      0.7
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "validation",
+      "de",
+      0.7
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "validation",
+      "en",
+      0.7
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "validation",
+      "en-ext",
+      0.7
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "validation",
+      "ja",
+      0.7
+     ],
+     [
+      "ArguAna",
+      "test",
+      "default",
+      0.2
+     ],
+     [
+      "SCIDOCS",
+      "test",
+      "default",
+      0.1
+     ]
+    ]
+   }
+  },
+  {
+   "model": [
+    "zukhruf/model-b",
+    "r1",
+    null
+   ],
+   "options": {
+    "aggregation_level": "subset",
+    "format": "long",
+    "include_model_revision": false
+   },
+   "table": {
+    "columns": [
+     "model_name",
+     "task_name",
+     "split",
+     "subset",
+     "score"
+    ],
+    "rows": [
+     [
+      "zukhruf/model-b",
+      "AmazonCounterfactualClassification",
+      "test",
+      "de",
+      0.7
+     ],
+     [
+      "zukhruf/model-b",
+      "AmazonCounterfactualClassification",
+      "test",
+      "en",
+      0.7
+     ],
+     [
+      "zukhruf/model-b",
+      "AmazonCounterfactualClassification",
+      "test",
+      "en-ext",
+      0.7
+     ],
+     [
+      "zukhruf/model-b",
+      "AmazonCounterfactualClassification",
+      "test",
+      "ja",
+      0.7
+     ],
+     [
+      "zukhruf/model-b",
+      "AmazonCounterfactualClassification",
+      "train",
+      "de",
+      0.7
+     ],
+     [
+      "zukhruf/model-b",
+      "AmazonCounterfactualClassification",
+      "train",
+      "en",
+      0.7
+     ],
+     [
+      "zukhruf/model-b",
+      "AmazonCounterfactualClassification",
+      "train",
+      "en-ext",
+      0.7
+     ],
+     [
+      "zukhruf/model-b",
+      "AmazonCounterfactualClassification",
+      "train",
+      "ja",
+      0.7
+     ],
+     [
+      "zukhruf/model-b",
+      "AmazonCounterfactualClassification",
+      "validation",
+      "de",
+      0.7
+     ],
+     [
+      "zukhruf/model-b",
+      "AmazonCounterfactualClassification",
+      "validation",
+      "en",
+      0.7
+     ],
+     [
+      "zukhruf/model-b",
+      "AmazonCounterfactualClassification",
+      "validation",
+      "en-ext",
+      0.7
+     ],
+     [
+      "zukhruf/model-b",
+      "AmazonCounterfactualClassification",
+      "validation",
+      "ja",
+      0.7
+     ],
+     [
+      "zukhruf/model-b",
+      "ArguAna",
+      "test",
+      "default",
+      0.2
+     ],
+     [
+      "zukhruf/model-b",
+      "SCIDOCS",
+      "test",
+      "default",
+      0.1
+     ]
+    ]
+   }
+  },
+  {
+   "model": [
+    "zukhruf/model-b",
+    "r1",
+    null
+   ],
+   "options": {
+    "aggregation_level": "subset",
+    "format": "long",
+    "include_model_revision": true
+   },
+   "table": {
+    "columns": [
+     "model_name",
+     "model_revision",
+     "task_name",
+     "split",
+     "subset",
+     "score"
+    ],
+    "rows": [
+     [
+      "zukhruf/model-b",
+      "r1",
+      "AmazonCounterfactualClassification",
+      "test",
+      "de",
+      0.7
+     ],
+     [
+      "zukhruf/model-b",
+      "r1",
+      "AmazonCounterfactualClassification",
+      "test",
+      "en",
+      0.7
+     ],
+     [
+      "zukhruf/model-b",
+      "r1",
+      "AmazonCounterfactualClassification",
+      "test",
+      "en-ext",
+      0.7
+     ],
+     [
+      "zukhruf/model-b",
+      "r1",
+      "AmazonCounterfactualClassification",
+      "test",
+      "ja",
+      0.7
+     ],
+     [
+      "zukhruf/model-b",
+      "r1",
+      "AmazonCounterfactualClassification",
+      "train",
+      "de",
+      0.7
+     ],
+     [
+      "zukhruf/model-b",
+      "r1",
+      "AmazonCounterfactualClassification",
+      "train",
+      "en",
+      0.7
+     ],
+     [
+      "zukhruf/model-b",
+      "r1",
+      "AmazonCounterfactualClassification",
+      "train",
+      "en-ext",
+      0.7
+     ],
+     [
+      "zukhruf/model-b",
+      "r1",
+      "AmazonCounterfactualClassification",
+      "train",
+      "ja",
+      0.7
+     ],
+     [
+      "zukhruf/model-b",
+      "r1",
+      "AmazonCounterfactualClassification",
+      "validation",
+      "de",
+      0.7
+     ],
+     [
+      "zukhruf/model-b",
+      "r1",
+      "AmazonCounterfactualClassification",
+      "validation",
+      "en",
+      0.7
+     ],
+     [
+      "zukhruf/model-b",
+      "r1",
+      "AmazonCounterfactualClassification",
+      "validation",
+      "en-ext",
+      0.7
+     ],
+     [
+      "zukhruf/model-b",
+      "r1",
+      "AmazonCounterfactualClassification",
+      "validation",
+      "ja",
+      0.7
+     ],
+     [
+      "zukhruf/model-b",
+      "r1",
+      "ArguAna",
+      "test",
+      "default",
+      0.2
+     ],
+     [
+      "zukhruf/model-b",
+      "r1",
+      "SCIDOCS",
+      "test",
+      "default",
+      0.1
+     ]
+    ]
+   }
+  },
+  {
+   "model": [
+    "zukhruf/model-b",
+    "r1",
+    null
+   ],
+   "options": {
+    "aggregation_level": "split",
+    "format": "wide",
+    "include_model_revision": false
+   },
+   "table": {
+    "columns": [
+     "task_name",
+     "split",
+     "zukhruf/model-b"
+    ],
+    "rows": [
+     [
+      "AmazonCounterfactualClassification",
+      "test",
+      0.7
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "train",
+      0.7
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "validation",
+      0.7
+     ],
+     [
+      "ArguAna",
+      "test",
+      0.2
+     ],
+     [
+      "SCIDOCS",
+      "test",
+      0.1
+     ]
+    ]
+   }
+  },
+  {
+   "model": [
+    "zukhruf/model-b",
+    "r1",
+    null
+   ],
+   "options": {
+    "aggregation_level": "split",
+    "format": "wide",
+    "include_model_revision": true
+   },
+   "table": {
+    "columns": [
+     [
+      "task_name",
+      ""
+     ],
+     [
+      "split",
+      ""
+     ],
+     [
+      "zukhruf/model-b",
+      "r1"
+     ]
+    ],
+    "rows": [
+     [
+      "AmazonCounterfactualClassification",
+      "test",
+      0.7
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "train",
+      0.7
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "validation",
+      0.7
+     ],
+     [
+      "ArguAna",
+      "test",
+      0.2
+     ],
+     [
+      "SCIDOCS",
+      "test",
+      0.1
+     ]
+    ]
+   }
+  },
+  {
+   "model": [
+    "zukhruf/model-b",
+    "r1",
+    null
+   ],
+   "options": {
+    "aggregation_level": "split",
+    "format": "long",
+    "include_model_revision": false
+   },
+   "table": {
+    "columns": [
+     "model_name",
+     "task_name",
+     "split",
+     "score"
+    ],
+    "rows": [
+     [
+      "zukhruf/model-b",
+      "AmazonCounterfactualClassification",
+      "test",
+      0.7
+     ],
+     [
+      "zukhruf/model-b",
+      "AmazonCounterfactualClassification",
+      "train",
+      0.7
+     ],
+     [
+      "zukhruf/model-b",
+      "AmazonCounterfactualClassification",
+      "validation",
+      0.7
+     ],
+     [
+      "zukhruf/model-b",
+      "ArguAna",
+      "test",
+      0.2
+     ],
+     [
+      "zukhruf/model-b",
+      "SCIDOCS",
+      "test",
+      0.1
+     ]
+    ]
+   }
+  },
+  {
+   "model": [
+    "zukhruf/model-b",
+    "r1",
+    null
+   ],
+   "options": {
+    "aggregation_level": "split",
+    "format": "long",
+    "include_model_revision": true
+   },
+   "table": {
+    "columns": [
+     "model_name",
+     "model_revision",
+     "task_name",
+     "split",
+     "score"
+    ],
+    "rows": [
+     [
+      "zukhruf/model-b",
+      "r1",
+      "AmazonCounterfactualClassification",
+      "test",
+      0.7
+     ],
+     [
+      "zukhruf/model-b",
+      "r1",
+      "AmazonCounterfactualClassification",
+      "train",
+      0.7
+     ],
+     [
+      "zukhruf/model-b",
+      "r1",
+      "AmazonCounterfactualClassification",
+      "validation",
+      0.7
+     ],
+     [
+      "zukhruf/model-b",
+      "r1",
+      "ArguAna",
+      "test",
+      0.2
+     ],
+     [
+      "zukhruf/model-b",
+      "r1",
+      "SCIDOCS",
+      "test",
+      0.1
+     ]
+    ]
+   }
+  },
+  {
+   "model": [
+    "zukhruf/model-b",
+    "r1",
+    null
+   ],
+   "options": {
+    "aggregation_level": "task",
+    "format": "wide",
+    "include_model_revision": false
+   },
+   "table": {
+    "columns": [
+     "task_name",
+     "zukhruf/model-b"
+    ],
+    "rows": [
+     [
+      "AmazonCounterfactualClassification",
+      0.7000000000000001
+     ],
+     [
+      "ArguAna",
+      0.2
+     ],
+     [
+      "SCIDOCS",
+      0.1
+     ]
+    ]
+   }
+  },
+  {
+   "model": [
+    "zukhruf/model-b",
+    "r1",
+    null
+   ],
+   "options": {
+    "aggregation_level": "task",
+    "format": "wide",
+    "include_model_revision": true
+   },
+   "table": {
+    "columns": [
+     [
+      "task_name",
+      ""
+     ],
+     [
+      "zukhruf/model-b",
+      "r1"
+     ]
+    ],
+    "rows": [
+     [
+      "AmazonCounterfactualClassification",
+      0.7000000000000001
+     ],
+     [
+      "ArguAna",
+      0.2
+     ],
+     [
+      "SCIDOCS",
+      0.1
+     ]
+    ]
+   }
+  },
+  {
+   "model": [
+    "zukhruf/model-b",
+    "r1",
+    null
+   ],
+   "options": {
+    "aggregation_level": "task",
+    "format": "long",
+    "include_model_revision": false
+   },
+   "table": {
+    "columns": [
+     "model_name",
+     "task_name",
+     "score"
+    ],
+    "rows": [
+     [
+      "zukhruf/model-b",
+      "AmazonCounterfactualClassification",
+      0.7000000000000001
+     ],
+     [
+      "zukhruf/model-b",
+      "ArguAna",
+      0.2
+     ],
+     [
+      "zukhruf/model-b",
+      "SCIDOCS",
+      0.1
+     ]
+    ]
+   }
+  },
+  {
+   "model": [
+    "zukhruf/model-b",
+    "r1",
+    null
+   ],
+   "options": {
+    "aggregation_level": "task",
+    "format": "long",
+    "include_model_revision": true
+   },
+   "table": {
+    "columns": [
+     "model_name",
+     "model_revision",
+     "task_name",
+     "score"
+    ],
+    "rows": [
+     [
+      "zukhruf/model-b",
+      "r1",
+      "AmazonCounterfactualClassification",
+      0.7000000000000001
+     ],
+     [
+      "zukhruf/model-b",
+      "r1",
+      "ArguAna",
+      0.2
+     ],
+     [
+      "zukhruf/model-b",
+      "r1",
+      "SCIDOCS",
+      0.1
+     ]
+    ]
+   }
+  },
+  {
+   "model": [
+    "zukhruf/model-b",
+    "r1",
+    null
+   ],
+   "options": {
+    "aggregation_level": "language",
+    "format": "wide",
+    "include_model_revision": false
+   },
+   "table": {
+    "columns": [
+     "language",
+     "zukhruf/model-b"
+    ],
+    "rows": [
+     [
+      "deu-Latn",
+      0.6999999999999998
+     ],
+     [
+      "eng-Latn",
+      0.5625
+     ],
+     [
+      "jpn-Jpan",
+      0.6999999999999998
+     ]
+    ]
+   }
+  },
+  {
+   "model": [
+    "zukhruf/model-b",
+    "r1",
+    null
+   ],
+   "options": {
+    "aggregation_level": "language",
+    "format": "wide",
+    "include_model_revision": true
+   },
+   "table": {
+    "columns": [
+     [
+      "language",
+      ""
+     ],
+     [
+      "zukhruf/model-b",
+      "r1"
+     ]
+    ],
+    "rows": [
+     [
+      "deu-Latn",
+      0.6999999999999998
+     ],
+     [
+      "eng-Latn",
+      0.5625
+     ],
+     [
+      "jpn-Jpan",
+      0.6999999999999998
+     ]
+    ]
+   }
+  },
+  {
+   "model": [
+    "zukhruf/model-b",
+    "r1",
+    null
+   ],
+   "options": {
+    "aggregation_level": "language",
+    "format": "long",
+    "include_model_revision": false
+   },
+   "table": {
+    "columns": [
+     "model_name",
+     "language",
+     "score"
+    ],
+    "rows": [
+     [
+      "zukhruf/model-b",
+      "deu-Latn",
+      0.6999999999999998
+     ],
+     [
+      "zukhruf/model-b",
+      "eng-Latn",
+      0.5625
+     ],
+     [
+      "zukhruf/model-b",
+      "jpn-Jpan",
+      0.6999999999999998
+     ]
+    ]
+   }
+  },
+  {
+   "model": [
+    "zukhruf/model-b",
+    "r1",
+    null
+   ],
+   "options": {
+    "aggregation_level": "language",
+    "format": "long",
+    "include_model_revision": true
+   },
+   "table": {
+    "columns": [
+     "model_name",
+     "model_revision",
+     "language",
+     "score"
+    ],
+    "rows": [
+     [
+      "zukhruf/model-b",
+      "r1",
+      "deu-Latn",
+      0.6999999999999998
+     ],
+     [
+      "zukhruf/model-b",
+      "r1",
+      "eng-Latn",
+      0.5625
+     ],
+     [
+      "zukhruf/model-b",
+      "r1",
+      "jpn-Jpan",
+      0.6999999999999998
+     ]
+    ]
+   }
+  },
+  {
+   "model": [
+    "zukhruf/model-c",
+    "r1",
+    null
+   ],
+   "options": {
+    "aggregation_level": "subset",
+    "format": "wide",
+    "include_model_revision": false
+   },
+   "table": {
+    "columns": [
+     "task_name",
+     "split",
+     "subset",
+     "zukhruf/model-c"
+    ],
+    "rows": [
+     [
+      "AmazonCounterfactualClassification",
+      "test",
+      "de",
+      0.434262
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "test",
+      "en",
+      0.202015
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "test",
+      "en-ext",
+      0.784376
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "test",
+      "ja",
+      0.19524
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "test",
+      "xx",
+      0.002995
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "train",
+      "de",
+      0.770198
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "train",
+      "en",
+      0.689344
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "train",
+      "en-ext",
+      0.636001
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "train",
+      "ja",
+      0.161205
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "train",
+      "xx",
+      0.002995
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "validation",
+      "de",
+      0.817632
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "validation",
+      "en",
+      0.812837
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "validation",
+      "en-ext",
+      0.206629
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "validation",
+      "ja",
+      0.171252
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "validation",
+      "xx",
+      0.002995
+     ],
+     [
+      "ArguAna",
+      "test",
+      "default",
+      0.996818
+     ]
+    ]
+   }
+  },
+  {
+   "model": [
+    "zukhruf/model-c",
+    "r1",
+    null
+   ],
+   "options": {
+    "aggregation_level": "subset",
+    "format": "wide",
+    "include_model_revision": true
+   },
+   "table": {
+    "columns": [
+     [
+      "task_name",
+      ""
+     ],
+     [
+      "split",
+      ""
+     ],
+     [
+      "subset",
+      ""
+     ],
+     [
+      "zukhruf/model-c",
+      "r1"
+     ]
+    ],
+    "rows": [
+     [
+      "AmazonCounterfactualClassification",
+      "test",
+      "de",
+      0.434262
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "test",
+      "en",
+      0.202015
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "test",
+      "en-ext",
+      0.784376
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "test",
+      "ja",
+      0.19524
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "test",
+      "xx",
+      0.002995
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "train",
+      "de",
+      0.770198
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "train",
+      "en",
+      0.689344
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "train",
+      "en-ext",
+      0.636001
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "train",
+      "ja",
+      0.161205
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "train",
+      "xx",
+      0.002995
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "validation",
+      "de",
+      0.817632
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "validation",
+      "en",
+      0.812837
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "validation",
+      "en-ext",
+      0.206629
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "validation",
+      "ja",
+      0.171252
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "validation",
+      "xx",
+      0.002995
+     ],
+     [
+      "ArguAna",
+      "test",
+      "default",
+      0.996818
+     ]
+    ]
+   }
+  },
+  {
+   "model": [
+    "zukhruf/model-c",
+    "r1",
+    null
+   ],
+   "options": {
+    "aggregation_level": "subset",
+    "format": "long",
+    "include_model_revision": false
+   },
+   "table": {
+    "columns": [
+     "model_name",
+     "task_name",
+     "split",
+     "subset",
+     "score"
+    ],
+    "rows": [
+     [
+      "zukhruf/model-c",
+      "AmazonCounterfactualClassification",
+      "test",
+      "de",
+      0.434262
+     ],
+     [
+      "zukhruf/model-c",
+      "AmazonCounterfactualClassification",
+      "test",
+      "en",
+      0.202015
+     ],
+     [
+      "zukhruf/model-c",
+      "AmazonCounterfactualClassification",
+      "test",
+      "en-ext",
+      0.784376
+     ],
+     [
+      "zukhruf/model-c",
+      "AmazonCounterfactualClassification",
+      "test",
+      "fr",
+      "NaN"
+     ],
+     [
+      "zukhruf/model-c",
+      "AmazonCounterfactualClassification",
+      "test",
+      "ja",
+      0.19524
+     ],
+     [
+      "zukhruf/model-c",
+      "AmazonCounterfactualClassification",
+      "test",
+      "xx",
+      0.002995
+     ],
+     [
+      "zukhruf/model-c",
+      "AmazonCounterfactualClassification",
+      "train",
+      "de",
+      0.770198
+     ],
+     [
+      "zukhruf/model-c",
+      "AmazonCounterfactualClassification",
+      "train",
+      "en",
+      0.689344
+     ],
+     [
+      "zukhruf/model-c",
+      "AmazonCounterfactualClassification",
+      "train",
+      "en-ext",
+      0.636001
+     ],
+     [
+      "zukhruf/model-c",
+      "AmazonCounterfactualClassification",
+      "train",
+      "fr",
+      "NaN"
+     ],
+     [
+      "zukhruf/model-c",
+      "AmazonCounterfactualClassification",
+      "train",
+      "ja",
+      0.161205
+     ],
+     [
+      "zukhruf/model-c",
+      "AmazonCounterfactualClassification",
+      "train",
+      "xx",
+      0.002995
+     ],
+     [
+      "zukhruf/model-c",
+      "AmazonCounterfactualClassification",
+      "validation",
+      "de",
+      0.817632
+     ],
+     [
+      "zukhruf/model-c",
+      "AmazonCounterfactualClassification",
+      "validation",
+      "en",
+      0.812837
+     ],
+     [
+      "zukhruf/model-c",
+      "AmazonCounterfactualClassification",
+      "validation",
+      "en-ext",
+      0.206629
+     ],
+     [
+      "zukhruf/model-c",
+      "AmazonCounterfactualClassification",
+      "validation",
+      "fr",
+      "NaN"
+     ],
+     [
+      "zukhruf/model-c",
+      "AmazonCounterfactualClassification",
+      "validation",
+      "ja",
+      0.171252
+     ],
+     [
+      "zukhruf/model-c",
+      "AmazonCounterfactualClassification",
+      "validation",
+      "xx",
+      0.002995
+     ],
+     [
+      "zukhruf/model-c",
+      "ArguAna",
+      "test",
+      "default",
+      0.996818
+     ]
+    ]
+   }
+  },
+  {
+   "model": [
+    "zukhruf/model-c",
+    "r1",
+    null
+   ],
+   "options": {
+    "aggregation_level": "subset",
+    "format": "long",
+    "include_model_revision": true
+   },
+   "table": {
+    "columns": [
+     "model_name",
+     "model_revision",
+     "task_name",
+     "split",
+     "subset",
+     "score"
+    ],
+    "rows": [
+     [
+      "zukhruf/model-c",
+      "r1",
+      "AmazonCounterfactualClassification",
+      "test",
+      "de",
+      0.434262
+     ],
+     [
+      "zukhruf/model-c",
+      "r1",
+      "AmazonCounterfactualClassification",
+      "test",
+      "en",
+      0.202015
+     ],
+     [
+      "zukhruf/model-c",
+      "r1",
+      "AmazonCounterfactualClassification",
+      "test",
+      "en-ext",
+      0.784376
+     ],
+     [
+      "zukhruf/model-c",
+      "r1",
+      "AmazonCounterfactualClassification",
+      "test",
+      "fr",
+      "NaN"
+     ],
+     [
+      "zukhruf/model-c",
+      "r1",
+      "AmazonCounterfactualClassification",
+      "test",
+      "ja",
+      0.19524
+     ],
+     [
+      "zukhruf/model-c",
+      "r1",
+      "AmazonCounterfactualClassification",
+      "test",
+      "xx",
+      0.002995
+     ],
+     [
+      "zukhruf/model-c",
+      "r1",
+      "AmazonCounterfactualClassification",
+      "train",
+      "de",
+      0.770198
+     ],
+     [
+      "zukhruf/model-c",
+      "r1",
+      "AmazonCounterfactualClassification",
+      "train",
+      "en",
+      0.689344
+     ],
+     [
+      "zukhruf/model-c",
+      "r1",
+      "AmazonCounterfactualClassification",
+      "train",
+      "en-ext",
+      0.636001
+     ],
+     [
+      "zukhruf/model-c",
+      "r1",
+      "AmazonCounterfactualClassification",
+      "train",
+      "fr",
+      "NaN"
+     ],
+     [
+      "zukhruf/model-c",
+      "r1",
+      "AmazonCounterfactualClassification",
+      "train",
+      "ja",
+      0.161205
+     ],
+     [
+      "zukhruf/model-c",
+      "r1",
+      "AmazonCounterfactualClassification",
+      "train",
+      "xx",
+      0.002995
+     ],
+     [
+      "zukhruf/model-c",
+      "r1",
+      "AmazonCounterfactualClassification",
+      "validation",
+      "de",
+      0.817632
+     ],
+     [
+      "zukhruf/model-c",
+      "r1",
+      "AmazonCounterfactualClassification",
+      "validation",
+      "en",
+      0.812837
+     ],
+     [
+      "zukhruf/model-c",
+      "r1",
+      "AmazonCounterfactualClassification",
+      "validation",
+      "en-ext",
+      0.206629
+     ],
+     [
+      "zukhruf/model-c",
+      "r1",
+      "AmazonCounterfactualClassification",
+      "validation",
+      "fr",
+      "NaN"
+     ],
+     [
+      "zukhruf/model-c",
+      "r1",
+      "AmazonCounterfactualClassification",
+      "validation",
+      "ja",
+      0.171252
+     ],
+     [
+      "zukhruf/model-c",
+      "r1",
+      "AmazonCounterfactualClassification",
+      "validation",
+      "xx",
+      0.002995
+     ],
+     [
+      "zukhruf/model-c",
+      "r1",
+      "ArguAna",
+      "test",
+      "default",
+      0.996818
+     ]
+    ]
+   }
+  },
+  {
+   "model": [
+    "zukhruf/model-c",
+    "r1",
+    null
+   ],
+   "options": {
+    "aggregation_level": "split",
+    "format": "wide",
+    "include_model_revision": false
+   },
+   "table": {
+    "columns": [
+     "task_name",
+     "split",
+     "zukhruf/model-c"
+    ],
+    "rows": [
+     [
+      "AmazonCounterfactualClassification",
+      "test",
+      0.3237776
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "train",
+      0.4519486
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "validation",
+      0.402269
+     ],
+     [
+      "ArguAna",
+      "test",
+      0.996818
+     ]
+    ]
+   }
+  },
+  {
+   "model": [
+    "zukhruf/model-c",
+    "r1",
+    null
+   ],
+   "options": {
+    "aggregation_level": "split",
+    "format": "wide",
+    "include_model_revision": true
+   },
+   "table": {
+    "columns": [
+     [
+      "task_name",
+      ""
+     ],
+     [
+      "split",
+      ""
+     ],
+     [
+      "zukhruf/model-c",
+      "r1"
+     ]
+    ],
+    "rows": [
+     [
+      "AmazonCounterfactualClassification",
+      "test",
+      0.3237776
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "train",
+      0.4519486
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "validation",
+      0.402269
+     ],
+     [
+      "ArguAna",
+      "test",
+      0.996818
+     ]
+    ]
+   }
+  },
+  {
+   "model": [
+    "zukhruf/model-c",
+    "r1",
+    null
+   ],
+   "options": {
+    "aggregation_level": "split",
+    "format": "long",
+    "include_model_revision": false
+   },
+   "table": {
+    "columns": [
+     "model_name",
+     "task_name",
+     "split",
+     "score"
+    ],
+    "rows": [
+     [
+      "zukhruf/model-c",
+      "AmazonCounterfactualClassification",
+      "test",
+      0.3237776
+     ],
+     [
+      "zukhruf/model-c",
+      "AmazonCounterfactualClassification",
+      "train",
+      0.4519486
+     ],
+     [
+      "zukhruf/model-c",
+      "AmazonCounterfactualClassification",
+      "validation",
+      0.402269
+     ],
+     [
+      "zukhruf/model-c",
+      "ArguAna",
+      "test",
+      0.996818
+     ]
+    ]
+   }
+  },
+  {
+   "model": [
+    "zukhruf/model-c",
+    "r1",
+    null
+   ],
+   "options": {
+    "aggregation_level": "split",
+    "format": "long",
+    "include_model_revision": true
+   },
+   "table": {
+    "columns": [
+     "model_name",
+     "model_revision",
+     "task_name",
+     "split",
+     "score"
+    ],
+    "rows": [
+     [
+      "zukhruf/model-c",
+      "r1",
+      "AmazonCounterfactualClassification",
+      "test",
+      0.3237776
+     ],
+     [
+      "zukhruf/model-c",
+      "r1",
+      "AmazonCounterfactualClassification",
+      "train",
+      0.4519486
+     ],
+     [
+      "zukhruf/model-c",
+      "r1",
+      "AmazonCounterfactualClassification",
+      "validation",
+      0.402269
+     ],
+     [
+      "zukhruf/model-c",
+      "r1",
+      "ArguAna",
+      "test",
+      0.996818
+     ]
+    ]
+   }
+  },
+  {
+   "model": [
+    "zukhruf/model-c",
+    "r1",
+    null
+   ],
+   "options": {
+    "aggregation_level": "task",
+    "format": "wide",
+    "include_model_revision": false
+   },
+   "table": {
+    "columns": [
+     "task_name",
+     "zukhruf/model-c"
+    ],
+    "rows": [
+     [
+      "AmazonCounterfactualClassification",
+      0.3926650666666667
+     ],
+     [
+      "ArguAna",
+      0.996818
+     ]
+    ]
+   }
+  },
+  {
+   "model": [
+    "zukhruf/model-c",
+    "r1",
+    null
+   ],
+   "options": {
+    "aggregation_level": "task",
+    "format": "wide",
+    "include_model_revision": true
+   },
+   "table": {
+    "columns": [
+     [
+      "task_name",
+      ""
+     ],
+     [
+      "zukhruf/model-c",
+      "r1"
+     ]
+    ],
+    "rows": [
+     [
+      "AmazonCounterfactualClassification",
+      0.3926650666666667
+     ],
+     [
+      "ArguAna",
+      0.996818
+     ]
+    ]
+   }
+  },
+  {
+   "model": [
+    "zukhruf/model-c",
+    "r1",
+    null
+   ],
+   "options": {
+    "aggregation_level": "task",
+    "format": "long",
+    "include_model_revision": false
+   },
+   "table": {
+    "columns": [
+     "model_name",
+     "task_name",
+     "score"
+    ],
+    "rows": [
+     [
+      "zukhruf/model-c",
+      "AmazonCounterfactualClassification",
+      0.3926650666666667
+     ],
+     [
+      "zukhruf/model-c",
+      "ArguAna",
+      0.996818
+     ]
+    ]
+   }
+  },
+  {
+   "model": [
+    "zukhruf/model-c",
+    "r1",
+    null
+   ],
+   "options": {
+    "aggregation_level": "task",
+    "format": "long",
+    "include_model_revision": true
+   },
+   "table": {
+    "columns": [
+     "model_name",
+     "model_revision",
+     "task_name",
+     "score"
+    ],
+    "rows": [
+     [
+      "zukhruf/model-c",
+      "r1",
+      "AmazonCounterfactualClassification",
+      0.3926650666666667
+     ],
+     [
+      "zukhruf/model-c",
+      "r1",
+      "ArguAna",
+      0.996818
+     ]
+    ]
+   }
+  },
+  {
+   "model": [
+    "zukhruf/model-c",
+    "r1",
+    null
+   ],
+   "options": {
+    "aggregation_level": "language",
+    "format": "wide",
+    "include_model_revision": false
+   },
+   "table": {
+    "columns": [
+     "language",
+     "zukhruf/model-c"
+    ],
+    "rows": [
+     [
+      "deu-Latn",
+      0.608183
+     ],
+     [
+      "eng-Latn",
+      0.6182885714285715
+     ],
+     [
+      "jpn-Jpan",
+      0.175899
+     ]
+    ]
+   }
+  },
+  {
+   "model": [
+    "zukhruf/model-c",
+    "r1",
+    null
+   ],
+   "options": {
+    "aggregation_level": "language",
+    "format": "wide",
+    "include_model_revision": true
+   },
+   "table": {
+    "columns": [
+     [
+      "language",
+      ""
+     ],
+     [
+      "zukhruf/model-c",
+      "r1"
+     ]
+    ],
+    "rows": [
+     [
+      "deu-Latn",
+      0.608183
+     ],
+     [
+      "eng-Latn",
+      0.6182885714285715
+     ],
+     [
+      "jpn-Jpan",
+      0.175899
+     ]
+    ]
+   }
+  },
+  {
+   "model": [
+    "zukhruf/model-c",
+    "r1",
+    null
+   ],
+   "options": {
+    "aggregation_level": "language",
+    "format": "long",
+    "include_model_revision": false
+   },
+   "table": {
+    "columns": [
+     "model_name",
+     "language",
+     "score"
+    ],
+    "rows": [
+     [
+      "zukhruf/model-c",
+      "deu-Latn",
+      0.608183
+     ],
+     [
+      "zukhruf/model-c",
+      "eng-Latn",
+      0.6182885714285715
+     ],
+     [
+      "zukhruf/model-c",
+      "fra-Latn",
+      "NaN"
+     ],
+     [
+      "zukhruf/model-c",
+      "jpn-Jpan",
+      0.175899
+     ]
+    ]
+   }
+  },
+  {
+   "model": [
+    "zukhruf/model-c",
+    "r1",
+    null
+   ],
+   "options": {
+    "aggregation_level": "language",
+    "format": "long",
+    "include_model_revision": true
+   },
+   "table": {
+    "columns": [
+     "model_name",
+     "model_revision",
+     "language",
+     "score"
+    ],
+    "rows": [
+     [
+      "zukhruf/model-c",
+      "r1",
+      "deu-Latn",
+      0.608183
+     ],
+     [
+      "zukhruf/model-c",
+      "r1",
+      "eng-Latn",
+      0.6182885714285715
+     ],
+     [
+      "zukhruf/model-c",
+      "r1",
+      "fra-Latn",
+      "NaN"
+     ],
+     [
+      "zukhruf/model-c",
+      "r1",
+      "jpn-Jpan",
+      0.175899
+     ]
+    ]
+   }
+  },
+  {
+   "model": [
+    "zukhruf/model-a",
+    "r1",
+    null
+   ],
+   "options": {
+    "aggregation_level": "subset",
+    "format": "wide",
+    "include_model_revision": false
+   },
+   "table": {
+    "columns": [
+     "task_name",
+     "split",
+     "subset",
+     "zukhruf/model-a"
+    ],
+    "rows": [
+     [
+      "AmazonCounterfactualClassification",
+      "test",
+      "de",
+      0.1
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "test",
+      "en",
+      0.1
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "test",
+      "en-ext",
+      0.1
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "test",
+      "ja",
+      0.1
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "train",
+      "de",
+      0.1
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "train",
+      "en",
+      0.1
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "train",
+      "en-ext",
+      0.1
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "train",
+      "ja",
+      0.1
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "validation",
+      "de",
+      0.1
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "validation",
+      "en",
+      0.1
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "validation",
+      "en-ext",
+      0.1
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "validation",
+      "ja",
+      0.1
+     ],
+     [
+      "ArguAna",
+      "test",
+      "default",
+      0.797647
+     ],
+     [
+      "SCIDOCS",
+      "test",
+      "default",
+      0.513504
+     ]
+    ]
+   }
+  },
+  {
+   "model": [
+    "zukhruf/model-a",
+    "r1",
+    null
+   ],
+   "options": {
+    "aggregation_level": "subset",
+    "format": "wide",
+    "include_model_revision": true
+   },
+   "table": {
+    "columns": [
+     [
+      "task_name",
+      ""
+     ],
+     [
+      "split",
+      ""
+     ],
+     [
+      "subset",
+      ""
+     ],
+     [
+      "zukhruf/model-a",
+      "r1"
+     ]
+    ],
+    "rows": [
+     [
+      "AmazonCounterfactualClassification",
+      "test",
+      "de",
+      0.1
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "test",
+      "en",
+      0.1
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "test",
+      "en-ext",
+      0.1
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "test",
+      "ja",
+      0.1
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "train",
+      "de",
+      0.1
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "train",
+      "en",
+      0.1
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "train",
+      "en-ext",
+      0.1
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "train",
+      "ja",
+      0.1
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "validation",
+      "de",
+      0.1
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "validation",
+      "en",
+      0.1
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "validation",
+      "en-ext",
+      0.1
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "validation",
+      "ja",
+      0.1
+     ],
+     [
+      "ArguAna",
+      "test",
+      "default",
+      0.797647
+     ],
+     [
+      "SCIDOCS",
+      "test",
+      "default",
+      0.513504
+     ]
+    ]
+   }
+  },
+  {
+   "model": [
+    "zukhruf/model-a",
+    "r1",
+    null
+   ],
+   "options": {
+    "aggregation_level": "subset",
+    "format": "long",
+    "include_model_revision": false
+   },
+   "table": {
+    "columns": [
+     "model_name",
+     "task_name",
+     "split",
+     "subset",
+     "score"
+    ],
+    "rows": [
+     [
+      "zukhruf/model-a",
+      "AmazonCounterfactualClassification",
+      "test",
+      "de",
+      0.1
+     ],
+     [
+      "zukhruf/model-a",
+      "AmazonCounterfactualClassification",
+      "test",
+      "en",
+      0.1
+     ],
+     [
+      "zukhruf/model-a",
+      "AmazonCounterfactualClassification",
+      "test",
+      "en-ext",
+      0.1
+     ],
+     [
+      "zukhruf/model-a",
+      "AmazonCounterfactualClassification",
+      "test",
+      "ja",
+      0.1
+     ],
+     [
+      "zukhruf/model-a",
+      "AmazonCounterfactualClassification",
+      "train",
+      "de",
+      0.1
+     ],
+     [
+      "zukhruf/model-a",
+      "AmazonCounterfactualClassification",
+      "train",
+      "en",
+      0.1
+     ],
+     [
+      "zukhruf/model-a",
+      "AmazonCounterfactualClassification",
+      "train",
+      "en-ext",
+      0.1
+     ],
+     [
+      "zukhruf/model-a",
+      "AmazonCounterfactualClassification",
+      "train",
+      "ja",
+      0.1
+     ],
+     [
+      "zukhruf/model-a",
+      "AmazonCounterfactualClassification",
+      "validation",
+      "de",
+      0.1
+     ],
+     [
+      "zukhruf/model-a",
+      "AmazonCounterfactualClassification",
+      "validation",
+      "en",
+      0.1
+     ],
+     [
+      "zukhruf/model-a",
+      "AmazonCounterfactualClassification",
+      "validation",
+      "en-ext",
+      0.1
+     ],
+     [
+      "zukhruf/model-a",
+      "AmazonCounterfactualClassification",
+      "validation",
+      "ja",
+      0.1
+     ],
+     [
+      "zukhruf/model-a",
+      "ArguAna",
+      "test",
+      "default",
+      0.797647
+     ],
+     [
+      "zukhruf/model-a",
+      "SCIDOCS",
+      "test",
+      "default",
+      0.513504
+     ]
+    ]
+   }
+  },
+  {
+   "model": [
+    "zukhruf/model-a",
+    "r1",
+    null
+   ],
+   "options": {
+    "aggregation_level": "subset",
+    "format": "long",
+    "include_model_revision": true
+   },
+   "table": {
+    "columns": [
+     "model_name",
+     "model_revision",
+     "task_name",
+     "split",
+     "subset",
+     "score"
+    ],
+    "rows": [
+     [
+      "zukhruf/model-a",
+      "r1",
+      "AmazonCounterfactualClassification",
+      "test",
+      "de",
+      0.1
+     ],
+     [
+      "zukhruf/model-a",
+      "r1",
+      "AmazonCounterfactualClassification",
+      "test",
+      "en",
+      0.1
+     ],
+     [
+      "zukhruf/model-a",
+      "r1",
+      "AmazonCounterfactualClassification",
+      "test",
+      "en-ext",
+      0.1
+     ],
+     [
+      "zukhruf/model-a",
+      "r1",
+      "AmazonCounterfactualClassification",
+      "test",
+      "ja",
+      0.1
+     ],
+     [
+      "zukhruf/model-a",
+      "r1",
+      "AmazonCounterfactualClassification",
+      "train",
+      "de",
+      0.1
+     ],
+     [
+      "zukhruf/model-a",
+      "r1",
+      "AmazonCounterfactualClassification",
+      "train",
+      "en",
+      0.1
+     ],
+     [
+      "zukhruf/model-a",
+      "r1",
+      "AmazonCounterfactualClassification",
+      "train",
+      "en-ext",
+      0.1
+     ],
+     [
+      "zukhruf/model-a",
+      "r1",
+      "AmazonCounterfactualClassification",
+      "train",
+      "ja",
+      0.1
+     ],
+     [
+      "zukhruf/model-a",
+      "r1",
+      "AmazonCounterfactualClassification",
+      "validation",
+      "de",
+      0.1
+     ],
+     [
+      "zukhruf/model-a",
+      "r1",
+      "AmazonCounterfactualClassification",
+      "validation",
+      "en",
+      0.1
+     ],
+     [
+      "zukhruf/model-a",
+      "r1",
+      "AmazonCounterfactualClassification",
+      "validation",
+      "en-ext",
+      0.1
+     ],
+     [
+      "zukhruf/model-a",
+      "r1",
+      "AmazonCounterfactualClassification",
+      "validation",
+      "ja",
+      0.1
+     ],
+     [
+      "zukhruf/model-a",
+      "r1",
+      "ArguAna",
+      "test",
+      "default",
+      0.797647
+     ],
+     [
+      "zukhruf/model-a",
+      "r1",
+      "SCIDOCS",
+      "test",
+      "default",
+      0.513504
+     ]
+    ]
+   }
+  },
+  {
+   "model": [
+    "zukhruf/model-a",
+    "r1",
+    null
+   ],
+   "options": {
+    "aggregation_level": "split",
+    "format": "wide",
+    "include_model_revision": false
+   },
+   "table": {
+    "columns": [
+     "task_name",
+     "split",
+     "zukhruf/model-a"
+    ],
+    "rows": [
+     [
+      "AmazonCounterfactualClassification",
+      "test",
+      0.1
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "train",
+      0.1
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "validation",
+      0.1
+     ],
+     [
+      "ArguAna",
+      "test",
+      0.797647
+     ],
+     [
+      "SCIDOCS",
+      "test",
+      0.513504
+     ]
+    ]
+   }
+  },
+  {
+   "model": [
+    "zukhruf/model-a",
+    "r1",
+    null
+   ],
+   "options": {
+    "aggregation_level": "split",
+    "format": "wide",
+    "include_model_revision": true
+   },
+   "table": {
+    "columns": [
+     [
+      "task_name",
+      ""
+     ],
+     [
+      "split",
+      ""
+     ],
+     [
+      "zukhruf/model-a",
+      "r1"
+     ]
+    ],
+    "rows": [
+     [
+      "AmazonCounterfactualClassification",
+      "test",
+      0.1
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "train",
+      0.1
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "validation",
+      0.1
+     ],
+     [
+      "ArguAna",
+      "test",
+      0.797647
+     ],
+     [
+      "SCIDOCS",
+      "test",
+      0.513504
+     ]
+    ]
+   }
+  },
+  {
+   "model": [
+    "zukhruf/model-a",
+    "r1",
+    null
+   ],
+   "options": {
+    "aggregation_level": "split",
+    "format": "long",
+    "include_model_revision": false
+   },
+   "table": {
+    "columns": [
+     "model_name",
+     "task_name",
+     "split",
+     "score"
+    ],
+    "rows": [
+     [
+      "zukhruf/model-a",
+      "AmazonCounterfactualClassification",
+      "test",
+      0.1
+     ],
+     [
+      "zukhruf/model-a",
+      "AmazonCounterfactualClassification",
+      "train",
+      0.1
+     ],
+     [
+      "zukhruf/model-a",
+      "AmazonCounterfactualClassification",
+      "validation",
+      0.1
+     ],
+     [
+      "zukhruf/model-a",
+      "ArguAna",
+      "test",
+      0.797647
+     ],
+     [
+      "zukhruf/model-a",
+      "SCIDOCS",
+      "test",
+      0.513504
+     ]
+    ]
+   }
+  },
+  {
+   "model": [
+    "zukhruf/model-a",
+    "r1",
+    null
+   ],
+   "options": {
+    "aggregation_level": "split",
+    "format": "long",
+    "include_model_revision": true
+   },
+   "table": {
+    "columns": [
+     "model_name",
+     "model_revision",
+     "task_name",
+     "split",
+     "score"
+    ],
+    "rows": [
+     [
+      "zukhruf/model-a",
+      "r1",
+      "AmazonCounterfactualClassification",
+      "test",
+      0.1
+     ],
+     [
+      "zukhruf/model-a",
+      "r1",
+      "AmazonCounterfactualClassification",
+      "train",
+      0.1
+     ],
+     [
+      "zukhruf/model-a",
+      "r1",
+      "AmazonCounterfactualClassification",
+      "validation",
+      0.1
+     ],
+     [
+      "zukhruf/model-a",
+      "r1",
+      "ArguAna",
+      "test",
+      0.797647
+     ],
+     [
+      "zukhruf/model-a",
+      "r1",
+      "SCIDOCS",
+      "test",
+      0.513504
+     ]
+    ]
+   }
+  },
+  {
+   "model": [
+    "zukhruf/model-a",
+    "r1",
+    null
+   ],
+   "options": {
+    "aggregation_level": "task",
+    "format": "wide",
+    "include_model_revision": false
+   },
+   "table": {
+    "columns": [
+     "task_name",
+     "zukhruf/model-a"
+    ],
+    "rows": [
+     [
+      "AmazonCounterfactualClassification",
+      0.10000000000000002
+     ],
+     [
+      "ArguAna",
+      0.797647
+     ],
+     [
+      "SCIDOCS",
+      0.513504
+     ]
+    ]
+   }
+  },
+  {
+   "model": [
+    "zukhruf/model-a",
+    "r1",
+    null
+   ],
+   "options": {
+    "aggregation_level": "task",
+    "format": "wide",
+    "include_model_revision": true
+   },
+   "table": {
+    "columns": [
+     [
+      "task_name",
+      ""
+     ],
+     [
+      "zukhruf/model-a",
+      "r1"
+     ]
+    ],
+    "rows": [
+     [
+      "AmazonCounterfactualClassification",
+      0.10000000000000002
+     ],
+     [
+      "ArguAna",
+      0.797647
+     ],
+     [
+      "SCIDOCS",
+      0.513504
+     ]
+    ]
+   }
+  },
+  {
+   "model": [
+    "zukhruf/model-a",
+    "r1",
+    null
+   ],
+   "options": {
+    "aggregation_level": "task",
+    "format": "long",
+    "include_model_revision": false
+   },
+   "table": {
+    "columns": [
+     "model_name",
+     "task_name",
+     "score"
+    ],
+    "rows": [
+     [
+      "zukhruf/model-a",
+      "AmazonCounterfactualClassification",
+      0.10000000000000002
+     ],
+     [
+      "zukhruf/model-a",
+      "ArguAna",
+      0.797647
+     ],
+     [
+      "zukhruf/model-a",
+      "SCIDOCS",
+      0.513504
+     ]
+    ]
+   }
+  },
+  {
+   "model": [
+    "zukhruf/model-a",
+    "r1",
+    null
+   ],
+   "options": {
+    "aggregation_level": "task",
+    "format": "long",
+    "include_model_revision": true
+   },
+   "table": {
+    "columns": [
+     "model_name",
+     "model_revision",
+     "task_name",
+     "score"
+    ],
+    "rows": [
+     [
+      "zukhruf/model-a",
+      "r1",
+      "AmazonCounterfactualClassification",
+      0.10000000000000002
+     ],
+     [
+      "zukhruf/model-a",
+      "r1",
+      "ArguAna",
+      0.797647
+     ],
+     [
+      "zukhruf/model-a",
+      "r1",
+      "SCIDOCS",
+      0.513504
+     ]
+    ]
+   }
+  },
+  {
+   "model": [
+    "zukhruf/model-a",
+    "r1",
+    null
+   ],
+   "options": {
+    "aggregation_level": "language",
+    "format": "wide",
+    "include_model_revision": false
+   },
+   "table": {
+    "columns": [
+     "language",
+     "zukhruf/model-a"
+    ],
+    "rows": [
+     [
+      "deu-Latn",
+      0.10000000000000002
+     ],
+     [
+      "eng-Latn",
+      0.238893875
+     ],
+     [
+      "jpn-Jpan",
+      0.10000000000000002
+     ]
+    ]
+   }
+  },
+  {
+   "model": [
+    "zukhruf/model-a",
+    "r1",
+    null
+   ],
+   "options": {
+    "aggregation_level": "language",
+    "format": "wide",
+    "include_model_revision": true
+   },
+   "table": {
+    "columns": [
+     [
+      "language",
+      ""
+     ],
+     [
+      "zukhruf/model-a",
+      "r1"
+     ]
+    ],
+    "rows": [
+     [
+      "deu-Latn",
+      0.10000000000000002
+     ],
+     [
+      "eng-Latn",
+      0.238893875
+     ],
+     [
+      "jpn-Jpan",
+      0.10000000000000002
+     ]
+    ]
+   }
+  },
+  {
+   "model": [
+    "zukhruf/model-a",
+    "r1",
+    null
+   ],
+   "options": {
+    "aggregation_level": "language",
+    "format": "long",
+    "include_model_revision": false
+   },
+   "table": {
+    "columns": [
+     "model_name",
+     "language",
+     "score"
+    ],
+    "rows": [
+     [
+      "zukhruf/model-a",
+      "deu-Latn",
+      0.10000000000000002
+     ],
+     [
+      "zukhruf/model-a",
+      "eng-Latn",
+      0.238893875
+     ],
+     [
+      "zukhruf/model-a",
+      "jpn-Jpan",
+      0.10000000000000002
+     ]
+    ]
+   }
+  },
+  {
+   "model": [
+    "zukhruf/model-a",
+    "r1",
+    null
+   ],
+   "options": {
+    "aggregation_level": "language",
+    "format": "long",
+    "include_model_revision": true
+   },
+   "table": {
+    "columns": [
+     "model_name",
+     "model_revision",
+     "language",
+     "score"
+    ],
+    "rows": [
+     [
+      "zukhruf/model-a",
+      "r1",
+      "deu-Latn",
+      0.10000000000000002
+     ],
+     [
+      "zukhruf/model-a",
+      "r1",
+      "eng-Latn",
+      0.238893875
+     ],
+     [
+      "zukhruf/model-a",
+      "r1",
+      "jpn-Jpan",
+      0.10000000000000002
+     ]
+    ]
+   }
+  },
+  {
+   "model": [
+    "zukhruf/model-a",
+    "r2",
+    null
+   ],
+   "options": {
+    "aggregation_level": "subset",
+    "format": "wide",
+    "include_model_revision": false
+   },
+   "table": {
+    "columns": [
+     "task_name",
+     "split",
+     "subset",
+     "zukhruf/model-a"
+    ],
+    "rows": [
+     [
+      "ArguAna",
+      "test",
+      "default",
+      0.777635
+     ],
+     [
+      "SCIDOCS",
+      "test",
+      "default",
+      0.34033
+     ]
+    ]
+   }
+  },
+  {
+   "model": [
+    "zukhruf/model-a",
+    "r2",
+    null
+   ],
+   "options": {
+    "aggregation_level": "subset",
+    "format": "wide",
+    "include_model_revision": true
+   },
+   "table": {
+    "columns": [
+     [
+      "task_name",
+      ""
+     ],
+     [
+      "split",
+      ""
+     ],
+     [
+      "subset",
+      ""
+     ],
+     [
+      "zukhruf/model-a",
+      "r2"
+     ]
+    ],
+    "rows": [
+     [
+      "ArguAna",
+      "test",
+      "default",
+      0.777635
+     ],
+     [
+      "SCIDOCS",
+      "test",
+      "default",
+      0.34033
+     ]
+    ]
+   }
+  },
+  {
+   "model": [
+    "zukhruf/model-a",
+    "r2",
+    null
+   ],
+   "options": {
+    "aggregation_level": "subset",
+    "format": "long",
+    "include_model_revision": false
+   },
+   "table": {
+    "columns": [
+     "model_name",
+     "task_name",
+     "split",
+     "subset",
+     "score"
+    ],
+    "rows": [
+     [
+      "zukhruf/model-a",
+      "ArguAna",
+      "test",
+      "default",
+      0.777635
+     ],
+     [
+      "zukhruf/model-a",
+      "SCIDOCS",
+      "test",
+      "default",
+      0.34033
+     ]
+    ]
+   }
+  },
+  {
+   "model": [
+    "zukhruf/model-a",
+    "r2",
+    null
+   ],
+   "options": {
+    "aggregation_level": "subset",
+    "format": "long",
+    "include_model_revision": true
+   },
+   "table": {
+    "columns": [
+     "model_name",
+     "model_revision",
+     "task_name",
+     "split",
+     "subset",
+     "score"
+    ],
+    "rows": [
+     [
+      "zukhruf/model-a",
+      "r2",
+      "ArguAna",
+      "test",
+      "default",
+      0.777635
+     ],
+     [
+      "zukhruf/model-a",
+      "r2",
+      "SCIDOCS",
+      "test",
+      "default",
+      0.34033
+     ]
+    ]
+   }
+  },
+  {
+   "model": [
+    "zukhruf/model-a",
+    "r2",
+    null
+   ],
+   "options": {
+    "aggregation_level": "split",
+    "format": "wide",
+    "include_model_revision": false
+   },
+   "table": {
+    "columns": [
+     "task_name",
+     "split",
+     "zukhruf/model-a"
+    ],
+    "rows": [
+     [
+      "ArguAna",
+      "test",
+      0.777635
+     ],
+     [
+      "SCIDOCS",
+      "test",
+      0.34033
+     ]
+    ]
+   }
+  },
+  {
+   "model": [
+    "zukhruf/model-a",
+    "r2",
+    null
+   ],
+   "options": {
+    "aggregation_level": "split",
+    "format": "wide",
+    "include_model_revision": true
+   },
+   "table": {
+    "columns": [
+     [
+      "task_name",
+      ""
+     ],
+     [
+      "split",
+      ""
+     ],
+     [
+      "zukhruf/model-a",
+      "r2"
+     ]
+    ],
+    "rows": [
+     [
+      "ArguAna",
+      "test",
+      0.777635
+     ],
+     [
+      "SCIDOCS",
+      "test",
+      0.34033
+     ]
+    ]
+   }
+  },
+  {
+   "model": [
+    "zukhruf/model-a",
+    "r2",
+    null
+   ],
+   "options": {
+    "aggregation_level": "split",
+    "format": "long",
+    "include_model_revision": false
+   },
+   "table": {
+    "columns": [
+     "model_name",
+     "task_name",
+     "split",
+     "score"
+    ],
+    "rows": [
+     [
+      "zukhruf/model-a",
+      "ArguAna",
+      "test",
+      0.777635
+     ],
+     [
+      "zukhruf/model-a",
+      "SCIDOCS",
+      "test",
+      0.34033
+     ]
+    ]
+   }
+  },
+  {
+   "model": [
+    "zukhruf/model-a",
+    "r2",
+    null
+   ],
+   "options": {
+    "aggregation_level": "split",
+    "format": "long",
+    "include_model_revision": true
+   },
+   "table": {
+    "columns": [
+     "model_name",
+     "model_revision",
+     "task_name",
+     "split",
+     "score"
+    ],
+    "rows": [
+     [
+      "zukhruf/model-a",
+      "r2",
+      "ArguAna",
+      "test",
+      0.777635
+     ],
+     [
+      "zukhruf/model-a",
+      "r2",
+      "SCIDOCS",
+      "test",
+      0.34033
+     ]
+    ]
+   }
+  },
+  {
+   "model": [
+    "zukhruf/model-a",
+    "r2",
+    null
+   ],
+   "options": {
+    "aggregation_level": "task",
+    "format": "wide",
+    "include_model_revision": false
+   },
+   "table": {
+    "columns": [
+     "task_name",
+     "zukhruf/model-a"
+    ],
+    "rows": [
+     [
+      "ArguAna",
+      0.777635
+     ],
+     [
+      "SCIDOCS",
+      0.34033
+     ]
+    ]
+   }
+  },
+  {
+   "model": [
+    "zukhruf/model-a",
+    "r2",
+    null
+   ],
+   "options": {
+    "aggregation_level": "task",
+    "format": "wide",
+    "include_model_revision": true
+   },
+   "table": {
+    "columns": [
+     [
+      "task_name",
+      ""
+     ],
+     [
+      "zukhruf/model-a",
+      "r2"
+     ]
+    ],
+    "rows": [
+     [
+      "ArguAna",
+      0.777635
+     ],
+     [
+      "SCIDOCS",
+      0.34033
+     ]
+    ]
+   }
+  },
+  {
+   "model": [
+    "zukhruf/model-a",
+    "r2",
+    null
+   ],
+   "options": {
+    "aggregation_level": "task",
+    "format": "long",
+    "include_model_revision": false
+   },
+   "table": {
+    "columns": [
+     "model_name",
+     "task_name",
+     "score"
+    ],
+    "rows": [
+     [
+      "zukhruf/model-a",
+      "ArguAna",
+      0.777635
+     ],
+     [
+      "zukhruf/model-a",
+      "SCIDOCS",
+      0.34033
+     ]
+    ]
+   }
+  },
+  {
+   "model": [
+    "zukhruf/model-a",
+    "r2",
+    null
+   ],
+   "options": {
+    "aggregation_level": "task",
+    "format": "long",
+    "include_model_revision": true
+   },
+   "table": {
+    "columns": [
+     "model_name",
+     "model_revision",
+     "task_name",
+     "score"
+    ],
+    "rows": [
+     [
+      "zukhruf/model-a",
+      "r2",
+      "ArguAna",
+      0.777635
+     ],
+     [
+      "zukhruf/model-a",
+      "r2",
+      "SCIDOCS",
+      0.34033
+     ]
+    ]
+   }
+  },
+  {
+   "model": [
+    "zukhruf/model-a",
+    "r2",
+    null
+   ],
+   "options": {
+    "aggregation_level": "language",
+    "format": "wide",
+    "include_model_revision": false
+   },
+   "table": {
+    "columns": [
+     "language",
+     "zukhruf/model-a"
+    ],
+    "rows": [
+     [
+      "eng-Latn",
+      0.5589824999999999
+     ]
+    ]
+   }
+  },
+  {
+   "model": [
+    "zukhruf/model-a",
+    "r2",
+    null
+   ],
+   "options": {
+    "aggregation_level": "language",
+    "format": "wide",
+    "include_model_revision": true
+   },
+   "table": {
+    "columns": [
+     [
+      "language",
+      ""
+     ],
+     [
+      "zukhruf/model-a",
+      "r2"
+     ]
+    ],
+    "rows": [
+     [
+      "eng-Latn",
+      0.5589824999999999
+     ]
+    ]
+   }
+  },
+  {
+   "model": [
+    "zukhruf/model-a",
+    "r2",
+    null
+   ],
+   "options": {
+    "aggregation_level": "language",
+    "format": "long",
+    "include_model_revision": false
+   },
+   "table": {
+    "columns": [
+     "model_name",
+     "language",
+     "score"
+    ],
+    "rows": [
+     [
+      "zukhruf/model-a",
+      "eng-Latn",
+      0.5589824999999999
+     ]
+    ]
+   }
+  },
+  {
+   "model": [
+    "zukhruf/model-a",
+    "r2",
+    null
+   ],
+   "options": {
+    "aggregation_level": "language",
+    "format": "long",
+    "include_model_revision": true
+   },
+   "table": {
+    "columns": [
+     "model_name",
+     "model_revision",
+     "language",
+     "score"
+    ],
+    "rows": [
+     [
+      "zukhruf/model-a",
+      "r2",
+      "eng-Latn",
+      0.5589824999999999
+     ]
+    ]
+   }
+  },
+  {
+   "model": [
+    "zukhruf/model-b",
+    "r1",
+    "k1_1.2"
+   ],
+   "options": {
+    "aggregation_level": "subset",
+    "format": "wide",
+    "include_model_revision": false
+   },
+   "table": {
+    "columns": [
+     "task_name",
+     "split",
+     "subset",
+     "zukhruf/model-b"
+    ],
+    "rows": [
+     [
+      "AmazonCounterfactualClassification",
+      "test",
+      "de",
+      0.990786
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "test",
+      "en",
+      0.480713
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "test",
+      "en-ext",
+      0.042384
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "test",
+      "ja",
+      0.348706
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "train",
+      "de",
+      0.971153
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "train",
+      "en",
+      0.72978
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "train",
+      "en-ext",
+      0.373346
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "train",
+      "ja",
+      0.592726
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "validation",
+      "de",
+      0.548863
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "validation",
+      "en",
+      0.061609
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "validation",
+      "en-ext",
+      0.501339
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "validation",
+      "ja",
+      0.73798
+     ],
+     [
+      "ArguAna",
+      "test",
+      "default",
+      0.065912
+     ]
+    ]
+   }
+  },
+  {
+   "model": [
+    "zukhruf/model-b",
+    "r1",
+    "k1_1.2"
+   ],
+   "options": {
+    "aggregation_level": "subset",
+    "format": "wide",
+    "include_model_revision": true
+   },
+   "table": {
+    "columns": [
+     [
+      "task_name",
+      ""
+     ],
+     [
+      "split",
+      ""
+     ],
+     [
+      "subset",
+      ""
+     ],
+     [
+      "zukhruf/model-b",
+      "r1"
+     ]
+    ],
+    "rows": [
+     [
+      "AmazonCounterfactualClassification",
+      "test",
+      "de",
+      0.990786
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "test",
+      "en",
+      0.480713
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "test",
+      "en-ext",
+      0.042384
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "test",
+      "ja",
+      0.348706
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "train",
+      "de",
+      0.971153
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "train",
+      "en",
+      0.72978
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "train",
+      "en-ext",
+      0.373346
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "train",
+      "ja",
+      0.592726
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "validation",
+      "de",
+      0.548863
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "validation",
+      "en",
+      0.061609
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "validation",
+      "en-ext",
+      0.501339
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "validation",
+      "ja",
+      0.73798
+     ],
+     [
+      "ArguAna",
+      "test",
+      "default",
+      0.065912
+     ]
+    ]
+   }
+  },
+  {
+   "model": [
+    "zukhruf/model-b",
+    "r1",
+    "k1_1.2"
+   ],
+   "options": {
+    "aggregation_level": "subset",
+    "format": "long",
+    "include_model_revision": false
+   },
+   "table": {
+    "columns": [
+     "model_name",
+     "task_name",
+     "split",
+     "subset",
+     "score"
+    ],
+    "rows": [
+     [
+      "zukhruf/model-b",
+      "AmazonCounterfactualClassification",
+      "test",
+      "de",
+      0.990786
+     ],
+     [
+      "zukhruf/model-b",
+      "AmazonCounterfactualClassification",
+      "test",
+      "en",
+      0.480713
+     ],
+     [
+      "zukhruf/model-b",
+      "AmazonCounterfactualClassification",
+      "test",
+      "en-ext",
+      0.042384
+     ],
+     [
+      "zukhruf/model-b",
+      "AmazonCounterfactualClassification",
+      "test",
+      "ja",
+      0.348706
+     ],
+     [
+      "zukhruf/model-b",
+      "AmazonCounterfactualClassification",
+      "train",
+      "de",
+      0.971153
+     ],
+     [
+      "zukhruf/model-b",
+      "AmazonCounterfactualClassification",
+      "train",
+      "en",
+      0.72978
+     ],
+     [
+      "zukhruf/model-b",
+      "AmazonCounterfactualClassification",
+      "train",
+      "en-ext",
+      0.373346
+     ],
+     [
+      "zukhruf/model-b",
+      "AmazonCounterfactualClassification",
+      "train",
+      "ja",
+      0.592726
+     ],
+     [
+      "zukhruf/model-b",
+      "AmazonCounterfactualClassification",
+      "validation",
+      "de",
+      0.548863
+     ],
+     [
+      "zukhruf/model-b",
+      "AmazonCounterfactualClassification",
+      "validation",
+      "en",
+      0.061609
+     ],
+     [
+      "zukhruf/model-b",
+      "AmazonCounterfactualClassification",
+      "validation",
+      "en-ext",
+      0.501339
+     ],
+     [
+      "zukhruf/model-b",
+      "AmazonCounterfactualClassification",
+      "validation",
+      "ja",
+      0.73798
+     ],
+     [
+      "zukhruf/model-b",
+      "ArguAna",
+      "test",
+      "default",
+      0.065912
+     ],
+     [
+      "zukhruf/model-b",
+      "SCIDOCS",
+      "test",
+      "default",
+      "NaN"
+     ]
+    ]
+   }
+  },
+  {
+   "model": [
+    "zukhruf/model-b",
+    "r1",
+    "k1_1.2"
+   ],
+   "options": {
+    "aggregation_level": "subset",
+    "format": "long",
+    "include_model_revision": true
+   },
+   "table": {
+    "columns": [
+     "model_name",
+     "model_revision",
+     "task_name",
+     "split",
+     "subset",
+     "score"
+    ],
+    "rows": [
+     [
+      "zukhruf/model-b",
+      "r1",
+      "AmazonCounterfactualClassification",
+      "test",
+      "de",
+      0.990786
+     ],
+     [
+      "zukhruf/model-b",
+      "r1",
+      "AmazonCounterfactualClassification",
+      "test",
+      "en",
+      0.480713
+     ],
+     [
+      "zukhruf/model-b",
+      "r1",
+      "AmazonCounterfactualClassification",
+      "test",
+      "en-ext",
+      0.042384
+     ],
+     [
+      "zukhruf/model-b",
+      "r1",
+      "AmazonCounterfactualClassification",
+      "test",
+      "ja",
+      0.348706
+     ],
+     [
+      "zukhruf/model-b",
+      "r1",
+      "AmazonCounterfactualClassification",
+      "train",
+      "de",
+      0.971153
+     ],
+     [
+      "zukhruf/model-b",
+      "r1",
+      "AmazonCounterfactualClassification",
+      "train",
+      "en",
+      0.72978
+     ],
+     [
+      "zukhruf/model-b",
+      "r1",
+      "AmazonCounterfactualClassification",
+      "train",
+      "en-ext",
+      0.373346
+     ],
+     [
+      "zukhruf/model-b",
+      "r1",
+      "AmazonCounterfactualClassification",
+      "train",
+      "ja",
+      0.592726
+     ],
+     [
+      "zukhruf/model-b",
+      "r1",
+      "AmazonCounterfactualClassification",
+      "validation",
+      "de",
+      0.548863
+     ],
+     [
+      "zukhruf/model-b",
+      "r1",
+      "AmazonCounterfactualClassification",
+      "validation",
+      "en",
+      0.061609
+     ],
+     [
+      "zukhruf/model-b",
+      "r1",
+      "AmazonCounterfactualClassification",
+      "validation",
+      "en-ext",
+      0.501339
+     ],
+     [
+      "zukhruf/model-b",
+      "r1",
+      "AmazonCounterfactualClassification",
+      "validation",
+      "ja",
+      0.73798
+     ],
+     [
+      "zukhruf/model-b",
+      "r1",
+      "ArguAna",
+      "test",
+      "default",
+      0.065912
+     ],
+     [
+      "zukhruf/model-b",
+      "r1",
+      "SCIDOCS",
+      "test",
+      "default",
+      "NaN"
+     ]
+    ]
+   }
+  },
+  {
+   "model": [
+    "zukhruf/model-b",
+    "r1",
+    "k1_1.2"
+   ],
+   "options": {
+    "aggregation_level": "split",
+    "format": "wide",
+    "include_model_revision": false
+   },
+   "table": {
+    "columns": [
+     "task_name",
+     "split",
+     "zukhruf/model-b"
+    ],
+    "rows": [
+     [
+      "AmazonCounterfactualClassification",
+      "test",
+      0.46564724999999996
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "train",
+      0.66675125
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "validation",
+      0.46244775
+     ],
+     [
+      "ArguAna",
+      "test",
+      0.065912
+     ]
+    ]
+   }
+  },
+  {
+   "model": [
+    "zukhruf/model-b",
+    "r1",
+    "k1_1.2"
+   ],
+   "options": {
+    "aggregation_level": "split",
+    "format": "wide",
+    "include_model_revision": true
+   },
+   "table": {
+    "columns": [
+     [
+      "task_name",
+      ""
+     ],
+     [
+      "split",
+      ""
+     ],
+     [
+      "zukhruf/model-b",
+      "r1"
+     ]
+    ],
+    "rows": [
+     [
+      "AmazonCounterfactualClassification",
+      "test",
+      0.46564724999999996
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "train",
+      0.66675125
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "validation",
+      0.46244775
+     ],
+     [
+      "ArguAna",
+      "test",
+      0.065912
+     ]
+    ]
+   }
+  },
+  {
+   "model": [
+    "zukhruf/model-b",
+    "r1",
+    "k1_1.2"
+   ],
+   "options": {
+    "aggregation_level": "split",
+    "format": "long",
+    "include_model_revision": false
+   },
+   "table": {
+    "columns": [
+     "model_name",
+     "task_name",
+     "split",
+     "score"
+    ],
+    "rows": [
+     [
+      "zukhruf/model-b",
+      "AmazonCounterfactualClassification",
+      "test",
+      0.46564724999999996
+     ],
+     [
+      "zukhruf/model-b",
+      "AmazonCounterfactualClassification",
+      "train",
+      0.66675125
+     ],
+     [
+      "zukhruf/model-b",
+      "AmazonCounterfactualClassification",
+      "validation",
+      0.46244775
+     ],
+     [
+      "zukhruf/model-b",
+      "ArguAna",
+      "test",
+      0.065912
+     ],
+     [
+      "zukhruf/model-b",
+      "SCIDOCS",
+      "test",
+      "NaN"
+     ]
+    ]
+   }
+  },
+  {
+   "model": [
+    "zukhruf/model-b",
+    "r1",
+    "k1_1.2"
+   ],
+   "options": {
+    "aggregation_level": "split",
+    "format": "long",
+    "include_model_revision": true
+   },
+   "table": {
+    "columns": [
+     "model_name",
+     "model_revision",
+     "task_name",
+     "split",
+     "score"
+    ],
+    "rows": [
+     [
+      "zukhruf/model-b",
+      "r1",
+      "AmazonCounterfactualClassification",
+      "test",
+      0.46564724999999996
+     ],
+     [
+      "zukhruf/model-b",
+      "r1",
+      "AmazonCounterfactualClassification",
+      "train",
+      0.66675125
+     ],
+     [
+      "zukhruf/model-b",
+      "r1",
+      "AmazonCounterfactualClassification",
+      "validation",
+      0.46244775
+     ],
+     [
+      "zukhruf/model-b",
+      "r1",
+      "ArguAna",
+      "test",
+      0.065912
+     ],
+     [
+      "zukhruf/model-b",
+      "r1",
+      "SCIDOCS",
+      "test",
+      "NaN"
+     ]
+    ]
+   }
+  },
+  {
+   "model": [
+    "zukhruf/model-b",
+    "r1",
+    "k1_1.2"
+   ],
+   "options": {
+    "aggregation_level": "task",
+    "format": "wide",
+    "include_model_revision": false
+   },
+   "table": {
+    "columns": [
+     "task_name",
+     "zukhruf/model-b"
+    ],
+    "rows": [
+     [
+      "AmazonCounterfactualClassification",
+      0.5316154166666667
+     ],
+     [
+      "ArguAna",
+      0.065912
+     ]
+    ]
+   }
+  },
+  {
+   "model": [
+    "zukhruf/model-b",
+    "r1",
+    "k1_1.2"
+   ],
+   "options": {
+    "aggregation_level": "task",
+    "format": "wide",
+    "include_model_revision": true
+   },
+   "table": {
+    "columns": [
+     [
+      "task_name",
+      ""
+     ],
+     [
+      "zukhruf/model-b",
+      "r1"
+     ]
+    ],
+    "rows": [
+     [
+      "AmazonCounterfactualClassification",
+      0.5316154166666667
+     ],
+     [
+      "ArguAna",
+      0.065912
+     ]
+    ]
+   }
+  },
+  {
+   "model": [
+    "zukhruf/model-b",
+    "r1",
+    "k1_1.2"
+   ],
+   "options": {
+    "aggregation_level": "task",
+    "format": "long",
+    "include_model_revision": false
+   },
+   "table": {
+    "columns": [
+     "model_name",
+     "task_name",
+     "score"
+    ],
+    "rows": [
+     [
+      "zukhruf/model-b",
+      "AmazonCounterfactualClassification",
+      0.5316154166666667
+     ],
+     [
+      "zukhruf/model-b",
+      "ArguAna",
+      0.065912
+     ],
+     [
+      "zukhruf/model-b",
+      "SCIDOCS",
+      "NaN"
+     ]
+    ]
+   }
+  },
+  {
+   "model": [
+    "zukhruf/model-b",
+    "r1",
+    "k1_1.2"
+   ],
+   "options": {
+    "aggregation_level": "task",
+    "format": "long",
+    "include_model_revision": true
+   },
+   "table": {
+    "columns": [
+     "model_name",
+     "model_revision",
+     "task_name",
+     "score"
+    ],
+    "rows": [
+     [
+      "zukhruf/model-b",
+      "r1",
+      "AmazonCounterfactualClassification",
+      0.5316154166666667
+     ],
+     [
+      "zukhruf/model-b",
+      "r1",
+      "ArguAna",
+      0.065912
+     ],
+     [
+      "zukhruf/model-b",
+      "r1",
+      "SCIDOCS",
+      "NaN"
+     ]
+    ]
+   }
+  },
+  {
+   "model": [
+    "zukhruf/model-b",
+    "r1",
+    "k1_1.2"
+   ],
+   "options": {
+    "aggregation_level": "language",
+    "format": "wide",
+    "include_model_revision": false
+   },
+   "table": {
+    "columns": [
+     "language",
+     "zukhruf/model-b"
+    ],
+    "rows": [
+     [
+      "deu-Latn",
+      0.5713118333333334
+     ],
+     [
+      "eng-Latn",
+      0.3221547142857143
+     ],
+     [
+      "jpn-Jpan",
+      0.559804
+     ]
+    ]
+   }
+  },
+  {
+   "model": [
+    "zukhruf/model-b",
+    "r1",
+    "k1_1.2"
+   ],
+   "options": {
+    "aggregation_level": "language",
+    "format": "wide",
+    "include_model_revision": true
+   },
+   "table": {
+    "columns": [
+     [
+      "language",
+      ""
+     ],
+     [
+      "zukhruf/model-b",
+      "r1"
+     ]
+    ],
+    "rows": [
+     [
+      "deu-Latn",
+      0.5713118333333334
+     ],
+     [
+      "eng-Latn",
+      0.3221547142857143
+     ],
+     [
+      "jpn-Jpan",
+      0.559804
+     ]
+    ]
+   }
+  },
+  {
+   "model": [
+    "zukhruf/model-b",
+    "r1",
+    "k1_1.2"
+   ],
+   "options": {
+    "aggregation_level": "language",
+    "format": "long",
+    "include_model_revision": false
+   },
+   "table": {
+    "columns": [
+     "model_name",
+     "language",
+     "score"
+    ],
+    "rows": [
+     [
+      "zukhruf/model-b",
+      "deu-Latn",
+      0.5713118333333334
+     ],
+     [
+      "zukhruf/model-b",
+      "eng-Latn",
+      0.3221547142857143
+     ],
+     [
+      "zukhruf/model-b",
+      "jpn-Jpan",
+      0.559804
+     ]
+    ]
+   }
+  },
+  {
+   "model": [
+    "zukhruf/model-b",
+    "r1",
+    "k1_1.2"
+   ],
+   "options": {
+    "aggregation_level": "language",
+    "format": "long",
+    "include_model_revision": true
+   },
+   "table": {
+    "columns": [
+     "model_name",
+     "model_revision",
+     "language",
+     "score"
+    ],
+    "rows": [
+     [
+      "zukhruf/model-b",
+      "r1",
+      "deu-Latn",
+      0.5713118333333334
+     ],
+     [
+      "zukhruf/model-b",
+      "r1",
+      "eng-Latn",
+      0.3221547142857143
+     ],
+     [
+      "zukhruf/model-b",
+      "r1",
+      "jpn-Jpan",
+      0.559804
+     ]
+    ]
+   }
+  }
+ ],
+ "benchmark_results": [
+  {
+   "options": {
+    "aggregation_level": "subset",
+    "format": "wide",
+    "include_model_revision": false
+   },
+   "table": {
+    "columns": [
+     "task_name",
+     "split",
+     "subset",
+     "zukhruf/model-a",
+     "zukhruf/model-b",
+     "zukhruf/model-c"
+    ],
+    "rows": [
+     [
+      "AmazonCounterfactualClassification",
+      "test",
+      "de",
+      0.1,
+      0.845393,
+      0.434262
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "test",
+      "en",
+      0.1,
+      0.5903565,
+      0.202015
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "test",
+      "en-ext",
+      0.1,
+      0.37119199999999997,
+      0.784376
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "test",
+      "ja",
+      0.1,
+      0.524353,
+      0.19524
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "test",
+      "xx",
+      "NaN",
+      "NaN",
+      0.002995
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "train",
+      "de",
+      0.1,
+      0.8355764999999999,
+      0.770198
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "train",
+      "en",
+      0.1,
+      0.71489,
+      0.689344
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "train",
+      "en-ext",
+      0.1,
+      0.536673,
+      0.636001
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "train",
+      "ja",
+      0.1,
+      0.646363,
+      0.161205
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "train",
+      "xx",
+      "NaN",
+      "NaN",
+      0.002995
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "validation",
+      "de",
+      0.1,
+      0.6244315,
+      0.817632
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "validation",
+      "en",
+      0.1,
+      0.3808045,
+      0.812837
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "validation",
+      "en-ext",
+      0.1,
+      0.6006695,
+      0.206629
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "validation",
+      "ja",
+      0.1,
+      0.71899,
+      0.171252
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "validation",
+      "xx",
+      "NaN",
+      "NaN",
+      0.002995
+     ],
+     [
+      "ArguAna",
+      "test",
+      "default",
+      0.777635,
+      0.13295600000000002,
+      0.996818
+     ],
+     [
+      "SCIDOCS",
+      "test",
+      "default",
+      0.34033,
+      0.1,
+      "NaN"
+     ]
+    ]
+   }
+  },
+  {
+   "options": {
+    "aggregation_level": "subset",
+    "format": "wide",
+    "include_model_revision": true
+   },
+   "table": {
+    "columns": [
+     [
+      "task_name",
+      ""
+     ],
+     [
+      "split",
+      ""
+     ],
+     [
+      "subset",
+      ""
+     ],
+     [
+      "zukhruf/model-a",
+      "r1"
+     ],
+     [
+      "zukhruf/model-a",
+      "r2"
+     ],
+     [
+      "zukhruf/model-b",
+      "r1"
+     ],
+     [
+      "zukhruf/model-c",
+      "r1"
+     ]
+    ],
+    "rows": [
+     [
+      "AmazonCounterfactualClassification",
+      "test",
+      "de",
+      0.1,
+      "NaN",
+      0.845393,
+      0.434262
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "test",
+      "en",
+      0.1,
+      "NaN",
+      0.5903565,
+      0.202015
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "test",
+      "en-ext",
+      0.1,
+      "NaN",
+      0.37119199999999997,
+      0.784376
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "test",
+      "ja",
+      0.1,
+      "NaN",
+      0.524353,
+      0.19524
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "test",
+      "xx",
+      "NaN",
+      "NaN",
+      "NaN",
+      0.002995
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "train",
+      "de",
+      0.1,
+      "NaN",
+      0.8355764999999999,
+      0.770198
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "train",
+      "en",
+      0.1,
+      "NaN",
+      0.71489,
+      0.689344
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "train",
+      "en-ext",
+      0.1,
+      "NaN",
+      0.536673,
+      0.636001
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "train",
+      "ja",
+      0.1,
+      "NaN",
+      0.646363,
+      0.161205
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "train",
+      "xx",
+      "NaN",
+      "NaN",
+      "NaN",
+      0.002995
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "validation",
+      "de",
+      0.1,
+      "NaN",
+      0.6244315,
+      0.817632
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "validation",
+      "en",
+      0.1,
+      "NaN",
+      0.3808045,
+      0.812837
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "validation",
+      "en-ext",
+      0.1,
+      "NaN",
+      0.6006695,
+      0.206629
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "validation",
+      "ja",
+      0.1,
+      "NaN",
+      0.71899,
+      0.171252
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "validation",
+      "xx",
+      "NaN",
+      "NaN",
+      "NaN",
+      0.002995
+     ],
+     [
+      "ArguAna",
+      "test",
+      "default",
+      0.797647,
+      0.777635,
+      0.13295600000000002,
+      0.996818
+     ],
+     [
+      "SCIDOCS",
+      "test",
+      "default",
+      0.513504,
+      0.34033,
+      0.1,
+      "NaN"
+     ]
+    ]
+   }
+  },
+  {
+   "options": {
+    "aggregation_level": "subset",
+    "format": "long",
+    "include_model_revision": false
+   },
+   "table": {
+    "columns": [
+     "model_name",
+     "task_name",
+     "split",
+     "subset",
+     "score"
+    ],
+    "rows": [
+     [
+      "zukhruf/model-a",
+      "AmazonCounterfactualClassification",
+      "test",
+      "de",
+      0.1
+     ],
+     [
+      "zukhruf/model-a",
+      "AmazonCounterfactualClassification",
+      "test",
+      "en",
+      0.1
+     ],
+     [
+      "zukhruf/model-a",
+      "AmazonCounterfactualClassification",
+      "test",
+      "en-ext",
+      0.1
+     ],
+     [
+      "zukhruf/model-a",
+      "AmazonCounterfactualClassification",
+      "test",
+      "ja",
+      0.1
+     ],
+     [
+      "zukhruf/model-a",
+      "AmazonCounterfactualClassification",
+      "train",
+      "de",
+      0.1
+     ],
+     [
+      "zukhruf/model-a",
+      "AmazonCounterfactualClassification",
+      "train",
+      "en",
+      0.1
+     ],
+     [
+      "zukhruf/model-a",
+      "AmazonCounterfactualClassification",
+      "train",
+      "en-ext",
+      0.1
+     ],
+     [
+      "zukhruf/model-a",
+      "AmazonCounterfactualClassification",
+      "train",
+      "ja",
+      0.1
+     ],
+     [
+      "zukhruf/model-a",
+      "AmazonCounterfactualClassification",
+      "validation",
+      "de",
+      0.1
+     ],
+     [
+      "zukhruf/model-a",
+      "AmazonCounterfactualClassification",
+      "validation",
+      "en",
+      0.1
+     ],
+     [
+      "zukhruf/model-a",
+      "AmazonCounterfactualClassification",
+      "validation",
+      "en-ext",
+      0.1
+     ],
+     [
+      "zukhruf/model-a",
+      "AmazonCounterfactualClassification",
+      "validation",
+      "ja",
+      0.1
+     ],
+     [
+      "zukhruf/model-a",
+      "ArguAna",
+      "test",
+      "default",
+      0.777635
+     ],
+     [
+      "zukhruf/model-a",
+      "SCIDOCS",
+      "test",
+      "default",
+      0.34033
+     ],
+     [
+      "zukhruf/model-b",
+      "AmazonCounterfactualClassification",
+      "test",
+      "de",
+      0.845393
+     ],
+     [
+      "zukhruf/model-b",
+      "AmazonCounterfactualClassification",
+      "test",
+      "en",
+      0.5903565
+     ],
+     [
+      "zukhruf/model-b",
+      "AmazonCounterfactualClassification",
+      "test",
+      "en-ext",
+      0.37119199999999997
+     ],
+     [
+      "zukhruf/model-b",
+      "AmazonCounterfactualClassification",
+      "test",
+      "ja",
+      0.524353
+     ],
+     [
+      "zukhruf/model-b",
+      "AmazonCounterfactualClassification",
+      "train",
+      "de",
+      0.8355764999999999
+     ],
+     [
+      "zukhruf/model-b",
+      "AmazonCounterfactualClassification",
+      "train",
+      "en",
+      0.71489
+     ],
+     [
+      "zukhruf/model-b",
+      "AmazonCounterfactualClassification",
+      "train",
+      "en-ext",
+      0.536673
+     ],
+     [
+      "zukhruf/model-b",
+      "AmazonCounterfactualClassification",
+      "train",
+      "ja",
+      0.646363
+     ],
+     [
+      "zukhruf/model-b",
+      "AmazonCounterfactualClassification",
+      "validation",
+      "de",
+      0.6244315
+     ],
+     [
+      "zukhruf/model-b",
+      "AmazonCounterfactualClassification",
+      "validation",
+      "en",
+      0.3808045
+     ],
+     [
+      "zukhruf/model-b",
+      "AmazonCounterfactualClassification",
+      "validation",
+      "en-ext",
+      0.6006695
+     ],
+     [
+      "zukhruf/model-b",
+      "AmazonCounterfactualClassification",
+      "validation",
+      "ja",
+      0.71899
+     ],
+     [
+      "zukhruf/model-b",
+      "ArguAna",
+      "test",
+      "default",
+      0.13295600000000002
+     ],
+     [
+      "zukhruf/model-b",
+      "SCIDOCS",
+      "test",
+      "default",
+      0.1
+     ],
+     [
+      "zukhruf/model-c",
+      "AmazonCounterfactualClassification",
+      "test",
+      "de",
+      0.434262
+     ],
+     [
+      "zukhruf/model-c",
+      "AmazonCounterfactualClassification",
+      "test",
+      "en",
+      0.202015
+     ],
+     [
+      "zukhruf/model-c",
+      "AmazonCounterfactualClassification",
+      "test",
+      "en-ext",
+      0.784376
+     ],
+     [
+      "zukhruf/model-c",
+      "AmazonCounterfactualClassification",
+      "test",
+      "fr",
+      "NaN"
+     ],
+     [
+      "zukhruf/model-c",
+      "AmazonCounterfactualClassification",
+      "test",
+      "ja",
+      0.19524
+     ],
+     [
+      "zukhruf/model-c",
+      "AmazonCounterfactualClassification",
+      "test",
+      "xx",
+      0.002995
+     ],
+     [
+      "zukhruf/model-c",
+      "AmazonCounterfactualClassification",
+      "train",
+      "de",
+      0.770198
+     ],
+     [
+      "zukhruf/model-c",
+      "AmazonCounterfactualClassification",
+      "train",
+      "en",
+      0.689344
+     ],
+     [
+      "zukhruf/model-c",
+      "AmazonCounterfactualClassification",
+      "train",
+      "en-ext",
+      0.636001
+     ],
+     [
+      "zukhruf/model-c",
+      "AmazonCounterfactualClassification",
+      "train",
+      "fr",
+      "NaN"
+     ],
+     [
+      "zukhruf/model-c",
+      "AmazonCounterfactualClassification",
+      "train",
+      "ja",
+      0.161205
+     ],
+     [
+      "zukhruf/model-c",
+      "AmazonCounterfactualClassification",
+      "train",
+      "xx",
+      0.002995
+     ],
+     [
+      "zukhruf/model-c",
+      "AmazonCounterfactualClassification",
+      "validation",
+      "de",
+      0.817632
+     ],
+     [
+      "zukhruf/model-c",
+      "AmazonCounterfactualClassification",
+      "validation",
+      "en",
+      0.812837
+     ],
+     [
+      "zukhruf/model-c",
+      "AmazonCounterfactualClassification",
+      "validation",
+      "en-ext",
+      0.206629
+     ],
+     [
+      "zukhruf/model-c",
+      "AmazonCounterfactualClassification",
+      "validation",
+      "fr",
+      "NaN"
+     ],
+     [
+      "zukhruf/model-c",
+      "AmazonCounterfactualClassification",
+      "validation",
+      "ja",
+      0.171252
+     ],
+     [
+      "zukhruf/model-c",
+      "AmazonCounterfactualClassification",
+      "validation",
+      "xx",
+      0.002995
+     ],
+     [
+      "zukhruf/model-c",
+      "ArguAna",
+      "test",
+      "default",
+      0.996818
+     ]
+    ]
+   }
+  },
+  {
+   "options": {
+    "aggregation_level": "subset",
+    "format": "long",
+    "include_model_revision": true
+   },
+   "table": {
+    "columns": [
+     "model_name",
+     "model_revision",
+     "task_name",
+     "split",
+     "subset",
+     "score"
+    ],
+    "rows": [
+     [
+      "zukhruf/model-a",
+      "r1",
+      "AmazonCounterfactualClassification",
+      "test",
+      "de",
+      0.1
+     ],
+     [
+      "zukhruf/model-a",
+      "r1",
+      "AmazonCounterfactualClassification",
+      "test",
+      "en",
+      0.1
+     ],
+     [
+      "zukhruf/model-a",
+      "r1",
+      "AmazonCounterfactualClassification",
+      "test",
+      "en-ext",
+      0.1
+     ],
+     [
+      "zukhruf/model-a",
+      "r1",
+      "AmazonCounterfactualClassification",
+      "test",
+      "ja",
+      0.1
+     ],
+     [
+      "zukhruf/model-a",
+      "r1",
+      "AmazonCounterfactualClassification",
+      "train",
+      "de",
+      0.1
+     ],
+     [
+      "zukhruf/model-a",
+      "r1",
+      "AmazonCounterfactualClassification",
+      "train",
+      "en",
+      0.1
+     ],
+     [
+      "zukhruf/model-a",
+      "r1",
+      "AmazonCounterfactualClassification",
+      "train",
+      "en-ext",
+      0.1
+     ],
+     [
+      "zukhruf/model-a",
+      "r1",
+      "AmazonCounterfactualClassification",
+      "train",
+      "ja",
+      0.1
+     ],
+     [
+      "zukhruf/model-a",
+      "r1",
+      "AmazonCounterfactualClassification",
+      "validation",
+      "de",
+      0.1
+     ],
+     [
+      "zukhruf/model-a",
+      "r1",
+      "AmazonCounterfactualClassification",
+      "validation",
+      "en",
+      0.1
+     ],
+     [
+      "zukhruf/model-a",
+      "r1",
+      "AmazonCounterfactualClassification",
+      "validation",
+      "en-ext",
+      0.1
+     ],
+     [
+      "zukhruf/model-a",
+      "r1",
+      "AmazonCounterfactualClassification",
+      "validation",
+      "ja",
+      0.1
+     ],
+     [
+      "zukhruf/model-a",
+      "r1",
+      "ArguAna",
+      "test",
+      "default",
+      0.797647
+     ],
+     [
+      "zukhruf/model-a",
+      "r1",
+      "SCIDOCS",
+      "test",
+      "default",
+      0.513504
+     ],
+     [
+      "zukhruf/model-a",
+      "r2",
+      "ArguAna",
+      "test",
+      "default",
+      0.777635
+     ],
+     [
+      "zukhruf/model-a",
+      "r2",
+      "SCIDOCS",
+      "test",
+      "default",
+      0.34033
+     ],
+     [
+      "zukhruf/model-b",
+      "r1",
+      "AmazonCounterfactualClassification",
+      "test",
+      "de",
+      0.845393
+     ],
+     [
+      "zukhruf/model-b",
+      "r1",
+      "AmazonCounterfactualClassification",
+      "test",
+      "en",
+      0.5903565
+     ],
+     [
+      "zukhruf/model-b",
+      "r1",
+      "AmazonCounterfactualClassification",
+      "test",
+      "en-ext",
+      0.37119199999999997
+     ],
+     [
+      "zukhruf/model-b",
+      "r1",
+      "AmazonCounterfactualClassification",
+      "test",
+      "ja",
+      0.524353
+     ],
+     [
+      "zukhruf/model-b",
+      "r1",
+      "AmazonCounterfactualClassification",
+      "train",
+      "de",
+      0.8355764999999999
+     ],
+     [
+      "zukhruf/model-b",
+      "r1",
+      "AmazonCounterfactualClassification",
+      "train",
+      "en",
+      0.71489
+     ],
+     [
+      "zukhruf/model-b",
+      "r1",
+      "AmazonCounterfactualClassification",
+      "train",
+      "en-ext",
+      0.536673
+     ],
+     [
+      "zukhruf/model-b",
+      "r1",
+      "AmazonCounterfactualClassification",
+      "train",
+      "ja",
+      0.646363
+     ],
+     [
+      "zukhruf/model-b",
+      "r1",
+      "AmazonCounterfactualClassification",
+      "validation",
+      "de",
+      0.6244315
+     ],
+     [
+      "zukhruf/model-b",
+      "r1",
+      "AmazonCounterfactualClassification",
+      "validation",
+      "en",
+      0.3808045
+     ],
+     [
+      "zukhruf/model-b",
+      "r1",
+      "AmazonCounterfactualClassification",
+      "validation",
+      "en-ext",
+      0.6006695
+     ],
+     [
+      "zukhruf/model-b",
+      "r1",
+      "AmazonCounterfactualClassification",
+      "validation",
+      "ja",
+      0.71899
+     ],
+     [
+      "zukhruf/model-b",
+      "r1",
+      "ArguAna",
+      "test",
+      "default",
+      0.13295600000000002
+     ],
+     [
+      "zukhruf/model-b",
+      "r1",
+      "SCIDOCS",
+      "test",
+      "default",
+      0.1
+     ],
+     [
+      "zukhruf/model-c",
+      "r1",
+      "AmazonCounterfactualClassification",
+      "test",
+      "de",
+      0.434262
+     ],
+     [
+      "zukhruf/model-c",
+      "r1",
+      "AmazonCounterfactualClassification",
+      "test",
+      "en",
+      0.202015
+     ],
+     [
+      "zukhruf/model-c",
+      "r1",
+      "AmazonCounterfactualClassification",
+      "test",
+      "en-ext",
+      0.784376
+     ],
+     [
+      "zukhruf/model-c",
+      "r1",
+      "AmazonCounterfactualClassification",
+      "test",
+      "fr",
+      "NaN"
+     ],
+     [
+      "zukhruf/model-c",
+      "r1",
+      "AmazonCounterfactualClassification",
+      "test",
+      "ja",
+      0.19524
+     ],
+     [
+      "zukhruf/model-c",
+      "r1",
+      "AmazonCounterfactualClassification",
+      "test",
+      "xx",
+      0.002995
+     ],
+     [
+      "zukhruf/model-c",
+      "r1",
+      "AmazonCounterfactualClassification",
+      "train",
+      "de",
+      0.770198
+     ],
+     [
+      "zukhruf/model-c",
+      "r1",
+      "AmazonCounterfactualClassification",
+      "train",
+      "en",
+      0.689344
+     ],
+     [
+      "zukhruf/model-c",
+      "r1",
+      "AmazonCounterfactualClassification",
+      "train",
+      "en-ext",
+      0.636001
+     ],
+     [
+      "zukhruf/model-c",
+      "r1",
+      "AmazonCounterfactualClassification",
+      "train",
+      "fr",
+      "NaN"
+     ],
+     [
+      "zukhruf/model-c",
+      "r1",
+      "AmazonCounterfactualClassification",
+      "train",
+      "ja",
+      0.161205
+     ],
+     [
+      "zukhruf/model-c",
+      "r1",
+      "AmazonCounterfactualClassification",
+      "train",
+      "xx",
+      0.002995
+     ],
+     [
+      "zukhruf/model-c",
+      "r1",
+      "AmazonCounterfactualClassification",
+      "validation",
+      "de",
+      0.817632
+     ],
+     [
+      "zukhruf/model-c",
+      "r1",
+      "AmazonCounterfactualClassification",
+      "validation",
+      "en",
+      0.812837
+     ],
+     [
+      "zukhruf/model-c",
+      "r1",
+      "AmazonCounterfactualClassification",
+      "validation",
+      "en-ext",
+      0.206629
+     ],
+     [
+      "zukhruf/model-c",
+      "r1",
+      "AmazonCounterfactualClassification",
+      "validation",
+      "fr",
+      "NaN"
+     ],
+     [
+      "zukhruf/model-c",
+      "r1",
+      "AmazonCounterfactualClassification",
+      "validation",
+      "ja",
+      0.171252
+     ],
+     [
+      "zukhruf/model-c",
+      "r1",
+      "AmazonCounterfactualClassification",
+      "validation",
+      "xx",
+      0.002995
+     ],
+     [
+      "zukhruf/model-c",
+      "r1",
+      "ArguAna",
+      "test",
+      "default",
+      0.996818
+     ]
+    ]
+   }
+  },
+  {
+   "options": {
+    "aggregation_level": "split",
+    "format": "wide",
+    "include_model_revision": false
+   },
+   "table": {
+    "columns": [
+     "task_name",
+     "split",
+     "zukhruf/model-a",
+     "zukhruf/model-b",
+     "zukhruf/model-c"
+    ],
+    "rows": [
+     [
+      "AmazonCounterfactualClassification",
+      "test",
+      0.1,
+      0.582823625,
+      0.3237776
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "train",
+      0.1,
+      0.6833756249999999,
+      0.4519486
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "validation",
+      0.1,
+      0.581223875,
+      0.402269
+     ],
+     [
+      "ArguAna",
+      "test",
+      0.777635,
+      0.13295600000000002,
+      0.996818
+     ],
+     [
+      "SCIDOCS",
+      "test",
+      0.34033,
+      0.1,
+      "NaN"
+     ]
+    ]
+   }
+  },
+  {
+   "options": {
+    "aggregation_level": "split",
+    "format": "wide",
+    "include_model_revision": true
+   },
+   "table": {
+    "columns": [
+     [
+      "task_name",
+      ""
+     ],
+     [
+      "split",
+      ""
+     ],
+     [
+      "zukhruf/model-a",
+      "r1"
+     ],
+     [
+      "zukhruf/model-a",
+      "r2"
+     ],
+     [
+      "zukhruf/model-b",
+      "r1"
+     ],
+     [
+      "zukhruf/model-c",
+      "r1"
+     ]
+    ],
+    "rows": [
+     [
+      "AmazonCounterfactualClassification",
+      "test",
+      0.1,
+      "NaN",
+      0.582823625,
+      0.3237776
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "train",
+      0.1,
+      "NaN",
+      0.6833756249999999,
+      0.4519486
+     ],
+     [
+      "AmazonCounterfactualClassification",
+      "validation",
+      0.1,
+      "NaN",
+      0.581223875,
+      0.402269
+     ],
+     [
+      "ArguAna",
+      "test",
+      0.797647,
+      0.777635,
+      0.13295600000000002,
+      0.996818
+     ],
+     [
+      "SCIDOCS",
+      "test",
+      0.513504,
+      0.34033,
+      0.1,
+      "NaN"
+     ]
+    ]
+   }
+  },
+  {
+   "options": {
+    "aggregation_level": "split",
+    "format": "long",
+    "include_model_revision": false
+   },
+   "table": {
+    "columns": [
+     "model_name",
+     "task_name",
+     "split",
+     "score"
+    ],
+    "rows": [
+     [
+      "zukhruf/model-a",
+      "AmazonCounterfactualClassification",
+      "test",
+      0.1
+     ],
+     [
+      "zukhruf/model-a",
+      "AmazonCounterfactualClassification",
+      "train",
+      0.1
+     ],
+     [
+      "zukhruf/model-a",
+      "AmazonCounterfactualClassification",
+      "validation",
+      0.1
+     ],
+     [
+      "zukhruf/model-a",
+      "ArguAna",
+      "test",
+      0.777635
+     ],
+     [
+      "zukhruf/model-a",
+      "SCIDOCS",
+      "test",
+      0.34033
+     ],
+     [
+      "zukhruf/model-b",
+      "AmazonCounterfactualClassification",
+      "test",
+      0.582823625
+     ],
+     [
+      "zukhruf/model-b",
+      "AmazonCounterfactualClassification",
+      "train",
+      0.6833756249999999
+     ],
+     [
+      "zukhruf/model-b",
+      "AmazonCounterfactualClassification",
+      "validation",
+      0.581223875
+     ],
+     [
+      "zukhruf/model-b",
+      "ArguAna",
+      "test",
+      0.13295600000000002
+     ],
+     [
+      "zukhruf/model-b",
+      "SCIDOCS",
+      "test",
+      0.1
+     ],
+     [
+      "zukhruf/model-c",
+      "AmazonCounterfactualClassification",
+      "test",
+      0.3237776
+     ],
+     [
+      "zukhruf/model-c",
+      "AmazonCounterfactualClassification",
+      "train",
+      0.4519486
+     ],
+     [
+      "zukhruf/model-c",
+      "AmazonCounterfactualClassification",
+      "validation",
+      0.402269
+     ],
+     [
+      "zukhruf/model-c",
+      "ArguAna",
+      "test",
+      0.996818
+     ]
+    ]
+   }
+  },
+  {
+   "options": {
+    "aggregation_level": "split",
+    "format": "long",
+    "include_model_revision": true
+   },
+   "table": {
+    "columns": [
+     "model_name",
+     "model_revision",
+     "task_name",
+     "split",
+     "score"
+    ],
+    "rows": [
+     [
+      "zukhruf/model-a",
+      "r1",
+      "AmazonCounterfactualClassification",
+      "test",
+      0.1
+     ],
+     [
+      "zukhruf/model-a",
+      "r1",
+      "AmazonCounterfactualClassification",
+      "train",
+      0.1
+     ],
+     [
+      "zukhruf/model-a",
+      "r1",
+      "AmazonCounterfactualClassification",
+      "validation",
+      0.1
+     ],
+     [
+      "zukhruf/model-a",
+      "r1",
+      "ArguAna",
+      "test",
+      0.797647
+     ],
+     [
+      "zukhruf/model-a",
+      "r1",
+      "SCIDOCS",
+      "test",
+      0.513504
+     ],
+     [
+      "zukhruf/model-a",
+      "r2",
+      "ArguAna",
+      "test",
+      0.777635
+     ],
+     [
+      "zukhruf/model-a",
+      "r2",
+      "SCIDOCS",
+      "test",
+      0.34033
+     ],
+     [
+      "zukhruf/model-b",
+      "r1",
+      "AmazonCounterfactualClassification",
+      "test",
+      0.582823625
+     ],
+     [
+      "zukhruf/model-b",
+      "r1",
+      "AmazonCounterfactualClassification",
+      "train",
+      0.6833756249999999
+     ],
+     [
+      "zukhruf/model-b",
+      "r1",
+      "AmazonCounterfactualClassification",
+      "validation",
+      0.581223875
+     ],
+     [
+      "zukhruf/model-b",
+      "r1",
+      "ArguAna",
+      "test",
+      0.13295600000000002
+     ],
+     [
+      "zukhruf/model-b",
+      "r1",
+      "SCIDOCS",
+      "test",
+      0.1
+     ],
+     [
+      "zukhruf/model-c",
+      "r1",
+      "AmazonCounterfactualClassification",
+      "test",
+      0.3237776
+     ],
+     [
+      "zukhruf/model-c",
+      "r1",
+      "AmazonCounterfactualClassification",
+      "train",
+      0.4519486
+     ],
+     [
+      "zukhruf/model-c",
+      "r1",
+      "AmazonCounterfactualClassification",
+      "validation",
+      0.402269
+     ],
+     [
+      "zukhruf/model-c",
+      "r1",
+      "ArguAna",
+      "test",
+      0.996818
+     ]
+    ]
+   }
+  },
+  {
+   "options": {
+    "aggregation_level": "task",
+    "format": "wide",
+    "include_model_revision": false
+   },
+   "table": {
+    "columns": [
+     "task_name",
+     "is_public",
+     "zukhruf/model-a",
+     "zukhruf/model-b",
+     "zukhruf/model-c"
+    ],
+    "rows": [
+     [
+      "AmazonCounterfactualClassification",
+      true,
+      0.10000000000000002,
+      0.6158077083333333,
+      0.3926650666666667
+     ],
+     [
+      "ArguAna",
+      true,
+      0.777635,
+      0.13295600000000002,
+      0.996818
+     ],
+     [
+      "SCIDOCS",
+      true,
+      0.34033,
+      0.1,
+      "NaN"
+     ]
+    ]
+   }
+  },
+  {
+   "options": {
+    "aggregation_level": "task",
+    "format": "wide",
+    "include_model_revision": true
+   },
+   "table": {
+    "columns": [
+     [
+      "task_name",
+      ""
+     ],
+     [
+      "is_public",
+      ""
+     ],
+     [
+      "zukhruf/model-a",
+      "r1"
+     ],
+     [
+      "zukhruf/model-a",
+      "r2"
+     ],
+     [
+      "zukhruf/model-b",
+      "r1"
+     ],
+     [
+      "zukhruf/model-c",
+      "r1"
+     ]
+    ],
+    "rows": [
+     [
+      "AmazonCounterfactualClassification",
+      true,
+      0.10000000000000002,
+      "NaN",
+      0.6158077083333333,
+      0.3926650666666667
+     ],
+     [
+      "ArguAna",
+      true,
+      0.797647,
+      0.777635,
+      0.13295600000000002,
+      0.996818
+     ],
+     [
+      "SCIDOCS",
+      true,
+      0.513504,
+      0.34033,
+      0.1,
+      "NaN"
+     ]
+    ]
+   }
+  },
+  {
+   "options": {
+    "aggregation_level": "task",
+    "format": "long",
+    "include_model_revision": false
+   },
+   "table": {
+    "columns": [
+     "model_name",
+     "task_name",
+     "is_public",
+     "score"
+    ],
+    "rows": [
+     [
+      "zukhruf/model-a",
+      "AmazonCounterfactualClassification",
+      true,
+      0.10000000000000002
+     ],
+     [
+      "zukhruf/model-a",
+      "ArguAna",
+      true,
+      0.777635
+     ],
+     [
+      "zukhruf/model-a",
+      "SCIDOCS",
+      true,
+      0.34033
+     ],
+     [
+      "zukhruf/model-b",
+      "AmazonCounterfactualClassification",
+      true,
+      0.6158077083333333
+     ],
+     [
+      "zukhruf/model-b",
+      "ArguAna",
+      true,
+      0.13295600000000002
+     ],
+     [
+      "zukhruf/model-b",
+      "SCIDOCS",
+      true,
+      0.1
+     ],
+     [
+      "zukhruf/model-c",
+      "AmazonCounterfactualClassification",
+      true,
+      0.3926650666666667
+     ],
+     [
+      "zukhruf/model-c",
+      "ArguAna",
+      true,
+      0.996818
+     ]
+    ]
+   }
+  },
+  {
+   "options": {
+    "aggregation_level": "task",
+    "format": "long",
+    "include_model_revision": true
+   },
+   "table": {
+    "columns": [
+     "model_name",
+     "model_revision",
+     "task_name",
+     "is_public",
+     "score"
+    ],
+    "rows": [
+     [
+      "zukhruf/model-a",
+      "r1",
+      "AmazonCounterfactualClassification",
+      true,
+      0.10000000000000002
+     ],
+     [
+      "zukhruf/model-a",
+      "r1",
+      "ArguAna",
+      true,
+      0.797647
+     ],
+     [
+      "zukhruf/model-a",
+      "r1",
+      "SCIDOCS",
+      true,
+      0.513504
+     ],
+     [
+      "zukhruf/model-a",
+      "r2",
+      "ArguAna",
+      true,
+      0.777635
+     ],
+     [
+      "zukhruf/model-a",
+      "r2",
+      "SCIDOCS",
+      true,
+      0.34033
+     ],
+     [
+      "zukhruf/model-b",
+      "r1",
+      "AmazonCounterfactualClassification",
+      true,
+      0.6158077083333333
+     ],
+     [
+      "zukhruf/model-b",
+      "r1",
+      "ArguAna",
+      true,
+      0.13295600000000002
+     ],
+     [
+      "zukhruf/model-b",
+      "r1",
+      "SCIDOCS",
+      true,
+      0.1
+     ],
+     [
+      "zukhruf/model-c",
+      "r1",
+      "AmazonCounterfactualClassification",
+      true,
+      0.3926650666666667
+     ],
+     [
+      "zukhruf/model-c",
+      "r1",
+      "ArguAna",
+      true,
+      0.996818
+     ]
+    ]
+   }
+  },
+  {
+   "options": {
+    "aggregation_level": "language",
+    "format": "wide",
+    "include_model_revision": false
+   },
+   "table": {
+    "columns": [
+     "language",
+     "zukhruf/model-a",
+     "zukhruf/model-b",
+     "zukhruf/model-c"
+    ],
+    "rows": [
+     [
+      "deu-Latn",
+      0.10000000000000002,
+      0.6356559166666667,
+      0.608183
+     ],
+     [
+      "eng-Latn",
+      0.214745625,
+      0.45033886666666667,
+      0.6182885714285715
+     ],
+     [
+      "jpn-Jpan",
+      0.10000000000000002,
+      0.629902,
+      0.175899
+     ]
+    ]
+   }
+  },
+  {
+   "options": {
+    "aggregation_level": "language",
+    "format": "wide",
+    "include_model_revision": true
+   },
+   "table": {
+    "columns": [
+     [
+      "language",
+      ""
+     ],
+     [
+      "zukhruf/model-a",
+      "r1"
+     ],
+     [
+      "zukhruf/model-a",
+      "r2"
+     ],
+     [
+      "zukhruf/model-b",
+      "r1"
+     ],
+     [
+      "zukhruf/model-c",
+      "r1"
+     ]
+    ],
+    "rows": [
+     [
+      "deu-Latn",
+      0.10000000000000002,
+      "NaN",
+      0.6356559166666667,
+      0.608183
+     ],
+     [
+      "eng-Latn",
+      0.238893875,
+      0.5589824999999999,
+      0.45033886666666667,
+      0.6182885714285715
+     ],
+     [
+      "jpn-Jpan",
+      0.10000000000000002,
+      "NaN",
+      0.629902,
+      0.175899
+     ]
+    ]
+   }
+  },
+  {
+   "options": {
+    "aggregation_level": "language",
+    "format": "long",
+    "include_model_revision": false
+   },
+   "table": {
+    "columns": [
+     "model_name",
+     "language",
+     "score"
+    ],
+    "rows": [
+     [
+      "zukhruf/model-a",
+      "deu-Latn",
+      0.10000000000000002
+     ],
+     [
+      "zukhruf/model-a",
+      "eng-Latn",
+      0.214745625
+     ],
+     [
+      "zukhruf/model-a",
+      "jpn-Jpan",
+      0.10000000000000002
+     ],
+     [
+      "zukhruf/model-b",
+      "deu-Latn",
+      0.6356559166666667
+     ],
+     [
+      "zukhruf/model-b",
+      "eng-Latn",
+      0.45033886666666667
+     ],
+     [
+      "zukhruf/model-b",
+      "jpn-Jpan",
+      0.629902
+     ],
+     [
+      "zukhruf/model-c",
+      "deu-Latn",
+      0.608183
+     ],
+     [
+      "zukhruf/model-c",
+      "eng-Latn",
+      0.6182885714285715
+     ],
+     [
+      "zukhruf/model-c",
+      "fra-Latn",
+      "NaN"
+     ],
+     [
+      "zukhruf/model-c",
+      "jpn-Jpan",
+      0.175899
+     ]
+    ]
+   }
+  },
+  {
+   "options": {
+    "aggregation_level": "language",
+    "format": "long",
+    "include_model_revision": true
+   },
+   "table": {
+    "columns": [
+     "model_name",
+     "model_revision",
+     "language",
+     "score"
+    ],
+    "rows": [
+     [
+      "zukhruf/model-a",
+      "r1",
+      "deu-Latn",
+      0.10000000000000002
+     ],
+     [
+      "zukhruf/model-a",
+      "r1",
+      "eng-Latn",
+      0.238893875
+     ],
+     [
+      "zukhruf/model-a",
+      "r1",
+      "jpn-Jpan",
+      0.10000000000000002
+     ],
+     [
+      "zukhruf/model-a",
+      "r2",
+      "eng-Latn",
+      0.5589824999999999
+     ],
+     [
+      "zukhruf/model-b",
+      "r1",
+      "deu-Latn",
+      0.6356559166666667
+     ],
+     [
+      "zukhruf/model-b",
+      "r1",
+      "eng-Latn",
+      0.45033886666666667
+     ],
+     [
+      "zukhruf/model-b",
+      "r1",
+      "jpn-Jpan",
+      0.629902
+     ],
+     [
+      "zukhruf/model-c",
+      "r1",
+      "deu-Latn",
+      0.608183
+     ],
+     [
+      "zukhruf/model-c",
+      "r1",
+      "eng-Latn",
+      0.6182885714285715
+     ],
+     [
+      "zukhruf/model-c",
+      "r1",
+      "fra-Latn",
+      "NaN"
+     ],
+     [
+      "zukhruf/model-c",
+      "r1",
+      "jpn-Jpan",
+      0.175899
+     ]
+    ]
+   }
+  }
+ ],
+ "maximum": [
+  {
+   "options": {
+    "aggregation_level": "task",
+    "format": "wide",
+    "include_model_revision": false
+   },
+   "table": {
+    "columns": [
+     "task_name",
+     "is_public",
+     "zukhruf/model-a",
+     "zukhruf/model-b",
+     "zukhruf/model-c"
+    ],
+    "rows": [
+     [
+      "AmazonCounterfactualClassification",
+      true,
+      0.1,
+      0.990786,
+      0.817632
+     ],
+     [
+      "ArguAna",
+      true,
+      0.777635,
+      0.2,
+      0.996818
+     ],
+     [
+      "SCIDOCS",
+      true,
+      0.34033,
+      0.1,
+      "NaN"
+     ]
+    ]
+   }
+  },
+  {
+   "options": {
+    "aggregation_level": "subset",
+    "format": "long",
+    "include_model_revision": false
+   },
+   "table": {
+    "columns": [
+     "model_name",
+     "task_name",
+     "split",
+     "subset",
+     "score"
+    ],
+    "rows": [
+     [
+      "zukhruf/model-a",
+      "AmazonCounterfactualClassification",
+      "test",
+      "de",
+      0.1
+     ],
+     [
+      "zukhruf/model-a",
+      "AmazonCounterfactualClassification",
+      "test",
+      "en",
+      0.1
+     ],
+     [
+      "zukhruf/model-a",
+      "AmazonCounterfactualClassification",
+      "test",
+      "en-ext",
+      0.1
+     ],
+     [
+      "zukhruf/model-a",
+      "AmazonCounterfactualClassification",
+      "test",
+      "ja",
+      0.1
+     ],
+     [
+      "zukhruf/model-a",
+      "AmazonCounterfactualClassification",
+      "train",
+      "de",
+      0.1
+     ],
+     [
+      "zukhruf/model-a",
+      "AmazonCounterfactualClassification",
+      "train",
+      "en",
+      0.1
+     ],
+     [
+      "zukhruf/model-a",
+      "AmazonCounterfactualClassification",
+      "train",
+      "en-ext",
+      0.1
+     ],
+     [
+      "zukhruf/model-a",
+      "AmazonCounterfactualClassification",
+      "train",
+      "ja",
+      0.1
+     ],
+     [
+      "zukhruf/model-a",
+      "AmazonCounterfactualClassification",
+      "validation",
+      "de",
+      0.1
+     ],
+     [
+      "zukhruf/model-a",
+      "AmazonCounterfactualClassification",
+      "validation",
+      "en",
+      0.1
+     ],
+     [
+      "zukhruf/model-a",
+      "AmazonCounterfactualClassification",
+      "validation",
+      "en-ext",
+      0.1
+     ],
+     [
+      "zukhruf/model-a",
+      "AmazonCounterfactualClassification",
+      "validation",
+      "ja",
+      0.1
+     ],
+     [
+      "zukhruf/model-a",
+      "ArguAna",
+      "test",
+      "default",
+      0.777635
+     ],
+     [
+      "zukhruf/model-a",
+      "SCIDOCS",
+      "test",
+      "default",
+      0.34033
+     ],
+     [
+      "zukhruf/model-b",
+      "AmazonCounterfactualClassification",
+      "test",
+      "de",
+      0.990786
+     ],
+     [
+      "zukhruf/model-b",
+      "AmazonCounterfactualClassification",
+      "test",
+      "en",
+      0.7
+     ],
+     [
+      "zukhruf/model-b",
+      "AmazonCounterfactualClassification",
+      "test",
+      "en-ext",
+      0.7
+     ],
+     [
+      "zukhruf/model-b",
+      "AmazonCounterfactualClassification",
+      "test",
+      "ja",
+      0.7
+     ],
+     [
+      "zukhruf/model-b",
+      "AmazonCounterfactualClassification",
+      "train",
+      "de",
+      0.971153
+     ],
+     [
+      "zukhruf/model-b",
+      "AmazonCounterfactualClassification",
+      "train",
+      "en",
+      0.72978
+     ],
+     [
+      "zukhruf/model-b",
+      "AmazonCounterfactualClassification",
+      "train",
+      "en-ext",
+      0.7
+     ],
+     [
+      "zukhruf/model-b",
+      "AmazonCounterfactualClassification",
+      "train",
+      "ja",
+      0.7
+     ],
+     [
+      "zukhruf/model-b",
+      "AmazonCounterfactualClassification",
+      "validation",
+      "de",
+      0.7
+     ],
+     [
+      "zukhruf/model-b",
+      "AmazonCounterfactualClassification",
+      "validation",
+      "en",
+      0.7
+     ],
+     [
+      "zukhruf/model-b",
+      "AmazonCounterfactualClassification",
+      "validation",
+      "en-ext",
+      0.7
+     ],
+     [
+      "zukhruf/model-b",
+      "AmazonCounterfactualClassification",
+      "validation",
+      "ja",
+      0.73798
+     ],
+     [
+      "zukhruf/model-b",
+      "ArguAna",
+      "test",
+      "default",
+      0.2
+     ],
+     [
+      "zukhruf/model-b",
+      "SCIDOCS",
+      "test",
+      "default",
+      0.1
+     ],
+     [
+      "zukhruf/model-c",
+      "AmazonCounterfactualClassification",
+      "test",
+      "de",
+      0.434262
+     ],
+     [
+      "zukhruf/model-c",
+      "AmazonCounterfactualClassification",
+      "test",
+      "en",
+      0.202015
+     ],
+     [
+      "zukhruf/model-c",
+      "AmazonCounterfactualClassification",
+      "test",
+      "en-ext",
+      0.784376
+     ],
+     [
+      "zukhruf/model-c",
+      "AmazonCounterfactualClassification",
+      "test",
+      "fr",
+      "NaN"
+     ],
+     [
+      "zukhruf/model-c",
+      "AmazonCounterfactualClassification",
+      "test",
+      "ja",
+      0.19524
+     ],
+     [
+      "zukhruf/model-c",
+      "AmazonCounterfactualClassification",
+      "test",
+      "xx",
+      0.002995
+     ],
+     [
+      "zukhruf/model-c",
+      "AmazonCounterfactualClassification",
+      "train",
+      "de",
+      0.770198
+     ],
+     [
+      "zukhruf/model-c",
+      "AmazonCounterfactualClassification",
+      "train",
+      "en",
+      0.689344
+     ],
+     [
+      "zukhruf/model-c",
+      "AmazonCounterfactualClassification",
+      "train",
+      "en-ext",
+      0.636001
+     ],
+     [
+      "zukhruf/model-c",
+      "AmazonCounterfactualClassification",
+      "train",
+      "fr",
+      "NaN"
+     ],
+     [
+      "zukhruf/model-c",
+      "AmazonCounterfactualClassification",
+      "train",
+      "ja",
+      0.161205
+     ],
+     [
+      "zukhruf/model-c",
+      "AmazonCounterfactualClassification",
+      "train",
+      "xx",
+      0.002995
+     ],
+     [
+      "zukhruf/model-c",
+      "AmazonCounterfactualClassification",
+      "validation",
+      "de",
+      0.817632
+     ],
+     [
+      "zukhruf/model-c",
+      "AmazonCounterfactualClassification",
+      "validation",
+      "en",
+      0.812837
+     ],
+     [
+      "zukhruf/model-c",
+      "AmazonCounterfactualClassification",
+      "validation",
+      "en-ext",
+      0.206629
+     ],
+     [
+      "zukhruf/model-c",
+      "AmazonCounterfactualClassification",
+      "validation",
+      "fr",
+      "NaN"
+     ],
+     [
+      "zukhruf/model-c",
+      "AmazonCounterfactualClassification",
+      "validation",
+      "ja",
+      0.171252
+     ],
+     [
+      "zukhruf/model-c",
+      "AmazonCounterfactualClassification",
+      "validation",
+      "xx",
+      0.002995
+     ],
+     [
+      "zukhruf/model-c",
+      "ArguAna",
+      "test",
+      "default",
+      0.996818
+     ]
+    ]
+   }
+  }
+ ],
+ "empty": {
+  "columns": [],
+  "rows": []
+ },
+ "aggregated": [
+  [
+   "match_name",
+   [
+    [
+     "zukhruf/model-a",
+     [
+      [
+       "Mean(Task)",
+       0.5589824999999999
+      ],
+      [
+       "Mean(TaskType)",
+       0.5589824999999999
+      ]
+     ]
+    ],
+    [
+     "zukhruf/model-b",
+     [
+      [
+       "Mean(Task)",
+       null
+      ],
+      [
+       "Mean(TaskType)",
+       null
+      ]
+     ]
+    ]
+   ]
+  ],
+  [
+   "no_experiments",
+   [
+    [
+     "zukhruf/model-a",
+     [
+      [
+       "Mean(Task)",
+       0.5589824999999999
+      ],
+      [
+       "Mean(TaskType)",
+       0.5589824999999999
+      ]
+     ]
+    ],
+    [
+     "zukhruf/model-b",
+     [
+      [
+       "Mean(Task)",
+       0.3333333333333334
+      ],
+      [
+       "Mean(TaskType)",
+       0.42500000000000004
+      ]
+     ]
+    ]
+   ]
+  ]
+ ]
+}

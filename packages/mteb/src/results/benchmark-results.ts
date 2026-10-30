@@ -1,16 +1,27 @@
-// mteb/results/benchmark_results.py. MTEB also builds pandas and polars data
-// frames, aggregates scores, keeps the leaderboard cache and filters models
-// by its model registry; this port does not.
+// mteb/results/benchmark_results.py. MTEB also builds polars frames and
+// HuggingFace datasets, scores benchmarks, keeps the leaderboard cache and
+// filters models by its model registry; this port does not.
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 
 import { z } from 'zod';
 
+import {
+  computeMeanTask,
+  computeMeanTaskType,
+} from '../benchmarks/benchmark-metrics.ts';
 import { Version } from '../dependencies/packaging.ts';
+import { DataFrame, Frame } from '../dependencies/pandas.ts';
 import { compareStrings } from '../dependencies/python.ts';
 import type { ModelMeta } from '../models/model-meta.ts';
 import { pydanticJsonDumps, pythonJsonLoads } from './json.ts';
-import { ModelResult, type ModelResultDict } from './model-result.ts';
+import {
+  ModelResult,
+  type ModelResultDict,
+  type ToDataFrameOptions,
+  aggregateAndPivot,
+  tableRow,
+} from './model-result.ts';
 import type { ResultTask, TaskResult } from './task-result.ts';
 
 const benchmarkResultsSchema = z.object({
@@ -158,6 +169,75 @@ export class BenchmarkResults implements Iterable<ModelResult> {
     );
   }
 
+  // A table of the scores of all models: a row for each task (or subset,
+  // split or language) and a column for each model, or a row for each score
+  // with the long format. Without the revision, the revisions of a model are
+  // joined first (joinRevisions), and the results of a model with the same
+  // name share its column: MTEB averages the experiments of a model with its
+  // default run. Without scores, an empty table.
+  toDataFrame(options: ToDataFrameOptions = {}): DataFrame {
+    const includeModelRevision = options.includeModelRevision ?? false;
+    const df = this.#buildPreAggDf(includeModelRevision);
+    if (df === null) return new DataFrame();
+    const columns = ['model_name'];
+    if (includeModelRevision) columns.push('model_revision');
+    return aggregateAndPivot(
+      df,
+      columns,
+      options.aggregationLevel ?? 'task',
+      options.format ?? 'wide',
+      options.aggregationFn,
+    );
+  }
+
+  // MTEB reads is_public from its task registry and true for a task outside
+  // it. This package has no registry, so every task is public. The columns
+  // experiments and trained_on never reach a table and are not built.
+  #buildPreAggDf(includeModelRevision: boolean): Frame | null {
+    const results = includeModelRevision ? this : this.joinRevisions();
+    const rows = results.modelResults.flatMap((modelResult) =>
+      modelResult.taskResults.flatMap((taskResult) =>
+        Object.entries(taskResult.scores).flatMap(([split, scoresList]) =>
+          scoresList.map((scores) =>
+            tableRow(
+              modelResult.modelName,
+              modelResult.modelRevision,
+              taskResult.taskName,
+              split,
+              scores,
+            ),
+          ),
+        ),
+      ),
+    );
+    if (rows.length === 0) return null;
+    const df = Frame.fromColumns({
+      model_name: rows.map((row) => row.modelName),
+      model_revision: rows.map((row) => row.modelRevision),
+      task_name: rows.map((row) => row.taskName),
+      split: rows.map((row) => row.split),
+      language: rows.map((row) => row.language),
+      subset: rows.map((row) => row.subset),
+      score: rows.map((row) => row.score),
+      is_public: rows.map(() => true),
+    });
+    return includeModelRevision ? df : df.drop(['model_revision']);
+  }
+
+  // Mean(Task) and Mean(TaskType) of each model, over the joined revisions.
+  // A later result of the same model name replaces an earlier one, as in a
+  // Python dict. MTEB scores a benchmark when the results have one; this
+  // package has no benchmarks. Each result needs its task (taskType).
+  getAggregatedScores(): Record<string, AggregatedScores> {
+    const scores: Record<string, AggregatedScores> = {};
+    for (const modelResult of this.joinRevisions())
+      scores[modelResult.modelName] = {
+        'Mean(Task)': computeMeanTask(modelResult.taskResults),
+        'Mean(TaskType)': computeMeanTaskType(modelResult.taskResults),
+      };
+    return scores;
+  }
+
   [Symbol.iterator](): Iterator<ModelResult> {
     return this.modelResults[Symbol.iterator]();
   }
@@ -231,6 +311,12 @@ export class BenchmarkResults implements Iterable<ModelResult> {
     );
   }
 }
+
+// The aggregated scores of a model; null when a score is missing or NaN.
+export type AggregatedScores = {
+  readonly 'Mean(Task)': number | null;
+  readonly 'Mean(TaskType)': number | null;
+};
 
 // The result that joinRevisions keeps for a model, experiment and task.
 type JoinedRow = {
