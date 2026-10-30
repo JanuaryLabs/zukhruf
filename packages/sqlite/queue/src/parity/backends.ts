@@ -177,13 +177,25 @@ export class ParityRun {
   }
 }
 
+// A fresh PGlite runs initdb, about 0.5 s of CPU per run on a CPU-bound CI, so
+// each run instead unpacks this one dump of a bare database into its own
+// in-memory instance; the dump is read-only and no run shares a database.
+const bareDatabase = (async () => {
+  const pglite = new PGlite();
+  try {
+    return await pglite.dumpDataDir('none');
+  } finally {
+    await pglite.close();
+  }
+})();
+
 // The oracle: real pg-boss on an in-memory PGlite, which pg-boss runs its own
 // suite against (node_modules/pg-boss/package.json `test:pglite`).
 export class PgBossBackend {
   readonly name = 'pg-boss';
 
   async open(options: RunOptions = {}): Promise<ParityRun> {
-    const pglite = new PGlite();
+    const pglite = new PGlite({ loadDataDir: await bareDatabase });
     const errors: Error[] = [];
     const clock = new TestClock(ParityRun.start);
     const events = new RunEvents(clock);
