@@ -7,11 +7,16 @@ export {
   AbsTaskRetrieval,
   type RetrievalSplitData,
 } from './abstasks/retrieval.ts';
+export { RetrievalDatasetLoader } from './abstasks/retrieval-dataset-loaders.ts';
 export {
   DEFAULT_DATASET_CACHE,
+  type Dataset,
+  type DatasetDict,
+  type DatasetRow,
+  type DatasetValue,
   type HubOptions,
-  RetrievalDatasetLoader,
-} from './abstasks/retrieval-dataset-loaders.ts';
+  loadDataset,
+} from './dependencies/datasets.ts';
 export * from './abstasks/task-metadata.ts';
 export * from './cache/result-cache.ts';
 export {

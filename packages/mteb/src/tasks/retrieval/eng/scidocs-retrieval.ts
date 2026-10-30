@@ -1,6 +1,6 @@
-import type { HubOptions } from '../../../abstasks/retrieval-dataset-loaders.ts';
 import { AbsTaskRetrieval } from '../../../abstasks/retrieval.ts';
 import { TaskMetadata } from '../../../abstasks/task-metadata.ts';
+import type { HubOptions } from '../../../dependencies/datasets.ts';
 
 // mteb/tasks/retrieval/eng/scidocs_retrieval.py.
 export class SCIDOCS extends AbsTaskRetrieval {

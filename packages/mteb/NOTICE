@@ -31,6 +31,15 @@ It also ports the semantics of parts of these dependencies of MTEB:
   Copyright (c) 2008-2011 AQR Capital Management, LLC, Lambda Foundry, Inc. and
   PyData Development Team, and 2011-2026 Open source contributors, BSD
   3-Clause License.
+- datasets 5.1.0 (load_dataset of JSON and parquet files), Copyright 2020
+  The HuggingFace Datasets Authors, Apache License 2.0.
+- huggingface_hub 2.3.0 (list_repo_tree), Copyright 2020 The HuggingFace
+  Team, Apache License 2.0.
+- fsspec 2026.7.0 (glob_translate, which copies CPython's glob.translate),
+  Copyright (c) 2018, Martin Durant, BSD 3-Clause License.
+
+The npm dependency hyparquet (Hyperparam, MIT License) reads the parquet
+files. The package does not include its code.
 
 It includes two files of Snowball 3.1.0 (https://snowballstem.org/) without
 change: dist/dependencies/snowball/base-stemmer.js and english-stemmer.js,
