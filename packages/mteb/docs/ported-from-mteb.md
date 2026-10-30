@@ -41,7 +41,7 @@ The first step ports the core and the retrieval and reranking tasks, for text. T
 | `cache/result_cache.py` (local folder)                                                              | `cache/result-cache.ts`                                 |
 | `evaluate.py`                                                                                       | `evaluate.ts`                                           |
 | pytrec_eval 0.5.11 (`RelevanceEvaluator`, trec_eval)                                                | `dependencies/pytrec-eval.ts`                           |
-| NumPy 2.5.4 (pairwise sum, mean, std, argsort, linspace, percentile)                                | `dependencies/numpy.ts`                                 |
+| NumPy 2.5.4 (sum, mean, std, `add.reduceat`, argsort, linspace, percentile)                         | `dependencies/numpy.ts`                                 |
 | NumPy 2 (`default_rng(seed).integers`: SeedSequence, PCG64, Lemire's bounded integers)              | `dependencies/numpy-random.ts`                          |
 | pandas 3.1.0 (`DataFrame`, `explode`, `pivot_table`, `groupby` mean)                                | `dependencies/pandas.ts`                                |
 | scikit-learn 1.9.1 (`sklearn.metrics.auc`)                                                          | `dependencies/sklearn.ts`                               |
@@ -61,7 +61,7 @@ The first step ports the core and the retrieval and reranking tasks, for text. T
 - A HuggingFace `Dataset` is an array of rows. A Python `dict` that maps ids is a `Map`: a `Map` keeps insertion order for every key, and an object moves integer-like keys such as `"0"` to the front.
 - An MTEB `Array` (a numpy array or a torch tensor) is `Embeddings`, one `Float32Array` for each row. Embeddings and similarity scores are float32, as in MTEB; the other numbers are float64, as in Python.
 - A pydantic model is a zod schema and a class. Files on disk keep the keys, the structure and the `NaN` values of MTEB, so MTEB and this package read the files of each other.
-- Numbers follow the Python algorithms where the result can differ: `sum` of floats is Neumaier summation (CPython 3.12), `round` rounds half to even, a numpy sum is a pairwise sum, and ties sort as Python tuples sort.
+- Numbers follow the Python algorithms where the result can differ: `sum` of floats is Neumaier summation (CPython 3.12), `round` rounds half to even, a numpy sum is a pairwise sum (`@stdlib/blas-ext-base-gsumpw` 0.3.1, which adds in the order of numpy's add loop), and ties sort as Python tuples sort.
 
 ## Differences
 

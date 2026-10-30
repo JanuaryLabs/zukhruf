@@ -1,3 +1,5 @@
+import gsumpw from '@stdlib/blas-ext-base-gsumpw';
+
 // The scores of one design on one stream for one profile, as the research
 // code computes them (round-2 evaluate.py, metric_row). T11F is the F-measure
 // with beta 0.5 of TREC-11 Filtering (Robertson and Soboroff 2002): precision
@@ -54,8 +56,9 @@ export function scores(
   };
 }
 
+// numpy.mean: the identity 0 plus numpy's pairwise sum, divided by the count.
 export function mean(values: readonly number[]): number {
-  return values.reduce((sum, value) => sum + value, 0) / values.length;
+  return (0 + gsumpw(values.length, values, 1)) / values.length;
 }
 
 // The mean of the values that are not NaN, as numpy.nanmean.

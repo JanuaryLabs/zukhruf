@@ -30,9 +30,11 @@ test('the topic bootstrap gives the interval of the research code for the same d
 
   const interval = topicBootstrap(differences, 31957);
 
-  assert.ok(Math.abs(interval.low - -0.026000000000000006) < 1e-15);
-  assert.ok(Math.abs(interval.high - 0.10402499999999987) < 1e-15);
-  assert.ok(Math.abs(interval.observed - 0.043) < 1e-15);
+  assert.deepEqual(interval, {
+    observed: 0.043000000000000003,
+    low: -0.026000000000000006,
+    high: 0.10402499999999987,
+  });
 });
 
 test('each replicate of the article bootstrap draws as many articles of each stratum as the stratum holds', () => {

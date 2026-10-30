@@ -12,8 +12,11 @@ It also ports the semantics of parts of these dependencies of MTEB:
 - pytrec_eval (terrierteam/pytrec_eval 0.5.11), Copyright (c) 2017 Christophe
   Van Gysel, MIT License, and the trec_eval measures that it binds
   (https://github.com/usnistgov/trec_eval).
-- NumPy 2.5.4 (pairwise summation, mean, standard deviation, stable argsort,
-  linspace), Copyright (c) NumPy Developers, BSD 3-Clause License.
+- NumPy 2.5.4 (sum, mean, standard deviation, add.reduceat, stable argsort,
+  linspace), Copyright (c) NumPy Developers, BSD 3-Clause License. The
+  pairwise summation of these functions is the npm dependency
+  @stdlib/blas-ext-base-gsumpw, Copyright (c) The Stdlib Authors, Apache
+  License 2.0. The package does not include its code.
 - scikit-learn 1.9.1 (sklearn.metrics.auc), Copyright (c) scikit-learn
   developers, BSD 3-Clause License.
 - packaging 26.3 (packaging.version), Copyright (c) Donald Stufft and

@@ -22,7 +22,7 @@ Changes: none. Both calculate the position as NumPy does, `(n - 1) * (q / 100)` 
 
 **`relevance-filtering/eval/bootstrap.ts` `topicBootstrap` → `significance/paired-bootstrap.ts` `pairedBootstrapTest`.**
 Both draw as many units as there are, with replacement, with `generator.integers(0, n, n)` for each replicate, take the mean of the differences of each draw, and give the 2.5 and 97.5 percentiles of the sorted means.
-Changes: the units are queries, not profiles. The differences come from two maps of scores by query id, in the Python order of the sorted ids, and the function refuses two maps with different queries. The mean is NumPy's pairwise mean of `dependencies/numpy.ts`; the eval adds the values in a plain loop. The number of replicates and the seed are options, with the defaults of the eval (2000 and 31957). The function also gives the result, the number of queries, the replicates and the seed.
+Changes: the units are queries, not profiles. The differences come from two maps of scores by query id, in the Python order of the sorted ids, and the function refuses two maps with different queries. Both take the mean as `np.mean` does: the identity 0 plus the pairwise sum of `@stdlib/blas-ext-base-gsumpw`, divided by the number of values. The eval added the values in a plain loop until #3414. The number of replicates and the seed are options, with the defaults of the eval (2000 and 31957). The function also gives the result, the number of queries, the replicates and the seed.
 
 **`event-detection/eval/verdict.ts` (lines 31-33) → `significance/paired-bootstrap.ts` `pairedBootstrapTest`.**
 Both give one of three results from the interval of a difference: above 0, below 0, or neither.
