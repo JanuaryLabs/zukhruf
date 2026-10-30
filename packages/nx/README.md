@@ -1,6 +1,6 @@
 # @zukhruf/nx
 
-This package is the Nx part of the monorepo standard. Each workspace copied the same Nx configuration into each project. This package gives that configuration one time, in areas. Each area has its own import path, and the package has no root entry point. Lint stays in `@zukhruf/eslint`, and the Git hooks stay in `@zukhruf/git-hooks`.
+This package is the Nx part of the monorepo standard. Each workspace copied the same Nx configuration into each project. This package gives that configuration one time, in areas. Each area has its own import path, and the package has no root entry point. The lint rules stay in `@zukhruf/eslint`, and the Git hooks stay in `@zukhruf/git-hooks`.
 
 The words in these documents have one meaning each. See the glossary in [CONTEXT.md](./CONTEXT.md).
 
@@ -10,11 +10,12 @@ The words in these documents have one meaning each. See the glossary in [CONTEXT
 | ---------------- | ---------------------- | --------------------------------------------------------------------------------------------- |
 | format           | `@zukhruf/nx/format`   | This README                                                                                   |
 | test             | `@zukhruf/nx/test`     | This README                                                                                   |
+| lint             | `@zukhruf/nx/lint`     | Design for review (#3335)                                                                     |
 | portless         | `@zukhruf/nx/portless` | Candidate (#3336): 14 projects in 3 repos                                                     |
 | opentofu, prisma | —                      | Candidates (#3339): 5 places each                                                             |
 | generators       | —                      | Candidates: the workspace generator of `@factory/foundation` (#3337); app kinds later (#3338) |
 
-The lint inputs (7 copies) are #3335; their home (`@zukhruf/eslint` or an area here) is still open.
+The lint rules stay in `@zukhruf/eslint`. The `lint` area gives only the inputs of the `lint` target (#3335).
 
 ## format
 
@@ -344,3 +345,133 @@ A `scripts.test` in a `package.json` replaces the inferred target. Nx runs it wi
 | text2sql         | #3368                                       |
 
 The umbrella item is #3328.
+
+## lint
+
+> Status: design for review (#3335). The code does not exist yet.
+
+Nx caches the `lint` target. A cached result is correct only when each file and each package that ESLint loads is an input. Seven workspaces write the packages by hand in `targetDefaults.lint.inputs`, and the lists drift: 5 to 15 packages. When a package is not in the list, an update of that package does not change the hash. Nx then replays a cached pass, and the new rules do not run.
+
+The `lint` area is an Nx inference plugin. It adds inputs to the `lint` target that `@nx/eslint/plugin` gives. It does not make a `lint` target, and it does not change the command. It reads the packages from `@zukhruf/eslint`, so no workspace writes a list.
+
+### Use the lint area
+
+You need Nx 23.2.1 or later, `@nx/eslint` and `@zukhruf/eslint`. Add the plugin to `plugins` in `nx.json`, after `@nx/eslint/plugin`:
+
+```json
+{
+  "plugins": [
+    { "plugin": "@nx/eslint/plugin", "options": { "targetName": "lint" } },
+    "@zukhruf/nx/lint"
+  ]
+}
+```
+
+The order is necessary. Nx merges the plugins in the order of the list, and a later plugin wins. The plugin writes `"..."` first in its `inputs`, so the inputs of `@nx/eslint/plugin` stay. If the plugin comes first, `@nx/eslint/plugin` replaces its inputs, and no run reports it. Thus the plugin stops with an error when `@nx/eslint/plugin` is not before it in `plugins`.
+
+zukhruf builds this package, so it lists the plugin by path, as it does for `format` and `test`: `"./packages/nx/src/lint/plugin.ts"`.
+
+### Signature of the lint area
+
+```ts
+// @zukhruf/nx/lint
+export const createNodes: CreateNodes;
+```
+
+The plugin takes no options. A workspace adds its own lint packages in `targetDefaults` (see [Add a lint package of the workspace](#add-a-lint-package-of-the-workspace)).
+
+### What the lint area adds
+
+`@nx/eslint/plugin` already gives these inputs to `lint` (`@nx/eslint/dist/src/plugins/plugin.js:284-297`):
+
+- `default` and `^default`,
+- the root ESLint config and the ESLint config of the project,
+- the `.eslintignore` of the project, when it exists,
+- the tsconfig files outside the project root that the tsconfig of the project extends,
+- `{workspaceRoot}/tools/eslint-rules/**/*`,
+- `externalDependencies` on `eslint`.
+
+The plugin keeps them, and it adds the packages of `@zukhruf/eslint`. It finds `@zukhruf/eslint` from the workspace root, in one of two forms:
+
+| Form of `@zukhruf/eslint`                                           | Inputs that the plugin adds                                                                                         |
+| ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| an installed package in `node_modules` (each workspace but zukhruf) | `{ "externalDependencies": ["@zukhruf/eslint"] }`                                                                   |
+| a package of the workspace (zukhruf)                                | the files of its `src` folder, and `externalDependencies` on each name in its `dependencies` and `peerDependencies` |
+
+One entry is sufficient for an installed package. Nx makes a node for each package of the lockfile, with an edge for each name in `dependencies`, `peerDependencies` and `optionalDependencies` (`nx/dist/src/plugins/js/lock-file/npm-parser.js:155-170`). An input on `@zukhruf/eslint` hashes all the packages that these edges reach. Thus the hash includes each peer of `@zukhruf/eslint`, each dependency, and the packages that they load in turn. A peer that is not installed has no node, so it is not an input, and it gives no error. The hash of a package is its `integrity` in the lockfile, or its version (`npm-parser.js:103`).
+
+A package of the workspace has no node in the lockfile. An `externalDependencies` entry with no node stops the run with an error: `The externalDependency '<name>' for '<project>:lint' could not be found`. Thus, for zukhruf, the plugin reads the names from the `package.json` of `@zukhruf/eslint`.
+
+When the plugin cannot find `@zukhruf/eslint`, it stops with an error. It does not give `lint` without the inputs.
+
+The plugin gives inputs to each project root (see [ADR 0003](./docs/adr/0003-which-roots-get-targets.md)). A project with no `lint` from `@nx/eslint/plugin` gets no `lint`: Nx deletes a target with no executor, no command and no `dependsOn` (`nx/dist/src/project-graph/utils/project-configuration/target-normalization.js:202-214`).
+
+A probe on Nx 23.2.1 (2026-10-30) showed this:
+
+| Order of `plugins`                    | `inputs` of the plugin                   | `lint` of the project                                                           |
+| ------------------------------------- | ---------------------------------------- | ------------------------------------------------------------------------------- |
+| `@nx/eslint/plugin`, then this plugin | `["...", { externalDependencies }]`      | `eslint .` with the inputs of `@nx/eslint/plugin` and the new inputs            |
+| `@nx/eslint/plugin`, then this plugin | `[{ externalDependencies }]`, no `"..."` | `eslint .` with only the new inputs                                             |
+| this plugin, then `@nx/eslint/plugin` | with or without `"..."`                  | `eslint .` with only the inputs of `@nx/eslint/plugin`; the new inputs are lost |
+
+In the same probe, `@zukhruf/eslint` had the peer `typescript-eslint`. A change of the version of `typescript-eslint` in the lockfile gave a new hash, and `lint` ran again. A change of the `integrity` of `globals`, a dependency of `@zukhruf/eslint`, did the same. Without the input, the same change gave a cached pass. See [ADR 0006](./docs/adr/0006-lint-inputs-from-the-eslint-package.md).
+
+### Add a lint package of the workspace
+
+Some configs load a package that is not in the edges of `@zukhruf/eslint`. Add it in `targetDefaults` with `"..."` first:
+
+```json
+{
+  "targetDefaults": {
+    "lint": {
+      "inputs": [
+        "...",
+        {
+          "externalDependencies": [
+            "eslint-plugin-import",
+            "eslint-plugin-jsx-a11y",
+            "eslint-plugin-react",
+            "eslint-plugin-react-hooks"
+          ]
+        }
+      ]
+    }
+  }
+}
+```
+
+`targetDefaults` comes after the plugins. Without `"..."`, its `inputs` replace the inputs of both plugins. A probe on Nx 23.2.1 (2026-10-30) showed both results.
+
+The four packages above are an example from the audit. `nx.configs['flat/react']` of `@nx/eslint-plugin` loads them (`@nx/eslint-plugin/dist/src/flat-configs/react-base.js:4` and `react-jsx.js`), but `@nx/eslint-plugin` does not declare them. factory, whatisgoingon, deepagents and text2sql use `flat/react`.
+
+A local file that the root ESLint config imports is also an input of the workspace, for example `{workspaceRoot}/island.eslint.config.mjs`. Add it in the same way.
+
+### Prerequisites of the lint area
+
+- Nx 23.2.1 or later. The peer range of the package is `>=23.2.1 <25`.
+- `@zukhruf/eslint` in the workspace. elt and context-compiler do not use it today: they have their own `personal.eslint.config.mjs`. They move to `@zukhruf/eslint` first.
+- Delete the hand list in `targetDefaults.lint.inputs`. `targetDefaults` comes after the plugins, so a list without `"..."` replaces the inputs of the plugin.
+- Keep the other keys of `targetDefaults.lint`, for example the `command`, `env` and `parallelism` of deepagents.
+
+### Migrate a workspace to the lint area
+
+1. Add `@zukhruf/nx/lint` to `plugins`, after `@nx/eslint/plugin`.
+2. Delete `targetDefaults.lint.inputs`.
+3. If the configs load a package that is not in the edges of `@zukhruf/eslint`, add `["...", { "externalDependencies": [...] }]` (see [Add a lint package of the workspace](#add-a-lint-package-of-the-workspace)).
+4. Compare `nx show target inputs <project>:lint --json` before and after, for one project of each kind. Each package of the old list must be in `external`.
+
+| Workspace        | Packages in the hand list today | After the migration                                                                                                                                                               |
+| ---------------- | ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| zukhruf          | 13, and `packages/eslint/src`   | no list; `@zukhruf/eslint` is a package of the workspace                                                                                                                          |
+| factory          | 14                              | 4 packages of `flat/react` in `targetDefaults`; `tools/eslint-rules` goes from the list, because `@nx/eslint/plugin` gives it                                                     |
+| whatisgoingon    | 15                              | the same as factory                                                                                                                                                               |
+| deepagents       | 9                               | the 4 packages of `flat/react`, which the list does not have today; `tsconfig.base.json` goes when the tsconfig chain gives it; `command`, `env` and `parallelism` stay           |
+| text2sql         | 7                               | the 4 packages of `flat/react` and `eslint-plugin-no-barrel-files` (3 project configs load it), which the list does not have today; Nx updates from 23.1.0 first; `command` stays |
+| elt              | 7                               | waits: moves to `@zukhruf/eslint` first                                                                                                                                           |
+| context-compiler | 5                               | waits: moves to `@zukhruf/eslint` first                                                                                                                                           |
+
+The lockfile measured the edges on 2026-10-30. For factory, whatisgoingon, deepagents and text2sql, each package of the hand list is in the edges of `@zukhruf/eslint`, except the 4 packages of `flat/react`.
+
+### Who uses the lint area
+
+No workspace uses it yet. The umbrella item is #3335.

@@ -1,6 +1,6 @@
 # Nx
 
-This package is the Nx part of the monorepo standard. Each area gives one part of the Nx configuration that the workspaces copied. The `format` area gives each project two targets: one that writes the files with Prettier, and one that only reads them. No workspace copies them. A check target never writes. The `test` area gives the test target to each project that owns test files.
+This package is the Nx part of the monorepo standard. Each area gives one part of the Nx configuration that the workspaces copied. The `format` area gives each project two targets: one that writes the files with Prettier, and one that only reads them. No workspace copies them. A check target never writes. The `test` area gives the test target to each project that owns test files. The `lint` area adds the lint packages to the inputs of the lint target.
 
 ## Language
 
@@ -55,3 +55,19 @@ _Avoid_: Integration test (not all integration tests use Docker), container test
 **Global setup**:
 The module that `node --test` runs one time before the test processes, and whose teardown runs after them. For a Docker test it is `@zukhruf/testing/docker-global-setup`, or the project's own `src/testing/docker-global-setup.ts`. Its value is a path, not a package name.
 _Avoid_: Setup file, bootstrap, shim
+
+**Lint target**:
+The target `lint` that `@nx/eslint/plugin` gives. It runs `eslint .` in the project root, and Nx caches it. The `lint` area does not make it and does not change its command. It adds only inputs.
+_Avoid_: Lint check, eslint target
+
+**Lint inputs**:
+The `inputs` of the lint target. `@nx/eslint/plugin` gives the files and the ESLint configs. The `lint` area adds the lint packages. A lint input that is missing gives a cached pass that is stale.
+_Avoid_: Lint cache key, hash list
+
+**Lint package**:
+A package that ESLint loads when it lints, for example `typescript-eslint`. For an installed `@zukhruf/eslint`, the lint packages are all the packages that its lockfile edges reach. A lint package of one workspace goes in `targetDefaults.lint.inputs`, after `"..."`.
+_Avoid_: Lint dependency, eslint plugin (that is one kind of lint package)
+
+**Lockfile edge**:
+A link from a package to a name in its `dependencies`, `peerDependencies` or `optionalDependencies`, as Nx reads it from the lockfile. An input on one package hashes all the packages that its edges reach.
+_Avoid_: Transitive dependency (an edge can be a peer)
