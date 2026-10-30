@@ -460,11 +460,12 @@ A local file that the root ESLint config imports is also an input of the workspa
 
 ### Migrate a workspace to the lint area
 
-1. Add `@zukhruf/nx/lint` to `plugins`, after `@nx/eslint/plugin`.
-2. Delete `targetDefaults.lint.inputs`, and delete `targetDefaults.lint.dependsOn` and a top-level `targetDefaults.lint.command` (see [Prerequisites of the lint area](#prerequisites-of-the-lint-area)).
-3. In each React project config, import `@zukhruf/eslint/react` instead of `nx.configs['flat/react']`.
-4. If the configs load a package that is not in the edges of `@zukhruf/eslint`, add `["...", { "externalDependencies": [...] }]` (see [Add a lint package of the workspace](#add-a-lint-package-of-the-workspace)).
-5. Compare `nx show target inputs <project>:lint --json` before and after, for one project of each kind. Each package of the old list must be in `external`.
+1. Update `@zukhruf/nx` and `@zukhruf/eslint` to the latest release. An older `@zukhruf/eslint` does not declare the 4 packages of `flat/react`, so its lockfile node has no edge to them. A probe on factory (Nx 24.0.1, 2026-10-30) showed this: with `@zukhruf/eslint` 0.3.44, the 4 packages were not in `external`.
+2. Add `@zukhruf/nx/lint` to `plugins`, after `@nx/eslint/plugin`.
+3. Delete `targetDefaults.lint.inputs`, and delete `targetDefaults.lint.dependsOn` and a top-level `targetDefaults.lint.command` (see [Prerequisites of the lint area](#prerequisites-of-the-lint-area)).
+4. In each React project config, import `@zukhruf/eslint/react` instead of `nx.configs['flat/react']`.
+5. If the configs load a package that is not in the edges of `@zukhruf/eslint`, add `["...", { "externalDependencies": [...] }]` (see [Add a lint package of the workspace](#add-a-lint-package-of-the-workspace)).
+6. Compare `nx show target inputs <project>:lint --json` before and after, for one project of each kind. Each package of the old list must be in `external`.
 
 | Workspace        | Packages in the hand list today | After the migration                                                                                                                                                                                                   |
 | ---------------- | ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -480,4 +481,14 @@ The lockfile measured the edges on 2026-10-30. For factory, whatisgoingon, deepa
 
 ### Who uses the lint area
 
-No workspace uses it yet. The umbrella item is #3335.
+| Workspace        | Backlog item                                       |
+| ---------------- | -------------------------------------------------- |
+| zukhruf          | uses it: `nx.json` lists the plugin by path        |
+| factory          | #3386                                              |
+| whatisgoingon    | #3387                                              |
+| deepagents       | #3388                                              |
+| text2sql         | #3389                                              |
+| elt              | #3390, after the move to `@zukhruf/eslint` (#2964) |
+| context-compiler | #3391, after the move to `@zukhruf/eslint` (#2881) |
+
+The umbrella item is #3335.
