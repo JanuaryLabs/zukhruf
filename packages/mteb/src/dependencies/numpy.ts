@@ -25,17 +25,21 @@ export function std(values: ArrayLike<number>): number {
 }
 
 // np.add.reduceat for increasing starts: each segment is its first value plus
-// the pairwise sum of the rest.
+// the pairwise sum of the rest. As numpy's documentation says, the segment of
+// the last start runs to the end of the values. A start outside the values
+// throws, where numpy raises an IndexError.
 export function addReduceat(
   values: ArrayLike<number>,
   starts: readonly number[],
 ): number[] {
   return starts.map((start, index) => {
+    const first = values[start];
+    if (first === undefined)
+      throw new RangeError(
+        `index ${start} out-of-bounds in add.reduceat [0, ${values.length})`,
+      );
     const end = starts[index + 1] ?? values.length;
-    return (
-      (values[start] ?? 0) +
-      gsumpw.ndarray(end - start - 1, values, 1, start + 1)
-    );
+    return first + gsumpw.ndarray(end - start - 1, values, 1, start + 1);
   });
 }
 
