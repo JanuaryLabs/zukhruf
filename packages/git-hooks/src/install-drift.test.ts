@@ -446,3 +446,147 @@ test(
     });
   },
 );
+
+// A repo whose root depends on shim-dep from the folder vendor/shim-dep
+// (`file:`), which is not a workspace package, as a repo vendors a fixed copy
+// of a package. npm links node_modules/shim-dep to vendor/shim-dep.
+// carrier-dep, a tarball in the temp folder, depends on shim-dep and reads it
+// from its own folder in node_modules. The step requires carrier-dep in
+// the snapshot of the pushed commit, and shows the value that it reads through
+// the link. `vendor(value)` writes the folder with that value.
+async function vendored(folder: string) {
+  const repo = await repository(
+    folder,
+    `import { createRequire } from 'node:module';
+import { join } from 'node:path';
+import { type Push, Step, prePush } from '@zukhruf/git-hooks';
+class Inspect extends Step<Push> {
+  readonly name = 'inspect';
+  async run(push: Push) {
+    const [update] = push.updates;
+    if (update === undefined || update.kind === 'delete') return this.fail('no head');
+    const seen = await push.inSnapshot(update.head, async (folder) =>
+      createRequire(join(folder, 'index.js'))('carrier-dep').value,
+    ).catch((error: Error) => error);
+    if (seen instanceof Error) return this.fail(seen.message.trimEnd());
+    return this.pass(JSON.stringify({ value: seen }));
+  }
+}
+await prePush([new Inspect()]);
+`,
+  );
+  const npm = (cwd: string, ...args: string[]) =>
+    execFileAsync('npm', [...args, '--offline', '--no-audit', '--no-fund'], {
+      cwd,
+      env: repo.environment,
+    });
+  const pack = async (
+    name: string,
+    version: string,
+    dependencies: Record<string, string>,
+    code: string,
+  ) => {
+    const source = join(repo.top, 'sources', `${name}-${version}`);
+    await mkdir(source, { recursive: true });
+    await writeFile(
+      join(source, 'package.json'),
+      JSON.stringify({ name, version, main: 'index.js', dependencies }),
+    );
+    await writeFile(join(source, 'index.js'), code);
+    await npm(source, 'pack', '--pack-destination', repo.top);
+    return `file:${join(repo.top, `${name}-${version}.tgz`)}`;
+  };
+  const leaf = (version: string) =>
+    pack('leaf-dep', version, {}, `exports.version = '${version}';\n`);
+  const tarball = {
+    carrier: await pack(
+      'carrier-dep',
+      '1.0.0',
+      { 'shim-dep': '^1.0.0' },
+      `exports.value = require('shim-dep').value;\n`,
+    ),
+    leaf1: await leaf('1.0.0'),
+    leaf2: await leaf('2.0.0'),
+  };
+  // shim-dep needs leaf-dep 2 and the root has leaf-dep 1, so npm installs
+  // leaf-dep 2 in vendor/shim-dep/node_modules.
+  const vendor = async (value: string) => {
+    await repo.write(
+      'vendor/shim-dep/package.json',
+      `${JSON.stringify({
+        name: 'shim-dep',
+        version: '1.0.0',
+        main: 'index.js',
+        dependencies: { 'leaf-dep': tarball.leaf2 },
+      })}\n`,
+    );
+    await repo.write(
+      'vendor/shim-dep/index.js',
+      `exports.value = \`${value} \${require('leaf-dep').version}\`;\n`,
+    );
+  };
+  await vendor('first');
+  await repo.write('.gitignore', 'node_modules\n');
+  await repo.write(
+    'package.json',
+    `${JSON.stringify({
+      name: 'probe',
+      private: true,
+      dependencies: {
+        'carrier-dep': tarball.carrier,
+        'leaf-dep': tarball.leaf1,
+        'shim-dep': 'file:vendor/shim-dep',
+      },
+    })}\n`,
+  );
+  await npm(repo.root, 'install', '--ignore-scripts');
+  return { ...repo, vendor };
+}
+
+test(
+  'a package that the pushed lockfile links to a folder outside the workspaces reads that folder of the pushed commit from an install of the lockfile',
+  { timeout: 60_000 },
+  async () => {
+    // Arrange
+    await using folder = await new TemporaryFiles().directory('git-hooks-');
+    const repo = await vendored(folder.path);
+    const head = await repo.commit('vendored shim-dep');
+    await rm(join(repo.root, 'node_modules'), { recursive: true });
+
+    // Act
+    const result = await repo.push('--quiet', 'origin', 'main');
+
+    // Assert
+    assert.equal(result.code, 0, result.stderr);
+    assert.match(result.stderr, installing(head));
+    assert.deepEqual(seen(result.stderr), { value: 'first 2.0.0' });
+  },
+);
+
+test(
+  'a push that changes a linked folder outside the workspaces and keeps the lockfile reads the new folder through the install of the lockfile',
+  { timeout: 60_000 },
+  async () => {
+    // Arrange
+    await using folder = await new TemporaryFiles().directory('git-hooks-');
+    const repo = await vendored(folder.path);
+    await repo.commit('vendored shim-dep');
+    await rm(join(repo.root, 'node_modules'), { recursive: true });
+    const first = await repo.push('--quiet', 'origin', 'main');
+    assert.equal(first.code, 0, first.stderr);
+    await repo.vendor('second');
+    await repo.commit('shim-dep second');
+
+    // Act
+    const result = await repo.push('--quiet', 'origin', 'main');
+
+    // Assert
+    assert.equal(result.code, 0, result.stderr);
+    assert.doesNotMatch(
+      result.stderr,
+      /installing/,
+      'The install of the same lockfile is used again',
+    );
+    assert.deepEqual(seen(result.stderr), { value: 'second 2.0.0' });
+  },
+);
