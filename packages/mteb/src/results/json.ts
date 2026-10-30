@@ -126,18 +126,22 @@ export function pydanticJsonDumps(value: unknown): string {
 // json.loads: JSON with the NaN, Infinity and -Infinity tokens.
 export function pythonJsonLoads(text: string): unknown {
   const tokens = pythonTokens(text);
-  return JSON.parse(tokens.json, (_key, value: unknown) =>
-    tokens.number(value),
-  );
+  return JSON.parse(tokens.json, (key, value: unknown) => {
+    tokens.key(key);
+    return tokens.number(value);
+  });
 }
 
 // Python's json module writes NaN, Infinity and -Infinity as bare tokens,
 // which JSON does not have. json is the text with each token outside a string
 // as a string that starts with a random marker; number gives the number of
-// such a string, and any other value as it is.
+// such a string, and any other value as it is. The json module reads the
+// tokens only as values (_scan_once, Lib/json/scanner.py); a key must start
+// with '"' (JSONObject, Lib/json/decoder.py), so key throws for a token.
 function pythonTokens(text: string): {
   readonly json: string;
   readonly number: <T>(value: T) => T | number;
+  readonly key: (name: string) => void;
 } {
   const marker = `${crypto.randomUUID()}:`;
   let out = '';
@@ -161,13 +165,22 @@ function pythonTokens(text: string): {
     out += char;
     index++;
   }
+  const numbers = [
+    [`${marker}NaN`, NaN],
+    [`${marker}Infinity`, Infinity],
+    [`${marker}-Infinity`, -Infinity],
+  ] as const;
   return {
     json: out,
     number: (value) => {
-      if (value === `${marker}NaN`) return NaN;
-      if (value === `${marker}Infinity`) return Infinity;
-      if (value === `${marker}-Infinity`) return -Infinity;
+      for (const [token, number] of numbers) if (value === token) return number;
       return value;
+    },
+    key: (name) => {
+      if (numbers.some(([token]) => token === name))
+        throw new SyntaxError(
+          'Expecting property name enclosed in double quotes',
+        );
     },
   };
 }
@@ -201,6 +214,7 @@ export function jsonLoadsInOrder(text: string): OrderedJson {
         containers.push(object);
       },
       onObjectProperty: (property: string) => {
+        tokens.key(property);
         key = property;
       },
       onObjectEnd: () => {

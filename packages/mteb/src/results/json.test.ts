@@ -2,7 +2,12 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import { pythonFloatRepr } from '../dependencies/python.ts';
-import { pydanticJsonDumps, pythonJsonDumps, pythonJsonLoads } from './json.ts';
+import {
+  jsonLoadsInOrder,
+  pydanticJsonDumps,
+  pythonJsonDumps,
+  pythonJsonLoads,
+} from './json.ts';
 
 // Python 3.12 printed these with json.dumps(value, indent=2) and repr().
 test('pythonJsonDumps indents like json.dump, keeps empty containers on one line and writes NaN as a token', () => {
@@ -67,6 +72,22 @@ test('pythonJsonLoads reads the NaN and Infinity tokens and leaves the same word
     c: 'NaN: Infinity',
   });
 });
+
+// CPython 3.12 json.loads raises "Expecting property name enclosed in double
+// quotes" for each of these: the tokens are values only.
+for (const text of [
+  '{NaN: 1}',
+  '{Infinity: 1}',
+  '{-Infinity: 1}',
+  '{"a": {NaN: 1}}',
+])
+  for (const [name, load] of [
+    ['pythonJsonLoads', pythonJsonLoads],
+    ['jsonLoadsInOrder', jsonLoadsInOrder],
+  ] as const)
+    test(`${name} refuses ${text}, a token in the place of a key`, () => {
+      assert.throws(() => load(text), { name: 'SyntaxError' });
+    });
 
 test('pydanticJsonDumps writes NaN as null, a date as an ISO string and keeps characters outside ASCII', () => {
   const value = {
