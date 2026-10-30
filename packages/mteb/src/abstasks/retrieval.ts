@@ -6,7 +6,7 @@ import { isEncoder, isSearch } from '../models/models-protocols.ts';
 import type { SearchProtocol } from '../models/models-protocols.ts';
 import { SearchEncoderWrapper } from '../models/search-wrappers.ts';
 import { type OrderedJson, jsonLoadsInOrder } from '../results/json.ts';
-import { TimingStack } from '../timing.ts';
+import type { TimingStack } from '../timing.ts';
 import type {
   CorpusDatasetType,
   EncodeKwargs,
@@ -17,11 +17,7 @@ import type {
 } from '../types/encoder-io.ts';
 import type { Score } from '../types/result.ts';
 import { AbsTask, type MTEBModels } from './abstask.ts';
-import {
-  type HubOptions,
-  RetrievalDatasetLoader,
-} from './retrieval-dataset-loaders.ts';
-import type { TaskMetadata } from './task-metadata.ts';
+import { RetrievalDatasetLoader } from './retrieval-dataset-loaders.ts';
 
 // mteb/abstasks/retrieval.py. The conversion of the v1 dataset format, the
 // HuggingFace loader and the descriptive statistics are not ported.
@@ -128,48 +124,27 @@ export abstract class AbsTaskRetrieval extends AbsTask<RetrievalSplitData> {
   previousResultsModelMeta: Readonly<Record<string, Score>> | null = null;
   #topK: number | null = null;
 
-  readonly #hub: HubOptions;
-
-  constructor(options: {
-    readonly metadata: TaskMetadata;
-    readonly seed?: number;
-    // Where loadData downloads the dataset of the metadata from.
-    readonly hub?: HubOptions;
-  }) {
-    super(options);
-    this.#hub = options.hub ?? {};
-  }
-
-  // Loads each eval split of each subset from the HuggingFace Hub, at the
-  // revision of the metadata, or from the folder that the dataset path names.
-  override async loadData(
-    options: { readonly timer?: TimingStack } = {},
-  ): Promise<void> {
-    if (this.dataLoaded) return;
-    const timer = options.timer ?? new TimingStack();
+  // Each eval split of each subset, from the HuggingFace Hub at the revision
+  // of the metadata, or from the folder that the dataset path names.
+  protected override async loadSplits(): Promise<
+    Map<string, Map<string, RetrievalSplitData>>
+  > {
     const dataset = new Map<string, Map<string, RetrievalSplitData>>();
-    {
-      using _ = timer.phase('Data loading');
-      const subsets = this.metadata.isMultilingual
-        ? this.hfSubsets
-        : ['default'];
-      for (const subset of subsets)
-        for (const split of this.evalSplits) {
-          const data = await new RetrievalDatasetLoader({
-            ...this.#hub,
-            hfRepo: this.metadata.dataset.path,
-            revision: this.metadata.dataset.revision,
-            split,
-            config: subset,
-          }).load();
-          const splits = dataset.get(subset) ?? new Map();
-          splits.set(split, data);
-          dataset.set(subset, splits);
-        }
-    }
-    this.dataset = dataset;
-    using _ = timer.phase('Dataset transform');
-    this.datasetTransform();
+    const subsets = this.metadata.isMultilingual ? this.hfSubsets : ['default'];
+    for (const subset of subsets)
+      for (const split of this.evalSplits) {
+        const data = await new RetrievalDatasetLoader({
+          ...this.hub,
+          hfRepo: this.metadata.dataset.path,
+          revision: this.metadata.dataset.revision,
+          split,
+          config: subset,
+        }).load();
+        const splits = dataset.get(subset) ?? new Map();
+        splits.set(split, data);
+        dataset.set(subset, splits);
+      }
+    return dataset;
   }
 
   override get abstaskPrompt(): string {

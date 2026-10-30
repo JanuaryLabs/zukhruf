@@ -1,0 +1,518 @@
+{
+  "card-configs": [
+    {
+      "name": null,
+      "splits": [
+        {
+          "split": "test",
+          "columns": [
+            "sentence1",
+            "sentence2",
+            "label",
+            "note"
+          ],
+          "rows": [
+            {
+              "sentence1": "Ada",
+              "sentence2": "Ben",
+              "label": 1.0,
+              "note": null
+            },
+            {
+              "sentence1": "Dee",
+              "sentence2": "Cy",
+              "label": 0.5,
+              "note": "ünï"
+            },
+            {
+              "sentence1": "Eve",
+              "sentence2": null,
+              "label": null,
+              "note": null
+            }
+          ]
+        },
+        {
+          "split": "train",
+          "columns": [
+            "sentence1",
+            "sentence2",
+            "label",
+            "note"
+          ],
+          "rows": [
+            {
+              "sentence1": "b",
+              "sentence2": "x",
+              "label": 1.0,
+              "note": null
+            },
+            {
+              "sentence1": "c",
+              "sentence2": null,
+              "label": 2.5,
+              "note": null
+            },
+            {
+              "sentence1": "a",
+              "sentence2": "y",
+              "label": 0.1,
+              "note": "n"
+            },
+            {
+              "sentence1": "d",
+              "sentence2": null,
+              "label": null,
+              "note": null
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "extra",
+      "splits": [
+        {
+          "split": "train",
+          "columns": [
+            "x"
+          ],
+          "rows": [
+            {
+              "x": [
+                3
+              ]
+            }
+          ]
+        },
+        {
+          "split": "test",
+          "columns": [
+            "x"
+          ],
+          "rows": [
+            {
+              "x": [
+                1,
+                2
+              ]
+            },
+            {
+              "x": []
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "split-in-filename": [
+    {
+      "name": null,
+      "splits": [
+        {
+          "split": "train",
+          "columns": [
+            "labels",
+            "sentence1",
+            "sentence2"
+          ],
+          "rows": [
+            {
+              "labels": [
+                0
+              ],
+              "sentence1": [
+                "t1"
+              ],
+              "sentence2": [
+                "u1"
+              ]
+            },
+            {
+              "labels": [
+                1,
+                1
+              ],
+              "sentence1": [
+                "t2",
+                "t3"
+              ],
+              "sentence2": [
+                "u2",
+                "u3"
+              ]
+            }
+          ]
+        },
+        {
+          "split": "test",
+          "columns": [
+            "labels",
+            "sentence1",
+            "sentence2"
+          ],
+          "rows": [
+            {
+              "labels": [
+                1,
+                0
+              ],
+              "sentence1": [
+                "q1",
+                "q2"
+              ],
+              "sentence2": [
+                "d1",
+                "d2"
+              ]
+            },
+            {
+              "labels": [
+                1
+              ],
+              "sentence1": [
+                "q3"
+              ],
+              "sentence2": [
+                "d3"
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "split-in-dir": [
+    {
+      "name": null,
+      "splits": [
+        {
+          "split": "validation",
+          "columns": [
+            "text"
+          ],
+          "rows": [
+            {
+              "text": "v0"
+            },
+            {
+              "text": "v1"
+            }
+          ]
+        },
+        {
+          "split": "test",
+          "columns": [
+            "text"
+          ],
+          "rows": [
+            {
+              "text": "t-a"
+            },
+            {
+              "text": "t-b"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "sharded": [
+    {
+      "name": null,
+      "splits": [
+        {
+          "split": "train",
+          "columns": [
+            "sentence",
+            "count",
+            "small",
+            "score",
+            "wide",
+            "flag",
+            "tags",
+            "ids",
+            "meta"
+          ],
+          "rows": [
+            {
+              "sentence": "s0",
+              "count": 1,
+              "small": 1,
+              "score": 0.10000000149011612,
+              "wide": 0.1,
+              "flag": true,
+              "tags": [
+                "a",
+                "b"
+              ],
+              "ids": [
+                1,
+                2
+              ],
+              "meta": {
+                "k": "x",
+                "v": 1
+              }
+            },
+            {
+              "sentence": null,
+              "count": 1099511627776,
+              "small": -2,
+              "score": 0.5,
+              "wide": 1e+300,
+              "flag": false,
+              "tags": [],
+              "ids": [
+                null
+              ],
+              "meta": {
+                "k": null,
+                "v": 2
+              }
+            },
+            {
+              "sentence": "s2",
+              "count": null,
+              "small": 3,
+              "score": null,
+              "wide": -0.0,
+              "flag": null,
+              "tags": null,
+              "ids": [],
+              "meta": null
+            },
+            {
+              "sentence": null,
+              "count": 1099511627776,
+              "small": -2,
+              "score": 0.5,
+              "wide": 1e+300,
+              "flag": false,
+              "tags": [],
+              "ids": [
+                null
+              ],
+              "meta": {
+                "k": null,
+                "v": 2
+              }
+            },
+            {
+              "sentence": "s2",
+              "count": null,
+              "small": 3,
+              "score": null,
+              "wide": -0.0,
+              "flag": null,
+              "tags": null,
+              "ids": [],
+              "meta": null
+            }
+          ]
+        },
+        {
+          "split": "test",
+          "columns": [
+            "sentence",
+            "count",
+            "small",
+            "score",
+            "wide",
+            "flag",
+            "tags",
+            "ids",
+            "meta"
+          ],
+          "rows": [
+            {
+              "sentence": "s0",
+              "count": 1,
+              "small": 1,
+              "score": 0.10000000149011612,
+              "wide": 0.1,
+              "flag": true,
+              "tags": [
+                "a",
+                "b"
+              ],
+              "ids": [
+                1,
+                2
+              ],
+              "meta": {
+                "k": "x",
+                "v": 1
+              }
+            },
+            {
+              "sentence": null,
+              "count": 1099511627776,
+              "small": -2,
+              "score": 0.5,
+              "wide": 1e+300,
+              "flag": false,
+              "tags": [],
+              "ids": [
+                null
+              ],
+              "meta": {
+                "k": null,
+                "v": 2
+              }
+            }
+          ]
+        },
+        {
+          "split": "custom",
+          "columns": [
+            "sentence",
+            "count",
+            "small",
+            "score",
+            "wide",
+            "flag",
+            "tags",
+            "ids",
+            "meta"
+          ],
+          "rows": [
+            {
+              "sentence": "s2",
+              "count": null,
+              "small": 3,
+              "score": null,
+              "wide": -0.0,
+              "flag": null,
+              "tags": null,
+              "ids": [],
+              "meta": null
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "multilingual": [
+    {
+      "name": "en",
+      "splits": [
+        {
+          "split": "test",
+          "columns": [
+            "sentence1",
+            "sentence2",
+            "score"
+          ],
+          "rows": [
+            {
+              "sentence1": "hello",
+              "sentence2": "hi",
+              "score": 4.5
+            }
+          ]
+        },
+        {
+          "split": "train",
+          "columns": [
+            "sentence1",
+            "sentence2",
+            "score"
+          ],
+          "rows": [
+            {
+              "sentence1": "a",
+              "sentence2": "b",
+              "score": 1.0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "de",
+      "splits": [
+        {
+          "split": "test",
+          "columns": [
+            "sentence1",
+            "sentence2",
+            "score"
+          ],
+          "rows": [
+            {
+              "sentence1": "tag",
+              "sentence2": "servus",
+              "score": 2.0
+            },
+            {
+              "sentence1": "hallo",
+              "sentence2": "moin",
+              "score": 3.0
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "card-features": [
+    {
+      "name": null,
+      "splits": [
+        {
+          "split": "train",
+          "columns": [
+            "score",
+            "text",
+            "label",
+            "values",
+            "count",
+            "missing"
+          ],
+          "rows": [
+            {
+              "score": 0.10000000149011612,
+              "text": "a",
+              "label": 1,
+              "values": [
+                0.10000000149011612,
+                2.0
+              ],
+              "count": 7,
+              "missing": null
+            },
+            {
+              "score": 2.0,
+              "text": "b",
+              "label": 0,
+              "values": null,
+              "count": -3,
+              "missing": null
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "all": [
+    {
+      "name": null,
+      "splits": [
+        {
+          "split": "train",
+          "columns": [
+            "a"
+          ],
+          "rows": [
+            {
+              "a": 2
+            },
+            {
+              "a": 1
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -1,6 +1,6 @@
-import type { HubOptions } from '../../../abstasks/retrieval-dataset-loaders.ts';
 import { AbsTaskRetrieval } from '../../../abstasks/retrieval.ts';
 import { TaskMetadata } from '../../../abstasks/task-metadata.ts';
+import type { HubOptions } from '../../../dependencies/datasets.ts';
 
 // mteb/tasks/retrieval/eng/argu_ana_retrieval.py. A query is an argument and
 // the corpus holds it too, so a document with the id of its query does not

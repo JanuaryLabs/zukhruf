@@ -6,7 +6,7 @@ import { test } from 'node:test';
 import { TemporaryFiles } from '@zukhruf/testing/fs';
 import { HttpServer } from '@zukhruf/testing/http';
 
-import type { HubOptions } from './retrieval-dataset-loaders.ts';
+import type { HubOptions } from '../dependencies/datasets.ts';
 import { AbsTaskRetrieval } from './retrieval.ts';
 import { TaskMetadata } from './task-metadata.ts';
 

@@ -1,0 +1,3 @@
+{"sentence1": "Ada", "sentence2": "Ben", "label": 1}
+{"sentence2": "Cy", "sentence1": "Dee", "label": 0.5, "note": "ünï"}
+{"sentence1": "Eve", "label": null}

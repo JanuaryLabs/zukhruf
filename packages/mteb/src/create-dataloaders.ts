@@ -17,7 +17,7 @@ type PreparedRow = Readonly<Record<string, unknown>> & {
 };
 
 // A dataloader of plain texts.
-function createDataloaderFromTexts(
+export function createDataloaderFromTexts(
   texts: readonly string[],
   options: { readonly batchSize?: number } = {},
 ): BatchedInput[] {

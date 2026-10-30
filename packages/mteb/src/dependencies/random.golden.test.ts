@@ -1,0 +1,75 @@
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { test } from 'node:test';
+
+import { RandomState } from './numpy-random.ts';
+import { PythonRandom } from './python-random.ts';
+
+// fixtures/random/expected.json holds what CPython 3.12.9's random.Random
+// and numpy 2.5.4's legacy RandomState returned for a list of calls from a
+// seed. generate.py makes it.
+type Call = readonly [string, ...number[]];
+
+type Case = {
+  readonly case: string;
+  readonly seed: number;
+  readonly calls: readonly Call[];
+  readonly results: readonly number[][];
+};
+
+const expected: { readonly python: Case[]; readonly numpy: Case[] } =
+  JSON.parse(
+    readFileSync(
+      join(import.meta.dirname, 'fixtures/random/expected.json'),
+      'utf8',
+    ),
+  );
+
+function float32Weights(n: number): Float32Array {
+  return new Float32Array(n).fill(Math.fround(1 / n));
+}
+
+for (const pythonCase of expected.python)
+  test(`random.Random(${pythonCase.seed}) gives the draws of CPython: ${pythonCase.case}`, () => {
+    const generator = new PythonRandom(pythonCase.seed);
+
+    const results = pythonCase.calls.map(([name, a = 0, b = 0]) => {
+      if (name === 'sample') return generator.sample(a, b);
+      if (name === 'choices') return generator.choices(a, b);
+      if (name === 'random')
+        return Array.from({ length: a }, () => generator.random());
+      if (name === 'getrandbits')
+        return Array.from({ length: b }, () => generator.getrandbits(a));
+      throw new Error(`No call ${name}.`);
+    });
+
+    assert.deepEqual(results, pythonCase.results);
+  });
+
+for (const numpyCase of expected.numpy)
+  test(`RandomState(${numpyCase.seed}) gives the draws of numpy: ${numpyCase.case}`, () => {
+    const generator = new RandomState(numpyCase.seed);
+
+    const results = numpyCase.calls.map(([name, a = 0, b = 0, c = 0]) => {
+      if (name === 'randint') return generator.randint(a, b, c);
+      if (name === 'random_sample') return generator.randomSample(a);
+      if (name === 'uniform') return generator.uniform(a);
+      if (name === 'choice_p')
+        return generator.choiceWithProbabilities(float32Weights(a), b);
+      if (name === 'choice_no_replace')
+        return generator.choiceWithoutReplacement(a, b);
+      if (name === 'permutation') return generator.permutation(a);
+      throw new Error(`No call ${name}.`);
+    });
+
+    assert.deepEqual(results, numpyCase.results);
+  });
+
+test('a sample larger than the population throws, as CPython raises a ValueError', () => {
+  const generator = new PythonRandom(1);
+
+  assert.throws(() => generator.sample(3, 4), {
+    message: 'Sample larger than population or is negative',
+  });
+});

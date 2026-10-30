@@ -1,6 +1,11 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
+import {
+  type Dataset,
+  type HubOptions,
+  loadDataset,
+} from '../dependencies/datasets.ts';
 import type {
   EncoderProtocol,
   SearchProtocol,
@@ -15,9 +20,8 @@ import type { TaskMetadata } from './task-metadata.ts';
 // mteb/abstasks/abstask.py. Python declares the metadata of a task on its
 // class; a subclass here gives it to the constructor, because the field
 // initializers of a subclass run only after the constructor of AbsTask.
-// Loading from the HuggingFace Hub, descriptive statistics, the push to the
-// Hub and stratified subsampling are not ported: a task loads its data in
-// loadData.
+// Fast loading, descriptive statistics, the push to the Hub and stratified
+// subsampling are not ported.
 
 // The models that a task evaluates.
 export type MTEBModels = EncoderProtocol | SearchProtocol;
@@ -44,6 +48,8 @@ export function getAbstaskPrompt(taskName: string): string {
 export abstract class AbsTask<SplitData = unknown> {
   readonly metadata: TaskMetadata;
   readonly seed: number;
+  // Where loadData downloads the dataset of the metadata from.
+  protected readonly hub: HubOptions;
   // The data by subset and split, or null before loadData.
   dataset: Map<HFSubset, Map<string, SplitData>> | null = null;
   hfSubsets: HFSubset[];
@@ -54,9 +60,11 @@ export abstract class AbsTask<SplitData = unknown> {
   constructor(options: {
     readonly metadata: TaskMetadata;
     readonly seed?: number;
+    readonly hub?: HubOptions;
   }) {
     this.metadata = options.metadata;
     this.seed = options.seed ?? 42;
+    this.hub = options.hub ?? {};
     this.hfSubsets = [...this.metadata.hfSubsets];
     taskNameToPrompt.set(this.metadata.name, this.abstaskPrompt);
   }
@@ -71,14 +79,44 @@ export abstract class AbsTask<SplitData = unknown> {
     return '';
   }
 
-  // Loads the data into dataset. Python loads it from the HuggingFace Hub;
-  // a task here overrides this method.
+  // load_data: loads the split data of each subset, then runs
+  // datasetTransform.
   async loadData(
-    _options: { readonly timer?: TimingStack } = {},
+    options: { readonly timer?: TimingStack } = {},
   ): Promise<void> {
-    throw new Error(
-      `${this.metadata.name}: this port does not load datasets from the HuggingFace Hub. Override loadData.`,
-    );
+    if (this.dataLoaded) return;
+    const timer = options.timer ?? new TimingStack();
+    {
+      using _ = timer.phase('Data loading');
+      this.dataset = await this.loadSplits();
+    }
+    using _ = timer.phase('Dataset transform');
+    this.datasetTransform();
+  }
+
+  // The split data of each subset. A task whose split data is a Dataset
+  // returns loadDatasets(); AbsTaskRetrieval reads its own files.
+  protected abstract loadSplits(): Promise<
+    Map<HFSubset, Map<string, SplitData>>
+  >;
+
+  // load_dataset of the metadata (abstask.py:409-420): every split of the
+  // config of each subset of a multilingual task, or of the config that the
+  // metadata names.
+  protected async loadDatasets(): Promise<Map<HFSubset, Map<string, Dataset>>> {
+    const { path, revision, name, split } = this.metadata.dataset;
+    if (split !== undefined)
+      throw new Error(
+        `${this.metadata.name}: this port does not load one split of a dataset (dataset.split).`,
+      );
+    const load = async (config: string | null) =>
+      new Map(await loadDataset({ ...this.hub, path, revision, name: config }));
+    const dataset = new Map<HFSubset, Map<string, Dataset>>();
+    if (this.metadata.isMultilingual)
+      for (const subset of this.hfSubsets)
+        dataset.set(subset, await load(subset));
+    else dataset.set('default', await load(name ?? null));
+    return dataset;
   }
 
   // A hook that a task overrides to change its data after loadData.

@@ -6,7 +6,7 @@ The words in these documents have one meaning each. See the glossary in [CONTEXT
 
 ## Use it
 
-This package has the retrieval and reranking tasks, for text. MTEB's tasks ArguAna and SCIDOCS are ported, with their datasets from the HuggingFace Hub, and so are the models EmbeddingGemma 2 and Qwen3-Embedding with the prompts of MTEB. A task of your own keeps its dataset in a folder on disk, and its metadata names that folder as the dataset path.
+This package has the retrieval, reranking, pair classification, STS and clustering tasks, for text. MTEB's tasks ArguAna, SCIDOCS, SprintDuplicateQuestions, STSBenchmark, BiorxivClusteringS2S and BiorxivClusteringS2S.v2 are ported, with their datasets from the HuggingFace Hub, and so are the models EmbeddingGemma 2 and Qwen3-Embedding with the prompts of MTEB. A task of your own keeps its dataset in a folder on disk, and its metadata names that folder as the dataset path.
 
 The package is private: it is not on npm. A project of this workspace names it in the dependencies of its `package.json`, with `ai`, and npm links the workspace package:
 
@@ -167,6 +167,42 @@ The settings of a hybrid that are not the defaults are its experiment arguments:
 - `sub_model_top_k`: `subModelTopK`, when you give it.
 
 Thus the hybrid of `bm25S.loadModel()` and `bm25S.loadModel({ k1: 1.2 })` has the experiment name `sub_models_[None,k1_1.2]`, and its result does not replace the result of the hybrid of two default BM25 models. A hybrid with all the default settings has no experiment arguments, so its name and its result folder are those of MTEB. MTEB gives a hybrid no experiment arguments.
+
+## Pair classification
+
+In a pair classification task, each row of a split is a pair: two texts and a label. The label is 1 when the texts are similar, and 0 when they are not. The task gives each pair five scores: the cosine similarity, the Euclidean distance, the Manhattan distance, the similarity of the model and the dot product. For each score, it finds the threshold with the best accuracy and the threshold with the best F1, and it calculates the average precision. The main score of MTEB's pair classification tasks is `max_ap`, the best average precision of the five scores.
+
+```ts
+import { SprintDuplicateQuestionsPC, evaluate } from '@zukhruf/mteb';
+
+const result = await evaluate(encoder, new SprintDuplicateQuestionsPC());
+```
+
+A task of your own extends `AbsTaskPairClassification`. Its dataset has the columns `sentence1`, `sentence2` and `labels`. For other column names, set `input1ColumnName`, `input2ColumnName` and `labelColumnName`, or change the names with `renameColumn` in `datasetTransform`.
+
+## STS
+
+In an STS (semantic textual similarity) task, each row of a split is a pair: two texts and a gold score. The gold score tells how similar the texts are, from `minScore` to `maxScore` (by default 0 to 5). The task gives each pair four scores: the cosine similarity, the negative Manhattan distance, the negative Euclidean distance and the similarity of the model. For each score, it calculates the Pearson and the Spearman correlation with the gold scores. The main score of MTEB's STS tasks is `cosine_spearman`.
+
+```ts
+import { STSBenchmarkSTS, evaluate } from '@zukhruf/mteb';
+
+const result = await evaluate(encoder, new STSBenchmarkSTS());
+```
+
+A task of your own extends `AbsTaskSTS`. Its dataset has the columns `sentence1`, `sentence2` and `score`. For other text columns, set `columnNames`. For another range of gold scores, set `minScore` and `maxScore`.
+
+## Clustering
+
+In a clustering task, each row of a split is a text and its label. The task embeds a sample of the texts. Then it clusters the embeddings with k-means (`MiniBatchKMeans` of scikit-learn), and compares the clusters with the labels. The V-measure is 1 when each cluster holds the texts of one label only and each label is in one cluster only. `AbsTaskClustering` (MTEB's v2 tasks) embeds 4% of the split, and clusters 10 samples of 16384 embeddings. Its main score is `v_measure`, the mean V-measure of the 10 samples. `ami` is the mean adjusted mutual information. When a text has a list of labels, one for each level of a hierarchy, the task scores each level.
+
+```ts
+import { BiorxivClusteringS2SFast, evaluate } from '@zukhruf/mteb';
+
+const result = await evaluate(encoder, new BiorxivClusteringS2SFast());
+```
+
+A task of your own extends `AbsTaskClustering`. Its dataset has the columns `sentences` and `labels`. For other columns, set `inputColumnName` and `labelColumnName`. To embed another part of the split, set `maxFractionOfDocumentsToEmbed` or `maxDocumentToEmbed`. `nClusters` sets the number of samples to cluster, and `maxDocumentsPerCluster` the size of each sample. `AbsTaskClusteringLegacy` is MTEB's older form: each row is a set of texts with a list of labels, and the task clusters each set.
 
 ## Compare models on MTEB's tasks
 

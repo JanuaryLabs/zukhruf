@@ -8,11 +8,26 @@ export {
   type RetrievalSplitData,
 } from './abstasks/retrieval.ts';
 export {
+  AbsTaskPairClassification,
+  type PairClassificationMetrics,
+} from './abstasks/pair-classification.ts';
+export { AbsTaskSTS, type STSMetrics } from './abstasks/sts.ts';
+export { AbsTaskClustering } from './abstasks/clustering.ts';
+export { AbsTaskClusteringLegacy } from './abstasks/clustering-legacy.ts';
+export { RetrievalDatasetLoader } from './abstasks/retrieval-dataset-loaders.ts';
+export {
   DEFAULT_DATASET_CACHE,
+  type Dataset,
+  type DatasetDict,
+  type DatasetRow,
+  type DatasetValue,
   type HubOptions,
-  RetrievalDatasetLoader,
-} from './abstasks/retrieval-dataset-loaders.ts';
+  loadDataset,
+  renameColumn,
+} from './dependencies/datasets.ts';
 export * from './abstasks/task-metadata.ts';
+export type { PairClassificationDistances } from './evaluators/pair-classification-evaluator.ts';
+export type { STSEvaluatorScores } from './evaluators/any-sts-evaluator.ts';
 export * from './cache/result-cache.ts';
 export {
   OVERWRITE_STRATEGIES,
@@ -93,4 +108,10 @@ export { cosSim, dotScore } from './similarity-functions.ts';
 export { type PhaseTiming, TimingStack } from './timing.ts';
 export { ArguAna } from './tasks/retrieval/eng/argu-ana-retrieval.ts';
 export { SCIDOCS } from './tasks/retrieval/eng/scidocs-retrieval.ts';
+export { SprintDuplicateQuestionsPC } from './tasks/pair-classification/eng/sprint-duplicate-questions-pc.ts';
+export { STSBenchmarkSTS } from './tasks/sts/eng/sts-benchmark-sts.ts';
+export {
+  BiorxivClusteringS2S,
+  BiorxivClusteringS2SFast,
+} from './tasks/clustering/eng/biorxiv-clustering-s2s.ts';
 export * from './types/index.ts';
