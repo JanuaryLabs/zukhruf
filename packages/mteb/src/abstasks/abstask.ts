@@ -6,6 +6,7 @@ import type {
   SearchProtocol,
 } from '../models/models-protocols.ts';
 import { isEncoder, isSearch } from '../models/models-protocols.ts';
+import { jsonLoadsInOrder, pythonJsonDumps } from '../results/json.ts';
 import { TimingStack, monotonic } from '../timing.ts';
 import type { EncodeKwargs } from '../types/encoder-io.ts';
 import type { HFSubset, Score } from '../types/result.ts';
@@ -152,20 +153,27 @@ export abstract class AbsTask<SplitData = unknown> {
     hfSubset: string,
   ): void {
     const path = this.predictionsPath(predictionFolder);
-    const existing: Record<string, unknown> = existsSync(path)
-      ? JSON.parse(readFileSync(path, 'utf8'))
-      : {
-          mteb_model_meta: {
-            model_name: model.mtebModelMeta.name,
-            revision: model.mtebModelMeta.revision,
-          },
-        };
-    const subset = existing[hfSubset];
-    existing[hfSubset] = {
-      ...(typeof subset === 'object' && subset !== null ? subset : {}),
-      [hfSplit]: predictions,
-    };
-    writeFileSync(path, JSON.stringify(existing));
+    const existing: unknown = existsSync(path)
+      ? jsonLoadsInOrder(readFileSync(path, 'utf8'))
+      : new Map([
+          [
+            'mteb_model_meta',
+            new Map([
+              ['model_name', model.mtebModelMeta.name],
+              ['revision', model.mtebModelMeta.revision],
+            ]),
+          ],
+        ]);
+    if (!(existing instanceof Map))
+      throw new TypeError(`${path} is not an object.`);
+    if (!existing.has(hfSubset)) existing.set(hfSubset, new Map());
+    const splits: unknown = existing.get(hfSubset);
+    // existing_results[hf_subset][hf_split] = predictions (abstask.py:307)
+    // raises a TypeError when the subset is not a dict.
+    if (!(splits instanceof Map))
+      throw new TypeError(`${path}: ${hfSubset} is not an object.`);
+    splits.set(hfSplit, predictions);
+    writeFileSync(path, pythonJsonDumps(existing));
   }
 
   protected predictionsPath(outputFolder: string): string {

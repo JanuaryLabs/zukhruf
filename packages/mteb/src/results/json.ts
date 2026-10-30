@@ -1,3 +1,5 @@
+import { printParseErrorCode, visit } from 'jsonc-parser';
+
 import { isPlainObject, pythonFloatRepr } from '../dependencies/python.ts';
 
 // The JSON of MTEB's files. MTEB writes a TaskResult, model_meta.json and
@@ -123,6 +125,20 @@ export function pydanticJsonDumps(value: unknown): string {
 
 // json.loads: JSON with the NaN, Infinity and -Infinity tokens.
 export function pythonJsonLoads(text: string): unknown {
+  const tokens = pythonTokens(text);
+  return JSON.parse(tokens.json, (_key, value: unknown) =>
+    tokens.number(value),
+  );
+}
+
+// Python's json module writes NaN, Infinity and -Infinity as bare tokens,
+// which JSON does not have. json is the text with each token outside a string
+// as a string that starts with a random marker; number gives the number of
+// such a string, and any other value as it is.
+function pythonTokens(text: string): {
+  readonly json: string;
+  readonly number: <T>(value: T) => T | number;
+} {
   const marker = `${crypto.randomUUID()}:`;
   let out = '';
   let index = 0;
@@ -145,16 +161,72 @@ export function pythonJsonLoads(text: string): unknown {
     out += char;
     index++;
   }
-  const tokens: Record<string, number> = {
-    [`${marker}NaN`]: NaN,
-    [`${marker}Infinity`]: Infinity,
-    [`${marker}-Infinity`]: -Infinity,
+  return {
+    json: out,
+    number: (value) => {
+      if (value === `${marker}NaN`) return NaN;
+      if (value === `${marker}Infinity`) return Infinity;
+      if (value === `${marker}-Infinity`) return -Infinity;
+      return value;
+    },
   };
-  return JSON.parse(out, (_key, value: unknown) =>
-    typeof value === 'string' && value.startsWith(marker)
-      ? (tokens[value] ?? value)
-      : value,
+}
+
+// A JSON value whose objects are Maps, as json.load gives dicts: the keys
+// keep the order of the text. JSON.parse puts integer-like keys ("10", "2")
+// first, in ascending order.
+export type OrderedJson =
+  null | boolean | number | string | OrderedJson[] | Map<string, OrderedJson>;
+
+// json.load, with each object as a Map in the order of its keys, and the
+// NaN, Infinity and -Infinity tokens of Python's json module. A text that is
+// not JSON throws a SyntaxError: comments and trailing commas too.
+export function jsonLoadsInOrder(text: string): OrderedJson {
+  const tokens = pythonTokens(text);
+  const containers: (OrderedJson[] | Map<string, OrderedJson>)[] = [];
+  let root: OrderedJson | undefined;
+  let key: string;
+  const add = (value: OrderedJson) => {
+    const parent = containers.at(-1);
+    if (parent === undefined) root = value;
+    else if (Array.isArray(parent)) parent.push(value);
+    else parent.set(key, value);
+  };
+  visit(
+    tokens.json,
+    {
+      onObjectBegin: () => {
+        const object = new Map<string, OrderedJson>();
+        add(object);
+        containers.push(object);
+      },
+      onObjectProperty: (property: string) => {
+        key = property;
+      },
+      onObjectEnd: () => {
+        containers.pop();
+      },
+      onArrayBegin: () => {
+        const array: OrderedJson[] = [];
+        add(array);
+        containers.push(array);
+      },
+      onArrayEnd: () => {
+        containers.pop();
+      },
+      onLiteralValue: (value: null | boolean | number | string) => {
+        add(tokens.number(value));
+      },
+      onError: (error, offset) => {
+        throw new SyntaxError(
+          `${printParseErrorCode(error)} at position ${offset} of the JSON text.`,
+        );
+      },
+    },
+    { disallowComments: true },
   );
+  if (root === undefined) throw new SyntaxError('The JSON text has no value.');
+  return root;
 }
 
 // The index after the closing quote of the string that starts at start.

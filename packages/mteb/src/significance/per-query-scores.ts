@@ -1,9 +1,8 @@
-import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import {
   type AbsTaskRetrieval,
-  predictionsFile,
+  readPredictionsFile,
 } from '../abstasks/retrieval.ts';
 import { calculateRetrievalScores } from '../evaluators/retrieval-metrics.ts';
 
@@ -53,20 +52,20 @@ export async function perQueryScores(
     throw new Error(
       `${task.metadata.name} has no split ${split} in subset ${subset}.`,
     );
-  const predictions = predictionsFile.parse(
-    JSON.parse(
-      readFileSync(join(predictionFolder, task.predictionFileName), 'utf8'),
-    ),
-  ).subsets[subset]?.[split];
+  const predictions = readPredictionsFile(
+    join(predictionFolder, task.predictionFileName),
+  )
+    .subsets.get(subset)
+    ?.get(split);
   if (predictions === undefined)
     throw new Error(
       `The predictions of ${task.metadata.name} in ${predictionFolder} have no split ${split} in subset ${subset}.`,
     );
   const run = new Map(
-    Object.entries(predictions).map(([query, scores]) => [
+    [...predictions].map(([query, scores]) => [
       query,
       new Map(
-        Object.entries(scores).filter(
+        [...scores].filter(
           ([document]) => !(task.ignoreIdenticalIds && document === query),
         ),
       ),
