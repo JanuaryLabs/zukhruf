@@ -19,8 +19,8 @@ import {
   ModelResult,
   type ModelResultDict,
   type ToDataFrameOptions,
-  aggregateAndPivot,
   tableRow,
+  toTable,
 } from './model-result.ts';
 import type { ResultTask, TaskResult } from './task-result.ts';
 
@@ -179,17 +179,14 @@ export class BenchmarkResults implements Iterable<ModelResult> {
   toDataFrame(options: ToDataFrameOptions = {}): DataFrame {
     const includeModelRevision = options.includeModelRevision ?? false;
     const includeExperiments = options.includeExperiments ?? false;
-    const df = this.#buildPreAggDf(includeModelRevision, includeExperiments);
-    if (df === null) return new DataFrame();
     const columns = ['model_name'];
     if (includeModelRevision) columns.push('model_revision');
     if (includeExperiments) columns.push('experiment');
-    return aggregateAndPivot(
-      df,
+    return toTable(
+      (score) =>
+        this.#buildPreAggDf(includeModelRevision, includeExperiments, score),
       columns,
-      options.aggregationLevel ?? 'task',
-      options.format ?? 'wide',
-      options.aggregationFn,
+      options,
     );
   }
 
@@ -199,6 +196,7 @@ export class BenchmarkResults implements Iterable<ModelResult> {
   #buildPreAggDf(
     includeModelRevision: boolean,
     includeExperiments: boolean,
+    score: string,
   ): Frame | null {
     const results = includeModelRevision ? this : this.joinRevisions();
     const rows = results.modelResults.flatMap((modelResult) =>
@@ -211,6 +209,7 @@ export class BenchmarkResults implements Iterable<ModelResult> {
               taskResult.taskName,
               split,
               scores,
+              score,
             ),
             experiment: modelResult.experimentName ?? '',
           })),

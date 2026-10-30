@@ -13,7 +13,9 @@
 # get_aggregated_scores. For each experiment ("" is the default run), the
 # tables and the aggregated scores of the results of that experiment alone:
 # they test the experiment columns of includeExperiments, which MTEB does not
-# have. Never edit expected.json by hand: run this script again.
+# have. For each score of SCORES, the tables of the results whose main score
+# is that score: they test the scores option of toDataFrame, which MTEB does
+# not have. Never edit expected.json by hand: run this script again.
 #
 # The results test the tables: a model with 2 revisions whose join takes
 # tasks from both, a model with an experiment (MTEB averages it with the
@@ -59,6 +61,11 @@ LANGUAGES = {
     "en-ext": ["eng-Latn", "deu-Latn"],
 }
 draw = random.Random(3379)
+# The scores that are not the main score have their own draw, so the main
+# scores, and each table of them, do not change with them. Not in sorted
+# order: a table of several scores keeps the order that it is given.
+SCORES = ["recall_at_10", "ndcg_at_10"]
+other = random.Random("scores")
 
 
 def subset(name, score, languages=None):
@@ -66,6 +73,7 @@ def subset(name, score, languages=None):
         "hf_subset": name,
         "languages": LANGUAGES.get(name, ["eng-Latn"]) if languages is None else languages,
         "main_score": score,
+        **{key: other.random() for key in SCORES},
     }
 
 
@@ -121,7 +129,10 @@ write(cache, a2, "SCIDOCS", retrieval(draw.random()))
 # 0.7000000000000001, then 0.2 and 0.1: their sum is 1.0000000000000002 in a
 # plain loop and 1.0 in a compensated one.
 b = meta("zukhruf/model-b", "r1")
-write(cache, b, "ArguAna", retrieval(0.2))
+# A NaN recall_at_10 where the main score is a number.
+b_arguana = retrieval(0.2)
+b_arguana["test"][0]["recall_at_10"] = math.nan
+write(cache, b, "ArguAna", b_arguana)
 write(cache, b, "SCIDOCS", retrieval(0.1))
 write(cache, b, "AmazonCounterfactualClassification", classification(0.7))
 b_k1 = meta("zukhruf/model-b", "r1", k1=1.2)
@@ -131,15 +142,16 @@ write(cache, b_k1, "AmazonCounterfactualClassification", classification())
 
 # zukhruf/model-c: no SCIDOCS, a main score of None in the subset "fr" that
 # no other model has, and a subset with no language. A missing main score
-# cannot be made: TaskResult refuses scores without one.
+# cannot be made: TaskResult refuses scores without one. In "fr", ndcg_at_10
+# is None and recall_at_10 is missing.
 c = meta("zukhruf/model-c", "r1")
 write(cache, c, "ArguAna", retrieval(draw.random()))
-write(
-    cache,
-    c,
-    "AmazonCounterfactualClassification",
-    classification(extra=[("fr", None, ["fra-Latn"]), ("xx", draw.random(), [])]),
-)
+c_classification = classification(extra=[("fr", None, ["fra-Latn"]), ("xx", draw.random(), [])])
+for split_scores in c_classification.values():
+    fr = next(item for item in split_scores if item["hf_subset"] == "fr")
+    fr["ndcg_at_10"] = None
+    del fr["recall_at_10"]
+write(cache, c, "AmazonCounterfactualClassification", c_classification)
 
 results = cache.load_results(include_remote=False, load_experiments="match_name")
 
@@ -257,6 +269,52 @@ experiment_aggregated = [
     for load_experiments in ("match_name", "no_experiments")
 ]
 
+
+def scored_by(model, score):
+    # The model result with the score as the main score of each subset: the
+    # table of MTEB of it is the table of that score. A missing score is None.
+    return model.model_copy(
+        update={
+            "task_results": [
+                task.model_copy(
+                    update={
+                        "scores": {
+                            split: [{**item, "main_score": item.get(score)} for item in items]
+                            for split, items in task.scores.items()
+                        }
+                    }
+                )
+                for task in model.task_results
+            ]
+        }
+    )
+
+
+score_model_results = [
+    {
+        "model": [model.model_name, model.model_revision, model.experiment_name],
+        "score": score,
+        "options": options(*combination),
+        "table": table(scored_by(model, score).to_dataframe(**options(*combination))),
+    }
+    for score in SCORES
+    for model in results
+    for combination in COMBINATIONS
+]
+score_benchmark_results = [
+    {
+        "score": score,
+        "options": options(*combination),
+        "table": table(
+            BenchmarkResults(model_results=[scored_by(model, score) for model in results]).to_dataframe(
+                **options(*combination)
+            )
+        ),
+    }
+    for score in SCORES
+    for combination in COMBINATIONS
+]
+
 generator = (
     f"generate.py: mteb {VERSIONS['mteb']}, pandas {VERSIONS['pandas']}, "
     f"numpy {VERSIONS['numpy']}, CPython {platform.python_version()}"
@@ -281,6 +339,9 @@ generator = (
             ],
             "experiment_tables": experiment_tables,
             "experiment_aggregated": experiment_aggregated,
+            "scores": SCORES,
+            "score_model_results": score_model_results,
+            "score_benchmark_results": score_benchmark_results,
         },
         ensure_ascii=False,
         indent=1,
@@ -288,7 +349,15 @@ generator = (
     + "\n",
     encoding="utf-8",
 )
-tables = [entry["table"] for entry in model_results + benchmark_results + maximum + experiment_tables]
+tables = [
+    entry["table"]
+    for entry in model_results
+    + benchmark_results
+    + maximum
+    + experiment_tables
+    + score_model_results
+    + score_benchmark_results
+]
 print(
     f"{generator}: {len(tables)} tables, {sum(len(t['rows']) * len(t['columns']) for t in tables)} cells",
     file=sys.stderr,

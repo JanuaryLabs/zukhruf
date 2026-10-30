@@ -1,8 +1,17 @@
 // The pandas 3.1.0 behavior that MTEB's tables depend on: a frame from
 // columns, drop, explode, pivot_table(...).reset_index() and
-// groupby(...).agg(...).reset_index(), for the dtypes that MTEB's tables have.
+// groupby(...).agg(...).reset_index(), for the dtypes that MTEB's tables have,
+// and the writers to_csv, to_markdown and to_latex with index=False.
+import { EOL } from 'node:os';
+
 import { addReduceat } from './numpy.ts';
-import { compareStrings } from './python.ts';
+import {
+  compareStrings,
+  pythonFloatRepr,
+  pythonFormatFixed,
+  pythonStrRepr,
+} from './python.ts';
+import { type TabulateValue, tabulate } from './tabulate.ts';
 
 // A value of a table. NaN is a number, as in a float64 column.
 export type Cell = string | number | boolean | null;
@@ -20,7 +29,13 @@ export type AggregationFn = (values: readonly number[]) => number;
 export type Value = Cell | readonly Cell[];
 
 // A table: column labels and rows of values, without an index, as a pandas
-// DataFrame after reset_index.
+// DataFrame after reset_index. The writers see each column with the dtype
+// that pd.DataFrame(rows, columns=...) infers for it: float64 when each cell
+// is a number or null and one is a number (null is NaN); bool when each cell
+// is a boolean; str when each cell is a string, null or NaN and one is a
+// string (null is NaN); object for any other column, also one of nulls only
+// or a table without rows. Column labels are all arrays of one length (a
+// MultiIndex) or all cells.
 export class DataFrame {
   readonly columns: readonly ColumnLabel[];
   readonly rows: readonly (readonly Cell[])[];
@@ -68,6 +83,116 @@ export class DataFrame {
         .join('  ')
         .trimEnd();
     return [...header, ...body].map(line).join('\n');
+  }
+
+  // df.to_csv(index=False): a line for each level of the column labels, then
+  // a line for each row, each ended by os.linesep. A float is its repr, a
+  // missing value is empty, and a field with a comma, a quote, a carriage
+  // return or a newline is quoted (csv.QUOTE_MINIMAL), its quotes doubled.
+  toCsv(): string {
+    return [
+      ...this.#levels(),
+      ...this.rows.map((row) =>
+        this.columns.map((_, index) => row[index] ?? null),
+      ),
+    ]
+      .map((cells) => `${csvRecord(cells.map(csvField))}${EOL}`)
+      .join('');
+  }
+
+  // df.to_markdown(index=False): tabulate's pipe table of the column labels
+  // (str of a label, repr of the tuple of a MultiIndex label) and of the
+  // values. A missing value of a float64 or str column is NaN, so it shows
+  // as nan; a None of an object column shows as nothing.
+  toMarkdown(): string {
+    const dtypes = this.#dtypes();
+    const levels = this.#levels();
+    return tabulate(
+      isMultiIndex(this.columns)
+        ? this.columns.map((_, index) =>
+            tupleRepr(levels.map((labels) => labels[index] ?? null)),
+          )
+        : (levels[0] ?? []).map(str),
+      this.rows.map((row) =>
+        this.columns.map((_, index): TabulateValue => {
+          const cell = row[index] ?? null;
+          const dtype = dtypes[index];
+          return cell === null && (dtype === 'float64' || dtype === 'str')
+            ? NaN
+            : cell;
+        }),
+      ),
+    );
+  }
+
+  // df.to_latex(index=False, escape=escape), which renders through Styler: a
+  // booktabs tabular whose float64 and bool columns align right (r) and the
+  // others left (l), a header line for each level of the column labels, and
+  // a line for each row. A float has 6 decimals, a missing value is NaN.
+  // Equal labels next to each other on a level above the last one, under
+  // equal labels on the levels above, merge into \multicolumn{n}{r}{label}.
+  // With escape, the LaTeX specials of each text are escaped.
+  toLatex(options: { readonly escape?: boolean } = {}): string {
+    const escape = options.escape ?? false;
+    const value = (cell: Cell) => latexValue(cell, escape);
+    const levels = this.#levels();
+    const columnFormat = this.#dtypes()
+      .map((dtype) => (dtype === 'float64' || dtype === 'bool' ? 'r' : 'l'))
+      .join('');
+    const head =
+      this.columns.length === 0
+        ? []
+        : levels.map((labels, level) =>
+            headerSpans(levels, level)
+              .map(([start, span]) => {
+                const label = value(labels[start] ?? null);
+                return span > 1 ? `\\multicolumn{${span}}{r}{${label}}` : label;
+              })
+              .join(' & '),
+          );
+    const body = this.rows.map((row) =>
+      this.columns.map((_, index) => value(row[index] ?? null)).join(' & '),
+    );
+    return [
+      `\\begin{tabular}{${columnFormat}}`,
+      '\\toprule',
+      ...head.map((line) => `${line} \\\\`),
+      '\\midrule',
+      ...body.map((line) => `${line} \\\\`),
+      '\\bottomrule',
+      '\\end{tabular}',
+      '',
+    ].join('\n');
+  }
+
+  // The dtype of each column.
+  #dtypes(): Dtype[] {
+    return this.columns.map((_, index) =>
+      dtypeOf(this.rows.map((row) => row[index] ?? null)),
+    );
+  }
+
+  // The column labels as levels: one for a flat index, one for each level of
+  // a MultiIndex.
+  #levels(): Cell[][] {
+    if (!isMultiIndex(this.columns)) {
+      if (this.columns.some((label) => !isCell(label)))
+        throw new TypeError(
+          'A DataFrame has array labels on every column (a MultiIndex) or on none.',
+        );
+      return [this.columns.filter(isCell)];
+    }
+    const labels = this.columns.filter(
+      (label): label is readonly Cell[] => !isCell(label),
+    );
+    const depth = labels[0]?.length ?? 0;
+    if (labels.some((label) => label.length !== depth))
+      throw new TypeError(
+        'The labels of a MultiIndex have one value for each level.',
+      );
+    return Array.from({ length: depth }, (_, level) =>
+      labels.map((label) => label[level] ?? null),
+    );
   }
 }
 
@@ -294,7 +419,7 @@ function compareKeys(left: readonly Cell[], right: readonly Cell[]): number {
   return 0;
 }
 
-function uniqueKeys(keys: readonly (readonly Cell[])[]): Cell[][] {
+export function uniqueKeys(keys: readonly (readonly Cell[])[]): Cell[][] {
   const unique = new Map(keys.map((key) => [JSON.stringify(key), [...key]]));
   return [...unique.values()].sort(compareKeys);
 }
@@ -305,4 +430,118 @@ function format(value: Cell): string {
   if (typeof value === 'number')
     return Number.isNaN(value) ? 'NaN' : value.toFixed(6);
   return value;
+}
+
+// The dtype that pd.DataFrame(rows) infers for a column of cells.
+type Dtype = 'float64' | 'bool' | 'str' | 'object';
+
+function dtypeOf(cells: readonly Cell[]): Dtype {
+  if (
+    cells.some((cell) => typeof cell === 'number') &&
+    cells.every((cell) => cell === null || typeof cell === 'number')
+  )
+    return 'float64';
+  if (cells.length > 0 && cells.every((cell) => typeof cell === 'boolean'))
+    return 'bool';
+  if (
+    cells.some((cell) => typeof cell === 'string') &&
+    cells.every(
+      (cell) => cell === null || typeof cell === 'string' || Number.isNaN(cell),
+    )
+  )
+    return 'str';
+  return 'object';
+}
+
+// Column labels that are all arrays: the labels of a MultiIndex.
+function isMultiIndex(columns: readonly ColumnLabel[]): boolean {
+  return columns.length > 0 && columns.every((label) => !isCell(label));
+}
+
+// str(value) of a Python value.
+function str(value: Cell): string {
+  if (value === null) return 'None';
+  if (typeof value === 'boolean') return value ? 'True' : 'False';
+  if (typeof value === 'number') return pythonFloatRepr(value);
+  return value;
+}
+
+// repr(tuple(label)).
+function tupleRepr(label: readonly Cell[]): string {
+  const items = label.map((value) =>
+    typeof value === 'string' ? pythonStrRepr(value) : str(value),
+  );
+  return `(${items.join(', ')}${items.length === 1 ? ',' : ''})`;
+}
+
+// The text that the csv writer writes for a value: na_rep "" for a missing
+// value, str for the others.
+function csvField(value: Cell): string {
+  if (value === null || Number.isNaN(value)) return '';
+  return str(value);
+}
+
+// csv.writer(...).writerow(fields) with QUOTE_MINIMAL. A record of one empty
+// field is "", so that it does not read back as a record of no field.
+function csvRecord(fields: readonly string[]): string {
+  if (fields.length === 1 && fields[0] === '') return '""';
+  return fields
+    .map((field) =>
+      /[,"\r\n]/.test(field) ? `"${field.replaceAll('"', '""')}"` : field,
+    )
+    .join(',');
+}
+
+// The display value of a cell in Styler.to_latex: na_rep "NaN" for a missing
+// value, the escaped text of a string when escape is set, a float with 6
+// decimals (styler.format.precision) and str for the others.
+function latexValue(value: Cell, escape: boolean): string {
+  if (value === null || Number.isNaN(value)) return 'NaN';
+  if (typeof value === 'string') return escape ? escapeLatex(value) : value;
+  if (typeof value === 'number') return pythonFormatFixed(value, 6);
+  return str(value);
+}
+
+// _escape_latex of pandas/io/formats/style_render.py, with its placeholder
+// for the backslash.
+function escapeLatex(text: string): string {
+  return text
+    .replaceAll('\\', 'ab2§=§8yz')
+    .replaceAll('ab2§=§8yz ', 'ab2§=§8yz\\space ')
+    .replaceAll('&', '\\&')
+    .replaceAll('%', '\\%')
+    .replaceAll('$', '\\$')
+    .replaceAll('#', '\\#')
+    .replaceAll('_', '\\_')
+    .replaceAll('{', '\\{')
+    .replaceAll('}', '\\}')
+    .replaceAll('~ ', '~\\space ')
+    .replaceAll('~', '\\textasciitilde ')
+    .replaceAll('^ ', '^\\space ')
+    .replaceAll('^', '\\textasciicircum ')
+    .replaceAll('ab2§=§8yz', '\\textbackslash ');
+}
+
+// The visible header cells of a level as [first column, span], as Styler
+// sparsifies a MultiIndex (sparsify_labels): on a level above the last one,
+// a label is hidden under the label before it when the two are equal on
+// this level and on each level above it.
+function headerSpans(
+  levels: readonly (readonly Cell[])[],
+  level: number,
+): [start: number, span: number][] {
+  const spans: [number, number][] = [];
+  const width = levels[0]?.length ?? 0;
+  for (let column = 0; column < width; column++) {
+    const hidden =
+      level < levels.length - 1 &&
+      column > 0 &&
+      levels
+        .slice(0, level + 1)
+        .every((labels) => Object.is(labels[column - 1], labels[column]));
+    const last = spans.at(-1);
+    if (hidden && last !== undefined) last[1] += 1;
+    else spans.push([column, 1]);
+  }
+  return spans;
 }

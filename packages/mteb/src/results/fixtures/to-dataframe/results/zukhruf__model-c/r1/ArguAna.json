@@ -10,6 +10,8 @@
           "eng-Latn"
         ],
         "main_score": 0.996818,
+        "recall_at_10": 0.640179,
+        "ndcg_at_10": 0.239942,
         "mteb_version": "2.26.28"
       }
     ]

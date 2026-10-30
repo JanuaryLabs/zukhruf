@@ -10,6 +10,8 @@
           "eng-Latn"
         ],
         "main_score": 0.812837,
+        "recall_at_10": 0.684313,
+        "ndcg_at_10": 0.103079,
         "mteb_version": "2.26.28"
       },
       {
@@ -18,6 +20,8 @@
           "deu-Latn"
         ],
         "main_score": 0.817632,
+        "recall_at_10": 0.039807,
+        "ndcg_at_10": 0.808916,
         "mteb_version": "2.26.28"
       },
       {
@@ -26,6 +30,8 @@
           "jpn-Jpan"
         ],
         "main_score": 0.171252,
+        "recall_at_10": 0.179178,
+        "ndcg_at_10": 0.937561,
         "mteb_version": "2.26.28"
       },
       {
@@ -35,6 +41,8 @@
           "deu-Latn"
         ],
         "main_score": 0.206629,
+        "recall_at_10": 0.902813,
+        "ndcg_at_10": 0.011169,
         "mteb_version": "2.26.28"
       },
       {
@@ -43,12 +51,15 @@
           "fra-Latn"
         ],
         "main_score": null,
+        "ndcg_at_10": null,
         "mteb_version": "2.26.28"
       },
       {
         "hf_subset": "xx",
         "languages": [],
         "main_score": 0.002995,
+        "recall_at_10": 0.495561,
+        "ndcg_at_10": 0.50976,
         "mteb_version": "2.26.28"
       }
     ],
@@ -59,6 +70,8 @@
           "eng-Latn"
         ],
         "main_score": 0.202015,
+        "recall_at_10": 0.082064,
+        "ndcg_at_10": 0.028225,
         "mteb_version": "2.26.28"
       },
       {
@@ -67,6 +80,8 @@
           "deu-Latn"
         ],
         "main_score": 0.434262,
+        "recall_at_10": 0.751073,
+        "ndcg_at_10": 0.235265,
         "mteb_version": "2.26.28"
       },
       {
@@ -75,6 +90,8 @@
           "jpn-Jpan"
         ],
         "main_score": 0.19524,
+        "recall_at_10": 0.30686,
+        "ndcg_at_10": 0.791797,
         "mteb_version": "2.26.28"
       },
       {
@@ -84,6 +101,8 @@
           "deu-Latn"
         ],
         "main_score": 0.784376,
+        "recall_at_10": 0.592946,
+        "ndcg_at_10": 0.467919,
         "mteb_version": "2.26.28"
       },
       {
@@ -92,12 +111,15 @@
           "fra-Latn"
         ],
         "main_score": null,
+        "ndcg_at_10": null,
         "mteb_version": "2.26.28"
       },
       {
         "hf_subset": "xx",
         "languages": [],
         "main_score": 0.002995,
+        "recall_at_10": 0.744515,
+        "ndcg_at_10": 0.406312,
         "mteb_version": "2.26.28"
       }
     ],
@@ -108,6 +130,8 @@
           "eng-Latn"
         ],
         "main_score": 0.689344,
+        "recall_at_10": 0.446644,
+        "ndcg_at_10": 0.275536,
         "mteb_version": "2.26.28"
       },
       {
@@ -116,6 +140,8 @@
           "deu-Latn"
         ],
         "main_score": 0.770198,
+        "recall_at_10": 0.888331,
+        "ndcg_at_10": 0.610451,
         "mteb_version": "2.26.28"
       },
       {
@@ -124,6 +150,8 @@
           "jpn-Jpan"
         ],
         "main_score": 0.161205,
+        "recall_at_10": 0.79829,
+        "ndcg_at_10": 0.685434,
         "mteb_version": "2.26.28"
       },
       {
@@ -133,6 +161,8 @@
           "deu-Latn"
         ],
         "main_score": 0.636001,
+        "recall_at_10": 0.437049,
+        "ndcg_at_10": 0.282072,
         "mteb_version": "2.26.28"
       },
       {
@@ -141,12 +171,15 @@
           "fra-Latn"
         ],
         "main_score": null,
+        "ndcg_at_10": null,
         "mteb_version": "2.26.28"
       },
       {
         "hf_subset": "xx",
         "languages": [],
         "main_score": 0.002995,
+        "recall_at_10": 0.099667,
+        "ndcg_at_10": 0.558472,
         "mteb_version": "2.26.28"
       }
     ]

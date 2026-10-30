@@ -10,6 +10,8 @@
           "eng-Latn"
         ],
         "main_score": 0.7,
+        "recall_at_10": 0.129335,
+        "ndcg_at_10": 0.736887,
         "mteb_version": "2.26.28"
       },
       {
@@ -18,6 +20,8 @@
           "deu-Latn"
         ],
         "main_score": 0.7,
+        "recall_at_10": 0.998712,
+        "ndcg_at_10": 0.14223,
         "mteb_version": "2.26.28"
       },
       {
@@ -26,6 +30,8 @@
           "jpn-Jpan"
         ],
         "main_score": 0.7,
+        "recall_at_10": 0.114824,
+        "ndcg_at_10": 0.568901,
         "mteb_version": "2.26.28"
       },
       {
@@ -35,6 +41,8 @@
           "deu-Latn"
         ],
         "main_score": 0.7,
+        "recall_at_10": 0.408531,
+        "ndcg_at_10": 0.340134,
         "mteb_version": "2.26.28"
       }
     ],
@@ -45,6 +53,8 @@
           "eng-Latn"
         ],
         "main_score": 0.7,
+        "recall_at_10": 0.068568,
+        "ndcg_at_10": 0.191828,
         "mteb_version": "2.26.28"
       },
       {
@@ -53,6 +63,8 @@
           "deu-Latn"
         ],
         "main_score": 0.7,
+        "recall_at_10": 0.261642,
+        "ndcg_at_10": 0.616124,
         "mteb_version": "2.26.28"
       },
       {
@@ -61,6 +73,8 @@
           "jpn-Jpan"
         ],
         "main_score": 0.7,
+        "recall_at_10": 0.004518,
+        "ndcg_at_10": 0.081791,
         "mteb_version": "2.26.28"
       },
       {
@@ -70,6 +84,8 @@
           "deu-Latn"
         ],
         "main_score": 0.7,
+        "recall_at_10": 0.099134,
+        "ndcg_at_10": 0.094994,
         "mteb_version": "2.26.28"
       }
     ],
@@ -80,6 +96,8 @@
           "eng-Latn"
         ],
         "main_score": 0.7,
+        "recall_at_10": 0.340224,
+        "ndcg_at_10": 0.023179,
         "mteb_version": "2.26.28"
       },
       {
@@ -88,6 +106,8 @@
           "deu-Latn"
         ],
         "main_score": 0.7,
+        "recall_at_10": 0.101881,
+        "ndcg_at_10": 0.311571,
         "mteb_version": "2.26.28"
       },
       {
@@ -96,6 +116,8 @@
           "jpn-Jpan"
         ],
         "main_score": 0.7,
+        "recall_at_10": 0.977943,
+        "ndcg_at_10": 0.760835,
         "mteb_version": "2.26.28"
       },
       {
@@ -105,6 +127,8 @@
           "deu-Latn"
         ],
         "main_score": 0.7,
+        "recall_at_10": 0.043641,
+        "ndcg_at_10": 0.261103,
         "mteb_version": "2.26.28"
       }
     ]

@@ -132,3 +132,179 @@ export function pythonFloatRepr(value: number): string {
   const fraction = digits.slice(exponent + 1);
   return `${sign}${whole}.${fraction || '0'}`;
 }
+
+// format(value, '.<digits>f'): the exact binary value of the float rounded to
+// the given decimals, a tie to the even digit, as CPython's dtoa rounds.
+// toFixed rounds a tie up and writes 1e21 and above in scientific notation.
+export function pythonFormatFixed(value: number, digits: number): string {
+  if (Number.isNaN(value)) return 'nan';
+  if (!Number.isFinite(value)) return value > 0 ? 'inf' : '-inf';
+  const sign = value < 0 || Object.is(value, -0) ? '-' : '';
+  const scaled = value === 0 ? 0n : scaledHalfEven(Math.abs(value), digits);
+  const text = String(scaled).padStart(digits + 1, '0');
+  return digits === 0
+    ? `${sign}${text}`
+    : `${sign}${text.slice(0, -digits)}.${text.slice(-digits)}`;
+}
+
+// format(value, 'g'): 6 significant digits, rounded as pythonFormatFixed
+// rounds, in positional notation when the decimal exponent is from -4 to 5,
+// else in scientific notation with at least two exponent digits; trailing
+// zeros and a trailing point are removed.
+export function pythonFormatG(value: number): string {
+  if (Number.isNaN(value)) return 'nan';
+  if (!Number.isFinite(value)) return value > 0 ? 'inf' : '-inf';
+  const sign = value < 0 || Object.is(value, -0) ? '-' : '';
+  if (value === 0) return `${sign}0`;
+  const magnitude = Math.abs(value);
+  let exponent = Number(magnitude.toExponential().split('e')[1]);
+  let scaled = scaledHalfEven(magnitude, 5 - exponent);
+  while (scaled >= 1_000_000n)
+    scaled = scaledHalfEven(magnitude, 5 - ++exponent);
+  while (scaled < 100_000n) scaled = scaledHalfEven(magnitude, 5 - --exponent);
+  const digits = String(scaled);
+  const point = (whole: string, fraction: string) => {
+    const kept = fraction.replace(/0+$/, '');
+    return kept === '' ? whole : `${whole}.${kept}`;
+  };
+  if (exponent < -4 || exponent >= 6) {
+    const magnitudeText = String(Math.abs(exponent)).padStart(2, '0');
+    return `${sign}${point(digits.slice(0, 1), digits.slice(1))}e${exponent < 0 ? '-' : '+'}${magnitudeText}`;
+  }
+  if (exponent < 0)
+    return `${sign}${point('0', `${'0'.repeat(-exponent - 1)}${digits}`)}`;
+  return `${sign}${point(digits.slice(0, exponent + 1), digits.slice(exponent + 1))}`;
+}
+
+// round(value * 10^power) of a positive finite double, a tie to the even
+// integer, on the exact binary value.
+function scaledHalfEven(value: number, power: number): bigint {
+  const [mantissa, exponent] = exactBinary(value);
+  let numerator = mantissa;
+  let denominator = 1n;
+  if (exponent >= 0) numerator <<= BigInt(exponent);
+  else denominator <<= BigInt(-exponent);
+  if (power >= 0) numerator *= 10n ** BigInt(power);
+  else denominator *= 10n ** BigInt(-power);
+  const quotient = numerator / denominator;
+  const twiceRemainder = (numerator % denominator) * 2n;
+  return twiceRemainder > denominator ||
+    (twiceRemainder === denominator && quotient % 2n === 1n)
+    ? quotient + 1n
+    : quotient;
+}
+
+// repr(text): single quotes, or double quotes when the text has a single
+// quote and no double quote; a backslash, the quote, \t, \n and \r escaped;
+// other ASCII control characters as \xhh, and the characters that
+// str.isprintable() rejects as \xhh, \uhhhh or \Uhhhhhhhh.
+export function pythonStrRepr(text: string): string {
+  const quote = text.includes("'") && !text.includes('"') ? '"' : "'";
+  let body = '';
+  for (const char of text) {
+    const code = char.codePointAt(0) ?? 0;
+    if (char === quote || char === '\\') body += `\\${char}`;
+    else if (char === '\t') body += '\\t';
+    else if (char === '\n') body += '\\n';
+    else if (char === '\r') body += '\\r';
+    else if (code < 0x20 || code === 0x7f)
+      body += `\\x${code.toString(16).padStart(2, '0')}`;
+    else if (code < 0x7f || !NOT_PRINTABLE.test(char)) body += char;
+    else if (code <= 0xff) body += `\\x${code.toString(16).padStart(2, '0')}`;
+    else if (code <= 0xffff) body += `\\u${code.toString(16).padStart(4, '0')}`;
+    else body += `\\U${code.toString(16).padStart(8, '0')}`;
+  }
+  return `${quote}${body}${quote}`;
+}
+
+// The characters that str.isprintable() rejects: the Unicode categories Cc,
+// Cf, Cs, Co, Cn, Zl, Zp and Zs, but the space.
+const NOT_PRINTABLE = /^[\p{Cc}\p{Cf}\p{Cs}\p{Co}\p{Cn}\p{Zl}\p{Zp}\p{Zs}]$/u;
+
+// The characters of str.isspace(), which str.strip(), int() and float() strip.
+const PYTHON_SPACE =
+  '\\t\\n\\v\\f\\r\\x1c-\\x1f \\x85\\xa0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000';
+const PYTHON_STRIP = new RegExp(
+  `^[${PYTHON_SPACE}]+|[${PYTHON_SPACE}]+$`,
+  'gu',
+);
+
+// text.strip().
+export function pythonStrip(text: string): string {
+  return text.replace(PYTHON_STRIP, '');
+}
+
+// text.splitlines(): split at \r\n and at each of \n, \r, \v, \f, \x1c,
+// \x1d, \x1e, \x85, U+2028 and U+2029, without an empty last line.
+export function pythonSplitlines(text: string): string[] {
+  const lines: string[] = [];
+  let line = '';
+  for (let index = 0; index < text.length; index++) {
+    const char = text[index] ?? '';
+    if (!LINE_BREAKS.has(char)) {
+      line += char;
+      continue;
+    }
+    if (char === '\r' && text[index + 1] === '\n') index += 1;
+    lines.push(line);
+    line = '';
+  }
+  if (line !== '') lines.push(line);
+  return lines;
+}
+
+const LINE_BREAKS = new Set(
+  String.fromCodePoint(
+    0x0a,
+    0x0b,
+    0x0c,
+    0x0d,
+    0x1c,
+    0x1d,
+    0x1e,
+    0x85,
+    0x2028,
+    0x2029,
+  ),
+);
+
+// A run of Unicode decimal digits, with one underscore between two digits.
+const DIGIT_PART = String.raw`\p{Nd}(?:_?\p{Nd})*`;
+const PYTHON_INT = new RegExp(
+  `^[${PYTHON_SPACE}]*[+-]?${DIGIT_PART}[${PYTHON_SPACE}]*$`,
+  'u',
+);
+const PYTHON_FLOAT = new RegExp(
+  `^[${PYTHON_SPACE}]*([+-]?(?:(?:${DIGIT_PART}(?:\\.(?:${DIGIT_PART})?)?|\\.${DIGIT_PART})(?:[eE][+-]?${DIGIT_PART})?|inf(?:inity)?|nan))[${PYTHON_SPACE}]*$`,
+  'iu',
+);
+
+// Whether int(text) reads the text: base 10, Unicode digits, an underscore
+// between two digits, whitespace around.
+export function pythonIsInt(text: string): boolean {
+  return PYTHON_INT.test(text);
+}
+
+// float(text), or undefined where float raises ValueError.
+export function pythonFloat(text: string): number | undefined {
+  const literal = PYTHON_FLOAT.exec(text)?.[1];
+  if (literal === undefined) return undefined;
+  const lower = literal.toLowerCase();
+  const negative = lower.startsWith('-');
+  if (lower.endsWith('inf') || lower.endsWith('infinity'))
+    return negative ? -Infinity : Infinity;
+  if (lower.endsWith('nan')) return NaN;
+  return Number(asciiDigits(literal).replaceAll('_', ''));
+}
+
+// Each Unicode decimal digit as its ASCII digit. The digits of a script are
+// ten consecutive code points from 0 to 9, and runs of them can follow each
+// other, as the mathematical digits do.
+function asciiDigits(text: string): string {
+  return text.replace(/\p{Nd}/gu, (digit) => {
+    const code = digit.codePointAt(0) ?? 0;
+    let start = code;
+    while (/\p{Nd}/u.test(String.fromCodePoint(start - 1))) start -= 1;
+    return String((code - start) % 10);
+  });
+}

@@ -276,6 +276,23 @@ SCIDOCS    True                        0.243560                 0.180830
 
 `aggregationLevel` gives a row for each subset, split, task or language. `format: 'long'` gives a row for each model and a `score` column. `includeModelRevision` gives a column for each model and revision. `getAggregatedScores` reads the task type of each result, so give the results their tasks with `selectTasks` first.
 
+A table shows the main score of each task. `scores` gives a table of other scores, side by side, in the order that you give them. A long table has a column for each score, with the name of the score, in place of `score`. A wide table has a column level for each score, above the models. Each score has the table that MTEB makes when that score is the main score.
+
+`toString` prints a table as aligned text. To write a table to a file, use `toMarkdown`, `toCsv` or `toLatex`. Each one gives the text that pandas writes with `to_markdown`, `to_csv` or `to_latex` and `index=False`. pandas does not escape LaTeX characters such as `_`, so pass `escape: true` to `toLatex` for names that have them.
+
+```ts
+import { writeFileSync } from 'node:fs';
+
+const table = results.toDataFrame({
+  aggregationLevel: 'split',
+  format: 'long',
+  scores: ['ndcg_at_10', 'recall_at_10', 'mrr_at_10'],
+});
+writeFileSync('scores.md', table.toMarkdown());
+writeFileSync('scores.csv', table.toCsv());
+writeFileSync('scores.tex', table.toLatex({ escape: true }));
+```
+
 By default, a table averages the experiments of one model with its default run, as MTEB does: the results of a quantized model and of its full weights share one column. `includeExperiments: true` gives a column for each experiment of a model. See [Compare a change with its baseline](#compare-a-change-with-its-baseline).
 
 `examples/table.ts` prints the table and the means of the results in `~/.cache/mteb`. An argument names another cache folder.

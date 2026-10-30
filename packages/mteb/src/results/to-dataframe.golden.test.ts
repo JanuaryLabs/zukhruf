@@ -54,6 +54,18 @@ type Expected = {
       readonly [string, readonly [string, number | string | null][]][],
     ][],
   ][];
+  readonly scores: readonly [string, ...string[]];
+  readonly score_model_results: readonly {
+    readonly model: readonly [string, string | null, string | null];
+    readonly score: string;
+    readonly options: Options;
+    readonly table: Table;
+  }[];
+  readonly score_benchmark_results: readonly {
+    readonly score: string;
+    readonly options: Options;
+    readonly table: Table;
+  }[];
 };
 
 const expected: Expected = JSON.parse(
@@ -123,6 +135,45 @@ function experimentOf(table: DataFrame, experiment: string): Table {
     rows: table.rows
       .filter((row) => scores.some((index) => !Number.isNaN(row[index] ?? NaN)))
       .map((row) => kept.map((index) => row[index] ?? null)),
+  });
+}
+
+// The columns and rows of one score of a table of several scores, as the
+// table of that score alone: long, the key columns and the column of the
+// score as "score"; wide, the columns whose first level is the score, without
+// that level, and the rows with a value in them.
+function scoreOf(table: DataFrame, score: string): Table {
+  if (table.columns.includes(score)) {
+    const keys = table.columns.flatMap((label, index) =>
+      expected.scores.some((name) => name === label) ? [] : [index],
+    );
+    const at = table.columns.indexOf(score);
+    return plain({
+      columns: [...keys.map((index) => table.columns[index] ?? ''), 'score'],
+      rows: table.rows.map((row) => [
+        ...keys.map((index) => row[index] ?? null),
+        row[at] ?? null,
+      ]),
+    });
+  }
+  const level = (label: ColumnLabel): readonly Cell[] =>
+    typeof label === 'object' && label !== null ? label : [label];
+  const unwrap = (levels: readonly Cell[]): ColumnLabel =>
+    levels.length === 1 ? (levels[0] ?? null) : levels;
+  const index = table.columns.flatMap((label, at) =>
+    INDEX_COLUMNS.has(String(level(label)[0])) ? [at] : [],
+  );
+  const scores = table.columns.flatMap((label, at) =>
+    level(label)[0] === score ? [at] : [],
+  );
+  return plain({
+    columns: [
+      ...index.map((at) => unwrap(level(table.columns[at] ?? '').slice(0, -1))),
+      ...scores.map((at) => unwrap(level(table.columns[at] ?? '').slice(1))),
+    ],
+    rows: table.rows
+      .filter((row) => scores.some((at) => !Number.isNaN(row[at] ?? NaN)))
+      .map((row) => [...index, ...scores].map((at) => row[at] ?? null)),
   });
 }
 
@@ -341,4 +392,89 @@ test('with includeExperiments, the aggregated scores of each experiment equal th
         `${loadExperiments} ${experiment}`,
       );
   }
+});
+
+test('with scores, each score of each model result keeps the table of MTEB with that score as the main score, to the last bit', () => {
+  const results = load();
+
+  for (const {
+    model,
+    score,
+    options: python,
+    table,
+  } of expected.score_model_results) {
+    const [name, revision, experiment] = model;
+    const result = results.modelResults.find(
+      (candidate) =>
+        candidate.modelName === name &&
+        candidate.modelRevision === revision &&
+        candidate.experimentName === experiment,
+    );
+    assert.ok(result, `${model.join(' ')} is loaded`);
+    assert.deepEqual(
+      scoreOf(
+        result.toDataFrame({ ...options(python), scores: expected.scores }),
+        score,
+      ),
+      plain(table),
+      `${model.join(' ')} ${score} ${JSON.stringify(python)}`,
+    );
+  }
+  assert.equal(
+    expected.score_model_results.length,
+    results.modelResults.length * 16 * expected.scores.length,
+  );
+});
+
+test('with scores, each score of the benchmark results equals the table of MTEB with that score as the main score, to the last bit', () => {
+  const results = load();
+
+  for (const {
+    score,
+    options: python,
+    table,
+  } of expected.score_benchmark_results)
+    assert.deepEqual(
+      scoreOf(
+        results.toDataFrame({ ...options(python), scores: expected.scores }),
+        score,
+      ),
+      plain(table),
+      `${score} ${JSON.stringify(python)}`,
+    );
+  assert.equal(
+    expected.score_benchmark_results.length,
+    16 * expected.scores.length,
+  );
+});
+
+test('with scores, the scores of a table keep the order that they are given', () => {
+  const results = load();
+  const scores = ['recall_at_10', 'ndcg_at_10'] as const;
+
+  const long = results.toDataFrame({ format: 'long', scores });
+  const wide = results.toDataFrame({ format: 'wide', scores });
+
+  assert.deepEqual(long.columns.slice(-2), scores);
+  assert.deepEqual(
+    [
+      ...new Set(
+        wide.columns
+          .slice(2)
+          .map((label) =>
+            typeof label === 'object' && label !== null ? label[0] : label,
+          ),
+      ),
+    ],
+    scores,
+  );
+});
+
+test('a score that no result has is refused with its name', () => {
+  const results = load();
+
+  assert.throws(() => results.toDataFrame({ scores: ['ndcg@10'] }), {
+    name: 'RangeError',
+    message: 'No result has the score ndcg@10.',
+  });
 });

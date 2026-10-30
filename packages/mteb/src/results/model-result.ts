@@ -6,8 +6,11 @@ import { z } from 'zod';
 
 import {
   type AggregationFn,
+  type Cell,
+  type ColumnLabel,
   DataFrame,
   Frame,
+  uniqueKeys,
 } from '../dependencies/pandas.ts';
 import { ModelMeta } from '../models/model-meta.ts';
 import type { Modalities, ScoresDict } from '../types/index.ts';
@@ -72,34 +75,136 @@ export type ToDataFrameOptions = {
   // wide: a column for each model; long: a row for each model and a score
   // column.
   readonly format?: 'wide' | 'long';
+  // The scores to table, in place of the main score, side by side in this
+  // order (wide: a column level of the score above the model; long: a column
+  // for each score, named by it, in place of "score"). Each score has the
+  // table that MTEB makes when it is the main score. Not in MTEB.
+  readonly scores?: readonly [string, ...string[]];
 };
 
+// The table of the main score, or of each score of options.scores side by
+// side. frameOf gives the frame of the rows with a score column for a score
+// name, or null when there are no scores.
+export function toTable(
+  frameOf: (score: string) => Frame | null,
+  columns: readonly string[],
+  options: ToDataFrameOptions,
+): DataFrame {
+  const aggregationLevel = options.aggregationLevel ?? 'task';
+  const outputFormat = options.format ?? 'wide';
+  const tables: [string, DataFrame][] = [];
+  let width = 0;
+  for (const score of options.scores ?? ['main_score']) {
+    const frame = frameOf(score);
+    if (frame === null) return new DataFrame();
+    const at = frame.columns.indexOf('score');
+    if (
+      options.scores !== undefined &&
+      frame.rows.every((row) => row[at] === null)
+    )
+      throw new RangeError(`No result has the score ${score}.`);
+    width = indexColumnsOf(aggregationLevel, frame).length;
+    tables.push([
+      score,
+      aggregateAndPivot(
+        frame,
+        columns,
+        aggregationLevel,
+        outputFormat,
+        options.aggregationFn,
+      ),
+    ]);
+  }
+  if (options.scores === undefined) return tables[0]?.[1] ?? new DataFrame();
+  return outputFormat === 'long'
+    ? sideBySideLong(tables)
+    : sideBySideWide(tables, width);
+}
+
+// Long tables of the same rows: their key columns, then the score column of
+// each table, named by its score. The keys of a row do not depend on the
+// score, so each table has the same rows in the same order.
+function sideBySideLong(tables: readonly [string, DataFrame][]): DataFrame {
+  const first = tables[0]?.[1] ?? new DataFrame();
+  return new DataFrame(
+    [...first.columns.slice(0, -1), ...tables.map(([score]) => score)],
+    first.rows.map((row, index) => [
+      ...row.slice(0, -1),
+      ...tables.map(([, table]) => table.rows[index]?.at(-1) ?? NaN),
+    ]),
+  );
+}
+
+// Wide tables side by side: the rows of all tables, in the order of the
+// index columns (the first width columns), and the columns of each table
+// under a column level of its score. A row that one table does not have is
+// NaN there: pivot_table drops a group whose aggregate is NaN, so the tables
+// of two scores can have different rows.
+function sideBySideWide(
+  tables: readonly [string, DataFrame][],
+  width: number,
+): DataFrame {
+  const levels = (label: ColumnLabel): readonly Cell[] =>
+    typeof label === 'object' && label !== null ? label : [label];
+  const keyOf = (row: readonly Cell[]) => JSON.stringify(row.slice(0, width));
+  const first = tables[0]?.[1] ?? new DataFrame();
+  const byKey = tables.map(
+    ([, table]) => new Map(table.rows.map((row) => [keyOf(row), row])),
+  );
+  return new DataFrame(
+    [
+      ...first.columns.slice(0, width).map((label) => [...levels(label), '']),
+      ...tables.flatMap(([score, table]) =>
+        table.columns.slice(width).map((label) => [score, ...levels(label)]),
+      ),
+    ],
+    uniqueKeys(
+      tables.flatMap(([, table]) =>
+        table.rows.map((row) => row.slice(0, width)),
+      ),
+    ).map((key) => [
+      ...key,
+      ...tables.flatMap(([, table], index) => {
+        const row = byKey[index]?.get(JSON.stringify(key));
+        return table.columns
+          .slice(width)
+          .map((_, column) => row?.[width + column] ?? NaN);
+      }),
+    ]),
+  );
+}
+
+// The index columns of a table at an aggregation level: the rows of a wide
+// table, and the last keys of a long one.
+function indexColumnsOf(
+  aggregationLevel: AggregationLevel,
+  frame: Frame,
+): string[] {
+  switch (aggregationLevel) {
+    case 'subset':
+      return ['task_name', 'split', 'subset'];
+    case 'split':
+      return ['task_name', 'split'];
+    case 'task':
+      return frame.columns.includes('is_public')
+        ? ['task_name', 'is_public']
+        : ['task_name'];
+    case 'language':
+      return ['language'];
+  }
+}
+
 // _aggregate_and_pivot.
-export function aggregateAndPivot(
+function aggregateAndPivot(
   frame: Frame,
   columns: readonly string[],
   aggregationLevel: AggregationLevel,
   outputFormat: 'wide' | 'long',
   aggregationFn: AggregationFn | undefined,
 ): DataFrame {
-  let df = frame;
-  let indexColumns: string[];
-  switch (aggregationLevel) {
-    case 'subset':
-      indexColumns = ['task_name', 'split', 'subset'];
-      break;
-    case 'split':
-      indexColumns = ['task_name', 'split'];
-      break;
-    case 'task':
-      indexColumns = ['task_name'];
-      if (df.columns.includes('is_public')) indexColumns.push('is_public');
-      break;
-    case 'language':
-      indexColumns = ['language'];
-      df = df.explode('language');
-      break;
-  }
+  const indexColumns = indexColumnsOf(aggregationLevel, frame);
+  const df =
+    aggregationLevel === 'language' ? frame.explode('language') : frame;
   if (outputFormat === 'wide')
     return df.pivotTable({
       index: indexColumns,
@@ -226,33 +331,33 @@ export class ModelResult implements Iterable<TaskResult> {
   // language) and a column for the model, or a row for each score with the
   // long format. Without scores, an empty table.
   toDataFrame(options: ToDataFrameOptions = {}): DataFrame {
-    const rows = this.#getScoreForTable();
-    if (rows.length === 0) return new DataFrame();
-    let df = Frame.fromColumns({
-      model_name: rows.map((row) => row.modelName),
-      model_revision: rows.map((row) => row.modelRevision),
-      task_name: rows.map((row) => row.taskName),
-      split: rows.map((row) => row.split),
-      language: rows.map((row) => row.language),
-      experiment: rows.map(() => this.experimentName ?? ''),
-      subset: rows.map((row) => row.subset),
-      score: rows.map((row) => row.score),
-    });
     const columns = ['model_name'];
     if (options.includeModelRevision) columns.push('model_revision');
-    else df = df.drop(['model_revision']);
     if (options.includeExperiments) columns.push('experiment');
-    else df = df.drop(['experiment']);
-    return aggregateAndPivot(
-      df,
+    return toTable(
+      (score) => {
+        const rows = this.#getScoreForTable(score);
+        if (rows.length === 0) return null;
+        return Frame.fromColumns({
+          model_name: rows.map((row) => row.modelName),
+          model_revision: rows.map((row) => row.modelRevision),
+          task_name: rows.map((row) => row.taskName),
+          split: rows.map((row) => row.split),
+          language: rows.map((row) => row.language),
+          experiment: rows.map(() => this.experimentName ?? ''),
+          subset: rows.map((row) => row.subset),
+          score: rows.map((row) => row.score),
+        }).drop([
+          ...(options.includeModelRevision ? [] : ['model_revision']),
+          ...(options.includeExperiments ? [] : ['experiment']),
+        ]);
+      },
       columns,
-      options.aggregationLevel ?? 'task',
-      options.format ?? 'wide',
-      options.aggregationFn,
+      options,
     );
   }
 
-  #getScoreForTable(): TableRow[] {
+  #getScoreForTable(score: string): TableRow[] {
     return this.taskResults.flatMap((taskResult) =>
       Object.entries(taskResult.scores).flatMap(([split, scoresList]) =>
         scoresList.map((scores) =>
@@ -262,6 +367,7 @@ export class ModelResult implements Iterable<TaskResult> {
             taskResult.taskName,
             split,
             scores,
+            score,
           ),
         ),
       ),
@@ -313,13 +419,15 @@ export type TableRow = {
 };
 
 // The row of a scores dict: score_item.get("languages", ["Unknown"]),
-// .get("hf_subset", "default") and .get("main_score", None).
+// .get("hf_subset", "default") and .get(score, None). MTEB reads the score
+// "main_score" only.
 export function tableRow(
   modelName: string,
   modelRevision: string | null,
   taskName: string,
   split: string,
   scores: ScoresDict,
+  scoreName: string,
 ): TableRow {
   const rawLanguages = scores['languages'];
   let language: string[];
@@ -327,7 +435,7 @@ export function tableRow(
   else if (Array.isArray(rawLanguages)) language = rawLanguages.map(String);
   else language = [];
   const subset = scores['hf_subset'];
-  const score = scores['main_score'];
+  const score = scores[scoreName];
   return {
     modelName,
     modelRevision,

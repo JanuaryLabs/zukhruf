@@ -33,17 +33,19 @@ It also ports the semantics of parts of these dependencies of MTEB:
   Developers, BSD 3-Clause License.
 - packaging 26.3 (packaging.version), Copyright (c) Donald Stufft and
   individual contributors, Apache License 2.0 or BSD 2-Clause License.
-- CPython 3.12 (the float sum, round, repr and heapq algorithms, and
-  random.Random), Copyright (c) Python Software Foundation, PSF License
-  Agreement.
+- CPython 3.12 (the float sum, round, repr, format and heapq algorithms,
+  random.Random, and the repr, strip and splitlines of a str), Copyright (c)
+  Python Software Foundation, PSF License Agreement.
 - bm25s 0.3.16 (tokenize and the Lucene BM25), Copyright (c) 2024 Xing Han Lu,
   MIT License.
 - PyStemmer 3.1.0 (Stemmer.Stemmer), Copyright (c) 2006 Richard Boulton, MIT
   License.
-- pandas 3.1.0 (DataFrame, explode, pivot_table and the groupby mean),
-  Copyright (c) 2008-2011 AQR Capital Management, LLC, Lambda Foundry, Inc. and
-  PyData Development Team, and 2011-2026 Open source contributors, BSD
-  3-Clause License.
+- pandas 3.1.0 (DataFrame, explode, pivot_table, the groupby mean, to_csv,
+  to_markdown and to_latex), Copyright (c) 2008-2011 AQR Capital Management,
+  LLC, Lambda Foundry, Inc. and PyData Development Team, and 2011-2026 Open
+  source contributors, BSD 3-Clause License.
+- tabulate 0.10.0 (tabulate with the pipe format), Copyright (c) 2011-2020
+  Sergey Astanin and contributors, MIT License.
 - datasets 5.1.0 (load_dataset of JSON and parquet files, rename_column and
   from_dict of a Dataset), Copyright 2020 The HuggingFace Datasets Authors,
   Apache License 2.0.
