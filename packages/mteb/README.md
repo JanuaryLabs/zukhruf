@@ -6,13 +6,15 @@ The words in these documents have one meaning each. See the glossary in [CONTEXT
 
 ## Use it
 
-This package has the retrieval and reranking tasks, for text. MTEB's tasks ArguAna and SCIDOCS are ported, with their datasets from the HuggingFace Hub, and so are the models EmbeddingGemma 2 and Qwen3-Embedding with the prompts of MTEB. A task of your own loads its data in `loadData`.
+This package has the retrieval and reranking tasks, for text. MTEB's tasks ArguAna and SCIDOCS are ported, with their datasets from the HuggingFace Hub, and so are the models EmbeddingGemma 2 and Qwen3-Embedding with the prompts of MTEB. A task of your own keeps its dataset in a folder on disk, and its metadata names that folder as the dataset path.
 
 ```sh
 npm install @zukhruf/mteb ai
 ```
 
 ```ts
+import { join } from 'node:path';
+
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
 
 import {
@@ -30,7 +32,7 @@ class Faq extends AbsTaskRetrieval {
       metadata: new TaskMetadata({
         name: 'Faq',
         description: 'Questions and the answers that answer them.',
-        dataset: { path: 'local/faq', revision: '1' },
+        dataset: { path: join(import.meta.dirname, 'faq'), revision: '1' },
         type: 'Retrieval',
         category: 't2t',
         modalities: ['text'],
@@ -39,25 +41,6 @@ class Faq extends AbsTaskRetrieval {
         mainScore: 'ndcg_at_10',
       }),
     });
-  }
-
-  override async loadData(): Promise<void> {
-    this.dataset = new Map([
-      [
-        'default',
-        new Map([
-          [
-            'test',
-            {
-              corpus: [{ id: 'a1', text: 'Reset the password from Settings.' }],
-              queries: [{ id: 'q1', text: 'How do I change my password?' }],
-              relevantDocs: new Map([['q1', new Map([['a1', 1]])]]),
-              topRanked: null,
-            },
-          ],
-        ]),
-      ],
-    ]);
   }
 }
 
@@ -78,6 +61,36 @@ const result = await evaluate(encoder, new Faq(), {
 console.log(result.taskResults[0]?.scores.test?.[0]?.main_score);
 console.log(encoder.tokens);
 ```
+
+The folder has the layout of a dataset of MTEB on the HuggingFace Hub. The front matter of its dataset card (`README.md`) names the file of each config and split:
+
+```
+faq/
+├── README.md         dataset card
+├── corpus.jsonl      {"_id": "a1", "text": "Reset the password from Settings."}
+├── queries.jsonl     {"_id": "q1", "text": "How do I change my password?"}
+└── qrels/test.jsonl  {"query-id": "q1", "corpus-id": "a1", "score": 1}
+```
+
+```yaml
+---
+configs:
+  - config_name: default
+    data_files:
+      - split: test
+        path: qrels/test.jsonl
+  - config_name: corpus
+    data_files:
+      - split: corpus
+        path: corpus.jsonl
+  - config_name: queries
+    data_files:
+      - split: queries
+        path: queries.jsonl
+---
+```
+
+The task reads the files of the folder at each load. It does not use the revision or the cache of downloaded datasets for a folder, so a change to the qrels counts at the next load. A query that has no qrels is not in the task. To make the data in code, override `loadData` and set `this.dataset`.
 
 `evaluate` keeps each result in the cache, in MTEB's folder layout. A second run of the same model on the same task loads the result and does not call the model; `overwriteStrategy: 'always'` runs it again. MTEB reads these files, and this package reads the files of MTEB.
 
