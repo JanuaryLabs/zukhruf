@@ -38,6 +38,12 @@
       "types": "./dist/react-native.d.ts",
       "import": "./dist/react-native.js",
       "default": "./dist/react-native.js"
+    },
+    "./react": {
+      "@zukhruf/source": "./src/react.ts",
+      "types": "./dist/react.d.ts",
+      "import": "./dist/react.js",
+      "default": "./dist/react.js"
     }
   },
   "files": [
@@ -65,7 +71,11 @@
     "eslint": "^9.30.0 || ^10.0.0",
     "eslint-plugin-es-x": "^9.7.0 || ^10.0.0",
     "eslint-plugin-functional": "^10.0.0",
+    "eslint-plugin-import": "^2.31.0",
     "eslint-plugin-import-x": "^4.16.0",
+    "eslint-plugin-jsx-a11y": "^6.10.1",
+    "eslint-plugin-react": "^7.35.0",
+    "eslint-plugin-react-hooks": "^5.0.0 || ^7.0.0",
     "jsonc-eslint-parser": "^2.4.0 || ^3.0.0",
     "typescript": ">=5.8.0 <6.1.0",
     "typescript-eslint": "^8.47.0"
@@ -78,6 +88,18 @@
       "optional": true
     },
     "eslint-plugin-es-x": {
+      "optional": true
+    },
+    "eslint-plugin-import": {
+      "optional": true
+    },
+    "eslint-plugin-jsx-a11y": {
+      "optional": true
+    },
+    "eslint-plugin-react": {
+      "optional": true
+    },
+    "eslint-plugin-react-hooks": {
       "optional": true
     }
   }

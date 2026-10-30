@@ -22,7 +22,7 @@ You need ESLint 9.30 or later.
 npm install --save-dev @zukhruf/eslint
 ```
 
-Its peers are `eslint`, `@eslint/js`, `typescript-eslint`, `typescript`, `eslint-plugin-import-x`, `eslint-plugin-functional` and `jsonc-eslint-parser`. `@zukhruf/eslint/nx` also needs `@nx/eslint-plugin`, and `@zukhruf/eslint/react-native` needs `eslint-plugin-es-x`. npm installs the peers for you. With `legacy-peer-deps=true` in `.npmrc`, npm does not, so add them to your devDependencies.
+Its peers are `eslint`, `@eslint/js`, `typescript-eslint`, `typescript`, `eslint-plugin-import-x`, `eslint-plugin-functional` and `jsonc-eslint-parser`. `@zukhruf/eslint/nx` also needs `@nx/eslint-plugin`, `@zukhruf/eslint/react` needs `@nx/eslint-plugin` and the 4 plugins in [React](#react), and `@zukhruf/eslint/react-native` needs `eslint-plugin-es-x`. npm installs the peers for you. With `legacy-peer-deps=true` in `.npmrc`, npm does not, so add them to your devDependencies.
 
 ```js
 // eslint.config.mjs
@@ -36,7 +36,7 @@ export default defineConfig({
 });
 ```
 
-Put framework presets (for example Nx's `flat/react`) **before** the zukhruf configs. The package's own checks survive any order. But `base` also changes some third-party rules, for example it turns `@typescript-eslint/no-unused-vars` off, and a preset that comes later sets them again.
+Put framework presets (for example [`@zukhruf/eslint/react`](#react), which is Nx's `flat/react`) **before** the zukhruf configs. The package's own checks survive any order. But `base` also changes some third-party rules, for example it turns `@typescript-eslint/no-unused-vars` off, and a preset that comes later sets them again.
 
 ## Configs
 
@@ -200,6 +200,30 @@ export default defineConfig({
 The rule decides each manifest's options itself, so your options add to the shared policy and never replace it. `projects` keys are folders relative to the workspace root. Like Nx's own rule, it needs the project graph that `nx` caches; without it, the rule checks nothing. It needs `@nx/devkit`, which `@nx/eslint-plugin` installs.
 
 `manifest/recommended` also has `manifest/no-truncated-description`. The npm registry keeps only the first 255 characters of a package's `description`. `npm view` and the npm search do not show the rest. The rule reports a `description` that is longer than 255 characters. It does not check a manifest with `"private": true`, because npm does not publish it. Put the key fact in the description, and put the details in the README.
+
+## React
+
+`@zukhruf/eslint/react` is Nx's `flat/react` config from `@nx/eslint-plugin`, with no changes. Use it in place of `nx.configs['flat/react']` in the `eslint.config.mjs` of a React project. Put it first, and then the root config, as before:
+
+```js
+import react from '@zukhruf/eslint/react';
+
+import baseConfig from '../../eslint.config.mjs';
+
+export default [...react, ...baseConfig];
+```
+
+`flat/react` loads `eslint-plugin-import`, `eslint-plugin-jsx-a11y`, `eslint-plugin-react` and `eslint-plugin-react-hooks`. Install these 4 plugins in the React workspace. They are optional peers of this package, because `@nx/eslint-plugin` (checked at 24.0.2) does not declare them. With the peers, npm writes the lockfile edges from `@zukhruf/eslint` to the 4 plugins, so a lint input on `@zukhruf/eslint` also hashes the plugins.
+
+The peer ranges of `eslint-plugin-import`, `eslint-plugin-jsx-a11y` and `eslint-plugin-react` stop at ESLint 9. On ESLint 10, add an `overrides` entry for each of the 3 to `package.json`, as factory and whatisgoingon do:
+
+```json
+"overrides": {
+  "eslint-plugin-import": { "eslint": "$eslint" },
+  "eslint-plugin-jsx-a11y": { "eslint": "$eslint" },
+  "eslint-plugin-react": { "eslint": "$eslint" }
+}
+```
 
 ## React Native: Hermes
 
