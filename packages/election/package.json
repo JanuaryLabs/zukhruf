@@ -1,6 +1,6 @@
 {
   "name": "@zukhruf/election",
-  "version": "0.5.2",
+  "version": "0.6.1",
   "description": "Elect one leader among the processes that share a directory, with a term that ends when the leader dies and an epoch that grows with each term. Backends are subclasses of one campaign.",
   "license": "MIT",
   "repository": {
@@ -40,11 +40,11 @@
     "access": "public"
   },
   "dependencies": {
-    "@zukhruf/async": "^0.5.2",
-    "@zukhruf/fs": "^0.5.2",
-    "@zukhruf/lease": "^0.5.2"
+    "@zukhruf/async": "^0.6.1",
+    "@zukhruf/fs": "^0.6.1",
+    "@zukhruf/lease": "^0.6.1"
   },
   "devDependencies": {
-    "@zukhruf/testing": "^0.5.2"
+    "@zukhruf/testing": "^0.6.1"
   }
 }
