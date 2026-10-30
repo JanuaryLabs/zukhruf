@@ -13,12 +13,14 @@ It also ports the semantics of parts of these dependencies of MTEB:
   Van Gysel, MIT License, and the trec_eval measures that it binds
   (https://github.com/usnistgov/trec_eval).
 - NumPy 2.5.4 (sum, mean, standard deviation, add.reduceat, stable argsort,
-  linspace), Copyright (c) NumPy Developers, BSD 3-Clause License. The
-  pairwise summation of these functions is the npm dependency
-  @stdlib/blas-ext-base-gsumpw, Copyright (c) The Stdlib Authors, Apache
-  License 2.0. The package does not include its code.
-- scikit-learn 1.9.1 (sklearn.metrics.auc), Copyright (c) scikit-learn
-  developers, BSD 3-Clause License.
+  linspace, and the sum of float32 values), Copyright (c) NumPy Developers,
+  BSD 3-Clause License. The pairwise summation of float64 values is the npm
+  dependency @stdlib/blas-ext-base-gsumpw, Copyright (c) The Stdlib Authors,
+  Apache License 2.0. The package does not include its code.
+- scikit-learn 1.9.1 (sklearn.metrics.auc and average_precision_score,
+  paired_cosine_distances, paired_euclidean_distances,
+  paired_manhattan_distances, normalize and row_norms), Copyright (c)
+  scikit-learn developers, BSD 3-Clause License.
 - packaging 26.3 (packaging.version), Copyright (c) Donald Stufft and
   individual contributors, Apache License 2.0 or BSD 2-Clause License.
 - CPython 3.12 (the float sum, round, repr and heapq algorithms), Copyright (c)
@@ -31,8 +33,9 @@ It also ports the semantics of parts of these dependencies of MTEB:
   Copyright (c) 2008-2011 AQR Capital Management, LLC, Lambda Foundry, Inc. and
   PyData Development Team, and 2011-2026 Open source contributors, BSD
   3-Clause License.
-- datasets 5.1.0 (load_dataset of JSON and parquet files), Copyright 2020
-  The HuggingFace Datasets Authors, Apache License 2.0.
+- datasets 5.1.0 (load_dataset of JSON and parquet files, rename_column and
+  from_dict of a Dataset), Copyright 2020 The HuggingFace Datasets Authors,
+  Apache License 2.0.
 - huggingface_hub 2.3.0 (list_repo_tree), Copyright 2020 The HuggingFace
   Team, Apache License 2.0.
 - fsspec 2026.7.0 (glob_translate, which copies CPython's glob.translate),

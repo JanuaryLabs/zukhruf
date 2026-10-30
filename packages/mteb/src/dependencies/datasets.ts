@@ -1242,3 +1242,59 @@ function castValue(
   }
   throw fail();
 }
+
+function columnsRepr(columns: readonly string[]): string {
+  return `[${columns.map((name) => `'${name}'`).join(', ')}]`;
+}
+
+// Dataset.rename_column (datasets/arrow_dataset.py): a copy of the dataset
+// with the column renamed in place.
+export function renameColumn(
+  dataset: Dataset,
+  originalColumnName: string,
+  newColumnName: string,
+): Dataset {
+  const columns = dataset.columnNames;
+  if (!columns.includes(originalColumnName))
+    throw new Error(
+      `Original column name ${originalColumnName} not in the dataset. Current columns in the dataset: ${columnsRepr(columns)}`,
+    );
+  if (columns.includes(newColumnName))
+    throw new Error(
+      `New column name ${newColumnName} already in the dataset. Please choose a column name which is not already in the dataset. Current columns in the dataset: ${columnsRepr(columns)}`,
+    );
+  if (newColumnName === '') throw new Error('New column name is empty.');
+  const rename = (name: string) =>
+    name === originalColumnName ? newColumnName : name;
+  return {
+    columnNames: columns.map(rename),
+    rows: dataset.rows.map((row) =>
+      Object.fromEntries(
+        Object.entries(row).map(([name, value]) => [rename(name), value]),
+      ),
+    ),
+  };
+}
+
+// Dataset.from_dict: a dataset with a column for each key; each value is the
+// list of the values of its column.
+export function datasetFromDict(mapping: DatasetRow): Dataset {
+  const columns = Object.entries(mapping).map(([name, values]) => {
+    if (!isList(values)) throw new TypeError(`Column ${name} is not a list.`);
+    return [name, values] as const;
+  });
+  const length = columns[0]?.[1].length ?? 0;
+  for (const [name, values] of columns)
+    if (values.length !== length)
+      throw new Error(
+        `Column ${name} has ${values.length} values, but the first column has ${length}.`,
+      );
+  return {
+    columnNames: columns.map(([name]) => name),
+    rows: Array.from({ length }, (_, index) =>
+      Object.fromEntries(
+        columns.map(([name, values]) => [name, values[index] ?? null]),
+      ),
+    ),
+  };
+}

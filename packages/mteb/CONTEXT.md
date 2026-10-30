@@ -24,6 +24,10 @@ _Avoid_: Labels, answers, ground truth
 The candidates of each query in a reranking task. The model ranks only these documents.
 _Avoid_: Shortlist, candidates list
 
+**Pair**:
+Two inputs and a label in a pair classification task. The label is 1 when the two inputs are similar, and 0 when they are not. The task gives each pair five scores and measures how well a threshold on each score separates the labels.
+_Avoid_: Sample, example, couple
+
 **Encoder**:
 The model wrapper that gives one embedding for each input. `AiSdkEncoder` is an encoder over an AI SDK embedding model.
 _Avoid_: Embedder, model (for the wrapper)
