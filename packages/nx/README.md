@@ -274,6 +274,8 @@ The plugin does not select the Docker engine. It never sets or deletes `DOCKER_C
 
 On an SSH engine, a repo adds `--test-concurrency=1` with `flags`, or `"parallelism": false` in `targetDefaults`. The plugin does not add them.
 
+A repo that wants a default engine for its Docker tests writes it in a task `.env` file of each Docker project, for example `.env.test` with `DOCKER_CONTEXT=limerence-dokploy` (deepagents, #3388). Nx loads the file for the `test` target, and a variable that the environment already sets wins (`nx/dist/src/tasks-runner/task-env.js:35-36`, `:177`). An empty value does not win: `dotenv-expand` 12.0.3 replaces it with the value of the file (`dotenv-expand/lib/main.js:79`). Thus CI sets `DOCKER_CONTEXT=default`, not an empty value. When `DOCKER_HOST` is set, it still selects the engine, in the Docker CLI and in `@zukhruf/docker`.
+
 ### Override the test target of a project
 
 Nx applies the plugin first, then `targetDefaults`, then `project.json` and `package.json`. A later source wins.
@@ -457,6 +459,7 @@ A local file that the root ESLint config imports is also an input of the workspa
 - Keep the other keys of `targetDefaults.lint`, for example the `options.command`, `env` and `parallelism` of deepagents.
 - `targetDefaults.lint` must not have `dependsOn` or a top-level `command`. Nx deletes the `lint` of the plugin on a project with no ESLint only when the target has no `executor`, no `command` and no `dependsOn` (`nx/dist/src/project-graph/utils/project-configuration/target-normalization.js:202-214`). With `dependsOn`, each project with no ESLint gets an `nx:noop` `lint` that runs the dependencies. With a top-level `command`, each such project gets a `lint` that runs the command. `options.command` is safe: Nx does not read it as a top-level `command` (`target-merging.js:15-33`). elt and context-compiler have `dependsOn: ["format"]` today, so they delete it first.
 - A `lint` target in a `project.json` with its own `executor` or `command` replaces the inputs of both plugins (`target-merging.js:443-457`). Delete such a target, or write its `inputs` with `"..."`.
+- A project with no ESLint config gets no `lint` from `@nx/eslint/plugin`. If its `project.json` has its own `lint`, `"..."` keeps nothing, and the plugin inputs do not reach it. Such a target writes all its inputs: `default`, `^default`, the root ESLint config and `{ "externalDependencies": ["@zukhruf/eslint"] }`. text2sql's `apps/desktop/electron` is an example (#3389). An uncached target does not need them.
 
 ### Migrate a workspace to the lint area
 
