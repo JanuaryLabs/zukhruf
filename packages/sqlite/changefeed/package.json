@@ -1,6 +1,6 @@
 {
   "name": "@zukhruf/sqlite-changefeed",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "description": "A changefeed of a SQLite database that another process owns and writes: a change event for each changed row of each table, keyed by its primary key, from a snapshot differential over a read-only connection. The feed keeps its own position. Needs WAL mode.",
   "license": "MIT",
   "repository": {
@@ -41,14 +41,14 @@
     "access": "public"
   },
   "dependencies": {
-    "@zukhruf/async": "^0.5.1",
-    "@zukhruf/snapshot-differential": "^0.5.1",
-    "@zukhruf/sqlite-data-version": "^0.5.1",
-    "@zukhruf/sqlite-reader": "^0.5.1",
-    "@zukhruf/sqlite-snapshot": "^0.5.1",
-    "@zukhruf/sqlite-transaction": "^0.5.1"
+    "@zukhruf/async": "^0.5.2",
+    "@zukhruf/snapshot-differential": "^0.5.2",
+    "@zukhruf/sqlite-data-version": "^0.5.2",
+    "@zukhruf/sqlite-reader": "^0.5.2",
+    "@zukhruf/sqlite-snapshot": "^0.5.2",
+    "@zukhruf/sqlite-transaction": "^0.5.2"
   },
   "devDependencies": {
-    "@zukhruf/testing": "^0.5.1"
+    "@zukhruf/testing": "^0.5.2"
   }
 }
