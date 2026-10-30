@@ -36,6 +36,10 @@ _Avoid_: Label, target, ground truth
 A group of inputs that k-means makes in a clustering task. Each input has a label, or a list of labels for the levels of a hierarchy. The V-measure compares the clusters with the labels. It is 1 when each cluster holds the inputs of one label only and each label is in one cluster only.
 _Avoid_: Group, class (the label of an input)
 
+**Label**:
+The class of an input in a classification task: an int or a string. The task trains a classifier on the embeddings of some inputs of each label. Then the classifier predicts the label of each input of the evaluation split, and the metrics compare the predictions with the labels.
+_Avoid_: Category, target, ground truth
+
 **Encoder**:
 The model wrapper that gives one embedding for each input. `AiSdkEncoder` is an encoder over an AI SDK embedding model.
 _Avoid_: Embedder, model (for the wrapper)

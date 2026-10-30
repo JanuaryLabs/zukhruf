@@ -1,0 +1,120 @@
+{"text": "When traveling, can I auto top-up my card at certain times?", "label": 4, "label_text": "automatic_top_up"}
+{"text": "Is there a limit when using auto top-up?", "label": 4, "label_text": "automatic_top_up"}
+{"text": "Will it automatically top-up or do I need to do that manually if there isn't much cash left?", "label": 4, "label_text": "automatic_top_up"}
+{"text": "I'm running out of money, can I  auto top up?", "label": 4, "label_text": "automatic_top_up"}
+{"text": "How do I use auto top up?", "label": 4, "label_text": "automatic_top_up"}
+{"text": "Can it automatically top-up money if there isn't much left?", "label": 4, "label_text": "automatic_top_up"}
+{"text": "If there isn't much money left can it automatically top-up?", "label": 4, "label_text": "automatic_top_up"}
+{"text": "I read about the auto-top up function, but can't find it in the app.", "label": 4, "label_text": "automatic_top_up"}
+{"text": "Can I have it add money at certain time intervals when I travel?", "label": 4, "label_text": "automatic_top_up"}
+{"text": "I'm going to be away for awhile, can I have it add money automatically in certain intervals?", "label": 4, "label_text": "automatic_top_up"}
+{"text": "Where can I find the \"auto-top\" feature?", "label": 4, "label_text": "automatic_top_up"}
+{"text": "I just activated auto top-up, but it is not letting me enable it. Why not?", "label": 4, "label_text": "automatic_top_up"}
+{"text": "how old do i need to be to get an account for myself", "label": 1, "label_text": "age_limit"}
+{"text": "How young can I be to open my own account?", "label": 1, "label_text": "age_limit"}
+{"text": "How old do I have to be?", "label": 1, "label_text": "age_limit"}
+{"text": "Can I open an account for a child?", "label": 1, "label_text": "age_limit"}
+{"text": "How old do we have to be?", "label": 1, "label_text": "age_limit"}
+{"text": "How do I go about setting up an account for my daughter?", "label": 1, "label_text": "age_limit"}
+{"text": "Is there an age minimum?", "label": 1, "label_text": "age_limit"}
+{"text": "What is the youngest age in order to have an account?", "label": 1, "label_text": "age_limit"}
+{"text": "What age do I have to be?", "label": 1, "label_text": "age_limit"}
+{"text": "Can my daughter open an account?", "label": 1, "label_text": "age_limit"}
+{"text": "What is the minimum age to open an account?", "label": 1, "label_text": "age_limit"}
+{"text": "What is the minimum age?", "label": 1, "label_text": "age_limit"}
+{"text": "I made a transaction this morning and would like to revert it.", "label": 8, "label_text": "cancel_transfer"}
+{"text": "Can i cancel a charge?", "label": 8, "label_text": "cancel_transfer"}
+{"text": "Can I cancel my transaction?", "label": 8, "label_text": "cancel_transfer"}
+{"text": "I made a transaction but did it to the wrong account.", "label": 8, "label_text": "cancel_transfer"}
+{"text": "Tell me how to cancel a transfer.", "label": 8, "label_text": "cancel_transfer"}
+{"text": "I need you to cancel a transfer that I made.  It is the wrong account number and the app won't let me stop the transaction.  Please stop it!", "label": 8, "label_text": "cancel_transfer"}
+{"text": "I need to cancel my recent transfer immediately, I made a mistake there, please help quickly before it goes through", "label": 8, "label_text": "cancel_transfer"}
+{"text": "I would like to revert a transaction I did this morning", "label": 8, "label_text": "cancel_transfer"}
+{"text": "If I make a transaction can I cancel it?", "label": 8, "label_text": "cancel_transfer"}
+{"text": "How can I cancel a transfer?", "label": 8, "label_text": "cancel_transfer"}
+{"text": "Is there any way to cancel a transfer?", "label": 8, "label_text": "cancel_transfer"}
+{"text": "I accidentally made a transaction to the wrong account.", "label": 8, "label_text": "cancel_transfer"}
+{"text": "I tried making an update to my balance using cheque just yesterday but it doesn't appear to have worked. Should this not be a faster process? I need you to please check over my account because something has went wrong.", "label": 6, "label_text": "balance_not_updated_after_cheque_or_cash_deposit"}
+{"text": "How come I don't see my deposit in my account yet?", "label": 6, "label_text": "balance_not_updated_after_cheque_or_cash_deposit"}
+{"text": "Is there a reason why my account isn't updating because I used a check to  balance my account?", "label": 6, "label_text": "balance_not_updated_after_cheque_or_cash_deposit"}
+{"text": "I don't know why the deposit I made a week ago still hasn't showed up, I really need the money now.", "label": 6, "label_text": "balance_not_updated_after_cheque_or_cash_deposit"}
+{"text": "I made a cash deposit almost a week ago but it's still not there!! please sort this out asap I need the money", "label": 6, "label_text": "balance_not_updated_after_cheque_or_cash_deposit"}
+{"text": "Where is my cash deposit?", "label": 6, "label_text": "balance_not_updated_after_cheque_or_cash_deposit"}
+{"text": "How can I get the cash deposit to show up on my account?", "label": 6, "label_text": "balance_not_updated_after_cheque_or_cash_deposit"}
+{"text": "When will I see the cash I deposited this morning as available?", "label": 6, "label_text": "balance_not_updated_after_cheque_or_cash_deposit"}
+{"text": "cash from this morning has not deposited", "label": 6, "label_text": "balance_not_updated_after_cheque_or_cash_deposit"}
+{"text": "Where is the cash from my cheque I recently deposited?", "label": 6, "label_text": "balance_not_updated_after_cheque_or_cash_deposit"}
+{"text": "Cash deposit to my account but it has not appeared.", "label": 6, "label_text": "balance_not_updated_after_cheque_or_cash_deposit"}
+{"text": "When I deposit cheques and cash, my balance does not update.", "label": 6, "label_text": "balance_not_updated_after_cheque_or_cash_deposit"}
+{"text": "Do all ATMs take this card?", "label": 3, "label_text": "atm_support"}
+{"text": "Which ATMs accept this card?", "label": 3, "label_text": "atm_support"}
+{"text": "Where is the closest Mastercard ATM?", "label": 3, "label_text": "atm_support"}
+{"text": "Is there a list of ATM machines?", "label": 3, "label_text": "atm_support"}
+{"text": "Are there any specific ATMs that this card can be used at?", "label": 3, "label_text": "atm_support"}
+{"text": "How do I know which ATMs will accept this card?", "label": 3, "label_text": "atm_support"}
+{"text": "Which ATM's accept my card?", "label": 3, "label_text": "atm_support"}
+{"text": "Is there any nearby ATM's?", "label": 3, "label_text": "atm_support"}
+{"text": "Where are the locations of ATMs that accept this card?", "label": 3, "label_text": "atm_support"}
+{"text": "Which ATMs accept this placard ?", "label": 3, "label_text": "atm_support"}
+{"text": "Help me locate the nearest ATM.", "label": 3, "label_text": "atm_support"}
+{"text": "What ATMs is the card okay to use at?", "label": 3, "label_text": "atm_support"}
+{"text": "I've tried numerous times to submit a transfer of funds. Why isn't it going through?", "label": 7, "label_text": "beneficiary_not_allowed"}
+{"text": "I've transferred money before without issue but now I am encountering an error stating that it isn't possible. Why is that?", "label": 7, "label_text": "beneficiary_not_allowed"}
+{"text": "I am not able to do a transfer to an account", "label": 7, "label_text": "beneficiary_not_allowed"}
+{"text": "I was unable to make a transfer to another account.", "label": 7, "label_text": "beneficiary_not_allowed"}
+{"text": "I had a transfer blocked", "label": 7, "label_text": "beneficiary_not_allowed"}
+{"text": "Can you please help me with this exchange?  I am trying to get crypto and the app won't let me.", "label": 7, "label_text": "beneficiary_not_allowed"}
+{"text": "How do I do a successful transfer to an account?", "label": 7, "label_text": "beneficiary_not_allowed"}
+{"text": "Why did I get a message saying that my transfer is not possible?  I have done this before no problem.  Please fix.", "label": 7, "label_text": "beneficiary_not_allowed"}
+{"text": "Hey I want to buy some crypto but the app doesn't allow me to! What's the issue, I really want to exchange this", "label": 7, "label_text": "beneficiary_not_allowed"}
+{"text": "I tried to transfer money but it said it wasn't possible? I've done this before and it worked why isn't it working now?", "label": 7, "label_text": "beneficiary_not_allowed"}
+{"text": "Why can't I transfer to a beneficiary?", "label": 7, "label_text": "beneficiary_not_allowed"}
+{"text": "I am having problems transferring to a beneficiary.", "label": 7, "label_text": "beneficiary_not_allowed"}
+{"text": "I made a transfer a few hours ago from a UK banking account.  I do not yet see the transfer.  Please check on this for me.", "label": 5, "label_text": "balance_not_updated_after_bank_transfer"}
+{"text": "the balance on my account didnt change when i transferred money", "label": 5, "label_text": "balance_not_updated_after_bank_transfer"}
+{"text": "How long will it take for my transferred money to show up?", "label": 5, "label_text": "balance_not_updated_after_bank_transfer"}
+{"text": "Why didn't my balance change after I transferred some money?", "label": 5, "label_text": "balance_not_updated_after_bank_transfer"}
+{"text": "When will my balance update after a transfer?", "label": 5, "label_text": "balance_not_updated_after_bank_transfer"}
+{"text": "How long does it take for an international transfer into my account?", "label": 5, "label_text": "balance_not_updated_after_bank_transfer"}
+{"text": "The amount of time that transfers usually take from a UK account is what?I just completed a transfer and it is not showing up at all. I'm wondering at this point if everything is actually okay.", "label": 5, "label_text": "balance_not_updated_after_bank_transfer"}
+{"text": "When will my transfer be available in my account.", "label": 5, "label_text": "balance_not_updated_after_bank_transfer"}
+{"text": "I didn't get the money I transferred", "label": 5, "label_text": "balance_not_updated_after_bank_transfer"}
+{"text": "I just completed a bank transfer and the balance didn't update", "label": 5, "label_text": "balance_not_updated_after_bank_transfer"}
+{"text": "I transferred some money but I think it has gotten lost somewhere.", "label": 5, "label_text": "balance_not_updated_after_bank_transfer"}
+{"text": "How long does a UK transfer take?", "label": 5, "label_text": "balance_not_updated_after_bank_transfer"}
+{"text": "Could you please activate my card", "label": 0, "label_text": "activate_my_card"}
+{"text": "I need to activate my card can you do that now?", "label": 0, "label_text": "activate_my_card"}
+{"text": "What do I need to do to activate my new card?", "label": 0, "label_text": "activate_my_card"}
+{"text": "Tell me how to go about activating my new card?", "label": 0, "label_text": "activate_my_card"}
+{"text": "How can I activate my card so I can start using it?", "label": 0, "label_text": "activate_my_card"}
+{"text": "How long will it take to activate my new card?", "label": 0, "label_text": "activate_my_card"}
+{"text": "What's the right way to activate my card?", "label": 0, "label_text": "activate_my_card"}
+{"text": "I received my new card, how is it activated?", "label": 0, "label_text": "activate_my_card"}
+{"text": "Is there a way my new card can be renewed?", "label": 0, "label_text": "activate_my_card"}
+{"text": "How do I activate a card I received?", "label": 0, "label_text": "activate_my_card"}
+{"text": "Why can't I activate my card?", "label": 0, "label_text": "activate_my_card"}
+{"text": "What is the process of card activation?", "label": 0, "label_text": "activate_my_card"}
+{"text": "Am I able to order a new card and have it sent to me in China?", "label": 9, "label_text": "card_about_to_expire"}
+{"text": "Will you be able to send the new card to China?", "label": 9, "label_text": "card_about_to_expire"}
+{"text": "When my card expires what happens to my account?", "label": 9, "label_text": "card_about_to_expire"}
+{"text": "What do I do when my card expires?", "label": 9, "label_text": "card_about_to_expire"}
+{"text": "The expiration date on my card is coming up", "label": 9, "label_text": "card_about_to_expire"}
+{"text": "My card's expiring, what happens now?", "label": 9, "label_text": "card_about_to_expire"}
+{"text": "My card is about to expire. What do I need to do?", "label": 9, "label_text": "card_about_to_expire"}
+{"text": "how long and how much does it cost for new card", "label": 9, "label_text": "card_about_to_expire"}
+{"text": "What do I do if my card is expiring soon?", "label": 9, "label_text": "card_about_to_expire"}
+{"text": "How much does it cost to get a new card?  Mine is almost expired.  How fast does it come?", "label": 9, "label_text": "card_about_to_expire"}
+{"text": "Since my card is about to expire, what do I do to get a new one?", "label": 9, "label_text": "card_about_to_expire"}
+{"text": "My card is about to expire and I need to know how much it costs and how long it takes to get a new one.", "label": 9, "label_text": "card_about_to_expire"}
+{"text": "Is the top up feature available on the Apple Watch?", "label": 2, "label_text": "apple_pay_or_google_pay"}
+{"text": "Can I use the system Google Pay for top-ups?", "label": 2, "label_text": "apple_pay_or_google_pay"}
+{"text": "My top-up for Google Pay isn't working", "label": 2, "label_text": "apple_pay_or_google_pay"}
+{"text": "Can I add money with Apple Pay?", "label": 2, "label_text": "apple_pay_or_google_pay"}
+{"text": "Can I use my Apple Watch to to top up?", "label": 2, "label_text": "apple_pay_or_google_pay"}
+{"text": "Does Apple Pay give the option to top up?", "label": 2, "label_text": "apple_pay_or_google_pay"}
+{"text": "Top up on my Google Pay isn't working.", "label": 2, "label_text": "apple_pay_or_google_pay"}
+{"text": "Is it possible to top up with Apple Pay?", "label": 2, "label_text": "apple_pay_or_google_pay"}
+{"text": "do i have to setup apple pay to use it", "label": 2, "label_text": "apple_pay_or_google_pay"}
+{"text": "Can I use Apple Pay to top up?", "label": 2, "label_text": "apple_pay_or_google_pay"}
+{"text": "How can I top up my Google Pay?", "label": 2, "label_text": "apple_pay_or_google_pay"}
+{"text": "Does Google Play have an app to Top up?", "label": 2, "label_text": "apple_pay_or_google_pay"}

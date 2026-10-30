@@ -14,6 +14,11 @@ export {
 export { AbsTaskSTS, type STSMetrics } from './abstasks/sts.ts';
 export { AbsTaskClustering } from './abstasks/clustering.ts';
 export { AbsTaskClusteringLegacy } from './abstasks/clustering-legacy.ts';
+export {
+  AbsTaskClassification,
+  type ClassificationMetrics,
+  type Undersampling,
+} from './abstasks/classification.ts';
 export { RetrievalDatasetLoader } from './abstasks/retrieval-dataset-loaders.ts';
 export {
   DEFAULT_DATASET_CACHE,
@@ -28,6 +33,8 @@ export {
 export * from './abstasks/task-metadata.ts';
 export type { PairClassificationDistances } from './evaluators/pair-classification-evaluator.ts';
 export type { STSEvaluatorScores } from './evaluators/any-sts-evaluator.ts';
+export type { ClassifierModel } from './evaluators/sklearn-evaluator.ts';
+export type { ClassLabel } from './dependencies/sklearn.ts';
 export * from './cache/result-cache.ts';
 export {
   OVERWRITE_STRATEGIES,
@@ -114,4 +121,8 @@ export {
   BiorxivClusteringS2S,
   BiorxivClusteringS2SFast,
 } from './tasks/clustering/eng/biorxiv-clustering-s2s.ts';
+export {
+  Banking77Classification,
+  Banking77ClassificationV2,
+} from './tasks/classification/eng/banking77-classification.ts';
 export * from './types/index.ts';

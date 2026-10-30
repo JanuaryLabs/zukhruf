@@ -6,7 +6,7 @@ The words in these documents have one meaning each. See the glossary in [CONTEXT
 
 ## Use it
 
-This package has the retrieval, reranking, pair classification, STS and clustering tasks, for text. MTEB's tasks ArguAna, SCIDOCS, SprintDuplicateQuestions, STSBenchmark, BiorxivClusteringS2S and BiorxivClusteringS2S.v2 are ported, with their datasets from the HuggingFace Hub, and so are the models EmbeddingGemma 2 and Qwen3-Embedding with the prompts of MTEB. A task of your own keeps its dataset in a folder on disk, and its metadata names that folder as the dataset path.
+This package has the retrieval, reranking, pair classification, STS, clustering and classification tasks, for text. MTEB's tasks ArguAna, SCIDOCS, SprintDuplicateQuestions, STSBenchmark, BiorxivClusteringS2S, BiorxivClusteringS2S.v2, Banking77Classification and Banking77Classification.v2 are ported, with their datasets from the HuggingFace Hub, and so are the models EmbeddingGemma 2 and Qwen3-Embedding with the prompts of MTEB. A task of your own keeps its dataset in a folder on disk, and its metadata names that folder as the dataset path.
 
 The package is private: it is not on npm. A project of this workspace names it in the dependencies of its `package.json`, with `ai`, and npm links the workspace package:
 
@@ -203,6 +203,18 @@ const result = await evaluate(encoder, new BiorxivClusteringS2SFast());
 ```
 
 A task of your own extends `AbsTaskClustering`. Its dataset has the columns `sentences` and `labels`. For other columns, set `inputColumnName` and `labelColumnName`. To embed another part of the split, set `maxFractionOfDocumentsToEmbed` or `maxDocumentToEmbed`. `nClusters` sets the number of samples to cluster, and `maxDocumentsPerCluster` the size of each sample. `AbsTaskClusteringLegacy` is MTEB's older form: each row is a set of texts with a list of labels, and the task clusters each set.
+
+## Classification
+
+In a classification task, each row of a split is a text and its label. The task trains a classifier (`LogisticRegression` of scikit-learn) on the embeddings of 8 training rows of each label. Then the classifier predicts the label of each row of the evaluation split. The task does this 10 times, with other training rows each time, and gives the mean of the scores. The scores are the accuracy, and the F1, precision and recall with the macro and the weighted average. For two labels, the task also gives the average precision (`ap`). The main score of Banking77Classification is `accuracy`.
+
+```ts
+import { Banking77ClassificationV2, evaluate } from '@zukhruf/mteb';
+
+const result = await evaluate(encoder, new Banking77ClassificationV2());
+```
+
+A task of your own extends `AbsTaskClassification`. Its dataset has a `train` split and the columns `text` and `label`. For other columns, set `inputColumnName` and `labelColumnName`. For another training split, set `trainSplit`. `samplesPerLabel` sets the number of training rows of each label, and `nExperiments` the number of experiments.
 
 ## Compare models on MTEB's tasks
 
