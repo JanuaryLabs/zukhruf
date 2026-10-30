@@ -6,6 +6,8 @@ Read this record before you change the design, add a profile type, or start a ne
 
 Status on 2026-10-29: DONE. The ranker desc+kw passed the sealed exam (MAP 0.867 against the keyword list's 0.649, interval of the difference +0.105 to +0.331; commit 31698d2). The package `@zukhruf/relevance-filtering` ranks each profile's stream through `ranked()`; its yes/no threshold is kept but not recommended. The exam is a regression set now.
 
+Status on 2026-10-30: round 13 found a better ranker, the decision model d1-2B (MAP 0.924 against desc+kw's 0.782 on January to March 2025). The package does not use it yet: its port for more than one ranker waits for the maintainer's approval (#3383).
+
 ## Words in this record
 
 | Word        | Meaning                                                                                                                                                                           |
@@ -105,6 +107,20 @@ The exam scored the ranking over the whole stream; the reader shows each profile
 
 What the reader trades: the ranker always fills N, so most of what it shows is not relevant on a quiet day (precision 0.19, against the keyword list's 0.62). The keyword list shows nothing on half of the days and misses 28% of the days that hold a relevant article; the ranker misses 5%. When the ranker shows only as many articles as the keyword list did that day, it is still a little better on both recall (0.634 against 0.595) and precision (0.657 against 0.622). The user's N controls this trade: a small N keeps the list short, a large N misses less.
 
+## Rounds 12 and 13 (2026-10-30): a decision model ranks better than desc+kw
+
+Backlog #3383 asks if a second method can rank a profile's stream better than desc+kw. If one can, the package gets a port that takes more than one ranker. Both rounds used one new test slice, fresh-5: 1,370 articles of The Decoder and SiliconANGLE from January to March 2025. Four blind annotators labelled each article for each profile (`fresh-5/labels.json`, sha256 `187918bd…`). The teaching came from the whole labelled pool, as in round 11. Seven profiles have at least 20 relevant articles and give the MAP. Six profiles have at least 20 days with a relevant article and give the daily recall.
+
+Round 12 (`round-12/selection-rule.json`, sha256 `5728b7ba…`) tested two rankers that add words to meaning. Hybrid adds the tf-idf cosine of the article and the profile's name, description and keywords to the similarity. Hybrid-rocchio also moves the description vector and the word vector toward the relevant taught articles and away from the others (Rocchio). Neither passed. The MAP of desc+kw is 0.782. Hybrid has 0.763, and the interval of the difference is −0.041 to −0.005, so hybrid is worse. Hybrid-rocchio has 0.788 (−0.050 to +0.073). The daily recall is 0.899, 0.890 and 0.900. desc+kw stays the ranker to beat.
+
+Round 13 (`round-13/selection-rule.json`, sha256 `d9e0d341…`) tested d1-2B, a decision model of Liquid AI. A decision model answers typed questions about a text, each with a probability, in one forward pass. It ran on the maintainer's Mac mini (llama.cpp, `/v1/systemone`), so no article left the maintainer's machines. For each article, the model got the title and the lead, and one question for each profile: "Is the main subject of this article: <description>?". It did not get a taught article or a keyword (zero-shot). All 1,370 answers were collected and frozen (sha256 `a86a1235…`) before the first label existed.
+
+d1 passed. Its probability as the order gave MAP 0.924 against desc+kw's 0.782 (interval +0.049 to +0.298), and daily recall 0.957 against 0.899 (+0.013 to +0.125). It missed 0.2% of the days with a relevant article; desc+kw missed 4%. d1 was better than desc+kw on each of the seven profiles. Regulation changed most (0.353 to 0.955). Without regulation, the macro MAP is 0.918 against 0.854; this number was calculated after the run, for information only. Keyword evidence made d1 worse: d1+kw has 0.876, and the interval of d1 against d1+kw is +0.007 to +0.096. The rule chooses the simpler ranker, d1.
+
+On this slice, the probabilities of d1 are also calibrated. A fixed threshold of 0.5 gave T11F 0.894 against the typed keyword's 0.679 (interval +0.083 to +0.369), and the macro Brier skill is +0.726. The precision is high (0.85 to 0.99). The recall is lower on chips, courts and open models (0.59 to 0.67). The rule gives the maintainer the decision to show a yes/no decision in the reader again.
+
+The cost is time. One call with all 16 questions takes 3.45 s (median) on the Mac mini, so the 1,370 articles took 82 minutes. One day of the stream (about 15 articles) takes less than one minute. desc+kw needs only one embedding for each article. The plans are `round-12/plan.json` (sha256 `090198db…`) and `round-13/plan.json` (`7859cb7c…`). Limitation 16 applies to this result.
+
 ## Limitations
 
 ### 1. A realistic stream has few relevant articles
@@ -194,6 +210,12 @@ What the reader trades: the ranker always fills N, so most of what it shows is n
 **What happens.** The package (`packages/information-filtering/relevance-filtering`, commit 9a5ea94) rehearsed the frozen exam protocol on development data before the exam: teach from the top 5 or 10 matches of a 6,300-article pool, decide on October to December 2025. It failed: macro F0.5 0.376 against the typed keyword's 0.524, Brier skill −0.019. The research code gives the same numbers. The top matches of a large pool have the most extreme scores, so the fit puts the relevant curve 3 to 4.4 standard deviations up and the relevant share at its floor; security accepted nothing. Round 6 taught from about 250 articles, so it did not show this. In the reader the pool grows every day, so this is a defect of the design, not of the exam.
 
 **Before you change it.** Do not score the exam with this design. The taught answers are a selected sample: a person judges only what the reader shows. The standard fix models that selection: fit the score distributions by maximum likelihood with the taught scores as samples above the cut-off of what was shown (Zhang and Callan, SIGIR 2001, for adaptive filtering thresholds). Pre-register it and test it under both teaching protocols (a small window and a large pool).
+
+### 16. An answer key from a language model can prefer a language-model ranker
+
+**What happens.** In each round, the annotators are an AI model (Claude Opus 5.5). d1 is also a language model, and round 13 asks it the main-subject question of the labelling rule. Studies of relevance labels from language models warn that such labels can agree more with a language-model ranker than human labels do (Faggioli et al., ICTIR 2023; Clarke and Dietz 2024). Part of d1's lead can come from this effect. No person labelled fresh-5.
+
+**Before you change it.** Before the package depends on d1 alone, let a person label a random sample of fresh-5, and compare the MAP of d1 and desc+kw on that sample.
 
 ## Rules for every round
 
