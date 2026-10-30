@@ -60,6 +60,11 @@ for (const numpyCase of expected.numpy)
       if (name === 'choice_no_replace')
         return generator.choiceWithoutReplacement(a, b);
       if (name === 'permutation') return generator.permutation(a);
+      if (name === 'shuffle') {
+        const values = Array.from({ length: a }, (_, index) => index);
+        generator.shuffle(values);
+        return values;
+      }
       throw new Error(`No call ${name}.`);
     });
 

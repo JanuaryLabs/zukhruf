@@ -130,7 +130,8 @@ export class NumpyGenerator {
 // numpy.random.RandomState(seed), the legacy generator that
 // sklearn.utils.check_random_state(seed) gives: MT19937 seeded by
 // init_genrand (mt19937_seed of numpy/random/src/mt19937/mt19937.c), and the
-// draws of mtrand.pyx that scikit-learn's MiniBatchKMeans calls. CPython's
+// draws of mtrand.pyx that scikit-learn's MiniBatchKMeans and MTEB's
+// classification tasks call. CPython's
 // random.Random (python-random.ts) has its own copy of the generator: it
 // seeds with init_by_array.
 const MT_N = 624;
@@ -212,17 +213,21 @@ export class RandomState {
     return this.permutation(n).slice(0, size);
   }
 
-  // permutation(n): shuffle of arange(n), from the last index down, each
-  // swap with random_interval(i).
+  // permutation(n): shuffle of arange(n).
   permutation(n: number): number[] {
     const values = Array.from({ length: n }, (_, index) => index);
-    for (let i = n - 1; i >= 1; i--) {
-      const j = this.#interval(i);
-      const swapped = values[j] ?? 0;
-      values[j] = values[i] ?? 0;
-      values[i] = swapped;
-    }
+    this.shuffle(values);
     return values;
+  }
+
+  // shuffle(x) in place: from the last index down, each item swaps with the
+  // item at random_interval(i). An array and a Python list draw the same
+  // integers.
+  shuffle(values: unknown[]): void {
+    for (let i = values.length - 1; i >= 1; i--) {
+      const j = this.#interval(i);
+      [values[i], values[j]] = [values[j], values[i]];
+    }
   }
 
   // random_interval(max): an integer in [0, max] by masked rejection.

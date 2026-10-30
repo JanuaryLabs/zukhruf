@@ -418,3 +418,113 @@ export function adjustedMutualInfoScore(
       : Math.max(numerator, FLOAT64_EPS);
   return numerator / denominator;
 }
+
+// A class label: an int, or a string as numpy keeps it.
+export type ClassLabel = number | string;
+
+// _check_targets of 1-D labels and unique_labels: the sorted labels of both
+// arrays.
+function checkTargets(
+  yTrue: readonly ClassLabel[],
+  yPred: readonly ClassLabel[],
+): ClassLabel[] {
+  checkClusterings(yTrue, yPred);
+  if (yTrue.length < 1)
+    throw new Error(
+      'Found empty input array (e.g., `y_true` or `y_pred`) while a minimum of 1 sample is required.',
+    );
+  const labels = [...yTrue, ...yPred];
+  if (
+    labels.some((label) => typeof label === 'string') &&
+    labels.some((label) => typeof label === 'number')
+  )
+    throw new Error('Mix of label input types (string and number)');
+  return uniqueInverse(labels).unique;
+}
+
+// sklearn.metrics.accuracy_score: the share of equal labels.
+export function accuracyScore(
+  yTrue: readonly ClassLabel[],
+  yPred: readonly ClassLabel[],
+): number {
+  checkTargets(yTrue, yPred);
+  let equal = 0;
+  for (const [index, label] of yTrue.entries())
+    if (label === yPred[index]) equal += 1;
+  return equal / yTrue.length;
+}
+
+// How precision_recall_fscore_support averages the scores of the labels:
+// macro is their mean, weighted their mean weighted by the true count of
+// each label.
+export type ClassificationAverage = 'macro' | 'weighted';
+
+// precision_recall_fscore_support with beta 1 and zero_division "warn": the
+// precision, recall and F1 of each label of y_true or y_pred, averaged. A
+// score whose denominator is 0 is 0 (sklearn warns).
+export function precisionRecallFscore(
+  yTrue: readonly ClassLabel[],
+  yPred: readonly ClassLabel[],
+  average: ClassificationAverage,
+): { precision: number; recall: number; fScore: number } {
+  const labels = checkTargets(yTrue, yPred);
+  const position = new Map(labels.map((label, index) => [label, index]));
+  const tpSum = new Array<number>(labels.length).fill(0);
+  const predSum = new Array<number>(labels.length).fill(0);
+  const trueSum = new Array<number>(labels.length).fill(0);
+  for (const [index, label] of yTrue.entries()) {
+    const predicted = yPred[index] ?? label;
+    const truePosition = position.get(label) ?? 0;
+    const predPosition = position.get(predicted) ?? 0;
+    trueSum[truePosition] = (trueSum[truePosition] ?? 0) + 1;
+    predSum[predPosition] = (predSum[predPosition] ?? 0) + 1;
+    if (label === predicted)
+      tpSum[truePosition] = (tpSum[truePosition] ?? 0) + 1;
+  }
+  const divide = (numerator: number, denominator: number) =>
+    denominator === 0 ? 0 : numerator / denominator;
+  const precision = tpSum.map((tp, index) => divide(tp, predSum[index] ?? 0));
+  const recall = tpSum.map((tp, index) => divide(tp, trueSum[index] ?? 0));
+  const fScore = tpSum.map((tp, index) =>
+    divide(2 * tp, (trueSum[index] ?? 0) + (predSum[index] ?? 0)),
+  );
+  // _nanmean for macro; np.average with the true counts as weights for
+  // weighted. The counts sum to the number of samples.
+  const averaged = (scores: number[]) =>
+    average === 'macro'
+      ? sum(scores) / scores.length
+      : sum(scores.map((score, index) => score * (trueSum[index] ?? 0))) /
+        sum(trueSum);
+  return {
+    precision: averaged(precision),
+    recall: averaged(recall),
+    fScore: averaged(fScore),
+  };
+}
+
+// sklearn.metrics.f1_score.
+export function f1Score(
+  yTrue: readonly ClassLabel[],
+  yPred: readonly ClassLabel[],
+  average: ClassificationAverage,
+): number {
+  return precisionRecallFscore(yTrue, yPred, average).fScore;
+}
+
+// sklearn.metrics.precision_score.
+export function precisionScore(
+  yTrue: readonly ClassLabel[],
+  yPred: readonly ClassLabel[],
+  average: ClassificationAverage,
+): number {
+  return precisionRecallFscore(yTrue, yPred, average).precision;
+}
+
+// sklearn.metrics.recall_score.
+export function recallScore(
+  yTrue: readonly ClassLabel[],
+  yPred: readonly ClassLabel[],
+  average: ClassificationAverage,
+): number {
+  return precisionRecallFscore(yTrue, yPred, average).recall;
+}

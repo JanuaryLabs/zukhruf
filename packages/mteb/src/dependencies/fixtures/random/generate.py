@@ -11,7 +11,8 @@
 #   random() and getrandbits(k), in the order of the calls;
 # - numpy.random.RandomState(seed): randint, random_sample, uniform(size),
 #   choice(n, size, p=p) with the float32 weights of scikit-learn, choice(n,
-#   size, replace=False) and permutation, in the order of the calls.
+#   size, replace=False), permutation and shuffle of a list range(n), in
+#   the order of the calls.
 # Never edit expected.json by hand: run this script again.
 import importlib.metadata
 import json
@@ -67,6 +68,10 @@ def numpy_case(case, seed, calls):
             results.append(generator.choice(call[1], replace=False, size=call[2]).tolist())
         elif name == "permutation":
             results.append(generator.permutation(call[1]).tolist())
+        elif name == "shuffle":
+            values = list(range(call[1]))
+            generator.shuffle(values)
+            results.append(values)
     return {"case": case, "seed": seed, "calls": calls, "results": results}
 
 
@@ -102,6 +107,9 @@ numpy_cases = [
         ["permutation", 1], ["permutation", 2], ["permutation", 10], ["choice_no_replace", 100, 100], ["choice_no_replace", 3, 0],
     ]),
     numpy_case("choice with p of 1536 and of 1", 2026, [["choice_p", 1536, 40], ["choice_p", 1, 3], ["uniform", 3]]),
+    numpy_case("shuffles of lists, as MTEB's classification tasks undersample", 42, [
+        ["shuffle", 0], ["shuffle", 1], ["shuffle", 2], ["shuffle", 30], ["shuffle", 1000], ["permutation", 5],
+    ]),
     numpy_case("more than 624 words: the state twists again", 1, [["random_sample", 400], ["randint", 0, 1000, 10]]),
 ]
 
