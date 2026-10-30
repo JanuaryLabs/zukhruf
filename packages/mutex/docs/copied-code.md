@@ -78,10 +78,17 @@ Backlog #2899 is about this code. A third dialect with a pool is the time to mov
 
 **The worker thread of the cross-thread tests.**
 
-- Places: `threadSource` and `startThread` in `packages/mutex/src/mutex/is-held.test.ts` and in `packages/mutex/src/mutex/mutex.test.ts`.
+- Places: `threadSource` and `startThread` in `packages/mutex/src/mutex/is-held.test.ts` and in `packages/mutex/src/mutex/cross-thread.test.ts`.
 - Same: `threadSource` gives the source of a worker. The worker imports `Mutex` and the store cases with dynamic imports, makes the thread side of the store, and runs `body`. `startThread` starts an eval worker with that source, and the host adopts the worker before it can ask for a key.
 - Differs: nothing in the code. One comment breaks its lines in a different place.
 - Why it stays: this knowledge is only in this repository, and no package exports a shared test module. Only a test helper whose knowledge is in three or more repositories goes into `@zukhruf/testing` ([testing ADR 0016](../../testing/docs/adr/0016-a-test-helper-goes-into-an-area-when-three-repositories-have-its-knowledge-and-it-does-not-use-mock.md)).
+
+**The long key of the mutex tests.**
+
+- Places: `longKey` and `label` in `packages/mutex/src/mutex/mutex.test.ts` and in `packages/mutex/src/mutex/cross-process.test.ts`.
+- Same: `longKey` is a key of 1000 characters. It is longer than any file name, so a lock store that names a file after the key cannot use the key as it is. `label` names a key in a test title. For a key longer than 32 characters, it gives the last four characters and the length.
+- Differs: nothing in the code.
+- Why it stays: the two files were one file. Backlog #3314 split them, so that `node --test` runs them side by side. This knowledge is only in this repository, and no package exports a shared test module.
 
 **The magic numbers of the network file systems.**
 
