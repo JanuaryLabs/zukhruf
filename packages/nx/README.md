@@ -155,7 +155,7 @@ Add the plugin to `plugins` in `nx.json`. The options are optional. They apply t
     "@zukhruf/nx/format",
     {
       "plugin": "@zukhruf/nx/test",
-      "options": { "timeout": 60000, "flags": [] }
+      "options": { "timeout": 240000, "flags": [] }
     }
   ]
 }
@@ -175,10 +175,10 @@ export const createNodes: CreateNodes<{
 
 Unlike `format`, this plugin takes options. The repos use different flags, so each difference is a parameter:
 
-| Option    | Default | Effect                                                                                                                           |
-| --------- | ------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| `timeout` | `60000` | the value of `--test-timeout`, in milliseconds                                                                                   |
-| `flags`   | `[]`    | more Node flags for each project of the workspace, for example `["--test-force-exit"]` or `["--experimental-test-module-mocks"]` |
+| Option    | Default  | Effect                                                                                                                           |
+| --------- | -------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `timeout` | `240000` | the value of `--test-timeout`, in milliseconds                                                                                   |
+| `flags`   | `[]`     | more Node flags for each project of the workspace, for example `["--test-force-exit"]` or `["--experimental-test-module-mocks"]` |
 
 ### Which projects get the test target
 
@@ -207,7 +207,7 @@ The 2026-10-29 audit of the 7 repos measured the effect. The rule matches each `
 | `dependsOn` | `["^build"]`                                                                                                                                                                                   |
 
 - `--no-warnings`: 5 of the 7 repos use it.
-- `--test-timeout`: zukhruf and deepagents use 60 s, so the default is 60 s. The other repos have no time limit, and that is drift.
+- `--test-timeout`: the default is 240 s. `@zukhruf/testing` starts a shared database server the first time that a test calls `database()`, and it sets a time limit for each cold start: Postgres 60 s, MySQL and MariaDB 90 s, SQL Server 180 s. The test waits during the cold start, so its own time limit must be longer. 240 s is the slowest readiness bound, SQL Server 180 s, plus 60 s for the work of the test. The old default, 60 s, stopped a test before the readiness bound: on 2026-10-30 a MySQL test of text2sql and the SQL Server tests of deepagents stopped at 60 s. When `@zukhruf/testing` changes a readiness bound, change this default with it. A repo that wants a shorter limit sets the `timeout` option. One project sets `--test-timeout` in its `args`. No time limit is drift. See [ADR 0004](./docs/adr/0004-node-test-target-from-test-files.md).
 - Two reporters: `spec` to the terminal and `junit` to `test-results.xml`. zukhruf, deepagents and text2sql use both.
 - `^build`: a test imports the built output of the packages that the project depends on. factory, whatisgoingon and text2sql test from the source, so `^build` is sufficient for them. A repo whose tests also need the project's own `build` adds it (see [Prerequisites of the test area](#prerequisites-of-the-test-area)).
 - No cache: no repo caches a `node:test` run today.

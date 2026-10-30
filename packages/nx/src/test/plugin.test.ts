@@ -66,7 +66,7 @@ test('a project that owns test files gets the test target with one glob for each
   assert.partialDeepStrictEqual(a?.['test'], {
     executor: 'nx:run-commands',
     options: {
-      command: `node --test --no-warnings --test-timeout=60000 ${reporters}`,
+      command: `node --test --no-warnings --test-timeout=240000 ${reporters}`,
       cwd: 'packages/a',
       args: '"eval/**/*.test.ts" "src/**/*.test.{mts,ts}"',
     },
@@ -192,11 +192,11 @@ test('a test:docker project gets its own global setup, else the one of @zukhruf/
     ]),
     [
       [
-        `node --test --no-warnings --test-timeout=60000 --test-global-setup=src/testing/docker-global-setup.ts --test-force-exit ${reporters}`,
+        `node --test --no-warnings --test-timeout=240000 --test-global-setup=src/testing/docker-global-setup.ts --test-force-exit ${reporters}`,
         false,
       ],
       [
-        `node --test --no-warnings --test-timeout=60000 --test-global-setup=${packageSetup} --test-force-exit ${reporters}`,
+        `node --test --no-warnings --test-timeout=240000 --test-global-setup=${packageSetup} --test-force-exit ${reporters}`,
         false,
       ],
     ],

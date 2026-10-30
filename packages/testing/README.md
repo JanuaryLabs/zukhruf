@@ -136,6 +136,8 @@ docker stop <container-id>
 
 The engine removes a server when it stops, so stopping also removes it. The image tag is part of the configuration: stop the server to pick up a newer image behind the same tag.
 
+A shared server starts on the first `database()` call that needs it. When that call is in a test, the time limit of the test also counts the start of the server. Each fixture sets a time limit for the start, its readiness bound: Postgres 60 s, MySQL and MariaDB 90 s, SQL Server 180 s. When the server does not answer in that time, the call fails with "Container … was not ready" and the output of the container. The default time limit of `@zukhruf/nx/test` is 240 s: the slowest readiness bound plus 60 s for the test (see [the test area](../nx/README.md#what-the-test-target-runs)). When you change a readiness bound, change that default with it.
+
 ## A killed run
 
 Disposal cleans up after a test that ends. A test process that is killed (a timeout with `--test-force-exit`, Ctrl-C, an out-of-memory kill) does not dispose its handles. A running container does not stop by itself. Thus Node's global setup and global teardown make the test processes of one `node --test` invocation into one run.
@@ -174,7 +176,7 @@ Another Docker client can create containers for the run, for example a sandbox l
 
 Status: design for review (#3404). The code does not exist yet.
 
-A shared server starts on the first `database()` call that needs it. When that call is in a test, the time limit of the test also counts the start of the server. A cold start pulls the image and boots the server, and on a slow engine that takes tens of seconds. SQL Server takes the longest. A cold start happens on each CI run, and on each machine after a new version of this package, because a new version selects new shared servers (see [Shared servers](#shared-servers)). Then the first test of a file can fail at the time limit, for example at the 60 s default of `@zukhruf/nx/test`.
+A shared server starts on the first `database()` call that needs it. When that call is in a test, the time limit of the test also counts the start of the server. A cold start pulls the image and boots the server, and on a slow engine that takes tens of seconds. SQL Server takes the longest. A cold start happens on each CI run, and on each machine after a new version of this package, because a new version selects new shared servers (see [Shared servers](#shared-servers)). Then the first test of a file can fail at a time limit that is shorter than the readiness bound (see [Shared servers](#shared-servers)).
 
 To prevent this, make a prebuilt fixture of each shared server: the global setup creates the server before the run starts. Write one global setup file in your project. Give `prebuild` one acquisition for each shared server that your tests use. Use the same options as your tests, because different options select a different server.
 
