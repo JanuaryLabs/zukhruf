@@ -1,10 +1,11 @@
 // The pandas 3.1.0 behavior that MTEB's tables depend on: a frame from
 // columns, drop, explode, pivot_table(...).reset_index() and
 // groupby(...).agg(...).reset_index(), for the dtypes that MTEB's tables have,
-// and the writers to_csv, to_markdown and to_latex with index=False.
+// and the writers to_csv, to_markdown and to_latex with index=False; and
+// qcut, which MTEB's regression tasks call to bin their values.
 import { EOL } from 'node:os';
 
-import { addReduceat } from './numpy.ts';
+import { addReduceat, linspace, quantile } from './numpy.ts';
 import {
   compareStrings,
   pythonFloatRepr,
@@ -544,4 +545,53 @@ function headerSpans(
     else spans.push([column, 1]);
   }
   return spans;
+}
+
+// pd.qcut(x, q, labels=False, duplicates="drop") of numbers (core/reshape/
+// tile.py): the bin of each value, from 0, or NaN outside the bins. The edges
+// are the quantiles of x at linspace(0, 1, q + 1), each one that q times it
+// does not give an integer rounded up to the next float. Equal edges become
+// one, unless there are 2 edges.
+export function qcut(
+  x: readonly number[],
+  q: number,
+  _options: { readonly labels: false; readonly duplicates: 'drop' },
+): number[] {
+  if (!Number.isInteger(q) || q < 1)
+    throw new Error('`q` should be a positive integer.');
+  const sorted = x
+    .filter((value) => !Number.isNaN(value))
+    .sort((a, b) => a - b);
+  const quantiles = linspace(0, 1, q + 1).map((value, index) =>
+    q * value === index ? value : nextUp(value),
+  );
+  let bins = quantiles.map((value) => quantile(sorted, value));
+  const uniqueBins = [...new Set(bins)];
+  if (uniqueBins.length < bins.length && bins.length !== 2) bins = uniqueBins;
+  const first = bins[0];
+  return x.map((value) => {
+    const id = value === first ? 1 : searchsortedLeft(bins, value);
+    if (Number.isNaN(value) || id === bins.length || id === 0)
+      return Number.NaN;
+    return id - 1;
+  });
+}
+
+// np.nextafter(value, 1) for 0 < value < 1: the next float up.
+function nextUp(value: number): number {
+  const bits = new BigInt64Array(new Float64Array([value]).buffer);
+  bits[0] = (bits[0] ?? 0n) + 1n;
+  return new Float64Array(bits.buffer)[0] ?? Number.NaN;
+}
+
+// np.searchsorted(sorted, value, side="left").
+function searchsortedLeft(sorted: readonly number[], value: number): number {
+  let low = 0;
+  let high = sorted.length;
+  while (low < high) {
+    const middle = (low + high) >>> 1;
+    if ((sorted[middle] ?? 0) < value) low = middle + 1;
+    else high = middle;
+  }
+  return low;
 }

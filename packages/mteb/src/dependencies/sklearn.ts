@@ -1,6 +1,6 @@
 import type { Embeddings } from '../types/encoder-io.ts';
 import { log } from './libm.ts';
-import { mean, sum, sumFloat32 } from './numpy.ts';
+import { mean, meanFloat32, sum, sumFloat32 } from './numpy.ts';
 import { compareStrings } from './python.ts';
 import { gammaln, rankdata } from './scipy.ts';
 
@@ -720,4 +720,59 @@ export class MultiLabelBinarizer {
       return row;
     });
   }
+}
+
+// The regression metrics of sklearn.metrics as MTEB calls them: y_true is a
+// datasets Column, which has no dtype, so scikit-learn casts it to the dtype
+// of y_pred, float32. Each difference, square and mean is a float32, and a
+// mean is the float32 pairwise sum divided by the number of values.
+function float32Differences(
+  yTrue: readonly number[],
+  yPred: Float32Array,
+): Float32Array {
+  if (yTrue.length !== yPred.length)
+    throw new Error(
+      `Found input variables with inconsistent numbers of samples: [${yTrue.length}, ${yPred.length}]`,
+    );
+  return Float32Array.from(
+    yTrue,
+    (value, i) => Math.fround(value) - (yPred[i] ?? 0),
+  );
+}
+
+// mean_squared_error(y_true, y_pred).
+export function meanSquaredError(
+  yTrue: readonly number[],
+  yPred: Float32Array,
+): number {
+  const differences = float32Differences(yTrue, yPred);
+  return meanFloat32(differences.map((difference) => difference * difference));
+}
+
+// mean_absolute_error(y_true, y_pred).
+export function meanAbsoluteError(
+  yTrue: readonly number[],
+  yPred: Float32Array,
+): number {
+  return meanFloat32(float32Differences(yTrue, yPred).map(Math.abs));
+}
+
+// r2_score(y_true, y_pred) with force_finite: 1 - the sum of the squared
+// errors over the sum of the squared deviations of y_true from its mean. It
+// is 1 when both sums are 0, 0 when only the deviations are 0, and NaN for
+// fewer than 2 samples.
+export function r2Score(yTrue: readonly number[], yPred: Float32Array): number {
+  const differences = float32Differences(yTrue, yPred);
+  if (yPred.length < 2) return Number.NaN;
+  const numerator = sumFloat32(
+    differences.map((difference) => difference * difference),
+  );
+  const trueValues = Float32Array.from(yTrue);
+  const trueMean = meanFloat32(trueValues);
+  const denominator = sumFloat32(
+    trueValues.map((value) => Math.fround(value - trueMean) ** 2),
+  );
+  if (numerator === 0) return 1;
+  if (denominator === 0) return 0;
+  return Math.fround(1 - Math.fround(numerator / denominator));
 }

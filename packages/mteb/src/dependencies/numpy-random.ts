@@ -1,10 +1,13 @@
 // numpy.random.default_rng(seed) for a seed and a range below 2^32, bit for
 // bit: SeedSequence, PCG64 (XSL-RR), Lemire's bounded integers for
-// integers(low, high, size), and masked rejection for shuffle of a list, as
-// numpy 2 implements them. The paired bootstrap test
+// integers(low, high, size), masked rejection for shuffle and permutation,
+// and Floyd's algorithm for choice without replacement, as numpy 2
+// implements them. The paired bootstrap test
 // (significance/paired-bootstrap.ts) draws its replicates with integers, so
 // a verdict is the verdict of the same test in NumPy. MTEB's multilabel
-// classification tasks undersample with shuffle.
+// classification tasks undersample with shuffle. The stratified split of
+// datasets, which MTEB's regression tasks call, draws with permutation and
+// choice.
 
 const MASK32 = 0xffff_ffffn;
 const MASK64 = (1n << 64n) - 1n;
@@ -92,15 +95,73 @@ export class NumpyGenerator {
     );
   }
 
-  // shuffle(x) of a Python list, in place (_generator.pyx): from the last
-  // index down, each item swaps with the item at random_interval(i). An
-  // ndarray takes another path (Lemire's bounded integers) that this port
-  // does not have.
+  // shuffle(x) of a Python list or a 1-D array, in place (_generator.pyx):
+  // from the last index down, each item swaps with the item at
+  // random_interval(i). Both draw the same integers.
   shuffle(values: unknown[]): void {
     for (let i = values.length - 1; i >= 1; i--) {
       const j = this.#interval(i);
       [values[i], values[j]] = [values[j], values[i]];
     }
+  }
+
+  // permutation(n): shuffle of arange(n). permutation(x) of a list: shuffle
+  // of a copy of x.
+  permutation(x: number): number[];
+  permutation<T>(x: readonly T[]): T[];
+  permutation<T>(x: number | readonly T[]): (number | T)[] {
+    const values =
+      typeof x === 'number'
+        ? Array.from({ length: x }, (_, index) => index)
+        : [...x];
+    this.shuffle(values);
+    return values;
+  }
+
+  // choice(a, size, replace=False) of a 1-D array, without p: Floyd's
+  // algorithm draws size distinct indices, then _shuffle_int shuffles them.
+  // numpy keeps the drawn indices in a hash
+  // set, which only tells whether an index was drawn.
+  choiceWithoutReplacement<T>(a: readonly T[], size: number): T[] {
+    const popSize = a.length;
+    if (size > popSize)
+      throw new Error(
+        'Cannot take a larger sample than population when replace is False',
+      );
+    if (popSize > 10_000 && size > Math.floor(popSize / 50))
+      throw new RangeError(
+        "This port chooses without replacement by Floyd's algorithm only.",
+      );
+    const drawn = new Set<number>();
+    const idx: number[] = [];
+    for (let j = popSize - size; j < popSize; j++) {
+      const value = this.#boundedUint64(j);
+      const index = drawn.has(value) ? j : value;
+      drawn.add(index);
+      idx.push(index);
+    }
+    const chosen = idx.map((index) => {
+      const item = a[index];
+      if (item === undefined) throw new RangeError(`No item at ${index}.`);
+      return item;
+    });
+    this.#shuffleInt(chosen);
+    return chosen;
+  }
+
+  // _shuffle_int(n, 1, data) of _generator.pyx: from the last index down, each
+  // item swaps with the item at random_bounded_uint64(0, i).
+  #shuffleInt(values: unknown[]): void {
+    for (let i = values.length - 1; i >= 1; i--) {
+      const j = this.#boundedUint64(i);
+      [values[i], values[j]] = [values[j], values[i]];
+    }
+  }
+
+  // random_bounded_uint64(off=0, rng) of distributions.c for rng below
+  // 2^32 - 1: no draw for rng 0, else Lemire's bounded integers.
+  #boundedUint64(rng: number): number {
+    return rng === 0 ? 0 : this.#bounded(rng);
   }
 
   // random_interval(max) of distributions.c: an integer in [0, max] by

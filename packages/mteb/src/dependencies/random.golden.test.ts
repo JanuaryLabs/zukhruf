@@ -90,6 +90,16 @@ for (const generatorCase of expected.generator_cases)
         generator.shuffle(values);
         return values;
       }
+      if (name === 'permutation') return generator.permutation(a);
+      if (name === 'permutation_list')
+        return generator.permutation(
+          Array.from({ length: a }, (_, index) => 3 * index + 1),
+        );
+      if (name === 'choice_no_replace')
+        return generator.choiceWithoutReplacement(
+          Array.from({ length: a }, (_, index) => index),
+          b,
+        );
       throw new Error(`No call ${name}.`);
     });
 

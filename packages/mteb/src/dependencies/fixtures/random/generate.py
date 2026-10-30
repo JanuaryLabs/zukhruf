@@ -13,8 +13,10 @@
 #   choice(n, size, p=p) with the float32 weights of scikit-learn, choice(n,
 #   size, replace=False), choice(a, size) of the array a = 3 * arange(n) + 1,
 #   permutation and shuffle of a list range(n), in the order of the calls;
-# - numpy.random.default_rng(seed): shuffle of a list range(n) and
-#   integers(low, high, size), in the order of the calls.
+# - numpy.random.default_rng(seed): shuffle of a list range(n),
+#   integers(low, high, size), permutation(n), permutation of the list
+#   3 * range(n) + 1, and choice(arange(n), size, replace=False), in the order
+#   of the calls.
 # Never edit expected.json by hand: run this script again.
 import importlib.metadata
 import json
@@ -91,6 +93,15 @@ def generator_case(case, seed, calls):
             results.append([int(value) for value in values])
         elif name == "integers":
             results.append(generator.integers(call[1], call[2], call[3]).tolist())
+        elif name == "permutation":
+            results.append(generator.permutation(call[1]).tolist())
+        elif name == "permutation_list":
+            # The stratified split of datasets permutes a list of ints.
+            results.append(generator.permutation([3 * value + 1 for value in range(call[1])]).tolist())
+        elif name == "choice_no_replace":
+            # The stratified split of datasets chooses among the indices of an
+            # ndarray.
+            results.append(generator.choice(np.arange(call[1]), size=call[2], replace=False).tolist())
     return {"case": case, "seed": seed, "calls": calls, "results": results}
 
 
@@ -141,6 +152,18 @@ generator_cases = [
     ]),
     generator_case("shuffles and integers share the buffered half of a 64-bit draw", 7, [
         ["shuffle", 3], ["integers", 0, 10, 1], ["shuffle", 4], ["integers", 0, 1000, 3], ["shuffle", 70000],
+    ]),
+    generator_case("permutations of n and of a list, as the stratified split of datasets draws", 42, [
+        ["permutation", 0], ["permutation", 1], ["permutation", 2], ["permutation", 30], ["permutation_list", 0],
+        ["permutation_list", 1], ["permutation_list", 25],
+    ]),
+    generator_case("choices without replacement: all of a population draws no last index, one of one draws nothing", 3, [
+        ["choice_no_replace", 10, 10], ["choice_no_replace", 10, 3], ["choice_no_replace", 1, 1], ["choice_no_replace", 7, 0],
+        ["choice_no_replace", 2, 2], ["choice_no_replace", 10, 9],
+    ]),
+    generator_case("choices and permutations share the buffered half with shuffles and integers", 2026, [
+        ["integers", 0, 10, 1], ["choice_no_replace", 6, 4], ["shuffle", 5], ["permutation", 7], ["integers", 0, 7, 3],
+        ["choice_no_replace", 3, 2], ["permutation_list", 9], ["choice_no_replace", 10, 1], ["integers", 0, 5, 1],
     ]),
 ]
 

@@ -63,9 +63,15 @@ export function linspace(start: number, stop: number, num: number): number[] {
 }
 
 // np.percentile(values, q) with the default method "linear", for values
-// sorted in increasing order.
+// sorted in increasing order: np.quantile of q / 100.
 export function percentile(sorted: readonly number[], q: number): number {
-  const position = (sorted.length - 1) * (q / 100);
+  return quantile(sorted, q / 100);
+}
+
+// np.quantile(values, q) with the default method "linear", for values sorted
+// in increasing order.
+export function quantile(sorted: readonly number[], q: number): number {
+  const position = (sorted.length - 1) * q;
   const below = Math.floor(position);
   const a = sorted[below] ?? Number.NaN;
   const b = sorted[Math.min(below + 1, sorted.length - 1)] ?? Number.NaN;
@@ -80,6 +86,24 @@ export function percentile(sorted: readonly number[], q: number): number {
 // a longer array splits in two at a multiple of 8.
 export function sumFloat32(values: ArrayLike<number>): number {
   return Math.fround(0 + pairwiseSumFloat32(values, 0, values.length));
+}
+
+// np.mean of a float32 array: the float32 pairwise sum divided by the
+// number of values, in float32.
+export function meanFloat32(values: ArrayLike<number>): number {
+  return Math.fround(sumFloat32(values) / values.length);
+}
+
+// np.mean(rows, axis=0) of a C-contiguous float32 matrix: numpy adds the rows
+// one after the other in float32, then divides each sum by the number of rows.
+export function meanAxis0Float32(rows: readonly Float32Array[]): Float32Array {
+  const [first, ...rest] = rows;
+  if (first === undefined) throw new RangeError('np.mean of no rows.');
+  const sums = Float32Array.from(first);
+  for (const row of rest)
+    for (let column = 0; column < sums.length; column++)
+      sums[column] = (sums[column] ?? 0) + (row[column] ?? 0);
+  return sums.map((value) => Math.fround(value / rows.length));
 }
 
 function pairwiseSumFloat32(

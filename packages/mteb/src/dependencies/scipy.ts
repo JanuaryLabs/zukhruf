@@ -153,3 +153,92 @@ export function gammaln(x: number): number {
   }
   return q + polevl(1 / (x * x), GAMMA_A) / x;
 }
+
+// scipy.stats.kendalltau(x, y).statistic with variant "b": the dense ranks of
+// y, then of x in a stable sort by x, the discordant pairs from a Fenwick
+// tree (_kendall_dis of _stats.pyx), and the ties, all exact integers. It is
+// NaN for fewer than 2 values, for a NaN, and when x or y is constant. SciPy
+// promotes both to float64, so a float32 y is widened, not x rounded.
+export function kendalltau(x: ArrayLike<number>, y: ArrayLike<number>): number {
+  if (x.length !== y.length)
+    throw new Error('Array shapes are incompatible for broadcasting.');
+  const size = x.length;
+  if (size < 2) return Number.NaN;
+  for (let index = 0; index < size; index++)
+    if (Number.isNaN(x[index]) || Number.isNaN(y[index])) return Number.NaN;
+  const byY = argsortStable(y);
+  const yDense = denseRanks(byY.map((index) => y[index] ?? 0));
+  const xByY = byY.map((index) => x[index] ?? 0);
+  const byX = argsortStable(xByY);
+  const xRanks = denseRanks(byX.map((index) => xByY[index] ?? 0));
+  const yRanks = byX.map((index) => yDense[index] ?? 0);
+  const dis = kendallDis(xRanks, yRanks);
+  let ntie = 0;
+  let run = 1;
+  for (let index = 1; index <= size; index++)
+    if (
+      index < size &&
+      xRanks[index] === xRanks[index - 1] &&
+      yRanks[index] === yRanks[index - 1]
+    )
+      run++;
+    else {
+      ntie += (run * (run - 1)) / 2;
+      run = 1;
+    }
+  const xtie = rankTies(xRanks);
+  const ytie = rankTies(yRanks);
+  const tot = (size * (size - 1)) / 2;
+  if (xtie === tot || ytie === tot) return Number.NaN;
+  const conMinusDis = tot - xtie - ytie + ntie - 2 * dis;
+  const tau = conMinusDis / Math.sqrt(tot - xtie) / Math.sqrt(tot - ytie);
+  return Math.min(1, Math.max(-1, tau));
+}
+
+// np.r_[True, values[1:] != values[:-1]].cumsum() of sorted values.
+function denseRanks(sorted: readonly number[]): number[] {
+  let rank = 0;
+  return sorted.map((value, index) => {
+    if (index === 0 || value !== sorted[index - 1]) rank++;
+    return rank;
+  });
+}
+
+// The pairs that share a rank: the sum of c (c - 1) / 2 over the count c of
+// each rank.
+function rankTies(ranks: readonly number[]): number {
+  const counts = new Map<number, number>();
+  for (const rank of ranks) counts.set(rank, (counts.get(rank) ?? 0) + 1);
+  let ties = 0;
+  for (const count of counts.values()) ties += (count * (count - 1)) / 2;
+  return ties;
+}
+
+function kendallDis(x: readonly number[], y: readonly number[]): number {
+  const sup = 1 + y.reduce((largest, rank) => Math.max(largest, rank), 0);
+  const arr = new Float64Array(sup + ((sup - 1) >> 14));
+  const size = x.length;
+  let dis = 0;
+  let i = 0;
+  let k = 0;
+  while (i < size) {
+    while (k < size && x[i] === x[k]) {
+      dis += i;
+      let idx = y[k] ?? 0;
+      while (idx !== 0) {
+        dis -= arr[idx + (idx >> 14)] ?? 0;
+        idx &= idx - 1;
+      }
+      k++;
+    }
+    while (i < k) {
+      let idx = y[i] ?? 0;
+      while (idx < sup) {
+        arr[idx + (idx >> 14)] = (arr[idx + (idx >> 14)] ?? 0) + 1;
+        idx += idx & -idx;
+      }
+      i++;
+    }
+  }
+  return dis;
+}
