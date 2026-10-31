@@ -9,6 +9,9 @@ package-lock.json
 # Snowball's JavaScript stemmers, kept byte for byte (sha256 in
 # packages/mteb/src/dependencies/snowball/SHA256SUMS).
 /packages/mteb/src/dependencies/snowball
+# codecarbon's data files, kept byte for byte (sha256 in
+# packages/mteb/src/dependencies/codecarbon/data/SHA256SUMS).
+/packages/mteb/src/dependencies/codecarbon/data
 # The answer keys of the relevance-filtering eval are copies of frozen files,
 # checked by the sha256 of their bytes.
 /packages/information-filtering/relevance-filtering/eval/sets

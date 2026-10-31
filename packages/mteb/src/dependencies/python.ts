@@ -316,7 +316,7 @@ export function pythonFloat(text: string): number | undefined {
 // Each Unicode decimal digit as its ASCII digit. The digits of a script are
 // ten consecutive code points from 0 to 9, and runs of them can follow each
 // other, as the mathematical digits do.
-function asciiDigits(text: string): string {
+export function asciiDigits(text: string): string {
   return text.replace(/\p{Nd}/gu, (digit) => {
     const code = digit.codePointAt(0) ?? 0;
     let start = code;

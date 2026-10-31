@@ -5,6 +5,19 @@
   "projectType": "library",
   "tags": ["layer:island", "std:domain"],
   "targets": {
+    "codecarbon-data": {
+      "executor": "nx:run-commands",
+      "cache": true,
+      "inputs": ["{projectRoot}/src/dependencies/codecarbon/data/**"],
+      "outputs": ["{projectRoot}/dist/dependencies/codecarbon/data"],
+      "options": {
+        "command": "node -e \"require('node:fs').cpSync('src/dependencies/codecarbon/data', 'dist/dependencies/codecarbon/data', { recursive: true })\"",
+        "cwd": "{projectRoot}"
+      }
+    },
+    "build": {
+      "dependsOn": ["^build", "codecarbon-data"]
+    },
     "compare": {
       "executor": "nx:run-commands",
       "cache": false,
