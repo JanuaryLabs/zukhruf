@@ -217,9 +217,7 @@ export class NumpyGenerator {
 // sklearn.utils.check_random_state(seed) gives: MT19937 seeded by
 // init_genrand (mt19937_seed of numpy/random/src/mt19937/mt19937.c), and the
 // draws of mtrand.pyx that scikit-learn's MiniBatchKMeans and MTEB's
-// classification tasks call. CPython's
-// random.Random (python-random.ts) has its own copy of the generator: it
-// seeds with init_by_array.
+// classification tasks call.
 const MT_N = 624;
 const MT_M = 397;
 const MATRIX_A = 0x9908_b0df;

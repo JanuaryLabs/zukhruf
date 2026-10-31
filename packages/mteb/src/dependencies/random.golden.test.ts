@@ -113,3 +113,22 @@ test('a sample larger than the population throws, as CPython raises a ValueError
     message: 'Sample larger than population or is negative',
   });
 });
+
+test('a negative sample size throws, as CPython raises a ValueError', () => {
+  const generator = new PythonRandom(1);
+
+  assert.throws(() => generator.sample(5, -1), {
+    name: 'RangeError',
+    message: 'Sample larger than population or is negative',
+  });
+});
+
+test('a float seed throws a TypeError: MTEB seeds random.Random with an int', () => {
+  assert.throws(() => new PythonRandom(1.5), { name: 'TypeError' });
+});
+
+test('getrandbits of more than 32 bits throws, as the draws are numbers', () => {
+  const generator = new PythonRandom(1);
+
+  assert.throws(() => generator.getrandbits(33), { name: 'RangeError' });
+});

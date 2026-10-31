@@ -42,10 +42,9 @@ It also ports the semantics of parts of these dependencies of MTEB:
   2001-2002 Enthought, Inc. 2003, SciPy Developers, BSD 3-Clause License.
 - packaging 26.3 (packaging.version), Copyright (c) Donald Stufft and
   individual contributors, Apache License 2.0 or BSD 2-Clause License.
-- CPython 3.12 (the float sum, round, repr and format algorithms,
-  random.Random, the repr, strip and splitlines of a str, and the order of a
-  set of ints), Copyright (c) Python Software Foundation, PSF License
-  Agreement.
+- CPython 3.12 (the float sum, round, repr and format algorithms, the repr,
+  strip and splitlines of a str, and the order of a set of ints), Copyright
+  (c) Python Software Foundation, PSF License Agreement.
 - bm25s 0.3.16 (tokenize, the stopword lists and the BM25 variants Robertson,
   Lucene, ATIRE, BM25L and BM25+), Copyright (c) 2024 Xing Han Lu, MIT License.
   bm25s takes its German, Dutch, French, Spanish, Portuguese, Italian,
@@ -93,6 +92,10 @@ code.
 The npm dependency cephes (NearForm, BSD 3-Clause License, and the Cephes
 license of Stephen L. Moshier) gives scipy.special.gammaln: the lgam of Cephes,
 compiled to WebAssembly. The package does not include its code.
+
+The npm dependency python-random (Jake Writer, BSD 3-Clause License, and the
+PSF License of CPython) gives random.Random of CPython. The package does not
+include its code.
 
 The npm dependency rapidfuzz-js (MIT License) gives the fuzzy matching of
 codecarbon's TDP table. The package does not include its code.

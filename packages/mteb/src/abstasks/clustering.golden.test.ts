@@ -8,6 +8,7 @@ import type { EmbeddingModelV4 } from '@ai-sdk/provider';
 import { TemporaryFiles } from '@zukhruf/testing/fs';
 
 import { log } from '../dependencies/libm.ts';
+import { PythonRandom } from '../dependencies/python-random.ts';
 import { isPlainObject } from '../dependencies/python.ts';
 import { MiniBatchKMeans } from '../dependencies/sklearn-kmeans.ts';
 import {
@@ -25,7 +26,10 @@ import {
 } from '../tasks/clustering/eng/biorxiv-clustering-s2s.ts';
 import type { AbsTask } from './abstask.ts';
 import { AbsTaskClusteringLegacy } from './clustering-legacy.ts';
-import { AbsTaskClustering } from './clustering.ts';
+import {
+  AbsTaskClustering,
+  evaluateClusteringBootstrapped,
+} from './clustering.ts';
 import { TaskMetadata } from './task-metadata.ts';
 
 // fixtures/clustering/expected.json holds what Python MTEB 2.26.28
@@ -424,6 +428,34 @@ test('MiniBatchKMeans throws for fewer samples than clusters, as scikit-learn ra
     {
       message: 'n_samples=2 should be >= n_clusters=3.',
     },
+  );
+});
+
+// MTEB 2.26.28 with CPython 3.12.9 raised IndexError('range object index out
+// of range') for these labels: no sample has a label at the second level, so
+// rng_state.choices draws from range(0).
+test('a level where no sample has a label throws the IndexError of MTEB', () => {
+  const labels = [
+    [0, -1],
+    [1, -1],
+    [0, -1],
+    [1, -1],
+  ];
+  const embeddings = labels.map(
+    (_, index) => new Float32Array([index === 0 ? 1 : 0, index === 1 ? 1 : 0]),
+  );
+
+  assert.throws(
+    () =>
+      evaluateClusteringBootstrapped(embeddings, labels, {
+        nClusters: 2,
+        clusterSize: 3,
+        kmeanBatchSize: 512,
+        maxDepth: null,
+        rngState: new PythonRandom(42),
+        seed: 42,
+      }),
+    { message: 'IndexError: range object index out of range' },
   );
 });
 
