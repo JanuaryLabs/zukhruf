@@ -1,3 +1,7 @@
+// heap is a port of CPython's heapq. MTEB gives the documents of a search in
+// the order of the heap array.
+import Heap from 'heap';
+
 import type { TaskMetadata } from '../abstasks/task-metadata.ts';
 import {
   type PreparedRow,
@@ -5,8 +9,11 @@ import {
   createDataloader,
   createDataloaderDataset,
 } from '../create-dataloaders.ts';
-import { heappush, heappushpop } from '../dependencies/heapq.ts';
-import { type ScoredId, zipStrictMismatch } from '../dependencies/python.ts';
+import {
+  type ScoredId,
+  compareScoredIds,
+  zipStrictMismatch,
+} from '../dependencies/python.ts';
 import { TimingStack } from '../timing.ts';
 import type {
   BatchedInput,
@@ -115,8 +122,8 @@ async function chunkedFullCorpusSearch(
       const heap = heaps.get(query) ?? [];
       for (const index of topk(row, k)) {
         const item: ScoredId = [row[index] ?? 0, chunk[index]?.id ?? ''];
-        if (heap.length < options.topK) heappush(heap, item);
-        else heappushpop(heap, item);
+        if (heap.length < options.topK) Heap.push(heap, item, compareScoredIds);
+        else Heap.pushpop(heap, item, compareScoredIds);
       }
     }
   }
@@ -183,7 +190,11 @@ async function rerankTopRankedDocuments(
       throw new Error(`NaN values detected in the similarity scores: ${nan}`);
     const heap = heaps.get(query) ?? [];
     for (const index of topk(scores, Math.min(options.topK, candidates.length)))
-      heappush(heap, [scores[index] ?? 0, candidates[index] ?? '']);
+      Heap.push(
+        heap,
+        [scores[index] ?? 0, candidates[index] ?? ''],
+        compareScoredIds,
+      );
   }
   return heaps;
 }

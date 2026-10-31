@@ -44,7 +44,7 @@ It also ports the semantics of parts of these dependencies of MTEB:
   Developers, BSD 3-Clause License.
 - packaging 26.3 (packaging.version), Copyright (c) Donald Stufft and
   individual contributors, Apache License 2.0 or BSD 2-Clause License.
-- CPython 3.12 (the float sum, round, repr, format and heapq algorithms,
+- CPython 3.12 (the float sum, round, repr and format algorithms,
   random.Random, the repr, strip and splitlines of a str, and the order of a
   set of ints), Copyright (c) Python Software Foundation, PSF License
   Agreement.
@@ -86,6 +86,10 @@ files. The package does not include its code.
 
 The npm dependency ml-matrix (mljs, MIT License) calculates the singular value
 decomposition of the least squares. The package does not include its code.
+
+The npm dependency heap (Xueqiao Xu, MIT License), a port of the heapq module
+of CPython, keeps the documents of a search. The package does not include its
+code.
 
 The npm dependency rapidfuzz-js (MIT License) gives the fuzzy matching of
 codecarbon's TDP table. The package does not include its code.
