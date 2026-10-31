@@ -207,6 +207,100 @@ function readWhileFilling(
   );
 }
 
+/** `rejects(...)` or `<object>.rejects(...)`, as in `assert.rejects`. */
+function isRejectsCall(node: unknown): boolean {
+  if (!isType(node, 'CallExpression')) return false;
+  const callee = node['callee'];
+  return (
+    identifierName(callee) === 'rejects' ||
+    (isType(callee, 'MemberExpression') &&
+      callee['computed'] !== true &&
+      identifierName(callee['property']) === 'rejects')
+  );
+}
+
+/** `promise.then(onFulfilled, onRejected)` or `promise.catch(onRejected)`. */
+function handlesRejection(promise: AstNode): boolean {
+  const member = promise['parent'];
+  const call = isAstNode(member) ? member['parent'] : undefined;
+  if (
+    !isType(member, 'MemberExpression') ||
+    member['object'] !== promise ||
+    member['computed'] === true ||
+    !isType(call, 'CallExpression') ||
+    call['callee'] !== member
+  ) {
+    return false;
+  }
+  const args = Array.isArray(call['arguments']) ? call['arguments'] : [];
+  const method = identifierName(member['property']);
+  return (
+    (method === 'then' && args.length >= 2) ||
+    (method === 'catch' && args.length >= 1)
+  );
+}
+
+/**
+ * The code whose failure is handled before the code after it runs: the try
+ * block of a try statement with a catch clause, an async function whose call
+ * is chained to a rejection handler, or an async function (or its call) given
+ * to `rejects`. A function that is not called in place ends the search, as it
+ * can run at any time.
+ */
+function handledRegion(loop: AstNode): AstNode | undefined {
+  let child: AstNode = loop;
+  for (let current: unknown = loop['parent']; isAstNode(current);) {
+    if (
+      isType(current, 'TryStatement') &&
+      current['block'] === child &&
+      isAstNode(current['handler'])
+    ) {
+      return child;
+    }
+    if (isFunction(current)) {
+      const call = current['parent'];
+      if (isRejectsCall(call)) return current;
+      if (!isType(call, 'CallExpression') || call['callee'] !== current) {
+        return undefined;
+      }
+      if (handlesRejection(call) || isRejectsCall(call['parent'])) {
+        return current;
+      }
+      child = call;
+      current = call['parent'];
+      continue;
+    }
+    child = current;
+    current = current['parent'];
+  }
+  return undefined;
+}
+
+/**
+ * The loop's failure is handled, and the array outlives the handled code, so
+ * the code after the handler can read the values that came before the
+ * failure. `Array.fromAsync` gives no array when the iterable fails.
+ */
+function readAfterFailure(
+  context: Rule.RuleContext,
+  loop: AstNode,
+  push: AstNode,
+): boolean {
+  const region = handledRegion(loop);
+  if (region === undefined) return false;
+  let array = push['callee'];
+  while (isType(array, 'MemberExpression')) array = array['object'];
+  if (!isType(array, 'Identifier')) return true;
+  const variable = context.sourceCode
+    .getScope(array)
+    .references.find(({ identifier }) => identifier === array)?.resolved;
+  return (
+    variable === null ||
+    variable === undefined ||
+    !contains(region, variable.scope.block)
+  );
+}
+
 /** The identifiers in `node`, a binding pattern or an expression. */
 function identifiers(node: unknown): string[] {
   const name = identifierName(node);
@@ -228,7 +322,8 @@ function identifiers(node: unknown): string[] {
  * A `for await` loop whose only statement pushes each value into an array is
  * `Array.fromAsync`, with the push's expression as its map function. A loop
  * that pushes on a condition, adds to a Set, or does more stays a loop, and so
- * does a loop whose array other code reads before the loop ends.
+ * does a loop whose array other code reads before the loop ends or after its
+ * failure is handled.
  */
 const rule: Rule.RuleModule = {
   meta: {
@@ -265,7 +360,8 @@ const rule: Rule.RuleModule = {
         if (
           pattern === undefined ||
           push === undefined ||
-          readWhileFilling(context, loop, push)
+          readWhileFilling(context, loop, push) ||
+          readAfterFailure(context, loop, push)
         ) {
           return;
         }

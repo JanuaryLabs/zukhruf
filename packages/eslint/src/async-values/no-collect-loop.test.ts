@@ -253,3 +253,174 @@ test('no-collect-loop leaves a loop that fills an outer array inside a detached 
     ],
   });
 });
+
+test('no-collect-loop leaves a loop whose rejection is handled before its outer array is read', () => {
+  typescriptRuleTester().run('no-collect-loop', rule, {
+    valid: [
+      // Array.fromAsync drops the values it got before the stream failed, and
+      // the code reads them after it handles the failure.
+      {
+        code: `
+          const passes: string[] = [];
+          const error = await (async () => {
+            for await (const { connection, outcomes } of pipeline.watch({ signal })) passes.push(
+              \`\${connection.name}:\${outcomes.map(({ copy }) => copy.from.name).join(',')}\`,
+            );
+          })().then(
+            () => assert.fail('the lost watcher must be reported'),
+            (error: unknown) => error,
+          );
+          assert.ok(error instanceof AggregateError);
+          assert.deepEqual(passes.toSorted(), ['lost:left']);
+        `,
+      },
+      {
+        code: `
+          const before: string[][] = [];
+          const failure = await (async () => {
+            for await (const batch of source.watch({ streams, signal }))
+              before.push(batch.map((stream) => stream.name));
+          })().then(
+            () => null,
+            (error: unknown) => error,
+          );
+          use(before, failure);
+        `,
+      },
+      {
+        code: `
+          const received = [];
+          await (async () => {
+            for await (const chunk of stream) received.push(chunk);
+          })().catch(() => {});
+          use(received);
+        `,
+      },
+      {
+        code: `
+          const received = [];
+          try {
+            await (async () => {
+              for await (const chunk of stream) received.push(chunk);
+            })();
+          } catch (error) {
+            log(error);
+          }
+          use(received);
+        `,
+      },
+      {
+        code: `
+          const received = [];
+          try {
+            for await (const chunk of stream) received.push(chunk);
+          } catch {}
+          use(received);
+        `,
+      },
+      {
+        code: `
+          const received = [];
+          await assert.rejects(async () => {
+            for await (const chunk of stream) received.push(chunk);
+          });
+          assert.deepEqual(received, [1, 2]);
+        `,
+      },
+      {
+        code: `
+          const received = [];
+          await t.assert.rejects(
+            (async () => {
+              for await (const chunk of stream) received.push(chunk);
+            })(),
+            /lost/,
+          );
+          use(received);
+        `,
+      },
+    ],
+    invalid: [
+      // A fulfilment handler alone lets the rejection through.
+      {
+        code: `
+          const received = [];
+          await (async () => {
+            for await (const chunk of stream) received.push(chunk);
+          })().then(() => done());
+          use(received);
+        `,
+        errors: [{ messageId: 'plain' }],
+      },
+      // The array lives inside the function: nothing reads it after a failure.
+      {
+        code: `
+          await (async () => {
+            const received = [];
+            for await (const chunk of stream) received.push(chunk);
+            use(received);
+          })().catch(log);
+        `,
+        errors: [{ messageId: 'plain' }],
+      },
+      {
+        code: `
+          try {
+            const received = [];
+            for await (const chunk of stream) received.push(chunk);
+            use(received);
+          } catch {}
+        `,
+        errors: [{ messageId: 'plain' }],
+      },
+      // A finally block does not handle the rejection.
+      {
+        code: `
+          const received = [];
+          try {
+            for await (const chunk of stream) received.push(chunk);
+          } finally {
+            close();
+          }
+          use(received);
+        `,
+        errors: [{ messageId: 'plain' }],
+      },
+      // The catch handles only a failure of its own try block.
+      {
+        code: `
+          const received = [];
+          try {
+            prepare();
+          } catch {}
+          for await (const chunk of stream) received.push(chunk);
+        `,
+        errors: [{ messageId: 'plain' }],
+      },
+      // A loop in the catch block is not guarded by that catch.
+      {
+        code: `
+          const received = [];
+          try {
+            prepare();
+          } catch {
+            for await (const chunk of stream) received.push(chunk);
+          }
+          use(received);
+        `,
+        errors: [{ messageId: 'plain' }],
+      },
+      // A helper other than rejects says nothing about the rejection.
+      {
+        code: `
+          const received = [];
+          await settle(async () => {
+            for await (const chunk of stream) received.push(chunk);
+          });
+          use(received);
+        `,
+        errors: [{ messageId: 'plain' }],
+      },
+    ],
+  });
+});
