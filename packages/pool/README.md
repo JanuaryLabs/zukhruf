@@ -19,6 +19,8 @@ const text = await pool.use((worker) => worker.read('/tmp/receipt.png'));
 
 A worker gives `exited()`, `kill()`, `close()`, and optionally `ready()`. A `Coprocess` of `@zukhruf/coprocess` has all of them. When a signal aborts a job that runs, the pool kills its worker. When a signal aborts a job whose worker still warms up, the warm-up continues for the next job.
 
+The pool waits for `ready()` with no time limit. Thus, if the warm-up of a worker can wait forever, the worker sets its own time limit, and `ready()` rejects when that limit ends. The pool then kills and closes the worker, and the job that waits for it fails. The next job starts a new worker.
+
 ## Choose when the workers start
 
 | Startup        | Starts                                                                                                                                                     |
