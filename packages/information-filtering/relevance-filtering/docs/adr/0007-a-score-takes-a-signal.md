@@ -1,5 +1,7 @@
 # A score takes a signal
 
+**Superseded in part by [ADR 0008](./0008-a-decision-scorer-keeps-eight-calls-in-flight-and-a-coalescing-model-asks-one-article-once.md).** The decision scorer now keeps up to 8 calls in flight. After a stop, no question starts and the calls that run abort, in place of "the scorer asks about no later article". The required signal of this record is still valid.
+
 A scorer can ask a model once for each article of the stream. The decision scorer asks d1-2B one article at a time. The news reader of context-compiler (#3430) scores its reports for each interest when the reports arrive. On its first pass, the reader has 1,129 reports and 2 interests, so it asks the model about 2,258 times. elt's watch waits for a running refresh before it stops, so a stop of the reader (Ctrl-C or SIGTERM) waited for all of these questions. A page that the viewer leaves also kept its questions to the model. The AI SDK's `experimental_decide` takes an `abortSignal`, but `Scorer.score(stream)` had no input for one. On 2026-10-30 the user chose a required signal on the port.
 
 ## Decision

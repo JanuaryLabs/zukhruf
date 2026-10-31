@@ -1,3 +1,4 @@
+export { CoalescingDecisionModel } from './coalescing-decision-model.ts';
 export { DecisionScorer } from './decision-scorer.ts';
 export { MissingVectorError, UnknownArticleError } from './errors.ts';
 export { ExpectedFThreshold } from './expected-f-threshold.ts';

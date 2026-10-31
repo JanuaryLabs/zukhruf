@@ -20,30 +20,41 @@ npm install @zukhruf/relevance-filtering ai
 
 ### With a decision model
 
-Give the scorer an AI SDK decision model, for example Liquid AI's d1-2B on a llama.cpp server through `@ai-sdk/typesafe-ai`, and the description of the interest.
+Give the scorer an AI SDK decision model, for example Liquid AI's d1-2B on a llama.cpp server through `@ai-sdk/typesafe-ai`, and the description of the interest. Wrap the model once in a `CoalescingDecisionModel`, and score the interests together with `Promise.all`. Then the model gets one call for each article with the questions of all the interests.
 
 ```ts
 import { createTypeSafeAi } from '@ai-sdk/typesafe-ai';
 
-import { DecisionScorer, UtilityThreshold } from '@zukhruf/relevance-filtering';
+import {
+  CoalescingDecisionModel,
+  DecisionScorer,
+  UtilityThreshold,
+} from '@zukhruf/relevance-filtering';
 
-const scorer = new DecisionScorer({
-  model: createTypeSafeAi({
+const model = new CoalescingDecisionModel(
+  createTypeSafeAi({
     baseURL: 'http://127.0.0.1:9931/v1',
     apiKey: 'none',
   }).decisionModel('LiquidAI/d1-2B-GGUF:Q8_0'),
-  description: 'Cybersecurity: attacks, breaches and the tools that stop them.',
-});
+);
+const descriptions = [
+  'Cybersecurity: attacks, breaches and the tools that stop them.',
+  'New computer chips and AI hardware, and how chips are made and supplied.',
+];
 
 // The new articles by id: { publishedAt, text: `${title} ${lead}` }. The
 // signal stops the questions to the model, for example when the host stops.
-const scores = await scorer.score(newArticles, { signal });
+const [security, chips] = await Promise.all(
+  descriptions.map((description) =>
+    new DecisionScorer({ model, description }).score(newArticles, { signal }),
+  ),
+);
 
 // The best 5 articles of one day, the best first.
-scores.ranked({ from: dayStart, to: dayEnd }).slice(0, 5);
-scores.probability(id); // from 0 to 1
+security.ranked({ from: dayStart, to: dayEnd }).slice(0, 5);
+security.probability(id); // from 0 to 1
 // Notify only when a miss costs three times as much as a false alarm.
-scores.accepted(new UtilityThreshold({ falseAlarm: 1, miss: 3 }));
+security.accepted(new UtilityThreshold({ falseAlarm: 1, miss: 3 }));
 ```
 
 ### With embeddings
@@ -108,7 +119,8 @@ scores.ranked({ from: dayStart, to: dayEnd }).slice(0, 5);
 
 - A `Scorer` has `score(stream, { signal })`, which gives a `Promise` of `Scores`. A scorer is made for one interest ([ADR 0006](./docs/adr/0006-a-scorer-is-made-for-one-interest-and-its-inputs-rule-out-illegal-states.md)). The `stream` is a map from article id to `{ publishedAt, text }`; `text` is, for example, the title and the lead. It can be empty.
 - The `signal` is an `AbortSignal`, and it is required ([ADR 0007](./docs/adr/0007-a-score-takes-a-signal.md)). When it aborts, the score rejects with the reason of the signal. Give the signal of the request or of the host's stop. A host that cannot stop a score gives `new AbortController().signal`.
-- `new DecisionScorer({ model, description })` takes an AI SDK decision model and the description. For each article, it asks the model "Is the main subject of this article: <description>?" about `text`, one article at a time. It gives the signal to the AI SDK, so a stop ends the question that runs, and the scorer asks about no later article.
+- `new DecisionScorer({ model, description })` takes an AI SDK decision model and the description. For each article, it asks the model "Is the main subject of this article: <description>?" about `text`. It keeps up to 8 calls in flight, two times the 4 slots that a llama.cpp server makes by default ([ADR 0008](./docs/adr/0008-a-decision-scorer-keeps-eight-calls-in-flight-and-a-coalescing-model-asks-one-article-once.md)). It gives the signal to each call, so a stop aborts the calls that run, and no question starts after the stop. When a call fails, the scorer aborts the other calls. The ranking does not depend on the order in which the answers arrive.
+- `new CoalescingDecisionModel(model)` wraps an AI SDK decision model, and is a decision model too. The calls that reach it before the next macrotask, about the same text and with equal options, go to the wrapped model as one call with all their questions (request coalescing, as in DataLoader). Each caller gets only its own answers. Wrap the model once, make one `DecisionScorer` for each interest with it, and score the interests with `Promise.all`. A call that is alone, has a state with a part that is not text, or has other options goes to the wrapped model without a change. A caller that aborts rejects at once; the merged call aborts only when all its callers abort. An error of the wrapped model rejects each caller of that call, and a refused question fails only its caller. Only the first caller of a merged call gets the usage, so a sum over the callers is the real usage.
 - `new SimilarityScorer({ vectors, descriptionVector, answers, keywords })` is the frozen design for an interest with at least one yes answer.
   - `vectors` is the port to the vectors of the articles: `query(vector, { from, to })` and `fetch(ids)`. The `Collection` of `@zukhruf/embeddings` has this shape. The stream and the taught articles must be in it, and `publishedAt` must be the date that the vectors store for the article.
   - `descriptionVector` is the vector of the description from the model of the stored vectors, made with the prompt that the model uses for a query.
@@ -165,7 +177,7 @@ A keyword list puts the matches first, the newest first. The 95% interval of (si
 ## Limits
 
 - The decision scorer was measured only with d1-2B (Q8_0), the question of round 13, and the title and the lead as the text. Another model or another question needs a new research round.
-- The decision scorer calls the model once for each article of the stream. The host decides when to score and if it keeps the scores.
+- The decision scorer calls the model once for each article of the stream. With a `CoalescingDecisionModel`, the scorers of all interests that score together share one call for each article. The host decides when to score and if it keeps the scores.
 - The answer keys of rounds 13 and 14 come from language models. No person labelled that slice (limitation 16 of the research record).
 - The similarity design is valid only with EmbeddingGemma 2, the vector text of event detection (`title: <title> | text: <title>\n<lead>`) for the articles and the query prompt for the description. Another model gives another similarity scale.
 - The binormal model is fitted on the stream. A stream of a few articles gives a weak fit. The research streams held 1,600 to 1,700 articles.
@@ -184,6 +196,8 @@ Before you change a step of the similarity design, read ADR 0002, and run `nx ru
 - [ADR 0004: The reader ranks, and does not decide yes or no](./docs/adr/0004-the-reader-ranks-and-does-not-decide-yes-or-no.md)
 - [ADR 0005: A scorer and a threshold are ports](./docs/adr/0005-a-scorer-and-a-threshold-are-ports.md)
 - [ADR 0006: A scorer is made for one interest, and its inputs rule out illegal states](./docs/adr/0006-a-scorer-is-made-for-one-interest-and-its-inputs-rule-out-illegal-states.md)
+- [ADR 0007: A score takes a signal](./docs/adr/0007-a-score-takes-a-signal.md)
+- [ADR 0008: A decision scorer keeps eight calls in flight, and a coalescing model asks about one article once](./docs/adr/0008-a-decision-scorer-keeps-eight-calls-in-flight-and-a-coalescing-model-asks-one-article-once.md)
 - [Code copied from the event-detection eval](./docs/copied-code.md)
 
 ## Recipes

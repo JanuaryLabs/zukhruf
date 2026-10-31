@@ -6,9 +6,9 @@
 
 ## The steps
 
-1. Make the AI SDK decision model once.
-2. For each interest, make a `DecisionScorer` with the model and the description of the interest. The scorer reads nothing else.
-3. Score the articles, a map by article id, with a signal. The scorer asks the model one question for each article. Ctrl-C aborts the signal and stops the questions.
+1. Make the AI SDK decision model once, and wrap it in a `CoalescingDecisionModel`.
+2. For each interest, make a `DecisionScorer` with the wrapped model and the description of the interest. The scorer reads nothing else.
+3. Score the articles, a map by article id, for all interests together with `Promise.all`, with one signal. The model gets one call for each article, with the question of each interest. Ctrl-C aborts the signal and stops the questions.
 4. For each day, show `scores.ranked({ from, to }).slice(0, n)`.
 5. For the notification, choose a threshold from what a miss and a false alarm cost.
 
@@ -27,12 +27,19 @@ npm install @zukhruf/relevance-filtering ai @ai-sdk/typesafe-ai zod
 ```ts title="rank-with-a-decision-model.ts"
 import { createTypeSafeAi } from '@ai-sdk/typesafe-ai';
 
-import { DecisionScorer, UtilityThreshold } from '@zukhruf/relevance-filtering';
+import {
+  CoalescingDecisionModel,
+  DecisionScorer,
+  UtilityThreshold,
+} from '@zukhruf/relevance-filtering';
 
-const model = createTypeSafeAi({
-  baseURL: process.env.DECISION_URL ?? 'http://127.0.0.1:9931/v1',
-  apiKey: 'none',
-}).decisionModel('LiquidAI/d1-2B-GGUF:Q8_0');
+// One call for each article asks the questions of all the interests.
+const model = new CoalescingDecisionModel(
+  createTypeSafeAi({
+    baseURL: process.env.DECISION_URL ?? 'http://127.0.0.1:9931/v1',
+    apiKey: 'none',
+  }).decisionModel('LiquidAI/d1-2B-GGUF:Q8_0'),
+);
 
 const items = [
   [
@@ -111,11 +118,15 @@ const notify = new UtilityThreshold({ falseAlarm: 1, miss: 3 });
 const stop = new AbortController();
 process.once('SIGINT', () => stop.abort());
 
-for (const { name, description } of interests) {
-  const scores = await new DecisionScorer({ model, description }).score(
-    stream,
-    { signal: stop.signal },
-  );
+const scored = await Promise.all(
+  interests.map(async ({ name, description }) => ({
+    name,
+    scores: await new DecisionScorer({ model, description }).score(stream, {
+      signal: stop.signal,
+    }),
+  })),
+);
+for (const { name, scores } of scored) {
   for (const day of [8, 9]) {
     const from = new Date(Date.UTC(2026, 9, day));
     const to = new Date(Date.UTC(2026, 9, day + 1) - 1);
@@ -159,7 +170,7 @@ The notification accepts each article with a probability of 0.25 or more, becaus
 
 ## Notes
 
-- The scorer calls the model once for each article and each profile, one call at a time. Score new articles when they arrive, and keep the scores, if a page must not wait for the model.
+- The scorer keeps up to 8 calls to the model in flight. With the coalescing decision model, the model gets one call for each article, with the questions of all the interests. Score new articles when they arrive, and keep the scores, if a page must not wait for the model.
 - The question is "Is the main subject of this article: <description>?", word for word as research round 13 measured it. Write the description as one sentence about the subject.
 - The model gave calibrated probabilities on the research slice, but the calibration changed with the answer key (research round 14). Choose the costs of a threshold for each action, and check them on your own feed.
 - A refused question fails `score` with the `Experimental_DecisionRefusalError` of the AI SDK. The scorer does not give a probability in its place.

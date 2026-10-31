@@ -24,6 +24,10 @@ _Avoid_: Filter, result
 A model that answers a typed question about a text with a calibrated probability, for example Liquid AI's d1-2B. The decision scorer asks it, through the AI SDK, if the main subject of the article is the description.
 _Avoid_: LLM, judge, classifier
 
+**Coalescing decision model**:
+A decision model that wraps another decision model. The calls that reach it in one turn of the event loop, about the same text, go to the wrapped model as one call with all their questions, and each caller gets its own answers. The scorers of several interests then share one call for each article. The standard term is request coalescing (Facebook's DataLoader).
+_Avoid_: Batcher, router, cache
+
 **Description vector**:
 The vector of the description from the embedding model of the stored articles, made with the prompt that the model uses for a query. The host makes it for the similarity scorer and the keyword scorer.
 _Avoid_: Query embedding, profile vector

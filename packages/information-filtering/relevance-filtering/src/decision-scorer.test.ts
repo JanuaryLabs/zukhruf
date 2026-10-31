@@ -196,37 +196,76 @@ describe('DecisionScorer', () => {
     );
   });
 
-  test('a stop while the model answers ends the score with the reason of the signal, and the model is asked about no later article', async () => {
-    const stop = new AbortController();
-    const reason = new Error('The reader stops.');
-    const asked: string[] = [];
-    // Answers the first article, and raises the stop from a timer while the
-    // second is asked. It rejects the second when its signal aborts, as fetch
-    // rejects a pending request.
-    const stopping: Experimental_DecisionModel = {
+  test('keeps at most 8 calls to the model in flight on a stream of 20 articles', async () => {
+    let inFlight = 0;
+    let most = 0;
+    // Answers each call after a timer, so the calls that the scorer starts
+    // meanwhile run together.
+    const counting: Experimental_DecisionModel = {
       specificationVersion: 'v4',
       provider: 'test',
       modelId: 'decision-stand-in',
       supportedQuestionTypes: ['boolean'],
-      doDecide: async ({ state, questions, abortSignal }) => {
-        if (abortSignal === undefined)
-          throw new Error('The scorer gave the model no signal.');
-        const [part] = state;
-        asked.push(part?.type === 'text' ? part.text : '');
-        if (asked.length > 1)
-          return new Promise((_, reject) =>
-            abortSignal.addEventListener(
-              'abort',
-              () => reject(abortSignal.reason),
-              { once: true },
-            ),
-          );
-        setTimeout(() => stop.abort(reason), 10);
+      doDecide: async ({ questions }) => {
+        inFlight += 1;
+        most = Math.max(most, inFlight);
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        inFlight -= 1;
         return {
           answers: Object.fromEntries(
             Object.keys(questions).map((id) => [
               id,
-              { type: 'boolean', probability: 0.9 },
+              { type: 'boolean', probability: 0.5 },
+            ]),
+          ),
+          warnings: [],
+        };
+      },
+    };
+    const articles = Array.from(
+      { length: 20 },
+      (_, n) => [`a${n}`, `Article ${n}`, 10] as const,
+    );
+
+    const scores = await new DecisionScorer({
+      model: counting,
+      description: DESCRIPTION,
+    }).score(stream(...articles), { signal: running });
+
+    assert.equal(most, 8);
+    assert.equal(scores.ranked().length, 20);
+  });
+
+  test('ranks the same when the answers arrive in another order than the questions', async () => {
+    const probabilities = new Map([
+      ['A chip of paint falls off a bridge', 0.1],
+      ['TSMC raises chip output', 0.7],
+      ['Nvidia ships a new GPU', 0.95],
+      ['A chip plant opens in Arizona', 0.7],
+    ]);
+    // The first article of the stream is answered last, and the last first.
+    const delays = new Map([
+      ['A chip of paint falls off a bridge', 40],
+      ['TSMC raises chip output', 30],
+      ['Nvidia ships a new GPU', 20],
+      ['A chip plant opens in Arizona', 10],
+    ]);
+    const answered: string[] = [];
+    const late: Experimental_DecisionModel = {
+      specificationVersion: 'v4',
+      provider: 'test',
+      modelId: 'decision-stand-in',
+      supportedQuestionTypes: ['boolean'],
+      doDecide: async ({ state, questions }) => {
+        const [part] = state;
+        const text = part?.type === 'text' ? part.text : '';
+        await new Promise((resolve) => setTimeout(resolve, delays.get(text)));
+        answered.push(text);
+        return {
+          answers: Object.fromEntries(
+            Object.keys(questions).map((id) => [
+              id,
+              { type: 'boolean', probability: probabilities.get(text) ?? NaN },
             ]),
           ),
           warnings: [],
@@ -234,20 +273,132 @@ describe('DecisionScorer', () => {
       },
     };
 
+    const scores = await new DecisionScorer({
+      model: late,
+      description: DESCRIPTION,
+    }).score(
+      stream(
+        ['paint', 'A chip of paint falls off a bridge', 10],
+        ['tsmc', 'TSMC raises chip output', 11],
+        ['gpu', 'Nvidia ships a new GPU', 12],
+        ['arizona', 'A chip plant opens in Arizona', 13],
+      ),
+      { signal: running },
+    );
+
+    assert.deepEqual(answered, [
+      'A chip plant opens in Arizona',
+      'Nvidia ships a new GPU',
+      'TSMC raises chip output',
+      'A chip of paint falls off a bridge',
+    ]);
+    assert.deepEqual(scores.ranked(), ['gpu', 'arizona', 'tsmc', 'paint']);
+  });
+
+  test('a model that fails stops the other calls: they abort, and the model is asked about no later article', async () => {
+    const failure = new Error('The decision server is down.');
+    const asked: string[] = [];
+    const aborted: string[] = [];
+    // Fails the first article from a timer, and holds every other call until
+    // its signal aborts, as fetch rejects a pending request.
+    const failing: Experimental_DecisionModel = {
+      specificationVersion: 'v4',
+      provider: 'test',
+      modelId: 'decision-stand-in',
+      supportedQuestionTypes: ['boolean'],
+      doDecide: async ({ state, abortSignal }) => {
+        if (abortSignal === undefined)
+          throw new Error('The scorer gave the model no signal.');
+        const [part] = state;
+        const text = part?.type === 'text' ? part.text : '';
+        asked.push(text);
+        if (text === 'Article 0')
+          return new Promise((_, reject) =>
+            setTimeout(() => reject(failure), 10),
+          );
+        return new Promise((_, reject) =>
+          abortSignal.addEventListener(
+            'abort',
+            () => {
+              aborted.push(text);
+              reject(abortSignal.reason);
+            },
+            { once: true },
+          ),
+        );
+      },
+    };
+    const articles = Array.from(
+      { length: 20 },
+      (_, n) => [`a${n}`, `Article ${n}`, 10] as const,
+    );
+
+    await assert.rejects(
+      new DecisionScorer({ model: failing, description: DESCRIPTION }).score(
+        stream(...articles),
+        { signal: running },
+      ),
+      (error) => error === failure,
+    );
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    assert.deepEqual(
+      asked,
+      Array.from({ length: 8 }, (_, n) => `Article ${n}`),
+    );
+    assert.deepEqual(aborted, asked.slice(1));
+  });
+
+  test('a stop while the model answers ends the score with the reason of the signal, aborts the calls that run, and no question starts after the stop', async () => {
+    const stop = new AbortController();
+    const reason = new Error('The reader stops.');
+    const asked: string[] = [];
+    const aborted: string[] = [];
+    // Holds each call until its signal aborts, and rejects it then, as fetch
+    // rejects a pending request. The stop comes from a timer while the first
+    // 8 calls run.
+    const stopping: Experimental_DecisionModel = {
+      specificationVersion: 'v4',
+      provider: 'test',
+      modelId: 'decision-stand-in',
+      supportedQuestionTypes: ['boolean'],
+      doDecide: async ({ state, abortSignal }) => {
+        if (abortSignal === undefined)
+          throw new Error('The scorer gave the model no signal.');
+        const [part] = state;
+        const text = part?.type === 'text' ? part.text : '';
+        asked.push(text);
+        return new Promise((_, reject) =>
+          abortSignal.addEventListener(
+            'abort',
+            () => {
+              aborted.push(text);
+              reject(abortSignal.reason);
+            },
+            { once: true },
+          ),
+        );
+      },
+    };
+    const articles = Array.from(
+      { length: 20 },
+      (_, n) => [`a${n}`, `Article ${n}`, 10] as const,
+    );
+    setTimeout(() => stop.abort(reason), 10);
+
     await assert.rejects(
       new DecisionScorer({ model: stopping, description: DESCRIPTION }).score(
-        stream(
-          ['gpu', 'Nvidia ships a new GPU', 10],
-          ['tsmc', 'TSMC raises chip output', 11],
-          ['paint', 'A chip of paint falls off a bridge', 12],
-        ),
+        stream(...articles),
         { signal: stop.signal },
       ),
       (error) => error === reason,
     );
-    assert.deepEqual(asked, [
-      'Nvidia ships a new GPU',
-      'TSMC raises chip output',
-    ]);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+
+    assert.deepEqual(
+      asked,
+      Array.from({ length: 8 }, (_, n) => `Article ${n}`),
+    );
+    assert.deepEqual(aborted, asked);
   });
 });
