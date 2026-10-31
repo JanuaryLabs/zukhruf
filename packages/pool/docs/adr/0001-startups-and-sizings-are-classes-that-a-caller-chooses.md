@@ -4,6 +4,8 @@ The pool came from elt, where `Vision` kept a pool of OCR processes, and `LocalT
 
 Each caller had its own rules: the OCR processes first started one after the other, and the OCR caller computed how many to run from the CPUs and the free memory. A caller that decides these numbers repeats knowledge that belongs to the pool, and a change for one caller changed the pool for all of them. Thus a caller chooses a startup and a sizing from classes that the package gives, and computes nothing. A class can be added without a change to the callers.
 
+An eviction is the third family of classes. It decides when the pool may evict an idle worker: `NoEviction` or `IdleTimeout` ([ADR 0006](./0006-the-pool-evicts-an-idle-worker-that-its-eviction-lets-go-and-lends-an-idle-worker-first.md)).
+
 ## Considered Options
 
 - **A number for the size, and an option for each kind of start.** Each new rule adds an option, and each caller must know how the options combine.

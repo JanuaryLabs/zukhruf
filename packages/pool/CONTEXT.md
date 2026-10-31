@@ -1,6 +1,6 @@
 # Pool
 
-A pool lends workers to jobs. The pool decides when workers start, how many run, and when a worker is replaced.
+A pool lends workers to jobs. The pool decides when workers start, how many run, when a worker is replaced, and when an idle worker is evicted.
 
 ## Language
 
@@ -13,11 +13,11 @@ The work that a caller gives the pool. The pool lends one worker to the job unti
 _Avoid_: Task (in p-queue a task is a queued function), request
 
 **Lend**:
-The pool gives a worker to one job. Only that job uses the worker until the job ends.
+The pool gives a worker to one job. Only that job uses the worker until the job ends. The pool lends an idle worker first, from the lowest slot.
 _Avoid_: Borrow (the job borrows; the pool lends), acquire, check out
 
 **Slot**:
-A place for one worker. A slot is empty, has a worker that starts, has a ready worker, or has a worker that ended.
+A place for one worker. A slot is empty, has a worker that starts, has a ready worker, has a worker that ended, or is in a back-off. A slot is empty again after the pool evicts its worker.
 _Avoid_: Seat, entry
 
 **Startup**:
@@ -27,6 +27,14 @@ _Avoid_: Strategy (a sizing is also a strategy), warm-up (the worker warms up; t
 **Sizing**:
 The class that decides how many workers run: `Fixed`, `Resources`, `HillClimbing` or `Gradient`.
 _Avoid_: Size (a number), capacity (what the computer can give)
+
+**Eviction**:
+The class that decides when the pool may evict an idle worker: `NoEviction` or `IdleTimeout`.
+_Avoid_: Idle timeout (one class of eviction), policy
+
+**Evict**:
+The pool closes an idle worker that its eviction lets go. The slot is then empty. The pool does not count an evicted worker as an exit.
+_Avoid_: Retire (the sizing stops keeping a slot), reap, scale down, close (the worker closes)
 
 **Capacity**:
 The most workers the computer can give: one for each CPU, while each finds its memory free.

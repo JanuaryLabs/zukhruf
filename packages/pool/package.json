@@ -1,7 +1,7 @@
 {
   "name": "@zukhruf/pool",
   "version": "0.6.5",
-  "description": "Lend long-lived workers, such as native helper processes, to one job at a time: startups that decide when workers start, sizings that decide how many run, and replacement of a worker that exits.",
+  "description": "Lend long-lived workers, such as native helper processes, to one job at a time: startups that decide when workers start, sizings that decide how many run, evictions that decide when an idle worker closes, and replacement of a worker that exits.",
   "license": "MIT",
   "repository": {
     "type": "git",

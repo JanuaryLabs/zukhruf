@@ -2,6 +2,7 @@ import PQueue from 'p-queue';
 
 import { Latch, untilAborted } from '@zukhruf/async';
 
+import type { Eviction } from './eviction.ts';
 import type { PoolStats } from './pool-stats.ts';
 import type { Sizing } from './sizing.ts';
 import type { Startup } from './startup.ts';
@@ -15,14 +16,22 @@ const backoff = { first: 1_000, most: 60_000, reset: 600_000 };
 
 // What a slot holds: nothing, a worker that starts, a worker that is ready
 // since a time, a worker that ended and waits to be closed, or a back-off
-// before its next worker starts.
+// before its next worker starts. A ready worker has the controller of its
+// idle wait: the wait is live while the controller is not aborted.
+interface Ready<T> {
+  readonly kind: 'ready';
+  readonly worker: T;
+  readonly since: number;
+  readonly idle: AbortController;
+}
+
 type State<T> =
   | { readonly kind: 'empty' }
   | {
       readonly kind: 'starting';
       readonly outcome: Latch<PromiseSettledResult<T>>;
     }
-  | { readonly kind: 'ready'; readonly worker: T; readonly since: number }
+  | Ready<T>
   | { readonly kind: 'lost'; readonly worker: T; readonly since: number }
   | { readonly kind: 'backoff'; readonly timer: NodeJS.Timeout };
 
@@ -34,7 +43,8 @@ interface Slot<T> {
 }
 
 // Lends workers to jobs, one job per worker at a time. The sizing decides how
-// many workers run and the startup when they start. A worker that exits is
+// many workers run, the startup when they start, and the eviction when an
+// idle worker closes. A job takes an idle worker first. A worker that exits is
 // replaced when a job next needs its slot, or sooner when the startup is
 // eager and the worker was idle: at once when it ran 10 minutes, after a
 // back-off when it exited early. The owner disposes the pool, which stops
@@ -43,6 +53,7 @@ export class Pool<T extends Worker> implements AsyncDisposable {
   readonly #create: () => T;
   readonly #startup: Startup;
   readonly #sizing: Sizing;
+  readonly #eviction: Eviction;
   readonly #queue: PQueue;
   readonly #slots: Slot<T>[];
   readonly #lent = new Set<Slot<T>>();
@@ -52,10 +63,16 @@ export class Pool<T extends Worker> implements AsyncDisposable {
   // When the pool last changed how many workers it runs.
   #resized = performance.now();
 
-  constructor(options: { size: Sizing; startup: Startup; create: () => T }) {
+  constructor(options: {
+    size: Sizing;
+    startup: Startup;
+    eviction: Eviction;
+    create: () => T;
+  }) {
     this.#create = options.create;
     this.#startup = options.startup;
     this.#sizing = options.size;
+    this.#eviction = options.eviction;
     this.#queue = new PQueue({ concurrency: this.#sizing.current });
     this.#slots = Array.from({ length: this.#sizing.ceiling }, (_, index) => ({
       index,
@@ -105,8 +122,10 @@ export class Pool<T extends Worker> implements AsyncDisposable {
     // while the job still holds its worker.
     return this.#queue.add(async () => {
       stop.throwIfAborted();
-      const slot = this.#running().find((free) => !this.#lent.has(free))!;
+      const slot = this.#pick();
       this.#lent.add(slot);
+      // A job takes the worker before its eviction lets it go.
+      if (slot.state.kind === 'ready') slot.state.idle.abort();
       try {
         const worker = await untilAborted(this.#borrow(slot), stop);
         const kill = () => {
@@ -128,7 +147,12 @@ export class Pool<T extends Worker> implements AsyncDisposable {
         }
       } finally {
         this.#lent.delete(slot);
+        const state = slot.state;
         if (slot.index >= this.#sizing.kept) this.#retire(slot);
+        else if (state.kind === 'ready')
+          this.#rest(slot, state.worker, state.since);
+        else if (state.kind === 'lost')
+          this.#replace(slot, state.worker, state.since);
       }
     });
   }
@@ -137,11 +161,29 @@ export class Pool<T extends Worker> implements AsyncDisposable {
     return this.#slots.slice(0, this.#sizing.current);
   }
 
+  // The slot a job takes, the lowest of its kind: an idle worker, else a
+  // worker that starts, else an empty slot or one whose worker ended, else a
+  // back-off. Jobs stay on the low slots, so the high ones stay idle until
+  // their eviction lets them go. This is the reason Commons Pool lends the
+  // object returned last (POOL-86) and Go's database/sql reuses the connection
+  // idle for the shortest time (sql.go:1336-1341).
+  #pick(): Slot<T> {
+    const free = this.#running().filter((slot) => !this.#lent.has(slot));
+    return (
+      free.find(({ state }) => state.kind === 'ready') ??
+      free.find(({ state }) => state.kind === 'starting') ??
+      free.find(
+        ({ state }) => state.kind === 'empty' || state.kind === 'lost',
+      ) ??
+      free.find(({ state }) => state.kind === 'backoff')!
+    );
+  }
+
   async #borrow(slot: Slot<T>): Promise<T> {
     const state = slot.state;
     if (state.kind === 'ready') return state.worker;
     if (state.kind === 'lost') {
-      slot.state = { kind: 'empty' };
+      this.#enter(slot, { kind: 'empty' });
       void this.#close(state.worker);
     }
     // A job does not wait out a back-off: its worker starts now.
@@ -170,6 +212,16 @@ export class Pool<T extends Worker> implements AsyncDisposable {
     if (this.#sizing.current === this.#queue.concurrency) return;
     this.#queue.concurrency = this.#sizing.current;
     this.#resized = performance.now();
+    // An idle worker waits for its eviction only while the pool runs its slot.
+    for (const slot of this.#slots.slice(0, this.#sizing.kept)) {
+      const state = slot.state;
+      if (
+        state.kind === 'ready' &&
+        !this.#lent.has(slot) &&
+        state.idle.signal.aborted === slot.index < this.#sizing.current
+      )
+        this.#rest(slot, state.worker, state.since);
+    }
     for (const slot of this.#running())
       if (slot.state.kind === 'empty') this.#spawn(slot);
   }
@@ -186,7 +238,7 @@ export class Pool<T extends Worker> implements AsyncDisposable {
 
   #spawn(slot: Slot<T>): Latch<PromiseSettledResult<T>> {
     const outcome = new Latch<PromiseSettledResult<T>>();
-    slot.state = { kind: 'starting', outcome };
+    this.#enter(slot, { kind: 'starting', outcome });
     const turn = Promise.withResolvers<void>();
     this.#startup
       .turn(turn.promise)
@@ -206,14 +258,14 @@ export class Pool<T extends Worker> implements AsyncDisposable {
       .then(
         (worker) => {
           if (slot.state.kind === 'starting' && slot.state.outcome === outcome)
-            slot.state = { kind: 'ready', worker, since: performance.now() };
+            this.#rest(slot, worker, performance.now());
           outcome.open({ status: 'fulfilled', value: worker });
           turn.resolve();
           void worker.exited().then(() => this.#ended(slot, worker));
         },
         (reason: unknown) => {
           if (slot.state.kind === 'starting' && slot.state.outcome === outcome)
-            slot.state = { kind: 'empty' };
+            this.#enter(slot, { kind: 'empty' });
           outcome.open({ status: 'rejected', reason });
           turn.resolve();
         },
@@ -221,11 +273,54 @@ export class Pool<T extends Worker> implements AsyncDisposable {
     return outcome;
   }
 
+  // Every change of a slot's state comes here, so a ready worker that leaves
+  // its slot ends its idle wait.
+  #enter(slot: Slot<T>, next: State<T>): void {
+    if (slot.state.kind === 'ready') slot.state.idle.abort();
+    slot.state = next;
+  }
+
+  // A worker becomes idle in a slot. Its eviction may let it go only while
+  // no job has it and the pool runs its slot: a slot the sizing keeps but does
+  // not run has the worker the sizing tries (ADR 0002).
+  #rest(slot: Slot<T>, worker: T, since: number): void {
+    const state: Ready<T> = {
+      kind: 'ready',
+      worker,
+      since,
+      idle: new AbortController(),
+    };
+    this.#enter(slot, state);
+    if (this.#lent.has(slot) || slot.index >= this.#sizing.current) {
+      state.idle.abort();
+      return;
+    }
+    this.#eviction.idle(
+      AbortSignal.any([state.idle.signal, this.#stopped.signal]),
+      () => this.#evict(slot, state),
+    );
+  }
+
+  // Closes an idle worker that its eviction let go. The slot is empty before
+  // the worker closes, so its exit starts no back-off and no replacement. A
+  // worker that ran 10 minutes ends the back-off, as at an exit.
+  #evict(slot: Slot<T>, state: Ready<T>): void {
+    if (
+      slot.state !== state ||
+      this.#lent.has(slot) ||
+      slot.index >= this.#sizing.current ||
+      this.#stopped.signal.aborted
+    )
+      return;
+    if (performance.now() - state.since >= backoff.reset) slot.early = 0;
+    this.#retire(slot);
+  }
+
   // The pool killed the worker of a slot: no job may borrow it any more.
   #lose(slot: Slot<T>, worker: T): void {
     const state = slot.state;
     if (state.kind === 'ready' && state.worker === worker)
-      slot.state = { kind: 'lost', worker, since: state.since };
+      this.#enter(slot, { kind: 'lost', worker, since: state.since });
   }
 
   #ended(slot: Slot<T>, worker: T): void {
@@ -235,37 +330,38 @@ export class Pool<T extends Worker> implements AsyncDisposable {
       state.worker !== worker
     )
       return;
-    slot.state = { kind: 'lost', worker, since: state.since };
-    if (
-      this.#lent.has(slot) ||
-      this.#stopped.signal.aborted ||
-      !this.#startup.eager
-    )
-      return;
-    slot.state = { kind: 'empty' };
+    this.#enter(slot, { kind: 'lost', worker, since: state.since });
+    if (!this.#lent.has(slot)) this.#replace(slot, worker, state.since);
+  }
+
+  // An eager pool closes the worker of a lost slot that no job has, and
+  // starts the next one: at once after a worker that ran 10 minutes, else
+  // after the back-off.
+  #replace(slot: Slot<T>, worker: T, since: number): void {
+    if (this.#stopped.signal.aborted || !this.#startup.eager) return;
+    this.#enter(slot, { kind: 'empty' });
     void this.#close(worker);
-    slot.early =
-      performance.now() - state.since < backoff.reset ? slot.early + 1 : 0;
+    slot.early = performance.now() - since < backoff.reset ? slot.early + 1 : 0;
     if (slot.index >= this.#sizing.current) return;
     if (slot.early === 0) {
       this.#spawn(slot);
       return;
     }
     const delay = Math.min(backoff.first * 2 ** (slot.early - 1), backoff.most);
-    slot.state = {
+    this.#enter(slot, {
       kind: 'backoff',
       timer: setTimeout(() => {
-        slot.state = { kind: 'empty' };
+        this.#enter(slot, { kind: 'empty' });
         if (slot.index < this.#sizing.current) this.#spawn(slot);
       }, delay),
-    };
+    });
   }
 
   // Closes the worker of a slot the pool no longer keeps, once its job ends.
   #retire(slot: Slot<T>): void {
     if (this.#lent.has(slot)) return;
     const state = slot.state;
-    slot.state = { kind: 'empty' };
+    this.#enter(slot, { kind: 'empty' });
     if (state.kind === 'ready' || state.kind === 'lost')
       void this.#close(state.worker);
     else if (state.kind === 'backoff') clearTimeout(state.timer);

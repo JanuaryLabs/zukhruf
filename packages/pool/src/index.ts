@@ -1,7 +1,10 @@
+export type { Eviction } from './eviction.ts';
 export { Fixed } from './fixed.ts';
 export { Gradient } from './gradient.ts';
 export { HillClimbing } from './hill-climbing.ts';
+export { IdleTimeout } from './idle-timeout.ts';
 export { LeaderFirst } from './leader-first.ts';
+export { NoEviction } from './no-eviction.ts';
 export { OnDemand } from './on-demand.ts';
 export { OrderedReady } from './ordered-ready.ts';
 export { Parallel } from './parallel.ts';
