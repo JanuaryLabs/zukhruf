@@ -339,12 +339,12 @@ A `scripts.test` in a `package.json` replaces the inferred target. Nx runs it wi
 | Workspace        | Backlog item                                |
 | ---------------- | ------------------------------------------- |
 | zukhruf          | uses it: `nx.json` lists the plugin by path |
-| factory          | #3363                                       |
-| whatisgoingon    | #3364                                       |
-| deepagents       | #3365                                       |
+| factory          | uses it (#3363)                             |
+| whatisgoingon    | uses it (#3364)                             |
+| deepagents       | uses it (#3365)                             |
 | elt              | #3366                                       |
 | context-compiler | #3367                                       |
-| text2sql         | #3368                                       |
+| text2sql         | uses it (#3368)                             |
 
 The umbrella item is #3328.
 
@@ -487,10 +487,10 @@ The lockfile measured the edges on 2026-10-30. For factory, whatisgoingon, deepa
 | Workspace        | Backlog item                                       |
 | ---------------- | -------------------------------------------------- |
 | zukhruf          | uses it: `nx.json` lists the plugin by path        |
-| factory          | #3386                                              |
-| whatisgoingon    | #3387                                              |
-| deepagents       | #3388                                              |
-| text2sql         | #3389                                              |
+| factory          | uses it (#3386)                                    |
+| whatisgoingon    | uses it (#3387)                                    |
+| deepagents       | uses it (#3388)                                    |
+| text2sql         | uses it (#3389)                                    |
 | elt              | #3390, after the move to `@zukhruf/eslint` (#2964) |
 | context-compiler | #3391, after the move to `@zukhruf/eslint` (#2881) |
 
