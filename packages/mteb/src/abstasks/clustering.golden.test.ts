@@ -88,8 +88,8 @@ const expected: Expected = JSON.parse(
 // AMI_TOLERANCE * max(1, |value|) bounds the difference of an adjusted
 // mutual information. Its expected mutual information adds exp of sums of
 // log-gamma values near 1e5, which MTEB takes from the C library (lgamma,
-// exp) and SciPy (gammaln), and this port from a port of Cephes' lgam and
-// Math.exp. The largest difference seen is 2.6e-14, for 4096 samples of
+// exp) and SciPy (gammaln), and this port from the lgam of the npm package
+// cephes and Math.exp. The largest difference seen is 2.6e-14, for 4096 samples of
 // 26 classes in 20 clusters; in evaluate it is 1.0e-14.
 const AMI_TOLERANCE = 1e-12;
 

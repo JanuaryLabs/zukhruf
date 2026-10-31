@@ -53,8 +53,9 @@ It also ports the semantics of parts of these dependencies of MTEB:
   corpus of NLTK (bm25s/tokenization.py:526). NLTK takes the first nine
   lists from the stopword lists of the Snowball project, through the copy of
   PostgreSQL, BSD 3-Clause License. NLTK added the Chinese list in 2022 and
-  names no source for it. bm25s names no source for its English list of 33
-  words, which is not the English list of NLTK.
+  names no source for it. The English list of bm25s, 33 words, is not the
+  English list of NLTK. It is equal to the English stop set of Lucene
+  (StopAnalyzer.ENGLISH_STOP_WORDS_SET), Apache License 2.0.
 - PyStemmer 3.1.0 (Stemmer.Stemmer and the names of its 36 algorithms),
   Copyright (c) 2006 Richard Boulton, MIT License.
 - pandas 3.1.0 (DataFrame, explode, pivot_table, the groupby mean, to_csv,

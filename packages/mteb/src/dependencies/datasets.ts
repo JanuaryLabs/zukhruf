@@ -15,6 +15,8 @@ import { parquetMetadata, parquetReadObjects, parquetSchema } from 'hyparquet';
 import { parse } from 'yaml';
 import { z } from 'zod';
 
+import { compareStrings } from './python.ts';
+
 // The part of the HuggingFace datasets library (version 5.1.0) that
 // load_dataset uses to read a dataset of JSON or parquet files: the configs of
 // the dataset card (datasets/utils/metadata.py), the data files that it infers
@@ -110,7 +112,7 @@ class FolderRepository implements DatasetRepository {
             .join('/'),
         );
     }
-    return files.sort(byCodePoint);
+    return files.sort(compareStrings);
   }
 
   async read(path: string): Promise<Uint8Array> {
@@ -157,7 +159,7 @@ class HubRepository implements DatasetRepository {
         if (entry.type === 'file') files.push(entry.path);
       url = nextPage(response.headers.get('link'));
     }
-    files.sort(byCodePoint);
+    files.sort(compareStrings);
     keep(cached, JSON.stringify(files));
     return files;
   }
@@ -191,19 +193,6 @@ function keep(path: string, data: string | Uint8Array): void {
   const partial = `${path}.${process.pid}.partial`;
   writeFileSync(partial, data);
   renameSync(partial, path);
-}
-
-// Python sorts strings by code point; JavaScript's default sort compares
-// UTF-16 code units, which puts characters above U+FFFF before U+E000-U+FFFF.
-function byCodePoint(a: string, b: string): number {
-  const left = [...a];
-  const right = [...b];
-  for (let i = 0; i < Math.min(left.length, right.length); i++) {
-    const difference =
-      (left[i]?.codePointAt(0) ?? 0) - (right[i]?.codePointAt(0) ?? 0);
-    if (difference !== 0) return difference;
-  }
-  return left.length - right.length;
 }
 
 // The YAML metadata of a dataset card (DatasetCard.load).
@@ -653,7 +642,7 @@ function getDataPatterns(
       ...DEFAULT_SPLITS.filter((split) => found.has(split)),
       ...[...found]
         .filter((split) => !defaults.includes(split))
-        .sort(byCodePoint),
+        .sort(compareStrings),
     ];
     return new Map(
       sorted.map((split) => [
@@ -707,7 +696,7 @@ function inferModuleOfFiles(files: readonly string[]): Module | string | null {
     const right = sortKey(b);
     for (let i = 0; i < left.length; i++)
       if (left[i] !== right[i]) return (right[i] ?? 0) - (left[i] ?? 0);
-    return byCodePoint(b[0].slice(1), a[0].slice(1));
+    return compareStrings(b[0].slice(1), a[0].slice(1));
   });
   for (const [key] of ordered) {
     const extension = key.slice(1);

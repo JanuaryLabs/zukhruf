@@ -3,8 +3,8 @@
 // integers to different floats. This log is the correctly rounded natural
 // logarithm: it computes log(x) in double-double arithmetic (about 100 bits)
 // and rounds once. Thus it equals any C library whose log rounds correctly
-// for x. libm.golden.test.ts checks it against the log of macOS for every
-// integer that clustering metrics take.
+// for x. clustering.golden.test.ts checks it against the log of macOS for the
+// integers 1 to 16384.
 
 type DoubleDouble = readonly [hi: number, lo: number];
 

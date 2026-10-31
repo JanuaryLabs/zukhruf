@@ -42,7 +42,7 @@ The article bootstrap of the relevance-filtering eval (`articleWeights`, `articl
 
 ## The Hub file reader, inside this package
 
-Two places read a file of a HuggingFace Hub repository at a revision through a cache folder, and write the file in one step. `dependencies/datasets.ts` reads the files of a dataset for `loadDataset`. `dependencies/tokenizers.ts` reads `tokenizer.json` of a model for `Tokenizer.fromPretrained`. This is the second place, so the reader is copied, not shared (Rule of Three). A third place that reads a Hub file starts the extraction. The three working copies then give the boundary of the shared reader. Until then, make each fix in both copies, and name both files in the commit.
+Two places read a file of a HuggingFace Hub repository at a revision through a cache folder, and write the file in one step. `dependencies/datasets.ts` reads the files of a dataset for `loadDataset`. `dependencies/tokenizers.ts` reads `tokenizer.json` of a model for `Tokenizer.fromPretrained`. This is the second place, so the reader is copied, not shared (Rule of Three). A third place that reads a Hub file starts the extraction (backlog #3484). The three working copies then give the boundary of the shared reader. Until then, make each fix in both copies, and name both files in the commit.
 
 **`dependencies/datasets.ts` `HubRepository.read` and `keep` → `dependencies/tokenizers.ts` `hubFile` and `keep`.**
 Both read a file from `.../<repository>/resolve/<revision>/<path>` of the endpoint, keep it in `<cache folder>/<repository>/<revision or commit>/<path>`, read the file from the cache when it is there, and write it through a `.partial` file and a rename. `keep` is the same.
