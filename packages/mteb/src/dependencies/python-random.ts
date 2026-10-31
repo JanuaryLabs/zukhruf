@@ -9,19 +9,6 @@ export class PythonRandom {
     this.#random = new Random(seed);
   }
 
-  random(): number {
-    return this.#random.random();
-  }
-
-  // getrandbits(k) for k up to 32, as a number.
-  getrandbits(k: number): number {
-    if (k > 32)
-      throw new RangeError(
-        `getrandbits(${k}): this port draws at most 32 bits.`,
-      );
-    return Number(this.#random.getrandbits(k));
-  }
-
   // sample(range(n), k).
   sample(n: number, k: number): number[] {
     return this.#random.sample(range(n), k);

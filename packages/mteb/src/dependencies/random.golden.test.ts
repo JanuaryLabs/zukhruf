@@ -40,10 +40,6 @@ for (const pythonCase of expected.python)
     const results = pythonCase.calls.map(([name, a = 0, b = 0]) => {
       if (name === 'sample') return generator.sample(a, b);
       if (name === 'choices') return generator.choices(a, b);
-      if (name === 'random')
-        return Array.from({ length: a }, () => generator.random());
-      if (name === 'getrandbits')
-        return Array.from({ length: b }, () => generator.getrandbits(a));
       throw new Error(`No call ${name}.`);
     });
 
@@ -125,10 +121,4 @@ test('a negative sample size throws, as CPython raises a ValueError', () => {
 
 test('a float seed throws a TypeError: MTEB seeds random.Random with an int', () => {
   assert.throws(() => new PythonRandom(1.5), { name: 'TypeError' });
-});
-
-test('getrandbits of more than 32 bits throws, as the draws are numbers', () => {
-  const generator = new PythonRandom(1);
-
-  assert.throws(() => generator.getrandbits(33), { name: 'RangeError' });
 });

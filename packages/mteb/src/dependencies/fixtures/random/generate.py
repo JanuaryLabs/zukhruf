@@ -7,8 +7,8 @@
 # uv run packages/mteb/src/dependencies/fixtures/random/generate.py
 #
 # expected.json holds, for each case, the calls and what they returned:
-# - random.Random(seed): sample(range(n), k), choices(range(n), k=k),
-#   random() and getrandbits(k), in the order of the calls;
+# - random.Random(seed): sample(range(n), k) and choices(range(n), k=k), in
+#   the order of the calls;
 # - numpy.random.RandomState(seed): randint, random_sample, uniform(size),
 #   choice(n, size, p=p) with the float32 weights of scikit-learn, choice(n,
 #   size, replace=False), choice(a, size) of the array a = 3 * arange(n) + 1,
@@ -43,10 +43,6 @@ def python_case(case, seed, calls):
             results.append(generator.sample(range(call[1]), k=call[2]))
         elif name == "choices":
             results.append(generator.choices(range(call[1]), k=call[2]))
-        elif name == "random":
-            results.append([generator.random() for _ in range(call[1])])
-        elif name == "getrandbits":
-            results.append([generator.getrandbits(call[1]) for _ in range(call[2])])
     return {"case": case, "seed": seed, "calls": calls, "results": results}
 
 
@@ -108,7 +104,7 @@ def generator_case(case, seed, calls):
 # k * 3 = 63 gives a table of 4 ** 3 for the set of sample, 66 one of 4 ** 4:
 # with n = 200, k = 21 selects by a set and k = 22 from a pool.
 python_cases = [
-    python_case("seed 42: a set, a pool, choices", 42, [["sample", 1000, 40], ["sample", 10, 10], ["choices", 40, 50], ["random", 3]]),
+    python_case("seed 42: a set, a pool, choices", 42, [["sample", 1000, 40], ["sample", 10, 10], ["choices", 40, 50], ["sample", 1000, 3]]),
     python_case("k = 21 of 200 selects by a set", 7, [["sample", 200, 21]]),
     python_case("k = 22 of 200 selects from a pool", 7, [["sample", 200, 22]]),
     python_case("k = 5 of 27 selects by a set, k = 5 of 21 from a pool", 11, [["sample", 27, 5], ["sample", 21, 5]]),
@@ -116,9 +112,10 @@ python_cases = [
     python_case("empty and whole samples", 0, [["sample", 5, 0], ["sample", 1, 1], ["sample", 6, 6]]),
     python_case("a negative seed uses its absolute value", -42, [["sample", 1000, 40]]),
     python_case("a seed above 2^32 has two key words", 2**40 + 5, [["sample", 300, 120], ["choices", 7, 30]]),
-    python_case("seed 0", 0, [["random", 5], ["getrandbits", 1, 8], ["getrandbits", 5, 4], ["getrandbits", 32, 3]]),
-    python_case("choices of one element and of many", 2026, [["choices", 1, 5], ["choices", 1675, 200], ["random", 2]]),
-    python_case("more than 624 words: the state twists again", 9, [["random", 700], ["sample", 100000, 30]]),
+    python_case("choices of one element and of many", 2026, [["choices", 1, 5], ["choices", 1675, 200], ["sample", 1000, 3]]),
+    # sample(range(1000), k=700) draws 933 words of 32 bits: more than the 624
+    # words of the state.
+    python_case("more than 624 words: the state twists again", 9, [["sample", 1000, 700], ["sample", 100000, 30]]),
 ]
 
 numpy_cases = [
