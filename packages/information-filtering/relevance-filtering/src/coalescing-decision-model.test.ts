@@ -216,11 +216,11 @@ describe('CoalescingDecisionModel', () => {
     assert.equal(calls.length, 5);
     for (const call of calls.slice(0, 4))
       assert.deepEqual(Object.keys(call.questions), ['relevant']);
-    assert.equal(calls[4]?.questions, questions);
+    assert.deepEqual(calls[4]?.questions, questions);
     assert.equal(calls[4]?.abortSignal, own);
   });
 
-  test('calls with other options, or with a state that is not text, reach the inner model one by one, unchanged', async () => {
+  test('calls that differ only in one option, or with a state that is not text, reach the inner model one by one, unchanged', async () => {
     const calls: Call[] = [];
     const probabilities = new Map([
       [
@@ -235,14 +235,25 @@ describe('CoalescingDecisionModel', () => {
     const questions = {
       relevant: { type: 'boolean' as const, instructions: question(CHIPS) },
     };
+    const text = 'Nvidia shows its next AI accelerator';
+    // Each pair differs in one option only.
+    const pairs = [
+      [{ maxOutputTokens: 5 }, { maxOutputTokens: 6 }],
+      [{ headers: { 'x-run': 'a' } }, { headers: { 'x-run': 'b' } }],
+      [
+        { providerOptions: { test: { slot: 1 } } },
+        { providerOptions: { test: { slot: 2 } } },
+      ],
+      [{ reasoning: 'none' as const }, { reasoning: 'low' as const }],
+    ];
 
     await Promise.all([
-      ...[5, 6].map((maxOutputTokens) =>
+      ...pairs.flat().map((options) =>
         experimental_decide({
           model: coalescing,
-          maxOutputTokens,
-          state: 'Nvidia shows its next AI accelerator',
+          state: text,
           questions,
+          ...options,
         }),
       ),
       ...[1, 2].map(() =>
@@ -254,13 +265,65 @@ describe('CoalescingDecisionModel', () => {
       ),
     ]);
 
-    assert.equal(calls.length, 4);
-    for (const call of calls) assert.equal(call.questions, questions);
-    assert.deepEqual(
-      calls.map(({ maxOutputTokens }) => maxOutputTokens).toSorted(),
-      [5, 6, undefined, undefined],
-    );
+    assert.equal(calls.length, 10);
+    for (const call of calls) assert.deepEqual(call.questions, questions);
   });
+
+  // Only the abort of a caller settles its call: the timeout fails a wrapper
+  // that drops it.
+  test(
+    'a caller that aborts before the window closes leaves the other caller alone: it reaches the inner model unchanged, with its own signal',
+    { timeout: 5000 },
+    async () => {
+      const calls: Call[] = [];
+      const coalescing = new CoalescingDecisionModel(
+        model(PROBABILITIES, calls),
+      );
+      const stop = new AbortController();
+      const reason = new Error('The page is gone.');
+      const own = new AbortController().signal;
+      const decisions = ask(coalescing, [stop.signal, own]);
+      // This macrotask runs before the window closes: the calls reached the
+      // model in microtasks, and the window was scheduled after this one.
+      setImmediate(() => stop.abort(reason));
+
+      const [stopped, kept] = await Promise.allSettled(decisions);
+
+      assert.deepEqual(stopped, { status: 'rejected', reason });
+      assert.equal(kept?.status, 'fulfilled');
+      assert.equal(calls.length, 1);
+      assert.deepEqual(calls[0]?.questions, {
+        relevant: { type: 'boolean', instructions: question(SECURITY) },
+      });
+      assert.equal(calls[0]?.abortSignal, own);
+    },
+  );
+
+  // Only the abort of a caller settles its call: the timeout fails a wrapper
+  // that drops it.
+  test(
+    'when every caller aborts before the window closes, the inner model gets no call',
+    { timeout: 5000 },
+    async () => {
+      const calls: Call[] = [];
+      const coalescing = new CoalescingDecisionModel(
+        model(PROBABILITIES, calls),
+      );
+      const stop = new AbortController();
+      const reason = new Error('The reader stops.');
+      const decisions = ask(coalescing, [stop.signal, stop.signal]);
+      setImmediate(() => stop.abort(reason));
+
+      const settled = await Promise.allSettled(decisions);
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      assert.deepEqual(settled, [
+        { status: 'rejected', reason },
+        { status: 'rejected', reason },
+      ]);
+      assert.deepEqual(calls, []);
+    },
+  );
 
   test('a caller that aborts rejects at once with its reason, and the other caller of the merged call gets its answer from an inner call that is not aborted', async () => {
     const calls: Call[] = [];
@@ -296,35 +359,47 @@ describe('CoalescingDecisionModel', () => {
     assert.equal(calls[0]?.abortSignal?.aborted, false);
   });
 
-  test('when every caller of a merged call aborts, the inner call aborts', async () => {
-    const calls: Call[] = [];
-    const stop = new AbortController();
-    const reason = new Error('The reader stops.');
-    // Holds the merged call until its signal aborts.
-    const coalescing = new CoalescingDecisionModel(
-      model(PROBABILITIES, calls, (abortSignal) => {
-        setTimeout(() => stop.abort(reason), 10);
-        return new Promise((_resolve, reject) =>
-          abortSignal?.addEventListener(
-            'abort',
-            () => reject(abortSignal.reason),
-            { once: true },
-          ),
-        );
-      }),
-    );
+  test(
+    'a merged call aborts only when its last live caller aborts',
+    { timeout: 5000 },
+    async () => {
+      const calls: Call[] = [];
+      const first = new AbortController();
+      const second = new AbortController();
+      const reason = new Error('The reader stops.');
+      const seen: boolean[] = [];
+      // Holds the merged call until its signal aborts. The second caller
+      // aborts first, then the first caller.
+      const coalescing = new CoalescingDecisionModel(
+        model(PROBABILITIES, calls, (abortSignal) => {
+          setTimeout(() => {
+            second.abort(reason);
+            seen.push(abortSignal?.aborted === true);
+          }, 10);
+          setTimeout(() => first.abort(reason), 20);
+          return new Promise((_resolve, reject) =>
+            abortSignal?.addEventListener(
+              'abort',
+              () => reject(abortSignal.reason),
+              { once: true },
+            ),
+          );
+        }),
+      );
 
-    const settled = await Promise.allSettled(
-      ask(coalescing, [stop.signal, stop.signal]),
-    );
+      const settled = await Promise.allSettled(
+        ask(coalescing, [first.signal, second.signal]),
+      );
 
-    assert.deepEqual(settled, [
-      { status: 'rejected', reason },
-      { status: 'rejected', reason },
-    ]);
-    assert.equal(calls.length, 1);
-    assert.equal(calls[0]?.abortSignal?.aborted, true);
-  });
+      assert.deepEqual(settled, [
+        { status: 'rejected', reason },
+        { status: 'rejected', reason },
+      ]);
+      assert.equal(calls.length, 1);
+      assert.deepEqual(seen, [false]);
+      assert.equal(calls[0]?.abortSignal?.aborted, true);
+    },
+  );
 
   test('the usage of a merged call goes to its first caller only, so a sum over the callers is the usage of the inner model', async () => {
     const calls: Call[] = [];
@@ -346,25 +421,31 @@ describe('CoalescingDecisionModel', () => {
     );
   });
 
-  test('an inner model that fails rejects every caller of the merged call with its error', async () => {
-    const failure = new Error('The decision server is down.');
-    const calls: Call[] = [];
-    const coalescing = new CoalescingDecisionModel(
-      model(PROBABILITIES, calls, async () => {
-        throw failure;
-      }),
-    );
+  // A caller that the error does not reach would wait for ever: the timeout
+  // fails it fast.
+  test(
+    'an inner model that fails rejects every caller of the merged call with its error',
+    { timeout: 5000 },
+    async () => {
+      const failure = new Error('The decision server is down.');
+      const calls: Call[] = [];
+      const coalescing = new CoalescingDecisionModel(
+        model(PROBABILITIES, calls, async () => {
+          throw failure;
+        }),
+      );
 
-    const settled = await Promise.allSettled(
-      ask(coalescing, [running, running]),
-    );
+      const settled = await Promise.allSettled(
+        ask(coalescing, [running, running]),
+      );
 
-    assert.equal(calls.length, 1);
-    assert.deepEqual(settled, [
-      { status: 'rejected', reason: failure },
-      { status: 'rejected', reason: failure },
-    ]);
-  });
+      assert.equal(calls.length, 1);
+      assert.deepEqual(settled, [
+        { status: 'rejected', reason: failure },
+        { status: 'rejected', reason: failure },
+      ]);
+    },
+  );
 
   test("a refusal of one scorer's question fails only that score, with the refusal error of the AI SDK", async () => {
     const calls: Call[] = [];

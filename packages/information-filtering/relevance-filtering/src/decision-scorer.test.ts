@@ -149,8 +149,20 @@ describe('DecisionScorer', () => {
 
   test('a stopped score fails with the reason of the signal, also for an empty stream, and asks the model nothing', async () => {
     const reason = new Error('The reader stops.');
+    const asked: string[] = [];
+    const recording: Experimental_DecisionModel = {
+      specificationVersion: 'v4',
+      provider: 'test',
+      modelId: 'decision-stand-in',
+      supportedQuestionTypes: ['boolean'],
+      doDecide: async ({ state }) => {
+        const [part] = state;
+        asked.push(part?.type === 'text' ? part.text : '');
+        throw new Error('The scorer asked a stopped model.');
+      },
+    };
     const scorer = new DecisionScorer({
-      model: model(QUESTION, new Map()),
+      model: recording,
       description: DESCRIPTION,
     });
 
@@ -158,6 +170,13 @@ describe('DecisionScorer', () => {
       scorer.score(new Map(), { signal: AbortSignal.abort(reason) }),
       (error) => error === reason,
     );
+    await assert.rejects(
+      scorer.score(stream(['gpu', 'Nvidia ships a new GPU', 10]), {
+        signal: AbortSignal.abort(reason),
+      }),
+      (error) => error === reason,
+    );
+    assert.deepEqual(asked, []);
   });
 
   test('a question that the model refuses fails the score with the refusal error of the AI SDK, and does not rank the article', async () => {
@@ -362,56 +381,62 @@ describe('DecisionScorer', () => {
     assert.deepEqual(aborted, asked.slice(1));
   });
 
-  test('a stop while the model answers ends the score with the reason of the signal, aborts the calls that run, and no question starts after the stop', async () => {
-    const stop = new AbortController();
-    const reason = new Error('The reader stops.');
-    const asked: string[] = [];
-    const aborted: string[] = [];
-    // Holds each call until its signal aborts, and rejects it then, as fetch
-    // rejects a pending request. The stop comes from a timer while the first
-    // 8 calls run.
-    const stopping: Experimental_DecisionModel = {
-      specificationVersion: 'v4',
-      provider: 'test',
-      modelId: 'decision-stand-in',
-      supportedQuestionTypes: ['boolean'],
-      doDecide: async ({ state, abortSignal }) => {
-        if (abortSignal === undefined)
-          throw new Error('The scorer gave the model no signal.');
-        const [part] = state;
-        const text = part?.type === 'text' ? part.text : '';
-        asked.push(text);
-        return new Promise((_, reject) =>
-          abortSignal.addEventListener(
-            'abort',
-            () => {
-              aborted.push(text);
-              reject(abortSignal.reason);
-            },
-            { once: true },
-          ),
-        );
-      },
-    };
-    const articles = Array.from(
-      { length: 20 },
-      (_, n) => [`a${n}`, `Article ${n}`, 10] as const,
-    );
-    setTimeout(() => stop.abort(reason), 10);
+  // The stand-in holds each call until its signal aborts, so a scorer that
+  // does not pass the stop would wait for ever: the timeout fails it fast.
+  test(
+    'a stop while the model answers ends the score with the reason of the signal, aborts the calls that run, and no question starts after the stop',
+    { timeout: 5000 },
+    async () => {
+      const stop = new AbortController();
+      const reason = new Error('The reader stops.');
+      const asked: string[] = [];
+      const aborted: string[] = [];
+      // Holds each call until its signal aborts, and rejects it then, as fetch
+      // rejects a pending request. The stop comes from a timer while the first
+      // 8 calls run.
+      const stopping: Experimental_DecisionModel = {
+        specificationVersion: 'v4',
+        provider: 'test',
+        modelId: 'decision-stand-in',
+        supportedQuestionTypes: ['boolean'],
+        doDecide: async ({ state, abortSignal }) => {
+          if (abortSignal === undefined)
+            throw new Error('The scorer gave the model no signal.');
+          const [part] = state;
+          const text = part?.type === 'text' ? part.text : '';
+          asked.push(text);
+          return new Promise((_, reject) =>
+            abortSignal.addEventListener(
+              'abort',
+              () => {
+                aborted.push(text);
+                reject(abortSignal.reason);
+              },
+              { once: true },
+            ),
+          );
+        },
+      };
+      const articles = Array.from(
+        { length: 20 },
+        (_, n) => [`a${n}`, `Article ${n}`, 10] as const,
+      );
+      setTimeout(() => stop.abort(reason), 10);
 
-    await assert.rejects(
-      new DecisionScorer({ model: stopping, description: DESCRIPTION }).score(
-        stream(...articles),
-        { signal: stop.signal },
-      ),
-      (error) => error === reason,
-    );
-    await new Promise((resolve) => setTimeout(resolve, 20));
+      await assert.rejects(
+        new DecisionScorer({ model: stopping, description: DESCRIPTION }).score(
+          stream(...articles),
+          { signal: stop.signal },
+        ),
+        (error) => error === reason,
+      );
+      await new Promise((resolve) => setTimeout(resolve, 20));
 
-    assert.deepEqual(
-      asked,
-      Array.from({ length: 8 }, (_, n) => `Article ${n}`),
-    );
-    assert.deepEqual(aborted, asked);
-  });
+      assert.deepEqual(
+        asked,
+        Array.from({ length: 8 }, (_, n) => `Article ${n}`),
+      );
+      assert.deepEqual(aborted, asked);
+    },
+  );
 });
