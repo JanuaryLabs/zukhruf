@@ -1,7 +1,8 @@
-// mteb/models/model_implementations/bm25.py: MTEB's BM25 baseline
+// mteb/models/model_implementations/bm25.py: MTEB's BM25 baselines
 // mteb/baseline-bm25s, with the stopwords, the stemmer and the tokenizer of
-// the language of the task, or a function as the tokenizer. Not ported yet:
-// a tokenizer of HuggingFace (and so mteb/baseline-bm25s-subword).
+// the language of the task, and mteb/baseline-bm25s-subword, with the
+// tokenizer of Qwen/Qwen3-0.6B. The tokenizer can also be a function or the
+// name of another tokenizer of the HuggingFace Hub.
 import type { TaskMetadata } from '../../abstasks/task-metadata.ts';
 import { combineQueriesWithInstructionText } from '../../create-dataloaders.ts';
 import {
@@ -23,7 +24,9 @@ import {
   type Tokenized,
   tokenize,
 } from '../../dependencies/bm25s.ts';
+import type { HubOptions } from '../../dependencies/datasets.ts';
 import { Stemmer } from '../../dependencies/pystemmer.ts';
+import { Tokenizer } from '../../dependencies/tokenizers.ts';
 import type {
   CorpusDatasetType,
   QueryDatasetType,
@@ -166,7 +169,7 @@ function toTokenized(tokenLists: readonly (readonly string[])[]): Tokenized {
 // and does not lowercase (the char tokenizer lowercases itself).
 type TokenizerPath =
   | { readonly kind: 'bm25s' }
-  | { readonly kind: 'custom'; readonly tokenize: CustomTokenizer };
+  | { readonly kind: 'custom'; readonly tokenizer: 'char' | CustomTokenizer };
 
 // The tokenizer of BM25Search: the stopwords, the stemmer and the tokenizer
 // of the language, unless the options name them. A language without a
@@ -181,6 +184,9 @@ export class BM25Tokenizer {
   readonly stemmer: Stemmer | null;
   readonly freqThreshold: number;
   readonly #path: TokenizerPath;
+  // The function of the custom path, from the first fit, as MTEB's
+  // _raw_tok, which is None before fit_transform.
+  #rawTokenize: CustomTokenizer | null = null;
   #combinedStops: ReadonlySet<string> = new Set();
 
   // The language null and a code that _ISO3_TO_LANG does not hold get no
@@ -199,12 +205,7 @@ export class BM25Tokenizer {
         ? (options.tokenizer ?? null)
         : (options.tokenizer ?? detectedTokenizer);
     this.#path =
-      tokenizer === null
-        ? { kind: 'bm25s' }
-        : {
-            kind: 'custom',
-            tokenize: tokenizer === 'char' ? unicodeTokenize : tokenizer,
-          };
+      tokenizer === null ? { kind: 'bm25s' } : { kind: 'custom', tokenizer };
     this.freqThreshold = options.freqThreshold ?? 0.9;
     // A stemmer name of "" gives no stemmer, as in MTEB (if stemmer_lang).
     this.stemmer = stemmerLanguage ? new Stemmer(stemmerLanguage) : null;
@@ -217,25 +218,30 @@ export class BM25Tokenizer {
 
   fitTransform(corpusTexts: readonly string[]): Tokenized {
     const path = this.#path;
-    return path.kind === 'bm25s'
-      ? this.#fitTransformBm25s(corpusTexts)
-      : this.#fitTransformCustom(corpusTexts, path.tokenize);
+    if (path.kind === 'bm25s') return this.#fitTransformBm25s(corpusTexts);
+    this.#rawTokenize =
+      path.tokenizer === 'char' ? unicodeTokenize : path.tokenizer;
+    return this.#fitTransformCustom(corpusTexts, this.#rawTokenize);
   }
 
   // The stopwords from document frequencies are stems, and bm25s removes
   // stopwords before it stems the words. Thus a query loses a word that
   // equals a frequent stem, and keeps an inflected form of it, as in MTEB.
+  // Before a fit, the custom path throws for each text, as MTEB calls None.
   transform(texts: readonly string[]): Tokenized {
-    const path = this.#path;
-    if (path.kind === 'bm25s')
+    if (this.#path.kind === 'bm25s')
       return tokenize(texts, {
         stopwords: [...this.#combinedStops],
         stemmer: this.stemmer,
       });
     return toTokenized(
-      texts.map((text) =>
-        path.tokenize(text).filter((token) => !this.#combinedStops.has(token)),
-      ),
+      texts.map((text) => {
+        if (this.#rawTokenize === null)
+          throw new TypeError("'NoneType' object is not callable");
+        return this.#rawTokenize(text).filter(
+          (token) => !this.#combinedStops.has(token),
+        );
+      }),
     );
   }
 
@@ -309,7 +315,7 @@ export type BM25Kwargs = LoadKwargs & {
   readonly stopwords?: StopwordsKey;
   readonly stemmer_language?: string;
   readonly freq_threshold?: number;
-  readonly tokenizer?: CustomTokenizer;
+  readonly tokenizer?: string | CustomTokenizer;
   readonly k1?: number;
   readonly b?: number;
   readonly delta?: number;
@@ -333,18 +339,22 @@ export class BM25Search implements SearchProtocol {
   readonly #stopwords: StopwordsKey | undefined;
   readonly #stemmerLanguage: string | undefined;
   readonly #freqThreshold: number;
-  readonly #tokenizer: CustomTokenizer | undefined;
+  readonly #tokenizer: string | CustomTokenizer | undefined;
+  readonly #hub: HubOptions;
   #indexed: Indexed | null = null;
 
   // stopwords and stemmerLanguage replace those of the language of the task.
   // A tokenizer drops the language: the documents get no stemmer, and the
-  // stopwords from document frequencies unless stopwords names a list.
+  // stopwords from document frequencies unless stopwords names a list. A
+  // string as the tokenizer names a tokenizer.json of the HuggingFace Hub,
+  // which hub reads.
   constructor(options: {
     readonly modelMeta: ModelMeta;
     readonly stopwords?: StopwordsKey | undefined;
     readonly stemmerLanguage?: string | undefined;
     readonly freqThreshold?: number | undefined;
-    readonly tokenizer?: CustomTokenizer | undefined;
+    readonly tokenizer?: string | CustomTokenizer | undefined;
+    readonly hub?: HubOptions;
     readonly k1?: number;
     readonly b?: number;
     readonly delta?: number;
@@ -355,23 +365,39 @@ export class BM25Search implements SearchProtocol {
     this.#stemmerLanguage = options.stemmerLanguage;
     this.#freqThreshold = options.freqThreshold ?? 0.9;
     this.#tokenizer = options.tokenizer;
+    this.#hub = options.hub ?? {};
     this.k1 = options.k1 ?? 1.5;
     this.b = options.b ?? 0.75;
     this.delta = options.delta ?? 0.5;
     this.method = options.method ?? 'lucene';
   }
 
+  // MTEB's _resolve_tokenizer: the tokens of a Hub tokenizer without " "
+  // and "▁", and without a token of only those characters. MTEB reads the
+  // tokenizer once, when it makes the model; here each index reads it.
+  async #resolveTokenizer(): Promise<CustomTokenizer | undefined> {
+    const tokenizer = this.#tokenizer;
+    if (typeof tokenizer !== 'string') return tokenizer;
+    const hfTokenizer = await Tokenizer.fromPretrained(tokenizer, this.#hub);
+    return (text) =>
+      hfTokenizer
+        .encode(text, { addSpecialTokens: false })
+        .tokens.map((token) => token.replaceAll(' ', '').replaceAll('▁', ''))
+        .filter((token) => token !== '');
+  }
+
   // A subset with more than one language is read as English, as in MTEB.
   async index(corpus: CorpusDatasetType, options: IndexOptions): Promise<void> {
+    const customTokenizer = await this.#resolveTokenizer();
     const tokenizer = new BM25Tokenizer(
-      this.#tokenizer === undefined
+      customTokenizer === undefined
         ? (getLanguage(options.taskMetadata, options.hfSubset) ?? 'eng')
         : null,
       {
         stopwordsKey: this.#stopwords,
         stemmerLanguage: this.#stemmerLanguage,
         freqThreshold: this.#freqThreshold,
-        tokenizer: this.#tokenizer,
+        tokenizer: customTokenizer,
       },
     );
     const encodedCorpus = tokenizer.fitTransform(
@@ -479,6 +505,83 @@ const BM25_S_LANGUAGES = [
   'cmn-Hant',
 ];
 
+// The languages of the tokenizer of Qwen3, as MTEB lists them.
+const QWEN_LANGUAGES = [
+  'afr-Latn',
+  'ara-Arab',
+  'aze-Latn',
+  'bel-Cyrl',
+  'bul-Cyrl',
+  'ben-Beng',
+  'cat-Latn',
+  'ceb-Latn',
+  'ces-Latn',
+  'cym-Latn',
+  'dan-Latn',
+  'deu-Latn',
+  'ell-Grek',
+  'eng-Latn',
+  'spa-Latn',
+  'est-Latn',
+  'eus-Latn',
+  'fas-Arab',
+  'fin-Latn',
+  'fra-Latn',
+  'glg-Latn',
+  'guj-Gujr',
+  'heb-Hebr',
+  'hin-Deva',
+  'hrv-Latn',
+  'hat-Latn',
+  'hun-Latn',
+  'hye-Armn',
+  'ind-Latn',
+  'isl-Latn',
+  'ita-Latn',
+  'jpn-Jpan',
+  'jav-Latn',
+  'kat-Geor',
+  'kaz-Cyrl',
+  'khm-Khmr',
+  'kan-Knda',
+  'kor-Hang',
+  'kir-Cyrl',
+  'lao-Laoo',
+  'lit-Latn',
+  'lav-Latn',
+  'mkd-Cyrl',
+  'mal-Mlym',
+  'mon-Cyrl',
+  'mar-Deva',
+  'msa-Latn',
+  'mya-Mymr',
+  'nep-Deva',
+  'nld-Latn',
+  'nor-Latn',
+  'nob-Latn',
+  'nno-Latn',
+  'pan-Guru',
+  'pol-Latn',
+  'por-Latn',
+  'que-Latn',
+  'ron-Latn',
+  'rus-Cyrl',
+  'sin-Sinh',
+  'slk-Latn',
+  'slv-Latn',
+  'swa-Latn',
+  'tam-Taml',
+  'tel-Telu',
+  'tha-Thai',
+  'tgl-Latn',
+  'tur-Latn',
+  'ukr-Cyrl',
+  'urd-Arab',
+  'vie-Latn',
+  'yor-Latn',
+  'zho-Hans',
+];
+
 export const bm25S = new ModelMeta<BM25Kwargs, BM25Search>({
   loader: bm25Loader,
   extraRequirementsGroups: ['bm25s'],
@@ -487,6 +590,32 @@ export const bm25S = new ModelMeta<BM25Kwargs, BM25Search>({
   languages: BM25_S_LANGUAGES,
   openWeights: true,
   revision: '0_3_0',
+  releaseDate: '2026-05-06',
+  nParameters: 0,
+  nEmbeddingParameters: 0,
+  memoryUsageMb: null,
+  embedDim: null,
+  license: null,
+  maxTokens: null,
+  reference: 'https://github.com/xhluca/bm25s',
+  similarityFnName: null,
+  framework: [],
+  useInstructions: false,
+  publicTrainingCode: 'https://github.com/xhluca/bm25s',
+  publicTrainingData: null,
+  trainingDatasets: null,
+  citation: BM25_CITATION,
+});
+
+export const bm25SSubword = new ModelMeta<BM25Kwargs, BM25Search>({
+  loader: bm25Loader,
+  loaderKwargs: { tokenizer: 'Qwen/Qwen3-0.6B' },
+  extraRequirementsGroups: ['bm25s'],
+  name: 'mteb/baseline-bm25s-subword',
+  modelType: ['sparse'],
+  languages: QWEN_LANGUAGES,
+  openWeights: true,
+  revision: '0_1_0',
   releaseDate: '2026-05-06',
   nParameters: 0,
   nEmbeddingParameters: 0,

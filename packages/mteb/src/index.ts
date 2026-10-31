@@ -95,6 +95,7 @@ export {
   type StopwordsKey,
   bm25Loader,
   bm25S,
+  bm25SSubword,
 } from './models/model-implementations/bm25.ts';
 export {
   EMBEDDING_GEMMA_2_TASK_INSTRUCTIONS,

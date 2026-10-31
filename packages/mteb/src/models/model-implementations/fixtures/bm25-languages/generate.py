@@ -12,7 +12,8 @@
 # experiment name, the model name with the experiment, the score of each
 # document for each query and the main score of mteb.evaluate, for each run.
 # It writes the scores of BM25Search with a function as the tokenizer, and
-# what MTEB raises for such a function through load_model. It also writes,
+# what MTEB raises for such a function through load_model and for
+# transform before fit_transform on the custom path. It also writes,
 # for each language of MTEB's _ISO3_TO_LANG and for a code that the table
 # does not hold, the stopwords key of BM25Tokenizer, the stems of its
 # stemmer for a list of probe words, the tokens of a probe corpus, and the
@@ -354,6 +355,16 @@ with tempfile.TemporaryDirectory() as cache:
         )
     assert function_runs[2]["stopwords"], "freq_threshold 0.25 finds no frequent token"
 
+    # transform before fit on the custom path: MTEB gets the tokenizer
+    # function in fit_transform, so it calls None for each text.
+    unfitted = BM25Tokenizer(None, tokenizer=split_space)
+    assert unfitted.transform([]).ids == []
+    try:
+        unfitted.transform(["a b"])
+        raise AssertionError("transform did not raise")
+    except TypeError as error:
+        transform_before_fit_error = str(error)
+
     # A function through load_model: the experiment name raises.
     loaded = bm25_s.load_model(tokenizer=split_space)
     try:
@@ -418,7 +429,8 @@ generator = (
     f'{{"generator": {json.dumps(generator)}, "probe": {json.dumps(PROBE, ensure_ascii=False)}, '
     + f'"probe_corpus": {json.dumps(PROBE_CORPUS, ensure_ascii=False)}, '
     + f'"probe_queries": {json.dumps(PROBE_QUERIES, ensure_ascii=False)}, '
-    + f'"load_model_error": {json.dumps(load_model_error)}, "languages": [\n'
+    + f'"load_model_error": {json.dumps(load_model_error)}, '
+    + f'"transform_before_fit_error": {json.dumps(transform_before_fit_error)}, "languages": [\n'
     + ",\n".join(json.dumps(language, ensure_ascii=False) for language in languages)
     + '\n], "runs": [\n'
     + ",\n".join(json.dumps(run, ensure_ascii=False) for run in runs)

@@ -45,7 +45,7 @@ jobs:
             run: npx prettier --check .
 
       - name: Lint, type check, test and build what changed
-        run: npx nx affected -t lint typecheck test build
+        run: npx nx affected -t lint typecheck test test-network build
         env:
           NX_PROFILE: nx-profile.json
 

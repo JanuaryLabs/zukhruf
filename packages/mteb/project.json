@@ -18,6 +18,15 @@
     "build": {
       "dependsOn": ["^build", "codecarbon-data"]
     },
+    "test-network": {
+      "executor": "nx:run-commands",
+      "dependsOn": ["build", "^build"],
+      "cache": false,
+      "options": {
+        "cwd": "{projectRoot}",
+        "command": "node --test --no-warnings --test-timeout=600000 \"src/**/*.network.spec.ts\""
+      }
+    },
     "compare": {
       "executor": "nx:run-commands",
       "cache": false,

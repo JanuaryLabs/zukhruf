@@ -52,6 +52,7 @@
     "access": "public"
   },
   "dependencies": {
+    "@huggingface/tokenizers": "^0.2.0",
     "@stdlib/blas-ext-base-gsumpw": "^0.3.1",
     "ai": "^7.0.154",
     "hyparquet": "^1.32.0",

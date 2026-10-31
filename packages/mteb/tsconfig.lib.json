@@ -7,7 +7,7 @@
     "allowJs": true
   },
   "include": ["src/**/*.ts"],
-  "exclude": ["src/**/*.test.ts"],
+  "exclude": ["src/**/*.test.ts", "src/**/*.spec.ts"],
   "references": [
     {
       "path": "../testing/tsconfig.lib.json"

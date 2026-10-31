@@ -1,11 +1,16 @@
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 
+import { TemporaryFiles } from '@zukhruf/testing/fs';
+import { HttpServer } from '@zukhruf/testing/http';
+
 import { AbsTaskRetrieval } from '../../abstasks/retrieval.ts';
 import { TaskMetadata } from '../../abstasks/task-metadata.ts';
 import type { Tokenized } from '../../dependencies/bm25s.ts';
+import { Tokenizer } from '../../dependencies/tokenizers.ts';
 import { evaluate } from '../../evaluate.ts';
 import type { ISOLanguageScript } from '../../types/metadata.ts';
 import {
@@ -14,6 +19,7 @@ import {
   BM25Tokenizer,
   type StopwordsKey,
   bm25S,
+  bm25SSubword,
 } from './bm25.ts';
 
 // fixtures/bm25/ is a folder dataset and what Python MTEB 2.26.28 with bm25s
@@ -33,7 +39,8 @@ const METHODS_FOLDER = join(import.meta.dirname, 'fixtures/bm25-methods');
 // its language and keyword arguments: the experiment name, the scores and
 // the main score of mteb.evaluate. It holds the scores of BM25Search with
 // the function text.split(" ") as the tokenizer, and the error of MTEB for
-// that function through load_model. It also holds the stopwords key, the
+// that function through load_model, and the error of transform before fit
+// on the custom path. It also holds the stopwords key, the
 // stems of a probe list and the tokens of a probe corpus that BM25Tokenizer
 // gives each language of MTEB's table. Its generate.py makes it.
 const LANGUAGES_FOLDER = join(import.meta.dirname, 'fixtures/bm25-languages');
@@ -85,6 +92,7 @@ const languagesExpected: {
   readonly probe_corpus: readonly string[];
   readonly probe_queries: readonly string[];
   readonly load_model_error: string;
+  readonly transform_before_fit_error: string;
   readonly languages: readonly {
     readonly language: string;
     readonly stopwords_key: string | null;
@@ -359,4 +367,136 @@ test('a function as the tokenizer of loadModel makes the experiment name throw t
   assert.throws(() => meta.experimentName, {
     message: languagesExpected.load_model_error,
   });
+});
+
+test('transform before fit on the custom path throws the TypeError of MTEB for a text, and gives no tokens for no texts', () => {
+  const tokenizer = new BM25Tokenizer(null, {
+    tokenizer: (text) => text.split(' '),
+  });
+
+  const empty = tokenizer.transform([]);
+
+  assert.deepEqual(empty, { ids: [], vocab: new Map() });
+  assert.throws(() => tokenizer.transform(['a b']), {
+    name: 'TypeError',
+    message: languagesExpected.transform_before_fit_error,
+  });
+});
+
+// fixtures/bm25-subword/ holds what MTEB gave for mteb/baseline-bm25s-subword:
+// its metadata and the experiment name of each run, which need no network,
+// and the tokens and scores of Qwen3's tokenizer, which
+// bm25-subword.network.spec.ts checks. It also holds tiny-tokenizer.json, a
+// small tokenizer whose tokens hold " " and "▁", and the tokens and scores
+// that MTEB gave with it. Its generate.py makes them.
+const SUBWORD_FOLDER = join(import.meta.dirname, 'fixtures/bm25-subword');
+
+const subwordExpected: {
+  readonly model_meta: Record<string, unknown>;
+  readonly runs: readonly {
+    readonly kwargs: BM25Kwargs;
+    readonly experiment_name: string | null;
+  }[];
+  readonly tiny_repository: string;
+  readonly tiny_texts: readonly {
+    readonly text: string;
+    readonly tokens: readonly string[];
+  }[];
+  readonly tiny_run: {
+    readonly corpus: readonly [string, string, string][];
+    readonly queries: readonly [string, string][];
+    readonly full: [string, [string, number][]][];
+  };
+} = JSON.parse(readFileSync(join(SUBWORD_FOLDER, 'expected.json'), 'utf8'));
+
+// A stand-in for the HuggingFace Hub that serves tiny-tokenizer.json as the
+// tokenizer.json of the tiny repository at main, with the commit and the
+// sha256 of a file of Git LFS. Anything else is 404.
+async function tinyHub() {
+  const bytes = readFileSync(join(SUBWORD_FOLDER, 'tiny-tokenizer.json'));
+  const path = `/${subwordExpected.tiny_repository}/resolve/main/tokenizer.json`;
+  const server = await new HttpServer().start((request, response) => {
+    if (request.url !== path) {
+      response.statusCode = 404;
+      response.end('Entry not found');
+      return;
+    }
+    response.setHeader(
+      'X-Repo-Commit',
+      '0123456789abcdef0123456789abcdef01234567',
+    );
+    response.setHeader(
+      'X-Linked-Etag',
+      `"${createHash('sha256').update(bytes).digest('hex')}"`,
+    );
+    response.end(request.method === 'HEAD' ? undefined : bytes);
+  });
+  return server;
+}
+
+test('the metadata of mteb/baseline-bm25s-subword is the metadata of MTEB, field for field and in its order', () => {
+  assert.deepEqual(
+    Object.entries(bm25SSubword.toDict()),
+    Object.entries(subwordExpected.model_meta),
+  );
+});
+
+for (const run of subwordExpected.runs) {
+  test(`the experiment of mteb/baseline-bm25s-subword with ${JSON.stringify(run.kwargs)} has the name that MTEB gives it`, () => {
+    assert.equal(
+      bm25SSubword.loadModel(run.kwargs).mtebModelMeta.experimentName,
+      run.experiment_name,
+    );
+  });
+}
+
+test('a tokenizer of the Hub gives the tokens of Python tokenizers for each text of the tiny tokenizer', async () => {
+  await using server = await tinyHub();
+  await using cache = await new TemporaryFiles().directory('mteb-bm25-');
+  const tokenizer = await Tokenizer.fromPretrained(
+    subwordExpected.tiny_repository,
+    { endpoint: server.origin, cacheFolder: cache.path },
+  );
+
+  const tokens = subwordExpected.tiny_texts.map(({ text }) => ({
+    text,
+    tokens: tokenizer.encode(text, { addSpecialTokens: false }).tokens,
+  }));
+
+  assert.deepEqual(
+    tokens,
+    subwordExpected.tiny_texts.map(({ text, tokens }) => ({ text, tokens })),
+  );
+});
+
+test('a tokenizer of the Hub as the tokenizer of BM25Search drops " " and "▁" from the tokens, and gives the float32 scores of MTEB', async () => {
+  await using server = await tinyHub();
+  await using cache = await new TemporaryFiles().directory('mteb-bm25-');
+  const task = new FolderTask();
+  const location = {
+    taskMetadata: task.metadata,
+    hfSplit: 'test',
+    hfSubset: 'default',
+    encodeKwargs: {},
+  };
+  const model = new BM25Search({
+    modelMeta: bm25SSubword,
+    tokenizer: subwordExpected.tiny_repository,
+    hub: { endpoint: server.origin, cacheFolder: cache.path },
+  });
+
+  await model.index(
+    subwordExpected.tiny_run.corpus.map(([id, title, text]) => ({
+      id,
+      title,
+      text,
+    })),
+    location,
+  );
+  const results = await model.search(
+    subwordExpected.tiny_run.queries.map(([id, text]) => ({ id, text })),
+    { ...location, topK: 100, topRanked: null },
+  );
+
+  assert.deepEqual(results, asMaps(subwordExpected.tiny_run.full));
 });

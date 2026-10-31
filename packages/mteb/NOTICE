@@ -48,6 +48,13 @@ It also ports the semantics of parts of these dependencies of MTEB:
   Agreement.
 - bm25s 0.3.16 (tokenize, the stopword lists and the BM25 variants Robertson,
   Lucene, ATIRE, BM25L and BM25+), Copyright (c) 2024 Xing Han Lu, MIT License.
+  bm25s takes its German, Dutch, French, Spanish, Portuguese, Italian,
+  Russian, Swedish, Norwegian and Chinese stopword lists from the stopwords
+  corpus of NLTK (bm25s/tokenization.py:526). NLTK takes the first nine
+  lists from the stopword lists of the Snowball project, through the copy of
+  PostgreSQL, BSD 3-Clause License. NLTK added the Chinese list in 2022 and
+  names no source for it. bm25s names no source for its English list of 33
+  words, which is not the English list of NLTK.
 - PyStemmer 3.1.0 (Stemmer.Stemmer and the names of its 36 algorithms),
   Copyright (c) 2006 Richard Boulton, MIT License.
 - pandas 3.1.0 (DataFrame, explode, pivot_table, the groupby mean, to_csv,
@@ -61,8 +68,10 @@ It also ports the semantics of parts of these dependencies of MTEB:
   Dataset, and datasets/utils/stratify.py, which adapts the
   StratifiedShuffleSplit of scikit-learn), Copyright 2020 The HuggingFace
   Datasets Authors, Apache License 2.0.
-- huggingface_hub 2.3.0 (list_repo_tree), Copyright 2020 The HuggingFace
-  Team, Apache License 2.0.
+- huggingface_hub 2.3.0 (list_repo_tree) and 2.4.0 (hf_hub_download of a
+  model file), Copyright 2020 The HuggingFace Team, Apache License 2.0.
+- tokenizers 0.23.3 (Tokenizer.from_pretrained and encode), Copyright 2020
+  The HuggingFace Team, Apache License 2.0.
 - fsspec 2026.7.0 (glob_translate, which copies CPython's glob.translate),
   Copyright (c) 2018, Martin Durant, BSD 3-Clause License.
 - codecarbon 2.8.4 (the emissions of private infrastructure and of GCP,
@@ -78,6 +87,10 @@ decomposition of the least squares. The package does not include its code.
 
 The npm dependency rapidfuzz-js (MIT License) gives the fuzzy matching of
 codecarbon's TDP table. The package does not include its code.
+
+The npm dependency @huggingface/tokenizers (Hugging Face, Apache License 2.0)
+runs the tokenizer.json files of the HuggingFace Hub. The package does not
+include its code.
 
 It includes 37 files of Snowball 3.1.0 (https://snowballstem.org/) without
 change, compiled from src/dependencies/snowball/ to dist/dependencies/snowball/:
