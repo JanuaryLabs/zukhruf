@@ -1,7 +1,6 @@
 import type { AbsTask, MTEBModels } from './abstasks/abstask.ts';
 import { AbsTaskRetrieval } from './abstasks/retrieval.ts';
 import { ResultCache } from './cache/result-cache.ts';
-import { EmissionsTracker } from './dependencies/codecarbon.ts';
 import {
   type ModelMeta,
   mergePrecisionIntoExperimentKwargs,
@@ -173,6 +172,9 @@ async function evaluateTrackedTask(
   task: AbsTask,
   options: TaskOptions,
 ): Promise<TaskResult> {
+  // MTEB imports codecarbon inside this branch, so a host that never tracks
+  // does not load it or rapidfuzz-js.
+  const { EmissionsTracker } = await import('./dependencies/codecarbon.ts');
   const tracker = await EmissionsTracker.create();
   tracker.start();
   let result: TaskResult;
