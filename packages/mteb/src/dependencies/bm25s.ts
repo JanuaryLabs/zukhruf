@@ -1,48 +1,12 @@
+import { STOPWORDS_EN } from './bm25s-stopwords.ts';
 import { log } from './libm.ts';
 import { mean, sumFloat32 } from './numpy.ts';
 
-// bm25s 0.3.16: tokenize (tokenization.py), the Lucene variant of BM25
+// bm25s 0.3.16: tokenize (tokenization.py), the BM25 variants
 // (scoring.py) and the numpy path of BM25.index and BM25.retrieve
 // (__init__.py, selection.py). Only what MTEB's mteb/baseline-bm25s calls is
 // ported: token ids are never passed in, there is no corpus to return, no
 // weight mask, no numba or jax backend, and no save or load.
-
-// STOPWORDS_EN of stopwords.py.
-export const STOPWORDS_EN: readonly string[] = [
-  'a',
-  'an',
-  'and',
-  'are',
-  'as',
-  'at',
-  'be',
-  'but',
-  'by',
-  'for',
-  'if',
-  'in',
-  'into',
-  'is',
-  'it',
-  'no',
-  'not',
-  'of',
-  'on',
-  'or',
-  'such',
-  'that',
-  'the',
-  'their',
-  'then',
-  'there',
-  'these',
-  'they',
-  'this',
-  'to',
-  'was',
-  'will',
-  'with',
-];
 
 // The token ids of each text and the id of each token (or stem).
 export type Tokenized = {

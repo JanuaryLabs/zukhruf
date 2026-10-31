@@ -21,6 +21,14 @@ const FOLDER = join(import.meta.dirname, 'fixtures/bm25');
 // main score of mteb.evaluate. Its generate.py makes both.
 const METHODS_FOLDER = join(import.meta.dirname, 'fixtures/bm25-methods');
 
+// fixtures/bm25-languages/ holds a folder dataset for each of deu, fin, pol
+// and rus, and what MTEB gave for each run of a folder with its language
+// and keyword arguments: the experiment name, the scores and the main score
+// of mteb.evaluate. It also holds the stopwords key and the stems of a probe
+// list that BM25Tokenizer gives each language of MTEB's table. Its
+// generate.py makes it.
+const LANGUAGES_FOLDER = join(import.meta.dirname, 'fixtures/bm25-languages');
+
 type Expected = {
   readonly top_ranked: Readonly<Record<string, readonly string[]>>;
   readonly full: [string, [string, number][]][];
@@ -43,15 +51,68 @@ const methodRuns: readonly MethodRun[] = JSON.parse(
   readFileSync(join(METHODS_FOLDER, 'expected.json'), 'utf8'),
 ).runs;
 
+type LanguageFolder = 'deu' | 'fin' | 'pol' | 'rus';
+
+type LanguageRun = {
+  readonly folder: LanguageFolder;
+  readonly kwargs: BM25Kwargs;
+  readonly experiment_name: string | null;
+  readonly model_name_with_experiment: string;
+  readonly full: [string, [string, number][]][];
+  readonly main_score: number;
+};
+
+const languagesExpected: {
+  readonly probe: readonly string[];
+  readonly languages: readonly {
+    readonly language: string;
+    readonly stopwords_key: string | null;
+    readonly stems: readonly string[] | null;
+  }[];
+  readonly runs: readonly LanguageRun[];
+} = JSON.parse(readFileSync(join(LANGUAGES_FOLDER, 'expected.json'), 'utf8'));
+
 const FOLDERS = {
   bm25: { name: 'Bm25Fixture', path: FOLDER },
   methods: { name: 'Bm25MethodsFixture', path: METHODS_FOLDER },
 } as const;
 
+const LANGUAGE_FOLDERS: Readonly<
+  Record<
+    LanguageFolder,
+    {
+      readonly name: string;
+      readonly path: string;
+      readonly evalLangs: ISOLanguageScript[];
+    }
+  >
+> = {
+  deu: {
+    name: 'Bm25LanguagesDeuFixture',
+    path: join(LANGUAGES_FOLDER, 'deu'),
+    evalLangs: ['deu-Latn'],
+  },
+  fin: {
+    name: 'Bm25LanguagesFinFixture',
+    path: join(LANGUAGES_FOLDER, 'fin'),
+    evalLangs: ['fin-Latn'],
+  },
+  pol: {
+    name: 'Bm25LanguagesPolFixture',
+    path: join(LANGUAGES_FOLDER, 'pol'),
+    evalLangs: ['pol-Latn'],
+  },
+  rus: {
+    name: 'Bm25LanguagesRusFixture',
+    path: join(LANGUAGES_FOLDER, 'rus'),
+    evalLangs: ['rus-Cyrl'],
+  },
+};
+
 class FolderTask extends AbsTaskRetrieval {
   constructor(
     evalLangs: ISOLanguageScript[] = ['eng-Latn'],
-    folder: (typeof FOLDERS)[keyof typeof FOLDERS] = FOLDERS.bm25,
+    folder: { readonly name: string; readonly path: string } = FOLDERS.bm25,
   ) {
     super({
       metadata: new TaskMetadata({
@@ -119,31 +180,15 @@ test('a subset with more than one language is read as English, as in MTEB', asyn
 });
 
 test('each word has the stem that PyStemmer 3.1.0 gives', () => {
-  const tokenizer = new BM25Tokenizer('eng');
+  const { stemmer } = new BM25Tokenizer('eng');
+  assert.ok(stemmer);
   const words = expected.stems.map(([word]) => word);
 
-  const stems = tokenizer.stemmer.stemWords(words);
+  const stems = stemmer.stemWords(words);
 
   assert.deepEqual(
     words.map((word, index) => [word, stems[index]]),
     expected.stems,
-  );
-});
-
-test('a task in another language than English stops the index, naming the language', async () => {
-  const task = new FolderTask(['deu-Latn']);
-  await task.loadData();
-  const split = task.dataset?.get('default')?.get('test');
-  assert.ok(split);
-
-  await assert.rejects(
-    bm25S.loadModel().index(split.corpus, {
-      taskMetadata: task.metadata,
-      hfSplit: 'test',
-      hfSubset: 'default',
-      encodeKwargs: {},
-    }),
-    /BM25Search supports English only: the subset 'default' of the task Bm25Fixture has the language 'deu'\./u,
   );
 });
 
@@ -173,3 +218,53 @@ for (const run of methodRuns) {
     );
   });
 }
+
+for (const run of languagesExpected.runs) {
+  const name = `${run.folder} ${JSON.stringify(run.kwargs)}`;
+  const folder = LANGUAGE_FOLDERS[run.folder];
+
+  test(`each document of each query has the float32 score that MTEB gives in ${name}, to the last bit`, async () => {
+    const results = await searchFolder(
+      new FolderTask(folder.evalLangs, folder),
+      null,
+      run.kwargs,
+    );
+
+    assert.deepEqual(results, asMaps(run.full));
+  });
+
+  test(`evaluate gives the main score of MTEB in ${name}`, async () => {
+    const result = await evaluate(
+      bm25S.loadModel(run.kwargs),
+      new FolderTask(folder.evalLangs, folder),
+      { cache: null },
+    );
+
+    assert.equal(
+      result.taskResults[0]?.scores['test']?.[0]?.['main_score'],
+      run.main_score,
+    );
+  });
+
+  test(`the experiment of ${name} has the names that MTEB gives it`, () => {
+    const meta = bm25S.loadModel(run.kwargs).mtebModelMeta;
+
+    assert.deepEqual(
+      [meta.experimentName, meta.modelNameWithExperiment],
+      [run.experiment_name, run.model_name_with_experiment],
+    );
+  });
+}
+
+test('each language of MTEB has the stopwords key and the stemmer that MTEB gives it', () => {
+  const settings = languagesExpected.languages.map(({ language }) => {
+    const tokenizer = new BM25Tokenizer(language);
+    return {
+      language,
+      stopwords_key: tokenizer.stopwordsKey,
+      stems: tokenizer.stemmer?.stemWords(languagesExpected.probe) ?? null,
+    };
+  });
+
+  assert.deepEqual(settings, languagesExpected.languages);
+});

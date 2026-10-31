@@ -121,3 +121,16 @@ test('a conversation query stops the search with a TypeError', async () => {
     },
   );
 });
+
+test('a stemmer name that PyStemmer does not know stops the index, as in MTEB', async () => {
+  const task = new FolderTask();
+  const model = bm25S.loadModel({ stemmer_language: 'klingon' });
+
+  await assert.rejects(
+    model.index([{ id: 'd1', text: 'Cats sleep.' }], {
+      ...LOCATION,
+      taskMetadata: task.metadata,
+    }),
+    { message: "Stemming algorithm 'klingon' not found" },
+  );
+});
