@@ -168,6 +168,50 @@ The settings of a hybrid that are not the defaults are its experiment arguments:
 
 Thus the hybrid of `bm25S.loadModel()` and `bm25S.loadModel({ k1: 1.2 })` has the experiment name `sub_models_[None,k1_1.2]`, and its result does not replace the result of the hybrid of two default BM25 models. A hybrid with all the default settings has no experiment arguments, so its name and its result folder are those of MTEB. MTEB gives a hybrid no experiment arguments.
 
+## Keep embeddings between runs
+
+An encoder that embeds a large corpus again for each run is slow and costs money. `CachedEmbeddingWrapper` is MTEB's embedding cache. It wraps an encoder and keeps the embedding of each text in a folder. On the next call, the encoder embeds only the texts that the folder does not hold.
+
+```ts
+import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
+
+import {
+  CachedEmbeddingWrapper,
+  ResultCache,
+  evaluate,
+  qwen3Embedding0B6,
+} from '@zukhruf/mteb';
+
+const llamaCpp = createOpenAICompatible({
+  name: 'llama.cpp',
+  baseURL: 'http://127.0.0.1:8080/v1',
+});
+using encoder = new CachedEmbeddingWrapper(
+  qwen3Embedding0B6.loadModel({
+    model: llamaCpp.embeddingModel('qwen3-embedding-0.6b'),
+  }),
+  'mteb-embeddings/Qwen3-Embedding-0.6B',
+);
+const result = await evaluate(encoder, new Faq(), {
+  cache: new ResultCache('mteb-results'),
+});
+```
+
+The wrapper has the metadata of its encoder, so the result cache keeps the result under the name of the encoder.
+
+The folder of a task is `<folder>/<task name>`. A call with a prompt type adds `query` or `document`. A precision or the experiment arguments of the encoder add `experiments/<experiment name>` after the task name. The name of the encoder is not in the path:
+
+- Give each encoder its own folder. Two encoders with the same dimension in one folder read the embeddings of each other, and nothing stops them.
+- Use a folder in one process at a time. The cache has no lock, as in MTEB.
+
+The wrapper keeps the embeddings only within a task. It uses them again for other splits and subsets, for other runs, and for other searches with the same encoder, such as a hybrid search.
+
+The result cache and the embedding cache do not overlap. The result cache keeps the scores of a task, and `evaluate` does not run a task that has a result. The embedding cache keeps an embedding for each text, so it helps only a task that runs.
+
+The files of a folder are those of MTEB's `NumpyCache`: `vectors.npy` (float32 rows with no header), `index.json` and `dimension`. MTEB reads a folder that this package wrote, and this package reads a folder that MTEB wrote. `vectors.npy` starts with room for 100,000 embeddings: a sparse file of 400 MB at 1024 dimensions. A copy that is not sparse uses all of that space on the disk.
+
+MTEB gives a document its title twice, and a query its instruction twice, when the text is not in the folder yet. Thus in MTEB, a run with the cache can give other scores than a run without it. This package embeds the texts of a run without the cache. A folder that MTEB filled holds those embeddings, and the wrapper reads them as they are.
+
 ## Reranking with a cross-encoder
 
 A cross-encoder gets the query and one document at the same time, and gives the pair one score. It does not give embeddings, so it cannot search a full corpus. It reranks the top ranked documents of each query: the documents that a first search found. MTEB runs a cross-encoder only on a reranking task, and so does this package.

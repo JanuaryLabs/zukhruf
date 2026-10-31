@@ -56,6 +56,10 @@ _Avoid_: Embedder, model (for the wrapper)
 The model wrapper that gives one score for each pair of a query and a document, from the two texts together. A cross-encoder runs only on a reranking task: it scores the top ranked documents of each query. `AiSdkReranker` is a cross-encoder over an AI SDK reranking model.
 _Avoid_: Reranker (for the wrapper)
 
+**Embedding cache**:
+The folder that `CachedEmbeddingWrapper` keeps the embedding of each text in, for one encoder. An encoder embeds only the texts that the folder does not hold.
+_Avoid_: Result cache (it keeps scores), vector store
+
 **Score**:
 One number of a result, such as `ndcg_at_10`. The main score of a task is the score that MTEB ranks models by.
 _Avoid_: Metric (the formula, not its value)

@@ -70,6 +70,12 @@ export {
   type AiSdkRerankerOptions,
 } from './models/ai-sdk-reranker.ts';
 export { AiSdkTextReranker } from './models/ai-sdk-text-reranker.ts';
+export type {
+  CacheBackend,
+  CacheBackendProtocol,
+} from './models/cache-wrappers/cache-backend-protocol.ts';
+export { NumpyCache } from './models/cache-wrappers/cache-backends/numpy-cache.ts';
+export { CachedEmbeddingWrapper } from './models/cache-wrappers/cache-wrapper.ts';
 export {
   type FusionFunction,
   type FusionStrategy,

@@ -17,7 +17,7 @@ It also ports the semantics of parts of these dependencies of MTEB:
   float32 values and along an axis, the MT19937 generator, randint,
   random_sample, choice, permutation and shuffle of the legacy RandomState,
   and the PCG64 generator, integers, shuffle, permutation and choice without
-  replacement of default_rng),
+  replacement of default_rng, and the file layout of a float32 np.memmap),
   Copyright (c) NumPy Developers, BSD 3-Clause License. The pairwise summation of float64 values
   is the npm dependency @stdlib/blas-ext-base-gsumpw, Copyright (c) The Stdlib
   Authors, Apache License 2.0. The package does not include its code.
