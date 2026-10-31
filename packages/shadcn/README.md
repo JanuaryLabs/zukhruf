@@ -56,7 +56,7 @@ The theme is the values of a set of CSS variables, for example `--primary`, `--b
 }
 ```
 
-- Write these rules outside of a layer. The package sets the variables outside of a layer, and a rule in a layer loses to them.
+- The package sets the default theme in `@layer base`. A rule outside of a layer wins over it. A rule in `@layer base` that comes after the import also wins over it. Thus a host theme in a layer, for example the ChatGPT tokens of OpenAI, can set the variables. A rule in `@layer theme` loses, because Tailwind CSS declares `theme` before `base`. See [ADR 0005](./docs/adr/0005-the-default-theme-is-in-layer-base.md).
 - The `.dark` class switches to the dark theme. Put it on an element, usually `<html>`. The element and all elements in it then use the `.dark` variables.
 
 The preset is fixed. The class strings of each component contain the preset, for example the rounded corners and the spacing of the dialog. Thus an app cannot change the preset. An app changes only the theme. See [ADR 0004](./docs/adr/0004-the-components-use-base-ui-and-the-nova-preset.md).
@@ -172,6 +172,7 @@ See [ADR 0002](./docs/adr/0002-one-entry-and-private-imports-between-the-compone
 2. [One entry, and private imports between the components](./docs/adr/0002-one-entry-and-private-imports-between-the-components.md)
 3. [The stylesheet registers its own source and keeps its patches in layers](./docs/adr/0003-the-stylesheet-registers-its-own-source-and-keeps-its-patches-in-layers.md)
 4. [The components use Base UI and the nova preset](./docs/adr/0004-the-components-use-base-ui-and-the-nova-preset.md)
+5. [The default theme is in `@layer base`](./docs/adr/0005-the-default-theme-is-in-layer-base.md)
 
 ## Development
 
@@ -212,8 +213,9 @@ The sync does these steps, in this order:
 
 1. It resets `theme.css` to one line: `@import "tw-animate-css";`.
 2. It runs `shadcn add index`, then `shadcn add --all`.
-3. It writes `src/index.ts`: one `export *` line for each component, each hook and each hand-written module.
-4. It formats the generated source with Prettier.
+3. It puts the `:root` rule and the `.dark` rule of `theme.css` into `@layer base`. The CLI writes them outside of a layer.
+4. It writes `src/index.ts`: one `export *` line for each component, each hook and each hand-written module.
+5. It formats the generated source with Prettier.
 
 Known facts about the sync:
 

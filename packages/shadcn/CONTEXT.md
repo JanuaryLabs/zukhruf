@@ -21,7 +21,7 @@ The visual design that the class strings of the components contain: the sizes, t
 _Avoid_: Style (the `style` field of `components.json` names the headless library and the preset together, as `base-nova`), theme
 
 **Theme**:
-The values of the CSS variables, for example `--primary` and `--radius`. The `.dark` class selects the dark values. An app changes the theme when it sets the variables after the import of the stylesheet.
+The values of the CSS variables, for example `--primary` and `--radius`. The `.dark` class selects the dark values. `theme.css` sets the default values in `@layer base`. An app changes the theme when it sets the variables after the import of the stylesheet, outside of a layer or in `@layer base`.
 _Avoid_: Preset, tokens, skin. `theme.css` is the generated file that sets the default theme.
 
 **Generated source**:

@@ -13,9 +13,9 @@ const packageDirectory = fileURLToPath(new URL('..', import.meta.url));
  * `source(none)` turns off the automatic scan, so only the `@source` of the
  * package's own stylesheet can find its classes.
  */
-async function buildAppStylesheet() {
+async function buildAppStylesheet(appRules: string) {
   const compiler = await compile(
-    '@import "tailwindcss" source(none);\n@import "@zukhruf/shadcn/styles.css";',
+    `@import "tailwindcss" source(none);\n@import "@zukhruf/shadcn/styles.css";\n${appRules}`,
     { base: packageDirectory, onDependency() {} },
   );
   const candidates = new Scanner({ sources: compiler.sources }).scan();
@@ -51,7 +51,7 @@ function layerOf(css: string, rule: RegExp) {
 describe('the stylesheet of @zukhruf/shadcn', () => {
   test('an app that imports it gets the classes of the components, colored by variables it can override', async () => {
     // Act
-    const css = await buildAppStylesheet();
+    const css = await buildAppStylesheet('');
 
     // Assert
     assert.match(
@@ -68,7 +68,7 @@ describe('the stylesheet of @zukhruf/shadcn', () => {
 
   test('it keeps the pointer cursor on buttons and the height cap on dialogs, both in layers that app utilities override', async () => {
     // Act
-    const css = await buildAppStylesheet();
+    const css = await buildAppStylesheet('');
 
     // Assert
     assert.equal(
@@ -89,7 +89,7 @@ describe('the stylesheet of @zukhruf/shadcn', () => {
 
   test('a dark: utility of the components applies under a .dark ancestor, not under the dark color scheme of the system', async () => {
     // Act
-    const css = await buildAppStylesheet();
+    const css = await buildAppStylesheet('');
 
     // Assert
     assert.match(
@@ -101,6 +101,46 @@ describe('the stylesheet of @zukhruf/shadcn', () => {
       css,
       /prefers-color-scheme/,
       'Tailwind keys dark: on prefers-color-scheme by default; the .dark class must replace that',
+    );
+  });
+
+  // happy-dom 20 drops each rule in a @layer block from getComputedStyle, so
+  // these tests check the cascade inputs: the layer and the order of each rule.
+  test('a host theme in @layer base that loads after the stylesheet wins over the default theme', async () => {
+    // Arrange: OpenAI's ChatGPT tokens are a host theme of this kind
+    // (@openai/mcp-extensions/styles.css).
+    const hostTheme = '@layer base { :root { --background: #123456; } }';
+
+    // Act
+    const css = await buildAppStylesheet(hostTheme);
+
+    // Assert
+    const defaultTheme = /:root\s*\{[^}]*--background:/;
+    const host = /:root\s*\{\s*--background:\s*#123456;?\s*\}/;
+    assert.equal(
+      layerOf(css, defaultTheme),
+      'base',
+      'A default outside of a layer wins over each rule in a layer, so the host theme would lose',
+    );
+    assert.equal(layerOf(css, host), 'base');
+    assert.ok(
+      defaultTheme.exec(css)!.index < host.exec(css)!.index,
+      'In one layer, the later rule wins, so the default must come before the host theme',
+    );
+  });
+
+  test('the .dark defaults follow the :root defaults in the same layer, so the .dark class switches the theme', async () => {
+    // Act
+    const css = await buildAppStylesheet('');
+
+    // Assert
+    const light = /:root\s*\{[^}]*--background:/;
+    const dark = /\.dark\s*\{[^}]*--background:/;
+    assert.equal(layerOf(css, light), 'base');
+    assert.equal(layerOf(css, dark), 'base');
+    assert.ok(
+      light.exec(css)!.index < dark.exec(css)!.index,
+      ':root and .dark have the same specificity, so .dark must come later to win',
     );
   });
 });
