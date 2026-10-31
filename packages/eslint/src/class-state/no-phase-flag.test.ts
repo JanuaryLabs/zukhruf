@@ -58,6 +58,22 @@ test('no-phase-flag', async () => {
         filename,
         code: `class A { #ready = false; } class B { #ready = 0; set() { this.#ready = 1; } }`,
       },
+      {
+        filename,
+        code: `class A { #events?: string[]; get events(): string[] { this.#events ??= ['a']; return this.#events; } }`,
+      },
+      {
+        filename,
+        code: `class A { #ids: Set<string> | undefined; ids(): Set<string> { return (this.#ids ??= new Set(['a'])); } }`,
+      },
+      {
+        filename,
+        code: `class A { #rules?: string[] | null; rules(): string[] { this.#rules ??= ['a']; return this.#rules; } }`,
+      },
+      {
+        filename,
+        code: `class A { #ids?: Set<string>; has(id: string): boolean { this.#ids ??= new Set(['a']); return this.#ids.has(id); } }`,
+      },
     ],
     invalid: [
       {
@@ -103,6 +119,51 @@ test('no-phase-flag', async () => {
       {
         filename,
         code: `type Role = 'leader' | 'follower'; class A { #role: Role | undefined; lead() { this.#role = 'leader'; } }`,
+        errors: reported,
+      },
+      {
+        filename,
+        code: `class A { #x?: string[]; get x(): string[] { this.#x ??= ['a']; return this.#x; } clear() { this.#x = undefined; } }`,
+        errors: reported,
+      },
+      {
+        filename,
+        code: `class A { #x?: string[]; get x(): string[] { this.#x ??= ['a']; return this.#x; } loaded() { if (this.#x) return true; return false; } }`,
+        errors: reported,
+      },
+      {
+        filename,
+        code: `class A { #x?: string[]; get x(): string[] { this.#x ??= ['a']; return this.#x; } set(x: string[]) { this.#x = x; } }`,
+        errors: reported,
+      },
+      {
+        filename,
+        code: `class A { #x?: string[]; constructor(x?: string[]) { this.#x = x; } get x(): string[] { this.#x ??= ['a']; return this.#x; } }`,
+        errors: reported,
+      },
+      {
+        filename,
+        code: `class A { #x?: string[]; get x(): string[] { const before = this.#x; this.#x ??= ['a']; return before ?? this.#x; } }`,
+        errors: reported,
+      },
+      {
+        filename,
+        code: `class A { #x?: string[]; get x(): () => string[] | undefined { this.#x ??= ['a']; const read = () => this.#x; return read; } }`,
+        errors: reported,
+      },
+      {
+        filename,
+        code: `class A { #x?: string[]; get x(): string[] { if (Math.random() > 0.5) { this.#x ??= ['a']; } return this.#x ?? []; } }`,
+        errors: reported,
+      },
+      {
+        filename,
+        code: `class A { x?: string[]; get value(): string[] { this.x ??= ['a']; return this.x; } }`,
+        errors: reported,
+      },
+      {
+        filename,
+        code: `class A { #x?: string[]; get x(): string[] { this.#x ??= ['a']; return this.#x; } reset(other: A) { other.#x = undefined; } }`,
         errors: reported,
       },
     ],

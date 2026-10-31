@@ -60,6 +60,96 @@ interface Field {
   optional: boolean;
 }
 
+/** Whether `statement` is `this.#name ??= …;` on its own. */
+function memoStatement(statement: TSESTree.Node, name: string): boolean {
+  if (statement.type !== 'ExpressionStatement') return false;
+  const { expression } = statement;
+  return (
+    expression.type === 'AssignmentExpression' &&
+    expression.operator === '??=' &&
+    expression.left.type === 'MemberExpression' &&
+    expression.left.object.type === 'ThisExpression' &&
+    expression.left.property.type === 'PrivateIdentifier' &&
+    expression.left.property.name === name
+  );
+}
+
+/**
+ * Whether a read of `this.#name` comes after a top-level `this.#name ??= …;`
+ * statement of its own function body. That statement always runs first, so the
+ * read never sees the field before it is set.
+ */
+function readsAfterMemo(
+  read: TSESTree.MemberExpression,
+  name: string,
+): boolean {
+  let node: TSESTree.Node | undefined = read.parent;
+  while (
+    node &&
+    node.type !== 'FunctionExpression' &&
+    node.type !== 'ArrowFunctionExpression' &&
+    node.type !== 'FunctionDeclaration'
+  ) {
+    node = node.parent;
+  }
+  if (node?.body?.type !== 'BlockStatement') return false;
+  return node.body.body.some(
+    (statement) =>
+      statement.range[1] <= read.range[0] && memoStatement(statement, name),
+  );
+}
+
+/** Whether `member` is the target of a destructuring or loop assignment. */
+function patternTarget(member: TSESTree.MemberExpression): boolean {
+  const { parent } = member;
+  switch (parent.type) {
+    case 'ArrayPattern':
+    case 'RestElement':
+      return true;
+    case 'AssignmentPattern':
+      return parent.right !== member;
+    case 'Property':
+      return parent.parent.type === 'ObjectPattern' && parent.value === member;
+    case 'ForInStatement':
+    case 'ForOfStatement':
+      return parent.left === member;
+    default:
+      return false;
+  }
+}
+
+/**
+ * Whether the occurrences of a private field make it a lazy memo: every write
+ * is `this.#name ??= …`, so the field never goes back to nullish, and every
+ * read is the value of a `??=` or comes after a top-level `this.#name ??= …;`
+ * of its own function body. A field that nothing reads is a flag, not a memo.
+ */
+function lazyMemo(occurrences: TSESTree.PrivateIdentifier[]): boolean {
+  let read = false;
+  for (const occurrence of occurrences) {
+    const member = occurrence.parent;
+    if (
+      member.type !== 'MemberExpression' ||
+      member.property !== occurrence ||
+      member.object.type !== 'ThisExpression'
+    ) {
+      return false;
+    }
+    const { parent } = member;
+    if (parent.type === 'AssignmentExpression' && parent.left === member) {
+      if (parent.operator !== '??=') return false;
+      if (parent.parent.type !== 'ExpressionStatement') read = true;
+      continue;
+    }
+    if (parent.type === 'UpdateExpression' || patternTarget(member)) {
+      return false;
+    }
+    if (!readsAfterMemo(member, occurrence.name)) return false;
+    read = true;
+  }
+  return read;
+}
+
 const rule = ESLintUtils.RuleCreator.withoutDocs({
   meta: {
     type: 'problem',
@@ -77,7 +167,12 @@ const rule = ESLintUtils.RuleCreator.withoutDocs({
   create(context) {
     // Throws the standard "requires type information" error without typed lint.
     const services = ESLintUtils.getParserServices(context);
-    const classes: { fields: Map<string, Field>; changed: Set<string> }[] = [];
+    const classes: {
+      fields: Map<string, Field>;
+      changed: Set<string>;
+      declared: Set<string>;
+      occurrences: Map<string, TSESTree.PrivateIdentifier[]>;
+    }[] = [];
     const current = () => classes.at(-1);
 
     const record = (field: Field) => {
@@ -86,8 +181,27 @@ const rule = ESLintUtils.RuleCreator.withoutDocs({
     };
 
     return {
-      ClassBody() {
-        classes.push({ fields: new Map(), changed: new Set() });
+      ClassBody(node: TSESTree.ClassBody) {
+        const declared = new Set<string>();
+        for (const member of node.body) {
+          if ('key' in member && member.key.type === 'PrivateIdentifier') {
+            declared.add(member.key.name);
+          }
+        }
+        classes.push({
+          fields: new Map(),
+          changed: new Set(),
+          declared,
+          occurrences: new Map(),
+        });
+      },
+      PrivateIdentifier(node: TSESTree.PrivateIdentifier) {
+        if ('key' in node.parent && node.parent.key === node) return;
+        const body = current();
+        if (!body) return;
+        const list = body.occurrences.get(node.name) ?? [];
+        list.push(node);
+        body.occurrences.set(node.name, list);
       },
       'ClassBody > PropertyDefinition'(node: TSESTree.PropertyDefinition) {
         if (node.static || node.readonly || node.computed) return;
@@ -118,8 +232,23 @@ const rule = ESLintUtils.RuleCreator.withoutDocs({
       'ClassBody:exit'() {
         const body = classes.pop();
         if (!body) return;
+        // A name the class does not declare belongs to an enclosing class.
+        const outer = current();
+        for (const [name, list] of body.occurrences) {
+          if (body.declared.has(name) || !outer) continue;
+          outer.occurrences.set(name, [
+            ...(outer.occurrences.get(name) ?? []),
+            ...list,
+          ]);
+        }
         for (const [key, field] of body.fields) {
           if (!body.changed.has(key)) continue;
+          if (
+            field.name.type === 'PrivateIdentifier' &&
+            lazyMemo(body.occurrences.get(field.name.name) ?? [])
+          ) {
+            continue;
+          }
           if (
             field.optional ||
             holdsFlag(services.getTypeAtLocation(field.name))
