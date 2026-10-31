@@ -56,6 +56,7 @@
     "@stdlib/blas-ext-base-gsumpw": "^0.3.1",
     "@stdlib/blas-ext-base-ssumpw": "^0.3.1",
     "ai": "^7.0.154",
+    "cephes": "^3.3.4",
     "heap": "^0.2.7",
     "hyparquet": "^1.32.0",
     "jsonc-parser": "^3.3.1",

@@ -36,12 +36,10 @@ It also ports the semantics of parts of these dependencies of MTEB:
   mteb/abstasks/_stratification.py), Copyright (c) Piotr Szymański and
   contributors, BSD 2-Clause License.
 - SciPy 1.18.1 (scipy.stats.rankdata, pearsonr, spearmanr and kendalltau,
-  scipy.linalg.lstsq, and
-  scipy.special.gammaln, the lgam of Cephes by Stephen L. Moshier, and
-  scipy.optimize.minimize with L-BFGS-B: lbfgsb.c, the C port of L-BFGS-B 3.0
-  by Ciyou Zhu, Richard Byrd, Peihuang Lu and Jorge Nocedal, with dcsrch and
-  dcstep of MINPACK-2), Copyright (c) 2001-2002 Enthought, Inc. 2003, SciPy
-  Developers, BSD 3-Clause License.
+  scipy.linalg.lstsq, and scipy.optimize.minimize with L-BFGS-B: lbfgsb.c,
+  the C port of L-BFGS-B 3.0 by Ciyou Zhu, Richard Byrd, Peihuang Lu and
+  Jorge Nocedal, with dcsrch and dcstep of MINPACK-2), Copyright (c)
+  2001-2002 Enthought, Inc. 2003, SciPy Developers, BSD 3-Clause License.
 - packaging 26.3 (packaging.version), Copyright (c) Donald Stufft and
   individual contributors, Apache License 2.0 or BSD 2-Clause License.
 - CPython 3.12 (the float sum, round, repr and format algorithms,
@@ -90,6 +88,10 @@ decomposition of the least squares. The package does not include its code.
 The npm dependency heap (Xueqiao Xu, MIT License), a port of the heapq module
 of CPython, keeps the documents of a search. The package does not include its
 code.
+
+The npm dependency cephes (NearForm, BSD 3-Clause License, and the Cephes
+license of Stephen L. Moshier) gives scipy.special.gammaln: the lgam of Cephes,
+compiled to WebAssembly. The package does not include its code.
 
 The npm dependency rapidfuzz-js (MIT License) gives the fuzzy matching of
 codecarbon's TDP table. The package does not include its code.

@@ -1,4 +1,7 @@
-import { log } from './libm.ts';
+import { createRequire } from 'node:module';
+
+import type * as Cephes from 'cephes' with { 'resolution-mode': 'require' };
+
 import { argsortStable, corrcoef, mean, sum } from './numpy.ts';
 import { pythonRoundToInteger } from './python.ts';
 
@@ -80,78 +83,17 @@ function unit(values: ArrayLike<number>): number[] {
   return centred.map((value) => value / norm);
 }
 
-// scipy.special.gammaln for x >= 1: lgam of Cephes (xsf/cephes/gamma.h), a
-// rational function between 2 and 3 after the recurrence below 13, and
-// Stirling's series from 13. It calls the correctly rounded log of libm.ts.
-// SciPy calls the log of the C library, so a value can differ in its last
-// bits.
-// The coefficients of gamma.h, as the float64 values that C reads.
-const GAMMA_A = [
-  0.000_811_614_167_470_508_5, -0.000_595_061_904_284_301_4,
-  0.000_793_650_340_457_716_9, -0.002_777_777_777_300_997,
-  0.083_333_333_333_333_19,
-];
-const GAMMA_B = [
-  -1378.251_525_691_208_6, -38_801.631_513_463_784, -331_612.992_738_871_2,
-  -1_162_370.974_927_623, -1_721_737.008_208_396_6, -853_555.664_245_765_4,
-];
-const GAMMA_C = [
-  -351.815_701_436_523_45, -17_064.210_665_188_115, -220_528.590_553_854_45,
-  -1_139_334.443_679_825_2, -2_532_523.071_775_829_4, -2_018_891.414_335_327_7,
-];
-const LS2PI = 0.918_938_533_204_672_8;
-
-function polevl(x: number, coefficients: readonly number[]): number {
-  let answer = coefficients[0] ?? 0;
-  for (const coefficient of coefficients.slice(1))
-    answer = answer * x + coefficient;
-  return answer;
-}
-
-function p1evl(x: number, coefficients: readonly number[]): number {
-  let answer = x + (coefficients[0] ?? 0);
-  for (const coefficient of coefficients.slice(1))
-    answer = answer * x + coefficient;
-  return answer;
-}
+// scipy.special.gammaln: the lgam of Cephes, from the npm package cephes.
+// The CommonJS entry of cephes compiles its WebAssembly synchronously, and its
+// ES module entry compiles it asynchronously, so this module requires the
+// CommonJS entry. It does so at the first call, so an import of this package
+// does not compile it. SciPy calls the log of the C library, and cephes does
+// not, so a value can differ in its last bit.
+const require = createRequire(import.meta.url);
 
 export function gammaln(x: number): number {
-  if (!(x >= 1))
-    throw new RangeError(`This port of gammaln takes x >= 1, not ${x}.`);
-  if (x === Infinity) return x;
-  if (x < 13) {
-    let z = 1;
-    let p = 0;
-    let u = x;
-    while (u >= 3) {
-      p -= 1;
-      u = x + p;
-      z *= u;
-    }
-    while (u < 2) {
-      z /= u;
-      p += 1;
-      u = x + p;
-    }
-    if (u === 2) return log(z);
-    p -= 2;
-    const shifted = x + p;
-    return (
-      log(z) + (shifted * polevl(shifted, GAMMA_B)) / p1evl(shifted, GAMMA_C)
-    );
-  }
-  const q = (x - 0.5) * log(x) - x + LS2PI;
-  if (x >= 1000) {
-    if (x > 1e8) return q;
-    const p = 1 / (x * x);
-    return (
-      q +
-      ((0.000_793_650_793_650_793_7 * p - 0.002_777_777_777_777_778) * p +
-        0.083_333_333_333_333_33) /
-        x
-    );
-  }
-  return q + polevl(1 / (x * x), GAMMA_A) / x;
+  const cephes: typeof Cephes = require('cephes');
+  return cephes.lgam(x);
 }
 
 // scipy.stats.kendalltau(x, y).statistic with variant "b": the dense ranks of
