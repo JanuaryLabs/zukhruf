@@ -22,7 +22,7 @@ You need ESLint 9.30 or later.
 npm install --save-dev @zukhruf/eslint
 ```
 
-Its peers are `eslint`, `@eslint/js`, `typescript-eslint`, `typescript`, `eslint-plugin-import-x`, `eslint-plugin-functional` and `jsonc-eslint-parser`. `@zukhruf/eslint/nx` also needs `@nx/eslint-plugin`, `@zukhruf/eslint/react` needs `@nx/eslint-plugin` and the 4 plugins in [React](#react), and `@zukhruf/eslint/react-native` needs `eslint-plugin-es-x`. npm installs the peers for you. With `legacy-peer-deps=true` in `.npmrc`, npm does not, so add them to your devDependencies.
+Its peers are `eslint`, `@eslint/js`, `typescript-eslint`, `typescript`, `eslint-plugin-import-x`, `eslint-plugin-functional` and `jsonc-eslint-parser`. `@zukhruf/eslint/nx` also needs `@nx/eslint-plugin`, `@zukhruf/eslint/react` needs `@nx/eslint-plugin`, `react` and the 4 plugins in [React](#react), and `@zukhruf/eslint/react-native` needs `eslint-plugin-es-x`. npm installs the peers for you. With `legacy-peer-deps=true` in `.npmrc`, npm does not, so add them to your devDependencies.
 
 ```js
 // eslint.config.mjs
@@ -203,7 +203,7 @@ The rule decides each manifest's options itself, so your options add to the shar
 
 ## React
 
-`@zukhruf/eslint/react` is Nx's `flat/react` config from `@nx/eslint-plugin`, with no changes. Use it in place of `nx.configs['flat/react']` in the `eslint.config.mjs` of a React project. Put it first, and then the root config, as before:
+`@zukhruf/eslint/react` is Nx's `flat/react` config from `@nx/eslint-plugin`, with one change: it sets `settings.react.version`. Use it in place of `nx.configs['flat/react']` in the `eslint.config.mjs` of a React project. Put it first, and then the root config, as before:
 
 ```js
 import react from '@zukhruf/eslint/react';
@@ -212,6 +212,8 @@ import baseConfig from '../../eslint.config.mjs';
 
 export default [...react, ...baseConfig];
 ```
+
+`flat/react` sets the React version to `'detect'`. On ESLint 10, `'detect'` stops every rule of `eslint-plugin-react` 7.37.5 at load, because the plugin calls `context.getFilename()`, which ESLint 10 removed. So the preset sets the version of the `react` package that resolves from the folder where ESLint runs. `nx lint` runs ESLint in the project folder, and a hoisted `react` resolves from there. Do not set `settings.react.version` in your config. If `react` does not resolve, the preset throws an error when it loads. Install `react` in the workspace. `react` is an optional peer of this package, so a lint input on `@zukhruf/eslint` also hashes the React version.
 
 `flat/react` loads `eslint-plugin-import`, `eslint-plugin-jsx-a11y`, `eslint-plugin-react` and `eslint-plugin-react-hooks`. Install these 4 plugins in the React workspace. They are optional peers of this package, because `@nx/eslint-plugin` (checked at 24.0.2) does not declare them. With the peers, npm writes the lockfile edges from `@zukhruf/eslint` to the 4 plugins, so a lint input on `@zukhruf/eslint` also hashes the plugins.
 
