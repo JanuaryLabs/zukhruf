@@ -113,7 +113,7 @@ console.log(result.taskResults[0]?.scores.test?.[0]?.main_score);
 
 `Faq` is the task of the section above. The search model splits each document (its title and its text) and each query into English words, removes the English stopwords of bm25s and stems each word with the English Snowball stemmer. Then it scores each document with BM25, as bm25s does. The scores are the scores of MTEB to the last bit.
 
-`k1` and `b` are the keyword arguments of `loadModel`, as in MTEB. They are experiment arguments, so `bm25S.loadModel({ k1: 1.2 })` keeps its results apart from the results of the defaults (`k1` 1.5, `b` 0.75). The search model supports English only: a task in another language stops with an error.
+`k1`, `b`, `delta` and `method` are the keyword arguments of `loadModel`, as in MTEB. `method` is the BM25 variant of bm25s: `'robertson'`, `'lucene'`, `'atire'`, `'bm25l'` or `'bm25+'`. `delta` is used by `'bm25l'` and `'bm25+'` only. The keyword arguments are experiment arguments, so `bm25S.loadModel({ k1: 1.2 })` keeps its results apart from the results of the defaults (`k1` 1.5, `b` 0.75, `delta` 0.5, `method` `'lucene'`). The search model supports English only: a task in another language stops with an error.
 
 ## Hybrid search: BM25 with an embedding model
 

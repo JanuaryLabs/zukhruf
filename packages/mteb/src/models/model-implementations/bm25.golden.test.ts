@@ -5,14 +5,21 @@ import { test } from 'node:test';
 
 import { AbsTaskRetrieval } from '../../abstasks/retrieval.ts';
 import { TaskMetadata } from '../../abstasks/task-metadata.ts';
+import { evaluate } from '../../evaluate.ts';
 import type { ISOLanguageScript } from '../../types/metadata.ts';
-import { BM25Tokenizer, bm25S } from './bm25.ts';
+import { type BM25Kwargs, BM25Tokenizer, bm25S } from './bm25.ts';
 
 // fixtures/bm25/ is a folder dataset and what Python MTEB 2.26.28 with bm25s
 // 0.3.16 and PyStemmer 3.1.0 gave for it: the float32 score of each document
 // for each query, a reranking, and the stem of each word. generate.py makes
 // both.
 const FOLDER = join(import.meta.dirname, 'fixtures/bm25');
+
+// fixtures/bm25-methods/ is a second folder dataset and what MTEB gave for
+// it and for the folder of fixtures/bm25/ with each bm25s method, with the
+// default settings and with k1 1.2, b 0.5 and delta 0.3: the scores and the
+// main score of mteb.evaluate. Its generate.py makes both.
+const METHODS_FOLDER = join(import.meta.dirname, 'fixtures/bm25-methods');
 
 type Expected = {
   readonly top_ranked: Readonly<Record<string, readonly string[]>>;
@@ -25,13 +32,32 @@ const expected: Expected = JSON.parse(
   readFileSync(join(FOLDER, 'expected.json'), 'utf8'),
 );
 
+type MethodRun = {
+  readonly folder: 'methods' | 'bm25';
+  readonly kwargs: BM25Kwargs;
+  readonly full: [string, [string, number][]][];
+  readonly main_score: number;
+};
+
+const methodRuns: readonly MethodRun[] = JSON.parse(
+  readFileSync(join(METHODS_FOLDER, 'expected.json'), 'utf8'),
+).runs;
+
+const FOLDERS = {
+  bm25: { name: 'Bm25Fixture', path: FOLDER },
+  methods: { name: 'Bm25MethodsFixture', path: METHODS_FOLDER },
+} as const;
+
 class FolderTask extends AbsTaskRetrieval {
-  constructor(evalLangs: ISOLanguageScript[] = ['eng-Latn']) {
+  constructor(
+    evalLangs: ISOLanguageScript[] = ['eng-Latn'],
+    folder: (typeof FOLDERS)[keyof typeof FOLDERS] = FOLDERS.bm25,
+  ) {
     super({
       metadata: new TaskMetadata({
-        name: 'Bm25Fixture',
+        name: folder.name,
         description: 'The BM25 fixture of @zukhruf/mteb.',
-        dataset: { path: FOLDER, revision: '1' },
+        dataset: { path: folder.path, revision: '1' },
         type: 'Retrieval',
         category: 't2t',
         modalities: ['text'],
@@ -46,6 +72,7 @@ class FolderTask extends AbsTaskRetrieval {
 async function searchFolder(
   task: FolderTask,
   topRanked: ReadonlyMap<string, readonly string[]> | null,
+  kwargs: BM25Kwargs = {},
 ) {
   await task.loadData();
   const split = task.dataset?.get('default')?.get('test');
@@ -56,7 +83,7 @@ async function searchFolder(
     hfSubset: 'default',
     encodeKwargs: {},
   };
-  const model = bm25S.loadModel();
+  const model = bm25S.loadModel(kwargs);
   await model.index(split.corpus, location);
   return model.search(split.queries, { ...location, topK: 100, topRanked });
 }
@@ -119,3 +146,30 @@ test('a task in another language than English stops the index, naming the langua
     /BM25Search supports English only: the subset 'default' of the task Bm25Fixture has the language 'deu'\./u,
   );
 });
+
+for (const run of methodRuns) {
+  const name = `${run.folder} ${JSON.stringify(run.kwargs)}`;
+
+  test(`each document of each query has the float32 score that MTEB gives with ${name}, to the last bit`, async () => {
+    const results = await searchFolder(
+      new FolderTask(['eng-Latn'], FOLDERS[run.folder]),
+      null,
+      run.kwargs,
+    );
+
+    assert.deepEqual(results, asMaps(run.full));
+  });
+
+  test(`evaluate gives the main score of MTEB with ${name}`, async () => {
+    const result = await evaluate(
+      bm25S.loadModel(run.kwargs),
+      new FolderTask(['eng-Latn'], FOLDERS[run.folder]),
+      { cache: null },
+    );
+
+    assert.equal(
+      result.taskResults[0]?.scores['test']?.[0]?.['main_score'],
+      run.main_score,
+    );
+  });
+}

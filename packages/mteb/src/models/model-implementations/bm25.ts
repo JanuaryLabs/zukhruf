@@ -2,12 +2,13 @@
 // mteb/baseline-bm25s, for English. Not ported: the other languages of
 // _ISO3_TO_LANG, the stopwords from document frequencies (for a language
 // without a stopword list), the "char" tokenizer, a tokenizer of
-// HuggingFace or a function (and so mteb/baseline-bm25s-subword), the bm25s
-// methods other than "lucene", and options other than k1 and b.
+// HuggingFace or a function (and so mteb/baseline-bm25s-subword), and
+// options other than k1, b, delta and method.
 import type { TaskMetadata } from '../../abstasks/task-metadata.ts';
 import { combineQueriesWithInstructionText } from '../../create-dataloaders.ts';
 import {
   BM25,
+  type Method,
   STOPWORDS_EN,
   type Tokenized,
   tokenize,
@@ -81,6 +82,8 @@ export class BM25Tokenizer {
 export type BM25Kwargs = LoadKwargs & {
   readonly k1?: number;
   readonly b?: number;
+  readonly delta?: number;
+  readonly method?: Method;
   readonly model?: never;
 };
 
@@ -95,18 +98,22 @@ export class BM25Search implements SearchProtocol {
   readonly mtebModelMeta: ModelMeta;
   readonly k1: number;
   readonly b: number;
-  readonly delta = 0.5;
-  readonly method = 'lucene';
+  readonly delta: number;
+  readonly method: Method;
   #indexed: Indexed | null = null;
 
   constructor(options: {
     readonly modelMeta: ModelMeta;
     readonly k1?: number;
     readonly b?: number;
+    readonly delta?: number;
+    readonly method?: Method;
   }) {
     this.mtebModelMeta = options.modelMeta;
     this.k1 = options.k1 ?? 1.5;
     this.b = options.b ?? 0.75;
+    this.delta = options.delta ?? 0.5;
+    this.method = options.method ?? 'lucene';
   }
 
   // A subset with more than one language is read as English, as in MTEB.

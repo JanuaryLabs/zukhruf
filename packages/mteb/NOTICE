@@ -46,8 +46,8 @@ It also ports the semantics of parts of these dependencies of MTEB:
   random.Random, the repr, strip and splitlines of a str, and the order of a
   set of ints), Copyright (c) Python Software Foundation, PSF License
   Agreement.
-- bm25s 0.3.16 (tokenize and the Lucene BM25), Copyright (c) 2024 Xing Han Lu,
-  MIT License.
+- bm25s 0.3.16 (tokenize and the BM25 variants Robertson, Lucene, ATIRE,
+  BM25L and BM25+), Copyright (c) 2024 Xing Han Lu, MIT License.
 - PyStemmer 3.1.0 (Stemmer.Stemmer), Copyright (c) 2006 Richard Boulton, MIT
   License.
 - pandas 3.1.0 (DataFrame, explode, pivot_table, the groupby mean, to_csv,
