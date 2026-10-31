@@ -56,6 +56,10 @@ _Avoid_: Embedder, model (for the wrapper)
 The model wrapper that gives one score for each pair of a query and a document, from the two texts together. A cross-encoder runs only on a reranking task: it scores the top ranked documents of each query. `AiSdkReranker` is a cross-encoder over an AI SDK reranking model.
 _Avoid_: Reranker (for the wrapper)
 
+**CO₂ emissions**:
+The kg CO₂eq of the electricity that the machine used for one task run, as codecarbon estimates it: the energy of the RAM and the CPU (and the GPU of an Apple chip) multiplied by the carbon intensity of the grid. `kgCo2Emissions` of a task result holds it.
+_Avoid_: Carbon footprint, energy (the energy is in kWh)
+
 **Embedding cache**:
 The folder that `CachedEmbeddingWrapper` keeps the embedding of each text in, for one encoder. An encoder embeds only the texts that the folder does not hold.
 _Avoid_: Result cache (it keeps scores), vector store

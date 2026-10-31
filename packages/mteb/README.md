@@ -214,6 +214,32 @@ The files of a folder are those of MTEB's `NumpyCache`: `vectors.npy` (float32 r
 
 MTEB gives a document its title twice, and a query its instruction twice, when the text is not in the folder yet. Thus in MTEB, a run with the cache can give other scores than a run without it. This package embeds the texts of a run without the cache. A folder that MTEB filled holds those embeddings, and the wrapper reads them as they are.
 
+## Track the CO₂ emissions of a run
+
+A benchmark run uses electricity, and the cost of a model choice can include its emissions. MTEB measures them with codecarbon, and this package ports that CO₂ tracker. With `co2Tracker: true`, `evaluate` tracks each task, and the result of the task holds `kgCo2Emissions`, in kg CO₂eq.
+
+```ts
+import { ResultCache, evaluate } from '@zukhruf/mteb';
+
+const result = await evaluate(encoder, new Faq(), {
+  cache: new ResultCache('mteb-results'),
+  co2Tracker: true,
+});
+console.log(result.taskResults[0]?.kgCo2Emissions);
+```
+
+The tracker measures the machine that runs `evaluate`. When the encoder calls a model on another machine, the number does not include that machine.
+
+The emissions are the energy of the machine multiplied by the carbon intensity of its electricity grid:
+
+- The RAM uses 3 W for each 8 GB of the machine.
+- On Linux, the CPU energy comes from the RAPL counters, when the process can read them. Most kernels let only root read them.
+- On a Mac, the CPU and GPU power come from `powermetrics`, when `sudo` runs it without a password. The tracker runs `sudo -n`, so it never asks for a password. `powermetrics` writes `powermetrics_log.txt` into the current folder.
+- Else the CPU uses half of its TDP, from codecarbon's table of CPUs, or 42.5 W when the table does not know the CPU. Then the emissions are the run time multiplied by a constant.
+- The grid comes from the cloud metadata server of GCP, or from the location of the IP address (get.geojs.io, then ip-api.com). When the network fails, the grid is that of Quebec, Canada. Each task waits for these requests, up to about 4.5 seconds when the network is down.
+
+Only one tracker can run on a machine at a time. It holds the file `.codecarbon.lock` in the temporary folder of the system, as codecarbon does, so a Python codecarbon run also stops it. When another run holds the file, the task runs, and then `evaluate` throws a `TypeError` with MTEB's message. The cause of the error names the file. A process that was killed leaves the file: delete it. On a resumed task, the new emissions add to the emissions of the cached result.
+
 ## Reranking with a cross-encoder
 
 A cross-encoder gets the query and one document at the same time, and gives the pair one score. It does not give embeddings, so it cannot search a full corpus. It reranks the top ranked documents of each query: the documents that a first search found. MTEB runs a cross-encoder only on a reranking task, and so does this package.

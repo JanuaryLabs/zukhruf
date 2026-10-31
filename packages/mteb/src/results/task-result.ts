@@ -152,7 +152,8 @@ export class TaskResult {
   readonly mtebVersion: string | null;
   readonly scores: Readonly<Record<SplitName, readonly ScoresDict[]>>;
   readonly evaluationTime: number | null;
-  readonly kgCo2Emissions: number | null;
+  // evaluate sets it after the CO₂ tracker stops, as MTEB sets the field.
+  kgCo2Emissions: number | null;
   readonly date: Date | null;
   readonly evaluationPhases: readonly PhaseTiming[] | null;
   // MTEB finds the task of a result in its task registry. This package has

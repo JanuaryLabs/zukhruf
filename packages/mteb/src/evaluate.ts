@@ -1,6 +1,7 @@
 import type { AbsTask, MTEBModels } from './abstasks/abstask.ts';
 import { AbsTaskRetrieval } from './abstasks/retrieval.ts';
 import { ResultCache } from './cache/result-cache.ts';
+import { EmissionsTracker } from './dependencies/codecarbon.ts';
 import {
   type ModelMeta,
   mergePrecisionIntoExperimentKwargs,
@@ -12,9 +13,9 @@ import type { EncodeKwargs } from './types/encoder-io.ts';
 import type { HFSubset, ScoresDict, SplitName } from './types/result.ts';
 
 // mteb/evaluate.py. Not ported: aggregated tasks and benchmarks, bitext
-// mining's batches of subsets, loading a model from a ModelMeta, the CO₂
-// tracker, and the private datasets of the HuggingFace Hub. MTEB's timer
-// option is not ported either: the evaluation of a task makes its own.
+// mining's batches of subsets, loading a model from a ModelMeta, and the
+// private datasets of the HuggingFace Hub. MTEB's timer option is not ported
+// either: the evaluation of a task makes its own.
 
 // What evaluate does with the results that the cache already has.
 // - always: run the task and replace the results.
@@ -39,6 +40,8 @@ export type EvaluateOptions = {
   readonly overwriteStrategy?: OverwriteStrategy;
   // The folder that keeps <task name>_predictions.json for each task.
   readonly predictionFolder?: string | null;
+  // Track the CO₂ emissions of each task with codecarbon's EmissionsTracker.
+  readonly co2Tracker?: boolean;
 };
 
 type Splits = ReadonlyMap<SplitName, readonly HFSubset[]>;
@@ -63,6 +66,7 @@ export async function evaluate(
     cache: options.cache === undefined ? new ResultCache() : options.cache,
     overwriteStrategy,
     predictionFolder: options.predictionFolder ?? null,
+    co2Tracker: options.co2Tracker ?? false,
   });
 }
 
@@ -72,6 +76,7 @@ type Resolved = {
   readonly cache: ResultCache | null;
   readonly overwriteStrategy: OverwriteStrategy;
   readonly predictionFolder: string | null;
+  readonly co2Tracker: boolean;
 };
 
 async function evaluateResolved(
@@ -116,7 +121,7 @@ async function evaluateResolved(
     });
   let result: TaskResult | TaskError;
   const run = () =>
-    evaluateTask(model, task, {
+    (options.co2Tracker ? evaluateTrackedTask : evaluateTask)(model, task, {
       splits: missing,
       encodeKwargs: options.encodeKwargs,
       predictionFolder: options.predictionFolder,
@@ -151,18 +156,41 @@ function isTask(tasks: AbsTask | Iterable<AbsTask>): tasks is AbsTask {
   return !(Symbol.iterator in tasks);
 }
 
+type TaskOptions = {
+  readonly splits: Splits;
+  readonly encodeKwargs: EncodeKwargs;
+  readonly predictionFolder: string | null;
+  readonly cache: ResultCache | null;
+  readonly existingResults: TaskResult | null;
+  readonly modelMeta: ModelMeta;
+};
+
+// evaluateTask inside an EmissionsTracker, which stops also when the task
+// throws. The emissions add to those of the cached result. Python's
+// `final_emissions or 0.0` is the number itself: final_emissions is a float.
+async function evaluateTrackedTask(
+  model: MTEBModels,
+  task: AbsTask,
+  options: TaskOptions,
+): Promise<TaskResult> {
+  const tracker = await EmissionsTracker.create();
+  tracker.start();
+  let result: TaskResult;
+  try {
+    result = await evaluateTask(model, task, options);
+  } finally {
+    await tracker.stop();
+  }
+  result.kgCo2Emissions =
+    (options.existingResults?.kgCo2Emissions ?? 0) + tracker.finalEmissions;
+  return result;
+}
+
 // The core of evaluate on one task: each subset of each missing split.
 async function evaluateTask(
   model: MTEBModels,
   task: AbsTask,
-  options: {
-    readonly splits: Splits;
-    readonly encodeKwargs: EncodeKwargs;
-    readonly predictionFolder: string | null;
-    readonly cache: ResultCache | null;
-    readonly existingResults: TaskResult | null;
-    readonly modelMeta: ModelMeta;
-  },
+  options: TaskOptions,
 ): Promise<TaskResult> {
   const taskResults = new Map<SplitName, Map<HFSubset, ScoresDict>>();
   let evaluationTime = 0;

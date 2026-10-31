@@ -1,4 +1,7 @@
 import assert from 'node:assert/strict';
+import { closeSync, openSync, unlinkSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { test } from 'node:test';
 
 import type { EmbeddingModelV4 } from '@ai-sdk/provider';
@@ -160,4 +163,78 @@ test('without raiseError, a failing task becomes an exception of the result', as
   assert.deepEqual(result.taskResults, []);
   assert.equal(result.exceptions?.[0]?.taskName, 'Letters');
   assert.match(result.exceptions?.[0]?.exception ?? '', /The model is down/u);
+});
+
+// codecarbon's lock is one file for the whole machine. Only this file takes
+// it, and node:test runs the tests of a file one after another. A lock that
+// another run holds stays: the test then runs against that one.
+function holdCodecarbonLock(): Disposable {
+  const path = join(tmpdir(), '.codecarbon.lock');
+  try {
+    closeSync(openSync(path, 'wx'));
+  } catch (error) {
+    if (error instanceof Error && 'code' in error && error.code === 'EEXIST')
+      return { [Symbol.dispose]() {} };
+    throw error;
+  }
+  return {
+    [Symbol.dispose]() {
+      unlinkSync(path);
+    },
+  };
+}
+
+const NO_FINAL_EMISSIONS =
+  "'EmissionsTracker' object has no attribute 'final_emissions'";
+
+test('with co2Tracker, a task that runs while another codecarbon run holds the lock throws the AttributeError of MTEB after the task ran', async () => {
+  await using directory = await new TemporaryFiles().directory(
+    'mteb-evaluate-',
+  );
+  using _lock = holdCodecarbonLock();
+  const { model, calls } = letterModel();
+  const cache = new ResultCache(directory.path);
+
+  await assert.rejects(
+    evaluate(encoderOf(model), new LetterTask(), { cache, co2Tracker: true }),
+    (error) => {
+      assert.ok(error instanceof TypeError);
+      assert.equal(error.message, NO_FINAL_EMISSIONS);
+      assert.ok(error.cause instanceof Error);
+      assert.match(error.cause.message, /Another instance of codecarbon/);
+      return true;
+    },
+  );
+  assert.ok(calls() > 0);
+  const saved = cache.loadTaskResult('Letters', encoderOf(model).mtebModelMeta);
+  assert.equal(saved?.mainScore, 1);
+  assert.equal(saved.kgCo2Emissions, null);
+});
+
+test('with co2Tracker and raiseError false, the held lock makes the task an error of the result', async () => {
+  using _lock = holdCodecarbonLock();
+
+  const result = await evaluate(
+    encoderOf(letterModel().model),
+    new LetterTask(),
+    { cache: null, co2Tracker: true, raiseError: false },
+  );
+
+  assert.deepEqual(result.taskResults, []);
+  assert.deepEqual(result.exceptions, [
+    { taskName: 'Letters', exception: NO_FINAL_EMISSIONS },
+  ]);
+});
+
+test('without co2Tracker, evaluate does not track: a held lock changes nothing', async () => {
+  using _lock = holdCodecarbonLock();
+
+  const result = await evaluate(
+    encoderOf(letterModel().model),
+    new LetterTask(),
+    { cache: null },
+  );
+
+  assert.equal(result.taskResults[0]?.mainScore, 1);
+  assert.equal(result.taskResults[0]?.kgCo2Emissions, null);
 });
