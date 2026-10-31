@@ -1,8 +1,9 @@
 // The NumPy 2.5 algorithms whose results MTEB depends on, for 1-D arrays of
 // float64. gsumpw of stdlib is the pairwise summation of numpy's add loop
 // (loops_utils.h): blocks of up to 128 values in 8 accumulators, larger arrays
-// split in two.
+// split in two. ssumpw is the same summation in float32.
 import gsumpw from '@stdlib/blas-ext-base-gsumpw';
+import ssumpw from '@stdlib/blas-ext-base-ssumpw';
 
 // np.sum: the identity 0 plus the pairwise sum.
 export function sum(values: ArrayLike<number>): number {
@@ -81,16 +82,14 @@ export function quantile(sorted: readonly number[], q: number): number {
 }
 
 // np.sum of a float32 array, also along the last axis of a C-contiguous
-// array: the pairwise sum of numpy's add loop (loops_utils.h) in float32.
-// Fewer than 8 values add in order; up to 128 values add in 8 accumulators;
-// a longer array splits in two at a multiple of 8.
-export function sumFloat32(values: ArrayLike<number>): number {
-  return Math.fround(0 + pairwiseSumFloat32(values, 0, values.length));
+// array: the identity 0 plus the float32 pairwise sum.
+export function sumFloat32(values: Float32Array): number {
+  return 0 + ssumpw(values.length, values, 1);
 }
 
 // np.mean of a float32 array: the float32 pairwise sum divided by the
 // number of values, in float32.
-export function meanFloat32(values: ArrayLike<number>): number {
+export function meanFloat32(values: Float32Array): number {
   return Math.fround(sumFloat32(values) / values.length);
 }
 
@@ -104,41 +103,6 @@ export function meanAxis0Float32(rows: readonly Float32Array[]): Float32Array {
     for (let column = 0; column < sums.length; column++)
       sums[column] = (sums[column] ?? 0) + (row[column] ?? 0);
   return sums.map((value) => Math.fround(value / rows.length));
-}
-
-function pairwiseSumFloat32(
-  values: ArrayLike<number>,
-  start: number,
-  n: number,
-): number {
-  const at = (index: number) => values[start + index] ?? 0;
-  if (n < 8) {
-    let result = 0;
-    for (let index = 0; index < n; index++)
-      result = Math.fround(result + at(index));
-    return result;
-  }
-  if (n <= 128) {
-    const r = Array.from({ length: 8 }, (_, lane) => Math.fround(at(lane)));
-    let index = 8;
-    for (; index < n - (n % 8); index += 8)
-      for (let lane = 0; lane < 8; lane++)
-        r[lane] = Math.fround((r[lane] ?? 0) + at(index + lane));
-    const add = (a: number, b: number) => Math.fround(a + b);
-    const lane = (index: number) => r[index] ?? 0;
-    let result = add(
-      add(add(lane(0), lane(1)), add(lane(2), lane(3))),
-      add(add(lane(4), lane(5)), add(lane(6), lane(7))),
-    );
-    for (; index < n; index++) result = Math.fround(result + at(index));
-    return result;
-  }
-  let half = Math.floor(n / 2);
-  half -= half % 8;
-  return Math.fround(
-    pairwiseSumFloat32(values, start, half) +
-      pairwiseSumFloat32(values, start + half, n - half),
-  );
 }
 
 // np.corrcoef(np.column_stack((x, y)), rowvar=False)[1, 0]: the covariance

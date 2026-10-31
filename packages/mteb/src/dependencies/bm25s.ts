@@ -255,7 +255,7 @@ export class BM25 {
       if (index.method === 'bm25l' || index.method === 'bm25+') {
         const { nonoccurrence } = index;
         const shift = sumFloat32(
-          known.map((column) => nonoccurrence[column] ?? 0),
+          Float32Array.from(known, (column) => nonoccurrence[column] ?? 0),
         );
         queryScores.forEach((score, doc) => {
           queryScores[doc] = score + shift;

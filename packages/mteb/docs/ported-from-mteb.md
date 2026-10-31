@@ -126,7 +126,7 @@ The first step ports the core and the retrieval and reranking tasks, for text. T
 - A HuggingFace `Dataset` is an array of rows. A Python `dict` that maps ids is a `Map`: a `Map` keeps insertion order for every key, and an object moves integer-like keys such as `"0"` to the front.
 - An MTEB `Array` (a numpy array or a torch tensor) is `Embeddings`, one `Float32Array` for each row. Embeddings and similarity scores are float32, as in MTEB; the other numbers are float64, as in Python.
 - A pydantic model is a zod schema and a class. Files on disk keep the keys, the structure and the `NaN` values of MTEB, so MTEB and this package read the files of each other.
-- Numbers follow the Python algorithms where the result can differ: `sum` of floats is Neumaier summation (CPython 3.12), `round` rounds half to even, a numpy sum is a pairwise sum (`@stdlib/blas-ext-base-gsumpw` 0.3.1, which adds in the order of numpy's add loop), and ties sort as Python tuples sort.
+- Numbers follow the Python algorithms where the result can differ: `sum` of floats is Neumaier summation (CPython 3.12), `round` rounds half to even, a numpy sum is a pairwise sum (`@stdlib/blas-ext-base-gsumpw` 0.3.1 for float64 and `@stdlib/blas-ext-base-ssumpw` 0.3.1 for float32, which add in the order of numpy's add loop), and ties sort as Python tuples sort.
 
 ## Differences
 
