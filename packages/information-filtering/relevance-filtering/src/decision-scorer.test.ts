@@ -147,6 +147,19 @@ describe('DecisionScorer', () => {
     assert.deepEqual(scores.ranked(), []);
   });
 
+  test('a stopped score fails with the reason of the signal, also for an empty stream, and asks the model nothing', async () => {
+    const reason = new Error('The reader stops.');
+    const scorer = new DecisionScorer({
+      model: model(QUESTION, new Map()),
+      description: DESCRIPTION,
+    });
+
+    await assert.rejects(
+      scorer.score(new Map(), { signal: AbortSignal.abort(reason) }),
+      (error) => error === reason,
+    );
+  });
+
   test('a question that the model refuses fails the score with the refusal error of the AI SDK, and does not rank the article', async () => {
     const scorer = new DecisionScorer({
       model: model(

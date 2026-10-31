@@ -31,6 +31,7 @@ export class DecisionScorer implements Scorer {
     stream: Stream,
     { signal }: { readonly signal: AbortSignal },
   ): Promise<Scores> {
+    signal.throwIfAborted();
     // The first failure stops the other calls, so a failed score asks the
     // model no more. A stop of the host aborts the same signal.
     const failed = new AbortController();
