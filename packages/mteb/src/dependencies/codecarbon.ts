@@ -11,6 +11,9 @@ import { cpus, tmpdir, totalmem } from 'node:os';
 import { join } from 'node:path';
 import { isMainThread } from 'node:worker_threads';
 
+import { bestMatch, createScorer, normalizeText, search } from 'rapidfuzz-js';
+import { ratio, tokenSetRatio } from 'rapidfuzz-js/fuzz';
+
 import { mean } from './numpy.ts';
 import {
   asciiDigits,
@@ -328,60 +331,45 @@ export function cloudEmissions(
   return row.impact * G_KWH_TO_KG_KWH * kWh;
 }
 
-// core/cpu.py TDP._get_cpu_power_from_registry. rapidfuzz's scorers at a
-// cutoff of 100 are equality: fuzz.ratio of the lower-case strings, then
-// fuzz.token_set_ratio, which gives 100 when the token set of one string
-// holds the other. A token match counts only when it is the only one.
+// core/cpu.py TDP._get_cpu_power_from_registry and _get_matching_cpu with
+// greedy=False: process.extractOne with fuzz.ratio of the lower-case strings,
+// then process.extract (limit 5) with fuzz.token_set_ratio of the strings
+// that default_process cleans, both at a cutoff of 100. rapidfuzz-js gives
+// the scorers, the cleaning and the search of rapidfuzz.
 export function cpuPowerFromRegistry(modelRaw: string): number | null {
   const table = data.cpuPower();
-  const lower = modelRaw.toLowerCase();
-  const direct = table.find((row) => row.name.toLowerCase() === lower);
-  if (direct !== undefined) return cpuConstantPower(direct);
+  const names = table.map((row) => row.name);
+  // The processor of extractOne, on the query and on each name.
+  const direct = bestMatch(
+    modelRaw.toLowerCase(),
+    names.map((name) => name.toLowerCase()),
+    { scorer: RATIO, threshold: 100 },
+  );
+  if (direct !== undefined) return cpuConstantPower(table, direct.key);
   let model = modelRaw.replaceAll('(R)', '');
   const startCpu = model.indexOf(' CPU @ ');
   if (startCpu > 0) model = model.slice(0, startCpu);
-  const tokens = tokenSet(model);
-  if (tokens.size === 0) return null;
-  const matches = cpuTokens().filter(
-    (row) =>
-      row.tokens.size > 0 &&
-      (isSubset(tokens, row.tokens) || isSubset(row.tokens, tokens)),
-  );
-  const [match, ...others] = matches;
-  return match !== undefined && others.length === 0
-    ? cpuConstantPower(match.row)
+  const [first, second] = search(model, names, {
+    scorer: TOKEN_SET_RATIO,
+    normalize: normalizeText,
+    threshold: 100,
+    limit: 5,
+  });
+  return first !== undefined &&
+    (second === undefined || first.score !== second.score)
+    ? cpuConstantPower(table, first.key)
     : null;
 }
 
-const cpuTokens = lazy(() =>
-  data.cpuPower().map((row) => ({ row, tokens: tokenSet(row.name) })),
-);
+const RATIO = createScorer(ratio);
+const TOKEN_SET_RATIO = createScorer(tokenSetRatio);
 
-function tokenSet(text: string): Set<string> {
-  return new Set(defaultProcess(text).split(' ').filter(Boolean));
-}
-
-function isSubset(small: Set<string>, large: Set<string>): boolean {
-  return [...small].every((token) => large.has(token));
-}
-
-// rapidfuzz.utils.default_process: each character that is not a letter or a
-// digit becomes a space, each character takes its simple lower case, and the
-// spaces at both ends go.
-const CAPITAL_I_WITH_DOT = String.fromCodePoint(0x130);
-
-function defaultProcess(text: string): string {
-  let processed = '';
-  for (const char of text) {
-    if (!/[\p{L}\p{N}]/u.test(char)) processed += ' ';
-    else if (char === CAPITAL_I_WITH_DOT) processed += 'i';
-    else processed += char.toLowerCase();
-  }
-  return processed.replace(/^ +| +$/g, '');
-}
-
-// _get_cpu_constant_power: float of the TDP string.
-function cpuConstantPower(row: CpuPowerRow): number {
+// _get_cpu_constant_power: float of the TDP string of the first row with
+// the matched name.
+function cpuConstantPower(table: readonly CpuPowerRow[], key: number): number {
+  const name = table[key]?.name;
+  const row = table.find((candidate) => candidate.name === name);
+  if (row === undefined) throw new RangeError(`no CPU row ${key}`);
   const power = pythonFloat(row.tdp);
   if (power === undefined)
     throw new RangeError(

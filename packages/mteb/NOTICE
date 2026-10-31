@@ -76,6 +76,9 @@ files. The package does not include its code.
 The npm dependency ml-matrix (mljs, MIT License) calculates the singular value
 decomposition of the least squares. The package does not include its code.
 
+The npm dependency rapidfuzz-js (MIT License) gives the fuzzy matching of
+codecarbon's TDP table. The package does not include its code.
+
 It includes 37 files of Snowball 3.1.0 (https://snowballstem.org/) without
 change, compiled from src/dependencies/snowball/ to dist/dependencies/snowball/:
 base-stemmer.js and the stemmer of each algorithm, arabic-stemmer.js,
