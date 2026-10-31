@@ -219,6 +219,35 @@ function isRejectsCall(node: unknown): boolean {
   );
 }
 
+/**
+ * A block whose last statement is a `throw`, or the body `Promise.reject(...)`
+ * of an arrow function: the failure goes on, so the code after it runs only on
+ * success, as with `Array.fromAsync`. A `throw` on one branch is not counted.
+ */
+function alwaysRethrows(body: unknown): boolean {
+  if (isType(body, 'BlockStatement')) {
+    const statements = Array.isArray(body['body']) ? body['body'] : [];
+    return isType(statements.at(-1), 'ThrowStatement');
+  }
+  if (!isType(body, 'CallExpression')) return false;
+  const callee = body['callee'];
+  return (
+    isType(callee, 'MemberExpression') &&
+    callee['computed'] !== true &&
+    identifierName(callee['object']) === 'Promise' &&
+    identifierName(callee['property']) === 'reject'
+  );
+}
+
+/** A handler that is not a function written in place counts as handling. */
+function handles(handler: unknown): boolean {
+  return !(
+    isFunction(handler) &&
+    isAstNode(handler) &&
+    alwaysRethrows(handler['body'])
+  );
+}
+
 /** `promise.then(onFulfilled, onRejected)` or `promise.catch(onRejected)`. */
 function handlesRejection(promise: AstNode): boolean {
   const member = promise['parent'];
@@ -235,15 +264,16 @@ function handlesRejection(promise: AstNode): boolean {
   const args = Array.isArray(call['arguments']) ? call['arguments'] : [];
   const method = identifierName(member['property']);
   return (
-    (method === 'then' && args.length >= 2) ||
-    (method === 'catch' && args.length >= 1)
+    (method === 'then' && args.length >= 2 && handles(args[1])) ||
+    (method === 'catch' && args.length >= 1 && handles(args[0]))
   );
 }
 
 /**
  * The code whose failure is handled before the code after it runs: the try
- * block of a try statement with a catch clause, an async function whose call
- * is chained to a rejection handler, or an async function (or its call) given
+ * block of a try statement with a catch clause that does not always rethrow,
+ * an async function whose call is chained to a rejection handler that does
+ * not always rethrow, or an async function (or its call) given
  * to `rejects`. A function that is not called in place ends the search, as it
  * can run at any time.
  */
@@ -253,7 +283,8 @@ function handledRegion(loop: AstNode): AstNode | undefined {
     if (
       isType(current, 'TryStatement') &&
       current['block'] === child &&
-      isAstNode(current['handler'])
+      isAstNode(current['handler']) &&
+      !alwaysRethrows(current['handler']['body'])
     ) {
       return child;
     }

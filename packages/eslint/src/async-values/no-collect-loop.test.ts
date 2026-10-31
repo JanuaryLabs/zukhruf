@@ -318,6 +318,18 @@ test('no-collect-loop leaves a loop whose rejection is handled before its outer 
           use(received);
         `,
       },
+      // A throw that runs only on one branch leaves the other branch handled.
+      {
+        code: `
+          const received = [];
+          try {
+            for await (const chunk of stream) received.push(chunk);
+          } catch (error) {
+            if (!aborted(error)) throw error;
+          }
+          use(received);
+        `,
+      },
       {
         code: `
           const received = [];
@@ -394,6 +406,42 @@ test('no-collect-loop leaves a loop whose rejection is handled before its outer 
             prepare();
           } catch {}
           for await (const chunk of stream) received.push(chunk);
+        `,
+        errors: [{ messageId: 'plain' }],
+      },
+      // A catch that always throws: code after the try runs only on success.
+      {
+        code: `
+          const received = [];
+          try {
+            for await (const chunk of stream) received.push(chunk);
+          } catch (error) {
+            log(error);
+            throw error;
+          }
+          use(received);
+        `,
+        errors: [{ messageId: 'plain' }],
+      },
+      {
+        code: `
+          const received = [];
+          await (async () => {
+            for await (const chunk of stream) received.push(chunk);
+          })().catch((error) => {
+            throw new Wrapped(error);
+          });
+          use(received);
+        `,
+        errors: [{ messageId: 'plain' }],
+      },
+      {
+        code: `
+          const received = [];
+          await (async () => {
+            for await (const chunk of stream) received.push(chunk);
+          })().then(done, (error) => Promise.reject(error));
+          use(received);
         `,
         errors: [{ messageId: 'plain' }],
       },
