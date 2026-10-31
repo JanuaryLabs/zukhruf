@@ -48,8 +48,8 @@ It also ports the semantics of parts of these dependencies of MTEB:
   Agreement.
 - bm25s 0.3.16 (tokenize and the BM25 variants Robertson, Lucene, ATIRE,
   BM25L and BM25+), Copyright (c) 2024 Xing Han Lu, MIT License.
-- PyStemmer 3.1.0 (Stemmer.Stemmer), Copyright (c) 2006 Richard Boulton, MIT
-  License.
+- PyStemmer 3.1.0 (Stemmer.Stemmer and the names of its 36 algorithms),
+  Copyright (c) 2006 Richard Boulton, MIT License.
 - pandas 3.1.0 (DataFrame, explode, pivot_table, the groupby mean, to_csv,
   to_markdown, to_latex and qcut), Copyright (c) 2008-2011 AQR Capital Management,
   LLC, Lambda Foundry, Inc. and PyData Development Team, and 2011-2026 Open
@@ -72,9 +72,20 @@ files. The package does not include its code.
 The npm dependency ml-matrix (mljs, MIT License) calculates the singular value
 decomposition of the least squares. The package does not include its code.
 
-It includes two files of Snowball 3.1.0 (https://snowballstem.org/) without
-change: dist/dependencies/snowball/base-stemmer.js and english-stemmer.js,
-compiled from src/dependencies/snowball/. Their license:
+It includes 37 files of Snowball 3.1.0 (https://snowballstem.org/) without
+change, compiled from src/dependencies/snowball/ to dist/dependencies/snowball/:
+base-stemmer.js and the stemmer of each algorithm, arabic-stemmer.js,
+armenian-stemmer.js, basque-stemmer.js, catalan-stemmer.js, czech-stemmer.js,
+danish-stemmer.js, dutch-stemmer.js, dutch_porter-stemmer.js,
+english-stemmer.js, esperanto-stemmer.js, estonian-stemmer.js,
+finnish-stemmer.js, french-stemmer.js, german-stemmer.js, greek-stemmer.js,
+hindi-stemmer.js, hungarian-stemmer.js, indonesian-stemmer.js,
+irish-stemmer.js, italian-stemmer.js, lithuanian-stemmer.js,
+nepali-stemmer.js, norwegian-stemmer.js, persian-stemmer.js,
+polish-stemmer.js, porter-stemmer.js, portuguese-stemmer.js,
+romanian-stemmer.js, russian-stemmer.js, serbian-stemmer.js,
+sesotho-stemmer.js, spanish-stemmer.js, swedish-stemmer.js, tamil-stemmer.js,
+turkish-stemmer.js and yiddish-stemmer.js. Their license:
 
 Copyright (c) 2001, Dr Martin Porter
 Copyright (c) 2004,2005, Richard Boulton

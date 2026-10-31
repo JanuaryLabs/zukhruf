@@ -1,0 +1,244 @@
+// Generated from nepali.sbl by Snowball 3.1.0 - https://snowballstem.org/
+
+// deno-lint-ignore-file ban-unused-ignore no-constant-condition no-empty prefer-const
+
+const a_0 = [
+    ["\u0932\u093E\u0907", 1],
+    ["\u0932\u093E\u0908", 1],
+    ["\u0938\u0901\u0917", 1],
+    ["\u0938\u0902\u0917", 1],
+    ["\u092E\u093E\u0930\u094D\u092B\u0924", 1],
+    ["\u0930\u0924", 1],
+    ["\u0915\u093E", 2],
+    ["\u092E\u093E", 1],
+    ["\u0926\u094D\u0935\u093E\u0930\u093E", 1],
+    ["\u0915\u093F", 2],
+    ["\u092A\u091B\u093F", 1],
+    ["\u0915\u0940", 2],
+    ["\u0932\u0947", 1],
+    ["\u0915\u0948", 2],
+    ["\u0938\u0901\u0917\u0948", 1],
+    ["\u092E\u0948", 1],
+    ["\u0915\u094B", 2]
+];
+
+const a_1 = [
+    ["\u0901", 1],
+    ["\u0902", 1],
+    ["\u0948", 2]
+];
+
+const a_2 = [
+    ["\u0925\u093F\u090F", 1],
+    ["\u091B", 1],
+    ["\u0907\u091B", 1, 1],
+    ["\u090F\u091B", 1, 2],
+    ["\u093F\u091B", 1, 3],
+    ["\u0947\u091B", 1, 4],
+    ["\u0928\u0947\u091B", 1, 1],
+    ["\u0939\u0941\u0928\u0947\u091B", 1, 1],
+    ["\u0907\u0928\u094D\u091B", 1, 7],
+    ["\u093F\u0928\u094D\u091B", 1, 8],
+    ["\u0939\u0941\u0928\u094D\u091B", 1, 9],
+    ["\u090F\u0915\u093E", 1],
+    ["\u0907\u090F\u0915\u093E", 1, 1],
+    ["\u093F\u090F\u0915\u093E", 1, 2],
+    ["\u0947\u0915\u093E", 1],
+    ["\u0928\u0947\u0915\u093E", 1, 1],
+    ["\u0926\u093E", 1],
+    ["\u0907\u0926\u093E", 1, 1],
+    ["\u093F\u0926\u093E", 1, 2],
+    ["\u0926\u0947\u0916\u093F", 1],
+    ["\u092E\u093E\u0925\u093F", 1],
+    ["\u090F\u0915\u0940", 1],
+    ["\u0907\u090F\u0915\u0940", 1, 1],
+    ["\u093F\u090F\u0915\u0940", 1, 2],
+    ["\u0947\u0915\u0940", 1],
+    ["\u0926\u0947\u0916\u0940", 1],
+    ["\u0925\u0940", 1],
+    ["\u0926\u0940", 1],
+    ["\u091B\u0941", 1],
+    ["\u090F\u091B\u0941", 1, 1],
+    ["\u0947\u091B\u0941", 1, 2],
+    ["\u0928\u0947\u091B\u0941", 1, 1],
+    ["\u0928\u0941", 1],
+    ["\u0939\u0930\u0941", 1],
+    ["\u0939\u0930\u0942", 1],
+    ["\u091B\u0947", 1],
+    ["\u0925\u0947", 1],
+    ["\u0928\u0947", 1],
+    ["\u090F\u0915\u0948", 1],
+    ["\u0947\u0915\u0948", 1],
+    ["\u0928\u0947\u0915\u0948", 1, 1],
+    ["\u0926\u0948", 1],
+    ["\u0907\u0926\u0948", 1, 1],
+    ["\u093F\u0926\u0948", 1, 2],
+    ["\u090F\u0915\u094B", 1],
+    ["\u0907\u090F\u0915\u094B", 1, 1],
+    ["\u093F\u090F\u0915\u094B", 1, 2],
+    ["\u0947\u0915\u094B", 1],
+    ["\u0928\u0947\u0915\u094B", 1, 1],
+    ["\u0926\u094B", 1],
+    ["\u0907\u0926\u094B", 1, 1],
+    ["\u093F\u0926\u094B", 1, 2],
+    ["\u092F\u094B", 1],
+    ["\u0907\u092F\u094B", 1, 1],
+    ["\u092D\u092F\u094B", 1, 2],
+    ["\u093F\u092F\u094B", 1, 3],
+    ["\u0925\u093F\u092F\u094B", 1, 1],
+    ["\u0926\u093F\u092F\u094B", 1, 2],
+    ["\u0925\u094D\u092F\u094B", 1, 6],
+    ["\u091B\u094C", 1],
+    ["\u0907\u091B\u094C", 1, 1],
+    ["\u090F\u091B\u094C", 1, 2],
+    ["\u093F\u091B\u094C", 1, 3],
+    ["\u0947\u091B\u094C", 1, 4],
+    ["\u0928\u0947\u091B\u094C", 1, 1],
+    ["\u092F\u094C", 1],
+    ["\u0925\u093F\u092F\u094C", 1, 1],
+    ["\u091B\u094D\u092F\u094C", 1, 2],
+    ["\u0925\u094D\u092F\u094C", 1, 3],
+    ["\u091B\u0928\u094D", 1],
+    ["\u0907\u091B\u0928\u094D", 1, 1],
+    ["\u090F\u091B\u0928\u094D", 1, 2],
+    ["\u093F\u091B\u0928\u094D", 1, 3],
+    ["\u0947\u091B\u0928\u094D", 1, 4],
+    ["\u0928\u0947\u091B\u0928\u094D", 1, 1],
+    ["\u0932\u093E\u0928\u094D", 1],
+    ["\u091B\u093F\u0928\u094D", 1],
+    ["\u0925\u093F\u0928\u094D", 1],
+    ["\u092A\u0930\u094D", 1],
+    ["\u0907\u0938\u094D", 1],
+    ["\u0925\u093F\u0907\u0938\u094D", 1, 1],
+    ["\u091B\u0938\u094D", 1],
+    ["\u0907\u091B\u0938\u094D", 1, 1],
+    ["\u090F\u091B\u0938\u094D", 1, 2],
+    ["\u093F\u091B\u0938\u094D", 1, 3],
+    ["\u0947\u091B\u0938\u094D", 1, 4],
+    ["\u0928\u0947\u091B\u0938\u094D", 1, 1],
+    ["\u093F\u0938\u094D", 1],
+    ["\u0925\u093F\u0938\u094D", 1, 1],
+    ["\u091B\u0947\u0938\u094D", 1],
+    ["\u0939\u094B\u0938\u094D", 1]
+];
+
+import B from './base-stemmer.js'
+
+export default class extends B {
+
+
+    /** @return {boolean} */
+    #r_remove_category_1() {
+        let /** number */ a;
+        this.ket = this.c;
+        a = this.find_among_b(a_0);
+        if (a === 0) return false;
+        this.bra = this.c;
+        switch (a) {
+            case 1: {
+                this.slice_del();
+                break;
+            }
+            case 2: {
+                // deno-lint-ignore no-unused-labels
+                lab0: {
+                    // deno-lint-ignore no-unused-labels
+                    lab1: {
+                        if (!(this.eq_s_b("\u090F"))) break lab1;
+                        break lab0;
+                    }
+                    // deno-lint-ignore no-unused-labels
+                    lab2: {
+                        if (!(this.eq_s_b("\u0947"))) break lab2;
+                        break lab0;
+                    }
+                    this.slice_del();
+                }
+                break;
+            }
+        }
+        return true;
+    }
+
+    /** @return {boolean} */
+    #r_remove_category_2() {
+        let /** number */ a;
+        this.ket = this.c;
+        a = this.find_among_b(a_1);
+        if (a === 0) return false;
+        this.bra = this.c;
+        switch (a) {
+            case 1: {
+                // deno-lint-ignore no-unused-labels
+                lab0: {
+                    // deno-lint-ignore no-unused-labels
+                    lab1: {
+                        if (!(this.eq_s_b("\u092F\u094C"))) break lab1;
+                        break lab0;
+                    }
+                    // deno-lint-ignore no-unused-labels
+                    lab2: {
+                        if (!(this.eq_s_b("\u091B\u094C"))) break lab2;
+                        break lab0;
+                    }
+                    // deno-lint-ignore no-unused-labels
+                    lab3: {
+                        if (!(this.eq_s_b("\u0928\u094C"))) break lab3;
+                        break lab0;
+                    }
+                    if (!(this.eq_s_b("\u0925\u0947"))) return false;
+                }
+                this.slice_del();
+                break;
+            }
+            case 2: {
+                if (!(this.eq_s_b("\u0924\u094D\u0930"))) return false;
+                this.slice_del();
+                break;
+            }
+        }
+        return true;
+    }
+
+    /** @return {boolean} */
+    #r_remove_category_3() {
+        this.ket = this.c;
+        if (this.find_among_b(a_2) === 0) return false;
+        this.bra = this.c;
+        this.slice_del();
+        return true;
+    }
+
+    /** @return {boolean} */
+    #stem() {
+        this.limit_backward = this.c; this.c = this.limit;
+        const /** number */ v_1 = this.limit - this.c;
+        this.#r_remove_category_1();
+        this.c = this.limit - v_1;
+        while (true) {
+            const /** number */ v_2 = this.limit - this.c;
+            // deno-lint-ignore no-unused-labels
+            lab0: {
+                const /** number */ v_3 = this.limit - this.c;
+                this.#r_remove_category_2();
+                this.c = this.limit - v_3;
+                if (!this.#r_remove_category_3()) break lab0;
+                continue;
+            }
+            this.c = this.limit - v_2;
+            break;
+        }
+        this.c = this.limit_backward;
+        return true;
+    }
+
+    /**@return{string}*/
+    stem(/**string*/input) {
+        this.setCurrent(input);
+        this.#stem();
+        return this.getCurrent();
+    }
+
+    stemWord = this.stem;
+}
+
