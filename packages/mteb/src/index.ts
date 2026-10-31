@@ -90,6 +90,9 @@ export {
   BM25Search,
   BM25Tokenizer,
   type BM25Kwargs,
+  type BM25TokenizerOptions,
+  type CustomTokenizer,
+  type StopwordsKey,
   bm25Loader,
   bm25S,
 } from './models/model-implementations/bm25.ts';

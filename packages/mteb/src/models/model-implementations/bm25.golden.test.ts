@@ -5,9 +5,16 @@ import { test } from 'node:test';
 
 import { AbsTaskRetrieval } from '../../abstasks/retrieval.ts';
 import { TaskMetadata } from '../../abstasks/task-metadata.ts';
+import type { Tokenized } from '../../dependencies/bm25s.ts';
 import { evaluate } from '../../evaluate.ts';
 import type { ISOLanguageScript } from '../../types/metadata.ts';
-import { type BM25Kwargs, BM25Tokenizer, bm25S } from './bm25.ts';
+import {
+  type BM25Kwargs,
+  BM25Search,
+  BM25Tokenizer,
+  type StopwordsKey,
+  bm25S,
+} from './bm25.ts';
 
 // fixtures/bm25/ is a folder dataset and what Python MTEB 2.26.28 with bm25s
 // 0.3.16 and PyStemmer 3.1.0 gave for it: the float32 score of each document
@@ -21,12 +28,14 @@ const FOLDER = join(import.meta.dirname, 'fixtures/bm25');
 // main score of mteb.evaluate. Its generate.py makes both.
 const METHODS_FOLDER = join(import.meta.dirname, 'fixtures/bm25-methods');
 
-// fixtures/bm25-languages/ holds a folder dataset for each of deu, fin, pol
-// and rus, and what MTEB gave for each run of a folder with its language
-// and keyword arguments: the experiment name, the scores and the main score
-// of mteb.evaluate. It also holds the stopwords key and the stems of a probe
-// list that BM25Tokenizer gives each language of MTEB's table. Its
-// generate.py makes it.
+// fixtures/bm25-languages/ holds a folder dataset for each of deu, fin, pol,
+// rus, zho, jpn and tha, and what MTEB gave for each run of a folder with
+// its language and keyword arguments: the experiment name, the scores and
+// the main score of mteb.evaluate. It holds the scores of BM25Search with
+// the function text.split(" ") as the tokenizer, and the error of MTEB for
+// that function through load_model. It also holds the stopwords key, the
+// stems of a probe list and the tokens of a probe corpus that BM25Tokenizer
+// gives each language of MTEB's table. Its generate.py makes it.
 const LANGUAGES_FOLDER = join(import.meta.dirname, 'fixtures/bm25-languages');
 
 type Expected = {
@@ -51,7 +60,7 @@ const methodRuns: readonly MethodRun[] = JSON.parse(
   readFileSync(join(METHODS_FOLDER, 'expected.json'), 'utf8'),
 ).runs;
 
-type LanguageFolder = 'deu' | 'fin' | 'pol' | 'rus';
+type LanguageFolder = 'deu' | 'fin' | 'pol' | 'rus' | 'zho' | 'jpn' | 'tha';
 
 type LanguageRun = {
   readonly folder: LanguageFolder;
@@ -62,14 +71,29 @@ type LanguageRun = {
   readonly main_score: number;
 };
 
+type FunctionRun = {
+  readonly folder: LanguageFolder;
+  readonly kwargs: {
+    readonly stopwords?: StopwordsKey;
+    readonly freq_threshold?: number;
+  };
+  readonly full: [string, [string, number][]][];
+};
+
 const languagesExpected: {
   readonly probe: readonly string[];
+  readonly probe_corpus: readonly string[];
+  readonly probe_queries: readonly string[];
+  readonly load_model_error: string;
   readonly languages: readonly {
     readonly language: string;
     readonly stopwords_key: string | null;
     readonly stems: readonly string[] | null;
+    readonly tokens: readonly (readonly string[])[];
+    readonly query_tokens: readonly (readonly string[])[];
   }[];
   readonly runs: readonly LanguageRun[];
+  readonly function_runs: readonly FunctionRun[];
 } = JSON.parse(readFileSync(join(LANGUAGES_FOLDER, 'expected.json'), 'utf8'));
 
 const FOLDERS = {
@@ -106,6 +130,21 @@ const LANGUAGE_FOLDERS: Readonly<
     name: 'Bm25LanguagesRusFixture',
     path: join(LANGUAGES_FOLDER, 'rus'),
     evalLangs: ['rus-Cyrl'],
+  },
+  zho: {
+    name: 'Bm25LanguagesZhoFixture',
+    path: join(LANGUAGES_FOLDER, 'zho'),
+    evalLangs: ['zho-Hans'],
+  },
+  jpn: {
+    name: 'Bm25LanguagesJpnFixture',
+    path: join(LANGUAGES_FOLDER, 'jpn'),
+    evalLangs: ['jpn-Jpan'],
+  },
+  tha: {
+    name: 'Bm25LanguagesThaFixture',
+    path: join(LANGUAGES_FOLDER, 'tha'),
+    evalLangs: ['tha-Thai'],
   },
 };
 
@@ -256,15 +295,68 @@ for (const run of languagesExpected.runs) {
   });
 }
 
-test('each language of MTEB has the stopwords key and the stemmer that MTEB gives it', () => {
+function decode({ ids, vocab }: Tokenized): (string | undefined)[][] {
+  const tokens = new Map(Array.from(vocab, ([token, id]) => [id, token]));
+  return ids.map((docIds) => docIds.map((id) => tokens.get(id)));
+}
+
+test('each language of MTEB has the stopwords key, the stemmer and the tokens of documents and queries that MTEB gives it', () => {
   const settings = languagesExpected.languages.map(({ language }) => {
     const tokenizer = new BM25Tokenizer(language);
+    const tokens = decode(
+      tokenizer.fitTransform(languagesExpected.probe_corpus),
+    );
     return {
       language,
       stopwords_key: tokenizer.stopwordsKey,
       stems: tokenizer.stemmer?.stemWords(languagesExpected.probe) ?? null,
+      tokens,
+      query_tokens: decode(
+        tokenizer.transform(languagesExpected.probe_queries),
+      ),
     };
   });
 
   assert.deepEqual(settings, languagesExpected.languages);
+});
+
+for (const run of languagesExpected.function_runs) {
+  test(`a function as the tokenizer gives the float32 scores of MTEB in ${run.folder} ${JSON.stringify(run.kwargs)}, to the last bit`, async () => {
+    const folder = LANGUAGE_FOLDERS[run.folder];
+    const task = new FolderTask(folder.evalLangs, folder);
+    await task.loadData();
+    const split = task.dataset?.get('default')?.get('test');
+    assert.ok(split);
+    const location = {
+      taskMetadata: task.metadata,
+      hfSplit: 'test',
+      hfSubset: 'default',
+      encodeKwargs: {},
+    };
+    const model = new BM25Search({
+      modelMeta: bm25S,
+      tokenizer: (text) => text.split(' '),
+      stopwords: run.kwargs.stopwords,
+      freqThreshold: run.kwargs.freq_threshold,
+    });
+
+    await model.index(split.corpus, location);
+    const results = await model.search(split.queries, {
+      ...location,
+      topK: 100,
+      topRanked: null,
+    });
+
+    assert.deepEqual(results, asMaps(run.full));
+  });
+}
+
+test('a function as the tokenizer of loadModel makes the experiment name throw the error of MTEB', () => {
+  const meta = bm25S.loadModel({
+    tokenizer: (text) => text.split(' '),
+  }).mtebModelMeta;
+
+  assert.throws(() => meta.experimentName, {
+    message: languagesExpected.load_model_error,
+  });
 });

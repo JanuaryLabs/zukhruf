@@ -9,7 +9,7 @@ import { AbsTaskRetrieval } from '../../abstasks/retrieval.ts';
 import { TaskMetadata } from '../../abstasks/task-metadata.ts';
 import { ResultCache } from '../../cache/result-cache.ts';
 import { evaluate } from '../../evaluate.ts';
-import { bm25S } from './bm25.ts';
+import { BM25Search, bm25S } from './bm25.ts';
 
 // fixtures/bm25/ is a folder dataset and the main score that Python
 // mteb.evaluate gave mteb/baseline-bm25s on it (generate.py).
@@ -125,6 +125,23 @@ test('a conversation query stops the search with a TypeError', async () => {
 test('a stemmer name that PyStemmer does not know stops the index, as in MTEB', async () => {
   const task = new FolderTask();
   const model = bm25S.loadModel({ stemmer_language: 'klingon' });
+
+  await assert.rejects(
+    model.index([{ id: 'd1', text: 'Cats sleep.' }], {
+      ...LOCATION,
+      taskMetadata: task.metadata,
+    }),
+    { message: "Stemming algorithm 'klingon' not found" },
+  );
+});
+
+test('with a function as the tokenizer, which never stems, a stemmer name that PyStemmer does not know still stops the index, as in MTEB', async () => {
+  const task = new FolderTask();
+  const model = new BM25Search({
+    modelMeta: bm25S,
+    tokenizer: (text) => text.split(' '),
+    stemmerLanguage: 'klingon',
+  });
 
   await assert.rejects(
     model.index([{ id: 'd1', text: 'Cats sleep.' }], {

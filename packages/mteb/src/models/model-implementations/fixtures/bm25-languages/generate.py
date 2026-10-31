@@ -11,10 +11,13 @@
 # and the keyword arguments of each run, and writes expected.json: the
 # experiment name, the model name with the experiment, the score of each
 # document for each query and the main score of mteb.evaluate, for each run.
-# It also writes, for each language of MTEB's _ISO3_TO_LANG and for a code
-# that the table does not hold, the stopwords key of BM25Tokenizer and the
-# stems of its stemmer for a list of probe words. Never edit expected.json
-# by hand: run this script again.
+# It writes the scores of BM25Search with a function as the tokenizer, and
+# what MTEB raises for such a function through load_model. It also writes,
+# for each language of MTEB's _ISO3_TO_LANG and for a code that the table
+# does not hold, the stopwords key of BM25Tokenizer, the stems of its
+# stemmer for a list of probe words, the tokens of a probe corpus, and the
+# tokens of probe queries after that corpus. Never
+# edit expected.json by hand: run this script again.
 #
 # The texts are written for this fixture. They test the paths of
 # BM25Tokenizer:
@@ -35,6 +38,20 @@
 #   stemmer_language="polish" adds the Polish stemmer.
 # - rus: the Russian stopwords and stemmer: Cyrillic, ё and Ё, and forms of
 #   one word that differ in their final letters.
+# - zho: the char tokenizer with the Chinese stopwords: each character is a
+#   token, and "\n", which joins the title and the text, stays a token. An
+#   explicit stopwords="zh" drops the char tokenizer, as in MTEB, so the
+#   bm25s tokenizer splits the text.
+# - jpn and tha: the char tokenizer with the stopwords from document
+#   frequencies, so "\n" (in each document) leaves. freq_threshold=0 keeps
+#   it. The texts hold characters that NFKC changes: full-width Latin
+#   letters and digits, half-width katakana, the ligatures ﬁ and ﬀ, ①, ㎏,
+#   ™ and ㍿, and a Greek word with a final sigma. 𩸽 (U+29E3D), a
+#   character outside the Basic Multilingual Plane, is one token.
+# - deu with a function as the tokenizer (text.split(" ") in Python and in
+#   JavaScript): no lowercasing, no stemmer, and the stopwords from document
+#   frequencies, or the German stopwords, which then leave only in lower
+#   case.
 import importlib.metadata
 import importlib.util
 import json
@@ -130,6 +147,62 @@ FOLDERS = {
             ("q05", "ogród i kwiat", ["d07", "d08"]),
         ],
     ),
+    "zho": (
+        ["zho-Hans"],
+        [
+            ("d01", "中文", "我们的城市有很多河流和桥。"),
+            ("d02", "", "他在图书馆里读书，她在家写字。"),
+            ("d03", "河流", "这条河流过城市，河水很清。"),
+            ("d04", "", "我们在公园里看见了一只猫和一只狗。"),
+            ("d05", "图书", "图书馆的书很多，也有ＡＢＣ的书和①号书架。"),
+            ("d06", "", "的了和是在"),
+        ],
+        [
+            ("q01", "城市的河流", ["d01", "d03"]),
+            ("q02", "图书馆里的书", ["d02", "d05"]),
+            ("q03", "猫和狗", ["d04"]),
+            ("q04", "的了是", ["d06"]),
+            ("q05", "abc书架１", ["d05"]),
+        ],
+    ),
+    "jpn": (
+        ["jpn-Jpan"],
+        [
+            ("d01", "東京", "東京の川には多くの橋があります。"),
+            ("d02", "", "私は図書館で本を読みます。ｶﾀｶﾅの本もあります。"),
+            ("d03", "カタカナ", "カタカナとひらがなを学びます。𩸽は魚です。"),
+            ("d04", "", "猫と犬が公園で遊んでいます。"),
+            ("d05", "ＡＢＣ", "ＡＢＣの本は１２３ページです。"),
+            ("d06", "", "ﬁleとoﬀiceの㎏と™と㍿。"),
+            ("d07", "ΣΟΦΟΣ", "ギリシャ語のΣΟΦΟΣは賢いという意味です。"),
+            ("d08", "", "の が は を に で"),
+        ],
+        [
+            ("q01", "東京の橋", ["d01"]),
+            ("q02", "カタカナの本と𩸽", ["d02", "d03"]),
+            ("q03", "abc 123", ["d05"]),
+            ("q04", "file office kg tm 株式会社", ["d06"]),
+            ("q05", "σοφος", ["d07"]),
+            ("q06", "猫と犬", ["d04"]),
+        ],
+    ),
+    "tha": (
+        ["tha-Thai"],
+        [
+            ("d01", "บ้าน", "บ้านหลังนี้อยู่ใกล้แม่น้ำ"),
+            ("d02", "", "แมวนอนอยู่บนเตียงในบ้าน"),
+            ("d03", "เมือง", "เมืองนี้มีถนนหลายสาย"),
+            ("d04", "", "หนังสือเล่มนี้ใหม่มาก"),
+            ("d05", "แม่น้ำ", "แม่น้ำไหลผ่านเมืองใหญ่ ๑๒๓"),
+            ("d06", "", "ต้นไม้ในสวนสีเขียว"),
+        ],
+        [
+            ("q01", "บ้านใกล้แม่น้ำ", ["d01", "d05"]),
+            ("q02", "แมวในบ้าน", ["d02"]),
+            ("q03", "ถนนในเมือง", ["d03"]),
+            ("q04", "หนังสือ", ["d04"]),
+        ],
+    ),
     "rus": (
         ["rus-Cyrl"],
         [
@@ -163,7 +236,31 @@ RUNS = [
     ("pol", {}),
     ("pol", {"stemmer_language": "polish"}),
     ("rus", {}),
+    ("zho", {}),
+    ("zho", {"stopwords": "zh"}),
+    ("jpn", {}),
+    ("jpn", {"freq_threshold": 0}),
+    ("tha", {}),
 ]
+
+# (folder, keyword arguments of BM25Search besides the tokenizer): runs with
+# the function text.split(" ") as the tokenizer.
+FUNCTION_RUNS = [
+    ("deu", {}),
+    ("deu", {"stopwords": "de"}),
+    ("deu", {"freq_threshold": 0.25}),
+]
+
+# Texts in many scripts, each with "\n": the tokens tell which tokenizer,
+# stopwords and stemmer a language gets.
+PROBE_CORPUS = [
+    "The Häuser\n中文的文本 running talossa книгами",
+    "ＡＢＣ ﬁsh\n日本語のテキスト the Häuser",
+    "ไทย ข้อความ\nкнигами the 文本 𩸽",
+]
+
+# Queries for the tokenizer of each language after its fit on PROBE_CORPUS.
+PROBE_QUERIES = ["The talo Häuser 文本 ＡＢＣ", "the\nкниги 𩸽 ไทย"]
 
 # Words of many scripts: the stems tell which stemmer a language gets.
 PROBE = [
@@ -203,7 +300,7 @@ with tempfile.TemporaryDirectory() as cache:
     import mteb
     from mteb.abstasks.retrieval import AbsTaskRetrieval
     from mteb.abstasks.task_metadata import TaskMetadata
-    from mteb.models.model_implementations.bm25 import _ISO3_TO_LANG, BM25Tokenizer, bm25_s
+    from mteb.models.model_implementations.bm25 import _ISO3_TO_LANG, BM25Search, BM25Tokenizer, bm25_s
 
     def folder_task(folder: str):
         class FolderTask(AbsTaskRetrieval):
@@ -229,6 +326,41 @@ with tempfile.TemporaryDirectory() as cache:
     )
     assert "ihmin" in fin_tokenizer._combined_stops and "talo" in fin_tokenizer._combined_stops
     assert fin_tokenizer.stemmer.stemWord("ihmin") == "ihm"
+
+    def split_space(text: str) -> list[str]:
+        return text.split(" ")
+
+    function_runs = []
+    for folder, kwargs in FUNCTION_RUNS:
+        task = folder_task(folder)
+        task.load_data()
+        split = task.dataset["default"]["test"]
+        location = {
+            "task_metadata": task.metadata,
+            "hf_split": "test",
+            "hf_subset": "default",
+            "encode_kwargs": {},
+        }
+        model = BM25Search(tokenizer=split_space, **kwargs)
+        model.index(split["corpus"], **location)
+        results = model.search(split["queries"], top_k=100, top_ranked=None, **location)
+        function_runs.append(
+            {
+                "folder": folder,
+                "kwargs": kwargs,
+                "stopwords": sorted(model._tokenizer._combined_stops),
+                "full": [[query, [[doc, score] for doc, score in docs.items()]] for query, docs in results.items()],
+            }
+        )
+    assert function_runs[2]["stopwords"], "freq_threshold 0.25 finds no frequent token"
+
+    # A function through load_model: the experiment name raises.
+    loaded = bm25_s.load_model(tokenizer=split_space)
+    try:
+        loaded.mteb_model_meta.experiment_name
+        raise AssertionError("experiment_name did not raise")
+    except ValueError as error:
+        load_model_error = str(error)
 
     runs = []
     for folder, kwargs in RUNS:
@@ -258,14 +390,21 @@ with tempfile.TemporaryDirectory() as cache:
 
     languages = []
     for code in [*_ISO3_TO_LANG, "pol"]:
-        if _ISO3_TO_LANG.get(code, (None, None, None))[2] is not None:
-            continue
         tokenizer = BM25Tokenizer(code)
+        encoded = tokenizer.fit_transform(PROBE_CORPUS)
+        id_to_token = {token_id: token for token, token_id in encoded.vocab.items()}
+
+        def decode(tokenized):
+            names = {token_id: token for token, token_id in tokenized.vocab.items()}
+            return [[names[token_id] for token_id in ids] for ids in tokenized.ids]
+
         languages.append(
             {
                 "language": code,
                 "stopwords_key": tokenizer.stopwords_key,
                 "stems": None if tokenizer.stemmer is None else tokenizer.stemmer.stemWords(PROBE),
+                "tokens": [[id_to_token[token_id] for token_id in ids] for ids in encoded.ids],
+                "query_tokens": decode(tokenizer.transform(PROBE_QUERIES)),
             }
         )
 
@@ -276,11 +415,16 @@ generator = (
 )
 # One run or language on each line keeps the file small.
 (HERE / "expected.json").write_text(
-    f'{{"generator": {json.dumps(generator)}, "probe": {json.dumps(PROBE, ensure_ascii=False)}, "languages": [\n'
+    f'{{"generator": {json.dumps(generator)}, "probe": {json.dumps(PROBE, ensure_ascii=False)}, '
+    + f'"probe_corpus": {json.dumps(PROBE_CORPUS, ensure_ascii=False)}, '
+    + f'"probe_queries": {json.dumps(PROBE_QUERIES, ensure_ascii=False)}, '
+    + f'"load_model_error": {json.dumps(load_model_error)}, "languages": [\n'
     + ",\n".join(json.dumps(language, ensure_ascii=False) for language in languages)
     + '\n], "runs": [\n'
     + ",\n".join(json.dumps(run, ensure_ascii=False) for run in runs)
+    + '\n], "function_runs": [\n'
+    + ",\n".join(json.dumps(run, ensure_ascii=False) for run in function_runs)
     + "\n]}\n",
     encoding="utf-8",
 )
-print(f"{generator}: {len(runs)} runs, {len(languages)} languages", file=sys.stderr)
+print(f"{generator}: {len(runs)} runs, {len(function_runs)} function runs, {len(languages)} languages", file=sys.stderr)

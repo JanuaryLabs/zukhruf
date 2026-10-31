@@ -1,7 +1,7 @@
 // mteb/models/model_implementations/bm25.py: MTEB's BM25 baseline
-// mteb/baseline-bm25s, with the stopwords and the stemmer of the language of
-// the task. Not ported yet: the "char" tokenizer, a tokenizer of HuggingFace
-// or a function (and so mteb/baseline-bm25s-subword).
+// mteb/baseline-bm25s, with the stopwords, the stemmer and the tokenizer of
+// the language of the task, or a function as the tokenizer. Not ported yet:
+// a tokenizer of HuggingFace (and so mteb/baseline-bm25s-subword).
 import type { TaskMetadata } from '../../abstasks/task-metadata.ts';
 import { combineQueriesWithInstructionText } from '../../create-dataloaders.ts';
 import {
@@ -131,39 +131,80 @@ export function getLanguage(
   return [...codes][0] ?? null;
 }
 
+// A function from a text to its tokens.
+export type CustomTokenizer = (text: string) => string[];
+
 export type BM25TokenizerOptions = {
   readonly stopwordsKey?: StopwordsKey | undefined;
   readonly stemmerLanguage?: string | undefined;
   readonly freqThreshold?: number | undefined;
+  readonly tokenizer?: 'char' | CustomTokenizer | undefined;
 };
 
-// The tokenizer of the bm25s path: the stopwords and the stemmer of the
-// language, unless the options name them. A language without a stopword
-// list gets the stopwords from document frequencies: each stem (each word
-// without a stemmer) in freqThreshold or more of the documents of the fit.
-// freqThreshold 0 turns them off. transform uses the stopwords of the last
-// fit.
+// _unicode_tokenize: the code points of the NFKC form in lower case, without
+// U+0020. "\n" and the other spaces stay tokens.
+function unicodeTokenize(text: string): string[] {
+  return Array.from(text.normalize('NFKC').toLowerCase().replaceAll(' ', ''));
+}
+
+// _to_tokenized: an id for each token, in the order of first use.
+function toTokenized(tokenLists: readonly (readonly string[])[]): Tokenized {
+  const vocab = new Map<string, number>();
+  const ids = tokenLists.map((tokens) =>
+    tokens.map((token) => {
+      const known = vocab.get(token);
+      if (known !== undefined) return known;
+      vocab.set(token, vocab.size);
+      return vocab.size - 1;
+    }),
+  );
+  return { ids, vocab };
+}
+
+// The bm25s path splits with the regex of bm25s and stems the words. The
+// custom path splits with the char tokenizer or a function, does not stem,
+// and does not lowercase (the char tokenizer lowercases itself).
+type TokenizerPath =
+  | { readonly kind: 'bm25s' }
+  | { readonly kind: 'custom'; readonly tokenize: CustomTokenizer };
+
+// The tokenizer of BM25Search: the stopwords, the stemmer and the tokenizer
+// of the language, unless the options name them. A language without a
+// stopword list gets the stopwords from document frequencies: each token
+// (each stem on the bm25s path) in freqThreshold or more of the documents
+// of the fit. freqThreshold 0 turns them off. transform uses the stopwords
+// of the last fit.
 export class BM25Tokenizer {
   readonly stopwordsKey: StopwordsKey | null;
+  // MTEB makes the stemmer of a name also on the custom path, which does
+  // not use it: an unknown name throws there too.
   readonly stemmer: Stemmer | null;
   readonly freqThreshold: number;
-  readonly #tokenizer: 'char' | null;
-  #combinedList: readonly string[] | null = null;
+  readonly #path: TokenizerPath;
+  #combinedStops: ReadonlySet<string> = new Set();
 
   // The language null and a code that _ISO3_TO_LANG does not hold get no
   // stopwords, no stemmer and the bm25s tokenizer. A stopwords key or a
-  // stemmer name in the options drops the tokenizer of the language.
+  // stemmer name in the options drops the tokenizer of the language, but
+  // not the tokenizer of the options.
   constructor(language: string | null, options: BM25TokenizerOptions = {}) {
     const [detectedStopwords, detectedStemmer, detectedTokenizer] =
       (language === null ? undefined : ISO3_TO_LANG.get(language)) ??
       NO_LANGUAGE;
     this.stopwordsKey = options.stopwordsKey ?? detectedStopwords;
     const stemmerLanguage = options.stemmerLanguage ?? detectedStemmer;
-    this.#tokenizer =
+    const tokenizer =
       options.stopwordsKey !== undefined ||
       options.stemmerLanguage !== undefined
-        ? null
-        : detectedTokenizer;
+        ? (options.tokenizer ?? null)
+        : (options.tokenizer ?? detectedTokenizer);
+    this.#path =
+      tokenizer === null
+        ? { kind: 'bm25s' }
+        : {
+            kind: 'custom',
+            tokenize: tokenizer === 'char' ? unicodeTokenize : tokenizer,
+          };
     this.freqThreshold = options.freqThreshold ?? 0.9;
     // A stemmer name of "" gives no stemmer, as in MTEB (if stemmer_lang).
     this.stemmer = stemmerLanguage ? new Stemmer(stemmerLanguage) : null;
@@ -175,15 +216,36 @@ export class BM25Tokenizer {
   }
 
   fitTransform(corpusTexts: readonly string[]): Tokenized {
-    if (this.#tokenizer !== null)
-      throw new Error(
-        `BM25Tokenizer does not port the tokenizer '${this.#tokenizer}' yet.`,
-      );
+    const path = this.#path;
+    return path.kind === 'bm25s'
+      ? this.#fitTransformBm25s(corpusTexts)
+      : this.#fitTransformCustom(corpusTexts, path.tokenize);
+  }
+
+  // The stopwords from document frequencies are stems, and bm25s removes
+  // stopwords before it stems the words. Thus a query loses a word that
+  // equals a frequent stem, and keeps an inflected form of it, as in MTEB.
+  transform(texts: readonly string[]): Tokenized {
+    const path = this.#path;
+    if (path.kind === 'bm25s')
+      return tokenize(texts, {
+        stopwords: [...this.#combinedStops],
+        stemmer: this.stemmer,
+      });
+    return toTokenized(
+      texts.map((text) =>
+        path.tokenize(text).filter((token) => !this.#combinedStops.has(token)),
+      ),
+    );
+  }
+
+  #fitTransformBm25s(corpusTexts: readonly string[]): Tokenized {
     if (this.stopwordsKey !== null || this.freqThreshold === 0) {
-      this.#combinedList =
-        this.stopwordsKey === null ? null : STOPWORDS[this.stopwordsKey];
+      this.#combinedStops = new Set(
+        this.stopwordsKey === null ? [] : STOPWORDS[this.stopwordsKey],
+      );
       return tokenize(corpusTexts, {
-        stopwords: this.#combinedList,
+        stopwords: [...this.#combinedStops],
         stemmer: this.stemmer,
       });
     }
@@ -200,10 +262,11 @@ export class BM25Tokenizer {
         .filter(([, df]) => df / corpusTexts.length >= this.freqThreshold)
         .map(([id]) => id),
     );
-    const freqStops = Array.from(raw.vocab)
-      .filter(([, id]) => stopIds.has(id))
-      .map(([token]) => token);
-    this.#combinedList = freqStops.length > 0 ? freqStops : null;
+    this.#combinedStops = new Set(
+      Array.from(raw.vocab)
+        .filter(([, id]) => stopIds.has(id))
+        .map(([token]) => token),
+    );
     // The stems stay in the vocabulary without documents, so bm25s gives
     // them an idf of 0.
     return {
@@ -212,14 +275,31 @@ export class BM25Tokenizer {
     };
   }
 
-  // The stopwords from document frequencies are stems, and bm25s removes
-  // stopwords before it stems the words. Thus a query loses a word that
-  // equals a frequent stem, and keeps an inflected form of it, as in MTEB.
-  transform(texts: readonly string[]): Tokenized {
-    return tokenize(texts, {
-      stopwords: this.#combinedList,
-      stemmer: this.stemmer,
-    });
+  // The stopwords of the custom path are the named stopwords and, without
+  // a stopwords key, the tokens from document frequencies.
+  #fitTransformCustom(
+    corpusTexts: readonly string[],
+    tokenizeText: CustomTokenizer,
+  ): Tokenized {
+    const rawTokenLists = corpusTexts.map((text) => tokenizeText(text));
+    const freqStops: string[] = [];
+    if (this.stopwordsKey === null && this.freqThreshold > 0) {
+      const docFrequencies = new Map<string, number>();
+      for (const tokens of rawTokenLists)
+        for (const token of new Set(tokens))
+          docFrequencies.set(token, (docFrequencies.get(token) ?? 0) + 1);
+      for (const [token, df] of docFrequencies)
+        if (df / corpusTexts.length >= this.freqThreshold)
+          freqStops.push(token);
+    }
+    const namedStops =
+      this.stopwordsKey === null ? [] : STOPWORDS[this.stopwordsKey];
+    this.#combinedStops = new Set([...namedStops, ...freqStops]);
+    return toTokenized(
+      rawTokenLists.map((tokens) =>
+        tokens.filter((token) => !this.#combinedStops.has(token)),
+      ),
+    );
   }
 }
 
@@ -229,6 +309,7 @@ export type BM25Kwargs = LoadKwargs & {
   readonly stopwords?: StopwordsKey;
   readonly stemmer_language?: string;
   readonly freq_threshold?: number;
+  readonly tokenizer?: CustomTokenizer;
   readonly k1?: number;
   readonly b?: number;
   readonly delta?: number;
@@ -252,14 +333,18 @@ export class BM25Search implements SearchProtocol {
   readonly #stopwords: StopwordsKey | undefined;
   readonly #stemmerLanguage: string | undefined;
   readonly #freqThreshold: number;
+  readonly #tokenizer: CustomTokenizer | undefined;
   #indexed: Indexed | null = null;
 
   // stopwords and stemmerLanguage replace those of the language of the task.
+  // A tokenizer drops the language: the documents get no stemmer, and the
+  // stopwords from document frequencies unless stopwords names a list.
   constructor(options: {
     readonly modelMeta: ModelMeta;
     readonly stopwords?: StopwordsKey | undefined;
     readonly stemmerLanguage?: string | undefined;
     readonly freqThreshold?: number | undefined;
+    readonly tokenizer?: CustomTokenizer | undefined;
     readonly k1?: number;
     readonly b?: number;
     readonly delta?: number;
@@ -269,6 +354,7 @@ export class BM25Search implements SearchProtocol {
     this.#stopwords = options.stopwords;
     this.#stemmerLanguage = options.stemmerLanguage;
     this.#freqThreshold = options.freqThreshold ?? 0.9;
+    this.#tokenizer = options.tokenizer;
     this.k1 = options.k1 ?? 1.5;
     this.b = options.b ?? 0.75;
     this.delta = options.delta ?? 0.5;
@@ -278,11 +364,14 @@ export class BM25Search implements SearchProtocol {
   // A subset with more than one language is read as English, as in MTEB.
   async index(corpus: CorpusDatasetType, options: IndexOptions): Promise<void> {
     const tokenizer = new BM25Tokenizer(
-      getLanguage(options.taskMetadata, options.hfSubset) ?? 'eng',
+      this.#tokenizer === undefined
+        ? (getLanguage(options.taskMetadata, options.hfSubset) ?? 'eng')
+        : null,
       {
         stopwordsKey: this.#stopwords,
         stemmerLanguage: this.#stemmerLanguage,
         freqThreshold: this.#freqThreshold,
+        tokenizer: this.#tokenizer,
       },
     );
     const encodedCorpus = tokenizer.fitTransform(
