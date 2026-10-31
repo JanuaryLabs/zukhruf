@@ -11,10 +11,15 @@ import {
 import { MultiLabelBinarizer } from '../dependencies/sklearn.ts';
 import { labelSetsOf } from '../evaluators/sklearn-evaluator.ts';
 import type {
+  CrossEncoderProtocol,
   EncoderProtocol,
   SearchProtocol,
 } from '../models/models-protocols.ts';
-import { isEncoder, isSearch } from '../models/models-protocols.ts';
+import {
+  isCrossEncoder,
+  isEncoder,
+  isSearch,
+} from '../models/models-protocols.ts';
 import { jsonLoadsInOrder, pythonJsonDumps } from '../results/json.ts';
 import { TimingStack, monotonic } from '../timing.ts';
 import type { EncodeKwargs } from '../types/encoder-io.ts';
@@ -29,7 +34,8 @@ import type { TaskMetadata } from './task-metadata.ts';
 // subsampling of single labels are not ported.
 
 // The models that a task evaluates.
-export type MTEBModels = EncoderProtocol | SearchProtocol;
+export type MTEBModels =
+  EncoderProtocol | CrossEncoderProtocol | SearchProtocol;
 
 export type EvaluateTaskOptions = {
   readonly encodeKwargs: EncodeKwargs;
@@ -162,6 +168,10 @@ export abstract class AbsTask<SplitData = unknown> {
     options: EvaluateTaskOptions,
   ): Promise<Map<HFSubset, Record<string, Score>>> {
     const timer = options.timer ?? new TimingStack();
+    if (isCrossEncoder(model) && !this.supportCrossEncoder)
+      throw new TypeError(
+        `Model ${model.mtebModelMeta.name} is a CrossEncoder, but this task ${this.metadata.name} does not support CrossEncoders. Please use a Encoder model instead.`,
+      );
     if (isSearch(model) && !isEncoder(model) && !this.supportSearch)
       throw new TypeError(
         `Model ${model.mtebModelMeta.name} is a SearchProtocol, but this task ${this.metadata.name} does not support Search. Please use a Encoder model instead.`,

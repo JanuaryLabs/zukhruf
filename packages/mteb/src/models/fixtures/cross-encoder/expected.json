@@ -1,0 +1,688 @@
+{
+ "generator": "generate.py: mteb 2.26.28, numpy 2.5.4, datasets 5.1.0, requests 2.34.2, CPython 3.12.9",
+ "batch_size": 3,
+ "top_k": 1,
+ "searches": [
+  {
+   "model": "baseline",
+   "requests": [],
+   "results": [
+    [
+     "q1",
+     [
+      [
+       "d3",
+       0.0
+      ],
+      [
+       "d1",
+       -3.0
+      ],
+      [
+       "d7",
+       -2.0
+      ]
+     ]
+    ],
+    [
+     "q2",
+     [
+      [
+       "d2",
+       0.0
+      ],
+      [
+       "d4",
+       -1.0
+      ],
+      [
+       "d5",
+       -2.0
+      ]
+     ]
+    ],
+    [
+     "q3",
+     []
+    ],
+    [
+     "q4",
+     []
+    ],
+    [
+     "q5",
+     [
+      [
+       "d6",
+       0.0
+      ],
+      [
+       "d1",
+       -1.0
+      ]
+     ]
+    ],
+    [
+     "q6",
+     [
+      [
+       "d5",
+       0.0
+      ]
+     ]
+    ]
+   ]
+  },
+  {
+   "model": "reranker",
+   "requests": [
+    [
+     "Which animals sleep? Find animals",
+     [
+      "Birds Birds sing at dawn."
+     ]
+    ],
+    [
+     "Which animals sleep? Find animals",
+     [
+      "Cats Cats sleep all day."
+     ]
+    ],
+    [
+     "Which animals sleep? Find animals",
+     [
+      "A long document about cats, dogs and birds."
+     ]
+    ],
+    [
+     "Which animals sleep? Find animals",
+     [
+      "Cats Cats sleep all day."
+     ]
+    ],
+    [
+     "Who barks? Find dogs",
+     [
+      "Dogs bark at night."
+     ]
+    ],
+    [
+     "Who barks? Find dogs",
+     [
+      "Dogs bark at night."
+     ]
+    ],
+    [
+     "Who barks? Find dogs",
+     [
+      "Fish Fish swim in water."
+     ]
+    ],
+    [
+     "𐐀 query Find letters",
+     [
+      "Ünïcode 𐐀 is outside the plane."
+     ]
+    ],
+    [
+     "𐐀 query Find letters",
+     [
+      "Cats Cats sleep all day."
+     ]
+    ],
+    [
+     "Who swims? Find fish",
+     [
+      "Fish Fish swim in water."
+     ]
+    ]
+   ],
+   "results": [
+    [
+     "q1",
+     [
+      [
+       "d3",
+       9.163825035095215
+      ],
+      [
+       "d1",
+       8.886659622192383
+      ],
+      [
+       "d7",
+       14.50284194946289
+      ]
+     ]
+    ],
+    [
+     "q2",
+     [
+      [
+       "d2",
+       6.720494747161865
+      ],
+      [
+       "d4",
+       6.720494747161865
+      ],
+      [
+       "d5",
+       8.332999229431152
+      ]
+     ]
+    ],
+    [
+     "q3",
+     []
+    ],
+    [
+     "q4",
+     []
+    ],
+    [
+     "q5",
+     [
+      [
+       "d6",
+       11.224005699157715
+      ],
+      [
+       "d1",
+       8.82447338104248
+      ]
+     ]
+    ],
+    [
+     "q6",
+     [
+      [
+       "d5",
+       8.143430709838867
+      ]
+     ]
+    ]
+   ]
+  }
+ ],
+ "evaluations": [
+  {
+   "model": "baseline",
+   "name": "mteb/baseline-no-reranking",
+   "main_score": 0.58333,
+   "requests": [],
+   "predictions": [
+    [
+     "mteb_model_meta",
+     [
+      [
+       "model_name",
+       "mteb/baseline-no-reranking"
+      ],
+      [
+       "revision",
+       "2"
+      ]
+     ]
+    ],
+    [
+     "default",
+     [
+      [
+       "test",
+       [
+        [
+         "q1",
+         [
+          [
+           "d3",
+           0.0
+          ],
+          [
+           "d1",
+           -3.0
+          ],
+          [
+           "d7",
+           -2.0
+          ]
+         ]
+        ],
+        [
+         "q2",
+         [
+          [
+           "d2",
+           0.0
+          ],
+          [
+           "d4",
+           -1.0
+          ],
+          [
+           "d5",
+           -2.0
+          ]
+         ]
+        ],
+        [
+         "q3",
+         []
+        ],
+        [
+         "q4",
+         []
+        ],
+        [
+         "q5",
+         [
+          [
+           "d6",
+           0.0
+          ],
+          [
+           "d1",
+           -1.0
+          ]
+         ]
+        ],
+        [
+         "q6",
+         [
+          [
+           "d5",
+           0.0
+          ]
+         ]
+        ]
+       ]
+      ]
+     ]
+    ]
+   ],
+   "phases": [
+    [
+     "Data loading",
+     "",
+     ""
+    ],
+    [
+     "Dataset transform",
+     "",
+     ""
+    ],
+    [
+     "Encoding queries and documents",
+     "test",
+     "default"
+    ],
+    [
+     "Scoring",
+     "test",
+     "default"
+    ]
+   ]
+  },
+  {
+   "model": "reranker",
+   "name": "fake/reranker",
+   "main_score": 0.5,
+   "requests": [
+    [
+     "Which animals sleep? Find animals",
+     [
+      "Birds Birds sing at dawn."
+     ]
+    ],
+    [
+     "Which animals sleep? Find animals",
+     [
+      "Cats Cats sleep all day."
+     ]
+    ],
+    [
+     "Which animals sleep? Find animals",
+     [
+      "A long document about cats, dogs and birds."
+     ]
+    ],
+    [
+     "Which animals sleep? Find animals",
+     [
+      "Cats Cats sleep all day."
+     ]
+    ],
+    [
+     "Who barks? Find dogs",
+     [
+      "Dogs bark at night."
+     ]
+    ],
+    [
+     "Who barks? Find dogs",
+     [
+      "Dogs bark at night."
+     ]
+    ],
+    [
+     "Who barks? Find dogs",
+     [
+      "Fish Fish swim in water."
+     ]
+    ],
+    [
+     "𐐀 query Find letters",
+     [
+      "Ünïcode 𐐀 is outside the plane."
+     ]
+    ],
+    [
+     "𐐀 query Find letters",
+     [
+      "Cats Cats sleep all day."
+     ]
+    ],
+    [
+     "Who swims? Find fish",
+     [
+      "Fish Fish swim in water."
+     ]
+    ]
+   ],
+   "predictions": [
+    [
+     "mteb_model_meta",
+     [
+      [
+       "model_name",
+       "fake/reranker"
+      ],
+      [
+       "revision",
+       "no_revision_available"
+      ]
+     ]
+    ],
+    [
+     "default",
+     [
+      [
+       "test",
+       [
+        [
+         "q1",
+         [
+          [
+           "d3",
+           9.163825035095215
+          ],
+          [
+           "d1",
+           8.886659622192383
+          ],
+          [
+           "d7",
+           14.50284194946289
+          ]
+         ]
+        ],
+        [
+         "q2",
+         [
+          [
+           "d2",
+           6.720494747161865
+          ],
+          [
+           "d4",
+           6.720494747161865
+          ],
+          [
+           "d5",
+           8.332999229431152
+          ]
+         ]
+        ],
+        [
+         "q3",
+         []
+        ],
+        [
+         "q4",
+         []
+        ],
+        [
+         "q5",
+         [
+          [
+           "d6",
+           11.224005699157715
+          ],
+          [
+           "d1",
+           8.82447338104248
+          ]
+         ]
+        ],
+        [
+         "q6",
+         [
+          [
+           "d5",
+           8.143430709838867
+          ]
+         ]
+        ]
+       ]
+      ]
+     ]
+    ]
+   ],
+   "phases": [
+    [
+     "Data loading",
+     "",
+     ""
+    ],
+    [
+     "Dataset transform",
+     "",
+     ""
+    ],
+    [
+     "Encoding queries and documents",
+     "test",
+     "default"
+    ],
+    [
+     "Scoring",
+     "test",
+     "default"
+    ]
+   ]
+  },
+  {
+   "model": "hybrid",
+   "name": "mteb/baseline-hybrid-rrf-baseline-no-reranking-reranker",
+   "main_score": 0.52182,
+   "requests": [
+    [
+     "Which animals sleep? Find animals",
+     [
+      "Birds Birds sing at dawn."
+     ]
+    ],
+    [
+     "Which animals sleep? Find animals",
+     [
+      "Cats Cats sleep all day."
+     ]
+    ],
+    [
+     "Which animals sleep? Find animals",
+     [
+      "A long document about cats, dogs and birds."
+     ]
+    ],
+    [
+     "Which animals sleep? Find animals",
+     [
+      "Cats Cats sleep all day."
+     ]
+    ],
+    [
+     "Who barks? Find dogs",
+     [
+      "Dogs bark at night."
+     ]
+    ],
+    [
+     "Who barks? Find dogs",
+     [
+      "Dogs bark at night."
+     ]
+    ],
+    [
+     "Who barks? Find dogs",
+     [
+      "Fish Fish swim in water."
+     ]
+    ],
+    [
+     "𐐀 query Find letters",
+     [
+      "Ünïcode 𐐀 is outside the plane."
+     ]
+    ],
+    [
+     "𐐀 query Find letters",
+     [
+      "Cats Cats sleep all day."
+     ]
+    ],
+    [
+     "Who swims? Find fish",
+     [
+      "Fish Fish swim in water."
+     ]
+    ]
+   ],
+   "predictions": [
+    [
+     "mteb_model_meta",
+     [
+      [
+       "model_name",
+       "mteb/baseline-hybrid-rrf-baseline-no-reranking-reranker"
+      ],
+      [
+       "revision",
+       "no_revision_available"
+      ]
+     ]
+    ],
+    [
+     "default",
+     [
+      [
+       "test",
+       [
+        [
+         "q1",
+         [
+          [
+           "d7",
+           0.01626123744050767
+          ],
+          [
+           "d3",
+           0.01626123744050767
+          ],
+          [
+           "d1",
+           0.015873015873015872
+          ]
+         ]
+        ],
+        [
+         "q2",
+         [
+          [
+           "d5",
+           0.016133229247983348
+          ],
+          [
+           "d2",
+           0.016133229247983348
+          ],
+          [
+           "d4",
+           0.016129032258064516
+          ]
+         ]
+        ],
+        [
+         "q3",
+         []
+        ],
+        [
+         "q4",
+         []
+        ],
+        [
+         "q5",
+         [
+          [
+           "d6",
+           0.01639344262295082
+          ],
+          [
+           "d1",
+           0.016129032258064516
+          ]
+         ]
+        ],
+        [
+         "q6",
+         [
+          [
+           "d5",
+           0.01639344262295082
+          ]
+         ]
+        ]
+       ]
+      ]
+     ]
+    ]
+   ],
+   "phases": [
+    [
+     "Data loading",
+     "",
+     ""
+    ],
+    [
+     "Dataset transform",
+     "",
+     ""
+    ],
+    [
+     "Encoding corpus",
+     "test",
+     "default"
+    ],
+    [
+     "Encoding queries",
+     "test",
+     "default"
+    ],
+    [
+     "Scoring",
+     "test",
+     "default"
+    ]
+   ]
+  }
+ ]
+}

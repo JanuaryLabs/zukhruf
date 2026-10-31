@@ -25,7 +25,7 @@ The candidates of each query in a reranking task. The model ranks only these doc
 _Avoid_: Shortlist, candidates list
 
 **Pair**:
-Two inputs and a label in a pair classification task. The label is 1 when the two inputs are similar, and 0 when they are not. The task gives each pair five scores and measures how well a threshold on each score separates the labels. In an STS task, a pair has two inputs and a gold score.
+Two inputs and a label in a pair classification task. The label is 1 when the two inputs are similar, and 0 when they are not. The task gives each pair five scores and measures how well a threshold on each score separates the labels. In an STS task, a pair has two inputs and a gold score. In a reranking task, a pair is a query and one of its top ranked documents, and a cross-encoder gives it a score.
 _Avoid_: Sample, example, couple
 
 **Gold score**:
@@ -51,6 +51,10 @@ _Avoid_: Label, target, score (a score is a number of a result)
 **Encoder**:
 The model wrapper that gives one embedding for each input. `AiSdkEncoder` is an encoder over an AI SDK embedding model.
 _Avoid_: Embedder, model (for the wrapper)
+
+**Cross-encoder**:
+The model wrapper that gives one score for each pair of a query and a document, from the two texts together. A cross-encoder runs only on a reranking task: it scores the top ranked documents of each query. `AiSdkReranker` is a cross-encoder over an AI SDK reranking model.
+_Avoid_: Reranker (for the wrapper)
 
 **Score**:
 One number of a result, such as `ndcg_at_10`. The main score of a task is the score that MTEB ranks models by.

@@ -2,9 +2,16 @@ import { existsSync, readFileSync, statSync } from 'node:fs';
 
 import { RetrievalEvaluator } from '../evaluators/retrieval-evaluator.ts';
 import { makeScoreDict } from '../evaluators/retrieval-metrics.ts';
-import { isEncoder, isSearch } from '../models/models-protocols.ts';
+import {
+  isCrossEncoder,
+  isEncoder,
+  isSearch,
+} from '../models/models-protocols.ts';
 import type { SearchProtocol } from '../models/models-protocols.ts';
-import { SearchEncoderWrapper } from '../models/search-wrappers.ts';
+import {
+  SearchCrossEncoderWrapper,
+  SearchEncoderWrapper,
+} from '../models/search-wrappers.ts';
 import { type OrderedJson, jsonLoadsInOrder } from '../results/json.ts';
 import type { TimingStack } from '../timing.ts';
 import type {
@@ -185,6 +192,8 @@ export abstract class AbsTaskRetrieval extends AbsTask<RetrievalSplitData> {
     let searchModel: SearchProtocol;
     if (isEncoder(model) && !isSearch(model))
       searchModel = new SearchEncoderWrapper(model);
+    else if (isCrossEncoder(model))
+      searchModel = new SearchCrossEncoderWrapper(model);
     else if (isSearch(model)) searchModel = model;
     else
       throw new TypeError(

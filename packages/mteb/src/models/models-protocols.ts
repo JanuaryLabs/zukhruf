@@ -14,7 +14,6 @@ import type { ModelMeta } from './model-meta.ts';
 
 // mteb/models/models_protocols.py. A Python Protocol is an interface, and
 // runtime_checkable's isinstance is a type guard that looks for the methods.
-// Cross-encoders are not ported yet.
 
 export type EncodeOptions = EncodeKwargs & {
   // Encoders choose their prompts from the metadata of the task: the task
@@ -39,6 +38,25 @@ export interface EncoderProtocol {
     embeddings1: Embeddings,
     embeddings2: Embeddings,
   ): Float32Array;
+  readonly mtebModelMeta: ModelMeta;
+}
+
+export type PredictOptions = EncodeKwargs & {
+  readonly taskMetadata: TaskMetadata;
+  readonly hfSplit: string;
+  readonly hfSubset: string;
+  readonly promptType?: PromptType | null;
+};
+
+// A model that scores pairs of inputs: inputs1[i] with inputs2[i]. Unlike an
+// encoder, it sees both inputs of a pair at once.
+export interface CrossEncoderProtocol {
+  // One score for each pair, in the order of the pairs.
+  predict(
+    inputs1: readonly BatchedInput[],
+    inputs2: readonly BatchedInput[],
+    options: PredictOptions,
+  ): Promise<Float32Array>;
   readonly mtebModelMeta: ModelMeta;
 }
 
@@ -88,5 +106,14 @@ export function isSearch(model: unknown): model is SearchProtocol {
     typeof model.index === 'function' &&
     'search' in model &&
     typeof model.search === 'function'
+  );
+}
+
+export function isCrossEncoder(model: unknown): model is CrossEncoderProtocol {
+  return (
+    typeof model === 'object' &&
+    model !== null &&
+    'predict' in model &&
+    typeof model.predict === 'function'
   );
 }

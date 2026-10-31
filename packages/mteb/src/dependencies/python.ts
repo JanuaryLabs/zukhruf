@@ -90,6 +90,22 @@ export function rankByScore(
     .map(([score, id]) => [id, score]);
 }
 
+// The message of the ValueError of zip(*iterables, strict=True) for
+// iterables of these lengths, or null when the lengths are equal. CPython
+// names the first argument after the first that is shorter or longer than
+// the arguments before it.
+export function zipStrictMismatch(lengths: readonly number[]): string | null {
+  const [first = 0, ...rest] = lengths;
+  const shortest = Math.min(first, ...rest);
+  const shorter = rest.findIndex((length) => length === shortest) + 1;
+  const longer = rest.findIndex((length) => length > shortest) + 1;
+  const [index, relation] =
+    first > shortest ? [shorter, 'shorter'] : [longer, 'longer'];
+  if (index === 0) return null;
+  const before = index === 1 ? ' 1' : `s 1-${index}`;
+  return `zip() argument ${index + 1} is ${relation} than argument${before}`;
+}
+
 // The exact value of a positive finite double: mantissa * 2^exponent.
 function exactBinary(value: number): [mantissa: bigint, exponent: number] {
   const view = new DataView(new ArrayBuffer(8));

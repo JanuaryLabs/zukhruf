@@ -1,7 +1,12 @@
 import type { TaskMetadata } from '../abstasks/task-metadata.ts';
-import { createDataloader } from '../create-dataloaders.ts';
+import {
+  type PreparedRow,
+  collate,
+  createDataloader,
+  createDataloaderDataset,
+} from '../create-dataloaders.ts';
 import { heappush, heappushpop } from '../dependencies/heapq.ts';
-import type { ScoredId } from '../dependencies/python.ts';
+import { type ScoredId, zipStrictMismatch } from '../dependencies/python.ts';
 import { TimingStack } from '../timing.ts';
 import type {
   BatchedInput,
@@ -14,6 +19,7 @@ import type {
 } from '../types/encoder-io.ts';
 import type { ModelMeta } from './model-meta.ts';
 import type {
+  CrossEncoderProtocol,
   EncodeOptions,
   EncoderProtocol,
   IndexOptions,
@@ -21,8 +27,8 @@ import type {
   SearchProtocol,
 } from './models-protocols.ts';
 
-// mteb/models/search_wrappers.py: SearchEncoderWrapper and its two searches.
-// Search index backends and the cross-encoder wrapper are not ported yet.
+// mteb/models/search_wrappers.py: SearchEncoderWrapper and its two searches,
+// and SearchCrossEncoderWrapper. Search index backends are not ported yet.
 
 type Location = {
   readonly taskMetadata: TaskMetadata;
@@ -267,6 +273,121 @@ export class SearchEncoderWrapper implements SearchProtocol {
     );
     for (const [query, heap] of heaps)
       for (const [score, id] of heap) results.get(query)?.set(id, score);
+    return results;
+  }
+}
+
+// _select_loader_rows: a dataloader over the rows at the indices, repeats
+// kept, in batches of batchSize. The rows are batched only now, so a column
+// with a missing value stops only the batches that hold the rows it selects.
+export function selectLoaderRows(
+  rows: readonly PreparedRow[],
+  indices: readonly number[],
+  batchSize: number,
+): BatchedInput[] {
+  return collate(
+    indices.map((index) => {
+      const row = rows[index];
+      if (row === undefined)
+        throw new Error(
+          `IndexError: Index ${index} out of range for dataset of size ${rows.length}.`,
+        );
+      return row;
+    }),
+    batchSize,
+  );
+}
+
+// A cross-encoder as a search model for reranking: it keeps the corpus at
+// index time, and scores each candidate of each query at search time. It
+// gives every candidate a score, so topK has no effect.
+export class SearchCrossEncoderWrapper implements SearchProtocol {
+  readonly model: CrossEncoderProtocol;
+  readonly mtebModelMeta: ModelMeta;
+  taskCorpus: CorpusDatasetType | null = null;
+
+  constructor(model: CrossEncoderProtocol) {
+    this.model = model;
+    this.mtebModelMeta = model.mtebModelMeta;
+  }
+
+  async index(
+    corpus: CorpusDatasetType,
+    _options: IndexOptions,
+  ): Promise<void> {
+    this.taskCorpus = corpus;
+  }
+
+  async search(
+    queries: QueryDatasetType,
+    options: SearchOptions,
+  ): Promise<RetrievalOutputType> {
+    const topRanked = options.topRanked;
+    if (topRanked === undefined || topRanked === null)
+      throw new Error(
+        'CrossEncoder search requires top_ranked documents for reranking.',
+      );
+    const corpus = this.taskCorpus;
+    if (corpus === null)
+      throw new Error('Corpus must be indexed before searching.');
+    const docIdToIdx = new Map(
+      corpus.map((document, index) => [document.id, index]),
+    );
+    const queryIndices: number[] = [];
+    const docIndices: number[] = [];
+    const docPairsIds: [query: string, document: string][] = [];
+    for (const [queryIndex, { id: query }] of queries.entries()) {
+      const candidates = topRanked.get(query);
+      // MTEB logs a warning for a query without candidates; logging is not
+      // ported.
+      if (candidates === undefined) continue;
+      for (const document of candidates) {
+        const docIndex = docIdToIdx.get(document);
+        if (docIndex === undefined) throw new Error(`KeyError: '${document}'`);
+        docPairsIds.push([query, document]);
+        queryIndices.push(queryIndex);
+        docIndices.push(docIndex);
+      }
+    }
+    const batchSize = options.encodeKwargs.batchSize ?? 32;
+    // The whole datasets are prepared before the pairs select their rows, as
+    // in MTEB.
+    const location = {
+      taskMetadata: options.taskMetadata,
+      hfSplit: options.hfSplit,
+      hfSubset: options.hfSubset,
+    };
+    const queriesLoader = selectLoaderRows(
+      createDataloaderDataset(queries, {
+        taskMetadata: options.taskMetadata,
+        promptType: 'query',
+      }),
+      queryIndices,
+      batchSize,
+    );
+    const corpusLoader = selectLoaderRows(
+      createDataloaderDataset(corpus, {
+        taskMetadata: options.taskMetadata,
+        promptType: 'document',
+      }),
+      docIndices,
+      batchSize,
+    );
+    // As in MTEB, the model gets no prompt type.
+    const predictions = await this.model.predict(queriesLoader, corpusLoader, {
+      ...options.encodeKwargs,
+      ...location,
+    });
+    const mismatch = zipStrictMismatch([
+      docPairsIds.length,
+      predictions.length,
+    ]);
+    if (mismatch !== null) throw new Error(mismatch);
+    const results: RetrievalOutputType = new Map(
+      queries.map(({ id }) => [id, new Map()]),
+    );
+    for (const [index, [query, document]] of docPairsIds.entries())
+      results.get(query)?.set(document, predictions[index] ?? Number.NaN);
     return results;
   }
 }

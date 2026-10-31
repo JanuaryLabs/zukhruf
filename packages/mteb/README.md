@@ -168,6 +168,49 @@ The settings of a hybrid that are not the defaults are its experiment arguments:
 
 Thus the hybrid of `bm25S.loadModel()` and `bm25S.loadModel({ k1: 1.2 })` has the experiment name `sub_models_[None,k1_1.2]`, and its result does not replace the result of the hybrid of two default BM25 models. A hybrid with all the default settings has no experiment arguments, so its name and its result folder are those of MTEB. MTEB gives a hybrid no experiment arguments.
 
+## Reranking with a cross-encoder
+
+A cross-encoder gets the query and one document at the same time, and gives the pair one score. It does not give embeddings, so it cannot search a full corpus. It reranks the top ranked documents of each query: the documents that a first search found. MTEB runs a cross-encoder only on a reranking task, and so does this package.
+
+First, make a reranking task from the predictions of a first search, such as BM25. `convertToReranking` reads the predictions file and keeps the `topK` best documents of each query as the top ranked documents:
+
+```ts
+import { bm25S, evaluate } from '@zukhruf/mteb';
+
+await evaluate(bm25S.loadModel(), new Faq(), {
+  cache: null,
+  predictionFolder: 'predictions/bm25',
+});
+const reranking = await new Faq().convertToReranking('predictions/bm25', 20);
+```
+
+Then give `evaluate` a cross-encoder. `AiSdkReranker` sends each pair to an AI SDK reranking model, such as a llama.cpp server with `--rerank`. Install `@ai-sdk/cohere`: llama.cpp answers in the format of the Cohere API.
+
+```ts
+import { createCohere } from '@ai-sdk/cohere';
+
+import {
+  AiSdkReranker,
+  ResultCache,
+  evaluate,
+  noRerankingBaseline,
+} from '@zukhruf/mteb';
+
+const llamaCpp = createCohere({ baseURL: 'http://127.0.0.1:8080/v1' });
+const cache = new ResultCache('mteb-results');
+const reranker = new AiSdkReranker({
+  model: llamaCpp.reranking('bge-reranker-v2-m3'),
+});
+await evaluate(noRerankingBaseline.loadModel(), reranking, { cache });
+await evaluate(reranker, reranking, { cache });
+```
+
+`noRerankingBaseline` keeps the order of the first search. Its score is the score that a reranker must beat.
+
+The cross-encoder sends one pair in each call, and it sends the calls one after the other, as MTEB does. A server that gets calls at the same time scores them in one batch, and a batch changes the scores. Thus a task with 100 queries and 20 top ranked documents for each query makes 2,000 calls. The cross-encoder gives every top ranked document a score, so `topK` of the task has no effect. A response without exactly one score stops the evaluation with an error.
+
+`HybridSearch` takes a cross-encoder as one of its models.
+
 ## Pair classification
 
 In a pair classification task, each row of a split is a pair: two texts and a label. The label is 1 when the texts are similar, and 0 when they are not. The task gives each pair five scores: the cosine similarity, the Euclidean distance, the Manhattan distance, the similarity of the model and the dot product. For each score, it finds the threshold with the best accuracy and the threshold with the best F1, and it calculates the average precision. The main score of MTEB's pair classification tasks is `max_ap`, the best average precision of the five scores.

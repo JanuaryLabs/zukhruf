@@ -1,9 +1,11 @@
-// mteb/models/hybrid_wrappers.py: HybridSearch and its three fusions. A
-// cross-encoder is not a sub-model here, because cross-encoders are not
-// ported yet.
+// mteb/models/hybrid_wrappers.py: HybridSearch and its three fusions.
 import type { MTEBModels } from '../abstasks/abstask.ts';
 import { mean, std } from '../dependencies/numpy.ts';
-import { type ScoredId, compareScoredIds } from '../dependencies/python.ts';
+import {
+  type ScoredId,
+  compareScoredIds,
+  zipStrictMismatch,
+} from '../dependencies/python.ts';
 import type {
   CorpusDatasetType,
   QueryDatasetType,
@@ -14,9 +16,14 @@ import {
   type IndexOptions,
   type SearchOptions,
   type SearchProtocol,
+  isCrossEncoder,
+  isEncoder,
   isSearch,
 } from './models-protocols.ts';
-import { SearchEncoderWrapper } from './search-wrappers.ts';
+import {
+  SearchCrossEncoderWrapper,
+  SearchEncoderWrapper,
+} from './search-wrappers.ts';
 
 // The score of each document of one query, for each sub-model, in the order
 // of the sub-model's results.
@@ -73,11 +80,15 @@ export class HybridSearch implements SearchProtocol {
       throw new RangeError('rrf_k must be greater than or equal to 0');
     this.rrfK = rrfK;
 
-    // A model that is an encoder and not a search model searches through
-    // SearchEncoderWrapper.
-    this.wrappedModels = models.map((model) =>
-      isSearch(model) ? model : new SearchEncoderWrapper(model),
-    );
+    this.wrappedModels = models.map((model) => {
+      if (isEncoder(model) && !isSearch(model))
+        return new SearchEncoderWrapper(model);
+      if (isCrossEncoder(model)) return new SearchCrossEncoderWrapper(model);
+      if (isSearch(model)) return model;
+      throw new TypeError(
+        'Expected a SearchProtocol, EncoderProtocol, or CrossEncoderProtocol',
+      );
+    });
     const names = this.wrappedModels.map(({ mtebModelMeta: { name } }) =>
       name ? (name.split('/').at(-1) ?? name) : 'unknown',
     );
@@ -183,10 +194,8 @@ function zipStrict(
   queryScoresList: readonly ReadonlyMap<string, number>[],
   weights: readonly number[],
 ): [ReadonlyMap<string, number>, number][] {
-  if (weights.length !== queryScoresList.length)
-    throw new RangeError(
-      `zip() argument 2 is ${weights.length < queryScoresList.length ? 'shorter' : 'longer'} than argument 1`,
-    );
+  const mismatch = zipStrictMismatch([queryScoresList.length, weights.length]);
+  if (mismatch !== null) throw new RangeError(mismatch);
   return queryScoresList.map((scores, index) => [scores, weights[index] ?? 0]);
 }
 

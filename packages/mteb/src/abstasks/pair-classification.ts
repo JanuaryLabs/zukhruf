@@ -3,6 +3,7 @@ import {
   type DatasetValue,
   datasetFromDict,
 } from '../dependencies/datasets.ts';
+import { zipStrictMismatch } from '../dependencies/python.ts';
 import { averagePrecisionScore } from '../dependencies/sklearn.ts';
 import {
   type PairClassificationDistances,
@@ -226,10 +227,8 @@ function sortedRows(
   labels: readonly number[],
   reverse: boolean,
 ): [number, number][] {
-  if (scores.length !== labels.length)
-    throw new Error(
-      `zip() argument 2 is ${labels.length > scores.length ? 'longer' : 'shorter'} than argument 1`,
-    );
+  const mismatch = zipStrictMismatch([scores.length, labels.length]);
+  if (mismatch !== null) throw new Error(mismatch);
   return scores
     .map((score, index) => ({ score, label: labels[index] ?? 0, index }))
     .sort(

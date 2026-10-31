@@ -7,7 +7,7 @@
 import { createHash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 
-import type { EmbeddingModel } from 'ai';
+import type { EmbeddingModel, RerankingModel } from 'ai';
 import { z } from 'zod';
 
 import {
@@ -28,7 +28,11 @@ import type {
   Licenses,
   Modalities,
 } from '../types/metadata.ts';
-import type { EncoderProtocol, SearchProtocol } from './models-protocols.ts';
+import type {
+  CrossEncoderProtocol,
+  EncoderProtocol,
+  SearchProtocol,
+} from './models-protocols.ts';
 
 export const FRAMEWORKS = [
   'Sentence Transformers',
@@ -129,8 +133,9 @@ export const OUTPUT_DTYPES = [
 
 export type OutputDType = (typeof OUTPUT_DTYPES)[number];
 
-// The model that a loader makes: an encoder or a search model.
-type MTEBModels = EncoderProtocol | SearchProtocol;
+// The model that a loader makes: an encoder, a cross-encoder or a search
+// model.
+type MTEBModels = EncoderProtocol | CrossEncoderProtocol | SearchProtocol;
 
 // The keyword arguments of loadModel.
 export type LoadKwargs = Readonly<Record<string, unknown>>;
@@ -139,6 +144,13 @@ export type LoadKwargs = Readonly<Record<string, unknown>>;
 // (MTEB loads the weights itself): the model, then the experiment arguments.
 export type EncoderKwargs = LoadKwargs & {
   readonly model: Exclude<EmbeddingModel, string>;
+};
+
+// The keyword arguments of a cross-encoder that an AI SDK reranking model
+// serves (MTEB loads the weights itself): the model, then the experiment
+// arguments.
+export type CrossEncoderKwargs = LoadKwargs & {
+  readonly model: Exclude<RerankingModel, string>;
 };
 
 // The metadata that the model reports. MTEB sets it on the model after the
@@ -545,9 +557,9 @@ export class ModelMeta<
   }
 
   // The model, through its loader. The keyword arguments with a value, but
-  // the AI SDK model of an encoder, become the experiment arguments of the
-  // copy of the metadata that the model reports, and so name the folder of
-  // its results.
+  // the AI SDK model of an encoder or a cross-encoder, become the experiment
+  // arguments of the copy of the metadata that the model reports, and so
+  // name the folder of its results.
   loadModel(
     ...[kwargs]: Record<string, never> extends Kwargs
       ? [kwargs?: Kwargs]

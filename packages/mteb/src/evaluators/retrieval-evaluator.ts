@@ -1,6 +1,9 @@
 import type { TaskMetadata } from '../abstasks/task-metadata.ts';
 import type { SearchProtocol } from '../models/models-protocols.ts';
-import { SearchEncoderWrapper } from '../models/search-wrappers.ts';
+import {
+  SearchCrossEncoderWrapper,
+  SearchEncoderWrapper,
+} from '../models/search-wrappers.ts';
 import { type TimingStack, monotonic } from '../timing.ts';
 import type {
   CorpusDatasetType,
@@ -65,9 +68,11 @@ export class RetrievalEvaluator extends Evaluator {
     const start = monotonic();
     await searchModel.index(this.corpus, { ...location, encodeKwargs });
     const end = monotonic();
-    // A SearchEncoderWrapper without an index backend encodes the corpus
-    // during the search, so indexing is not "Encoding corpus".
+    // A cross-encoder, and a SearchEncoderWrapper without an index backend,
+    // encode the corpus during the search, so indexing is not "Encoding
+    // corpus".
     const encodesCorpusDuringSearch =
+      searchModel instanceof SearchCrossEncoderWrapper ||
       searchModel instanceof SearchEncoderWrapper;
     if (!encodesCorpusDuringSearch)
       this.timer.addPhase('Encoding corpus', {

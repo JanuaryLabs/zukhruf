@@ -12,7 +12,7 @@ import type {
 // of its batches; each batch holds each column of its rows as a list.
 
 // A row as the encoder reads it: text is the text that the model gets.
-type PreparedRow = Readonly<Record<string, unknown>> & {
+export type PreparedRow = Readonly<Record<string, unknown>> & {
   readonly text: string;
 };
 
@@ -132,7 +132,7 @@ function prepareDataset(
 
 // _custom_collate_fn: each key of the first row becomes a list. A null value
 // throws, except in the columns that hold lists of varying lengths.
-function collate(
+export function collate(
   rows: readonly PreparedRow[],
   batchSize: number,
 ): BatchedInput[] {
@@ -156,19 +156,21 @@ function collate(
   return batches;
 }
 
-// A dataloader of a dataset. Without a prompt type, a text task with an input
-// column gives the texts of that column.
-export function createDataloader(
+type DataloaderOptions = {
+  readonly taskMetadata: TaskMetadata;
+  readonly promptType?: PromptType | null;
+  readonly inputColumn?: keyof CorpusRow | keyof QueryRow | null;
+  readonly batchSize?: number;
+};
+
+// The rows of the dataloader of a dataset before they are batched: the
+// dataset of a torch DataLoader. Without a prompt type, a text task with an
+// input column gives the texts of that column.
+export function createDataloaderDataset(
   dataset: readonly (CorpusRow | QueryRow)[],
-  options: {
-    readonly taskMetadata: TaskMetadata;
-    readonly promptType?: PromptType | null;
-    readonly inputColumn?: keyof CorpusRow | keyof QueryRow | null;
-    readonly batchSize?: number;
-  },
-): BatchedInput[] {
+  options: DataloaderOptions,
+): PreparedRow[] {
   const promptType = options.promptType ?? null;
-  const batchSize = options.batchSize ?? 32;
   const inputColumn = options.inputColumn ?? null;
   const { modalities } = options.taskMetadata;
   if (
@@ -177,14 +179,36 @@ export function createDataloader(
     modalities[0] === 'text' &&
     inputColumn !== null
   )
-    return createDataloaderFromTexts(
-      dataset.map((row) =>
-        String(Object.entries(row).find(([key]) => key === inputColumn)?.[1]),
+    return dataset.map((row) => ({
+      text: String(
+        Object.entries(row).find(([key]) => key === inputColumn)?.[1],
       ),
-      { batchSize },
-    );
+    }));
+  return prepareDataset(dataset, options.taskMetadata, promptType);
+}
+
+// A dataloader of a dataset: the rows of createDataloaderDataset in batches.
+export function createDataloader(
+  dataset: readonly (CorpusRow | QueryRow)[],
+  options: DataloaderOptions,
+): BatchedInput[] {
   return collate(
-    prepareDataset(dataset, options.taskMetadata, promptType),
-    batchSize,
+    createDataloaderDataset(dataset, options),
+    options.batchSize ?? 32,
   );
+}
+
+// The values of a column of the batches, in order: the column of the dataset
+// of a torch DataLoader.
+export function batchColumn(
+  inputs: readonly BatchedInput[],
+  name: string,
+): unknown[] {
+  return inputs.flatMap((batch) => {
+    const values: unknown = Object.entries(batch).find(
+      ([key]) => key === name,
+    )?.[1];
+    if (!Array.isArray(values)) throw new Error(`KeyError: '${name}'`);
+    return values;
+  });
 }

@@ -66,6 +66,11 @@ export {
 } from './models/ai-sdk-encoder.ts';
 export { AiSdkTextEncoder } from './models/ai-sdk-text-encoder.ts';
 export {
+  AiSdkReranker,
+  type AiSdkRerankerOptions,
+} from './models/ai-sdk-reranker.ts';
+export { AiSdkTextReranker } from './models/ai-sdk-text-reranker.ts';
+export {
   type FusionFunction,
   type FusionStrategy,
   HybridSearch,
@@ -88,6 +93,11 @@ export {
   embeddingGemma2,
 } from './models/model-implementations/google-embeddinggemma.ts';
 export {
+  NoRerankingBaseline,
+  type NoRerankingKwargs,
+  noRerankingBaseline,
+} from './models/model-implementations/random-baseline.ts';
+export {
   instructionTemplate as qwen3InstructionTemplate,
   qwen3Embedding0B6,
   qwen3Embedding4B,
@@ -95,13 +105,18 @@ export {
 } from './models/model-implementations/qwen3-models.ts';
 export * from './models/model-meta.ts';
 export type {
+  CrossEncoderProtocol,
   EncodeOptions,
   EncoderProtocol,
   IndexOptions,
+  PredictOptions,
   SearchOptions,
   SearchProtocol,
 } from './models/models-protocols.ts';
-export { SearchEncoderWrapper } from './models/search-wrappers.ts';
+export {
+  SearchCrossEncoderWrapper,
+  SearchEncoderWrapper,
+} from './models/search-wrappers.ts';
 export {
   type AggregationFn,
   type Cell,
