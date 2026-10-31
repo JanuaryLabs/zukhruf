@@ -1,0 +1,904 @@
+{
+ "generator": "generate.py: mteb 2.26.28, numpy 2.5.4, torch 2.14.1, datasets 5.1.0, CPython 3.12.9",
+ "batch_size": 3,
+ "metas": [
+  {
+   "loader_kwargs": {},
+   "name": "mteb/baseline-no-reranking",
+   "revision": "2",
+   "release_date": null,
+   "languages": null,
+   "n_parameters": 0,
+   "n_active_parameters_override": null,
+   "n_embedding_parameters": 0,
+   "memory_usage_mb": 0.0,
+   "max_tokens": "Infinity",
+   "embed_dim": null,
+   "license": "mit",
+   "open_weights": true,
+   "public_training_code": null,
+   "public_training_data": null,
+   "framework": [],
+   "reference": null,
+   "similarity_fn_name": null,
+   "use_instructions": false,
+   "training_datasets": [],
+   "adapted_from": null,
+   "superseded_by": null,
+   "modalities": [
+    "text",
+    "image",
+    "audio",
+    "video"
+   ],
+   "model_type": [
+    "cross-encoder"
+   ],
+   "citation": null,
+   "contacts": null,
+   "experiment_kwargs": null,
+   "output_dtypes": null,
+   "extra_requirements_groups": null,
+   "loader": "NoRerankingBaseline",
+   "is_cross_encoder": true
+  },
+  {
+   "loader_kwargs": {
+    "fp_options": "float16"
+   },
+   "name": "BAAI/bge-reranker-v2-m3",
+   "revision": "953dc6f6f85a1b2dbfca4c34a2796e7dde08d41e",
+   "release_date": "2024-06-24",
+   "languages": [
+    "eng-Latn",
+    "ara-Arab",
+    "ben-Beng",
+    "spa-Latn",
+    "fas-Arab",
+    "fin-Latn",
+    "fra-Latn",
+    "hin-Deva",
+    "ind-Latn",
+    "jpn-Jpan",
+    "kor-Hang",
+    "rus-Cyrl",
+    "swa-Latn",
+    "tel-Telu",
+    "tha-Thai",
+    "zho-Hans",
+    "deu-Latn",
+    "yor-Latn",
+    "dan-Latn",
+    "heb-Hebr",
+    "hun-Latn",
+    "ita-Latn",
+    "khm-Khmr",
+    "msa-Latn",
+    "nld-Latn",
+    "nob-Latn",
+    "pol-Latn",
+    "por-Latn",
+    "swe-Latn",
+    "tur-Latn",
+    "vie-Latn",
+    "zho-Hant"
+   ],
+   "n_parameters": null,
+   "n_active_parameters_override": null,
+   "n_embedding_parameters": 256002048,
+   "memory_usage_mb": 2166.0,
+   "max_tokens": null,
+   "embed_dim": null,
+   "license": null,
+   "open_weights": true,
+   "public_training_code": null,
+   "public_training_data": null,
+   "framework": [
+    "Sentence Transformers",
+    "PyTorch",
+    "safetensors",
+    "Transformers"
+   ],
+   "reference": null,
+   "similarity_fn_name": null,
+   "use_instructions": null,
+   "training_datasets": [
+    "CMedQAv1-reranking",
+    "CMedQAv2-reranking",
+    "CodeSearchNet",
+    "DuRetrieval",
+    "HotpotQA",
+    "HotpotQA-NL",
+    "HotpotQA-PL",
+    "HotpotQAHardNegatives",
+    "LeCaRDv2",
+    "MIRACLReranking",
+    "MIRACLRetrieval",
+    "MIRACLRetrievalHardNegatives",
+    "MMarcoReranking",
+    "MSMARCO",
+    "MSMARCO-PL",
+    "MSMARCOHardNegatives",
+    "MrTidyRetrieval",
+    "NQ",
+    "NQ-NL",
+    "NQ-PL",
+    "NQHardNegatives",
+    "NanoMSMARCORetrieval",
+    "NanoNQRetrieval",
+    "T2Reranking",
+    "T2Retrieval",
+    "mMARCO-NL"
+   ],
+   "adapted_from": null,
+   "superseded_by": null,
+   "modalities": [
+    "text"
+   ],
+   "model_type": [
+    "cross-encoder"
+   ],
+   "citation": "\n@inproceedings{li2023making,\n  address = {Bangkok, Thailand},\n  author = {Li, Chaofan and Liu, Zheng and Xiao, Shitao and Shao, Yingxia and Lian, Defu},\n  booktitle = {Proceedings of the 62nd Annual Meeting of the {A}ssociation for {C}omputational {L}inguistics (Volume 1: Long Papers)},\n  doi = {10.18653/v1/2024.acl-long.191},\n  editor = {Ku, Lun-Wei and Martins, Andre and Srikumar, Vivek},\n  month = {aug},\n  pages = {3490--3500},\n  publisher = {Association for Computational Linguistics},\n  title = {{L}lama2{V}ec: Unsupervised Adaptation of Large Language Models for Dense Retrieval},\n  url = {https://aclanthology.org/2024.acl-long.191/},\n  year = {2024},\n}\n    @inproceedings{bge-m3,\n  address = {Bangkok, Thailand},\n  author = {Chen, Jianlyu and Xiao, Shitao and Zhang, Peitian and Luo, Kun and Lian, Defu and Liu, Zheng},\n  booktitle = {Findings of the {A}ssociation for {C}omputational {L}inguistics: {ACL} 2024},\n  doi = {10.18653/v1/2024.findings-acl.137},\n  editor = {Ku, Lun-Wei and Martins, Andre and Srikumar, Vivek},\n  month = {aug},\n  pages = {2318--2335},\n  publisher = {Association for Computational Linguistics},\n  title = {{M}3-Embedding: Multi-Linguality, Multi-Functionality, Multi-Granularity Text Embeddings Through Self-Knowledge Distillation},\n  url = {https://aclanthology.org/2024.findings-acl.137/},\n  year = {2024},\n}\n    ",
+   "contacts": null,
+   "experiment_kwargs": null,
+   "output_dtypes": "float16",
+   "extra_requirements_groups": [
+    "flagembedding"
+   ],
+   "loader": "BGEReranker",
+   "is_cross_encoder": true
+  },
+  {
+   "loader_kwargs": {
+    "fp_options": "float16"
+   },
+   "name": "jinaai/jina-reranker-v2-base-multilingual",
+   "revision": "126747772a932960028d9f4dc93bd5d9c4869be4",
+   "release_date": "2024-09-26",
+   "languages": [
+    "eng-Latn"
+   ],
+   "n_parameters": null,
+   "n_active_parameters_override": null,
+   "n_embedding_parameters": null,
+   "memory_usage_mb": 531.0,
+   "max_tokens": null,
+   "embed_dim": null,
+   "license": null,
+   "open_weights": true,
+   "public_training_code": null,
+   "public_training_data": null,
+   "framework": [
+    "Sentence Transformers",
+    "PyTorch",
+    "Transformers",
+    "ONNX",
+    "safetensors"
+   ],
+   "reference": null,
+   "similarity_fn_name": null,
+   "use_instructions": null,
+   "training_datasets": null,
+   "adapted_from": null,
+   "superseded_by": null,
+   "modalities": [
+    "text"
+   ],
+   "model_type": [
+    "cross-encoder"
+   ],
+   "citation": null,
+   "contacts": null,
+   "experiment_kwargs": null,
+   "output_dtypes": "bfloat16",
+   "extra_requirements_groups": null,
+   "loader": "JinaReranker",
+   "is_cross_encoder": true
+  },
+  {
+   "loader_kwargs": {},
+   "name": "cross-encoder/ms-marco-TinyBERT-L2-v2",
+   "revision": "81d1926f67cb8eee2c2be17ca9f793c7c3bd20cc",
+   "release_date": "2021-04-16",
+   "languages": [
+    "eng-Latn"
+   ],
+   "n_parameters": 4386049,
+   "n_active_parameters_override": null,
+   "n_embedding_parameters": 3906816,
+   "memory_usage_mb": 17.0,
+   "max_tokens": 512.0,
+   "embed_dim": 128,
+   "license": "apache-2.0",
+   "open_weights": true,
+   "public_training_code": "https://github.com/UKPLab/sentence-transformers/tree/master/examples/cross_encoder/training/ms_marco",
+   "public_training_data": "https://huggingface.co/datasets/sentence-transformers/msmarco",
+   "framework": [
+    "Sentence Transformers",
+    "PyTorch",
+    "Transformers",
+    "safetensors",
+    "ONNX"
+   ],
+   "reference": "https://huggingface.co/cross-encoder/ms-marco-TinyBERT-L2-v2",
+   "similarity_fn_name": null,
+   "use_instructions": null,
+   "training_datasets": [
+    "MSMARCO"
+   ],
+   "adapted_from": null,
+   "superseded_by": null,
+   "modalities": [
+    "text"
+   ],
+   "model_type": [
+    "cross-encoder"
+   ],
+   "citation": "@inproceedings{reimers-2019-sentence-bert,\n    title = \"Sentence-BERT: Sentence Embeddings using Siamese BERT-Networks\",\n    author = \"Reimers, Nils and Gurevych, Iryna\",\n    booktitle = \"Proceedings of the 2019 Conference on Empirical Methods in Natural Language Processing\",\n    month = \"11\",\n    year = \"2019\",\n    publisher = \"Association for Computational Linguistics\",\n    url = \"https://arxiv.org/abs/1908.10084\",\n}\n",
+   "contacts": null,
+   "experiment_kwargs": null,
+   "output_dtypes": null,
+   "extra_requirements_groups": null,
+   "loader": "CrossEncoderWrapper",
+   "is_cross_encoder": true
+  },
+  {
+   "loader_kwargs": {},
+   "name": "cross-encoder/ms-marco-MiniLM-L2-v2",
+   "revision": "1b5cd67b15209f24824c50370e0397743aa9b787",
+   "release_date": "2021-04-16",
+   "languages": [
+    "eng-Latn"
+   ],
+   "n_parameters": 15615745,
+   "n_active_parameters_override": null,
+   "n_embedding_parameters": 11720448,
+   "memory_usage_mb": 60.0,
+   "max_tokens": 512.0,
+   "embed_dim": 384,
+   "license": "apache-2.0",
+   "open_weights": true,
+   "public_training_code": "https://github.com/UKPLab/sentence-transformers/tree/master/examples/cross_encoder/training/ms_marco",
+   "public_training_data": "https://huggingface.co/datasets/sentence-transformers/msmarco",
+   "framework": [
+    "Sentence Transformers",
+    "PyTorch",
+    "Transformers",
+    "safetensors",
+    "ONNX"
+   ],
+   "reference": "https://huggingface.co/cross-encoder/ms-marco-MiniLM-L2-v2",
+   "similarity_fn_name": null,
+   "use_instructions": null,
+   "training_datasets": [
+    "MSMARCO"
+   ],
+   "adapted_from": null,
+   "superseded_by": null,
+   "modalities": [
+    "text"
+   ],
+   "model_type": [
+    "cross-encoder"
+   ],
+   "citation": "@inproceedings{reimers-2019-sentence-bert,\n    title = \"Sentence-BERT: Sentence Embeddings using Siamese BERT-Networks\",\n    author = \"Reimers, Nils and Gurevych, Iryna\",\n    booktitle = \"Proceedings of the 2019 Conference on Empirical Methods in Natural Language Processing\",\n    month = \"11\",\n    year = \"2019\",\n    publisher = \"Association for Computational Linguistics\",\n    url = \"https://arxiv.org/abs/1908.10084\",\n}\n",
+   "contacts": null,
+   "experiment_kwargs": null,
+   "output_dtypes": null,
+   "extra_requirements_groups": null,
+   "loader": "CrossEncoderWrapper",
+   "is_cross_encoder": true
+  },
+  {
+   "loader_kwargs": {},
+   "name": "cross-encoder/ms-marco-MiniLM-L4-v2",
+   "revision": "777b2f369bc1c2f850df8bd367ed1654bda4497b",
+   "release_date": "2021-04-16",
+   "languages": [
+    "eng-Latn"
+   ],
+   "n_parameters": 19164673,
+   "n_active_parameters_override": null,
+   "n_embedding_parameters": 11720448,
+   "memory_usage_mb": 73.0,
+   "max_tokens": 512.0,
+   "embed_dim": 384,
+   "license": "apache-2.0",
+   "open_weights": true,
+   "public_training_code": "https://github.com/UKPLab/sentence-transformers/tree/master/examples/cross_encoder/training/ms_marco",
+   "public_training_data": "https://huggingface.co/datasets/sentence-transformers/msmarco",
+   "framework": [
+    "Sentence Transformers",
+    "PyTorch",
+    "Transformers",
+    "safetensors",
+    "ONNX"
+   ],
+   "reference": "https://huggingface.co/cross-encoder/ms-marco-MiniLM-L4-v2",
+   "similarity_fn_name": null,
+   "use_instructions": null,
+   "training_datasets": [
+    "MSMARCO"
+   ],
+   "adapted_from": null,
+   "superseded_by": null,
+   "modalities": [
+    "text"
+   ],
+   "model_type": [
+    "cross-encoder"
+   ],
+   "citation": "@inproceedings{reimers-2019-sentence-bert,\n    title = \"Sentence-BERT: Sentence Embeddings using Siamese BERT-Networks\",\n    author = \"Reimers, Nils and Gurevych, Iryna\",\n    booktitle = \"Proceedings of the 2019 Conference on Empirical Methods in Natural Language Processing\",\n    month = \"11\",\n    year = \"2019\",\n    publisher = \"Association for Computational Linguistics\",\n    url = \"https://arxiv.org/abs/1908.10084\",\n}\n",
+   "contacts": null,
+   "experiment_kwargs": null,
+   "output_dtypes": null,
+   "extra_requirements_groups": null,
+   "loader": "CrossEncoderWrapper",
+   "is_cross_encoder": true
+  },
+  {
+   "loader_kwargs": {},
+   "name": "cross-encoder/ms-marco-MiniLM-L6-v2",
+   "revision": "c5ee24cb16019beea0893ab7796b1df96625c6b8",
+   "release_date": "2021-04-16",
+   "languages": [
+    "eng-Latn"
+   ],
+   "n_parameters": 22713601,
+   "n_active_parameters_override": null,
+   "n_embedding_parameters": 11720448,
+   "memory_usage_mb": 87.0,
+   "max_tokens": 512.0,
+   "embed_dim": 384,
+   "license": "apache-2.0",
+   "open_weights": true,
+   "public_training_code": "https://github.com/UKPLab/sentence-transformers/tree/master/examples/cross_encoder/training/ms_marco",
+   "public_training_data": "https://huggingface.co/datasets/sentence-transformers/msmarco",
+   "framework": [
+    "Sentence Transformers",
+    "PyTorch",
+    "Transformers",
+    "safetensors",
+    "ONNX"
+   ],
+   "reference": "https://huggingface.co/cross-encoder/ms-marco-MiniLM-L6-v2",
+   "similarity_fn_name": null,
+   "use_instructions": null,
+   "training_datasets": [
+    "MSMARCO"
+   ],
+   "adapted_from": null,
+   "superseded_by": null,
+   "modalities": [
+    "text"
+   ],
+   "model_type": [
+    "cross-encoder"
+   ],
+   "citation": "@inproceedings{reimers-2019-sentence-bert,\n    title = \"Sentence-BERT: Sentence Embeddings using Siamese BERT-Networks\",\n    author = \"Reimers, Nils and Gurevych, Iryna\",\n    booktitle = \"Proceedings of the 2019 Conference on Empirical Methods in Natural Language Processing\",\n    month = \"11\",\n    year = \"2019\",\n    publisher = \"Association for Computational Linguistics\",\n    url = \"https://arxiv.org/abs/1908.10084\",\n}\n",
+   "contacts": null,
+   "experiment_kwargs": null,
+   "output_dtypes": null,
+   "extra_requirements_groups": null,
+   "loader": "CrossEncoderWrapper",
+   "is_cross_encoder": true
+  },
+  {
+   "loader_kwargs": {},
+   "name": "cross-encoder/ms-marco-MiniLM-L12-v2",
+   "revision": "7b0235231ca2674cb8ca8f022859a6eba2b1c968",
+   "release_date": "2021-04-16",
+   "languages": [
+    "eng-Latn"
+   ],
+   "n_parameters": 33360385,
+   "n_active_parameters_override": null,
+   "n_embedding_parameters": 11720448,
+   "memory_usage_mb": 127.0,
+   "max_tokens": 512.0,
+   "embed_dim": 384,
+   "license": "apache-2.0",
+   "open_weights": true,
+   "public_training_code": "https://github.com/UKPLab/sentence-transformers/tree/master/examples/cross_encoder/training/ms_marco",
+   "public_training_data": "https://huggingface.co/datasets/sentence-transformers/msmarco",
+   "framework": [
+    "Sentence Transformers",
+    "PyTorch",
+    "Transformers",
+    "safetensors",
+    "ONNX"
+   ],
+   "reference": "https://huggingface.co/cross-encoder/ms-marco-MiniLM-L12-v2",
+   "similarity_fn_name": null,
+   "use_instructions": null,
+   "training_datasets": [
+    "MSMARCO"
+   ],
+   "adapted_from": null,
+   "superseded_by": null,
+   "modalities": [
+    "text"
+   ],
+   "model_type": [
+    "cross-encoder"
+   ],
+   "citation": "@inproceedings{reimers-2019-sentence-bert,\n    title = \"Sentence-BERT: Sentence Embeddings using Siamese BERT-Networks\",\n    author = \"Reimers, Nils and Gurevych, Iryna\",\n    booktitle = \"Proceedings of the 2019 Conference on Empirical Methods in Natural Language Processing\",\n    month = \"11\",\n    year = \"2019\",\n    publisher = \"Association for Computational Linguistics\",\n    url = \"https://arxiv.org/abs/1908.10084\",\n}\n",
+   "contacts": null,
+   "experiment_kwargs": null,
+   "output_dtypes": null,
+   "extra_requirements_groups": null,
+   "loader": "CrossEncoderWrapper",
+   "is_cross_encoder": true
+  },
+  {
+   "loader_kwargs": {
+    "dtype": "bfloat16"
+   },
+   "name": "Qwen/Qwen3-Reranker-0.6B",
+   "revision": "6e9e69830b95c52b5fd889b7690dda3329508de3",
+   "release_date": "2025-05-29",
+   "languages": null,
+   "n_parameters": 595776512,
+   "n_active_parameters_override": null,
+   "n_embedding_parameters": 155309056,
+   "memory_usage_mb": 1136.0,
+   "max_tokens": 40960.0,
+   "embed_dim": 1024,
+   "license": "apache-2.0",
+   "open_weights": true,
+   "public_training_code": null,
+   "public_training_data": null,
+   "framework": [
+    "PyTorch",
+    "Transformers",
+    "safetensors"
+   ],
+   "reference": "https://huggingface.co/Qwen/Qwen3-Reranker-0.6B",
+   "similarity_fn_name": null,
+   "use_instructions": true,
+   "training_datasets": [
+    "CodeSearchNet",
+    "DuRetrieval",
+    "HotpotQA",
+    "MIRACLReranking",
+    "MSMARCO",
+    "MrTidyRetrieval",
+    "MultiLongDocRetrieval",
+    "NQ",
+    "T2Reranking"
+   ],
+   "adapted_from": null,
+   "superseded_by": null,
+   "modalities": [
+    "text"
+   ],
+   "model_type": [
+    "cross-encoder"
+   ],
+   "citation": "@article{qwen3embedding,\n  title={Qwen3 Embedding: Advancing Text Embedding and Reranking Through Foundation Models},\n  author={Zhang, Yanzhao and Li, Mingxin and Long, Dingkun and Zhang, Xin and Lin, Huan and Yang, Baosong and Xie, Pengjun and Yang, An and Liu, Dayiheng and Lin, Junyang and Huang, Fei and Zhou, Jingren},\n  journal={arXiv preprint arXiv:2506.05176},\n  year={2025}\n}",
+   "contacts": null,
+   "experiment_kwargs": null,
+   "output_dtypes": "bfloat16",
+   "extra_requirements_groups": null,
+   "loader": "Qwen3RerankerWrapper",
+   "is_cross_encoder": true
+  },
+  {
+   "loader_kwargs": {
+    "dtype": "bfloat16"
+   },
+   "name": "Qwen/Qwen3-Reranker-4B",
+   "revision": "f16fc5d5d2b9b1d0db8280929242745d79794ef5",
+   "release_date": "2025-06-03",
+   "languages": null,
+   "n_parameters": 4021784576,
+   "n_active_parameters_override": null,
+   "n_embedding_parameters": 388272640,
+   "memory_usage_mb": 7671.0,
+   "max_tokens": 40960.0,
+   "embed_dim": 2560,
+   "license": "apache-2.0",
+   "open_weights": true,
+   "public_training_code": null,
+   "public_training_data": null,
+   "framework": [
+    "PyTorch",
+    "Transformers",
+    "safetensors"
+   ],
+   "reference": "https://huggingface.co/Qwen/Qwen3-Reranker-4B",
+   "similarity_fn_name": null,
+   "use_instructions": true,
+   "training_datasets": [
+    "CodeSearchNet",
+    "DuRetrieval",
+    "HotpotQA",
+    "MIRACLReranking",
+    "MSMARCO",
+    "MrTidyRetrieval",
+    "MultiLongDocRetrieval",
+    "NQ",
+    "T2Reranking"
+   ],
+   "adapted_from": null,
+   "superseded_by": null,
+   "modalities": [
+    "text"
+   ],
+   "model_type": [
+    "cross-encoder"
+   ],
+   "citation": "@article{qwen3embedding,\n  title={Qwen3 Embedding: Advancing Text Embedding and Reranking Through Foundation Models},\n  author={Zhang, Yanzhao and Li, Mingxin and Long, Dingkun and Zhang, Xin and Lin, Huan and Yang, Baosong and Xie, Pengjun and Yang, An and Liu, Dayiheng and Lin, Junyang and Huang, Fei and Zhou, Jingren},\n  journal={arXiv preprint arXiv:2506.05176},\n  year={2025}\n}",
+   "contacts": null,
+   "experiment_kwargs": null,
+   "output_dtypes": "bfloat16",
+   "extra_requirements_groups": null,
+   "loader": "Qwen3RerankerWrapper",
+   "is_cross_encoder": true
+  },
+  {
+   "loader_kwargs": {
+    "dtype": "bfloat16"
+   },
+   "name": "Qwen/Qwen3-Reranker-8B",
+   "revision": "5fa94080caafeaa45a15d11f969d7978e087a3db",
+   "release_date": "2025-05-29",
+   "languages": null,
+   "n_parameters": 8188548096,
+   "n_active_parameters_override": null,
+   "n_embedding_parameters": 621236224,
+   "memory_usage_mb": 15618.0,
+   "max_tokens": 40960.0,
+   "embed_dim": 4096,
+   "license": "apache-2.0",
+   "open_weights": true,
+   "public_training_code": null,
+   "public_training_data": null,
+   "framework": [
+    "PyTorch",
+    "Transformers",
+    "safetensors"
+   ],
+   "reference": "https://huggingface.co/Qwen/Qwen3-Reranker-8B",
+   "similarity_fn_name": null,
+   "use_instructions": true,
+   "training_datasets": [
+    "CodeSearchNet",
+    "DuRetrieval",
+    "HotpotQA",
+    "MIRACLReranking",
+    "MSMARCO",
+    "MrTidyRetrieval",
+    "MultiLongDocRetrieval",
+    "NQ",
+    "T2Reranking"
+   ],
+   "adapted_from": null,
+   "superseded_by": null,
+   "modalities": [
+    "text"
+   ],
+   "model_type": [
+    "cross-encoder"
+   ],
+   "citation": "@article{qwen3embedding,\n  title={Qwen3 Embedding: Advancing Text Embedding and Reranking Through Foundation Models},\n  author={Zhang, Yanzhao and Li, Mingxin and Long, Dingkun and Zhang, Xin and Lin, Huan and Yang, Baosong and Xie, Pengjun and Yang, An and Liu, Dayiheng and Lin, Junyang and Huang, Fei and Zhou, Jingren},\n  journal={arXiv preprint arXiv:2506.05176},\n  year={2025}\n}",
+   "contacts": null,
+   "experiment_kwargs": null,
+   "output_dtypes": "bfloat16",
+   "extra_requirements_groups": null,
+   "loader": "Qwen3RerankerWrapper",
+   "is_cross_encoder": true
+  }
+ ],
+ "texts": {
+  "BGEReranker": [
+   [
+    "Which animals sleep?",
+    "Birds Birds sing at dawn."
+   ],
+   [
+    "Which animals sleep?",
+    "Cats Cats sleep all day."
+   ],
+   [
+    "Which animals sleep?",
+    "A long document about cats, dogs and birds."
+   ],
+   [
+    "Which animals sleep?",
+    "Cats Cats sleep all day."
+   ],
+   [
+    "Who barks?",
+    "Dogs bark at night."
+   ],
+   [
+    "Who barks?",
+    "Dogs bark at night."
+   ],
+   [
+    "Who barks?",
+    "Fish Fish swim in water."
+   ],
+   [
+    "𐐀 query",
+    "Ünïcode 𐐀 is outside the plane."
+   ],
+   [
+    "𐐀 query",
+    "Cats Cats sleep all day."
+   ],
+   [
+    "Who swims?",
+    "Fish Fish swim in water."
+   ]
+  ],
+  "JinaReranker": [
+   [
+    "Which animals sleep?",
+    "Birds Birds sing at dawn."
+   ],
+   [
+    "Which animals sleep?",
+    "Cats Cats sleep all day."
+   ],
+   [
+    "Which animals sleep?",
+    "A long document about cats, dogs and birds."
+   ],
+   [
+    "Which animals sleep?",
+    "Cats Cats sleep all day."
+   ],
+   [
+    "Who barks?",
+    "Dogs bark at night."
+   ],
+   [
+    "Who barks?",
+    "Dogs bark at night."
+   ],
+   [
+    "Who barks?",
+    "Fish Fish swim in water."
+   ],
+   [
+    "𐐀 query",
+    "Ünïcode 𐐀 is outside the plane."
+   ],
+   [
+    "𐐀 query",
+    "Cats Cats sleep all day."
+   ],
+   [
+    "Who swims?",
+    "Fish Fish swim in water."
+   ]
+  ],
+  "CrossEncoderWrapper": [
+   [
+    "Which animals sleep? Find animals",
+    "Birds Birds sing at dawn."
+   ],
+   [
+    "Which animals sleep? Find animals",
+    "Cats Cats sleep all day."
+   ],
+   [
+    "Which animals sleep? Find animals",
+    "A long document about cats, dogs and birds."
+   ],
+   [
+    "Which animals sleep? Find animals",
+    "Cats Cats sleep all day."
+   ],
+   [
+    "Who barks? Find dogs",
+    "Dogs bark at night."
+   ],
+   [
+    "Who barks? Find dogs",
+    "Dogs bark at night."
+   ],
+   [
+    "Who barks? Find dogs",
+    "Fish Fish swim in water."
+   ],
+   [
+    "𐐀 query Find letters",
+    "Ünïcode 𐐀 is outside the plane."
+   ],
+   [
+    "𐐀 query Find letters",
+    "Cats Cats sleep all day."
+   ],
+   [
+    "Who swims? Find fish",
+    "Fish Fish swim in water."
+   ]
+  ],
+  "Qwen3RerankerWrapper": [
+   [
+    "Find animals",
+    "Which animals sleep? Find animals",
+    "Birds Birds sing at dawn."
+   ],
+   [
+    "Find animals",
+    "Which animals sleep? Find animals",
+    "Cats Cats sleep all day."
+   ],
+   [
+    "Find animals",
+    "Which animals sleep? Find animals",
+    "A long document about cats, dogs and birds."
+   ],
+   [
+    "Find animals",
+    "Which animals sleep? Find animals",
+    "Cats Cats sleep all day."
+   ],
+   [
+    "Find dogs",
+    "Who barks? Find dogs",
+    "Dogs bark at night."
+   ],
+   [
+    "Find dogs",
+    "Who barks? Find dogs",
+    "Dogs bark at night."
+   ],
+   [
+    "Find dogs",
+    "Who barks? Find dogs",
+    "Fish Fish swim in water."
+   ],
+   [
+    "Find letters",
+    "𐐀 query Find letters",
+    "Ünïcode 𐐀 is outside the plane."
+   ],
+   [
+    "Find letters",
+    "𐐀 query Find letters",
+    "Cats Cats sleep all day."
+   ],
+   [
+    "Find fish",
+    "Who swims? Find fish",
+    "Fish Fish swim in water."
+   ]
+  ]
+ },
+ "zip_errors": [
+  [
+   [
+    2,
+    2
+   ],
+   null
+  ],
+  [
+   [
+    3,
+    2
+   ],
+   "zip() argument 2 is shorter than argument 1"
+  ],
+  [
+   [
+    2,
+    3
+   ],
+   "zip() argument 2 is longer than argument 1"
+  ],
+  [
+   [
+    0,
+    1
+   ],
+   "zip() argument 2 is longer than argument 1"
+  ],
+  [
+   [
+    2,
+    2,
+    1
+   ],
+   "zip() argument 3 is shorter than arguments 1-2"
+  ],
+  [
+   [
+    2,
+    2,
+    3
+   ],
+   "zip() argument 3 is longer than arguments 1-2"
+  ],
+  [
+   [
+    3,
+    2,
+    2
+   ],
+   "zip() argument 2 is shorter than argument 1"
+  ],
+  [
+   [
+    2,
+    3,
+    1
+   ],
+   "zip() argument 3 is shorter than arguments 1-2"
+  ],
+  [
+   [
+    1,
+    2,
+    3
+   ],
+   "zip() argument 2 is longer than argument 1"
+  ],
+  [
+   [
+    2,
+    1,
+    3
+   ],
+   "zip() argument 2 is shorter than argument 1"
+  ]
+ ],
+ "qwen3_batches": [
+  [
+   [
+    3,
+    3
+   ],
+   {
+    "pairs": 3
+   }
+  ],
+  [
+   [
+    3,
+    4
+   ],
+   {
+    "error": "zip() argument 3 is longer than arguments 1-2"
+   }
+  ],
+  [
+   [
+    3,
+    2
+   ],
+   {
+    "error": "zip() argument 3 is shorter than arguments 1-2"
+   }
+  ],
+  [
+   [
+    4,
+    6
+   ],
+   {
+    "pairs": 4
+   }
+  ],
+  [
+   [
+    4,
+    3
+   ],
+   {
+    "error": "zip() argument 3 is shorter than arguments 1-2"
+   }
+  ]
+ ],
+ "length_errors": {
+  "BGEReranker": "Expected 2 passages, got 1",
+  "JinaReranker": "zip() argument 2 is shorter than argument 1",
+  "CrossEncoderWrapper": "zip() argument 2 is shorter than argument 1",
+  "OpenAIAPIRerankWrapper": "Expected equal number of queries and documents, got 2 queries and 1 documents"
+ }
+}

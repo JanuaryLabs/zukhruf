@@ -93,6 +93,27 @@ export {
   embeddingGemma2,
 } from './models/model-implementations/google-embeddinggemma.ts';
 export {
+  Qwen3RerankerWrapper,
+  qwen3Reranker0B6,
+  qwen3Reranker4B,
+  qwen3Reranker8B,
+} from './models/model-implementations/qwen3-reranker.ts';
+export {
+  BGEReranker,
+  JinaReranker,
+  bgeRerankerV2M3,
+  jinaRerankerMultilingual,
+  msMarcoMinilmL12V2,
+  msMarcoMinilmL2V2,
+  msMarcoMinilmL4V2,
+  msMarcoMinilmL6V2,
+  msMarcoTinybertL2V2,
+} from './models/model-implementations/rerankers-custom.ts';
+export {
+  CrossEncoderWrapper,
+  crossEncoderWrapperLoader,
+} from './models/sentence-transformer-wrapper.ts';
+export {
   NoRerankingBaseline,
   type NoRerankingKwargs,
   noRerankingBaseline,

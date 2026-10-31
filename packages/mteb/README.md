@@ -6,7 +6,7 @@ The words in these documents have one meaning each. See the glossary in [CONTEXT
 
 ## Use it
 
-This package has the retrieval, reranking, pair classification, STS, clustering, classification, multilabel classification and regression tasks, for text. MTEB's tasks ArguAna, SCIDOCS, SprintDuplicateQuestions, STSBenchmark, BiorxivClusteringS2S, BiorxivClusteringS2S.v2, Banking77Classification, Banking77Classification.v2, KorHateSpeechMLClassification, RuSciBenchCitedCountRegression and RuSciBenchYearPublRegression are ported, with their datasets from the HuggingFace Hub, and so are the models EmbeddingGemma 2 and Qwen3-Embedding with the prompts of MTEB. A task of your own keeps its dataset in a folder on disk, and its metadata names that folder as the dataset path.
+This package has the retrieval, reranking, pair classification, STS, clustering, classification, multilabel classification and regression tasks, for text. MTEB's tasks ArguAna, SCIDOCS, SprintDuplicateQuestions, STSBenchmark, BiorxivClusteringS2S, BiorxivClusteringS2S.v2, Banking77Classification, Banking77Classification.v2, KorHateSpeechMLClassification, RuSciBenchCitedCountRegression and RuSciBenchYearPublRegression are ported, with their datasets from the HuggingFace Hub, and so are the models EmbeddingGemma 2 and Qwen3-Embedding with the prompts of MTEB, and the cross-encoders BGE-Reranker-v2-m3, Jina-Reranker-v2, the ms-marco cross-encoders and Qwen3-Reranker. A task of your own keeps its dataset in a folder on disk, and its metadata names that folder as the dataset path.
 
 The package is private: it is not on npm. A project of this workspace names it in the dependencies of its `package.json`, with `ai`, and npm links the workspace package:
 
@@ -206,6 +206,19 @@ await evaluate(reranker, reranking, { cache });
 ```
 
 `noRerankingBaseline` keeps the order of the first search. Its score is the score that a reranker must beat.
+
+MTEB's cross-encoders have their metadata here: `bgeRerankerV2M3`, `jinaRerankerMultilingual`, the five ms-marco cross-encoders (such as `msMarcoMinilmL6V2`) and `qwen3Reranker0B6`, `qwen3Reranker4B` and `qwen3Reranker8B`. `loadModel` takes the AI SDK reranking model of a server that serves the weights, and sends the texts that MTEB's model scores:
+
+```ts
+import { bgeRerankerV2M3 } from '@zukhruf/mteb';
+
+const bge = bgeRerankerV2M3.loadModel({
+  model: llamaCpp.reranking('bge-reranker-v2-m3'),
+});
+await evaluate(bge, reranking, { cache });
+```
+
+The server applies the activation and the precision of the model, so the scores are near the scores of MTEB, not equal to them. BGE and Jina score the query without its instruction, as in MTEB. Qwen3-Reranker sends the query with its instruction. MTEB also gives Qwen3-Reranker the instruction in its own prompt, which a reranking server cannot take, so its scores differ more.
 
 The cross-encoder sends one pair in each call, and it sends the calls one after the other, as MTEB does. A server that gets calls at the same time scores them in one batch, and a batch changes the scores. Thus a task with 100 queries and 20 top ranked documents for each query makes 2,000 calls. The cross-encoder gives every top ranked document a score, so `topK` of the task has no effect. A response without exactly one score stops the evaluation with an error.
 
