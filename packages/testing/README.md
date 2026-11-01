@@ -25,6 +25,7 @@ Each area has its own import path, so a test loads only the drivers it uses. The
 | `@zukhruf/testing/streams`    | `StreamHarness`                                               |                          |
 | `@zukhruf/testing/fs`         | `TemporaryFiles`                                              |                          |
 | `@zukhruf/testing/msw`        | `Msw`                                                         | `msw`                    |
+| `@zukhruf/testing/preload`    | `notInstalled`                                                |                          |
 
 ## Parameterized tests
 
@@ -255,6 +256,57 @@ spawn(command, args, {
   },
 });
 ```
+
+## Preloads
+
+A package can have optional peer dependencies. A project that does not use a part of the package does not install the peer of that part. This repository installs each peer. Thus a wrong import of a peer stays green here, and fails only in the project of a consumer.
+
+`notInstalled(...packages)` makes installed packages look not installed, in one child process. Give its result to the `--import` flag of the child, then import your module in the child. The hook changes the resolution of the whole process, and the test process needs the packages. Thus the check runs in a child.
+
+```ts
+import spawn from 'nano-spawn';
+
+import { notInstalled } from '@zukhruf/testing/preload';
+
+test('the fs area loads without msw', async () => {
+  await spawn(process.execPath, [
+    '--import',
+    notInstalled('msw'),
+    '--input-type=module',
+    '--eval',
+    "await import('@zukhruf/testing/fs');",
+  ]);
+});
+```
+
+`notInstalled` returns the URL of a preload: a file of this package that Node.js runs before the entry point of the child. The query of the URL holds the names. The preload adds a `resolve` hook with `registerHooks` of `node:module`. The hook stops each specifier that is a name, or that starts with a name and `/`. Thus `notInstalled('msw')` also stops `msw/node`, and it does not stop `ms`. The hook gives each other specifier to the next hook. It stops a name for each importer, also for an installed package that depends on it: msw requires `ms`, so `notInstalled('ms')` also stops msw.
+
+The hook throws the error that Node.js throws for a package that is not installed:
+
+| Call                  | Error                                                                                    |
+| --------------------- | ---------------------------------------------------------------------------------------- |
+| `import('msw/node')`  | `Cannot find package 'msw' imported from <path of the importer>`, `ERR_MODULE_NOT_FOUND` |
+| `require('msw/node')` | `Cannot find module 'msw/node'`, `MODULE_NOT_FOUND`                                      |
+
+Thus code that reads `error.code` to find a peer that is not installed takes the same path as in the project of a consumer. The error of `require` has only the first line of the message of Node.js. It has no require stack, because the hook knows only the importer.
+
+To use more preloads, give one `--import` flag for each. Node.js runs them in order, and each hook gives the specifiers that it does not stop to the hook before it:
+
+```ts
+spawn(process.execPath, [
+  '--import',
+  notInstalled('typescript'),
+  '--import',
+  notInstalled('@typescript/native'),
+  '--import',
+  yourOwnPreload,
+  entry,
+]);
+```
+
+In `NODE_OPTIONS`, as `` `--import=${notInstalled('msw')}` ``, the preload also runs in each Node.js process that the child starts with its environment.
+
+A call with no name does not compile. [ADR 0018](./docs/adr/0018-a-preload-is-a-file-of-the-package-and-its-url-gives-its-settings.md) records this design.
 
 ## Intercepted requests
 

@@ -3,43 +3,30 @@ import { test } from 'node:test';
 
 import spawn, { SubprocessError } from 'nano-spawn';
 
+import { notInstalled } from './preload/index.ts';
+
 /**
  * A consumer installs only the drivers of the areas it imports: the four
  * drivers are optional peers, and the mariadb and mysql2 drivers of this
- * package's own tests are no dependency at all. This child-process hook makes
- * each driver unresolvable, the way a consumer without it sees the package.
+ * package's own tests are no dependency at all. The child sees each hidden
+ * driver as not installed, the way a consumer without it sees the package.
  */
-const withoutDrivers = (drivers: string[]): string[] => [
-  '--import',
-  `data:text/javascript,${encodeURIComponent(`
-    import { registerHooks } from 'node:module';
-    const missing = new Set(${JSON.stringify(drivers)});
-    registerHooks({
-      resolve(specifier, context, next) {
-        if (missing.has(specifier)) throw new Error('not installed: ' + specifier);
-        return next(specifier, context);
-      },
-    });
-  `)}`,
-];
-
-const importArea = (area: string, drivers: string[]) =>
+const importArea = (area: string, hidden: [string, ...string[]]) =>
   spawn(process.execPath, [
-    ...withoutDrivers(drivers),
+    '--import',
+    notInstalled(...hidden),
     '--input-type=module',
     '--eval',
     `await import('@zukhruf/testing/${area}');`,
   ]);
 
-const drivers = [
+const drivers: [string, ...string[]] = [
   'mssql',
   '@duckdb/node-api',
   '@google-cloud/bigquery',
   'mariadb',
   'mysql2',
-  'mysql2/promise',
   'msw',
-  'msw/node',
 ];
 
 test('every area without a driver imports when no driver is installed', async () => {
@@ -55,6 +42,7 @@ test('every area without a driver imports when no driver is installed', async ()
     'http',
     'streams',
     'fs',
+    'preload',
   ]) {
     await importArea(area, drivers);
   }
@@ -67,18 +55,14 @@ test('an area with a driver needs only its own driver', async () => {
     ['bigquery', '@google-cloud/bigquery'],
     ['msw', 'msw'],
   ] as const) {
-    const own = drivers.filter(
-      (other) => other === driver || other.startsWith(`${driver}/`),
-    );
-    await importArea(
-      area,
-      drivers.filter((other) => !own.includes(other)),
-    );
+    const [other, ...others] = drivers.filter((name) => name !== driver);
+    assert.ok(other !== undefined);
+    await importArea(area, [other, ...others]);
     await assert.rejects(
-      importArea(area, own),
+      importArea(area, [driver]),
       (error: unknown) =>
         error instanceof SubprocessError &&
-        error.stderr.includes(`not installed: ${driver}`),
+        error.stderr.includes(`Cannot find package '${driver}'`),
     );
   }
 });

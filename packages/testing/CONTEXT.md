@@ -83,3 +83,7 @@ _Avoid_: Scratch directory, tmpdir
 **Interception**:
 An msw server in the test process that answers requests with the test's handlers, fails each request that no handler answers, and records a clone of each request.
 _Avoid_: Mock server
+
+**Preload**:
+A module that Node.js runs in a child process before the entry point of the child, from the `--import` flag. A preload of this package is a file of the package. Its URL gives it its settings.
+_Avoid_: Loader, shim

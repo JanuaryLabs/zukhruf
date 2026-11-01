@@ -116,6 +116,12 @@
       "import": "./dist/msw/msw.js",
       "default": "./dist/msw/msw.js"
     },
+    "./preload": {
+      "@zukhruf/source": "./src/preload/index.ts",
+      "types": "./dist/preload/index.d.ts",
+      "import": "./dist/preload/index.js",
+      "default": "./dist/preload/index.js"
+    },
     "./docker-global-setup": {
       "@zukhruf/source": "./src/scripts/docker-global-setup.ts",
       "types": "./dist/scripts/docker-global-setup.d.ts",
