@@ -9,9 +9,13 @@ import {
   TESTS,
   TEST_SUPPORT,
 } from '../files.ts';
+import noCompactNotation from './no-compact-notation.ts';
 import noMissingConsole from './no-missing-console.ts';
 
-const rules = { 'no-missing-console': noMissingConsole };
+const rules = {
+  'no-compact-notation': noCompactNotation,
+  'no-missing-console': noMissingConsole,
+};
 
 const configs: Record<string, Linter.Config[]> = {};
 
@@ -38,6 +42,7 @@ configs['recommended'] = [
     ignores: [...TESTS, ...TEST_SUPPORT, ...CONFIG_FILES, ...SCRIPTS],
     rules: {
       'hermes/no-missing-console': 'error',
+      'hermes/no-compact-notation': 'error',
       // Hermes implements Collator, DateTimeFormat and NumberFormat only.
       'es-x/no-intl-displaynames': 'error',
       'es-x/no-intl-durationformat': 'error',

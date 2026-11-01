@@ -244,6 +244,7 @@ They are optional peers of this package. With the peers, npm writes the lockfile
 - the `Intl` APIs Hermes does not have: es-x's `no-intl-displaynames`, `no-intl-durationformat`, `no-intl-listformat`, `no-intl-locale`, `no-intl-pluralrules`, `no-intl-relativetimeformat` and `no-intl-segmenter`;
 - Node's built-in modules: `import-x/no-nodejs-modules`;
 - `hermes/no-missing-console`: `console.clear`, `dir`, `dirxml`, `profile`, `profileEnd` and `timeLog`, which React Native release builds do not have, and `console[name]` with a computed name.
+- `hermes/no-compact-notation`: `notation: 'compact'` and `compactDisplay` in the options of `Intl.NumberFormat`, which Hermes on iOS ignores: `format(44000)` gives `44,000`, not `44K`. Build the short form yourself.
 
 ```js
 import hermes from '@zukhruf/eslint/react-native';

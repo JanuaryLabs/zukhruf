@@ -17,6 +17,7 @@ test('hermes/recommended flags what Hermes lacks in app code, and leaves Node-si
       `export const list = new Intl.ListFormat('en').format(['a', 'b']);`,
       `export const plural = new Intl.PluralRules('en').select(1);`,
       `export const amount = new Intl.NumberFormat('en').format(1);`,
+      `export const short = new Intl.NumberFormat('en', { notation: 'compact' }).format(44000);`,
       `console.dir(createHash);`,
       `console.log('ready');`,
     ].join('\n'),
@@ -32,6 +33,7 @@ test('hermes/recommended flags what Hermes lacks in app code, and leaves Node-si
   assert.deepEqual(ruleIds, [
     'es-x/no-intl-listformat',
     'es-x/no-intl-pluralrules',
+    'hermes/no-compact-notation',
     'hermes/no-missing-console',
     'import-x/no-nodejs-modules',
   ]);
