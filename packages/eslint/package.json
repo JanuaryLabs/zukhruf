@@ -65,16 +65,15 @@
     "@zukhruf/testing": "^0.6.7"
   },
   "peerDependencies": {
+    "@eslint-react/eslint-plugin": "^5.28.8",
     "@eslint/js": "^9.30.0 || ^10.0.0",
     "@nx/devkit": ">=21.0.0",
     "@nx/eslint-plugin": ">=21.0.0",
     "eslint": "^9.30.0 || ^10.0.0",
     "eslint-plugin-es-x": "^9.7.0 || ^10.0.0",
     "eslint-plugin-functional": "^10.0.0",
-    "eslint-plugin-import": "^2.31.0",
     "eslint-plugin-import-x": "^4.16.0",
-    "eslint-plugin-jsx-a11y": "^6.10.1",
-    "eslint-plugin-react": "^7.35.0",
+    "eslint-plugin-jsx-a11y-x": "^0.2.0",
     "eslint-plugin-react-hooks": "^5.0.0 || ^7.0.0",
     "jsonc-eslint-parser": "^2.4.0 || ^3.0.0",
     "react": "*",
@@ -82,6 +81,9 @@
     "typescript-eslint": "^8.47.0"
   },
   "peerDependenciesMeta": {
+    "@eslint-react/eslint-plugin": {
+      "optional": true
+    },
     "@nx/devkit": {
       "optional": true
     },
@@ -91,13 +93,7 @@
     "eslint-plugin-es-x": {
       "optional": true
     },
-    "eslint-plugin-import": {
-      "optional": true
-    },
-    "eslint-plugin-jsx-a11y": {
-      "optional": true
-    },
-    "eslint-plugin-react": {
+    "eslint-plugin-jsx-a11y-x": {
       "optional": true
     },
     "eslint-plugin-react-hooks": {

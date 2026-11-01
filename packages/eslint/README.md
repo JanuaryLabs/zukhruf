@@ -36,7 +36,7 @@ export default defineConfig({
 });
 ```
 
-Put framework presets (for example [`@zukhruf/eslint/react`](#react), which is Nx's `flat/react`) **before** the zukhruf configs. The package's own checks survive any order. But `base` also changes some third-party rules, for example it turns `@typescript-eslint/no-unused-vars` off, and a preset that comes later sets them again.
+Put framework configs (for example [`@zukhruf/eslint/react`](#react)) **before** the zukhruf configs. The package's own checks survive any order. But `base` also changes some third-party rules, for example it turns `@typescript-eslint/no-unused-vars` off, and a preset that comes later sets them again.
 
 ## Configs
 
@@ -203,7 +203,7 @@ The rule decides each manifest's options itself, so your options add to the shar
 
 ## React
 
-`@zukhruf/eslint/react` is Nx's `flat/react` config from `@nx/eslint-plugin`, with one change: it sets `settings.react.version`. Use it in place of `nx.configs['flat/react']` in the `eslint.config.mjs` of a React project. Put it first, and then the root config, as before:
+`@zukhruf/eslint/react` gives the configs that the React community maintains. The package adds no rule of its own to them and changes no severity. Use it in the `eslint.config.mjs` of a React project. Put it first, and then the root config, as before:
 
 ```js
 import react from '@zukhruf/eslint/react';
@@ -213,19 +213,26 @@ import baseConfig from '../../eslint.config.mjs';
 export default [...react, ...baseConfig];
 ```
 
-`flat/react` sets the React version to `'detect'`. On ESLint 10, `'detect'` stops every rule of `eslint-plugin-react` 7.37.5 at load, because the plugin calls `context.getFilename()`, which ESLint 10 removed. So the preset sets the version of the `react` package that resolves from the folder where ESLint runs. `nx lint` runs ESLint in the project folder, and a hoisted `react` resolves from there. Do not set `settings.react.version` in your config. If `react` does not resolve, the preset throws an error when it loads. Install `react` in the workspace. `react` is an optional peer of this package, so a lint input on `@zukhruf/eslint` also hashes the React version.
+It gives these configs, in this order:
 
-`flat/react` loads `eslint-plugin-import`, `eslint-plugin-jsx-a11y`, `eslint-plugin-react` and `eslint-plugin-react-hooks`. Install these 4 plugins in the React workspace. They are optional peers of this package, because `@nx/eslint-plugin` (checked at 24.0.2) does not declare them. With the peers, npm writes the lockfile edges from `@zukhruf/eslint` to the 4 plugins, so a lint input on `@zukhruf/eslint` also hashes the plugins.
+1. `recommended` of `eslint-plugin-jsx-a11y-x`: the accessibility rules. This plugin is the maintained fork of `eslint-plugin-jsx-a11y`, and its peer range includes ESLint 10.
+2. `flat.recommended` of `eslint-plugin-react-hooks`: the rules of the React team.
+3. `recommended-type-checked` of `@eslint-react/eslint-plugin`: the React rules, for example `@eslint-react/no-missing-key`. The rules use type information. `zukhruf/base` gives it, because it sets `projectService`.
+4. `disable-conflict-eslint-plugin-react-hooks` of `@eslint-react/eslint-plugin`: it turns off the 12 rules of `eslint-plugin-react-hooks` that `@eslint-react/eslint-plugin` also has.
 
-The peer ranges of `eslint-plugin-import`, `eslint-plugin-jsx-a11y` and `eslint-plugin-react` stop at ESLint 9. On ESLint 10, add an `overrides` entry for each of the 3 to `package.json`, as factory and whatisgoingon do:
+Thus `@eslint-react/eslint-plugin` owns the hook rules, for example `@eslint-react/rules-of-hooks` and `@eslint-react/exhaustive-deps`, and ESLint reports each problem one time. This is the path of the eslint-react guide "Migrating from eslint-plugin-react-hooks". `eslint-plugin-react-hooks` adds only its 4 React Compiler rules: `preserve-manual-memoization`, `incompatible-library`, `config` and `gating`. Each rule has the severity that its plugin ships.
 
-```json
-"overrides": {
-  "eslint-plugin-import": { "eslint": "$eslint" },
-  "eslint-plugin-jsx-a11y": { "eslint": "$eslint" },
-  "eslint-plugin-react": { "eslint": "$eslint" }
-}
+The style rules of zukhruf for React are not in this export. They are in the config `zukhruf/react`.
+
+Install the 3 plugins in the React workspace:
+
+```sh
+npm install --save-dev @eslint-react/eslint-plugin eslint-plugin-jsx-a11y-x eslint-plugin-react-hooks
 ```
+
+They are optional peers of this package. With the peers, npm writes the lockfile edges from `@zukhruf/eslint` to the 3 plugins, so a lint input on `@zukhruf/eslint` also hashes the plugins.
+
+`react` is also an optional peer, because the React version changes the lint result. `@eslint-react/eslint-plugin` reads the version of the `react` package that resolves from the folder where ESLint runs. `nx lint` runs ESLint in the project folder, and a hoisted `react` resolves from there. With the peer, a lint input on `@zukhruf/eslint` also hashes the React version.
 
 ## React Native: Hermes
 

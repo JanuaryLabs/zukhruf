@@ -1,69 +1,153 @@
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
-import { createRequire } from 'node:module';
 import { test } from 'node:test';
 
-import { ESLint } from 'eslint';
-import tseslint from 'typescript-eslint';
-
-import react from './react.ts';
 import { fixtureWorkspace } from './testing/fixture-workspace.ts';
+import { fixtureConfig, lint } from './testing/run-eslint.ts';
 
-test('./react lints a .tsx file on ESLint 10 and reports a prop given twice', async () => {
+// `types: []` keeps the fixture from loading @types the temporary folder does
+// not have.
+const tsconfig = JSON.stringify({
+  compilerOptions: {
+    strict: true,
+    noEmit: true,
+    target: 'esnext',
+    jsx: 'preserve',
+    types: [],
+  },
+  include: ['**/*.tsx'],
+});
+
+// A React project config: the preset first, then the root config.
+const reactProjectConfig = [
+  `import react from ${JSON.stringify(import.meta.resolve('@zukhruf/eslint/react'))};`,
+  fixtureConfig(
+    `...react, { plugins: { zukhruf }, extends: ['zukhruf/base'] }`,
+  ),
+].join('\n');
+
+test('./react lints a .tsx file on ESLint 10 with type information and reports a number that renders as text', async () => {
   // Arrange
-  // flat/react sets @typescript-eslint rules but leaves the plugin to the
-  // workspace's TypeScript config.
-  const eslint = new ESLint({
-    overrideConfigFile: true,
-    overrideConfig: [tseslint.configs.base, ...react],
+  await using workspace = await fixtureWorkspace({
+    'nx.json': '{}',
+    'tsconfig.json': tsconfig,
+    'eslint.config.mjs': reactProjectConfig,
+    'src/count.tsx': [
+      `export const Count = ({ count }: { count: number }) => (`,
+      `  <div>{count && <span>{count}</span>}</div>`,
+      `);`,
+      ``,
+    ].join('\n'),
   });
-  const code = 'export const Box = () => <div id="one" id="two" />;\n';
 
   // Act
-  const [result] = await eslint.lintText(code, { filePath: 'box.tsx' });
+  const findings = lint(workspace.root, ['src']);
 
   // Assert
-  assert.deepEqual(
-    result?.messages.map((message) => message.ruleId),
-    ['react/jsx-no-duplicate-props'],
+  assert.ok(
+    findings.some(
+      ({ ruleId }) =>
+        ruleId === '@eslint-react/no-leaked-conditional-rendering',
+    ),
+    JSON.stringify(findings),
   );
 });
 
-test('./react sets the React version to the react package that is installed', () => {
+test('./react reports a list item that has no key', async () => {
   // Arrange
-  const installed: unknown = createRequire(import.meta.url)(
-    'react/package.json',
-  );
-  assert.ok(installed !== null && typeof installed === 'object');
-
-  // Act
-  const versions = react.flatMap((config) => {
-    const settings = config.settings?.['react'];
-    return settings !== null && typeof settings === 'object'
-      ? [Reflect.get(settings, 'version')]
-      : [];
+  await using workspace = await fixtureWorkspace({
+    'nx.json': '{}',
+    'tsconfig.json': tsconfig,
+    'eslint.config.mjs': reactProjectConfig,
+    'src/list.tsx': [
+      `export const List = ({ items }: { items: string[] }) => (`,
+      `  <ul>{items.map((item) => <li>{item}</li>)}</ul>`,
+      `);`,
+      ``,
+    ].join('\n'),
   });
 
+  // Act
+  const findings = lint(workspace.root, ['src']);
+
   // Assert
-  assert.deepEqual(versions, [Reflect.get(installed, 'version')]);
+  assert.ok(
+    findings.some(({ ruleId }) => ruleId === '@eslint-react/no-missing-key'),
+    JSON.stringify(findings),
+  );
 });
 
-test('./react throws an error that names react when react is not installed', async () => {
+test('./react reports a hook called in a condition one time, from @eslint-react', async () => {
   // Arrange
-  await using workspace = await fixtureWorkspace({ 'package.json': '{}' });
+  await using workspace = await fixtureWorkspace({
+    'nx.json': '{}',
+    'tsconfig.json': tsconfig,
+    'eslint.config.mjs': reactProjectConfig,
+    'src/toggle.tsx': [
+      `import { useState } from 'react';`,
+      `export function Toggle({ on }: { on: boolean }) {`,
+      `  if (on) {`,
+      `    useState(0);`,
+      `  }`,
+      `  return <div />;`,
+      `}`,
+      ``,
+    ].join('\n'),
+  });
 
   // Act
-  const run = spawnSync(
-    process.execPath,
-    [
-      '--input-type=module',
-      '--eval',
-      `await import(${JSON.stringify(import.meta.resolve('@zukhruf/eslint/react'))});`,
-    ],
-    { cwd: workspace.root, encoding: 'utf8' },
-  );
+  const findings = lint(workspace.root, ['src']);
 
   // Assert
-  assert.notEqual(run.status, 0);
-  assert.match(run.stderr, /needs the react package/);
+  const hookRules = findings
+    .map(({ ruleId }) => ruleId)
+    .filter((ruleId) => ruleId?.endsWith('rules-of-hooks'));
+  assert.deepEqual(hookRules, ['@eslint-react/rules-of-hooks']);
+});
+
+test('./react reports a React Compiler finding from eslint-plugin-react-hooks', async () => {
+  // Arrange: react-hook-form's watch() is on the compiler's list of
+  // incompatible library APIs.
+  await using workspace = await fixtureWorkspace({
+    'nx.json': '{}',
+    'tsconfig.json': tsconfig,
+    'eslint.config.mjs': reactProjectConfig,
+    'src/form.tsx': [
+      `import { useForm } from 'react-hook-form';`,
+      `export function Form() {`,
+      `  const { watch } = useForm();`,
+      `  return <p>{watch('name')}</p>;`,
+      `}`,
+      ``,
+    ].join('\n'),
+  });
+
+  // Act
+  const findings = lint(workspace.root, ['src']);
+
+  // Assert
+  assert.ok(
+    findings.some(
+      ({ ruleId }) => ruleId === 'react-hooks/incompatible-library',
+    ),
+    JSON.stringify(findings),
+  );
+});
+
+test('./react reports an image that has no alt text', async () => {
+  // Arrange
+  await using workspace = await fixtureWorkspace({
+    'nx.json': '{}',
+    'tsconfig.json': tsconfig,
+    'eslint.config.mjs': reactProjectConfig,
+    'src/logo.tsx': 'export const Logo = () => <img src="logo.png" />;\n',
+  });
+
+  // Act
+  const findings = lint(workspace.root, ['src']);
+
+  // Assert
+  assert.ok(
+    findings.some(({ ruleId }) => ruleId === 'jsx-a11y-x/alt-text'),
+    JSON.stringify(findings),
+  );
 });

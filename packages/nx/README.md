@@ -447,7 +447,7 @@ Some configs load a package that is not in the edges of `@zukhruf/eslint`. Add i
 
 The package above is an example from the audit: 3 project configs of text2sql load `eslint-plugin-no-barrel-files`.
 
-`nx.configs['flat/react']` of `@nx/eslint-plugin` loads 4 packages, but `@nx/eslint-plugin` does not declare them (`@nx/eslint-plugin/dist/src/flat-configs/react-base.js:4` and `react-jsx.js:4-6`): `eslint-plugin-import`, `eslint-plugin-jsx-a11y`, `eslint-plugin-react` and `eslint-plugin-react-hooks`. Do not add them in `targetDefaults`. Import `@zukhruf/eslint/react` in each React project config. It gives `nx.configs['flat/react']`, and `@zukhruf/eslint` declares the 4 packages as optional peers. Thus they are lockfile edges of `@zukhruf/eslint`, and the plugin hashes them.
+`@zukhruf/eslint/react` loads 3 plugins: `@eslint-react/eslint-plugin`, `eslint-plugin-jsx-a11y-x` and `eslint-plugin-react-hooks`. `@zukhruf/eslint` declares them as optional peers. Thus they are lockfile edges of `@zukhruf/eslint`, and the plugin hashes them. Do not add them in `targetDefaults`. Import `@zukhruf/eslint/react` in each React project config. Do not use `nx.configs['flat/react']`: `@nx/eslint-plugin` does not declare the packages that it loads (`@nx/eslint-plugin/dist/src/flat-configs/react-base.js:4` and `react-jsx.js:4-6`), so they are not lockfile edges.
 
 A local file that the root ESLint config imports is also an input of the workspace, for example `{workspaceRoot}/island.eslint.config.mjs`. Add it in the same way.
 
@@ -463,7 +463,7 @@ A local file that the root ESLint config imports is also an input of the workspa
 
 ### Migrate a workspace to the lint area
 
-1. Update `@zukhruf/nx` and `@zukhruf/eslint` to the latest release. An older `@zukhruf/eslint` does not declare the 4 packages of `flat/react`, so its lockfile node has no edge to them. A probe on factory (Nx 24.0.1, 2026-10-30) showed this: with `@zukhruf/eslint` 0.3.44, the 4 packages were not in `external`.
+1. Update `@zukhruf/nx` and `@zukhruf/eslint` to the latest release. An older `@zukhruf/eslint` does not declare the 3 plugins of `@zukhruf/eslint/react`, so its lockfile node has no edge to them. A probe on factory (Nx 24.0.1, 2026-10-30) showed this for the React plugins of that time: with `@zukhruf/eslint` 0.3.44, they were not in `external`.
 2. Add `@zukhruf/nx/lint` to `plugins`, after `@nx/eslint/plugin`.
 3. Delete `targetDefaults.lint.inputs`, and delete `targetDefaults.lint.dependsOn` and a top-level `targetDefaults.lint.command` (see [Prerequisites of the lint area](#prerequisites-of-the-lint-area)).
 4. In each React project config, import `@zukhruf/eslint/react` instead of `nx.configs['flat/react']`.
@@ -480,7 +480,7 @@ A local file that the root ESLint config imports is also an input of the workspa
 | elt              | 7                               | no project config; the root config gives `@zukhruf/eslint/react` to `apps/web`                                                                                                                                        |
 | context-compiler | 5                               | no project config; the root config gives `@zukhruf/eslint/react` to `packages/ui`, `apps/desktop/frontend` and `apps/server/src/page`                                                                                 |
 
-The lockfile measured the edges on 2026-10-30. For factory, whatisgoingon, deepagents and text2sql, each package of the hand list is in the edges of `@zukhruf/eslint`, except the 4 packages of `flat/react`. `@zukhruf/eslint/react` adds them as optional peers. An optional peer is an edge only when the workspace installs it, so the root `devDependencies` of the 4 packages stay in these 4 workspaces.
+The lockfile measured the edges on 2026-10-30. For factory, whatisgoingon, deepagents and text2sql, each package of the hand list is in the edges of `@zukhruf/eslint`, except the React plugins. `@zukhruf/eslint/react` declares its 3 plugins as optional peers (#3519). An optional peer is an edge only when the workspace installs it, so the 3 plugins go in the root `devDependencies` of each React workspace.
 
 ### Who uses the lint area
 
