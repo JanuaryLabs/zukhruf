@@ -187,6 +187,13 @@ export default defineConfig(
     files: ['packages/docker/**', 'packages/async/**'],
     rules: { 'zukhruf/no-raw-temp-directory': 'off' },
   },
+  // The Latch is the one-shot gate that zukhruf/no-promise-field tells code
+  // to wait on, so its promise must live in its field. It never rejects and
+  // is never replaced, so no hazard of the rule applies.
+  {
+    files: ['packages/async/src/latch.ts'],
+    rules: { 'zukhruf/no-promise-field': 'off' },
+  },
   // The tests of TemporaryFiles arrange their parent folders with node:fs, so
   // that the subject under test does not make its own fixtures.
   {

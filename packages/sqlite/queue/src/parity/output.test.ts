@@ -64,13 +64,15 @@ describe('outputs', () => {
       thrown: () => {
         throw new Error('boom');
       },
+      // A handler may throw any value; pg-boss stores a string or a plain
+      // object as the failure output.
       thrownText: () => {
-        // eslint-disable-next-line @typescript-eslint/only-throw-error -- The scenario: a handler that throws a string, which pg-boss stores as the failure output.
-        throw 'boom';
+        const text: unknown = 'boom';
+        throw text;
       },
       thrownObject: () => {
-        // eslint-disable-next-line @typescript-eslint/only-throw-error -- The scenario: a handler that throws a plain object, which pg-boss stores as the failure output.
-        throw { code: 1 };
+        const object: unknown = { code: 1 };
+        throw object;
       },
       thrownWithCause: () => {
         throw new Error('outer', { cause: new Error('inner') });

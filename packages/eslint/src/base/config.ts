@@ -111,9 +111,22 @@ export const base: Concept = {
             { assertionStyle: 'never' },
           ],
           // Enums and value namespaces need a runtime transform, which Node's
-          // strip-only `.ts` execution does not do.
-          '@typescript-eslint/no-namespace': 'error',
+          // strip-only `.ts` execution does not do. A declared namespace, such
+          // as `NodeJS` in the `declare global` of env.ts, is types only.
+          '@typescript-eslint/no-namespace': [
+            'error',
+            { allowDeclarations: true },
+          ],
           'zukhruf/no-enum': 'error',
+          // An interface that extends one type is an augmentation point, such
+          // as ProcessEnv in env.ts. typescript-eslint replaced
+          // no-empty-interface, which Nx's TypeScript preset still turns on,
+          // with no-empty-object-type.
+          '@typescript-eslint/no-empty-object-type': [
+            'error',
+            { allowInterfaces: 'with-single-extends' },
+          ],
+          '@typescript-eslint/no-empty-interface': 'off',
         },
         // A disable directive that suppresses nothing outlived its reason.
         linterOptions: { reportUnusedDisableDirectives: 'error' },
