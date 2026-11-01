@@ -25,7 +25,7 @@ import noStateManagers from '../imports/no-state-managers.ts';
 import noTestFileImport from '../imports/no-test-file-import.ts';
 import noEnum from '../language/no-enum.ts';
 import { workspaceRootOf } from '../workspace/workspace-root.ts';
-import { noFloatingPromises, noLet } from './options.ts';
+import { noFloatingPromises, noLet, noUnassignedImport } from './options.ts';
 
 const importBans = {
   'no-state-managers': noStateManagers,
@@ -128,7 +128,7 @@ export const base: Concept = {
           'import-x/no-duplicates': ['error', { 'prefer-inline': false }],
           // A bare `import './x.ts'` hides a registration behind evaluation
           // order; a module you need is a value you bind.
-          'import-x/no-unassigned-import': 'error',
+          'import-x/no-unassigned-import': ['error', noUnassignedImport()],
         },
       },
       {

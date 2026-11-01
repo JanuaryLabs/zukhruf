@@ -4,6 +4,8 @@ export {
   type NoFloatingPromisesOptions,
   noLet,
   type NoLetOptions,
+  noUnassignedImport,
+  type NoUnassignedImportOptions,
   type TypeOrValueSpecifier,
 } from './base/options.ts';
 export {

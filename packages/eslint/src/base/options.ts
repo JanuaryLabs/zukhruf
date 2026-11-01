@@ -14,6 +14,23 @@ export function noLet({ ignoreIdentifierPattern = [] }: NoLetOptions = {}) {
   return { allowInFunctions: true, ignoreIdentifierPattern };
 }
 
+export interface NoUnassignedImportOptions {
+  /** More side-effect imports to allow, as globs of the import source. */
+  allow?: string[];
+}
+
+// The side effects the monorepo standard defines: a stylesheet for the
+// bundler, `env.ts` that parses the environment first, and `startup.ts` that
+// connects the stores before the server serves.
+const STANDARD_SIDE_EFFECTS = ['**/*.css', '**/env.ts', '**/startup.ts'];
+
+/** Options for `import-x/no-unassigned-import`, with the standard's side-effect imports already allowed. */
+export function noUnassignedImport({
+  allow = [],
+}: NoUnassignedImportOptions = {}) {
+  return { allow: [...STANDARD_SIDE_EFFECTS, ...allow] };
+}
+
 /** typescript-eslint's name for a type or value by where it is declared: the TS lib, a package, or a file. */
 export interface TypeOrValueSpecifier {
   from: 'file' | 'lib' | 'package';
