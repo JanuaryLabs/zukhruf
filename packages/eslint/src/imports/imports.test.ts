@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 
 import { typescriptRuleTester } from '../testing/rule-tester.ts';
+import noOtherTestRunner from './no-other-test-runner.ts';
 import noPlaywrightTest from './no-playwright-test.ts';
 import noStateManagers from './no-state-managers.ts';
 import noTestFileImport from './no-test-file-import.ts';
@@ -35,6 +36,28 @@ test('no-playwright-test', () => {
         errors: [{ messageId: 'banned' }],
       },
     ],
+  });
+});
+
+test('no-other-test-runner bans each runner but node:test and Vitest', () => {
+  typescriptRuleTester().run('no-other-test-runner', noOtherTestRunner, {
+    valid: [
+      { code: `import { test } from 'node:test';` },
+      { code: `import { expect, test } from 'vitest';` },
+      // The jest-dom matchers that a Vite app's Vitest setup registers.
+      { code: `import '@testing-library/jest-dom/vitest';` },
+    ],
+    invalid: [
+      { code: `import { expect, jest } from '@jest/globals';` },
+      { code: `import { run } from 'jest';` },
+      { code: `import type { Config } from 'jest/config';` },
+      { code: `import { describe } from 'mocha';` },
+      { code: `import 'jasmine';` },
+      { code: `import test from 'ava';` },
+      { code: `import t from 'tap';` },
+      { code: `import test from 'tape';` },
+      { code: `import { test } from 'uvu';` },
+    ].map((item) => ({ ...item, errors: [{ messageId: 'banned' }] })),
   });
 });
 
