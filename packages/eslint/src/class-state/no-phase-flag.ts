@@ -2,6 +2,7 @@ import { ESLintUtils, type TSESTree } from '@typescript-eslint/utils';
 import {
   isBooleanLiteralType,
   isIntrinsicBooleanType,
+  isIntrinsicNullType,
   isIntrinsicUndefinedType,
   unionConstituents,
 } from 'ts-api-utils';
@@ -9,13 +10,14 @@ import type ts from 'typescript';
 
 import { eslintRule } from '../authoring/rule-module.ts';
 
-/** Whether `type` is a flag, or can be `undefined` until something sets it. */
+/** Whether `type` is a flag, or can be `undefined` or `null` until something sets it. */
 function holdsFlag(type: ts.Type): boolean {
   return unionConstituents(type).some(
     (part) =>
       isBooleanLiteralType(part) ||
       isIntrinsicBooleanType(part) ||
-      isIntrinsicUndefinedType(part),
+      isIntrinsicUndefinedType(part) ||
+      isIntrinsicNullType(part),
   );
 }
 

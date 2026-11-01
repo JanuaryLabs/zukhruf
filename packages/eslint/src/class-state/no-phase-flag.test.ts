@@ -40,6 +40,10 @@ test('no-phase-flag', async () => {
       },
       {
         filename,
+        code: `class A { #value: string | null; constructor() { this.#value = null; } }`,
+      },
+      {
+        filename,
         code: `class A { #count = 0; next() { this.#count += 1; } }`,
       },
       {
@@ -84,6 +88,12 @@ test('no-phase-flag', async () => {
       {
         filename,
         code: `class A { #current: string | undefined; open() { this.#current = 'x'; } }`,
+        errors: reported,
+      },
+      // A null that the first use replaces is the same phase as undefined.
+      {
+        filename,
+        code: `interface Chat { id: string } class A { #chat: Chat | null = null; open() { this.#chat = { id: 'main' }; } }`,
         errors: reported,
       },
       {
