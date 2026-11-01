@@ -112,7 +112,7 @@ The maintainer chose to keep the three places (backlog #2538). The parts that ar
 
 ## Test helpers in more than two places
 
-The tests of the lock stores that use a database server have four helpers in more than two places. Root ADR 0001 (rule 2) keeps test helpers as copies, also after the third copy. A test helper goes into `@zukhruf/testing` only when three or more repositories have its knowledge and it does not use the `mock` of `node:test` ([testing ADR 0016](../../testing/docs/adr/0016-a-test-helper-goes-into-an-area-when-three-repositories-have-its-knowledge-and-it-does-not-use-mock.md)). The knowledge of these four helpers is only in this repository. Also, no package exports a shared test module, and each test file reads from top to bottom. Thus each helper stays a copy. A fix to one place goes into each place, and the commit names each file.
+The tests of the lock stores that use a database server have four helpers in more than two places. All the places are in this package. Root ADR 0001 (rule 2) keeps the test helpers of different packages as copies, but not the copies inside one package. A test helper goes into `@zukhruf/testing` only when three or more repositories have its knowledge and it does not use the `mock` of `node:test` ([testing ADR 0016](../../testing/docs/adr/0016-a-test-helper-goes-into-an-area-when-three-repositories-have-its-knowledge-and-it-does-not-use-mock.md)). The knowledge of these four helpers is only in this repository. Thus each helper moves into the test support of this package, `src/testing/` (backlog #2521). Until then, a fix to one place goes into each place, and the commit names each file.
 
 The paths are in `packages/mutex/src`.
 
