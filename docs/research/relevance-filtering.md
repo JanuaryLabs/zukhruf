@@ -10,7 +10,7 @@ Status on 2026-10-30: round 13 found a better ranker, the decision model d1-2B (
 
 Status on 2026-11-01: round 15 found that a fit on the taught answers of each profile does not give better yes and no decisions than d1's own probability (#3421). The thresholds stay on d1's own probability, and the package gets no recalibration adapter.
 
-Status on 2026-11-01 (round 16): a fit of a slope and an intercept on the taught answers (platt-map) passed, when the reader also answers some random articles (#3523). The user sees the teaching design and the API of the adapter before anything is built.
+Status on 2026-11-01 (round 16): a fit of a slope and an intercept on the taught answers (platt-map) passed, when the reader also answers some random articles (#3523). The fit does not change the order of the articles, so it changes nothing in a reader that shows the best N of each interest. The user chose to keep that reader and not to build the adapter now; it waits for a reader that decides yes or no.
 
 ## Words in this record
 
@@ -184,7 +184,7 @@ Shift-map failed. In the frozen arm, all taught answers of a well-ranked profile
 
 Observations calculated after the run, for information only: platt-map helped most where d1's boundary differs from the key. Coding rose from 0.236 to 0.722 (window) and from 0.218 to 0.506 (pool), and courts rose by 0.095 and 0.072. Open models (−0.050, −0.020) and earnings (−0.040, −0.024) lost a little.
 
-The rule now requires two things before anything is built: the user sees the design in which the host shows the reader some articles that d1 ranks low, and the user sees the API of the adapter (#3523).
+The rule required two things before anything was built: the user sees the design in which the host shows the reader some articles that d1 ranks low, and the user sees the API of the adapter (#3523). The user saw both on 2026-11-01. The fit has a positive slope, so it keeps the order of each interest's articles; it changes only the probabilities and the yes or no decisions. The reader (context-compiler's what-is-going-on) shows the best N of each interest and decides no yes or no, so the adapter would change nothing in it. The user chose to keep the best-N reader and not to build the adapter now. A reader that decides yes or no needs it: about 20 answers for each interest, half of them random (10 gave most of the gain in the window protocol; 20 were clearly better in the pool protocol).
 
 The SiliconANGLE crawl ran on elt 4d63590f, whose crawler waits 1 s between requests to one site. The Decoder rows of the period come from fresh-6's crawl, which holds every Decoder post modified from 2024-03-15. A check found 62 of 62 SiliconANGLE articles of 2024-10-01..03 extracted the same as in fresh-6. Two faults were found and fixed before fresh-7 was frozen; limitation 17 gives the earlier slices that they touch. d1 ran on the Mac mini (llama.cpp b11960, Q8_0), and the median time for one article is 3.61 s. The results are `round-16/results.json` (`42ccbaea…`).
 
