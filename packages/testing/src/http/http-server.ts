@@ -27,15 +27,21 @@ export interface HttpServerHandle extends AsyncDisposable {
 export class HttpServer {
   async start(handler: HttpHandler): Promise<HttpServerHandle> {
     await using resources = new AsyncDisposableStack();
-    const server = serve(handler);
-    await listen(server);
+    const server = createServer((request, response) => {
+      void handler(request, response);
+    });
+    const listening = once(server, 'listening');
+    server.listen(0, '127.0.0.1');
+    await listening;
 
     resources.defer(async () => {
       const closed = server[Symbol.asyncDispose]();
       server.closeAllConnections();
       await closed;
     });
-    const origin = originOf(server);
+    const address = server.address();
+    assert(address && typeof address === 'object');
+    const origin = `http://127.0.0.1:${address.port}`;
     const owned = resources.move();
     const cleanup = () => owned.disposeAsync();
 
@@ -46,22 +52,4 @@ export class HttpServer {
       [Symbol.asyncDispose]: cleanup,
     };
   }
-}
-
-function serve(handler: HttpHandler): Server {
-  return createServer((request, response) => {
-    void handler(request, response);
-  });
-}
-
-async function listen(server: Server): Promise<void> {
-  const listening = once(server, 'listening');
-  server.listen(0, '127.0.0.1');
-  await listening;
-}
-
-function originOf(server: Server): string {
-  const address = server.address();
-  assert(address && typeof address === 'object');
-  return `http://127.0.0.1:${address.port}`;
 }
