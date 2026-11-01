@@ -1,0 +1,32 @@
+{
+  "status": "DESIGN FROZEN 2026-10-29 for @zukhruf/relevance-filtering (#3195). Exam not opened.",
+  "bar": "The user accepted non-inferiority on 2026-10-29 ('what are you waiting for?' after the yes/no on the bar, read as yes): a design passes when it is not worse than the reader's typed keyword by more than 0.05 macro T11F, beats keywordBroad and the trivial designs, and its probabilities beat climatology (Brier skill > 0). Precedent: non-inferiority trials (a new treatment with other benefits is accepted when it is not worse than the standard by more than a pre-set margin). The other benefit here: calibrated probabilities, which a keyword does not give.",
+  "developmentEvidence": {
+    "round4": "fresh 2026-01..03, random teaching: 0.733 vs keywordNarrow 0.679, interval [-0.012, +0.118], Brier skill +0.475",
+    "round5": "fresh-2 2025-10..12, random teaching: 0.697 vs 0.644, interval [-0.040, +0.137], Brier skill +0.136",
+    "round6": "both slices, product teaching: 0.701 vs 0.656, interval [-0.019, +0.118], vs keywordBroad [+0.092, +0.252], Brier skill +0.512 -> passes the bar above"
+  },
+  "design": {
+    "name": "desc|binormal+kw",
+    "profile": "name, description (one sentence), optional keywords, taught relevant and not-relevant article ids (from the reader's yes/no on its own top matches).",
+    "representation": "EmbeddingGemma 2 Q8_0; article text = event-detection vector text (title + 2 lead sentences, design-3152b lead rule); description embedded with the query prompt `task: search result | query: <description>`; unit vectors, cosine.",
+    "score": "s(x) = cos(x, d). The taught articles do not move the score; they serve the calibration.",
+    "calibration": "Binormal score-distribution model on the stream's scores, as round-2 selection-rule.json 'binormal': standardise by the stream's mean and sd; relevant component starts from the taught relevant scores; semi-supervised EM with the taught scores fixed to their component; pi bounded to [1/n, 0.5], starts at 0.05; sd floor 0.05; at most 500 iterations or |delta loglik| < 1e-9; if the relevant mean falls to or below the other, fall back to Platt on the taught scores (slope 0 when their AUC <= 0.5). Stream = the unlabelled articles the filter is deciding on.",
+    "keywords": "Naive-Bayes evidence: logit p += log(P(k|rel)/P(k|non)) for a matching article, log((1-P(k|rel))/(1-P(k|non))) otherwise; P(k|rel) = (matching taught relevant + 1) / (taught relevant + 2); P(k|non) = (matching stream articles + 1) / (stream size + 2). Match = any keyword in title + ' ' + lead (research stand-in: keywords.json narrow regex).",
+    "decision": "Expected-F0.5 plug-in over the stream's probabilities: accept the top m maximising 1.25 sum_{i<=m} p_i / (0.25 sum_all p + m).",
+    "noRelevantExample": "With no taught relevant article the profile accepts the keyword matches."
+  },
+  "implementationCheck": {
+    "file": "implementation-check.json",
+    "what": "security, fresh slice, product teaching N=10: the shown, taught and accepted articles, the binormal parameters, the threshold and the probability and decision of every 37th scored article. The package must reproduce them (probabilities to 1e-9) before the exam is scored."
+  },
+  "examVerdictRule": {
+    "stream": "The 133 deepmind-outlets articles (exam/items.json). Labels: exam/labels.jsonl (15 profiles, sealed sha256 2bba5406...) and relevance-biology/exam/labels.json (Biology, sha256 4cb90b03...). Ambiguous excluded from scores.",
+    "teaching": "Product teaching on the reader's past feed: from the teaching pool (round-2 collection + fresh + fresh-2, all labelled), the reader shows the top N articles by cos(article, d) and the top N keyword matches by cos(article, d), N in {5, 10}; the answer key answers yes/no (ambiguous skipped); the profile learns from the answers and filters the exam stream.",
+    "profiles": "Every profile with >= 3 strict relevant exam articles.",
+    "metric": "Macro mean over those profiles of T11F, averaged over N in {5, 10}; Brier skill per profile against the exam base rate, macro mean.",
+    "pass": "Paired, label-stratified article bootstrap (2000 replicates, numpy.random.default_rng(31958); one weight per exam article shared by all profiles and N): the 95% interval of (design - keywordNarrow) has lower bound > -0.05, the intervals against keywordBroad, alwaysNo and alwaysYes lie entirely above 0, and the macro Brier skill is > 0. All four hold, or the verdict is fail.",
+    "biology": "Biology's round-1 exam rule is also scored and reported; it does not decide the verdict.",
+    "runsThrough": "The package's eval harness, after the implementation check passes. One scoring only; afterwards the exam becomes a regression set."
+  }
+}

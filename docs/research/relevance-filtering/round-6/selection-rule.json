@@ -1,0 +1,20 @@
+{
+  "round": "relevance-filtering research round 6 (zukhruf #3195): teach the way the reader teaches (yes/no on its own top matches)",
+  "writtenBefore": "any round-6 score. Both fresh slices were labelled and scored before (rounds 4 and 5) under random teaching; this round changes only how the taught articles are chosen (limitation 14, training-serving skew).",
+  "inherits": "../round-2/selection-rule.json (dense representation, descriptions, binormal calibration, threshold rule, metrics, baselines) and ../round-4/selection-rule.json (keyword evidence) except where this file says otherwise. Bootstrap seed numpy.random.default_rng(31957).",
+  "streams": "Two slices, each scored on its own: fresh (2026-01-01..2026-03-31, labels a2802bbe...) and fresh-2 (2025-10-01..2025-12-31, labels d123cde2...). Per slice: teaching window = articles published in its first 14 days; scored stream = every later article of the slice.",
+  "teaching": {
+    "protocol": "Relevance feedback on delivered articles (TREC adaptive filtering gives judgments only for delivered documents). Before any teaching the reader shows, from the teaching window, (a) the top N articles by cos(article, d) and (b) the top N keyword-matching articles (keywords.json narrow) by cos(article, d); the union is shown. The answer key answers: relevant -> taught relevant, not relevant -> taught not relevant, ambiguous -> no answer (the reader skips).",
+    "cells": "N in {5, 10}. Deterministic: no random draws.",
+    "noRelevantAnswer": "If no shown article is relevant, the design has no relevant example: it accepts the keyword matches (p = 1 for a match, 0 otherwise)."
+  },
+  "candidates": {
+    "desc|binormal+kw": "rounds 4 and 5 design: binormal on cos(x, d) with the taught answers as labelled points, then naive-Bayes keyword evidence (P(k|rel) from the taught relevant answers, Laplace; P(k|non) from the scored stream).",
+    "desc|binormal": "the same without keyword evidence.",
+    "rocchio-q0|binormal+kw": "textbook Rocchio (8 d + 16 mean(taught relevant) - 4 mean(taught not relevant)) with leave-one-out taught scores, binormal, keyword evidence. With no taught not-relevant answer the gamma term is 0."
+  },
+  "units": "A (profile, slice) unit is scored when its scored stream holds >= 15 strict relevant articles. A profile's score = mean over its scored units and both cells. Scored profiles = profiles with >= 1 scored unit.",
+  "gate": "Round 2's eligibility on the macro mean over scored profiles: the topic-bootstrap interval of (candidate - baseline) lies above 0 for alwaysNo, alwaysYes, keywordNarrow and keywordBroad, and macro Brier skill > 0. simplerWins ranks: desc|binormal 0 < desc|binormal+kw 1 < rocchio-q0|binormal+kw 2.",
+  "reportedForTheUser": "Not part of the gate: for each candidate, whether the lower bound of its interval against keywordNarrow is above -0.05 (non-inferiority with a 0.05 margin), so the user can decide the bar with numbers from the product's teaching.",
+  "noneEligible": "No design is frozen; the exam stays sealed; the round reports why."
+}

@@ -1,0 +1,27 @@
+You are a relevance annotator for a TREC-style answer key (news articles × 16 interest profiles). Your judgement is the label; there is no model to consult.
+
+Folder: P=/Users/ezzabuzaid/.codex/visualizations/2026/10/23/01a16a1c-424c-7793-8ca9-02cc1c715d82/relevance-profiles
+
+Files you may use (and ONLY these):
+- The rule: $P/profiles.md. Read it completely before the first label. Re-read a profile's section whenever a case is unclear.
+- Your queue: $P/fresh-7/queue-{N}.json ({COUNT} articles: queue number q, title, excerpt, lead).
+- Show items: `python3 -I $P/tools/show.py $P/fresh-7/queue-{N}.json <from> <to>` (positions, 1-based, inclusive).
+- Read a body when the title and lead are unclear: `python3 -I $P/tools/body.py $P/fresh-7/items.json <q>`.
+- Write labels: `python3 -I $P/tools/put.py $P/fresh-7/queue-{N}.json $P/fresh-7/labels-{N}.jsonl $P/profiles.json <<'EOF'` followed by one JSON line per article and `EOF`. Formats:
+  {"q": 12, "labels": {}}   (relevant to no profile)
+  {"q": 13, "labels": {"chips": true}, "reasons": {"chips": "Nvidia's new GPU is the subject"}}
+  {"q": 14, "labels": {"safety": null}, "reasons": {"safety": "lab safety framework update, no new result"}, "alternatives": {"safety": false}}
+  Omit false labels. If put.py prints NOTHING WRITTEN, fix the lines and resend the whole batch.
+- Progress: `python3 -I $P/tools/check.py $P/fresh-7/queue-{N}.json $P/fresh-7/labels-{N}.jsonl`.
+
+Procedure:
+1. Read profiles.md in full.
+2. Work in batches of about 30 positions: show them, judge each article against all 16 profiles with the main-subject test, read the body when needed, then write one line for EVERY article in the batch (including those relevant to nothing). Continue until check.py says {COUNT} of {COUNT}.
+3. If you are interrupted or resume, run check.py first; never relabel an item that is already written.
+
+Rules (they keep the answer key valid):
+- Blind: do not open, list or search any other file under $P or its parent folder (no other queues or labels, no keywords.json, no labels.json, nothing under relevance-biology/, labels/, agreement/, exam/, fresh/, fresh-2/, fresh-3/, fresh-4/, fresh-5/, fresh-6/ or round-*/). Do not use model outputs, embeddings or scores.
+- Read every article yourself. Do not grep, regex or keyword-scan the queue to find candidates, and do not write any script that decides labels. Do not edit the tools, the rule or the queue.
+- A reason is one short line that names the subject. An ambiguous label needs the alternative (true/false) and the reason.
+
+Final message (short): the number labelled; per profile, the counts of true and null; up to five hard boundary cases (q + one line each); any tool problem.

@@ -1,0 +1,556 @@
+{
+ "status": "ROUND 9 DONE 2026-10-29 (confirmatory test on fresh-3). truncated: FAIL, truncated-guard: FAIL, frozen (reference): FAIL, each in both protocols. Chosen: none. Per selection-rule.json 'noneEligible': no package change, the exam stays sealed.",
+ "statusPerCandidate": {
+  "truncated": "FAIL",
+  "truncated-guard": "FAIL",
+  "frozen": "FAIL"
+ },
+ "statusPerProtocol": {
+  "window": {
+   "truncated": "FAIL",
+   "truncated-guard": "FAIL",
+   "frozen": "FAIL"
+  },
+  "pool": {
+   "truncated": "FAIL",
+   "truncated-guard": "FAIL",
+   "frozen": "FAIL"
+  }
+ },
+ "chosen": null,
+ "files": {
+  "selection-rule.json": "6909823c990834940f1c90434b35b4f2ebd56f551c7d741877097f91cc9dac64",
+  "evaluate.py": "75bacc123bda5f5f5f61a0711186b9cc47a07391855f530460f5f7f563cc1068",
+  "results.json": "7465df4f34a1468e99caa682119edba5c09dcac76c8e69e540c0a00bac6a1c44",
+  "round-7/evaluate.py": "8c5f796055a1ab0647d600cb20db2a179e22f385b1f08d8e094d74dd967a0dda",
+  "labels": {
+   "collection": "69a540c1ae2075ddaff71b5a039791bf90b6c6868a317ec3d58443e29037d406",
+   "fresh": "a2802bbe8303534f916b7e8292393b7bdaebf02a14855652147953a887ed7f5d",
+   "fresh-2": "d123cde2c93e24f942a5fd2004d15c8cd88055b09ee223958f9527c6f35e0936",
+   "fresh-3": "a5a871b628f7d96c742216e7568f8802874038fd5c2baf32db8784290e58599c"
+  },
+  "fresh3": {
+   "articles": "1d824357b760c20c7b84b031150a549fd67bff16afaa1dc39ef9db5a95f469de",
+   "items": "833c4929fe83623174d11b8e56374a4a5f58c415d3fec14cde642d494f5b2a1f",
+   "vectors": "3067aa5ea7a3fd31fea9083913b46f33ae0bb43edea98e6b8dba00fd7f6ddcec",
+   "windowArticles": 229,
+   "streamArticles": 1388
+  }
+ },
+ "order": [
+  "evaluate.py written before fresh-3 labels existed; smoke run on in-memory random labels (fresh-3 rng 9, other sets rng 7 via round 7)",
+  "evaluate.py frozen 2026-10-29T12:20:07Z (sha256 75bacc12...), before the labels were frozen (12:23:11Z)",
+  "ONE real run with fresh-3 labels sha256 a5a871b6...; results.json frozen (sha256 7465df4f...)"
+ ],
+ "protocols": {
+  "window": {
+   "scoredProfiles": [
+    "chips",
+    "security",
+    "funding",
+    "regulation",
+    "courts",
+    "robotics",
+    "open-models",
+    "coding",
+    "earnings"
+   ],
+   "macroT11F": {
+    "truncated": 0.4840844147199051,
+    "truncated-guard": 0.5168004595759839,
+    "frozen": 0.583196599585106,
+    "alwaysNo": 0.0,
+    "alwaysYes": 0.07679344532363755,
+    "keywordNarrow": 0.6816857848968219,
+    "keywordBroad": 0.5835652404862495
+   },
+   "macroBrierSkill": {
+    "truncated": 0.1262322168151937,
+    "truncated-guard": 0.2797717945514907,
+    "frozen": 0.3710526422084566
+   },
+   "intervalsVsBaselines": {
+    "truncated": {
+     "alwaysNo": [
+      0.30797725115605884,
+      0.669501843131201
+     ],
+     "alwaysYes": [
+      0.2592105189753029,
+      0.5559412439654393
+     ],
+     "keywordNarrow": [
+      -0.41032182322185407,
+      0.008335595172838854
+     ],
+     "keywordBroad": [
+      -0.30435757726069745,
+      0.09200533686826189
+     ]
+    },
+    "truncated-guard": {
+     "alwaysNo": [
+      0.3611080411601628,
+      0.6842060203139242
+     ],
+     "alwaysYes": [
+      0.3099738244244323,
+      0.5679442851839905
+     ],
+     "keywordNarrow": [
+      -0.35919196379439516,
+      0.017982621251392696
+     ],
+     "keywordBroad": [
+      -0.22518775698297122,
+      0.0940809834669572
+     ]
+    },
+    "frozen": {
+     "alwaysNo": [
+      0.41661916155567424,
+      0.7427485364996977
+     ],
+     "alwaysYes": [
+      0.3617347867476719,
+      0.6457813989388794
+     ],
+     "keywordNarrow": [
+      -0.3065181095780348,
+      0.08871444862857031
+     ],
+     "keywordBroad": [
+      -0.16558348156186273,
+      0.16849040026104445
+     ]
+    }
+   },
+   "perProfileT11F": {
+    "chips": {
+     "truncated": 0.5456882111707966,
+     "truncated-guard": 0.5456882111707966,
+     "frozen": 0.6928967906180877,
+     "alwaysNo": 0.0,
+     "alwaysYes": 0.054639748101500275,
+     "keywordNarrow": 0.7894736842105263,
+     "keywordBroad": 0.5749486652977412
+    },
+    "security": {
+     "truncated": 0.8014247551202137,
+     "truncated-guard": 0.8014247551202137,
+     "frozen": 0.8565768402315601,
+     "alwaysNo": 0.0,
+     "alwaysYes": 0.17413823897124486,
+     "keywordNarrow": 0.7298907646474677,
+     "keywordBroad": 0.7643040136635354
+    },
+    "funding": {
+     "truncated": 0.9176365264100269,
+     "truncated-guard": 0.9176365264100269,
+     "frozen": 0.9173478655767484,
+     "alwaysNo": 0.0,
+     "alwaysYes": 0.23809523809523808,
+     "keywordNarrow": 0.8645533141210374,
+     "keywordBroad": 0.8669497523000708
+    },
+    "regulation": {
+     "truncated": 0.23076923076923078,
+     "truncated-guard": 0.23076923076923078,
+     "frozen": 0.23076923076923078,
+     "alwaysNo": 0.0,
+     "alwaysYes": 0.0376768976291123,
+     "keywordNarrow": 0.33557046979865773,
+     "keywordBroad": 0.40114613180515757
+    },
+    "courts": {
+     "truncated": 0.3333333333333333,
+     "truncated-guard": 0.3333333333333333,
+     "frozen": 0.3333333333333333,
+     "alwaysNo": 0.0,
+     "alwaysYes": 0.01980554555275477,
+     "keywordNarrow": 0.8888888888888888,
+     "keywordBroad": 0.5154639175257731
+    },
+    "robotics": {
+     "truncated": 0.13072566432250227,
+     "truncated-guard": 0.4251700680272109,
+     "frozen": 0.6598960338852522,
+     "alwaysNo": 0.0,
+     "alwaysYes": 0.02335609054976644,
+     "keywordNarrow": 0.7142857142857143,
+     "keywordBroad": 0.7666666666666667
+    },
+    "open-models": {
+     "truncated": 0.481410928430796,
+     "truncated-guard": 0.481410928430796,
+     "frozen": 0.6201933640958031,
+     "alwaysNo": 0.0,
+     "alwaysYes": 0.028084797970646856,
+     "keywordNarrow": 0.38922155688622756,
+     "keywordBroad": 0.40540540540540543
+    },
+    "coding": {
+     "truncated": 0.7453165374677002,
+     "truncated-guard": 0.7453165374677002,
+     "frozen": 0.7673013923013923,
+     "alwaysNo": 0.0,
+     "alwaysYes": 0.04734158776402039,
+     "keywordNarrow": 0.55,
+     "keywordBroad": 0.3106508875739645
+    },
+    "earnings": {
+     "truncated": 0.17045454545454544,
+     "truncated-guard": 0.17045454545454544,
+     "frozen": 0.17045454545454544,
+     "alwaysNo": 0.0,
+     "alwaysYes": 0.06800286327845383,
+     "keywordNarrow": 0.8732876712328768,
+     "keywordBroad": 0.646551724137931
+    }
+   },
+   "perProfileBrierSkill": {
+    "chips": {
+     "truncated": 0.32030383685163977,
+     "truncated-guard": 0.32030383685163977,
+     "frozen": 0.46752551911268275
+    },
+    "security": {
+     "truncated": 0.5758731760490954,
+     "truncated-guard": 0.5758731760490954,
+     "frozen": 0.6970429024124523
+    },
+    "funding": {
+     "truncated": 0.7641340712933219,
+     "truncated-guard": 0.7641340712933219,
+     "frozen": 0.7583740616351791
+    },
+    "regulation": {
+     "truncated": 0.05132990798089915,
+     "truncated-guard": 0.05132990798089915,
+     "frozen": 0.05302632415538011
+    },
+    "courts": {
+     "truncated": 0.10596816817389759,
+     "truncated-guard": 0.10596816817389759,
+     "frozen": 0.10855535454654153
+    },
+    "robotics": {
+     "truncated": -1.0539952792737761,
+     "truncated-guard": 0.3278609203528964,
+     "frozen": 0.48597312478633903
+    },
+    "open-models": {
+     "truncated": -0.07455470058770125,
+     "truncated-guard": -0.07455470058770125,
+     "frozen": 0.3276947216110003
+    },
+    "coding": {
+     "truncated": 0.45763790524270076,
+     "truncated-guard": 0.45763790524270076,
+     "frozen": 0.45256107044554317
+    },
+    "earnings": {
+     "truncated": -0.010607134393333717,
+     "truncated-guard": -0.010607134393333717,
+     "frozen": -0.011279298829009021
+    }
+   },
+   "fallbackCounts": {
+    "truncated": {
+     "unscored|no relevant answer: keyword": 4,
+     "scored|none": 17,
+     "scored|platt": 1,
+     "unscored|none": 10
+    },
+    "truncated-guard": {
+     "unscored|no relevant answer: keyword": 4,
+     "scored|none": 17,
+     "scored|round-2 EM": 1,
+     "unscored|none": 10
+    },
+    "frozen": {
+     "unscored|no relevant answer: keyword": 4,
+     "scored|none": 18,
+     "unscored|none": 10
+    }
+   },
+   "pass": {
+    "truncated": "FAIL",
+    "truncated-guard": "FAIL",
+    "frozen": "FAIL"
+   }
+  },
+  "pool": {
+   "scoredProfiles": [
+    "chips",
+    "security",
+    "funding",
+    "regulation",
+    "courts",
+    "robotics",
+    "safety",
+    "open-models",
+    "health",
+    "coding",
+    "earnings"
+   ],
+   "macroT11F": {
+    "truncated": 0.6316644934431402,
+    "truncated-guard": 0.6316644934431402,
+    "frozen": 0.47205167303077905,
+    "alwaysNo": 0.0,
+    "alwaysYes": 0.0642006926209521,
+    "keywordNarrow": 0.6334055600824903,
+    "keywordBroad": 0.554958640654899
+   },
+   "macroBrierSkill": {
+    "truncated": 0.3781524853784985,
+    "truncated-guard": 0.3781524853784985,
+    "frozen": 0.24327175986024654
+   },
+   "intervalsVsBaselines": {
+    "truncated": {
+     "alwaysNo": [
+      0.49814874186571856,
+      0.7623095037452823
+     ],
+     "alwaysYes": [
+      0.451587435012502,
+      0.6783352925981875
+     ],
+     "keywordNarrow": [
+      -0.10102987460838836,
+      0.07714701223297672
+     ],
+     "keywordBroad": [
+      -0.008156665719431706,
+      0.17928877775077418
+     ]
+    },
+    "truncated-guard": {
+     "alwaysNo": [
+      0.49814874186571856,
+      0.7623095037452823
+     ],
+     "alwaysYes": [
+      0.451587435012502,
+      0.6783352925981875
+     ],
+     "keywordNarrow": [
+      -0.10102987460838836,
+      0.07714701223297672
+     ],
+     "keywordBroad": [
+      -0.008156665719431706,
+      0.17928877775077418
+     ]
+    },
+    "frozen": {
+     "alwaysNo": [
+      0.32200453188062694,
+      0.6257012232256052
+     ],
+     "alwaysYes": [
+      0.24166419533421074,
+      0.5667402206045021
+     ],
+     "keywordNarrow": [
+      -0.3429996888883702,
+      -0.0029911546018528508
+     ],
+     "keywordBroad": [
+      -0.2655997812510881,
+      0.07533894958389288
+     ]
+    }
+   },
+   "perProfileT11F": {
+    "chips": {
+     "truncated": 0.6289308176100629,
+     "truncated-guard": 0.6289308176100629,
+     "frozen": 0.28531709254600823,
+     "alwaysNo": 0.0,
+     "alwaysYes": 0.05304829770387965,
+     "keywordNarrow": 0.7859531772575251,
+     "keywordBroad": 0.5765765765765766
+    },
+    "security": {
+     "truncated": 0.8439452527832233,
+     "truncated-guard": 0.8439452527832233,
+     "frozen": 0.8700942636947452,
+     "alwaysNo": 0.0,
+     "alwaysYes": 0.1654100630866287,
+     "keywordNarrow": 0.7279344858962693,
+     "keywordBroad": 0.7659738260200154
+    },
+    "funding": {
+     "truncated": 0.9102845193944381,
+     "truncated-guard": 0.9102845193944381,
+     "frozen": 0.022545817455997097,
+     "alwaysNo": 0.0,
+     "alwaysYes": 0.2436472346786248,
+     "keywordNarrow": 0.8623548922056384,
+     "keywordBroad": 0.8680142687277052
+    },
+    "regulation": {
+     "truncated": 0.25316455696202533,
+     "truncated-guard": 0.25316455696202533,
+     "frozen": 0.1694915254237288,
+     "alwaysNo": 0.0,
+     "alwaysYes": 0.040075436115040074,
+     "keywordNarrow": 0.3142857142857143,
+     "keywordBroad": 0.4491725768321513
+    },
+    "courts": {
+     "truncated": 0.5128205128205128,
+     "truncated-guard": 0.5128205128205128,
+     "frozen": 0.5128205128205128,
+     "alwaysNo": 0.0,
+     "alwaysYes": 0.01778258852636462,
+     "keywordNarrow": 0.8947368421052632,
+     "keywordBroad": 0.4976303317535545
+    },
+    "robotics": {
+     "truncated": 0.7403545359749739,
+     "truncated-guard": 0.7403545359749739,
+     "frozen": 0.6741376902667225,
+     "alwaysNo": 0.0,
+     "alwaysYes": 0.025443330763299923,
+     "keywordNarrow": 0.7453416149068323,
+     "keywordBroad": 0.7772020725388601
+    },
+    "safety": {
+     "truncated": 0.2994791666666667,
+     "truncated-guard": 0.2994791666666667,
+     "frozen": 0.4166666666666667,
+     "alwaysNo": 0.0,
+     "alwaysYes": 0.012586532410320957,
+     "keywordNarrow": 0.1953125,
+     "keywordBroad": 0.2631578947368421
+    },
+    "open-models": {
+     "truncated": 0.4624007639571842,
+     "truncated-guard": 0.4624007639571842,
+     "frozen": 0.3512396694214876,
+     "alwaysNo": 0.0,
+     "alwaysYes": 0.02882967118591242,
+     "keywordNarrow": 0.4146341463414634,
+     "keywordBroad": 0.41533546325878595
+    },
+    "health": {
+     "truncated": 0.5882352941176471,
+     "truncated-guard": 0.5882352941176471,
+     "frozen": 0.5,
+     "alwaysNo": 0.0,
+     "alwaysYes": 0.014040561622464899,
+     "keywordNarrow": 0.5932203389830508,
+     "keywordBroad": 0.5666666666666667
+    },
+    "coding": {
+     "truncated": 0.7615894039735099,
+     "truncated-guard": 0.7615894039735099,
+     "frozen": 0.43956043956043955,
+     "alwaysNo": 0.0,
+     "alwaysYes": 0.046158660616491945,
+     "keywordNarrow": 0.5633802816901409,
+     "keywordBroad": 0.3128991060025543
+    },
+    "earnings": {
+     "truncated": 0.9471046036142989,
+     "truncated-guard": 0.9471046036142989,
+     "frozen": 0.9506947254822609,
+     "alwaysNo": 0.0,
+     "alwaysYes": 0.05918524212144504,
+     "keywordNarrow": 0.8703071672354948,
+     "keywordBroad": 0.6119162640901772
+    }
+   },
+   "perProfileBrierSkill": {
+    "chips": {
+     "truncated": 0.40358264891849105,
+     "truncated-guard": 0.40358264891849105,
+     "frozen": 0.060123103656765486
+    },
+    "security": {
+     "truncated": 0.6865701214506826,
+     "truncated-guard": 0.6865701214506826,
+     "frozen": 0.7315290903120095
+    },
+    "funding": {
+     "truncated": 0.764179135414037,
+     "truncated-guard": 0.764179135414037,
+     "frozen": -0.25701020268589725
+    },
+    "regulation": {
+     "truncated": 0.052370094767276,
+     "truncated-guard": 0.052370094767276,
+     "frozen": 0.020753950894491446
+    },
+    "courts": {
+     "truncated": 0.21922521421719476,
+     "truncated-guard": 0.21922521421719476,
+     "frozen": 0.1998092440660168
+    },
+    "robotics": {
+     "truncated": 0.5606208030789794,
+     "truncated-guard": 0.5606208030789794,
+     "frozen": 0.33434417548912526
+    },
+    "safety": {
+     "truncated": -0.15394618056116516,
+     "truncated-guard": -0.15394618056116516,
+     "frozen": 0.15001133460523763
+    },
+    "open-models": {
+     "truncated": -0.1396876784894786,
+     "truncated-guard": -0.1396876784894786,
+     "frozen": 0.1964944176802731
+    },
+    "health": {
+     "truncated": 0.418726341580421,
+     "truncated-guard": 0.418726341580421,
+     "frozen": 0.20299214085538464
+    },
+    "coding": {
+     "truncated": 0.46136127186962833,
+     "truncated-guard": 0.46136127186962833,
+     "frozen": 0.14951000583664198
+    },
+    "earnings": {
+     "truncated": 0.886675566917417,
+     "truncated-guard": 0.886675566917417,
+     "frozen": 0.8874320977526629
+    }
+   },
+   "fallbackCounts": {
+    "truncated": {
+     "unscored|none": 10,
+     "scored|none": 22
+    },
+    "truncated-guard": {
+     "unscored|none": 10,
+     "scored|none": 22
+    },
+    "frozen": {
+     "unscored|none": 10,
+     "scored|none": 22
+    }
+   },
+   "pass": {
+    "truncated": "FAIL",
+    "truncated-guard": "FAIL",
+    "frozen": "FAIL"
+   }
+  }
+ },
+ "postHocFindings (post hoc, not part of the rule)": [
+  "post hoc: the confirmatory slice does not confirm round 7. Pool: truncated = truncated-guard (no fallback fired) 0.632 vs keywordNarrow 0.633, interval [-0.101, +0.077], vs keywordBroad [-0.008, +0.179]; it still beats frozen (0.472) by a wide margin, as on poolA/poolB. Window: truncated 0.484, guard 0.517, frozen 0.583, all far below keywordNarrow 0.682.",
+  "post hoc: fresh-3's teaching window is thin. earnings and courts got ONE relevant answer each (of 5-10 shown); with one taught score the relevant sd hits the 0.05 floor and pi its 1/n bound, so all three designs accept 2-3 articles (earnings 0.170 vs keyword 0.873, courts 0.333 vs 0.889). These two profiles alone cost about 0.14 of macro T11F in the window protocol, identically for all candidates.",
+  "post hoc: the guard did what it was for: robotics window N=5 truncated ended at mu1 <= mu0 (mu1 -0.08, pi 0.5), the Platt fallback accepted 1,385 of 1,388 (T11F 0.02, Brier skill -1.05 for the profile); the round-2 EM fallback gave robotics 0.425. It was the only fallback in a scored unit in either protocol.",
+  "post hoc: where the truncated fit does converge well apart, it is often too far below the frozen fit in the window: chips N=5 accepted 7 (0.29) vs frozen 22 (0.68), robotics N=10 4 vs 20. With few window answers the truncation term pulls the relevant component down to sd ~0.3 and pi to its lower bound.",
+  "post hoc: in the pool protocol the truncated fit fixes the frozen design's starvation (funding 0.023 -> 0.910, chips 0.285 -> 0.629, coding 0.440 -> 0.762) but courts (0.513 vs keyword 0.895, pi at 1/n, s1 0.15) and regulation (0.253 vs 0.314) stay below the keyword, and safety/open-models get the opposite failure (mu1 near 1, pi 0.05-0.19, 26-59 accepted).",
+  "post hoc: many fits in all candidates end with pi at its lower bound 1/n; the plug-in threshold then accepts only the few top articles. This bound-hitting, not the mu1 <= mu0 mode, is the dominant failure on fresh-3.",
+  "post hoc: no-relevant-answer keyword fallbacks: window 4 units (biology, energy; all unscored); pool none."
+ ],
+ "noneEligible": "No change to the package; the exam stays sealed. Why: on unseen data, truncated's pool interval vs keywordNarrow is [-0.101, +0.077] (bar -0.05) and vs keywordBroad [-0.008, +0.179] (bar 0); in the window protocol every candidate's lower bound vs keywordNarrow is below -0.30 and none beats keywordBroad. The round-7 pool result did not replicate on fresh-3."
+}

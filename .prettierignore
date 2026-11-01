@@ -18,3 +18,6 @@ package-lock.json
 /packages/information-filtering/relevance-filtering/eval/profiles.*
 /packages/information-filtering/relevance-filtering/eval/keywords.json
 /packages/information-filtering/relevance-filtering/eval/implementation-check
+# The frozen files of the relevance-filtering research rounds, kept byte for
+# byte (the sha256 files beside them).
+/docs/research/relevance-filtering

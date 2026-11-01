@@ -1,0 +1,38 @@
+{
+ "fresh3": 3086,
+ "fresh4": 4090,
+ "shared": 3086,
+ "identical": 3081,
+ "differing": [
+  {
+   "url": "https://the-decoder.com/openai-claims-gpt-5-6-sol-beats-opus-5-on-arc-agi-3-with-its-latest-api-and-two-additional-settings/",
+   "fields": [
+    "textContent"
+   ]
+  },
+  {
+   "url": "https://the-decoder.com/microsoft-ai-bets-on-cheap-specialist-models-instead-of-chasing-the-frontier/",
+   "fields": [
+    "textContent"
+   ]
+  },
+  {
+   "url": "https://the-decoder.com/openai-goes-full-china-pricing-mode-with-an-80-percent-cut-to-its-most-affordable-gpt-5-6-model/",
+   "fields": [
+    "textContent"
+   ]
+  },
+  {
+   "url": "https://the-decoder.com/anthropic-says-one-ai-agent-beats-many-subagents-now-that-models-can-handle-complexity-alone/",
+   "fields": [
+    "textContent"
+   ]
+  },
+  {
+   "url": "https://the-decoder.com/anthropics-claude-now-writes-code-and-proves-it-safe-automatically/",
+   "fields": [
+    "textContent"
+   ]
+  }
+ ]
+}

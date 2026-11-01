@@ -1,0 +1,18 @@
+{
+  "round": "relevance-filtering research round 5 (zukhruf #3195): replication of round 4's best design on a second fresh slice, with one guarded variant",
+  "writtenBefore": "the second fresh slice is crawled, read, labelled or embedded, and before any round-5 score.",
+  "why": "Round 4's desc|binormal+kw scored 0.733 against keywordNarrow 0.679 on the fresh January-March set, but its interval against the keyword was [-0.012, +0.118]. Its one large loss (regulation) came from the binormal fit taking a large cluster of stream articles for the relevant curve (limitation 13). A replication tests the same design on new data; one variant guards the fit.",
+  "inherits": "../round-4/selection-rule.json (sha256 ead2b9f67f4f68e66f439c31eafae69fc464af2676b34bce406d00a4b28c7c29) and through it round 2's rule, except where this file says otherwise. Bootstrap seed: numpy.random.default_rng(31956). Draw seeds: numpy.random.default_rng([3195, 5, profileIndex, kRel, kNon, draw]).",
+  "data": {
+    "teaching": "Every labelled article of the round-2 collection (labels.json 69a540c1...) and of the first fresh slice (fresh/labels.json a2802bbe...), with the round-2 pool rules.",
+    "test": "Second fresh slice: every article of the-decoder.com and siliconangle.com published 2025-10-01 to 2025-12-31, crawled and prepared like fresh/ (same exclusions plus every collection and fresh-slice URL and title), labelled for all 16 profiles by blind annotators with profiles.md, frozen before any round-5 score; vectors checked as in round 4."
+  },
+  "candidates": {
+    "desc|binormal+kw": "round 4, unchanged (the replication).",
+    "desc|binormal-w+kw": "the same, with the stream down-weighted in the binormal M-step for the component shapes (EM-lambda of Nigam, McCallum, Thrun & Mitchell 2000): each stream article counts lambda = (kRel + kNon) / n_stream in the means and standard deviations, so the stream as a whole weighs as much as the taught articles; the mixing weight is still the mean responsibility over the stream. With no data to choose lambda by cross-validation, equal total weight is the neutral choice."
+  },
+  "simplerWins": "desc|binormal+kw 0 < desc|binormal-w+kw 1.",
+  "scoredProfiles": "Profiles with >= 10 strict relevant teaching articles and >= 20 strict relevant test articles in the second slice.",
+  "pass": "As round 2's eligibility: every baseline's topic-bootstrap interval of the difference lies above 0, and macro Brier skill is above 0. A passing design is frozen in plan.json with an implementationCheck, and only then is the exam scored, once, by the round-2 examVerdictRule with k from the narrow regex and the teaching pool = collection + both fresh slices.",
+  "noneEligible": "No design is frozen; the exam stays sealed; the round reports why."
+}

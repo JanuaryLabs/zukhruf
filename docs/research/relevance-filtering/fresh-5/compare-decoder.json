@@ -1,0 +1,38 @@
+{
+ "fresh4": 4090,
+ "fresh5": 4092,
+ "shared": 4090,
+ "identical": 4085,
+ "differing": [
+  {
+   "url": "https://the-decoder.com/anthropic-follows-openai-in-admitting-its-claude-models-reached-out-of-test-environments-and-attacked-real-world-systems/",
+   "fields": [
+    "textContent"
+   ]
+  },
+  {
+   "url": "https://the-decoder.com/eu-pools-up-to-e30-billion-for-ai-gigafactories-while-us-tech-giants-casually-spend-20-times-more/",
+   "fields": [
+    "textContent"
+   ]
+  },
+  {
+   "url": "https://the-decoder.com/new-deepseek-flash-model-matches-openais-gpt-5-6-luna-at-roughly-60-percent-lower-cost/",
+   "fields": [
+    "textContent"
+   ]
+  },
+  {
+   "url": "https://the-decoder.com/thinking-machines-bets-on-efficiency-over-size-with-its-second-model-inkling-small/",
+   "fields": [
+    "textContent"
+   ]
+  },
+  {
+   "url": "https://the-decoder.com/google-deepmind-unveils-gemini-robotics-2-to-power-robots-of-all-shapes-from-tabletop-arms-to-humanoids/",
+   "fields": [
+    "textContent"
+   ]
+  }
+ ]
+}

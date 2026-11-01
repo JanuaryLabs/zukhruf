@@ -224,11 +224,11 @@ The SiliconANGLE crawl ran on elt 4d63590f, whose crawler waits 1 s between requ
 
 **What happens.** MIT News, the Arc Institute and Isomorphic Labs give the publish date only in visible markup, and Fortune only in JSON-LD. The crawler returned no date, so each crawl read it from the cached page (elt #3148). A period crawl also cannot stop paging at a date (elt #3212).
 
-### 7. The research data is outside the repository
+### 7. The publisher texts and the crawls are outside the repository
 
-**What happens.** The labels, crawls and rounds are in a hidden folder on one Mac. The anthropic-outlets texts exist only in the gitignored eval cache of event detection (#3213).
+**What happens.** The package's eval harness keeps the labels of every slice (`eval/sets/`, the collection and fresh to fresh-7). The frozen files of rounds 2 to 16 are in `docs/research/relevance-filtering/`, byte for byte with their sha256 files: rules, evaluators, results, the decision model's answers and the slice scripts. The publisher texts (`articles.json` and `items.json` of each slice), the crawls and the vectors are not in a public repository. They are only in the research folder on one Mac (`~/.codex/visualizations/2026/10/23/01a16a1c-424c-7793-8ca9-02cc1c715d82/relevance-profiles`, 7.1 GB with the crawls). The anthropic-outlets texts exist only in the gitignored eval cache of event detection (#3213).
 
-**Before you change it.** Move the labels and the round scripts into the package's eval harness when the package exists, as event detection did (#3145).
+**Before you change it.** To run a round again, put the research folder's `articles.json`, `items.json` and vectors beside the files of `docs/research/relevance-filtering/`, and check them against the `.sha256` files there. When that folder is lost, crawl the slices again with the scripts in `docs/research/relevance-filtering/fresh-*/`: the sites can change a post after a crawl, so compare the new texts with the old sha256 and record the differences.
 
 ### 8. The boundary of "Biology" needs judgement
 

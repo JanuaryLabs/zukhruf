@@ -1,0 +1,630 @@
+{
+ "rule": {
+  "file": "selection-rule.json",
+  "sha256": "08e4956eb9a962b5fb47017f7eecc483ce9f1164e1b9bb91a6c3ff8ea66c974c"
+ },
+ "evaluate": {
+  "sha256": "373fe940859f9300f4f3147c3173c16868420a62f4618bcf459be8f5cd21a363",
+  "round13": "3736b270004fad654ecc4b1fb5bd4b1bf15aea8e065f7d79f6b6612724a97a4e"
+ },
+ "labels": {
+  "file": "round-14/labels-gpt.json",
+  "sha256": "4bd638346c359832e1dea3f76d66bc9b7e8b39a08ef4100cac3723b6ac504c1c"
+ },
+ "seed": 31967,
+ "holds": true,
+ "map": {
+  "scoredProfiles": [
+   "chips",
+   "security",
+   "funding",
+   "regulation",
+   "courts",
+   "robotics",
+   "safety",
+   "open-models",
+   "jobs",
+   "health",
+   "coding",
+   "earnings"
+  ],
+  "macro": {
+   "d1": 0.8080290724580257,
+   "d1+kw": 0.7564174427125466,
+   "desc+kw": 0.6343084693548692,
+   "hybrid": 0.6340491999581509,
+   "hybrid-rocchio": 0.6451529868815529,
+   "keywordNarrow": 0.40216275231394544,
+   "keywordBroad": 0.4271884510228245,
+   "newest": 0.061854963385388595
+  },
+  "intervals": {
+   "d1": {
+    "desc+kw": [
+     0.09363027977186535,
+     0.27766615004631073
+    ],
+    "hybrid": [
+     0.08745857080521725,
+     0.29025369491286623
+    ],
+    "hybrid-rocchio": [
+     0.09821806261949252,
+     0.24663894159995486
+    ],
+    "keywordNarrow": [
+     0.3217938653199586,
+     0.5051703316009193
+    ],
+    "keywordBroad": [
+     0.3021938281450085,
+     0.4631501976941636
+    ],
+    "newest": [
+     0.6767700532035142,
+     0.8107813827747535
+    ]
+   },
+   "d1+kw": {
+    "desc+kw": [
+     0.06804986766905496,
+     0.1945273599715984
+    ],
+    "hybrid": [
+     0.06927632170205972,
+     0.19057716179886033
+    ],
+    "hybrid-rocchio": [
+     0.07233416642247266,
+     0.15480750165099705
+    ],
+    "keywordNarrow": [
+     0.30537212988795065,
+     0.41412456592210845
+    ],
+    "keywordBroad": [
+     0.2731236338201215,
+     0.3822731809706266
+    ],
+    "newest": [
+     0.5986742422385086,
+     0.7802238760408702
+    ]
+   }
+  },
+  "perProfile": {
+   "chips": {
+    "d1": 0.8394829669725298,
+    "d1+kw": 0.8479203124178892,
+    "desc+kw": 0.7487861973118548,
+    "hybrid": 0.6931885115049152,
+    "hybrid-rocchio": 0.6754102195302532,
+    "keywordNarrow": 0.5323603842778354,
+    "keywordBroad": 0.46294920415012836,
+    "newest": 0.07811679885298514
+   },
+   "security": {
+    "d1": 0.9545535933800388,
+    "d1+kw": 0.9153575509309313,
+    "desc+kw": 0.8892896070529914,
+    "hybrid": 0.8590719070828934,
+    "hybrid-rocchio": 0.8099643438629627,
+    "keywordNarrow": 0.5612108291907514,
+    "keywordBroad": 0.6563213710614465,
+    "newest": 0.16920482071166934
+   },
+   "funding": {
+    "d1": 0.9828069578773379,
+    "d1+kw": 0.9686857412408459,
+    "desc+kw": 0.9099768561122908,
+    "hybrid": 0.9072827741413849,
+    "hybrid-rocchio": 0.9158654476195671,
+    "keywordNarrow": 0.7055294889655118,
+    "keywordBroad": 0.8557458979639194,
+    "newest": 0.20771549537359424
+   },
+   "regulation": {
+    "d1": 0.8932895978908333,
+    "d1+kw": 0.7329529086773396,
+    "desc+kw": 0.30261024185271335,
+    "hybrid": 0.3173067478986067,
+    "hybrid-rocchio": 0.44717024276494194,
+    "keywordNarrow": 0.11603659648190313,
+    "keywordBroad": 0.2856431785716389,
+    "newest": 0.04523550712323582
+   },
+   "courts": {
+    "d1": 0.8568622973229472,
+    "d1+kw": 0.8814761777281622,
+    "desc+kw": 0.7397928017675681,
+    "hybrid": 0.7379022985935515,
+    "hybrid-rocchio": 0.7475892425603552,
+    "keywordNarrow": 0.6732110080212869,
+    "keywordBroad": 0.41446742239169987,
+    "newest": 0.01887610429411267
+   },
+   "robotics": {
+    "d1": 0.827396387503096,
+    "d1+kw": 0.8365965730992689,
+    "desc+kw": 0.6154076876218226,
+    "hybrid": 0.7898067342069771,
+    "hybrid-rocchio": 0.7245691207898333,
+    "keywordNarrow": 0.5291242675070673,
+    "keywordBroad": 0.5914780874509427,
+    "newest": 0.018632856084828706
+   },
+   "safety": {
+    "d1": 0.693917803701105,
+    "d1+kw": 0.3815504249371677,
+    "desc+kw": 0.26681529248266045,
+    "hybrid": 0.15687659773960752,
+    "hybrid-rocchio": 0.27502240325094524,
+    "keywordNarrow": 0.054371050201647064,
+    "keywordBroad": 0.06699770833641175,
+    "newest": 0.026030450424969497
+   },
+   "open-models": {
+    "d1": 0.6819186064208105,
+    "d1+kw": 0.6169901297576466,
+    "desc+kw": 0.5940060885478633,
+    "hybrid": 0.5687074100041414,
+    "hybrid-rocchio": 0.6049047623960199,
+    "keywordNarrow": 0.20836480796442594,
+    "keywordBroad": 0.3384047519502135,
+    "newest": 0.03936812589294686
+   },
+   "jobs": {
+    "d1": 0.47049440127643427,
+    "d1+kw": 0.47482735293476075,
+    "desc+kw": 0.38911341209209516,
+    "hybrid": 0.29362120520708695,
+    "hybrid-rocchio": 0.31668438712409885,
+    "keywordNarrow": 0.11102625419613343,
+    "keywordBroad": 0.0986288429830114,
+    "newest": 0.01998125915007253
+   },
+   "health": {
+    "d1": 0.8278760345080218,
+    "d1+kw": 0.8128456550327918,
+    "desc+kw": 0.6314306443770372,
+    "hybrid": 0.7604872621152338,
+    "hybrid-rocchio": 0.7024000276551354,
+    "keywordNarrow": 0.44709341743877395,
+    "keywordBroad": 0.4961049742004324,
+    "newest": 0.01712826951994847
+   },
+   "coding": {
+    "d1": 0.677591745679362,
+    "d1+kw": 0.6184991746410908,
+    "desc+kw": 0.5594887655617216,
+    "hybrid": 0.5539935426269994,
+    "hybrid-rocchio": 0.5336538597226692,
+    "keywordNarrow": 0.22228649647592735,
+    "keywordBroad": 0.19191478437478082,
+    "newest": 0.041493589861036684
+   },
+   "earnings": {
+    "d1": 0.9901584769637924,
+    "d1+kw": 0.9893073111526658,
+    "desc+kw": 0.9649840374778113,
+    "hybrid": 0.970345408376413,
+    "hybrid-rocchio": 0.9886017853018527,
+    "keywordNarrow": 0.6653384270460811,
+    "keywordBroad": 0.667605188839268,
+    "newest": 0.060476283335263135
+   }
+  }
+ },
+ "daily": {
+  "scoredProfiles": [
+   "chips",
+   "security",
+   "funding",
+   "regulation",
+   "courts",
+   "robotics",
+   "safety",
+   "open-models",
+   "jobs",
+   "coding",
+   "earnings"
+  ],
+  "macroRecall": {
+   "d1": 0.9411786645188294,
+   "d1+kw": 0.9366593239057387,
+   "desc+kw": 0.8838587644611575,
+   "hybrid": 0.8821493177268205,
+   "hybrid-rocchio": 0.8804131958611372,
+   "keywordNarrow": 0.4618857722569873,
+   "keywordBroad": 0.6794744611131166,
+   "newest": 0.4201693271002448
+  },
+  "intervals": {
+   "d1": {
+    "desc+kw": [
+     0.012630453892172665,
+     0.11420576738220367
+    ],
+    "hybrid": [
+     0.014726319723693659,
+     0.1164175368742983
+    ],
+    "hybrid-rocchio": [
+     0.024880216404490223,
+     0.10307383746208183
+    ],
+    "keywordNarrow": [
+     0.3592584592339763,
+     0.6183891132003986
+    ],
+    "keywordBroad": [
+     0.16194997075254877,
+     0.3894259447063997
+    ],
+    "newest": [
+     0.46331493770272547,
+     0.5823001322835232
+    ]
+   },
+   "d1+kw": {
+    "desc+kw": [
+     0.006433799005227596,
+     0.11028113361183034
+    ],
+    "hybrid": [
+     0.009326641274711108,
+     0.11413897589626021
+    ],
+    "hybrid-rocchio": [
+     0.01869101533873066,
+     0.1002631336731964
+    ],
+    "keywordNarrow": [
+     0.3558576937668046,
+     0.6127645531752446
+    ],
+    "keywordBroad": [
+     0.1577309303548114,
+     0.38307855464732
+    ],
+    "newest": [
+     0.46060376157936,
+     0.5764649448813151
+    ]
+   }
+  },
+  "perProfile": {
+   "chips": {
+    "d1": 0.9574074074074074,
+    "d1+kw": 0.9554232804232804,
+    "desc+kw": 0.8768518518518517,
+    "hybrid": 0.8644179894179893,
+    "hybrid-rocchio": 0.8447751322751321,
+    "keywordNarrow": 0.5908730158730159,
+    "keywordBroad": 0.7970899470899471,
+    "newest": 0.37407407407407406
+   },
+   "security": {
+    "d1": 0.9044022817460317,
+    "d1+kw": 0.8915922619047619,
+    "desc+kw": 0.8705357142857143,
+    "hybrid": 0.8604662698412698,
+    "hybrid-rocchio": 0.8104352678571428,
+    "keywordNarrow": 0.5888082837301587,
+    "keywordBroad": 0.7283730158730158,
+    "newest": 0.34087921626984125
+   },
+   "funding": {
+    "d1": 0.894047619047619,
+    "d1+kw": 0.8860317460317461,
+    "desc+kw": 0.8661678004535146,
+    "hybrid": 0.8679591836734694,
+    "hybrid-rocchio": 0.8675283446712018,
+    "keywordNarrow": 0.5666156462585034,
+    "keywordBroad": 0.8001473922902494,
+    "newest": 0.43630952380952376
+   },
+   "regulation": {
+    "d1": 0.9846938775510203,
+    "d1+kw": 0.9846938775510203,
+    "desc+kw": 0.7120181405895692,
+    "hybrid": 0.6961451247165534,
+    "hybrid-rocchio": 0.7789115646258504,
+    "keywordNarrow": 0.12414965986394556,
+    "keywordBroad": 0.6388888888888888,
+    "newest": 0.532312925170068
+   },
+   "courts": {
+    "d1": 0.9797101449275362,
+    "d1+kw": 0.9797101449275362,
+    "desc+kw": 0.7884057971014493,
+    "hybrid": 0.8173913043478261,
+    "hybrid-rocchio": 0.8347826086956522,
+    "keywordNarrow": 0.6782608695652174,
+    "keywordBroad": 0.7333333333333333,
+    "newest": 0.4579710144927536
+   },
+   "robotics": {
+    "d1": 0.9125,
+    "d1+kw": 0.9125,
+    "desc+kw": 0.9041666666666667,
+    "hybrid": 0.9041666666666667,
+    "hybrid-rocchio": 0.875,
+    "keywordNarrow": 0.7374999999999999,
+    "keywordBroad": 0.7958333333333334,
+    "newest": 0.5291666666666667
+   },
+   "safety": {
+    "d1": 0.9583333333333334,
+    "d1+kw": 0.936111111111111,
+    "desc+kw": 0.9694444444444444,
+    "hybrid": 0.9555555555555556,
+    "hybrid-rocchio": 0.9611111111111111,
+    "keywordNarrow": 0.125,
+    "keywordBroad": 0.15833333333333333,
+    "newest": 0.38888888888888884
+   },
+   "open-models": {
+    "d1": 0.965099715099715,
+    "d1+kw": 0.9458689458689458,
+    "desc+kw": 0.9387464387464387,
+    "hybrid": 0.9387464387464387,
+    "hybrid-rocchio": 0.9515669515669515,
+    "keywordNarrow": 0.4123931623931623,
+    "keywordBroad": 0.7628205128205128,
+    "newest": 0.26282051282051283
+   },
+   "jobs": {
+    "d1": 0.9047619047619048,
+    "d1+kw": 0.9047619047619048,
+    "desc+kw": 0.9365079365079364,
+    "hybrid": 0.9365079365079364,
+    "hybrid-rocchio": 0.9087301587301587,
+    "keywordNarrow": 0.19047619047619047,
+    "keywordBroad": 0.4523809523809524,
+    "newest": 0.49206349206349204
+   },
+   "coding": {
+    "d1": 0.9298941798941799,
+    "d1+kw": 0.9444444444444443,
+    "desc+kw": 0.8974867724867724,
+    "hybrid": 0.9034391534391535,
+    "hybrid-rocchio": 0.8928571428571429,
+    "keywordNarrow": 0.4523809523809524,
+    "keywordBroad": 0.7275132275132274,
+    "newest": 0.26587301587301587
+   },
+   "earnings": {
+    "d1": 0.9621148459383754,
+    "d1+kw": 0.9621148459383754,
+    "desc+kw": 0.9621148459383754,
+    "hybrid": 0.9588468720821662,
+    "hybrid-rocchio": 0.9588468720821662,
+    "keywordNarrow": 0.6142857142857142,
+    "keywordBroad": 0.8795051353874884,
+    "newest": 0.5415032679738562
+   }
+  }
+ },
+ "decision": {
+  "perProfileT11F": {
+   "chips": {
+    "d1>=0.5": 0.7885304659498208,
+    "keywordNarrow": 0.7523510971786834
+   },
+   "security": {
+    "d1>=0.5": 0.9095744680851063,
+    "keywordNarrow": 0.717680608365019
+   },
+   "funding": {
+    "d1>=0.5": 0.9377289377289377,
+    "keywordNarrow": 0.8293612964728313
+   },
+   "regulation": {
+    "d1>=0.5": 0.8153846153846154,
+    "keywordNarrow": 0.30386740331491713
+   },
+   "courts": {
+    "d1>=0.5": 0.8247422680412371,
+    "keywordNarrow": 0.8849557522123894
+   },
+   "robotics": {
+    "d1>=0.5": 0.8673469387755102,
+    "keywordNarrow": 0.7786885245901639
+   },
+   "safety": {
+    "d1>=0.5": 0.5882352941176471,
+    "keywordNarrow": 0.14423076923076922
+   },
+   "open-models": {
+    "d1>=0.5": 0.7792207792207793,
+    "keywordNarrow": 0.4074074074074074
+   },
+   "jobs": {
+    "d1>=0.5": 0.2857142857142857,
+    "keywordNarrow": 0.39215686274509803
+   },
+   "health": {
+    "d1>=0.5": 0.4069767441860465,
+    "keywordNarrow": 0.6
+   },
+   "coding": {
+    "d1>=0.5": 0.581081081081081,
+    "keywordNarrow": 0.4482758620689655
+   },
+   "earnings": {
+    "d1>=0.5": 0.9701492537313433,
+    "keywordNarrow": 0.8787878787878788
+   }
+  },
+  "macroT11F": {
+   "d1>=0.5": 0.7295570943347008,
+   "keywordNarrow": 0.5948136218645103
+  },
+  "intervalVsKeywordNarrow": [
+   0.0201718977308329,
+   0.2593358027670843
+  ],
+  "perProfileBrierSkill": {
+   "chips": 0.5589022058693706,
+   "security": 0.7293461767161455,
+   "funding": 0.8675033442416398,
+   "regulation": 0.6655551058315257,
+   "courts": 0.5902668527929834,
+   "robotics": 0.5047906923975534,
+   "safety": 0.2192570906148592,
+   "open-models": 0.4461647583269721,
+   "jobs": 0.1837433708568651,
+   "health": -1.6135327476503067,
+   "coding": 0.22819794379846292,
+   "earnings": 0.8883855182610925
+  },
+  "macroBrierSkill": 0.3557150260047635
+ },
+ "agreement": {
+  "biology": {
+   "claudeTrue": 4,
+   "gptTrue": 7,
+   "bothTrue": 4,
+   "trueVsNull": 3,
+   "trueVsFalse": 0,
+   "kappaStrict": 0.7262554948714504,
+   "kappaAmbiguousRelevant": 0.9625948779555524
+  },
+  "chips": {
+   "claudeTrue": 49,
+   "gptTrue": 91,
+   "bothTrue": 49,
+   "trueVsNull": 34,
+   "trueVsFalse": 8,
+   "kappaStrict": 0.6853708948939754,
+   "kappaAmbiguousRelevant": 0.855796479523262
+  },
+  "security": {
+   "claudeTrue": 169,
+   "gptTrue": 220,
+   "bothTrue": 167,
+   "trueVsNull": 33,
+   "trueVsFalse": 22,
+   "kappaStrict": 0.8356848463702379,
+   "kappaAmbiguousRelevant": 0.9291003184713377
+  },
+  "funding": {
+   "claudeTrue": 267,
+   "gptTrue": 277,
+   "bothTrue": 267,
+   "trueVsNull": 9,
+   "trueVsFalse": 1,
+   "kappaStrict": 0.9770658327781144,
+   "kappaAmbiguousRelevant": 0.9843514925641035
+  },
+  "regulation": {
+   "claudeTrue": 50,
+   "gptTrue": 77,
+   "bothTrue": 50,
+   "trueVsNull": 20,
+   "trueVsFalse": 7,
+   "kappaStrict": 0.777557279451561,
+   "kappaAmbiguousRelevant": 0.9142141515341266
+  },
+  "courts": {
+   "claudeTrue": 24,
+   "gptTrue": 29,
+   "bothTrue": 24,
+   "trueVsNull": 2,
+   "trueVsFalse": 3,
+   "kappaStrict": 0.9038164508972434,
+   "kappaAmbiguousRelevant": 0.9104177019851951
+  },
+  "robotics": {
+   "claudeTrue": 18,
+   "gptTrue": 26,
+   "bothTrue": 18,
+   "trueVsNull": 8,
+   "trueVsFalse": 0,
+   "kappaStrict": 0.8153141008358065,
+   "kappaAmbiguousRelevant": 1.0
+  },
+  "safety": {
+   "claudeTrue": 12,
+   "gptTrue": 24,
+   "bothTrue": 12,
+   "trueVsNull": 7,
+   "trueVsFalse": 5,
+   "kappaStrict": 0.6627277203348082,
+   "kappaAmbiguousRelevant": 0.8330218574794831
+  },
+  "open-models": {
+   "claudeTrue": 39,
+   "gptTrue": 54,
+   "bothTrue": 38,
+   "trueVsNull": 9,
+   "trueVsFalse": 8,
+   "kappaStrict": 0.8109547232909632,
+   "kappaAmbiguousRelevant": 0.8937407895757384
+  },
+  "jobs": {
+   "claudeTrue": 7,
+   "gptTrue": 23,
+   "bothTrue": 7,
+   "trueVsNull": 8,
+   "trueVsFalse": 8,
+   "kappaStrict": 0.46245524547550015,
+   "kappaAmbiguousRelevant": 0.7464465501924785
+  },
+  "energy": {
+   "claudeTrue": 0,
+   "gptTrue": 4,
+   "bothTrue": 0,
+   "trueVsNull": 3,
+   "trueVsFalse": 1,
+   "kappaStrict": 0.0,
+   "kappaAmbiguousRelevant": 0.749267935578317
+  },
+  "quantum": {
+   "claudeTrue": 12,
+   "gptTrue": 12,
+   "bothTrue": 12,
+   "trueVsNull": 0,
+   "trueVsFalse": 0,
+   "kappaStrict": 1.0,
+   "kappaAmbiguousRelevant": 0.967373184091452
+  },
+  "health": {
+   "claudeTrue": 15,
+   "gptTrue": 22,
+   "bothTrue": 15,
+   "trueVsNull": 6,
+   "trueVsFalse": 1,
+   "kappaStrict": 0.8083150109934053,
+   "kappaAmbiguousRelevant": 0.9774069065602439
+  },
+  "education": {
+   "claudeTrue": 4,
+   "gptTrue": 6,
+   "bothTrue": 4,
+   "trueVsNull": 2,
+   "trueVsFalse": 0,
+   "kappaStrict": 0.7992968063287358,
+   "kappaAmbiguousRelevant": 0.8564091814275191
+  },
+  "coding": {
+   "claudeTrue": 17,
+   "gptTrue": 62,
+   "bothTrue": 17,
+   "trueVsNull": 13,
+   "trueVsFalse": 32,
+   "kappaStrict": 0.419064849889748,
+   "kappaAmbiguousRelevant": 0.6415958142576842
+  },
+  "earnings": {
+   "claudeTrue": 89,
+   "gptTrue": 90,
+   "bothTrue": 88,
+   "trueVsNull": 0,
+   "trueVsFalse": 3,
+   "kappaStrict": 0.9820688451638235,
+   "kappaAmbiguousRelevant": 0.9704218662291114
+  }
+ }
+}

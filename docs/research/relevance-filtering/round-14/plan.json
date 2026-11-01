@@ -1,0 +1,263 @@
+{
+ "status": "ROUND 14 DONE 2026-10-30 (#3383, limitation 16). HOLDS: on GPT-family labels d1 MAP 0.808 vs desc+kw 0.634 (interval [+0.094, +0.278], 12 profiles) and daily recall 0.941 vs 0.884 ([+0.013, +0.114], 11 profiles); d1 > desc+kw on 12 of 12 profiles. Per selection-rule.json 'then': the Scorer design goes ahead with d1; the user decides its shape.",
+ "holds": true,
+ "files": {
+  "selection-rule.json": "08e4956eb9a962b5fb47017f7eecc483ce9f1164e1b9bb91a6c3ff8ea66c974c",
+  "evaluate.py": "373fe940859f9300f4f3147c3173c16868420a62f4618bcf459be8f5cd21a363",
+  "labels-gpt.json": "4bd638346c359832e1dea3f76d66bc9b7e8b39a08ef4100cac3723b6ac504c1c",
+  "results.json": "a861738f6743196400af95cdd827e8452d0331078454e21e896d347b08bbf641",
+  "round-13/evaluate.py": "3736b270004fad654ecc4b1fb5bd4b1bf15aea8e065f7d79f6b6612724a97a4e",
+  "fresh-5/labels.json": "187918bddcbdbac1782aeaeb483327cd0a869c5b7a6721188b9920895d954484"
+ },
+ "annotators": {
+  "tool": "codex-cli 0.164.0 (cmux wrapper), exec --ignore-user-config --ephemeral -s workspace-write -C round-14/annotate, no --model",
+  "model": "the ChatGPT account's default model; the exec event log does not name it (searched: no 'model' field in logs/codex-N.jsonl)",
+  "blindAudit": "logs/codex-1..4.jsonl: every command used show/put/body/check.py, cat profiles.md, or counted its own labels file for the final report; no path outside round-14/annotate; no hook output items",
+  "minutes": "about 5 per queue (17:38 to 17:45 local)"
+ },
+ "order": [
+  "selection-rule.json frozen 2026-10-30T14:36:45Z, before any GPT label",
+  "evaluate.py --claude reproduced round-13/results.json exactly; a mutant label file (funding's relevant labels removed) failed that check ('map.macro differs'), so the label swap reaches the scores; evaluate.py frozen (373fe940...)",
+  "4 Codex annotators, labels merged and frozen (4bd63834...)",
+  "ONE real run (run.log), results.json frozen"
+ ],
+ "map": {
+  "scoredProfiles": [
+   "chips",
+   "security",
+   "funding",
+   "regulation",
+   "courts",
+   "robotics",
+   "safety",
+   "open-models",
+   "jobs",
+   "health",
+   "coding",
+   "earnings"
+  ],
+  "macro": {
+   "d1": 0.8080290724580257,
+   "d1+kw": 0.7564174427125466,
+   "desc+kw": 0.6343084693548692,
+   "hybrid": 0.6340491999581509,
+   "hybrid-rocchio": 0.6451529868815529,
+   "keywordNarrow": 0.40216275231394544,
+   "keywordBroad": 0.4271884510228245,
+   "newest": 0.061854963385388595
+  },
+  "d1VsDesc+kw": [
+   0.09363027977186535,
+   0.27766615004631073
+  ]
+ },
+ "daily": {
+  "scoredProfiles": [
+   "chips",
+   "security",
+   "funding",
+   "regulation",
+   "courts",
+   "robotics",
+   "safety",
+   "open-models",
+   "jobs",
+   "coding",
+   "earnings"
+  ],
+  "macroRecall": {
+   "d1": 0.9411786645188294,
+   "d1+kw": 0.9366593239057387,
+   "desc+kw": 0.8838587644611575,
+   "hybrid": 0.8821493177268205,
+   "hybrid-rocchio": 0.8804131958611372,
+   "keywordNarrow": 0.4618857722569873,
+   "keywordBroad": 0.6794744611131166,
+   "newest": 0.4201693271002448
+  },
+  "d1VsDesc+kw": [
+   0.012630453892172665,
+   0.11420576738220367
+  ]
+ },
+ "decision": {
+  "macroT11F": {
+   "d1>=0.5": 0.7295570943347008,
+   "keywordNarrow": 0.5948136218645103
+  },
+  "intervalVsKeywordNarrow": [
+   0.0201718977308329,
+   0.2593358027670843
+  ],
+  "macroBrierSkill": 0.3557150260047635,
+  "perProfileBrierSkill": {
+   "chips": 0.5589022058693706,
+   "security": 0.7293461767161455,
+   "funding": 0.8675033442416398,
+   "regulation": 0.6655551058315257,
+   "courts": 0.5902668527929834,
+   "robotics": 0.5047906923975534,
+   "safety": 0.2192570906148592,
+   "open-models": 0.4461647583269721,
+   "jobs": 0.1837433708568651,
+   "health": -1.6135327476503067,
+   "coding": 0.22819794379846292,
+   "earnings": 0.8883855182610925
+  }
+ },
+ "agreement": {
+  "biology": {
+   "claudeTrue": 4,
+   "gptTrue": 7,
+   "bothTrue": 4,
+   "trueVsNull": 3,
+   "trueVsFalse": 0,
+   "kappaStrict": 0.726,
+   "kappaAmbiguousRelevant": 0.963
+  },
+  "chips": {
+   "claudeTrue": 49,
+   "gptTrue": 91,
+   "bothTrue": 49,
+   "trueVsNull": 34,
+   "trueVsFalse": 8,
+   "kappaStrict": 0.685,
+   "kappaAmbiguousRelevant": 0.856
+  },
+  "security": {
+   "claudeTrue": 169,
+   "gptTrue": 220,
+   "bothTrue": 167,
+   "trueVsNull": 33,
+   "trueVsFalse": 22,
+   "kappaStrict": 0.836,
+   "kappaAmbiguousRelevant": 0.929
+  },
+  "funding": {
+   "claudeTrue": 267,
+   "gptTrue": 277,
+   "bothTrue": 267,
+   "trueVsNull": 9,
+   "trueVsFalse": 1,
+   "kappaStrict": 0.977,
+   "kappaAmbiguousRelevant": 0.984
+  },
+  "regulation": {
+   "claudeTrue": 50,
+   "gptTrue": 77,
+   "bothTrue": 50,
+   "trueVsNull": 20,
+   "trueVsFalse": 7,
+   "kappaStrict": 0.778,
+   "kappaAmbiguousRelevant": 0.914
+  },
+  "courts": {
+   "claudeTrue": 24,
+   "gptTrue": 29,
+   "bothTrue": 24,
+   "trueVsNull": 2,
+   "trueVsFalse": 3,
+   "kappaStrict": 0.904,
+   "kappaAmbiguousRelevant": 0.91
+  },
+  "robotics": {
+   "claudeTrue": 18,
+   "gptTrue": 26,
+   "bothTrue": 18,
+   "trueVsNull": 8,
+   "trueVsFalse": 0,
+   "kappaStrict": 0.815,
+   "kappaAmbiguousRelevant": 1.0
+  },
+  "safety": {
+   "claudeTrue": 12,
+   "gptTrue": 24,
+   "bothTrue": 12,
+   "trueVsNull": 7,
+   "trueVsFalse": 5,
+   "kappaStrict": 0.663,
+   "kappaAmbiguousRelevant": 0.833
+  },
+  "open-models": {
+   "claudeTrue": 39,
+   "gptTrue": 54,
+   "bothTrue": 38,
+   "trueVsNull": 9,
+   "trueVsFalse": 8,
+   "kappaStrict": 0.811,
+   "kappaAmbiguousRelevant": 0.894
+  },
+  "jobs": {
+   "claudeTrue": 7,
+   "gptTrue": 23,
+   "bothTrue": 7,
+   "trueVsNull": 8,
+   "trueVsFalse": 8,
+   "kappaStrict": 0.462,
+   "kappaAmbiguousRelevant": 0.746
+  },
+  "energy": {
+   "claudeTrue": 0,
+   "gptTrue": 4,
+   "bothTrue": 0,
+   "trueVsNull": 3,
+   "trueVsFalse": 1,
+   "kappaStrict": 0.0,
+   "kappaAmbiguousRelevant": 0.749
+  },
+  "quantum": {
+   "claudeTrue": 12,
+   "gptTrue": 12,
+   "bothTrue": 12,
+   "trueVsNull": 0,
+   "trueVsFalse": 0,
+   "kappaStrict": 1.0,
+   "kappaAmbiguousRelevant": 0.967
+  },
+  "health": {
+   "claudeTrue": 15,
+   "gptTrue": 22,
+   "bothTrue": 15,
+   "trueVsNull": 6,
+   "trueVsFalse": 1,
+   "kappaStrict": 0.808,
+   "kappaAmbiguousRelevant": 0.977
+  },
+  "education": {
+   "claudeTrue": 4,
+   "gptTrue": 6,
+   "bothTrue": 4,
+   "trueVsNull": 2,
+   "trueVsFalse": 0,
+   "kappaStrict": 0.799,
+   "kappaAmbiguousRelevant": 0.856
+  },
+  "coding": {
+   "claudeTrue": 17,
+   "gptTrue": 62,
+   "bothTrue": 17,
+   "trueVsNull": 13,
+   "trueVsFalse": 32,
+   "kappaStrict": 0.419,
+   "kappaAmbiguousRelevant": 0.642
+  },
+  "earnings": {
+   "claudeTrue": 89,
+   "gptTrue": 90,
+   "bothTrue": 88,
+   "trueVsNull": 0,
+   "trueVsFalse": 3,
+   "kappaStrict": 0.982,
+   "kappaAmbiguousRelevant": 0.97
+  }
+ },
+ "reportedOnly": {
+  "why": "post-hoc, no decision depends on it",
+  "sameSevenProfilesAsRound13": {
+   "d1": 0.886,
+   "desc+kw": 0.736,
+   "brierSkill": 0.678
+  },
+  "reading": "The GPT key draws wider boundaries (more relevant: coding 62 vs 17, jobs 23 vs 7, chips 91 vs 49) and keeps almost every Claude relevant. The ranking result holds under both keys; d1's calibration does not transfer as well (macro Brier skill +0.726 on the Claude key, +0.356 on the GPT key, health -1.61), because a probability is calibrated to one boundary."
+ }
+}

@@ -1,0 +1,107 @@
+{
+ "round": 6,
+ "status": "NO DESIGN FROZEN by the gate. Product-style teaching (yes/no on the reader's top matches): desc|binormal+kw 0.701 vs keywordNarrow 0.656, interval [-0.019, +0.118], Brier skill +0.512; non-inferior at margin 0.05 (reported, not the gate). The exam stays sealed.",
+ "selectionRule": {
+  "file": "selection-rule.json",
+  "sha256": "0d1455141d7c634bc6170ecb8281610c093e4160f20a37b3e7b1de500c35699d"
+ },
+ "evaluate": {
+  "file": "evaluate.py",
+  "sha256": "a9204fd6c3810460ce5f03cae8fffb449af0c1359d9c99d81658fd945c38e305"
+ },
+ "results": {
+  "file": "results.json",
+  "sha256": "f3134ddc3c3180fe7679b32e0418aa41e8d0cc453c95a193a5b8aab5b507b9d9"
+ },
+ "scoredProfiles": [
+  "chips",
+  "security",
+  "funding",
+  "regulation",
+  "courts",
+  "robotics",
+  "open-models",
+  "jobs",
+  "coding",
+  "earnings"
+ ],
+ "macroF05": {
+  "desc|binormal": 0.618,
+  "desc|binormal+kw": 0.701,
+  "rocchio-q0|binormal+kw": 0.67,
+  "alwaysNo": 0.0,
+  "alwaysYes": 0.067,
+  "keywordNarrow": 0.656,
+  "keywordBroad": 0.528
+ },
+ "macroBrierSkill": {
+  "desc|binormal": 0.41,
+  "desc|binormal+kw": 0.512,
+  "rocchio-q0|binormal+kw": 0.163
+ },
+ "intervalsVsBaselines": {
+  "desc|binormal": {
+   "alwaysNo": [
+    0.46236244787099884,
+    0.765435262808028
+   ],
+   "alwaysYes": [
+    0.41509634615263663,
+    0.6714369961676094
+   ],
+   "keywordNarrow": [
+    -0.13662979247698015,
+    0.06873707377708041
+   ],
+   "keywordBroad": [
+    -0.02292523297828676,
+    0.19298959547985592
+   ]
+  },
+  "desc|binormal+kw": {
+   "alwaysNo": [
+    0.5627222924476734,
+    0.8308593173443855
+   ],
+   "alwaysYes": [
+    0.5094510226746878,
+    0.7479134309757426
+   ],
+   "keywordNarrow": [
+    -0.018930299397270207,
+    0.11803257822399792
+   ],
+   "keywordBroad": [
+    0.09171649948753034,
+    0.2517731681458932
+   ]
+  },
+  "rocchio-q0|binormal+kw": {
+   "alwaysNo": [
+    0.5613486321213536,
+    0.7726023263654559
+   ],
+   "alwaysYes": [
+    0.5171438949352831,
+    0.6789115713410924
+   ],
+   "keywordNarrow": [
+    -0.06900484515259174,
+    0.11428522368793606
+   ],
+   "keywordBroad": [
+    0.05986665024959995,
+    0.2242681318017768
+   ]
+  }
+ },
+ "nonInferiorMargin005": {
+  "desc|binormal": false,
+  "desc|binormal+kw": true,
+  "rocchio-q0|binormal+kw": false
+ },
+ "findingsPostHoc": [
+  "Three tests agree on the lead over the typed keyword: +0.054 (round 4), +0.053 (round 5), +0.045 (round 6, product teaching). Losses stay on chips, robotics, coding (small) and regulation.",
+  "Product teaching gives few relevant answers for rare profiles (courts 1-2, jobs 0-1, earnings 1 of 10 shown), yet the design keeps working there because the keyword evidence and the stream carry it."
+ ]
+}

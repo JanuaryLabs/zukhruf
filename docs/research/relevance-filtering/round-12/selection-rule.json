@@ -1,0 +1,23 @@
+{
+  "round": "relevance-filtering research round 12 (zukhruf #3383, step 1): does words + meaning rank better than today's ranker?",
+  "writtenBefore": "the fifth fresh slice (2025-01-01..2025-03-31) is crawled, read, labelled or embedded, and before any round-12 score.",
+  "why": "The user chose (2026-10-30) a Scorer port with several scoring methods; the port is built only when a second method wins on new months. Round 3 (collection, round-3/plan.json) found that fusing word matching with embedding similarity gave the best average precision on most profiles; it was dropped only because its yes/no threshold failed, and the reader now ranks (rounds 10 and 11).",
+  "data": {
+    "teaching": "Product teaching (round 6: the reader shows the top N_teach by cos with the description and the top N_teach keyword matches; the answer key answers; ambiguous skipped), N_teach in {5, 10}, from the whole labelled pool: collection + fresh + fresh-2 + fresh-3 + fresh-4.",
+    "test": "fresh-5: every the-decoder.com and siliconangle.com article published 2025-01-01..2025-03-31, crawled and prepared like fresh-4 (all earlier URLs and titles excluded), labelled for all 16 profiles by four blind annotators with profiles.md, frozen before any round-12 score; vectors checked as before."
+  },
+  "rankers": {
+    "desc+kw": "the frozen ranker (freeze-ranking/plan.json), unchanged: reference.",
+    "hybrid": "score = z(cos(x, d)) + z(lex(x)), where lex is the cosine of the article's tf-idf vector with the tf-idf vector of the profile's name + description + keywords (round 3's analyzer: lower-case, [a-z0-9]+, scikit-learn English stop words, nltk 3.9.2 Porter stemmer, sublinear tf, smooth idf, L2; idf fitted on the teaching pool's texts), and z standardises by the scored stream's mean and sd. No taught answer moves the order. Ties by cos(x, d), then id.",
+    "hybrid-rocchio": "round 3's hybrid-rocchio with the taught answers of product teaching: z(cos(x, q_dense)) + z(cos(x_lex, q_lex)), q_dense = 8 d + 16 mean(taught relevant) - 4 mean(taught not relevant), q_lex = 8 q0_lex + 16 mean(taught relevant lex) - 4 mean(taught not relevant lex), q0_lex = name + description + keywords; terms with no relevant answer use 0; ties as above."
+  },
+  "baselines": "keywordNarrow and keywordBroad (matches first, newest first) and newest, as round 10.",
+  "metrics": {
+    "map": "AP per profile over the scored stream's labelled articles; mean over N_teach; macro over profiles with >= 20 strict relevant fresh-5 articles (MAP).",
+    "daily": "Round 11's daily recall of the best N_day (3, 5, 10) per UTC day; macro over profiles with >= 20 days that hold a strict relevant article.",
+    "secondary": "Daily precision, missed days, and both metrics per profile (reported only)."
+  },
+  "pass": "Topic-level paired bootstrap (2000 replicates, numpy.random.default_rng(31965)). A hybrid ranker replaces desc+kw only when (1) the interval of (hybrid - desc+kw) MAP lies entirely above 0, and (2) the interval of (hybrid - desc+kw) daily recall has lower bound > -0.05. If both hybrids pass, the simpler (hybrid, no taught answers) wins unless its MAP interval against hybrid-rocchio lies entirely below 0.",
+  "then": "A passing ranker becomes the second adapter of the Scorer port (#3383); the port's API is shown to the user before it is built.",
+  "noneEligible": "desc+kw stays; the result goes to #3383 and the research record."
+}

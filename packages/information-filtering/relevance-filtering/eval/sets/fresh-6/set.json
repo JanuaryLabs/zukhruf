@@ -1,0 +1,17 @@
+{
+  "role": "training",
+  "sliceStart": "2024-10-01",
+  "frozenAt": "2026-11-01T05:50:48Z",
+  "firstScoredAt": "2026-11-01T05:51:53Z",
+  "labelsSha256": {
+    "labels.json": "9d8a3e8a4df6c32b3f04db7d4fcb1c2d72935cd95e55a230064655847ab0cb7a"
+  },
+  "annotator": "4 blind Claude (Opus 5.5) annotators, one queue each, with profiles.md.",
+  "source": "The Decoder and SiliconANGLE, 2024-10-01 to 2024-12-31 (1,578). labels.json is fresh-6/labels.json of the relevance-profiles bundle of zukhruf #3195 (~/.codex/visualizations/2026/10/23/01a16a1c-424c-7793-8ca9-02cc1c715d82/relevance-profiles; its frozen files are in eval/research); articles.json holds the q, id and publish date of fresh-6/items.json.",
+  "weaknesses": [
+    "Annotators are one AI model.",
+    "Round 15 scored this set, and round 16 uses it as a teaching pool only.",
+    "It does not have SiliconANGLE's post of 2024-10-01 00:12 UTC, whose URL has the US date 2024-09-30 (limitation 17 of docs/research/relevance-filtering.md).",
+    "The Decoder pages were crawled with an elt build that was not committed; fresh-6/compare-decoder.json found 4,086 of 4,092 shared pages extracted as in fresh-5."
+  ]
+}

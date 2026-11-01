@@ -1,0 +1,5228 @@
+{
+ "rule": {
+  "file": "selection-rule.json",
+  "sha256": "ead2b9f67f4f68e66f439c31eafae69fc464af2676b34bce406d00a4b28c7c29"
+ },
+ "fresh": {
+  "labels": "a2802bbe8303534f916b7e8292393b7bdaebf02a14855652147953a887ed7f5d",
+  "articles": 1675
+ },
+ "environment": {
+  "python": "3.13.13 (main, Apr  7 2026, 18:19:01) [Clang 21.0.0 (clang-2100.0.123.102)]",
+  "numpy": "2.3.4"
+ },
+ "scoredProfiles": [
+  "chips",
+  "security",
+  "funding",
+  "regulation",
+  "courts",
+  "robotics",
+  "open-models",
+  "jobs",
+  "health",
+  "coding",
+  "earnings"
+ ],
+ "macroF05": {
+  "desc|binormal": 0.6490579244610603,
+  "rocchio-q0|binormal": 0.6070280130733823,
+  "desc|binormal+kw": 0.7329193067311492,
+  "rocchio-q0|binormal+kw": 0.7055135049000282,
+  "rocchio-q0|kwstrat": 0.563724824645467,
+  "alwaysNo": 0.0,
+  "alwaysYes": 0.06777474477857194,
+  "keywordNarrow": 0.6792842048349551,
+  "keywordBroad": 0.5533441138156932
+ },
+ "macroBrierSkill": {
+  "desc|binormal": 0.3170676549119612,
+  "rocchio-q0|binormal": 0.08962398560488835,
+  "desc|binormal+kw": 0.47503719890092877,
+  "rocchio-q0|binormal+kw": 0.37790768242700473,
+  "rocchio-q0|kwstrat": -0.5610226011927696
+ },
+ "intervalsVsBaselines": {
+  "desc|binormal": {
+   "alwaysNo": [
+    0.497528612046721,
+    0.7747996833743345
+   ],
+   "alwaysYes": [
+    0.4480669335412451,
+    0.6913848198588951
+   ],
+   "keywordNarrow": [
+    -0.10914151157275127,
+    0.049155981178698405
+   ],
+   "keywordBroad": [
+    -0.022092410926674046,
+    0.2059638635298471
+   ]
+  },
+  "rocchio-q0|binormal": {
+   "alwaysNo": [
+    0.4666049250601289,
+    0.7334313085711813
+   ],
+   "alwaysYes": [
+    0.41918995702057654,
+    0.6517455537390332
+   ],
+   "keywordNarrow": [
+    -0.14626049105920472,
+    -0.0038659479097338796
+   ],
+   "keywordBroad": [
+    -0.05286501050309791,
+    0.16069536698032166
+   ]
+  },
+  "desc|binormal+kw": {
+   "alwaysNo": [
+    0.5787286163006865,
+    0.8404303028459372
+   ],
+   "alwaysYes": [
+    0.5278775092777765,
+    0.7625147042276851
+   ],
+   "keywordNarrow": [
+    -0.011914994191901476,
+    0.11794720834392874
+   ],
+   "keywordBroad": [
+    0.06446558110058086,
+    0.2875571398678329
+   ]
+  },
+  "rocchio-q0|binormal+kw": {
+   "alwaysNo": [
+    0.5602057371301569,
+    0.8162743747197331
+   ],
+   "alwaysYes": [
+    0.5055738718428531,
+    0.7395029540425732
+   ],
+   "keywordNarrow": [
+    -0.033736705541452555,
+    0.08322891075094
+   ],
+   "keywordBroad": [
+    0.04419444474127048,
+    0.2536428472885949
+   ]
+  },
+  "rocchio-q0|kwstrat": {
+   "alwaysNo": [
+    0.4337713789864509,
+    0.6794556188224533
+   ],
+   "alwaysYes": [
+    0.3836109454550181,
+    0.599179126434815
+   ],
+   "keywordNarrow": [
+    -0.1991844879133556,
+    -0.03900214597149053
+   ],
+   "keywordBroad": [
+    -0.12000424079020842,
+    0.1313835448289379
+   ]
+  }
+ },
+ "eligible": [],
+ "best": null,
+ "simplerVsBest": {},
+ "chosen": null,
+ "profiles": {
+  "biology": {
+   "profile": "biology",
+   "rows": {
+    "desc|binormal|strict": {
+     "f05": 0.6902731269288441,
+     "t11su": 0.5788095238095238,
+     "precision": 0.8334999999999999,
+     "recall": 0.42357142857142854,
+     "brier": 0.0035144884882725037,
+     "brierSkill": 0.16002242223752006,
+     "ece": 0.006846679393617308,
+     "accepted": 9.66,
+     "tp": 2.965,
+     "fp": 6.695,
+     "fn": 4.035
+    },
+    "desc|binormal|ambiguousRelevant": {
+     "f05": 0.7394588970811796,
+     "t11su": 0.6039583333333334,
+     "precision": 0.909198639075317,
+     "recall": 0.431875,
+     "brier": 0.006153528916557182,
+     "brierSkill": 0.3495895657581471,
+     "ece": 0.0064188033992223096,
+     "accepted": 13.605,
+     "tp": 6.91,
+     "fp": 6.695,
+     "fn": 9.09
+    },
+    "rocchio-q0|binormal|strict": {
+     "f05": 0.5450559654927967,
+     "t11su": 0.47476190476190483,
+     "precision": 0.6986102337368162,
+     "recall": 0.3571428571428571,
+     "brier": 0.012236203929014056,
+     "brierSkill": -1.9245043685868028,
+     "ece": 0.026766905110746562,
+     "accepted": 67.22,
+     "tp": 2.5,
+     "fp": 64.72,
+     "fn": 4.5
+    },
+    "rocchio-q0|binormal|ambiguousRelevant": {
+     "f05": 0.49242569084391724,
+     "t11su": 0.4255208333333333,
+     "precision": 0.7591525173905473,
+     "recall": 0.2559375,
+     "brier": 0.016128365742641607,
+     "brierSkill": -0.7047222022565874,
+     "ece": 0.028703591327125615,
+     "accepted": 68.815,
+     "tp": 4.095,
+     "fp": 64.72,
+     "fn": 11.905
+    },
+    "desc|binormal+kw|strict": {
+     "f05": 0.7821770334928231,
+     "t11su": 0.614047619047619,
+     "precision": 0.995,
+     "recall": 0.42357142857142854,
+     "brier": 0.0031974805529153805,
+     "brierSkill": 0.23578865637409774,
+     "ece": 0.005629991473158132,
+     "accepted": 8.68,
+     "tp": 2.965,
+     "fp": 5.715,
+     "fn": 4.035
+    },
+    "desc|binormal+kw|ambiguousRelevant": {
+     "f05": 0.8233442123585726,
+     "t11su": 0.6604166666666665,
+     "precision": 0.9950087336244542,
+     "recall": 0.49375,
+     "brier": 0.005458385777896095,
+     "brierSkill": 0.4230642104389042,
+     "ece": 0.0055877843281338,
+     "accepted": 13.615,
+     "tp": 7.9,
+     "fp": 5.715,
+     "fn": 8.1
+    },
+    "rocchio-q0|binormal+kw|strict": {
+     "f05": 0.6079056308982921,
+     "t11su": 0.49857142857142844,
+     "precision": 0.8372227278110802,
+     "recall": 0.335,
+     "brier": 0.0076574184432664175,
+     "brierSkill": -0.8301553177231348,
+     "ece": 0.019535396369351046,
+     "accepted": 54.395,
+     "tp": 2.345,
+     "fp": 52.05,
+     "fn": 4.655
+    },
+    "rocchio-q0|binormal+kw|ambiguousRelevant": {
+     "f05": 0.6428343151195538,
+     "t11su": 0.5155208333333333,
+     "precision": 0.8911277954226562,
+     "recall": 0.3621875,
+     "brier": 0.010444627709449135,
+     "brierSkill": -0.10396732283466044,
+     "ece": 0.0212058474295882,
+     "accepted": 57.845,
+     "tp": 5.795,
+     "fp": 52.05,
+     "fn": 10.205
+    },
+    "rocchio-q0|kwstrat|strict": {
+     "f05": 0.4378813984407495,
+     "t11su": 0.3961904761904762,
+     "precision": 0.6823840265812102,
+     "recall": 0.21428571428571425,
+     "brier": 0.01579589667211046,
+     "brierSkill": -2.775285953987447,
+     "ece": 0.03510290320960895,
+     "accepted": 82.2,
+     "tp": 1.5,
+     "fp": 80.7,
+     "fn": 5.5
+    },
+    "rocchio-q0|kwstrat|ambiguousRelevant": {
+     "f05": 0.4729357307798903,
+     "t11su": 0.41489583333333335,
+     "precision": 0.794603366214401,
+     "recall": 0.2515625,
+     "brier": 0.019215211552270083,
+     "brierSkill": -1.0309929894265275,
+     "ece": 0.03785856345386114,
+     "accepted": 84.725,
+     "tp": 4.025,
+     "fp": 80.7,
+     "fn": 11.975
+    },
+    "alwaysNo|strict": {
+     "f05": 0.0,
+     "t11su": 0.33333333333333326,
+     "precision": 0.0,
+     "recall": 0.0,
+     "brier": 0.004201680672268907,
+     "brierSkill": -0.00421940928270037,
+     "ece": 0.004201680672268907,
+     "accepted": 0.0,
+     "tp": 0.0,
+     "fp": 0.0,
+     "fn": 7.0
+    },
+    "alwaysNo|ambiguousRelevant": {
+     "f05": 0.0,
+     "t11su": 0.33333333333333326,
+     "precision": 0.0,
+     "recall": 0.0,
+     "brier": 0.009552238805970148,
+     "brierSkill": -0.009644364074743672,
+     "ece": 0.009552238805970148,
+     "accepted": 0.0,
+     "tp": 0.0,
+     "fp": 0.0,
+     "fn": 16.0
+    },
+    "alwaysYes|strict": {
+     "f05": 0.005246589716684153,
+     "t11su": 0.0,
+     "precision": 0.004201680672268907,
+     "recall": 1.0,
+     "brier": 0.9957983193277312,
+     "brierSkill": -237.00000000000003,
+     "ece": 0.9957983193277312,
+     "accepted": 1666.0,
+     "tp": 7.0,
+     "fp": 1659.0,
+     "fn": 0.0
+    },
+    "alwaysYes|ambiguousRelevant": {
+     "f05": 0.011911852293031568,
+     "t11su": 0.0,
+     "precision": 0.009552238805970148,
+     "recall": 1.0,
+     "brier": 0.99044776119403,
+     "brierSkill": -103.6875,
+     "ece": 0.99044776119403,
+     "accepted": 1675.0,
+     "tp": 16.0,
+     "fp": 1659.0,
+     "fn": 0.0
+    },
+    "keywordNarrow|strict": {
+     "f05": 0.6666666666666665,
+     "t11su": 0.5238095238095238,
+     "precision": 1.0,
+     "recall": 0.28571428571428564,
+     "brier": 0.0030012004801920765,
+     "brierSkill": 0.28270042194092815,
+     "ece": 0.0030012004801920765,
+     "accepted": 2.0,
+     "tp": 2.0,
+     "fp": 0.0,
+     "fn": 5.0
+    },
+    "keywordNarrow|ambiguousRelevant": {
+     "f05": 0.7954545454545453,
+     "t11su": 0.625,
+     "precision": 1.0,
+     "recall": 0.4375,
+     "brier": 0.005373134328358209,
+     "brierSkill": 0.43207504520795664,
+     "ece": 0.005373134328358209,
+     "accepted": 7.0,
+     "tp": 7.0,
+     "fp": 0.0,
+     "fn": 9.0
+    },
+    "keywordBroad|strict": {
+     "f05": 0.18181818181818182,
+     "t11su": 0.04761904761904764,
+     "precision": 0.16666666666666663,
+     "recall": 0.28571428571428564,
+     "brier": 0.00900360144057623,
+     "brierSkill": -1.1518987341772153,
+     "ece": 0.00900360144057623,
+     "accepted": 12.0,
+     "tp": 2.0,
+     "fp": 10.0,
+     "fn": 5.0
+    },
+    "keywordBroad|ambiguousRelevant": {
+     "f05": 0.4891304347826086,
+     "t11su": 0.5,
+     "precision": 0.4736842105263159,
+     "recall": 0.5625,
+     "brier": 0.010149253731343283,
+     "brierSkill": -0.07274713682941525,
+     "ece": 0.010149253731343287,
+     "accepted": 19.0,
+     "tp": 9.0,
+     "fp": 10.0,
+     "fn": 7.0
+    }
+   },
+   "check": null,
+   "notes": {
+    "binormalFallback": {
+     "desc": 0,
+     "rocchio-q0": 4
+    },
+    "kwstratFallbackStrata": 113
+   },
+   "counts": {
+    "teachRelevant": 14,
+    "freshRelevant": 7,
+    "freshAmbiguous": 9,
+    "freshLabelled": 1666
+   },
+   "ap": {
+    "desc": 0.694891289849273,
+    "rocchio-q0": 0.7152146029750661
+   }
+  },
+  "chips": {
+   "profile": "chips",
+   "rows": {
+    "desc|binormal|strict": {
+     "f05": 0.7067753952292528,
+     "t11su": 0.5905696202531645,
+     "precision": 0.8507855598374183,
+     "recall": 0.43753164556962026,
+     "brier": 0.024345408960854697,
+     "brierSkill": 0.4782450903485646,
+     "ece": 0.018505150139832033,
+     "accepted": 43.46,
+     "tp": 34.565,
+     "fp": 8.895,
+     "fn": 44.435
+    },
+    "desc|binormal|ambiguousRelevant": {
+     "f05": 0.6548977424260601,
+     "t11su": 0.5342708333333334,
+     "precision": 0.8853296762176943,
+     "recall": 0.33229166666666665,
+     "brier": 0.049675062108454966,
+     "brierSkill": 0.367835128964212,
+     "ece": 0.04134056348267202,
+     "accepted": 56.745,
+     "tp": 47.85,
+     "fp": 8.895,
+     "fn": 96.15
+    },
+    "rocchio-q0|binormal|strict": {
+     "f05": 0.5774948732062102,
+     "t11su": 0.5122151898734177,
+     "precision": 0.7166479785994058,
+     "recall": 0.38088607594936713,
+     "brier": 0.03246238616416439,
+     "brierSkill": 0.3042873345283505,
+     "ece": 0.03123272614388477,
+     "accepted": 73.09,
+     "tp": 30.09,
+     "fp": 43.0,
+     "fn": 48.91
+    },
+    "rocchio-q0|binormal|ambiguousRelevant": {
+     "f05": 0.5487226800870556,
+     "t11su": 0.4812152777777778,
+     "precision": 0.766291958984265,
+     "recall": 0.3008680555555555,
+     "brier": 0.05864969737371514,
+     "brierSkill": 0.2536239150422311,
+     "ece": 0.05056869200981898,
+     "accepted": 86.325,
+     "tp": 43.325,
+     "fp": 43.0,
+     "fn": 100.675
+    },
+    "desc|binormal+kw|strict": {
+     "f05": 0.8436129068543349,
+     "t11su": 0.729493670886076,
+     "precision": 0.9356607342381783,
+     "recall": 0.6139240506329113,
+     "brier": 0.016401747830982517,
+     "brierSkill": 0.6484884492415003,
+     "ece": 0.0123198068905841,
+     "accepted": 51.61,
+     "tp": 48.5,
+     "fp": 3.11,
+     "fn": 30.5
+    },
+    "desc|binormal+kw|ambiguousRelevant": {
+     "f05": 0.7537543395874567,
+     "t11su": 0.6062731481481481,
+     "precision": 0.9505138474235109,
+     "recall": 0.4202083333333333,
+     "brier": 0.04130055662473573,
+     "brierSkill": 0.4744090909160941,
+     "ece": 0.03643217209952804,
+     "accepted": 63.62,
+     "tp": 60.51,
+     "fp": 3.11,
+     "fn": 83.49
+    },
+    "rocchio-q0|binormal+kw|strict": {
+     "f05": 0.7697327597444962,
+     "t11su": 0.6833755274261604,
+     "precision": 0.9084856519033593,
+     "recall": 0.5509493670886076,
+     "brier": 0.020918909118607575,
+     "brierSkill": 0.5516795977945854,
+     "ece": 0.020302511664948186,
+     "accepted": 48.33,
+     "tp": 43.525,
+     "fp": 4.805,
+     "fn": 35.475
+    },
+    "rocchio-q0|binormal+kw|ambiguousRelevant": {
+     "f05": 0.6897696408830258,
+     "t11su": 0.5777199074074074,
+     "precision": 0.9319749822044849,
+     "recall": 0.3823958333333334,
+     "brier": 0.04664731162221785,
+     "brierSkill": 0.40636628351982645,
+     "ece": 0.04160343395135925,
+     "accepted": 59.87,
+     "tp": 55.065,
+     "fp": 4.805,
+     "fn": 88.935
+    },
+    "rocchio-q0|kwstrat|strict": {
+     "f05": 0.6189920028520554,
+     "t11su": 0.5610759493670886,
+     "precision": 0.7913686182496156,
+     "recall": 0.4484177215189874,
+     "brier": 0.03115335170678666,
+     "brierSkill": 0.3323417063459665,
+     "ece": 0.04302433570488193,
+     "accepted": 65.21,
+     "tp": 35.425,
+     "fp": 29.785,
+     "fn": 43.575
+    },
+    "rocchio-q0|kwstrat|ambiguousRelevant": {
+     "f05": 0.5624926251864796,
+     "t11su": 0.49252314814814807,
+     "precision": 0.8280329481679212,
+     "recall": 0.3198611111111111,
+     "brier": 0.05978254159937699,
+     "brierSkill": 0.23920733872762864,
+     "ece": 0.06557544443926623,
+     "accepted": 75.845,
+     "tp": 46.06,
+     "fp": 29.785,
+     "fn": 97.94
+    },
+    "alwaysNo|strict": {
+     "f05": 0.0,
+     "t11su": 0.33333333333333326,
+     "precision": 0.0,
+     "recall": 0.0,
+     "brier": 0.04906832298136645,
+     "brierSkill": -0.051600261267145564,
+     "ece": 0.04906832298136645,
+     "accepted": 0.0,
+     "tp": 0.0,
+     "fp": 0.0,
+     "fn": 79.0
+    },
+    "alwaysNo|ambiguousRelevant": {
+     "f05": 0.0,
+     "t11su": 0.33333333333333326,
+     "precision": 0.0,
+     "recall": 0.0,
+     "brier": 0.08597014925373134,
+     "brierSkill": -0.09405617243631624,
+     "ece": 0.08597014925373134,
+     "accepted": 0.0,
+     "tp": 0.0,
+     "fp": 0.0,
+     "fn": 144.0
+    },
+    "alwaysYes|strict": {
+     "f05": 0.060592115355115814,
+     "t11su": 0.0,
+     "precision": 0.04906832298136645,
+     "recall": 1.0,
+     "brier": 0.9509316770186337,
+     "brierSkill": -19.379746835443036,
+     "ece": 0.9509316770186337,
+     "accepted": 1610.0,
+     "tp": 79.0,
+     "fp": 1531.0,
+     "fn": 0.0
+    },
+    "alwaysYes|ambiguousRelevant": {
+     "f05": 0.10520163646990063,
+     "t11su": 0.0,
+     "precision": 0.08597014925373134,
+     "recall": 1.0,
+     "brier": 0.9140298507462689,
+     "brierSkill": -10.631944444444443,
+     "ece": 0.9140298507462689,
+     "accepted": 1675.0,
+     "tp": 144.0,
+     "fp": 1531.0,
+     "fn": 0.0
+    },
+    "keywordNarrow|strict": {
+     "f05": 0.8454810495626822,
+     "t11su": 0.7890295358649788,
+     "precision": 0.8787878787878788,
+     "recall": 0.7341772151898737,
+     "brier": 0.018012422360248442,
+     "brierSkill": 0.6139695243449719,
+     "ece": 0.018012422360248442,
+     "accepted": 66.0,
+     "tp": 58.0,
+     "fp": 8.0,
+     "fn": 21.0
+    },
+    "keywordNarrow|ambiguousRelevant": {
+     "f05": 0.7991803278688525,
+     "t11su": 0.6759259259259258,
+     "precision": 0.9069767441860465,
+     "recall": 0.5416666666666667,
+     "brier": 0.044179104477611926,
+     "brierSkill": 0.43777668916467066,
+     "ece": 0.04417910447761196,
+     "accepted": 86.0,
+     "tp": 78.0,
+     "fp": 8.0,
+     "fn": 66.0
+    },
+    "keywordBroad|strict": {
+     "f05": 0.5436337625178825,
+     "t11su": 0.6413502109704642,
+     "precision": 0.49032258064516127,
+     "recall": 0.9620253164556962,
+     "brier": 0.05093167701863354,
+     "brierSkill": -0.09153444840387269,
+     "ece": 0.05093167701863354,
+     "accepted": 155.0,
+     "tp": 76.0,
+     "fp": 79.0,
+     "fn": 3.0
+    },
+    "keywordBroad|ambiguousRelevant": {
+     "f05": 0.6356837606837606,
+     "t11su": 0.7013888888888892,
+     "precision": 0.6010101010101012,
+     "recall": 0.8263888888888892,
+     "brier": 0.062089552238805974,
+     "brierSkill": 0.2098483199071049,
+     "ece": 0.062089552238805974,
+     "accepted": 198.0,
+     "tp": 119.0,
+     "fp": 79.0,
+     "fn": 25.0
+    }
+   },
+   "check": null,
+   "notes": {
+    "binormalFallback": {
+     "desc": 3,
+     "rocchio-q0": 4
+    },
+    "kwstratFallbackStrata": 106
+   },
+   "counts": {
+    "teachRelevant": 168,
+    "freshRelevant": 79,
+    "freshAmbiguous": 65,
+    "freshLabelled": 1610
+   },
+   "ap": {
+    "desc": 0.7375248897019822,
+    "rocchio-q0": 0.6843826095988413
+   }
+  },
+  "security": {
+   "profile": "security",
+   "rows": {
+    "desc|binormal|strict": {
+     "f05": 0.8184313262373444,
+     "t11su": 0.8313122171945702,
+     "precision": 0.8161792557018441,
+     "recall": 0.8458597285067875,
+     "brier": 0.04511309889755781,
+     "brierSkill": 0.6144789823938654,
+     "ece": 0.08306844873799815,
+     "accepted": 234.37,
+     "tp": 186.935,
+     "fp": 47.435,
+     "fn": 34.065
+    },
+    "desc|binormal|ambiguousRelevant": {
+     "f05": 0.8083990440591478,
+     "t11su": 0.784575411913815,
+     "precision": 0.8261323338764468,
+     "recall": 0.7611596958174905,
+     "brier": 0.05394323470531935,
+     "brierSkill": 0.5924544429870215,
+     "ece": 0.06845574785777518,
+     "accepted": 247.62,
+     "tp": 200.185,
+     "fp": 47.435,
+     "fn": 62.815
+    },
+    "rocchio-q0|binormal|strict": {
+     "f05": 0.7803935286853576,
+     "t11su": 0.7196757164404224,
+     "precision": 0.8386743503848121,
+     "recall": 0.6845701357466063,
+     "brier": 0.05244574990799247,
+     "brierSkill": 0.5518166703741859,
+     "ece": 0.0466463899803189,
+     "accepted": 220.695,
+     "tp": 151.29,
+     "fp": 69.405,
+     "fn": 69.71
+    },
+    "rocchio-q0|binormal|ambiguousRelevant": {
+     "f05": 0.7664491214425542,
+     "t11su": 0.6845564005069709,
+     "precision": 0.8476685447608945,
+     "recall": 0.6234600760456275,
+     "brier": 0.06377271637777722,
+     "brierSkill": 0.5181919037597313,
+     "ece": 0.04968843773562989,
+     "accepted": 233.375,
+     "tp": 163.97,
+     "fp": 69.405,
+     "fn": 99.03
+    },
+    "desc|binormal+kw|strict": {
+     "f05": 0.8732485703980977,
+     "t11su": 0.8853318250377076,
+     "precision": 0.8782596357699,
+     "recall": 0.891244343891403,
+     "brier": 0.03248050587087667,
+     "brierSkill": 0.72243277492116,
+     "ece": 0.05347599444048672,
+     "accepted": 224.92,
+     "tp": 196.965,
+     "fp": 27.955,
+     "fn": 24.035
+    },
+    "desc|binormal+kw|ambiguousRelevant": {
+     "f05": 0.8632617574501298,
+     "t11su": 0.8389543726235742,
+     "precision": 0.8865161137637538,
+     "recall": 0.8115779467680607,
+     "brier": 0.04057961930019533,
+     "brierSkill": 0.6934176520667218,
+     "ece": 0.0417068158915576,
+     "accepted": 241.4,
+     "tp": 213.445,
+     "fp": 27.955,
+     "fn": 49.555
+    },
+    "rocchio-q0|binormal+kw|strict": {
+     "f05": 0.8310572213643703,
+     "t11su": 0.7872171945701357,
+     "precision": 0.8924934218005315,
+     "recall": 0.7314932126696833,
+     "brier": 0.041466394888470856,
+     "brierSkill": 0.645642459850469,
+     "ece": 0.03895895060529084,
+     "accepted": 187.8,
+     "tp": 161.66,
+     "fp": 26.14,
+     "fn": 59.34
+    },
+    "rocchio-q0|binormal+kw|ambiguousRelevant": {
+     "f05": 0.8170782400521927,
+     "t11su": 0.7482699619771863,
+     "precision": 0.9014471707836749,
+     "recall": 0.6661787072243347,
+     "brier": 0.05257666612428059,
+     "brierSkill": 0.6027789805606084,
+     "ece": 0.04496775454197491,
+     "accepted": 201.345,
+     "tp": 175.205,
+     "fp": 26.14,
+     "fn": 87.795
+    },
+    "rocchio-q0|kwstrat|strict": {
+     "f05": 0.7583826382188554,
+     "t11su": 0.6898717948717948,
+     "precision": 0.8786758602682275,
+     "recall": 0.5788009049773756,
+     "brier": 0.0561206818002515,
+     "brierSkill": 0.5204119671425568,
+     "ece": 0.06239084817353789,
+     "accepted": 152.045,
+     "tp": 127.915,
+     "fp": 24.13,
+     "fn": 93.085
+    },
+    "rocchio-q0|kwstrat|ambiguousRelevant": {
+     "f05": 0.7390280117702938,
+     "t11su": 0.6542141951837769,
+     "precision": 0.8866467012264292,
+     "recall": 0.5202661596958175,
+     "brier": 0.070219295687871,
+     "brierSkill": 0.46948746899394905,
+     "ece": 0.07464880835097581,
+     "accepted": 160.96,
+     "tp": 136.83,
+     "fp": 24.13,
+     "fn": 126.17
+    },
+    "alwaysNo|strict": {
+     "f05": 0.0,
+     "t11su": 0.33333333333333326,
+     "precision": 0.0,
+     "recall": 0.0,
+     "brier": 0.1353337415799143,
+     "brierSkill": -0.15651558073654392,
+     "ece": 0.1353337415799143,
+     "accepted": 0.0,
+     "tp": 0.0,
+     "fp": 0.0,
+     "fn": 221.0
+    },
+    "alwaysNo|ambiguousRelevant": {
+     "f05": 0.0,
+     "t11su": 0.33333333333333326,
+     "precision": 0.0,
+     "recall": 0.0,
+     "brier": 0.15701492537313433,
+     "brierSkill": -0.18626062322946169,
+     "ece": 0.15701492537313433,
+     "accepted": 0.0,
+     "tp": 0.0,
+     "fp": 0.0,
+     "fn": 263.0
+    },
+    "alwaysYes|strict": {
+     "f05": 0.16363097882422628,
+     "t11su": 0.0,
+     "precision": 0.1353337415799143,
+     "recall": 1.0,
+     "brier": 0.8646662584200857,
+     "brierSkill": -6.389140271493213,
+     "ece": 0.8646662584200857,
+     "accepted": 1633.0,
+     "tp": 221.0,
+     "fp": 1412.0,
+     "fn": 0.0
+    },
+    "alwaysYes|ambiguousRelevant": {
+     "f05": 0.1888553784288382,
+     "t11su": 0.0,
+     "precision": 0.15701492537313433,
+     "recall": 1.0,
+     "brier": 0.8429850746268653,
+     "brierSkill": -5.368821292775665,
+     "ece": 0.8429850746268653,
+     "accepted": 1675.0,
+     "tp": 263.0,
+     "fp": 1412.0,
+     "fn": 0.0
+    },
+    "keywordNarrow|strict": {
+     "f05": 0.7528285465622279,
+     "t11su": 0.7662141779788838,
+     "precision": 0.7456896551724139,
+     "recall": 0.7828054298642535,
+     "brier": 0.065523576240049,
+     "brierSkill": 0.4400580672452027,
+     "ece": 0.065523576240049,
+     "accepted": 232.0,
+     "tp": 173.0,
+     "fp": 59.0,
+     "fn": 48.0
+    },
+    "keywordNarrow|ambiguousRelevant": {
+     "f05": 0.7592446892210859,
+     "t11su": 0.7477820025348544,
+     "precision": 0.7658730158730159,
+     "recall": 0.7338403041825095,
+     "brier": 0.07701492537313434,
+     "brierSkill": 0.41814593005094836,
+     "ece": 0.07701492537313434,
+     "accepted": 252.0,
+     "tp": 193.0,
+     "fp": 59.0,
+     "fn": 70.0
+    },
+    "keywordBroad|strict": {
+     "f05": 0.78544061302682,
+     "t11su": 0.8521870286576169,
+     "precision": 0.7564575645756457,
+     "recall": 0.9276018099547513,
+     "brier": 0.05021432945499082,
+     "brierSkill": 0.5708856216271646,
+     "ece": 0.05021432945499082,
+     "accepted": 271.0,
+     "tp": 205.0,
+     "fp": 66.0,
+     "fn": 16.0
+    },
+    "keywordBroad|ambiguousRelevant": {
+     "f05": 0.7909407665505228,
+     "t11su": 0.8250950570342204,
+     "precision": 0.7747440273037541,
+     "recall": 0.8631178707224335,
+     "brier": 0.06089552238805972,
+     "brierSkill": 0.5399293400402848,
+     "ece": 0.06089552238805972,
+     "accepted": 293.0,
+     "tp": 227.0,
+     "fp": 66.0,
+     "fn": 36.0
+    }
+   },
+   "check": {
+    "profile": "security",
+    "cell": [
+     10,
+     3
+    ],
+    "draw": 0,
+    "candidates": {
+     "desc|binormal": {
+      "threshold": 0.6881581389036346,
+      "articles": {
+       "https://siliconangle.com/2026/02/23/ubicquia-raises-106m-expand-ai-enabled-infrastructure-platform/": [
+        0.058985596080658176,
+        false
+       ],
+       "https://siliconangle.com/2026/03/31/anthropic-accidentally-exposes-claude-code-source-code-npm-packaging-error/": [
+        0.026926725578800992,
+        false
+       ],
+       "https://the-decoder.com/openais-dissatisfaction-with-nvidia-chips-sparked-cerebras-deal/": [
+        0.029330499600411397,
+        false
+       ],
+       "https://siliconangle.com/2026/03/11/rivians-industrial-automation-spinoff-mind-robotics-secures-500m-funding/": [
+        0.03291533300072563,
+        false
+       ],
+       "https://siliconangle.com/2026/01/23/hotel-software-maker-mews-nabs-300m-2-5b-valuation/": [
+        0.028753381321686033,
+        false
+       ],
+       "https://siliconangle.com/2026/02/24/even-anthropic-moves-deeper-enterprise-hits-wall-dod/": [
+        0.033436477257912434,
+        false
+       ],
+       "https://siliconangle.com/2026/03/10/secureframe-unveils-secureframe-defense-cut-defense-cyber-certification-timelines-weeks/": [
+        0.9934585124378307,
+        true
+       ],
+       "https://siliconangle.com/2026/01/26/quantum-chipmaker-ionq-acquire-fab-operator-skywater-1-8b/": [
+        0.08724899861072988,
+        false
+       ],
+       "https://siliconangle.com/2026/02/13/grafana-labs-reportedly-raising-funding-9b-valuation/": [
+        0.06473513960231686,
+        false
+       ],
+       "https://siliconangle.com/2026/01/07/cyera-researchers-detail-critical-ni8mare-vulnerability-allowing-full-takeover-n8n-instances/": [
+        0.9996902922406246,
+        true
+       ],
+       "https://siliconangle.com/2026/03/16/nvidia-gtc-2026-jensen-huangs-groq-mellanox-moment-inference-land-grab/": [
+        0.0449507510632447,
+        false
+       ],
+       "https://the-decoder.com/hua-hong-becomes-the-second-chinese-chipmaker-to-crack-7nm-manufacturing-as-beijing-pushes-for-ai-independence/": [
+        0.03229066426386895,
+        false
+       ],
+       "https://the-decoder.com/openai-brings-back-three-top-researchers-from-mira-muratis-startup-thinking-machines/": [
+        0.06416281683996328,
+        false
+       ],
+       "https://siliconangle.com/2026/02/09/databricks-closes-7b-financing-round-134b-valuation/": [
+        0.04500234155288002,
+        false
+       ],
+       "https://the-decoder.com/over-100-fake-citations-slip-through-peer-review-at-top-ai-conference/": [
+        0.10333089418470387,
+        false
+       ],
+       "https://the-decoder.com/ollama-brings-local-ai-image-generation-to-mac/": [
+        0.08987948177287619,
+        false
+       ],
+       "https://siliconangle.com/2026/01/06/lenovo-launches-new-thinksystem-servers-dedicated-ai-inference/": [
+        0.07701141118357574,
+        false
+       ],
+       "https://the-decoder.com/openai-ceo-altman-admits-he-broke-his-own-ai-security-rule-after-just-two-hours-says-were-all-going-yolo/": [
+        0.2522910077585218,
+        false
+       ],
+       "https://the-decoder.com/google-brings-gemini-ai-to-gmail-with-summaries-smart-replies-and-inbox-prioritization/": [
+        0.02644657701653963,
+        false
+       ],
+       "https://the-decoder.com/openai-says-chatgpt-is-growing-again-plans-new-model-this-week/": [
+        0.02751347141265237,
+        false
+       ],
+       "https://siliconangle.com/2026/01/21/pentera-labs-warns-vulnerable-demo-apps-actively-exploited-wild/": [
+        0.9998420892979296,
+        true
+       ],
+       "https://siliconangle.com/2026/01/28/apiiro-introduces-guardian-agent-secure-ai-driven-software-development/": [
+        0.9908741006811375,
+        true
+       ],
+       "https://siliconangle.com/2026/03/20/dassaults-pricing-overhaul-weighs-shares-signals-long-term-ai-pivot/": [
+        0.03564842833952547,
+        false
+       ],
+       "https://siliconangle.com/2026/01/23/bitgo-kicks-off-huge-year-ipos/": [
+        0.029933994083295112,
+        false
+       ],
+       "https://the-decoder.com/european-commission-opens-new-investigation-into-x-over-grok-ai/": [
+        0.1415425096361151,
+        false
+       ],
+       "https://siliconangle.com/2026/01/14/google-introduces-personal-intelligence-personalization-tool-gemini/": [
+        0.03250971986812651,
+        false
+       ],
+       "https://the-decoder.com/alibabas-free-qwen3-5-signals-that-chinas-open-weight-ai-race-is-far-from-slowing-down/": [
+        0.030967528171766567,
+        false
+       ],
+       "https://the-decoder.com/openais-sora-burned-a-million-dollars-a-day-while-losing-half-its-users-in-record-time/": [
+        0.036012910191158376,
+        false
+       ],
+       "https://siliconangle.com/2026/02/10/report-ai-model-compression-startup-multiverse-seeking-e500m-funding-round/": [
+        0.04922443024885348,
+        false
+       ],
+       "https://the-decoder.com/google-pulls-back-on-browser-ai-as-the-industry-bets-on-coding-tools/": [
+        0.081079442021262,
+        false
+       ],
+       "https://the-decoder.com/u-s-military-strikes-3000-targets-in-iran-with-ai-support-but-oversight-remains-underinvested/": [
+        0.0781531410393746,
+        false
+       ],
+       "https://siliconangle.com/2026/03/09/openai-acquire-promptfoo-expand-ai-application-testing-capabilities/": [
+        0.03379332078011016,
+        false
+       ],
+       "https://siliconangle.com/2026/01/06/amazons-ai-agents-spark-backlash-retailers-listing-products-without-knowledge/": [
+        0.20270897125530873,
+        false
+       ],
+       "https://siliconangle.com/2026/03/17/intelligent-green-aws-pga-tour-reimagining-fan-experience-agentic-ai/": [
+        0.24982469286992876,
+        false
+       ],
+       "https://the-decoder.com/google-deepmind-goes-on-acquisition-spree-with-three-ai-deals-in-one-week/": [
+        0.03246500594165147,
+        false
+       ],
+       "https://the-decoder.com/after-groks-deepfake-flood-senate-passes-bill-letting-victims-take-creators-to-court/": [
+        0.03210160574758436,
+        false
+       ],
+       "https://siliconangle.com/2026/03/02/analysis-salesforce-aims-help-telcos-grow-revenue-agentforce-communications/": [
+        0.05071976264439371,
+        false
+       ],
+       "https://siliconangle.com/2026/03/25/rocketlane-bags-60m-investors-accelerate-professional-services-automation-ai-agents/": [
+        0.03870809495805749,
+        false
+       ],
+       "https://siliconangle.com/2026/03/06/telcos-try-hop-ai-train-anthropic-wars-pentagon-agents-threaten-microsoft/": [
+        0.5458283498037161,
+        false
+       ],
+       "https://the-decoder.com/new-deepseek-technique-balances-signal-flow-and-learning-capacity-in-large-ai-models/": [
+        0.3325557558009426,
+        false
+       ],
+       "https://siliconangle.com/2026/02/25/sauce-labs-launches-programmable-infrastructure-mobile-testing-real-device-access-api/": [
+        0.05081104368192135,
+        false
+       ],
+       "https://siliconangle.com/2026/01/20/court-filings-raise-questions-doge-access-social-security-administration-data/": [
+        0.08712725184766096,
+        false
+       ],
+       "https://siliconangle.com/2026/03/10/beyond-fan-experience-wi-fi-7-redefining-modern-stadium/": [
+        0.10501787369718951,
+        false
+       ],
+       "https://siliconangle.com/2026/03/24/meta-ordered-pay-375-million-major-child-safety-trial/": [
+        0.08157823600732966,
+        false
+       ],
+       "https://siliconangle.com/2026/02/09/aiola-strives-fix-ai-speech-recognition-woes-dynamic-routing/": [
+        0.034009123045892375,
+        false
+       ],
+       "https://siliconangle.com/2026/03/10/exclusive-virtana-customizes-observability-platform-ai-workloads/": [
+        0.11362817037682671,
+        false
+       ]
+      }
+     },
+     "rocchio-q0|binormal": {
+      "threshold": 0.6501102323252812,
+      "articles": {
+       "https://siliconangle.com/2026/02/23/ubicquia-raises-106m-expand-ai-enabled-infrastructure-platform/": [
+        0.01665512607985281,
+        false
+       ],
+       "https://siliconangle.com/2026/03/31/anthropic-accidentally-exposes-claude-code-source-code-npm-packaging-error/": [
+        0.00840008660802899,
+        false
+       ],
+       "https://the-decoder.com/openais-dissatisfaction-with-nvidia-chips-sparked-cerebras-deal/": [
+        0.026756776416689443,
+        false
+       ],
+       "https://siliconangle.com/2026/03/11/rivians-industrial-automation-spinoff-mind-robotics-secures-500m-funding/": [
+        0.004949710410332153,
+        false
+       ],
+       "https://siliconangle.com/2026/01/23/hotel-software-maker-mews-nabs-300m-2-5b-valuation/": [
+        0.002046664115121888,
+        false
+       ],
+       "https://siliconangle.com/2026/02/24/even-anthropic-moves-deeper-enterprise-hits-wall-dod/": [
+        0.018005005196551516,
+        false
+       ],
+       "https://siliconangle.com/2026/03/10/secureframe-unveils-secureframe-defense-cut-defense-cyber-certification-timelines-weeks/": [
+        0.8701385577497163,
+        true
+       ],
+       "https://siliconangle.com/2026/01/26/quantum-chipmaker-ionq-acquire-fab-operator-skywater-1-8b/": [
+        0.00932561311853003,
+        false
+       ],
+       "https://siliconangle.com/2026/02/13/grafana-labs-reportedly-raising-funding-9b-valuation/": [
+        0.020806619984289232,
+        false
+       ],
+       "https://siliconangle.com/2026/01/07/cyera-researchers-detail-critical-ni8mare-vulnerability-allowing-full-takeover-n8n-instances/": [
+        0.9190635460215014,
+        true
+       ],
+       "https://siliconangle.com/2026/03/16/nvidia-gtc-2026-jensen-huangs-groq-mellanox-moment-inference-land-grab/": [
+        0.0755557236313028,
+        false
+       ],
+       "https://the-decoder.com/hua-hong-becomes-the-second-chinese-chipmaker-to-crack-7nm-manufacturing-as-beijing-pushes-for-ai-independence/": [
+        0.004618432432270503,
+        false
+       ],
+       "https://the-decoder.com/openai-brings-back-three-top-researchers-from-mira-muratis-startup-thinking-machines/": [
+        0.0472571633414236,
+        false
+       ],
+       "https://siliconangle.com/2026/02/09/databricks-closes-7b-financing-round-134b-valuation/": [
+        0.004567899116146357,
+        false
+       ],
+       "https://the-decoder.com/over-100-fake-citations-slip-through-peer-review-at-top-ai-conference/": [
+        0.06204238982574434,
+        false
+       ],
+       "https://the-decoder.com/ollama-brings-local-ai-image-generation-to-mac/": [
+        0.0007490679331254579,
+        false
+       ],
+       "https://siliconangle.com/2026/01/06/lenovo-launches-new-thinksystem-servers-dedicated-ai-inference/": [
+        0.07834885294456939,
+        false
+       ],
+       "https://the-decoder.com/openai-ceo-altman-admits-he-broke-his-own-ai-security-rule-after-just-two-hours-says-were-all-going-yolo/": [
+        0.15970195630044148,
+        false
+       ],
+       "https://the-decoder.com/google-brings-gemini-ai-to-gmail-with-summaries-smart-replies-and-inbox-prioritization/": [
+        0.006011985997815716,
+        false
+       ],
+       "https://the-decoder.com/openai-says-chatgpt-is-growing-again-plans-new-model-this-week/": [
+        0.02996376424540509,
+        false
+       ],
+       "https://siliconangle.com/2026/01/21/pentera-labs-warns-vulnerable-demo-apps-actively-exploited-wild/": [
+        0.7964861277970987,
+        true
+       ],
+       "https://siliconangle.com/2026/01/28/apiiro-introduces-guardian-agent-secure-ai-driven-software-development/": [
+        0.9135948462356718,
+        true
+       ],
+       "https://siliconangle.com/2026/03/20/dassaults-pricing-overhaul-weighs-shares-signals-long-term-ai-pivot/": [
+        0.012009179836395434,
+        false
+       ],
+       "https://siliconangle.com/2026/01/23/bitgo-kicks-off-huge-year-ipos/": [
+        0.0036320505051107843,
+        false
+       ],
+       "https://the-decoder.com/european-commission-opens-new-investigation-into-x-over-grok-ai/": [
+        0.10146924471958213,
+        false
+       ],
+       "https://siliconangle.com/2026/01/14/google-introduces-personal-intelligence-personalization-tool-gemini/": [
+        0.012797083822757793,
+        false
+       ],
+       "https://the-decoder.com/alibabas-free-qwen3-5-signals-that-chinas-open-weight-ai-race-is-far-from-slowing-down/": [
+        0.01843344508005451,
+        false
+       ],
+       "https://the-decoder.com/openais-sora-burned-a-million-dollars-a-day-while-losing-half-its-users-in-record-time/": [
+        0.005013424730663074,
+        false
+       ],
+       "https://siliconangle.com/2026/02/10/report-ai-model-compression-startup-multiverse-seeking-e500m-funding-round/": [
+        0.02785522824483505,
+        false
+       ],
+       "https://the-decoder.com/google-pulls-back-on-browser-ai-as-the-industry-bets-on-coding-tools/": [
+        0.2063097005492447,
+        false
+       ],
+       "https://the-decoder.com/u-s-military-strikes-3000-targets-in-iran-with-ai-support-but-oversight-remains-underinvested/": [
+        0.046651017713747855,
+        false
+       ],
+       "https://siliconangle.com/2026/03/09/openai-acquire-promptfoo-expand-ai-application-testing-capabilities/": [
+        0.022090215422413295,
+        false
+       ],
+       "https://siliconangle.com/2026/01/06/amazons-ai-agents-spark-backlash-retailers-listing-products-without-knowledge/": [
+        0.05419724863711117,
+        false
+       ],
+       "https://siliconangle.com/2026/03/17/intelligent-green-aws-pga-tour-reimagining-fan-experience-agentic-ai/": [
+        0.30830905454597024,
+        false
+       ],
+       "https://the-decoder.com/google-deepmind-goes-on-acquisition-spree-with-three-ai-deals-in-one-week/": [
+        0.03560609682228111,
+        false
+       ],
+       "https://the-decoder.com/after-groks-deepfake-flood-senate-passes-bill-letting-victims-take-creators-to-court/": [
+        0.04748831534850645,
+        false
+       ],
+       "https://siliconangle.com/2026/03/02/analysis-salesforce-aims-help-telcos-grow-revenue-agentforce-communications/": [
+        0.045685543279549046,
+        false
+       ],
+       "https://siliconangle.com/2026/03/25/rocketlane-bags-60m-investors-accelerate-professional-services-automation-ai-agents/": [
+        0.007262642231923855,
+        false
+       ],
+       "https://siliconangle.com/2026/03/06/telcos-try-hop-ai-train-anthropic-wars-pentagon-agents-threaten-microsoft/": [
+        0.30707221260409767,
+        false
+       ],
+       "https://the-decoder.com/new-deepseek-technique-balances-signal-flow-and-learning-capacity-in-large-ai-models/": [
+        0.6061510287517382,
+        false
+       ],
+       "https://siliconangle.com/2026/02/25/sauce-labs-launches-programmable-infrastructure-mobile-testing-real-device-access-api/": [
+        0.04551597513302302,
+        false
+       ],
+       "https://siliconangle.com/2026/01/20/court-filings-raise-questions-doge-access-social-security-administration-data/": [
+        0.023135607472429764,
+        false
+       ],
+       "https://siliconangle.com/2026/03/10/beyond-fan-experience-wi-fi-7-redefining-modern-stadium/": [
+        0.042026664862718555,
+        false
+       ],
+       "https://siliconangle.com/2026/03/24/meta-ordered-pay-375-million-major-child-safety-trial/": [
+        0.012779847194405392,
+        false
+       ],
+       "https://siliconangle.com/2026/02/09/aiola-strives-fix-ai-speech-recognition-woes-dynamic-routing/": [
+        0.04144497192174834,
+        false
+       ],
+       "https://siliconangle.com/2026/03/10/exclusive-virtana-customizes-observability-platform-ai-workloads/": [
+        0.08969806149852988,
+        false
+       ]
+      }
+     },
+     "desc|binormal+kw": {
+      "threshold": 0.7063587812490089,
+      "articles": {
+       "https://siliconangle.com/2026/02/23/ubicquia-raises-106m-expand-ai-enabled-infrastructure-platform/": [
+        0.035596046159493855,
+        false
+       ],
+       "https://siliconangle.com/2026/03/31/anthropic-accidentally-exposes-claude-code-source-code-npm-packaging-error/": [
+        0.016032884413969273,
+        false
+       ],
+       "https://the-decoder.com/openais-dissatisfaction-with-nvidia-chips-sparked-cerebras-deal/": [
+        0.01748162641628115,
+        false
+       ],
+       "https://siliconangle.com/2026/03/11/rivians-industrial-automation-spinoff-mind-robotics-secures-500m-funding/": [
+        0.10136743430500872,
+        false
+       ],
+       "https://siliconangle.com/2026/01/23/hotel-software-maker-mews-nabs-300m-2-5b-valuation/": [
+        0.017133535891817153,
+        false
+       ],
+       "https://siliconangle.com/2026/02/24/even-anthropic-moves-deeper-enterprise-hits-wall-dod/": [
+        0.019962993576240373,
+        false
+       ],
+       "https://siliconangle.com/2026/03/10/secureframe-unveils-secureframe-defense-cut-defense-cyber-certification-timelines-weeks/": [
+        0.998017184714366,
+        true
+       ],
+       "https://siliconangle.com/2026/01/26/quantum-chipmaker-ionq-acquire-fab-operator-skywater-1-8b/": [
+        0.05328680029825661,
+        false
+       ],
+       "https://siliconangle.com/2026/02/13/grafana-labs-reportedly-raising-funding-9b-valuation/": [
+        0.03916060132106447,
+        false
+       ],
+       "https://siliconangle.com/2026/01/07/cyera-researchers-detail-critical-ni8mare-vulnerability-allowing-full-takeover-n8n-instances/": [
+        0.999474146101114,
+        true
+       ],
+       "https://siliconangle.com/2026/03/16/nvidia-gtc-2026-jensen-huangs-groq-mellanox-moment-inference-land-grab/": [
+        0.02696695149021383,
+        false
+       ],
+       "https://the-decoder.com/hua-hong-becomes-the-second-chinese-chipmaker-to-crack-7nm-manufacturing-as-beijing-pushes-for-ai-independence/": [
+        0.019269689806846124,
+        false
+       ],
+       "https://the-decoder.com/openai-brings-back-three-top-researchers-from-mira-muratis-startup-thinking-machines/": [
+        0.038805001537929484,
+        false
+       ],
+       "https://siliconangle.com/2026/02/09/databricks-closes-7b-financing-round-134b-valuation/": [
+        0.02699848525041232,
+        false
+       ],
+       "https://the-decoder.com/over-100-fake-citations-slip-through-peer-review-at-top-ai-conference/": [
+        0.0635445324034572,
+        false
+       ],
+       "https://the-decoder.com/ollama-brings-local-ai-image-generation-to-mac/": [
+        0.054955001005342174,
+        false
+       ],
+       "https://siliconangle.com/2026/01/06/lenovo-launches-new-thinksystem-servers-dedicated-ai-inference/": [
+        0.04682979800366571,
+        false
+       ],
+       "https://the-decoder.com/openai-ceo-altman-admits-he-broke-his-own-ai-security-rule-after-just-two-hours-says-were-all-going-yolo/": [
+        0.5279195408568669,
+        false
+       ],
+       "https://the-decoder.com/google-brings-gemini-ai-to-gmail-with-summaries-smart-replies-and-inbox-prioritization/": [
+        0.01574384830648151,
+        false
+       ],
+       "https://the-decoder.com/openai-says-chatgpt-is-growing-again-plans-new-model-this-week/": [
+        0.01638624583353132,
+        false
+       ],
+       "https://siliconangle.com/2026/01/21/pentera-labs-warns-vulnerable-demo-apps-actively-exploited-wild/": [
+        0.999952348463532,
+        true
+       ],
+       "https://siliconangle.com/2026/01/28/apiiro-introduces-guardian-agent-secure-ai-driven-software-development/": [
+        0.9972287898669121,
+        true
+       ],
+       "https://siliconangle.com/2026/03/20/dassaults-pricing-overhaul-weighs-shares-signals-long-term-ai-pivot/": [
+        0.02130326702929758,
+        false
+       ],
+       "https://siliconangle.com/2026/01/23/bitgo-kicks-off-huge-year-ipos/": [
+        0.01784580472015357,
+        false
+       ],
+       "https://the-decoder.com/european-commission-opens-new-investigation-into-x-over-grok-ai/": [
+        0.08849527797547246,
+        false
+       ],
+       "https://siliconangle.com/2026/01/14/google-introduces-personal-intelligence-personalization-tool-gemini/": [
+        0.019402183871676026,
+        false
+       ],
+       "https://the-decoder.com/alibabas-free-qwen3-5-signals-that-chinas-open-weight-ai-race-is-far-from-slowing-down/": [
+        0.018469915319725472,
+        false
+       ],
+       "https://the-decoder.com/openais-sora-burned-a-million-dollars-a-day-while-losing-half-its-users-in-record-time/": [
+        0.02152435266969932,
+        false
+       ],
+       "https://siliconangle.com/2026/02/10/report-ai-model-compression-startup-multiverse-seeking-e500m-funding-round/": [
+        0.029583789550285733,
+        false
+       ],
+       "https://the-decoder.com/google-pulls-back-on-browser-ai-as-the-industry-bets-on-coding-tools/": [
+        0.04938883392990917,
+        false
+       ],
+       "https://the-decoder.com/u-s-military-strikes-3000-targets-in-iran-with-ai-support-but-oversight-remains-underinvested/": [
+        0.04754712186723342,
+        false
+       ],
+       "https://siliconangle.com/2026/03/09/openai-acquire-promptfoo-expand-ai-application-testing-capabilities/": [
+        0.1038752010141526,
+        false
+       ],
+       "https://siliconangle.com/2026/01/06/amazons-ai-agents-spark-backlash-retailers-listing-products-without-knowledge/": [
+        0.13021501781697742,
+        false
+       ],
+       "https://siliconangle.com/2026/03/17/intelligent-green-aws-pga-tour-reimagining-fan-experience-agentic-ai/": [
+        0.16394574088599795,
+        false
+       ],
+       "https://the-decoder.com/google-deepmind-goes-on-acquisition-spree-with-three-ai-deals-in-one-week/": [
+        0.019375137038912305,
+        false
+       ],
+       "https://the-decoder.com/after-groks-deepfake-flood-senate-passes-bill-letting-victims-take-creators-to-court/": [
+        0.019155358690468582,
+        false
+       ],
+       "https://siliconangle.com/2026/03/02/analysis-salesforce-aims-help-telcos-grow-revenue-agentforce-communications/": [
+        0.03050162218524083,
+        false
+       ],
+       "https://siliconangle.com/2026/03/25/rocketlane-bags-60m-investors-accelerate-professional-services-automation-ai-agents/": [
+        0.023161274752733385,
+        false
+       ],
+       "https://siliconangle.com/2026/03/06/telcos-try-hop-ai-train-anthropic-wars-pentagon-agents-threaten-microsoft/": [
+        0.41440584816639037,
+        false
+       ],
+       "https://the-decoder.com/new-deepseek-technique-balances-signal-flow-and-learning-capacity-in-large-ai-models/": [
+        0.22683688770055466,
+        false
+       ],
+       "https://siliconangle.com/2026/02/25/sauce-labs-launches-programmable-infrastructure-mobile-testing-real-device-access-api/": [
+        0.030557687670701883,
+        false
+       ],
+       "https://siliconangle.com/2026/01/20/court-filings-raise-questions-doge-access-social-security-administration-data/": [
+        0.24030616862702125,
+        false
+       ],
+       "https://siliconangle.com/2026/03/10/beyond-fan-experience-wi-fi-7-redefining-modern-stadium/": [
+        0.06462877746126167,
+        false
+       ],
+       "https://siliconangle.com/2026/03/24/meta-ordered-pay-375-million-major-child-safety-trial/": [
+        0.049703214953169095,
+        false
+       ],
+       "https://siliconangle.com/2026/02/09/aiola-strives-fix-ai-speech-recognition-woes-dynamic-routing/": [
+        0.020309736007028345,
+        false
+       ],
+       "https://siliconangle.com/2026/03/10/exclusive-virtana-customizes-observability-platform-ai-workloads/": [
+        0.0701873126415869,
+        false
+       ]
+      }
+     },
+     "rocchio-q0|binormal+kw": {
+      "threshold": 0.7009569419076884,
+      "articles": {
+       "https://siliconangle.com/2026/02/23/ubicquia-raises-106m-expand-ai-enabled-infrastructure-platform/": [
+        0.009874731330168363,
+        false
+       ],
+       "https://siliconangle.com/2026/03/31/anthropic-accidentally-exposes-claude-code-source-code-npm-packaging-error/": [
+        0.004963401597090078,
+        false
+       ],
+       "https://the-decoder.com/openais-dissatisfaction-with-nvidia-chips-sparked-cerebras-deal/": [
+        0.015930566542053715,
+        false
+       ],
+       "https://siliconangle.com/2026/03/11/rivians-industrial-automation-spinoff-mind-robotics-secures-500m-funding/": [
+        0.01621869369754353,
+        false
+       ],
+       "https://siliconangle.com/2026/01/23/hotel-software-maker-mews-nabs-300m-2-5b-valuation/": [
+        0.0012061609758208247,
+        false
+       ],
+       "https://siliconangle.com/2026/02/24/even-anthropic-moves-deeper-enterprise-hits-wall-dod/": [
+        0.010681036235552277,
+        false
+       ],
+       "https://siliconangle.com/2026/03/10/secureframe-unveils-secureframe-defense-cut-defense-cyber-certification-timelines-weeks/": [
+        0.9569096333754038,
+        true
+       ],
+       "https://siliconangle.com/2026/01/26/quantum-chipmaker-ionq-acquire-fab-operator-skywater-1-8b/": [
+        0.0055123770971177155,
+        false
+       ],
+       "https://siliconangle.com/2026/02/13/grafana-labs-reportedly-raising-funding-9b-valuation/": [
+        0.012357367782157402,
+        false
+       ],
+       "https://siliconangle.com/2026/01/07/cyera-researchers-detail-critical-ni8mare-vulnerability-allowing-full-takeover-n8n-instances/": [
+        0.8699006282491548,
+        true
+       ],
+       "https://siliconangle.com/2026/03/16/nvidia-gtc-2026-jensen-huangs-groq-mellanox-moment-inference-land-grab/": [
+        0.04591622945100765,
+        false
+       ],
+       "https://the-decoder.com/hua-hong-becomes-the-second-chinese-chipmaker-to-crack-7nm-manufacturing-as-beijing-pushes-for-ai-independence/": [
+        0.0027246652672231475,
+        false
+       ],
+       "https://the-decoder.com/openai-brings-back-three-top-researchers-from-mira-muratis-startup-thinking-machines/": [
+        0.02837803745941264,
+        false
+       ],
+       "https://siliconangle.com/2026/02/09/databricks-closes-7b-financing-round-134b-valuation/": [
+        0.0026947968091621255,
+        false
+       ],
+       "https://the-decoder.com/over-100-fake-citations-slip-through-peer-review-at-top-ai-conference/": [
+        0.037489019101376087,
+        false
+       ],
+       "https://the-decoder.com/ollama-brings-local-ai-image-generation-to-mac/": [
+        0.0004412127589168424,
+        false
+       ],
+       "https://siliconangle.com/2026/01/06/lenovo-launches-new-thinksystem-servers-dedicated-ai-inference/": [
+        0.0476701532395728,
+        false
+       ],
+       "https://the-decoder.com/openai-ceo-altman-admits-he-broke-his-own-ai-security-rule-after-just-two-hours-says-were-all-going-yolo/": [
+        0.38645877808651086,
+        false
+       ],
+       "https://the-decoder.com/google-brings-gemini-ai-to-gmail-with-summaries-smart-replies-and-inbox-prioritization/": [
+        0.003548835831791941,
+        false
+       ],
+       "https://the-decoder.com/openai-says-chatgpt-is-growing-again-plans-new-model-this-week/": [
+        0.017863774238642327,
+        false
+       ],
+       "https://siliconangle.com/2026/01/21/pentera-labs-warns-vulnerable-demo-apps-actively-exploited-wild/": [
+        0.9284221347718521,
+        true
+       ],
+       "https://siliconangle.com/2026/01/28/apiiro-introduces-guardian-agent-secure-ai-driven-software-development/": [
+        0.9722550672821733,
+        true
+       ],
+       "https://siliconangle.com/2026/03/20/dassaults-pricing-overhaul-weighs-shares-signals-long-term-ai-pivot/": [
+        0.0071065068863858105,
+        false
+       ],
+       "https://siliconangle.com/2026/01/23/bitgo-kicks-off-huge-year-ipos/": [
+        0.0021418744276334722,
+        false
+       ],
+       "https://the-decoder.com/european-commission-opens-new-investigation-into-x-over-grok-ai/": [
+        0.062349846353023264,
+        false
+       ],
+       "https://siliconangle.com/2026/01/14/google-introduces-personal-intelligence-personalization-tool-gemini/": [
+        0.007575220211827216,
+        false
+       ],
+       "https://the-decoder.com/alibabas-free-qwen3-5-signals-that-chinas-open-weight-ai-race-is-far-from-slowing-down/": [
+        0.010937138944515257,
+        false
+       ],
+       "https://the-decoder.com/openais-sora-burned-a-million-dollars-a-day-while-losing-half-its-users-in-record-time/": [
+        0.0029581741173947407,
+        false
+       ],
+       "https://siliconangle.com/2026/02/10/report-ai-model-compression-startup-multiverse-seeking-e500m-funding-round/": [
+        0.016592144725880387,
+        false
+       ],
+       "https://the-decoder.com/google-pulls-back-on-browser-ai-as-the-industry-bets-on-coding-tools/": [
+        0.1327424272693249,
+        false
+       ],
+       "https://the-decoder.com/u-s-military-strikes-3000-targets-in-iran-with-ai-support-but-oversight-remains-underinvested/": [
+        0.02800692721095538,
+        false
+       ],
+       "https://siliconangle.com/2026/03/09/openai-acquire-promptfoo-expand-ai-application-testing-capabilities/": [
+        0.06965133488098607,
+        false
+       ],
+       "https://siliconangle.com/2026/01/06/amazons-ai-agents-spark-backlash-retailers-listing-products-without-knowledge/": [
+        0.032640561261169876,
+        false
+       ],
+       "https://siliconangle.com/2026/03/17/intelligent-green-aws-pga-tour-reimagining-fan-experience-agentic-ai/": [
+        0.20789726626425864,
+        false
+       ],
+       "https://the-decoder.com/google-deepmind-goes-on-acquisition-spree-with-three-ai-deals-in-one-week/": [
+        0.02127759414089886,
+        false
+       ],
+       "https://the-decoder.com/after-groks-deepfake-flood-senate-passes-bill-letting-victims-take-creators-to-court/": [
+        0.02851960904763895,
+        false
+       ],
+       "https://siliconangle.com/2026/03/02/analysis-salesforce-aims-help-telcos-grow-revenue-agentforce-communications/": [
+        0.027416208614785942,
+        false
+       ],
+       "https://siliconangle.com/2026/03/25/rocketlane-bags-60m-investors-accelerate-professional-services-automation-ai-agents/": [
+        0.0042893011292986505,
+        false
+       ],
+       "https://siliconangle.com/2026/03/06/telcos-try-hop-ai-train-anthropic-wars-pentagon-agents-threaten-microsoft/": [
+        0.20694272814326697,
+        false
+       ],
+       "https://the-decoder.com/new-deepseek-technique-balances-signal-flow-and-learning-capacity-in-large-ai-models/": [
+        0.4754076477166774,
+        false
+       ],
+       "https://siliconangle.com/2026/02/25/sauce-labs-launches-programmable-infrastructure-mobile-testing-real-device-access-api/": [
+        0.02731250890471376,
+        false
+       ],
+       "https://siliconangle.com/2026/01/20/court-filings-raise-questions-doge-access-social-security-administration-data/": [
+        0.07277998648055739,
+        false
+       ],
+       "https://siliconangle.com/2026/03/10/beyond-fan-experience-wi-fi-7-redefining-modern-stadium/": [
+        0.02518188151848544,
+        false
+       ],
+       "https://siliconangle.com/2026/03/24/meta-ordered-pay-375-million-major-child-safety-trial/": [
+        0.007564963110609113,
+        false
+       ],
+       "https://siliconangle.com/2026/02/09/aiola-strives-fix-ai-speech-recognition-woes-dynamic-routing/": [
+        0.024827295562961482,
+        false
+       ],
+       "https://siliconangle.com/2026/03/10/exclusive-virtana-customizes-observability-platform-ai-workloads/": [
+        0.054839827542385144,
+        false
+       ]
+      }
+     },
+     "rocchio-q0|kwstrat": {
+      "threshold": 0.42496269335089887,
+      "articles": {
+       "https://siliconangle.com/2026/02/23/ubicquia-raises-106m-expand-ai-enabled-infrastructure-platform/": [
+        0.00184199919342376,
+        false
+       ],
+       "https://siliconangle.com/2026/03/31/anthropic-accidentally-exposes-claude-code-source-code-npm-packaging-error/": [
+        0.0006682095821964884,
+        false
+       ],
+       "https://the-decoder.com/openais-dissatisfaction-with-nvidia-chips-sparked-cerebras-deal/": [
+        0.0035553364200659465,
+        false
+       ],
+       "https://siliconangle.com/2026/03/11/rivians-industrial-automation-spinoff-mind-robotics-secures-500m-funding/": [
+        3.521629034025642e-05,
+        false
+       ],
+       "https://siliconangle.com/2026/01/23/hotel-software-maker-mews-nabs-300m-2-5b-valuation/": [
+        5.52747647802887e-05,
+        false
+       ],
+       "https://siliconangle.com/2026/02/24/even-anthropic-moves-deeper-enterprise-hits-wall-dod/": [
+        0.0020567534440456003,
+        false
+       ],
+       "https://siliconangle.com/2026/03/10/secureframe-unveils-secureframe-defense-cut-defense-cyber-certification-timelines-weeks/": [
+        0.4649691550542086,
+        true
+       ],
+       "https://siliconangle.com/2026/01/26/quantum-chipmaker-ionq-acquire-fab-operator-skywater-1-8b/": [
+        0.0007847528399463344,
+        false
+       ],
+       "https://siliconangle.com/2026/02/13/grafana-labs-reportedly-raising-funding-9b-valuation/": [
+        0.0025178387486557985,
+        false
+       ],
+       "https://siliconangle.com/2026/01/07/cyera-researchers-detail-critical-ni8mare-vulnerability-allowing-full-takeover-n8n-instances/": [
+        0.6830499017673104,
+        true
+       ],
+       "https://siliconangle.com/2026/03/16/nvidia-gtc-2026-jensen-huangs-groq-mellanox-moment-inference-land-grab/": [
+        0.013822986585360353,
+        false
+       ],
+       "https://the-decoder.com/hua-hong-becomes-the-second-chinese-chipmaker-to-crack-7nm-manufacturing-as-beijing-pushes-for-ai-independence/": [
+        0.00025279043783871247,
+        false
+       ],
+       "https://the-decoder.com/openai-brings-back-three-top-researchers-from-mira-muratis-startup-thinking-machines/": [
+        0.007560370708723174,
+        false
+       ],
+       "https://siliconangle.com/2026/02/09/databricks-closes-7b-financing-round-134b-valuation/": [
+        0.00024807506519813893,
+        false
+       ],
+       "https://the-decoder.com/over-100-fake-citations-slip-through-peer-review-at-top-ai-conference/": [
+        0.010744920172536976,
+        false
+       ],
+       "https://the-decoder.com/ollama-brings-local-ai-image-generation-to-mac/": [
+        4.386000874045948e-06,
+        false
+       ],
+       "https://siliconangle.com/2026/01/06/lenovo-launches-new-thinksystem-servers-dedicated-ai-inference/": [
+        0.01447710648545375,
+        false
+       ],
+       "https://the-decoder.com/openai-ceo-altman-admits-he-broke-his-own-ai-security-rule-after-just-two-hours-says-were-all-going-yolo/": [
+        0.10042309349561424,
+        false
+       ],
+       "https://the-decoder.com/google-brings-gemini-ai-to-gmail-with-summaries-smart-replies-and-inbox-prioritization/": [
+        0.0003926461154861727,
+        false
+       ],
+       "https://the-decoder.com/openai-says-chatgpt-is-growing-again-plans-new-model-this-week/": [
+        0.00414219068423588,
+        false
+       ],
+       "https://siliconangle.com/2026/01/21/pentera-labs-warns-vulnerable-demo-apps-actively-exploited-wild/": [
+        0.43987806265348206,
+        true
+       ],
+       "https://siliconangle.com/2026/01/28/apiiro-introduces-guardian-agent-secure-ai-driven-software-development/": [
+        0.47499584272874285,
+        true
+       ],
+       "https://siliconangle.com/2026/03/20/dassaults-pricing-overhaul-weighs-shares-signals-long-term-ai-pivot/": [
+        0.0011471401165795148,
+        false
+       ],
+       "https://siliconangle.com/2026/01/23/bitgo-kicks-off-huge-year-ipos/": [
+        0.00016601610698457892,
+        false
+       ],
+       "https://the-decoder.com/european-commission-opens-new-investigation-into-x-over-grok-ai/": [
+        0.020106508766026154,
+        false
+       ],
+       "https://siliconangle.com/2026/01/14/google-introduces-personal-intelligence-personalization-tool-gemini/": [
+        0.0012595298975451308,
+        false
+       ],
+       "https://the-decoder.com/alibabas-free-qwen3-5-signals-that-chinas-open-weight-ai-race-is-far-from-slowing-down/": [
+        0.0021259662863307716,
+        false
+       ],
+       "https://the-decoder.com/openais-sora-burned-a-million-dollars-a-day-while-losing-half-its-users-in-record-time/": [
+        0.0002905601467515506,
+        false
+       ],
+       "https://siliconangle.com/2026/02/10/report-ai-model-compression-startup-multiverse-seeking-e500m-funding-round/": [
+        0.0037543545069558815,
+        false
+       ],
+       "https://the-decoder.com/google-pulls-back-on-browser-ai-as-the-industry-bets-on-coding-tools/": [
+        0.04991057861606418,
+        false
+       ],
+       "https://the-decoder.com/u-s-military-strikes-3000-targets-in-iran-with-ai-support-but-oversight-remains-underinvested/": [
+        0.007434438451256464,
+        false
+       ],
+       "https://siliconangle.com/2026/03/09/openai-acquire-promptfoo-expand-ai-application-testing-capabilities/": [
+        0.003304512785877567,
+        false
+       ],
+       "https://siliconangle.com/2026/01/06/amazons-ai-agents-spark-backlash-retailers-listing-products-without-knowledge/": [
+        0.009029207108808168,
+        false
+       ],
+       "https://siliconangle.com/2026/03/17/intelligent-green-aws-pga-tour-reimagining-fan-experience-agentic-ai/": [
+        0.08574800144967831,
+        false
+       ],
+       "https://the-decoder.com/google-deepmind-goes-on-acquisition-spree-with-three-ai-deals-in-one-week/": [
+        0.005214189232983224,
+        false
+       ],
+       "https://the-decoder.com/after-groks-deepfake-flood-senate-passes-bill-letting-victims-take-creators-to-court/": [
+        0.0076084980835755545,
+        false
+       ],
+       "https://siliconangle.com/2026/03/02/analysis-salesforce-aims-help-telcos-grow-revenue-agentforce-communications/": [
+        0.007234672187892088,
+        false
+       ],
+       "https://siliconangle.com/2026/03/25/rocketlane-bags-60m-investors-accelerate-professional-services-automation-ai-agents/": [
+        0.0005320280791660248,
+        false
+       ],
+       "https://siliconangle.com/2026/03/06/telcos-try-hop-ai-train-anthropic-wars-pentagon-agents-threaten-microsoft/": [
+        0.08526836527676779,
+        false
+       ],
+       "https://the-decoder.com/new-deepseek-technique-balances-signal-flow-and-learning-capacity-in-large-ai-models/": [
+        0.24884907639692677,
+        false
+       ],
+       "https://siliconangle.com/2026/02/25/sauce-labs-launches-programmable-infrastructure-mobile-testing-real-device-access-api/": [
+        0.007199691945696585,
+        false
+       ],
+       "https://siliconangle.com/2026/01/20/court-filings-raise-questions-doge-access-social-security-administration-data/": [
+        0.003678524077390888,
+        false
+       ],
+       "https://siliconangle.com/2026/03/10/beyond-fan-experience-wi-fi-7-redefining-modern-stadium/": [
+        0.006487061155223128,
+        false
+       ],
+       "https://siliconangle.com/2026/03/24/meta-ordered-pay-375-million-major-child-safety-trial/": [
+        0.001257044964321441,
+        false
+       ],
+       "https://siliconangle.com/2026/02/09/aiola-strives-fix-ai-speech-recognition-woes-dynamic-routing/": [
+        0.006369630177099961,
+        false
+       ],
+       "https://siliconangle.com/2026/03/10/exclusive-virtana-customizes-observability-platform-ai-workloads/": [
+        0.01719380222604655,
+        false
+       ]
+      }
+     }
+    },
+    "taught": {
+     "relevant": [
+      "https://siliconangle.com/2026/09/29/access-management-gets-reboot-ai-agents-scale-okta-oktane/",
+      "https://siliconangle.com/2026/08/03/exclusive-terra-securitys-prevention-writes-firewall-rules-block-proven-exploits/",
+      "https://siliconangle.com/2026/09/22/cisco-talos-finds-malware-that-puts-its-next-move-to-a-four-model-vote/",
+      "https://siliconangle.com/2026/09/23/oracle-shifts-agent-controls-toward-data-layer-security-oracleaicybersecurity/",
+      "https://siliconangle.com/2026/08/09/finding-big-money-ai-smaller-world-security-black-hat-usa-2026/",
+      "https://siliconangle.com/2026/05/26/novee-debuts-agentic-fix-pushing-pentest-findings-claude-copilot-cursor/",
+      "https://siliconangle.com/2026/05/13/cofense-adds-ai-driven-campaign-detection-phishing-defense-platform/",
+      "https://siliconangle.com/2026/10/22/1password-for-agents-lets-personal-ai-agents-log-in-without-ever-seeing-the-password/",
+      "https://siliconangle.com/2026/05/07/ai-factory-security-starts-hardware-level-securingtheaifactory/",
+      "https://siliconangle.com/2026/04/03/deepfakes-malware-ai-menu-grows-longer-threat-actors-causing-headaches-defenders/"
+     ],
+     "notRelevant": [
+      "https://siliconangle.com/2026/08/06/datadog-shares-plummet-despite-expectation-topping-quarterly-results/",
+      "https://siliconangle.com/2026/06/17/pramaana-labs-raises-27m-make-ai-prove-answers/",
+      "https://siliconangle.com/2026/06/02/microsoft-debuts-expansion-model-families-agentic-ai-intelligence-developers/"
+     ]
+    }
+   },
+   "notes": {
+    "binormalFallback": {
+     "desc": 2,
+     "rocchio-q0": 11
+    },
+    "kwstratFallbackStrata": 85
+   },
+   "counts": {
+    "teachRelevant": 599,
+    "freshRelevant": 221,
+    "freshAmbiguous": 42,
+    "freshLabelled": 1633
+   },
+   "ap": {
+    "desc": 0.9240890518986439,
+    "rocchio-q0": 0.8847803849009114
+   }
+  },
+  "funding": {
+   "profile": "funding",
+   "rows": {
+    "desc|binormal|strict": {
+     "f05": 0.8863620993677211,
+     "t11su": 0.885578231292517,
+     "precision": 0.8953519839745502,
+     "recall": 0.8768367346938777,
+     "brier": 0.04371155441147547,
+     "brierSkill": 0.7577708859768976,
+     "ece": 0.033674569618613405,
+     "accepted": 381.72,
+     "tp": 343.72,
+     "fp": 38.0,
+     "fn": 48.28
+    },
+    "desc|binormal|ambiguousRelevant": {
+     "f05": 0.886229967611278,
+     "t11su": 0.8798774509803923,
+     "precision": 0.8982269616287604,
+     "recall": 0.8663848039215687,
+     "brier": 0.045445152052673576,
+     "brierSkill": 0.7533504056057572,
+     "ece": 0.03085033948783362,
+     "accepted": 391.485,
+     "tp": 353.485,
+     "fp": 38.0,
+     "fn": 54.515
+    },
+    "rocchio-q0|binormal|strict": {
+     "f05": 0.873536991627382,
+     "t11su": 0.8199489795918368,
+     "precision": 0.9179024676447523,
+     "recall": 0.7801275510204081,
+     "brier": 0.05213698680777961,
+     "brierSkill": 0.7110810564319087,
+     "ece": 0.034612599668483235,
+     "accepted": 346.535,
+     "tp": 305.81,
+     "fp": 40.725,
+     "fn": 86.19
+    },
+    "rocchio-q0|binormal|ambiguousRelevant": {
+     "f05": 0.8704645308164487,
+     "t11su": 0.8103513071895425,
+     "precision": 0.9194134826082451,
+     "recall": 0.7646446078431371,
+     "brier": 0.055400566398722796,
+     "brierSkill": 0.6993182635714738,
+     "ece": 0.03714783287206133,
+     "accepted": 352.7,
+     "tp": 311.975,
+     "fp": 40.725,
+     "fn": 96.025
+    },
+    "desc|binormal+kw|strict": {
+     "f05": 0.9163208884655069,
+     "t11su": 0.8906590136054422,
+     "precision": 0.9450364400132366,
+     "recall": 0.8617602040816326,
+     "brier": 0.03626068412094795,
+     "brierSkill": 0.7990601453838275,
+     "ece": 0.023567680732570206,
+     "accepted": 358.015,
+     "tp": 337.81,
+     "fp": 20.205,
+     "fn": 54.19
+    },
+    "desc|binormal+kw|ambiguousRelevant": {
+     "f05": 0.9143711449792636,
+     "t11su": 0.8826102941176471,
+     "precision": 0.9463284790074806,
+     "recall": 0.8486764705882354,
+     "brier": 0.03861330015915889,
+     "brierSkill": 0.7904296851853225,
+     "ece": 0.022989103266340995,
+     "accepted": 366.465,
+     "tp": 346.26,
+     "fp": 20.205,
+     "fn": 61.74
+    },
+    "rocchio-q0|binormal+kw|strict": {
+     "f05": 0.8947406386489165,
+     "t11su": 0.8291028911564626,
+     "precision": 0.9564021146518101,
+     "recall": 0.7739158163265306,
+     "brier": 0.04634547489022706,
+     "brierSkill": 0.743174923134455,
+     "ece": 0.03450826329657671,
+     "accepted": 328.01,
+     "tp": 303.375,
+     "fp": 24.635,
+     "fn": 88.625
+    },
+    "rocchio-q0|binormal+kw|ambiguousRelevant": {
+     "f05": 0.8906659790982526,
+     "t11su": 0.8182720588235293,
+     "precision": 0.9570974665897025,
+     "recall": 0.7570710784313726,
+     "brier": 0.05012691513442695,
+     "brierSkill": 0.7279405453014945,
+     "ece": 0.03793803778872025,
+     "accepted": 333.52,
+     "tp": 308.885,
+     "fp": 24.635,
+     "fn": 99.115
+    },
+    "rocchio-q0|kwstrat|strict": {
+     "f05": 0.8059606671962831,
+     "t11su": 0.7289625850340136,
+     "precision": 0.9096251617518285,
+     "recall": 0.6200765306122449,
+     "brier": 0.08063340094107588,
+     "brierSkill": 0.553167176651609,
+     "ece": 0.07304023627004186,
+     "accepted": 263.95,
+     "tp": 243.07,
+     "fp": 20.88,
+     "fn": 148.93
+    },
+    "rocchio-q0|kwstrat|ambiguousRelevant": {
+     "f05": 0.8032832968309604,
+     "t11su": 0.7222630718954249,
+     "precision": 0.911964936244802,
+     "recall": 0.6089828431372548,
+     "brier": 0.08465609945612906,
+     "brierSkill": 0.540536412560545,
+     "ece": 0.07679742781119377,
+     "accepted": 269.345,
+     "tp": 248.465,
+     "fp": 20.88,
+     "fn": 159.535
+    },
+    "alwaysNo|strict": {
+     "f05": 0.0,
+     "t11su": 0.33333333333333326,
+     "precision": 0.0,
+     "recall": 0.0,
+     "brier": 0.23628691983122355,
+     "brierSkill": -0.30939226519337026,
+     "ece": 0.23628691983122355,
+     "accepted": 0.0,
+     "tp": 0.0,
+     "fp": 0.0,
+     "fn": 392.0
+    },
+    "alwaysNo|ambiguousRelevant": {
+     "f05": 0.0,
+     "t11su": 0.33333333333333326,
+     "precision": 0.0,
+     "recall": 0.0,
+     "brier": 0.24358208955223887,
+     "brierSkill": -0.32202052091554867,
+     "ece": 0.24358208955223887,
+     "accepted": 0.0,
+     "tp": 0.0,
+     "fp": 0.0,
+     "fn": 408.0
+    },
+    "alwaysYes|strict": {
+     "f05": 0.27888446215139434,
+     "t11su": 0.0,
+     "precision": 0.23628691983122355,
+     "recall": 1.0,
+     "brier": 0.7637130801687764,
+     "brierSkill": -3.2321428571428568,
+     "ece": 0.7637130801687764,
+     "accepted": 1659.0,
+     "tp": 392.0,
+     "fp": 1267.0,
+     "fn": 0.0
+    },
+    "alwaysYes|ambiguousRelevant": {
+     "f05": 0.2870005627462015,
+     "t11su": 0.0,
+     "precision": 0.24358208955223887,
+     "recall": 1.0,
+     "brier": 0.7564179104477611,
+     "brierSkill": -3.105392156862745,
+     "ece": 0.7564179104477611,
+     "accepted": 1675.0,
+     "tp": 408.0,
+     "fp": 1267.0,
+     "fn": 0.0
+    },
+    "keywordNarrow|strict": {
+     "f05": 0.885558583106267,
+     "t11su": 0.7678571428571429,
+     "precision": 0.9665427509293677,
+     "recall": 0.663265306122449,
+     "brier": 0.08499095840867991,
+     "brierSkill": 0.5290196188972827,
+     "ece": 0.08499095840867991,
+     "accepted": 269.0,
+     "tp": 260.0,
+     "fp": 9.0,
+     "fn": 132.0
+    },
+    "keywordNarrow|ambiguousRelevant": {
+     "f05": 0.8800000000000003,
+     "t11su": 0.7573529411764707,
+     "precision": 0.967032967032967,
+     "recall": 0.6470588235294119,
+     "brier": 0.09134328358208955,
+     "brierSkill": 0.5042423046566693,
+     "ece": 0.09134328358208955,
+     "accepted": 273.0,
+     "tp": 264.0,
+     "fp": 9.0,
+     "fn": 144.0
+    },
+    "keywordBroad|strict": {
+     "f05": 0.9078947368421056,
+     "t11su": 0.8928571428571428,
+     "precision": 0.9151193633952255,
+     "recall": 0.8801020408163265,
+     "brier": 0.047619047619047616,
+     "brierSkill": 0.7361173751268464,
+     "ece": 0.047619047619047616,
+     "accepted": 377.0,
+     "tp": 345.0,
+     "fp": 32.0,
+     "fn": 47.0
+    },
+    "keywordBroad|ambiguousRelevant": {
+     "f05": 0.9053497942386832,
+     "t11su": 0.8823529411764709,
+     "precision": 0.9166666666666665,
+     "recall": 0.8627450980392161,
+     "brier": 0.05253731343283581,
+     "brierSkill": 0.7148583190182152,
+     "ece": 0.052537313432835846,
+     "accepted": 384.0,
+     "tp": 352.0,
+     "fp": 32.0,
+     "fn": 56.0
+    }
+   },
+   "check": null,
+   "notes": {
+    "binormalFallback": {
+     "desc": 0,
+     "rocchio-q0": 6
+    },
+    "kwstratFallbackStrata": 105
+   },
+   "counts": {
+    "teachRelevant": 775,
+    "freshRelevant": 392,
+    "freshAmbiguous": 16,
+    "freshLabelled": 1659
+   },
+   "ap": {
+    "desc": 0.9676101590837335,
+    "rocchio-q0": 0.9530038018751238
+   }
+  },
+  "regulation": {
+   "profile": "regulation",
+   "rows": {
+    "desc|binormal|strict": {
+     "f05": 0.11232660912295374,
+     "t11su": 0.23695238095238097,
+     "precision": 0.5614018941626252,
+     "recall": 0.152,
+     "brier": 0.05098146514337313,
+     "brierSkill": -1.4336594135338152,
+     "ece": 0.09464819347871814,
+     "accepted": 237.865,
+     "tp": 5.32,
+     "fp": 232.545,
+     "fn": 29.68
+    },
+    "desc|binormal|ambiguousRelevant": {
+     "f05": 0.08592134618350755,
+     "t11su": 0.23413333333333333,
+     "precision": 0.5953539468739121,
+     "recall": 0.16226666666666667,
+     "brier": 0.06957548690215275,
+     "brierSkill": -0.6266893786654361,
+     "ece": 0.10369354707726366,
+     "accepted": 244.715,
+     "tp": 12.17,
+     "fp": 232.545,
+     "fn": 62.83
+    },
+    "rocchio-q0|binormal|strict": {
+     "f05": 0.12532232472874572,
+     "t11su": 0.2199047619047619,
+     "precision": 0.5507291459630207,
+     "recall": 0.1891428571428571,
+     "brier": 0.048183181541616944,
+     "brierSkill": -1.3000800977962315,
+     "ece": 0.08742893926237807,
+     "accepted": 215.25,
+     "tp": 6.62,
+     "fp": 208.63,
+     "fn": 28.38
+    },
+    "rocchio-q0|binormal|ambiguousRelevant": {
+     "f05": 0.10917634146822518,
+     "t11su": 0.21980000000000005,
+     "precision": 0.5891224885758684,
+     "recall": 0.1882666666666667,
+     "brier": 0.06649002531522386,
+     "brierSkill": -0.5545506439585413,
+     "ece": 0.09722000996598366,
+     "accepted": 222.75,
+     "tp": 14.12,
+     "fp": 208.63,
+     "fn": 60.88
+    },
+    "desc|binormal+kw|strict": {
+     "f05": 0.11704329976143979,
+     "t11su": 0.24114285714285713,
+     "precision": 0.386019359989229,
+     "recall": 0.16399999999999998,
+     "brier": 0.04207626630341956,
+     "brierSkill": -1.0085594105171205,
+     "ece": 0.08098029946930264,
+     "accepted": 206.505,
+     "tp": 5.74,
+     "fp": 200.765,
+     "fn": 29.26
+    },
+    "desc|binormal+kw|ambiguousRelevant": {
+     "f05": 0.10710498092839905,
+     "t11su": 0.24064444444444444,
+     "precision": 0.4835837095285176,
+     "recall": 0.16873333333333335,
+     "brier": 0.06069658476530908,
+     "brierSkill": -0.4190987969347526,
+     "ece": 0.09010655541172957,
+     "accepted": 213.42,
+     "tp": 12.655,
+     "fp": 200.765,
+     "fn": 62.345
+    },
+    "rocchio-q0|binormal+kw|strict": {
+     "f05": 0.12615902343673768,
+     "t11su": 0.23871428571428574,
+     "precision": 0.4923950553200058,
+     "recall": 0.1814285714285714,
+     "brier": 0.0410240117132341,
+     "brierSkill": -0.958328816287683,
+     "ece": 0.07536037479554787,
+     "accepted": 162.96,
+     "tp": 6.35,
+     "fp": 156.61,
+     "fn": 28.65
+    },
+    "rocchio-q0|binormal+kw|ambiguousRelevant": {
+     "f05": 0.11575693129611307,
+     "t11su": 0.23748888888888886,
+     "precision": 0.5527204679269299,
+     "recall": 0.17413333333333333,
+     "brier": 0.0594124282867209,
+     "brierSkill": -0.38907495093276123,
+     "ece": 0.08523841009693957,
+     "accepted": 169.67,
+     "tp": 13.06,
+     "fp": 156.61,
+     "fn": 61.94
+    },
+    "rocchio-q0|kwstrat|strict": {
+     "f05": 0.12025387770916479,
+     "t11su": 0.21628571428571428,
+     "precision": 0.38336459894529784,
+     "recall": 0.19114285714285711,
+     "brier": 0.05232286159812309,
+     "brierSkill": -1.4976925302793327,
+     "ece": 0.09503684599980129,
+     "accepted": 214.365,
+     "tp": 6.69,
+     "fp": 207.675,
+     "fn": 28.31
+    },
+    "rocchio-q0|kwstrat|ambiguousRelevant": {
+     "f05": 0.1189686254516034,
+     "t11su": 0.21706666666666666,
+     "precision": 0.46043992645946646,
+     "recall": 0.19406666666666667,
+     "brier": 0.06969279675071083,
+     "brierSkill": -0.6294321073642756,
+     "ece": 0.1033970539395895,
+     "accepted": 222.23,
+     "tp": 14.555,
+     "fp": 207.675,
+     "fn": 60.445
+    },
+    "alwaysNo|strict": {
+     "f05": 0.0,
+     "t11su": 0.33333333333333326,
+     "precision": 0.0,
+     "recall": 0.0,
+     "brier": 0.021406727828746176,
+     "brierSkill": -0.02187500000000009,
+     "ece": 0.021406727828746176,
+     "accepted": 0.0,
+     "tp": 0.0,
+     "fp": 0.0,
+     "fn": 35.0
+    },
+    "alwaysNo|ambiguousRelevant": {
+     "f05": 0.0,
+     "t11su": 0.33333333333333326,
+     "precision": 0.0,
+     "recall": 0.0,
+     "brier": 0.044776119402985086,
+     "brierSkill": -0.046875,
+     "ece": 0.044776119402985086,
+     "accepted": 0.0,
+     "tp": 0.0,
+     "fp": 0.0,
+     "fn": 75.0
+    },
+    "alwaysYes|strict": {
+     "f05": 0.02661596958174905,
+     "t11su": 0.0,
+     "precision": 0.021406727828746176,
+     "recall": 1.0,
+     "brier": 0.9785932721712538,
+     "brierSkill": -45.71428571428571,
+     "ece": 0.9785932721712538,
+     "accepted": 1635.0,
+     "tp": 35.0,
+     "fp": 1600.0,
+     "fn": 0.0
+    },
+    "alwaysYes|ambiguousRelevant": {
+     "f05": 0.055350553505535076,
+     "t11su": 0.0,
+     "precision": 0.044776119402985086,
+     "recall": 1.0,
+     "brier": 0.9552238805970147,
+     "brierSkill": -21.33333333333334,
+     "ece": 0.9552238805970147,
+     "accepted": 1675.0,
+     "tp": 75.0,
+     "fp": 1600.0,
+     "fn": 0.0
+    },
+    "keywordNarrow|strict": {
+     "f05": 0.3030303030303031,
+     "t11su": 0.3523809523809524,
+     "precision": 0.375,
+     "recall": 0.17142857142857146,
+     "brier": 0.02385321100917431,
+     "brierSkill": -0.13866071428571458,
+     "ece": 0.02385321100917431,
+     "accepted": 16.0,
+     "tp": 6.0,
+     "fp": 10.0,
+     "fn": 29.0
+    },
+    "keywordNarrow|ambiguousRelevant": {
+     "f05": 0.32258064516129037,
+     "t11su": 0.37777777777777777,
+     "precision": 0.5,
+     "recall": 0.13333333333333333,
+     "brier": 0.044776119402985086,
+     "brierSkill": -0.046875,
+     "ece": 0.044776119402985086,
+     "accepted": 20.0,
+     "tp": 10.0,
+     "fp": 10.0,
+     "fn": 65.0
+    },
+    "keywordBroad|strict": {
+     "f05": 0.3021148036253777,
+     "t11su": 0.2,
+     "precision": 0.27027027027027023,
+     "recall": 0.5714285714285713,
+     "brier": 0.04220183486238532,
+     "brierSkill": -1.0145535714285716,
+     "ece": 0.04220183486238532,
+     "accepted": 74.0,
+     "tp": 20.0,
+     "fp": 54.0,
+     "fn": 15.0
+    },
+    "keywordBroad|ambiguousRelevant": {
+     "f05": 0.3734939759036145,
+     "t11su": 0.3688888888888889,
+     "precision": 0.36470588235294116,
+     "recall": 0.41333333333333316,
+     "brier": 0.058507462686567153,
+     "brierSkill": -0.36791666666666684,
+     "ece": 0.058507462686567153,
+     "accepted": 85.0,
+     "tp": 31.0,
+     "fp": 54.0,
+     "fn": 44.0
+    }
+   },
+   "check": null,
+   "notes": {
+    "binormalFallback": {
+     "desc": 8,
+     "rocchio-q0": 6
+    },
+    "kwstratFallbackStrata": 99
+   },
+   "counts": {
+    "teachRelevant": 154,
+    "freshRelevant": 35,
+    "freshAmbiguous": 40,
+    "freshLabelled": 1635
+   },
+   "ap": {
+    "desc": 0.2918405837041901,
+    "rocchio-q0": 0.4039740531554792
+   }
+  },
+  "courts": {
+   "profile": "courts",
+   "rows": {
+    "desc|binormal|strict": {
+     "f05": 0.8240347125344288,
+     "t11su": 0.7094696969696969,
+     "precision": 0.9153779761904762,
+     "recall": 0.5895454545454545,
+     "brier": 0.004199901043560773,
+     "brierSkill": 0.6786511956569491,
+     "ece": 0.007784083261040503,
+     "accepted": 17.92,
+     "tp": 12.97,
+     "fp": 4.95,
+     "fn": 9.03
+    },
+    "desc|binormal|ambiguousRelevant": {
+     "f05": 0.6995563737433897,
+     "t11su": 0.5625462962962964,
+     "precision": 0.9154094623365719,
+     "recall": 0.36097222222222214,
+     "brier": 0.011950487580372133,
+     "brierSkill": 0.4317573941142709,
+     "ece": 0.011715038424699837,
+     "accepted": 17.945,
+     "tp": 12.995,
+     "fp": 4.95,
+     "fn": 23.005
+    },
+    "rocchio-q0|binormal|strict": {
+     "f05": 0.7909973577332957,
+     "t11su": 0.8150757575757577,
+     "precision": 0.7874011531619948,
+     "recall": 0.8484090909090908,
+     "brier": 0.005954710737086839,
+     "brierSkill": 0.5443846996096744,
+     "ece": 0.012360375979648057,
+     "accepted": 32.065,
+     "tp": 18.665,
+     "fp": 13.4,
+     "fn": 3.335
+    },
+    "rocchio-q0|binormal|ambiguousRelevant": {
+     "f05": 0.7237909666803162,
+     "t11su": 0.6506018518518519,
+     "precision": 0.7980178952482817,
+     "recall": 0.5556944444444444,
+     "brier": 0.012563174117460637,
+     "brierSkill": 0.402624307109679,
+     "ece": 0.013333836095956196,
+     "accepted": 33.405,
+     "tp": 20.005,
+     "fp": 13.4,
+     "fn": 15.995
+    },
+    "desc|binormal+kw|strict": {
+     "f05": 0.7992063943952408,
+     "t11su": 0.7681060606060606,
+     "precision": 0.819911590071246,
+     "recall": 0.7318181818181819,
+     "brier": 0.0034314808531305373,
+     "brierSkill": 0.7374456545898344,
+     "ece": 0.005291167994994481,
+     "accepted": 22.09,
+     "tp": 16.1,
+     "fp": 5.99,
+     "fn": 5.9
+    },
+    "desc|binormal+kw|ambiguousRelevant": {
+     "f05": 0.7044378234463724,
+     "t11su": 0.6015277777777778,
+     "precision": 0.8215049609997384,
+     "recall": 0.45277777777777783,
+     "brier": 0.010744923758875901,
+     "brierSkill": 0.4890816432615381,
+     "ece": 0.0107020017543312,
+     "accepted": 22.29,
+     "tp": 16.3,
+     "fp": 5.99,
+     "fn": 19.7
+    },
+    "rocchio-q0|binormal+kw|strict": {
+     "f05": 0.8265804859975758,
+     "t11su": 0.8613636363636362,
+     "precision": 0.8206593676224159,
+     "recall": 0.8904545454545455,
+     "brier": 0.004469147462971851,
+     "brierSkill": 0.6580502305261036,
+     "ece": 0.008950538984224354,
+     "accepted": 31.785,
+     "tp": 19.59,
+     "fp": 12.195,
+     "fn": 2.41
+    },
+    "rocchio-q0|binormal+kw|ambiguousRelevant": {
+     "f05": 0.7679716283577689,
+     "t11su": 0.6943518518518519,
+     "precision": 0.8468534368834064,
+     "recall": 0.6045833333333334,
+     "brier": 0.010408268963762417,
+     "brierSkill": 0.5050894920436592,
+     "ece": 0.011089294522050814,
+     "accepted": 33.96,
+     "tp": 21.765,
+     "fp": 12.195,
+     "fn": 14.235
+    },
+    "rocchio-q0|kwstrat|strict": {
+     "f05": 0.7337063640454902,
+     "t11su": 0.7422727272727272,
+     "precision": 0.7915487990164181,
+     "recall": 0.7268181818181819,
+     "brier": 0.007672161343101166,
+     "brierSkill": 0.41297667522130976,
+     "ece": 0.014797704103595221,
+     "accepted": 35.725,
+     "tp": 15.99,
+     "fp": 19.735,
+     "fn": 6.01
+    },
+    "rocchio-q0|kwstrat|ambiguousRelevant": {
+     "f05": 0.6671333390441676,
+     "t11su": 0.6041203703703704,
+     "precision": 0.8198342214180967,
+     "recall": 0.48513888888888884,
+     "brier": 0.014357175100665349,
+     "brierSkill": 0.31732002251026675,
+     "ece": 0.01823502009852244,
+     "accepted": 37.2,
+     "tp": 17.465,
+     "fp": 19.735,
+     "fn": 18.535
+    },
+    "alwaysNo|strict": {
+     "f05": 0.0,
+     "t11su": 0.33333333333333326,
+     "precision": 0.0,
+     "recall": 0.0,
+     "brier": 0.013245033112582785,
+     "brierSkill": -0.01342281879194629,
+     "ece": 0.013245033112582785,
+     "accepted": 0.0,
+     "tp": 0.0,
+     "fp": 0.0,
+     "fn": 22.0
+    },
+    "alwaysNo|ambiguousRelevant": {
+     "f05": 0.0,
+     "t11su": 0.33333333333333326,
+     "precision": 0.0,
+     "recall": 0.0,
+     "brier": 0.021492537313432834,
+     "brierSkill": -0.02196461256863924,
+     "ece": 0.021492537313432834,
+     "accepted": 0.0,
+     "tp": 0.0,
+     "fp": 0.0,
+     "fn": 36.0
+    },
+    "alwaysYes|strict": {
+     "f05": 0.016501650165016507,
+     "t11su": 0.0,
+     "precision": 0.013245033112582785,
+     "recall": 1.0,
+     "brier": 0.9867549668874175,
+     "brierSkill": -74.5,
+     "ece": 0.9867549668874175,
+     "accepted": 1661.0,
+     "tp": 22.0,
+     "fp": 1639.0,
+     "fn": 0.0
+    },
+    "alwaysYes|ambiguousRelevant": {
+     "f05": 0.026722090261282652,
+     "t11su": 0.0,
+     "precision": 0.021492537313432834,
+     "recall": 1.0,
+     "brier": 0.9785074626865671,
+     "brierSkill": -45.527777777777786,
+     "ece": 0.9785074626865671,
+     "accepted": 1675.0,
+     "tp": 36.0,
+     "fp": 1639.0,
+     "fn": 0.0
+    },
+    "keywordNarrow|strict": {
+     "f05": 0.7203389830508476,
+     "t11su": 0.7424242424242423,
+     "precision": 0.7083333333333331,
+     "recall": 0.7727272727272727,
+     "brier": 0.007224563515954242,
+     "brierSkill": 0.44722391702257475,
+     "ece": 0.007224563515954242,
+     "accepted": 24.0,
+     "tp": 17.0,
+     "fp": 7.0,
+     "fn": 5.0
+    },
+    "keywordNarrow|ambiguousRelevant": {
+     "f05": 0.7094594594594595,
+     "t11su": 0.6574074074074074,
+     "precision": 0.75,
+     "recall": 0.5833333333333333,
+     "brier": 0.013134328358208953,
+     "brierSkill": 0.3754660700969427,
+     "ece": 0.013134328358208961,
+     "accepted": 28.0,
+     "tp": 21.0,
+     "fp": 7.0,
+     "fn": 15.0
+    },
+    "keywordBroad|strict": {
+     "f05": 0.4646017699115045,
+     "t11su": 0.5151515151515152,
+     "precision": 0.411764705882353,
+     "recall": 0.9545454545454549,
+     "brier": 0.018663455749548467,
+     "brierSkill": -0.42800488102501516,
+     "ece": 0.01866345574954847,
+     "accepted": 51.0,
+     "tp": 21.0,
+     "fp": 30.0,
+     "fn": 1.0
+    },
+    "keywordBroad|ambiguousRelevant": {
+     "f05": 0.5434782608695653,
+     "t11su": 0.611111111111111,
+     "precision": 0.5,
+     "recall": 0.8333333333333335,
+     "brier": 0.021492537313432834,
+     "brierSkill": -0.02196461256863924,
+     "ece": 0.021492537313432834,
+     "accepted": 60.0,
+     "tp": 30.0,
+     "fp": 30.0,
+     "fn": 6.0
+    }
+   },
+   "check": null,
+   "notes": {
+    "binormalFallback": {
+     "desc": 0,
+     "rocchio-q0": 1
+    },
+    "kwstratFallbackStrata": 81
+   },
+   "counts": {
+    "teachRelevant": 66,
+    "freshRelevant": 22,
+    "freshAmbiguous": 14,
+    "freshLabelled": 1661
+   },
+   "ap": {
+    "desc": 0.9357448072047033,
+    "rocchio-q0": 0.923336145409515
+   }
+  },
+  "robotics": {
+   "profile": "robotics",
+   "rows": {
+    "desc|binormal|strict": {
+     "f05": 0.601372768008868,
+     "t11su": 0.5866279069767443,
+     "precision": 0.6191804838031317,
+     "recall": 0.5453488372093024,
+     "brier": 0.017839257863842755,
+     "brierSkill": 0.2917643047480657,
+     "ece": 0.01509090723064889,
+     "accepted": 37.675,
+     "tp": 23.45,
+     "fp": 14.225,
+     "fn": 19.55
+    },
+    "desc|binormal|ambiguousRelevant": {
+     "f05": 0.6196191127139339,
+     "t11su": 0.5854242424242424,
+     "precision": 0.6582919317188914,
+     "recall": 0.5074545454545454,
+     "brier": 0.021325163959152845,
+     "brierSkill": 0.32850265844109766,
+     "ece": 0.016246920105832188,
+     "accepted": 42.135,
+     "tp": 27.91,
+     "fp": 14.225,
+     "fn": 27.09
+    },
+    "rocchio-q0|binormal|strict": {
+     "f05": 0.6103731900870835,
+     "t11su": 0.525232558139535,
+     "precision": 0.7898941641817256,
+     "recall": 0.3863953488372093,
+     "brier": 0.020974881204913167,
+     "brierSkill": 0.16727704221948764,
+     "ece": 0.028153819492124733,
+     "accepted": 50.855,
+     "tp": 16.615,
+     "fp": 34.24,
+     "fn": 26.385
+    },
+    "rocchio-q0|binormal|ambiguousRelevant": {
+     "f05": 0.5844254733768577,
+     "t11su": 0.49793939393939396,
+     "precision": 0.8038731690029127,
+     "recall": 0.33736363636363637,
+     "brier": 0.026007071852179292,
+     "brierSkill": 0.18107642014286715,
+     "ece": 0.03214804417800113,
+     "accepted": 52.795,
+     "tp": 18.555,
+     "fp": 34.24,
+     "fn": 36.445
+    },
+    "desc|binormal+kw|strict": {
+     "f05": 0.8326371879820751,
+     "t11su": 0.7641085271317829,
+     "precision": 0.8913129483231488,
+     "recall": 0.6917441860465116,
+     "brier": 0.008740464706119711,
+     "brierSkill": 0.6529951444611142,
+     "ece": 0.007643094677939258,
+     "accepted": 33.665,
+     "tp": 29.745,
+     "fp": 3.92,
+     "fn": 13.255
+    },
+    "desc|binormal+kw|ambiguousRelevant": {
+     "f05": 0.8303260531935748,
+     "t11su": 0.7417575757575756,
+     "precision": 0.9068243685674712,
+     "recall": 0.6482727272727273,
+     "brier": 0.011903332650741888,
+     "brierSkill": 0.6251819565854353,
+     "ece": 0.009715491587438837,
+     "accepted": 39.575,
+     "tp": 35.655,
+     "fp": 3.92,
+     "fn": 19.345
+    },
+    "rocchio-q0|binormal+kw|strict": {
+     "f05": 0.8055258142750926,
+     "t11su": 0.7243023255813952,
+     "precision": 0.9305622628246987,
+     "recall": 0.622093023255814,
+     "brier": 0.010551518883358839,
+     "brierSkill": 0.5810945517265027,
+     "ece": 0.015623096749107801,
+     "accepted": 35.425,
+     "tp": 26.75,
+     "fp": 8.675,
+     "fn": 16.25
+    },
+    "rocchio-q0|binormal+kw|ambiguousRelevant": {
+     "f05": 0.7881685586768452,
+     "t11su": 0.6862727272727273,
+     "precision": 0.9390141164090292,
+     "recall": 0.5596363636363637,
+     "brier": 0.014296145134886975,
+     "brierSkill": 0.5498358900778083,
+     "ece": 0.019008672690601726,
+     "accepted": 39.455,
+     "tp": 30.78,
+     "fp": 8.675,
+     "fn": 24.22
+    },
+    "rocchio-q0|kwstrat|strict": {
+     "f05": 0.4540252053746624,
+     "t11su": 0.3822093023255813,
+     "precision": 0.5165767451038248,
+     "recall": 0.6013953488372092,
+     "brier": 0.07922210209602151,
+     "brierSkill": -2.1451936501807656,
+     "ece": 0.15396984965041444,
+     "accepted": 329.075,
+     "tp": 25.86,
+     "fp": 303.215,
+     "fn": 17.14
+    },
+    "rocchio-q0|kwstrat|ambiguousRelevant": {
+     "f05": 0.44819931733404245,
+     "t11su": 0.3646969696969697,
+     "precision": 0.526521582381025,
+     "recall": 0.5564545454545453,
+     "brier": 0.08248423382589623,
+     "brierSkill": -1.597304472814592,
+     "ece": 0.15428324548280262,
+     "accepted": 333.82,
+     "tp": 30.605,
+     "fp": 303.215,
+     "fn": 24.395
+    },
+    "alwaysNo|strict": {
+     "f05": 0.0,
+     "t11su": 0.33333333333333326,
+     "precision": 0.0,
+     "recall": 0.0,
+     "brier": 0.02585688514732411,
+     "brierSkill": -0.02654320987654324,
+     "ece": 0.02585688514732411,
+     "accepted": 0.0,
+     "tp": 0.0,
+     "fp": 0.0,
+     "fn": 43.0
+    },
+    "alwaysNo|ambiguousRelevant": {
+     "f05": 0.0,
+     "t11su": 0.33333333333333326,
+     "precision": 0.0,
+     "recall": 0.0,
+     "brier": 0.03283582089552239,
+     "brierSkill": -0.03395061728395077,
+     "ece": 0.03283582089552239,
+     "accepted": 0.0,
+     "tp": 0.0,
+     "fp": 0.0,
+     "fn": 55.0
+    },
+    "alwaysYes|strict": {
+     "f05": 0.03211351755041075,
+     "t11su": 0.0,
+     "precision": 0.02585688514732411,
+     "recall": 1.0,
+     "brier": 0.974143114852676,
+     "brierSkill": -37.674418604651166,
+     "ece": 0.974143114852676,
+     "accepted": 1663.0,
+     "tp": 43.0,
+     "fp": 1620.0,
+     "fn": 0.0
+    },
+    "alwaysYes|ambiguousRelevant": {
+     "f05": 0.04071058475203554,
+     "t11su": 0.0,
+     "precision": 0.03283582089552239,
+     "recall": 1.0,
+     "brier": 0.9671641791044775,
+     "brierSkill": -29.45454545454545,
+     "ece": 0.9671641791044775,
+     "accepted": 1675.0,
+     "tp": 55.0,
+     "fp": 1620.0,
+     "fn": 0.0
+    },
+    "keywordNarrow|strict": {
+     "f05": 0.8604651162790696,
+     "t11su": 0.8604651162790696,
+     "precision": 0.8604651162790696,
+     "recall": 0.8604651162790696,
+     "brier": 0.0072158749248346366,
+     "brierSkill": 0.7135228251507322,
+     "ece": 0.007215874924834637,
+     "accepted": 43.0,
+     "tp": 37.0,
+     "fp": 6.0,
+     "fn": 6.0
+    },
+    "keywordNarrow|ambiguousRelevant": {
+     "f05": 0.8687258687258688,
+     "t11su": 0.8424242424242425,
+     "precision": 0.8823529411764709,
+     "recall": 0.8181818181818181,
+     "brier": 0.009552238805970148,
+     "brierSkill": 0.6992143658810326,
+     "ece": 0.009552238805970153,
+     "accepted": 51.0,
+     "tp": 45.0,
+     "fp": 6.0,
+     "fn": 10.0
+    },
+    "keywordBroad|strict": {
+     "f05": 0.8565737051792829,
+     "t11su": 0.9302325581395349,
+     "precision": 0.8269230769230768,
+     "recall": 1.0,
+     "brier": 0.005411906193625977,
+     "brierSkill": 0.7851421188630491,
+     "ece": 0.005411906193625979,
+     "accepted": 52.0,
+     "tp": 43.0,
+     "fp": 9.0,
+     "fn": 0.0
+    },
+    "keywordBroad|ambiguousRelevant": {
+     "f05": 0.8695652173913045,
+     "t11su": 0.9090909090909095,
+     "precision": 0.8524590163934426,
+     "recall": 0.9454545454545454,
+     "brier": 0.007164179104477613,
+     "brierSkill": 0.7744107744107744,
+     "ece": 0.007164179104477614,
+     "accepted": 61.0,
+     "tp": 52.0,
+     "fp": 9.0,
+     "fn": 3.0
+    }
+   },
+   "check": null,
+   "notes": {
+    "binormalFallback": {
+     "desc": 0,
+     "rocchio-q0": 3
+    },
+    "kwstratFallbackStrata": 73
+   },
+   "counts": {
+    "teachRelevant": 86,
+    "freshRelevant": 43,
+    "freshAmbiguous": 12,
+    "freshLabelled": 1663
+   },
+   "ap": {
+    "desc": 0.6277928366466661,
+    "rocchio-q0": 0.6866685824517686
+   }
+  },
+  "safety": {
+   "profile": "safety",
+   "rows": {
+    "desc|binormal|strict": {
+     "f05": 0.06458472569779988,
+     "t11su": 0.07430555555555556,
+     "precision": 0.05656722479478793,
+     "recall": 0.4983333333333333,
+     "brier": 0.04619537503861167,
+     "brierSkill": -5.348355588299761,
+     "ece": 0.08974707112746774,
+     "accepted": 112.205,
+     "tp": 5.98,
+     "fp": 106.225,
+     "fn": 6.02
+    },
+    "desc|binormal|ambiguousRelevant": {
+     "f05": 0.17824066539542968,
+     "t11su": 0.12240000000000002,
+     "precision": 0.3064701471616634,
+     "recall": 0.4058,
+     "brier": 0.057451762243291966,
+     "brierSkill": -0.9838535439241357,
+     "ece": 0.0858635751061955,
+     "accepted": 126.515,
+     "tp": 20.29,
+     "fp": 106.225,
+     "fn": 29.71
+    },
+    "rocchio-q0|binormal|strict": {
+     "f05": 0.0575508446210168,
+     "t11su": 0.18,
+     "precision": 0.07494099711176544,
+     "recall": 0.22791666666666668,
+     "brier": 0.02134351469494455,
+     "brierSkill": -1.933112257977275,
+     "ece": 0.041197573182478256,
+     "accepted": 66.88,
+     "tp": 2.735,
+     "fp": 64.145,
+     "fn": 9.265
+    },
+    "rocchio-q0|binormal|ambiguousRelevant": {
+     "f05": 0.09903575040721678,
+     "t11su": 0.22836666666666666,
+     "precision": 0.17680005001941457,
+     "recall": 0.19810000000000003,
+     "brier": 0.03951383947109162,
+     "brierSkill": -0.36444327219792527,
+     "ece": 0.051555939277917705,
+     "accepted": 74.05,
+     "tp": 9.905,
+     "fp": 64.145,
+     "fn": 40.095
+    },
+    "desc|binormal+kw|strict": {
+     "f05": 0.13054829166285997,
+     "t11su": 0.10361111111111111,
+     "precision": 0.23833868494573354,
+     "recall": 0.4275,
+     "brier": 0.038703881467705974,
+     "brierSkill": -4.31884419163246,
+     "ece": 0.07577554893796519,
+     "accepted": 83.77,
+     "tp": 5.13,
+     "fp": 78.64,
+     "fn": 6.87
+    },
+    "desc|binormal+kw|ambiguousRelevant": {
+     "f05": 0.22151910317231302,
+     "t11su": 0.16196666666666665,
+     "precision": 0.37177499943117165,
+     "recall": 0.36400000000000005,
+     "brier": 0.05049528435328778,
+     "brierSkill": -0.7436410112454527,
+     "ece": 0.07207339072485301,
+     "accepted": 96.84,
+     "tp": 18.2,
+     "fp": 78.64,
+     "fn": 31.8
+    },
+    "rocchio-q0|binormal+kw|strict": {
+     "f05": 0.15362351934480656,
+     "t11su": 0.24375,
+     "precision": 0.38610990270447204,
+     "recall": 0.17875,
+     "brier": 0.017805057066645348,
+     "brierSkill": -1.4468430754065202,
+     "ece": 0.033710734289591475,
+     "accepted": 36.425,
+     "tp": 2.145,
+     "fp": 34.28,
+     "fn": 9.855
+    },
+    "rocchio-q0|binormal+kw|ambiguousRelevant": {
+     "f05": 0.14317366429421377,
+     "t11su": 0.2851,
+     "precision": 0.5592515353052824,
+     "recall": 0.1467,
+     "brier": 0.03616074304106751,
+     "brierSkill": -0.24865827316424668,
+     "ece": 0.04450997150241008,
+     "accepted": 41.615,
+     "tp": 7.335,
+     "fp": 34.28,
+     "fn": 42.665
+    },
+    "rocchio-q0|kwstrat|strict": {
+     "f05": 0.1027889366672143,
+     "t11su": 0.19194444444444442,
+     "precision": 0.18658209374605236,
+     "recall": 0.20125,
+     "brier": 0.021741413450737282,
+     "brierSkill": -1.9877931169984007,
+     "ece": 0.03951343792212513,
+     "accepted": 56.405,
+     "tp": 2.415,
+     "fp": 53.99,
+     "fn": 9.585
+    },
+    "rocchio-q0|kwstrat|ambiguousRelevant": {
+     "f05": 0.14693944511404913,
+     "t11su": 0.2535666666666667,
+     "precision": 0.37582647549887954,
+     "recall": 0.17490000000000003,
+     "brier": 0.03977981532891043,
+     "brierSkill": -0.37362762316522236,
+     "ece": 0.05045388225601887,
+     "accepted": 62.735,
+     "tp": 8.745,
+     "fp": 53.99,
+     "fn": 41.255
+    },
+    "alwaysNo|strict": {
+     "f05": 0.0,
+     "t11su": 0.33333333333333326,
+     "precision": 0.0,
+     "recall": 0.0,
+     "brier": 0.00733048259010385,
+     "brierSkill": -0.007384615384615323,
+     "ece": 0.00733048259010385,
+     "accepted": 0.0,
+     "tp": 0.0,
+     "fp": 0.0,
+     "fn": 12.0
+    },
+    "alwaysNo|ambiguousRelevant": {
+     "f05": 0.0,
+     "t11su": 0.33333333333333326,
+     "precision": 0.0,
+     "recall": 0.0,
+     "brier": 0.02985074626865671,
+     "brierSkill": -0.03076923076923066,
+     "ece": 0.02985074626865671,
+     "accepted": 0.0,
+     "tp": 0.0,
+     "fp": 0.0,
+     "fn": 50.0
+    },
+    "alwaysYes|strict": {
+     "f05": 0.009146341463414632,
+     "t11su": 0.0,
+     "precision": 0.00733048259010385,
+     "recall": 1.0,
+     "brier": 0.9926695174098961,
+     "brierSkill": -135.41666666666669,
+     "ece": 0.9926695174098961,
+     "accepted": 1637.0,
+     "tp": 12.0,
+     "fp": 1625.0,
+     "fn": 0.0
+    },
+    "alwaysYes|ambiguousRelevant": {
+     "f05": 0.037037037037037035,
+     "t11su": 0.0,
+     "precision": 0.02985074626865671,
+     "recall": 1.0,
+     "brier": 0.9701492537313432,
+     "brierSkill": -32.5,
+     "ece": 0.9701492537313432,
+     "accepted": 1675.0,
+     "tp": 50.0,
+     "fp": 1625.0,
+     "fn": 0.0
+    },
+    "keywordNarrow|strict": {
+     "f05": 0.05952380952380953,
+     "t11su": 0.0,
+     "precision": 0.05555555555555557,
+     "recall": 0.08333333333333331,
+     "brier": 0.017104459376908975,
+     "brierSkill": -1.3505641025641029,
+     "ece": 0.017104459376908975,
+     "accepted": 18.0,
+     "tp": 1.0,
+     "fp": 17.0,
+     "fn": 11.0
+    },
+    "keywordNarrow|ambiguousRelevant": {
+     "f05": 0.18115942028985502,
+     "t11su": 0.2866666666666666,
+     "precision": 0.22727272727272718,
+     "recall": 0.1,
+     "brier": 0.037014925373134326,
+     "brierSkill": -0.27815384615384603,
+     "ece": 0.037014925373134326,
+     "accepted": 22.0,
+     "tp": 5.0,
+     "fp": 17.0,
+     "fn": 45.0
+    },
+    "keywordBroad|strict": {
+     "f05": 0.11029411764705886,
+     "t11su": 0.0,
+     "precision": 0.0967741935483871,
+     "recall": 0.25,
+     "brier": 0.02260232131948687,
+     "brierSkill": -2.1061025641025637,
+     "ece": 0.02260232131948687,
+     "accepted": 31.0,
+     "tp": 3.0,
+     "fp": 28.0,
+     "fn": 9.0
+    },
+    "keywordBroad|ambiguousRelevant": {
+     "f05": 0.1842105263157894,
+     "t11su": 0.24000000000000007,
+     "precision": 0.2,
+     "recall": 0.14000000000000004,
+     "brier": 0.04238805970149253,
+     "brierSkill": -0.46369230769230746,
+     "ece": 0.04238805970149253,
+     "accepted": 35.0,
+     "tp": 7.0,
+     "fp": 28.0,
+     "fn": 43.0
+    }
+   },
+   "check": null,
+   "notes": {
+    "binormalFallback": {
+     "desc": 0,
+     "rocchio-q0": 0
+    },
+    "kwstratFallbackStrata": 12
+   },
+   "counts": {
+    "teachRelevant": 103,
+    "freshRelevant": 12,
+    "freshAmbiguous": 38,
+    "freshLabelled": 1637
+   },
+   "ap": {
+    "desc": 0.09841648876404747,
+    "rocchio-q0": 0.16014682108601958
+   }
+  },
+  "open-models": {
+   "profile": "open-models",
+   "rows": {
+    "desc|binormal|strict": {
+     "f05": 0.6608967057339692,
+     "t11su": 0.6874074074074075,
+     "precision": 0.6474833874508147,
+     "recall": 0.7355555555555554,
+     "brier": 0.013683571489215968,
+     "brierSkill": 0.3527689340776702,
+     "ece": 0.02227730385301087,
+     "accepted": 41.2,
+     "tp": 26.48,
+     "fp": 14.72,
+     "fn": 9.52
+    },
+    "desc|binormal|ambiguousRelevant": {
+     "f05": 0.6764759924326162,
+     "t11su": 0.6782222222222223,
+     "precision": 0.6789802370972903,
+     "recall": 0.6808888888888889,
+     "brier": 0.01549793785521747,
+     "brierSkill": 0.40720651813163583,
+     "ece": 0.01999660435134581,
+     "accepted": 45.36,
+     "tp": 30.64,
+     "fp": 14.72,
+     "fn": 14.36
+    },
+    "rocchio-q0|binormal|strict": {
+     "f05": 0.5063843871877071,
+     "t11su": 0.5111574074074074,
+     "precision": 0.4939000224811776,
+     "recall": 0.6877777777777778,
+     "brier": 0.020658195762576225,
+     "brierSkill": 0.022870156816751735,
+     "ece": 0.033054876921960796,
+     "accepted": 61.97,
+     "tp": 24.76,
+     "fp": 37.21,
+     "fn": 11.24
+    },
+    "rocchio-q0|binormal|ambiguousRelevant": {
+     "f05": 0.531944469519499,
+     "t11su": 0.5343703703703704,
+     "precision": 0.5299350936920775,
+     "recall": 0.6492222222222221,
+     "brier": 0.02267664972453156,
+     "brierSkill": 0.1326220124964027,
+     "ece": 0.031209982273211895,
+     "accepted": 66.425,
+     "tp": 29.215,
+     "fp": 37.21,
+     "fn": 15.785
+    },
+    "desc|binormal+kw|strict": {
+     "f05": 0.7294840861978514,
+     "t11su": 0.7476388888888889,
+     "precision": 0.7259966570172613,
+     "recall": 0.772361111111111,
+     "brier": 0.011470332545256378,
+     "brierSkill": 0.45745483439022466,
+     "ece": 0.017243500133945985,
+     "accepted": 38.67,
+     "tp": 27.805,
+     "fp": 10.865,
+     "fn": 8.195
+    },
+    "desc|binormal+kw|ambiguousRelevant": {
+     "f05": 0.7191111795008627,
+     "t11su": 0.698111111111111,
+     "precision": 0.7408990846764075,
+     "recall": 0.6678888888888889,
+     "brier": 0.01392520171870717,
+     "brierSkill": 0.467363407334045,
+     "ece": 0.015084772056997263,
+     "accepted": 40.92,
+     "tp": 30.055,
+     "fp": 10.865,
+     "fn": 14.945
+    },
+    "rocchio-q0|binormal+kw|strict": {
+     "f05": 0.6713774718082084,
+     "t11su": 0.6777777777777777,
+     "precision": 0.6856790223380671,
+     "recall": 0.74125,
+     "brier": 0.01480900340545205,
+     "brierSkill": 0.2995361578728209,
+     "ece": 0.023967613328251508,
+     "accepted": 43.035,
+     "tp": 26.685,
+     "fp": 16.35,
+     "fn": 9.315
+    },
+    "rocchio-q0|binormal+kw|ambiguousRelevant": {
+     "f05": 0.6721790451684305,
+     "t11su": 0.6563703703703703,
+     "precision": 0.7063477175368555,
+     "recall": 0.6656666666666666,
+     "brier": 0.01727550168413259,
+     "brierSkill": 0.33921500460062043,
+     "ece": 0.02201189475675578,
+     "accepted": 46.305,
+     "tp": 29.955,
+     "fp": 16.35,
+     "fn": 15.045
+    },
+    "rocchio-q0|kwstrat|strict": {
+     "f05": 0.5086955834273132,
+     "t11su": 0.5104166666666667,
+     "precision": 0.5561736448488689,
+     "recall": 0.5406944444444445,
+     "brier": 0.019831383651321945,
+     "brierSkill": 0.06197825695759152,
+     "ece": 0.025336128716231598,
+     "accepted": 42.85,
+     "tp": 19.465,
+     "fp": 23.385,
+     "fn": 16.535
+    },
+    "rocchio-q0|kwstrat|ambiguousRelevant": {
+     "f05": 0.5229198632019105,
+     "t11su": 0.5164074074074074,
+     "precision": 0.5892675056464648,
+     "recall": 0.5023333333333333,
+     "brier": 0.022732041466191094,
+     "brierSkill": 0.1305032878175545,
+     "ece": 0.025956950393485605,
+     "accepted": 45.99,
+     "tp": 22.605,
+     "fp": 23.385,
+     "fn": 22.395
+    },
+    "alwaysNo|strict": {
+     "f05": 0.0,
+     "t11su": 0.33333333333333326,
+     "precision": 0.0,
+     "recall": 0.0,
+     "brier": 0.02160864345738295,
+     "brierSkill": -0.022085889570552242,
+     "ece": 0.02160864345738295,
+     "accepted": 0.0,
+     "tp": 0.0,
+     "fp": 0.0,
+     "fn": 36.0
+    },
+    "alwaysNo|ambiguousRelevant": {
+     "f05": 0.0,
+     "t11su": 0.33333333333333326,
+     "precision": 0.0,
+     "recall": 0.0,
+     "brier": 0.02686567164179104,
+     "brierSkill": -0.027607361963190025,
+     "ece": 0.02686567164179104,
+     "accepted": 0.0,
+     "tp": 0.0,
+     "fp": 0.0,
+     "fn": 45.0
+    },
+    "alwaysYes|strict": {
+     "f05": 0.02686567164179104,
+     "t11su": 0.0,
+     "precision": 0.02160864345738295,
+     "recall": 1.0,
+     "brier": 0.9783913565426167,
+     "brierSkill": -45.27777777777777,
+     "ece": 0.9783913565426167,
+     "accepted": 1666.0,
+     "tp": 36.0,
+     "fp": 1630.0,
+     "fn": 0.0
+    },
+    "alwaysYes|ambiguousRelevant": {
+     "f05": 0.03335804299481098,
+     "t11su": 0.0,
+     "precision": 0.02686567164179104,
+     "recall": 1.0,
+     "brier": 0.9731343283582086,
+     "brierSkill": -36.22222222222223,
+     "ece": 0.9731343283582093,
+     "accepted": 1675.0,
+     "tp": 45.0,
+     "fp": 1630.0,
+     "fn": 0.0
+    },
+    "keywordNarrow|strict": {
+     "f05": 0.46641791044776126,
+     "t11su": 0.4907407407407407,
+     "precision": 0.4310344827586207,
+     "recall": 0.6944444444444445,
+     "brier": 0.026410564225690276,
+     "brierSkill": -0.249216087252897,
+     "ece": 0.026410564225690276,
+     "accepted": 58.0,
+     "tp": 25.0,
+     "fp": 33.0,
+     "fn": 11.0
+    },
+    "keywordNarrow|ambiguousRelevant": {
+     "f05": 0.46263345195729527,
+     "t11su": 0.4740740740740739,
+     "precision": 0.44067796610169496,
+     "recall": 0.5777777777777776,
+     "brier": 0.031044776119402987,
+     "brierSkill": -0.18745739604635303,
+     "ece": 0.031044776119402987,
+     "accepted": 59.0,
+     "tp": 26.0,
+     "fp": 33.0,
+     "fn": 19.0
+    },
+    "keywordBroad|strict": {
+     "f05": 0.4120879120879121,
+     "t11su": 0.4074074074074075,
+     "precision": 0.3658536585365853,
+     "recall": 0.8333333333333335,
+     "brier": 0.034813925570228096,
+     "brierSkill": -0.6466939331970005,
+     "ece": 0.0348139255702281,
+     "accepted": 82.0,
+     "tp": 30.0,
+     "fp": 52.0,
+     "fn": 6.0
+    },
+    "keywordBroad|ambiguousRelevant": {
+     "f05": 0.45340050377833746,
+     "t11su": 0.4814814814814815,
+     "precision": 0.40909090909090906,
+     "recall": 0.8,
+     "brier": 0.0364179104477612,
+     "brierSkill": -0.39297886843899105,
+     "ece": 0.036417910447761194,
+     "accepted": 88.0,
+     "tp": 36.0,
+     "fp": 52.0,
+     "fn": 9.0
+    }
+   },
+   "check": null,
+   "notes": {
+    "binormalFallback": {
+     "desc": 0,
+     "rocchio-q0": 1
+    },
+    "kwstratFallbackStrata": 28
+   },
+   "counts": {
+    "teachRelevant": 95,
+    "freshRelevant": 36,
+    "freshAmbiguous": 9,
+    "freshLabelled": 1666
+   },
+   "ap": {
+    "desc": 0.7584827205945279,
+    "rocchio-q0": 0.6782339007532058
+   }
+  },
+  "jobs": {
+   "profile": "jobs",
+   "rows": {
+    "desc|binormal|strict": {
+     "f05": 0.36552393810614037,
+     "t11su": 0.3875396825396825,
+     "precision": 0.42214894578018997,
+     "recall": 0.26476190476190475,
+     "brier": 0.009903684960058914,
+     "brierSkill": 0.21040739034694178,
+     "ece": 0.008071237630013035,
+     "accepted": 13.3,
+     "tp": 5.56,
+     "fp": 7.74,
+     "fn": 15.44
+    },
+    "desc|binormal|ambiguousRelevant": {
+     "f05": 0.33107168447189617,
+     "t11su": 0.38294573643410845,
+     "precision": 0.4756774416645259,
+     "recall": 0.1644186046511628,
+     "brier": 0.020734030724740074,
+     "brierSkill": 0.17105684347784322,
+     "ece": 0.013375670188325337,
+     "accepted": 14.81,
+     "tp": 7.07,
+     "fp": 7.74,
+     "fn": 35.93
+    },
+    "rocchio-q0|binormal|strict": {
+     "f05": 0.3717832454739339,
+     "t11su": 0.3347619047619048,
+     "precision": 0.5615895710862683,
+     "recall": 0.3388095238095238,
+     "brier": 0.01758898745449241,
+     "brierSkill": -0.40231990025508096,
+     "ece": 0.031876176593624114,
+     "accepted": 78.93,
+     "tp": 7.115,
+     "fp": 71.815,
+     "fn": 13.885
+    },
+    "rocchio-q0|binormal|ambiguousRelevant": {
+     "f05": 0.31676672158931435,
+     "t11su": 0.3232945736434108,
+     "precision": 0.594284716241058,
+     "recall": 0.23988372093023258,
+     "brier": 0.028054053112399988,
+     "brierSkill": -0.12159645410791727,
+     "ece": 0.036079846059677505,
+     "accepted": 82.13,
+     "tp": 10.315,
+     "fp": 71.815,
+     "fn": 32.685
+    },
+    "desc|binormal+kw|strict": {
+     "f05": 0.6246511017574633,
+     "t11su": 0.5426984126984127,
+     "precision": 0.7717097506251918,
+     "recall": 0.3709523809523809,
+     "brier": 0.008478270613540085,
+     "brierSkill": 0.32405161855530906,
+     "ece": 0.005835871612861938,
+     "accepted": 10.18,
+     "tp": 7.79,
+     "fp": 2.39,
+     "fn": 13.21
+    },
+    "desc|binormal+kw|ambiguousRelevant": {
+     "f05": 0.4945586225006119,
+     "t11su": 0.45069767441860464,
+     "precision": 0.7892906325700444,
+     "recall": 0.20383720930232557,
+     "brier": 0.019825298310178537,
+     "brierSkill": 0.2073878167536671,
+     "ece": 0.015294822109787049,
+     "accepted": 11.155,
+     "tp": 8.765,
+     "fp": 2.39,
+     "fn": 34.235
+    },
+    "rocchio-q0|binormal+kw|strict": {
+     "f05": 0.5216679808165636,
+     "t11su": 0.4554761904761904,
+     "precision": 0.7220802884348559,
+     "recall": 0.34,
+     "brier": 0.011650439375724797,
+     "brierSkill": 0.0711436331645421,
+     "ece": 0.020155028461229643,
+     "accepted": 26.84,
+     "tp": 7.14,
+     "fp": 19.7,
+     "fn": 13.86
+    },
+    "rocchio-q0|binormal+kw|ambiguousRelevant": {
+     "f05": 0.4115960415785838,
+     "t11su": 0.39976744186046503,
+     "precision": 0.7431026914656295,
+     "recall": 0.2053488372093023,
+     "brier": 0.02266299651411932,
+     "brierSkill": 0.09393710677544989,
+     "ece": 0.026000869920864415,
+     "accepted": 28.53,
+     "tp": 8.83,
+     "fp": 19.7,
+     "fn": 34.17
+    },
+    "rocchio-q0|kwstrat|strict": {
+     "f05": 0.4525042163857442,
+     "t11su": 0.39325396825396824,
+     "precision": 0.6359346801237695,
+     "recall": 0.3392857142857143,
+     "brier": 0.01618972908160469,
+     "brierSkill": -0.2907610133677167,
+     "ece": 0.029045292433922076,
+     "accepted": 55.815,
+     "tp": 7.125,
+     "fp": 48.69,
+     "fn": 13.875
+    },
+    "rocchio-q0|kwstrat|ambiguousRelevant": {
+     "f05": 0.36940923089385225,
+     "t11su": 0.3571705426356589,
+     "precision": 0.6669930589648123,
+     "recall": 0.22430232558139532,
+     "brier": 0.026972880912820414,
+     "brierSkill": -0.07837136643627134,
+     "ece": 0.03461134761152497,
+     "accepted": 58.335,
+     "tp": 9.645,
+     "fp": 48.69,
+     "fn": 33.355
+    },
+    "alwaysNo|strict": {
+     "f05": 0.0,
+     "t11su": 0.33333333333333326,
+     "precision": 0.0,
+     "recall": 0.0,
+     "brier": 0.012704174228675138,
+     "brierSkill": -0.012867647058823373,
+     "ece": 0.012704174228675138,
+     "accepted": 0.0,
+     "tp": 0.0,
+     "fp": 0.0,
+     "fn": 21.0
+    },
+    "alwaysNo|ambiguousRelevant": {
+     "f05": 0.0,
+     "t11su": 0.33333333333333326,
+     "precision": 0.0,
+     "recall": 0.0,
+     "brier": 0.02567164179104477,
+     "brierSkill": -0.026348039215686292,
+     "ece": 0.02567164179104477,
+     "accepted": 0.0,
+     "tp": 0.0,
+     "fp": 0.0,
+     "fn": 43.0
+    },
+    "alwaysYes|strict": {
+     "f05": 0.015829941203075536,
+     "t11su": 0.0,
+     "precision": 0.012704174228675138,
+     "recall": 1.0,
+     "brier": 0.9872958257713248,
+     "brierSkill": -77.7142857142857,
+     "ece": 0.9872958257713248,
+     "accepted": 1653.0,
+     "tp": 21.0,
+     "fp": 1632.0,
+     "fn": 0.0
+    },
+    "alwaysYes|ambiguousRelevant": {
+     "f05": 0.031884917692421764,
+     "t11su": 0.0,
+     "precision": 0.02567164179104477,
+     "recall": 1.0,
+     "brier": 0.9743283582089555,
+     "brierSkill": -37.95348837209303,
+     "ece": 0.9743283582089555,
+     "accepted": 1675.0,
+     "tp": 43.0,
+     "fp": 1632.0,
+     "fn": 0.0
+    },
+    "keywordNarrow|strict": {
+     "f05": 0.4794520547945204,
+     "t11su": 0.4603174603174604,
+     "precision": 0.5384615384615384,
+     "recall": 0.33333333333333326,
+     "brier": 0.012099213551119177,
+     "brierSkill": 0.0353641456582634,
+     "ece": 0.012099213551119177,
+     "accepted": 13.0,
+     "tp": 7.0,
+     "fp": 6.0,
+     "fn": 14.0
+    },
+    "keywordNarrow|ambiguousRelevant": {
+     "f05": 0.40404040404040403,
+     "t11su": 0.4108527131782945,
+     "precision": 0.5714285714285713,
+     "recall": 0.18604651162790695,
+     "brier": 0.024477611940298512,
+     "brierSkill": 0.02138907888736885,
+     "ece": 0.024477611940298512,
+     "accepted": 14.0,
+     "tp": 8.0,
+     "fp": 6.0,
+     "fn": 35.0
+    },
+    "keywordBroad|strict": {
+     "f05": 0.15463917525773194,
+     "t11su": 0.0,
+     "precision": 0.12931034482758624,
+     "recall": 0.7142857142857142,
+     "brier": 0.06473079249848757,
+     "brierSkill": -4.160801820728288,
+     "ece": 0.06473079249848757,
+     "accepted": 116.0,
+     "tp": 15.0,
+     "fp": 101.0,
+     "fn": 6.0
+    },
+    "keywordBroad|ambiguousRelevant": {
+     "f05": 0.2432432432432433,
+     "t11su": 0.0,
+     "precision": 0.2109375,
+     "recall": 0.6279069767441863,
+     "brier": 0.06985074626865671,
+     "brierSkill": -1.7926214090287271,
+     "ece": 0.06985074626865673,
+     "accepted": 128.0,
+     "tp": 27.0,
+     "fp": 101.0,
+     "fn": 16.0
+    }
+   },
+   "check": null,
+   "notes": {
+    "binormalFallback": {
+     "desc": 0,
+     "rocchio-q0": 1
+    },
+    "kwstratFallbackStrata": 60
+   },
+   "counts": {
+    "teachRelevant": 54,
+    "freshRelevant": 21,
+    "freshAmbiguous": 22,
+    "freshLabelled": 1653
+   },
+   "ap": {
+    "desc": 0.4196218028146585,
+    "rocchio-q0": 0.5371021275610397
+   }
+  },
+  "energy": {
+   "profile": "energy",
+   "rows": {
+    "desc|binormal|strict": {
+     "f05": 0.13077243211131326,
+     "t11su": 0.0003571428571428572,
+     "precision": 0.10781285939184429,
+     "recall": 0.9328571428571429,
+     "brier": 0.05888248846421156,
+     "brierSkill": -6.06219203005533,
+     "ece": 0.10731553671537584,
+     "accepted": 123.67,
+     "tp": 13.06,
+     "fp": 110.61,
+     "fn": 0.94
+    },
+    "desc|binormal|ambiguousRelevant": {
+     "f05": 0.1688176543874832,
+     "t11su": 0.002013888888888889,
+     "precision": 0.14176029489978467,
+     "recall": 0.7479166666666667,
+     "brier": 0.06048062076034675,
+     "brierSkill": -3.2824031299401337,
+     "ece": 0.10426459007295913,
+     "accepted": 128.56,
+     "tp": 17.95,
+     "fp": 110.61,
+     "fn": 6.05
+    },
+    "rocchio-q0|binormal|strict": {
+     "f05": 0.31808905086110395,
+     "t11su": 0.2086904761904762,
+     "precision": 0.3035773742809274,
+     "recall": 0.6535714285714286,
+     "brier": 0.01973359254199822,
+     "brierSkill": -1.36678889784291,
+     "ece": 0.042738976628554574,
+     "accepted": 75.815,
+     "tp": 9.15,
+     "fp": 66.665,
+     "fn": 4.85
+    },
+    "rocchio-q0|binormal|ambiguousRelevant": {
+     "f05": 0.3704018462721836,
+     "t11su": 0.3104861111111111,
+     "precision": 0.3721204246940668,
+     "recall": 0.5475,
+     "brier": 0.02287775423908005,
+     "brierSkill": -0.6198869179542436,
+     "ece": 0.039675652732082616,
+     "accepted": 79.805,
+     "tp": 13.14,
+     "fp": 66.665,
+     "fn": 10.86
+    },
+    "desc|binormal+kw|strict": {
+     "f05": 0.18748112460742355,
+     "t11su": 0.006428571428571429,
+     "precision": 0.1577017457633178,
+     "recall": 0.9,
+     "brier": 0.04281901215523965,
+     "brierSkill": -4.135586050534709,
+     "ece": 0.07749298377022157,
+     "accepted": 85.485,
+     "tp": 12.6,
+     "fp": 72.885,
+     "fn": 1.4
+    },
+    "desc|binormal+kw|ambiguousRelevant": {
+     "f05": 0.25856010363566617,
+     "t11su": 0.061527777777777785,
+     "precision": 0.22286490024047,
+     "recall": 0.8133333333333332,
+     "brier": 0.04371738957894075,
+     "brierSkill": -2.0954623747581165,
+     "ece": 0.07544444451065219,
+     "accepted": 92.405,
+     "tp": 19.52,
+     "fp": 72.885,
+     "fn": 4.48
+    },
+    "rocchio-q0|binormal+kw|strict": {
+     "f05": 0.4345304786097362,
+     "t11su": 0.41392857142857137,
+     "precision": 0.40722339286335135,
+     "recall": 0.7542857142857143,
+     "brier": 0.014822640249115065,
+     "brierSkill": -0.7777837615558973,
+     "ece": 0.03083042867987247,
+     "accepted": 33.29,
+     "tp": 10.56,
+     "fp": 22.73,
+     "fn": 3.44
+    },
+    "rocchio-q0|binormal+kw|ambiguousRelevant": {
+     "f05": 0.4823050013363464,
+     "t11su": 0.46527777777777773,
+     "precision": 0.47817164771896037,
+     "recall": 0.6154166666666666,
+     "brier": 0.017218631764216157,
+     "brierSkill": -0.21918594143647674,
+     "ece": 0.028411128261177615,
+     "accepted": 37.5,
+     "tp": 14.77,
+     "fp": 22.73,
+     "fn": 9.23
+    },
+    "rocchio-q0|kwstrat|strict": {
+     "f05": 0.35134946556617985,
+     "t11su": 0.2596428571428572,
+     "precision": 0.3692123922613434,
+     "recall": 0.515,
+     "brier": 0.01730773425767161,
+     "brierSkill": -1.0758386087424805,
+     "ece": 0.032328787648459895,
+     "accepted": 39.58,
+     "tp": 7.21,
+     "fp": 32.37,
+     "fn": 6.79
+    },
+    "rocchio-q0|kwstrat|ambiguousRelevant": {
+     "f05": 0.37345146435375726,
+     "t11su": 0.3029861111111111,
+     "precision": 0.4257140272468823,
+     "recall": 0.414375,
+     "brier": 0.021063394355411037,
+     "brierSkill": -0.4914189831516278,
+     "ece": 0.03199769448239258,
+     "accepted": 42.315,
+     "tp": 9.945,
+     "fp": 32.37,
+     "fn": 14.055
+    },
+    "alwaysNo|strict": {
+     "f05": 0.0,
+     "t11su": 0.33333333333333326,
+     "precision": 0.0,
+     "recall": 0.0,
+     "brier": 0.00840840840840841,
+     "brierSkill": -0.008479709267110946,
+     "ece": 0.00840840840840841,
+     "accepted": 0.0,
+     "tp": 0.0,
+     "fp": 0.0,
+     "fn": 14.0
+    },
+    "alwaysNo|ambiguousRelevant": {
+     "f05": 0.0,
+     "t11su": 0.33333333333333326,
+     "precision": 0.0,
+     "recall": 0.0,
+     "brier": 0.014328358208955226,
+     "brierSkill": -0.014536644457904258,
+     "ece": 0.014328358208955226,
+     "accepted": 0.0,
+     "tp": 0.0,
+     "fp": 0.0,
+     "fn": 24.0
+    },
+    "alwaysYes|strict": {
+     "f05": 0.010488462691039858,
+     "t11su": 0.0,
+     "precision": 0.00840840840840841,
+     "recall": 1.0,
+     "brier": 0.9915915915915915,
+     "brierSkill": -117.92857142857142,
+     "ece": 0.9915915915915915,
+     "accepted": 1665.0,
+     "tp": 14.0,
+     "fp": 1651.0,
+     "fn": 0.0
+    },
+    "alwaysYes|ambiguousRelevant": {
+     "f05": 0.017846519928613917,
+     "t11su": 0.0,
+     "precision": 0.014328358208955226,
+     "recall": 1.0,
+     "brier": 0.985671641791045,
+     "brierSkill": -68.79166666666664,
+     "ece": 0.985671641791045,
+     "accepted": 1675.0,
+     "tp": 24.0,
+     "fp": 1651.0,
+     "fn": 0.0
+    },
+    "keywordNarrow|strict": {
+     "f05": 0.09856630824372761,
+     "t11su": 0.0,
+     "precision": 0.08088235294117649,
+     "recall": 0.7857142857142858,
+     "brier": 0.07687687687687686,
+     "brierSkill": -8.220385913299296,
+     "ece": 0.07687687687687685,
+     "accepted": 136.0,
+     "tp": 11.0,
+     "fp": 125.0,
+     "fn": 3.0
+    },
+    "keywordNarrow|ambiguousRelevant": {
+     "f05": 0.151006711409396,
+     "t11su": 0.0,
+     "precision": 0.12587412587412586,
+     "recall": 0.75,
+     "brier": 0.0782089552238806,
+     "brierSkill": -4.537679184332726,
+     "ece": 0.0782089552238806,
+     "accepted": 143.0,
+     "tp": 18.0,
+     "fp": 125.0,
+     "fn": 6.0
+    },
+    "keywordBroad|strict": {
+     "f05": 0.3873239436619719,
+     "t11su": 0.3571428571428571,
+     "precision": 0.34375,
+     "recall": 0.7857142857142858,
+     "brier": 0.014414414414414413,
+     "brierSkill": -0.7288223587436187,
+     "ece": 0.014414414414414413,
+     "accepted": 32.0,
+     "tp": 11.0,
+     "fp": 21.0,
+     "fn": 3.0
+    },
+    "keywordBroad|ambiguousRelevant": {
+     "f05": 0.46511627906976744,
+     "t11su": 0.486111111111111,
+     "precision": 0.4324324324324324,
+     "recall": 0.6666666666666665,
+     "brier": 0.017313432835820902,
+     "brierSkill": -0.22589844538663417,
+     "ece": 0.017313432835820902,
+     "accepted": 37.0,
+     "tp": 16.0,
+     "fp": 21.0,
+     "fn": 8.0
+    }
+   },
+   "check": null,
+   "notes": {
+    "binormalFallback": {
+     "desc": 0,
+     "rocchio-q0": 4
+    },
+    "kwstratFallbackStrata": 15
+   },
+   "counts": {
+    "teachRelevant": 19,
+    "freshRelevant": 14,
+    "freshAmbiguous": 10,
+    "freshLabelled": 1665
+   },
+   "ap": {
+    "desc": 0.38538310812311105,
+    "rocchio-q0": 0.5525140737102217
+   }
+  },
+  "quantum": {
+   "profile": "quantum",
+   "rows": {
+    "desc|binormal|strict": {
+     "f05": 0.9131701631701629,
+     "t11su": 0.7866666666666666,
+     "precision": 1.0,
+     "recall": 0.68,
+     "brier": 0.0007729612914303418,
+     "brierSkill": 0.7845986596187515,
+     "ece": 0.0013788864238291206,
+     "accepted": 4.08,
+     "tp": 4.08,
+     "fp": 0.0,
+     "fn": 1.92
+    },
+    "desc|binormal|ambiguousRelevant": {
+     "f05": 0.9080915377658126,
+     "t11su": 0.7766666666666666,
+     "precision": 1.0,
+     "recall": 0.665,
+     "brier": 0.0020486650182959527,
+     "brierSkill": 0.7691652292386916,
+     "ece": 0.0028715492362093075,
+     "accepted": 9.975,
+     "tp": 9.975,
+     "fp": 0.0,
+     "fn": 5.025
+    },
+    "rocchio-q0|binormal|strict": {
+     "f05": 0.8743828900717446,
+     "t11su": 0.7838888888888889,
+     "precision": 0.9507275392029925,
+     "recall": 0.7025,
+     "brier": 0.001674351004700231,
+     "brierSkill": 0.5334081348191009,
+     "ece": 0.0029954082657205634,
+     "accepted": 6.07,
+     "tp": 4.215,
+     "fp": 1.855,
+     "fn": 1.785
+    },
+    "rocchio-q0|binormal|ambiguousRelevant": {
+     "f05": 0.8810785178742307,
+     "t11su": 0.7685555555555555,
+     "precision": 0.9691364362761422,
+     "recall": 0.6680000000000001,
+     "brier": 0.0026609538834542843,
+     "brierSkill": 0.7001751510334767,
+     "ece": 0.004137298183504851,
+     "accepted": 11.875,
+     "tp": 10.02,
+     "fp": 1.855,
+     "fn": 4.98
+    },
+    "desc|binormal+kw|strict": {
+     "f05": 1.0,
+     "t11su": 1.0,
+     "precision": 1.0,
+     "recall": 1.0,
+     "brier": 2.406901877538825e-05,
+     "brierSkill": 0.9932926797714718,
+     "ece": 0.00026915784241906095,
+     "accepted": 6.0,
+     "tp": 6.0,
+     "fp": 0.0,
+     "fn": 0.0
+    },
+    "desc|binormal+kw|ambiguousRelevant": {
+     "f05": 0.9995070422535209,
+     "t11su": 0.9984444444444445,
+     "precision": 1.0,
+     "recall": 0.9976666666666668,
+     "brier": 3.605486831425224e-05,
+     "brierSkill": 0.9959374923729246,
+     "ece": 0.00039570047754312594,
+     "accepted": 14.965,
+     "tp": 14.965,
+     "fp": 0.0,
+     "fn": 0.035
+    },
+    "rocchio-q0|binormal+kw|strict": {
+     "f05": 0.9748264693822917,
+     "t11su": 0.9713888888888889,
+     "precision": 0.9805336134453781,
+     "recall": 0.9666666666666666,
+     "brier": 0.0005538089853863351,
+     "brierSkill": 0.8456698943531171,
+     "ece": 0.0011533318558932283,
+     "accepted": 6.645,
+     "tp": 5.8,
+     "fp": 0.845,
+     "fn": 0.2
+    },
+    "rocchio-q0|binormal+kw|ambiguousRelevant": {
+     "f05": 0.9786978954316574,
+     "t11su": 0.966888888888889,
+     "precision": 0.9934100658419793,
+     "recall": 0.9586666666666668,
+     "brier": 0.0006910991630276509,
+     "brierSkill": 0.9221299160935962,
+     "ece": 0.0013727427562570532,
+     "accepted": 15.225,
+     "tp": 14.38,
+     "fp": 0.845,
+     "fn": 0.62
+    },
+    "rocchio-q0|kwstrat|strict": {
+     "f05": 0.5127285385360265,
+     "t11su": 0.4902777777777777,
+     "precision": 0.5403086695606752,
+     "recall": 0.75,
+     "brier": 0.05484752735250895,
+     "brierSkill": -14.284375866307261,
+     "ece": 0.11795085947909179,
+     "accepted": 244.035,
+     "tp": 4.5,
+     "fp": 239.535,
+     "fn": 1.5
+    },
+    "rocchio-q0|kwstrat|ambiguousRelevant": {
+     "f05": 0.5408709715945936,
+     "t11su": 0.5015555555555555,
+     "precision": 0.5817867738185255,
+     "recall": 0.738,
+     "brier": 0.055654842780837474,
+     "brierSkill": -5.270948525180205,
+     "ece": 0.11810694640530373,
+     "accepted": 250.605,
+     "tp": 11.07,
+     "fp": 239.535,
+     "fn": 3.93
+    },
+    "alwaysNo|strict": {
+     "f05": 0.0,
+     "t11su": 0.33333333333333326,
+     "precision": 0.0,
+     "recall": 0.0,
+     "brier": 0.0036014405762304917,
+     "brierSkill": -0.0036144578313253017,
+     "ece": 0.0036014405762304917,
+     "accepted": 0.0,
+     "tp": 0.0,
+     "fp": 0.0,
+     "fn": 6.0
+    },
+    "alwaysNo|ambiguousRelevant": {
+     "f05": 0.0,
+     "t11su": 0.33333333333333326,
+     "precision": 0.0,
+     "recall": 0.0,
+     "brier": 0.008955223880597014,
+     "brierSkill": -0.009036144578313143,
+     "ece": 0.008955223880597014,
+     "accepted": 0.0,
+     "tp": 0.0,
+     "fp": 0.0,
+     "fn": 15.0
+    },
+    "alwaysYes|strict": {
+     "f05": 0.004497751124437781,
+     "t11su": 0.0,
+     "precision": 0.0036014405762304917,
+     "recall": 1.0,
+     "brier": 0.9963985594237692,
+     "brierSkill": -276.66666666666663,
+     "ece": 0.9963985594237692,
+     "accepted": 1666.0,
+     "tp": 6.0,
+     "fp": 1660.0,
+     "fn": 0.0
+    },
+    "alwaysYes|ambiguousRelevant": {
+     "f05": 0.01116902457185406,
+     "t11su": 0.0,
+     "precision": 0.008955223880597014,
+     "recall": 1.0,
+     "brier": 0.9910447761194027,
+     "brierSkill": -110.66666666666669,
+     "ece": 0.9910447761194027,
+     "accepted": 1675.0,
+     "tp": 15.0,
+     "fp": 1660.0,
+     "fn": 0.0
+    },
+    "keywordNarrow|strict": {
+     "f05": 0.8823529411764709,
+     "t11su": 0.9444444444444445,
+     "precision": 0.8571428571428571,
+     "recall": 1.0,
+     "brier": 0.0006002400960384153,
+     "brierSkill": 0.8327309236947791,
+     "ece": 0.0006002400960384154,
+     "accepted": 7.0,
+     "tp": 6.0,
+     "fp": 1.0,
+     "fn": 0.0
+    },
+    "keywordNarrow|ambiguousRelevant": {
+     "f05": 0.9493670886075948,
+     "t11su": 0.9777777777777779,
+     "precision": 0.9375,
+     "recall": 1.0,
+     "brier": 0.0005970149253731342,
+     "brierSkill": 0.932730923694779,
+     "ece": 0.0005970149253731342,
+     "accepted": 16.0,
+     "tp": 15.0,
+     "fp": 1.0,
+     "fn": 0.0
+    },
+    "keywordBroad|strict": {
+     "f05": 0.8823529411764709,
+     "t11su": 0.9444444444444445,
+     "precision": 0.8571428571428571,
+     "recall": 1.0,
+     "brier": 0.0006002400960384153,
+     "brierSkill": 0.8327309236947791,
+     "ece": 0.0006002400960384154,
+     "accepted": 7.0,
+     "tp": 6.0,
+     "fp": 1.0,
+     "fn": 0.0
+    },
+    "keywordBroad|ambiguousRelevant": {
+     "f05": 0.9493670886075948,
+     "t11su": 0.9777777777777779,
+     "precision": 0.9375,
+     "recall": 1.0,
+     "brier": 0.0005970149253731342,
+     "brierSkill": 0.932730923694779,
+     "ece": 0.0005970149253731342,
+     "accepted": 16.0,
+     "tp": 15.0,
+     "fp": 1.0,
+     "fn": 0.0
+    }
+   },
+   "check": null,
+   "notes": {
+    "binormalFallback": {
+     "desc": 0,
+     "rocchio-q0": 0
+    },
+    "kwstratFallbackStrata": 58
+   },
+   "counts": {
+    "teachRelevant": 41,
+    "freshRelevant": 6,
+    "freshAmbiguous": 9,
+    "freshLabelled": 1666
+   },
+   "ap": {
+    "desc": 0.9583333333333335,
+    "rocchio-q0": 0.9478651904838544
+   }
+  },
+  "health": {
+   "profile": "health",
+   "rows": {
+    "desc|binormal|strict": {
+     "f05": 0.6194523881852152,
+     "t11su": 0.5147222222222223,
+     "precision": 0.8484808386058387,
+     "recall": 0.3041666666666666,
+     "brier": 0.008934874817138214,
+     "brierSkill": 0.3759161905469091,
+     "ece": 0.006524786304710761,
+     "accepted": 8.91,
+     "tp": 7.3,
+     "fp": 1.61,
+     "fn": 16.7
+    },
+    "desc|binormal|ambiguousRelevant": {
+     "f05": 0.5716139752456698,
+     "t11su": 0.480354609929078,
+     "precision": 0.8902144118136764,
+     "recall": 0.23765957446808514,
+     "brier": 0.019415894489085223,
+     "brierSkill": 0.2880741416705037,
+     "ece": 0.015340345814501895,
+     "accepted": 12.78,
+     "tp": 11.17,
+     "fp": 1.61,
+     "fn": 35.83
+    },
+    "rocchio-q0|binormal|strict": {
+     "f05": 0.5438804357259165,
+     "t11su": 0.46166666666666667,
+     "precision": 0.7501194157194476,
+     "recall": 0.3597916666666666,
+     "brier": 0.023348437811927095,
+     "brierSkill": -0.6308434435473351,
+     "ece": 0.04317851563485787,
+     "accepted": 119.72,
+     "tp": 8.635,
+     "fp": 111.085,
+     "fn": 15.365
+    },
+    "rocchio-q0|binormal|ambiguousRelevant": {
+     "f05": 0.4701365950534471,
+     "t11su": 0.4109219858156028,
+     "precision": 0.7899146045800503,
+     "recall": 0.2679787234042553,
+     "brier": 0.03395631455431532,
+     "brierSkill": -0.245081878580309,
+     "ece": 0.051592019777034634,
+     "accepted": 123.68,
+     "tp": 12.595,
+     "fp": 111.085,
+     "fn": 34.405
+    },
+    "desc|binormal+kw|strict": {
+     "f05": 0.7103821378846848,
+     "t11su": 0.6639583333333334,
+     "precision": 0.761000767904416,
+     "recall": 0.5835416666666666,
+     "brier": 0.006866509435762891,
+     "brierSkill": 0.5203875315525633,
+     "ece": 0.005737321519017843,
+     "accepted": 18.21,
+     "tp": 14.005,
+     "fp": 4.205,
+     "fn": 9.995
+    },
+    "desc|binormal+kw|ambiguousRelevant": {
+     "f05": 0.697452599291372,
+     "t11su": 0.6020921985815604,
+     "precision": 0.8255507830527553,
+     "recall": 0.44787234042553187,
+     "brier": 0.01486940741852194,
+     "brierSkill": 0.4547809453109072,
+     "ece": 0.012720111457792107,
+     "accepted": 25.255,
+     "tp": 21.05,
+     "fp": 4.205,
+     "fn": 25.95
+    },
+    "rocchio-q0|binormal+kw|strict": {
+     "f05": 0.7013909010709048,
+     "t11su": 0.6477083333333333,
+     "precision": 0.7805598847954388,
+     "recall": 0.601875,
+     "brier": 0.01054105661500485,
+     "brierSkill": 0.2637274833068133,
+     "ece": 0.02347784634468357,
+     "accepted": 43.58,
+     "tp": 14.445,
+     "fp": 29.135,
+     "fn": 9.555
+    },
+    "rocchio-q0|binormal+kw|ambiguousRelevant": {
+     "f05": 0.6610330278841774,
+     "t11su": 0.5645035460992908,
+     "precision": 0.8241055756159703,
+     "recall": 0.4411702127659574,
+     "brier": 0.018961708812977214,
+     "brierSkill": 0.30472784400113434,
+     "ece": 0.030096896413834326,
+     "accepted": 49.87,
+     "tp": 20.735,
+     "fp": 29.135,
+     "fn": 26.265
+    },
+    "rocchio-q0|kwstrat|strict": {
+     "f05": 0.4073570649925219,
+     "t11su": 0.37909722222222214,
+     "precision": 0.4539085249005224,
+     "recall": 0.5764583333333333,
+     "brier": 0.08249747450976816,
+     "brierSkill": -4.762289815584211,
+     "ece": 0.14756628717163625,
+     "accepted": 289.14,
+     "tp": 13.835,
+     "fp": 275.305,
+     "fn": 10.165
+    },
+    "rocchio-q0|kwstrat|ambiguousRelevant": {
+     "f05": 0.3930955863425172,
+     "t11su": 0.3354255319148936,
+     "precision": 0.49268334827838756,
+     "recall": 0.45734042553191495,
+     "brier": 0.08920245187422447,
+     "brierSkill": -2.2708012577711987,
+     "ece": 0.14915608127459942,
+     "accepted": 296.8,
+     "tp": 21.495,
+     "fp": 275.305,
+     "fn": 25.505
+    },
+    "alwaysNo|strict": {
+     "f05": 0.0,
+     "t11su": 0.33333333333333326,
+     "precision": 0.0,
+     "recall": 0.0,
+     "brier": 0.014527845036319618,
+     "brierSkill": -0.014742014742014753,
+     "ece": 0.014527845036319618,
+     "accepted": 0.0,
+     "tp": 0.0,
+     "fp": 0.0,
+     "fn": 24.0
+    },
+    "alwaysNo|ambiguousRelevant": {
+     "f05": 0.0,
+     "t11su": 0.33333333333333326,
+     "precision": 0.0,
+     "recall": 0.0,
+     "brier": 0.02805970149253732,
+     "brierSkill": -0.028869778869778928,
+     "ece": 0.02805970149253732,
+     "accepted": 0.0,
+     "tp": 0.0,
+     "fp": 0.0,
+     "fn": 47.0
+    },
+    "alwaysYes|strict": {
+     "f05": 0.018094089264173708,
+     "t11su": 0.0,
+     "precision": 0.014527845036319618,
+     "recall": 1.0,
+     "brier": 0.9854721549636806,
+     "brierSkill": -67.83333333333334,
+     "ece": 0.9854721549636806,
+     "accepted": 1652.0,
+     "tp": 24.0,
+     "fp": 1628.0,
+     "fn": 0.0
+    },
+    "alwaysYes|ambiguousRelevant": {
+     "f05": 0.034830294945901896,
+     "t11su": 0.0,
+     "precision": 0.02805970149253732,
+     "recall": 1.0,
+     "brier": 0.9719402985074624,
+     "brierSkill": -34.63829787234044,
+     "ece": 0.9719402985074624,
+     "accepted": 1675.0,
+     "tp": 47.0,
+     "fp": 1628.0,
+     "fn": 0.0
+    },
+    "keywordNarrow|strict": {
+     "f05": 0.6875,
+     "t11su": 0.7777777777777777,
+     "precision": 0.6470588235294119,
+     "recall": 0.9166666666666665,
+     "brier": 0.008474576271186442,
+     "brierSkill": 0.40806715806715815,
+     "ece": 0.008474576271186442,
+     "accepted": 34.0,
+     "tp": 22.0,
+     "fp": 12.0,
+     "fn": 2.0
+    },
+    "keywordNarrow|ambiguousRelevant": {
+     "f05": 0.7613168724279834,
+     "t11su": 0.7730496453900707,
+     "precision": 0.7551020408163265,
+     "recall": 0.7872340425531915,
+     "brier": 0.013134328358208953,
+     "brierSkill": 0.5184013801035077,
+     "ece": 0.013134328358208961,
+     "accepted": 49.0,
+     "tp": 37.0,
+     "fp": 12.0,
+     "fn": 10.0
+    },
+    "keywordBroad|strict": {
+     "f05": 0.6122448979591839,
+     "t11su": 0.7361111111111108,
+     "precision": 0.5581395348837209,
+     "recall": 1.0,
+     "brier": 0.011501210653753027,
+     "brierSkill": 0.19666257166257162,
+     "ece": 0.011501210653753027,
+     "accepted": 43.0,
+     "tp": 24.0,
+     "fp": 19.0,
+     "fn": 0.0
+    },
+    "keywordBroad|ambiguousRelevant": {
+     "f05": 0.6989247311827959,
+     "t11su": 0.75177304964539,
+     "precision": 0.6724137931034483,
+     "recall": 0.8297872340425534,
+     "brier": 0.01611940298507463,
+     "brierSkill": 0.4089471483088504,
+     "ece": 0.01611940298507463,
+     "accepted": 58.0,
+     "tp": 39.0,
+     "fp": 19.0,
+     "fn": 8.0
+    }
+   },
+   "check": null,
+   "notes": {
+    "binormalFallback": {
+     "desc": 0,
+     "rocchio-q0": 13
+    },
+    "kwstratFallbackStrata": 48
+   },
+   "counts": {
+    "teachRelevant": 25,
+    "freshRelevant": 24,
+    "freshAmbiguous": 23,
+    "freshLabelled": 1652
+   },
+   "ap": {
+    "desc": 0.5865851151574111,
+    "rocchio-q0": 0.6557455676935211
+   }
+  },
+  "education": {
+   "profile": "education",
+   "rows": {
+    "desc|binormal|strict": {
+     "f05": 0.6197916666666667,
+     "t11su": 0.4979166666666666,
+     "precision": 0.9875,
+     "recall": 0.25,
+     "brier": 0.0021960866232205796,
+     "brierSkill": 0.082030512439415,
+     "ece": 0.0021843994139758697,
+     "accepted": 1.035,
+     "tp": 1.0,
+     "fp": 0.035,
+     "fn": 3.0
+    },
+    "desc|binormal|ambiguousRelevant": {
+     "f05": 0.33157894736842103,
+     "t11su": 0.3928787878787879,
+     "precision": 0.9875,
+     "recall": 0.09090909090909091,
+     "brier": 0.006361114772510221,
+     "brierSkill": 0.024972539684003942,
+     "ece": 0.006351923042154076,
+     "accepted": 1.035,
+     "tp": 1.0,
+     "fp": 0.035,
+     "fn": 10.0
+    },
+    "rocchio-q0|binormal|strict": {
+     "f05": 0.5984884655153142,
+     "t11su": 0.5104166666666666,
+     "precision": 0.8717075065872498,
+     "recall": 0.28875,
+     "brier": 0.006203238968416379,
+     "brierSkill": -1.592968800430182,
+     "ece": 0.010140427899295397,
+     "accepted": 16.225,
+     "tp": 1.155,
+     "fp": 15.07,
+     "fn": 2.845
+    },
+    "rocchio-q0|binormal|ambiguousRelevant": {
+     "f05": 0.3821066433920123,
+     "t11su": 0.4015151515151515,
+     "precision": 0.9628729664436232,
+     "recall": 0.12863636363636363,
+     "brier": 0.01016999517900758,
+     "brierSkill": -0.5588501269724186,
+     "ece": 0.014047477991780686,
+     "accepted": 16.485,
+     "tp": 1.415,
+     "fp": 15.07,
+     "fn": 9.585
+    },
+    "desc|binormal+kw|strict": {
+     "f05": 0.6227678571428572,
+     "t11su": 0.4979166666666666,
+     "precision": 0.9958333333333332,
+     "recall": 0.25,
+     "brier": 0.0017479621015229528,
+     "brierSkill": 0.26934763973143083,
+     "ece": 0.0017430038213091625,
+     "accepted": 1.025,
+     "tp": 1.0,
+     "fp": 0.025,
+     "fn": 3.0
+    },
+    "desc|binormal+kw|ambiguousRelevant": {
+     "f05": 0.3323809523809524,
+     "t11su": 0.3931818181818182,
+     "precision": 0.9958333333333332,
+     "recall": 0.09090909090909091,
+     "brier": 0.005916751319166208,
+     "brierSkill": 0.09308427557715833,
+     "ece": 0.005913317839213134,
+     "accepted": 1.025,
+     "tp": 1.0,
+     "fp": 0.025,
+     "fn": 10.0
+    },
+    "rocchio-q0|binormal+kw|strict": {
+     "f05": 0.6027215184749345,
+     "t11su": 0.495,
+     "precision": 0.9375941135540876,
+     "recall": 0.26625,
+     "brier": 0.0037615307966667234,
+     "brierSkill": -0.5723289151480283,
+     "ece": 0.007256677693755863,
+     "accepted": 12.49,
+     "tp": 1.065,
+     "fp": 11.425,
+     "fn": 2.935
+    },
+    "rocchio-q0|binormal+kw|ambiguousRelevant": {
+     "f05": 0.34222253388087936,
+     "t11su": 0.38984848484848483,
+     "precision": 0.9677571822479759,
+     "recall": 0.10818181818181817,
+     "brier": 0.007788909480361971,
+     "brierSkill": -0.19387888772074718,
+     "ece": 0.011182323456974586,
+     "accepted": 12.615,
+     "tp": 1.19,
+     "fp": 11.425,
+     "fn": 9.81
+    },
+    "rocchio-q0|kwstrat|strict": {
+     "f05": 0.5740289428961642,
+     "t11su": 0.48791666666666667,
+     "precision": 0.8767232679232747,
+     "recall": 0.2625,
+     "brier": 0.005096498366309359,
+     "brierSkill": -1.130348568315308,
+     "ece": 0.009204865076992825,
+     "accepted": 16.73,
+     "tp": 1.05,
+     "fp": 15.68,
+     "fn": 2.95
+    },
+    "rocchio-q0|kwstrat|ambiguousRelevant": {
+     "f05": 0.3376511877921209,
+     "t11su": 0.38772727272727275,
+     "precision": 0.9194183611243679,
+     "recall": 0.11136363636363637,
+     "brier": 0.009083098437132639,
+     "brierSkill": -0.39225131406688485,
+     "ece": 0.013068407589074465,
+     "accepted": 16.905,
+     "tp": 1.225,
+     "fp": 15.68,
+     "fn": 9.775
+    },
+    "alwaysNo|strict": {
+     "f05": 0.0,
+     "t11su": 0.33333333333333326,
+     "precision": 0.0,
+     "recall": 0.0,
+     "brier": 0.0023980815347721817,
+     "brierSkill": -0.0024038461538460343,
+     "ece": 0.0023980815347721817,
+     "accepted": 0.0,
+     "tp": 0.0,
+     "fp": 0.0,
+     "fn": 4.0
+    },
+    "alwaysNo|ambiguousRelevant": {
+     "f05": 0.0,
+     "t11su": 0.33333333333333326,
+     "precision": 0.0,
+     "recall": 0.0,
+     "brier": 0.006567164179104476,
+     "brierSkill": -0.006610576923076872,
+     "ece": 0.006567164179104476,
+     "accepted": 0.0,
+     "tp": 0.0,
+     "fp": 0.0,
+     "fn": 11.0
+    },
+    "alwaysYes|strict": {
+     "f05": 0.0029958058717795078,
+     "t11su": 0.0,
+     "precision": 0.0023980815347721817,
+     "recall": 1.0,
+     "brier": 0.9976019184652282,
+     "brierSkill": -416.0,
+     "ece": 0.9976019184652282,
+     "accepted": 1668.0,
+     "tp": 4.0,
+     "fp": 1664.0,
+     "fn": 0.0
+    },
+    "alwaysYes|ambiguousRelevant": {
+     "f05": 0.008195499925495455,
+     "t11su": 0.0,
+     "precision": 0.006567164179104476,
+     "recall": 1.0,
+     "brier": 0.9934328358208956,
+     "brierSkill": -151.27272727272728,
+     "ece": 0.9934328358208956,
+     "accepted": 1675.0,
+     "tp": 11.0,
+     "fp": 1664.0,
+     "fn": 0.0
+    },
+    "keywordNarrow|strict": {
+     "f05": 0.17857142857142855,
+     "t11su": 0.08333333333333331,
+     "precision": 0.16666666666666663,
+     "recall": 0.25,
+     "brier": 0.004796163069544363,
+     "brierSkill": -1.0048076923076916,
+     "ece": 0.004796163069544364,
+     "accepted": 6.0,
+     "tp": 1.0,
+     "fp": 5.0,
+     "fn": 3.0
+    },
+    "keywordNarrow|ambiguousRelevant": {
+     "f05": 0.14285714285714282,
+     "t11su": 0.24242424242424235,
+     "precision": 0.16666666666666663,
+     "recall": 0.09090909090909091,
+     "brier": 0.008955223880597014,
+     "brierSkill": -0.37265078671328683,
+     "ece": 0.008955223880597014,
+     "accepted": 6.0,
+     "tp": 1.0,
+     "fp": 5.0,
+     "fn": 10.0
+    },
+    "keywordBroad|strict": {
+     "f05": 0.10638297872340427,
+     "t11su": 0.0,
+     "precision": 0.08695652173913042,
+     "recall": 1.0,
+     "brier": 0.025179856115107917,
+     "brierSkill": -9.525240384615385,
+     "ece": 0.025179856115107917,
+     "accepted": 46.0,
+     "tp": 4.0,
+     "fp": 42.0,
+     "fn": 0.0
+    },
+    "keywordBroad|ambiguousRelevant": {
+     "f05": 0.16908212560386476,
+     "t11su": 0.0,
+     "precision": 0.14285714285714282,
+     "recall": 0.6363636363636364,
+     "brier": 0.027462686567164177,
+     "brierSkill": -3.2094624125874134,
+     "ece": 0.027462686567164177,
+     "accepted": 49.0,
+     "tp": 7.0,
+     "fp": 42.0,
+     "fn": 4.0
+    }
+   },
+   "check": null,
+   "notes": {
+    "binormalFallback": {
+     "desc": 0,
+     "rocchio-q0": 0
+    },
+    "kwstratFallbackStrata": 6
+   },
+   "counts": {
+    "teachRelevant": 17,
+    "freshRelevant": 4,
+    "freshAmbiguous": 7,
+    "freshLabelled": 1668
+   },
+   "ap": {
+    "desc": 0.5648474178403757,
+    "rocchio-q0": 0.7092569293383585
+   }
+  },
+  "coding": {
+   "profile": "coding",
+   "rows": {
+    "desc|binormal|strict": {
+     "f05": 0.6144824559678591,
+     "t11su": 0.5283809523809522,
+     "precision": 0.7878580812571707,
+     "recall": 0.3472142857142857,
+     "brier": 0.026990036049483457,
+     "brierSkill": 0.33908379315295917,
+     "ece": 0.020037122192708284,
+     "accepted": 31.955,
+     "tp": 24.305,
+     "fp": 7.65,
+     "fn": 45.695
+    },
+    "desc|binormal|ambiguousRelevant": {
+     "f05": 0.5972711322821606,
+     "t11su": 0.5105448717948717,
+     "precision": 0.8221424886002011,
+     "recall": 0.30259615384615385,
+     "brier": 0.03912258660776884,
+     "brierSkill": 0.32818815152388564,
+     "ece": 0.02611053467220053,
+     "accepted": 39.12,
+     "tp": 31.47,
+     "fp": 7.65,
+     "fn": 72.53
+    },
+    "rocchio-q0|binormal|strict": {
+     "f05": 0.5707666342221789,
+     "t11su": 0.49445238095238087,
+     "precision": 0.703693875228264,
+     "recall": 0.4269285714285715,
+     "brier": 0.03364105737750728,
+     "brierSkill": 0.17621747538602175,
+     "ece": 0.04375799973647712,
+     "accepted": 114.38,
+     "tp": 29.885,
+     "fp": 84.495,
+     "fn": 40.115
+    },
+    "rocchio-q0|binormal|ambiguousRelevant": {
+     "f05": 0.5517952684431726,
+     "t11su": 0.4731089743589743,
+     "precision": 0.7341501909459275,
+     "recall": 0.3665865384615385,
+     "brier": 0.04556974605755919,
+     "brierSkill": 0.21747772864699413,
+     "ece": 0.04728135588246566,
+     "accepted": 122.62,
+     "tp": 38.125,
+     "fp": 84.495,
+     "fn": 65.875
+    },
+    "desc|binormal+kw|strict": {
+     "f05": 0.6679242635812337,
+     "t11su": 0.6253571428571428,
+     "precision": 0.7393916970682379,
+     "recall": 0.5312857142857144,
+     "brier": 0.019287484972154746,
+     "brierSkill": 0.5276993560125391,
+     "ece": 0.015607257712848082,
+     "accepted": 50.245,
+     "tp": 37.19,
+     "fp": 13.055,
+     "fn": 32.81
+    },
+    "desc|binormal+kw|ambiguousRelevant": {
+     "f05": 0.6649419483098927,
+     "t11su": 0.5948237179487179,
+     "precision": 0.7802402631050114,
+     "recall": 0.455,
+     "brier": 0.030013999339115794,
+     "brierSkill": 0.4846005306773812,
+     "ece": 0.020303525896936667,
+     "accepted": 60.375,
+     "tp": 47.32,
+     "fp": 13.055,
+     "fn": 56.68
+    },
+    "rocchio-q0|binormal+kw|strict": {
+     "f05": 0.6756739538770029,
+     "t11su": 0.6449047619047619,
+     "precision": 0.7229004376159458,
+     "recall": 0.5992142857142857,
+     "brier": 0.022665181584505045,
+     "brierSkill": 0.4449882981680138,
+     "ece": 0.026979130630530465,
+     "accepted": 61.015,
+     "tp": 41.945,
+     "fp": 19.07,
+     "fn": 28.055
+    },
+    "rocchio-q0|binormal+kw|ambiguousRelevant": {
+     "f05": 0.6748167950359611,
+     "t11su": 0.6121794871794872,
+     "precision": 0.763470303169797,
+     "recall": 0.5094711538461538,
+     "brier": 0.03325351222716165,
+     "brierSkill": 0.4289717154535916,
+     "ece": 0.030119514574755844,
+     "accepted": 72.055,
+     "tp": 52.985,
+     "fp": 19.07,
+     "fn": 51.015
+    },
+    "rocchio-q0|kwstrat|strict": {
+     "f05": 0.4827972154643947,
+     "t11su": 0.4971428571428572,
+     "precision": 0.552671656620649,
+     "recall": 0.5080714285714286,
+     "brier": 0.04360162828842843,
+     "brierSkill": -0.0676911556512818,
+     "ece": 0.06771092830735491,
+     "accepted": 135.62,
+     "tp": 35.565,
+     "fp": 100.055,
+     "fn": 34.435
+    },
+    "rocchio-q0|kwstrat|ambiguousRelevant": {
+     "f05": 0.4943609728328305,
+     "t11su": 0.48096153846153844,
+     "precision": 0.6026026410079749,
+     "recall": 0.44653846153846144,
+     "brier": 0.05560353807067075,
+     "brierSkill": 0.0451777622072808,
+     "ece": 0.0740930981857044,
+     "accepted": 146.495,
+     "tp": 46.44,
+     "fp": 100.055,
+     "fn": 57.56
+    },
+    "alwaysNo|strict": {
+     "f05": 0.0,
+     "t11su": 0.33333333333333326,
+     "precision": 0.0,
+     "recall": 0.0,
+     "brier": 0.042656916514320534,
+     "brierSkill": -0.04455760661998731,
+     "ece": 0.042656916514320534,
+     "accepted": 0.0,
+     "tp": 0.0,
+     "fp": 0.0,
+     "fn": 70.0
+    },
+    "alwaysNo|ambiguousRelevant": {
+     "f05": 0.0,
+     "t11su": 0.33333333333333326,
+     "precision": 0.0,
+     "recall": 0.0,
+     "brier": 0.062089552238805974,
+     "brierSkill": -0.06619987269255256,
+     "ece": 0.062089552238805974,
+     "accepted": 0.0,
+     "tp": 0.0,
+     "fp": 0.0,
+     "fn": 104.0
+    },
+    "alwaysYes|strict": {
+     "f05": 0.052758516731986733,
+     "t11su": 0.0,
+     "precision": 0.042656916514320534,
+     "recall": 1.0,
+     "brier": 0.9573430834856792,
+     "brierSkill": -22.442857142857147,
+     "ece": 0.9573430834856792,
+     "accepted": 1641.0,
+     "tp": 70.0,
+     "fp": 1571.0,
+     "fn": 0.0
+    },
+    "alwaysYes|ambiguousRelevant": {
+     "f05": 0.07642563198118756,
+     "t11su": 0.0,
+     "precision": 0.062089552238805974,
+     "recall": 1.0,
+     "brier": 0.937910447761194,
+     "brierSkill": -15.105769230769228,
+     "ece": 0.937910447761194,
+     "accepted": 1675.0,
+     "tp": 104.0,
+     "fp": 1571.0,
+     "fn": 0.0
+    },
+    "keywordNarrow|strict": {
+     "f05": 0.602409638554217,
+     "t11su": 0.680952380952381,
+     "precision": 0.5607476635514017,
+     "recall": 0.8571428571428571,
+     "brier": 0.03473491773308957,
+     "brierSkill": 0.14943166318086742,
+     "ece": 0.03473491773308958,
+     "accepted": 107.0,
+     "tp": 60.0,
+     "fp": 47.0,
+     "fn": 10.0
+    },
+    "keywordNarrow|ambiguousRelevant": {
+     "f05": 0.6375838926174496,
+     "t11su": 0.6698717948717949,
+     "precision": 0.6178861788617889,
+     "recall": 0.7307692307692306,
+     "brier": 0.044776119402985086,
+     "brierSkill": 0.23110586103902456,
+     "ece": 0.04477611940298507,
+     "accepted": 123.0,
+     "tp": 76.0,
+     "fp": 47.0,
+     "fn": 28.0
+    },
+    "keywordBroad|strict": {
+     "f05": 0.4136253041362531,
+     "t11su": 0.40952380952380957,
+     "precision": 0.3617021276595746,
+     "recall": 0.9714285714285714,
+     "brier": 0.07434491163924438,
+     "brierSkill": -0.8205146858234065,
+     "ece": 0.07434491163924438,
+     "accepted": 188.0,
+     "tp": 68.0,
+     "fp": 120.0,
+     "fn": 2.0
+    },
+    "keywordBroad|ambiguousRelevant": {
+     "f05": 0.47669491525423724,
+     "t11su": 0.5256410256410257,
+     "precision": 0.42857142857142855,
+     "recall": 0.8653846153846152,
+     "brier": 0.07999999999999999,
+     "brierSkill": -0.3737575282769427,
+     "ece": 0.07999999999999996,
+     "accepted": 210.0,
+     "tp": 90.0,
+     "fp": 120.0,
+     "fn": 14.0
+    }
+   },
+   "check": null,
+   "notes": {
+    "binormalFallback": {
+     "desc": 0,
+     "rocchio-q0": 7
+    },
+    "kwstratFallbackStrata": 76
+   },
+   "counts": {
+    "teachRelevant": 133,
+    "freshRelevant": 70,
+    "freshAmbiguous": 34,
+    "freshLabelled": 1641
+   },
+   "ap": {
+    "desc": 0.6122847375645363,
+    "rocchio-q0": 0.6563319395706205
+   }
+  },
+  "earnings": {
+   "profile": "earnings",
+   "rows": {
+    "desc|binormal|strict": {
+     "f05": 0.9299787705779105,
+     "t11su": 0.8695833333333333,
+     "precision": 0.9683176712565593,
+     "recall": 0.8161805555555557,
+     "brier": 0.007372470823851504,
+     "brierSkill": 0.8223168503165652,
+     "ece": 0.005005040704126185,
+     "accepted": 60.465,
+     "tp": 58.765,
+     "fp": 1.7,
+     "fn": 13.235
+    },
+    "desc|binormal|ambiguousRelevant": {
+     "f05": 0.9045757715822523,
+     "t11su": 0.8075862068965516,
+     "precision": 0.9715005903569605,
+     "recall": 0.7211494252873563,
+     "brier": 0.011705946907404275,
+     "brierSkill": 0.7622796165777374,
+     "ece": 0.009652397342665708,
+     "accepted": 64.44,
+     "tp": 62.74,
+     "fp": 1.7,
+     "fn": 24.26
+    },
+    "rocchio-q0|binormal|strict": {
+     "f05": 0.9263751751293947,
+     "t11su": 0.8782638888888888,
+     "precision": 0.963508840270043,
+     "recall": 0.8265277777777778,
+     "brier": 0.006590093360466635,
+     "brierSkill": 0.8411728478860389,
+     "ece": 0.006384254381772858,
+     "accepted": 60.825,
+     "tp": 59.51,
+     "fp": 1.315,
+     "fn": 12.49
+    },
+    "rocchio-q0|binormal|ambiguousRelevant": {
+     "f05": 0.9018622737988425,
+     "t11su": 0.8171072796934865,
+     "precision": 0.9655104466313961,
+     "recall": 0.7332183908045977,
+     "brier": 0.01111676510960984,
+     "brierSkill": 0.77424451988586,
+     "ece": 0.010578753983436814,
+     "accepted": 65.105,
+     "tp": 63.79,
+     "fp": 1.315,
+     "fn": 23.21
+    },
+    "desc|binormal+kw|strict": {
+     "f05": 0.9476015367647129,
+     "t11su": 0.8866898148148149,
+     "precision": 0.9893046754992321,
+     "recall": 0.8346527777777777,
+     "brier": 0.006474734932353255,
+     "brierSkill": 0.843953089319264,
+     "ece": 0.004812271047542192,
+     "accepted": 60.76,
+     "tp": 60.095,
+     "fp": 0.665,
+     "fn": 11.905
+    },
+    "desc|binormal+kw|ambiguousRelevant": {
+     "f05": 0.9197848790466878,
+     "t11su": 0.8211302681992337,
+     "precision": 0.9899511799292307,
+     "recall": 0.7355172413793105,
+     "brier": 0.011021773168490677,
+     "brierSkill": 0.7761735838773077,
+     "ece": 0.009742348040761864,
+     "accepted": 64.655,
+     "tp": 63.99,
+     "fp": 0.665,
+     "fn": 23.01
+    },
+    "rocchio-q0|binormal+kw|strict": {
+     "f05": 0.9367423028604409,
+     "t11su": 0.8941666666666666,
+     "precision": 0.9805739467997736,
+     "recall": 0.8456944444444445,
+     "brier": 0.00596343035999819,
+     "brierSkill": 0.8562759874404299,
+     "ece": 0.0060554670629349395,
+     "accepted": 61.53,
+     "tp": 60.89,
+     "fp": 0.64,
+     "fn": 11.11
+    },
+    "rocchio-q0|binormal+kw|ambiguousRelevant": {
+     "f05": 0.9083472442091077,
+     "t11su": 0.8236781609195402,
+     "precision": 0.9862922709734824,
+     "recall": 0.7391954022988506,
+     "brier": 0.010844650929544812,
+     "brierSkill": 0.7797705219881571,
+     "ece": 0.010805058670918553,
+     "accepted": 64.95,
+     "tp": 64.31,
+     "fp": 0.64,
+     "fn": 22.69
+    },
+    "rocchio-q0|kwstrat|strict": {
+     "f05": 0.8582982354336519,
+     "t11su": 0.7781018518518519,
+     "precision": 0.9568429545123861,
+     "recall": 0.6769444444444442,
+     "brier": 0.011970353097797981,
+     "brierSkill": 0.7115037696238096,
+     "ece": 0.013109281675952478,
+     "accepted": 50.15,
+     "tp": 48.74,
+     "fp": 1.41,
+     "fn": 23.26
+    },
+    "rocchio-q0|kwstrat|ambiguousRelevant": {
+     "f05": 0.8316615021906415,
+     "t11su": 0.7266283524904215,
+     "precision": 0.96054080825785,
+     "recall": 0.5980459770114943,
+     "brier": 0.017052384579454665,
+     "brierSkill": 0.6537059810233903,
+     "ece": 0.017791134806039874,
+     "accepted": 53.44,
+     "tp": 52.03,
+     "fp": 1.41,
+     "fn": 34.97
+    },
+    "alwaysNo|strict": {
+     "f05": 0.0,
+     "t11su": 0.33333333333333326,
+     "precision": 0.0,
+     "recall": 0.0,
+     "brier": 0.043373493975903614,
+     "brierSkill": -0.04534005037783362,
+     "ece": 0.043373493975903614,
+     "accepted": 0.0,
+     "tp": 0.0,
+     "fp": 0.0,
+     "fn": 72.0
+    },
+    "alwaysNo|ambiguousRelevant": {
+     "f05": 0.0,
+     "t11su": 0.33333333333333326,
+     "precision": 0.0,
+     "recall": 0.0,
+     "brier": 0.05194029850746271,
+     "brierSkill": -0.05478589420654911,
+     "ece": 0.05194029850746271,
+     "accepted": 0.0,
+     "tp": 0.0,
+     "fp": 0.0,
+     "fn": 87.0
+    },
+    "alwaysYes|strict": {
+     "f05": 0.05363528009535161,
+     "t11su": 0.0,
+     "precision": 0.043373493975903614,
+     "recall": 1.0,
+     "brier": 0.9566265060240967,
+     "brierSkill": -22.055555555555546,
+     "ece": 0.9566265060240967,
+     "accepted": 1660.0,
+     "tp": 72.0,
+     "fp": 1588.0,
+     "fn": 0.0
+    },
+    "alwaysYes|ambiguousRelevant": {
+     "f05": 0.06409311919846768,
+     "t11su": 0.0,
+     "precision": 0.05194029850746271,
+     "recall": 1.0,
+     "brier": 0.9480597014925374,
+     "brierSkill": -18.252873563218394,
+     "ece": 0.9480597014925374,
+     "accepted": 1675.0,
+     "tp": 87.0,
+     "fp": 1588.0,
+     "fn": 0.0
+    },
+    "keywordNarrow|strict": {
+     "f05": 0.8686440677966101,
+     "t11su": 0.712962962962963,
+     "precision": 1.0,
+     "recall": 0.5694444444444445,
+     "brier": 0.01867469879518072,
+     "brierSkill": 0.5499230338650992,
+     "ece": 0.01867469879518072,
+     "accepted": 41.0,
+     "tp": 41.0,
+     "fp": 0.0,
+     "fn": 31.0
+    },
+    "keywordNarrow|ambiguousRelevant": {
+     "f05": 0.8301158301158301,
+     "t11su": 0.6628352490421454,
+     "precision": 1.0,
+     "recall": 0.49425287356321845,
+     "brier": 0.026268656716417906,
+     "brierSkill": 0.46654506499898657,
+     "ece": 0.026268656716417923,
+     "accepted": 43.0,
+     "tp": 43.0,
+     "fp": 0.0,
+     "fn": 44.0
+    },
+    "keywordBroad|strict": {
+     "f05": 0.6339285714285713,
+     "t11su": 0.7546296296296297,
+     "precision": 0.581967213114754,
+     "recall": 0.9861111111111108,
+     "brier": 0.031325301204819286,
+     "brierSkill": 0.24503218583823116,
+     "ece": 0.031325301204819286,
+     "accepted": 122.0,
+     "tp": 71.0,
+     "fp": 51.0,
+     "fn": 1.0
+    },
+    "keywordBroad|ambiguousRelevant": {
+     "f05": 0.6467661691542288,
+     "t11su": 0.735632183908046,
+     "precision": 0.6046511627906977,
+     "recall": 0.8965517241379308,
+     "brier": 0.035820895522388055,
+     "brierSkill": 0.2725614522713453,
+     "ece": 0.035820895522388055,
+     "accepted": 129.0,
+     "tp": 78.0,
+     "fp": 51.0,
+     "fn": 9.0
+    }
+   },
+   "check": null,
+   "notes": {
+    "binormalFallback": {
+     "desc": 0,
+     "rocchio-q0": 0
+    },
+    "kwstratFallbackStrata": 127
+   },
+   "counts": {
+    "teachRelevant": 165,
+    "freshRelevant": 72,
+    "freshAmbiguous": 15,
+    "freshLabelled": 1660
+   },
+   "ap": {
+    "desc": 0.9548595158176991,
+    "rocchio-q0": 0.9683878961045764
+   }
+  }
+ }
+}

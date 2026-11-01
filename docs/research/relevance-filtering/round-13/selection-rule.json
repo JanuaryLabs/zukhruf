@@ -1,0 +1,21 @@
+{
+  "round": "relevance-filtering research round 13 (zukhruf #3383, judge step): Liquid AI's d1-2B decision model as a scorer",
+  "writtenBefore": "any fresh-5 label exists and before any d1 answer is collected. Round 12 (same test slice) is frozen separately.",
+  "why": "On 2026-10-30 the user pointed to a decision model on the Mac mini (llama.cpp llama serve at mac-mini.tailf1764a.ts.net:9931, model LiquidAI/d1-2B-GGUF:Q8_0, endpoint /v1/systemone): 'System One', typed questions answered with calibrated probabilities in one forward pass. A probe gave the Anthropic scorpion-venom post biology 0.858 and chips 0.037 in 0.37 s for both questions. It is the Jev-like judge of #3383; if its probabilities are calibrated, it can also give back a yes/no decision.",
+  "model": "LiquidAI/d1-2B-GGUF:Q8_0 as served on the Mac mini (record the /v1/models entry and llama.cpp version with the answers).",
+  "answers": {
+    "how": "For every fresh-5 article, one /v1/systemone call: state = title + '\\n' + lead (the annotators' text); questions = one 'noul' question per profile, instructions = 'Is the main subject of this article: <profile description>?' with the profile's description sentence from profiles.json, word for word. The answer's noul value is the probability p_d1.",
+    "freeze": "All answers are written to round-13/d1-answers.json and frozen (sha256) BEFORE fresh-5's labels exist. A failed call is retried at most 3 times; an article that still fails is recorded and scored as p = 0."
+  },
+  "rankers": {
+    "d1": "order by p_d1; ties by cos(x, d) then id. No taught answer and no keyword is used (zero-shot).",
+    "d1+kw": "the naive-Bayes keyword evidence of the frozen ranker added to logit(p_d1) (P(k|rel) from product teaching's relevant answers as in round 12, P(k|non) from the stream); same ties.",
+    "references": "desc+kw (frozen ranker) and round 12's hybrid, scored by round 12's evaluator on the same slice; keywordNarrow, keywordBroad and newest."
+  },
+  "metrics": "Round 12's MAP and daily recall (same profiles rule, same teaching pool for d1+kw). Also, because d1 claims calibrated probabilities: per profile the yes/no decision p_d1 >= 0.5 scored by T11F against keywordNarrow, and Brier skill of p_d1 against the profile's base rate (macro means).",
+  "pass": {
+    "ranker": "Topic-level paired bootstrap (2000 replicates, numpy.random.default_rng(31966)): a d1 ranker replaces the winner of round 12 (or desc+kw) only when its MAP interval against that ranker lies entirely above 0 and its daily-recall interval has lower bound > -0.05. Between d1 and d1+kw the simpler (d1) wins unless its MAP interval against d1+kw lies entirely below 0.",
+    "decision": "Reported, and decided by the user: if the T11F interval of (p_d1 >= 0.5) against keywordNarrow lies entirely above 0 and the macro Brier skill is above 0, the reader may show a yes/no cut-off again."
+  },
+  "noneEligible": "The ranker stays as round 12 leaves it; the result goes to #3383."
+}

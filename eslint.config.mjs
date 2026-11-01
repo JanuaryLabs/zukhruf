@@ -72,6 +72,10 @@ export default defineConfig(
   // Snowball's JavaScript stemmers, kept byte for byte (sha256 in
   // packages/mteb/docs/ported-from-mteb.md).
   globalIgnores(['packages/mteb/src/dependencies/snowball/']),
+  // The frozen files of the relevance-filtering research rounds, kept byte for
+  // byte (their sha256 files beside them). Their scripts ran from the
+  // research folder, not from this workspace.
+  globalIgnores(['docs/research/relevance-filtering/']),
   {
     plugins: { zukhruf, island, manifest },
     extends: [

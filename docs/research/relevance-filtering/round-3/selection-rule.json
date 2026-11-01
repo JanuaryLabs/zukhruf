@@ -1,0 +1,25 @@
+{
+  "round": "relevance-filtering research round 3 (zukhruf #3195): add the lexical signal of classic TREC filtering, fused with the dense profile",
+  "writtenBefore": "any score of a round-3 candidate. Round 2's results were read (round-2/plan.json): this round reuses the same labelled collection as its development set, a known risk of adaptive reuse (Dwork et al. 2015) that the sealed exam guards against.",
+  "why": "Round 2: no candidate beat the hand-written narrow keyword baseline across profiles; dense designs won on profiles with varied wording and lost on profiles that one stem names (chips, robotics, courts, quantum). No candidate had a lexical signal. The classic filtering profile is Rocchio over tf-idf vectors (Buckley, Salton & Allan 1994; Joachims 1997). BM25 stays a strong baseline against dense models outside their training domain (Thakur et al. 2021, BEIR), and lexical + dense hybrids improve on either alone (Karpukhin et al. 2020; Ma et al. 2021). Round 2 also showed the binormal calibration is the one that works.",
+  "inherits": "Everything in ../round-2/selection-rule.json (sha256 d4913edeb471506316f29915a5f03069cdf3e8a6a9f55f5506f89627b77505d4) that this file does not replace: inputs, periods, dense representation and descriptions, teaching simulation (same seeds, so draws are identical to round 2), threshold rule, baselines, metrics, scored profiles, eligibility and simplerWins logic, freeze contents and examVerdictRule. Bootstrap seed for this round: numpy.random.default_rng(31954).",
+  "lexical": {
+    "text": "title + ' ' + lead of collection/items.json (the keyword baselines' text).",
+    "analyzer": "lower-case; tokens = regex [a-z0-9]+ ; drop scikit-learn ENGLISH_STOP_WORDS; Porter stemmer (nltk 3.9.2 PorterStemmer, default mode).",
+    "weights": "scikit-learn 1.7.2 TfidfVectorizer(analyzer=<the analyzer>, sublinear_tf=True, smooth_idf=True, norm='l2'), fitted on the teaching-period texts only (idf from the past, as a running filter has it). Terms unseen in the teaching period are dropped.",
+    "q0": "the profile's title + ' ' + description, through the same vectorizer. It is the automatic analogue of a keyword query: no hand-written terms."
+  },
+  "candidates": {
+    "methods": {
+      "lex-q0": "lexical score = cos(x_lex, q0_lex). Taught examples serve only the calibration.",
+      "lex-rocchio": "textbook Rocchio on tf-idf: q = 8 q0 + 16 mean(P_lex) - 4 mean(N_lex); score = cos(x_lex, q).",
+      "rocchio-q0": "round 2's dense textbook Rocchio, unchanged (reference).",
+      "hybrid-q0": "fusion of dense desc (round 2) and lex-q0: score = z(dense) + z(lex), where z standardises each score by its mean and standard deviation over the stream (CombSUM with z-score normalisation: Fox & Shaw 1994; Lee 1997; Montague & Aslam 2001). Taught leave-one-out scores use the same stream statistics.",
+      "hybrid-rocchio": "the same fusion of dense rocchio-q0 and lex-rocchio."
+    },
+    "calibration": "binormal exactly as round 2 (falls back to platt when the fit cannot hold). Platt and platt+em are dropped: round 2 showed negative macro Brier skill for every Platt variant.",
+    "grid": "5 candidates."
+  },
+  "simplerWins": "complexity ranks: lex-q0 0 < rocchio-q0 1 < lex-rocchio 2 < hybrid-q0 3 < hybrid-rocchio 4.",
+  "noneEligible": "No design is frozen; the exam stays sealed; the round reports why."
+}

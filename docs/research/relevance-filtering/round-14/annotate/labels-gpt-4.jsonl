@@ -1,0 +1,342 @@
+{"q": 4, "labels": {"regulation": true, "courts": true}, "reasons": {"regulation": "FTC consumer protection case against Amazon", "courts": "Amazon deceptive practices trial"}, "alternatives": {}}
+{"q": 8, "labels": {"funding": true}, "reasons": {"funding": "Ethos raises $6 million"}, "alternatives": {}}
+{"q": 12, "labels": {"earnings": true}, "reasons": {"earnings": "Nutanix quarterly earnings and revenue beat"}, "alternatives": {}}
+{"q": 16, "labels": {"earnings": true}, "reasons": {"earnings": "SentinelOne revenue guidance and quarterly results"}, "alternatives": {}}
+{"q": 20, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 24, "labels": {"chips": true}, "reasons": {"chips": "Nvidia accelerated computing hardware market analysis"}, "alternatives": {}}
+{"q": 28, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 32, "labels": {"earnings": true}, "reasons": {"earnings": "Snap quarterly earnings beat"}, "alternatives": {}}
+{"q": 36, "labels": {"regulation": true}, "reasons": {"regulation": "China considers App Store antitrust investigation"}, "alternatives": {}}
+{"q": 40, "labels": {"chips": true}, "reasons": {"chips": "Nvidia DGX SuperPOD AI hardware systems"}, "alternatives": {}}
+{"q": 44, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 48, "labels": {"funding": true}, "reasons": {"funding": "Lenovo acquisition of Infinidat"}, "alternatives": {}}
+{"q": 52, "labels": {"open-models": true}, "reasons": {"open-models": "Tencent releases open-source Hunyuan3D 2.0"}, "alternatives": {}}
+{"q": 56, "labels": {"jobs": true}, "reasons": {"jobs": "Generative AI creates demand for knowledge engineers"}, "alternatives": {}}
+{"q": 60, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 64, "labels": {"security": true}, "reasons": {"security": "Cohesity cyber resiliency and threat response"}, "alternatives": {}}
+{"q": 68, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 72, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 76, "labels": {"earnings": true}, "reasons": {"earnings": "Zoom quarterly results and guidance"}, "alternatives": {}}
+{"q": 80, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 84, "labels": {"jobs": true}, "reasons": {"jobs": "OpenAI premium agents positioned to replace highly paid specialists"}, "alternatives": {}}
+{"q": 88, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 92, "labels": {"robotics": true}, "reasons": {"robotics": "Nvidia framework transfers robot training to real movements"}, "alternatives": {}}
+{"q": 96, "labels": {"funding": true}, "reasons": {"funding": "Manas AI launches with initial funding"}, "alternatives": {}}
+{"q": 100, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 104, "labels": {"funding": true}, "reasons": {"funding": "Databricks acquisition of BladeBridge"}, "alternatives": {}}
+{"q": 108, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 112, "labels": {"funding": true}, "reasons": {"funding": "Sourcetable raises $4.3 million"}, "alternatives": {}}
+{"q": 116, "labels": {"chips": true}, "reasons": {"chips": "Broadcom connectivity silicon and edge AI chipsets"}, "alternatives": {}}
+{"q": 120, "labels": {"security": true}, "reasons": {"security": "Deep Instinct deep-learning threat prevention"}, "alternatives": {}}
+{"q": 124, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 128, "labels": {"regulation": true}, "reasons": {"regulation": "Bill would sunset Section 230 protections"}, "alternatives": {}}
+{"q": 132, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 136, "labels": {"security": true}, "reasons": {"security": "Software security report on adversarial testing and AI risks"}, "alternatives": {}}
+{"q": 140, "labels": {"open-models": true}, "reasons": {"open-models": "YuE open-source music generation model release"}, "alternatives": {}}
+{"q": 144, "labels": {"funding": true, "security": true}, "reasons": {"funding": "Tenable acquires Vulcan for $150 million", "security": "Vulnerability remediation platform acquisition"}, "alternatives": {}}
+{"q": 148, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 152, "labels": {"robotics": true}, "reasons": {"robotics": "ChatGPT linked to an autonomous weapons system"}, "alternatives": {}}
+{"q": 156, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 160, "labels": {"security": true}, "reasons": {"security": "Aviatrix secure multicloud networking platform"}, "alternatives": {}}
+{"q": 164, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 168, "labels": {"funding": true}, "reasons": {"funding": "Google buys Wiz for $32 billion"}, "alternatives": {}}
+{"q": 172, "labels": {"earnings": true}, "reasons": {"earnings": "Intel earnings and revenue beat"}, "alternatives": {}}
+{"q": 176, "labels": {"funding": true}, "reasons": {"funding": "Kodiak Hub raises $6 million"}, "alternatives": {}}
+{"q": 180, "labels": {"funding": true}, "reasons": {"funding": "Lila Sciences raises $200 million"}, "alternatives": {}}
+{"q": 184, "labels": {"regulation": true, "jobs": true}, "reasons": {"regulation": "Labor Department investigates Scale AI pay practices", "jobs": "Pay of AI data labeling contractors"}, "alternatives": {}}
+{"q": 188, "labels": {"security": true}, "reasons": {"security": "Cloudflare cyberthreat intelligence feed"}, "alternatives": {}}
+{"q": 192, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 196, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 200, "labels": {"earnings": true}, "reasons": {"earnings": "Cisco earnings and revenue beat"}, "alternatives": {}}
+{"q": 204, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 208, "labels": {"open-models": true}, "reasons": {"open-models": "DeepSeek releases improved V3 under MIT license"}, "alternatives": {}}
+{"q": 212, "labels": {"earnings": true, "chips": true}, "reasons": {"earnings": "GlobalFoundries mixed earnings results", "chips": "Foundry results describe semiconductor manufacturing business"}, "alternatives": {}}
+{"q": 216, "labels": {"funding": true}, "reasons": {"funding": "Perplexity seeks new funding round"}, "alternatives": {}}
+{"q": 220, "labels": {"security": true}, "reasons": {"security": "Tape backups defend against ransomware"}, "alternatives": {}}
+{"q": 224, "labels": {"funding": true, "security": true}, "reasons": {"funding": "Oligo raises $50 million", "security": "Application security platform using eBPF"}, "alternatives": {}}
+{"q": 228, "labels": {"funding": true}, "reasons": {"funding": "Aligned secures equity and debt financing"}, "alternatives": {}}
+{"q": 232, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 236, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 240, "labels": {"funding": true, "chips": true}, "reasons": {"funding": "EnCharge raises $100 million", "chips": "Commercialization of edge AI accelerators"}, "alternatives": {}}
+{"q": 244, "labels": {"funding": true}, "reasons": {"funding": "TrueFoundry raises $19 million"}, "alternatives": {}}
+{"q": 248, "labels": {"funding": true, "security": null}, "reasons": {"funding": "Charm Security launches with $8 million", "security": "AI scam prevention focuses on human vulnerability without clear intrusion"}, "alternatives": {"security": false}}
+{"q": 252, "labels": {"quantum": true, "chips": true}, "reasons": {"quantum": "Majorana 1 topological quantum processor", "chips": "Microsoft quantum chip launch"}, "alternatives": {}}
+{"q": 256, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 260, "labels": {"regulation": null}, "reasons": {"regulation": "Government AI service suite accompanies modernization policy"}, "alternatives": {"regulation": false}}
+{"q": 264, "labels": {"security": true}, "reasons": {"security": "Rapid7 exposure management and remediation service"}, "alternatives": {}}
+{"q": 268, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 272, "labels": {"chips": true}, "reasons": {"chips": "Axelera Titania edge inference chip launch"}, "alternatives": {}}
+{"q": 276, "labels": {"chips": true}, "reasons": {"chips": "Nvidia GPU platform and accelerated computing strategy"}, "alternatives": {}}
+{"q": 280, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 284, "labels": {"security": true}, "reasons": {"security": "Cybersecurity planning for Super Bowl infrastructure"}, "alternatives": {}}
+{"q": 288, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 292, "labels": {"coding": true, "security": true}, "reasons": {"coding": "Spark AI agent tests and fixes code", "security": "Agent discovers software vulnerabilities"}, "alternatives": {}}
+{"q": 296, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 300, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 304, "labels": {"earnings": true}, "reasons": {"earnings": "Rivian quarterly gross profit and forecast"}, "alternatives": {}}
+{"q": 308, "labels": {"earnings": true}, "reasons": {"earnings": "Zscaler earnings and revenue beat"}, "alternatives": {}}
+{"q": 312, "labels": {"funding": true}, "reasons": {"funding": "Private equity bidders seek Trend Micro acquisition"}, "alternatives": {}}
+{"q": 316, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 320, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 324, "labels": {"earnings": true}, "reasons": {"earnings": "Robinhood quarterly earnings and crypto revenue"}, "alternatives": {}}
+{"q": 328, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 332, "labels": {"coding": true}, "reasons": {"coding": "Copado AI automation for software delivery"}, "alternatives": {}}
+{"q": 336, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 340, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 344, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 348, "labels": {"funding": true}, "reasons": {"funding": "SoftBank acquires Ampere for $6.5 billion"}, "alternatives": {}}
+{"q": 352, "labels": {"security": true}, "reasons": {"security": "VMware private cloud cyber resilience"}, "alternatives": {}}
+{"q": 356, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 360, "labels": {"funding": true, "security": true}, "reasons": {"funding": "Passbolt raises $8 million", "security": "Password credential and secret access management"}, "alternatives": {}}
+{"q": 364, "labels": {"courts": true}, "reasons": {"courts": "Amicus brief supports Musk lawsuit against OpenAI restructuring"}, "alternatives": {}}
+{"q": 368, "labels": {"earnings": true}, "reasons": {"earnings": "Tenable quarterly results and forecast"}, "alternatives": {}}
+{"q": 372, "labels": {"open-models": true}, "reasons": {"open-models": "OLMo 2 32B release with code weights and data"}, "alternatives": {}}
+{"q": 376, "labels": {"funding": true}, "reasons": {"funding": "ElevenLabs raises $180 million Series C"}, "alternatives": {}}
+{"q": 380, "labels": {"coding": true}, "reasons": {"coding": "GitHub adds o3-mini to Copilot"}, "alternatives": {}}
+{"q": 384, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 388, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 392, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 396, "labels": {"chips": true}, "reasons": {"chips": "Blackwell Ultra GPUs and AI desktop hardware"}, "alternatives": {}}
+{"q": 400, "labels": {"funding": true}, "reasons": {"funding": "Lambda closes $480 million investment"}, "alternatives": {}}
+{"q": 404, "labels": {"security": true}, "reasons": {"security": "Infinidat storage cyberattack detection"}, "alternatives": {}}
+{"q": 408, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 412, "labels": {"chips": true}, "reasons": {"chips": "Broadcom optical network chip launch"}, "alternatives": {}}
+{"q": 416, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 420, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 424, "labels": {"earnings": true}, "reasons": {"earnings": "Block quarterly earnings below estimates"}, "alternatives": {}}
+{"q": 428, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 432, "labels": {"earnings": true}, "reasons": {"earnings": "Couchbase quarterly results and lower outlook"}, "alternatives": {}}
+{"q": 436, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 440, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 444, "labels": {"security": true}, "reasons": {"security": "Detectify AI automation of vulnerability testing"}, "alternatives": {}}
+{"q": 448, "labels": {"funding": true}, "reasons": {"funding": "Arize AI acquisition of Velvet"}, "alternatives": {}}
+{"q": 452, "labels": {"funding": true}, "reasons": {"funding": "CoreWeave IPO filing"}, "alternatives": {}}
+{"q": 456, "labels": {"funding": true}, "reasons": {"funding": "Coinbase potential acquisition of Deribit"}, "alternatives": {}}
+{"q": 460, "labels": {"regulation": true}, "reasons": {"regulation": "US sanctions entities using AI for election interference"}, "alternatives": {}}
+{"q": 464, "labels": {"funding": true}, "reasons": {"funding": "Nexthop AI launches with $110 million"}, "alternatives": {}}
+{"q": 468, "labels": {"regulation": true, "chips": true}, "reasons": {"regulation": "US AI chip export controls", "chips": "Restrictions on AI chip purchases and exports"}, "alternatives": {}}
+{"q": 472, "labels": {"earnings": true, "chips": true}, "reasons": {"earnings": "Micron revenue results and stock decline", "chips": "Sales growth of AI memory chips"}, "alternatives": {}}
+{"q": 476, "labels": {"funding": true}, "reasons": {"funding": "Contentstack acquires Lytics"}, "alternatives": {}}
+{"q": 480, "labels": {"earnings": true}, "reasons": {"earnings": "Atlassian quarterly earnings beat"}, "alternatives": {}}
+{"q": 484, "labels": {"security": true}, "reasons": {"security": "Rubrik compromised-data protection and cyber recovery"}, "alternatives": {}}
+{"q": 488, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 492, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 496, "labels": {"funding": true, "robotics": true}, "reasons": {"funding": "Hidden Level raises $65 million", "robotics": "Detection and tracking of covert drones"}, "alternatives": {}}
+{"q": 500, "labels": {"health": true}, "reasons": {"health": "AI healthcare delivery and patient care"}, "alternatives": {}}
+{"q": 504, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 508, "labels": {"robotics": true}, "reasons": {"robotics": "Figure household humanoid robot testing"}, "alternatives": {}}
+{"q": 512, "labels": {"funding": true}, "reasons": {"funding": "Atombeam raises $20 million"}, "alternatives": {}}
+{"q": 516, "labels": {"robotics": true}, "reasons": {"robotics": "Nvidia GR00T N1 robotics model and ecosystem"}, "alternatives": {}}
+{"q": 520, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 524, "labels": {"funding": true, "security": true}, "reasons": {"funding": "Andesite raises $23 million", "security": "AI-assisted security operations center"}, "alternatives": {}}
+{"q": 528, "labels": {"security": true}, "reasons": {"security": "CrowdStrike and Google cloud threat defense"}, "alternatives": {}}
+{"q": 532, "labels": {"earnings": true}, "reasons": {"earnings": "Oracle results and guidance miss expectations"}, "alternatives": {}}
+{"q": 536, "labels": {"security": true}, "reasons": {"security": "Russian disinformation operation poisons chatbot information sources"}, "alternatives": {}}
+{"q": 540, "labels": {"earnings": true}, "reasons": {"earnings": "Fastly earnings miss and weak guidance"}, "alternatives": {}}
+{"q": 544, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 548, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 552, "labels": {"security": true}, "reasons": {"security": "PrivacyKey secure biometric authentication"}, "alternatives": {}}
+{"q": 556, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 560, "labels": {"funding": true, "health": true}, "reasons": {"funding": "Rad AI raises $60 million", "health": "AI tools for radiologists and patient care"}, "alternatives": {}}
+{"q": 564, "labels": {"funding": true, "security": null}, "reasons": {"funding": "Chainalysis acquires Alterya", "security": "AI fraud detection without a clear computer intrusion"}, "alternatives": {"security": false}}
+{"q": 568, "labels": {"funding": true}, "reasons": {"funding": "Insightsoftware acquires JustPerform"}, "alternatives": {}}
+{"q": 572, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 576, "labels": {"funding": true}, "reasons": {"funding": "Study of startup acquisition and IPO exit financing requirements"}, "alternatives": {}}
+{"q": 580, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 584, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 588, "labels": {"regulation": true}, "reasons": {"regulation": "Trump executive orders suspend TikTok ban"}, "alternatives": {}}
+{"q": 592, "labels": {"security": true}, "reasons": {"security": "Chinese hackers breach US investment review office"}, "alternatives": {}}
+{"q": 596, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 600, "labels": {"regulation": true}, "reasons": {"regulation": "TikTok service restoration following proposed ban intervention"}, "alternatives": {}}
+{"q": 604, "labels": {"funding": true}, "reasons": {"funding": "dbt Labs acquires SDF Labs"}, "alternatives": {}}
+{"q": 608, "labels": {"funding": true}, "reasons": {"funding": "Databricks completes equity and debt financing"}, "alternatives": {}}
+{"q": 612, "labels": {"funding": true, "robotics": true}, "reasons": {"funding": "Rerun raises $17 million", "robotics": "Data infrastructure for robots drones and autonomous cars"}, "alternatives": {}}
+{"q": 616, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 620, "labels": {"safety": true}, "reasons": {"safety": "Fact-checking evaluation finds DeepSeek spreads misinformation"}, "alternatives": {}}
+{"q": 624, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 628, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 632, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 636, "labels": {"security": true}, "reasons": {"security": "Infrastructure security posture visibility and analytics"}, "alternatives": {}}
+{"q": 640, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 644, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 648, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 652, "labels": {"regulation": true, "courts": true}, "reasons": {"regulation": "CFTC settles enforcement case", "courts": "Gemini settles CFTC lawsuit"}, "alternatives": {}}
+{"q": 656, "labels": {"security": true}, "reasons": {"security": "AI identity verification defends against deepfake fraud"}, "alternatives": {}}
+{"q": 660, "labels": {"open-models": true}, "reasons": {"open-models": "Phi-4 multimodal and mini released on Hugging Face"}, "alternatives": {}}
+{"q": 664, "labels": {"chips": true}, "reasons": {"chips": "TSMC invests in US semiconductor fabs"}, "alternatives": {}}
+{"q": 668, "labels": {"regulation": true}, "reasons": {"regulation": "International AI declaration at Paris summit"}, "alternatives": {}}
+{"q": 672, "labels": {"security": null, "safety": true}, "reasons": {"security": "AI document forgery threatens verification without clear intrusion", "safety": "Image-model forgery capabilities and safeguards demonstrated"}, "alternatives": {"security": false}}
+{"q": 676, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 680, "labels": {"funding": true}, "reasons": {"funding": "MongoDB acquires Voyage AI"}, "alternatives": {}}
+{"q": 684, "labels": {"chips": true}, "reasons": {"chips": "GeForce RTX 50 GPUs and AI rendering"}, "alternatives": {}}
+{"q": 688, "labels": {"earnings": true}, "reasons": {"earnings": "ServiceNow revenue miss and guidance"}, "alternatives": {}}
+{"q": 692, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 696, "labels": {"funding": true, "security": true}, "reasons": {"funding": "ReliaQuest raises $500 million", "security": "AI-driven enterprise security operations"}, "alternatives": {}}
+{"q": 700, "labels": {"earnings": true}, "reasons": {"earnings": "Freshworks quarterly earnings beat"}, "alternatives": {}}
+{"q": 704, "labels": {"security": true}, "reasons": {"security": "Cyber resilience against AI attacks and ransomware"}, "alternatives": {}}
+{"q": 708, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 712, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 716, "labels": {"security": true}, "reasons": {"security": "Dynatrace features address cybersecurity issues"}, "alternatives": {}}
+{"q": 720, "labels": {"open-models": true}, "reasons": {"open-models": "Mistral Small 3.1 release under Apache 2.0"}, "alternatives": {}}
+{"q": 724, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 728, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 732, "labels": {"regulation": true}, "reasons": {"regulation": "South Korea suspends DeepSeek over privacy compliance"}, "alternatives": {}}
+{"q": 736, "labels": {"safety": true, "security": true}, "reasons": {"safety": "Claude jailbreak challenge defeats model defenses", "security": "Claude jailbreak challenge defeats model defenses"}, "alternatives": {}}
+{"q": 740, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 744, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 748, "labels": {"education": true}, "reasons": {"education": "AI tutoring pilot improves Nigerian student learning"}, "alternatives": {}}
+{"q": 752, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 756, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 760, "labels": {"funding": true}, "reasons": {"funding": "Safe Superintelligence fundraising valuation"}, "alternatives": {}}
+{"q": 764, "labels": {"security": true}, "reasons": {"security": "Recolabs cybersecurity resilience strategies"}, "alternatives": {}}
+{"q": 768, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 772, "labels": {"funding": true, "security": true}, "reasons": {"funding": "Dream raises $100 million for critical infrastructure cyber defense", "security": "Dream raises $100 million for critical infrastructure cyber defense"}, "alternatives": {}}
+{"q": 776, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 780, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 784, "labels": {"earnings": true, "chips": true}, "reasons": {"earnings": "Samsung guidance reflects weakness in memory chip market", "chips": "Samsung guidance reflects weakness in memory chip market"}, "alternatives": {}}
+{"q": 788, "labels": {"funding": true}, "reasons": {"funding": "Movement Labs seeks $100 million round"}, "alternatives": {}}
+{"q": 792, "labels": {"security": true}, "reasons": {"security": "Ocean Observatories data cyber resilience"}, "alternatives": {}}
+{"q": 796, "labels": {"safety": null}, "reasons": {"safety": "OpenAI Model Spec behavioral policy update without new results"}, "alternatives": {"safety": false}}
+{"q": 800, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 804, "labels": {"funding": true}, "reasons": {"funding": "Netradyne raises $90 million for AI dashcams"}, "alternatives": {}}
+{"q": 808, "labels": {"jobs": true}, "reasons": {"jobs": "AI transforms outsourced business operations and work processes"}, "alternatives": {}}
+{"q": 812, "labels": {"safety": true}, "reasons": {"safety": "Study evaluates incorrect news citations by AI search engines"}, "alternatives": {}}
+{"q": 816, "labels": {"security": true}, "reasons": {"security": "HPE investigates claimed network breach"}, "alternatives": {}}
+{"q": 820, "labels": {"funding": true}, "reasons": {"funding": "Google invests in Anthropic"}, "alternatives": {}}
+{"q": 824, "labels": {"funding": true, "chips": true}, "reasons": {"funding": "Celestial AI raises $250 million for chip optical interconnects", "chips": "Celestial AI raises $250 million for chip optical interconnects"}, "alternatives": {}}
+{"q": 828, "labels": {"education": null}, "reasons": {"education": "University AI research consortium includes limited education work"}, "alternatives": {"education": false}}
+{"q": 832, "labels": {"open-models": true}, "reasons": {"open-models": "DeepSeek releases updated open-source V3"}, "alternatives": {}}
+{"q": 836, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 840, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 844, "labels": {"earnings": true}, "reasons": {"earnings": "Tesla quarterly earnings and growth forecast"}, "alternatives": {}}
+{"q": 848, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 852, "labels": {"health": null}, "reasons": {"health": "Study of emotional dependence and loneliness among ChatGPT users"}, "alternatives": {"health": true}}
+{"q": 856, "labels": {"jobs": true}, "reasons": {"jobs": "Survey of scientists adopting AI in daily work"}, "alternatives": {}}
+{"q": 860, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 864, "labels": {"earnings": true}, "reasons": {"earnings": "Netscout and Dynatrace quarterly results"}, "alternatives": {}}
+{"q": 868, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 872, "labels": {"earnings": true, "chips": true}, "reasons": {"earnings": "Broadcom earnings and custom AI accelerator business", "chips": "Broadcom earnings and custom AI accelerator business"}, "alternatives": {}}
+{"q": 876, "labels": {"funding": true}, "reasons": {"funding": "Synthesia raises $180 million"}, "alternatives": {}}
+{"q": 880, "labels": {"funding": true}, "reasons": {"funding": "CADDi raises $38 million"}, "alternatives": {}}
+{"q": 884, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 888, "labels": {"robotics": true}, "reasons": {"robotics": "DeepMind robotic control models"}, "alternatives": {}}
+{"q": 892, "labels": {"earnings": true}, "reasons": {"earnings": "Backblaze revenue and loss results"}, "alternatives": {}}
+{"q": 896, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 900, "labels": {"chips": true}, "reasons": {"chips": "Management of AMD Instinct GPU cluster resources"}, "alternatives": {}}
+{"q": 904, "labels": {"security": true, "regulation": true, "courts": true}, "reasons": {"security": "DOJ charges Chinese officials and contractors over cyber intrusions", "regulation": "DOJ charges Chinese officials and contractors over cyber intrusions", "courts": "DOJ charges Chinese officials and contractors over cyber intrusions"}, "alternatives": {}}
+{"q": 908, "labels": {"security": true}, "reasons": {"security": "Cyber resilience summit on AI threats and recovery"}, "alternatives": {}}
+{"q": 912, "labels": {"funding": true}, "reasons": {"funding": "Turing closes $111 million investment"}, "alternatives": {}}
+{"q": 916, "labels": {"chips": true}, "reasons": {"chips": "Qualcomm Snapdragon X CPU and NPU platform"}, "alternatives": {}}
+{"q": 920, "labels": {"funding": true}, "reasons": {"funding": "Quantexa raises $175 million"}, "alternatives": {}}
+{"q": 924, "labels": {"security": true}, "reasons": {"security": "F5 application and API security platform"}, "alternatives": {}}
+{"q": 928, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 932, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 936, "labels": {"security": true}, "reasons": {"security": "Contrast application vulnerability management"}, "alternatives": {}}
+{"q": 940, "labels": {"security": true}, "reasons": {"security": "Dell detection and response protects backup systems"}, "alternatives": {}}
+{"q": 944, "labels": {"security": true}, "reasons": {"security": "NeMo Guardrails jailbreak detection and blocking service"}, "alternatives": {}}
+{"q": 948, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 952, "labels": {"open-models": true}, "reasons": {"open-models": "DeepSeek R1 family open-source model release"}, "alternatives": {}}
+{"q": 956, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 960, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 964, "labels": {"funding": true}, "reasons": {"funding": "Archer raises $300 million"}, "alternatives": {}}
+{"q": 968, "labels": {"regulation": true}, "reasons": {"regulation": "CMA probes Apple and Google mobile practices"}, "alternatives": {}}
+{"q": 972, "labels": {"courts": true}, "reasons": {"courts": "Pardon of Silk Road marketplace founder after criminal conviction"}, "alternatives": {}}
+{"q": 976, "labels": {"earnings": true}, "reasons": {"earnings": "Rapid7 quarterly results and weak outlook"}, "alternatives": {}}
+{"q": 980, "labels": {"funding": true, "chips": true}, "reasons": {"funding": "MemryX raises $44 million for edge AI accelerators", "chips": "MemryX raises $44 million for edge AI accelerators"}, "alternatives": {}}
+{"q": 984, "labels": {"funding": true}, "reasons": {"funding": "CoreWeave IPO pricing and debut"}, "alternatives": {}}
+{"q": 988, "labels": {"robotics": null}, "reasons": {"robotics": "GenEx world simulation targets robots and autonomous navigation"}, "alternatives": {"robotics": true}}
+{"q": 992, "labels": {"funding": true}, "reasons": {"funding": "Circle acquires Hashnote"}, "alternatives": {}}
+{"q": 996, "labels": {"funding": true}, "reasons": {"funding": "NinjaOne raises $500 million"}, "alternatives": {}}
+{"q": 1000, "labels": {"earnings": true}, "reasons": {"earnings": "IBM stock rises following strong earnings"}, "alternatives": {}}
+{"q": 1004, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 1008, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 1012, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 1016, "labels": {"open-models": null}, "reasons": {"open-models": "Zuckerberg previews future open-source Llama 4 release"}, "alternatives": {"open-models": false}}
+{"q": 1020, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 1024, "labels": {"funding": true, "health": true}, "reasons": {"funding": "VideaHealth raises $40 million for AI dentistry", "health": "VideaHealth raises $40 million for AI dentistry"}, "alternatives": {}}
+{"q": 1028, "labels": {"funding": true}, "reasons": {"funding": "Hightouch raises $80 million"}, "alternatives": {}}
+{"q": 1032, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 1036, "labels": {"funding": true, "robotics": true}, "reasons": {"funding": "Xocean raises funding for uncrewed ocean survey vessels", "robotics": "Xocean raises funding for uncrewed ocean survey vessels"}, "alternatives": {}}
+{"q": 1040, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 1044, "labels": {"courts": true, "funding": true}, "reasons": {"courts": "23andMe court-supervised bankruptcy seeks company buyer", "funding": "23andMe court-supervised bankruptcy seeks company buyer"}, "alternatives": {}}
+{"q": 1048, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 1052, "labels": {"funding": true}, "reasons": {"funding": "Carbon Arc raises $56 million"}, "alternatives": {}}
+{"q": 1056, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 1060, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 1064, "labels": {"security": true}, "reasons": {"security": "Palo Alto cybersecurity strategy reset"}, "alternatives": {}}
+{"q": 1068, "labels": {"funding": true, "chips": true}, "reasons": {"funding": "AheadComputing raises seed round for RISC-V AI chipset", "chips": "AheadComputing raises seed round for RISC-V AI chipset"}, "alternatives": {}}
+{"q": 1072, "labels": {"funding": true, "quantum": true}, "reasons": {"funding": "Quantum Machines raises $170 million for quantum computer equipment", "quantum": "Quantum Machines raises $170 million for quantum computer equipment"}, "alternatives": {}}
+{"q": 1076, "labels": {"security": true}, "reasons": {"security": "Training to defend against social engineering and phishing"}, "alternatives": {}}
+{"q": 1080, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 1084, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 1088, "labels": {"earnings": true}, "reasons": {"earnings": "Kyndryl quarterly earnings and sales"}, "alternatives": {}}
+{"q": 1092, "labels": {"funding": true, "security": true}, "reasons": {"funding": "Semgrep raises $100 million for software vulnerability detection", "security": "Semgrep raises $100 million for software vulnerability detection"}, "alternatives": {}}
+{"q": 1096, "labels": {"funding": null}, "reasons": {"funding": "Infrastructure fund raises capital without a named company investment"}, "alternatives": {"funding": false}}
+{"q": 1100, "labels": {"funding": true, "security": true}, "reasons": {"funding": "Orion raises $6 million for AI data-exfiltration prevention", "security": "Orion raises $6 million for AI data-exfiltration prevention"}, "alternatives": {}}
+{"q": 1104, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 1108, "labels": {"jobs": null}, "reasons": {"jobs": "DeepMind recruitment of specialized AI researchers"}, "alternatives": {"jobs": false}}
+{"q": 1112, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 1116, "labels": {"security": true}, "reasons": {"security": "Controls against unauthorized AI content scraping"}, "alternatives": {}}
+{"q": 1120, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 1124, "labels": {"security": true, "quantum": null}, "reasons": {"security": "PKI modernization and post-quantum cryptography readiness", "quantum": "PKI modernization and post-quantum cryptography readiness"}, "alternatives": {"quantum": false}}
+{"q": 1128, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 1132, "labels": {"funding": true}, "reasons": {"funding": "OpenAI takes ownership stake alongside CoreWeave compute deal"}, "alternatives": {}}
+{"q": 1136, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 1140, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 1144, "labels": {"regulation": null, "jobs": true}, "reasons": {"regulation": "Government AI adoption strategy and civil-servant training", "jobs": "Government AI adoption strategy and civil-servant training"}, "alternatives": {"regulation": true}}
+{"q": 1148, "labels": {"safety": true}, "reasons": {"safety": "Assistant testing exposes persistent reliability failures"}, "alternatives": {}}
+{"q": 1152, "labels": {"courts": true}, "reasons": {"courts": "Indian publishers file copyright suit against OpenAI"}, "alternatives": {}}
+{"q": 1156, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 1160, "labels": {"safety": true}, "reasons": {"safety": "Vending-Bench reveals agent paranoia and long-horizon failures"}, "alternatives": {}}
+{"q": 1164, "labels": {"funding": true, "coding": true}, "reasons": {"funding": "Momentic raises $3.7 million for AI software testing", "coding": "Momentic raises $3.7 million for AI software testing"}, "alternatives": {}}
+{"q": 1168, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 1172, "labels": {"coding": true, "jobs": true}, "reasons": {"coding": "AI-assisted development changes developer work and skills", "jobs": "AI-assisted development changes developer work and skills"}, "alternatives": {}}
+{"q": 1176, "labels": {"funding": true}, "reasons": {"funding": "Moonpay acquires Helio"}, "alternatives": {}}
+{"q": 1180, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 1184, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 1188, "labels": {"regulation": true}, "reasons": {"regulation": "UK proposed AI copyright opt-out laws"}, "alternatives": {}}
+{"q": 1192, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 1196, "labels": {"earnings": true}, "reasons": {"earnings": "Synopsys results and earnings forecast"}, "alternatives": {}}
+{"q": 1200, "labels": {"open-models": true}, "reasons": {"open-models": "Open-Sora 2.0 open-source video model analysis"}, "alternatives": {}}
+{"q": 1204, "labels": {"funding": true}, "reasons": {"funding": "Qbiq raises $16 million"}, "alternatives": {}}
+{"q": 1208, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 1212, "labels": {"security": true}, "reasons": {"security": "Record ransomware victim count in February"}, "alternatives": {}}
+{"q": 1216, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 1220, "labels": {"funding": true}, "reasons": {"funding": "Bria raises $40 million"}, "alternatives": {}}
+{"q": 1224, "labels": {"quantum": true, "energy": true}, "reasons": {"quantum": "D-Wave quantum blockchain research reduces computing energy use", "energy": "D-Wave quantum blockchain research reduces computing energy use"}, "alternatives": {}}
+{"q": 1228, "labels": {"security": true}, "reasons": {"security": "Snyk provides security tools to open-source maintainers"}, "alternatives": {}}
+{"q": 1232, "labels": {"funding": true}, "reasons": {"funding": "BuildOps raises $127 million"}, "alternatives": {}}
+{"q": 1236, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 1240, "labels": {"regulation": true}, "reasons": {"regulation": "Executive order targets federal online censorship"}, "alternatives": {}}
+{"q": 1244, "labels": {"funding": true, "regulation": true}, "reasons": {"funding": "Chinese officials consider Musk acquisition to avoid TikTok ban", "regulation": "Chinese officials consider Musk acquisition to avoid TikTok ban"}, "alternatives": {}}
+{"q": 1248, "labels": {"open-models": true}, "reasons": {"open-models": "Hugging Face open-sources SmolVLM-256M"}, "alternatives": {}}
+{"q": 1252, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 1256, "labels": {"funding": true}, "reasons": {"funding": "UVeye raises $191 million"}, "alternatives": {}}
+{"q": 1260, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 1264, "labels": {"funding": true}, "reasons": {"funding": "Anthropic nears $2 billion funding"}, "alternatives": {}}
+{"q": 1268, "labels": {"funding": true}, "reasons": {"funding": "Applied Labs raises $4.2 million"}, "alternatives": {}}
+{"q": 1272, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 1276, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 1280, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 1284, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 1288, "labels": {"funding": true}, "reasons": {"funding": "Musk consortium bids $97.4 billion for OpenAI"}, "alternatives": {}}
+{"q": 1292, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 1296, "labels": {"security": true}, "reasons": {"security": "Veeam backup recovery and cyber resilience"}, "alternatives": {}}
+{"q": 1300, "labels": {"biology": true}, "reasons": {"biology": "Neuroscience studies decode typed language from brain activity"}, "alternatives": {}}
+{"q": 1304, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 1308, "labels": {"earnings": true}, "reasons": {"earnings": "Workday earnings beat"}, "alternatives": {}}
+{"q": 1312, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 1316, "labels": {"robotics": true}, "reasons": {"robotics": "OpenAI restarts physical robotics development"}, "alternatives": {}}
+{"q": 1320, "labels": {"chips": true}, "reasons": {"chips": "Arm Cortex-A320 CPU and Ethos-U85 edge AI hardware"}, "alternatives": {}}
+{"q": 1324, "labels": {"security": true}, "reasons": {"security": "Cato Networks cloud network security platform"}, "alternatives": {}}
+{"q": 1328, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 1332, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 1336, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 1340, "labels": {"security": true}, "reasons": {"security": "Cyber resilience and social engineering defenses"}, "alternatives": {}}
+{"q": 1344, "labels": {"funding": true, "security": true}, "reasons": {"funding": "RAD raises $14 million for cloud threat detection", "security": "RAD raises $14 million for cloud threat detection"}, "alternatives": {}}
+{"q": 1348, "labels": {"funding": true}, "reasons": {"funding": "Isomorphic Labs raises $600 million"}, "alternatives": {}}
+{"q": 1352, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 1356, "labels": {"earnings": true}, "reasons": {"earnings": "PagerDuty earnings and revenue beat"}, "alternatives": {}}
+{"q": 1360, "labels": {"security": true}, "reasons": {"security": "Mobile phishing threat research"}, "alternatives": {}}
+{"q": 1364, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 1368, "labels": {"funding": true, "regulation": true}, "reasons": {"funding": "Trump administration considers Oracle acquisition to resolve TikTok ban", "regulation": "Trump administration considers Oracle acquisition to resolve TikTok ban"}, "alternatives": {}}

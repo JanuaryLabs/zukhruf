@@ -1,0 +1,18 @@
+{
+  "round": "relevance-filtering research round 7 (zukhruf #3195): the binormal fit models how the taught answers were selected",
+  "writtenBefore": "any round-7 score. Rounds 4-6 and the package rehearsal (zukhruf 3db265b, limitation 15) were read.",
+  "why": "The reader shows its top matches and the person answers only those, so the taught scores are a sample selected by the score itself. Round 6 taught from about 250 articles; the rehearsal taught from the top of a 6,300-article pool and the frozen fit failed (0.376 vs keywordNarrow 0.524). The standard model for this selection is maximum likelihood with truncated densities for the judged scores (Zhang & Callan, SIGIR 2001, 'Maximum likelihood estimation for filtering thresholds').",
+  "inherits": "../freeze/plan.json (sha256 d49b589b...) for representation, score, keyword evidence, decision and the no-relevant-answer case; ../round-6/selection-rule.json for product teaching, metrics and units. Bootstrap seed numpy.random.default_rng(31959).",
+  "candidates": {
+    "frozen": "freeze/plan.json desc|binormal+kw, unchanged (reference).",
+    "truncated": "Same, except the binormal fit. Standardise the stream scores z by the stream's mean and sd and every shown score the same way. Each shown list (top N by score; top N keyword matches by score) has a cut-off c = the lowest standardised score that list showed. Log-likelihood = sum over stream articles of log(pi N(z; mu1, s1) + (1 - pi) N(z; mu0, s0)) + sum over answered shown articles of [log N(z_i; mu_y, s_y) - log(1 - Phi((c_i - mu_y) / s_y))], where y is the answer (relevant -> component 1, not relevant -> component 0) and c_i the cut-off of the list that showed it (an article in both lists takes the lower cut-off). Maximise over (mu1, s1, mu0, s0, pi) with bounds mu in [-10, 10], s in [0.05, 10], pi in [1/n_stream, 0.5] by L-BFGS-B (scipy.optimize.minimize, gtol 1e-10, maxiter 10000), one start: mu0 = 0, s0 = 1, pi = 0.05, mu1 = mean of the relevant answers' z, s1 = max(their sd, 0.05). If the result has mu1 <= mu0 or the optimiser fails, fall back to Platt on the taught scores as the frozen design does. Probability = posterior of component 1, then the keyword evidence and the plug-in threshold as frozen."
+  },
+  "protocols": {
+    "window": "Round 6 exactly: per fresh slice, teach from the top N (5, 10) by score and the top N keyword matches in its first 14 days; score the rest of the slice.",
+    "poolA": "The package rehearsal: teach from the top N of the pool collection + fresh (both labelled); score all of fresh-2.",
+    "poolB": "Mirror: teach from the top N of collection + fresh-2; score all of fresh."
+  },
+  "units": "Per protocol: a (profile, stream) unit is scored when its scored stream holds >= 15 strict relevant articles; a profile's score is the mean over its units and both N.",
+  "pass": "A candidate passes when, in EACH of the three protocols separately, against the macro mean over scored profiles: the topic-bootstrap interval of (candidate - keywordNarrow) has lower bound > -0.05, the intervals against keywordBroad, alwaysNo and alwaysYes lie above 0, and macro Brier skill > 0 (the user's non-inferiority bar, freeze/plan.json). If 'truncated' passes, it replaces the frozen design: the package is updated, the implementation check redone, the plan refrozen with the exam teaching from the pool (as poolA/poolB), and only then the exam is scored once.",
+  "noneEligible": "No change to the package; the exam stays sealed; the round reports why."
+}

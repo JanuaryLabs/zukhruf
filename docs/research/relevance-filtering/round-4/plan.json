@@ -1,0 +1,153 @@
+{
+ "round": 4,
+ "status": "NO DESIGN FROZEN. desc|binormal+kw (sentence + the reader's keywords as naive-Bayes evidence) has the best macro T11F (0.733 vs keywordNarrow 0.679) and Brier skill +0.475, beats keywordBroad and both trivial designs, but its topic-bootstrap interval against keywordNarrow is [-0.012, +0.118]: it includes 0, so the pre-registered rule does not freeze it. The exam stays sealed.",
+ "selectionRule": {
+  "file": "selection-rule.json",
+  "sha256": "ead2b9f67f4f68e66f439c31eafae69fc464af2676b34bce406d00a4b28c7c29"
+ },
+ "evaluate": {
+  "file": "evaluate.py",
+  "sha256": "4414872b47999ddc7c6c0133ce4e6463d32da3a5cb9244d8fc62641931502734"
+ },
+ "results": {
+  "file": "results.json",
+  "sha256": "704fe65959d9d3864076ce46155a14d6bd91f712f23584ab580c64d1d8b36067"
+ },
+ "fresh": {
+  "articles": 1675,
+  "period": "2026-01-01..2026-03-31",
+  "labels": "../fresh/labels.json a2802bbe (4 blind annotators, frozen 09:48:41Z)",
+  "articlesSha256": "1d5c5fe5",
+  "vectorsSha256": "12f827fd"
+ },
+ "scoredProfiles": [
+  "chips",
+  "security",
+  "funding",
+  "regulation",
+  "courts",
+  "robotics",
+  "open-models",
+  "jobs",
+  "health",
+  "coding",
+  "earnings"
+ ],
+ "macroF05": {
+  "desc|binormal": 0.649,
+  "rocchio-q0|binormal": 0.607,
+  "desc|binormal+kw": 0.733,
+  "rocchio-q0|binormal+kw": 0.706,
+  "rocchio-q0|kwstrat": 0.564,
+  "alwaysNo": 0.0,
+  "alwaysYes": 0.068,
+  "keywordNarrow": 0.679,
+  "keywordBroad": 0.553
+ },
+ "macroBrierSkill": {
+  "desc|binormal": 0.317,
+  "rocchio-q0|binormal": 0.09,
+  "desc|binormal+kw": 0.475,
+  "rocchio-q0|binormal+kw": 0.378,
+  "rocchio-q0|kwstrat": -0.561
+ },
+ "intervalsVsBaselines": {
+  "desc|binormal": {
+   "alwaysNo": [
+    0.497528612046721,
+    0.7747996833743345
+   ],
+   "alwaysYes": [
+    0.4480669335412451,
+    0.6913848198588951
+   ],
+   "keywordNarrow": [
+    -0.10914151157275127,
+    0.049155981178698405
+   ],
+   "keywordBroad": [
+    -0.022092410926674046,
+    0.2059638635298471
+   ]
+  },
+  "rocchio-q0|binormal": {
+   "alwaysNo": [
+    0.4666049250601289,
+    0.7334313085711813
+   ],
+   "alwaysYes": [
+    0.41918995702057654,
+    0.6517455537390332
+   ],
+   "keywordNarrow": [
+    -0.14626049105920472,
+    -0.0038659479097338796
+   ],
+   "keywordBroad": [
+    -0.05286501050309791,
+    0.16069536698032166
+   ]
+  },
+  "desc|binormal+kw": {
+   "alwaysNo": [
+    0.5787286163006865,
+    0.8404303028459372
+   ],
+   "alwaysYes": [
+    0.5278775092777765,
+    0.7625147042276851
+   ],
+   "keywordNarrow": [
+    -0.011914994191901476,
+    0.11794720834392874
+   ],
+   "keywordBroad": [
+    0.06446558110058086,
+    0.2875571398678329
+   ]
+  },
+  "rocchio-q0|binormal+kw": {
+   "alwaysNo": [
+    0.5602057371301569,
+    0.8162743747197331
+   ],
+   "alwaysYes": [
+    0.5055738718428531,
+    0.7395029540425732
+   ],
+   "keywordNarrow": [
+    -0.033736705541452555,
+    0.08322891075094
+   ],
+   "keywordBroad": [
+    0.04419444474127048,
+    0.2536428472885949
+   ]
+  },
+  "rocchio-q0|kwstrat": {
+   "alwaysNo": [
+    0.4337713789864509,
+    0.6794556188224533
+   ],
+   "alwaysYes": [
+    0.3836109454550181,
+    0.599179126434815
+   ],
+   "keywordNarrow": [
+    -0.1991844879133556,
+    -0.03900214597149053
+   ],
+   "keywordBroad": [
+    -0.12000424079020842,
+    0.1313835448289379
+   ]
+  }
+ },
+ "findingsPostHoc": [
+  "Keyword evidence lifts both dense designs by about 0.08-0.10 macro T11F and raises Brier skill (desc 0.317 -> 0.475). desc|binormal+kw beats keywordNarrow on 8 of 11 scored profiles, ties chips (0.844 vs 0.845), and loses robotics (0.833 vs 0.860) and regulation (0.117 vs 0.303).",
+  "Regulation is unstable across draws: mean 206 accepted vs 16 for the keyword, precision 0.39, recall 0.16 per draw on average; the binormal fit sometimes takes the government-story cluster (40 fresh ambiguous, many Pentagon-Anthropic articles) for the relevant curve.",
+  "kwstrat (binormal per keyword stratum) is worse than no keywords (0.564, Brier skill -0.561): strata are too small for the fit (85 fallback strata on security alone).",
+  "Biology (not scored, 7 fresh relevant): desc|binormal+kw 0.782 vs keywordNarrow 0.667."
+ ],
+ "nextRound": "Pre-register desc|binormal+kw alone as the candidate, add a guard against an unstable binormal fit (for example cap the mixing weight from the taught prior or fall back when the fitted relevant share jumps), and replicate on another fresh slice (October-December 2025) with the same gate. Only a pass there spends the exam."
+}

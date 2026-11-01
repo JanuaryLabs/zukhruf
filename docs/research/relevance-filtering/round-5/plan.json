@@ -1,0 +1,80 @@
+{
+ "round": 5,
+ "status": "NO DESIGN FROZEN. Replication of desc|binormal+kw on the second fresh slice (2025-10..12, 1,735 articles, labels d123cde2): 0.697 vs keywordNarrow 0.644, interval [-0.040, +0.137], Brier skill +0.136. The EM-lambda guard (desc|binormal-w+kw) is worse (0.592). The exam stays sealed.",
+ "selectionRule": {
+  "file": "selection-rule.json",
+  "sha256": "11faab82470b928420710e311598d91ce133757ff78b10e88e5f14ea3a72ceed"
+ },
+ "evaluate": {
+  "file": "evaluate.py",
+  "sha256": "64794a13696a3429171834882c21fe91c0616ee820629ee6be3ff8212d3316cb"
+ },
+ "results": {
+  "file": "results.json",
+  "sha256": "effbbcdb69395c18f0b2a6e6793863c302874b009ecc0fe254929c1c19b61f3d"
+ },
+ "scoredProfiles": [
+  "chips",
+  "security",
+  "funding",
+  "regulation",
+  "robotics",
+  "open-models",
+  "coding",
+  "earnings"
+ ],
+ "macroF05": {
+  "desc|binormal+kw": 0.697,
+  "desc|binormal-w+kw": 0.592,
+  "alwaysNo": 0.0,
+  "alwaysYes": 0.072,
+  "keywordNarrow": 0.644,
+  "keywordBroad": 0.561
+ },
+ "macroBrierSkill": {
+  "desc|binormal+kw": 0.136,
+  "desc|binormal-w+kw": 0.331
+ },
+ "intervalsVsBaselines": {
+  "desc|binormal+kw": {
+   "alwaysNo": [
+    0.5385593454443868,
+    0.8247267207460522
+   ],
+   "alwaysYes": [
+    0.48312748553297374,
+    0.7397851124834395
+   ],
+   "keywordNarrow": [
+    -0.03967645434186023,
+    0.13661147351423708
+   ],
+   "keywordBroad": [
+    0.00916114599973556,
+    0.257263401796166
+   ]
+  },
+  "desc|binormal-w+kw": {
+   "alwaysNo": [
+    0.45999969337431484,
+    0.7214639139707522
+   ],
+   "alwaysYes": [
+    0.4068713366329255,
+    0.6385493030037712
+   ],
+   "keywordNarrow": [
+    -0.1498035441600954,
+    0.03440912350237867
+   ],
+   "keywordBroad": [
+    -0.08899781901140241,
+    0.156956786237149
+   ]
+  }
+ },
+ "findingsPostHoc": [
+  "Two independent fresh slices agree: the sentence + keywords design beats the typed keyword by about +0.05 macro T11F on average (round 4 +0.054, round 5 +0.053), and loses on the same profiles (robotics, regulation, chips by a little). Each slice alone has 8-11 scored profiles, too few for the interval to clear 0 with that spread.",
+  "Down-weighting the stream in the binormal fit (EM-lambda) hurts every scored profile except regulation: the stream carries the information about the base rate that the few taught articles lack."
+ ]
+}

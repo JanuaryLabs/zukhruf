@@ -1,0 +1,27 @@
+{
+  "round": "relevance-filtering research round 11 (zukhruf #3308): the best-N-a-day list measured fairly against a keyword list",
+  "writtenBefore": "the fourth fresh slice (2025-04-01..2025-06-30) is crawled, read, labelled or embedded, and before any round-11 score.",
+  "why": "The exam passed on MAP over the whole stream (zukhruf 31698d2), but the reader shows each interest's best N articles of a day, and the user sets N. Round 10's daily precision was not a fair comparison: a keyword list shows only that day's matches, is never filled to N, and its empty days were dropped. This round measures what a reader sees each day, for both lists, on a slice no round has used.",
+  "data": {
+    "teaching": "Product teaching (top N_teach by cos with the description and top N_teach keyword matches, yes/no from the answer key, ambiguous skipped), N_teach in {5, 10}, from the whole labelled pool: collection + fresh + fresh-2 + fresh-3.",
+    "test": "fresh-4: every the-decoder.com and siliconangle.com article published 2025-04-01..2025-06-30, crawled and prepared like fresh-3 (all earlier URLs and titles excluded), labelled for all 16 profiles by four blind annotators with profiles.md, frozen before any round-11 score; vectors checked as before. A day = the UTC publish date."
+  },
+  "lists": {
+    "ranker": "freeze-ranking/plan.json desc+kw, through the package's ranked({ from, to }) for each day, best N_day first.",
+    "keyword": "keywords.json narrow matches of the day, newest first, at most N_day (fewer when the day has fewer matches).",
+    "newest": "the day's N_day newest articles (no filter)."
+  },
+  "nDay": [3, 5, 10],
+  "metrics": {
+    "main": "Daily recall: for each profile, day with at least one strict relevant article, and N_day: relevant articles shown / relevant articles of that day. Mean over those days, then over N_day and N_teach; macro mean over scored profiles.",
+    "secondary": [
+      "Daily precision of what is shown (days where the list shows at least one article), and the share of days the list shows nothing.",
+      "Equal count: on each day, the ranker cut to the number of articles the keyword list showed that day (k_day); recall and precision of both at k_day.",
+      "Missed days: share of days with a relevant article where the list shows none of them."
+    ],
+    "ambiguous": "Ambiguous articles are shown or not like any article; they count neither as relevant nor as wrong."
+  },
+  "scoredProfiles": "Profiles with at least 20 days that hold a strict relevant fresh-4 article.",
+  "pass": "Topic-level paired bootstrap (2000 replicates, numpy.random.default_rng(31964)): the best-N-a-day list ships when the interval of (ranker - keyword) macro daily recall has lower bound > -0.05 (the user's non-inferiority bar) and the interval of (ranker - newest) lies above 0. Secondary metrics are reported, never decide.",
+  "noneEligible": "The reader keeps the ranked list only with the caveat recorded; the result goes to #3205 and the research record."
+}

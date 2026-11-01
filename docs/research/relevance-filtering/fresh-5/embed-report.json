@@ -1,0 +1,207 @@
+{
+ "probeCosine": 1,
+ "earlierAgreement": 1,
+ "earlierChecked": [
+  {
+   "id": "https://the-decoder.com/openai-officially-confirms-mega-funding-round-and-chatgpt-super-app/",
+   "cosine": 1
+  },
+  {
+   "id": "https://siliconangle.com/2026/04/09/apiiro-launches-apiiro-cli-bring-ai-native-security-software-development-workflows/",
+   "cosine": 1
+  },
+  {
+   "id": "https://siliconangle.com/2026/04/17/ai-chip-developer-cerebras-systems-files-go-public-amid-rapid-revenue-growth/",
+   "cosine": 1
+  },
+  {
+   "id": "https://siliconangle.com/2026/04/25/experian-takes-consumer-financial-guidance-next-level-ai-powered-virtual-assistant/",
+   "cosine": 1
+  },
+  {
+   "id": "https://the-decoder.com/even-the-latest-ai-models-make-three-systematic-reasoning-errors-arc-agi-3-analysis-shows/",
+   "cosine": 1
+  },
+  {
+   "id": "https://the-decoder.com/sam-altmans-personal-investments-face-political-scrutiny-ahead-of-openais-planned-ipo/",
+   "cosine": 1
+  },
+  {
+   "id": "https://siliconangle.com/2026/05/19/google-reimagines-search-ai-agents-generative-interfaces/",
+   "cosine": 1
+  },
+  {
+   "id": "https://siliconangle.com/2026/05/27/aws-launches-aws-agentic-shopping-assistant-help-retailers-build-ai-tools/",
+   "cosine": 1
+  },
+  {
+   "id": "https://the-decoder.com/chatgpt-now-saves-narrative-dossiers-about-you-sorted-by-work-hobbies-and-travel-preferences/",
+   "cosine": 1
+  },
+  {
+   "id": "https://the-decoder.com/kpmg-fabricated-ai-case-studies-in-a-report-designed-to-sell-clients-on-ai-adoption/",
+   "cosine": 1
+  },
+  {
+   "id": "https://siliconangle.com/2026/06/23/virtue-ai-pulls-rug-feet-unapproved-ai-agents/",
+   "cosine": 1
+  },
+  {
+   "id": "https://siliconangle.com/2026/07/02/pinecone-releases-nexus-public-preview-bring-business-knowledge-ai-agents/",
+   "cosine": 1
+  },
+  {
+   "id": "https://the-decoder.com/nadella-calls-out-ai-labs-like-openai-and-anthropic-for-banning-distillation-while-training-on-everyone-elses-data/",
+   "cosine": 1
+  },
+  {
+   "id": "https://siliconangle.com/2026/07/22/ibm-cuts-outlook-software-mainframe-weakness-weighs-results/",
+   "cosine": 1
+  },
+  {
+   "id": "https://siliconangle.com/2026/07/31/anthropic-discloses-claude-hacked-three-organizations-internal-tests/",
+   "cosine": 1
+  },
+  {
+   "id": "https://siliconangle.com/2026/08/10/def-con-hackers-launch-water-watch-center-defend-small-water-utilities/",
+   "cosine": 1
+  },
+  {
+   "id": "https://siliconangle.com/2026/08/19/gop-urges-top-ai-firms-to-do-something-about-the-toxic-image-of-data-centers/",
+   "cosine": 1
+  },
+  {
+   "id": "https://the-decoder.com/ai-agents-have-no-sense-of-time-and-are-not-aware-of-it/",
+   "cosine": 1
+  },
+  {
+   "id": "https://the-decoder.com/ai-designed-drug-appears-to-turn-back-the-bodys-biological-clock-in-early-trial/",
+   "cosine": 1
+  },
+  {
+   "id": "https://siliconangle.com/2026/09/16/thinkingdataai-launches-agentic-engine-with-ai-agents-tracking-growth-on-a-companys-own-infrastructure/",
+   "cosine": 1
+  },
+  {
+   "id": "https://siliconangle.com/2026/09/24/dataiku-debuts-cross-platform-agent-management-expands-cobuild-building-agent/",
+   "cosine": 1
+  },
+  {
+   "id": "https://siliconangle.com/2026/10/01/servicenow-launches-conversational-interface-to-its-service-desk/",
+   "cosine": 1
+  },
+  {
+   "id": "https://siliconangle.com/2026/10/08/automation-anywhere-acquires-boost-ai-to-expand-customer-facing-voice-ai/",
+   "cosine": 1
+  },
+  {
+   "id": "https://the-decoder.com/mathematicians-say-openai-doesnt-understand-its-own-navier-stokes-proof/",
+   "cosine": 1
+  }
+ ],
+ "freshAgreement": 1,
+ "freshChecked": [
+  {
+   "id": "https://siliconangle.com/2025/04/01/loftlabs-launches-vnode-enhance-secure-workload-isolation-kubernetes/",
+   "cosine": 1
+  },
+  {
+   "id": "https://siliconangle.com/2025/04/04/google-cloud-ai-thecube-googlecloudnext/",
+   "cosine": 1
+  },
+  {
+   "id": "https://siliconangle.com/2025/04/09/new-workspace-ai-tools-google-focus-workflow-automation-content-creation/",
+   "cosine": 1
+  },
+  {
+   "id": "https://the-decoder.com/openai-co-founder-sutskever-raises-2-billion-for-ai-startup-with-no-product/",
+   "cosine": 1
+  },
+  {
+   "id": "https://the-decoder.com/anthropics-ai-assistant-claude-gets-agent-based-research-and-google-workspace-integration/",
+   "cosine": 1
+  },
+  {
+   "id": "https://siliconangle.com/2025/04/21/security-operations-startup-kenzo-raises-4-5-m-expand-ai-powered-platform/",
+   "cosine": 1
+  },
+  {
+   "id": "https://siliconangle.com/2025/04/24/harness-traceable-launch-cloud-native-waap-modern-application-security/",
+   "cosine": 1
+  },
+  {
+   "id": "https://siliconangle.com/2025/04/28/congress-passes-take-act-combat-elicit-deepfakes/",
+   "cosine": 1
+  },
+  {
+   "id": "https://siliconangle.com/2025/05/01/chainguard-approach-open-source-software-security-rsac/",
+   "cosine": 1
+  },
+  {
+   "id": "https://the-decoder.com/ai-to-flag-suspicious-behavior-on-new-york-city-subways/",
+   "cosine": 1
+  },
+  {
+   "id": "https://siliconangle.com/2025/05/07/netapps-vision-enterprise-ai-readiness-scale-netappintelligence/",
+   "cosine": 1
+  },
+  {
+   "id": "https://the-decoder.com/confident-user-prompts-make-llms-more-likely-to-hallucinate/",
+   "cosine": 1
+  },
+  {
+   "id": "https://siliconangle.com/2025/05/14/enterprises-confront-tech-chaos-focus-data-governance-keynote-analysis-boomiworld/",
+   "cosine": 1
+  },
+  {
+   "id": "https://siliconangle.com/2025/05/19/starburst-targets-ai-bottlenecks-smarter-data-access-governance/",
+   "cosine": 1
+  },
+  {
+   "id": "https://siliconangle.com/2025/05/21/datahub-gets-35m-funding-provide-context-needed-ai-reliability-safety/",
+   "cosine": 1
+  },
+  {
+   "id": "https://the-decoder.com/google-deepmind-ceo-demis-hassabi-says-world-models-are-making-progress-toward-agi/",
+   "cosine": 1
+  },
+  {
+   "id": "https://the-decoder.com/nvidia-posts-record-sales-but-china-sanctions-take-a-multibillion-dollar-toll/",
+   "cosine": 1
+  },
+  {
+   "id": "https://siliconangle.com/2025/06/03/managed-cybersecurity-service-startup-threatspike-raises-14m/",
+   "cosine": 1
+  },
+  {
+   "id": "https://siliconangle.com/2025/06/05/snowflake-merkle-advertising-ai-data-snowflakesummit/",
+   "cosine": 1
+  },
+  {
+   "id": "https://the-decoder.com/mistral-launches-europes-first-reasoning-model-magistral-but-lags-behind-competitors/",
+   "cosine": 1
+  },
+  {
+   "id": "https://siliconangle.com/2025/06/12/amd-debuts-new-flagship-mi350-data-center-graphics-cards-185b-transistors/",
+   "cosine": 1
+  },
+  {
+   "id": "https://siliconangle.com/2025/06/17/broadcom-says-vmware-cloud-foundation-9-0-recognizes-ascendancy-private-cloud/",
+   "cosine": 1
+  },
+  {
+   "id": "https://siliconangle.com/2025/06/20/truist-qlik-ai-data-pipeline-qlikconnect/",
+   "cosine": 1
+  },
+  {
+   "id": "https://the-decoder.com/microsoft-has-introduced-an-ai-agent-to-the-windows-settings-menu/",
+   "cosine": 1
+  },
+  {
+   "id": "https://siliconangle.com/2025/06/26/linux-foundation-open-source-ai-opensourcesummit/",
+   "cosine": 1
+  }
+ ],
+ "rows": 1370,
+ "fallbacks": 0
+}

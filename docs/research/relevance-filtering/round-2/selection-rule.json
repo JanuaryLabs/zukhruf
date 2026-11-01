@@ -1,0 +1,80 @@
+{
+  "round": "relevance-filtering research round 2 (zukhruf #3195): one domain-free design chosen across 16 profiles",
+  "writtenBefore": "any label of the collection is read, and any embedding, probability or score of any candidate on any set",
+  "why": "Round 1 (Biology only) had too few positives to separate designs. Round 2 follows the multi-topic standard: for a fixed judging effort, many topics with shallow judgments compare systems more reliably than one topic judged deeply (Sanderson & Zobel, SIGIR 2005; Carterette et al., SIGIR 2008). TREC-11 Filtering used 100 topics (Robertson & Soboroff 2002). The package is domain-free, so the design is chosen across profiles with the same parameters for every profile.",
+  "inputs": {
+    "profiles": { "file": "../profiles.json", "sha256": "a5932290df72f7b345054a5624967a4b7e151f3242f3011867d6f733dd3f22c9" },
+    "rule": { "file": "../profiles.md", "sha256": "964812c9af2f638aaae737656686b89268905097ffac8774757b438839d40b7b" },
+    "keywords": { "file": "../keywords.json", "sha256": "e4931aad3949a067e99e9bc10772f0da785991e4fe3be5d048015d5500bebb8f" },
+    "collection": "../collection/items.json: The Decoder + SiliconANGLE stream (3,838) and anthropic-outlets (816), 2026-04-01 to 2026-10-26, exam and training-extra URLs excluded. Labels: ../labels.json (main pass, frozen after the annotators finish and before this round reads it). Agreement labels (second annotator, 400 articles) are reported, never used for scores.",
+    "biologyTeaching": "../../relevance-biology/training-extra/labels.json (sha256 7c89b068087a8efac9608531b306f995318bf4bc9db093bddb6c5eb045f89f26): its 42 relevant rows are Biology's relevant teaching pool, as in round 1.",
+    "exam": "../exam/labels.jsonl (15 profiles, deepmind-outlets, 133 articles) and ../../relevance-biology/exam/labels.json (Biology) are not opened, embedded or scored in this round."
+  },
+  "task": "TREC batch filtering (TREC-11). For each profile, a profile is built from taught examples of the teaching period only, then gives every article of the test period a probability and a yes/no decision. No relevance feedback during the stream. The same design and parameters serve every profile.",
+  "periods": {
+    "teaching": "publishedAt < 2026-06-01 (TREC-11 also teaches from the earliest part of the collection)",
+    "test": "publishedAt >= 2026-06-01"
+  },
+  "representation": {
+    "model": "EmbeddingGemma 2 Q8_0, llama.cpp b11836, server args of packages/event-grouping/eval/README.md on port 8098; before any text is embedded the server must give the vector of eval/embedding-probe.json with cosine >= 0.9999.",
+    "articleText": "The round-1 vector text (event-detection vector text, 2 lead sentences). Article vectors are reused, not recomputed: stream articles from ../../relevance-biology/pooled/vectors.json, anthropic-outlets and training-extra articles from ../../relevance-biology/round-1/vectors.json (both made with probe cosine 1 on the same server build). Every collection article must have exactly one vector, or the round stops.",
+    "description": "Per profile, its description sentence from profiles.json with the EmbeddingGemma query prompt: `task: search result | query: <description>`. Biology's must equal round 1's description:query vector (cosine >= 0.9999).",
+    "vectors": "Unit-normalised float64; similarity = dot product."
+  },
+  "teachingSimulation": {
+    "cells": [ { "kRel": 3, "kNon": 3 }, { "kRel": 3, "kNon": 10 }, { "kRel": 10, "kNon": 3 }, { "kRel": 10, "kNon": 10 } ],
+    "drawsPerCell": 50,
+    "seed": "numpy.random.default_rng([3195, 2, profileIndex, kRel, kNon, draw]); profileIndex = position in profiles.json; one draw is shared by every candidate (paired design).",
+    "relevantPool": "Strict relevant (true) teaching-period articles of the profile, sorted by id; Biology uses the 42 training-extra relevant rows instead. kRel drawn without replacement.",
+    "notRelevantPool": "Teaching-period articles labelled not relevant (false) for the profile, sorted by id, in two strata: near misses (the profile's broad keyword baseline matches) and plain negatives (no match). ceil(kNon/2) from near misses and floor(kNon/2) from plain negatives, without replacement; a short stratum is filled from the other. Ambiguous articles are never taught.",
+    "stream": "Every test-period article (ambiguous ones too, as unlabelled input for prior estimation and thresholds). Taught articles are never in the stream because the periods do not overlap."
+  },
+  "candidates": {
+    "methods": {
+      "desc": "Description only: score = cos(x, d). The taught examples serve only the calibration.",
+      "rocchio": "Round-1 Rocchio: q = mean(P) - 0.25 mean(N) (beta 16, gamma 4); score = cos(x, q).",
+      "rocchio-q0": "Textbook Rocchio with the description as the original query (Rocchio 1971; Buckley, Salton & Allan 1994, alpha 8, beta 16, gamma 4): q = 8 d + 16 mean(P) - 4 mean(N); score = cos(x, q).",
+      "knn": "Round-1 best selection score: similarity-weighted kNN, k = 3, with d added as one more positive; score = sum(max(sim,0) y) / sum(max(sim,0)), 0 when the denominator is 0.",
+      "probe": "L2 logistic regression (scikit-learn LogisticRegression, lbfgs, fit_intercept, no class weights, max_iter 10000, tol 1e-10) on the 768-d unit vectors with d added as one more positive. Regularisation on a stated scale: C chosen per draw from {0.01, 0.1, 1, 10, 100, 1000} by the lowest leave-one-out log loss on the taught set (ties: smaller C). Score = the decision function (logit)."
+    },
+    "calibration": {
+      "platt": "Platt (1999) sigmoid on leave-one-out scores of the taught articles (each scored by the method trained on the other taught articles plus d), with Platt's targets (N+ + 1)/(N+ + 2) and 1/(N- + 2), Newton's method to |grad| < 1e-12. If the leave-one-out AUC of the taught set is <= 0.5 the sigmoid slope is fixed at 0 (the probability is the Platt prior), because a reversed or flat ranking cannot be calibrated.",
+      "platt+em": "platt, then the Saerens, Latinne & Decaestecker (2002) EM prior adjustment on the unlabelled stream, exactly as round 1 (training prior pi_t = (kRel + 1) / (kRel + kNon + 1) counting d as a positive).",
+      "binormal": "Score-distribution model (binormal model of signal detection; score-distribution thresholds in filtering: Manmatha, Rath & Feng 2001; Arampatzis & van Hameren 2001): two normal components, relevant and not relevant, fitted by semi-supervised EM (Nigam, McCallum, Thrun & Mitchell 2000) on the stream's scores (unlabelled) together with the taught leave-one-out scores (fixed to their component; d is not a taught point). Scores are standardised by the stream's mean and standard deviation first. Start: relevant component from the taught positives' scores, other component from the stream; mixing weight pi bounded to [1/n_stream, 0.5]; standard deviations floored at 0.05 (standardised units); relevant mean kept above the other (swap stops the fit: probability falls back to platt). At most 500 iterations or |delta log-likelihood| < 1e-9. Probability = posterior of the relevant component."
+    },
+    "grid": "5 methods x 3 calibrations, minus knn x binormal (a 3-neighbour vote has no continuous score distribution) = 14 candidates. 'none' (uncalibrated) is not a candidate: round 1 showed its scores are not probabilities."
+  },
+  "threshold": {
+    "rule": "Expected-F0.5 plug-in, exactly as round 1: accept the top m stream articles by probability, m maximising E[F0.5](m) = 1.25 sum_{i<=m} p_i / (0.25 sum_all p_i + m). No stream label is used.",
+    "sensitivity": "Reported only: fixed p >= 0.5."
+  },
+  "baselines": {
+    "alwaysNo": "accept none, p = 0",
+    "alwaysYes": "accept all, p = 1",
+    "keywordNarrow": "accept iff keywords.json narrow regex matches title + ' ' + lead (case-insensitive); p = 1 or 0",
+    "keywordBroad": "same with the broad regex",
+    "climatology": "for Brier only: constant p = the stream's observed strict base rate for the profile"
+  },
+  "metrics": {
+    "main": "T11F = 1.25 TP / (1.25 TP + 0.25 FN + FP), 0 when TP = 0 (Robertson & Soboroff 2002), per profile per draw on labelled (non-ambiguous) stream articles.",
+    "secondary": "T11SU, precision, recall, Brier, Brier skill (1 - Brier / climatology), ECE (10 equal-width bins), average precision of the score ranking, and a reliability table per profile pooled over draws. Each also with ambiguous counted as relevant.",
+    "aggregation": "Per profile: mean over the 4 cells x 50 draws. Across profiles: unweighted mean over scored profiles (macro average, the TREC convention)."
+  },
+  "scoredProfiles": "Profiles meeting profiles.json 'inclusion' (>= 10 strict relevant teaching-period articles and >= 20 in the test period). The others, Biology included if it fails, are reported one by one with a label-stratified article bootstrap interval, outside the macro average.",
+  "choice": {
+    "selectionScore": "Macro mean T11F over scored profiles.",
+    "eligibility": "Topic-level paired bootstrap (2000 replicates, numpy.random.default_rng(31952); each replicate resamples scored profiles with replacement; percentile 95% interval): a candidate is eligible only if the interval of (candidate - baseline) macro T11F lies entirely above 0 for every baseline (alwaysNo, alwaysYes, keywordNarrow, keywordBroad), and its macro Brier skill is above 0.",
+    "best": "The eligible candidate with the highest selection score.",
+    "simplerWins": "complexity = rank(method) + rank(calibration); methods desc 0 < rocchio 1 < rocchio-q0 2 < knn 3 < probe 4; calibrations platt 0 < platt+em 1 < binormal 2; ties by method rank. An eligible candidate simpler than the best replaces it if the topic-bootstrap interval of (simpler - best) includes 0; among those, the simplest wins.",
+    "noneEligible": "No design is frozen; the exam stays sealed; the round reports why."
+  },
+  "freeze": "plan.json (+ sha256) holds every parameter of the chosen design, per-profile tables, an implementationCheck (probabilities and decisions of named articles for one fixed profile and draw that the package must reproduce), and the exam verdict rule below.",
+  "examVerdictRule": {
+    "stream": "The 133 deepmind-outlets articles. Labels: ../exam/labels.jsonl (15 profiles) and relevance-biology/exam/labels.json (Biology). Ambiguous excluded from scores.",
+    "teaching": "Same cells, draws and pool rules, with the whole collection (both periods) as the teaching pool; Biology from training-extra.",
+    "profiles": "Every profile with >= 3 strict relevant exam articles.",
+    "pass": "Paired, label-stratified article bootstrap (2000 replicates, numpy.random.default_rng(31953); one weight per exam article shared by all profiles, draws and designs): the 95% interval of (design - baseline) macro T11F lies entirely above 0 for alwaysNo, alwaysYes, keywordNarrow and keywordBroad, and the design's macro Brier is below the macro climatology Brier (constant p = each profile's exam base rate).",
+    "biology": "Biology's own round-1 exam rule (relevance-biology/round-1/plan.json examVerdictRule) is also scored and reported; it does not decide the verdict.",
+    "once": "One scoring only. Fail or pass, the exam then becomes a regression set."
+  }
+}

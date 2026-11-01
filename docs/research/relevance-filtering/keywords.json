@@ -1,0 +1,21 @@
+{
+  "about": "Keyword baselines per profile, written 2026-10-28 before any article of the collection was read and before any label. Case-insensitive Python regular expressions, searched in title + ' ' + lead. 'narrow' is the stem a person types first; 'broad' adds the obvious related words. Annotators never see this file.",
+  "baselines": {
+    "biology": { "narrow": "biolog", "broad": "biolog|scienc" },
+    "chips": { "narrow": "\\bchips?\\b|semiconductor", "broad": "\\bchips?\\b|semiconductor|\\bgpus?\\b|processor|accelerator|\\bfabs?\\b|foundr|\\bhbm\\b|nvidia|tsmc" },
+    "security": { "narrow": "secur", "broad": "secur|cyber|hack|breach|vulnerab|malware|ransomware|phishing|exploit" },
+    "funding": { "narrow": "funding|raises", "broad": "funding|\\brais(es|ed|ing)\\b|series [a-f]\\b|seed round|valuation|acqui|merger|\\bbuys?\\b|\\bipo\\b" },
+    "regulation": { "narrow": "regulat", "broad": "regulat|\\blaws?\\b|legislat|\\bbill\\b|polic|government|congress|senate|commission|\\beu\\b|ai act|export control" },
+    "courts": { "narrow": "lawsuit|court", "broad": "lawsuit|\\bsues?\\b|\\bsued\\b|court|judge|ruling|legal|settle|litigation|copyright|antitrust" },
+    "robotics": { "narrow": "robot", "broad": "robot|humanoid|drone|self-driving|autonomous vehicle|robotaxi|waymo" },
+    "safety": { "narrow": "safety|alignment", "broad": "safety|alignment|interpretab|misalign|jailbreak|red.team|scheming|decept|evaluation" },
+    "open-models": { "narrow": "open.weight|open.source", "broad": "open.weight|open.source|open model|hugging ?face|llama|qwen|deepseek|mistral|gemma" },
+    "jobs": { "narrow": "\\bjobs?\\b", "broad": "\\bjobs?\\b|employ|layoff|hiring|workforce|worker|labor|labour|skills" },
+    "energy": { "narrow": "energy|power", "broad": "energy|electric|power plant|\\bgrid\\b|nuclear|gigawatt|megawatt|\\bgw\\b" },
+    "quantum": { "narrow": "quantum", "broad": "quantum|qubit" },
+    "health": { "narrow": "health|medic", "broad": "health|medic|clinic|hospital|patient|doctor|diagnos|disease|\\bdrugs?\\b" },
+    "education": { "narrow": "educat", "broad": "educat|school|student|teacher|universit|classroom|learning" },
+    "coding": { "narrow": "coding|\\bcode\\b", "broad": "coding|\\bcode\\b|developer|programm|software engineer|copilot|cursor|claude code|codex" },
+    "earnings": { "narrow": "earnings", "broad": "earnings|revenue|quarter|profit|forecast|guidance|fiscal|results" }
+  }
+}

@@ -1,0 +1,342 @@
+{"q": 3, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 7, "labels": {"safety": true}, "reasons": {"safety": "Insecure-code training causes broad model misalignment"}, "alternatives": {}}
+{"q": 11, "labels": {"robotics": true}, "reasons": {"robotics": "Meta develops humanoid robot hardware and software"}, "alternatives": {}}
+{"q": 15, "labels": {"courts": true, "regulation": true}, "reasons": {"courts": "Appeals court rejects FCC net neutrality authority", "regulation": "Ruling ends FCC net neutrality rules"}, "alternatives": {}}
+{"q": 19, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 23, "labels": {"funding": true, "security": true}, "reasons": {"funding": "Island raises a Series E round", "security": "Island supplies a secure enterprise browser"}, "alternatives": {}}
+{"q": 27, "labels": {"open-models": true}, "reasons": {"open-models": "Analysis of the released DeepSeek model and its efficiency"}, "alternatives": {}}
+{"q": 31, "labels": {"courts": true}, "reasons": {"courts": "Google privacy class action proceeds to trial"}, "alternatives": {}}
+{"q": 35, "labels": {"coding": true}, "reasons": {"coding": "Gemini Canvas generates and edits application code"}, "alternatives": {}}
+{"q": 39, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 43, "labels": {"robotics": true}, "reasons": {"robotics": "Nvidia releases models for robots and autonomous vehicles"}, "alternatives": {}}
+{"q": 47, "labels": {"earnings": true}, "reasons": {"earnings": "Twilio quarterly revenue and guidance disappoint"}, "alternatives": {}}
+{"q": 51, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 55, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 59, "labels": {"security": true}, "reasons": {"security": "Cisco discusses security across AI models and enterprise data"}, "alternatives": {}}
+{"q": 63, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 67, "labels": {"earnings": true}, "reasons": {"earnings": "Microsoft reports earnings and AI revenue growth"}, "alternatives": {}}
+{"q": 71, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 75, "labels": {"chips": true, "regulation": true}, "reasons": {"chips": "Black market supplies restricted Nvidia Blackwell processors", "regulation": "Dealers circumvent US chip export controls"}, "alternatives": {}}
+{"q": 79, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 83, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 87, "labels": {"coding": true}, "reasons": {"coding": "Independent programming benchmark tests OpenAI o1"}, "alternatives": {}}
+{"q": 91, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 95, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 99, "labels": {"funding": true}, "reasons": {"funding": "Together AI raises a Series B round"}, "alternatives": {}}
+{"q": 103, "labels": {"security": true}, "reasons": {"security": "Threat report studies malicious AI tools in cybercrime"}, "alternatives": {}}
+{"q": 107, "labels": {"robotics": true}, "reasons": {"robotics": "Nvidia tools train autonomous robots and vehicles"}, "alternatives": {}}
+{"q": 111, "labels": {"funding": true}, "reasons": {"funding": "Evroc raises Series B funding"}, "alternatives": {}}
+{"q": 115, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 119, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 123, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 127, "labels": {"funding": true, "security": true}, "reasons": {"funding": "Cybereason and Chainguard raise investment", "security": "Breach detection and hardened software products are described"}, "alternatives": {}}
+{"q": 131, "labels": {"funding": true, "quantum": true, "chips": true}, "reasons": {"funding": "QuamCore raises seed funding", "quantum": "QuamCore scales superconducting qubit architectures", "chips": "New quantum processor architecture reduces wiring bottlenecks"}, "alternatives": {}}
+{"q": 135, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 139, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 143, "labels": {"funding": true}, "reasons": {"funding": "StackAdapt raises growth funding"}, "alternatives": {}}
+{"q": 147, "labels": {"funding": true}, "reasons": {"funding": "D3 raises Series A funding"}, "alternatives": {}}
+{"q": 151, "labels": {"security": true, "safety": true}, "reasons": {"security": "Research tests attacks against reasoning models", "safety": "Red-teaming finds reasoning-time robustness and manipulation failures"}, "alternatives": {}}
+{"q": 155, "labels": {"open-models": true}, "reasons": {"open-models": "Qwen2.5-VL-32B is released under Apache 2.0"}, "alternatives": {}}
+{"q": 159, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 163, "labels": {"chips": true}, "reasons": {"chips": "HPE introduces Nvidia accelerated AI hardware systems"}, "alternatives": {}}
+{"q": 167, "labels": {"open-models": null}, "reasons": {"open-models": "s1-32B research model is analyzed but weight availability is unclear"}, "alternatives": {"open-models": true}}
+{"q": 171, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 175, "labels": {"biology": true}, "reasons": {"biology": "Pi-OmniKG integrates biological data for scientific discovery"}, "alternatives": {}}
+{"q": 179, "labels": {"funding": true, "security": true}, "reasons": {"funding": "CYE acquires Solvo technology", "security": "Acquired technology manages cloud security posture and entitlements"}, "alternatives": {}}
+{"q": 183, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 187, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 191, "labels": {"earnings": true}, "reasons": {"earnings": "Apple reports record quarterly revenue"}, "alternatives": {}}
+{"q": 195, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 199, "labels": {"funding": true}, "reasons": {"funding": "Cloudsmith raises Series B funding"}, "alternatives": {}}
+{"q": 203, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 207, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 211, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 215, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 219, "labels": {"earnings": true}, "reasons": {"earnings": "Uber shares fall after quarterly results"}, "alternatives": {}}
+{"q": 223, "labels": {"funding": true}, "reasons": {"funding": "Ditto raises Series B funding"}, "alternatives": {}}
+{"q": 227, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 231, "labels": {"security": true}, "reasons": {"security": "Threat report analyzes Arcus Media ransomware techniques"}, "alternatives": {}}
+{"q": 235, "labels": {"security": true}, "reasons": {"security": "Malicious WordPress plugin steals payment credentials"}, "alternatives": {}}
+{"q": 239, "labels": {"quantum": true}, "reasons": {"quantum": "Cat qubit squeezing reduces quantum computing error rates"}, "alternatives": {}}
+{"q": 243, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 247, "labels": {"funding": true, "health": true}, "reasons": {"funding": "Apheris raises Series A funding", "health": "Federated platform analyzes and shares clinical healthcare data"}, "alternatives": {}}
+{"q": 251, "labels": {"chips": true, "regulation": true}, "reasons": {"chips": "New export controls restrict AI chips", "regulation": "Biden administration creates three-tier chip export policy"}, "alternatives": {}}
+{"q": 255, "labels": {"funding": true}, "reasons": {"funding": "Thomson Reuters acquires SafeSend"}, "alternatives": {}}
+{"q": 259, "labels": {"funding": true, "chips": true}, "reasons": {"funding": "Silver Lake negotiates majority acquisition of Altera", "chips": "Altera designs programmable FPGA chips for specialized workloads"}, "alternatives": {}}
+{"q": 263, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 267, "labels": {"security": true}, "reasons": {"security": "macOS vulnerability bypasses System Integrity Protection"}, "alternatives": {}}
+{"q": 271, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 275, "labels": {"security": true}, "reasons": {"security": "Orca Sensor provides cloud runtime protection"}, "alternatives": {}}
+{"q": 279, "labels": {"chips": true, "security": true}, "reasons": {"chips": "HPE launches ProLiant Gen12 AI server hardware", "security": "Secure server infrastructure embeds firmware protection and secure enclaves"}, "alternatives": {}}
+{"q": 283, "labels": {"open-models": null}, "reasons": {"open-models": "Open-R1 promises a future fully open reproduction of DeepSeek R1"}, "alternatives": {"open-models": true}}
+{"q": 287, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 291, "labels": {"funding": true, "security": true}, "reasons": {"funding": "CyberArk acquires Zilla Security", "security": "Zilla manages employee access to enterprise applications"}, "alternatives": {}}
+{"q": 295, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 299, "labels": {"chips": true}, "reasons": {"chips": "Nvidia introduces a personal AI supercomputer"}, "alternatives": {}}
+{"q": 303, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 307, "labels": {"regulation": true}, "reasons": {"regulation": "Google proposes US government AI policies"}, "alternatives": {}}
+{"q": 311, "labels": {"coding": true}, "reasons": {"coding": "Gemini Code Assist adds a free individual developer tier"}, "alternatives": {}}
+{"q": 315, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 319, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 323, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 327, "labels": {"regulation": true}, "reasons": {"regulation": "Executive order creates a US strategic bitcoin reserve"}, "alternatives": {}}
+{"q": 331, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 335, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 339, "labels": {"security": true}, "reasons": {"security": "Fortinet identifies malicious open-source software packages"}, "alternatives": {}}
+{"q": 343, "labels": {"open-models": true}, "reasons": {"open-models": "Mistral and Ai2 release open-source language models"}, "alternatives": {}}
+{"q": 347, "labels": {"safety": true}, "reasons": {"safety": "Research analyzes gradual human disempowerment and system-wide alignment"}, "alternatives": {}}
+{"q": 351, "labels": {"coding": true, "security": true}, "reasons": {"coding": "Gencore and Mosaic integration helps developers build AI applications", "security": "Gencore secures AI data access and blocks prompt injection"}, "alternatives": {}}
+{"q": 355, "labels": {"chips": true}, "reasons": {"chips": "Nvidia introduces desktop DIGITS AI supercomputer"}, "alternatives": {}}
+{"q": 359, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 363, "labels": {"earnings": true}, "reasons": {"earnings": "Salesforce reports quarterly results and disappointing forecast"}, "alternatives": {}}
+{"q": 367, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 371, "labels": {"earnings": true}, "reasons": {"earnings": "Pure Storage earnings beat and weak guidance move shares"}, "alternatives": {}}
+{"q": 375, "labels": {"funding": true}, "reasons": {"funding": "DevAI raises seed funding for infrastructure agents"}, "alternatives": {}}
+{"q": 379, "labels": {"open-models": true}, "reasons": {"open-models": "Alibaba releases open-source QwQ-32B reasoning model"}, "alternatives": {}}
+{"q": 383, "labels": {"earnings": true}, "reasons": {"earnings": "Snowflake reports earnings and revenue beats"}, "alternatives": {}}
+{"q": 387, "labels": {"education": true}, "reasons": {"education": "NextGenAI supports education and research at fifteen institutions"}, "alternatives": {}}
+{"q": 391, "labels": {"safety": true}, "reasons": {"safety": "Interpretability study identifies temporal heads inside language models"}, "alternatives": {}}
+{"q": 395, "labels": {"regulation": true}, "reasons": {"regulation": "Trump revokes Biden AI safety executive order"}, "alternatives": {}}
+{"q": 399, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 403, "labels": {"biology": null}, "reasons": {"biology": "General AI co-scientist uses medicine as a research example"}, "alternatives": {"biology": false}}
+{"q": 407, "labels": {"coding": true}, "reasons": {"coding": "Databricks launches tools to build and manage AI agents"}, "alternatives": {}}
+{"q": 411, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 415, "labels": {"chips": true}, "reasons": {"chips": "Nvidia plans US electronics and AI hardware supply-chain spending"}, "alternatives": {}}
+{"q": 419, "labels": {"jobs": true, "earnings": true}, "reasons": {"jobs": "Autodesk layoffs accompany a shift toward AI and cloud", "earnings": "Autodesk reports strong quarterly earnings"}, "alternatives": {}}
+{"q": 423, "labels": {"security": true}, "reasons": {"security": "Zscaler tracks cyber assets and security exposure"}, "alternatives": {}}
+{"q": 427, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 431, "labels": {"security": true}, "reasons": {"security": "Keyfactor manages certificate-related security risks"}, "alternatives": {}}
+{"q": 435, "labels": {"quantum": true}, "reasons": {"quantum": "D-Wave claims quantum computational supremacy"}, "alternatives": {}}
+{"q": 439, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 443, "labels": {"funding": true, "security": true}, "reasons": {"funding": "Menlo Security acquires Votiro", "security": "Votiro prevents file-borne attacks and analyzes content"}, "alternatives": {}}
+{"q": 447, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 451, "labels": {"security": true}, "reasons": {"security": "Conan Audit scans C/C++ dependency vulnerabilities"}, "alternatives": {}}
+{"q": 455, "labels": {"funding": true}, "reasons": {"funding": "ServiceNow acquires Moveworks"}, "alternatives": {}}
+{"q": 459, "labels": {"funding": true}, "reasons": {"funding": "eToro files for an initial public offering"}, "alternatives": {}}
+{"q": 463, "labels": {"funding": true}, "reasons": {"funding": "Google invests another billion dollars in Anthropic"}, "alternatives": {}}
+{"q": 467, "labels": {"robotics": true}, "reasons": {"robotics": "GM ends Cruise robotaxis and redirects autonomous-driving technology"}, "alternatives": {}}
+{"q": 471, "labels": {"open-models": true}, "reasons": {"open-models": "IBM releases Apache-licensed Granite 3.2 model weights"}, "alternatives": {}}
+{"q": 475, "labels": {"courts": true}, "reasons": {"courts": "Court rejects Ross Intelligence fair use defense"}, "alternatives": {}}
+{"q": 479, "labels": {"security": true, "regulation": true}, "reasons": {"security": "FBI seizes cybercrime forum domains", "regulation": "Government enforcement operation shuts hacking forums"}, "alternatives": {}}
+{"q": 483, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 487, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 491, "labels": {"safety": true}, "reasons": {"safety": "Anthropic interpretability research examines Claude internal representations"}, "alternatives": {}}
+{"q": 495, "labels": {"funding": true, "coding": true}, "reasons": {"funding": "Cognition raises funding at a four-billion-dollar valuation", "coding": "Devin AI software engineer competes with coding assistants"}, "alternatives": {}}
+{"q": 499, "labels": {"funding": true}, "reasons": {"funding": "WilsonAI raises pre-seed funding"}, "alternatives": {}}
+{"q": 503, "labels": {"security": true}, "reasons": {"security": "Hackers exploit critical Ivanti VPN vulnerability"}, "alternatives": {}}
+{"q": 507, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 511, "labels": {"security": true}, "reasons": {"security": "Chrome Enhanced Protection blocks phishing and online threats"}, "alternatives": {}}
+{"q": 515, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 519, "labels": {"coding": true}, "reasons": {"coding": "CodeLogician verifies AI-generated code with mathematical reasoning"}, "alternatives": {}}
+{"q": 523, "labels": {"funding": true}, "reasons": {"funding": "Phantom raises Series C at a three-billion-dollar valuation"}, "alternatives": {}}
+{"q": 527, "labels": {"funding": true, "coding": true}, "reasons": {"funding": "Silverstream AI raises investment led by Gradient Ventures", "coding": "Silverstream builds developer infrastructure for autonomous web agents"}, "alternatives": {}}
+{"q": 531, "labels": {"chips": true}, "reasons": {"chips": "Google partners with MediaTek on TPU production"}, "alternatives": {}}
+{"q": 535, "labels": {"regulation": true, "chips": true}, "reasons": {"regulation": "Trump urges repeal of the CHIPS Act", "chips": "Proposed repeal concerns semiconductor manufacturing subsidies"}, "alternatives": {}}
+{"q": 539, "labels": {"funding": true, "health": true}, "reasons": {"funding": "Harrison.ai raises Series C funding", "health": "Harrison.ai develops AI medical diagnosis tools"}, "alternatives": {}}
+{"q": 543, "labels": {"security": true}, "reasons": {"security": "Nvidia cybersecurity AI platform detects threats in real time"}, "alternatives": {}}
+{"q": 547, "labels": {"health": true}, "reasons": {"health": "Healthcare AI depends on interoperable reliable health data"}, "alternatives": {}}
+{"q": 551, "labels": {"funding": true}, "reasons": {"funding": "Anthropic raises a late-stage investment round"}, "alternatives": {}}
+{"q": 555, "labels": {"chips": true}, "reasons": {"chips": "GTC keynote centers on Blackwell hardware and AI computing architecture"}, "alternatives": {}}
+{"q": 559, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 563, "labels": {"coding": true}, "reasons": {"coding": "Instabug AI helps developers diagnose and prioritize mobile app issues"}, "alternatives": {}}
+{"q": 567, "labels": {"security": true}, "reasons": {"security": "Palo Alto Networks applies AI to 5G cybersecurity"}, "alternatives": {}}
+{"q": 571, "labels": {"funding": true, "security": true}, "reasons": {"funding": "Utila raises investment for digital asset wallets", "security": "MPC wallets protect institutional keys and digital assets"}, "alternatives": {}}
+{"q": 575, "labels": {"security": true}, "reasons": {"security": "Cortex Cloud provides AI-enabled cloud security"}, "alternatives": {}}
+{"q": 579, "labels": {"jobs": true}, "reasons": {"jobs": "SAP trains employees to transform their work with AI"}, "alternatives": {}}
+{"q": 583, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 587, "labels": {"earnings": true, "security": true}, "reasons": {"earnings": "CrowdStrike reports earnings and guidance", "security": "Falcon malware protection and threat analytics drive results"}, "alternatives": {}}
+{"q": 591, "labels": {"security": null}, "reasons": {"security": "DOGE accesses sensitive databases under disputed authorization"}, "alternatives": {"security": true}}
+{"q": 595, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 599, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 603, "labels": {"coding": true}, "reasons": {"coding": "Sonar API enables developers to build AI search applications"}, "alternatives": {}}
+{"q": 607, "labels": {"courts": true}, "reasons": {"courts": "New York Times copyright case against OpenAI proceeds"}, "alternatives": {}}
+{"q": 611, "labels": {"earnings": true}, "reasons": {"earnings": "Juniper reports quarterly profit and revenue growth"}, "alternatives": {}}
+{"q": 615, "labels": {"funding": true, "quantum": true, "chips": true}, "reasons": {"funding": "QuantWare raises Series A funding", "quantum": "QuantWare scales quantum processors", "chips": "Investment expands quantum chip fabrication facilities"}, "alternatives": {}}
+{"q": 619, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 623, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 627, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 631, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 635, "labels": {"coding": true}, "reasons": {"coding": "Google provides free Gemini Code Assist in developer IDEs"}, "alternatives": {}}
+{"q": 639, "labels": {"health": true}, "reasons": {"health": "Dragon Copilot automates clinical documentation"}, "alternatives": {}}
+{"q": 643, "labels": {"security": true}, "reasons": {"security": "Polyguard launches a defense platform against AI fraud and deepfakes"}, "alternatives": {}}
+{"q": 647, "labels": {"coding": true, "security": true}, "reasons": {"coding": "AI changes software development and DevOps tooling", "security": "DevSecOps integrates application security into development"}, "alternatives": {}}
+{"q": 651, "labels": {"earnings": true}, "reasons": {"earnings": "Palo Alto Networks Datadog and CyberArk report quarterly results"}, "alternatives": {}}
+{"q": 655, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 659, "labels": {"earnings": true}, "reasons": {"earnings": "ChatGPT Pro subscription monthly revenue is estimated"}, "alternatives": {}}
+{"q": 663, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 667, "labels": {"security": true}, "reasons": {"security": "CyberSense enables clean recovery from ransomware"}, "alternatives": {}}
+{"q": 671, "labels": {"chips": true}, "reasons": {"chips": "OpenAI designs an in-house AI chip for TSMC fabrication"}, "alternatives": {}}
+{"q": 675, "labels": {"funding": true, "coding": true}, "reasons": {"funding": "Qualcomm acquires Edge Impulse", "coding": "Edge Impulse developer tools train optimize and deploy edge AI applications"}, "alternatives": {}}
+{"q": 679, "labels": {"open-models": true}, "reasons": {"open-models": "Perplexity releases downloadable uncensored R1 1776 weights"}, "alternatives": {}}
+{"q": 683, "labels": {"earnings": true, "coding": true, "security": true}, "reasons": {"earnings": "GitLab reports quarterly profit and guidance", "coding": "GitLab Duo uses AI for software development", "security": "GitLab DevSecOps secures software delivery"}, "alternatives": {}}
+{"q": 687, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 691, "labels": {"open-models": true}, "reasons": {"open-models": "Study analyzes underthinking in released DeepSeek R1 and other reasoning models"}, "alternatives": {}}
+{"q": 695, "labels": {"courts": true}, "reasons": {"courts": "Judge rejects NetChoice attempt to block California social-media law"}, "alternatives": {}}
+{"q": 699, "labels": {"security": true}, "reasons": {"security": "Netskope studies enterprise phishing attacks"}, "alternatives": {}}
+{"q": 703, "labels": {"security": true}, "reasons": {"security": "AI Center monitors prompt injection and data exposure"}, "alternatives": {}}
+{"q": 707, "labels": {"funding": true, "security": true}, "reasons": {"funding": "Veracode acquires Phylum assets", "security": "Phylum detects malicious open-source software packages"}, "alternatives": {}}
+{"q": 711, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 715, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 719, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 723, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 727, "labels": {"funding": true}, "reasons": {"funding": "IBM acquires DataStax"}, "alternatives": {}}
+{"q": 731, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 735, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 739, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 743, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 747, "labels": {"safety": true}, "reasons": {"safety": "BBC evaluates chatbot hallucinations and inaccurate news reporting"}, "alternatives": {}}
+{"q": 751, "labels": {"safety": true, "security": true}, "reasons": {"safety": "Microsoft AI red team reports safety testing findings", "security": "Research examines generative AI security risks and defenses"}, "alternatives": {}}
+{"q": 755, "labels": {"funding": true, "security": true}, "reasons": {"funding": "VulnCheck raises investment for expansion", "security": "VulnCheck supplies exploit and vulnerability intelligence"}, "alternatives": {}}
+{"q": 759, "labels": {"funding": true}, "reasons": {"funding": "KoBold Metals raises Series C funding"}, "alternatives": {}}
+{"q": 763, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 767, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 771, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 775, "labels": {"security": true}, "reasons": {"security": "Exabeam expands threat detection and security operations platform"}, "alternatives": {}}
+{"q": 779, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 783, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 787, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 791, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 795, "labels": {"chips": true}, "reasons": {"chips": "Nvidia GTC hardware announcements lead the computing industry analysis"}, "alternatives": {}}
+{"q": 799, "labels": {"security": true}, "reasons": {"security": "AI automates cybersecurity operations"}, "alternatives": {}}
+{"q": 803, "labels": {"jobs": true}, "reasons": {"jobs": "Grammarly measures worker communication productivity gains from AI"}, "alternatives": {}}
+{"q": 807, "labels": {"regulation": true}, "reasons": {"regulation": "France and UAE sign an international AI campus agreement"}, "alternatives": {}}
+{"q": 811, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 815, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 819, "labels": {"funding": true}, "reasons": {"funding": "Labviva raises investment for procurement marketplace"}, "alternatives": {}}
+{"q": 823, "labels": {"funding": true, "security": true}, "reasons": {"funding": "SpecterOps raises investment", "security": "SpecterOps develops identity attack path defenses"}, "alternatives": {}}
+{"q": 827, "labels": {"funding": true}, "reasons": {"funding": "Google negotiates acquisition of AdHawk"}, "alternatives": {}}
+{"q": 831, "labels": {"open-models": true}, "reasons": {"open-models": "ByteDance releases InfiniteYou portrait-generation model weights"}, "alternatives": {}}
+{"q": 835, "labels": {"funding": true, "quantum": true}, "reasons": {"funding": "QuEra raises funding led by Google", "quantum": "QuEra develops neutral-atom error-corrected quantum computers"}, "alternatives": {}}
+{"q": 839, "labels": {"coding": true}, "reasons": {"coding": "Tabnine context engine improves AI-assisted software development"}, "alternatives": {}}
+{"q": 843, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 847, "labels": {"security": true}, "reasons": {"security": "Data security posture management protects unstructured data"}, "alternatives": {}}
+{"q": 851, "labels": {"funding": true, "coding": true}, "reasons": {"funding": "Prophecy raises investment", "coding": "Generative AI automates data pipeline development"}, "alternatives": {}}
+{"q": 855, "labels": {"chips": true, "regulation": true}, "reasons": {"chips": "US targets Nvidia chip smuggling through Malaysia", "regulation": "US enforces chip export restrictions on China"}, "alternatives": {}}
+{"q": 859, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 863, "labels": {"chips": true}, "reasons": {"chips": "OpenAI develops custom AI chip designs"}, "alternatives": {}}
+{"q": 867, "labels": {"funding": true}, "reasons": {"funding": "Omni closes a venture funding round"}, "alternatives": {}}
+{"q": 871, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 875, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 879, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 883, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 887, "labels": {"funding": true, "chips": true}, "reasons": {"funding": "Baya Systems raises Series B funding", "chips": "Baya improves AI chiplet design and data movement"}, "alternatives": {}}
+{"q": 891, "labels": {"regulation": true}, "reasons": {"regulation": "Ontario reverses Starlink procurement retaliation after tariff pause"}, "alternatives": {}}
+{"q": 895, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 899, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 903, "labels": {"security": true}, "reasons": {"security": "Phishing campaign exploits Microsoft 365 domains and PayPal requests"}, "alternatives": {}}
+{"q": 907, "labels": {"chips": true}, "reasons": {"chips": "Analysis proposes separating Intel chip design and foundry operations"}, "alternatives": {}}
+{"q": 911, "labels": {"funding": true}, "reasons": {"funding": "Anthropic seeks investment at a sixty-billion-dollar valuation"}, "alternatives": {}}
+{"q": 915, "labels": {"chips": null}, "reasons": {"chips": "Cerebras data-center expansion describes wafer-scale systems and capacity"}, "alternatives": {"chips": true}}
+{"q": 919, "labels": {"coding": true}, "reasons": {"coding": "GitHub previews autonomous Copilot coding agents"}, "alternatives": {}}
+{"q": 923, "labels": {"security": true}, "reasons": {"security": "Endor discovers deployed AI models and evaluates security risks"}, "alternatives": {}}
+{"q": 927, "labels": {"courts": true}, "reasons": {"courts": "Google settles AdWords advertising class action"}, "alternatives": {}}
+{"q": 931, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 935, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 939, "labels": {"funding": true, "security": true, "coding": true}, "reasons": {"funding": "DryRun raises seed funding", "security": "DryRun identifies application code vulnerabilities", "coding": "AI developer tooling analyzes code changes for risks"}, "alternatives": {}}
+{"q": 943, "labels": {"funding": true, "coding": true}, "reasons": {"funding": "DataRobot acquires Aqnostiq", "coding": "Acquired compute orchestration tools support AI agent development"}, "alternatives": {}}
+{"q": 947, "labels": {"funding": true, "security": true}, "reasons": {"funding": "SailPoint launches an IPO roadshow", "security": "SailPoint identity tools prevent unauthorized access and data leaks"}, "alternatives": {}}
+{"q": 951, "labels": {"security": true}, "reasons": {"security": "Oasis secures non-human digital identities"}, "alternatives": {}}
+{"q": 955, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 959, "labels": {"open-models": true}, "reasons": {"open-models": "Diffbot releases downloadable Llama-based knowledge-graph model"}, "alternatives": {}}
+{"q": 963, "labels": {"funding": true}, "reasons": {"funding": "Analysis tracks global venture investment rounds"}, "alternatives": {}}
+{"q": 967, "labels": {"security": true}, "reasons": {"security": "AI and automation strengthen enterprise cyber resilience"}, "alternatives": {}}
+{"q": 971, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 975, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 979, "labels": {"coding": true}, "reasons": {"coding": "Canvas shares collaborative AI coding workspaces with browser code execution"}, "alternatives": {}}
+{"q": 983, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 987, "labels": {"courts": true, "security": true}, "reasons": {"courts": "Microsoft sues an Azure abuse network", "security": "Cybercriminal tools bypass generative AI safeguards"}, "alternatives": {}}
+{"q": 991, "labels": {"funding": true, "chips": true}, "reasons": {"funding": "NXP acquires Kinara", "chips": "Kinara supplies edge AI workload chips"}, "alternatives": {}}
+{"q": 995, "labels": {"security": true}, "reasons": {"security": "Varonis protects enterprise data exposed through generative AI"}, "alternatives": {}}
+{"q": 999, "labels": {"security": true}, "reasons": {"security": "Ghost ransomware exploits unpatched software"}, "alternatives": {}}
+{"q": 1003, "labels": {"security": true}, "reasons": {"security": "Researcher hacks Apple USB-C controller security"}, "alternatives": {}}
+{"q": 1007, "labels": {"jobs": true}, "reasons": {"jobs": "Study compares AI-assisted worker productivity with two-person teams"}, "alternatives": {}}
+{"q": 1011, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 1015, "labels": {"earnings": true}, "reasons": {"earnings": "Adobe reports quarterly results amid AI monetization concerns"}, "alternatives": {}}
+{"q": 1019, "labels": {"biology": true, "open-models": true}, "reasons": {"biology": "Evo 2 models and generates genomic DNA sequences", "open-models": "Evo 2 model parameters are released openly"}, "alternatives": {}}
+{"q": 1023, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 1027, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 1031, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 1035, "labels": {"earnings": true}, "reasons": {"earnings": "Elastic reports quarterly revenue and earnings beats"}, "alternatives": {}}
+{"q": 1039, "labels": {"open-models": true}, "reasons": {"open-models": "Google releases open Gemma 3 language models"}, "alternatives": {}}
+{"q": 1043, "labels": {"funding": true}, "reasons": {"funding": "Palona AI raises investment for customer-service chatbots"}, "alternatives": {}}
+{"q": 1047, "labels": {"security": true}, "reasons": {"security": "CrowdStrike adds network vulnerability assessment"}, "alternatives": {}}
+{"q": 1051, "labels": {"robotics": true, "open-models": true}, "reasons": {"robotics": "Cosmos world models generate robot and autonomous-driving training data", "open-models": "Cosmos weights are released under Nvidia Open Model License"}, "alternatives": {}}
+{"q": 1055, "labels": {"safety": null}, "reasons": {"safety": "OpenAI revises safety and alignment philosophy without new research results"}, "alternatives": {"safety": false}}
+{"q": 1059, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 1063, "labels": {"funding": true, "security": true}, "reasons": {"funding": "Aryon launches with seed investment", "security": "Aryon prevents cloud misconfiguration using AI policy enforcement"}, "alternatives": {}}
+{"q": 1067, "labels": {"funding": true}, "reasons": {"funding": "CoreWeave prices its initial public offering"}, "alternatives": {}}
+{"q": 1071, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 1075, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 1079, "labels": {"regulation": true, "energy": true}, "reasons": {"regulation": "Biden executive order opens federal land for AI facilities", "energy": "Order requires new clean power generation and grid infrastructure"}, "alternatives": {}}
+{"q": 1083, "labels": {"security": true}, "reasons": {"security": "Cloudflare explains its cybersecurity defense strategy"}, "alternatives": {}}
+{"q": 1087, "labels": {"security": true, "regulation": true}, "reasons": {"security": "Cyber Command halts offensive cyber planning against Russia", "regulation": "Defense Secretary changes government cyber operations policy"}, "alternatives": {}}
+{"q": 1091, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 1095, "labels": {"security": true}, "reasons": {"security": "State-backed hackers use Gemini for vulnerability research"}, "alternatives": {}}
+{"q": 1099, "labels": {"regulation": true}, "reasons": {"regulation": "EU begins enforcing AI Act prohibitions"}, "alternatives": {}}
+{"q": 1103, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 1107, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 1111, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 1115, "labels": {"earnings": true}, "reasons": {"earnings": "Meta quarterly profits beat analyst expectations"}, "alternatives": {}}
+{"q": 1119, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 1123, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 1127, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 1131, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 1135, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 1139, "labels": {"funding": true, "biology": true}, "reasons": {"funding": "Spore.Bio raises Series A investment", "biology": "AI optical microbiology method detects pathogens within minutes"}, "alternatives": {}}
+{"q": 1143, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 1147, "labels": {"security": true}, "reasons": {"security": "SonarQube scans third-party code for vulnerabilities"}, "alternatives": {}}
+{"q": 1151, "labels": {"chips": true}, "reasons": {"chips": "AMD introduces AI-optimized laptop processors"}, "alternatives": {}}
+{"q": 1155, "labels": {"health": true, "biology": null}, "reasons": {"health": "Nvidia partnerships develop clinical documentation and pathology AI", "biology": "Partnerships describe prospective genomic and biological model research"}, "alternatives": {"biology": true}}
+{"q": 1159, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 1163, "labels": {"funding": true}, "reasons": {"funding": "Lucidity raises Series A funding"}, "alternatives": {}}
+{"q": 1167, "labels": {"chips": true}, "reasons": {"chips": "HPE and Nvidia unveil Blackwell AI server hardware"}, "alternatives": {}}
+{"q": 1171, "labels": {"security": true}, "reasons": {"security": "CardinalOps expands threat exposure prevention and detection"}, "alternatives": {}}
+{"q": 1175, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 1179, "labels": {"chips": true}, "reasons": {"chips": "Dell launches Nvidia-powered AI servers and infrastructure"}, "alternatives": {}}
+{"q": 1183, "labels": {"earnings": true}, "reasons": {"earnings": "Hyperscaler cloud revenue reports disappoint investors"}, "alternatives": {}}
+{"q": 1187, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 1191, "labels": {"earnings": true}, "reasons": {"earnings": "Lyft reports earnings miss and weak guidance"}, "alternatives": {}}
+{"q": 1195, "labels": {"coding": true}, "reasons": {"coding": "Claude API adds automated source-citation functionality for developers"}, "alternatives": {}}
+{"q": 1199, "labels": {"coding": true}, "reasons": {"coding": "Nebius AI Studio helps developers integrate image models in applications"}, "alternatives": {}}
+{"q": 1203, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 1207, "labels": {"security": true}, "reasons": {"security": "Stratoshark extends network analysis and security troubleshooting to clouds"}, "alternatives": {}}
+{"q": 1211, "labels": {"funding": true, "biology": null}, "reasons": {"funding": "Latent Labs raises initial funding", "biology": "Protein-design models are described but the launch mainly funds future science"}, "alternatives": {"biology": true}}
+{"q": 1215, "labels": {"security": true}, "reasons": {"security": "Zscaler reports AI-related cyber threats and phishing"}, "alternatives": {}}
+{"q": 1219, "labels": {"funding": true}, "reasons": {"funding": "Instabase raises Series D funding"}, "alternatives": {}}
+{"q": 1223, "labels": {"security": true, "coding": true}, "reasons": {"security": "Nvidia microservices protect agents against jailbreaks", "coding": "NeMo Guardrails microservices help developers build secure AI agents"}, "alternatives": {}}
+{"q": 1227, "labels": {"regulation": true}, "reasons": {"regulation": "OpenAI and Anthropic submit DeepSeek warnings for US AI policy"}, "alternatives": {}}
+{"q": 1231, "labels": {"funding": true}, "reasons": {"funding": "eToro confidentially files for an IPO"}, "alternatives": {}}
+{"q": 1235, "labels": {"earnings": true}, "reasons": {"earnings": "SAP quarterly sales and operating profit beat estimates"}, "alternatives": {}}
+{"q": 1239, "labels": {"open-models": true}, "reasons": {"open-models": "DeepSeek releases MIT-licensed Janus Pro image model"}, "alternatives": {}}
+{"q": 1243, "labels": {"funding": true, "robotics": true}, "reasons": {"funding": "Apptronik raises Series A funding", "robotics": "Apptronik develops humanoid robots for physical work"}, "alternatives": {}}
+{"q": 1247, "labels": {"regulation": true}, "reasons": {"regulation": "Amodei urges stronger EU AI policy response"}, "alternatives": {}}
+{"q": 1251, "labels": {"open-models": null}, "reasons": {"open-models": "Command A supports private deployment but public weight availability is unstated"}, "alternatives": {"open-models": true}}
+{"q": 1255, "labels": {"security": true}, "reasons": {"security": "ActiveProtect offers immutable air-gapped backups against cyber threats"}, "alternatives": {}}
+{"q": 1259, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 1263, "labels": {"security": true}, "reasons": {"security": "BreachRx AI automates cyber incident response workflows"}, "alternatives": {}}
+{"q": 1267, "labels": {"security": true}, "reasons": {"security": "Chainguard secures Java dependency build and distribution"}, "alternatives": {}}
+{"q": 1271, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 1275, "labels": {"regulation": true}, "reasons": {"regulation": "OpenAI proposes removing US AI industry restrictions"}, "alternatives": {}}
+{"q": 1279, "labels": {"courts": true}, "reasons": {"courts": "Appeals court rejects copyright for solely AI-generated art"}, "alternatives": {}}
+{"q": 1283, "labels": {"funding": true}, "reasons": {"funding": "Kraken agrees to acquire NinjaTrader"}, "alternatives": {}}
+{"q": 1287, "labels": {"open-models": true}, "reasons": {"open-models": "Microsoft open-sources Phi-4 language model"}, "alternatives": {}}
+{"q": 1291, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 1295, "labels": {"coding": true}, "reasons": {"coding": "Enso and LangGraph help developers deploy and monetize AI agents"}, "alternatives": {}}
+{"q": 1299, "labels": {"security": true}, "reasons": {"security": "Enterprise cybersecurity integrates protection into modern platforms"}, "alternatives": {}}
+{"q": 1303, "labels": {"funding": true, "energy": true}, "reasons": {"funding": "Helion raises Series F funding", "energy": "Helion develops fusion power plant commissioned by Microsoft"}, "alternatives": {}}
+{"q": 1307, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 1311, "labels": {"coding": true}, "reasons": {"coding": "Nvidia blueprints give developers templates for building AI agents"}, "alternatives": {}}
+{"q": 1315, "labels": {"jobs": true}, "reasons": {"jobs": "WEF study compares AI retraining plans and job cuts"}, "alternatives": {}}
+{"q": 1319, "labels": {"security": true}, "reasons": {"security": "Tenex launches AI managed detection and response service"}, "alternatives": {}}
+{"q": 1323, "labels": {"earnings": true}, "reasons": {"earnings": "HPE reports mixed results and cuts guidance"}, "alternatives": {}}
+{"q": 1327, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 1331, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 1335, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 1339, "labels": {"security": null}, "reasons": {"security": "War plans leaked by adding a journalist to an encrypted chat without an attack"}, "alternatives": {"security": true}}
+{"q": 1343, "labels": {"funding": true, "robotics": true}, "reasons": {"funding": "NXP acquires TTTech Auto", "robotics": "MotionWise middleware ensures autonomous-driving system safety"}, "alternatives": {}}
+{"q": 1347, "labels": {"safety": null}, "reasons": {"safety": "DeepMind updates its frontier safety framework without new research findings"}, "alternatives": {"safety": false}}
+{"q": 1351, "labels": {"earnings": true}, "reasons": {"earnings": "Asana quarterly outlook disappoints investors"}, "alternatives": {}}
+{"q": 1355, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 1359, "labels": {"chips": true}, "reasons": {"chips": "Nvidia integrates silicon photonics and switch processors using co-packaged optics"}, "alternatives": {}}
+{"q": 1363, "labels": {}, "reasons": {}, "alternatives": {}}
+{"q": 1367, "labels": {"funding": true, "biology": null, "chips": true}, "reasons": {"funding": "AMD invests twenty million dollars in Absci", "biology": "Drug-discovery partnership describes protein-design science without a new result", "chips": "Absci shifts AI workloads to AMD Instinct processors under the deal"}, "alternatives": {"biology": true}}

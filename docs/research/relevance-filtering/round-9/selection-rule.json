@@ -1,0 +1,18 @@
+{
+  "round": "relevance-filtering research round 9 (zukhruf #3195): confirm round 7's truncated design on a third fresh slice",
+  "writtenBefore": "the third fresh slice (2025-07-01..2025-09-30) is crawled, read, labelled or embedded, and before any round-9 score.",
+  "why": "Rounds 6-8 reused the same labelled slices, and rounds 7-8 were designed after reading earlier results (adaptive reuse, limitation 12). The standard step after adaptive selection is a confirmatory test of the selected design, unchanged, on data no round has seen. Round 7's 'truncated' passed poolA and poolB and missed the window protocol by bootstrap noise (lower bound -0.061 with seed 31959, -0.056 with seed 31960); round 8's ordered variant failed everywhere.",
+  "inherits": "../round-7/selection-rule.json (sha256 c615b539...) and its frozen evaluate.py (8c5f7960...): the 'truncated' fit, the 'frozen' reference, units, metrics and the pass rule. Bootstrap seed numpy.random.default_rng(31961).",
+  "data": "Third fresh slice fresh-3: every article of the-decoder.com and siliconangle.com published 2025-07-01 to 2025-09-30, crawled and prepared like fresh-2 (all earlier collection, fresh, fresh-2 and exclusion URLs and titles excluded), labelled for all 16 profiles by four blind annotators with profiles.md, frozen before any round-9 score; vectors checked as before.",
+  "protocols": {
+    "window": "Round 6's window protocol on fresh-3 alone (teach from its first 14 days, score the rest).",
+    "pool": "Teach from the top N of the pool collection + fresh + fresh-2 (every labelled article); score all of fresh-3."
+  },
+  "candidates": {
+    "truncated": "round 7, unchanged.",
+    "truncated-guard": "round 7 'truncated', except that where its fit ends with mu1 <= mu0 or the optimiser fails, the probabilities come from the frozen design's round-2 EM binormal fit (then Platt only if that fit fails too), instead of Platt directly.",
+    "frozen": "freeze/plan.json, unchanged (reference)."
+  },
+  "pass": "A candidate passes when, in both protocols separately: the topic-bootstrap interval of (candidate - keywordNarrow) has lower bound > -0.05, the intervals against keywordBroad, alwaysNo and alwaysYes lie above 0, and macro Brier skill > 0. If both truncated candidates pass, the simpler ('truncated') is chosen. A passing candidate replaces the frozen design: update the package, redo the implementation check, refreeze the plan with pool teaching for the exam, then score the exam once.",
+  "noneEligible": "No change to the package; the exam stays sealed; the round reports why."
+}

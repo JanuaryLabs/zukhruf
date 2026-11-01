@@ -1,0 +1,166 @@
+{
+ "round": 2,
+ "status": "NO DESIGN FROZEN. No candidate is eligible: every candidate's topic-bootstrap interval against keywordNarrow (and most against keywordBroad) includes 0 or lies below it. The exam stays sealed.",
+ "selectionRule": {
+  "file": "selection-rule.json",
+  "sha256": "d4913edeb471506316f29915a5f03069cdf3e8a6a9f55f5506f89627b77505d4"
+ },
+ "evaluate": {
+  "file": "evaluate.py",
+  "sha256": "67ef588ae80e4d7f4bf54bef0cce870886467f42a6918383ffd0ef3c35f61833"
+ },
+ "results": {
+  "file": "results.json",
+  "sha256": "41917bf78c45a9b4fad79fdea32ec3c5357257324caa9f0d3da86759793d3065"
+ },
+ "scoredProfiles": [
+  "chips",
+  "security",
+  "funding",
+  "regulation",
+  "courts",
+  "robotics",
+  "safety",
+  "open-models",
+  "jobs",
+  "coding",
+  "earnings"
+ ],
+ "macroF05": {
+  "desc|platt": 0.306,
+  "desc|platt+em": 0.114,
+  "desc|binormal": 0.532,
+  "rocchio|platt": 0.204,
+  "rocchio|platt+em": 0.105,
+  "rocchio|binormal": 0.368,
+  "rocchio-q0|platt": 0.299,
+  "rocchio-q0|platt+em": 0.113,
+  "rocchio-q0|binormal": 0.538,
+  "knn|platt": 0.166,
+  "knn|platt+em": 0.249,
+  "probe|platt": 0.242,
+  "probe|platt+em": 0.107,
+  "probe|binormal": 0.393,
+  "alwaysNo": 0.0,
+  "alwaysYes": 0.061,
+  "keywordNarrow": 0.569,
+  "keywordBroad": 0.462
+ },
+ "macroBrierSkill": {
+  "desc|platt": -2.906,
+  "desc|platt+em": -0.03,
+  "desc|binormal": 0.111,
+  "rocchio|platt": -4.482,
+  "rocchio|platt+em": -0.137,
+  "rocchio|binormal": -0.929,
+  "rocchio-q0|platt": -2.863,
+  "rocchio-q0|platt+em": -0.024,
+  "rocchio-q0|binormal": -0.041,
+  "knn|platt": -6.953,
+  "knn|platt+em": -0.732,
+  "probe|platt": -5.795,
+  "probe|platt+em": -0.124,
+  "probe|binormal": -2.559
+ },
+ "perProfileF05": {
+  "biology": {
+   "desc|binormal": 0.184,
+   "rocchio-q0|binormal": 0.507,
+   "keywordNarrow": 0.417,
+   "keywordBroad": 0.192
+  },
+  "chips": {
+   "desc|binormal": 0.597,
+   "rocchio-q0|binormal": 0.529,
+   "keywordNarrow": 0.761,
+   "keywordBroad": 0.454
+  },
+  "security": {
+   "desc|binormal": 0.78,
+   "rocchio-q0|binormal": 0.722,
+   "keywordNarrow": 0.652,
+   "keywordBroad": 0.69
+  },
+  "funding": {
+   "desc|binormal": 0.835,
+   "rocchio-q0|binormal": 0.834,
+   "keywordNarrow": 0.849,
+   "keywordBroad": 0.812
+  },
+  "regulation": {
+   "desc|binormal": 0.059,
+   "rocchio-q0|binormal": 0.257,
+   "keywordNarrow": 0.262,
+   "keywordBroad": 0.349
+  },
+  "courts": {
+   "desc|binormal": 0.596,
+   "rocchio-q0|binormal": 0.682,
+   "keywordNarrow": 0.727,
+   "keywordBroad": 0.473
+  },
+  "robotics": {
+   "desc|binormal": 0.568,
+   "rocchio-q0|binormal": 0.701,
+   "keywordNarrow": 0.824,
+   "keywordBroad": 0.784
+  },
+  "safety": {
+   "desc|binormal": 0.158,
+   "rocchio-q0|binormal": 0.186,
+   "keywordNarrow": 0.26,
+   "keywordBroad": 0.317
+  },
+  "open-models": {
+   "desc|binormal": 0.389,
+   "rocchio-q0|binormal": 0.406,
+   "keywordNarrow": 0.365,
+   "keywordBroad": 0.32
+  },
+  "jobs": {
+   "desc|binormal": 0.493,
+   "rocchio-q0|binormal": 0.272,
+   "keywordNarrow": 0.433,
+   "keywordBroad": 0.125
+  },
+  "energy": {
+   "desc|binormal": 0.078,
+   "rocchio-q0|binormal": 0.425,
+   "keywordNarrow": 0.08,
+   "keywordBroad": 0.285
+  },
+  "quantum": {
+   "desc|binormal": 0.67,
+   "rocchio-q0|binormal": 0.715,
+   "keywordNarrow": 0.789,
+   "keywordBroad": 0.789
+  },
+  "health": {
+   "desc|binormal": 0.437,
+   "rocchio-q0|binormal": 0.299,
+   "keywordNarrow": 0.392,
+   "keywordBroad": 0.27
+  },
+  "education": {},
+  "coding": {
+   "desc|binormal": 0.51,
+   "rocchio-q0|binormal": 0.426,
+   "keywordNarrow": 0.401,
+   "keywordBroad": 0.255
+  },
+  "earnings": {
+   "desc|binormal": 0.871,
+   "rocchio-q0|binormal": 0.9,
+   "keywordNarrow": 0.726,
+   "keywordBroad": 0.508
+  }
+ },
+ "findingsPostHoc": [
+  "Calibration was round 1's main failure: the binormal score-distribution model roughly doubles macro T11F over Platt for every method (desc 0.306 -> 0.532, rocchio-q0 0.299 -> 0.538) and desc|binormal is the only candidate with positive macro Brier skill (+0.111).",
+  "Lexical and semantic profiles split: dense designs beat keywordNarrow on security, earnings, coding, jobs, open-models, health; keywordNarrow wins on chips, robotics, courts, quantum, where one stem nearly is the topic. No candidate had a lexical signal; the keyword baselines are hand-written (TREC manual-run analogue).",
+  "Narrative profiles (regulation, safety) are weak for every system; they also carry the most ambiguous labels (85 and 141 in the test period).",
+  "Biology (not scored, 12 test positives): rocchio-q0|binormal 0.507 vs keywordNarrow 0.417; desc|binormal over-accepts (precision 0.18).",
+  "kNN and the probe rank worst (AP), as in round 1."
+ ],
+ "round3Proposal": "Add the lexical signal the TREC filtering systems used: Rocchio over tf-idf (stemmed) with the profile title + description as q0, fused with dense rocchio-q0 by z-score CombSUM; binormal calibration; same labels, cells, draws, threshold, baselines and eligibility rule."
+}

@@ -1,0 +1,134 @@
+{
+ "round": 3,
+ "status": "NO DESIGN FROZEN. No candidate is eligible: hybrid-rocchio|binormal (macro T11F 0.557) ties keywordNarrow (0.569; interval of the difference [-0.080, +0.052]) and has negative macro Brier skill (-0.326). The exam stays sealed.",
+ "selectionRule": {
+  "file": "selection-rule.json",
+  "sha256": "f846855ff5dd7f01556ca006a3f7fc0cd89a06bac7ab90ecbb99fe1ed6353fe4"
+ },
+ "evaluate": {
+  "file": "evaluate.py",
+  "sha256": "7319aa28c2ab0f558014bc386daa425ac6cef6d3a01d765454719bfdc10a6088"
+ },
+ "results": {
+  "file": "results.json",
+  "sha256": "d6c5f9d0a1956d3196ab9205dac8c165b167f2992d57634742cd7d78fb648d8b"
+ },
+ "consistency": "rocchio-q0|binormal macro T11F equals round 2 exactly (0.53773): same draws, same code.",
+ "macroF05": {
+  "lex-q0|binormal": 0.23,
+  "rocchio-q0|binormal": 0.538,
+  "lex-rocchio|binormal": 0.349,
+  "hybrid-q0|binormal": 0.469,
+  "hybrid-rocchio|binormal": 0.557,
+  "alwaysNo": 0.0,
+  "alwaysYes": 0.061,
+  "keywordNarrow": 0.569,
+  "keywordBroad": 0.462
+ },
+ "macroBrierSkill": {
+  "lex-q0|binormal": -5.22,
+  "rocchio-q0|binormal": -0.041,
+  "lex-rocchio|binormal": -2.522,
+  "hybrid-q0|binormal": -0.424,
+  "hybrid-rocchio|binormal": -0.326
+ },
+ "intervalsVsBaselines": {
+  "lex-q0|binormal": {
+   "alwaysNo": [
+    0.1388783890072782,
+    0.3425245477853163
+   ],
+   "alwaysYes": [
+    0.10425622932275398,
+    0.2461137558051298
+   ],
+   "keywordNarrow": [
+    -0.4407199108559865,
+    -0.2501081681542045
+   ],
+   "keywordBroad": [
+    -0.324002220303931,
+    -0.1588312488607535
+   ]
+  },
+  "rocchio-q0|binormal": {
+   "alwaysNo": [
+    0.40642229635605404,
+    0.6776577396241695
+   ],
+   "alwaysYes": [
+    0.3563051500588638,
+    0.6065301406831622
+   ],
+   "keywordNarrow": [
+    -0.09374581189414119,
+    0.03163146218074804
+   ],
+   "keywordBroad": [
+    -0.004151073846472791,
+    0.17093691460484942
+   ]
+  },
+  "lex-rocchio|binormal": {
+   "alwaysNo": [
+    0.23623710453088778,
+    0.4678696576703778
+   ],
+   "alwaysYes": [
+    0.19920697051963274,
+    0.38228761490603425
+   ],
+   "keywordNarrow": [
+    -0.30066463375053276,
+    -0.1509288891653215
+   ],
+   "keywordBroad": [
+    -0.16510511150756454,
+    -0.062084851472875194
+   ]
+  },
+  "hybrid-q0|binormal": {
+   "alwaysNo": [
+    0.37019028387425745,
+    0.5755556509714949
+   ],
+   "alwaysYes": [
+    0.3311347984669289,
+    0.48819379543800073
+   ],
+   "keywordNarrow": [
+    -0.17082624705805138,
+    -0.03477352372403891
+   ],
+   "keywordBroad": [
+    -0.051293271785290716,
+    0.06513646668395627
+   ]
+  },
+  "hybrid-rocchio|binormal": {
+   "alwaysNo": [
+    0.4440926580698851,
+    0.6739783444044622
+   ],
+   "alwaysYes": [
+    0.39857241302317803,
+    0.6007023799822585
+   ],
+   "keywordNarrow": [
+    -0.07969315007795054,
+    0.051912062210814826
+   ],
+   "keywordBroad": [
+    0.032715366542708214,
+    0.1673060514474643
+   ]
+  }
+ },
+ "findingsPostHoc": [
+  "Ranking: the fused dense + lexical Rocchio has the best average precision of every design on most scored profiles (chips 0.73, courts 0.82, robotics 0.86, jobs 0.57, coding 0.64, earnings 0.96), above dense alone and lexical alone. The lexical signal adds what round 2 lacked.",
+  "Threshold: the binormal model does not fit lexical or fused scores. Most articles share no stemmed term with the profile, so the score distribution is zero-inflated; the fit takes the articles that share a term for the relevant component and the plug-in threshold accepts 300-1,000 articles per profile (lex-q0 precision 0.06-0.66).",
+  "Lexical alone from the title + description (lex-q0) is far below the hand-written narrow keyword (0.230 vs 0.569): the person who writes a keyword adds knowledge the sentence does not hold, and the threshold failure above adds to it.",
+  "Dense rocchio-q0|binormal stays the best calibrated design with a positive-sum T11F (0.538, Brier skill -0.041); desc|binormal (round 2) is the only design with positive Brier skill (+0.111)."
+ ],
+ "nextRound": "Keep the fused ranking; find a threshold rule that does not assume a score distribution shape, or a score-distribution model that fits zero-inflated fused scores. Each further round reuses this labelled set; a fresh development set (another month of the same feeds, labelled the same way) limits the adaptive-reuse risk."
+}

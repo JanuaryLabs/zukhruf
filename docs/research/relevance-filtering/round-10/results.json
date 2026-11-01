@@ -1,0 +1,7642 @@
+{
+ "rule": {
+  "file": "selection-rule.json",
+  "sha256": "37952976999ece341484bb4ec0fa41e5ffd2e63323c297d938c88b47ea5d155e"
+ },
+ "evaluate": {
+  "sha256": "526b9c6942e0141d9b19e73310ca8ffb2ffede28dde795a7ae630763a9c0fb83",
+  "round9": "75bacc123bda5f5f5f61a0711186b9cc47a07391855f530460f5f7f563cc1068"
+ },
+ "smoke": false,
+ "labels": {
+  "collection": "69a540c1ae2075ddaff71b5a039791bf90b6c6868a317ec3d58443e29037d406",
+  "fresh": "a2802bbe8303534f916b7e8292393b7bdaebf02a14855652147953a887ed7f5d",
+  "fresh-2": "d123cde2c93e24f942a5fd2004d15c8cd88055b09ee223958f9527c6f35e0936",
+  "fresh-3": "a5a871b628f7d96c742216e7568f8802874038fd5c2baf32db8784290e58599c"
+ },
+ "environment": {
+  "python": "3.13.13 (main, Apr  7 2026, 18:19:01) [Clang 21.0.0 (clang-2100.0.123.102)]",
+  "numpy": "2.3.4",
+  "scipy": "1.16.2"
+ },
+ "status": {
+  "desc": "PASS",
+  "desc+kw": "PASS",
+  "truncated+kw": "PASS"
+ },
+ "best": "desc+kw",
+ "simplerVsBest": {
+  "desc": {
+   "window": [
+    -0.1000489239248204,
+    0.05592969530027958
+   ],
+   "pool": [
+    -0.1365227368031007,
+    -0.033137163469542666
+   ]
+  }
+ },
+ "chosen": "desc+kw",
+ "protocols": {
+  "window": {
+   "scoredProfiles": [
+    "chips",
+    "security",
+    "funding",
+    "regulation",
+    "courts",
+    "robotics",
+    "open-models",
+    "coding",
+    "earnings"
+   ],
+   "perProfileAP": {
+    "chips": {
+     "desc": 0.6555742946750933,
+     "desc+kw": 0.7996750537530084,
+     "truncated+kw": 0.7449581403707133,
+     "keywordNarrow": 0.5683872273626087,
+     "keywordBroad": 0.48676313062214094,
+     "newest": 0.04131689517289381
+    },
+    "security": {
+     "desc": 0.8991439493146444,
+     "desc+kw": 0.9350457820010707,
+     "truncated+kw": 0.9343323419922079,
+     "keywordNarrow": 0.6189213712863835,
+     "keywordBroad": 0.7047093052001143,
+     "newest": 0.18005375282154648
+    },
+    "funding": {
+     "desc": 0.9562336216991266,
+     "desc+kw": 0.9646610961376542,
+     "truncated+kw": 0.9647083383858946,
+     "keywordNarrow": 0.7391715901097698,
+     "keywordBroad": 0.8179450852292225,
+     "newest": 0.19931770377696445
+    },
+    "regulation": {
+     "desc": 0.3869543013809989,
+     "desc+kw": 0.35566147608572285,
+     "truncated+kw": 0.35724113257752266,
+     "keywordNarrow": 0.137913257692874,
+     "keywordBroad": 0.26459984306360945,
+     "newest": 0.029554394172822306
+    },
+    "courts": {
+     "desc": 0.6933873028299847,
+     "desc+kw": 0.5136288949022894,
+     "truncated+kw": 0.5110654510296424,
+     "keywordNarrow": 0.7177166697513658,
+     "keywordBroad": 0.40054493127323615,
+     "newest": 0.016198220233365753
+    },
+    "robotics": {
+     "desc": 0.46379040703253316,
+     "desc+kw": 0.6932842531888627,
+     "truncated+kw": 0.602009171878779,
+     "keywordNarrow": 0.5452345204704339,
+     "keywordBroad": 0.652201642555002,
+     "newest": 0.01791919523997443
+    },
+    "open-models": {
+     "desc": 0.5966842454300474,
+     "desc+kw": 0.6158093305459753,
+     "truncated+kw": 0.5973076175911467,
+     "keywordNarrow": 0.1858166798489905,
+     "keywordBroad": 0.26597862664595406,
+     "newest": 0.020337829538091986
+    },
+    "coding": {
+     "desc": 0.6246625442434748,
+     "desc+kw": 0.705546803750993,
+     "truncated+kw": 0.7079906137437376,
+     "keywordNarrow": 0.4313305857884017,
+     "keywordBroad": 0.26082508547263505,
+     "newest": 0.041563693366506456
+    },
+    "earnings": {
+     "desc": 0.9768151223632148,
+     "desc+kw": 0.8667048550050325,
+     "truncated+kw": 0.8667048550050325,
+     "keywordNarrow": 0.684155648357999,
+     "keywordBroad": 0.5196293340730381,
+     "newest": 0.04241295785662752
+    }
+   },
+   "MAP": {
+    "desc": 0.6948050876632353,
+    "desc+kw": 0.7166686161522899,
+    "truncated+kw": 0.6984797402860752,
+    "keywordNarrow": 0.5142941722965363,
+    "keywordBroad": 0.4859107760149947,
+    "newest": 0.06540829357542147
+   },
+   "intervals": {
+    "desc": {
+     "keywordNarrow": [
+      0.08024581110952453,
+      0.27253081942965507
+     ],
+     "keywordBroad": [
+      0.08378584133932411,
+      0.3186887582019
+     ],
+     "newest": [
+      0.5297979516144382,
+      0.7389225867323298
+     ]
+    },
+    "desc+kw": {
+     "keywordNarrow": [
+      0.08172100918525248,
+      0.29625613636694353
+     ],
+     "keywordBroad": [
+      0.14645994705318974,
+      0.31778245437518465
+     ],
+     "newest": [
+      0.5478785568098998,
+      0.738682808185508
+     ]
+    },
+    "truncated+kw": {
+     "keywordNarrow": [
+      0.058994802222824855,
+      0.2818451061063303
+     ],
+     "keywordBroad": [
+      0.11630511386293535,
+      0.30735433702950743
+     ],
+     "newest": [
+      0.5343277531790486,
+      0.7234708254177245
+     ]
+    }
+   },
+   "pass": {
+    "desc": true,
+    "desc+kw": true,
+    "truncated+kw": true
+   },
+   "dailyPrecision": {
+    "desc": {
+     "3": 0.24216524216524216,
+     "5": 0.18354700854700856,
+     "10": 0.11241577352688464
+    },
+    "desc+kw": {
+     "3": 0.24667616334283002,
+     "5": 0.18782051282051285,
+     "10": 0.11312802423913536
+    },
+    "truncated+kw": {
+     "3": 0.24643874643874644,
+     "5": 0.18725071225071227,
+     "10": 0.11312802423913536
+    },
+    "keywordNarrow": {
+     "3": 0.6914760805591152,
+     "5": 0.6891882731742349,
+     "10": 0.6891956217926948
+    },
+    "keywordBroad": {
+     "3": 0.5129696929489431,
+     "5": 0.5123328701812723,
+     "10": 0.5131897078152394
+    },
+    "newest": {
+     "3": 0.07644824311490978,
+     "5": 0.07414529914529916,
+     "10": 0.06042147153258264
+    }
+   },
+   "perProfileDailyPrecision": {
+    "chips": {
+     "desc": {
+      "3": 0.20512820512820512,
+      "5": 0.14038461538461539,
+      "10": 0.08067765567765568
+     },
+     "desc+kw": {
+      "3": 0.2158119658119658,
+      "5": 0.14423076923076922,
+      "10": 0.08195970695970696
+     },
+     "truncated+kw": {
+      "3": 0.21367521367521367,
+      "5": 0.14294871794871794,
+      "10": 0.08131868131868132
+     },
+     "keywordNarrow": {
+      "3": 0.8225806451612904,
+      "5": 0.8279569892473119,
+      "10": 0.8279569892473119
+     },
+     "keywordBroad": {
+      "3": 0.4833333333333333,
+      "5": 0.49566666666666664,
+      "10": 0.49699999999999994
+     },
+     "newest": {
+      "3": 0.047008547008547,
+      "5": 0.04551282051282052,
+      "10": 0.04478021978021978
+     }
+    },
+    "security": {
+     "desc": {
+      "3": 0.5128205128205128,
+      "5": 0.41602564102564105,
+      "10": 0.2520604395604396
+     },
+     "desc+kw": {
+      "3": 0.5256410256410257,
+      "5": 0.42628205128205127,
+      "10": 0.25398351648351647
+     },
+     "truncated+kw": {
+      "3": 0.5256410256410257,
+      "5": 0.42628205128205127,
+      "10": 0.2546245421245421
+     },
+     "keywordNarrow": {
+      "3": 0.7530864197530862,
+      "5": 0.7395061728395061,
+      "10": 0.7395723104056438
+     },
+     "keywordBroad": {
+      "3": 0.7339181286549707,
+      "5": 0.7263157894736841,
+      "10": 0.7284321915900863
+     },
+     "newest": {
+      "3": 0.11965811965811966,
+      "5": 0.10576923076923077,
+      "10": 0.10077838827838828
+     }
+    },
+    "funding": {
+     "desc": {
+      "3": 0.6324786324786325,
+      "5": 0.5230769230769232,
+      "10": 0.3452991452991453
+     },
+     "desc+kw": {
+      "3": 0.6282051282051282,
+      "5": 0.5384615384615387,
+      "10": 0.3465811965811966
+     },
+     "truncated+kw": {
+      "3": 0.6282051282051282,
+      "5": 0.5384615384615387,
+      "10": 0.3465811965811966
+     },
+     "keywordNarrow": {
+      "3": 0.9090909090909091,
+      "5": 0.8987878787878788,
+      "10": 0.8987878787878788
+     },
+     "keywordBroad": {
+      "3": 0.8032786885245902,
+      "5": 0.8076502732240437,
+      "10": 0.8112151964610982
+     },
+     "newest": {
+      "3": 0.24786324786324782,
+      "5": 0.241025641025641,
+      "10": 0.19017094017094013
+     }
+    },
+    "regulation": {
+     "desc": {
+      "3": 0.11965811965811966,
+      "5": 0.0717948717948718,
+      "10": 0.043910256410256414
+     },
+     "desc+kw": {
+      "3": 0.1217948717948718,
+      "5": 0.07564102564102565,
+      "10": 0.04455128205128206
+     },
+     "truncated+kw": {
+      "3": 0.1217948717948718,
+      "5": 0.07564102564102565,
+      "10": 0.04455128205128206
+     },
+     "keywordNarrow": {
+      "3": 0.36363636363636365,
+      "5": 0.36363636363636365,
+      "10": 0.36363636363636365
+     },
+     "keywordBroad": {
+      "3": 0.337037037037037,
+      "5": 0.337037037037037,
+      "10": 0.34074074074074073
+     },
+     "newest": {
+      "3": 0.034188034188034185,
+      "5": 0.043589743589743594,
+      "10": 0.02980769230769231
+     }
+    },
+    "courts": {
+     "desc": {
+      "3": 0.08547008547008546,
+      "5": 0.05811965811965813,
+      "10": 0.035164835164835165
+     },
+     "desc+kw": {
+      "3": 0.08547008547008546,
+      "5": 0.05811965811965813,
+      "10": 0.035164835164835165
+     },
+     "truncated+kw": {
+      "3": 0.08547008547008546,
+      "5": 0.05811965811965813,
+      "10": 0.035164835164835165
+     },
+     "keywordNarrow": {
+      "3": 0.9285714285714286,
+      "5": 0.9285714285714286,
+      "10": 0.9285714285714286
+     },
+     "keywordBroad": {
+      "3": 0.4444444444444444,
+      "5": 0.4475308641975308,
+      "10": 0.4475308641975308
+     },
+     "newest": {
+      "3": 0.021367521367521364,
+      "5": 0.02222222222222222,
+      "10": 0.019780219780219783
+     }
+    },
+    "robotics": {
+     "desc": {
+      "3": 0.08547008547008547,
+      "5": 0.06153846153846155,
+      "10": 0.0321937321937322
+     },
+     "desc+kw": {
+      "3": 0.08974358974358974,
+      "5": 0.06153846153846155,
+      "10": 0.0321937321937322
+     },
+     "truncated+kw": {
+      "3": 0.0876068376068376,
+      "5": 0.060256410256410264,
+      "10": 0.0321937321937322
+     },
+     "keywordNarrow": {
+      "3": 0.7045454545454546,
+      "5": 0.7045454545454546,
+      "10": 0.7045454545454546
+     },
+     "keywordBroad": {
+      "3": 0.7307692307692307,
+      "5": 0.7307692307692307,
+      "10": 0.7307692307692307
+     },
+     "newest": {
+      "3": 0.008547008547008546,
+      "5": 0.020512820512820513,
+      "10": 0.019373219373219373
+     }
+    },
+    "open-models": {
+     "desc": {
+      "3": 0.11538461538461539,
+      "5": 0.08183760683760684,
+      "10": 0.05064102564102564
+     },
+     "desc+kw": {
+      "3": 0.1111111111111111,
+      "5": 0.08183760683760684,
+      "10": 0.05064102564102564
+     },
+     "truncated+kw": {
+      "3": 0.1111111111111111,
+      "5": 0.07927350427350428,
+      "10": 0.05064102564102564
+     },
+     "keywordNarrow": {
+      "3": 0.36538461538461536,
+      "5": 0.36538461538461536,
+      "10": 0.36538461538461536
+     },
+     "keywordBroad": {
+      "3": 0.3632478632478633,
+      "5": 0.3713675213675214,
+      "10": 0.3713675213675214
+     },
+     "newest": {
+      "3": 0.029914529914529912,
+      "5": 0.030555555555555555,
+      "10": 0.028846153846153848
+     }
+    },
+    "coding": {
+     "desc": {
+      "3": 0.14957264957264957,
+      "5": 0.10769230769230767,
+      "10": 0.07136752136752136
+     },
+     "desc+kw": {
+      "3": 0.16880341880341881,
+      "5": 0.11282051282051281,
+      "10": 0.07264957264957264
+     },
+     "truncated+kw": {
+      "3": 0.17094017094017094,
+      "5": 0.11282051282051281,
+      "10": 0.07264957264957264
+     },
+     "keywordNarrow": {
+      "3": 0.4875,
+      "5": 0.4854166666666666,
+      "10": 0.4854166666666666
+     },
+     "keywordBroad": {
+      "3": 0.25706214689265533,
+      "5": 0.2567796610169491,
+      "10": 0.25169491525423726
+     },
+     "newest": {
+      "3": 0.034188034188034185,
+      "5": 0.0358974358974359,
+      "10": 0.03803418803418804
+     }
+    },
+    "earnings": {
+     "desc": {
+      "3": 0.27350427350427353,
+      "5": 0.19145299145299147,
+      "10": 0.10042735042735043
+     },
+     "desc+kw": {
+      "3": 0.27350427350427353,
+      "5": 0.19145299145299147,
+      "10": 0.10042735042735043
+     },
+     "truncated+kw": {
+      "3": 0.27350427350427353,
+      "5": 0.19145299145299147,
+      "10": 0.10042735042735043
+     },
+     "keywordNarrow": {
+      "3": 0.8888888888888888,
+      "5": 0.8888888888888888,
+      "10": 0.8888888888888888
+     },
+     "keywordBroad": {
+      "3": 0.4636363636363636,
+      "5": 0.43787878787878787,
+      "10": 0.43995670995671
+     },
+     "newest": {
+      "3": 0.14529914529914528,
+      "5": 0.12222222222222222,
+      "10": 0.07222222222222222
+     }
+    }
+   },
+   "keywordEmptyDaysSummedOverScoredUnits": {
+    "keywordNarrow|3": 822,
+    "keywordNarrow|5": 822,
+    "keywordNarrow|10": 822,
+    "keywordBroad|3": 566,
+    "keywordBroad|5": 566,
+    "keywordBroad|10": 566
+   },
+   "fallbackCounts": {
+    "desc+kw": {
+     "unscored|no relevant answer: keyword": 4,
+     "scored|none": 18,
+     "unscored|none": 10
+    },
+    "truncated+kw": {
+     "unscored|no relevant answer: keyword": 4,
+     "scored|none": 17,
+     "scored|platt": 1,
+     "unscored|none": 10
+    }
+   },
+   "units": {
+    "biology": {
+     "fresh-3|5": {
+      "shown": 5,
+      "taughtRelevant": 0,
+      "taughtNotRelevant": 3,
+      "scoredRelevant": 0,
+      "ap": {
+       "desc": NaN,
+       "desc+kw": NaN,
+       "truncated+kw": NaN,
+       "keywordNarrow": NaN,
+       "keywordBroad": NaN,
+       "newest": NaN
+      },
+      "daily": {
+       "desc": {
+        "3": {
+         "precision": 0.0,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.0,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.0,
+         "emptyDays": 0
+        }
+       },
+       "desc+kw": {
+        "3": {
+         "precision": 0.0,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.0,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.0,
+         "emptyDays": 0
+        }
+       },
+       "truncated+kw": {
+        "3": {
+         "precision": 0.0,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.0,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.0,
+         "emptyDays": 0
+        }
+       },
+       "keywordNarrow": {
+        "3": {
+         "precision": 0.0,
+         "emptyDays": 76
+        },
+        "5": {
+         "precision": 0.0,
+         "emptyDays": 76
+        },
+        "10": {
+         "precision": 0.0,
+         "emptyDays": 76
+        }
+       },
+       "keywordBroad": {
+        "3": {
+         "precision": 0.0,
+         "emptyDays": 62
+        },
+        "5": {
+         "precision": 0.0,
+         "emptyDays": 62
+        },
+        "10": {
+         "precision": 0.0,
+         "emptyDays": 62
+        }
+       },
+       "newest": {
+        "3": {
+         "precision": 0.0,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.0,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.0,
+         "emptyDays": 0
+        }
+       }
+      },
+      "fallbacks": {
+       "desc+kw": "no relevant answer: keyword",
+       "truncated+kw": "no relevant answer: keyword"
+      }
+     },
+     "fresh-3|10": {
+      "shown": 10,
+      "taughtRelevant": 0,
+      "taughtNotRelevant": 8,
+      "scoredRelevant": 0,
+      "ap": {
+       "desc": NaN,
+       "desc+kw": NaN,
+       "truncated+kw": NaN,
+       "keywordNarrow": NaN,
+       "keywordBroad": NaN,
+       "newest": NaN
+      },
+      "daily": {
+       "desc": {
+        "3": {
+         "precision": 0.0,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.0,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.0,
+         "emptyDays": 0
+        }
+       },
+       "desc+kw": {
+        "3": {
+         "precision": 0.0,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.0,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.0,
+         "emptyDays": 0
+        }
+       },
+       "truncated+kw": {
+        "3": {
+         "precision": 0.0,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.0,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.0,
+         "emptyDays": 0
+        }
+       },
+       "keywordNarrow": {
+        "3": {
+         "precision": 0.0,
+         "emptyDays": 76
+        },
+        "5": {
+         "precision": 0.0,
+         "emptyDays": 76
+        },
+        "10": {
+         "precision": 0.0,
+         "emptyDays": 76
+        }
+       },
+       "keywordBroad": {
+        "3": {
+         "precision": 0.0,
+         "emptyDays": 62
+        },
+        "5": {
+         "precision": 0.0,
+         "emptyDays": 62
+        },
+        "10": {
+         "precision": 0.0,
+         "emptyDays": 62
+        }
+       },
+       "newest": {
+        "3": {
+         "precision": 0.0,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.0,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.0,
+         "emptyDays": 0
+        }
+       }
+      },
+      "fallbacks": {
+       "desc+kw": "no relevant answer: keyword",
+       "truncated+kw": "no relevant answer: keyword"
+      }
+     }
+    },
+    "chips": {
+     "fresh-3|5": {
+      "shown": 6,
+      "taughtRelevant": 4,
+      "taughtNotRelevant": 2,
+      "scoredRelevant": 59,
+      "ap": {
+       "desc": 0.6555742946750933,
+       "desc+kw": 0.7911063202632862,
+       "truncated+kw": 0.6810742773798129,
+       "keywordNarrow": 0.5683872273626087,
+       "keywordBroad": 0.48676313062214094,
+       "newest": 0.04131689517289381
+      },
+      "daily": {
+       "desc": {
+        "3": {
+         "precision": 0.20512820512820512,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.14038461538461539,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.08067765567765568,
+         "emptyDays": 0
+        }
+       },
+       "desc+kw": {
+        "3": {
+         "precision": 0.21367521367521364,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.14294871794871794,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.08195970695970696,
+         "emptyDays": 0
+        }
+       },
+       "truncated+kw": {
+        "3": {
+         "precision": 0.20940170940170938,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.14038461538461539,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.08067765567765568,
+         "emptyDays": 0
+        }
+       },
+       "keywordNarrow": {
+        "3": {
+         "precision": 0.8225806451612904,
+         "emptyDays": 47
+        },
+        "5": {
+         "precision": 0.8279569892473119,
+         "emptyDays": 47
+        },
+        "10": {
+         "precision": 0.8279569892473119,
+         "emptyDays": 47
+        }
+       },
+       "keywordBroad": {
+        "3": {
+         "precision": 0.4833333333333333,
+         "emptyDays": 28
+        },
+        "5": {
+         "precision": 0.49566666666666664,
+         "emptyDays": 28
+        },
+        "10": {
+         "precision": 0.49699999999999994,
+         "emptyDays": 28
+        }
+       },
+       "newest": {
+        "3": {
+         "precision": 0.047008547008547,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.04551282051282052,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.04478021978021978,
+         "emptyDays": 0
+        }
+       }
+      },
+      "fallbacks": {}
+     },
+     "fresh-3|10": {
+      "shown": 13,
+      "taughtRelevant": 7,
+      "taughtNotRelevant": 4,
+      "scoredRelevant": 59,
+      "ap": {
+       "desc": 0.6555742946750933,
+       "desc+kw": 0.8082437872427307,
+       "truncated+kw": 0.8088420033616136,
+       "keywordNarrow": 0.5683872273626087,
+       "keywordBroad": 0.48676313062214094,
+       "newest": 0.04131689517289381
+      },
+      "daily": {
+       "desc": {
+        "3": {
+         "precision": 0.20512820512820512,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.14038461538461539,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.08067765567765568,
+         "emptyDays": 0
+        }
+       },
+       "desc+kw": {
+        "3": {
+         "precision": 0.21794871794871795,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.1455128205128205,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.08195970695970696,
+         "emptyDays": 0
+        }
+       },
+       "truncated+kw": {
+        "3": {
+         "precision": 0.21794871794871795,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.1455128205128205,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.08195970695970696,
+         "emptyDays": 0
+        }
+       },
+       "keywordNarrow": {
+        "3": {
+         "precision": 0.8225806451612904,
+         "emptyDays": 47
+        },
+        "5": {
+         "precision": 0.8279569892473119,
+         "emptyDays": 47
+        },
+        "10": {
+         "precision": 0.8279569892473119,
+         "emptyDays": 47
+        }
+       },
+       "keywordBroad": {
+        "3": {
+         "precision": 0.4833333333333333,
+         "emptyDays": 28
+        },
+        "5": {
+         "precision": 0.49566666666666664,
+         "emptyDays": 28
+        },
+        "10": {
+         "precision": 0.49699999999999994,
+         "emptyDays": 28
+        }
+       },
+       "newest": {
+        "3": {
+         "precision": 0.047008547008547,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.04551282051282052,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.04478021978021978,
+         "emptyDays": 0
+        }
+       }
+      },
+      "fallbacks": {}
+     }
+    },
+    "security": {
+     "fresh-3|5": {
+      "shown": 8,
+      "taughtRelevant": 8,
+      "taughtNotRelevant": 0,
+      "scoredRelevant": 195,
+      "ap": {
+       "desc": 0.8991439493146444,
+       "desc+kw": 0.9347126007117252,
+       "truncated+kw": 0.93382453312431,
+       "keywordNarrow": 0.6189213712863835,
+       "keywordBroad": 0.7047093052001143,
+       "newest": 0.18005375282154648
+      },
+      "daily": {
+       "desc": {
+        "3": {
+         "precision": 0.5128205128205128,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.41602564102564105,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.2520604395604396,
+         "emptyDays": 0
+        }
+       },
+       "desc+kw": {
+        "3": {
+         "precision": 0.5256410256410257,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.42628205128205127,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.2546245421245421,
+         "emptyDays": 0
+        }
+       },
+       "truncated+kw": {
+        "3": {
+         "precision": 0.5256410256410257,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.42628205128205127,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.2546245421245421,
+         "emptyDays": 0
+        }
+       },
+       "keywordNarrow": {
+        "3": {
+         "precision": 0.7530864197530862,
+         "emptyDays": 24
+        },
+        "5": {
+         "precision": 0.7395061728395061,
+         "emptyDays": 24
+        },
+        "10": {
+         "precision": 0.7395723104056438,
+         "emptyDays": 24
+        }
+       },
+       "keywordBroad": {
+        "3": {
+         "precision": 0.7339181286549707,
+         "emptyDays": 21
+        },
+        "5": {
+         "precision": 0.7263157894736841,
+         "emptyDays": 21
+        },
+        "10": {
+         "precision": 0.7284321915900863,
+         "emptyDays": 21
+        }
+       },
+       "newest": {
+        "3": {
+         "precision": 0.11965811965811966,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.10576923076923077,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.10077838827838828,
+         "emptyDays": 0
+        }
+       }
+      },
+      "fallbacks": {}
+     },
+     "fresh-3|10": {
+      "shown": 15,
+      "taughtRelevant": 14,
+      "taughtNotRelevant": 0,
+      "scoredRelevant": 195,
+      "ap": {
+       "desc": 0.8991439493146444,
+       "desc+kw": 0.9353789632904161,
+       "truncated+kw": 0.9348401508601059,
+       "keywordNarrow": 0.6189213712863835,
+       "keywordBroad": 0.7047093052001143,
+       "newest": 0.18005375282154648
+      },
+      "daily": {
+       "desc": {
+        "3": {
+         "precision": 0.5128205128205128,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.41602564102564105,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.2520604395604396,
+         "emptyDays": 0
+        }
+       },
+       "desc+kw": {
+        "3": {
+         "precision": 0.5256410256410257,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.42628205128205127,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.25334249084249083,
+         "emptyDays": 0
+        }
+       },
+       "truncated+kw": {
+        "3": {
+         "precision": 0.5256410256410257,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.42628205128205127,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.2546245421245421,
+         "emptyDays": 0
+        }
+       },
+       "keywordNarrow": {
+        "3": {
+         "precision": 0.7530864197530862,
+         "emptyDays": 24
+        },
+        "5": {
+         "precision": 0.7395061728395061,
+         "emptyDays": 24
+        },
+        "10": {
+         "precision": 0.7395723104056438,
+         "emptyDays": 24
+        }
+       },
+       "keywordBroad": {
+        "3": {
+         "precision": 0.7339181286549707,
+         "emptyDays": 21
+        },
+        "5": {
+         "precision": 0.7263157894736841,
+         "emptyDays": 21
+        },
+        "10": {
+         "precision": 0.7284321915900863,
+         "emptyDays": 21
+        }
+       },
+       "newest": {
+        "3": {
+         "precision": 0.11965811965811966,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.10576923076923077,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.10077838827838828,
+         "emptyDays": 0
+        }
+       }
+      },
+      "fallbacks": {}
+     }
+    },
+    "funding": {
+     "fresh-3|5": {
+      "shown": 5,
+      "taughtRelevant": 5,
+      "taughtNotRelevant": 0,
+      "scoredRelevant": 273,
+      "ap": {
+       "desc": 0.9562336216991266,
+       "desc+kw": 0.9647324589282827,
+       "truncated+kw": 0.9647184350830507,
+       "keywordNarrow": 0.7391715901097698,
+       "keywordBroad": 0.8179450852292225,
+       "newest": 0.19931770377696445
+      },
+      "daily": {
+       "desc": {
+        "3": {
+         "precision": 0.6324786324786325,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.5230769230769232,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.3452991452991453,
+         "emptyDays": 0
+        }
+       },
+       "desc+kw": {
+        "3": {
+         "precision": 0.6282051282051282,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.5384615384615387,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.3465811965811966,
+         "emptyDays": 0
+        }
+       },
+       "truncated+kw": {
+        "3": {
+         "precision": 0.6282051282051282,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.5384615384615387,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.3465811965811966,
+         "emptyDays": 0
+        }
+       },
+       "keywordNarrow": {
+        "3": {
+         "precision": 0.9090909090909091,
+         "emptyDays": 23
+        },
+        "5": {
+         "precision": 0.8987878787878788,
+         "emptyDays": 23
+        },
+        "10": {
+         "precision": 0.8987878787878788,
+         "emptyDays": 23
+        }
+       },
+       "keywordBroad": {
+        "3": {
+         "precision": 0.8032786885245902,
+         "emptyDays": 17
+        },
+        "5": {
+         "precision": 0.8076502732240437,
+         "emptyDays": 17
+        },
+        "10": {
+         "precision": 0.8112151964610982,
+         "emptyDays": 17
+        }
+       },
+       "newest": {
+        "3": {
+         "precision": 0.24786324786324782,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.241025641025641,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.19017094017094013,
+         "emptyDays": 0
+        }
+       }
+      },
+      "fallbacks": {}
+     },
+     "fresh-3|10": {
+      "shown": 11,
+      "taughtRelevant": 11,
+      "taughtNotRelevant": 0,
+      "scoredRelevant": 273,
+      "ap": {
+       "desc": 0.9562336216991266,
+       "desc+kw": 0.9645897333470256,
+       "truncated+kw": 0.9646982416887386,
+       "keywordNarrow": 0.7391715901097698,
+       "keywordBroad": 0.8179450852292225,
+       "newest": 0.19931770377696445
+      },
+      "daily": {
+       "desc": {
+        "3": {
+         "precision": 0.6324786324786325,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.5230769230769232,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.3452991452991453,
+         "emptyDays": 0
+        }
+       },
+       "desc+kw": {
+        "3": {
+         "precision": 0.6282051282051282,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.5384615384615387,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.3465811965811966,
+         "emptyDays": 0
+        }
+       },
+       "truncated+kw": {
+        "3": {
+         "precision": 0.6282051282051282,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.5384615384615387,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.3465811965811966,
+         "emptyDays": 0
+        }
+       },
+       "keywordNarrow": {
+        "3": {
+         "precision": 0.9090909090909091,
+         "emptyDays": 23
+        },
+        "5": {
+         "precision": 0.8987878787878788,
+         "emptyDays": 23
+        },
+        "10": {
+         "precision": 0.8987878787878788,
+         "emptyDays": 23
+        }
+       },
+       "keywordBroad": {
+        "3": {
+         "precision": 0.8032786885245902,
+         "emptyDays": 17
+        },
+        "5": {
+         "precision": 0.8076502732240437,
+         "emptyDays": 17
+        },
+        "10": {
+         "precision": 0.8112151964610982,
+         "emptyDays": 17
+        }
+       },
+       "newest": {
+        "3": {
+         "precision": 0.24786324786324782,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.241025641025641,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.19017094017094013,
+         "emptyDays": 0
+        }
+       }
+      },
+      "fallbacks": {}
+     }
+    },
+    "regulation": {
+     "fresh-3|5": {
+      "shown": 8,
+      "taughtRelevant": 4,
+      "taughtNotRelevant": 4,
+      "scoredRelevant": 41,
+      "ap": {
+       "desc": 0.3869543013809989,
+       "desc+kw": 0.34772897545866543,
+       "truncated+kw": 0.34748402493274166,
+       "keywordNarrow": 0.137913257692874,
+       "keywordBroad": 0.26459984306360945,
+       "newest": 0.029554394172822306
+      },
+      "daily": {
+       "desc": {
+        "3": {
+         "precision": 0.11965811965811966,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.0717948717948718,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.043910256410256414,
+         "emptyDays": 0
+        }
+       },
+       "desc+kw": {
+        "3": {
+         "precision": 0.12393162393162395,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.07692307692307693,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.0451923076923077,
+         "emptyDays": 0
+        }
+       },
+       "truncated+kw": {
+        "3": {
+         "precision": 0.12393162393162395,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.07692307692307693,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.0451923076923077,
+         "emptyDays": 0
+        }
+       },
+       "keywordNarrow": {
+        "3": {
+         "precision": 0.36363636363636365,
+         "emptyDays": 56
+        },
+        "5": {
+         "precision": 0.36363636363636365,
+         "emptyDays": 56
+        },
+        "10": {
+         "precision": 0.36363636363636365,
+         "emptyDays": 56
+        }
+       },
+       "keywordBroad": {
+        "3": {
+         "precision": 0.337037037037037,
+         "emptyDays": 33
+        },
+        "5": {
+         "precision": 0.337037037037037,
+         "emptyDays": 33
+        },
+        "10": {
+         "precision": 0.34074074074074073,
+         "emptyDays": 33
+        }
+       },
+       "newest": {
+        "3": {
+         "precision": 0.034188034188034185,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.043589743589743594,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.02980769230769231,
+         "emptyDays": 0
+        }
+       }
+      },
+      "fallbacks": {}
+     },
+     "fresh-3|10": {
+      "shown": 12,
+      "taughtRelevant": 6,
+      "taughtNotRelevant": 6,
+      "scoredRelevant": 41,
+      "ap": {
+       "desc": 0.3869543013809989,
+       "desc+kw": 0.3635939767127803,
+       "truncated+kw": 0.3669982402223037,
+       "keywordNarrow": 0.137913257692874,
+       "keywordBroad": 0.26459984306360945,
+       "newest": 0.029554394172822306
+      },
+      "daily": {
+       "desc": {
+        "3": {
+         "precision": 0.11965811965811966,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.0717948717948718,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.043910256410256414,
+         "emptyDays": 0
+        }
+       },
+       "desc+kw": {
+        "3": {
+         "precision": 0.11965811965811966,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.07435897435897436,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.043910256410256414,
+         "emptyDays": 0
+        }
+       },
+       "truncated+kw": {
+        "3": {
+         "precision": 0.11965811965811966,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.07435897435897436,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.043910256410256414,
+         "emptyDays": 0
+        }
+       },
+       "keywordNarrow": {
+        "3": {
+         "precision": 0.36363636363636365,
+         "emptyDays": 56
+        },
+        "5": {
+         "precision": 0.36363636363636365,
+         "emptyDays": 56
+        },
+        "10": {
+         "precision": 0.36363636363636365,
+         "emptyDays": 56
+        }
+       },
+       "keywordBroad": {
+        "3": {
+         "precision": 0.337037037037037,
+         "emptyDays": 33
+        },
+        "5": {
+         "precision": 0.337037037037037,
+         "emptyDays": 33
+        },
+        "10": {
+         "precision": 0.34074074074074073,
+         "emptyDays": 33
+        }
+       },
+       "newest": {
+        "3": {
+         "precision": 0.034188034188034185,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.043589743589743594,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.02980769230769231,
+         "emptyDays": 0
+        }
+       }
+      },
+      "fallbacks": {}
+     }
+    },
+    "courts": {
+     "fresh-3|5": {
+      "shown": 5,
+      "taughtRelevant": 1,
+      "taughtNotRelevant": 3,
+      "scoredRelevant": 22,
+      "ap": {
+       "desc": 0.6933873028299847,
+       "desc+kw": 0.5136288949022894,
+       "truncated+kw": 0.5085020071569955,
+       "keywordNarrow": 0.7177166697513658,
+       "keywordBroad": 0.40054493127323615,
+       "newest": 0.016198220233365753
+      },
+      "daily": {
+       "desc": {
+        "3": {
+         "precision": 0.08547008547008546,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.05811965811965813,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.035164835164835165,
+         "emptyDays": 0
+        }
+       },
+       "desc+kw": {
+        "3": {
+         "precision": 0.08547008547008546,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.05811965811965813,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.035164835164835165,
+         "emptyDays": 0
+        }
+       },
+       "truncated+kw": {
+        "3": {
+         "precision": 0.08547008547008546,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.05811965811965813,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.035164835164835165,
+         "emptyDays": 0
+        }
+       },
+       "keywordNarrow": {
+        "3": {
+         "precision": 0.9285714285714286,
+         "emptyDays": 64
+        },
+        "5": {
+         "precision": 0.9285714285714286,
+         "emptyDays": 64
+        },
+        "10": {
+         "precision": 0.9285714285714286,
+         "emptyDays": 64
+        }
+       },
+       "keywordBroad": {
+        "3": {
+         "precision": 0.4444444444444444,
+         "emptyDays": 51
+        },
+        "5": {
+         "precision": 0.4475308641975308,
+         "emptyDays": 51
+        },
+        "10": {
+         "precision": 0.4475308641975308,
+         "emptyDays": 51
+        }
+       },
+       "newest": {
+        "3": {
+         "precision": 0.021367521367521364,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.02222222222222222,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.019780219780219783,
+         "emptyDays": 0
+        }
+       }
+      },
+      "fallbacks": {}
+     },
+     "fresh-3|10": {
+      "shown": 10,
+      "taughtRelevant": 1,
+      "taughtNotRelevant": 8,
+      "scoredRelevant": 22,
+      "ap": {
+       "desc": 0.6933873028299847,
+       "desc+kw": 0.5136288949022894,
+       "truncated+kw": 0.5136288949022894,
+       "keywordNarrow": 0.7177166697513658,
+       "keywordBroad": 0.40054493127323615,
+       "newest": 0.016198220233365753
+      },
+      "daily": {
+       "desc": {
+        "3": {
+         "precision": 0.08547008547008546,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.05811965811965813,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.035164835164835165,
+         "emptyDays": 0
+        }
+       },
+       "desc+kw": {
+        "3": {
+         "precision": 0.08547008547008546,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.05811965811965813,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.035164835164835165,
+         "emptyDays": 0
+        }
+       },
+       "truncated+kw": {
+        "3": {
+         "precision": 0.08547008547008546,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.05811965811965813,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.035164835164835165,
+         "emptyDays": 0
+        }
+       },
+       "keywordNarrow": {
+        "3": {
+         "precision": 0.9285714285714286,
+         "emptyDays": 64
+        },
+        "5": {
+         "precision": 0.9285714285714286,
+         "emptyDays": 64
+        },
+        "10": {
+         "precision": 0.9285714285714286,
+         "emptyDays": 64
+        }
+       },
+       "keywordBroad": {
+        "3": {
+         "precision": 0.4444444444444444,
+         "emptyDays": 51
+        },
+        "5": {
+         "precision": 0.4475308641975308,
+         "emptyDays": 51
+        },
+        "10": {
+         "precision": 0.4475308641975308,
+         "emptyDays": 51
+        }
+       },
+       "newest": {
+        "3": {
+         "precision": 0.021367521367521364,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.02222222222222222,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.019780219780219783,
+         "emptyDays": 0
+        }
+       }
+      },
+      "fallbacks": {}
+     }
+    },
+    "robotics": {
+     "fresh-3|5": {
+      "shown": 7,
+      "taughtRelevant": 4,
+      "taughtNotRelevant": 2,
+      "scoredRelevant": 26,
+      "ap": {
+       "desc": 0.46379040703253316,
+       "desc+kw": 0.6901964053641727,
+       "truncated+kw": 0.6949928050401047,
+       "keywordNarrow": 0.5452345204704339,
+       "keywordBroad": 0.652201642555002,
+       "newest": 0.01791919523997443
+      },
+      "daily": {
+       "desc": {
+        "3": {
+         "precision": 0.08547008547008547,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.06153846153846155,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.0321937321937322,
+         "emptyDays": 0
+        }
+       },
+       "desc+kw": {
+        "3": {
+         "precision": 0.08974358974358974,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.06153846153846155,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.0321937321937322,
+         "emptyDays": 0
+        }
+       },
+       "truncated+kw": {
+        "3": {
+         "precision": 0.08974358974358974,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.06153846153846155,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.0321937321937322,
+         "emptyDays": 0
+        }
+       },
+       "keywordNarrow": {
+        "3": {
+         "precision": 0.7045454545454546,
+         "emptyDays": 56
+        },
+        "5": {
+         "precision": 0.7045454545454546,
+         "emptyDays": 56
+        },
+        "10": {
+         "precision": 0.7045454545454546,
+         "emptyDays": 56
+        }
+       },
+       "keywordBroad": {
+        "3": {
+         "precision": 0.7307692307692307,
+         "emptyDays": 52
+        },
+        "5": {
+         "precision": 0.7307692307692307,
+         "emptyDays": 52
+        },
+        "10": {
+         "precision": 0.7307692307692307,
+         "emptyDays": 52
+        }
+       },
+       "newest": {
+        "3": {
+         "precision": 0.008547008547008546,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.020512820512820513,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.019373219373219373,
+         "emptyDays": 0
+        }
+       }
+      },
+      "fallbacks": {
+       "truncated+kw": "platt"
+      }
+     },
+     "fresh-3|10": {
+      "shown": 12,
+      "taughtRelevant": 6,
+      "taughtNotRelevant": 5,
+      "scoredRelevant": 26,
+      "ap": {
+       "desc": 0.46379040703253316,
+       "desc+kw": 0.6963721010135526,
+       "truncated+kw": 0.5090255387174532,
+       "keywordNarrow": 0.5452345204704339,
+       "keywordBroad": 0.652201642555002,
+       "newest": 0.01791919523997443
+      },
+      "daily": {
+       "desc": {
+        "3": {
+         "precision": 0.08547008547008547,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.06153846153846155,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.0321937321937322,
+         "emptyDays": 0
+        }
+       },
+       "desc+kw": {
+        "3": {
+         "precision": 0.08974358974358974,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.06153846153846155,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.0321937321937322,
+         "emptyDays": 0
+        }
+       },
+       "truncated+kw": {
+        "3": {
+         "precision": 0.08547008547008547,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.05897435897435898,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.0321937321937322,
+         "emptyDays": 0
+        }
+       },
+       "keywordNarrow": {
+        "3": {
+         "precision": 0.7045454545454546,
+         "emptyDays": 56
+        },
+        "5": {
+         "precision": 0.7045454545454546,
+         "emptyDays": 56
+        },
+        "10": {
+         "precision": 0.7045454545454546,
+         "emptyDays": 56
+        }
+       },
+       "keywordBroad": {
+        "3": {
+         "precision": 0.7307692307692307,
+         "emptyDays": 52
+        },
+        "5": {
+         "precision": 0.7307692307692307,
+         "emptyDays": 52
+        },
+        "10": {
+         "precision": 0.7307692307692307,
+         "emptyDays": 52
+        }
+       },
+       "newest": {
+        "3": {
+         "precision": 0.008547008547008546,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.020512820512820513,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.019373219373219373,
+         "emptyDays": 0
+        }
+       }
+      },
+      "fallbacks": {}
+     }
+    },
+    "safety": {
+     "fresh-3|5": {
+      "shown": 8,
+      "taughtRelevant": 2,
+      "taughtNotRelevant": 5,
+      "scoredRelevant": 14,
+      "ap": {
+       "desc": 0.6309014038370998,
+       "desc+kw": 0.5961327559089361,
+       "truncated+kw": 0.45014242092696427,
+       "keywordNarrow": 0.05802218597526688,
+       "keywordBroad": 0.11131015099772816,
+       "newest": 0.009253380280431753
+      },
+      "daily": {
+       "desc": {
+        "3": {
+         "precision": 0.059829059829059825,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.035897435897435895,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.020512820512820513,
+         "emptyDays": 0
+        }
+       },
+       "desc+kw": {
+        "3": {
+         "precision": 0.059829059829059825,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.035897435897435895,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.020512820512820513,
+         "emptyDays": 0
+        }
+       },
+       "truncated+kw": {
+        "3": {
+         "precision": 0.05555555555555555,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.035897435897435895,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.020512820512820513,
+         "emptyDays": 0
+        }
+       },
+       "keywordNarrow": {
+        "3": {
+         "precision": 0.15,
+         "emptyDays": 58
+        },
+        "5": {
+         "precision": 0.15,
+         "emptyDays": 58
+        },
+        "10": {
+         "precision": 0.15,
+         "emptyDays": 58
+        }
+       },
+       "keywordBroad": {
+        "3": {
+         "precision": 0.22916666666666666,
+         "emptyDays": 54
+        },
+        "5": {
+         "precision": 0.22916666666666666,
+         "emptyDays": 54
+        },
+        "10": {
+         "precision": 0.22916666666666666,
+         "emptyDays": 54
+        }
+       },
+       "newest": {
+        "3": {
+         "precision": 0.004273504273504273,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.010256410256410256,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.011538461538461539,
+         "emptyDays": 0
+        }
+       }
+      },
+      "fallbacks": {}
+     },
+     "fresh-3|10": {
+      "shown": 13,
+      "taughtRelevant": 2,
+      "taughtNotRelevant": 10,
+      "scoredRelevant": 14,
+      "ap": {
+       "desc": 0.6309014038370998,
+       "desc+kw": 0.5961327559089361,
+       "truncated+kw": 0.45965856517842735,
+       "keywordNarrow": 0.05802218597526688,
+       "keywordBroad": 0.11131015099772816,
+       "newest": 0.009253380280431753
+      },
+      "daily": {
+       "desc": {
+        "3": {
+         "precision": 0.059829059829059825,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.035897435897435895,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.020512820512820513,
+         "emptyDays": 0
+        }
+       },
+       "desc+kw": {
+        "3": {
+         "precision": 0.059829059829059825,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.035897435897435895,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.020512820512820513,
+         "emptyDays": 0
+        }
+       },
+       "truncated+kw": {
+        "3": {
+         "precision": 0.05555555555555555,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.035897435897435895,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.020512820512820513,
+         "emptyDays": 0
+        }
+       },
+       "keywordNarrow": {
+        "3": {
+         "precision": 0.15,
+         "emptyDays": 58
+        },
+        "5": {
+         "precision": 0.15,
+         "emptyDays": 58
+        },
+        "10": {
+         "precision": 0.15,
+         "emptyDays": 58
+        }
+       },
+       "keywordBroad": {
+        "3": {
+         "precision": 0.22916666666666666,
+         "emptyDays": 54
+        },
+        "5": {
+         "precision": 0.22916666666666666,
+         "emptyDays": 54
+        },
+        "10": {
+         "precision": 0.22916666666666666,
+         "emptyDays": 54
+        }
+       },
+       "newest": {
+        "3": {
+         "precision": 0.004273504273504273,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.010256410256410256,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.011538461538461539,
+         "emptyDays": 0
+        }
+       }
+      },
+      "fallbacks": {}
+     }
+    },
+    "open-models": {
+     "fresh-3|5": {
+      "shown": 6,
+      "taughtRelevant": 5,
+      "taughtNotRelevant": 0,
+      "scoredRelevant": 31,
+      "ap": {
+       "desc": 0.5966842454300474,
+       "desc+kw": 0.6110608431417165,
+       "truncated+kw": 0.5845211222809503,
+       "keywordNarrow": 0.1858166798489905,
+       "keywordBroad": 0.26597862664595406,
+       "newest": 0.020337829538091986
+      },
+      "daily": {
+       "desc": {
+        "3": {
+         "precision": 0.11538461538461539,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.08183760683760684,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.05064102564102564,
+         "emptyDays": 0
+        }
+       },
+       "desc+kw": {
+        "3": {
+         "precision": 0.1111111111111111,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.08183760683760684,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.05064102564102564,
+         "emptyDays": 0
+        }
+       },
+       "truncated+kw": {
+        "3": {
+         "precision": 0.1111111111111111,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.07927350427350428,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.05064102564102564,
+         "emptyDays": 0
+        }
+       },
+       "keywordNarrow": {
+        "3": {
+         "precision": 0.36538461538461536,
+         "emptyDays": 52
+        },
+        "5": {
+         "precision": 0.36538461538461536,
+         "emptyDays": 52
+        },
+        "10": {
+         "precision": 0.36538461538461536,
+         "emptyDays": 52
+        }
+       },
+       "keywordBroad": {
+        "3": {
+         "precision": 0.3632478632478633,
+         "emptyDays": 39
+        },
+        "5": {
+         "precision": 0.3713675213675214,
+         "emptyDays": 39
+        },
+        "10": {
+         "precision": 0.3713675213675214,
+         "emptyDays": 39
+        }
+       },
+       "newest": {
+        "3": {
+         "precision": 0.029914529914529912,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.030555555555555555,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.028846153846153848,
+         "emptyDays": 0
+        }
+       }
+      },
+      "fallbacks": {}
+     },
+     "fresh-3|10": {
+      "shown": 15,
+      "taughtRelevant": 6,
+      "taughtNotRelevant": 5,
+      "scoredRelevant": 31,
+      "ap": {
+       "desc": 0.5966842454300474,
+       "desc+kw": 0.6205578179502342,
+       "truncated+kw": 0.6100941129013432,
+       "keywordNarrow": 0.1858166798489905,
+       "keywordBroad": 0.26597862664595406,
+       "newest": 0.020337829538091986
+      },
+      "daily": {
+       "desc": {
+        "3": {
+         "precision": 0.11538461538461539,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.08183760683760684,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.05064102564102564,
+         "emptyDays": 0
+        }
+       },
+       "desc+kw": {
+        "3": {
+         "precision": 0.1111111111111111,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.08183760683760684,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.05064102564102564,
+         "emptyDays": 0
+        }
+       },
+       "truncated+kw": {
+        "3": {
+         "precision": 0.1111111111111111,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.07927350427350428,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.05064102564102564,
+         "emptyDays": 0
+        }
+       },
+       "keywordNarrow": {
+        "3": {
+         "precision": 0.36538461538461536,
+         "emptyDays": 52
+        },
+        "5": {
+         "precision": 0.36538461538461536,
+         "emptyDays": 52
+        },
+        "10": {
+         "precision": 0.36538461538461536,
+         "emptyDays": 52
+        }
+       },
+       "keywordBroad": {
+        "3": {
+         "precision": 0.3632478632478633,
+         "emptyDays": 39
+        },
+        "5": {
+         "precision": 0.3713675213675214,
+         "emptyDays": 39
+        },
+        "10": {
+         "precision": 0.3713675213675214,
+         "emptyDays": 39
+        }
+       },
+       "newest": {
+        "3": {
+         "precision": 0.029914529914529912,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.030555555555555555,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.028846153846153848,
+         "emptyDays": 0
+        }
+       }
+      },
+      "fallbacks": {}
+     }
+    },
+    "jobs": {
+     "fresh-3|5": {
+      "shown": 7,
+      "taughtRelevant": 2,
+      "taughtNotRelevant": 4,
+      "scoredRelevant": 7,
+      "ap": {
+       "desc": 0.3609412322059766,
+       "desc+kw": 0.6304956947814091,
+       "truncated+kw": 0.6466555183946487,
+       "keywordNarrow": 0.38698221925581533,
+       "keywordBroad": 0.04031098497705593,
+       "newest": 0.006685409158531665
+      },
+      "daily": {
+       "desc": {
+        "3": {
+         "precision": 0.025641025641025637,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.015384615384615384,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.008974358974358975,
+         "emptyDays": 0
+        }
+       },
+       "desc+kw": {
+        "3": {
+         "precision": 0.025641025641025637,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.015384615384615384,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.008974358974358975,
+         "emptyDays": 0
+        }
+       },
+       "truncated+kw": {
+        "3": {
+         "precision": 0.025641025641025637,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.015384615384615384,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.008974358974358975,
+         "emptyDays": 0
+        }
+       },
+       "keywordNarrow": {
+        "3": {
+         "precision": 0.5,
+         "emptyDays": 70
+        },
+        "5": {
+         "precision": 0.5,
+         "emptyDays": 70
+        },
+        "10": {
+         "precision": 0.5,
+         "emptyDays": 70
+        }
+       },
+       "keywordBroad": {
+        "3": {
+         "precision": 0.06862745098039216,
+         "emptyDays": 27
+        },
+        "5": {
+         "precision": 0.06862745098039216,
+         "emptyDays": 27
+        },
+        "10": {
+         "precision": 0.06862745098039216,
+         "emptyDays": 27
+        }
+       },
+       "newest": {
+        "3": {
+         "precision": 0.0,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.002564102564102564,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.005128205128205128,
+         "emptyDays": 0
+        }
+       }
+      },
+      "fallbacks": {}
+     },
+     "fresh-3|10": {
+      "shown": 12,
+      "taughtRelevant": 2,
+      "taughtNotRelevant": 8,
+      "scoredRelevant": 7,
+      "ap": {
+       "desc": 0.3609412322059766,
+       "desc+kw": 0.6078199578199578,
+       "truncated+kw": 0.6300627943485086,
+       "keywordNarrow": 0.38698221925581533,
+       "keywordBroad": 0.04031098497705593,
+       "newest": 0.006685409158531665
+      },
+      "daily": {
+       "desc": {
+        "3": {
+         "precision": 0.025641025641025637,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.015384615384615384,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.008974358974358975,
+         "emptyDays": 0
+        }
+       },
+       "desc+kw": {
+        "3": {
+         "precision": 0.025641025641025637,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.015384615384615384,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.008974358974358975,
+         "emptyDays": 0
+        }
+       },
+       "truncated+kw": {
+        "3": {
+         "precision": 0.025641025641025637,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.015384615384615384,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.008974358974358975,
+         "emptyDays": 0
+        }
+       },
+       "keywordNarrow": {
+        "3": {
+         "precision": 0.5,
+         "emptyDays": 70
+        },
+        "5": {
+         "precision": 0.5,
+         "emptyDays": 70
+        },
+        "10": {
+         "precision": 0.5,
+         "emptyDays": 70
+        }
+       },
+       "keywordBroad": {
+        "3": {
+         "precision": 0.06862745098039216,
+         "emptyDays": 27
+        },
+        "5": {
+         "precision": 0.06862745098039216,
+         "emptyDays": 27
+        },
+        "10": {
+         "precision": 0.06862745098039216,
+         "emptyDays": 27
+        }
+       },
+       "newest": {
+        "3": {
+         "precision": 0.0,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.002564102564102564,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.005128205128205128,
+         "emptyDays": 0
+        }
+       }
+      },
+      "fallbacks": {}
+     }
+    },
+    "energy": {
+     "fresh-3|5": {
+      "shown": 7,
+      "taughtRelevant": 0,
+      "taughtNotRelevant": 6,
+      "scoredRelevant": 5,
+      "ap": {
+       "desc": 0.10796435076762945,
+       "desc+kw": 0.2473837347960887,
+       "truncated+kw": 0.2473837347960887,
+       "keywordNarrow": 0.023889957694575515,
+       "keywordBroad": 0.14409175970303872,
+       "newest": 0.003237664850220679
+      },
+      "daily": {
+       "desc": {
+        "3": {
+         "precision": 0.01282051282051282,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.01282051282051282,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.0074074074074074086,
+         "emptyDays": 0
+        }
+       },
+       "desc+kw": {
+        "3": {
+         "precision": 0.017094017094017092,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.01282051282051282,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.0074074074074074086,
+         "emptyDays": 0
+        }
+       },
+       "truncated+kw": {
+        "3": {
+         "precision": 0.017094017094017092,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.01282051282051282,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.0074074074074074086,
+         "emptyDays": 0
+        }
+       },
+       "keywordNarrow": {
+        "3": {
+         "precision": 0.03939393939393939,
+         "emptyDays": 23
+        },
+        "5": {
+         "precision": 0.036969696969696965,
+         "emptyDays": 23
+        },
+        "10": {
+         "precision": 0.03593073593073593,
+         "emptyDays": 23
+        }
+       },
+       "keywordBroad": {
+        "3": {
+         "precision": 0.18421052631578946,
+         "emptyDays": 59
+        },
+        "5": {
+         "precision": 0.18421052631578946,
+         "emptyDays": 59
+        },
+        "10": {
+         "precision": 0.18421052631578946,
+         "emptyDays": 59
+        }
+       },
+       "newest": {
+        "3": {
+         "precision": 0.004273504273504273,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.005128205128205128,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.006125356125356125,
+         "emptyDays": 0
+        }
+       }
+      },
+      "fallbacks": {
+       "desc+kw": "no relevant answer: keyword",
+       "truncated+kw": "no relevant answer: keyword"
+      }
+     },
+     "fresh-3|10": {
+      "shown": 15,
+      "taughtRelevant": 0,
+      "taughtNotRelevant": 14,
+      "scoredRelevant": 5,
+      "ap": {
+       "desc": 0.10796435076762945,
+       "desc+kw": 0.2473837347960887,
+       "truncated+kw": 0.2473837347960887,
+       "keywordNarrow": 0.023889957694575515,
+       "keywordBroad": 0.14409175970303872,
+       "newest": 0.003237664850220679
+      },
+      "daily": {
+       "desc": {
+        "3": {
+         "precision": 0.01282051282051282,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.01282051282051282,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.0074074074074074086,
+         "emptyDays": 0
+        }
+       },
+       "desc+kw": {
+        "3": {
+         "precision": 0.017094017094017092,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.01282051282051282,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.0074074074074074086,
+         "emptyDays": 0
+        }
+       },
+       "truncated+kw": {
+        "3": {
+         "precision": 0.017094017094017092,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.01282051282051282,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.0074074074074074086,
+         "emptyDays": 0
+        }
+       },
+       "keywordNarrow": {
+        "3": {
+         "precision": 0.03939393939393939,
+         "emptyDays": 23
+        },
+        "5": {
+         "precision": 0.036969696969696965,
+         "emptyDays": 23
+        },
+        "10": {
+         "precision": 0.03593073593073593,
+         "emptyDays": 23
+        }
+       },
+       "keywordBroad": {
+        "3": {
+         "precision": 0.18421052631578946,
+         "emptyDays": 59
+        },
+        "5": {
+         "precision": 0.18421052631578946,
+         "emptyDays": 59
+        },
+        "10": {
+         "precision": 0.18421052631578946,
+         "emptyDays": 59
+        }
+       },
+       "newest": {
+        "3": {
+         "precision": 0.004273504273504273,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.005128205128205128,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.006125356125356125,
+         "emptyDays": 0
+        }
+       }
+      },
+      "fallbacks": {
+       "desc+kw": "no relevant answer: keyword",
+       "truncated+kw": "no relevant answer: keyword"
+      }
+     }
+    },
+    "quantum": {
+     "fresh-3|5": {
+      "shown": 5,
+      "taughtRelevant": 1,
+      "taughtNotRelevant": 3,
+      "scoredRelevant": 10,
+      "ap": {
+       "desc": 0.9833333333333334,
+       "desc+kw": 0.8813455988455988,
+       "truncated+kw": 1.0,
+       "keywordNarrow": 0.7980122655122656,
+       "keywordBroad": 0.7980122655122656,
+       "newest": 0.008158558834046994
+      },
+      "daily": {
+       "desc": {
+        "3": {
+         "precision": 0.04273504273504273,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.02564102564102564,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.01282051282051282,
+         "emptyDays": 0
+        }
+       },
+       "desc+kw": {
+        "3": {
+         "precision": 0.04273504273504273,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.02564102564102564,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.01282051282051282,
+         "emptyDays": 0
+        }
+       },
+       "truncated+kw": {
+        "3": {
+         "precision": 0.04273504273504273,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.02564102564102564,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.01282051282051282,
+         "emptyDays": 0
+        }
+       },
+       "keywordNarrow": {
+        "3": {
+         "precision": 0.9,
+         "emptyDays": 68
+        },
+        "5": {
+         "precision": 0.9,
+         "emptyDays": 68
+        },
+        "10": {
+         "precision": 0.9,
+         "emptyDays": 68
+        }
+       },
+       "keywordBroad": {
+        "3": {
+         "precision": 0.9,
+         "emptyDays": 68
+        },
+        "5": {
+         "precision": 0.9,
+         "emptyDays": 68
+        },
+        "10": {
+         "precision": 0.9,
+         "emptyDays": 68
+        }
+       },
+       "newest": {
+        "3": {
+         "precision": 0.008547008547008546,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.005128205128205128,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.005128205128205128,
+         "emptyDays": 0
+        }
+       }
+      },
+      "fallbacks": {}
+     },
+     "fresh-3|10": {
+      "shown": 10,
+      "taughtRelevant": 1,
+      "taughtNotRelevant": 8,
+      "scoredRelevant": 10,
+      "ap": {
+       "desc": 0.9833333333333334,
+       "desc+kw": 0.8813455988455988,
+       "truncated+kw": 0.8813455988455988,
+       "keywordNarrow": 0.7980122655122656,
+       "keywordBroad": 0.7980122655122656,
+       "newest": 0.008158558834046994
+      },
+      "daily": {
+       "desc": {
+        "3": {
+         "precision": 0.04273504273504273,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.02564102564102564,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.01282051282051282,
+         "emptyDays": 0
+        }
+       },
+       "desc+kw": {
+        "3": {
+         "precision": 0.04273504273504273,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.02564102564102564,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.01282051282051282,
+         "emptyDays": 0
+        }
+       },
+       "truncated+kw": {
+        "3": {
+         "precision": 0.04273504273504273,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.02564102564102564,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.01282051282051282,
+         "emptyDays": 0
+        }
+       },
+       "keywordNarrow": {
+        "3": {
+         "precision": 0.9,
+         "emptyDays": 68
+        },
+        "5": {
+         "precision": 0.9,
+         "emptyDays": 68
+        },
+        "10": {
+         "precision": 0.9,
+         "emptyDays": 68
+        }
+       },
+       "keywordBroad": {
+        "3": {
+         "precision": 0.9,
+         "emptyDays": 68
+        },
+        "5": {
+         "precision": 0.9,
+         "emptyDays": 68
+        },
+        "10": {
+         "precision": 0.9,
+         "emptyDays": 68
+        }
+       },
+       "newest": {
+        "3": {
+         "precision": 0.008547008547008546,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.005128205128205128,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.005128205128205128,
+         "emptyDays": 0
+        }
+       }
+      },
+      "fallbacks": {}
+     }
+    },
+    "health": {
+     "fresh-3|5": {
+      "shown": 8,
+      "taughtRelevant": 4,
+      "taughtNotRelevant": 3,
+      "scoredRelevant": 13,
+      "ap": {
+       "desc": 0.5114418620059276,
+       "desc+kw": 0.8647035270040748,
+       "truncated+kw": 0.8647035270040748,
+       "keywordNarrow": 0.5418042185029728,
+       "keywordBroad": 0.5126812948641923,
+       "newest": 0.009386891543194636
+      },
+      "daily": {
+       "desc": {
+        "3": {
+         "precision": 0.047008547008547,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.030769230769230774,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.01666666666666667,
+         "emptyDays": 0
+        }
+       },
+       "desc+kw": {
+        "3": {
+         "precision": 0.05128205128205128,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.030769230769230774,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.01666666666666667,
+         "emptyDays": 0
+        }
+       },
+       "truncated+kw": {
+        "3": {
+         "precision": 0.05128205128205128,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.030769230769230774,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.01666666666666667,
+         "emptyDays": 0
+        }
+       },
+       "keywordNarrow": {
+        "3": {
+         "precision": 0.5588235294117647,
+         "emptyDays": 61
+        },
+        "5": {
+         "precision": 0.5588235294117647,
+         "emptyDays": 61
+        },
+        "10": {
+         "precision": 0.5588235294117647,
+         "emptyDays": 61
+        }
+       },
+       "keywordBroad": {
+        "3": {
+         "precision": 0.525,
+         "emptyDays": 58
+        },
+        "5": {
+         "precision": 0.525,
+         "emptyDays": 58
+        },
+        "10": {
+         "precision": 0.525,
+         "emptyDays": 58
+        }
+       },
+       "newest": {
+        "3": {
+         "precision": 0.008547008547008546,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.007692307692307694,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.010256410256410256,
+         "emptyDays": 0
+        }
+       }
+      },
+      "fallbacks": {}
+     },
+     "fresh-3|10": {
+      "shown": 14,
+      "taughtRelevant": 5,
+      "taughtNotRelevant": 8,
+      "scoredRelevant": 13,
+      "ap": {
+       "desc": 0.5114418620059276,
+       "desc+kw": 0.8674025823347091,
+       "truncated+kw": 0.8647035270040748,
+       "keywordNarrow": 0.5418042185029728,
+       "keywordBroad": 0.5126812948641923,
+       "newest": 0.009386891543194636
+      },
+      "daily": {
+       "desc": {
+        "3": {
+         "precision": 0.047008547008547,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.030769230769230774,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.01666666666666667,
+         "emptyDays": 0
+        }
+       },
+       "desc+kw": {
+        "3": {
+         "precision": 0.05128205128205128,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.030769230769230774,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.01666666666666667,
+         "emptyDays": 0
+        }
+       },
+       "truncated+kw": {
+        "3": {
+         "precision": 0.05128205128205128,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.030769230769230774,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.01666666666666667,
+         "emptyDays": 0
+        }
+       },
+       "keywordNarrow": {
+        "3": {
+         "precision": 0.5588235294117647,
+         "emptyDays": 61
+        },
+        "5": {
+         "precision": 0.5588235294117647,
+         "emptyDays": 61
+        },
+        "10": {
+         "precision": 0.5588235294117647,
+         "emptyDays": 61
+        }
+       },
+       "keywordBroad": {
+        "3": {
+         "precision": 0.525,
+         "emptyDays": 58
+        },
+        "5": {
+         "precision": 0.525,
+         "emptyDays": 58
+        },
+        "10": {
+         "precision": 0.525,
+         "emptyDays": 58
+        }
+       },
+       "newest": {
+        "3": {
+         "precision": 0.008547008547008546,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.007692307692307694,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.010256410256410256,
+         "emptyDays": 0
+        }
+       }
+      },
+      "fallbacks": {}
+     }
+    },
+    "education": {
+     "fresh-3|5": {
+      "shown": 5,
+      "taughtRelevant": 2,
+      "taughtNotRelevant": 3,
+      "scoredRelevant": 8,
+      "ap": {
+       "desc": 0.7638162672476398,
+       "desc+kw": 0.8870481927710844,
+       "truncated+kw": 0.8870481927710844,
+       "keywordNarrow": 0.5100122099387332,
+       "keywordBroad": 0.15731644245660265,
+       "newest": 0.005317689839383523
+      },
+      "daily": {
+       "desc": {
+        "3": {
+         "precision": 0.034188034188034185,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.022222222222222223,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.013247863247863246,
+         "emptyDays": 0
+        }
+       },
+       "desc+kw": {
+        "3": {
+         "precision": 0.034188034188034185,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.022222222222222223,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.013247863247863246,
+         "emptyDays": 0
+        }
+       },
+       "truncated+kw": {
+        "3": {
+         "precision": 0.034188034188034185,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.022222222222222223,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.013247863247863246,
+         "emptyDays": 0
+        }
+       },
+       "keywordNarrow": {
+        "3": {
+         "precision": 0.7142857142857143,
+         "emptyDays": 71
+        },
+        "5": {
+         "precision": 0.7142857142857143,
+         "emptyDays": 71
+        },
+        "10": {
+         "precision": 0.7142857142857143,
+         "emptyDays": 71
+        }
+       },
+       "keywordBroad": {
+        "3": {
+         "precision": 0.1891891891891892,
+         "emptyDays": 41
+        },
+        "5": {
+         "precision": 0.1891891891891892,
+         "emptyDays": 41
+        },
+        "10": {
+         "precision": 0.1891891891891892,
+         "emptyDays": 41
+        }
+       },
+       "newest": {
+        "3": {
+         "precision": 0.004273504273504273,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.004273504273504273,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.006837606837606838,
+         "emptyDays": 0
+        }
+       }
+      },
+      "fallbacks": {}
+     },
+     "fresh-3|10": {
+      "shown": 10,
+      "taughtRelevant": 2,
+      "taughtNotRelevant": 8,
+      "scoredRelevant": 8,
+      "ap": {
+       "desc": 0.7638162672476398,
+       "desc+kw": 0.8870481927710844,
+       "truncated+kw": 0.8870481927710844,
+       "keywordNarrow": 0.5100122099387332,
+       "keywordBroad": 0.15731644245660265,
+       "newest": 0.005317689839383523
+      },
+      "daily": {
+       "desc": {
+        "3": {
+         "precision": 0.034188034188034185,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.022222222222222223,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.013247863247863246,
+         "emptyDays": 0
+        }
+       },
+       "desc+kw": {
+        "3": {
+         "precision": 0.034188034188034185,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.022222222222222223,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.013247863247863246,
+         "emptyDays": 0
+        }
+       },
+       "truncated+kw": {
+        "3": {
+         "precision": 0.034188034188034185,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.022222222222222223,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.013247863247863246,
+         "emptyDays": 0
+        }
+       },
+       "keywordNarrow": {
+        "3": {
+         "precision": 0.7142857142857143,
+         "emptyDays": 71
+        },
+        "5": {
+         "precision": 0.7142857142857143,
+         "emptyDays": 71
+        },
+        "10": {
+         "precision": 0.7142857142857143,
+         "emptyDays": 71
+        }
+       },
+       "keywordBroad": {
+        "3": {
+         "precision": 0.1891891891891892,
+         "emptyDays": 41
+        },
+        "5": {
+         "precision": 0.1891891891891892,
+         "emptyDays": 41
+        },
+        "10": {
+         "precision": 0.1891891891891892,
+         "emptyDays": 41
+        }
+       },
+       "newest": {
+        "3": {
+         "precision": 0.004273504273504273,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.004273504273504273,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.006837606837606838,
+         "emptyDays": 0
+        }
+       }
+      },
+      "fallbacks": {}
+     }
+    },
+    "coding": {
+     "fresh-3|5": {
+      "shown": 6,
+      "taughtRelevant": 4,
+      "taughtNotRelevant": 0,
+      "scoredRelevant": 52,
+      "ap": {
+       "desc": 0.6246625442434748,
+       "desc+kw": 0.6986340646753497,
+       "truncated+kw": 0.7059466676731424,
+       "keywordNarrow": 0.4313305857884017,
+       "keywordBroad": 0.26082508547263505,
+       "newest": 0.041563693366506456
+      },
+      "daily": {
+       "desc": {
+        "3": {
+         "precision": 0.14957264957264957,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.10769230769230767,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.07136752136752136,
+         "emptyDays": 0
+        }
+       },
+       "desc+kw": {
+        "3": {
+         "precision": 0.16666666666666666,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.11282051282051281,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.07264957264957264,
+         "emptyDays": 0
+        }
+       },
+       "truncated+kw": {
+        "3": {
+         "precision": 0.17094017094017094,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.11282051282051281,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.07264957264957264,
+         "emptyDays": 0
+        }
+       },
+       "keywordNarrow": {
+        "3": {
+         "precision": 0.4875,
+         "emptyDays": 38
+        },
+        "5": {
+         "precision": 0.4854166666666666,
+         "emptyDays": 38
+        },
+        "10": {
+         "precision": 0.4854166666666666,
+         "emptyDays": 38
+        }
+       },
+       "keywordBroad": {
+        "3": {
+         "precision": 0.25706214689265533,
+         "emptyDays": 19
+        },
+        "5": {
+         "precision": 0.2567796610169491,
+         "emptyDays": 19
+        },
+        "10": {
+         "precision": 0.25169491525423726,
+         "emptyDays": 19
+        }
+       },
+       "newest": {
+        "3": {
+         "precision": 0.034188034188034185,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.0358974358974359,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.03803418803418804,
+         "emptyDays": 0
+        }
+       }
+      },
+      "fallbacks": {}
+     },
+     "fresh-3|10": {
+      "shown": 14,
+      "taughtRelevant": 7,
+      "taughtNotRelevant": 3,
+      "scoredRelevant": 52,
+      "ap": {
+       "desc": 0.6246625442434748,
+       "desc+kw": 0.7124595428266363,
+       "truncated+kw": 0.7100345598143328,
+       "keywordNarrow": 0.4313305857884017,
+       "keywordBroad": 0.26082508547263505,
+       "newest": 0.041563693366506456
+      },
+      "daily": {
+       "desc": {
+        "3": {
+         "precision": 0.14957264957264957,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.10769230769230767,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.07136752136752136,
+         "emptyDays": 0
+        }
+       },
+       "desc+kw": {
+        "3": {
+         "precision": 0.17094017094017094,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.11282051282051281,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.07264957264957264,
+         "emptyDays": 0
+        }
+       },
+       "truncated+kw": {
+        "3": {
+         "precision": 0.17094017094017094,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.11282051282051281,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.07264957264957264,
+         "emptyDays": 0
+        }
+       },
+       "keywordNarrow": {
+        "3": {
+         "precision": 0.4875,
+         "emptyDays": 38
+        },
+        "5": {
+         "precision": 0.4854166666666666,
+         "emptyDays": 38
+        },
+        "10": {
+         "precision": 0.4854166666666666,
+         "emptyDays": 38
+        }
+       },
+       "keywordBroad": {
+        "3": {
+         "precision": 0.25706214689265533,
+         "emptyDays": 19
+        },
+        "5": {
+         "precision": 0.2567796610169491,
+         "emptyDays": 19
+        },
+        "10": {
+         "precision": 0.25169491525423726,
+         "emptyDays": 19
+        }
+       },
+       "newest": {
+        "3": {
+         "precision": 0.034188034188034185,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.0358974358974359,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.03803418803418804,
+         "emptyDays": 0
+        }
+       }
+      },
+      "fallbacks": {}
+     }
+    },
+    "earnings": {
+     "fresh-3|5": {
+      "shown": 5,
+      "taughtRelevant": 1,
+      "taughtNotRelevant": 4,
+      "scoredRelevant": 76,
+      "ap": {
+       "desc": 0.9768151223632148,
+       "desc+kw": 0.8667048550050325,
+       "truncated+kw": 0.8667048550050325,
+       "keywordNarrow": 0.684155648357999,
+       "keywordBroad": 0.5196293340730381,
+       "newest": 0.04241295785662752
+      },
+      "daily": {
+       "desc": {
+        "3": {
+         "precision": 0.27350427350427353,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.19145299145299147,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.10042735042735043,
+         "emptyDays": 0
+        }
+       },
+       "desc+kw": {
+        "3": {
+         "precision": 0.27350427350427353,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.19145299145299147,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.10042735042735043,
+         "emptyDays": 0
+        }
+       },
+       "truncated+kw": {
+        "3": {
+         "precision": 0.27350427350427353,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.19145299145299147,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.10042735042735043,
+         "emptyDays": 0
+        }
+       },
+       "keywordNarrow": {
+        "3": {
+         "precision": 0.8888888888888888,
+         "emptyDays": 51
+        },
+        "5": {
+         "precision": 0.8888888888888888,
+         "emptyDays": 51
+        },
+        "10": {
+         "precision": 0.8888888888888888,
+         "emptyDays": 51
+        }
+       },
+       "keywordBroad": {
+        "3": {
+         "precision": 0.4636363636363636,
+         "emptyDays": 23
+        },
+        "5": {
+         "precision": 0.43787878787878787,
+         "emptyDays": 23
+        },
+        "10": {
+         "precision": 0.43995670995671,
+         "emptyDays": 23
+        }
+       },
+       "newest": {
+        "3": {
+         "precision": 0.14529914529914528,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.12222222222222222,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.07222222222222222,
+         "emptyDays": 0
+        }
+       }
+      },
+      "fallbacks": {}
+     },
+     "fresh-3|10": {
+      "shown": 10,
+      "taughtRelevant": 1,
+      "taughtNotRelevant": 9,
+      "scoredRelevant": 76,
+      "ap": {
+       "desc": 0.9768151223632148,
+       "desc+kw": 0.8667048550050325,
+       "truncated+kw": 0.8667048550050325,
+       "keywordNarrow": 0.684155648357999,
+       "keywordBroad": 0.5196293340730381,
+       "newest": 0.04241295785662752
+      },
+      "daily": {
+       "desc": {
+        "3": {
+         "precision": 0.27350427350427353,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.19145299145299147,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.10042735042735043,
+         "emptyDays": 0
+        }
+       },
+       "desc+kw": {
+        "3": {
+         "precision": 0.27350427350427353,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.19145299145299147,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.10042735042735043,
+         "emptyDays": 0
+        }
+       },
+       "truncated+kw": {
+        "3": {
+         "precision": 0.27350427350427353,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.19145299145299147,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.10042735042735043,
+         "emptyDays": 0
+        }
+       },
+       "keywordNarrow": {
+        "3": {
+         "precision": 0.8888888888888888,
+         "emptyDays": 51
+        },
+        "5": {
+         "precision": 0.8888888888888888,
+         "emptyDays": 51
+        },
+        "10": {
+         "precision": 0.8888888888888888,
+         "emptyDays": 51
+        }
+       },
+       "keywordBroad": {
+        "3": {
+         "precision": 0.4636363636363636,
+         "emptyDays": 23
+        },
+        "5": {
+         "precision": 0.43787878787878787,
+         "emptyDays": 23
+        },
+        "10": {
+         "precision": 0.43995670995671,
+         "emptyDays": 23
+        }
+       },
+       "newest": {
+        "3": {
+         "precision": 0.14529914529914528,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.12222222222222222,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.07222222222222222,
+         "emptyDays": 0
+        }
+       }
+      },
+      "fallbacks": {}
+     }
+    }
+   }
+  },
+  "pool": {
+   "scoredProfiles": [
+    "chips",
+    "security",
+    "funding",
+    "regulation",
+    "courts",
+    "robotics",
+    "safety",
+    "open-models",
+    "health",
+    "coding",
+    "earnings"
+   ],
+   "perProfileAP": {
+    "chips": {
+     "desc": 0.6505686686332145,
+     "desc+kw": 0.7625981220754148,
+     "truncated+kw": 0.7887798141574027,
+     "keywordNarrow": 0.6021717647995964,
+     "keywordBroad": 0.4910907527647684,
+     "newest": 0.041597170590106126
+    },
+    "security": {
+     "desc": 0.9012943613768873,
+     "desc+kw": 0.9450821643147411,
+     "truncated+kw": 0.9446829989571299,
+     "keywordNarrow": 0.6117717590812926,
+     "keywordBroad": 0.7081359593748616,
+     "newest": 0.17610640090287644
+    },
+    "funding": {
+     "desc": 0.9561854357521337,
+     "desc+kw": 0.955881704688315,
+     "truncated+kw": 0.9643029873335911,
+     "keywordNarrow": 0.7229116693099114,
+     "keywordBroad": 0.8156453351210715,
+     "newest": 0.1998762530958301
+    },
+    "regulation": {
+     "desc": 0.43468417009421045,
+     "desc+kw": 0.4369559770350211,
+     "truncated+kw": 0.41562984718643914,
+     "keywordNarrow": 0.12514500017761007,
+     "keywordBroad": 0.2948673081621441,
+     "newest": 0.03000542833639639
+    },
+    "courts": {
+     "desc": 0.6669348065487614,
+     "desc+kw": 0.8645912088167328,
+     "truncated+kw": 0.8662381126375497,
+     "keywordNarrow": 0.7280367058152737,
+     "keywordBroad": 0.4035217593046335,
+     "newest": 0.016155325449812467
+    },
+    "robotics": {
+     "desc": 0.48572262801045274,
+     "desc+kw": 0.6961107136332083,
+     "truncated+kw": 0.7284964175282456,
+     "keywordNarrow": 0.5673343535670342,
+     "keywordBroad": 0.6722899791614574,
+     "newest": 0.01835165765476893
+    },
+    "safety": {
+     "desc": 0.6304854745966888,
+     "desc+kw": 0.6702346878896468,
+     "truncated+kw": 0.4457032705945853,
+     "keywordNarrow": 0.06396387942300925,
+     "keywordBroad": 0.11383751907998715,
+     "newest": 0.009419075111120803
+    },
+    "open-models": {
+     "desc": 0.6648729441603694,
+     "desc+kw": 0.6506619668484888,
+     "truncated+kw": 0.6396157238353779,
+     "keywordNarrow": 0.20356439109349364,
+     "keywordBroad": 0.2753562042951004,
+     "newest": 0.02074280053998891
+    },
+    "health": {
+     "desc": 0.5112596588220093,
+     "desc+kw": 0.7365547148554996,
+     "truncated+kw": 0.8202111415319777,
+     "keywordNarrow": 0.4900367313239926,
+     "keywordBroad": 0.5204283912157579,
+     "newest": 0.009825158451477882
+    },
+    "coding": {
+     "desc": 0.6468349257954726,
+     "desc+kw": 0.7203065930761801,
+     "truncated+kw": 0.7297516301547534,
+     "keywordNarrow": 0.44860245852745534,
+     "keywordBroad": 0.26453093106316505,
+     "newest": 0.04136161451800767
+    },
+    "earnings": {
+     "desc": 0.9750149701646691,
+     "desc+kw": 0.9838764591178017,
+     "truncated+kw": 0.983819500495303,
+     "keywordNarrow": 0.6759358460623126,
+     "keywordBroad": 0.5204664774803107,
+     "newest": 0.042527476216803174
+    }
+   },
+   "MAP": {
+    "desc": 0.6839870949049881,
+    "desc+kw": 0.7657140283955499,
+    "truncated+kw": 0.7570210404011232,
+    "keywordNarrow": 0.4763158690164529,
+    "keywordBroad": 0.4618336924566597,
+    "newest": 0.05508803280610808
+   },
+   "intervals": {
+    "desc": {
+     "keywordNarrow": [
+      0.08702326889337723,
+      0.3256505761018877
+     ],
+     "keywordBroad": [
+      0.09982315201253851,
+      0.33594622172513205
+     ],
+     "newest": [
+      0.5485555970233134,
+      0.7175319772711356
+     ]
+    },
+    "desc+kw": {
+     "keywordNarrow": [
+      0.21545455570428934,
+      0.3742340379791102
+     ],
+     "keywordBroad": [
+      0.20605374266430118,
+      0.3986211620682737
+     ],
+     "newest": [
+      0.6299263721923888,
+      0.7840073411340478
+     ]
+    },
+    "truncated+kw": {
+     "keywordNarrow": [
+      0.22634374108590025,
+      0.3319018967443936
+     ],
+     "keywordBroad": [
+      0.21200510627711358,
+      0.37277534916028093
+     ],
+     "newest": [
+      0.6027709448567621,
+      0.7866591855333234
+     ]
+    }
+   },
+   "pass": {
+    "desc": true,
+    "desc+kw": true,
+    "truncated+kw": true
+   },
+   "dailyPrecision": {
+    "desc": {
+     "3": 0.20454545454545456,
+     "5": 0.15326086956521737,
+     "10": 0.09327984817115254
+    },
+    "desc+kw": {
+     "3": 0.20965085638998682,
+     "5": 0.15563241106719367,
+     "10": 0.09377391931739759
+    },
+    "truncated+kw": {
+     "3": 0.208498023715415,
+     "5": 0.15573122529644268,
+     "10": 0.09367510508814858
+    },
+    "keywordNarrow": {
+     "3": 0.635564903445896,
+     "5": 0.6338499320276462,
+     "10": 0.6338551687264313
+    },
+    "keywordBroad": {
+     "3": 0.4977738306845472,
+     "5": 0.4965332732509674,
+     "10": 0.497621250344087
+    },
+    "newest": {
+     "3": 0.06324110671936758,
+     "5": 0.06037549407114624,
+     "10": 0.050295658447832355
+    }
+   },
+   "perProfileDailyPrecision": {
+    "chips": {
+     "desc": {
+      "3": 0.20289855072463767,
+      "5": 0.13641304347826086,
+      "10": 0.07782091097308488
+     },
+     "desc+kw": {
+      "3": 0.21376811594202896,
+      "5": 0.14076086956521738,
+      "10": 0.07890786749482402
+     },
+     "truncated+kw": {
+      "3": 0.21014492753623187,
+      "5": 0.13858695652173914,
+      "10": 0.07782091097308488
+     },
+     "keywordNarrow": {
+      "3": 0.8041666666666668,
+      "5": 0.8083333333333333,
+      "10": 0.8083333333333333
+     },
+     "keywordBroad": {
+      "3": 0.5055555555555555,
+      "5": 0.5158333333333334,
+      "10": 0.5169444444444444
+     },
+     "newest": {
+      "3": 0.05434782608695652,
+      "5": 0.04728260869565218,
+      "10": 0.045212215320910965
+     }
+    },
+    "security": {
+     "desc": {
+      "3": 0.4855072463768115,
+      "5": 0.3918478260869565,
+      "10": 0.23544254658385097
+     },
+     "desc+kw": {
+      "3": 0.4963768115942029,
+      "5": 0.3983695652173912,
+      "10": 0.23652950310559007
+     },
+     "truncated+kw": {
+      "3": 0.4963768115942029,
+      "5": 0.3983695652173912,
+      "10": 0.23652950310559007
+     },
+     "keywordNarrow": {
+      "3": 0.7419354838709676,
+      "5": 0.7295698924731183,
+      "10": 0.7296274961597543
+     },
+     "keywordBroad": {
+      "3": 0.7256410256410257,
+      "5": 0.7184615384615385,
+      "10": 0.7211965811965811
+     },
+     "newest": {
+      "3": 0.10869565217391304,
+      "5": 0.09619565217391304,
+      "10": 0.0919642857142857
+     }
+    },
+    "funding": {
+     "desc": {
+      "3": 0.6376811594202898,
+      "5": 0.532608695652174,
+      "10": 0.35000000000000003
+     },
+     "desc+kw": {
+      "3": 0.6304347826086957,
+      "5": 0.5391304347826087,
+      "10": 0.35108695652173916
+     },
+     "truncated+kw": {
+      "3": 0.6340579710144927,
+      "5": 0.5456521739130435,
+      "10": 0.35108695652173916
+     },
+     "keywordNarrow": {
+      "3": 0.921875,
+      "5": 0.9130208333333334,
+      "10": 0.9130208333333334
+     },
+     "keywordBroad": {
+      "3": 0.8194444444444444,
+      "5": 0.8203703703703704,
+      "10": 0.8280202821869488
+     },
+     "newest": {
+      "3": 0.26086956521739124,
+      "5": 0.24565217391304345,
+      "10": 0.19130434782608696
+     }
+    },
+    "regulation": {
+     "desc": {
+      "3": 0.13043478260869565,
+      "5": 0.08043478260869566,
+      "10": 0.04954710144927536
+     },
+     "desc+kw": {
+      "3": 0.13949275362318841,
+      "5": 0.08695652173913043,
+      "10": 0.050634057971014494
+     },
+     "truncated+kw": {
+      "3": 0.13043478260869565,
+      "5": 0.08478260869565217,
+      "10": 0.050634057971014494
+     },
+     "keywordNarrow": {
+      "3": 0.34615384615384615,
+      "5": 0.34615384615384615,
+      "10": 0.34615384615384615
+     },
+     "keywordBroad": {
+      "3": 0.41369047619047616,
+      "5": 0.41369047619047616,
+      "10": 0.41666666666666663
+     },
+     "newest": {
+      "3": 0.04710144927536231,
+      "5": 0.049999999999999996,
+      "10": 0.0365036231884058
+     }
+    },
+    "courts": {
+     "desc": {
+      "3": 0.07608695652173912,
+      "5": 0.051449275362318844,
+      "10": 0.030900621118012422
+     },
+     "desc+kw": {
+      "3": 0.08333333333333333,
+      "5": 0.051449275362318844,
+      "10": 0.030900621118012422
+     },
+     "truncated+kw": {
+      "3": 0.08333333333333333,
+      "5": 0.051449275362318844,
+      "10": 0.030900621118012422
+     },
+     "keywordNarrow": {
+      "3": 0.9333333333333333,
+      "5": 0.9333333333333333,
+      "10": 0.9333333333333333
+     },
+     "keywordBroad": {
+      "3": 0.41935483870967744,
+      "5": 0.42204301075268813,
+      "10": 0.42204301075268813
+     },
+     "newest": {
+      "3": 0.021739130434782608,
+      "5": 0.021014492753623187,
+      "10": 0.01785714285714286
+     }
+    },
+    "robotics": {
+     "desc": {
+      "3": 0.09420289855072463,
+      "5": 0.06739130434782609,
+      "10": 0.034903381642512075
+     },
+     "desc+kw": {
+      "3": 0.10144927536231883,
+      "5": 0.06739130434782609,
+      "10": 0.034903381642512075
+     },
+     "truncated+kw": {
+      "3": 0.10144927536231883,
+      "5": 0.06739130434782609,
+      "10": 0.034903381642512075
+     },
+     "keywordNarrow": {
+      "3": 0.7321428571428571,
+      "5": 0.7321428571428571,
+      "10": 0.7321428571428571
+     },
+     "keywordBroad": {
+      "3": 0.7424242424242424,
+      "5": 0.7424242424242424,
+      "10": 0.7424242424242424
+     },
+     "newest": {
+      "3": 0.007246376811594202,
+      "5": 0.01956521739130435,
+      "10": 0.018599033816425123
+     }
+    },
+    "safety": {
+     "desc": {
+      "3": 0.05797101449275362,
+      "5": 0.034782608695652174,
+      "10": 0.02028985507246377
+     },
+     "desc+kw": {
+      "3": 0.05797101449275362,
+      "5": 0.034782608695652174,
+      "10": 0.02028985507246377
+     },
+     "truncated+kw": {
+      "3": 0.05797101449275362,
+      "5": 0.034782608695652174,
+      "10": 0.02028985507246377
+     },
+     "keywordNarrow": {
+      "3": 0.17391304347826086,
+      "5": 0.17391304347826086,
+      "10": 0.17391304347826086
+     },
+     "keywordBroad": {
+      "3": 0.24074074074074073,
+      "5": 0.24074074074074073,
+      "10": 0.24074074074074073
+     },
+     "newest": {
+      "3": 0.003623188405797101,
+      "5": 0.010869565217391304,
+      "10": 0.011594202898550725
+     }
+    },
+    "open-models": {
+     "desc": {
+      "3": 0.11956521739130435,
+      "5": 0.08242753623188405,
+      "10": 0.050905797101449275
+     },
+     "desc+kw": {
+      "3": 0.11594202898550723,
+      "5": 0.0802536231884058,
+      "10": 0.050905797101449275
+     },
+     "truncated+kw": {
+      "3": 0.11594202898550723,
+      "5": 0.0802536231884058,
+      "10": 0.050905797101449275
+     },
+     "keywordNarrow": {
+      "3": 0.3939393939393939,
+      "5": 0.3939393939393939,
+      "10": 0.3939393939393939
+     },
+     "keywordBroad": {
+      "3": 0.3854166666666667,
+      "5": 0.3920138888888889,
+      "10": 0.3920138888888889
+     },
+     "newest": {
+      "3": 0.02536231884057971,
+      "5": 0.02807971014492754,
+      "10": 0.029166666666666664
+     }
+    },
+    "health": {
+     "desc": {
+      "3": 0.05797101449275362,
+      "5": 0.0375,
+      "10": 0.021195652173913046
+     },
+     "desc+kw": {
+      "3": 0.06159420289855072,
+      "5": 0.0375,
+      "10": 0.021195652173913046
+     },
+     "truncated+kw": {
+      "3": 0.06159420289855072,
+      "5": 0.0375,
+      "10": 0.021195652173913046
+     },
+     "keywordNarrow": {
+      "3": 0.5476190476190477,
+      "5": 0.5476190476190477,
+      "10": 0.5476190476190477
+     },
+     "keywordBroad": {
+      "3": 0.5384615384615384,
+      "5": 0.5384615384615384,
+      "10": 0.5384615384615384
+     },
+     "newest": {
+      "3": 0.010869565217391304,
+      "5": 0.00923913043478261,
+      "10": 0.012499999999999999
+     }
+    },
+    "coding": {
+     "desc": {
+      "3": 0.15217391304347827,
+      "5": 0.10652173913043476,
+      "10": 0.06884057971014493
+     },
+     "desc+kw": {
+      "3": 0.17028985507246377,
+      "5": 0.1108695652173913,
+      "10": 0.06992753623188407
+     },
+     "truncated+kw": {
+      "3": 0.16666666666666669,
+      "5": 0.10978260869565218,
+      "10": 0.06992753623188407
+     },
+     "keywordNarrow": {
+      "3": 0.5072463768115941,
+      "5": 0.5054347826086957,
+      "10": 0.5054347826086957
+     },
+     "keywordBroad": {
+      "3": 0.26811594202898553,
+      "5": 0.2640096618357488,
+      "10": 0.2596618357487923
+     },
+     "newest": {
+      "3": 0.032608695652173905,
+      "5": 0.03260869565217391,
+      "10": 0.03731884057971014
+     }
+    },
+    "earnings": {
+     "desc": {
+      "3": 0.2355072463768116,
+      "5": 0.1644927536231884,
+      "10": 0.08623188405797101
+     },
+     "desc+kw": {
+      "3": 0.2355072463768116,
+      "5": 0.1644927536231884,
+      "10": 0.08623188405797101
+     },
+     "truncated+kw": {
+      "3": 0.2355072463768116,
+      "5": 0.1644927536231884,
+      "10": 0.08623188405797101
+     },
+     "keywordNarrow": {
+      "3": 0.8888888888888888,
+      "5": 0.8888888888888888,
+      "10": 0.8888888888888888
+     },
+     "keywordBroad": {
+      "3": 0.4166666666666667,
+      "5": 0.3938172043010753,
+      "10": 0.3956605222734255
+     },
+     "newest": {
+      "3": 0.12318840579710144,
+      "5": 0.1036231884057971,
+      "10": 0.06123188405797102
+     }
+    }
+   },
+   "keywordEmptyDaysSummedOverScoredUnits": {
+    "keywordNarrow|3": 1254,
+    "keywordNarrow|5": 1254,
+    "keywordNarrow|10": 1254,
+    "keywordBroad|3": 926,
+    "keywordBroad|5": 926,
+    "keywordBroad|10": 926
+   },
+   "fallbackCounts": {
+    "desc+kw": {
+     "unscored|none": 10,
+     "scored|none": 22
+    },
+    "truncated+kw": {
+     "unscored|none": 10,
+     "scored|none": 22
+    }
+   },
+   "units": {
+    "biology": {
+     "fresh-3|5": {
+      "shown": 5,
+      "taughtRelevant": 3,
+      "taughtNotRelevant": 0,
+      "scoredRelevant": 0,
+      "ap": {
+       "desc": NaN,
+       "desc+kw": NaN,
+       "truncated+kw": NaN,
+       "keywordNarrow": NaN,
+       "keywordBroad": NaN,
+       "newest": NaN
+      },
+      "daily": {
+       "desc": {
+        "3": {
+         "precision": 0.0,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.0,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.0,
+         "emptyDays": 0
+        }
+       },
+       "desc+kw": {
+        "3": {
+         "precision": 0.0,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.0,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.0,
+         "emptyDays": 0
+        }
+       },
+       "truncated+kw": {
+        "3": {
+         "precision": 0.0,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.0,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.0,
+         "emptyDays": 0
+        }
+       },
+       "keywordNarrow": {
+        "3": {
+         "precision": 0.0,
+         "emptyDays": 90
+        },
+        "5": {
+         "precision": 0.0,
+         "emptyDays": 90
+        },
+        "10": {
+         "precision": 0.0,
+         "emptyDays": 90
+        }
+       },
+       "keywordBroad": {
+        "3": {
+         "precision": 0.0,
+         "emptyDays": 75
+        },
+        "5": {
+         "precision": 0.0,
+         "emptyDays": 75
+        },
+        "10": {
+         "precision": 0.0,
+         "emptyDays": 75
+        }
+       },
+       "newest": {
+        "3": {
+         "precision": 0.0,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.0,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.0,
+         "emptyDays": 0
+        }
+       }
+      },
+      "fallbacks": {}
+     },
+     "fresh-3|10": {
+      "shown": 12,
+      "taughtRelevant": 5,
+      "taughtNotRelevant": 1,
+      "scoredRelevant": 0,
+      "ap": {
+       "desc": NaN,
+       "desc+kw": NaN,
+       "truncated+kw": NaN,
+       "keywordNarrow": NaN,
+       "keywordBroad": NaN,
+       "newest": NaN
+      },
+      "daily": {
+       "desc": {
+        "3": {
+         "precision": 0.0,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.0,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.0,
+         "emptyDays": 0
+        }
+       },
+       "desc+kw": {
+        "3": {
+         "precision": 0.0,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.0,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.0,
+         "emptyDays": 0
+        }
+       },
+       "truncated+kw": {
+        "3": {
+         "precision": 0.0,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.0,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.0,
+         "emptyDays": 0
+        }
+       },
+       "keywordNarrow": {
+        "3": {
+         "precision": 0.0,
+         "emptyDays": 90
+        },
+        "5": {
+         "precision": 0.0,
+         "emptyDays": 90
+        },
+        "10": {
+         "precision": 0.0,
+         "emptyDays": 90
+        }
+       },
+       "keywordBroad": {
+        "3": {
+         "precision": 0.0,
+         "emptyDays": 75
+        },
+        "5": {
+         "precision": 0.0,
+         "emptyDays": 75
+        },
+        "10": {
+         "precision": 0.0,
+         "emptyDays": 75
+        }
+       },
+       "newest": {
+        "3": {
+         "precision": 0.0,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.0,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.0,
+         "emptyDays": 0
+        }
+       }
+      },
+      "fallbacks": {}
+     }
+    },
+    "chips": {
+     "fresh-3|5": {
+      "shown": 6,
+      "taughtRelevant": 6,
+      "taughtNotRelevant": 0,
+      "scoredRelevant": 67,
+      "ap": {
+       "desc": 0.6505686686332145,
+       "desc+kw": 0.7689426222738681,
+       "truncated+kw": 0.7901137530557611,
+       "keywordNarrow": 0.6021717647995964,
+       "keywordBroad": 0.4910907527647684,
+       "newest": 0.041597170590106126
+      },
+      "daily": {
+       "desc": {
+        "3": {
+         "precision": 0.20289855072463767,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.13641304347826086,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.07782091097308488,
+         "emptyDays": 0
+        }
+       },
+       "desc+kw": {
+        "3": {
+         "precision": 0.21376811594202896,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.14076086956521738,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.07890786749482402,
+         "emptyDays": 0
+        }
+       },
+       "truncated+kw": {
+        "3": {
+         "precision": 0.21014492753623187,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.13858695652173914,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.07782091097308488,
+         "emptyDays": 0
+        }
+       },
+       "keywordNarrow": {
+        "3": {
+         "precision": 0.8041666666666668,
+         "emptyDays": 52
+        },
+        "5": {
+         "precision": 0.8083333333333333,
+         "emptyDays": 52
+        },
+        "10": {
+         "precision": 0.8083333333333333,
+         "emptyDays": 52
+        }
+       },
+       "keywordBroad": {
+        "3": {
+         "precision": 0.5055555555555555,
+         "emptyDays": 32
+        },
+        "5": {
+         "precision": 0.5158333333333334,
+         "emptyDays": 32
+        },
+        "10": {
+         "precision": 0.5169444444444444,
+         "emptyDays": 32
+        }
+       },
+       "newest": {
+        "3": {
+         "precision": 0.05434782608695652,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.04728260869565218,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.045212215320910965,
+         "emptyDays": 0
+        }
+       }
+      },
+      "fallbacks": {}
+     },
+     "fresh-3|10": {
+      "shown": 11,
+      "taughtRelevant": 11,
+      "taughtNotRelevant": 0,
+      "scoredRelevant": 67,
+      "ap": {
+       "desc": 0.6505686686332145,
+       "desc+kw": 0.7562536218769614,
+       "truncated+kw": 0.7874458752590444,
+       "keywordNarrow": 0.6021717647995964,
+       "keywordBroad": 0.4910907527647684,
+       "newest": 0.041597170590106126
+      },
+      "daily": {
+       "desc": {
+        "3": {
+         "precision": 0.20289855072463767,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.13641304347826086,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.07782091097308488,
+         "emptyDays": 0
+        }
+       },
+       "desc+kw": {
+        "3": {
+         "precision": 0.21376811594202896,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.14076086956521738,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.07890786749482402,
+         "emptyDays": 0
+        }
+       },
+       "truncated+kw": {
+        "3": {
+         "precision": 0.21014492753623187,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.13858695652173914,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.07782091097308488,
+         "emptyDays": 0
+        }
+       },
+       "keywordNarrow": {
+        "3": {
+         "precision": 0.8041666666666668,
+         "emptyDays": 52
+        },
+        "5": {
+         "precision": 0.8083333333333333,
+         "emptyDays": 52
+        },
+        "10": {
+         "precision": 0.8083333333333333,
+         "emptyDays": 52
+        }
+       },
+       "keywordBroad": {
+        "3": {
+         "precision": 0.5055555555555555,
+         "emptyDays": 32
+        },
+        "5": {
+         "precision": 0.5158333333333334,
+         "emptyDays": 32
+        },
+        "10": {
+         "precision": 0.5169444444444444,
+         "emptyDays": 32
+        }
+       },
+       "newest": {
+        "3": {
+         "precision": 0.05434782608695652,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.04728260869565218,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.045212215320910965,
+         "emptyDays": 0
+        }
+       }
+      },
+      "fallbacks": {}
+     }
+    },
+    "security": {
+     "fresh-3|5": {
+      "shown": 5,
+      "taughtRelevant": 5,
+      "taughtNotRelevant": 0,
+      "scoredRelevant": 215,
+      "ap": {
+       "desc": 0.9012943613768873,
+       "desc+kw": 0.9450603687886087,
+       "truncated+kw": 0.9449249921392443,
+       "keywordNarrow": 0.6117717590812926,
+       "keywordBroad": 0.7081359593748616,
+       "newest": 0.17610640090287644
+      },
+      "daily": {
+       "desc": {
+        "3": {
+         "precision": 0.4855072463768115,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.3918478260869565,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.23544254658385097,
+         "emptyDays": 0
+        }
+       },
+       "desc+kw": {
+        "3": {
+         "precision": 0.4963768115942029,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.3983695652173912,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.23652950310559007,
+         "emptyDays": 0
+        }
+       },
+       "truncated+kw": {
+        "3": {
+         "precision": 0.4963768115942029,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.3983695652173912,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.23652950310559007,
+         "emptyDays": 0
+        }
+       },
+       "keywordNarrow": {
+        "3": {
+         "precision": 0.7419354838709676,
+         "emptyDays": 30
+        },
+        "5": {
+         "precision": 0.7295698924731183,
+         "emptyDays": 30
+        },
+        "10": {
+         "precision": 0.7296274961597543,
+         "emptyDays": 30
+        }
+       },
+       "keywordBroad": {
+        "3": {
+         "precision": 0.7256410256410257,
+         "emptyDays": 27
+        },
+        "5": {
+         "precision": 0.7184615384615385,
+         "emptyDays": 27
+        },
+        "10": {
+         "precision": 0.7211965811965811,
+         "emptyDays": 27
+        }
+       },
+       "newest": {
+        "3": {
+         "precision": 0.10869565217391304,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.09619565217391304,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.0919642857142857,
+         "emptyDays": 0
+        }
+       }
+      },
+      "fallbacks": {}
+     },
+     "fresh-3|10": {
+      "shown": 11,
+      "taughtRelevant": 10,
+      "taughtNotRelevant": 0,
+      "scoredRelevant": 215,
+      "ap": {
+       "desc": 0.9012943613768873,
+       "desc+kw": 0.9451039598408735,
+       "truncated+kw": 0.9444410057750157,
+       "keywordNarrow": 0.6117717590812926,
+       "keywordBroad": 0.7081359593748616,
+       "newest": 0.17610640090287644
+      },
+      "daily": {
+       "desc": {
+        "3": {
+         "precision": 0.4855072463768115,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.3918478260869565,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.23544254658385097,
+         "emptyDays": 0
+        }
+       },
+       "desc+kw": {
+        "3": {
+         "precision": 0.4963768115942029,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.3983695652173912,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.23652950310559007,
+         "emptyDays": 0
+        }
+       },
+       "truncated+kw": {
+        "3": {
+         "precision": 0.4963768115942029,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.3983695652173912,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.23652950310559007,
+         "emptyDays": 0
+        }
+       },
+       "keywordNarrow": {
+        "3": {
+         "precision": 0.7419354838709676,
+         "emptyDays": 30
+        },
+        "5": {
+         "precision": 0.7295698924731183,
+         "emptyDays": 30
+        },
+        "10": {
+         "precision": 0.7296274961597543,
+         "emptyDays": 30
+        }
+       },
+       "keywordBroad": {
+        "3": {
+         "precision": 0.7256410256410257,
+         "emptyDays": 27
+        },
+        "5": {
+         "precision": 0.7184615384615385,
+         "emptyDays": 27
+        },
+        "10": {
+         "precision": 0.7211965811965811,
+         "emptyDays": 27
+        }
+       },
+       "newest": {
+        "3": {
+         "precision": 0.10869565217391304,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.09619565217391304,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.0919642857142857,
+         "emptyDays": 0
+        }
+       }
+      },
+      "fallbacks": {}
+     }
+    },
+    "funding": {
+     "fresh-3|5": {
+      "shown": 5,
+      "taughtRelevant": 5,
+      "taughtNotRelevant": 0,
+      "scoredRelevant": 326,
+      "ap": {
+       "desc": 0.9561854357521337,
+       "desc+kw": 0.9557006981908657,
+       "truncated+kw": 0.9643379173143776,
+       "keywordNarrow": 0.7229116693099114,
+       "keywordBroad": 0.8156453351210715,
+       "newest": 0.1998762530958301
+      },
+      "daily": {
+       "desc": {
+        "3": {
+         "precision": 0.6376811594202898,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.532608695652174,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.35000000000000003,
+         "emptyDays": 0
+        }
+       },
+       "desc+kw": {
+        "3": {
+         "precision": 0.6304347826086957,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.5391304347826087,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.35108695652173916,
+         "emptyDays": 0
+        }
+       },
+       "truncated+kw": {
+        "3": {
+         "precision": 0.6340579710144927,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.5456521739130435,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.35108695652173916,
+         "emptyDays": 0
+        }
+       },
+       "keywordNarrow": {
+        "3": {
+         "precision": 0.921875,
+         "emptyDays": 28
+        },
+        "5": {
+         "precision": 0.9130208333333334,
+         "emptyDays": 28
+        },
+        "10": {
+         "precision": 0.9130208333333334,
+         "emptyDays": 28
+        }
+       },
+       "keywordBroad": {
+        "3": {
+         "precision": 0.8194444444444444,
+         "emptyDays": 20
+        },
+        "5": {
+         "precision": 0.8203703703703704,
+         "emptyDays": 20
+        },
+        "10": {
+         "precision": 0.8280202821869488,
+         "emptyDays": 20
+        }
+       },
+       "newest": {
+        "3": {
+         "precision": 0.26086956521739124,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.24565217391304345,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.19130434782608696,
+         "emptyDays": 0
+        }
+       }
+      },
+      "fallbacks": {}
+     },
+     "fresh-3|10": {
+      "shown": 11,
+      "taughtRelevant": 11,
+      "taughtNotRelevant": 0,
+      "scoredRelevant": 326,
+      "ap": {
+       "desc": 0.9561854357521337,
+       "desc+kw": 0.9560627111857642,
+       "truncated+kw": 0.9642680573528047,
+       "keywordNarrow": 0.7229116693099114,
+       "keywordBroad": 0.8156453351210715,
+       "newest": 0.1998762530958301
+      },
+      "daily": {
+       "desc": {
+        "3": {
+         "precision": 0.6376811594202898,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.532608695652174,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.35000000000000003,
+         "emptyDays": 0
+        }
+       },
+       "desc+kw": {
+        "3": {
+         "precision": 0.6304347826086957,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.5391304347826087,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.35108695652173916,
+         "emptyDays": 0
+        }
+       },
+       "truncated+kw": {
+        "3": {
+         "precision": 0.6340579710144927,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.5456521739130435,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.35108695652173916,
+         "emptyDays": 0
+        }
+       },
+       "keywordNarrow": {
+        "3": {
+         "precision": 0.921875,
+         "emptyDays": 28
+        },
+        "5": {
+         "precision": 0.9130208333333334,
+         "emptyDays": 28
+        },
+        "10": {
+         "precision": 0.9130208333333334,
+         "emptyDays": 28
+        }
+       },
+       "keywordBroad": {
+        "3": {
+         "precision": 0.8194444444444444,
+         "emptyDays": 20
+        },
+        "5": {
+         "precision": 0.8203703703703704,
+         "emptyDays": 20
+        },
+        "10": {
+         "precision": 0.8280202821869488,
+         "emptyDays": 20
+        }
+       },
+       "newest": {
+        "3": {
+         "precision": 0.26086956521739124,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.24565217391304345,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.19130434782608696,
+         "emptyDays": 0
+        }
+       }
+      },
+      "fallbacks": {}
+     }
+    },
+    "regulation": {
+     "fresh-3|5": {
+      "shown": 9,
+      "taughtRelevant": 7,
+      "taughtNotRelevant": 1,
+      "scoredRelevant": 51,
+      "ap": {
+       "desc": 0.43468417009421045,
+       "desc+kw": 0.4409502930819321,
+       "truncated+kw": 0.4157487109992411,
+       "keywordNarrow": 0.12514500017761007,
+       "keywordBroad": 0.2948673081621441,
+       "newest": 0.03000542833639639
+      },
+      "daily": {
+       "desc": {
+        "3": {
+         "precision": 0.13043478260869565,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.08043478260869566,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.04954710144927536,
+         "emptyDays": 0
+        }
+       },
+       "desc+kw": {
+        "3": {
+         "precision": 0.14130434782608695,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.08695652173913043,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.050634057971014494,
+         "emptyDays": 0
+        }
+       },
+       "truncated+kw": {
+        "3": {
+         "precision": 0.13043478260869565,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.08478260869565217,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.050634057971014494,
+         "emptyDays": 0
+        }
+       },
+       "keywordNarrow": {
+        "3": {
+         "precision": 0.34615384615384615,
+         "emptyDays": 66
+        },
+        "5": {
+         "precision": 0.34615384615384615,
+         "emptyDays": 66
+        },
+        "10": {
+         "precision": 0.34615384615384615,
+         "emptyDays": 66
+        }
+       },
+       "keywordBroad": {
+        "3": {
+         "precision": 0.41369047619047616,
+         "emptyDays": 36
+        },
+        "5": {
+         "precision": 0.41369047619047616,
+         "emptyDays": 36
+        },
+        "10": {
+         "precision": 0.41666666666666663,
+         "emptyDays": 36
+        }
+       },
+       "newest": {
+        "3": {
+         "precision": 0.04710144927536231,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.049999999999999996,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.0365036231884058,
+         "emptyDays": 0
+        }
+       }
+      },
+      "fallbacks": {}
+     },
+     "fresh-3|10": {
+      "shown": 18,
+      "taughtRelevant": 12,
+      "taughtNotRelevant": 5,
+      "scoredRelevant": 51,
+      "ap": {
+       "desc": 0.43468417009421045,
+       "desc+kw": 0.43296166098811,
+       "truncated+kw": 0.41551098337363723,
+       "keywordNarrow": 0.12514500017761007,
+       "keywordBroad": 0.2948673081621441,
+       "newest": 0.03000542833639639
+      },
+      "daily": {
+       "desc": {
+        "3": {
+         "precision": 0.13043478260869565,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.08043478260869566,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.04954710144927536,
+         "emptyDays": 0
+        }
+       },
+       "desc+kw": {
+        "3": {
+         "precision": 0.13768115942028986,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.08695652173913043,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.050634057971014494,
+         "emptyDays": 0
+        }
+       },
+       "truncated+kw": {
+        "3": {
+         "precision": 0.13043478260869565,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.08478260869565217,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.050634057971014494,
+         "emptyDays": 0
+        }
+       },
+       "keywordNarrow": {
+        "3": {
+         "precision": 0.34615384615384615,
+         "emptyDays": 66
+        },
+        "5": {
+         "precision": 0.34615384615384615,
+         "emptyDays": 66
+        },
+        "10": {
+         "precision": 0.34615384615384615,
+         "emptyDays": 66
+        }
+       },
+       "keywordBroad": {
+        "3": {
+         "precision": 0.41369047619047616,
+         "emptyDays": 36
+        },
+        "5": {
+         "precision": 0.41369047619047616,
+         "emptyDays": 36
+        },
+        "10": {
+         "precision": 0.41666666666666663,
+         "emptyDays": 36
+        }
+       },
+       "newest": {
+        "3": {
+         "precision": 0.04710144927536231,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.049999999999999996,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.0365036231884058,
+         "emptyDays": 0
+        }
+       }
+      },
+      "fallbacks": {}
+     }
+    },
+    "courts": {
+     "fresh-3|5": {
+      "shown": 5,
+      "taughtRelevant": 5,
+      "taughtNotRelevant": 0,
+      "scoredRelevant": 23,
+      "ap": {
+       "desc": 0.6669348065487614,
+       "desc+kw": 0.8645912088167328,
+       "truncated+kw": 0.8645912088167328,
+       "keywordNarrow": 0.7280367058152737,
+       "keywordBroad": 0.4035217593046335,
+       "newest": 0.016155325449812467
+      },
+      "daily": {
+       "desc": {
+        "3": {
+         "precision": 0.07608695652173912,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.051449275362318844,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.030900621118012422,
+         "emptyDays": 0
+        }
+       },
+       "desc+kw": {
+        "3": {
+         "precision": 0.08333333333333333,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.051449275362318844,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.030900621118012422,
+         "emptyDays": 0
+        }
+       },
+       "truncated+kw": {
+        "3": {
+         "precision": 0.08333333333333333,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.051449275362318844,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.030900621118012422,
+         "emptyDays": 0
+        }
+       },
+       "keywordNarrow": {
+        "3": {
+         "precision": 0.9333333333333333,
+         "emptyDays": 77
+        },
+        "5": {
+         "precision": 0.9333333333333333,
+         "emptyDays": 77
+        },
+        "10": {
+         "precision": 0.9333333333333333,
+         "emptyDays": 77
+        }
+       },
+       "keywordBroad": {
+        "3": {
+         "precision": 0.41935483870967744,
+         "emptyDays": 61
+        },
+        "5": {
+         "precision": 0.42204301075268813,
+         "emptyDays": 61
+        },
+        "10": {
+         "precision": 0.42204301075268813,
+         "emptyDays": 61
+        }
+       },
+       "newest": {
+        "3": {
+         "precision": 0.021739130434782608,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.021014492753623187,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.01785714285714286,
+         "emptyDays": 0
+        }
+       }
+      },
+      "fallbacks": {}
+     },
+     "fresh-3|10": {
+      "shown": 11,
+      "taughtRelevant": 9,
+      "taughtNotRelevant": 1,
+      "scoredRelevant": 23,
+      "ap": {
+       "desc": 0.6669348065487614,
+       "desc+kw": 0.8645912088167328,
+       "truncated+kw": 0.8678850164583666,
+       "keywordNarrow": 0.7280367058152737,
+       "keywordBroad": 0.4035217593046335,
+       "newest": 0.016155325449812467
+      },
+      "daily": {
+       "desc": {
+        "3": {
+         "precision": 0.07608695652173912,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.051449275362318844,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.030900621118012422,
+         "emptyDays": 0
+        }
+       },
+       "desc+kw": {
+        "3": {
+         "precision": 0.08333333333333333,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.051449275362318844,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.030900621118012422,
+         "emptyDays": 0
+        }
+       },
+       "truncated+kw": {
+        "3": {
+         "precision": 0.08333333333333333,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.051449275362318844,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.030900621118012422,
+         "emptyDays": 0
+        }
+       },
+       "keywordNarrow": {
+        "3": {
+         "precision": 0.9333333333333333,
+         "emptyDays": 77
+        },
+        "5": {
+         "precision": 0.9333333333333333,
+         "emptyDays": 77
+        },
+        "10": {
+         "precision": 0.9333333333333333,
+         "emptyDays": 77
+        }
+       },
+       "keywordBroad": {
+        "3": {
+         "precision": 0.41935483870967744,
+         "emptyDays": 61
+        },
+        "5": {
+         "precision": 0.42204301075268813,
+         "emptyDays": 61
+        },
+        "10": {
+         "precision": 0.42204301075268813,
+         "emptyDays": 61
+        }
+       },
+       "newest": {
+        "3": {
+         "precision": 0.021739130434782608,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.021014492753623187,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.01785714285714286,
+         "emptyDays": 0
+        }
+       }
+      },
+      "fallbacks": {}
+     }
+    },
+    "robotics": {
+     "fresh-3|5": {
+      "shown": 5,
+      "taughtRelevant": 5,
+      "taughtNotRelevant": 0,
+      "scoredRelevant": 33,
+      "ap": {
+       "desc": 0.48572262801045274,
+       "desc+kw": 0.7065715731268836,
+       "truncated+kw": 0.725989821869476,
+       "keywordNarrow": 0.5673343535670342,
+       "keywordBroad": 0.6722899791614574,
+       "newest": 0.01835165765476893
+      },
+      "daily": {
+       "desc": {
+        "3": {
+         "precision": 0.09420289855072463,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.06739130434782609,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.034903381642512075,
+         "emptyDays": 0
+        }
+       },
+       "desc+kw": {
+        "3": {
+         "precision": 0.10144927536231883,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.06739130434782609,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.034903381642512075,
+         "emptyDays": 0
+        }
+       },
+       "truncated+kw": {
+        "3": {
+         "precision": 0.10144927536231883,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.06739130434782609,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.034903381642512075,
+         "emptyDays": 0
+        }
+       },
+       "keywordNarrow": {
+        "3": {
+         "precision": 0.7321428571428571,
+         "emptyDays": 64
+        },
+        "5": {
+         "precision": 0.7321428571428571,
+         "emptyDays": 64
+        },
+        "10": {
+         "precision": 0.7321428571428571,
+         "emptyDays": 64
+        }
+       },
+       "keywordBroad": {
+        "3": {
+         "precision": 0.7424242424242424,
+         "emptyDays": 59
+        },
+        "5": {
+         "precision": 0.7424242424242424,
+         "emptyDays": 59
+        },
+        "10": {
+         "precision": 0.7424242424242424,
+         "emptyDays": 59
+        }
+       },
+       "newest": {
+        "3": {
+         "precision": 0.007246376811594202,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.01956521739130435,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.018599033816425123,
+         "emptyDays": 0
+        }
+       }
+      },
+      "fallbacks": {}
+     },
+     "fresh-3|10": {
+      "shown": 11,
+      "taughtRelevant": 9,
+      "taughtNotRelevant": 2,
+      "scoredRelevant": 33,
+      "ap": {
+       "desc": 0.48572262801045274,
+       "desc+kw": 0.6856498541395332,
+       "truncated+kw": 0.7310030131870152,
+       "keywordNarrow": 0.5673343535670342,
+       "keywordBroad": 0.6722899791614574,
+       "newest": 0.01835165765476893
+      },
+      "daily": {
+       "desc": {
+        "3": {
+         "precision": 0.09420289855072463,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.06739130434782609,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.034903381642512075,
+         "emptyDays": 0
+        }
+       },
+       "desc+kw": {
+        "3": {
+         "precision": 0.10144927536231883,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.06739130434782609,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.034903381642512075,
+         "emptyDays": 0
+        }
+       },
+       "truncated+kw": {
+        "3": {
+         "precision": 0.10144927536231883,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.06739130434782609,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.034903381642512075,
+         "emptyDays": 0
+        }
+       },
+       "keywordNarrow": {
+        "3": {
+         "precision": 0.7321428571428571,
+         "emptyDays": 64
+        },
+        "5": {
+         "precision": 0.7321428571428571,
+         "emptyDays": 64
+        },
+        "10": {
+         "precision": 0.7321428571428571,
+         "emptyDays": 64
+        }
+       },
+       "keywordBroad": {
+        "3": {
+         "precision": 0.7424242424242424,
+         "emptyDays": 59
+        },
+        "5": {
+         "precision": 0.7424242424242424,
+         "emptyDays": 59
+        },
+        "10": {
+         "precision": 0.7424242424242424,
+         "emptyDays": 59
+        }
+       },
+       "newest": {
+        "3": {
+         "precision": 0.007246376811594202,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.01956521739130435,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.018599033816425123,
+         "emptyDays": 0
+        }
+       }
+      },
+      "fallbacks": {}
+     }
+    },
+    "safety": {
+     "fresh-3|5": {
+      "shown": 7,
+      "taughtRelevant": 6,
+      "taughtNotRelevant": 0,
+      "scoredRelevant": 16,
+      "ap": {
+       "desc": 0.6304854745966888,
+       "desc+kw": 0.6779559406315662,
+       "truncated+kw": 0.4457032705945853,
+       "keywordNarrow": 0.06396387942300925,
+       "keywordBroad": 0.11383751907998715,
+       "newest": 0.009419075111120803
+      },
+      "daily": {
+       "desc": {
+        "3": {
+         "precision": 0.05797101449275362,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.034782608695652174,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.02028985507246377,
+         "emptyDays": 0
+        }
+       },
+       "desc+kw": {
+        "3": {
+         "precision": 0.05797101449275362,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.034782608695652174,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.02028985507246377,
+         "emptyDays": 0
+        }
+       },
+       "truncated+kw": {
+        "3": {
+         "precision": 0.05797101449275362,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.034782608695652174,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.02028985507246377,
+         "emptyDays": 0
+        }
+       },
+       "keywordNarrow": {
+        "3": {
+         "precision": 0.17391304347826086,
+         "emptyDays": 69
+        },
+        "5": {
+         "precision": 0.17391304347826086,
+         "emptyDays": 69
+        },
+        "10": {
+         "precision": 0.17391304347826086,
+         "emptyDays": 69
+        }
+       },
+       "keywordBroad": {
+        "3": {
+         "precision": 0.24074074074074073,
+         "emptyDays": 65
+        },
+        "5": {
+         "precision": 0.24074074074074073,
+         "emptyDays": 65
+        },
+        "10": {
+         "precision": 0.24074074074074073,
+         "emptyDays": 65
+        }
+       },
+       "newest": {
+        "3": {
+         "precision": 0.003623188405797101,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.010869565217391304,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.011594202898550725,
+         "emptyDays": 0
+        }
+       }
+      },
+      "fallbacks": {}
+     },
+     "fresh-3|10": {
+      "shown": 15,
+      "taughtRelevant": 9,
+      "taughtNotRelevant": 2,
+      "scoredRelevant": 16,
+      "ap": {
+       "desc": 0.6304854745966888,
+       "desc+kw": 0.6625134351477274,
+       "truncated+kw": 0.4457032705945853,
+       "keywordNarrow": 0.06396387942300925,
+       "keywordBroad": 0.11383751907998715,
+       "newest": 0.009419075111120803
+      },
+      "daily": {
+       "desc": {
+        "3": {
+         "precision": 0.05797101449275362,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.034782608695652174,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.02028985507246377,
+         "emptyDays": 0
+        }
+       },
+       "desc+kw": {
+        "3": {
+         "precision": 0.05797101449275362,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.034782608695652174,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.02028985507246377,
+         "emptyDays": 0
+        }
+       },
+       "truncated+kw": {
+        "3": {
+         "precision": 0.05797101449275362,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.034782608695652174,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.02028985507246377,
+         "emptyDays": 0
+        }
+       },
+       "keywordNarrow": {
+        "3": {
+         "precision": 0.17391304347826086,
+         "emptyDays": 69
+        },
+        "5": {
+         "precision": 0.17391304347826086,
+         "emptyDays": 69
+        },
+        "10": {
+         "precision": 0.17391304347826086,
+         "emptyDays": 69
+        }
+       },
+       "keywordBroad": {
+        "3": {
+         "precision": 0.24074074074074073,
+         "emptyDays": 65
+        },
+        "5": {
+         "precision": 0.24074074074074073,
+         "emptyDays": 65
+        },
+        "10": {
+         "precision": 0.24074074074074073,
+         "emptyDays": 65
+        }
+       },
+       "newest": {
+        "3": {
+         "precision": 0.003623188405797101,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.010869565217391304,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.011594202898550725,
+         "emptyDays": 0
+        }
+       }
+      },
+      "fallbacks": {}
+     }
+    },
+    "open-models": {
+     "fresh-3|5": {
+      "shown": 5,
+      "taughtRelevant": 5,
+      "taughtNotRelevant": 0,
+      "scoredRelevant": 37,
+      "ap": {
+       "desc": 0.6648729441603694,
+       "desc+kw": 0.6298319205305557,
+       "truncated+kw": 0.6426445062902174,
+       "keywordNarrow": 0.20356439109349364,
+       "keywordBroad": 0.2753562042951004,
+       "newest": 0.02074280053998891
+      },
+      "daily": {
+       "desc": {
+        "3": {
+         "precision": 0.11956521739130435,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.08242753623188405,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.050905797101449275,
+         "emptyDays": 0
+        }
+       },
+       "desc+kw": {
+        "3": {
+         "precision": 0.11594202898550723,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.0802536231884058,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.050905797101449275,
+         "emptyDays": 0
+        }
+       },
+       "truncated+kw": {
+        "3": {
+         "precision": 0.11594202898550723,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.0802536231884058,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.050905797101449275,
+         "emptyDays": 0
+        }
+       },
+       "keywordNarrow": {
+        "3": {
+         "precision": 0.3939393939393939,
+         "emptyDays": 59
+        },
+        "5": {
+         "precision": 0.3939393939393939,
+         "emptyDays": 59
+        },
+        "10": {
+         "precision": 0.3939393939393939,
+         "emptyDays": 59
+        }
+       },
+       "keywordBroad": {
+        "3": {
+         "precision": 0.3854166666666667,
+         "emptyDays": 44
+        },
+        "5": {
+         "precision": 0.3920138888888889,
+         "emptyDays": 44
+        },
+        "10": {
+         "precision": 0.3920138888888889,
+         "emptyDays": 44
+        }
+       },
+       "newest": {
+        "3": {
+         "precision": 0.02536231884057971,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.02807971014492754,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.029166666666666664,
+         "emptyDays": 0
+        }
+       }
+      },
+      "fallbacks": {}
+     },
+     "fresh-3|10": {
+      "shown": 11,
+      "taughtRelevant": 7,
+      "taughtNotRelevant": 2,
+      "scoredRelevant": 37,
+      "ap": {
+       "desc": 0.6648729441603694,
+       "desc+kw": 0.6714920131664218,
+       "truncated+kw": 0.6365869413805383,
+       "keywordNarrow": 0.20356439109349364,
+       "keywordBroad": 0.2753562042951004,
+       "newest": 0.02074280053998891
+      },
+      "daily": {
+       "desc": {
+        "3": {
+         "precision": 0.11956521739130435,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.08242753623188405,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.050905797101449275,
+         "emptyDays": 0
+        }
+       },
+       "desc+kw": {
+        "3": {
+         "precision": 0.11594202898550723,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.0802536231884058,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.050905797101449275,
+         "emptyDays": 0
+        }
+       },
+       "truncated+kw": {
+        "3": {
+         "precision": 0.11594202898550723,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.0802536231884058,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.050905797101449275,
+         "emptyDays": 0
+        }
+       },
+       "keywordNarrow": {
+        "3": {
+         "precision": 0.3939393939393939,
+         "emptyDays": 59
+        },
+        "5": {
+         "precision": 0.3939393939393939,
+         "emptyDays": 59
+        },
+        "10": {
+         "precision": 0.3939393939393939,
+         "emptyDays": 59
+        }
+       },
+       "keywordBroad": {
+        "3": {
+         "precision": 0.3854166666666667,
+         "emptyDays": 44
+        },
+        "5": {
+         "precision": 0.3920138888888889,
+         "emptyDays": 44
+        },
+        "10": {
+         "precision": 0.3920138888888889,
+         "emptyDays": 44
+        }
+       },
+       "newest": {
+        "3": {
+         "precision": 0.02536231884057971,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.02807971014492754,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.029166666666666664,
+         "emptyDays": 0
+        }
+       }
+      },
+      "fallbacks": {}
+     }
+    },
+    "jobs": {
+     "fresh-3|5": {
+      "shown": 9,
+      "taughtRelevant": 5,
+      "taughtNotRelevant": 1,
+      "scoredRelevant": 10,
+      "ap": {
+       "desc": 0.406605099448483,
+       "desc+kw": 0.5333491944030082,
+       "truncated+kw": 0.6026862837391748,
+       "keywordNarrow": 0.33320255277764,
+       "keywordBroad": 0.042508955705991565,
+       "newest": 0.006527000871217885
+      },
+      "daily": {
+       "desc": {
+        "3": {
+         "precision": 0.03260869565217391,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.01956521739130435,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.012318840579710144,
+         "emptyDays": 0
+        }
+       },
+       "desc+kw": {
+        "3": {
+         "precision": 0.03260869565217391,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.01956521739130435,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.012318840579710144,
+         "emptyDays": 0
+        }
+       },
+       "truncated+kw": {
+        "3": {
+         "precision": 0.03260869565217391,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.01956521739130435,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.012318840579710144,
+         "emptyDays": 0
+        }
+       },
+       "keywordNarrow": {
+        "3": {
+         "precision": 0.5,
+         "emptyDays": 82
+        },
+        "5": {
+         "precision": 0.5,
+         "emptyDays": 82
+        },
+        "10": {
+         "precision": 0.5,
+         "emptyDays": 82
+        }
+       },
+       "keywordBroad": {
+        "3": {
+         "precision": 0.0847457627118644,
+         "emptyDays": 33
+        },
+        "5": {
+         "precision": 0.0847457627118644,
+         "emptyDays": 33
+        },
+        "10": {
+         "precision": 0.0847457627118644,
+         "emptyDays": 33
+        }
+       },
+       "newest": {
+        "3": {
+         "precision": 0.003623188405797101,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.004347826086956522,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.009057971014492754,
+         "emptyDays": 0
+        }
+       }
+      },
+      "fallbacks": {}
+     },
+     "fresh-3|10": {
+      "shown": 17,
+      "taughtRelevant": 10,
+      "taughtNotRelevant": 2,
+      "scoredRelevant": 10,
+      "ap": {
+       "desc": 0.406605099448483,
+       "desc+kw": 0.5480391021963643,
+       "truncated+kw": 0.6047330673649058,
+       "keywordNarrow": 0.33320255277764,
+       "keywordBroad": 0.042508955705991565,
+       "newest": 0.006527000871217885
+      },
+      "daily": {
+       "desc": {
+        "3": {
+         "precision": 0.03260869565217391,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.01956521739130435,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.012318840579710144,
+         "emptyDays": 0
+        }
+       },
+       "desc+kw": {
+        "3": {
+         "precision": 0.03260869565217391,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.01956521739130435,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.012318840579710144,
+         "emptyDays": 0
+        }
+       },
+       "truncated+kw": {
+        "3": {
+         "precision": 0.03260869565217391,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.01956521739130435,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.012318840579710144,
+         "emptyDays": 0
+        }
+       },
+       "keywordNarrow": {
+        "3": {
+         "precision": 0.5,
+         "emptyDays": 82
+        },
+        "5": {
+         "precision": 0.5,
+         "emptyDays": 82
+        },
+        "10": {
+         "precision": 0.5,
+         "emptyDays": 82
+        }
+       },
+       "keywordBroad": {
+        "3": {
+         "precision": 0.0847457627118644,
+         "emptyDays": 33
+        },
+        "5": {
+         "precision": 0.0847457627118644,
+         "emptyDays": 33
+        },
+        "10": {
+         "precision": 0.0847457627118644,
+         "emptyDays": 33
+        }
+       },
+       "newest": {
+        "3": {
+         "precision": 0.003623188405797101,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.004347826086956522,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.009057971014492754,
+         "emptyDays": 0
+        }
+       }
+      },
+      "fallbacks": {}
+     }
+    },
+    "energy": {
+     "fresh-3|5": {
+      "shown": 6,
+      "taughtRelevant": 5,
+      "taughtNotRelevant": 1,
+      "scoredRelevant": 5,
+      "ap": {
+       "desc": 0.10123568995749448,
+       "desc+kw": 0.19996589247363242,
+       "truncated+kw": 0.1920305661189639,
+       "keywordNarrow": 0.02386783661855275,
+       "keywordBroad": 0.1440903426130755,
+       "newest": 0.003237664850220679
+      },
+      "daily": {
+       "desc": {
+        "3": {
+         "precision": 0.010869565217391304,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.010869565217391304,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.006280193236714976,
+         "emptyDays": 0
+        }
+       },
+       "desc+kw": {
+        "3": {
+         "precision": 0.014492753623188404,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.010869565217391304,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.006280193236714976,
+         "emptyDays": 0
+        }
+       },
+       "truncated+kw": {
+        "3": {
+         "precision": 0.014492753623188404,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.010869565217391304,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.006280193236714976,
+         "emptyDays": 0
+        }
+       },
+       "keywordNarrow": {
+        "3": {
+         "precision": 0.032828282828282825,
+         "emptyDays": 26
+        },
+        "5": {
+         "precision": 0.030808080808080805,
+         "emptyDays": 26
+        },
+        "10": {
+         "precision": 0.02994227994227994,
+         "emptyDays": 26
+        }
+       },
+       "keywordBroad": {
+        "3": {
+         "precision": 0.16666666666666666,
+         "emptyDays": 71
+        },
+        "5": {
+         "precision": 0.16666666666666666,
+         "emptyDays": 71
+        },
+        "10": {
+         "precision": 0.16666666666666666,
+         "emptyDays": 71
+        }
+       },
+       "newest": {
+        "3": {
+         "precision": 0.003623188405797101,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.004347826086956522,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.005193236714975845,
+         "emptyDays": 0
+        }
+       }
+      },
+      "fallbacks": {}
+     },
+     "fresh-3|10": {
+      "shown": 11,
+      "taughtRelevant": 6,
+      "taughtNotRelevant": 4,
+      "scoredRelevant": 5,
+      "ap": {
+       "desc": 0.10123568995749448,
+       "desc+kw": 0.20327073582817082,
+       "truncated+kw": 0.19995984796184763,
+       "keywordNarrow": 0.02386783661855275,
+       "keywordBroad": 0.1440903426130755,
+       "newest": 0.003237664850220679
+      },
+      "daily": {
+       "desc": {
+        "3": {
+         "precision": 0.010869565217391304,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.010869565217391304,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.006280193236714976,
+         "emptyDays": 0
+        }
+       },
+       "desc+kw": {
+        "3": {
+         "precision": 0.014492753623188404,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.010869565217391304,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.006280193236714976,
+         "emptyDays": 0
+        }
+       },
+       "truncated+kw": {
+        "3": {
+         "precision": 0.014492753623188404,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.010869565217391304,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.006280193236714976,
+         "emptyDays": 0
+        }
+       },
+       "keywordNarrow": {
+        "3": {
+         "precision": 0.032828282828282825,
+         "emptyDays": 26
+        },
+        "5": {
+         "precision": 0.030808080808080805,
+         "emptyDays": 26
+        },
+        "10": {
+         "precision": 0.02994227994227994,
+         "emptyDays": 26
+        }
+       },
+       "keywordBroad": {
+        "3": {
+         "precision": 0.16666666666666666,
+         "emptyDays": 71
+        },
+        "5": {
+         "precision": 0.16666666666666666,
+         "emptyDays": 71
+        },
+        "10": {
+         "precision": 0.16666666666666666,
+         "emptyDays": 71
+        }
+       },
+       "newest": {
+        "3": {
+         "precision": 0.003623188405797101,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.004347826086956522,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.005193236714975845,
+         "emptyDays": 0
+        }
+       }
+      },
+      "fallbacks": {}
+     }
+    },
+    "quantum": {
+     "fresh-3|5": {
+      "shown": 5,
+      "taughtRelevant": 5,
+      "taughtNotRelevant": 0,
+      "scoredRelevant": 11,
+      "ap": {
+       "desc": 0.9805194805194806,
+       "desc+kw": 1.0,
+       "truncated+kw": 1.0,
+       "keywordNarrow": 0.8087990292535747,
+       "keywordBroad": 0.8087990292535747,
+       "newest": 0.008064959807302487
+      },
+      "daily": {
+       "desc": {
+        "3": {
+         "precision": 0.03985507246376811,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.02391304347826087,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.011956521739130435,
+         "emptyDays": 0
+        }
+       },
+       "desc+kw": {
+        "3": {
+         "precision": 0.03985507246376811,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.02391304347826087,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.011956521739130435,
+         "emptyDays": 0
+        }
+       },
+       "truncated+kw": {
+        "3": {
+         "precision": 0.03985507246376811,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.02391304347826087,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.011956521739130435,
+         "emptyDays": 0
+        }
+       },
+       "keywordNarrow": {
+        "3": {
+         "precision": 0.9090909090909091,
+         "emptyDays": 81
+        },
+        "5": {
+         "precision": 0.9090909090909091,
+         "emptyDays": 81
+        },
+        "10": {
+         "precision": 0.9090909090909091,
+         "emptyDays": 81
+        }
+       },
+       "keywordBroad": {
+        "3": {
+         "precision": 0.9090909090909091,
+         "emptyDays": 81
+        },
+        "5": {
+         "precision": 0.9090909090909091,
+         "emptyDays": 81
+        },
+        "10": {
+         "precision": 0.9090909090909091,
+         "emptyDays": 81
+        }
+       },
+       "newest": {
+        "3": {
+         "precision": 0.007246376811594202,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.006521739130434784,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.005434782608695652,
+         "emptyDays": 0
+        }
+       }
+      },
+      "fallbacks": {}
+     },
+     "fresh-3|10": {
+      "shown": 10,
+      "taughtRelevant": 10,
+      "taughtNotRelevant": 0,
+      "scoredRelevant": 11,
+      "ap": {
+       "desc": 0.9805194805194806,
+       "desc+kw": 1.0,
+       "truncated+kw": 1.0,
+       "keywordNarrow": 0.8087990292535747,
+       "keywordBroad": 0.8087990292535747,
+       "newest": 0.008064959807302487
+      },
+      "daily": {
+       "desc": {
+        "3": {
+         "precision": 0.03985507246376811,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.02391304347826087,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.011956521739130435,
+         "emptyDays": 0
+        }
+       },
+       "desc+kw": {
+        "3": {
+         "precision": 0.03985507246376811,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.02391304347826087,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.011956521739130435,
+         "emptyDays": 0
+        }
+       },
+       "truncated+kw": {
+        "3": {
+         "precision": 0.03985507246376811,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.02391304347826087,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.011956521739130435,
+         "emptyDays": 0
+        }
+       },
+       "keywordNarrow": {
+        "3": {
+         "precision": 0.9090909090909091,
+         "emptyDays": 81
+        },
+        "5": {
+         "precision": 0.9090909090909091,
+         "emptyDays": 81
+        },
+        "10": {
+         "precision": 0.9090909090909091,
+         "emptyDays": 81
+        }
+       },
+       "keywordBroad": {
+        "3": {
+         "precision": 0.9090909090909091,
+         "emptyDays": 81
+        },
+        "5": {
+         "precision": 0.9090909090909091,
+         "emptyDays": 81
+        },
+        "10": {
+         "precision": 0.9090909090909091,
+         "emptyDays": 81
+        }
+       },
+       "newest": {
+        "3": {
+         "precision": 0.007246376811594202,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.006521739130434784,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.005434782608695652,
+         "emptyDays": 0
+        }
+       }
+      },
+      "fallbacks": {}
+     }
+    },
+    "health": {
+     "fresh-3|5": {
+      "shown": 6,
+      "taughtRelevant": 4,
+      "taughtNotRelevant": 2,
+      "scoredRelevant": 18,
+      "ap": {
+       "desc": 0.5112596588220093,
+       "desc+kw": 0.7298116304163368,
+       "truncated+kw": 0.817602578275093,
+       "keywordNarrow": 0.4900367313239926,
+       "keywordBroad": 0.5204283912157579,
+       "newest": 0.009825158451477882
+      },
+      "daily": {
+       "desc": {
+        "3": {
+         "precision": 0.05797101449275362,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.0375,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.021195652173913046,
+         "emptyDays": 0
+        }
+       },
+       "desc+kw": {
+        "3": {
+         "precision": 0.06159420289855072,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.0375,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.021195652173913046,
+         "emptyDays": 0
+        }
+       },
+       "truncated+kw": {
+        "3": {
+         "precision": 0.06159420289855072,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.0375,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.021195652173913046,
+         "emptyDays": 0
+        }
+       },
+       "keywordNarrow": {
+        "3": {
+         "precision": 0.5476190476190477,
+         "emptyDays": 71
+        },
+        "5": {
+         "precision": 0.5476190476190477,
+         "emptyDays": 71
+        },
+        "10": {
+         "precision": 0.5476190476190477,
+         "emptyDays": 71
+        }
+       },
+       "keywordBroad": {
+        "3": {
+         "precision": 0.5384615384615384,
+         "emptyDays": 66
+        },
+        "5": {
+         "precision": 0.5384615384615384,
+         "emptyDays": 66
+        },
+        "10": {
+         "precision": 0.5384615384615384,
+         "emptyDays": 66
+        }
+       },
+       "newest": {
+        "3": {
+         "precision": 0.010869565217391304,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.00923913043478261,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.012499999999999999,
+         "emptyDays": 0
+        }
+       }
+      },
+      "fallbacks": {}
+     },
+     "fresh-3|10": {
+      "shown": 12,
+      "taughtRelevant": 7,
+      "taughtNotRelevant": 3,
+      "scoredRelevant": 18,
+      "ap": {
+       "desc": 0.5112596588220093,
+       "desc+kw": 0.7432977992946626,
+       "truncated+kw": 0.8228197047888625,
+       "keywordNarrow": 0.4900367313239926,
+       "keywordBroad": 0.5204283912157579,
+       "newest": 0.009825158451477882
+      },
+      "daily": {
+       "desc": {
+        "3": {
+         "precision": 0.05797101449275362,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.0375,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.021195652173913046,
+         "emptyDays": 0
+        }
+       },
+       "desc+kw": {
+        "3": {
+         "precision": 0.06159420289855072,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.0375,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.021195652173913046,
+         "emptyDays": 0
+        }
+       },
+       "truncated+kw": {
+        "3": {
+         "precision": 0.06159420289855072,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.0375,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.021195652173913046,
+         "emptyDays": 0
+        }
+       },
+       "keywordNarrow": {
+        "3": {
+         "precision": 0.5476190476190477,
+         "emptyDays": 71
+        },
+        "5": {
+         "precision": 0.5476190476190477,
+         "emptyDays": 71
+        },
+        "10": {
+         "precision": 0.5476190476190477,
+         "emptyDays": 71
+        }
+       },
+       "keywordBroad": {
+        "3": {
+         "precision": 0.5384615384615384,
+         "emptyDays": 66
+        },
+        "5": {
+         "precision": 0.5384615384615384,
+         "emptyDays": 66
+        },
+        "10": {
+         "precision": 0.5384615384615384,
+         "emptyDays": 66
+        }
+       },
+       "newest": {
+        "3": {
+         "precision": 0.010869565217391304,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.00923913043478261,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.012499999999999999,
+         "emptyDays": 0
+        }
+       }
+      },
+      "fallbacks": {}
+     }
+    },
+    "education": {
+     "fresh-3|5": {
+      "shown": 7,
+      "taughtRelevant": 7,
+      "taughtNotRelevant": 0,
+      "scoredRelevant": 10,
+      "ap": {
+       "desc": 0.7993454345434544,
+       "desc+kw": 0.8998039215686274,
+       "truncated+kw": 0.9098039215686274,
+       "keywordNarrow": 0.4841189337882922,
+       "keywordBroad": 0.15888400695983748,
+       "newest": 0.005536255726520961
+      },
+      "daily": {
+       "desc": {
+        "3": {
+         "precision": 0.03623188405797101,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.023188405797101453,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.013405797101449277,
+         "emptyDays": 0
+        }
+       },
+       "desc+kw": {
+        "3": {
+         "precision": 0.03623188405797101,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.023188405797101453,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.013405797101449277,
+         "emptyDays": 0
+        }
+       },
+       "truncated+kw": {
+        "3": {
+         "precision": 0.03623188405797101,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.023188405797101453,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.013405797101449277,
+         "emptyDays": 0
+        }
+       },
+       "keywordNarrow": {
+        "3": {
+         "precision": 0.75,
+         "emptyDays": 84
+        },
+        "5": {
+         "precision": 0.75,
+         "emptyDays": 84
+        },
+        "10": {
+         "precision": 0.75,
+         "emptyDays": 84
+        }
+       },
+       "keywordBroad": {
+        "3": {
+         "precision": 0.20238095238095238,
+         "emptyDays": 50
+        },
+        "5": {
+         "precision": 0.20238095238095238,
+         "emptyDays": 50
+        },
+        "10": {
+         "precision": 0.20238095238095238,
+         "emptyDays": 50
+        }
+       },
+       "newest": {
+        "3": {
+         "precision": 0.003623188405797101,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.003623188405797101,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.006884057971014493,
+         "emptyDays": 0
+        }
+       }
+      },
+      "fallbacks": {}
+     },
+     "fresh-3|10": {
+      "shown": 16,
+      "taughtRelevant": 15,
+      "taughtNotRelevant": 1,
+      "scoredRelevant": 10,
+      "ap": {
+       "desc": 0.7993454345434544,
+       "desc+kw": 0.9097087378640778,
+       "truncated+kw": 0.9097087378640778,
+       "keywordNarrow": 0.4841189337882922,
+       "keywordBroad": 0.15888400695983748,
+       "newest": 0.005536255726520961
+      },
+      "daily": {
+       "desc": {
+        "3": {
+         "precision": 0.03623188405797101,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.023188405797101453,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.013405797101449277,
+         "emptyDays": 0
+        }
+       },
+       "desc+kw": {
+        "3": {
+         "precision": 0.03623188405797101,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.023188405797101453,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.013405797101449277,
+         "emptyDays": 0
+        }
+       },
+       "truncated+kw": {
+        "3": {
+         "precision": 0.03623188405797101,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.023188405797101453,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.013405797101449277,
+         "emptyDays": 0
+        }
+       },
+       "keywordNarrow": {
+        "3": {
+         "precision": 0.75,
+         "emptyDays": 84
+        },
+        "5": {
+         "precision": 0.75,
+         "emptyDays": 84
+        },
+        "10": {
+         "precision": 0.75,
+         "emptyDays": 84
+        }
+       },
+       "keywordBroad": {
+        "3": {
+         "precision": 0.20238095238095238,
+         "emptyDays": 50
+        },
+        "5": {
+         "precision": 0.20238095238095238,
+         "emptyDays": 50
+        },
+        "10": {
+         "precision": 0.20238095238095238,
+         "emptyDays": 50
+        }
+       },
+       "newest": {
+        "3": {
+         "precision": 0.003623188405797101,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.003623188405797101,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.006884057971014493,
+         "emptyDays": 0
+        }
+       }
+      },
+      "fallbacks": {}
+     }
+    },
+    "coding": {
+     "fresh-3|5": {
+      "shown": 5,
+      "taughtRelevant": 5,
+      "taughtNotRelevant": 0,
+      "scoredRelevant": 59,
+      "ap": {
+       "desc": 0.6468349257954726,
+       "desc+kw": 0.718280668805573,
+       "truncated+kw": 0.7283679878820114,
+       "keywordNarrow": 0.44860245852745534,
+       "keywordBroad": 0.26453093106316505,
+       "newest": 0.04136161451800767
+      },
+      "daily": {
+       "desc": {
+        "3": {
+         "precision": 0.15217391304347827,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.10652173913043476,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.06884057971014493,
+         "emptyDays": 0
+        }
+       },
+       "desc+kw": {
+        "3": {
+         "precision": 0.17028985507246377,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.1108695652173913,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.06992753623188407,
+         "emptyDays": 0
+        }
+       },
+       "truncated+kw": {
+        "3": {
+         "precision": 0.16666666666666669,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.10869565217391304,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.06992753623188407,
+         "emptyDays": 0
+        }
+       },
+       "keywordNarrow": {
+        "3": {
+         "precision": 0.5072463768115941,
+         "emptyDays": 46
+        },
+        "5": {
+         "precision": 0.5054347826086957,
+         "emptyDays": 46
+        },
+        "10": {
+         "precision": 0.5054347826086957,
+         "emptyDays": 46
+        }
+       },
+       "keywordBroad": {
+        "3": {
+         "precision": 0.26811594202898553,
+         "emptyDays": 23
+        },
+        "5": {
+         "precision": 0.2640096618357488,
+         "emptyDays": 23
+        },
+        "10": {
+         "precision": 0.2596618357487923,
+         "emptyDays": 23
+        }
+       },
+       "newest": {
+        "3": {
+         "precision": 0.032608695652173905,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.03260869565217391,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.03731884057971014,
+         "emptyDays": 0
+        }
+       }
+      },
+      "fallbacks": {}
+     },
+     "fresh-3|10": {
+      "shown": 10,
+      "taughtRelevant": 10,
+      "taughtNotRelevant": 0,
+      "scoredRelevant": 59,
+      "ap": {
+       "desc": 0.6468349257954726,
+       "desc+kw": 0.7223325173467873,
+       "truncated+kw": 0.7311352724274954,
+       "keywordNarrow": 0.44860245852745534,
+       "keywordBroad": 0.26453093106316505,
+       "newest": 0.04136161451800767
+      },
+      "daily": {
+       "desc": {
+        "3": {
+         "precision": 0.15217391304347827,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.10652173913043476,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.06884057971014493,
+         "emptyDays": 0
+        }
+       },
+       "desc+kw": {
+        "3": {
+         "precision": 0.17028985507246377,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.1108695652173913,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.06992753623188407,
+         "emptyDays": 0
+        }
+       },
+       "truncated+kw": {
+        "3": {
+         "precision": 0.16666666666666669,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.1108695652173913,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.06992753623188407,
+         "emptyDays": 0
+        }
+       },
+       "keywordNarrow": {
+        "3": {
+         "precision": 0.5072463768115941,
+         "emptyDays": 46
+        },
+        "5": {
+         "precision": 0.5054347826086957,
+         "emptyDays": 46
+        },
+        "10": {
+         "precision": 0.5054347826086957,
+         "emptyDays": 46
+        }
+       },
+       "keywordBroad": {
+        "3": {
+         "precision": 0.26811594202898553,
+         "emptyDays": 23
+        },
+        "5": {
+         "precision": 0.2640096618357488,
+         "emptyDays": 23
+        },
+        "10": {
+         "precision": 0.2596618357487923,
+         "emptyDays": 23
+        }
+       },
+       "newest": {
+        "3": {
+         "precision": 0.032608695652173905,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.03260869565217391,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.03731884057971014,
+         "emptyDays": 0
+        }
+       }
+      },
+      "fallbacks": {}
+     }
+    },
+    "earnings": {
+     "fresh-3|5": {
+      "shown": 9,
+      "taughtRelevant": 9,
+      "taughtNotRelevant": 0,
+      "scoredRelevant": 77,
+      "ap": {
+       "desc": 0.9750149701646691,
+       "desc+kw": 0.9837717251421001,
+       "truncated+kw": 0.9837956505478537,
+       "keywordNarrow": 0.6759358460623126,
+       "keywordBroad": 0.5204664774803107,
+       "newest": 0.042527476216803174
+      },
+      "daily": {
+       "desc": {
+        "3": {
+         "precision": 0.2355072463768116,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.1644927536231884,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.08623188405797101,
+         "emptyDays": 0
+        }
+       },
+       "desc+kw": {
+        "3": {
+         "precision": 0.2355072463768116,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.1644927536231884,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.08623188405797101,
+         "emptyDays": 0
+        }
+       },
+       "truncated+kw": {
+        "3": {
+         "precision": 0.2355072463768116,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.1644927536231884,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.08623188405797101,
+         "emptyDays": 0
+        }
+       },
+       "keywordNarrow": {
+        "3": {
+         "precision": 0.8888888888888888,
+         "emptyDays": 65
+        },
+        "5": {
+         "precision": 0.8888888888888888,
+         "emptyDays": 65
+        },
+        "10": {
+         "precision": 0.8888888888888888,
+         "emptyDays": 65
+        }
+       },
+       "keywordBroad": {
+        "3": {
+         "precision": 0.4166666666666667,
+         "emptyDays": 30
+        },
+        "5": {
+         "precision": 0.3938172043010753,
+         "emptyDays": 30
+        },
+        "10": {
+         "precision": 0.3956605222734255,
+         "emptyDays": 30
+        }
+       },
+       "newest": {
+        "3": {
+         "precision": 0.12318840579710144,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.1036231884057971,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.06123188405797102,
+         "emptyDays": 0
+        }
+       }
+      },
+      "fallbacks": {}
+     },
+     "fresh-3|10": {
+      "shown": 16,
+      "taughtRelevant": 16,
+      "taughtNotRelevant": 0,
+      "scoredRelevant": 77,
+      "ap": {
+       "desc": 0.9750149701646691,
+       "desc+kw": 0.9839811930935035,
+       "truncated+kw": 0.9838433504427522,
+       "keywordNarrow": 0.6759358460623126,
+       "keywordBroad": 0.5204664774803107,
+       "newest": 0.042527476216803174
+      },
+      "daily": {
+       "desc": {
+        "3": {
+         "precision": 0.2355072463768116,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.1644927536231884,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.08623188405797101,
+         "emptyDays": 0
+        }
+       },
+       "desc+kw": {
+        "3": {
+         "precision": 0.2355072463768116,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.1644927536231884,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.08623188405797101,
+         "emptyDays": 0
+        }
+       },
+       "truncated+kw": {
+        "3": {
+         "precision": 0.2355072463768116,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.1644927536231884,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.08623188405797101,
+         "emptyDays": 0
+        }
+       },
+       "keywordNarrow": {
+        "3": {
+         "precision": 0.8888888888888888,
+         "emptyDays": 65
+        },
+        "5": {
+         "precision": 0.8888888888888888,
+         "emptyDays": 65
+        },
+        "10": {
+         "precision": 0.8888888888888888,
+         "emptyDays": 65
+        }
+       },
+       "keywordBroad": {
+        "3": {
+         "precision": 0.4166666666666667,
+         "emptyDays": 30
+        },
+        "5": {
+         "precision": 0.3938172043010753,
+         "emptyDays": 30
+        },
+        "10": {
+         "precision": 0.3956605222734255,
+         "emptyDays": 30
+        }
+       },
+       "newest": {
+        "3": {
+         "precision": 0.12318840579710144,
+         "emptyDays": 0
+        },
+        "5": {
+         "precision": 0.1036231884057971,
+         "emptyDays": 0
+        },
+        "10": {
+         "precision": 0.06123188405797102,
+         "emptyDays": 0
+        }
+       }
+      },
+      "fallbacks": {}
+     }
+    }
+   }
+  }
+ }
+}

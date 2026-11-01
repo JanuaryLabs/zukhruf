@@ -1,0 +1,15 @@
+{
+ "addendumTo": "round-15/selection-rule.json (sha256 3c622f79...), which stays as it is and stays the primary arm.",
+ "writtenBefore": "fresh-6/articles.json, round-15/d1-answers.json and every fresh-6 label exist, and before any round-15 score. Written 2026-10-31 after the smoke run of round-15/evaluate.py on fresh-4 (a scored slice, used only as a runnability check).",
+ "why": "The frozen teaching (round 10's product teaching) shows the reader only the top N_teach articles by p_d1 and the top N_teach narrow-keyword matches by p_d1. On a profile that d1 ranks well, every shown article is relevant, so no taught answer is a no, and the frozen fallback keeps raw for shift and platt. In the fresh-4 smoke run (400 articles), both eligible profiles fell back in every unit, and 10 of 32 window units and 22 of 32 pool units fell back. This is sampling bias in relevance feedback: answers only on the articles a system already ranks high hold no information about the articles it ranks low (TREC adaptive filtering; Zhang and Callan, SIGIR 2001, model the delivery threshold for this reason). This addendum is a structural change of what the reader is shown. It uses no number of fresh-4 or fresh-5.",
+ "arm": {
+  "name": "exploration",
+  "shown": "Per protocol, profile and N_teach: the articles of the frozen arm, plus N_teach articles drawn uniformly at random without replacement from the teaching set's other articles (those the frozen arm does not show), with numpy.random.default_rng([31969, protocol, profile, n_teach]), where protocol is 0 for window and 1 for pool, profile is the index of the profile in profiles.json, and n_teach is 5 or 10. When fewer than N_teach other articles exist, all of them are shown.",
+  "answers": "The answer key answers each shown article as in the frozen arm (relevant / not relevant; ambiguous is skipped).",
+  "calibrations": "raw, shift and platt exactly as the frozen rule defines them (targets, clipping, fallbacks), fitted on all taught answers of this arm.",
+  "test": "The same test articles, metrics, profile eligibility and macro means as the frozen arm. raw does not read the teaching, so raw is the same in both arms."
+ },
+ "pass": "The frozen rule's pass rule, applied to this arm on its own (its shift and platt against raw, in both protocols, with numpy.random.default_rng(31968) and 2000 replicates). The frozen arm's verdict is computed and reported first and does not change.",
+ "reported": "For each arm, protocol and N_teach: the number of units in which shift or platt fell back to raw, and why (no relevant answer, no not-relevant answer, platt a <= 0), next to every number the frozen rule reports.",
+ "then": "If only the exploration arm passes, the recalibration adapter needs the reader to answer some articles that d1 ranks low, so the host must show them; the user sees that design and the adapter API before anything is built (#3421). If the frozen arm passes, its 'then' holds as written."
+}

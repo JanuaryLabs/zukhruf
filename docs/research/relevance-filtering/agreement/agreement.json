@@ -1,0 +1,181 @@
+{
+ "sample": 400,
+ "profiles": {
+  "biology": {
+   "mainTrue": 0,
+   "secondTrue": 0,
+   "bothTrue": 0,
+   "trueVsNull": 0,
+   "trueVsFalse": 0,
+   "kappaStrict": NaN,
+   "kappaAmbiguousRelevant": 1.0
+  },
+  "chips": {
+   "mainTrue": 13,
+   "secondTrue": 14,
+   "bothTrue": 12,
+   "trueVsNull": 3,
+   "trueVsFalse": 0,
+   "kappaStrict": 0.885,
+   "kappaAmbiguousRelevant": 0.888
+  },
+  "security": {
+   "mainTrue": 56,
+   "secondTrue": 59,
+   "bothTrue": 56,
+   "trueVsNull": 3,
+   "trueVsFalse": 0,
+   "kappaStrict": 0.97,
+   "kappaAmbiguousRelevant": 0.96
+  },
+  "funding": {
+   "mainTrue": 77,
+   "secondTrue": 76,
+   "bothTrue": 75,
+   "trueVsNull": 3,
+   "trueVsFalse": 0,
+   "kappaStrict": 0.976,
+   "kappaAmbiguousRelevant": 0.985
+  },
+  "regulation": {
+   "mainTrue": 14,
+   "secondTrue": 14,
+   "bothTrue": 13,
+   "trueVsNull": 2,
+   "trueVsFalse": 0,
+   "kappaStrict": 0.926,
+   "kappaAmbiguousRelevant": 0.899
+  },
+  "courts": {
+   "mainTrue": 5,
+   "secondTrue": 4,
+   "bothTrue": 4,
+   "trueVsNull": 1,
+   "trueVsFalse": 0,
+   "kappaStrict": 0.888,
+   "kappaAmbiguousRelevant": 0.922
+  },
+  "robotics": {
+   "mainTrue": 6,
+   "secondTrue": 6,
+   "bothTrue": 6,
+   "trueVsNull": 0,
+   "trueVsFalse": 0,
+   "kappaStrict": 1.0,
+   "kappaAmbiguousRelevant": 1.0
+  },
+  "safety": {
+   "mainTrue": 12,
+   "secondTrue": 11,
+   "bothTrue": 11,
+   "trueVsNull": 1,
+   "trueVsFalse": 0,
+   "kappaStrict": 0.955,
+   "kappaAmbiguousRelevant": 0.895
+  },
+  "open-models": {
+   "mainTrue": 8,
+   "secondTrue": 8,
+   "bothTrue": 8,
+   "trueVsNull": 0,
+   "trueVsFalse": 0,
+   "kappaStrict": 1.0,
+   "kappaAmbiguousRelevant": 0.959
+  },
+  "jobs": {
+   "mainTrue": 4,
+   "secondTrue": 8,
+   "bothTrue": 4,
+   "trueVsNull": 4,
+   "trueVsFalse": 0,
+   "kappaStrict": 0.662,
+   "kappaAmbiguousRelevant": 0.885
+  },
+  "energy": {
+   "mainTrue": 2,
+   "secondTrue": 2,
+   "bothTrue": 2,
+   "trueVsNull": 0,
+   "trueVsFalse": 0,
+   "kappaStrict": 1.0,
+   "kappaAmbiguousRelevant": 0.797
+  },
+  "quantum": {
+   "mainTrue": 4,
+   "secondTrue": 4,
+   "bothTrue": 4,
+   "trueVsNull": 0,
+   "trueVsFalse": 0,
+   "kappaStrict": 1.0,
+   "kappaAmbiguousRelevant": 1.0
+  },
+  "health": {
+   "mainTrue": 4,
+   "secondTrue": 4,
+   "bothTrue": 4,
+   "trueVsNull": 0,
+   "trueVsFalse": 0,
+   "kappaStrict": 1.0,
+   "kappaAmbiguousRelevant": 0.908
+  },
+  "education": {
+   "mainTrue": 2,
+   "secondTrue": 2,
+   "bothTrue": 2,
+   "trueVsNull": 0,
+   "trueVsFalse": 0,
+   "kappaStrict": 1.0,
+   "kappaAmbiguousRelevant": 1.0
+  },
+  "coding": {
+   "mainTrue": 13,
+   "secondTrue": 15,
+   "bothTrue": 13,
+   "trueVsNull": 1,
+   "trueVsFalse": 1,
+   "kappaStrict": 0.926,
+   "kappaAmbiguousRelevant": 0.828
+  },
+  "earnings": {
+   "mainTrue": 10,
+   "secondTrue": 11,
+   "bothTrue": 10,
+   "trueVsNull": 1,
+   "trueVsFalse": 0,
+   "kappaStrict": 0.951,
+   "kappaAmbiguousRelevant": 0.931
+  }
+ },
+ "biologyAgainstEarlierKeys": {
+  "anthropic-outlets": {
+   "n": 816,
+   "table": {
+    "True->True": 4,
+    "True->None": 0,
+    "True->False": 0,
+    "None->True": 2,
+    "None->None": 5,
+    "None->False": 4,
+    "False->True": 0,
+    "False->None": 1,
+    "False->False": 800
+   },
+   "kappaStrict": 0.799
+  },
+  "pooled": {
+   "n": 529,
+   "table": {
+    "True->True": 6,
+    "True->None": 1,
+    "True->False": 0,
+    "None->True": 2,
+    "None->None": 5,
+    "None->False": 3,
+    "False->True": 0,
+    "False->None": 18,
+    "False->False": 494
+   },
+   "kappaStrict": 0.797
+  }
+ }
+}

@@ -139,9 +139,19 @@ Each folder in `sets/` is one set. `articles.json` holds the queue number, the i
 | fresh      | 1,675    | training                                              | `labels.json`, sha256 `a2802bbe…`                                                          |
 | fresh-2    | 1,735    | training                                              | `labels.json`, sha256 `d123cde2…`                                                          |
 | fresh-3    | 1,617    | training (rounds 9 and 10; teaching pool of the exam) | `labels.json`, sha256 `a5a871b6…`                                                          |
-| exam       | 133      | exam, never scored                                    | `labels.jsonl` (sealed, sha256 `2bba5406…`) and `biology-labels.json` (sha256 `4cb90b03…`) |
+| fresh-4    | 1,647    | training (round 11)                                   | `labels.json`, sha256 `8e62624c…`                                                          |
+| fresh-5    | 1,370    | training (rounds 12 to 14; teaching pool of round 15) | `labels.json`, sha256 `187918bd…`                                                          |
+| fresh-6    | 1,578    | training (round 15; teaching pool of round 16)        | `labels.json`, sha256 `9d8a3e8a…`                                                          |
+| fresh-7    | 1,494    | training (round 16)                                   | `labels.json`, sha256 `7fdedd07…`                                                          |
+| exam       | 133      | exam, scored one time on 2026-10-29                   | `labels.jsonl` (sealed, sha256 `2bba5406…`) and `biology-labels.json` (sha256 `4cb90b03…`) |
 
 `profiles.json`, `profiles.md` and `keywords.json` are the profiles and the keyword baselines of the answer key. A design sees only the id and the description of a profile.
+
+## Research files
+
+[`docs/research/relevance-filtering/`](../../../../docs/research/relevance-filtering/) keeps the frozen files of research rounds 2 to 16, byte for byte, in the layout of the research folder: the rules (`selection-rule.json`, `plan.json`, `exploration-arm.json`), the evaluators, the results, the decision model's answers (`d1-answers.json` of rounds 13, 15 and 16), the second answer key of round 14 (`round-14/labels-gpt.json`), the annotator briefs and tools, and the scripts that made each fresh slice. Each frozen file has its `.sha256` and `.frozenAt` beside it. The folder is in no Nx project, and Prettier and ESLint skip it, so its bytes stay as they were frozen and its scripts' imports give the package no dependency. One sha256 file is shared: `freeze.py` names the file after the base name, so `profiles.sha256` holds the hash of `profiles.md`; the hash of `profiles.json` (`a5932290…`) is in the folder's `README.md`.
+
+The folder holds no publisher text, no crawl and no vector. The scripts read `articles.json`, `items.json` and the vectors from the research folder on the maintainer's Mac (`~/.codex/visualizations/2026/10/23/01a16a1c-424c-7793-8ca9-02cc1c715d82/relevance-profiles`). Their `.sha256` files are in the folder, so a copy of those files can be checked before a script runs again.
 
 ### Roles
 

@@ -1,0 +1,17 @@
+{
+  "role": "training",
+  "sliceStart": "2025-01-01",
+  "frozenAt": "2026-10-30T13:46:54Z",
+  "firstScoredAt": "2026-10-30T13:47:50Z",
+  "labelsSha256": {
+    "labels.json": "187918bddcbdbac1782aeaeb483327cd0a869c5b7a6721188b9920895d954484"
+  },
+  "annotator": "4 blind Claude (Opus 5.5) annotators, one queue each, with profiles.md.",
+  "source": "The Decoder and SiliconANGLE, 2025-01-01 to 2025-03-31 (1,370). labels.json is fresh-5/labels.json of the relevance-profiles bundle of zukhruf #3195 (~/.codex/visualizations/2026/10/23/01a16a1c-424c-7793-8ca9-02cc1c715d82/relevance-profiles; its frozen files are in eval/research); articles.json holds the q, id and publish date of fresh-5/items.json.",
+  "weaknesses": [
+    "Annotators are one AI model.",
+    "Rounds 12 to 14 scored this set, and rounds 15 and 16 use it as a teaching pool only.",
+    "Round 14 labelled it again with four Codex (GPT) annotators: eval/research/round-14/labels-gpt.json.",
+    "It does not have the Decoder post at the shortlink https://the-decoder.com/?p=20377 (2025-01-09): the preparation script dropped every shortlink after the first (limitation 17 of docs/research/relevance-filtering.md)."
+  ]
+}

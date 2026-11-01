@@ -1,0 +1,28 @@
+{
+ "round": "relevance-filtering research round 15 (zukhruf #3421): does a per-profile recalibration of d1-2B's probability from the reader's taught answers make better yes/no decisions than d1's own probability?",
+ "writtenBefore": "the sixth fresh slice (2024-10-01..2024-12-31) is crawled, read, answered by d1 or labelled, and before any round-15 score. fresh-5 (rounds 12 to 14) is used only as a teaching pool here, never as a test.",
+ "why": "Round 13 found d1-2B ranks best (MAP 0.924) and its probabilities were calibrated on the first answer key (Brier skill +0.726); round 14 found the ranking holds on a second key (MAP 0.808) but the calibration did not (+0.356, health -1.61): a probability is calibrated to one judge's boundary. Top systems set the decision threshold per profile and adapt it from feedback (TREC adaptive filtering, Zhang and Callan SIGIR 2001; Gmail Priority Inbox, Aberdeen et al. 2010). The package (@zukhruf/relevance-filtering 0.5.1, ADR 0005) ships DecisionScorer and UtilityThreshold; the user chose (2026-10-30) to test a recalibration before an adapter for it ships.",
+ "data": {
+  "test": "fresh-6: every the-decoder.com and siliconangle.com article published 2024-10-01..2024-12-31, crawled with elt's web source and prepared like fresh-5 (every URL and title of the collection and fresh..fresh-5 excluded), labelled for all 16 profiles by four blind annotators (Claude, fresh-5's brief word for word, paths changed only), frozen before any round-15 score. No embeddings are made: no similarity design is scored in this round.",
+  "answers": "d1-2B (LiquidAI/d1-2B-GGUF:Q8_0 on the Mac mini, /v1/systemone, as round 13; model entry and server build recorded) answers every fresh-6 article with round 13's state (title + '\\n' + lead) and questions ('Is the main subject of this article: <profile description>?', one noul question per profile, all 16 in one call), frozen (sha256) BEFORE any fresh-6 label exists. A failed call is retried at most 3 times; an article that still fails is recorded and scored as p = 0. The pool's d1 answers are round 13's frozen fresh-5 answers (a86a1235...)."
+ },
+ "teaching": {
+  "protocol": "Product teaching as round 10: the reader is shown, per profile, the top N_teach articles of the teaching set by p_d1 and the top N_teach narrow-keyword matches by p_d1; the answer key answers each shown article (relevant / not relevant; ambiguous is skipped). N_teach in {5, 10}.",
+  "window": "teach from the fresh-6 articles of 2024-10-01..2024-10-14 (UTC publish day), test on the rest of fresh-6.",
+  "pool": "teach from fresh-5 (labels 187918bd..., d1 answers a86a1235...), test on all of fresh-6."
+ },
+ "calibrations": {
+  "raw": "p_d1 unchanged (DecisionScorer today).",
+  "shift": "p = logistic(logit(p_d1) + b) with one intercept b per profile, b by maximum likelihood on the taught answers with Platt's smoothed targets ((n_rel + 1) / (n_rel + 2) for relevant, 1 / (n_not + 2) for not relevant). p_d1 clipped to [1e-6, 1 - 1e-6] before logit.",
+  "platt": "p = logistic(a * logit(p_d1) + b) per profile, a and b by Platt's method with smoothed targets on logit(p_d1) (Platt 1999; Newton with line search, Lin, Lin and Weng 2007), same clipping.",
+  "fallback": "A profile with no relevant or no not-relevant taught answer keeps raw for shift and platt; a platt fit with a <= 0 (it would flatten or reverse the ranking) keeps raw. Both calibrations are monotone otherwise, so the ranking (MAP) of each profile is unchanged; MAP is reported as a check only."
+ },
+ "decisions": {
+  "primary": "UtilityThreshold at TREC-11's linear utility T11U = 2 TP - FP, whose Bayes threshold for calibrated probabilities is p >= 1/3 (falseAlarm 1, miss 2). Scored by T11SU, TREC-11's scaled utility: T11NU = T11U / (2 * relevant), T11SU = (max(T11NU, -0.5) + 0.5) / 1.5, over the labelled test articles (ambiguous left out).",
+  "reported": "T11F (F0.5) of ExpectedFThreshold(beta 0.5) and of p >= 0.5; Brier skill against the profile's test base rate; expected calibration error (10 equal-width bins); keywordNarrow's T11SU and T11F; MAP of raw d1 (check)."
+ },
+ "profiles": "Scored profiles: at least 20 strict relevant articles in the test part of each protocol (fresh-6 minus the window for window; all of fresh-6 for pool). Macro means over them.",
+ "pass": "Topic-level paired bootstrap, 2000 replicates, numpy.random.default_rng(31968), a fresh generator per call. A calibration (shift or platt) replaces raw when, in BOTH protocols, (1) the interval of its macro T11SU minus raw's lies entirely above 0, and (2) the interval of its macro Brier skill minus raw's has lower bound > -0.05. If both pass, the simpler (shift) wins unless platt's macro T11SU interval against shift lies entirely above 0 in both protocols.",
+ "then": "A passing calibration becomes a recalibration adapter of the Scorer port (a decorator over DecisionScorer that fits on the profile's taught answers); its API is shown to the user before it is built (#3421).",
+ "noneEligible": "Thresholds stay on raw d1 probabilities; the result goes to #3421 and the research record."
+}

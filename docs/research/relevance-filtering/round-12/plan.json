@@ -1,0 +1,105 @@
+{
+ "status": "ROUND 12 DONE 2026-10-30 (#3383, step 1). hybrid: FAIL (MAP interval vs desc+kw [-0.041, -0.005], entirely below 0). hybrid-rocchio: FAIL (MAP interval vs desc+kw [-0.050, +0.073] includes 0). Chosen: none. Per selection-rule.json 'noneEligible': desc+kw stays; no Scorer adapter from this round. Round 13 scores d1 against desc+kw.",
+ "statusPerRanker": {
+  "hybrid": "FAIL",
+  "hybrid-rocchio": "FAIL"
+ },
+ "chosen": null,
+ "toBeatInRound13": "desc+kw",
+ "files": {
+  "selection-rule.json": "5728b7ba552757a19c755d911eba5ce6d1a360570ab9f1ed326f89f917c9ee73",
+  "evaluate.py": "d4537eb086cab10cbd8ef12667d28d60312e2e2442626ae0d74f6ec148829c9e",
+  "results.json": "6463b9c52853342dc212ac0be62b8c09ce19a0f5faeb67848072cceb3f8ce75f",
+  "test": {
+   "fresh-5/articles.json": "862c92b3b47b00ea6229f170c4f6f1a5785b5109a5ed056226f2a81f377d3fc1",
+   "fresh-5/items.json": "30c29039de1a73cc5cba53d1949a8029627dfa7186edb15a212ccff7658b99f1",
+   "fresh-5/vectors.json": "0bb2c9520a99d291d4e2c1a6057206b1fe5bc01cc994b4e852b7a9c96d2b465a",
+   "fresh-5/labels.json": "187918bddcbdbac1782aeaeb483327cd0a869c5b7a6721188b9920895d954484"
+  },
+  "poolLabels": {
+   "collection": "69a540c1ae2075ddaff71b5a039791bf90b6c6868a317ec3d58443e29037d406",
+   "fresh": "a2802bbe8303534f916b7e8292393b7bdaebf02a14855652147953a887ed7f5d",
+   "fresh-2": "d123cde2c93e24f942a5fd2004d15c8cd88055b09ee223958f9527c6f35e0936",
+   "fresh-3": "a5a871b628f7d96c742216e7568f8802874038fd5c2baf32db8784290e58599c",
+   "fresh-4": "8e62624c97128144e101d1f846a05671570a83a33e84b06fb75f1c23c59de416"
+  }
+ },
+ "order": [
+  "selection-rule.json frozen 2026-10-30T10:30Z, before fresh-5 was crawled",
+  "evaluate.py frozen (d4537eb0...) after smoke runs on in-memory random labels (fresh-4 stand-in)",
+  "round-13/d1-answers.json frozen 13:27:55Z; fresh-5 labelled by 4 blind annotators (fresh-4's brief), merged and frozen 13:46:54Z (187918bd...)",
+  "ONE real run (run.log), results.json frozen"
+ ],
+ "map": {
+  "scoredProfiles": [
+   "chips",
+   "security",
+   "funding",
+   "regulation",
+   "courts",
+   "open-models",
+   "earnings"
+  ],
+  "macro": {
+   "desc+kw": 0.7822666976765984,
+   "hybrid": 0.7628558905976898,
+   "hybrid-rocchio": 0.7881571183080013,
+   "keywordNarrow": 0.49843280115192584,
+   "keywordBroad": 0.5091750523314686,
+   "newest": 0.07314059774175767
+  },
+  "intervalsVsDesc+kw": {
+   "hybrid": [
+    -0.040626146524297774,
+    -0.005120122440778707
+   ],
+   "hybrid-rocchio": [
+    -0.049895882077262144,
+    0.07326446132297422
+   ]
+  },
+  "desc+kwVsKeywordNarrow": [
+   0.2031430900983599,
+   0.35927293082125805
+  ]
+ },
+ "daily": {
+  "scoredProfiles": [
+   "chips",
+   "security",
+   "funding",
+   "regulation",
+   "open-models",
+   "earnings"
+  ],
+  "macroRecall": {
+   "desc+kw": 0.8986622102738128,
+   "hybrid": 0.8900552215175977,
+   "hybrid-rocchio": 0.8999951995458831,
+   "keywordNarrow": 0.5246969259803944,
+   "keywordBroad": 0.8139483321082847,
+   "newest": 0.3944770241237121
+  },
+  "intervalsVsDesc+kw": {
+   "hybrid": [
+    -0.017610324389985426,
+    -0.0018652710681696198
+   ],
+   "hybrid-rocchio": [
+    -0.025642903931408074,
+    0.033830367163700505
+   ]
+  },
+  "desc+kwVsKeywordNarrow": [
+   0.29267965946914615,
+   0.47909862831565125
+  ]
+ },
+ "hybridVsHybridRocchioMAP": [
+  -0.08374140768746288,
+  0.01646976623418122
+ ],
+ "notes": [
+  "RuntimeWarning 'Mean of empty slice' in run.log comes from profiles with no strict relevant test article (energy has 0); they are in neither scored set."
+ ]
+}

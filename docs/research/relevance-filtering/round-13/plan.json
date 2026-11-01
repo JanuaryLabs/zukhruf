@@ -1,0 +1,378 @@
+{
+ "status": "ROUND 13 DONE 2026-10-30 (#3383, judge step). To beat: desc+kw (round 12 chose none). d1: PASS (MAP 0.924 vs 0.782, interval [+0.049, +0.298]; daily recall 0.957 vs 0.899, interval [+0.013, +0.125]). d1+kw: PASS (MAP [+0.016, +0.210]; daily [-0.001, +0.114] > -0.05). Both pass; d1 vs d1+kw MAP [+0.007, +0.096] is not below 0 -> chosen: d1 (zero-shot). Decision (reported, the user decides): T11F of p_d1 >= 0.5 0.894 vs keywordNarrow 0.679, interval [+0.083, +0.369], macro Brier skill +0.726 -> yesNoAllowed true. Per selection-rule.json and the round-12 rule's 'then': the Scorer port API is shown to the user before it is built.",
+ "statusPerRanker": {
+  "d1": "PASS",
+  "d1+kw": "PASS"
+ },
+ "chosen": "d1",
+ "toBeat": "desc+kw",
+ "d1VsD1kwMAP": [
+  0.007451202246894886,
+  0.09591309846716237
+ ],
+ "files": {
+  "selection-rule.json": "d9e0d341d74a8ed1b30a2b2288fa66b1f2f11567ae8f4a179e67370bbb99a6d1",
+  "evaluate.py": "3736b270004fad654ecc4b1fb5bd4b1bf15aea8e065f7d79f6b6612724a97a4e",
+  "collect.py": "eae679183c28101da105b60197f318442b667fb60184bc7aabf1a58ccd28b767",
+  "d1-answers.json": "a86a12352dfaece01fb51610179e650888b4dd63729c0d06805fe02e15687587",
+  "results.json": "45fd5b5217ccadad5222246801ecd2e1a4baf59a28d0ee597af3c59cc4b9a39d",
+  "round-12/evaluate.py": "d4537eb086cab10cbd8ef12667d28d60312e2e2442626ae0d74f6ec148829c9e",
+  "round-12/results.json": "6463b9c52853342dc212ac0be62b8c09ce19a0f5faeb67848072cceb3f8ce75f",
+  "fresh-5/labels.json": "187918bddcbdbac1782aeaeb483327cd0a869c5b7a6721188b9920895d954484"
+ },
+ "model": {
+  "id": "LiquidAI/d1-2B-GGUF:Q8_0",
+  "server": {
+   "build_info": "b11960-8642541b2"
+  },
+  "failedArticles": 0,
+  "missingArticles": 0
+ },
+ "order": [
+  "selection-rule.json frozen 2026-10-30T11:24:18Z, before any fresh-5 label and any d1 answer",
+  "collect.py and evaluate.py frozen 11:31Z",
+  "d1-answers.json collected (1,370 articles, 0 failed) and frozen 13:27:55Z",
+  "fresh-5 labels frozen 13:46:54Z (187918bd...)",
+  "round 12: ONE real run, results.json frozen (6463b9c5...)",
+  "round 13: ONE real run (run.log); round-12 reproduction 0.0 for every reference; results.json frozen"
+ ],
+ "map": {
+  "scoredProfiles": [
+   "chips",
+   "security",
+   "funding",
+   "regulation",
+   "courts",
+   "open-models",
+   "earnings"
+  ],
+  "macro": {
+   "d1": 0.9235994670590004,
+   "d1+kw": 0.8761597927003283,
+   "desc+kw": 0.7822666976765984,
+   "hybrid": 0.7628558905976898,
+   "hybrid-rocchio": 0.7881571183080013,
+   "keywordNarrow": 0.49843280115192584,
+   "keywordBroad": 0.5091750523314686,
+   "newest": 0.07314059774175767
+  },
+  "intervals": {
+   "d1": {
+    "desc+kw": [
+     0.049437377730089875,
+     0.29757874060309514
+    ],
+    "hybrid": [
+     0.06387859843046044,
+     0.31561282870017066
+    ],
+    "hybrid-rocchio": [
+     0.05771967694511541,
+     0.24000369191031193
+    ],
+    "keywordNarrow": [
+     0.2921988009758809,
+     0.5925885366879041
+    ],
+    "keywordBroad": [
+     0.29108344084053067,
+     0.5345833124852628
+    ],
+    "newest": [
+     0.7978671596240074,
+     0.8998671408167526
+    ]
+   },
+   "d1+kw": {
+    "desc+kw": [
+     0.016089870856660776,
+     0.20970240887163719
+    ],
+    "hybrid": [
+     0.032707478924603794,
+     0.22626901929530258
+    ],
+    "hybrid-rocchio": [
+     0.027364440824615626,
+     0.15628316356841174
+    ],
+    "keywordNarrow": [
+     0.2825819365201065,
+     0.4967637493273848
+    ],
+    "keywordBroad": [
+     0.26421914498865906,
+     0.46050232193508334
+    ],
+    "newest": [
+     0.7371933680494885,
+     0.871346269016607
+    ]
+   }
+  },
+  "perProfile": {
+   "chips": {
+    "d1": 0.8908637414283538,
+    "d1+kw": 0.8581609223609579,
+    "desc+kw": 0.8019823515978244,
+    "hybrid": 0.7235222888846367,
+    "hybrid-rocchio": 0.7088775364678321,
+    "keywordNarrow": 0.5036171138953722,
+    "keywordBroad": 0.34432255350793256,
+    "newest": 0.03794796536693832
+   },
+   "security": {
+    "d1": 0.9380330156797791,
+    "d1+kw": 0.8822599592668952,
+    "desc+kw": 0.8937298691976219,
+    "hybrid": 0.8655916533958236,
+    "hybrid-rocchio": 0.8217569861444765,
+    "keywordNarrow": 0.4959334856607855,
+    "keywordBroad": 0.6106187133615494,
+    "newest": 0.13446348994635166
+   },
+   "funding": {
+    "d1": 0.9904816655484188,
+    "d1+kw": 0.9769029601114718,
+    "desc+kw": 0.9250152198803597,
+    "hybrid": 0.9206624280307946,
+    "hybrid-rocchio": 0.9273475853600961,
+    "keywordNarrow": 0.7166538421797237,
+    "keywordBroad": 0.8652140321069108,
+    "newest": 0.2018440888992592
+   },
+   "regulation": {
+    "d1": 0.9545585542913402,
+    "d1+kw": 0.7829696263091271,
+    "desc+kw": 0.35338428179050135,
+    "hybrid": 0.3500960641813195,
+    "hybrid-rocchio": 0.5318880861082758,
+    "keywordNarrow": 0.11084159974139877,
+    "keywordBroad": 0.258919601121838,
+    "newest": 0.02904920671517945
+   },
+   "courts": {
+    "d1": 0.9270032611151032,
+    "d1+kw": 0.9532693155609823,
+    "desc+kw": 0.845380873522595,
+    "hybrid": 0.8407685360084255,
+    "hybrid-rocchio": 0.8227640929956426,
+    "keywordNarrow": 0.7617995016635571,
+    "keywordBroad": 0.4849276423360469,
+    "newest": 0.016014734154091197
+   },
+   "open-models": {
+    "d1": 0.7777819250983706,
+    "d1+kw": 0.6979301715166042,
+    "desc+kw": 0.6896646407592304,
+    "hybrid": 0.6764754417328587,
+    "hybrid-rocchio": 0.7154553251421271,
+    "keywordNarrow": 0.25232388105708714,
+    "keywordBroad": 0.3342183363359635,
+    "newest": 0.032638725891597095
+   },
+   "earnings": {
+    "d1": 0.9864741062516369,
+    "d1+kw": 0.98162559377626,
+    "desc+kw": 0.9667096469880558,
+    "hybrid": 0.96287482194997,
+    "hybrid-rocchio": 0.9890102159375591,
+    "keywordNarrow": 0.6478601838655562,
+    "keywordBroad": 0.666004487550039,
+    "newest": 0.06002597321888684
+   }
+  }
+ },
+ "daily": {
+  "scoredProfiles": [
+   "chips",
+   "security",
+   "funding",
+   "regulation",
+   "open-models",
+   "earnings"
+  ],
+  "macroRecall": {
+   "d1": 0.9572973868673124,
+   "d1+kw": 0.944824420252243,
+   "desc+kw": 0.8986622102738128,
+   "hybrid": 0.8900552215175977,
+   "hybrid-rocchio": 0.8999951995458831,
+   "keywordNarrow": 0.5246969259803944,
+   "keywordBroad": 0.8139483321082847,
+   "newest": 0.3944770241237121
+  },
+  "intervals": {
+   "d1": {
+    "desc+kw": [
+     0.01254196938918134,
+     0.12482538001076132
+    ],
+    "hybrid": [
+     0.018886251716023244,
+     0.13185788643768864
+    ],
+    "hybrid-rocchio": [
+     0.01772252829732564,
+     0.10016745806467808
+    ],
+    "keywordNarrow": [
+     0.32472343513564955,
+     0.604032474503489
+    ],
+    "keywordBroad": [
+     0.09870426138542084,
+     0.19600112146307794
+    ],
+    "newest": [
+     0.4604076479076478,
+     0.6693325167195222
+    ]
+   },
+   "d1+kw": {
+    "desc+kw": [
+     -0.0013124129434618121,
+     0.11436387686387682
+    ],
+    "hybrid": [
+     0.004929622812206935,
+     0.12199750481000467
+    ],
+    "hybrid-rocchio": [
+     0.005764057035243519,
+     0.08870654350880335
+    ],
+    "keywordNarrow": [
+     0.30908622137435693,
+     0.5957116018710221
+    ],
+    "keywordBroad": [
+     0.08859509282624001,
+     0.1857232535198637
+    ],
+    "newest": [
+     0.4570125861792529,
+     0.6508726625958264
+    ]
+   }
+  },
+  "macroSecondary": {
+   "d1": {
+    "precision": 0.2363400094418613,
+    "emptyDays": 0.0,
+    "missedDays": 0.001984126984126984
+   },
+   "d1+kw": {
+    "precision": 0.2322062877051433,
+    "emptyDays": 0.0,
+    "missedDays": 0.008174154784324275
+   },
+   "desc+kw": {
+    "precision": 0.22135513753751376,
+    "emptyDays": 0.0,
+    "missedDays": 0.04155793202403372
+   },
+   "hybrid": {
+    "precision": 0.21778524549539946,
+    "emptyDays": 0.0,
+    "missedDays": 0.04732609930350043
+   },
+   "hybrid-rocchio": {
+    "precision": 0.21666100107449462,
+    "emptyDays": 0.0,
+    "missedDays": 0.038224150300421485
+   },
+   "keywordNarrow": {
+    "precision": 0.6866993378526082,
+    "emptyDays": 0.5277777777777778,
+    "missedDays": 0.3046178970460474
+   },
+   "keywordBroad": {
+    "precision": 0.519405663509796,
+    "emptyDays": 0.32037037037037036,
+    "missedDays": 0.09452766249007959
+   },
+   "newest": {
+    "precision": 0.08327331961591221,
+    "emptyDays": 0.0,
+    "missedDays": 0.43098432949820814
+   }
+  }
+ },
+ "decision": {
+  "perProfileT11F": {
+   "chips": {
+    "d1>=0.5": 0.8648648648648649,
+    "keywordNarrow": 0.7416267942583732
+   },
+   "security": {
+    "d1>=0.5": 0.9057527539779682,
+    "keywordNarrow": 0.6543075245365322
+   },
+   "funding": {
+    "d1>=0.5": 0.9486016628873771,
+    "keywordNarrow": 0.8439646712463199
+   },
+   "regulation": {
+    "d1>=0.5": 0.8587786259541985,
+    "keywordNarrow": 0.32608695652173914
+   },
+   "courts": {
+    "d1>=0.5": 0.8695652173913043,
+    "keywordNarrow": 0.9134615384615384
+   },
+   "open-models": {
+    "d1>=0.5": 0.8518518518518519,
+    "keywordNarrow": 0.4048582995951417
+   },
+   "earnings": {
+    "d1>=0.5": 0.9600997506234414,
+    "keywordNarrow": 0.8662613981762918
+   }
+  },
+  "macroT11F": {
+   "d1>=0.5": 0.8942163896501437,
+   "keywordNarrow": 0.6786524546851337
+  },
+  "intervalVsKeywordNarrow": [
+   0.08274347920611658,
+   0.36937221699065315
+  ],
+  "perProfileBrierSkill": {
+   "chips": 0.6472292375709516,
+   "security": 0.7420929391000737,
+   "funding": 0.8871307752165849,
+   "regulation": 0.7128846893555814,
+   "courts": 0.6399518138642457,
+   "open-models": 0.5676676406857393,
+   "earnings": 0.8858202586939743
+  },
+  "macroBrierSkill": 0.7261110506410217,
+  "yesNoAllowed": true,
+  "perProfileECE": {
+   "chips": 0.03851041104485648,
+   "security": 0.0653263514985191,
+   "funding": 0.04512052887653978,
+   "regulation": 0.04044669096848354,
+   "courts": 0.03800294505581114,
+   "open-models": 0.022857122125352753,
+   "earnings": 0.028753926308335592
+  }
+ },
+ "reportedOnly": {
+  "why": "post-hoc sensitivity, no decision depends on it: regulation moved most (desc+kw 0.353 -> d1 0.955)",
+  "macroMAPWithoutRegulation": {
+   "d1": 0.9184396191869437,
+   "d1+kw": 0.8916914870988619,
+   "desc+kw": 0.8537471003242812,
+   "hybrid": 0.8316491950004181
+  }
+ },
+ "costs": {
+  "d1": "one /v1/systemone call per article with all 16 questions: median 3.45 s on the Mac mini (82 min for 1,370 articles); data stays on the user's machines (tailnet)."
+ },
+ "limitations": [
+  "The answer key is written by LLM annotators (Claude Opus 5.5) and d1 is an LLM judge asked the main-subject question of the rule; LLM labels can favour LLM rankers (Clarke & Dietz 2024; Alaofi et al. SIGIR 2024). No human labels exist for fresh-5.",
+  "One three-month slice, 7 MAP profiles; profile-level bootstrap intervals are wide."
+ ]
+}

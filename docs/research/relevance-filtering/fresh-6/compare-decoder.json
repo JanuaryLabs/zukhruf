@@ -1,0 +1,44 @@
+{
+ "fresh5": 4092,
+ "fresh6": 6096,
+ "shared": 4092,
+ "identical": 4086,
+ "differing": [
+  {
+   "url": "https://the-decoder.com/aschenbrenners-ai-thesis-could-be-correct-his-timing-and-leverage-were-not/",
+   "fields": [
+    "textContent"
+   ]
+  },
+  {
+   "url": "https://the-decoder.com/google-handed-users-the-easiest-possible-tool-for-fake-satellite-imagery-then-pulled-it-after-two-days/",
+   "fields": [
+    "textContent"
+   ]
+  },
+  {
+   "url": "https://the-decoder.com/german-court-rules-ai-music-generator-suno-violated-copyrights-rejects-fair-use-defense/",
+   "fields": [
+    "textContent"
+   ]
+  },
+  {
+   "url": "https://the-decoder.com/bytedances-seedance-2-5-generates-30-second-video-clips-with-built-in-audio/",
+   "fields": [
+    "textContent"
+   ]
+  },
+  {
+   "url": "https://the-decoder.com/a-security-researcher-built-a-self-spreading-worm-that-hides-inside-word-docs-and-hijacks-microsoft-copilot/",
+   "fields": [
+    "textContent"
+   ]
+  },
+  {
+   "url": "https://the-decoder.com/experts-adopt-ai-agents-random-opinions-and-think-theyre-their-own-anthropic-study-finds/",
+   "fields": [
+    "textContent"
+   ]
+  }
+ ]
+}

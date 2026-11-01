@@ -1,0 +1,28 @@
+{
+  "status": "RANKER FROZEN 2026-10-29 for @zukhruf/relevance-filtering (#3195). Exam not opened.",
+  "decision": "The user chose a ranked reader on 2026-10-29 (best N a day per interest, user sets N, keywords as evidence, no yes/no threshold). Round 10 (round-10/selection-rule.json 37952976..., evaluate.py 526b9c69..., results.json 54394564..., plan.json 16e1c286...) passed all three rankers in both protocols and chose desc+kw.",
+  "developmentEvidence": {
+    "window": "desc+kw MAP 0.717 vs keywordNarrow 0.514 (interval +0.082..+0.296), keywordBroad 0.486, newest 0.065; 9 profiles",
+    "pool": "desc+kw MAP 0.766 vs keywordNarrow 0.476 (interval +0.215..+0.374), keywordBroad 0.462, newest 0.055; 11 profiles",
+    "choiceRuleAddedBeforeRun": "best = highest mean of the two protocols' MAP; a simpler ranker wins only if its interval against best includes 0 in both protocols (desc did not in pool)."
+  },
+  "ranker": {
+    "name": "desc+kw",
+    "order": "The scored stream ordered by the frozen design's probability (freeze/plan.json desc|binormal+kw: cos with the description embedded with the caller's query text; binormal on the stream with the taught answers; naive-Bayes keyword evidence); ties by cos(x, d), then id. A profile with no relevant answer orders keyword matches first (newest first), then the rest by cos(x, d).",
+    "teaching": "Product teaching: the reader shows the top N articles by cos(x, d) and the top N keyword matches by cos(x, d) from the pool; the person answers yes/no; ambiguous answers are skipped."
+  },
+  "knownWeakPoints": [
+    "With one relevant answer, the relevant sd sits at its floor and the keyword evidence then sets most of the order (earnings window 0.977 for desc vs 0.867 for desc+kw).",
+    "The daily top-N precision in round 10 is not a fair comparison with a keyword list, which shows only that day's matches; per-day recall was not measured.",
+    "fresh-3 served rounds 9 and 10 (adaptive reuse); the exam is the confirmation."
+  ],
+  "examVerdictRule": {
+    "stream": "The 133 deepmind-outlets articles. Labels: exam/labels.jsonl (15 profiles, sha256 2bba5406...) and relevance-biology/exam/labels.json (Biology, sha256 4cb90b03...). Ambiguous left out of AP.",
+    "teaching": "Product teaching from the whole labelled pool (collection + fresh + fresh-2 + fresh-3), N in {5, 10}.",
+    "profiles": "Every profile with >= 3 strict relevant exam articles.",
+    "metric": "AP per profile over the exam stream, mean over N; macro MAP over those profiles. Baselines: keywordNarrow and keywordBroad (matches first, newest first inside groups, ties by id) and newest.",
+    "bootstrap": "Paired article bootstrap, 2000 replicates, numpy.random.default_rng(31963), stratified into two strata (articles strictly relevant to at least one verdict profile, and all others), one weight per exam article shared by every profile, N and list; percentile 95% interval of the MAP difference.",
+    "pass": "Lower bound of (desc+kw - keywordNarrow) > -0.05, and the intervals against keywordBroad and newest lie entirely above 0. Otherwise fail.",
+    "once": "Scored one time, through the package's ranking API and eval, after the package reproduces round 10's order for a named unit. Afterwards the exam becomes a regression set."
+  }
+}

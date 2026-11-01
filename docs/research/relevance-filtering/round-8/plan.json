@@ -1,0 +1,698 @@
+{
+ "status": "ROUND 8 DONE 2026-10-29. ordered: FAIL in all three protocols. truncated (reference, round 7 code): FAIL (window lower bound vs keywordNarrow -0.056 with seed 31960; passes poolA and poolB). No candidate eligible: per selection-rule.json 'noneEligible', no package change, the exam stays sealed.",
+ "statusPerCandidate": {
+  "ordered": "FAIL",
+  "truncated": "FAIL"
+ },
+ "statusPerProtocol": {
+  "window": {
+   "ordered": "FAIL",
+   "truncated": "FAIL"
+  },
+  "poolA": {
+   "ordered": "FAIL",
+   "truncated": "PASS"
+  },
+  "poolB": {
+   "ordered": "FAIL",
+   "truncated": "PASS"
+  }
+ },
+ "files": {
+  "selection-rule.json": "6249268c3f190bfae31d6c4b6f6cc85c36899902dbc5a5ee3ea325e5ba92f844",
+  "evaluate.py": "d89d3e7df19406ed63640f9461e205ebe513030d4364a052bbb40bc4824a0ea0",
+  "results.json": "69af0e1cfc25dcf42457fc5825f175c684db81558abcad211cf05bde72f98bae",
+  "round-7/evaluate.py": "8c5f796055a1ab0647d600cb20db2a179e22f385b1f08d8e094d74dd967a0dda",
+  "labels": {
+   "collection": "69a540c1ae2075ddaff71b5a039791bf90b6c6868a317ec3d58443e29037d406",
+   "fresh": "a2802bbe8303534f916b7e8292393b7bdaebf02a14855652147953a887ed7f5d",
+   "fresh-2": "d123cde2c93e24f942a5fd2004d15c8cd88055b09ee223958f9527c6f35e0936"
+  }
+ },
+ "order": [
+  "evaluate.py written (imports frozen round-7 module; implementation notes in the docstring)",
+  "gradient check of the reparametrised likelihood vs central differences: max rel error 2.06e-8 (asserted < 1e-5 in every run)",
+  "smoke run on round 7's in-memory random labels (rng 7): end to end, all starts converged",
+  "evaluate.py frozen (sha256 d89d3e7d...), ONE real run, results.json frozen (sha256 69af0e1c...)"
+ ],
+ "referenceCheck": "truncated reproduces round 7's macro T11F and Brier skill exactly in all three protocols (window 0.6769 / 0.294, poolA 0.7110 / 0.480, poolB 0.7423 / 0.558); only the intervals moved with the seed (window vs keywordNarrow [-0.061, +0.105] in round 7, [-0.056, +0.101] here).",
+ "protocols": {
+  "window": {
+   "scoredProfiles": [
+    "chips",
+    "security",
+    "funding",
+    "regulation",
+    "courts",
+    "robotics",
+    "open-models",
+    "jobs",
+    "coding",
+    "earnings"
+   ],
+   "macroT11F": {
+    "ordered": 0.6610242886631986,
+    "truncated": 0.6769494477340773,
+    "alwaysNo": 0.0,
+    "alwaysYes": 0.06728851279636985,
+    "keywordNarrow": 0.6559484434821066,
+    "keywordBroad": 0.5283312698523951
+   },
+   "macroBrierSkill": {
+    "ordered": -0.7212517282066232,
+    "truncated": 0.2943937458128906
+   },
+   "intervalsVsBaselines": {
+    "ordered": {
+     "alwaysNo": [
+      0.4915766663996534,
+      0.8073747957721085
+     ],
+     "alwaysYes": [
+      0.4390142179277792,
+      0.7230869347312718
+     ],
+     "keywordNarrow": [
+      -0.10296174474939,
+      0.10186969063981757
+     ],
+     "keywordBroad": [
+      0.024409512615958192,
+      0.22475083444743107
+     ]
+    },
+    "truncated": {
+     "alwaysNo": [
+      0.5065604260391435,
+      0.8231099665857092
+     ],
+     "alwaysYes": [
+      0.4581970798190733,
+      0.7479360682116767
+     ],
+     "keywordNarrow": [
+      -0.05606464461637806,
+      0.10069144835911664
+     ],
+     "keywordBroad": [
+      0.04788183990722376,
+      0.2405470485515949
+     ]
+    }
+   },
+   "perProfileT11F": {
+    "chips": {
+     "ordered": 0.7385782543709773,
+     "truncated": 0.7203532906157457,
+     "alwaysNo": 0.0,
+     "alwaysYes": 0.05505131677796418,
+     "keywordNarrow": 0.7898446133375431,
+     "keywordBroad": 0.4990113692535838
+    },
+    "security": {
+     "ordered": 0.8436347491252634,
+     "truncated": 0.8436347491252634,
+     "alwaysNo": 0.0,
+     "alwaysYes": 0.15182761889348717,
+     "keywordNarrow": 0.7216878965365945,
+     "keywordBroad": 0.7523668826227983
+    },
+    "funding": {
+     "ordered": 0.9394308407842304,
+     "truncated": 0.9394308407842304,
+     "alwaysNo": 0.0,
+     "alwaysYes": 0.24681425383672173,
+     "keywordNarrow": 0.8563830413834537,
+     "keywordBroad": 0.8867987005956619
+    },
+    "regulation": {
+     "ordered": 0.0854663751190567,
+     "truncated": 0.12805281437785987,
+     "alwaysNo": 0.0,
+     "alwaysYes": 0.02780524333677461,
+     "keywordNarrow": 0.31135531135531136,
+     "keywordBroad": 0.311624649859944
+    },
+    "courts": {
+     "ordered": 0.45886144782579413,
+     "truncated": 0.8391608391608392,
+     "alwaysNo": 0.0,
+     "alwaysYes": 0.01637785017253314,
+     "keywordNarrow": 0.7933235149729994,
+     "keywordBroad": 0.4641096929104006
+    },
+    "robotics": {
+     "ordered": 0.8632128740824393,
+     "truncated": 0.8632128740824393,
+     "alwaysNo": 0.0,
+     "alwaysYes": 0.022361784883538002,
+     "keywordNarrow": 0.8414608567982801,
+     "keywordBroad": 0.8276616431696645
+    },
+    "open-models": {
+     "ordered": 0.6389121058943096,
+     "truncated": 0.6389121058943096,
+     "alwaysNo": 0.0,
+     "alwaysYes": 0.027913454241257567,
+     "keywordNarrow": 0.3673030672421177,
+     "keywordBroad": 0.3741943649356465
+    },
+    "jobs": {
+     "ordered": 0.4166666666666667,
+     "truncated": 0.4166666666666667,
+     "alwaysNo": 0.0,
+     "alwaysYes": 0.017421602787456445,
+     "keywordNarrow": 0.4411764705882353,
+     "keywordBroad": 0.16355140186915887
+    },
+    "coding": {
+     "ordered": 0.677758847462451,
+     "truncated": 0.4323495713326222,
+     "alwaysNo": 0.0,
+     "alwaysYes": 0.049170356342323224,
+     "keywordNarrow": 0.5935396308360478,
+     "keywordBroad": 0.37165439371624936
+    },
+    "earnings": {
+     "ordered": 0.9477207253007964,
+     "truncated": 0.9477207253007964,
+     "alwaysNo": 0.0,
+     "alwaysYes": 0.05814164669164242,
+     "keywordNarrow": 0.8434100317704822,
+     "keywordBroad": 0.632339599590844
+    }
+   },
+   "perProfileBrierSkill": {
+    "chips": {
+     "ordered": 0.26512635473404833,
+     "truncated": 0.4614826431394576
+    },
+    "security": {
+     "ordered": 0.6608313289623785,
+     "truncated": 0.6608106679144259
+    },
+    "funding": {
+     "ordered": 0.829014837878989,
+     "truncated": 0.8290144618957962
+    },
+    "regulation": {
+     "ordered": -5.039837775774353,
+     "truncated": -1.7758927605377692
+    },
+    "courts": {
+     "ordered": -6.37110163972718,
+     "truncated": 0.7033417516783774
+    },
+    "robotics": {
+     "ordered": 0.6387054400171912,
+     "truncated": 0.6387115526863181
+    },
+    "open-models": {
+     "ordered": 0.36837881460838523,
+     "truncated": 0.3683760992072449
+    },
+    "jobs": {
+     "ordered": 0.1301958056037309,
+     "truncated": 0.13019736839727353
+    },
+    "coding": {
+     "ordered": 0.4609216807716884,
+     "truncated": 0.08264720425130256
+    },
+    "earnings": {
+     "ordered": 0.845247870858888,
+     "truncated": 0.8452484694964786
+    }
+   },
+   "fallbackCounts": {
+    "ordered": {
+     "unscored|none": 18,
+     "unscored|no relevant answer: keyword": 8,
+     "scored|none": 38
+    },
+    "truncated": {
+     "unscored|none": 18,
+     "unscored|no relevant answer: keyword": 8,
+     "scored|none": 36,
+     "scored|platt": 2
+    }
+   },
+   "orderedWinningStart": {
+    "scored": {
+     "1": 10,
+     "3": 11,
+     "2": 17
+    },
+    "unscored": {
+     "3": 6,
+     "2": 8,
+     "1": 4
+    }
+   },
+   "pass": {
+    "ordered": "FAIL",
+    "truncated": "FAIL"
+   }
+  },
+  "poolA": {
+   "scoredProfiles": [
+    "chips",
+    "security",
+    "funding",
+    "regulation",
+    "courts",
+    "robotics",
+    "open-models",
+    "coding",
+    "earnings"
+   ],
+   "macroT11F": {
+    "ordered": 0.6551675179616797,
+    "truncated": 0.7110207428215507,
+    "alwaysNo": 0.0,
+    "alwaysYes": 0.06535639723894178,
+    "keywordNarrow": 0.6591666785051195,
+    "keywordBroad": 0.5453053738582321
+   },
+   "macroBrierSkill": {
+    "ordered": 0.0677311725105103,
+    "truncated": 0.48049388665340614
+   },
+   "intervalsVsBaselines": {
+    "ordered": {
+     "alwaysNo": [
+      0.4888470186448279,
+      0.805954480583858
+     ],
+     "alwaysYes": [
+      0.444149905690299,
+      0.7252995559527572
+     ],
+     "keywordNarrow": [
+      -0.13701901547027992,
+      0.11031266861689541
+     ],
+     "keywordBroad": [
+      -0.006313510153792284,
+      0.22291922889942123
+     ]
+    },
+    "truncated": {
+     "alwaysNo": [
+      0.5695789582709574,
+      0.8396074838343489
+     ],
+     "alwaysYes": [
+      0.5195329928625589,
+      0.7579435841818541
+     ],
+     "keywordNarrow": [
+      -0.006207045227848929,
+      0.10336431411342935
+     ],
+     "keywordBroad": [
+      0.0632317033912244,
+      0.27287879317269625
+     ]
+    }
+   },
+   "perProfileT11F": {
+    "chips": {
+     "ordered": 0.6107129019759783,
+     "truncated": 0.6107129019759783,
+     "alwaysNo": 0.0,
+     "alwaysYes": 0.05743740795287187,
+     "keywordNarrow": 0.7329842931937173,
+     "keywordBroad": 0.49295774647887325
+    },
+    "security": {
+     "ordered": 0.8668460153403372,
+     "truncated": 0.8668460153403372,
+     "alwaysNo": 0.0,
+     "alwaysYes": 0.13396715643906656,
+     "keywordNarrow": 0.6997971602434077,
+     "keywordBroad": 0.7262103505843072
+    },
+    "funding": {
+     "ordered": 0.9142394822006472,
+     "truncated": 0.9142394822006472,
+     "alwaysNo": 0.0,
+     "alwaysYes": 0.21824286513710128,
+     "keywordNarrow": 0.8217131474103586,
+     "keywordBroad": 0.8613989637305699
+    },
+    "regulation": {
+     "ordered": 0.17335922773747642,
+     "truncated": 0.4721999197109594,
+     "alwaysNo": 0.0,
+     "alwaysYes": 0.0333043730089777,
+     "keywordNarrow": 0.39473684210526316,
+     "keywordBroad": 0.37549407114624506
+    },
+    "courts": {
+     "ordered": 0.391351943076081,
+     "truncated": 0.8,
+     "alwaysNo": 0.0,
+     "alwaysYes": 0.013714450700158799,
+     "keywordNarrow": 0.7766990291262136,
+     "keywordBroad": 0.4186046511627907
+    },
+    "robotics": {
+     "ordered": 0.8235294117647058,
+     "truncated": 0.8235294117647058,
+     "alwaysNo": 0.0,
+     "alwaysYes": 0.018029712966969567,
+     "keywordNarrow": 0.8270676691729323,
+     "keywordBroad": 0.8275862068965517
+    },
+    "open-models": {
+     "ordered": 0.5009896091044038,
+     "truncated": 0.2961798839458414,
+     "alwaysNo": 0.0,
+     "alwaysYes": 0.028851702250432775,
+     "keywordNarrow": 0.3082191780821918,
+     "keywordBroad": 0.3532608695652174
+    },
+    "coding": {
+     "ordered": 0.6714231263995426,
+     "truncated": 0.6714231263995426,
+     "alwaysNo": 0.0,
+     "alwaysYes": 0.03739551253849538,
+     "keywordNarrow": 0.56047197640118,
+     "keywordBroad": 0.29860228716645487
+    },
+    "earnings": {
+     "ordered": 0.9440559440559441,
+     "truncated": 0.9440559440559441,
+     "alwaysNo": 0.0,
+     "alwaysYes": 0.04726439415640218,
+     "keywordNarrow": 0.8108108108108109,
+     "keywordBroad": 0.5536332179930796
+    }
+   },
+   "perProfileBrierSkill": {
+    "chips": {
+     "ordered": 0.31646383064368644,
+     "truncated": 0.3165070586677334
+    },
+    "security": {
+     "ordered": 0.6980317197657276,
+     "truncated": 0.6980203116367361
+    },
+    "funding": {
+     "ordered": 0.7724002709739864,
+     "truncated": 0.7723992227331733
+    },
+    "regulation": {
+     "ordered": -2.5547133286691404,
+     "truncated": 0.1830306940402211
+    },
+    "courts": {
+     "ordered": -0.5440400675547171,
+     "truncated": 0.5527846386997002
+    },
+    "robotics": {
+     "ordered": 0.48872000833068535,
+     "truncated": 0.488717778812953
+    },
+    "open-models": {
+     "ordered": 0.17836826831894187,
+     "truncated": 0.058664332357705795
+    },
+    "coding": {
+     "ordered": 0.41812758864208766,
+     "truncated": 0.4180913892445546
+    },
+    "earnings": {
+     "ordered": 0.8362222621433346,
+     "truncated": 0.8362295536878779
+    }
+   },
+   "fallbackCounts": {
+    "ordered": {
+     "unscored|none": 14,
+     "scored|none": 18
+    },
+    "truncated": {
+     "unscored|none": 12,
+     "scored|none": 18,
+     "unscored|platt": 1,
+     "unscored|no fit and no not-relevant answer: keyword": 1
+    }
+   },
+   "orderedWinningStart": {
+    "scored": {
+     "1": 7,
+     "2": 7,
+     "3": 4
+    },
+    "unscored": {
+     "2": 5,
+     "3": 3,
+     "1": 6
+    }
+   },
+   "pass": {
+    "ordered": "FAIL",
+    "truncated": "PASS"
+   }
+  },
+  "poolB": {
+   "scoredProfiles": [
+    "chips",
+    "security",
+    "funding",
+    "regulation",
+    "courts",
+    "robotics",
+    "open-models",
+    "jobs",
+    "health",
+    "coding",
+    "earnings"
+   ],
+   "macroT11F": {
+    "ordered": 0.6993943941577558,
+    "truncated": 0.7422712851071359,
+    "alwaysNo": 0.0,
+    "alwaysYes": 0.06777474477857194,
+    "keywordNarrow": 0.6792842048349551,
+    "keywordBroad": 0.5533441138156932
+   },
+   "macroBrierSkill": {
+    "ordered": 0.3372448944829152,
+    "truncated": 0.5576313858609523
+   },
+   "intervalsVsBaselines": {
+    "ordered": {
+     "alwaysNo": [
+      0.5400030714993982,
+      0.8213251353391541
+     ],
+     "alwaysYes": [
+      0.48377604763111737,
+      0.7380181045315477
+     ],
+     "keywordNarrow": [
+      -0.05431150715085654,
+      0.0896112812646015
+     ],
+     "keywordBroad": [
+      0.041441959679855395,
+      0.2530813026182926
+     ]
+    },
+    "truncated": {
+     "alwaysNo": [
+      0.6000043673600799,
+      0.8536784254794478
+     ],
+     "alwaysYes": [
+      0.5379555821404641,
+      0.7767139060915712
+     ],
+     "keywordNarrow": [
+      0.00086852849603666,
+      0.12281587207415304
+     ],
+     "keywordBroad": [
+      0.0822714382331915,
+      0.29200357814818867
+     ]
+    }
+   },
+   "perProfileT11F": {
+    "chips": {
+     "ordered": 0.8366533864541833,
+     "truncated": 0.8366533864541833,
+     "alwaysNo": 0.0,
+     "alwaysYes": 0.060592115355115814,
+     "keywordNarrow": 0.8454810495626822,
+     "keywordBroad": 0.5436337625178826
+    },
+    "security": {
+     "ordered": 0.8847589404681027,
+     "truncated": 0.8847589404681027,
+     "alwaysNo": 0.0,
+     "alwaysYes": 0.16363097882422628,
+     "keywordNarrow": 0.752828546562228,
+     "keywordBroad": 0.7854406130268199
+    },
+    "funding": {
+     "ordered": 0.9400324047009495,
+     "truncated": 0.9400324047009495,
+     "alwaysNo": 0.0,
+     "alwaysYes": 0.2788844621513944,
+     "keywordNarrow": 0.885558583106267,
+     "keywordBroad": 0.9078947368421053
+    },
+    "regulation": {
+     "ordered": 0.0385591694052517,
+     "truncated": 0.1282051282051282,
+     "alwaysNo": 0.0,
+     "alwaysYes": 0.026615969581749048,
+     "keywordNarrow": 0.30303030303030304,
+     "keywordBroad": 0.3021148036253776
+    },
+    "courts": {
+     "ordered": 0.5561396131202692,
+     "truncated": 0.8536585365853658,
+     "alwaysNo": 0.0,
+     "alwaysYes": 0.0165016501650165,
+     "keywordNarrow": 0.7203389830508474,
+     "keywordBroad": 0.4646017699115044
+    },
+    "robotics": {
+     "ordered": 0.8588957055214724,
+     "truncated": 0.8588957055214724,
+     "alwaysNo": 0.0,
+     "alwaysYes": 0.03211351755041075,
+     "keywordNarrow": 0.8604651162790697,
+     "keywordBroad": 0.8565737051792829
+    },
+    "open-models": {
+     "ordered": 0.6263392857142858,
+     "truncated": 0.7096153846153846,
+     "alwaysNo": 0.0,
+     "alwaysYes": 0.026865671641791045,
+     "keywordNarrow": 0.4664179104477612,
+     "keywordBroad": 0.41208791208791207
+    },
+    "jobs": {
+     "ordered": 0.6372062231049321,
+     "truncated": 0.6372062231049321,
+     "alwaysNo": 0.0,
+     "alwaysYes": 0.015829941203075532,
+     "keywordNarrow": 0.4794520547945205,
+     "keywordBroad": 0.15463917525773196
+    },
+    "health": {
+     "ordered": 0.7148692810457516,
+     "truncated": 0.7148692810457516,
+     "alwaysNo": 0.0,
+     "alwaysYes": 0.018094089264173704,
+     "keywordNarrow": 0.6875,
+     "keywordBroad": 0.6122448979591837
+    },
+    "coding": {
+     "ordered": 0.6383458646616541,
+     "truncated": 0.6395506839387626,
+     "alwaysNo": 0.0,
+     "alwaysYes": 0.052758516731986733,
+     "keywordNarrow": 0.6024096385542169,
+     "keywordBroad": 0.41362530413625304
+    },
+    "earnings": {
+     "ordered": 0.9615384615384616,
+     "truncated": 0.9615384615384616,
+     "alwaysNo": 0.0,
+     "alwaysYes": 0.05363528009535161,
+     "keywordNarrow": 0.8686440677966102,
+     "keywordBroad": 0.6339285714285714
+    }
+   },
+   "perProfileBrierSkill": {
+    "chips": {
+     "ordered": 0.6171748662117439,
+     "truncated": 0.6171660007962845
+    },
+    "security": {
+     "ordered": 0.7311668314926342,
+     "truncated": 0.7311665130449881
+    },
+    "funding": {
+     "ordered": 0.8357004100747135,
+     "truncated": 0.8357001181832391
+    },
+    "regulation": {
+     "ordered": -1.6913921433023449,
+     "truncated": 0.008783770675893199
+    },
+    "courts": {
+     "ordered": 0.1469131729540722,
+     "truncated": 0.7708506525201685
+    },
+    "robotics": {
+     "ordered": 0.6897366724444095,
+     "truncated": 0.6897321402231023
+    },
+    "open-models": {
+     "ordered": 0.3111799934048639,
+     "truncated": 0.4684700402696067
+    },
+    "jobs": {
+     "ordered": 0.3278711072060316,
+     "truncated": 0.3278787387025914
+    },
+    "health": {
+     "ordered": 0.47859248927191966,
+     "truncated": 0.47858045123016824
+    },
+    "coding": {
+     "ordered": 0.4070973713678986,
+     "truncated": 0.34996390208576583
+    },
+    "earnings": {
+     "ordered": 0.8556530681861256,
+     "truncated": 0.8556529167386675
+    }
+   },
+   "fallbackCounts": {
+    "ordered": {
+     "unscored|none": 10,
+     "scored|none": 22
+    },
+    "truncated": {
+     "unscored|none": 10,
+     "scored|none": 21,
+     "scored|no fit and no not-relevant answer: keyword": 1
+    }
+   },
+   "orderedWinningStart": {
+    "scored": {
+     "1": 7,
+     "3": 9,
+     "2": 6
+    },
+    "unscored": {
+     "1": 3,
+     "3": 2,
+     "2": 5
+    }
+   },
+   "pass": {
+    "ordered": "FAIL",
+    "truncated": "PASS"
+   }
+  }
+ },
+ "postHocFindings (post hoc, not part of the rule)": [
+  "post hoc: the ordering constraint does not remove round 7's second peak, it only re-labels it. The peak where the answers are explained as the upper tail of a broad low component reappears as mu1 just above mu0 (mu1 about 0.03 to 0.5 in z, pi 0.3 to 0.5, s1 ~0.5-1.5). It often has a HIGHER log-likelihood than the separated solution (e.g. window courts fresh-2|5: -2048.97 vs -2067.41; poolA courts fresh-2|5: -2424.21 vs -2447.06; regulation everywhere), so the highest-likelihood rule picks it on purpose. That mode accepts hundreds of articles: window courts fresh-2|5 accepted 708 (T11F 0.009 vs truncated 0.769), regulation fresh-2|5 803.",
+  "post hoc: so round 7's failure was not an optimiser artefact but a property of the truncated likelihood with few answers: the selection term rewards a model in which nearly everything above the cut-off is 'relevant-ish'. One start (round 7) usually stayed in the separated basin by luck of the start; more starts find the worse-for-filtering but better-for-likelihood mode. Candidate remedies (not tested): a prior or bound on pi / minimum separation, or the truncated term only for the not-relevant answers.",
+  "post hoc: start 2 (delta = log 1, mu1 = 1) is the one that reaches the overlapping mode; starts 1 and 3 mostly agree with round 7's fit. Distinct optima across the three starts (loglik spread > 1e-4): {\"window\": {\"unitsFitted\": 56, \"unitsWithDistinctOptima\": 27}, \"poolA\": {\"unitsFitted\": 32, \"unitsWithDistinctOptima\": 20}, \"poolB\": {\"unitsFitted\": 32, \"unitsWithDistinctOptima\": 18}}. The winner counts in orderedWinningStart include exact ties within 1e-6, where the winner is arbitrary.",
+  "post hoc: ordered helps where round 7's single start failed or overshot: coding window 0.432 -> 0.678, open-models poolA 0.296 -> 0.501, chips window 0.720 -> 0.739; it hurts courts (window 0.839 -> 0.459, poolA 0.800 -> 0.391, poolB 0.854 -> 0.556) and regulation (Brier skill -5.04 window, -2.56 poolA, -1.69 poolB). Window macro Brier skill is -0.721.",
+  "post hoc: ordered never needed a fallback (every unit had a converged start; round-2 EM and Platt fallbacks 0); truncated keeps round 7's fallbacks (window 2 Platt in scored units; poolB 1 keyword).",
+  "post hoc: rounds 6-8 reuse the same slices (selection-rule 'risk'); truncated's window result now sits on either side of the bar depending only on the bootstrap seed (-0.061 vs -0.056), which says the margin is within bootstrap noise."
+ ],
+ "noneEligible": "No change to the package; the exam stays sealed. Why: ordered fails every protocol (vs keywordNarrow lower bounds window -0.103, poolA -0.137, poolB -0.054; poolA vs keywordBroad -0.006; window Brier skill -0.721). truncated still fails window (-0.056)."
+}

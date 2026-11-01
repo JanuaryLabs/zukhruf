@@ -1,0 +1,23 @@
+{
+  "round": "relevance-filtering research round 4 (zukhruf #3195): the reader's keywords as evidence inside the filter, scored on a fresh development set",
+  "writtenBefore": "the fresh articles are crawled, read, labelled or embedded, and before any round-4 score.",
+  "why": "Rounds 2 and 3: no design beat the narrow keyword baseline across profiles; the dense designs win where wording varies and lose where one word names the topic. On 2026-10-28 the user agreed that a profile may hold optional keywords next to its sentence. Round 3 showed that an OR of keyword and filter does not help (post hoc), so the keywords enter as evidence in the probability, not as a gate. Rounds 2 and 3 reused one labelled set; this round scores on articles no round has seen (limitation 12).",
+  "inherits": "../round-2/selection-rule.json (sha256 d4913edeb471506316f29915a5f03069cdf3e8a6a9f55f5506f89627b77505d4) for the dense representation, descriptions, rocchio-q0 and desc methods, binormal calibration, threshold rule, baselines, metrics, eligibility and simplerWins logic, freeze contents and examVerdictRule, except where this file says otherwise. Bootstrap seed: numpy.random.default_rng(31955).",
+  "data": {
+    "teaching": "Every article of the round-2 collection (collection/items.json, labels.json sha256 69a540c1ae2075ddaff71b5a039791bf90b6c6868a317ec3d58443e29037d406), both periods. Relevant pool per profile: its strict relevant collection articles, Biology included (the reader's own feed, limitation 2). Not-relevant pool: near misses and plain negatives as in round 2. Seeds: numpy.random.default_rng([3195, 4, profileIndex, kRel, kNon, draw]).",
+    "test": "Fresh stream: every article of the-decoder.com and siliconangle.com published 2026-01-01 to 2026-03-31, crawled with the round-2 stream method (robots.txt and terms honoured, stop at the first 403/429), minus exam, training, training-extra and collection URLs and duplicate titles. Labelled for all 16 profiles by blind annotators with profiles.md (sha256 964812c9...), one per article, frozen before any round-4 score. Vectors from the same server build and vector text, checked equal to stored vectors for at least 20 collection articles before the fresh articles are embedded.",
+    "timeDirection": "The test months come before the teaching months. TREC teaches from the earlier part; this round reverses it because only earlier months can be labelled fresh. Topic drift over three months is assumed small; the exam stays the final check."
+  },
+  "keywords": "The reader's keywords for a profile are stood in for by keywords.json 'narrow' (sha256 e4931aad...): k(article) = the narrow regex matches title + ' ' + lead. A design that uses k must beat the keywordNarrow baseline, which is k alone.",
+  "candidates": {
+    "rocchio-q0|binormal": "round 2, unchanged (reference)",
+    "desc|binormal": "round 2, unchanged (reference)",
+    "rocchio-q0|binormal+kw": "Naive Bayes evidence (Lewis 1998): logit p = logit p_binormal + log LR, with LR = P(k|rel) / P(k|non) for a matching article and (1 - P(k|rel)) / (1 - P(k|non)) otherwise. P(k|rel) = (matching taught relevant + 1) / (kRel + 2); P(k|non) = (matching stream articles + 1) / (stream size + 2), because almost every stream article is not relevant. p_binormal is clipped to [1e-12, 1 - 1e-12] before the logit.",
+    "desc|binormal+kw": "the same evidence on desc|binormal.",
+    "rocchio-q0|kwstrat": "binormal fitted separately inside each keyword stratum of the stream (k true, k false) on the rocchio-q0 score, each taught leave-one-out score in its own stratum, mixing weight bounded to [1/n_stratum, 0.5]. A stratum with no taught relevant article starts its relevant component from all taught relevant scores. A stratum fit that cannot hold falls back to that stratum's rocchio-q0|binormal+kw probabilities."
+  },
+  "simplerWins": "complexity ranks: desc|binormal 0 < rocchio-q0|binormal 1 < desc|binormal+kw 2 < rocchio-q0|binormal+kw 3 < rocchio-q0|kwstrat 4.",
+  "scoredProfiles": "Profiles with >= 10 strict relevant teaching articles and >= 20 strict relevant fresh test articles. Others are reported one by one.",
+  "examVerdictRule": "As round 2, with k from the same narrow regex on the exam articles, and the teaching pool = collection + fresh set.",
+  "noneEligible": "No design is frozen; the exam stays sealed; the round reports why."
+}

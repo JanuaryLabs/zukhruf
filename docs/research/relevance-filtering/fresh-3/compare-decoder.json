@@ -1,0 +1,50 @@
+{
+ "fresh2": 3077,
+ "fresh3": 3086,
+ "shared": 3077,
+ "identical": 3070,
+ "differing": [
+  {
+   "url": "https://the-decoder.com/openai-open-sources-codex-security-cli-to-help-developers-find-and-fix-vulnerabilities-from-the-command-line/",
+   "fields": [
+    "textContent"
+   ]
+  },
+  {
+   "url": "https://the-decoder.com/frontier-ai-developers-urge-international-coordination-to-pace-automated-research-before-capabilities-outstrip-control/",
+   "fields": [
+    "textContent"
+   ]
+  },
+  {
+   "url": "https://the-decoder.com/gpt-transcribe-improves-on-its-predecessor-but-cant-catch-elevenlabs-google-or-mistral-on-error-rates/",
+   "fields": [
+    "textContent"
+   ]
+  },
+  {
+   "url": "https://the-decoder.com/openai-admits-its-autonomous-ai-models-also-compromised-credentials-on-other-platforms-during-security-eval/",
+   "fields": [
+    "textContent"
+   ]
+  },
+  {
+   "url": "https://the-decoder.com/pwc-has-allegedly-published-ai-generated-reports-containing-false-or-fabricated-sources/",
+   "fields": [
+    "textContent"
+   ]
+  },
+  {
+   "url": "https://the-decoder.com/pangram-says-its-new-ai-text-detector-makes-only-one-mistake-per-24000-documents/",
+   "fields": [
+    "textContent"
+   ]
+  },
+  {
+   "url": "https://the-decoder.com/googles-lyria-3-5-music-model-now-lets-users-edit-individual-track-sections-without-starting-over/",
+   "fields": [
+    "textContent"
+   ]
+  }
+ ]
+}

@@ -1,0 +1,13 @@
+{
+  "round": "relevance-filtering research round 8 (zukhruf #3195): the truncated fit with ordered components",
+  "writtenBefore": "any round-8 score. Round 7 (round-7/plan.json) was read: 'truncated' passed poolA and poolB but failed the window protocol (lower bound -0.061 vs keywordNarrow); post hoc, the likelihood had a second peak with mu1 <= mu0 that the single start reached, and the Platt fallback then accepted almost every article (regulation fresh-2 N=10: 1,446 of about 1,500).",
+  "why": "A two-component mixture is identifiable only up to label order; the standard remedy is an ordering constraint on the component means (McLachlan & Peel 2000, Finite Mixture Models, section 2.5), here built into the parameters so that mu1 <= mu0 cannot be represented. Several starts and keeping the highest likelihood is the standard guard against local optima in mixture fitting.",
+  "inherits": "../round-7/selection-rule.json (sha256 c615b539...) and its evaluate.py (frozen 8c5f7960...) for everything not changed here: protocols window, poolA, poolB; units; metrics; the pass rule (all three protocols). Bootstrap seed numpy.random.default_rng(31960).",
+  "candidates": {
+    "ordered": "round 7 'truncated', except: parameters (mu0, delta, s1, s0, pi) with mu1 = mu0 + exp(delta), mu0 in [-10, 10], delta in [log 0.05, log 20], s in [0.05, 10], pi in [1/n_stream, 0.5]; three L-BFGS-B starts that differ only in delta: log(max(mean of the relevant answers' z - 0, 0.05)), log(1), log(3) (mu0 = 0, s0 = 1, s1 = max(sd of the relevant answers' z, 0.05), pi = 0.05 in all three); keep the converged result with the highest log-likelihood. If no start converges, fall back to the frozen design's binormal fit (round-2 EM), then to Platt only if that fit also fails, as the frozen design does.",
+    "truncated": "round 7, unchanged (reference)."
+  },
+  "pass": "As round 7: in each of window, poolA and poolB separately, lower bound of (candidate - keywordNarrow) > -0.05, intervals against keywordBroad, alwaysNo and alwaysYes above 0, macro Brier skill > 0. If 'ordered' passes, it replaces the frozen design: update the package, redo the implementation check, refreeze the plan with pool teaching for the exam, then score the exam once.",
+  "risk": "Rounds 6, 7 and 8 reuse the same labelled slices for development (adaptive reuse, limitation 12); the sealed exam stays the final check.",
+  "noneEligible": "No change to the package; the exam stays sealed; the round reports why."
+}

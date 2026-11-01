@@ -1,0 +1,23 @@
+{
+  "round": "relevance-filtering research round 10 (zukhruf #3195): a ranked reader, best N a day, no yes/no threshold",
+  "writtenBefore": "any round-10 score. Round 9 (round-9/plan.json) was read: every yes/no design failed on fresh-3.",
+  "why": "On 2026-10-29 the user chose a ranked list per interest (the reader shows the best N articles a day, best first; the user sets N) after round 9 showed that the ranking is strong and the yes/no threshold from a few taught answers is not. TREC calls ranking a stream against a profile 'routing' and scores it by average precision; filtering is the binary task. Precedent: TREC routing (Harman 1993-1998), mean average precision.",
+  "inherits": "../round-9/selection-rule.json (sha256 6909823c...) and its frozen evaluate.py (75bacc12...) for data (collection, fresh, fresh-2 as teaching pool; fresh-3 as the test slice, labels a5a871b6...), product teaching (top N by score and top N keyword matches, N in {5, 10}, yes/no from the answer key), protocols window and pool, and units. fresh-3 was scored once before (round 9, yes/no); this round asks a different question of it (adaptive reuse noted). Bootstrap seed numpy.random.default_rng(31962).",
+  "rankers": {
+    "desc": "order the scored stream by cos(x, d), ties by id. Taught answers are not used.",
+    "desc+kw": "order by the frozen design's probability (freeze/plan.json desc|binormal+kw: binormal on cos(x, d) with the taught answers, then the naive-Bayes keyword evidence); ties by cos(x, d), then id.",
+    "truncated+kw": "order by round 7's 'truncated' probability plus the same keyword evidence; ties by cos(x, d), then id."
+  },
+  "baselines": {
+    "keywordNarrow": "keywords.json narrow matches first, then the other articles; inside each group newest first (publishedAt descending), ties by id.",
+    "keywordBroad": "the same with the broad regex.",
+    "newest": "no filter: newest first."
+  },
+  "metrics": {
+    "main": "Average precision (AP) of the ranking over the scored stream's labelled articles (ambiguous left out), per profile; a profile's score = mean over its units and N. Macro mean over scored profiles (MAP).",
+    "product": "Reported only: for each day of the scored stream and N_day in {3, 5, 10}, precision of the top N_day articles of that day, averaged over days; and the same for the baselines (a keyword list shows at most N_day matches, newest first)."
+  },
+  "pass": "A ranker passes when, in both protocols separately: the topic-bootstrap interval of (ranker - keywordNarrow) MAP has lower bound > -0.05 (the user's non-inferiority bar), and the intervals against keywordBroad and newest lie above 0. Among passing rankers the simplest wins when its interval against the best includes 0 (order: desc < desc+kw < truncated+kw).",
+  "then": "A passing ranker is frozen with an exam verdict rule written before the exam is opened: on the 133 deepmind-outlets articles, rankers taught from the whole labelled pool (collection + fresh + fresh-2 + fresh-3) by product teaching; MAP over profiles with >= 3 strict relevant exam articles; paired label-stratified article bootstrap (seed 31963); pass when the lower bound against keywordNarrow is > -0.05 and the intervals against keywordBroad and newest lie above 0. The package gains a ranking API before the exam is scored through it.",
+  "noneEligible": "No ranker is frozen; the exam stays sealed; the round reports why."
+}
