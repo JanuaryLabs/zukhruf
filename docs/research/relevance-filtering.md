@@ -8,6 +8,8 @@ Status on 2026-10-29: DONE. The ranker desc+kw passed the sealed exam (MAP 0.867
 
 Status on 2026-10-30: round 13 found a better ranker, the decision model d1-2B (MAP 0.924 against desc+kw's 0.782 on January to March 2025), and round 14 found the same lead with an answer key from a second model family. The package now ranks through a scorer port: `DecisionScorer` asks a decision model the question of round 13, and `SimilarityScorer` is the frozen design (ADR 0005 of the package, #3383). Its thresholds are a separate port. A recalibration of the decision model from the taught answers waits for round 15 (#3421).
 
+Status on 2026-11-01: round 15 found that a fit on the taught answers of each profile does not give better yes and no decisions than d1's own probability (#3421). The thresholds stay on d1's own probability, and the package gets no recalibration adapter.
+
 ## Words in this record
 
 | Word        | Meaning                                                                                                                                                                           |
@@ -129,6 +131,34 @@ The lead holds. On the new key, 12 profiles have at least 20 relevant articles. 
 
 The calibration of d1 changed more than its ranking. The macro Brier skill is +0.356 on the new key, against +0.726 on the first key, and health has −1.61. A probability is calibrated to one boundary of relevance, and the two keys draw the boundary in different places. The plan is `round-14/plan.json` (`6939f5f8…`).
 
+## Round 15 (2026-11-01): the taught answers do not recalibrate d1
+
+Round 14 found that the calibration of d1 changes with the answer key. Round 15 (`round-15/selection-rule.json`, sha256 `3c622f79…`) asked if a fit on the taught answers of each profile gives better yes and no decisions than d1's own probability. It tested two calibrations, both with Platt's smoothed targets. Shift adds one intercept to the logit of d1's probability. Platt fits a slope and an intercept (Platt 1999). The threshold accepts an article at p ≥ 1/3. This is the Bayes threshold of TREC-11's linear utility, which gives 2 for an accepted relevant article and −1 for a false alarm. The score is TREC-11's scaled utility, T11SU.
+
+The test set is fresh-6: 1,578 articles of The Decoder and SiliconANGLE from October to December 2024. d1 answered every article with the question of round 13. Its answers were frozen (sha256 `89855665…`) before the first label existed. Four blind annotators labelled fresh-6 with the brief of fresh-5 (labels `9d8a3e8a…`). Nine profiles have at least 20 relevant articles. The reader taught each profile in two protocols: from the first 14 days of fresh-6 (window), and from all of fresh-5 (pool). In the frozen arm, the reader answers the top 5 or 10 articles by d1 and the top 5 or 10 keyword matches, as in the product. A second arm (`round-15/exploration-arm.json`, `6915da70…`) also shows 5 or 10 random articles. It was frozen before fresh-6 existed. A calibration passes when, in both protocols, the interval of its macro T11SU minus raw's is above 0, and its Brier skill is not more than 0.05 below raw's.
+
+No calibration passed in either arm. The thresholds stay on d1's own probability, and the package gets no recalibration adapter.
+
+| Arm         | Protocol | Raw d1 | Shift (interval against raw) | Platt (interval against raw) |
+| ----------- | -------- | ------ | ---------------------------- | ---------------------------- |
+| frozen      | window   | 0.784  | 0.840 (−0.047 to +0.231)     | 0.743 (−0.143 to +0.023)     |
+| frozen      | pool     | 0.788  | 0.819 (−0.002 to +0.095)     | 0.825 (−0.009 to +0.121)     |
+| exploration | window   | 0.784  | 0.805 (−0.104 to +0.209)     | 0.774 (−0.168 to +0.207)     |
+| exploration | pool     | 0.788  | 0.703 (−0.183 to +0.009)     | 0.605 (−0.301 to −0.073)     |
+
+The numbers are macro T11SU. The typed keyword has 0.593 (window) and 0.607 (pool).
+
+In the frozen arm, most fits did not occur. On a profile that d1 ranks well, all the top articles are relevant, so the taught answers have no "no". Then shift and platt keep raw. In the pool protocol, shift kept raw in 16 of 18 units (9 profiles, with 5 and with 10 taught articles). The exploration arm removed every fallback, but its fits made the decisions worse. In the pool protocol, the interval of platt is below 0.
+
+Raw d1 is a good input for a threshold on this set. Its Brier skill is +0.585 (window) and +0.577 (pool). On fresh-5, it was +0.726 with the first key and +0.356 with the second. Its MAP is 0.936 and 0.932. This is a check of round 13 on a third period.
+
+Two observations, calculated after the run, for information only:
+
+- **Coding.** Raw d1 accepts 124 to 144 articles for 25 to 28 relevant articles, so its T11SU is 0. d1 draws the boundary of coding wider than this key, as the second key of round 14 did (62 relevant articles against 17). Shift lowered the probabilities of coding (intercept −1.5 to −1.8 in the window protocol) and raised its T11SU there to 0.67 and 0.69. Coding is the only profile where a fit helped much.
+- **The other profiles.** 67% of d1's probabilities on fresh-6 are below 0.05. Platt's smoothed target for a "no" is 1/(n + 2), where n is the number of "no" answers: 0.14 for 5 and 0.08 for 10. A random "no" with a probability of 0.03 can thus pull the intercept up, and the profile then accepts more false alarms. In the pool protocol of the exploration arm, 13 of 18 intercepts are positive. Robotics, open models and regulation lose the most.
+
+Six crawls of The Decoder did not finish as one full-refresh copy, which commits nothing when one page fails. The seventh crawl copied incrementally: rows commit after each page, and a new run continues from the checkpoint. The set of articles did not change. The crawl ran on an elt build that was not committed, so a check compared its text with fresh-5's: 4,086 of 4,092 shared pages are the same, and the 6 differences are posts of 2026, none of them in fresh-6. d1 ran on the Mac mini (llama.cpp b11960, Q8_0), and the median time for one article is 3.52 s. The results are `round-15/results.json` (`93f4a446…`).
+
 ## Limitations
 
 ### 1. A realistic stream has few relevant articles
@@ -145,9 +175,9 @@ The calibration of d1 changed more than its ranking. The macro Brier skill is +0
 
 ### 3. A few taught articles cannot calibrate a probability
 
-**What happens.** Platt scaling fitted on 6 to 20 taught scores was too sharp, and its probabilities assumed a base rate of 23% to 77%. On the realistic stream, the profile then accepted 200 to 800 of 803 articles. The prior correction (Saerens, Latinne and Decaestecker 2002) then collapsed to 0 or 1.
+**What happens.** Platt scaling fitted on 6 to 20 taught scores was too sharp, and its probabilities assumed a base rate of 23% to 77%. On the realistic stream, the profile then accepted 200 to 800 of 803 articles. The prior correction (Saerens, Latinne and Decaestecker 2002) then collapsed to 0 or 1. Round 15 found the same for the decision model d1-2B: fits of one or two parameters on 4 to 27 taught answers of each profile did not give better decisions than d1's own probability.
 
-**Before you change it.** Calibrate with information from the stream, not only from the taught set. Options to measure: a base rate that the reader states, a bounded prior estimate from the stream, or adaptive filtering from the reader's later yes and no. A base rate that the host gives is an input of the package. Raise it as a package question before you add it. Round 2: the binormal model, fitted on the unlabelled stream, works for dense scores (limitation 10 for its limit).
+**Before you change it.** Calibrate with information from the stream, not only from the taught set. Options to measure: a base rate that the reader states, a bounded prior estimate from the stream, or adaptive filtering from the reader's later yes and no. A base rate that the host gives is an input of the package. Raise it as a package question before you add it. Round 2: the binormal model, fitted on the unlabelled stream, works for dense scores (limitation 10 for its limit). For a decision model, options to measure: a fit that starts at the model's own probability and moves from it only as the answers increase (a prior on the intercept at 0), and targets without Platt's smoothing. Test them with both teaching protocols of round 15.
 
 ### 4. Round 1 had two setup errors
 
