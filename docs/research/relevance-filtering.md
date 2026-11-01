@@ -10,6 +10,8 @@ Status on 2026-10-30: round 13 found a better ranker, the decision model d1-2B (
 
 Status on 2026-11-01: round 15 found that a fit on the taught answers of each profile does not give better yes and no decisions than d1's own probability (#3421). The thresholds stay on d1's own probability, and the package gets no recalibration adapter.
 
+Status on 2026-11-01 (round 16): a fit of a slope and an intercept on the taught answers (platt-map) passed, when the reader also answers some random articles (#3523). The user sees the teaching design and the API of the adapter before anything is built.
+
 ## Words in this record
 
 | Word        | Meaning                                                                                                                                                                           |
@@ -159,6 +161,33 @@ Two observations, calculated after the run, for information only:
 
 Six crawls of The Decoder did not finish as one full-refresh copy, which commits nothing when one page fails. The seventh crawl copied incrementally: rows commit after each page, and a new run continues from the checkpoint. The set of articles did not change. The crawl ran on an elt build that was not committed, so a check compared its text with fresh-5's: 4,086 of 4,092 shared pages are the same, and the 6 differences are posts of 2026, none of them in fresh-6. d1 ran on the Mac mini (llama.cpp b11960, Q8_0), and the median time for one article is 3.52 s. The results are `round-15/results.json` (`93f4a446…`).
 
+## Round 16 (2026-11-01): a fit with a slope passes when the reader also answers random articles
+
+Round 15 showed two causes for its result: the product's teaching gives no "no" on most profiles, and Platt's smoothed targets pull the fit up. Round 16 (`round-16/selection-rule.json`, sha256 `ad38cb00…`) was the last round for this question. It tested two fits that start at d1's own probability. Shift-map fits one intercept with the prior N(0, 1). Platt-map fits a slope and an intercept with the prior (a − 1, b) ~ N(0, I). Both fit hard yes and no targets, and the prior has the default strength of L2 regularisation in scikit-learn and LIBLINEAR (C = 1).
+
+The gate is different from round 15. A recalibration helps the profiles whose boundary d1 draws in another place, and a superiority test cannot pass a gain on one of nine profiles. A calibration passes when, in both protocols, three conditions are true: the lower bound of its macro T11SU interval against raw is above −0.02, the lower bound of its Brier skill interval is above −0.05, and its macro T11SU gain is above 0. The margin 0.02 keeps 90% of raw d1's lead over the typed keyword in round 15, as the FDA's 2016 guidance on non-inferiority sets a margin. Large online experiments launch a change in the same way: no guardrail gets worse, and the target moves in the right direction (Kohavi, Tang and Xu 2020).
+
+The test set is fresh-7: 1,494 articles of The Decoder and SiliconANGLE from July to September 2024. These counts are equal to the WordPress API counts of the two sites for the period. d1's answers were frozen (`ed14d301…`) before the first label existed, and four blind annotators labelled the set (`7fdedd07…`). The teaching pool is fresh-6.
+
+Platt-map passed in the exploration arm, in which the reader also answers 5 or 10 random articles. No calibration passed in the frozen arm.
+
+| Arm         | Protocol | Raw d1 | Shift-map (interval against raw) | Platt-map (interval against raw) |
+| ----------- | -------- | ------ | -------------------------------- | -------------------------------- |
+| frozen      | window   | 0.767  | 0.739 (−0.150 to +0.123)         | 0.824 (−0.042 to +0.195)         |
+| frozen      | pool     | 0.776  | 0.461 (−0.450 to −0.183)         | 0.784 (−0.003 to +0.022)         |
+| exploration | window   | 0.767  | 0.796 (−0.073 to +0.179)         | 0.836 (−0.015 to +0.201)         |
+| exploration | pool     | 0.776  | 0.762 (−0.032 to +0.001)         | 0.812 (−0.009 to +0.103)         |
+
+The numbers are macro T11SU. The typed keyword has 0.652 (window) and 0.648 (pool). In the exploration arm, the Brier skill of platt-map is better than raw's in both protocols (intervals +0.008 to +0.249 and +0.036 to +0.201), and platt-map is better than shift-map in both.
+
+Shift-map failed. In the frozen arm, all taught answers of a well-ranked profile are relevant, and an intercept alone then moves every probability up: in the pool protocol, its T11SU fell to 0.461. Platt-map can also change the slope. On most profiles it fitted a slope of 1.2 to 2.0: d1's probabilities are less extreme than this answer key, and the fit makes them more extreme. In the frozen arm, platt-map passed the pool protocol but not the window protocol (lower bounds −0.042 for T11SU and −0.139 for Brier skill). A probable cause is that 14 days of top matches give too few answers.
+
+Observations calculated after the run, for information only: platt-map helped most where d1's boundary differs from the key. Coding rose from 0.236 to 0.722 (window) and from 0.218 to 0.506 (pool), and courts rose by 0.095 and 0.072. Open models (−0.050, −0.020) and earnings (−0.040, −0.024) lost a little.
+
+The rule now requires two things before anything is built: the user sees the design in which the host shows the reader some articles that d1 ranks low, and the user sees the API of the adapter (#3523).
+
+The SiliconANGLE crawl ran on elt 4d63590f, whose crawler waits 1 s between requests to one site. The Decoder rows of the period come from fresh-6's crawl, which holds every Decoder post modified from 2024-03-15. A check found 62 of 62 SiliconANGLE articles of 2024-10-01..03 extracted the same as in fresh-6. Two faults were found and fixed before fresh-7 was frozen; limitation 17 gives the earlier slices that they touch. d1 ran on the Mac mini (llama.cpp b11960, Q8_0), and the median time for one article is 3.61 s. The results are `round-16/results.json` (`42ccbaea…`).
+
 ## Limitations
 
 ### 1. A realistic stream has few relevant articles
@@ -175,9 +204,9 @@ Six crawls of The Decoder did not finish as one full-refresh copy, which commits
 
 ### 3. A few taught articles cannot calibrate a probability
 
-**What happens.** Platt scaling fitted on 6 to 20 taught scores was too sharp, and its probabilities assumed a base rate of 23% to 77%. On the realistic stream, the profile then accepted 200 to 800 of 803 articles. The prior correction (Saerens, Latinne and Decaestecker 2002) then collapsed to 0 or 1. Round 15 found the same for the decision model d1-2B: fits of one or two parameters on 4 to 27 taught answers of each profile did not give better decisions than d1's own probability.
+**What happens.** Platt scaling fitted on 6 to 20 taught scores was too sharp, and its probabilities assumed a base rate of 23% to 77%. On the realistic stream, the profile then accepted 200 to 800 of 803 articles. The prior correction (Saerens, Latinne and Decaestecker 2002) then collapsed to 0 or 1. Round 15 found the same for the decision model d1-2B: fits of one or two parameters on 4 to 27 taught answers of each profile did not give better decisions than d1's own probability. Round 16 found a fit that works with few answers: a slope and an intercept with a prior at d1's own probability, when the taught answers include random articles.
 
-**Before you change it.** Calibrate with information from the stream, not only from the taught set. Options to measure: a base rate that the reader states, a bounded prior estimate from the stream, or adaptive filtering from the reader's later yes and no. A base rate that the host gives is an input of the package. Raise it as a package question before you add it. Round 2: the binormal model, fitted on the unlabelled stream, works for dense scores (limitation 10 for its limit). For a decision model, options to measure: a fit that starts at the model's own probability and moves from it only as the answers increase (a prior on the intercept at 0), and targets without Platt's smoothing. Test them with both teaching protocols of round 15.
+**Before you change it.** Calibrate with information from the stream, not only from the taught set. Options to measure: a base rate that the reader states, a bounded prior estimate from the stream, or adaptive filtering from the reader's later yes and no. A base rate that the host gives is an input of the package. Raise it as a package question before you add it. Round 2: the binormal model, fitted on the unlabelled stream, works for dense scores (limitation 10 for its limit). For a decision model, round 16 measured the option that works: platt-map, with the prior (a − 1, b) ~ N(0, I) and hard targets, on taught answers that include random articles. Without random articles (the frozen arm), it did not pass.
 
 ### 4. Round 1 had two setup errors
 
@@ -254,6 +283,12 @@ Six crawls of The Decoder did not finish as one full-refresh copy, which commits
 **What happens.** In each round, the annotators are an AI model (Claude Opus 5.5). d1 is also a language model, and round 13 asks it the main-subject question of the labelling rule. Studies of relevance labels from language models warn that such labels can agree more with a language-model ranker than human labels do (Faggioli et al., ICTIR 2023; Clarke and Dietz 2024). Part of d1's lead can come from this effect. No person labelled fresh-5. Round 14 removed one part of the risk: with a key from a second model family, d1's lead holds. A bias that all language models share stays possible.
 
 **Before you change it.** Before the package depends on d1 alone, let a person label a random sample of fresh-5, and compare the MAP of d1 and desc+kw on that sample. Do not use a fixed threshold on d1's probability: its calibration changed with the key (round 14).
+
+### 17. Two slices miss one article each
+
+**What happens.** fresh-5 does not have the Decoder post at the shortlink `https://the-decoder.com/?p=20377` (2025-01-09). The preparation script removed the query from each URL to find duplicates, so all shortlinks had the same identity and all but the first were dropped without a report. fresh-6 does not have the SiliconANGLE post of 2024-10-01 00:12 UTC. Its URL has the US date 2024-09-30, and the crawl read only the URLs of October to December. Both slices are scored, so they stay as they are. One article of about 1,400 cannot change a result.
+
+**Before you change it.** Compare the number of articles of each slice with the site's WordPress API count for the period, as fresh-7 does. Keep the query of a URL that has no path. When a site puts a local date in its URLs and the period is UTC, also crawl the day before the period.
 
 ## Rules for every round
 
