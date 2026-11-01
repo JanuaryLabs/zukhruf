@@ -45,6 +45,15 @@ type VectorsFile = {
   readonly dimension: number;
 };
 
+type Vectors =
+  | { readonly kind: 'unsized' }
+  | { readonly kind: 'sized'; readonly dimension: number }
+  | {
+      readonly kind: 'open';
+      readonly dimension: number;
+      readonly file: VectorsFile;
+    };
+
 export class NumpyCache implements CacheBackendProtocol {
   readonly directory: string;
   readonly vectorsFile: string;
@@ -52,8 +61,10 @@ export class NumpyCache implements CacheBackendProtocol {
   readonly dimensionFile: string;
   readonly initialVectors: number;
   hashToIndex = new Map<string, number>();
-  vectorDim: number | null = null;
-  #vectors: VectorsFile | null = null;
+  // MTEB's vector_dim and vectors: no dimension until a vector or the
+  // dimension file sets one, and the vectors file is open only between an
+  // initialization or a load and close().
+  #vectors: Vectors = { kind: 'unsized' };
 
   constructor(directory: string, initialVectors = 100_000) {
     this.directory = directory;
@@ -64,21 +75,30 @@ export class NumpyCache implements CacheBackendProtocol {
     this.initialVectors = initialVectors;
   }
 
+  get vectorDim(): number | null {
+    return this.#vectors.kind === 'unsized' ? null : this.#vectors.dimension;
+  }
+
   add(items: readonly { readonly text: string }[], vectors: Embeddings): void {
-    if (this.vectorDim === null) {
+    if (this.#vectors.kind === 'unsized') {
       // Embeddings without a row hold no dimension. MTEB reads it from the
       // shape of the array, which has one also when it has no row.
       const [first] = vectors;
       if (first === undefined) return;
-      this.vectorDim = first.length;
-      this.#initializeVectorsFile(this.vectorDim);
+      const dimension = first.length;
+      this.#vectors = { kind: 'sized', dimension };
+      this.#vectors = {
+        kind: 'open',
+        dimension,
+        file: this.#initializeVectorsFile(dimension),
+      };
       this.#saveDimension();
     }
-    const file = this.#vectors;
-    if (file === null)
+    if (this.#vectors.kind !== 'open')
       throw new Error(
         'Vectors file not initialized. Call _initialize_vectors_file() first.',
       );
+    const { file } = this.#vectors;
     // zip(items, vectors, strict=True) raises only when it reaches the end of
     // the shorter one, after the pairs before it.
     for (const [position, vector] of vectors.entries()) {
@@ -119,12 +139,13 @@ export class NumpyCache implements CacheBackendProtocol {
     );
   }
 
-  #initializeVectorsFile(dimension: number): void {
+  #initializeVectorsFile(dimension: number): VectorsFile {
     if (!existsSync(this.vectorsFile)) {
       const fd = openSync(this.vectorsFile, 'w+');
       ftruncateSync(fd, this.initialVectors * dimension * FLOAT32_BYTES);
-      this.#vectors = { fd, rows: this.initialVectors, dimension };
-    } else this.#vectors = this.#openVectorsFile(dimension);
+      return { fd, rows: this.initialVectors, dimension };
+    }
+    return this.#openVectorsFile(dimension);
   }
 
   // np.memmap does not infer the number of rows: the size of the file gives
@@ -158,7 +179,11 @@ export class NumpyCache implements CacheBackendProtocol {
       throw new Error(
         `invalid literal for int() with base 10: ${pythonStrRepr(text)}`,
       );
-    this.vectorDim = Number(text);
+    const dimension = Number(text);
+    this.#vectors =
+      this.#vectors.kind === 'open'
+        ? { ...this.#vectors, dimension }
+        : { kind: 'sized', dimension };
   }
 
   // The vectors file needs no flush: each row went to the file when add
@@ -183,14 +208,19 @@ export class NumpyCache implements CacheBackendProtocol {
         IndexFile.parse(JSON.parse(readFileSync(this.indexFile, 'utf8'))),
       ),
     );
-    if (this.vectorDim === null) return;
+    const dimension = this.vectorDim;
+    if (dimension === null) return;
     this.close();
-    this.#vectors = this.#openVectorsFile(this.vectorDim);
+    this.#vectors = {
+      kind: 'open',
+      dimension,
+      file: this.#openVectorsFile(dimension),
+    };
   }
 
   getVector(item: { readonly text: string }): Float32Array | null {
-    const file = this.#vectors;
-    if (file === null) return null;
+    if (this.#vectors.kind !== 'open') return null;
+    const { file } = this.#vectors;
     const index = this.hashToIndex.get(hashItem(item));
     if (index === undefined) return null;
     if (index >= file.rows)
@@ -214,8 +244,8 @@ export class NumpyCache implements CacheBackendProtocol {
   }
 
   close(): void {
-    if (this.#vectors === null) return;
-    closeSync(this.#vectors.fd);
-    this.#vectors = null;
+    if (this.#vectors.kind !== 'open') return;
+    closeSync(this.#vectors.file.fd);
+    this.#vectors = { kind: 'sized', dimension: this.#vectors.dimension };
   }
 }

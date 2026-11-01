@@ -960,12 +960,16 @@ export class Lock {
   }
 }
 
+type Schedule =
+  | { readonly kind: 'stopped' }
+  | { readonly kind: 'running'; readonly timer: NodeJS.Timeout };
+
 // external/scheduler.py PeriodicScheduler: a call every interval, on a timer
 // that does not keep the process alive, as Python's daemon threads.
 class PeriodicScheduler {
   readonly #interval: number;
   readonly #function: () => Promise<void>;
-  #timer: NodeJS.Timeout | null = null;
+  #schedule: Schedule = { kind: 'stopped' };
 
   constructor(interval: number, fn: () => Promise<void>) {
     this.#interval = interval;
@@ -973,21 +977,22 @@ class PeriodicScheduler {
   }
 
   start(): void {
-    if (this.#timer === null) this.#arm();
+    if (this.#schedule.kind === 'stopped') this.#arm();
   }
 
   #arm(): void {
-    this.#timer = setTimeout(() => {
+    const timer = setTimeout(() => {
       this.#arm();
       // An error ends the call of a Python Timer thread, not the schedule.
       this.#function().catch(() => undefined);
     }, this.#interval * 1000).unref();
+    this.#schedule = { kind: 'running', timer };
   }
 
   stop(): void {
-    if (this.#timer === null) return;
-    clearTimeout(this.#timer);
-    this.#timer = null;
+    if (this.#schedule.kind === 'stopped') return;
+    clearTimeout(this.#schedule.timer);
+    this.#schedule = { kind: 'stopped' };
   }
 }
 

@@ -199,13 +199,22 @@ async function rerankTopRankedDocuments(
   return heaps;
 }
 
+type TaskCorpus =
+  | { readonly kind: 'none' }
+  | { readonly kind: 'indexed'; readonly corpus: CorpusDatasetType };
+
 // An encoder as a search model: it keeps the corpus at index time, and
 // encodes it at search time.
 export class SearchEncoderWrapper implements SearchProtocol {
   readonly model: EncoderProtocol;
   readonly mtebModelMeta: ModelMeta;
   readonly corpusChunkSize: number;
-  taskCorpus: CorpusDatasetType | null = null;
+  #taskCorpus: TaskCorpus = { kind: 'none' };
+
+  // MTEB's task_corpus: null until index, and after a search ends.
+  get taskCorpus(): CorpusDatasetType | null {
+    return this.#taskCorpus.kind === 'indexed' ? this.#taskCorpus.corpus : null;
+  }
 
   constructor(
     model: EncoderProtocol,
@@ -220,7 +229,7 @@ export class SearchEncoderWrapper implements SearchProtocol {
     corpus: CorpusDatasetType,
     _options: IndexOptions,
   ): Promise<void> {
-    this.taskCorpus = corpus;
+    this.#taskCorpus = { kind: 'indexed', corpus };
   }
 
   async search(
@@ -278,7 +287,7 @@ export class SearchEncoderWrapper implements SearchProtocol {
             corpusChunkSize: this.corpusChunkSize,
             searchKOffset: 1,
           });
-    this.taskCorpus = null;
+    this.#taskCorpus = { kind: 'none' };
     const results: RetrievalOutputType = new Map(
       [...queryIdxToId.values()].map((query) => [query, new Map()]),
     );
@@ -315,7 +324,12 @@ export function selectLoaderRows(
 export class SearchCrossEncoderWrapper implements SearchProtocol {
   readonly model: CrossEncoderProtocol;
   readonly mtebModelMeta: ModelMeta;
-  taskCorpus: CorpusDatasetType | null = null;
+  #taskCorpus: TaskCorpus = { kind: 'none' };
+
+  // MTEB's task_corpus: null until index, and after a search ends.
+  get taskCorpus(): CorpusDatasetType | null {
+    return this.#taskCorpus.kind === 'indexed' ? this.#taskCorpus.corpus : null;
+  }
 
   constructor(model: CrossEncoderProtocol) {
     this.model = model;
@@ -326,7 +340,7 @@ export class SearchCrossEncoderWrapper implements SearchProtocol {
     corpus: CorpusDatasetType,
     _options: IndexOptions,
   ): Promise<void> {
-    this.taskCorpus = corpus;
+    this.#taskCorpus = { kind: 'indexed', corpus };
   }
 
   async search(

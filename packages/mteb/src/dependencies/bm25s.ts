@@ -156,12 +156,17 @@ function scoreColumns(
   return columns;
 }
 
+// bm25s raises on retrieve before index builds the score columns.
+type IndexState =
+  | { readonly kind: 'empty' }
+  | { readonly kind: 'indexed'; readonly index: Index };
+
 export class BM25 {
   readonly k1: number;
   readonly b: number;
   readonly delta: number;
   readonly method: Method;
-  #index: Index | null = null;
+  #index: IndexState = { kind: 'empty' };
 
   constructor(options: BM25Options = {}) {
     this.k1 = options.k1 ?? 1.5;
@@ -190,13 +195,16 @@ export class BM25 {
     const base = { numDocs, vocab: corpus.vocab };
     if (!isNonoccurrenceMethod(method)) {
       this.#index = {
-        ...base,
-        method,
-        columns: scoreColumns(
-          corpus.ids,
-          nVocab,
-          (id, tf, docLen) => (idf[id] ?? 0) * tfc(tf, docLen),
-        ),
+        kind: 'indexed',
+        index: {
+          ...base,
+          method,
+          columns: scoreColumns(
+            corpus.ids,
+            nVocab,
+            (id, tf, docLen) => (idf[id] ?? 0) * tfc(tf, docLen),
+          ),
+        },
       };
       return;
     }
@@ -208,15 +216,18 @@ export class BM25 {
       ),
     );
     this.#index = {
-      ...base,
-      method,
-      nonoccurrence,
-      columns: scoreColumns(
-        corpus.ids,
-        nVocab,
-        (id, tf, docLen) =>
-          (idf[id] ?? 0) * tfc(tf, docLen) - (nonoccurrence[id] ?? 0),
-      ),
+      kind: 'indexed',
+      index: {
+        ...base,
+        method,
+        nonoccurrence,
+        columns: scoreColumns(
+          corpus.ids,
+          nVocab,
+          (id, tf, docLen) =>
+            (idf[id] ?? 0) * tfc(tf, docLen) - (nonoccurrence[id] ?? 0),
+        ),
+      },
     };
   }
 
@@ -230,9 +241,9 @@ export class BM25 {
     queries: Tokenized,
     options: { readonly k?: number } = {},
   ): RetrieveResults {
-    const index = this.#index;
-    if (index === null)
+    if (this.#index.kind === 'empty')
       throw new Error('The index is empty. Call `index` first.');
+    const { index } = this.#index;
     const k = options.k ?? 10;
     if (k > index.numDocs)
       throw new Error(

@@ -34,7 +34,7 @@ import { Activity } from './activity.ts';
 import { Attorney } from './attorney.ts';
 import { DatabaseError } from './database-error.ts';
 import { Database } from './database.ts';
-import { InFlight } from './in-flight.ts';
+import { CurrentOperation } from './in-flight.ts';
 import { JobFetcher } from './job-fetcher.ts';
 import type { FoundJob, JobQueue } from './job-queue.ts';
 import { JobRows } from './job-rows.ts';
@@ -126,6 +126,9 @@ type NotifierPhase = { kind: 'available' } | { kind: 'unavailable' };
 
 type LifecyclePhase =
   { kind: 'stopped' } | { kind: 'armed' } | { kind: 'running' };
+// The clock attached to this instance's activity, from start() to stop().
+type Attachment =
+  { kind: 'detached' } | { kind: 'attached'; handle: AsyncDisposable };
 
 function normalizeOptions(
   options?: string | SqliteJobQueueOptions,
@@ -167,10 +170,10 @@ export class SqliteJobQueue
   // index.js:64, 124, 256): armed before a start runs, so stop() can shut
   // down what a start that threw partway left armed.
   #lifecycle: LifecyclePhase = { kind: 'stopped' };
-  #starting: InFlight<this> | null = null;
-  #stopping: InFlight<void> | null = null;
+  readonly #starting = new CurrentOperation<this>();
+  readonly #stopping = new CurrentOperation<void>();
   readonly #activity = new Activity();
-  #attachment: AsyncDisposable | null = null;
+  #attachment: Attachment = { kind: 'detached' };
   // When wip last went out, first read at construction
   // (node_modules/pg-boss/dist/manager.js:194).
   #wipTs: number;
@@ -248,23 +251,19 @@ export class SqliteJobQueue
   // node_modules/pg-boss/dist/index.js:106-132: a stop in flight finishes
   // first, and a concurrent start shares the one in flight.
   async start(): Promise<this> {
-    if (this.#stopping) {
-      await this.#stopping.settled();
+    const stopping = this.#stopping.inFlight;
+    if (stopping) {
+      await stopping.settled();
     }
-    if (this.#starting) {
-      return this.#starting.result();
+    const starting = this.#starting.inFlight;
+    if (starting) {
+      return starting.result();
     }
     if (this.#lifecycle.kind === 'running') {
       return this;
     }
     this.#lifecycle = { kind: 'armed' };
-    const starting = this.#doStart();
-    this.#starting = new InFlight(starting);
-    try {
-      return await starting;
-    } finally {
-      this.#starting = null;
-    }
+    return this.#starting.run(this.#doStart());
   }
 
   // index.js:133-170: the clock attaches once the schema exists and before
@@ -278,7 +277,10 @@ export class SqliteJobQueue
     }
     this.applySchema();
     if (Activity.isAttachable(this.#clock)) {
-      this.#attachment = await this.#activity.attach(this.#clock);
+      this.#attachment = {
+        kind: 'attached',
+        handle: await this.#activity.attach(this.#clock),
+      };
     }
     this.#manager = { kind: 'started' };
     // manager.js:823-837: the cache refresh, then wip, both on the clock in
@@ -306,11 +308,13 @@ export class SqliteJobQueue
 
   // node_modules/pg-boss/dist/index.js:192-275.
   async stop(options: StopOptions = {}): Promise<void> {
-    if (this.#starting) {
-      await this.#starting.settled();
+    const starting = this.#starting.inFlight;
+    if (starting) {
+      await starting.settled();
     }
-    if (this.#stopping) {
-      return this.#stopping.result();
+    const stopping = this.#stopping.inFlight;
+    if (stopping) {
+      return stopping.result();
     }
     const { close = true, graceful = true } = options;
     // An instance not running is already stopped; asked to close, one that
@@ -322,13 +326,7 @@ export class SqliteJobQueue
       return;
     }
     const timeout = Math.max(options.timeout ?? 30000, 1000);
-    const stopping = this.#doStop(close, graceful, timeout);
-    this.#stopping = new InFlight(stopping);
-    try {
-      return await stopping;
-    } finally {
-      this.#stopping = null;
-    }
+    return this.#stopping.run(this.#doStop(close, graceful, timeout));
   }
 
   async #doStop(
@@ -369,8 +367,10 @@ export class SqliteJobQueue
     const shutdown = async () => {
       await this.#failWip();
       const attachment = this.#attachment;
-      this.#attachment = null;
-      await attachment?.[Symbol.asyncDispose]();
+      this.#attachment = { kind: 'detached' };
+      if (attachment.kind === 'attached') {
+        await attachment.handle[Symbol.asyncDispose]();
+      }
       if (close) {
         this.#closeOwnDatabase();
       }

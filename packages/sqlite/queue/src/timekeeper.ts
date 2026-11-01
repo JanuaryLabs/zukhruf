@@ -16,7 +16,7 @@ import { transaction } from '@zukhruf/sqlite-transaction';
 
 import type { Activity } from './activity.ts';
 import { ClaimTimer } from './claim-timer.ts';
-import { InFlight } from './in-flight.ts';
+import { CurrentOperation } from './in-flight.ts';
 import { NaiveTimestamp } from './naive-timestamp.ts';
 import { Recurrence } from './recurrence.ts';
 import { Row } from './rows.ts';
@@ -103,7 +103,7 @@ export class Timekeeper extends EventEmitter<Pick<PgBossEventMap, 'error'>> {
   readonly #manager: TimekeeperManager;
   #phase: TimekeeperPhase = { kind: 'stopped' };
   // pg-boss's _timekeeping: the pass in flight.
-  #pass: InFlight<void> | null = null;
+  readonly #pass = new CurrentOperation<void>();
 
   constructor(
     clock: Clock,
@@ -191,21 +191,15 @@ export class Timekeeper extends EventEmitter<Pick<PgBossEventMap, 'error'>> {
     this.#phase = { kind: 'stopped' };
     await this.#manager.offWork(Timekeeper.sendIt, { wait: true });
     phase.timer.stop();
-    await this.#pass?.settled();
+    await this.#pass.inFlight?.settled();
   }
 
   // timekeeper.js:335-384
   async #onCron(): Promise<void> {
-    if (this.#phase.kind !== 'keeping' || this.#pass) {
+    if (this.#phase.kind !== 'keeping' || this.#pass.inFlight) {
       return;
     }
-    const pass = this.#cronPass(this.#phase);
-    this.#pass = new InFlight(pass);
-    try {
-      await pass;
-    } finally {
-      this.#pass = null;
-    }
+    await this.#pass.run(this.#cronPass(this.#phase));
   }
 
   async #cronPass(phase: {

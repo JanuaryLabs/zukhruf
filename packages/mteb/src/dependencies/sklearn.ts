@@ -680,19 +680,24 @@ export function labelRankingAveragePrecisionScore(
   return out / yTrue.length;
 }
 
+// scikit-learn's fitted state: classes_ exists only after fit.
+type Fit =
+  | { readonly kind: 'unfitted' }
+  | { readonly kind: 'fitted'; readonly classes: ClassLabel[] };
+
 // sklearn.preprocessing.MultiLabelBinarizer with its defaults: fitTransform
 // learns the sorted labels of the label sets and gives their indicator
 // matrix; transform gives the indicator matrix of other label sets and
 // leaves out the labels that it did not learn (scikit-learn warns).
 export class MultiLabelBinarizer {
-  #classes: ClassLabel[] | null = null;
+  #fit: Fit = { kind: 'unfitted' };
 
   get classes(): readonly ClassLabel[] {
-    if (this.#classes === null)
+    if (this.#fit.kind === 'unfitted')
       throw new Error(
         "This MultiLabelBinarizer instance is not fitted yet. Call 'fit' with appropriate arguments before using this estimator.",
       );
-    return this.#classes;
+    return this.#fit.classes;
   }
 
   fitTransform(y: readonly (readonly ClassLabel[])[]): number[][] {
@@ -704,7 +709,7 @@ export class MultiLabelBinarizer {
       throw new TypeError(
         "'<' not supported between instances of 'str' and 'int'",
       );
-    this.#classes = uniqueInverse(labels).unique;
+    this.#fit = { kind: 'fitted', classes: uniqueInverse(labels).unique };
     return this.transform(y);
   }
 

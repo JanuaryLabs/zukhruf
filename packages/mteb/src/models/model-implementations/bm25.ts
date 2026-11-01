@@ -137,6 +137,10 @@ export function getLanguage(
 // A function from a text to its tokens.
 export type CustomTokenizer = (text: string) => string[];
 
+type RawTokenizer =
+  | { readonly kind: 'unfitted' }
+  | { readonly kind: 'fitted'; readonly tokenize: CustomTokenizer };
+
 export type BM25TokenizerOptions = {
   readonly stopwordsKey?: StopwordsKey | undefined;
   readonly stemmerLanguage?: string | undefined;
@@ -186,7 +190,7 @@ export class BM25Tokenizer {
   readonly #path: TokenizerPath;
   // The function of the custom path, from the first fit, as MTEB's
   // _raw_tok, which is None before fit_transform.
-  #rawTokenize: CustomTokenizer | null = null;
+  #rawTokenize: RawTokenizer = { kind: 'unfitted' };
   #combinedStops: ReadonlySet<string> = new Set();
 
   // The language null and a code that _ISO3_TO_LANG does not hold get no
@@ -219,9 +223,10 @@ export class BM25Tokenizer {
   fitTransform(corpusTexts: readonly string[]): Tokenized {
     const path = this.#path;
     if (path.kind === 'bm25s') return this.#fitTransformBm25s(corpusTexts);
-    this.#rawTokenize =
+    const rawTokenize =
       path.tokenizer === 'char' ? unicodeTokenize : path.tokenizer;
-    return this.#fitTransformCustom(corpusTexts, this.#rawTokenize);
+    this.#rawTokenize = { kind: 'fitted', tokenize: rawTokenize };
+    return this.#fitTransformCustom(corpusTexts, rawTokenize);
   }
 
   // The stopwords from document frequencies are stems, and bm25s removes
@@ -236,11 +241,11 @@ export class BM25Tokenizer {
       });
     return toTokenized(
       texts.map((text) => {
-        if (this.#rawTokenize === null)
+        if (this.#rawTokenize.kind === 'unfitted')
           throw new TypeError("'NoneType' object is not callable");
-        return this.#rawTokenize(text).filter(
-          (token) => !this.#combinedStops.has(token),
-        );
+        return this.#rawTokenize
+          .tokenize(text)
+          .filter((token) => !this.#combinedStops.has(token));
       }),
     );
   }
@@ -329,6 +334,11 @@ type Indexed = {
   readonly corpusIds: readonly string[];
 };
 
+// MTEB raises on search before index builds the tokenizer and the retriever.
+type IndexState =
+  | { readonly kind: 'empty' }
+  | { readonly kind: 'indexed'; readonly indexed: Indexed };
+
 // BM25 over the tokens of each document: its title and its text.
 export class BM25Search implements SearchProtocol {
   readonly mtebModelMeta: ModelMeta;
@@ -341,7 +351,7 @@ export class BM25Search implements SearchProtocol {
   readonly #freqThreshold: number;
   readonly #tokenizer: string | CustomTokenizer | undefined;
   readonly #hub: HubOptions;
-  #indexed: Indexed | null = null;
+  #index: IndexState = { kind: 'empty' };
 
   // stopwords and stemmerLanguage replace those of the language of the task.
   // A tokenizer drops the language: the documents get no stemmer, and the
@@ -410,10 +420,13 @@ export class BM25Search implements SearchProtocol {
       method: this.method,
     });
     retriever.index(encodedCorpus);
-    this.#indexed = {
-      tokenizer,
-      retriever,
-      corpusIds: corpus.map((doc) => doc.id),
+    this.#index = {
+      kind: 'indexed',
+      indexed: {
+        tokenizer,
+        retriever,
+        corpusIds: corpus.map((doc) => doc.id),
+      },
     };
   }
 
@@ -424,9 +437,9 @@ export class BM25Search implements SearchProtocol {
     queries: QueryDatasetType,
     options: SearchOptions,
   ): Promise<RetrievalOutputType> {
-    const indexed = this.#indexed;
-    if (indexed === null)
+    if (this.#index.kind === 'empty')
       throw new Error('Tokenizer not initialized. Call `index` first.');
+    const { indexed } = this.#index;
     const results: RetrievalOutputType = new Map(
       queries.map((query) => [query.id, new Map<string, number>()]),
     );

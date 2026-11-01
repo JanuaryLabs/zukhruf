@@ -23,6 +23,16 @@ export interface WorkerConfig<TJob> {
   onError: (error: Error) => void;
 }
 
+type Observed = Pick<
+  WipData,
+  | 'lastFetchedOn'
+  | 'lastJobStartedOn'
+  | 'lastJobEndedOn'
+  | 'lastJobDuration'
+  | 'lastError'
+  | 'lastErrorOn'
+>;
+
 // One polling loop of a work() call, which starts one per localConcurrency
 // (node_modules/pg-boss/dist/worker.js:53-114): fetch at once, hand the jobs
 // over, then wait out the interval on the clock unless notified meanwhile.
@@ -50,12 +60,15 @@ export class Worker<TJob> {
   #wake = new AbortController();
   // How the loop ended, which stop() waits for.
   readonly #ran = new Latch<{ ok: true } | { ok: false; error: unknown }>();
-  #lastFetchedOn: number | null = null;
-  #lastJobStartedOn: number | null = null;
-  #lastJobEndedOn: number | null = null;
-  #lastJobDuration: number | null = null;
-  #lastError: Error | null = null;
-  #lastErrorOn: number | null = null;
+  // What the loop saw last, as pg-boss reports it in toWipData.
+  #observed: Observed = {
+    lastFetchedOn: null,
+    lastJobStartedOn: null,
+    lastJobEndedOn: null,
+    lastJobDuration: null,
+    lastError: null,
+    lastErrorOn: null,
+  };
 
   constructor(config: WorkerConfig<TJob>) {
     this.id = config.id;
@@ -105,23 +118,34 @@ export class Worker<TJob> {
       const notifications = this.#notifications;
       try {
         const jobs = await this.#fetch();
-        this.#lastFetchedOn = this.#clock.now();
+        const fetchedOn = this.#clock.now();
+        this.#observed = {
+          ...this.#observed,
+          lastFetchedOn: fetchedOn,
+          lastJobStartedOn: fetchedOn,
+        };
         fetchedCount = jobs.length;
         this.jobs = jobs;
-        this.#lastJobStartedOn = this.#lastFetchedOn;
         await this.#onFetch(jobs);
-        this.#lastJobEndedOn = this.#clock.now();
+        this.#observed = {
+          ...this.#observed,
+          lastJobEndedOn: this.#clock.now(),
+        };
         this.jobs = [];
       } catch (caught) {
-        this.#lastErrorOn = this.#clock.now();
+        const erroredOn = this.#clock.now();
         const error =
           caught instanceof Error ? caught : new Error(String(caught));
-        this.#lastError = error;
+        this.#observed = {
+          ...this.#observed,
+          lastError: error,
+          lastErrorOn: erroredOn,
+        };
         error.message = `${error.message} (Queue: ${this.name}, Worker: ${this.id})`;
         this.#onError(error);
       }
       const duration = this.#clock.now() - started;
-      this.#lastJobDuration = duration;
+      this.#observed = { ...this.#observed, lastJobDuration: duration };
       const remaining = this.#resolveInterval(fetchedCount) - duration;
       if (
         !this.stopping &&
@@ -172,12 +196,7 @@ export class Worker<TJob> {
       state: this.#state,
       count: this.jobs.length,
       createdOn: this.createdOn,
-      lastFetchedOn: this.#lastFetchedOn,
-      lastJobStartedOn: this.#lastJobStartedOn,
-      lastJobEndedOn: this.#lastJobEndedOn,
-      lastError: this.#lastError,
-      lastErrorOn: this.#lastErrorOn,
-      lastJobDuration: this.#lastJobDuration,
+      ...this.#observed,
     };
   }
 }

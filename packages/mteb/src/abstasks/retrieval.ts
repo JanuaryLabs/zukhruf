@@ -118,6 +118,18 @@ function filterQueriesWithoutPositives(
   return [kept, queries.filter((query) => kept.has(query.id))];
 }
 
+// How many documents a search keeps for each query.
+type TopK =
+  | { readonly kind: 'largest-k' }
+  | { readonly kind: 'set'; readonly value: number };
+// The model meta of the earlier run that convertToReranking read.
+type PreviousRun =
+  | { readonly kind: 'none' }
+  | {
+      readonly kind: 'read';
+      readonly modelMeta: Readonly<Record<string, Score>>;
+    };
+
 // A retrieval task: each query ranks the documents of a corpus, and the
 // relevant documents of each query score the ranking. A task with topRanked
 // reranks the candidates of each query.
@@ -128,8 +140,15 @@ export abstract class AbsTaskRetrieval extends AbsTask<RetrievalSplitData> {
   skipFirstResult = false;
   override readonly supportCrossEncoder: boolean = true;
   override readonly supportSearch: boolean = true;
-  previousResultsModelMeta: Readonly<Record<string, Score>> | null = null;
-  #topK: number | null = null;
+  #previousRun: PreviousRun = { kind: 'none' };
+  #topK: TopK = { kind: 'largest-k' };
+
+  // MTEB's previous_results_model_meta: null until convertToReranking.
+  get previousResultsModelMeta(): Readonly<Record<string, Score>> | null {
+    return this.#previousRun.kind === 'read'
+      ? this.#previousRun.modelMeta
+      : null;
+  }
 
   // Each eval split of each subset, from the HuggingFace Hub at the revision
   // of the metadata, or from the folder that the dataset path names.
@@ -161,7 +180,9 @@ export abstract class AbsTaskRetrieval extends AbsTask<RetrievalSplitData> {
   // The number of documents that a search keeps for each query: the largest
   // k value, unless convertToReranking set it.
   get topK(): number {
-    return this.#topK ?? Math.max(...this.kValues);
+    return this.#topK.kind === 'set'
+      ? this.#topK.value
+      : Math.max(...this.kValues);
   }
 
   protected override async evaluateSubset(
@@ -250,7 +271,7 @@ export abstract class AbsTaskRetrieval extends AbsTask<RetrievalSplitData> {
   // Makes the task a reranking task: the candidates of each query are the
   // topK best documents of an earlier run that saved its predictions.
   async convertToReranking(topRankedPath: string, topK = 10): Promise<this> {
-    this.#topK = topK;
+    this.#topK = { kind: 'set', value: topK };
     const path =
       existsSync(topRankedPath) && statSync(topRankedPath).isDirectory()
         ? this.predictionsPath(topRankedPath)
@@ -261,7 +282,7 @@ export abstract class AbsTaskRetrieval extends AbsTask<RetrievalSplitData> {
       );
     const previous = readPredictionsFile(path);
     if (!this.dataLoaded) await this.loadData();
-    this.previousResultsModelMeta = previous.mtebModelMeta;
+    this.#previousRun = { kind: 'read', modelMeta: previous.mtebModelMeta };
     for (const [subset, splits] of this.dataset ?? [])
       for (const [split, data] of splits) {
         const topRanked = previous.subsets.get(subset)?.get(split);

@@ -10,7 +10,7 @@ import { transaction } from '@zukhruf/sqlite-transaction';
 import type { Activity } from './activity.ts';
 import type { SuperviseIntervals } from './attorney.ts';
 import { ClaimTimer } from './claim-timer.ts';
-import { InFlight } from './in-flight.ts';
+import { CurrentOperation } from './in-flight.ts';
 import { JobSettler } from './job-settler.ts';
 import { Row } from './rows.ts';
 import { SqlValues } from './sql-values.ts';
@@ -69,7 +69,7 @@ export class Supervisor extends EventEmitter<
   readonly #largeQueueSize: number;
   #phase: SupervisorPhase = { kind: 'unstarted' };
   // pg-boss's #maintaining: the pass in flight.
-  #pass: InFlight<void> | null = null;
+  readonly #pass = new CurrentOperation<void>();
 
   constructor(clock: Clock, activity: Activity, config: SupervisorConfig) {
     super();
@@ -101,7 +101,7 @@ export class Supervisor extends EventEmitter<
     }
     phase.timer?.stop();
     this.#phase = { kind: 'stopped', database: phase.database };
-    await this.#pass?.settled();
+    await this.#pass.inFlight?.settled();
   }
 
   get #stopped(): boolean {
@@ -110,16 +110,10 @@ export class Supervisor extends EventEmitter<
 
   // boss.js:173-199
   async #onSupervise(): Promise<void> {
-    if (this.#stopped || this.#pass) {
+    if (this.#stopped || this.#pass.inFlight) {
       return;
     }
-    const pass = this.#supervise();
-    this.#pass = new InFlight(pass);
-    try {
-      await pass;
-    } finally {
-      this.#pass = null;
-    }
+    await this.#pass.run(this.#supervise());
   }
 
   async #supervise(): Promise<void> {

@@ -164,6 +164,16 @@ export class MiniBatchKMeans {
   }
 }
 
+// sklearn's ewa_inertia and ewa_inertia_min: None until the first step after
+// the initialization sets both.
+type Ewa =
+  | { readonly kind: 'none' }
+  | {
+      readonly kind: 'tracking';
+      readonly inertia: number;
+      readonly min: number;
+    };
+
 // _mini_batch_convergence without tol: an exponentially weighted average of
 // the mean inertia of the batches, in float32, and a stop after
 // maxNoImprovement steps without a new minimum.
@@ -171,8 +181,7 @@ class Convergence {
   readonly #batchSize: number;
   readonly #alpha: number;
   readonly #maxNoImprovement: number;
-  #ewaInertia: number | null = null;
-  #ewaInertiaMin: number | null = null;
+  #ewa: Ewa = { kind: 'none' };
   #noImprovement = 0;
 
   constructor(batchSize: number, nSamples: number, maxNoImprovement: number) {
@@ -185,20 +194,26 @@ class Convergence {
     const inertia = Math.fround(batchInertia / this.#batchSize);
     // The first step has the inertia of the initialization.
     if (step === 0) return false;
-    this.#ewaInertia =
-      this.#ewaInertia === null
-        ? inertia
-        : Math.fround(
-            Math.fround(this.#ewaInertia * (1 - this.#alpha)) +
-              Math.fround(inertia * this.#alpha),
-          );
-    if (
-      this.#ewaInertiaMin === null ||
-      this.#ewaInertia < this.#ewaInertiaMin
-    ) {
+    if (this.#ewa.kind === 'none') {
       this.#noImprovement = 0;
-      this.#ewaInertiaMin = this.#ewaInertia;
-    } else this.#noImprovement++;
+      this.#ewa = { kind: 'tracking', inertia, min: inertia };
+    } else {
+      const ewaInertia = Math.fround(
+        Math.fround(this.#ewa.inertia * (1 - this.#alpha)) +
+          Math.fround(inertia * this.#alpha),
+      );
+      if (ewaInertia < this.#ewa.min) {
+        this.#noImprovement = 0;
+        this.#ewa = { kind: 'tracking', inertia: ewaInertia, min: ewaInertia };
+      } else {
+        this.#noImprovement++;
+        this.#ewa = {
+          kind: 'tracking',
+          inertia: ewaInertia,
+          min: this.#ewa.min,
+        };
+      }
+    }
     return this.#noImprovement >= this.#maxNoImprovement;
   }
 }

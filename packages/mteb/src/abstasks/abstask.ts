@@ -81,6 +81,13 @@ export function multilabelSubsampling(
   return subsampled;
 }
 
+type Data<SplitData> =
+  | { readonly kind: 'unloaded' }
+  | {
+      readonly kind: 'loaded';
+      readonly dataset: Map<HFSubset, Map<string, SplitData>>;
+    };
+
 // One task: its metadata, its data by subset and split, and the evaluation
 // of a model on each subset.
 export abstract class AbsTask<SplitData = unknown> {
@@ -88,10 +95,11 @@ export abstract class AbsTask<SplitData = unknown> {
   readonly seed: number;
   // Where loadData downloads the dataset of the metadata from.
   protected readonly hub: HubOptions;
-  // The data by subset and split, or null before loadData.
-  dataset: Map<HFSubset, Map<string, SplitData>> | null = null;
+  // The data by subset and split, from loadData to unloadData.
+  #data: Data<SplitData> = { kind: 'unloaded' };
   hfSubsets: HFSubset[];
-  #evalSplits: readonly string[] | null = null;
+  // The splits that filterEvalSplits chose; none means the metadata's.
+  #evalSplits: readonly string[] = [];
   readonly supportCrossEncoder: boolean = false;
   readonly supportSearch: boolean = false;
 
@@ -107,9 +115,14 @@ export abstract class AbsTask<SplitData = unknown> {
     taskNameToPrompt.set(this.metadata.name, this.abstaskPrompt);
   }
 
+  // MTEB's dataset: the data by subset and split, or null before loadData.
+  get dataset(): Map<HFSubset, Map<string, SplitData>> | null {
+    return this.#data.kind === 'loaded' ? this.#data.dataset : null;
+  }
+
   // MTEB's data_loaded: whether the task holds its data.
   get dataLoaded(): boolean {
-    return this.dataset !== null;
+    return this.#data.kind === 'loaded';
   }
 
   // The instruction of the task type, for models that take instructions.
@@ -126,7 +139,7 @@ export abstract class AbsTask<SplitData = unknown> {
     const timer = options.timer ?? new TimingStack();
     {
       using _ = timer.phase('Data loading');
-      this.dataset = await this.loadSplits();
+      this.#data = { kind: 'loaded', dataset: await this.loadSplits() };
     }
     using _ = timer.phase('Dataset transform');
     this.datasetTransform();
@@ -280,13 +293,12 @@ export abstract class AbsTask<SplitData = unknown> {
   }
 
   filterEvalSplits(evalSplits: readonly string[] | null): this {
-    this.#evalSplits = evalSplits;
+    this.#evalSplits = evalSplits ?? [];
     return this;
   }
 
   get evalSplits(): readonly string[] {
-    if (this.#evalSplits !== null && this.#evalSplits.length > 0)
-      return this.#evalSplits;
+    if (this.#evalSplits.length > 0) return this.#evalSplits;
     return this.metadata.evalSplits;
   }
 
@@ -310,6 +322,6 @@ export abstract class AbsTask<SplitData = unknown> {
   }
 
   unloadData(): void {
-    this.dataset = null;
+    this.#data = { kind: 'unloaded' };
   }
 }

@@ -8,7 +8,7 @@ import type { EmbeddingModelV4 } from '@ai-sdk/provider';
 import { AiSdkEncoder } from '../models/ai-sdk-encoder.ts';
 import { ModelMeta } from '../models/model-meta.ts';
 import type { CorpusRow, QueryRow } from '../types/encoder-io.ts';
-import { AbsTaskRetrieval } from './retrieval.ts';
+import { AbsTaskRetrieval, type RetrievalSplitData } from './retrieval.ts';
 import { TaskMetadata } from './task-metadata.ts';
 
 // A tiny retrieval task and the scores that MTEB 2.26.28 gave it, once as a
@@ -78,8 +78,10 @@ class TableTask extends AbsTaskRetrieval {
     this.#rerank = rerank;
   }
 
-  override async loadData(): Promise<void> {
-    this.dataset = new Map([
+  protected override async loadSplits(): Promise<
+    Map<string, Map<string, RetrievalSplitData>>
+  > {
+    return new Map([
       [
         'default',
         new Map([

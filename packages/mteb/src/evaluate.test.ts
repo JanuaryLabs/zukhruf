@@ -8,7 +8,10 @@ import type { EmbeddingModelV4 } from '@ai-sdk/provider';
 
 import { TemporaryFiles } from '@zukhruf/testing/fs';
 
-import { AbsTaskRetrieval } from './abstasks/retrieval.ts';
+import {
+  AbsTaskRetrieval,
+  type RetrievalSplitData,
+} from './abstasks/retrieval.ts';
 import { TaskMetadata } from './abstasks/task-metadata.ts';
 import { ResultCache } from './cache/result-cache.ts';
 import { evaluate } from './evaluate.ts';
@@ -63,8 +66,10 @@ class LetterTask extends AbsTaskRetrieval {
     });
   }
 
-  override async loadData(): Promise<void> {
-    this.dataset = new Map([
+  protected override async loadSplits(): Promise<
+    Map<string, Map<string, RetrievalSplitData>>
+  > {
+    return new Map([
       [
         'default',
         new Map([
