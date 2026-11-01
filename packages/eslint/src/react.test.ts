@@ -151,3 +151,29 @@ test('./react reports an image that has no alt text', async () => {
     JSON.stringify(findings),
   );
 });
+
+test('./react leaves a package.json to manifest/recommended, also when a script holds &&', async () => {
+  // Arrange: no-leaked-conditional-rendering reads type information only when
+  // the text has "&&", and jsonc-eslint-parser gives none.
+  await using workspace = await fixtureWorkspace({
+    'nx.json': '{}',
+    'tsconfig.json': tsconfig,
+    'eslint.config.mjs': [
+      `import react from ${JSON.stringify(import.meta.resolve('@zukhruf/eslint/react'))};`,
+      fixtureConfig(
+        `...react, { plugins: { zukhruf }, extends: ['zukhruf/base'] }, { plugins: { manifest }, extends: ['manifest/recommended'] }`,
+      ),
+    ].join('\n'),
+    'package.json': JSON.stringify({
+      name: 'fx',
+      private: true,
+      scripts: { start: 'npm run build && node dist/main.js' },
+    }),
+  });
+
+  // Act
+  const findings = lint(workspace.root, ['package.json']);
+
+  // Assert
+  assert.deepEqual(findings, []);
+});

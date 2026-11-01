@@ -213,6 +213,8 @@ import baseConfig from '../../eslint.config.mjs';
 export default [...react, ...baseConfig];
 ```
 
+The configs apply only to TypeScript files, the files to which `zukhruf/base` gives type information. Thus they do not lint the `package.json` or the other files of a project.
+
 It gives these configs, in this order:
 
 1. `recommended` of `eslint-plugin-jsx-a11y-x`: the accessibility rules. This plugin is the maintained fork of `eslint-plugin-jsx-a11y`, and its peer range includes ESLint 10.
