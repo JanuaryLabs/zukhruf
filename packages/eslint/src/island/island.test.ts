@@ -96,19 +96,46 @@ test('island/no-generic-port reports generic port methods in islands only', asyn
           code: `interface Store { get<T>(key: string): Promise<T>; }`,
           filename: workspace.path('apps/host/src/main.ts'),
         },
+        // Generic only in what it takes: the response is not generic.
+        {
+          code: `interface Each<Context> { <Row>(rows: readonly Row[], name: (row: Row) => string, body: (context: Context, row: Row) => void): Promise<void>; }`,
+          filename: island,
+        },
+        {
+          code: `interface Report { join<Row>(rows: readonly Row[], line: (row: Row) => string): string; }`,
+          filename: island,
+        },
+        {
+          code: `type Visit = <Row>(rows: readonly Row[], visit: (row: Row) => void) => Promise<void>;`,
+          filename: island,
+        },
+        // The inner T is the returned function's own input, not the response.
+        {
+          code: `interface Curry { make<T>(x: T): <T>(y: T) => void; }`,
+          filename: island,
+        },
+        // A variable's type is not a port.
+        {
+          code: `const read: <T>() => T = () => { throw new Error('unset'); };`,
+          filename: island,
+        },
       ],
       invalid: [
-        {
-          code: `interface Store { get<T>(key: string): Promise<T>; }`,
-          filename: island,
-          errors: [{ messageId: 'matched' }],
-        },
-        {
-          code: `type Fetch = <T>(url: string) => Promise<T>;`,
-          filename: island,
-          errors: [{ messageId: 'matched' }],
-        },
-      ],
+        `interface Store { get<T>(key: string): Promise<T>; }`,
+        `type Fetch = <T>(url: string) => Promise<T>;`,
+        `interface Call { <T>(url: string): Promise<T>; }`,
+        `interface Reader { read<T>(): T; }`,
+        `interface List { list<T>(): Promise<T[]>; }`,
+        `interface Schema<T> { parse(input: unknown): T } interface Parser { read<T>(schema: Schema<T>): Promise<T>; }`,
+        // The outer T reaches the response through the returned function.
+        `interface Later { make<T>(): <U>(u: U) => T; }`,
+        // Two uses of T in one response are one report.
+        `interface Pair { pair<T>(): Promise<[T, T]>; }`,
+      ].map((code) => ({
+        code,
+        filename: island,
+        errors: [{ messageId: 'matched' }],
+      })),
     },
   );
 });
