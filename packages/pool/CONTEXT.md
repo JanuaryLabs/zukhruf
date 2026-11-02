@@ -44,6 +44,14 @@ _Avoid_: Size, limit, ceiling (the ceiling of a sizing is its capacity)
 The jobs that a sizing that learns measures at one number of workers: at least 20 jobs and 2 seconds.
 _Avoid_: Sample (one job is one sample), batch
 
+**Step**:
+Three windows of a sizing that learns: at the size it has, at the size it tries (one more worker, or fewer), and at the size it has again. A step with fewer keeps every worker alive.
+_Avoid_: Probe, trial, experiment
+
+**Pause**:
+The time that a sizing that learns waits after a step that changed nothing: one window, doubled for each such step in a row, up to 16 windows, with a random length of 0.5 to 1.5 times.
+_Avoid_: Back-off (an eager pool waits a back-off before it replaces a worker), cooldown, delay
+
 **Exit**:
 The end of a worker. The pool learns of it from `exited()`, and replaces the worker.
 _Avoid_: Death, crash (a crash is one kind of exit)

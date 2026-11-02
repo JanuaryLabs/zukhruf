@@ -1,5 +1,7 @@
 # A sizing that learns compares one more worker between two windows
 
+Superseded on 2026-11-02 for "learn once" by [ADR 0007](./0007-a-sizing-that-learns-keeps-learning-in-steps-both-ways-and-pauses-between-steps-that-change-nothing.md). A sizing that learns now takes steps with one more worker or with fewer for as long as the pool runs. The decision below stays true for the rest: each step measures in the order A, B, A.
+
 `HillClimbing` and `Gradient` find how many workers pay. They measure jobs at one number of workers, then at one more. The jobs do not stay the same while they measure: OCR reads the files of an import in the order of their names, and these come grouped by kind, small stickers first, photos later. On 2026-10-26, 724 WhatsApp images were read on one computer. Two workers measured 36 images a second on stickers, three workers measured 40 on photos, and the sizing kept two workers in 3 of 3 runs. Pools of a fixed size read the same images in 36 s with two workers and in 20 s with three.
 
 Thus each step measures in the order A, B, A: a window at the number that pays so far, one at one more, and one at the first number again. The step compares the window with one more to the mean of both other windows. A change of the jobs that is slow and steady cancels. The worker that the step tries stays alive during the last window, so the next step needs no new warm-up. With this order, 3 of 3 runs grew to the capacity of the computer (5, 4 and 5 workers). A window has at least 20 jobs and 2 seconds, so the size of a few files does not decide.

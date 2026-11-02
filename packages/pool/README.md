@@ -37,14 +37,21 @@ The pool waits for `ready()` with no time limit. Thus, if the warm-up of a worke
 
 ## Choose how many workers run
 
-| Sizing                              | Runs                                                                                                                   |
-| ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| `Fixed(n)`                          | n workers                                                                                                              |
-| `Resources({ memoryPerWorker })`    | one for each CPU, while each finds its memory free                                                                     |
-| `HillClimbing({ memoryPerWorker })` | two first, and one more while the last one added at least a tenth more jobs a second (as the .NET thread pool)         |
-| `Gradient({ memoryPerWorker })`     | two first, and one more while a job takes at most half again the time it took with two (as Netflix concurrency-limits) |
+| Sizing                              | Runs                                                                                                                |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `Fixed(n)`                          | n workers                                                                                                           |
+| `Resources({ memoryPerWorker })`    | one for each CPU, while each finds its memory free                                                                  |
+| `HillClimbing({ memoryPerWorker })` | two first, then as many as add at least a tenth more jobs a second each (as the .NET thread pool)                   |
+| `Gradient({ memoryPerWorker })`     | two first, then as many as keep a job at most half again the time it takes with two (as Netflix concurrency-limits) |
 
-The two sizings that learn measure only while jobs wait and every worker is ready, in windows of at least 20 jobs and 2 seconds. They learn once, and never pass what the computer can give. See [ADR 0002](./docs/adr/0002-a-sizing-that-learns-compares-one-more-worker-between-two-windows.md).
+The two sizings that learn take steps for as long as the pool runs. A step measures three windows of at least 20 jobs and 2 seconds: at the size it has, at the size it tries, and at the size it has again. A sizing measures only while jobs wait and every worker is ready.
+
+- A step tries one more worker, or fewer: `HillClimbing` one fewer, `Gradient` two. A step with fewer keeps every worker alive, so it costs no warm-up.
+- The sizing keeps one more worker as soon as one step shows that it pays. It lets a worker go only after two steps in a row show that the worker does not pay.
+- After a step that changes nothing, the sizing pauses: one window first, then twice as long after each such step, up to 16 windows. The length is random, so pools in other processes do not step at the same moments.
+- After each window, the sizing reads the free memory again. When its workers do not fit, it runs fewer at once. It never runs more than the capacity when the pool was built.
+
+See [ADR 0002](./docs/adr/0002-a-sizing-that-learns-compares-one-more-worker-between-two-windows.md) and [ADR 0007](./docs/adr/0007-a-sizing-that-learns-keeps-learning-in-steps-both-ways-and-pauses-between-steps-that-change-nothing.md).
 
 ## Choose when idle workers close
 
@@ -89,3 +96,4 @@ A job that needs the slot of an exited worker starts a new worker. An eager star
 - [ADR 0004](./docs/adr/0004-a-pool-reports-its-stats-as-one-snapshot-of-counts.md): a pool reports its stats as one snapshot of counts.
 - [ADR 0005](./docs/adr/0005-an-eager-pool-backs-off-before-it-replaces-a-worker-that-exited-early.md): an eager pool backs off before it replaces a worker that exited early.
 - [ADR 0006](./docs/adr/0006-the-pool-evicts-an-idle-worker-that-its-eviction-lets-go-and-lends-an-idle-worker-first.md): the pool evicts an idle worker that its eviction lets go, and lends an idle worker first.
+- [ADR 0007](./docs/adr/0007-a-sizing-that-learns-keeps-learning-in-steps-both-ways-and-pauses-between-steps-that-change-nothing.md): a sizing that learns keeps learning in steps both ways, and pauses between steps that change nothing.
