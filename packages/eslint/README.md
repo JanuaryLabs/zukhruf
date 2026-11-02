@@ -158,7 +158,7 @@ export default defineConfig(
 An island is an Nx project tagged `layer:island`. Its tags come from its `project.json` or its `package.json` `nx.tags`. `island/recommended` has these rules:
 
 - `island/no-generic-port` and `island/no-explicit-any` in islands.
-- `island/no-process-env` and `island/no-console` in islands and in the files that `settings.island.libraries` names.
+- `island/no-process-env`, `island/no-console` and `island/jsdom-virtual-console` in islands and in the files that `settings.island.libraries` names. jsdom's default virtual console writes a page's errors to the host's `console.error`, so each `new JSDOM(…)` from `jsdom` sets `virtualConsole` in its options literal.
 - `island/dependency-checks` on each island's `package.json`, with `dependencyPolicy()`.
 
 `moduleBoundaries()` and `dependencyPolicy()` add your entries to the shared options:

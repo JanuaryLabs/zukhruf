@@ -47,6 +47,55 @@ test('island/no-console reports console in islands and in library globs, not in 
   });
 });
 
+test('island/jsdom-virtual-console reports a JSDOM without its own virtual console in library code', async () => {
+  await using workspace = await fixtureWorkspace(workspaceFiles);
+  const island = workspace.path('packages/island/src/index.ts');
+  const jsdom = `import { JSDOM, VirtualConsole } from 'jsdom';`;
+
+  typescriptRuleTester().run(
+    'jsdom-virtual-console',
+    plugin.rules['jsdom-virtual-console'],
+    {
+      valid: [
+        {
+          code: `${jsdom} new JSDOM('<p>', { url: 'https://x.test', virtualConsole: new VirtualConsole() });`,
+          filename: island,
+        },
+        {
+          code: `class JSDOM { constructor(html: string) {} } new JSDOM('<p>');`,
+          filename: island,
+        },
+        {
+          code: `${jsdom} new JSDOM('<p>');`,
+          filename: workspace.path('apps/host/src/main.ts'),
+        },
+      ],
+      invalid: [
+        {
+          code: `${jsdom} new JSDOM('<p>');`,
+          filename: island,
+          errors: [{ messageId: 'virtualConsole' }],
+        },
+        {
+          code: `${jsdom} new JSDOM('<p>', { url: 'https://x.test' });`,
+          filename: island,
+          errors: [{ messageId: 'virtualConsole' }],
+        },
+        {
+          code: `${jsdom} const options = { virtualConsole: new VirtualConsole() }; new JSDOM('<p>', options);`,
+          filename: island,
+          errors: [{ messageId: 'virtualConsole' }],
+        },
+        {
+          code: `import { JSDOM as Dom } from 'jsdom'; new Dom('<p>', {});`,
+          filename: island,
+          errors: [{ messageId: 'virtualConsole' }],
+        },
+      ],
+    },
+  );
+});
+
 test('island/no-process-env reports both read forms in islands only', async () => {
   await using workspace = await fixtureWorkspace(workspaceFiles);
   const island = workspace.path('packages/island/src/index.ts');
