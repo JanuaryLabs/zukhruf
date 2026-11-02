@@ -22,6 +22,7 @@ export async function prePush(steps: readonly Step<Push>[]): Promise<void> {
     remote: { name, url },
     input: await text(process.stdin),
     notice: (message) => print(current, message),
+    clock: globalThis,
   });
   for (const step of steps) {
     current = step.name;

@@ -34,13 +34,14 @@ export async function installFor(
   snapshot: string,
   environment: NodeJS.ProcessEnv,
   installing: () => void,
+  clock: { readonly Date: { now(): number } },
 ): Promise<string> {
   const lockfile = await readFile(join(snapshot, 'package-lock.json'));
   const hash = createHash('sha256').update(lockfile).digest('hex');
   const installs = join(state, 'installs');
   const folder = join(installs, hash.slice(0, 16));
   if (existsSync(join(folder, marker))) {
-    const now = new Date();
+    const now = new Date(clock.Date.now());
     await utimes(join(folder, marker), now, now);
     await copyLinkedFolders(snapshot, folder);
   } else {

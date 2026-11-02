@@ -3,9 +3,9 @@ import { existsSync } from 'node:fs';
 import { mkdir, mkdtempDisposable, realpath } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { setTimeout as delay } from 'node:timers/promises';
 import { promisify } from 'node:util';
 
+import { type Clock, poll } from '@zukhruf/async';
 import { FileLock } from '@zukhruf/fs';
 
 import { type RefUpdate, readRefUpdates } from './ref-update.ts';
@@ -37,6 +37,9 @@ interface PushOptions {
   readonly input: string;
   // Prints a line of progress, such as a wait for the lock or an install.
   readonly notice: (message: string) => void;
+  // The clock of the wait for the lock, and of the time of each install:
+  // `globalThis` in a hook, a fake clock in a test.
+  readonly clock: Clock & { readonly Date: { now(): number } };
 }
 
 // What `git push` is about to send: the remote and the ref updates. A step
@@ -48,9 +51,10 @@ export class Push {
   readonly #root: string;
   readonly #environment: NodeJS.ProcessEnv;
   readonly #notice: (message: string) => void;
+  readonly #clock: PushOptions['clock'];
 
   private constructor(
-    { root, environment, remote, notice }: PushOptions,
+    { root, environment, remote, notice, clock }: PushOptions,
     updates: readonly RefUpdate[],
   ) {
     this.remote = remote;
@@ -58,6 +62,7 @@ export class Push {
     this.#root = root;
     this.#environment = environment;
     this.#notice = notice;
+    this.#clock = clock;
   }
 
   static async read(options: PushOptions): Promise<Push> {
@@ -95,7 +100,11 @@ export class Push {
     using lock = FileLock.open(join(state, 'lock'));
     if (!lock.tryLock()) {
       this.#notice('waiting for another pre-push build in this repo');
-      while (!lock.tryLock()) await delay(200);
+      await poll(async () => (lock.tryLock() ? true : undefined), {
+        interval: 200,
+        clock: this.#clock,
+        signal: undefined,
+      });
     }
     await using temporary = await mkdtempDisposable(
       join(tmpdir(), 'git-hooks-push-'),
@@ -119,10 +128,15 @@ export class Push {
       join(folder, 'package-lock.json'),
       join(this.#root, 'node_modules/.package-lock.json'),
     ))
-      ? await installFor(state, folder, this.#environment, () =>
-          this.#notice(
-            `${sha.slice(0, 7)}: the installed packages differ from package-lock.json; installing it with npm ci (first time for this lockfile)`,
-          ),
+      ? await installFor(
+          state,
+          folder,
+          this.#environment,
+          () =>
+            this.#notice(
+              `${sha.slice(0, 7)}: the installed packages differ from package-lock.json; installing it with npm ci (first time for this lockfile)`,
+            ),
+          this.#clock,
         )
       : this.#root;
     await linkPackages(installed, folder);
