@@ -75,6 +75,7 @@
     "eslint-plugin-import-x": "^4.16.0",
     "eslint-plugin-jsx-a11y-x": "^0.2.0",
     "eslint-plugin-react-hooks": "^7.0.0",
+    "eslint-plugin-react-you-might-not-need-an-effect": "^1.1.0",
     "jsonc-eslint-parser": "^2.4.0 || ^3.0.0",
     "react": "*",
     "typescript": ">=5.8.0 <6.1.0",
@@ -97,6 +98,9 @@
       "optional": true
     },
     "eslint-plugin-react-hooks": {
+      "optional": true
+    },
+    "eslint-plugin-react-you-might-not-need-an-effect": {
       "optional": true
     },
     "react": {

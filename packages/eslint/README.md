@@ -222,15 +222,16 @@ It gives these configs, in this order:
 2. `flat.recommended` of `eslint-plugin-react-hooks`: the rules of the React team.
 3. `recommended-type-checked` of `@eslint-react/eslint-plugin`: the React rules, for example `@eslint-react/no-missing-key`. The rules use type information. `zukhruf/base` gives it, because it sets `projectService`.
 4. `disable-conflict-eslint-plugin-react-hooks` of `@eslint-react/eslint-plugin`: it turns off the 12 rules of `eslint-plugin-react-hooks` that `@eslint-react/eslint-plugin` also has.
+5. `strict` of `eslint-plugin-react-you-might-not-need-an-effect`: its 10 rules report an effect that React does not need, for example state derived from props or an event handler run from an effect. `strict` makes each rule an error.
 
-Thus `@eslint-react/eslint-plugin` owns the hook rules, for example `@eslint-react/rules-of-hooks` and `@eslint-react/exhaustive-deps`, and ESLint reports each problem one time. This is the path of the eslint-react guide "Migrating from eslint-plugin-react-hooks". `eslint-plugin-react-hooks` adds only its 4 React Compiler rules: `preserve-manual-memoization`, `incompatible-library`, `config` and `gating`. Each rule has the severity that its plugin ships.
+Thus `@eslint-react/eslint-plugin` owns the hook rules, for example `@eslint-react/rules-of-hooks` and `@eslint-react/exhaustive-deps`, and ESLint reports each problem one time. This is the path of the eslint-react guide "Migrating from eslint-plugin-react-hooks". `eslint-plugin-react-hooks` adds only its 4 React Compiler rules: `preserve-manual-memoization`, `incompatible-library`, `config` and `gating`. Each rule of the first 4 configs has the severity that its plugin ships.
 
 The style rules of zukhruf for React are not in this export. They are in the config `zukhruf/react`.
 
-Install the 3 plugins in the React workspace:
+Install the 4 plugins in the React workspace:
 
 ```sh
-npm install --save-dev @eslint-react/eslint-plugin eslint-plugin-jsx-a11y-x eslint-plugin-react-hooks
+npm install --save-dev @eslint-react/eslint-plugin eslint-plugin-jsx-a11y-x eslint-plugin-react-hooks eslint-plugin-react-you-might-not-need-an-effect
 ```
 
 They are optional peers of this package. With the peers, npm writes the lockfile edges from `@zukhruf/eslint` to the 3 plugins, so a lint input on `@zukhruf/eslint` also hashes the plugins.

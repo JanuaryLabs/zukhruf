@@ -1,6 +1,7 @@
 import eslintReact from '@eslint-react/eslint-plugin';
 import jsxA11y from 'eslint-plugin-jsx-a11y-x';
 import reactHooks from 'eslint-plugin-react-hooks';
+import youMightNotNeedAnEffect from 'eslint-plugin-react-you-might-not-need-an-effect';
 
 import { TYPESCRIPT } from './files.ts';
 
@@ -19,4 +20,5 @@ export default [
   reactHooks.configs.flat.recommended,
   eslintReact.configs['recommended-type-checked'],
   eslintReact.configs['disable-conflict-eslint-plugin-react-hooks'],
+  youMightNotNeedAnEffect.configs.strict,
 ].map((config) => ({ ...config, files: TYPESCRIPT }));
