@@ -1,5 +1,7 @@
 import { rm, writeFile } from 'node:fs/promises';
 
+import type { Clock } from '@zukhruf/async';
+
 import { draftOf } from './draft.ts';
 import { replaceFile } from './replace-file.ts';
 
@@ -11,12 +13,12 @@ import { replaceFile } from './replace-file.ts';
 export async function atomicWrite(
   path: string,
   content: string | Uint8Array,
-  options?: { mode?: number },
+  { clock, mode }: { clock: Clock; mode?: number },
 ) {
   const draft = draftOf(path);
   try {
-    await writeFile(draft, content, { mode: options?.mode });
-    await replaceFile(draft, path);
+    await writeFile(draft, content, { mode });
+    await replaceFile(draft, path, clock);
   } catch (error) {
     // A draft that never replaced `path` would only pile up, one per failed write.
     await rm(draft, { force: true });

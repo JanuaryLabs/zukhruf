@@ -53,7 +53,11 @@ function reserve(product: string, token: FencingToken): boolean {
 
 // The database is durable, so the tokens must be durable too.
 const mutex = new Mutex(
-  new MemoryStore({ tokens: new FileTokenSource(join(directory, 'fences')) }),
+  new MemoryStore({
+    tokens: new FileTokenSource(join(directory, 'fences'), {
+      clock: globalThis,
+    }),
+  }),
 );
 
 // Holder A gets the key. For this demo, it keeps its token after the release.

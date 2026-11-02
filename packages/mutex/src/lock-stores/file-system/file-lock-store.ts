@@ -22,20 +22,21 @@ export abstract class FileLockStore implements LockStore {
   readonly #directory: string;
   readonly #pollInterval: number;
   readonly #tokens: TokenSource;
-  readonly #clock: Clock;
+  /** The clock of every wait of the store: `globalThis` in production, a fake clock in a test. */
+  protected readonly clock: Clock;
 
   constructor(
     directory: string,
     {
-      pollInterval = 10,
-      tokens = new FileTokenSource(directory),
       clock,
+      pollInterval = 10,
+      tokens = new FileTokenSource(directory, { clock }),
     }: FileLockStoreOptions,
   ) {
     this.#directory = directory;
     this.#pollInterval = pollInterval;
     this.#tokens = tokens;
-    this.#clock = clock;
+    this.clock = clock;
   }
 
   async acquire(
@@ -87,7 +88,7 @@ export abstract class FileLockStore implements LockStore {
     return poll(attempt, {
       interval: this.#pollInterval,
       signal,
-      clock: this.#clock,
+      clock: this.clock,
     });
   }
 

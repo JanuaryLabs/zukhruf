@@ -11,7 +11,9 @@ A write that changes a file in place can stop halfway. Then a reader sees a part
 ```ts
 import { atomicWrite } from '@zukhruf/fs';
 
-await atomicWrite('/var/lib/app/queue', 'first\nsecond\n');
+await atomicWrite('/var/lib/app/queue', 'first\nsecond\n', {
+  clock: globalThis,
+});
 ```
 
 ## Make the replacement durable
@@ -25,7 +27,7 @@ After a rename, the operating system can keep the new content in memory for some
 ```ts
 import { durableWrite } from '@zukhruf/fs';
 
-await durableWrite('/var/lib/app/counter', '42');
+await durableWrite('/var/lib/app/counter', '42', { clock: globalThis });
 ```
 
 Use `durableWrite` when a value must never go back after a crash, for example a counter that gives out fencing tokens. A counter that goes back gives the same token two times.
@@ -37,9 +39,11 @@ On Windows, a process cannot open a directory to sync it. Some file systems refu
 `atomicWrite` and `durableWrite` take the same arguments:
 
 ```ts
-atomicWrite(path: string, content: string | Uint8Array, options?: { mode?: number })
-durableWrite(path: string, content: string | Uint8Array, options?: { mode?: number })
+atomicWrite(path: string, content: string | Uint8Array, options: { clock: Clock; mode?: number })
+durableWrite(path: string, content: string | Uint8Array, options: { clock: Clock; mode?: number })
 ```
+
+`clock` is the clock that the waits of the write run on. Give `globalThis` in production, and a fake clock in a test. A write waits only on Windows, between two tries of a rename that Windows refuses for now (see "Try again while Windows refuses a file for a moment"). `Clock` is the type of `@zukhruf/async`.
 
 The content is a string or bytes. A `Buffer` is a `Uint8Array`, so a `Buffer` is bytes too. The write puts the bytes at the path with no change.
 
@@ -50,7 +54,10 @@ import { randomBytes } from 'node:crypto';
 
 import { atomicWrite } from '@zukhruf/fs';
 
-await atomicWrite('/var/lib/app/key', randomBytes(32), { mode: 0o600 });
+await atomicWrite('/var/lib/app/key', randomBytes(32), {
+  clock: globalThis,
+  mode: 0o600,
+});
 ```
 
 On Windows, a file has no POSIX mode. Node.js uses only the write bit of `mode` there, to make the file read-only.
@@ -62,7 +69,9 @@ On Windows, a file has no POSIX mode. Node.js uses only the write bit of `mode` 
 ```ts
 import { createExclusive } from '@zukhruf/fs';
 
-const created = await createExclusive('/var/lib/app/job.lock', 'pid 4242');
+const created = await createExclusive('/var/lib/app/job.lock', 'pid 4242', {
+  clock: globalThis,
+});
 if (!created) console.log('Another process holds the job.');
 ```
 
@@ -84,7 +93,9 @@ import { join } from 'node:path';
 import { createExclusive, draftSuffixLength, safeFileName } from '@zukhruf/fs';
 
 const name = safeFileName('orders/2026', '.lock'.length + draftSuffixLength);
-await createExclusive(join('/var/lib/app/locks', `${name}.lock`), 'pid 4242');
+await createExclusive(join('/var/lib/app/locks', `${name}.lock`), 'pid 4242', {
+  clock: globalThis,
+});
 // The file is orders%2F2026.lock
 ```
 
@@ -102,12 +113,15 @@ import { readFile } from 'node:fs/promises';
 
 import { patiently } from '@zukhruf/fs';
 
-const content = await patiently(() =>
-  readFile('/var/lib/app/job.lock', 'utf8'),
+const content = await patiently(
+  () => readFile('/var/lib/app/job.lock', 'utf8'),
+  { clock: globalThis },
 );
 ```
 
-Each write of this package uses `patiently` for its rename or link.
+Each wait between two tries runs on the clock that you give. The 1 second is a time on that clock too. A test gives a fake clock and moves the time, so that the test does not wait. See [ADR 0005](./docs/adr/0005-a-write-waits-on-the-clock-that-the-caller-gives.md).
+
+Each write of this package uses `patiently` for its rename or link, with the clock of the write.
 
 ## Lock a file
 

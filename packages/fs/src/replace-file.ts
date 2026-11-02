@@ -1,5 +1,7 @@
 import { rename } from 'node:fs/promises';
 
+import type { Clock } from '@zukhruf/async';
+
 import { patiently } from './patiently.ts';
 
 /**
@@ -8,6 +10,6 @@ import { patiently } from './patiently.ts';
  * reads it at that moment. The refusal is brief, so the rename is tried again;
  * it stays the single commit point.
  */
-export function replaceFile(draft: string, path: string) {
-  return patiently(() => rename(draft, path));
+export function replaceFile(draft: string, path: string, clock: Clock) {
+  return patiently(() => rename(draft, path), { clock });
 }

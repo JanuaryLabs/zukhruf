@@ -3,6 +3,7 @@ import { readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { describe, test } from 'node:test';
 
+import type { Clock } from '@zukhruf/async';
 import { TemporaryFiles } from '@zukhruf/testing/fs';
 
 import { atomicWrite } from './atomic-write.ts';
@@ -17,7 +18,10 @@ const writes = {
   atomicWrite,
   durableWrite,
   createExclusive,
-} satisfies Record<string, (path: string, content: string) => Promise<unknown>>;
+} satisfies Record<
+  string,
+  (path: string, content: string, options: { clock: Clock }) => Promise<unknown>
+>;
 
 describe('The room for the name of a draft', () => {
   for (const [name, write] of Object.entries(writes)) {
@@ -32,7 +36,9 @@ describe('The room for the name of a draft', () => {
         const longest = 'k'.repeat(longestFileName - draftSuffixLength);
 
         // Act
-        await write(join(directory.path, longest), 'content');
+        await write(join(directory.path, longest), 'content', {
+          clock: globalThis,
+        });
 
         // Assert
         assert.deepEqual(await readdir(directory.path), [longest]);
@@ -50,7 +56,9 @@ describe('The room for the name of a draft', () => {
         const tooLong = 'k'.repeat(longestFileName - draftSuffixLength + 1);
 
         // Act
-        const writing = write(join(directory.path, tooLong), 'content');
+        const writing = write(join(directory.path, tooLong), 'content', {
+          clock: globalThis,
+        });
 
         // Assert
         await assert.rejects(writing, { code: 'ENAMETOOLONG' });

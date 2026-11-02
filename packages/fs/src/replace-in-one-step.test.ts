@@ -144,7 +144,7 @@ describe('A replacement in one step', () => {
       await writeFile(join(path, 'kept'), 'old');
 
       // Act
-      const writing = atomicWrite(path, 'first\n');
+      const writing = atomicWrite(path, 'first\n', { clock: globalThis });
 
       // Assert
       await assert.rejects(writing, { code: 'EISDIR' });
@@ -170,7 +170,7 @@ describe('A replacement in one step', () => {
       await writeFile(join(path, 'kept'), 'old');
 
       // Act
-      const writing = durableWrite(path, '42');
+      const writing = durableWrite(path, '42', { clock: globalThis });
 
       // Assert
       await assert.rejects(writing, { code: 'EISDIR' });
@@ -200,7 +200,7 @@ describe('A replacement in one step', () => {
       );
 
       // Act
-      const writing = durableWrite(path, '42');
+      const writing = durableWrite(path, '42', { clock: globalThis });
 
       // Assert
       await assert.rejects(writing, { code: 'EIO' });
@@ -222,7 +222,7 @@ describe('A replacement in one step', () => {
       using disk = recordDiskWrites(t);
 
       // Act
-      await atomicWrite(path, 'first\nsecond\n');
+      await atomicWrite(path, 'first\nsecond\n', { clock: globalThis });
 
       // Assert
       const replacement = disk.replacementIn(directory.path);
@@ -246,7 +246,7 @@ describe('A replacement in one step', () => {
       using disk = recordDiskWrites(t);
 
       // Act
-      await durableWrite(path, '42');
+      await durableWrite(path, '42', { clock: globalThis });
 
       // Assert: content first, then its sync, then the one-step replacement.
       const replacement = disk.replacementIn(directory.path);
@@ -279,7 +279,7 @@ describe('A replacement in one step', () => {
       using disk = recordDiskWrites(t);
 
       // Act
-      await durableWrite(path, '42');
+      await durableWrite(path, '42', { clock: globalThis });
 
       // Assert
       const replacement = disk.replacementIn(directory.path);
@@ -315,7 +315,7 @@ describe('A replacement in one step', () => {
         );
 
         // Act
-        const writing = durableWrite(path, '42');
+        const writing = durableWrite(path, '42', { clock: globalThis });
 
         // Assert: a file system that cannot sync directories still works; a disk error does not pass silently.
         if (outcome === 'writes') {
@@ -342,8 +342,8 @@ describe('A replacement in one step', () => {
         const bytes = new Uint8Array([0x00, 0xff, 0xc3, 0x28, 0x0a, 0x80]);
 
         // Act
-        await write(fromArray, bytes);
-        await write(fromBuffer, Buffer.from(bytes));
+        await write(fromArray, bytes, { clock: globalThis });
+        await write(fromBuffer, Buffer.from(bytes), { clock: globalThis });
 
         // Assert
         assert.deepEqual(new Uint8Array(await readFile(fromArray)), bytes);
@@ -376,7 +376,7 @@ describe('A replacement in one step', () => {
 
         try {
           // Act
-          await write(path, 'new', { mode: 0o600 });
+          await write(path, 'new', { clock: globalThis, mode: 0o600 });
         } finally {
           t.mock.restoreAll();
           syncBuiltinESMExports();
@@ -402,7 +402,7 @@ describe('A replacement in one step', () => {
         const path = join(directory.path, 'plain');
 
         // Act
-        await write(path, 'x');
+        await write(path, 'x', { clock: globalThis });
 
         // Assert
         assert.equal(await modeOf(path), await modeOf(reference));

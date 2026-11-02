@@ -1,5 +1,7 @@
 import { link, unlink, writeFile } from 'node:fs/promises';
 
+import type { Clock } from '@zukhruf/async';
+
 import { draftOf } from './draft.ts';
 import { isErrno } from './errno.ts';
 import { patiently } from './patiently.ts';
@@ -8,21 +10,25 @@ import { patiently } from './patiently.ts';
  * Creates `path` holding `content` unless it already exists. Linking a fully
  * written file makes creation atomic, so the file is never seen empty.
  */
-export async function createExclusive(path: string, content: string) {
+export async function createExclusive(
+  path: string,
+  content: string,
+  { clock }: { clock: Clock },
+) {
   const draft = draftOf(path);
   try {
     await writeFile(draft, content);
-    await patiently(() => link(draft, path));
+    await patiently(() => link(draft, path), { clock });
     return true;
   } catch (error) {
     if (isErrno(error, 'EEXIST')) return false;
     throw error;
   } finally {
-    await removeDraft(draft);
+    await removeDraft(draft, clock);
   }
 }
 
 /** A draft left behind has a unique name, so it never blocks a key; failing to remove it must not change whether `path` was created. */
-async function removeDraft(draft: string) {
-  await patiently(() => unlink(draft)).catch(() => {});
+async function removeDraft(draft: string, clock: Clock) {
+  await patiently(() => unlink(draft), { clock }).catch(() => {});
 }

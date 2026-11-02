@@ -29,11 +29,12 @@ export interface CampaignOptions {
  */
 export abstract class LeaderElection<Claim> {
   readonly #pollInterval: number;
-  readonly #clock: Clock;
+  /** The clock of the campaign: `globalThis` in production, a fake clock in a test. */
+  protected readonly clock: Clock;
 
   protected constructor(pollInterval: number, clock: Clock) {
     this.#pollInterval = pollInterval;
-    this.#clock = clock;
+    this.clock = clock;
   }
 
   /** Resolves with the new term, or `undefined` when another candidate still leads after `timeout`. */
@@ -41,7 +42,7 @@ export abstract class LeaderElection<Claim> {
     Term | undefined
   > {
     signal?.throwIfAborted();
-    const deadline = this.#clock.performance.now() + timeout;
+    const deadline = this.clock.performance.now() + timeout;
     for (;;) {
       const outcome = await this.#attempt(deadline, signal);
       // A claim lost before its term began is no term: try again with a new attempt.
@@ -94,7 +95,7 @@ export abstract class LeaderElection<Claim> {
       won = await poll(() => this.tryClaim(claim, signal), {
         interval: this.#pollInterval,
         signal,
-        clock: this.#clock,
+        clock: this.clock,
         deadline,
       });
     } catch (error) {

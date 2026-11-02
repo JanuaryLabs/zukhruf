@@ -1,6 +1,7 @@
 import { mkdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
+import type { Clock } from '@zukhruf/async';
 import {
   draftSuffixLength,
   durableWrite,
@@ -18,9 +19,12 @@ import type { TokenSource } from './token-source.ts';
  */
 export class FileTokenSource implements TokenSource {
   readonly #directory: string;
+  readonly #clock: Clock;
 
-  constructor(directory: string) {
+  /** `clock` runs the waits of the write of a counter: `globalThis` in production. */
+  constructor(directory: string, { clock }: { clock: Clock }) {
     this.#directory = directory;
+    this.#clock = clock;
   }
 
   async next(key: string): Promise<FencingToken> {
@@ -28,7 +32,7 @@ export class FileTokenSource implements TokenSource {
     const name = safeFileName(key, '.fence'.length + draftSuffixLength);
     const path = join(this.#directory, `${name}.fence`);
     const token = (await readCounter(path)) + 1n;
-    await durableWrite(path, token.toString());
+    await durableWrite(path, token.toString(), { clock: this.#clock });
     return new FencingToken(token);
   }
 }

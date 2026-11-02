@@ -37,7 +37,11 @@ import { Mutex } from '@zukhruf/mutex';
 import { MemoryStore } from '@zukhruf/mutex/memory';
 
 const mutex = new Mutex(
-  new MemoryStore({ tokens: new FileTokenSource('/var/lib/my-app/fences') }),
+  new MemoryStore({
+    tokens: new FileTokenSource('/var/lib/my-app/fences', {
+      clock: globalThis,
+    }),
+  }),
 );
 ```
 

@@ -85,7 +85,9 @@ export class SqliteElection extends LeaderElection<FileLock> {
       (await readCleanShutdown(this.#cleanShutdownPath)) ===
       previous.toString();
     const epoch = previous + 1n;
-    await durableWrite(this.#epochPath, epoch.toString());
+    await durableWrite(this.#epochPath, epoch.toString(), {
+      clock: this.clock,
+    });
     // Read once: if the epochs ever start again, an old note could name one of them.
     await rm(this.#cleanShutdownPath, { force: true });
     return { epoch, afterCleanShutdown };
@@ -105,7 +107,9 @@ export class SqliteElection extends LeaderElection<FileLock> {
     _claim: FileLock,
     epoch: bigint,
   ): Promise<void> {
-    await atomicWrite(this.#cleanShutdownPath, epoch.toString());
+    await atomicWrite(this.#cleanShutdownPath, epoch.toString(), {
+      clock: this.clock,
+    });
   }
 
   protected async release(claim: FileLock): Promise<void> {

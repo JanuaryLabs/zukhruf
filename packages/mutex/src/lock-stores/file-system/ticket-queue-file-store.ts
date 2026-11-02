@@ -1,5 +1,6 @@
 import { appendFile } from 'node:fs/promises';
 
+import type { Clock } from '@zukhruf/async';
 import { atomicWrite, draftSuffixLength, patiently } from '@zukhruf/fs';
 
 import { Caller } from './caller.ts';
@@ -29,39 +30,41 @@ export class TicketQueueFileStore extends FileLockStore {
   ): Promise<AsyncDisposable> {
     const me = Caller.current();
     await using leaving = new AsyncDisposableStack();
-    const presence = Presence.claim(path, me);
-    leaving.defer(() => leave(path, me, presence));
-    await enqueue(path, me);
+    const presence = Presence.claim(path, me, this.clock);
+    leaving.defer(() => leave(path, me, presence, this.clock));
+    await enqueue(path, me, this.clock);
     await this.poll(() => this.#attempt(path, me), signal);
     leaving.move();
-    return holding(path, me, presence);
+    return holding(path, me, presence, this.clock);
   }
 
   protected async tryLock(path: string): Promise<AsyncDisposable | undefined> {
-    const head = await readHead(path);
+    const head = await readHead(path, this.clock);
     if (head) await this.#evictGoneHeads(path, head);
-    if ((await readTickets(path)).length > 0) return undefined;
+    if ((await readTickets(path, this.clock)).length > 0) return undefined;
 
     const me = Caller.current();
     await using leaving = new AsyncDisposableStack();
-    const presence = Presence.claim(path, me);
-    leaving.defer(() => leave(path, me, presence));
-    await enqueue(path, me);
+    const presence = Presence.claim(path, me, this.clock);
+    leaving.defer(() => leave(path, me, presence, this.clock));
+    await enqueue(path, me, this.clock);
     // Another waiter appended at the same moment and is first.
-    if ((await readHead(path))?.id !== me.id) return undefined;
+    if ((await readHead(path, this.clock))?.id !== me.id) return undefined;
     leaving.move();
-    return holding(path, me, presence);
+    return holding(path, me, presence, this.clock);
   }
 
   /** The first ticket's caller holds the key. A gone one does not, and a waiter behind it holds nothing yet. */
   protected isHeldAt(path: string): Promise<boolean> {
-    return Presence.isNamedCallerPresent(path, () => readHead(path));
+    return Presence.isNamedCallerPresent(path, () =>
+      readHead(path, this.clock),
+    );
   }
 
   async #attempt(path: string, me: Caller): Promise<true | undefined> {
-    const tickets = await readTickets(path);
+    const tickets = await readTickets(path, this.clock);
     if (!tickets.some((ticket) => ticket.id === me.id)) {
-      await enqueue(path, me);
+      await enqueue(path, me, this.clock);
       return undefined;
     }
 
@@ -78,17 +81,17 @@ export class TicketQueueFileStore extends FileLockStore {
    * drop a later holder's ticket.
    */
   async #evictGoneHeads(path: string, head: Caller) {
-    if (!(await isGone(path, head))) return;
+    if (!(await isGone(path, head, this.clock))) return;
     await this.withReclaimLock(path, async () => {
       let gone = head;
       for (;;) {
-        const tickets = await readTickets(path);
+        const tickets = await readTickets(path, this.clock);
         if (tickets[0]?.id !== gone.id) return;
         const rest = tickets.filter((ticket) => ticket.id !== gone.id);
-        await replace(path, rest);
-        await Presence.delete(Presence.pathOf(path, gone));
+        await replace(path, rest, this.clock);
+        await Presence.delete(Presence.pathOf(path, gone), this.clock);
         const [next] = rest;
-        if (!next || !(await isGone(path, next))) return;
+        if (!next || !(await isGone(path, next, this.clock))) return;
         gone = next;
       }
     });
@@ -96,8 +99,12 @@ export class TicketQueueFileStore extends FileLockStore {
 }
 
 /** Whether the caller at the head of the queue at `path` no longer runs. */
-async function isGone(path: string, head: Caller): Promise<boolean> {
-  const state = await Presence.judge(path, head, () => readHead(path));
+async function isGone(
+  path: string,
+  head: Caller,
+  clock: Clock,
+): Promise<boolean> {
+  const state = await Presence.judge(path, head, () => readHead(path, clock));
   return state === 'gone';
 }
 
@@ -106,10 +113,15 @@ async function isGone(path: string, head: Caller): Promise<boolean> {
  * the queue. Its presence ends, so the ticket reads as gone and whoever finds
  * it first evicts it, together with the presence file.
  */
-async function leave(path: string, me: Caller, presence: Presence) {
+async function leave(
+  path: string,
+  me: Caller,
+  presence: Presence,
+  clock: Clock,
+) {
   using reading = new DisposableStack();
   reading.defer(() => presence.end());
-  const tickets = await readTickets(path);
+  const tickets = await readTickets(path, clock);
   reading.move();
   if (tickets.some((ticket) => ticket.id === me.id)) presence.end();
   else await presence.withdraw();
@@ -119,41 +131,49 @@ function holding(
   path: string,
   me: Caller,
   presence: Presence,
+  clock: Clock,
 ): AsyncDisposable {
   return {
     [Symbol.asyncDispose]: () =>
-      presence.releaseAfter(() => removeTicket(path, me)),
+      presence.releaseAfter(() => removeTicket(path, me, clock)),
   };
 }
 
-async function removeTicket(path: string, me: Caller) {
-  const remaining = await readTickets(path);
+async function removeTicket(path: string, me: Caller, clock: Clock) {
+  const remaining = await readTickets(path, clock);
   await replace(
     path,
     remaining.filter((ticket) => ticket.id !== me.id),
+    clock,
   );
 }
 
-async function enqueue(path: string, caller: Caller) {
-  await patiently(() => appendFile(path, `${caller.serialize()}\n`));
+async function enqueue(path: string, caller: Caller, clock: Clock) {
+  await patiently(() => appendFile(path, `${caller.serialize()}\n`), {
+    clock,
+  });
 }
 
 /** The caller of the first ticket, which holds the key while it runs. */
-async function readHead(path: string): Promise<Caller | undefined> {
-  const [head] = await readTickets(path);
+async function readHead(
+  path: string,
+  clock: Clock,
+): Promise<Caller | undefined> {
+  const [head] = await readTickets(path, clock);
   return head;
 }
 
-async function readTickets(path: string): Promise<Caller[]> {
-  const content = await readRecord(path);
+async function readTickets(path: string, clock: Clock): Promise<Caller[]> {
+  const content = await readRecord(path, clock);
   if (content === undefined) return [];
   // The last segment is empty or a ticket still being appended.
   return content.split('\n').slice(0, -1).map(Caller.parse);
 }
 
-async function replace(path: string, tickets: Caller[]) {
+async function replace(path: string, tickets: Caller[], clock: Clock) {
   await atomicWrite(
     path,
     tickets.map((ticket) => `${ticket.serialize()}\n`).join(''),
+    { clock },
   );
 }

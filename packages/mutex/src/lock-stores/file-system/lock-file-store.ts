@@ -1,5 +1,6 @@
 import { unlink } from 'node:fs/promises';
 
+import type { Clock } from '@zukhruf/async';
 import { createExclusive, draftSuffixLength, patiently } from '@zukhruf/fs';
 
 import { Caller } from './caller.ts';
@@ -37,46 +38,55 @@ export class LockFileStore extends FileLockStore {
     path: string,
     me: Caller,
   ): Promise<AsyncDisposable | undefined> {
-    const holder = await readHolder(path);
+    const holder = await readHolder(path, this.clock);
     if (holder) {
       await this.#evictIfGone(path, holder);
       return undefined;
     }
 
     await using claiming = new AsyncDisposableStack();
-    const presence = claiming.adopt(Presence.claim(path, me), (claimed) =>
-      claimed.withdraw(),
+    const presence = claiming.adopt(
+      Presence.claim(path, me, this.clock),
+      (claimed) => claimed.withdraw(),
     );
-    if (!(await createExclusive(path, me.serialize()))) return undefined;
+    if (!(await createExclusive(path, me.serialize(), { clock: this.clock })))
+      return undefined;
     claiming.move();
     return {
       [Symbol.asyncDispose]: () =>
-        presence.releaseAfter(() => removeLockFile(path)),
+        presence.releaseAfter(() => removeLockFile(path, this.clock)),
     };
   }
 
   /** A gone holder stays: only a caller that acquires evicts it. */
   protected isHeldAt(path: string): Promise<boolean> {
-    return Presence.isNamedCallerPresent(path, () => readHolder(path));
+    return Presence.isNamedCallerPresent(path, () =>
+      readHolder(path, this.clock),
+    );
   }
 
   async #evictIfGone(path: string, holder: Caller) {
-    const state = await Presence.judge(path, holder, () => readHolder(path));
+    const state = await Presence.judge(path, holder, () =>
+      readHolder(path, this.clock),
+    );
     if (state !== 'gone') return;
     await this.withReclaimLock(path, async () => {
-      if ((await readHolder(path))?.id !== holder.id) return;
-      await removeLockFile(path);
-      await Presence.delete(Presence.pathOf(path, holder));
+      if ((await readHolder(path, this.clock))?.id !== holder.id) return;
+      await removeLockFile(path, this.clock);
+      await Presence.delete(Presence.pathOf(path, holder), this.clock);
     });
   }
 }
 
-function removeLockFile(path: string) {
-  return patiently(() => unlink(path));
+function removeLockFile(path: string, clock: Clock) {
+  return patiently(() => unlink(path), { clock });
 }
 
-async function readHolder(path: string): Promise<Caller | undefined> {
-  const content = await readRecord(path);
+async function readHolder(
+  path: string,
+  clock: Clock,
+): Promise<Caller | undefined> {
+  const content = await readRecord(path, clock);
   if (content === undefined) return undefined;
   return Caller.parse(content);
 }

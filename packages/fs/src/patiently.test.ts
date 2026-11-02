@@ -19,10 +19,13 @@ describe('patiently, off Windows', () => {
       let runs = 0;
 
       // Act
-      const value = await patiently(async () => {
-        runs++;
-        return 'content';
-      });
+      const value = await patiently(
+        async () => {
+          runs++;
+          return 'content';
+        },
+        { clock: globalThis },
+      );
 
       // Assert
       assert.equal(value, 'content');
@@ -44,10 +47,13 @@ describe('patiently, off Windows', () => {
       );
 
       // Act
-      const running = patiently(async () => {
-        runs++;
-        throw refusal;
-      });
+      const running = patiently(
+        async () => {
+          runs++;
+          throw refusal;
+        },
+        { clock: globalThis },
+      );
 
       // Assert
       await assert.rejects(running, (error) => error === refusal);

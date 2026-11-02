@@ -70,12 +70,12 @@ See [failure modes](../concepts/failure-modes.md).
 
 ## Options
 
-| Option                       | Default                          | Description                                                                                                                                                                                                                |
-| ---------------------------- | -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `directory` (first argument) | —                                | The shared directory. It belongs to the lock store alone: no other program may add, change, or remove files or folders in it.                                                                                              |
-| `pollInterval`               | `10`                             | Milliseconds between two attempts.                                                                                                                                                                                         |
-| `clock`                      | —                                | The clock that a waiter sleeps on. Give `globalThis` in production; a test gives a fake clock, for example `createClock()` of `@sinonjs/fake-timers` ([`@zukhruf/async`](../../../async/README.md#run-a-wait-on-a-clock)). |
-| `tokens`                     | `new FileTokenSource(directory)` | The token source. Tokens continue after a restart.                                                                                                                                                                         |
+| Option                       | Default                                     | Description                                                                                                                                                                                                                |
+| ---------------------------- | ------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `directory` (first argument) | —                                           | The shared directory. It belongs to the lock store alone: no other program may add, change, or remove files or folders in it.                                                                                              |
+| `pollInterval`               | `10`                                        | Milliseconds between two attempts.                                                                                                                                                                                         |
+| `clock`                      | —                                           | The clock that a waiter sleeps on. Give `globalThis` in production; a test gives a fake clock, for example `createClock()` of `@sinonjs/fake-timers` ([`@zukhruf/async`](../../../async/README.md#run-a-wait-on-a-clock)). |
+| `tokens`                     | `new FileTokenSource(directory, { clock })` | The token source. Tokens continue after a restart.                                                                                                                                                                         |
 
 The token sources come from `@zukhruf/fencing`, for example `import { FileTokenSource } from '@zukhruf/fencing'`.
 

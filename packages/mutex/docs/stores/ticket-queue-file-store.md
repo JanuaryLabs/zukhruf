@@ -74,12 +74,12 @@ See [failure modes](../concepts/failure-modes.md).
 
 ## Options
 
-| Option                       | Default                          | Description                                                                                                                                                                                                                |
-| ---------------------------- | -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `directory` (first argument) | —                                | The shared directory. All processes must use the same path. It belongs to the lock store alone: no other program may add, change, or remove files or folders in it.                                                        |
-| `pollInterval`               | `10`                             | Milliseconds between two reads of the queue.                                                                                                                                                                               |
-| `clock`                      | —                                | The clock that a waiter sleeps on. Give `globalThis` in production; a test gives a fake clock, for example `createClock()` of `@sinonjs/fake-timers` ([`@zukhruf/async`](../../../async/README.md#run-a-wait-on-a-clock)). |
-| `tokens`                     | `new FileTokenSource(directory)` | The token source. The default keeps one counter file for each key, so tokens continue after a restart.                                                                                                                     |
+| Option                       | Default                                     | Description                                                                                                                                                                                                                |
+| ---------------------------- | ------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `directory` (first argument) | —                                           | The shared directory. All processes must use the same path. It belongs to the lock store alone: no other program may add, change, or remove files or folders in it.                                                        |
+| `pollInterval`               | `10`                                        | Milliseconds between two reads of the queue.                                                                                                                                                                               |
+| `clock`                      | —                                           | The clock that a waiter sleeps on. Give `globalThis` in production; a test gives a fake clock, for example `createClock()` of `@sinonjs/fake-timers` ([`@zukhruf/async`](../../../async/README.md#run-a-wait-on-a-clock)). |
+| `tokens`                     | `new FileTokenSource(directory, { clock })` | The token source. The default keeps one counter file for each key, so tokens continue after a restart.                                                                                                                     |
 
 The token sources come from `@zukhruf/fencing`, for example `import { FileTokenSource } from '@zukhruf/fencing'`.
 

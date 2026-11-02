@@ -85,7 +85,9 @@ describe('createExclusive', () => {
         using disk = failWriteHalfway(t, 'ENOSPC');
 
         // Act
-        const creating = createExclusive(path, 'pid 4242\n'.repeat(1_000));
+        const creating = createExclusive(path, 'pid 4242\n'.repeat(1_000), {
+          clock: globalThis,
+        });
 
         // Assert
         await assert.rejects(creating, (error) => error === disk.failure);
@@ -120,7 +122,9 @@ describe('createExclusive', () => {
       syncBuiltinESMExports();
 
       // Act
-      const creating = createExclusive(path, 'pid 4242\n'.repeat(1_000));
+      const creating = createExclusive(path, 'pid 4242\n'.repeat(1_000), {
+        clock: globalThis,
+      });
 
       // Assert
       await assert.rejects(creating, (error) => error === disk.failure);
@@ -139,7 +143,7 @@ describe('createExclusive', () => {
       using _failing = failLink(t, 'EIO');
 
       // Act
-      const creating = createExclusive(path, 'pid 4242');
+      const creating = createExclusive(path, 'pid 4242', { clock: globalThis });
 
       // Assert
       await assert.rejects(creating, { code: 'EIO' });
@@ -162,8 +166,10 @@ describe('createExclusive', () => {
       const path = join(directory.path, 'job.lock');
 
       // Act
-      const first = await createExclusive(path, 'pid 1');
-      const second = await createExclusive(path, 'pid 2');
+      const first = await createExclusive(path, 'pid 1', { clock: globalThis });
+      const second = await createExclusive(path, 'pid 2', {
+        clock: globalThis,
+      });
 
       // Assert
       assert.deepEqual([first, second], [true, false]);
@@ -183,7 +189,9 @@ describe('createExclusive', () => {
       await writeFile(path, 'pid 1');
 
       // Act
-      const created = await createExclusive(path, 'pid 2');
+      const created = await createExclusive(path, 'pid 2', {
+        clock: globalThis,
+      });
 
       // Assert
       assert.equal(created, false);
@@ -203,7 +211,9 @@ describe('createExclusive', () => {
       const content = 'pid 4242\n'.repeat(1_000);
 
       // Act
-      const created = await createExclusive(path, content);
+      const created = await createExclusive(path, content, {
+        clock: globalThis,
+      });
 
       // Assert
       assert.equal(created, true);
@@ -224,7 +234,9 @@ describe('createExclusive', () => {
 
       // Act
       const results = await Promise.all(
-        callers.map((caller) => createExclusive(path, caller)),
+        callers.map((caller) =>
+          createExclusive(path, caller, { clock: globalThis }),
+        ),
       );
 
       // Assert
@@ -252,7 +264,7 @@ describe('createExclusive', () => {
       using disk = recordLinks(t);
 
       // Act
-      await createExclusive(path, content);
+      await createExclusive(path, content, { clock: globalThis });
 
       // Assert
       assert.equal(disk.links.length, 1, 'The file must appear in one step');

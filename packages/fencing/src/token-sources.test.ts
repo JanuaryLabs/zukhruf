@@ -27,13 +27,14 @@ const sources: Array<{
   },
   {
     name: 'FileTokenSource',
-    create: (directory) => new FileTokenSource(directory),
+    create: (directory) =>
+      new FileTokenSource(directory, { clock: globalThis }),
     // Each token waits for the disk, up to 60 ms on a busy Windows runner; 101 cross the counter's 10 and 100.
     tokens: 101,
   },
   {
     name: 'MonotonicClockTokenSource',
-    create: () => new MonotonicClockTokenSource(),
+    create: () => new MonotonicClockTokenSource({ clock: process }),
     tokens: 1000,
   },
   {
@@ -73,12 +74,14 @@ describe('Token sources', () => {
     await using directory = await new TemporaryFiles().directory(
       'zukhruf-fencing-',
     );
-    const previous = new FileTokenSource(directory.path);
+    const previous = new FileTokenSource(directory.path, { clock: globalThis });
     await previous.next('product:42');
     const last = await previous.next('product:42');
 
     // Act: a new process starts over the same directory.
-    const next = await new FileTokenSource(directory.path).next('product:42');
+    const next = await new FileTokenSource(directory.path, {
+      clock: globalThis,
+    }).next('product:42');
 
     // Assert
     assert.ok(
@@ -118,7 +121,9 @@ describe('Token sources', () => {
     await writeFile(path, 'abc');
 
     // Act
-    const minting = new FileTokenSource(directory.path).next('product:42');
+    const minting = new FileTokenSource(directory.path, {
+      clock: globalThis,
+    }).next('product:42');
 
     // Assert
     await assert.rejects(minting);
@@ -141,7 +146,9 @@ describe('Token sources', () => {
       await writeFile(path, text);
 
       // Act
-      const minting = new FileTokenSource(directory.path).next('product:42');
+      const minting = new FileTokenSource(directory.path, {
+        clock: globalThis,
+      }).next('product:42');
 
       // Assert
       await assert.rejects(
@@ -162,7 +169,7 @@ describe('Token sources', () => {
     await using directory = await new TemporaryFiles().directory(
       'zukhruf-fencing-',
     );
-    const tokens = new FileTokenSource(directory.path);
+    const tokens = new FileTokenSource(directory.path, { clock: globalThis });
     await tokens.next('product:42');
     await tokens.next('product:42');
 
@@ -184,7 +191,7 @@ describe('Token sources', () => {
     await using directory = await new TemporaryFiles().directory(
       'zukhruf-fencing-',
     );
-    const tokens = new FileTokenSource(directory.path);
+    const tokens = new FileTokenSource(directory.path, { clock: globalThis });
     await tokens.next('Sync');
     await tokens.next('Sync');
 
@@ -208,7 +215,9 @@ describe('Token sources', () => {
     await writeFile(join(directory.path, 'product%3A42.fence'), '41');
 
     // Act
-    const token = await new FileTokenSource(directory.path).next('product:42');
+    const token = await new FileTokenSource(directory.path, {
+      clock: globalThis,
+    }).next('product:42');
 
     // Assert
     assert.equal(token.value, 42n);
@@ -224,7 +233,7 @@ describe('Token sources', () => {
     await using directory = await new TemporaryFiles().directory(
       'zukhruf-fencing-',
     );
-    const tokens = new FileTokenSource(directory.path);
+    const tokens = new FileTokenSource(directory.path, { clock: globalThis });
     const longest = 'a'.repeat(208);
     const tooLong = 'a'.repeat(209);
     const digest = createHash('sha256')
@@ -250,7 +259,9 @@ describe('Token sources', () => {
 
     // Act
     const counted = await new CounterTokenSource().next('product:42');
-    const filed = await new FileTokenSource(directory.path).next('product:42');
+    const filed = await new FileTokenSource(directory.path, {
+      clock: globalThis,
+    }).next('product:42');
 
     // Assert
     assert.equal(counted.value, 1n);

@@ -1,6 +1,8 @@
 import { open, rm } from 'node:fs/promises';
 import { dirname } from 'node:path';
 
+import type { Clock } from '@zukhruf/async';
+
 import { draftOf } from './draft.ts';
 import { isErrno } from './errno.ts';
 import { replaceFile } from './replace-file.ts';
@@ -13,13 +15,13 @@ import { replaceFile } from './replace-file.ts';
 export async function durableWrite(
   path: string,
   content: string | Uint8Array,
-  options?: { mode?: number },
+  { clock, mode }: { clock: Clock; mode?: number },
 ) {
   const draft = draftOf(path);
   try {
     // The rename keeps the draft's mode, so `mode` is set when the draft is created.
-    await writeSynced(draft, content, options?.mode);
-    await replaceFile(draft, path);
+    await writeSynced(draft, content, mode);
+    await replaceFile(draft, path, clock);
   } catch (error) {
     // A draft that never replaced `path` would only pile up, one per failed write.
     await rm(draft, { force: true });

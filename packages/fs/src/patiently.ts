@@ -1,4 +1,4 @@
-import { setTimeout as delay } from 'node:timers/promises';
+import { type Clock, delay } from '@zukhruf/async';
 
 import { isErrno } from './errno.ts';
 
@@ -18,19 +18,29 @@ function isRefusedForNow(error: unknown): boolean {
   );
 }
 
-/** Runs `operation`, and runs it again while Windows refuses the file for a moment; after that, the error reaches the caller. */
-export async function patiently<T>(operation: () => Promise<T>): Promise<T> {
-  const started = performance.now();
+/**
+ * Runs `operation`, and runs it again while Windows refuses the file for a
+ * moment; after that, the error reaches the caller. Each wait, and the time
+ * that it allows, run on the clock.
+ */
+export async function patiently<T>(
+  operation: () => Promise<T>,
+  { clock }: { clock: Clock },
+): Promise<T> {
+  const started = clock.performance.now();
   for (let attempt = 0; ; attempt++) {
     try {
       return await operation();
     } catch (error) {
       if (
         !isRefusedForNow(error) ||
-        performance.now() - started > WINDOWS_PATIENCE
+        clock.performance.now() - started > WINDOWS_PATIENCE
       )
         throw error;
-      await delay(Math.min(5 * 2 ** attempt, 100));
+      await delay(Math.min(5 * 2 ** attempt, 100), {
+        clock,
+        signal: undefined,
+      });
     }
   }
 }

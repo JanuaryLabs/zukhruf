@@ -44,7 +44,7 @@ export class SqliteStore extends FileLockStore {
     const lock = held.use(FileLock.open(path));
     await this.poll(async () => (lock.tryLock() ? true : undefined), signal);
     // The release removes the record, then lets the lock go even when the record stays.
-    held.use(await new HolderRecord(path).announce());
+    held.use(await new HolderRecord(path, this.clock).announce());
     return held.move();
   }
 
@@ -52,11 +52,11 @@ export class SqliteStore extends FileLockStore {
     await using held = new AsyncDisposableStack();
     const lock = held.use(FileLock.open(path));
     if (!lock.tryLock()) return undefined;
-    held.use(await new HolderRecord(path).announce());
+    held.use(await new HolderRecord(path, this.clock).announce());
     return held.move();
   }
 
   protected isHeldAt(path: string): Promise<boolean> {
-    return new HolderRecord(path).isPresent();
+    return new HolderRecord(path, this.clock).isPresent();
   }
 }

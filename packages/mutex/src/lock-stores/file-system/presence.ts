@@ -1,5 +1,6 @@
 import { unlink } from 'node:fs/promises';
 
+import type { Clock } from '@zukhruf/async';
 import { FileLock, patiently } from '@zukhruf/fs';
 
 import { Caller } from './caller.ts';
@@ -14,10 +15,12 @@ import { Caller } from './caller.ts';
 export class Presence {
   readonly #path: string;
   readonly #lock: FileLock;
+  readonly #clock: Clock;
 
-  private constructor(path: string, lock: FileLock) {
+  private constructor(path: string, lock: FileLock, clock: Clock) {
     this.#path = path;
     this.#lock = lock;
+    this.#clock = clock;
   }
 
   /** The length of what `pathOf` adds to a record's path. */
@@ -29,7 +32,7 @@ export class Presence {
   }
 
   /** Claims the presence of `caller`, whose record is at `record`. */
-  static claim(record: string, caller: Caller): Presence {
+  static claim(record: string, caller: Caller, clock: Clock): Presence {
     const path = Presence.pathOf(record, caller);
     using opened = new DisposableStack();
     const lock = opened.use(FileLock.open(path));
@@ -39,7 +42,7 @@ export class Presence {
       );
     }
     opened.move();
-    return new Presence(path, lock);
+    return new Presence(path, lock, clock);
   }
 
   /**
@@ -77,9 +80,9 @@ export class Presence {
   }
 
   /** Deletes the file of a presence that has ended. */
-  static async delete(path: string): Promise<void> {
+  static async delete(path: string, clock: Clock): Promise<void> {
     try {
-      await patiently(() => unlink(path));
+      await patiently(() => unlink(path), { clock });
     } catch (error) {
       throw new Error(
         `The presence ${JSON.stringify(path)} has ended, but its file could not be deleted. The file locks nothing; delete it by hand.`,
@@ -113,12 +116,12 @@ export class Presence {
       throw error;
     }
     this.end();
-    await Presence.delete(this.#path);
+    await Presence.delete(this.#path, this.#clock);
   }
 
   /** Ends a presence whose record never appeared, or is gone already. */
   async withdraw(): Promise<void> {
     this.end();
-    await Presence.delete(this.#path);
+    await Presence.delete(this.#path, this.#clock);
   }
 }

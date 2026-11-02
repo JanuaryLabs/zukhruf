@@ -89,12 +89,12 @@ Thus a fenced resource compares the tokens of one key, from one token source. Gi
 
 A **token source** makes the tokens of an issuer. The issuer asks it for the next token of a key, one time for each grant. The issuer never asks for two tokens of one key at the same time: a mutex holds the key while it asks.
 
-| Token source                | Tokens                                                                                                  | Durable                                    |
-| --------------------------- | ------------------------------------------------------------------------------------------------------- | ------------------------------------------ |
-| `CounterTokenSource`        | 1, 2, 3, … in memory, one counter for all keys.                                                         | No. It starts again at 1 with the process. |
-| `MonotonicClockTokenSource` | The monotonic clock of the process (`process.hrtime.bigint()`). Each token is higher than the last one. | No. Its order holds only in one process.   |
-| `FileTokenSource`           | 1, 2, 3, … for each key, in a file `<key>.fence` in the directory that you give.                        | Yes.                                       |
-| `EpochTokenSource`          | `epoch << 32 \| counter`. The counter starts at 1 and is one counter for all keys.                      | Yes, when each start uses a higher epoch.  |
+| Token source                | Tokens                                                                                                                        | Durable                                    |
+| --------------------------- | ----------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------ |
+| `CounterTokenSource`        | 1, 2, 3, … in memory, one counter for all keys.                                                                               | No. It starts again at 1 with the process. |
+| `MonotonicClockTokenSource` | The monotonic clock that you give (`process` in production, `clock.hrtime.bigint()`). Each token is higher than the last one. | No. Its order holds only in one process.   |
+| `FileTokenSource`           | 1, 2, 3, … for each key, in a file `<key>.fence` in the directory that you give.                                              | Yes.                                       |
+| `EpochTokenSource`          | `epoch << 32 \| counter`. The counter starts at 1 and is one counter for all keys.                                            | Yes, when each start uses a higher epoch.  |
 
 Select a token source:
 
@@ -106,9 +106,15 @@ Select a token source:
 ```ts
 import { FileTokenSource } from '@zukhruf/fencing';
 
-const tokens = new FileTokenSource('/var/lib/my-app/fences');
+const tokens = new FileTokenSource('/var/lib/my-app/fences', {
+  clock: globalThis,
+});
 const token = await tokens.next('product:42');
 ```
+
+`clock` is the clock that the write of a counter waits on. The write waits only on Windows, while Windows refuses the file for a moment (see `patiently` of `@zukhruf/fs`). Give `globalThis` in production, and a fake clock in a test.
+
+`MonotonicClockTokenSource` reads the clock that you give: `new MonotonicClockTokenSource({ clock: process })`. All worker threads of a process share `process.hrtime`, so give `process` in production. See [ADR 0002](./docs/adr/0002-a-token-source-reads-the-clock-that-the-caller-gives.md).
 
 `FileTokenSource` makes the directory if it is absent. It keeps the counter of each key as decimal text, and it replaces the file in one step and syncs it to the disk before it gives the token. On Linux and macOS, a power loss cannot make it give one token two times. The name of the file comes from the key with `safeFileName` of `@zukhruf/fs`, so keys that differ only in case have separate counters on every file system.
 

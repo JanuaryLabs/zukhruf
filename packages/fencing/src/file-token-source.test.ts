@@ -107,7 +107,7 @@ describe('FileTokenSource durability', () => {
     await using directory = await new TemporaryFiles().directory(
       'zukhruf-fencing-',
     );
-    const tokens = new FileTokenSource(directory.path);
+    const tokens = new FileTokenSource(directory.path, { clock: globalThis });
     using disk = recordDiskWrites(t);
 
     // Act
@@ -146,7 +146,7 @@ describe('FileTokenSource durability', () => {
       await using directory = await new TemporaryFiles().directory(
         'zukhruf-fencing-',
       );
-      const tokens = new FileTokenSource(directory.path);
+      const tokens = new FileTokenSource(directory.path, { clock: globalThis });
       using disk = recordDiskWrites(t);
 
       // Act
@@ -170,7 +170,7 @@ describe('FileTokenSource durability', () => {
     await using directory = await new TemporaryFiles().directory(
       'zukhruf-fencing-',
     );
-    const tokens = new FileTokenSource(directory.path);
+    const tokens = new FileTokenSource(directory.path, { clock: globalThis });
     const first = await tokens.next('product:42');
     const filesBefore = await fsPromises.readdir(directory.path);
 
@@ -216,7 +216,9 @@ describe('FileTokenSource durability', () => {
         await using directory = await new TemporaryFiles().directory(
           'zukhruf-fencing-',
         );
-        const tokens = new FileTokenSource(directory.path);
+        const tokens = new FileTokenSource(directory.path, {
+          clock: globalThis,
+        });
         using _refused = refuseSync(t, (path) => path === directory.path, code);
 
         // Act

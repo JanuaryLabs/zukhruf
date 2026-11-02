@@ -49,6 +49,9 @@
   "publishConfig": {
     "access": "public"
   },
+  "dependencies": {
+    "@zukhruf/async": "^0.6.13"
+  },
   "devDependencies": {
     "@zukhruf/testing": "^0.6.13"
   }

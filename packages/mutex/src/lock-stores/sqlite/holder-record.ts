@@ -1,6 +1,7 @@
 import { mkdir, readdir, unlink } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 
+import type { Clock } from '@zukhruf/async';
 import { atomicWrite, patiently } from '@zukhruf/fs';
 
 import { Caller } from '../file-system/caller.ts';
@@ -16,10 +17,12 @@ import { readRecord } from '../file-system/record-file.ts';
 export class HolderRecord {
   readonly #folder: string;
   readonly #path: string;
+  readonly #clock: Clock;
 
-  constructor(lockPath: string) {
+  constructor(lockPath: string, clock: Clock) {
     this.#folder = `${lockPath}.holder`;
     this.#path = join(this.#folder, 'caller');
+    this.#clock = clock;
   }
 
   /**
@@ -31,15 +34,17 @@ export class HolderRecord {
     await mkdir(this.#folder, { recursive: true });
     await using announcing = new AsyncDisposableStack();
     const presence = announcing.adopt(
-      Presence.claim(this.#path, me),
+      Presence.claim(this.#path, me, this.#clock),
       (claimed) => claimed.withdraw(),
     );
-    await atomicWrite(this.#path, me.serialize());
+    await atomicWrite(this.#path, me.serialize(), { clock: this.#clock });
     announcing.move();
     await this.#clearEarlierHolders(me);
     return {
       [Symbol.asyncDispose]: () =>
-        presence.releaseAfter(() => patiently(() => unlink(this.#path))),
+        presence.releaseAfter(() =>
+          patiently(() => unlink(this.#path), { clock: this.#clock }),
+        ),
     };
   }
 
@@ -67,7 +72,7 @@ export class HolderRecord {
   }
 
   async #read(): Promise<Caller | undefined> {
-    const content = await readRecord(this.#path);
+    const content = await readRecord(this.#path, this.#clock);
     if (content === undefined) return undefined;
     try {
       return Caller.parse(content);
