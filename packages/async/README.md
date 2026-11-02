@@ -4,6 +4,8 @@ Helpers for code that waits for promises: `untilAborted` cancels a wait, `Latch`
 
 The words in these documents have one meaning each. See the glossary in [CONTEXT.md](./CONTEXT.md).
 
+> **Design for review.** The `clock` option of `poll` and `pollChanges` is not in the code yet ([ADR 0005](./docs/adr/0005-a-wait-runs-on-the-clock-that-the-caller-gives.md), backlog #3570). The released version does not take it.
+
 ## Cancel a wait
 
 A caller waits for a promise. The caller wants to stop the wait when a signal aborts, for example after a time limit, or when the user stops the program. `untilAborted` gives a promise that settles in the same way as the promise of the caller. When the signal aborts first, it rejects with the reason of the signal.
@@ -62,7 +64,11 @@ An attempt tries to get a value now, and it does not wait. For example, it tries
 import { poll } from '@zukhruf/async';
 
 // queue.take() gives the next job, or undefined when the queue is empty.
-const job = await poll(() => queue.take(), { interval: 100, signal });
+const job = await poll(() => queue.take(), {
+  interval: 100,
+  signal,
+  clock: globalThis,
+});
 ```
 
 - Only `undefined` means "no value yet". `null`, `0` and `false` are values.
@@ -71,19 +77,22 @@ const job = await poll(() => queue.take(), { interval: 100, signal });
 
 ### Stop at a deadline
 
-A deadline is a time from `performance.now()`, not a duration. After the deadline, an attempt that gives `undefined` resolves `poll` with `undefined`. An attempt that gives a value still resolves `poll` with the value.
+A deadline is a time from `clock.performance.now()`, not a duration. Compute it from the clock that you give to `poll`. After the deadline, an attempt that gives `undefined` resolves `poll` with `undefined`. An attempt that gives a value still resolves `poll` with the value.
 
 ```ts
-const deadline = performance.now() + 5_000;
+const clock = globalThis;
+const deadline = clock.performance.now() + 5_000;
 const job = await poll(() => queue.take(), {
   interval: 100,
   signal: undefined,
+  clock,
   deadline,
 });
 // job is undefined when the queue stayed empty for 5 seconds.
 ```
 
-- The first attempt always occurs, also when the deadline is already in the past. Thus a deadline of `performance.now()` gives one attempt.
+- The first attempt always occurs, also when the deadline is already in the past. Thus a deadline of `clock.performance.now()` gives one attempt.
+- A deadline from another clock is wrong for the wait. The type can not find this mistake, because both are numbers.
 - One deadline can stop many polls. A campaign of `@zukhruf/election` uses one deadline for all its attempts.
 - Without a deadline, the type of the result has no `undefined`.
 
@@ -95,10 +104,15 @@ For such a poll, give `ref: false`. Then the wait does not keep the process aliv
 
 ```ts
 // The worker takes jobs, but it does not keep the process alive.
-poll(() => queue.take(), { interval: 100, signal, ref: false }).then(run);
+poll(() => queue.take(), {
+  interval: 100,
+  signal,
+  clock: globalThis,
+  ref: false,
+}).then(run);
 ```
 
-- `ref` is the `ref` option of the Node.js timer (`setTimeout` of `node:timers/promises`). `poll` gives it to the timer unchanged.
+- With `ref: false`, `poll` calls `unref()` on the timer that `clock.setTimeout` gives.
 - Without `ref`, Node.js keeps its default: the wait keeps the process alive.
 - `ref` changes only the wait between two attempts. An attempt that runs can keep the process alive.
 
@@ -112,7 +126,12 @@ A value can change while you are not looking, for example the `data_version` of 
 import { pollChanges } from '@zukhruf/async';
 
 const reads = new Map([['messages', async () => version.current]]);
-for await (const changed of pollChanges(reads, { interval: 1_000, signal })) {
+const watch = pollChanges(reads, {
+  interval: 1_000,
+  signal,
+  clock: globalThis,
+});
+for await (const changed of watch) {
   if (changed.size > 0) await copyMessages();
 }
 ```
@@ -132,7 +151,12 @@ const reads = new Map([
   ['library', () => library.version()],
   ['annotations', () => annotations.version()],
 ]);
-for await (const changed of pollChanges(reads, { interval: 1_000, signal })) {
+const watch = pollChanges(reads, {
+  interval: 1_000,
+  signal,
+  clock: globalThis,
+});
+for await (const changed of watch) {
   await copy(streams.filter((stream) => changed.has(stream.store)));
 }
 ```
@@ -144,3 +168,41 @@ When `signal` aborts during the wait, `pollChanges` stops the timer, and the loo
 To reject when the signal aborts, call `signal.throwIfAborted()` after the loop.
 
 See [ADR 0004](./docs/adr/0004-a-change-watcher-yields-each-check-with-the-keys-that-changed.md).
+
+## Run a wait on a clock
+
+Each wait of `poll` and `pollChanges` runs on the clock that you give. In production, give `globalThis`: the wait then uses the timers of Node.js. In a test, give a fake clock. The test then moves the time, and the wait takes no real time.
+
+```ts
+import assert from 'node:assert/strict';
+import { test } from 'node:test';
+
+import { createClock } from '@sinonjs/fake-timers';
+
+import { poll } from '@zukhruf/async';
+
+test('a job that comes during the second wait', async (t) => {
+  const clock = createClock();
+  const jobs: string[] = [];
+  const job = poll(async () => jobs.shift(), {
+    interval: 1_000,
+    signal: undefined,
+    clock,
+  });
+
+  // The first attempt gave no job, so the poll waits on the clock.
+  await t.waitFor(() => assert.equal(clock.countTimers(), 1));
+  jobs.push('build');
+  await clock.tickAsync(1_000);
+
+  assert.equal(await job, 'build');
+});
+```
+
+- `await clock.tickAsync(ms)` moves the time, and fires each timer that is due, in the order of their times.
+- `t.waitFor(() => assert.equal(clock.countTimers(), 1))` waits until the code waits on the clock again. Use it after work that is real, for example a read of a file, before you move the time.
+- `clock.setSystemTime(time)` moves the wall clock and does not move `performance.now()`. A deadline does not move with the wall clock.
+- `createClock()` does not replace a global, so tests that run at the same time do not see each other's clock.
+- The type of the option is `Clock`. It has only the members that the wait calls: `setTimeout`, `clearTimeout` and `performance.now()`. `globalThis` and `createClock()` both have them.
+
+See [ADR 0005](./docs/adr/0005-a-wait-runs-on-the-clock-that-the-caller-gives.md).
