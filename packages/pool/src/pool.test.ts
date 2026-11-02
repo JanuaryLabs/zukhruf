@@ -1025,6 +1025,55 @@ void test.each([HillClimbing, Gradient], (Learning) =>
   }),
 );
 
+test('a Gradient pool measures the time of a job with two workers again, so it shrinks when the work gets heavier for every size', async (t) => {
+  // Four units and 10 ms of the job's own: a job takes 60 ms with up to four
+  // workers, so the pool grows to the four that the memory affords.
+  const engine = new PQueue({ concurrency: 4 });
+  const created: EchoWorker[] = [];
+  const memoryPerWorker = 2 ** 30;
+  t.mock.method(process, 'availableMemory', () => 4.5 * memoryPerWorker);
+  await using pool = new Pool({
+    size: new Gradient({ memoryPerWorker }),
+    startup: new Parallel(),
+    eviction: new NoEviction(),
+    create: () => {
+      const worker = new EchoWorker();
+      worker.release();
+      created.push(worker);
+      return worker;
+    },
+  });
+  assert.ok(availableParallelism() >= 4, 'this test needs four CPUs');
+  const stop = new AbortController();
+  const load = Array.from({ length: 16 }, async () => {
+    while (!stop.signal.aborted)
+      await pool.use(async (worker) => {
+        await worker.echo('sleep 10');
+        await engine.add(() => worker.echo('sleep 50'));
+      });
+  });
+  try {
+    await t.waitFor(() => assert.equal(pool.stats.lent, 4), {
+      interval: 50,
+      timeout: 60_000,
+    });
+    const settled = created.filter((worker) => !worker.dead);
+
+    // Two units: a job takes 75 ms with three workers and 100 ms with four,
+    // 1.67 times its 60 ms with two. Only a window at two workers shows it,
+    // because the time with two that the pool measured before is stale.
+    engine.concurrency = 2;
+
+    await t.waitFor(() => assert.ok(settled.some((worker) => worker.dead)), {
+      interval: 50,
+      timeout: 120_000,
+    });
+  } finally {
+    stop.abort();
+    await Promise.all(load);
+  }
+});
+
 // A sizing the test steers, which keeps every sample the pool reports.
 class Steered implements Sizing {
   readonly ceiling = 2;
