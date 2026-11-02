@@ -454,10 +454,10 @@ A local file that the root ESLint config imports is also an input of the workspa
 ### Prerequisites of the lint area
 
 - Nx 23.2.1 or later. The peer range of the package is `>=23.2.1 <25`.
-- `@zukhruf/eslint` in the workspace. elt and context-compiler do not use it today: they have their own `personal.eslint.config.mjs`. They move to `@zukhruf/eslint` first.
+- `@zukhruf/eslint` in the workspace.
 - Delete the hand list in `targetDefaults.lint.inputs`. `targetDefaults` comes after the plugins, so a list without `"..."` replaces the inputs of the plugin.
 - Keep the other keys of `targetDefaults.lint`, for example the `options.command`, `env` and `parallelism` of deepagents.
-- `targetDefaults.lint` must not have `dependsOn` or a top-level `command`. Nx deletes the `lint` of the plugin on a project with no ESLint only when the target has no `executor`, no `command` and no `dependsOn` (`nx/dist/src/project-graph/utils/project-configuration/target-normalization.js:202-214`). With `dependsOn`, each project with no ESLint gets an `nx:noop` `lint` that runs the dependencies. With a top-level `command`, each such project gets a `lint` that runs the command. `options.command` is safe: Nx does not read it as a top-level `command` (`target-merging.js:15-33`). elt and context-compiler have `dependsOn: ["format"]` today, so they delete it first.
+- `targetDefaults.lint` must not have `dependsOn` or a top-level `command`. Nx deletes the `lint` of the plugin on a project with no ESLint only when the target has no `executor`, no `command` and no `dependsOn` (`nx/dist/src/project-graph/utils/project-configuration/target-normalization.js:202-214`). With `dependsOn`, each project with no ESLint gets an `nx:noop` `lint` that runs the dependencies. With a top-level `command`, each such project gets a `lint` that runs the command. `options.command` is safe: Nx does not read it as a top-level `command` (`target-merging.js:15-33`).
 - A `lint` target in a `project.json` with its own `executor` or `command` replaces the inputs of both plugins (`target-merging.js:443-457`). Delete such a target, or write its `inputs` with `"..."`.
 - A project with no ESLint config gets no `lint` from `@nx/eslint/plugin`. If its `project.json` has its own `lint`, `"..."` keeps nothing, and the plugin inputs do not reach it. Such a target writes all its inputs: `default`, `^default`, the root ESLint config and `{ "externalDependencies": ["@zukhruf/eslint"] }`. text2sql's `apps/desktop/electron` is an example (#3389). An uncached target does not need them.
 
