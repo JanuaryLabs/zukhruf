@@ -7,6 +7,8 @@ import { join } from 'node:path';
 import { describe, test } from 'node:test';
 import { Worker } from 'node:worker_threads';
 
+import { createClock } from '@sinonjs/fake-timers';
+
 import { SqliteElection } from '@zukhruf/election';
 import { Mutex } from '@zukhruf/mutex';
 import { SocketStore } from '@zukhruf/mutex/socket';
@@ -525,20 +527,20 @@ describe('A single flight shares the run in progress', () => {
     },
   );
 
-  // Timing is the only observable: a run that waits for the key's lock still
-  // leads in the end. One poll of the lock is 10 ms, so 20 runs that each wait
-  // one poll lose about 200 ms; the test allows half a poll a run for noise.
-  // A poll shorter than that would pass the test and still wait, so a shorter
-  // poll is not the fix. The one-key loop goes first, so warm-up favours the
-  // other loop and never hides a wait.
+  // A run that waits for the key's lock still leads in the end, so only the
+  // wait shows the fault. The clock never moves, so a run that waits on it,
+  // for even one poll, never ends and the test times out. A shorter poll is
+  // not the fix: it still waits.
   test(
-    'back-to-back runs of one key lead as fast as back-to-back runs of different keys',
+    'back-to-back runs of one key each lead at once, with no wait on the clock',
     { timeout: 10_000 },
     async () => {
-      // Arrange: a first run elects the coordinator, so neither loop pays for the election.
+      // Arrange: a first run elects the coordinator. The clock never moves,
+      // so a run that waited on it, for example to poll for the key that the
+      // run before it held, would never end.
       await using directory = await new TemporaryFiles().directory('flights-');
       await using flights = new SingleFlight({
-        clock: globalThis,
+        clock: createClock(),
         directory: directory.path,
         codec: asText,
       });
@@ -546,26 +548,15 @@ describe('A single flight shares the run in progress', () => {
       const runs = 20;
 
       // Act
-      let started = performance.now();
       const joined: boolean[] = [];
       for (let run = 0; run < runs; run++) {
         joined.push((await flights.run('sync', async () => 'sync')).joined);
       }
-      const oneKey = performance.now() - started;
-      started = performance.now();
-      for (let run = 0; run < runs; run++) {
-        await flights.run(`report:${run}`, async () => 'report');
-      }
-      const differentKeys = performance.now() - started;
 
       // Assert
       assert.deepEqual(
         joined,
         Array.from({ length: runs }, () => false),
-      );
-      assert.ok(
-        oneKey < differentKeys + runs * 5,
-        `${runs} runs of one key took ${oneKey.toFixed(0)} ms, ${runs} runs of different keys ${differentKeys.toFixed(0)} ms`,
       );
     },
   );
@@ -769,19 +760,18 @@ describe('A single flight in its directory', () => {
     async () => {
       // Arrange
       await using directory = await new TemporaryFiles().directory('flights-');
+      // The clock never moves, so a call that waited on it would never end.
       await using flights = new SingleFlight({
-        clock: globalThis,
+        clock: createClock(),
         directory: directory.path,
         codec: asText,
       });
-      const started = performance.now();
 
       // Act
-      await flights.run('sync', async () => 'done');
-      const took = performance.now() - started;
+      const result = await flights.run('sync', async () => 'done');
 
       // Assert
-      assert.ok(took < 2500, `The first call took ${Math.round(took)} ms`);
+      assert.deepEqual(result, { value: 'done', joined: false });
     },
   );
 
@@ -817,16 +807,16 @@ describe('A single flight in its directory', () => {
           { interval: 5, timeout: 2000 },
         );
       }
+      // The clock never moves, so a call that waited on it, as for a grace
+      // window after an unclean shutdown (#2549), would never end.
       await using next = new SingleFlight({
-        clock: globalThis,
+        clock: createClock(),
         directory: directory.path,
         codec: asText,
       });
-      const started = performance.now();
 
       // Act
-      await next.run('sync', async () => 'done');
-      const took = performance.now() - started;
+      const result = await next.run('sync', async () => 'done');
 
       // Assert
       assert.equal(
@@ -834,11 +824,7 @@ describe('A single flight in its directory', () => {
         '3',
         'The call must start the third term',
       );
-      // A term after an unclean shutdown used to hold every fresh run for 500 ms (#2549).
-      assert.ok(
-        took < 400,
-        `The first call of the third term took ${Math.round(took)} ms`,
-      );
+      assert.deepEqual(result, { value: 'done', joined: false });
     },
   );
 

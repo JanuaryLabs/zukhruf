@@ -47,6 +47,7 @@
     "@zukhruf/lease": "^0.6.13"
   },
   "devDependencies": {
+    "@sinonjs/fake-timers": "15.4.0",
     "@zukhruf/mutex": "^0.6.13",
     "@zukhruf/testing": "^0.6.13"
   }
