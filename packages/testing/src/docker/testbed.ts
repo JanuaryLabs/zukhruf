@@ -209,7 +209,9 @@ export class DockerTestbed {
     const engine = await this.#engine();
     // Publish this process's lease, then read the sweep lease (ADR 0014).
     await this.#processLease(engine);
-    await EngineLease.gone(engine.client, sweepLeaseName(PACKAGE_VERSION));
+    await EngineLease.gone(engine.client, sweepLeaseName(PACKAGE_VERSION), {
+      clock: globalThis,
+    });
     const configured: EngineApi.ContainerCreateRequest = {
       ...body,
       HostConfig: { ...RESOURCES, ...body.HostConfig },

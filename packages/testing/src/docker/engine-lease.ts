@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 
+import { type Clock, timeout } from '@zukhruf/async';
 import {
   type CancelOptions,
   type Container,
@@ -122,7 +123,7 @@ export class EngineLease implements AsyncDisposable {
   static async gone(
     docker: Docker,
     name: string,
-    cancel: CancelOptions = {},
+    { clock, ...cancel }: CancelOptions & { clock: Clock },
   ): Promise<void> {
     const lease = await docker.containers.find(name, cancel);
     if (lease === undefined) return;
@@ -134,7 +135,7 @@ export class EngineLease implements AsyncDisposable {
         return;
       }
       const seen = state;
-      if (await removedWithin(lease, cancel)) return;
+      if (await removedWithin(lease, cancel, clock)) return;
       state = await stateOf(lease, cancel);
       if (seen === 'created' && state === 'created') {
         await removeUnlessRunning(lease, cancel);
@@ -154,18 +155,21 @@ export class EngineLease implements AsyncDisposable {
 async function removedWithin(
   lease: Container,
   { signal }: CancelOptions,
+  clock: Clock,
 ): Promise<boolean> {
-  const patience = AbortSignal.timeout(PATIENCE);
+  using patience = timeout(PATIENCE, { clock });
   try {
     await lease.wait({
       condition: 'removed',
       signal:
-        signal === undefined ? patience : AbortSignal.any([signal, patience]),
+        signal === undefined
+          ? patience.signal
+          : AbortSignal.any([signal, patience.signal]),
     });
     return true;
   } catch (error) {
     if (error instanceof ContainerNotFoundError) return true;
-    if (signal?.aborted || !patience.aborted) throw error;
+    if (signal?.aborted || !patience.signal.aborted) throw error;
     return false;
   }
 }

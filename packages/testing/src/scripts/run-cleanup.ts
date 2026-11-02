@@ -265,7 +265,7 @@ async function takeSweepLease(
     }
     if (lease !== undefined) return lease;
     try {
-      await EngineLease.gone(engine, name, { signal: wait });
+      await EngineLease.gone(engine, name, { signal: wait, clock: globalThis });
     } catch (error) {
       if (wait.aborted) return undefined;
       throw error;

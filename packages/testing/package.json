@@ -150,6 +150,7 @@
     "pg": "^8.23.1"
   },
   "dependencies": {
+    "@zukhruf/async": "^0.6.13",
     "@zukhruf/docker": "^0.6.13",
     "nano-spawn": "^2.1.0",
     "p-memoize": "^8.0.0",

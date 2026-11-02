@@ -9,6 +9,8 @@ import command, {
   SubprocessError,
 } from 'nano-spawn';
 
+import { timeout } from '@zukhruf/async';
+
 import { timebox } from '../async/timebox.ts';
 import { type ProcessRun, forwardPrefix } from './run-records.ts';
 
@@ -173,12 +175,12 @@ export class DockerHost {
         resources.use(await run.records.recordProcess(child.pid));
       resources.defer(async () => {
         child.stdin!.end();
-        const deadline = setTimeout(() => child.kill('SIGKILL'), 1_000);
-        try {
-          await exit;
-        } finally {
-          clearTimeout(deadline);
-        }
+        // A real deadline on a real process.
+        using deadline = timeout(1_000, { clock: globalThis });
+        deadline.signal.addEventListener('abort', () => child.kill('SIGKILL'), {
+          once: true,
+        });
+        await exit;
       });
       resources.defer(async () => {
         const closed = new Promise<void>((resolve, reject) =>
