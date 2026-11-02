@@ -15,7 +15,7 @@ import {
   isPlainObject,
   pythonRound,
 } from '../dependencies/python.ts';
-import { type PhaseTiming, TimingStack } from '../timing.ts';
+import { type PhaseTiming, plotPhases } from '../timing.ts';
 import type {
   HFSubset,
   Modalities,
@@ -364,9 +364,7 @@ export class TaskResult {
 
   // A text bar chart of the evaluation phases.
   plotEvaluationPhases(): string {
-    const stack = new TimingStack();
-    if (this.evaluationPhases) stack.phases.push(...this.evaluationPhases);
-    return stack.plot();
+    return plotPhases(this.evaluationPhases ?? []);
   }
 
   // The aggregation of a score over the splits, the languages and the

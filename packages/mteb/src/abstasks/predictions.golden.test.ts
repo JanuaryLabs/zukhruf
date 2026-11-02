@@ -91,6 +91,7 @@ test('evaluate writes the predictions file that MTEB writes, in the order of the
   await evaluate(bm25S.loadModel(), new KeyOrderTask(), {
     cache: null,
     predictionFolder: folder.path,
+    clock: globalThis,
   });
 
   assert.equal(
@@ -149,6 +150,7 @@ test('evaluate refuses a predictions file whose subset is not an object, as MTEB
     evaluate(bm25S.loadModel(), new KeyOrderTask(), {
       cache: null,
       predictionFolder: folder.path,
+      clock: globalThis,
     }),
     { name: 'TypeError' },
   );

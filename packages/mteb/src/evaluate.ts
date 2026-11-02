@@ -1,3 +1,5 @@
+import type { Clock } from '@zukhruf/async';
+
 import type { AbsTask, MTEBModels } from './abstasks/abstask.ts';
 import { AbsTaskRetrieval } from './abstasks/retrieval.ts';
 import { ResultCache } from './cache/result-cache.ts';
@@ -41,7 +43,13 @@ export type EvaluateOptions = {
   readonly predictionFolder?: string | null;
   // Track the CO₂ emissions of each task with codecarbon's EmissionsTracker.
   readonly co2Tracker?: boolean;
+  // The clock of the timings, of the date of each result and of the
+  // emissions tracker: globalThis in a program, a fake clock in a test.
+  readonly clock: EvaluationClock;
 };
+
+/** The clock that an evaluation reads: the time of each phase and the date of each result. */
+export type EvaluationClock = Clock & { readonly Date: { now(): number } };
 
 type Splits = ReadonlyMap<SplitName, readonly HFSubset[]>;
 
@@ -49,7 +57,7 @@ type Splits = ReadonlyMap<SplitName, readonly HFSubset[]>;
 export async function evaluate(
   model: MTEBModels,
   tasks: AbsTask | Iterable<AbsTask>,
-  options: EvaluateOptions = {},
+  options: EvaluateOptions,
 ): Promise<ModelResult> {
   const kwargs: EncodeKwargs = { batchSize: 32, ...options.encodeKwargs };
   const meta = applyPrecisionToMeta(model.mtebModelMeta, kwargs);
@@ -66,10 +74,12 @@ export async function evaluate(
     overwriteStrategy,
     predictionFolder: options.predictionFolder ?? null,
     co2Tracker: options.co2Tracker ?? false,
+    clock: options.clock,
   });
 }
 
 type Resolved = {
+  readonly clock: EvaluationClock;
   readonly raiseError: boolean;
   readonly encodeKwargs: EncodeKwargs;
   readonly cache: ResultCache | null;
@@ -127,6 +137,7 @@ async function evaluateResolved(
       cache: options.cache,
       existingResults: existing,
       modelMeta: meta,
+      clock: options.clock,
     });
   if (options.raiseError) result = await run();
   else
@@ -156,6 +167,7 @@ function isTask(tasks: AbsTask | Iterable<AbsTask>): tasks is AbsTask {
 }
 
 type TaskOptions = {
+  readonly clock: EvaluationClock;
   readonly splits: Splits;
   readonly encodeKwargs: EncodeKwargs;
   readonly predictionFolder: string | null;
@@ -175,7 +187,7 @@ async function evaluateTrackedTask(
   // MTEB imports codecarbon inside this branch, so a host that never tracks
   // does not load it or rapidfuzz-js.
   const { EmissionsTracker } = await import('./dependencies/codecarbon.ts');
-  const tracker = await EmissionsTracker.create();
+  const tracker = await EmissionsTracker.create({ clock: options.clock });
   tracker.start();
   let result: TaskResult;
   try {
@@ -207,30 +219,31 @@ async function evaluateTask(
     if (existing.evaluationTime !== null)
       evaluationTime = existing.evaluationTime;
   }
-  const timer = new TimingStack();
+  const { clock } = options;
+  const timer = new TimingStack(clock);
   const preloaded = task.dataLoaded;
   if (!preloaded) {
     const phasesBefore = timer.phases.length;
-    const start = monotonic();
+    const start = monotonic(clock);
     await task.loadData({ timer });
-    const end = monotonic();
+    const end = monotonic(clock);
     evaluationTime += end - start;
     if (timer.phases.length === phasesBefore)
       timer.addPhase('Data loading', { start, end, split: '', subset: '' });
   }
   for (const [split, subsets] of options.splits) {
-    const tick = monotonic();
+    const tick = monotonic(clock);
     const splitResults = taskResults.get(split) ?? new Map();
     taskResults.set(split, splitResults);
     const phasesBefore = timer.phases.length;
-    const start = monotonic();
+    const start = monotonic(clock);
     for (const subset of subsets) {
       const scores = await task.evaluate(model, split, [subset], {
         encodeKwargs: options.encodeKwargs,
         predictionFolder: options.predictionFolder,
         timer,
       });
-      const tock = monotonic();
+      const tock = monotonic(clock);
       for (const [name, value] of scores) splitResults.set(name, value);
       if (options.cache !== null)
         options.cache.saveToCache(
@@ -240,14 +253,14 @@ async function evaluateTask(
             evaluationTime + (tock - tick),
             {
               kgCo2Emissions: existingCo2,
-              date: new Date(),
+              date: new Date(clock.Date.now()),
               evaluationPhases: timer.phases.length > 0 ? timer.phases : null,
             },
           ),
           options.modelMeta,
         );
     }
-    const end = monotonic();
+    const end = monotonic(clock);
     // The phase of the whole split, for a task that records no phases.
     if (timer.phases.length === phasesBefore)
       timer.addPhase('Evaluation', { start, end, split, subset: '' });
@@ -255,7 +268,7 @@ async function evaluateTask(
   }
   const result = TaskResult.fromTaskResults(task, taskResults, evaluationTime, {
     kgCo2Emissions: existingCo2,
-    date: new Date(),
+    date: new Date(clock.Date.now()),
     evaluationPhases: timer.phases.length > 0 ? timer.phases : null,
   });
   if (!preloaded) task.unloadData();

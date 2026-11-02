@@ -313,6 +313,7 @@ async function evaluated(name: Name, task: AbsTaskRegression) {
   const result = await evaluate(encoder, task, {
     cache: null,
     predictionFolder: folder.path,
+    clock: globalThis,
   });
   const file = pythonJsonLoads(
     readFileSync(
@@ -462,7 +463,10 @@ test('a training split of fewer rows than nSamples plus the bins throws the erro
   const task = new FolderTask('FewTrainRegressionFixture', 'few-train', 100);
 
   await assert.rejects(
-    evaluate(encoderOf('folder').encoder, task, { cache: null }),
+    evaluate(encoderOf('folder').encoder, task, {
+      cache: null,
+      clock: globalThis,
+    }),
     { message: expected.few_train_error },
   );
 });
@@ -471,7 +475,10 @@ test('a bin of one training row throws the error of MTEB', async () => {
   const task = new FolderTask('OneMemberRegressionFixture', 'one-member', 100);
 
   await assert.rejects(
-    evaluate(encoderOf('folder').encoder, task, { cache: null }),
+    evaluate(encoderOf('folder').encoder, task, {
+      cache: null,
+      clock: globalThis,
+    }),
     { message: expected.one_member_error },
   );
 });

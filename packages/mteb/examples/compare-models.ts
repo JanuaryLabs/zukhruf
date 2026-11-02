@@ -43,6 +43,7 @@ for (const { baseURL, meta, id } of models) {
     quantization: 'Q8_0',
   });
   const result = await evaluate(encoder, [new ArguAna(), new SCIDOCS()], {
+    clock: globalThis,
     cache,
   });
   for (const task of result.taskResults)

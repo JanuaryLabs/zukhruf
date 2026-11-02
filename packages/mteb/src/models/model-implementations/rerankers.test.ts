@@ -178,6 +178,7 @@ for (const [name, meta] of LOADERS)
     await evaluate(meta.loadModel({ model }), new CrossEncoderFixture(), {
       cache: null,
       encodeKwargs: { batchSize: expected.batch_size },
+      clock: globalThis,
     });
 
     assert.deepEqual(pairs, want);

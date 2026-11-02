@@ -242,6 +242,7 @@ for (const [name, makeTask] of TASKS)
     const result = await evaluate(encoder, task, {
       cache: null,
       predictionFolder: folder.path,
+      clock: globalThis,
     });
 
     const file = pythonJsonLoads(
@@ -276,7 +277,10 @@ for (const [name, makeTask] of TASKS)
     const model = new RecordingLogisticRegression({ maxIter: 100 });
     task.evaluatorModel = model;
 
-    await evaluate(encoderOf(name).encoder, task, { cache: null });
+    await evaluate(encoderOf(name).encoder, task, {
+      cache: null,
+      clock: globalThis,
+    });
 
     const fits = expected[name].fits;
     assert.deepEqual(

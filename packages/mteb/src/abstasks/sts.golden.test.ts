@@ -255,6 +255,7 @@ test('the folder task normalizes negative, zero and positive gold scores from -2
 test('evaluate gives the folder task the Spearman correlations and main score of MTEB to the last bit, and its Pearson correlations within the stated tolerances', async () => {
   const result = await evaluate(vectorEncoder(), new FolderTask(), {
     cache: null,
+    clock: globalThis,
   });
 
   assertScores(
@@ -269,6 +270,7 @@ test('the predictions file has the four score arrays of MTEB: the negated Manhat
   await evaluate(vectorEncoder(), new FolderTask(), {
     cache: null,
     predictionFolder: folder.path,
+    clock: globalThis,
   });
 
   const file: { default: { test: Predictions } } = JSON.parse(
@@ -375,6 +377,7 @@ test('STSBenchmark normalizes the gold scores of its slice from 0 to 5 as MTEB d
 test('evaluate gives STSBenchmark on its slice the Spearman correlations and main score of MTEB to the last bit, and its Pearson correlations within the stated tolerances', async () => {
   const result = await evaluate(codePointEncoder(), new STSBenchmarkSlice(), {
     cache: null,
+    clock: globalThis,
   });
 
   assertScores(
@@ -391,6 +394,7 @@ test('STSBenchmark writes the four score arrays of MTEB: the negated Manhattan d
   await evaluate(codePointEncoder(), new STSBenchmarkSlice(), {
     cache: null,
     predictionFolder: folder.path,
+    clock: globalThis,
   });
 
   const file: { default: { test: Predictions } } = JSON.parse(

@@ -14,6 +14,8 @@ import { isMainThread } from 'node:worker_threads';
 import { bestMatch, createScorer, normalizeText, search } from 'rapidfuzz-js';
 import { ratio, tokenSetRatio } from 'rapidfuzz-js/fuzz';
 
+import { type Clock, delay, timeout } from '@zukhruf/async';
+
 import { mean } from './numpy.ts';
 import {
   asciiDigits,
@@ -741,14 +743,12 @@ const CLOUD_METADATA = [
   },
 ] as const;
 
-async function envCloudDetails(): Promise<CloudDetails | null> {
+async function envCloudDetails(clock: Clock): Promise<CloudDetails | null> {
   for (const { provider, url, headers } of CLOUD_METADATA) {
     let metadata: unknown;
     try {
-      const response = await fetch(url, {
-        headers,
-        signal: AbortSignal.timeout(1000),
-      });
+      using limit = timeout(1000, { clock });
+      const response = await fetch(url, { headers, signal: limit.signal });
       if (response.status >= 400 && response.status < 600) continue;
       metadata = JSON.parse(await response.text());
     } catch {
@@ -779,9 +779,12 @@ function withoutAttributes(metadata: unknown): unknown {
 
 // external/geography.py GeoMetadata.from_geo_js: geojs, then ip-api with
 // api.first.org for the three-letter code, 0.5 s each, then Quebec, Canada.
-async function geoFromGeoJs(): Promise<GeoMetadata> {
+async function geoFromGeoJs(clock: Clock): Promise<GeoMetadata> {
   try {
-    const response = await getJson('https://get.geojs.io/v1/ip/geo.json');
+    const response = await getJson(
+      'https://get.geojs.io/v1/ip/geo.json',
+      clock,
+    );
     return geoOf(response, {
       countryIsoCode: pythonUpper(pythonSubscript(response, 'country_code3')),
       country: 'country',
@@ -794,13 +797,14 @@ async function geoFromGeoJs(): Promise<GeoMetadata> {
     // The backup API.
   }
   try {
-    const response = await getJson('https://ip-api.com/json/');
+    const response = await getJson('https://ip-api.com/json/', clock);
     const countryName = pythonSubscript(response, 'country');
     if (typeof countryName !== 'string')
       throw new TypeError('quote_from_bytes() expected bytes');
     const codes = pythonSubscript(
       await getJson(
         `https://api.first.org/data/v1/countries?q=${quotePlus(countryName)}&scope=iso`,
+        clock,
       ),
       'data',
     );
@@ -824,8 +828,9 @@ async function geoFromGeoJs(): Promise<GeoMetadata> {
 }
 
 // requests.get(url, timeout=0.5).json(): the body of any status.
-async function getJson(url: string): Promise<unknown> {
-  const response = await fetch(url, { signal: AbortSignal.timeout(500) });
+async function getJson(url: string, clock: Clock): Promise<unknown> {
+  using limit = timeout(500, { clock });
+  const response = await fetch(url, { signal: limit.signal });
   return JSON.parse(await response.text());
 }
 
@@ -962,36 +967,45 @@ export class Lock {
 
 type Schedule =
   | { readonly kind: 'stopped' }
-  | { readonly kind: 'running'; readonly timer: NodeJS.Timeout };
+  | { readonly kind: 'running'; readonly stop: AbortController };
 
 // external/scheduler.py PeriodicScheduler: a call every interval, on a timer
 // that does not keep the process alive, as Python's daemon threads.
 class PeriodicScheduler {
   readonly #interval: number;
   readonly #function: () => Promise<void>;
+  readonly #clock: Clock;
   #schedule: Schedule = { kind: 'stopped' };
 
-  constructor(interval: number, fn: () => Promise<void>) {
+  constructor(interval: number, fn: () => Promise<void>, clock: Clock) {
     this.#interval = interval;
     this.#function = fn;
+    this.#clock = clock;
   }
 
   start(): void {
-    if (this.#schedule.kind === 'stopped') this.#arm();
+    if (this.#schedule.kind !== 'stopped') return;
+    const stop = new AbortController();
+    this.#schedule = { kind: 'running', stop };
+    // The stop rejects the wait, and that ends the schedule.
+    this.#run(stop.signal).catch(() => undefined);
   }
 
-  #arm(): void {
-    const timer = setTimeout(() => {
-      this.#arm();
+  async #run(signal: AbortSignal): Promise<void> {
+    for (;;) {
+      await delay(this.#interval * 1000, {
+        clock: this.#clock,
+        signal,
+        ref: false,
+      });
       // An error ends the call of a Python Timer thread, not the schedule.
       this.#function().catch(() => undefined);
-    }, this.#interval * 1000).unref();
-    this.#schedule = { kind: 'running', timer };
+    }
   }
 
   stop(): void {
     if (this.#schedule.kind === 'stopped') return;
-    clearTimeout(this.#schedule.timer);
+    this.#schedule.stop.abort();
     this.#schedule = { kind: 'stopped' };
   }
 }
@@ -1007,9 +1021,9 @@ function lockUnlessHeld(): Lock | null {
   }
 }
 
-// time.perf_counter in seconds.
-function perfCounter(): number {
-  return performance.now() / 1000;
+// time.perf_counter in seconds, on the clock.
+function perfCounter(clock: Clock): number {
+  return clock.performance.now() / 1000;
 }
 
 // Where the grid intensity comes from: the country and region of private
@@ -1044,37 +1058,45 @@ type TrackerState =
 // configuration files and CODECARBON_ variables.
 export class EmissionsTracker {
   #state: TrackerState;
+  readonly #clock: Clock;
 
-  private constructor(state: TrackerState) {
+  private constructor(state: TrackerState, clock: Clock) {
     this.#state = state;
+    this.#clock = clock;
   }
 
   // __init__: the lock, the hardware, the cloud and the place. A constructor
   // cannot wait for the network and for sudo, so this is async. When
   // another run holds the lock, the tracker does nothing and has no final
   // emissions.
-  static async create(): Promise<EmissionsTracker> {
+  static async create({ clock }: { clock: Clock }): Promise<EmissionsTracker> {
     const lock = lockUnlessHeld();
     if (lock === null)
-      return new EmissionsTracker({
-        kind: 'another-instance',
-        cause: new Error(
-          `Another instance of codecarbon is probably running as we find \`${LOCKFILE}\`. Turn off the other instance to be able to run this one or use \`allow_multiple_runs\` or delete the file. Exiting.`,
-        ),
-      });
+      return new EmissionsTracker(
+        {
+          kind: 'another-instance',
+          cause: new Error(
+            `Another instance of codecarbon is probably running as we find \`${LOCKFILE}\`. Turn off the other instance to be able to run this one or use \`allow_multiple_runs\` or delete the file. Exiting.`,
+          ),
+        },
+        clock,
+      );
     const hardware = await trackedHardware();
-    const cloud = cloudMetadataFrom(await envCloudDetails());
+    const cloud = cloudMetadataFrom(await envCloudDetails(clock));
     const place: Place =
-      cloud.provider === null ? { geo: await geoFromGeoJs() } : { cloud };
-    const tracker: EmissionsTracker = new EmissionsTracker({
-      kind: 'initialized',
-      measurement: {
-        lock,
-        hardware,
-        place,
-        scheduler: new PeriodicScheduler(15, () => tracker.#measure()),
+      cloud.provider === null ? { geo: await geoFromGeoJs(clock) } : { cloud };
+    const tracker: EmissionsTracker = new EmissionsTracker(
+      {
+        kind: 'initialized',
+        measurement: {
+          lock,
+          hardware,
+          place,
+          scheduler: new PeriodicScheduler(15, () => tracker.#measure(), clock),
+        },
       },
-    });
+      clock,
+    );
     return tracker;
   }
 
@@ -1082,7 +1104,7 @@ export class EmissionsTracker {
   // seconds. Python suppresses its errors.
   start(): void {
     if (this.#state.kind !== 'initialized') return;
-    const now = perfCounter();
+    const now = perfCounter(this.#clock);
     const run: Started = {
       ...this.#state.measurement,
       startTime: now,
@@ -1147,10 +1169,10 @@ export class EmissionsTracker {
     if (this.#state.kind !== 'started') return;
     const { run } = this.#state;
     for (const hardware of run.hardware) {
-      const lastDuration = perfCounter() - run.lastMeasuredTime;
+      const lastDuration = perfCounter(this.#clock) - run.lastMeasuredTime;
       run.totalEnergy += await hardware.measureEnergy(lastDuration);
     }
-    run.lastMeasuredTime = perfCounter();
+    run.lastMeasuredTime = perfCounter(this.#clock);
   }
 }
 

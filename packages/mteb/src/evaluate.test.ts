@@ -112,7 +112,10 @@ test('evaluate scores the task and saves the result in the cache', async () => {
   const { model } = letterModel();
   const cache = new ResultCache(directory.path);
 
-  const result = await evaluate(encoderOf(model), new LetterTask(), { cache });
+  const result = await evaluate(encoderOf(model), new LetterTask(), {
+    cache,
+    clock: globalThis,
+  });
 
   const [taskResult] = result.taskResults;
   const [scores] = taskResult?.scores.test ?? [];
@@ -130,11 +133,15 @@ test('a second evaluate of the same model loads the cached result and does not c
     'mteb-evaluate-',
   );
   const cache = new ResultCache(directory.path);
-  await evaluate(encoderOf(letterModel().model), new LetterTask(), { cache });
+  await evaluate(encoderOf(letterModel().model), new LetterTask(), {
+    cache,
+    clock: globalThis,
+  });
   const second = letterModel();
 
   const result = await evaluate(encoderOf(second.model), new LetterTask(), {
     cache,
+    clock: globalThis,
   });
 
   assert.equal(second.calls(), 0);
@@ -146,12 +153,16 @@ test('overwriteStrategy always runs the model again', async () => {
     'mteb-evaluate-',
   );
   const cache = new ResultCache(directory.path);
-  await evaluate(encoderOf(letterModel().model), new LetterTask(), { cache });
+  await evaluate(encoderOf(letterModel().model), new LetterTask(), {
+    cache,
+    clock: globalThis,
+  });
   const second = letterModel();
 
   await evaluate(encoderOf(second.model), new LetterTask(), {
     cache,
     overwriteStrategy: 'always',
+    clock: globalThis,
   });
 
   assert.ok(second.calls() > 0);
@@ -163,6 +174,7 @@ test('without raiseError, a failing task becomes an exception of the result', as
   const result = await evaluate(encoderOf(model), new LetterTask(), {
     cache: null,
     raiseError: false,
+    clock: globalThis,
   });
 
   assert.deepEqual(result.taskResults, []);
@@ -201,7 +213,11 @@ test('with co2Tracker, a task that runs while another codecarbon run holds the l
   const cache = new ResultCache(directory.path);
 
   await assert.rejects(
-    evaluate(encoderOf(model), new LetterTask(), { cache, co2Tracker: true }),
+    evaluate(encoderOf(model), new LetterTask(), {
+      cache,
+      co2Tracker: true,
+      clock: globalThis,
+    }),
     (error) => {
       assert.ok(error instanceof TypeError);
       assert.equal(error.message, NO_FINAL_EMISSIONS);
@@ -222,7 +238,7 @@ test('with co2Tracker and raiseError false, the held lock makes the task an erro
   const result = await evaluate(
     encoderOf(letterModel().model),
     new LetterTask(),
-    { cache: null, co2Tracker: true, raiseError: false },
+    { cache: null, co2Tracker: true, raiseError: false, clock: globalThis },
   );
 
   assert.deepEqual(result.taskResults, []);
@@ -237,7 +253,7 @@ test('without co2Tracker, evaluate does not track: a held lock changes nothing',
   const result = await evaluate(
     encoderOf(letterModel().model),
     new LetterTask(),
-    { cache: null },
+    { cache: null, clock: globalThis },
   );
 
   assert.equal(result.taskResults[0]?.mainScore, 1);

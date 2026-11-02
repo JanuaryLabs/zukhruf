@@ -149,7 +149,7 @@ test('evaluate keeps the result of a hybrid under the name of MTEB and the revis
   await evaluate(
     new HybridSearch({ models: [bm25S.loadModel(), bm25S.loadModel()] }),
     new FolderTask(),
-    { cache },
+    { cache, clock: globalThis },
   );
 
   assert.ok(
@@ -224,7 +224,7 @@ test('evaluate keeps two hybrids that differ in a sub-model setting apart, and t
     await evaluate(
       new HybridSearch({ models: [bm25S.loadModel(), model] }),
       new FolderTask(),
-      { cache },
+      { cache, clock: globalThis },
     );
 
   const folder = join(

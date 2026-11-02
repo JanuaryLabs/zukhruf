@@ -11,6 +11,7 @@ import { AbsTaskRetrieval } from '../abstasks/retrieval.ts';
 import { TaskMetadata } from '../abstasks/task-metadata.ts';
 import { evaluate } from '../evaluate.ts';
 import { STSBenchmarkSTS } from '../tasks/sts/eng/sts-benchmark-sts.ts';
+import { TimingStack } from '../timing.ts';
 import { AiSdkReranker } from './ai-sdk-reranker.ts';
 import { HybridSearch } from './hybrid-wrappers.ts';
 import { noRerankingBaseline } from './model-implementations/random-baseline.ts';
@@ -188,6 +189,7 @@ for (const evaluation of expected.evaluations)
       cache: null,
       encodeKwargs: { batchSize: expected.batch_size },
       predictionFolder: folder.path,
+      clock: globalThis,
     });
 
     const taskResult = result.taskResults[0];
@@ -234,6 +236,7 @@ test('a model without a score for its document throws, where MTEB scores the pai
   await assert.rejects(
     evaluate(new AiSdkReranker({ model }), new CrossEncoderFixture(), {
       cache: null,
+      clock: globalThis,
     }),
     new Error('Incomplete ranking from server: expected 1 score, got 0.'),
   );
@@ -272,6 +275,7 @@ test('a cross-encoder on a task that is not a retrieval task throws the TypeErro
       null,
       {
         encodeKwargs: {},
+        timer: new TimingStack(globalThis),
       },
     ),
     new TypeError(

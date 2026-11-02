@@ -65,9 +65,9 @@ export class RetrievalEvaluator extends Evaluator {
       hfSplit: this.hfSplit,
       hfSubset: this.hfSubset,
     };
-    const start = monotonic();
+    const start = monotonic(this.timer.clock);
     await searchModel.index(this.corpus, { ...location, encodeKwargs });
-    const end = monotonic();
+    const end = monotonic(this.timer.clock);
     // A cross-encoder, and a SearchEncoderWrapper without an index backend,
     // encode the corpus during the search, so indexing is not "Encoding
     // corpus".

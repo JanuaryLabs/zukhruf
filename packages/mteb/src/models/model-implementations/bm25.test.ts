@@ -45,6 +45,7 @@ test('evaluate gives the main score of Python MTEB and keeps the result under th
 
   const result = await evaluate(bm25S.loadModel(), new FolderTask(), {
     cache,
+    clock: globalThis,
   });
 
   assert.equal(
@@ -74,7 +75,7 @@ test('k1 is an experiment argument: it reaches the scores and names the folder o
 
   const tuned = bm25S.loadModel({ k1: 0.1 });
   await tuned.index(split.corpus, location);
-  await evaluate(tuned, task, { cache });
+  await evaluate(tuned, task, { cache, clock: globalThis });
 
   assert.deepEqual(tuned.mtebModelMeta.experimentKwargs, { k1: 0.1 });
   assert.notDeepEqual(

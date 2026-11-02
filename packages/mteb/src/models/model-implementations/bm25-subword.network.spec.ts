@@ -104,7 +104,7 @@ for (const run of expected.runs) {
     const result = await evaluate(
       bm25SSubword.loadModel(run.kwargs),
       new FolderTask(run.folder, run.eval_langs),
-      { cache: null },
+      { cache: null, clock: globalThis },
     );
 
     assert.equal(

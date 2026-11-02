@@ -7,6 +7,7 @@ import type { EmbeddingModelV4 } from '@ai-sdk/provider';
 
 import { AiSdkEncoder } from '../models/ai-sdk-encoder.ts';
 import { ModelMeta } from '../models/model-meta.ts';
+import { TimingStack } from '../timing.ts';
 import type { CorpusRow, QueryRow } from '../types/encoder-io.ts';
 import { AbsTaskRetrieval, type RetrievalSplitData } from './retrieval.ts';
 import { TaskMetadata } from './task-metadata.ts';
@@ -127,6 +128,7 @@ for (const [mode, rerank] of [
 
     const scores = await task.evaluate(encoder, 'test', null, {
       encodeKwargs: { batchSize: 3 },
+      timer: new TimingStack(globalThis),
     });
 
     assert.deepEqual(
@@ -141,6 +143,7 @@ test('the encoder adds up the tokens that the model reports', async () => {
 
   await task.evaluate(encoder, 'test', null, {
     encodeKwargs: { batchSize: 3 },
+    timer: new TimingStack(globalThis),
   });
 
   // The model reports one token per text: 9 documents and the 5 queries

@@ -103,7 +103,7 @@ test('EmbeddingGemma 2 embeds a query as "task: <instruction of the task> | quer
   await evaluate(
     encoder,
     new ArguAna({ hub: { endpoint: server.origin, cacheFolder: cache.path } }),
-    { cache: null },
+    { cache: null, clock: globalThis },
   );
 
   assert.deepEqual(texts, [
@@ -122,7 +122,7 @@ test('Qwen3-Embedding puts "Instruct: <prompt of the task>\\nQuery:" before a qu
   await evaluate(
     qwen3Embedding0B6.loadModel({ model }),
     new ArguAna({ hub: { endpoint: server.origin, cacheFolder: cache.path } }),
-    { cache: null },
+    { cache: null, clock: globalThis },
   );
 
   assert.deepEqual(texts, [
@@ -173,7 +173,7 @@ test('evaluate writes model_meta.json with the loader name of MTEB', async () =>
   await evaluate(
     embeddingGemma2.loadModel({ model }),
     new ArguAna({ hub: { endpoint: server.origin, cacheFolder: cache.path } }),
-    { cache: resultCache },
+    { cache: resultCache, clock: globalThis },
   );
 
   const modelMeta = JSON.parse(

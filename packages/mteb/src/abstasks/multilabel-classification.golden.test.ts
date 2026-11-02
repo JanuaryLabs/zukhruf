@@ -203,6 +203,7 @@ for (const [name, makeTask] of TASKS)
     const result = await evaluate(encoder, task, {
       cache: null,
       predictionFolder: folder.path,
+      clock: globalThis,
     });
 
     const file = pythonJsonLoads(
@@ -233,10 +234,14 @@ for (const [name, makeTask] of TASKS)
 for (const [name, makeTask] of TASKS)
   test(`a second evaluate of the same ${name} task goes on with the shuffles of the first one and gives MTEB's second scores`, async () => {
     const task = makeTask();
-    await evaluate(encoderOf(name).encoder, task, { cache: null });
+    await evaluate(encoderOf(name).encoder, task, {
+      cache: null,
+      clock: globalThis,
+    });
 
     const second = await evaluate(encoderOf(name).encoder, task, {
       cache: null,
+      clock: globalThis,
     });
 
     assert.deepEqual(
@@ -249,7 +254,7 @@ test('a task with one label throws the error of MTEB, as scikit-learn then predi
   const task = new FolderTask('SingleLabelFixture', 'single');
 
   await assert.rejects(
-    evaluate(vectorEncoder().encoder, task, { cache: null }),
+    evaluate(vectorEncoder().encoder, task, { cache: null, clock: globalThis }),
     { message: expected.single_error },
   );
 });

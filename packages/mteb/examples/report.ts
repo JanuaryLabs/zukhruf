@@ -57,6 +57,7 @@ const predictionFolder = (model: MTEBModels) =>
   );
 for (const model of models)
   await evaluate(model, task, {
+    clock: globalThis,
     cache,
     predictionFolder: predictionFolder(model),
     overwriteStrategy: 'always',

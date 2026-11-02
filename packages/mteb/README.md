@@ -58,6 +58,7 @@ const encoder = new AiSdkEncoder({
   }),
 });
 const result = await evaluate(encoder, new Faq(), {
+  clock: globalThis,
   cache: new ResultCache('mteb-results'),
 });
 console.log(result.taskResults[0]?.scores.test?.[0]?.main_score);
@@ -106,6 +107,7 @@ MTEB's BM25 baseline `mteb/baseline-bm25s` is a search model: it needs no embedd
 import { ResultCache, bm25S, evaluate } from '@zukhruf/mteb';
 
 const result = await evaluate(bm25S.loadModel(), new Faq(), {
+  clock: globalThis,
   cache: new ResultCache('mteb-results'),
 });
 console.log(result.taskResults[0]?.scores.test?.[0]?.main_score);
@@ -148,6 +150,7 @@ const hybrid = new HybridSearch({
   fusionStrategy: 'rrf',
 });
 const result = await evaluate(hybrid, new Faq(), {
+  clock: globalThis,
   cache: new ResultCache('mteb-results'),
 });
 ```
@@ -197,6 +200,7 @@ using encoder = new CachedEmbeddingWrapper(
   'mteb-embeddings/Qwen3-Embedding-0.6B',
 );
 const result = await evaluate(encoder, new Faq(), {
+  clock: globalThis,
   cache: new ResultCache('mteb-results'),
 });
 ```
@@ -218,12 +222,13 @@ MTEB gives a document its title twice, and a query its instruction twice, when t
 
 ## Track the CO₂ emissions of a run
 
-A benchmark run uses electricity, and the cost of a model choice can include its emissions. MTEB measures them with codecarbon, and this package ports that CO₂ tracker. With `co2Tracker: true`, `evaluate` tracks each task, and the result of the task holds `kgCo2Emissions`, in kg CO₂eq.
+A benchmark run uses electricity, and the cost of a model choice can include its emissions. MTEB measures them with codecarbon, and this package ports that CO₂ tracker. With `co2Tracker: true`, `evaluate` tracks each task, and the result of the task holds `kgCo2Emissions`, in kg CO₂eq. `evaluate` takes a `clock`: the time of each phase, the date of each result and the tracker run on it. Give `globalThis` in a program; a test gives a fake clock.
 
 ```ts
 import { ResultCache, evaluate } from '@zukhruf/mteb';
 
 const result = await evaluate(encoder, new Faq(), {
+  clock: globalThis,
   cache: new ResultCache('mteb-results'),
   co2Tracker: true,
 });
@@ -252,6 +257,7 @@ First, make a reranking task from the predictions of a first search, such as BM2
 import { bm25S, evaluate } from '@zukhruf/mteb';
 
 await evaluate(bm25S.loadModel(), new Faq(), {
+  clock: globalThis,
   cache: null,
   predictionFolder: 'predictions/bm25',
 });
@@ -275,8 +281,11 @@ const cache = new ResultCache('mteb-results');
 const reranker = new AiSdkReranker({
   model: llamaCpp.reranking('bge-reranker-v2-m3'),
 });
-await evaluate(noRerankingBaseline.loadModel(), reranking, { cache });
-await evaluate(reranker, reranking, { cache });
+await evaluate(noRerankingBaseline.loadModel(), reranking, {
+  cache,
+  clock: globalThis,
+});
+await evaluate(reranker, reranking, { cache, clock: globalThis });
 ```
 
 `noRerankingBaseline` keeps the order of the first search. Its score is the score that a reranker must beat.
@@ -289,7 +298,7 @@ import { bgeRerankerV2M3 } from '@zukhruf/mteb';
 const bge = bgeRerankerV2M3.loadModel({
   model: llamaCpp.reranking('bge-reranker-v2-m3'),
 });
-await evaluate(bge, reranking, { cache });
+await evaluate(bge, reranking, { cache, clock: globalThis });
 ```
 
 The server applies the activation and the precision of the model, so the scores are near the scores of MTEB, not equal to them. BGE and Jina score the query without its instruction, as in MTEB. Qwen3-Reranker sends the query with its instruction. MTEB also gives Qwen3-Reranker the instruction in its own prompt, which a reranking server cannot take, so its scores differ more.
@@ -396,6 +405,7 @@ const encoder = qwen3Embedding0B6.loadModel({
   quantization: 'Q8_0',
 });
 const result = await evaluate(encoder, [new ArguAna(), new SCIDOCS()], {
+  clock: globalThis,
   cache: new ResultCache('mteb-results'),
 });
 ```
@@ -471,7 +481,7 @@ A change of a setting, such as `k1` of BM25 or the weights of a hybrid, is an ex
 import { ResultCache, bm25S, evaluate } from '@zukhruf/mteb';
 
 const cache = new ResultCache('mteb-results');
-await evaluate(bm25S.loadModel(), new Faq(), { cache });
+await evaluate(bm25S.loadModel(), new Faq(), { cache, clock: globalThis });
 await evaluate(bm25S.loadModel({ k1: 1.2 }), new Faq(), { cache });
 
 const results = cache
@@ -503,6 +513,7 @@ import {
 
 const task = new Faq();
 await evaluate(bm25S.loadModel(), task, {
+  clock: globalThis,
   predictionFolder: 'predictions/baseline',
   overwriteStrategy: 'always',
 });
@@ -566,6 +577,7 @@ const predictionFolder = (model: MTEBModels) =>
   `predictions/${model.mtebModelMeta.modelNameAsPath()}${model.mtebModelMeta.experimentName ?? ''}`;
 for (const model of [baseline, change])
   await evaluate(model, task, {
+    clock: globalThis,
     cache,
     predictionFolder: predictionFolder(model),
     overwriteStrategy: 'always',

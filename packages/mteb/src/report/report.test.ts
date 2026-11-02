@@ -69,6 +69,7 @@ async function evaluated(root: string, mainScore = 'ndcg_at_10') {
     await evaluate(model, new FolderTask(mainScore), {
       cache,
       predictionFolder: predictionFolder(model),
+      clock: globalThis,
     });
   return { baseline, change, models, cache, predictionFolder };
 }
@@ -510,6 +511,7 @@ test('a task with two subsets has a split and subset in its switch, its tables a
     await evaluate(model, new TwoSubsets(), {
       cache,
       predictionFolder: predictionFolder(model),
+      clock: globalThis,
     });
 
   const report = await Report.from({
@@ -635,6 +637,7 @@ test('a query that is a conversation shows by its id only', async () => {
     await evaluate(model, new Conversations(), {
       cache,
       predictionFolder: predictionFolder(model),
+      clock: globalThis,
     });
 
   const html = (

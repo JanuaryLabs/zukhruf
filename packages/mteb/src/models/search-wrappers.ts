@@ -14,7 +14,7 @@ import {
   compareScoredIds,
   zipStrictMismatch,
 } from '../dependencies/python.ts';
-import { TimingStack } from '../timing.ts';
+import type { TimingStack } from '../timing.ts';
 import type {
   BatchedInput,
   CorpusDatasetType,
@@ -78,14 +78,14 @@ async function chunkedFullCorpusSearch(
     readonly encodeFn: Encode;
     readonly similarityFn: Similarity;
     readonly searchKOffset?: number;
-    readonly timer?: TimingStack;
+    readonly timer: TimingStack | undefined;
   },
 ): Promise<Map<string, ScoredId[]>> {
-  const timer = options.timer ?? new TimingStack();
+  const { timer } = options;
   const heaps = new Map<string, ScoredId[]>(
     [...options.queryIdxToId.values()].map((query) => [query, []]),
   );
-  using _ = timer.phase('Searching corpus', {
+  using _ = timer?.phase('Searching corpus', {
     split: options.hfSplit,
     subset: options.hfSubset,
   });
@@ -141,10 +141,10 @@ async function rerankTopRankedDocuments(
     readonly encodeKwargs: EncodeKwargs;
     readonly encodeFn: Encode;
     readonly similarityFn: Similarity;
-    readonly timer?: TimingStack;
+    readonly timer: TimingStack | undefined;
   },
 ): Promise<Map<string, ScoredId[]>> {
-  const timer = options.timer ?? new TimingStack();
+  const { timer } = options;
   const heaps = new Map<string, ScoredId[]>(
     [...options.queryIdxToId.values()].map((query) => [query, []]),
   );
@@ -154,7 +154,7 @@ async function rerankTopRankedDocuments(
   const location = { split: options.hfSplit, subset: options.hfSubset };
   let documents: Embeddings;
   {
-    using _ = timer.phase('Encoding corpus', location);
+    using _ = timer?.phase('Encoding corpus', location);
     documents = await options.encodeFn(
       createDataloader(options.taskCorpus, {
         taskMetadata: options.taskMetadata,
@@ -170,7 +170,7 @@ async function rerankTopRankedDocuments(
       },
     );
   }
-  using _ = timer.phase('Computing similarity', location);
+  using _ = timer?.phase('Computing similarity', location);
   for (const [queryIndex, query] of options.queryIdxToId) {
     const candidates = options.topRanked.get(query);
     if (candidates === undefined || candidates.length === 0) continue;
@@ -239,7 +239,7 @@ export class SearchEncoderWrapper implements SearchProtocol {
     const corpus = this.taskCorpus;
     if (corpus === null)
       throw new Error('Corpus must be indexed before searching.');
-    const timer = options.timer ?? new TimingStack();
+    const { timer } = options;
     const location = {
       taskMetadata: options.taskMetadata,
       hfSplit: options.hfSplit,
@@ -247,7 +247,7 @@ export class SearchEncoderWrapper implements SearchProtocol {
     };
     let queryEmbeddings: Embeddings;
     {
-      using _ = timer.phase('Encoding queries', {
+      using _ = timer?.phase('Encoding queries', {
         split: options.hfSplit,
         subset: options.hfSubset,
       });

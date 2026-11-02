@@ -21,7 +21,7 @@ import {
   isSearch,
 } from '../models/models-protocols.ts';
 import { jsonLoadsInOrder, pythonJsonDumps } from '../results/json.ts';
-import { TimingStack, monotonic } from '../timing.ts';
+import { type TimingStack, monotonic } from '../timing.ts';
 import type { EncodeKwargs } from '../types/encoder-io.ts';
 import type { HFSubset, Score } from '../types/result.ts';
 import { iterativeTrainTestSplit } from './stratification.ts';
@@ -41,7 +41,7 @@ export type EvaluateTaskOptions = {
   readonly encodeKwargs: EncodeKwargs;
   // The folder that keeps the predictions of the model.
   readonly predictionFolder?: string | null;
-  readonly timer?: TimingStack;
+  readonly timer: TimingStack;
 };
 
 // get_abstask_prompt finds the task class of a task name among the imported
@@ -132,16 +132,17 @@ export abstract class AbsTask<SplitData = unknown> {
 
   // load_data: loads the split data of each subset, then runs
   // datasetTransform.
+  // A load with no timer records no phases.
   async loadData(
     options: { readonly timer?: TimingStack } = {},
   ): Promise<void> {
     if (this.dataLoaded) return;
-    const timer = options.timer ?? new TimingStack();
+    const { timer } = options;
     {
-      using _ = timer.phase('Data loading');
+      using _ = timer?.phase('Data loading');
       this.#data = { kind: 'loaded', dataset: await this.loadSplits() };
     }
-    using _ = timer.phase('Dataset transform');
+    using _ = timer?.phase('Dataset transform');
     this.datasetTransform();
   }
 
@@ -180,7 +181,7 @@ export abstract class AbsTask<SplitData = unknown> {
     subsetsToRun: readonly HFSubset[] | null,
     options: EvaluateTaskOptions,
   ): Promise<Map<HFSubset, Record<string, Score>>> {
-    const timer = options.timer ?? new TimingStack();
+    const { timer } = options;
     if (isCrossEncoder(model) && !this.supportCrossEncoder)
       throw new TypeError(
         `Model ${model.mtebModelMeta.name} is a CrossEncoder, but this task ${this.metadata.name} does not support CrossEncoders. Please use a Encoder model instead.`,
@@ -191,12 +192,12 @@ export abstract class AbsTask<SplitData = unknown> {
       );
     if (!this.dataLoaded) {
       const phasesBefore = timer.phases.length;
-      const start = monotonic();
+      const start = monotonic(timer.clock);
       await this.loadData({ timer });
       if (timer.phases.length === phasesBefore)
         timer.addPhase('Data loading', {
           start,
-          end: monotonic(),
+          end: monotonic(timer.clock),
           split: '',
           subset: '',
         });

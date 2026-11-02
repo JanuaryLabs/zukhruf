@@ -221,6 +221,7 @@ function folderDotMagnitudes(): number[] {
 test('evaluate gives the folder task the scores of MTEB, max_ap as the main score, to the last bit', async () => {
   const result = await evaluate(vectorEncoder(), new FolderTask(), {
     cache: null,
+    clock: globalThis,
   });
 
   assert.deepEqual(
@@ -237,6 +238,7 @@ test('the predictions file has the five score arrays of MTEB: Manhattan to the l
   await evaluate(vectorEncoder(), new FolderTask(), {
     cache: null,
     predictionFolder: folder.path,
+    clock: globalThis,
   });
 
   const file: { default: { test: Predictions } } = JSON.parse(
@@ -339,6 +341,7 @@ function sprintSlice(): SprintDuplicateQuestionsPC {
 test('evaluate gives SprintDuplicateQuestions on its v1 slice the scores of MTEB, max_ap as the main score, to the last bit', async () => {
   const result = await evaluate(codePointEncoder(), sprintSlice(), {
     cache: null,
+    clock: globalThis,
   });
 
   assert.deepEqual(
@@ -355,6 +358,7 @@ test('SprintDuplicateQuestions writes the five score arrays of MTEB: Manhattan t
   await evaluate(codePointEncoder(), sprintSlice(), {
     cache: null,
     predictionFolder: folder.path,
+    clock: globalThis,
   });
 
   const file: { default: { test: Predictions } } = JSON.parse(

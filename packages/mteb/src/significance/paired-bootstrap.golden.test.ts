@@ -114,6 +114,7 @@ async function evaluated(
   const result = await evaluate(model, task, {
     cache: null,
     predictionFolder: folder.path,
+    clock: globalThis,
   });
   const scores = result.taskResults[0]?.scores['test']?.[0];
   assert.ok(scores);
@@ -224,6 +225,7 @@ test('each score with a value for each query has the mean that evaluate gives, r
   const result = await evaluate(model, task, {
     cache: null,
     predictionFolder: folder.path,
+    clock: globalThis,
   });
   const scores = result.taskResults[0]?.scores['test']?.[0];
   assert.ok(scores);

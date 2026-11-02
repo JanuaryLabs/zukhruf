@@ -350,6 +350,7 @@ for (const { key, title, task, encoder, v2 } of TASKS)
     const result = await evaluate(encoder(), subject, {
       cache: null,
       predictionFolder: folder.path,
+      clock: globalThis,
     });
 
     const python = expected.tasks[key];

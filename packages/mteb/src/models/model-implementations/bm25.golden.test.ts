@@ -256,7 +256,7 @@ for (const run of methodRuns) {
     const result = await evaluate(
       bm25S.loadModel(run.kwargs),
       new FolderTask(['eng-Latn'], FOLDERS[run.folder]),
-      { cache: null },
+      { cache: null, clock: globalThis },
     );
 
     assert.equal(
@@ -284,7 +284,7 @@ for (const run of languagesExpected.runs) {
     const result = await evaluate(
       bm25S.loadModel(run.kwargs),
       new FolderTask(folder.evalLangs, folder),
-      { cache: null },
+      { cache: null, clock: globalThis },
     );
 
     assert.equal(

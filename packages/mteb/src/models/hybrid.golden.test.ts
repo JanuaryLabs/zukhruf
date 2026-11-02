@@ -229,7 +229,10 @@ for (const evaluation of expected.evaluations)
   test(`evaluate gives the ${evaluation.model} hybrid the main score of MTEB`, async () => {
     const model = MODELS[evaluation.model]();
 
-    const result = await evaluate(model, new FolderTask(), { cache: null });
+    const result = await evaluate(model, new FolderTask(), {
+      cache: null,
+      clock: globalThis,
+    });
 
     assert.deepEqual(
       [
