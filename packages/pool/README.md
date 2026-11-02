@@ -88,6 +88,13 @@ A worker that exited is in no count, and a slot whose worker the pool evicted is
 
 A job that needs the slot of an exited worker starts a new worker. An eager startup also replaces an idle worker that exits. After an early exit (a worker that ran less than 10 minutes), the pool waits first: 1 s, then 2 s, 4 s, and so on up to 60 s for each early exit in a row. A worker that runs 10 minutes ends this back-off. A job does not wait for a back-off: its worker starts now. Kubernetes restarts a container in CrashLoopBackOff with the same rule. The pool does not count an evicted worker as an exit: it does not replace the worker and does not start a back-off. An evicted worker that ran 10 minutes ends the back-off too. See [ADR 0005](./docs/adr/0005-an-eager-pool-backs-off-before-it-replaces-a-worker-that-exited-early.md).
 
+## Recipes
+
+1. [Let the pool find how many workers pay](./docs/recipes/find-how-many-workers-pay.md)
+2. [Warm a model once, then start the other workers](./docs/recipes/warm-a-model-once.md)
+3. [Hold workers only while there is work](./docs/recipes/hold-workers-only-while-there-is-work.md)
+4. [Test a pool on the real path](./docs/recipes/test-a-pool-on-the-real-path.md)
+
 ## Decisions
 
 - [ADR 0001](./docs/adr/0001-startups-and-sizings-are-classes-that-a-caller-chooses.md): startups and sizings are classes that a caller chooses.
