@@ -60,6 +60,38 @@ test('no-phase-flag', async () => {
       },
       {
         filename,
+        code: `function first(items: string[]) { let found: string | undefined; items.forEach((item) => { found ??= item; }); return { found }; }`,
+      },
+      {
+        filename,
+        code: `function pick(early: boolean) { let x: string | undefined; if (early) x = 'a'; return { x }; }`,
+      },
+      {
+        filename,
+        code: `function all(items: string[]) { let last: string | undefined; return items.map((item) => { last = item; return item + (last ?? ''); }); }`,
+      },
+      {
+        filename,
+        code: `function f() { let x: string | undefined; return (x = 'a'); }`,
+      },
+      {
+        filename,
+        code: `function f() { let x: string | undefined; const g = () => { return (x = 'a'); }; g(); return x; }`,
+      },
+      {
+        filename,
+        code: `function counter() { let n = 0; return { inc() { n += 1; return n; } }; }`,
+      },
+      {
+        filename,
+        code: `function lazy(read: () => string) { let value: { readonly read: string } | null = null; return () => (value ??= { read: read() }).read; }`,
+      },
+      {
+        filename,
+        code: `function cached() { let cache: Map<string, string> | undefined; return { get(): Map<string, string> { cache ??= new Map(); return cache; } }; }`,
+      },
+      {
+        filename,
         code: `class A { #ready = false; } class B { #ready = 0; set() { this.#ready = 1; } }`,
       },
       {
@@ -175,6 +207,56 @@ test('no-phase-flag', async () => {
         filename,
         code: `class A { #x?: string[]; get x(): string[] { this.#x ??= ['a']; return this.#x; } reset(other: A) { other.#x = undefined; } }`,
         errors: reported,
+      },
+      {
+        filename,
+        code: `interface Host { id: string } function create() { let host: Host | undefined; const current = () => { if (!host) throw new Error('initialize first'); return host; }; return { current, initialize(runtimeHost: Host) { host = runtimeHost; } }; }`,
+        errors: [{ messageId: 'phaseVariable', line: 1, column: 55 }],
+      },
+      {
+        filename,
+        code: `interface Chat { id: string } function create() { let chat: Chat | null = null; return (next: Chat) => { chat = next; return chat.id; }; }`,
+        errors: [{ messageId: 'phaseVariable', line: 1, column: 55 }],
+      },
+      {
+        filename,
+        code: `function connection() { let closed = false; return { close() { closed = true; }, get open() { return !closed; } }; }`,
+        errors: [{ messageId: 'phaseVariable' }],
+      },
+      {
+        filename,
+        code: `function cached() { let cache: Map<string, string> | undefined; return { get() { return (cache ??= new Map()); }, clear() { cache = undefined; } }; }`,
+        errors: [{ messageId: 'phaseVariable' }],
+      },
+      {
+        filename,
+        code: `function cached() { let cache: Map<string, string> | undefined; return { get(): Map<string, string> { cache ??= new Map(); return cache; }, loaded() { return cache !== undefined; } }; }`,
+        errors: [{ messageId: 'phaseVariable' }],
+      },
+      {
+        filename,
+        code: `function f() { let x: string | undefined; return [() => { x = 'a'; }]; }`,
+        errors: [{ messageId: 'phaseVariable' }],
+      },
+      {
+        filename,
+        code: `function f() { let x: string | undefined; return class { set() { x = 'a'; } }; }`,
+        errors: [{ messageId: 'phaseVariable' }],
+      },
+      {
+        filename,
+        code: `function f() { let x: string | undefined; return class { set = () => { x = 'a'; }; }; }`,
+        errors: [{ messageId: 'phaseVariable' }],
+      },
+      {
+        filename,
+        code: `function f() { let x: string | undefined; return { set(v: string) { x = v; } } as const; }`,
+        errors: [{ messageId: 'phaseVariable' }],
+      },
+      {
+        filename,
+        code: `function f() { let x: string | undefined; return { set(v: string) { x = v; } } satisfies { set(v: string): void }; }`,
+        errors: [{ messageId: 'phaseVariable' }],
       },
     ],
   });

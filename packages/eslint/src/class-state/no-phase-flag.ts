@@ -1,4 +1,8 @@
-import { ESLintUtils, type TSESTree } from '@typescript-eslint/utils';
+import {
+  AST_NODE_TYPES,
+  ESLintUtils,
+  type TSESTree,
+} from '@typescript-eslint/utils';
 import {
   isBooleanLiteralType,
   isIntrinsicBooleanType,
@@ -19,6 +23,56 @@ function holdsFlag(type: ts.Type): boolean {
       isIntrinsicUndefinedType(part) ||
       isIntrinsicNullType(part),
   );
+}
+
+type FunctionNode =
+  | TSESTree.ArrowFunctionExpression
+  | TSESTree.FunctionDeclaration
+  | TSESTree.FunctionExpression;
+
+function isFunction(node: TSESTree.Node): node is FunctionNode {
+  return (
+    node.type === 'ArrowFunctionExpression' ||
+    node.type === 'FunctionDeclaration' ||
+    node.type === 'FunctionExpression'
+  );
+}
+
+/** Nodes that hold a function as a value without calling it. */
+const holdsValue = new Set<AST_NODE_TYPES>([
+  AST_NODE_TYPES.ArrayExpression,
+  AST_NODE_TYPES.ClassBody,
+  AST_NODE_TYPES.ClassExpression,
+  AST_NODE_TYPES.MethodDefinition,
+  AST_NODE_TYPES.ObjectExpression,
+  AST_NODE_TYPES.Property,
+  AST_NODE_TYPES.PropertyDefinition,
+  AST_NODE_TYPES.TSAsExpression,
+  AST_NODE_TYPES.TSSatisfiesExpression,
+]);
+
+/** Whether `fn` is returned, or held by the returned object, array or class. */
+function returned(fn: FunctionNode): boolean {
+  let node: TSESTree.Node = fn;
+  while (node.parent && holdsValue.has(node.parent.type)) node = node.parent;
+  return node.parent?.type === 'ReturnStatement';
+}
+
+/**
+ * Whether `write` runs after `factory` returns, the way a method runs after
+ * the constructor: the outermost function around it is part of what `factory`
+ * returns. A callback that `factory` calls, such as one passed to `map`, has
+ * finished by then.
+ */
+function writtenAfterReturn(
+  write: TSESTree.Node,
+  factory: TSESTree.Node,
+): boolean {
+  let outermost: FunctionNode | undefined;
+  for (let node = write.parent; node && node !== factory; node = node.parent) {
+    if (isFunction(node)) outermost = node;
+  }
+  return outermost !== undefined && returned(outermost);
 }
 
 /** A private field and a public field of the same name are different fields. */
@@ -62,28 +116,28 @@ interface Field {
   optional: boolean;
 }
 
-/** Whether `statement` is `this.#name ??= …;` on its own. */
-function memoStatement(statement: TSESTree.Node, name: string): boolean {
+/** Whether `statement` is `target ??= …;` on its own, for one of `targets`. */
+function memoStatement(
+  statement: TSESTree.Node,
+  targets: ReadonlySet<TSESTree.Node>,
+): boolean {
   if (statement.type !== 'ExpressionStatement') return false;
   const { expression } = statement;
   return (
     expression.type === 'AssignmentExpression' &&
     expression.operator === '??=' &&
-    expression.left.type === 'MemberExpression' &&
-    expression.left.object.type === 'ThisExpression' &&
-    expression.left.property.type === 'PrivateIdentifier' &&
-    expression.left.property.name === name
+    targets.has(expression.left)
   );
 }
 
 /**
- * Whether a read of `this.#name` comes after a top-level `this.#name ??= …;`
- * statement of its own function body. That statement always runs first, so the
- * read never sees the field before it is set.
+ * Whether a read comes after a top-level `target ??= …;` statement of its own
+ * function body. That statement always runs first, so the read never sees the
+ * value before it is set.
  */
 function readsAfterMemo(
-  read: TSESTree.MemberExpression,
-  name: string,
+  read: TSESTree.Node,
+  targets: ReadonlySet<TSESTree.Node>,
 ): boolean {
   let node: TSESTree.Node | undefined = read.parent;
   while (
@@ -97,37 +151,61 @@ function readsAfterMemo(
   if (node?.body?.type !== 'BlockStatement') return false;
   return node.body.body.some(
     (statement) =>
-      statement.range[1] <= read.range[0] && memoStatement(statement, name),
+      statement.range[1] <= read.range[0] && memoStatement(statement, targets),
   );
 }
 
-/** Whether `member` is the target of a destructuring or loop assignment. */
-function patternTarget(member: TSESTree.MemberExpression): boolean {
-  const { parent } = member;
+/** Whether `target` is the target of a destructuring or loop assignment. */
+function patternTarget(target: TSESTree.Node): boolean {
+  const { parent } = target;
+  if (!parent) return false;
   switch (parent.type) {
     case 'ArrayPattern':
     case 'RestElement':
       return true;
     case 'AssignmentPattern':
-      return parent.right !== member;
+      return parent.right !== target;
     case 'Property':
-      return parent.parent.type === 'ObjectPattern' && parent.value === member;
+      return parent.parent.type === 'ObjectPattern' && parent.value === target;
     case 'ForInStatement':
     case 'ForOfStatement':
-      return parent.left === member;
+      return parent.left === target;
     default:
       return false;
   }
 }
 
 /**
- * Whether the occurrences of a private field make it a lazy memo: every write
- * is `this.#name ??= …`, so the field never goes back to nullish, and every
- * read is the value of a `??=` or comes after a top-level `this.#name ??= …;`
- * of its own function body. A field that nothing reads is a flag, not a memo.
+ * Whether the uses of a field or variable make it a lazy memo: every write is
+ * `target ??= …`, so it never goes back to nullish, and every read is the value
+ * of a `??=` or comes after a top-level `target ??= …;` of its own function
+ * body. One that nothing reads is a flag, not a memo.
  */
-function lazyMemo(occurrences: TSESTree.PrivateIdentifier[]): boolean {
+function lazyMemo(uses: readonly TSESTree.Node[]): boolean {
+  const targets = new Set(uses);
   let read = false;
+  for (const use of uses) {
+    const { parent } = use;
+    if (!parent) return false;
+    if (parent.type === 'AssignmentExpression' && parent.left === use) {
+      if (parent.operator !== '??=') return false;
+      if (parent.parent.type !== 'ExpressionStatement') read = true;
+      continue;
+    }
+    if (parent.type === 'UpdateExpression' || patternTarget(use)) {
+      return false;
+    }
+    if (!readsAfterMemo(use, targets)) return false;
+    read = true;
+  }
+  return read;
+}
+
+/** `this.#name` around each occurrence, or nothing when one is on another object. */
+function thisMembers(
+  occurrences: readonly TSESTree.PrivateIdentifier[],
+): TSESTree.MemberExpression[] | undefined {
+  const members: TSESTree.MemberExpression[] = [];
   for (const occurrence of occurrences) {
     const member = occurrence.parent;
     if (
@@ -135,21 +213,11 @@ function lazyMemo(occurrences: TSESTree.PrivateIdentifier[]): boolean {
       member.property !== occurrence ||
       member.object.type !== 'ThisExpression'
     ) {
-      return false;
+      return undefined;
     }
-    const { parent } = member;
-    if (parent.type === 'AssignmentExpression' && parent.left === member) {
-      if (parent.operator !== '??=') return false;
-      if (parent.parent.type !== 'ExpressionStatement') read = true;
-      continue;
-    }
-    if (parent.type === 'UpdateExpression' || patternTarget(member)) {
-      return false;
-    }
-    if (!readsAfterMemo(member, occurrence.name)) return false;
-    read = true;
+    members.push(member);
   }
-  return read;
+  return members;
 }
 
 const rule = ESLintUtils.RuleCreator.withoutDocs({
@@ -157,12 +225,14 @@ const rule = ESLintUtils.RuleCreator.withoutDocs({
     type: 'problem',
     docs: {
       description:
-        'Disallow boolean or optional class fields that change after the constructor, which store a phase',
+        'Disallow boolean or optional class fields that change after the constructor, and boolean or optional variables that a returned function changes after its factory returns, which store a phase',
     },
     schema: [],
     messages: {
       phaseFlag:
         'Do not keep a phase in a flag or optional field that changes after the constructor: every reader must know which phase holds. Model the phases as State objects, wait on a one-shot latch, push the fact as an event, or ask the platform for it.',
+      phaseVariable:
+        'Do not keep a phase in a flag or optional variable that the returned object or function changes after its factory returns: every reader must know which phase holds. Model the phases as State objects, wait on a one-shot latch, push the fact as an event, or ask the platform for it.',
     },
   },
   defaultOptions: [],
@@ -183,6 +253,29 @@ const rule = ESLintUtils.RuleCreator.withoutDocs({
     };
 
     return {
+      'VariableDeclaration[kind="let"]'(node: TSESTree.VariableDeclaration) {
+        for (const variable of context.sourceCode.getDeclaredVariables(node)) {
+          const factory = variable.scope.variableScope;
+          if (factory.type !== 'function') continue;
+          const uses = variable.references
+            .filter((reference) => !reference.init)
+            .map((reference) => reference.identifier);
+          const changedLater = variable.references.some(
+            (reference) =>
+              reference.isWrite() &&
+              writtenAfterReturn(reference.identifier, factory.block),
+          );
+          const [name] = variable.identifiers;
+          if (
+            name &&
+            changedLater &&
+            holdsFlag(services.getTypeAtLocation(name)) &&
+            !lazyMemo(uses)
+          ) {
+            context.report({ node: name, messageId: 'phaseVariable' });
+          }
+        }
+      },
       ClassBody(node: TSESTree.ClassBody) {
         const declared = new Set<string>();
         for (const member of node.body) {
@@ -247,7 +340,9 @@ const rule = ESLintUtils.RuleCreator.withoutDocs({
           if (!body.changed.has(key)) continue;
           if (
             field.name.type === 'PrivateIdentifier' &&
-            lazyMemo(body.occurrences.get(field.name.name) ?? [])
+            lazyMemo(
+              thisMembers(body.occurrences.get(field.name.name) ?? []) ?? [],
+            )
           ) {
             continue;
           }
