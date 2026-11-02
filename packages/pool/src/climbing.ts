@@ -1,4 +1,4 @@
-import { capacity } from './capacity.ts';
+import { type CapacityOptions, capacity } from './capacity.ts';
 import type { Sample, Sizing } from './sizing.ts';
 
 // A window of jobs ends after both, so the sizes of the files it held do not
@@ -33,13 +33,13 @@ export interface Window {
 // the same direction at once; any other step turns around after a pause. The
 // pause has a random length, so pools in other processes do not measure each
 // other's steps (.NET; AWS's exponential backoff and jitter). Pools start with
-// two workers and never pass what the Mac affords, which they read again after
+// two workers and never pass what the computer affords, which they read again after
 // each window. Variants say what a window measures, what passes, and how many
 // workers a step with fewer tries.
 export abstract class Climbing implements Sizing {
   readonly ceiling: number;
-  readonly #memoryPerWorker: number;
-  // The workers the Mac affords now; other processes take and free memory.
+  readonly #capacity: CapacityOptions;
+  // The workers the computer affords now; other processes take and free memory.
   #room: number;
   #size: number;
   #direction: 'more' | 'fewer' = 'more';
@@ -55,9 +55,9 @@ export abstract class Climbing implements Sizing {
   #count = 0;
   #busy = 0;
 
-  constructor(options: { memoryPerWorker: number }) {
-    this.#memoryPerWorker = options.memoryPerWorker;
-    this.ceiling = capacity(options.memoryPerWorker);
+  constructor(options: CapacityOptions) {
+    this.#capacity = options;
+    this.ceiling = capacity(options);
     this.#room = this.ceiling;
     this.#size = Math.min(2, this.ceiling);
     this.#step = this.ceiling > 1 ? 'before' : 'settled';
@@ -97,7 +97,7 @@ export abstract class Climbing implements Sizing {
       busy: this.#busy,
     });
     this.#restart();
-    this.#room = Math.min(this.ceiling, capacity(this.#memoryPerWorker));
+    this.#room = Math.min(this.ceiling, capacity(this.#capacity));
     if (this.kept > this.#room) {
       // Memory that other processes took does not wait for two steps.
       this.#size = Math.min(this.#size, this.#room);

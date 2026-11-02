@@ -17,6 +17,7 @@
 Each job uses the CPU of its helper for 30 ms. Thirty-two callers send jobs for 40 seconds, and the program prints the stats every 4 seconds.
 
 ```ts title="find-the-size.ts"
+import { availableParallelism } from 'node:os';
 import { createInterface } from 'node:readline';
 
 import { Coprocess } from '@zukhruf/coprocess';
@@ -31,8 +32,12 @@ if (process.argv[2] === 'helper') {
     process.stdout.write(`${JSON.stringify({ done: JSON.parse(line).id })}\n`);
   }
 } else {
+  const { availableMemory } = process;
   await using pool = new Pool({
-    size: new HillClimbing({ memoryPerWorker: 256 * 2 ** 20 }),
+    size: new HillClimbing({
+      memoryPerWorker: 256 * 2 ** 20,
+      computer: { availableParallelism, availableMemory },
+    }),
     startup: new OnDemand(),
     eviction: new IdleTimeout({ after: 300_000 }),
     clock: globalThis,

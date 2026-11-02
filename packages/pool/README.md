@@ -38,12 +38,12 @@ The pool waits for `ready()` with no time limit. Thus, if the warm-up of a worke
 
 ## Choose how many workers run
 
-| Sizing                              | Runs                                                                                                                |
-| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| `Fixed(n)`                          | n workers                                                                                                           |
-| `Resources({ memoryPerWorker })`    | one for each CPU, while each finds its memory free                                                                  |
-| `HillClimbing({ memoryPerWorker })` | two first, then as many as add at least a tenth more jobs a second each (as the .NET thread pool)                   |
-| `Gradient({ memoryPerWorker })`     | two first, then as many as keep a job at most half again the time it takes with two (as Netflix concurrency-limits) |
+| Sizing                                        | Runs                                                                                                                |
+| --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `Fixed(n)`                                    | n workers                                                                                                           |
+| `Resources({ memoryPerWorker, computer })`    | one for each CPU, while each finds its memory free                                                                  |
+| `HillClimbing({ memoryPerWorker, computer })` | two first, then as many as add at least a tenth more jobs a second each (as the .NET thread pool)                   |
+| `Gradient({ memoryPerWorker, computer })`     | two first, then as many as keep a job at most half again the time it takes with two (as Netflix concurrency-limits) |
 
 The two sizings that learn take steps for as long as the pool runs. A step measures three windows of at least 20 jobs and 2 seconds: at the size it has, at the size it tries, and at the size it has again. A sizing measures only while jobs wait and every worker is ready.
 
@@ -53,6 +53,33 @@ The two sizings that learn take steps for as long as the pool runs. A step measu
 - After each window, the sizing reads the free memory again. When its workers do not fit, it runs fewer at once. It never runs more than the capacity when the pool was built.
 
 See [ADR 0002](./docs/adr/0002-a-sizing-that-learns-compares-one-more-worker-between-two-windows.md) and [ADR 0007](./docs/adr/0007-a-sizing-that-learns-keeps-learning-in-steps-both-ways-and-pauses-between-steps-that-change-nothing.md).
+
+## Give the sizing the computer
+
+`Resources`, `HillClimbing` and `Gradient` find the capacity: the most workers the computer can give. They read the CPU count and the free memory from the `computer` that you give. A sizing that learns reads the free memory again after each window. Give the two functions of Node in production:
+
+```ts
+import { availableParallelism } from 'node:os';
+
+import { HillClimbing } from '@zukhruf/pool';
+
+const { availableMemory } = process;
+const size = new HillClimbing({
+  memoryPerWorker: 2 * 1024 ** 3,
+  computer: { availableParallelism, availableMemory },
+});
+```
+
+A test gives a plain object, and changes what it returns to show other processes that take the memory:
+
+```ts
+let free = 8 * 1024 ** 3;
+const computer = { availableParallelism: () => 4, availableMemory: () => free };
+// ...
+free = 2.5 * 1024 ** 3;
+```
+
+A host that runs several pools on one computer can give each pool a part of the memory, for example `availableMemory: () => process.availableMemory() / 2`. See [ADR 0009](./docs/adr/0009-a-sizing-reads-the-capacity-from-the-computer-that-the-caller-gives.md).
 
 ## Choose when idle workers close
 
@@ -112,3 +139,4 @@ An eviction of your own gets the clock of the pool as the third argument of `idl
 - [ADR 0006](./docs/adr/0006-the-pool-evicts-an-idle-worker-that-its-eviction-lets-go-and-lends-an-idle-worker-first.md): the pool evicts an idle worker that its eviction lets go, and lends an idle worker first.
 - [ADR 0007](./docs/adr/0007-a-sizing-that-learns-keeps-learning-in-steps-both-ways-and-pauses-between-steps-that-change-nothing.md): a sizing that learns keeps learning in steps both ways, and pauses between steps that change nothing.
 - [ADR 0008](./docs/adr/0008-the-pool-measures-and-waits-on-the-clock-that-the-caller-gives.md): the pool measures and waits on the clock that the caller gives.
+- [ADR 0009](./docs/adr/0009-a-sizing-reads-the-capacity-from-the-computer-that-the-caller-gives.md): a sizing reads the capacity from the computer that the caller gives.

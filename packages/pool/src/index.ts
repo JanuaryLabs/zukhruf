@@ -11,6 +11,7 @@ export { Parallel } from './parallel.ts';
 export { Pool } from './pool.ts';
 export type { PoolStats } from './pool-stats.ts';
 export { Resources } from './resources.ts';
+export type { Computer } from './capacity.ts';
 export type { Sample, Sizing } from './sizing.ts';
 export type { Startup } from './startup.ts';
 export type { Worker } from './worker.ts';

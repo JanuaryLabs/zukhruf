@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { availableParallelism } from 'node:os';
 import { createInterface } from 'node:readline';
 import type { TestContext } from 'node:test';
 import { setTimeout } from 'node:timers/promises';
@@ -388,13 +387,20 @@ test('disposing a pool stops every worker, rejects waiting and later jobs, and s
 });
 
 test('a resources sizing runs one worker per CPU while each finds its memory free, and at least one', async () => {
-  for (const [memoryPerWorker, expected] of [
-    [Number.MAX_SAFE_INTEGER, 1],
-    [1, availableParallelism()],
+  for (const [cpus, gibFree, expected] of [
+    [3, 64, 3],
+    [8, 2.5, 2],
+    [4, 0.5, 1],
   ] as const) {
     const created: EchoWorker[] = [];
     await using pool = new Pool({
-      size: new Resources({ memoryPerWorker }),
+      size: new Resources({
+        memoryPerWorker: 2 ** 30,
+        computer: {
+          availableParallelism: () => cpus,
+          availableMemory: () => gibFree * 2 ** 30,
+        },
+      }),
       startup: new Parallel(),
       eviction: new NoEviction(),
       create: () => {
@@ -432,8 +438,11 @@ function window(
 }
 
 test('hill climbing tries one more worker between two windows at its size and keeps it while it adds a tenth more throughput', () => {
-  const sizing = new HillClimbing({ memoryPerWorker: 1 });
-  assert.ok(sizing.ceiling >= 4, 'this test needs four CPUs');
+  const sizing = new HillClimbing({
+    memoryPerWorker: 1,
+    computer: { availableParallelism: () => 4, availableMemory: () => 2 ** 40 },
+  });
+  assert.equal(sizing.ceiling, 4, 'the four CPUs of the computer');
   assert.deepEqual([sizing.current, sizing.kept], [2, 2]);
 
   let clock = window(sizing, 0, 10, 1);
@@ -459,8 +468,11 @@ test('hill climbing tries one more worker between two windows at its size and ke
 });
 
 test('hill climbing is not fooled by work that gets slower while it measures', () => {
-  const sizing = new HillClimbing({ memoryPerWorker: 1 });
-  assert.ok(sizing.ceiling >= 3, 'this test needs three CPUs');
+  const sizing = new HillClimbing({
+    memoryPerWorker: 1,
+    computer: { availableParallelism: () => 3, availableMemory: () => 2 ** 40 },
+  });
+  assert.equal(sizing.ceiling, 3, 'the three CPUs of the computer');
   // Two workers manage 24 fast files a second at first and 8 slow ones later;
   // three, measured between, manage half again what two do at that point.
   let clock = window(sizing, 0, 24, 1);
@@ -470,23 +482,36 @@ test('hill climbing is not fooled by work that gets slower while it measures', (
 });
 
 test('a climbing sizing learns nothing from jobs that were not measurable or from windows under two seconds, and never passes its ceiling', () => {
-  const idle = new HillClimbing({ memoryPerWorker: 1 });
-  const fast = new Gradient({ memoryPerWorker: 1 });
+  const idle = new HillClimbing({
+    memoryPerWorker: 1,
+    computer: { availableParallelism: () => 4, availableMemory: () => 2 ** 40 },
+  });
+  const fast = new Gradient({
+    memoryPerWorker: 1,
+    computer: { availableParallelism: () => 4, availableMemory: () => 2 ** 40 },
+  });
   for (let job = 0; job < 1000; job++) {
     idle.record({ started: job, finished: job + 1, measurable: false });
     fast.record({ started: job, finished: job + 1, measurable: true });
   }
   assert.deepEqual([idle.current, fast.current], [2, 2]);
 
-  const small = new HillClimbing({ memoryPerWorker: Number.MAX_SAFE_INTEGER });
+  // Four CPUs, but the free memory of half a worker: at least one.
+  const small = new HillClimbing({
+    memoryPerWorker: 2 ** 30,
+    computer: { availableParallelism: () => 4, availableMemory: () => 2 ** 29 },
+  });
   assert.equal(small.ceiling, 1);
   window(small, 0, 10, 1);
   assert.deepEqual([small.current, small.kept], [1, 1]);
 });
 
 test('gradient keeps one more worker while a job takes at most half again the time it took with two', () => {
-  const sizing = new Gradient({ memoryPerWorker: 1 });
-  assert.ok(sizing.ceiling >= 4, 'this test needs four CPUs');
+  const sizing = new Gradient({
+    memoryPerWorker: 1,
+    computer: { availableParallelism: () => 4, availableMemory: () => 2 ** 40 },
+  });
+  assert.equal(sizing.ceiling, 4, 'the four CPUs of the computer');
 
   let clock = window(sizing, 0, 10, 10);
   clock = window(sizing, clock, 10, 14);
@@ -504,9 +529,13 @@ test('a hill-climbing pool grows past its first two workers while a backlog of s
   const clock = createClock();
   const created: EchoWorker[] = [];
   await using pool = new Pool({
-    // Room for four workers on any Mac with four CPUs.
+    // Room for four workers: four CPUs, and memory for many more.
     size: new HillClimbing({
-      memoryPerWorker: Math.floor(process.availableMemory() / 4),
+      memoryPerWorker: 1,
+      computer: {
+        availableParallelism: () => 4,
+        availableMemory: () => 2 ** 40,
+      },
     }),
     startup: new Parallel(),
     eviction: new NoEviction(),
@@ -518,7 +547,6 @@ test('a hill-climbing pool grows past its first two workers while a backlog of s
     },
     clock,
   });
-  assert.ok(availableParallelism() >= 4, 'this test needs four CPUs');
   await pool.ready();
   assert.equal(created.length, 2);
 
@@ -546,8 +574,9 @@ test('a hill-climbing pool grows past its first two workers while a backlog of s
 
 // These tests run real pools of real worker processes on a fake clock: each
 // job waits on the clock, so a window of two seconds takes no real time, and
-// the time of each job is exact. They run at the same time. The tests after
-// them replace what the whole process reads, so they run alone.
+// the time of each job is exact. Each sizing reads a plain computer, not the
+// process, so the tests run at the same time. The test after them runs six
+// pools at once, so it runs alone.
 //
 // In each test the jobs share an engine of a few units, as Vision workers
 // share the Neural Engine: a job past the units waits for one, while the other
@@ -571,9 +600,14 @@ void describe(
           const engine = new PQueue({ concurrency: units });
           const created: EchoWorker[] = [];
           await using pool = new Pool({
-            // One worker for each CPU: free memory, which other processes
-            // change, does not decide.
-            size: new Learning({ memoryPerWorker: 1 }),
+            // Four CPUs, and memory for many more workers.
+            size: new Learning({
+              memoryPerWorker: 1,
+              computer: {
+                availableParallelism: () => 4,
+                availableMemory: () => 2 ** 40,
+              },
+            }),
             startup: new Parallel(),
             eviction: new NoEviction(),
             create: () => {
@@ -584,7 +618,6 @@ void describe(
             },
             clock,
           });
-          assert.ok(availableParallelism() >= 4, 'this test needs four CPUs');
           const stop = new AbortController();
           const load = Array.from({ length: 16 }, async () => {
             while (!stop.signal.aborted)
@@ -632,9 +665,14 @@ void describe(
           let thrashing = false;
           const created: EchoWorker[] = [];
           await using pool = new Pool({
-            // One worker for each CPU: free memory, which other processes
-            // change, does not decide.
-            size: new Learning({ memoryPerWorker: 1 }),
+            // Four CPUs, and memory for many more workers.
+            size: new Learning({
+              memoryPerWorker: 1,
+              computer: {
+                availableParallelism: () => 4,
+                availableMemory: () => 2 ** 40,
+              },
+            }),
             startup: new Parallel(),
             eviction: new NoEviction(),
             create: () => {
@@ -645,7 +683,6 @@ void describe(
             },
             clock,
           });
-          assert.ok(availableParallelism() >= 4, 'this test needs four CPUs');
           const stop = new AbortController();
           const load = Array.from({ length: 16 }, async () => {
             while (!stop.signal.aborted)
@@ -732,9 +769,14 @@ void describe(
           const born = new Map<EchoWorker, number>();
           const died = new Map<EchoWorker, number>();
           await using pool = new Pool({
-            // One worker for each CPU: free memory, which other processes
-            // change, does not decide.
-            size: new Learning({ memoryPerWorker: 1 }),
+            // Four CPUs, and memory for many more workers.
+            size: new Learning({
+              memoryPerWorker: 1,
+              computer: {
+                availableParallelism: () => 4,
+                availableMemory: () => 2 ** 40,
+              },
+            }),
             startup: new Parallel(),
             eviction: new NoEviction(),
             create: () => {
@@ -747,7 +789,6 @@ void describe(
             },
             clock,
           });
-          assert.ok(availableParallelism() >= 4, 'this test needs four CPUs');
           const stop = new AbortController();
           const load = Array.from({ length: 16 }, async () => {
             while (!stop.signal.aborted)
@@ -805,9 +846,14 @@ void describe(
       const engine = new PQueue({ concurrency: 8 });
       const created: EchoWorker[] = [];
       await using pool = new Pool({
-        // One worker for each CPU: free memory, which other processes change,
-        // does not decide.
-        size: new HillClimbing({ memoryPerWorker: 1 }),
+        // Four CPUs, and memory for many more workers.
+        size: new HillClimbing({
+          memoryPerWorker: 1,
+          computer: {
+            availableParallelism: () => 4,
+            availableMemory: () => 2 ** 40,
+          },
+        }),
         startup: new Parallel(),
         eviction: new NoEviction(),
         create: () => {
@@ -818,7 +864,6 @@ void describe(
         },
         clock,
       });
-      assert.ok(availableParallelism() >= 4, 'this test needs four CPUs');
       // A job takes a third longer each two seconds of the clock, as photos
       // follow stickers (ADR 0002): a step that tries four workers measures
       // the jobs of three faster before it and slower after it.
@@ -862,9 +907,14 @@ void describe(
       const engine = new PQueue({ concurrency: 2 });
       const tried: number[] = [];
       await using pool = new Pool({
-        // One worker for each CPU: free memory, which other processes change,
-        // does not decide.
-        size: new HillClimbing({ memoryPerWorker: 1 }),
+        // Four CPUs, and memory for many more workers.
+        size: new HillClimbing({
+          memoryPerWorker: 1,
+          computer: {
+            availableParallelism: () => 4,
+            availableMemory: () => 2 ** 40,
+          },
+        }),
         startup: new Parallel(),
         eviction: new NoEviction(),
         create: () => {
@@ -875,7 +925,6 @@ void describe(
         },
         clock,
       });
-      assert.ok(availableParallelism() >= 4, 'this test needs four CPUs');
       const stop = new AbortController();
       const load = Array.from({ length: 16 }, async () => {
         while (!stop.signal.aborted)
@@ -924,9 +973,14 @@ void describe(
           const engine = new PQueue({ concurrency: units });
           const created: EchoWorker[] = [];
           await using pool = new Pool({
-            // One worker for each CPU: free memory, which other processes
-            // change, does not decide.
-            size: new Learning({ memoryPerWorker: 1 }),
+            // Four CPUs, and memory for many more workers.
+            size: new Learning({
+              memoryPerWorker: 1,
+              computer: {
+                availableParallelism: () => 4,
+                availableMemory: () => 2 ** 40,
+              },
+            }),
             startup: new Parallel(),
             eviction: new NoEviction(),
             create: () => {
@@ -937,7 +991,6 @@ void describe(
             },
             clock,
           });
-          assert.ok(availableParallelism() >= 4, 'this test needs four CPUs');
           const busy = new AbortController();
           const load = Array.from({ length: 16 }, async () => {
             while (!busy.signal.aborted)
@@ -976,25 +1029,137 @@ void describe(
           }
         }),
     );
-  },
-);
 
-void test.each(
-  [
-    { Learning: HillClimbing, units: 3, own: 0 },
-    { Learning: Gradient, units: 2, own: 10 },
-  ],
-  ({ Learning, units, own }) =>
-    test(`a ${Learning.name} pool runs fewer workers when the memory they need is no longer free`, async (t) => {
+    void test.each(
+      [
+        { Learning: HillClimbing, units: 3, own: 0 },
+        { Learning: Gradient, units: 2, own: 10 },
+      ],
+      ({ Learning, units, own }) =>
+        test(`a ${Learning.name} pool runs fewer workers when the memory they need is no longer free`, async (t) => {
+          const clock = createClock();
+          const engine = new PQueue({ concurrency: units });
+          const created: EchoWorker[] = [];
+          // Free memory for eight workers, until other processes take it.
+          const memoryPerWorker = 2 ** 30;
+          let free = 8 * memoryPerWorker;
+          const computer = {
+            availableParallelism: () => 4,
+            availableMemory: () => free,
+          };
+          await using pool = new Pool({
+            size: new Learning({ memoryPerWorker, computer }),
+            startup: new Parallel(),
+            eviction: new NoEviction(),
+            create: () => {
+              const worker = new EchoWorker();
+              worker.release();
+              created.push(worker);
+              return worker;
+            },
+            clock,
+          });
+          const stop = new AbortController();
+          const load = Array.from({ length: 16 }, async () => {
+            while (!stop.signal.aborted)
+              await pool.use(async () => {
+                await delay(own, { clock, signal: undefined });
+                await engine.add(() => delay(50, { clock, signal: undefined }));
+              });
+          });
+          try {
+            // The pool closes the worker of a step that did not pay: it settled.
+            await untilDropped(t, clock, pool, created, 60_000);
+            const settled = created.filter((worker) => !worker.dead);
+            assert.ok(
+              settled.length > 2,
+              `the pool settled at ${settled.length}`,
+            );
+
+            // Other processes take the memory: two workers still find theirs free.
+            free = 2.5 * memoryPerWorker;
+
+            await drive(
+              clock,
+              [pool],
+              () =>
+                settled.filter((worker) => !worker.dead).length === 2 &&
+                pool.stats.lent <= 2,
+              60_000,
+            );
+          } finally {
+            stop.abort();
+            await settle(clock, [pool], Promise.all(load), 60_000);
+          }
+        }),
+    );
+
+    void test.each([HillClimbing, Gradient], (Learning) =>
+      test(`a ${Learning.name} pool never runs more workers than the computer affords, also when more would pay`, async (t) => {
+        const clock = createClock();
+        // Eight units: every worker up to eight adds as much as the one before.
+        const engine = new PQueue({ concurrency: 8 });
+        const created: EchoWorker[] = [];
+        // Free memory for three and a half workers.
+        const memoryPerWorker = 2 ** 30;
+        const computer = {
+          availableParallelism: () => 4,
+          availableMemory: () => 3.5 * memoryPerWorker,
+        };
+        await using pool = new Pool({
+          size: new Learning({ memoryPerWorker, computer }),
+          startup: new Parallel(),
+          eviction: new NoEviction(),
+          create: () => {
+            const worker = new EchoWorker();
+            worker.release();
+            created.push(worker);
+            return worker;
+          },
+          clock,
+        });
+        const stop = new AbortController();
+        const load = Array.from({ length: 16 }, async () => {
+          while (!stop.signal.aborted)
+            await pool.use(() =>
+              engine.add(() => delay(50, { clock, signal: undefined })),
+            );
+        });
+        let most = 0;
+        const sampler = clock.setInterval(() => {
+          most = Math.max(
+            most,
+            created.filter((worker) => !worker.dead).length,
+          );
+        }, 20);
+        try {
+          await drive(clock, [pool], () => pool.stats.lent === 3, 60_000);
+
+          // Steps keep trying sizes while the work runs.
+          await runFor(clock, [pool], 40_000);
+
+          assert.equal(most, 3);
+        } finally {
+          clock.clearInterval(sampler);
+          stop.abort();
+          await settle(clock, [pool], Promise.all(load), 60_000);
+        }
+      }),
+    );
+
+    test('a Gradient pool measures the time of a job with two workers again, so it shrinks when the work gets heavier for every size', async (t) => {
+      // Four units and 10 ms of the job's own: a job takes 60 ms with up to four
+      // workers, so the pool grows to the four that the memory affords.
       const clock = createClock();
-      const engine = new PQueue({ concurrency: units });
+      const engine = new PQueue({ concurrency: 4 });
       const created: EchoWorker[] = [];
-      // Free memory for eight workers, until other processes take it.
       const memoryPerWorker = 2 ** 30;
-      let free = 8 * memoryPerWorker;
-      t.mock.method(process, 'availableMemory', () => free);
+      const computer = {
+        availableParallelism: () => 4,
+        availableMemory: () => 4.5 * memoryPerWorker,
+      };
       await using pool = new Pool({
-        size: new Learning({ memoryPerWorker }),
+        size: new Gradient({ memoryPerWorker, computer }),
         startup: new Parallel(),
         eviction: new NoEviction(),
         create: () => {
@@ -1005,37 +1170,30 @@ void test.each(
         },
         clock,
       });
-      assert.ok(availableParallelism() >= 4, 'this test needs four CPUs');
       const stop = new AbortController();
       const load = Array.from({ length: 16 }, async () => {
         while (!stop.signal.aborted)
           await pool.use(async () => {
-            await delay(own, { clock, signal: undefined });
+            await delay(10, { clock, signal: undefined });
             await engine.add(() => delay(50, { clock, signal: undefined }));
           });
       });
       try {
-        // The pool closes the worker of a step that did not pay: it settled.
-        await untilDropped(t, clock, pool, created, 60_000);
+        await drive(clock, [pool], () => pool.stats.lent === 4, 60_000);
         const settled = created.filter((worker) => !worker.dead);
-        assert.ok(settled.length > 2, `the pool settled at ${settled.length}`);
 
-        // Other processes take the memory: two workers still find theirs free.
-        free = 2.5 * memoryPerWorker;
+        // Two units: a job takes 75 ms with three workers and 100 ms with four,
+        // 1.67 times its 60 ms with two. Only a window at two workers shows it,
+        // because the time with two that the pool measured before is stale.
+        engine.concurrency = 2;
 
-        await drive(
-          clock,
-          [pool],
-          () =>
-            settled.filter((worker) => !worker.dead).length === 2 &&
-            pool.stats.lent <= 2,
-          60_000,
-        );
+        await untilDropped(t, clock, pool, settled, 120_000);
       } finally {
         stop.abort();
         await settle(clock, [pool], Promise.all(load), 60_000);
       }
-    }),
+    });
+  },
 );
 
 void test.each(
@@ -1045,7 +1203,6 @@ void test.each(
   ],
   ({ Learning, units, own }) =>
     test(`${Learning.name} pools under the same work do not try one more worker at the same moments`, async () => {
-      assert.ok(availableParallelism() >= 4, 'this test needs four CPUs');
       // Six pools on one clock, as six processes read one time.
       const clock = createClock();
       await using pools = new AsyncDisposableStack();
@@ -1054,9 +1211,14 @@ void test.each(
         const created: { worker: EchoWorker; at: number }[] = [];
         const pool = pools.use(
           new Pool({
-            // One worker for each CPU: free memory, which other processes
-            // change, does not decide.
-            size: new Learning({ memoryPerWorker: 1 }),
+            // Four CPUs, and memory for many more workers.
+            size: new Learning({
+              memoryPerWorker: 1,
+              computer: {
+                availableParallelism: () => 4,
+                availableMemory: () => 2 ** 40,
+              },
+            }),
             startup: new Parallel(),
             eviction: new NoEviction(),
             create: () => {
@@ -1124,99 +1286,6 @@ void test.each(
       }
     }),
 );
-
-void test.each([HillClimbing, Gradient], (Learning) =>
-  test(`a ${Learning.name} pool never runs more workers than the Mac affords, also when more would pay`, async (t) => {
-    const clock = createClock();
-    // Eight units: every worker up to eight adds as much as the one before.
-    const engine = new PQueue({ concurrency: 8 });
-    const created: EchoWorker[] = [];
-    // Free memory for three and a half workers.
-    const memoryPerWorker = 2 ** 30;
-    t.mock.method(process, 'availableMemory', () => 3.5 * memoryPerWorker);
-    await using pool = new Pool({
-      size: new Learning({ memoryPerWorker }),
-      startup: new Parallel(),
-      eviction: new NoEviction(),
-      create: () => {
-        const worker = new EchoWorker();
-        worker.release();
-        created.push(worker);
-        return worker;
-      },
-      clock,
-    });
-    assert.ok(availableParallelism() >= 4, 'this test needs four CPUs');
-    const stop = new AbortController();
-    const load = Array.from({ length: 16 }, async () => {
-      while (!stop.signal.aborted)
-        await pool.use(() =>
-          engine.add(() => delay(50, { clock, signal: undefined })),
-        );
-    });
-    let most = 0;
-    const sampler = clock.setInterval(() => {
-      most = Math.max(most, created.filter((worker) => !worker.dead).length);
-    }, 20);
-    try {
-      await drive(clock, [pool], () => pool.stats.lent === 3, 60_000);
-
-      // Steps keep trying sizes while the work runs.
-      await runFor(clock, [pool], 40_000);
-
-      assert.equal(most, 3);
-    } finally {
-      clock.clearInterval(sampler);
-      stop.abort();
-      await settle(clock, [pool], Promise.all(load), 60_000);
-    }
-  }),
-);
-
-test('a Gradient pool measures the time of a job with two workers again, so it shrinks when the work gets heavier for every size', async (t) => {
-  // Four units and 10 ms of the job's own: a job takes 60 ms with up to four
-  // workers, so the pool grows to the four that the memory affords.
-  const clock = createClock();
-  const engine = new PQueue({ concurrency: 4 });
-  const created: EchoWorker[] = [];
-  const memoryPerWorker = 2 ** 30;
-  t.mock.method(process, 'availableMemory', () => 4.5 * memoryPerWorker);
-  await using pool = new Pool({
-    size: new Gradient({ memoryPerWorker }),
-    startup: new Parallel(),
-    eviction: new NoEviction(),
-    create: () => {
-      const worker = new EchoWorker();
-      worker.release();
-      created.push(worker);
-      return worker;
-    },
-    clock,
-  });
-  assert.ok(availableParallelism() >= 4, 'this test needs four CPUs');
-  const stop = new AbortController();
-  const load = Array.from({ length: 16 }, async () => {
-    while (!stop.signal.aborted)
-      await pool.use(async () => {
-        await delay(10, { clock, signal: undefined });
-        await engine.add(() => delay(50, { clock, signal: undefined }));
-      });
-  });
-  try {
-    await drive(clock, [pool], () => pool.stats.lent === 4, 60_000);
-    const settled = created.filter((worker) => !worker.dead);
-
-    // Two units: a job takes 75 ms with three workers and 100 ms with four,
-    // 1.67 times its 60 ms with two. Only a window at two workers shows it,
-    // because the time with two that the pool measured before is stale.
-    engine.concurrency = 2;
-
-    await untilDropped(t, clock, pool, settled, 120_000);
-  } finally {
-    stop.abort();
-    await settle(clock, [pool], Promise.all(load), 60_000);
-  }
-});
 
 // A sizing the test steers, which keeps every sample the pool reports.
 class Steered implements Sizing {

@@ -12,8 +12,8 @@
 4. Move the clock 10 ms at a time, and let the event loop turn between two moves, so that the real helpers start and close. Do not move the clock while a worker starts (`pool.stats.starting > 0`). A warm-up then takes no time on the clock, as the pool measures no job until its workers are ready.
 5. Move the clock until a fact that callers see is true, such as a count in `pool.stats`. Then wait for the real exit of a worker that the pool closed.
 6. Stop the jobs at the end of the test. Move the clock until each caller ends: the last job of each caller waits on the clock.
-7. Fit the CI runner. A GitHub `ubuntu-latest` runner of a public repository has 4 CPUs. Let each pool settle at 3 workers or fewer, and assert `availableParallelism() >= 4`.
-8. Run the tests that move only their own clock at the same time: `describe(name, { concurrency: true }, ...)`. Run alone a test that replaces what the whole process reads, such as `process.availableMemory`.
+7. Give the sizing a plain computer: `computer: { availableParallelism: () => 4, availableMemory: () => 2 ** 40 }`. The test then gets the same capacity on each computer that runs it. To show other processes that take the memory, let `availableMemory` return a variable, and change the variable.
+8. Run the tests at the same time: `describe(name, { concurrency: true }, ...)`. Each test moves only its own clock and reads only its own computer.
 9. Run each claim for each sizing with `test.each` of `@zukhruf/testing/node`.
 
 ## The program
@@ -22,7 +22,6 @@ The jobs share an engine of three units. A fourth worker only waits for a unit, 
 
 ```ts title="real-path.test.ts"
 import assert from 'node:assert/strict';
-import { availableParallelism } from 'node:os';
 import { createInterface } from 'node:readline';
 import { describe, test } from 'node:test';
 
@@ -64,12 +63,18 @@ if (process.argv[2] === 'helper') {
     void test('a HillClimbing pool settles where one more worker stops paying', async () => {
       const clock = createClock();
       // The jobs share an engine of three units: a fourth worker only waits.
-      // Three workers fit the four CPUs of a CI runner.
       const engine = new PQueue({ concurrency: 3 });
       const started: Coprocess[] = [];
       const closed: Coprocess[] = [];
       await using pool = new Pool({
-        size: new HillClimbing({ memoryPerWorker: 1 }),
+        // A computer with four CPUs and memory for many workers.
+        size: new HillClimbing({
+          memoryPerWorker: 1,
+          computer: {
+            availableParallelism: () => 4,
+            availableMemory: () => 2 ** 40,
+          },
+        }),
         startup: new Parallel(),
         eviction: new NoEviction(),
         clock,
@@ -84,7 +89,6 @@ if (process.argv[2] === 'helper') {
           return helper;
         },
       });
-      assert.ok(availableParallelism() >= 4, 'this test needs four CPUs');
       const stop = new AbortController();
       // Each job waits 50 ms of the clock for a unit of the engine.
       const callers = Array.from({ length: 16 }, async () => {
@@ -129,8 +133,8 @@ Output of `node --test real-path.test.ts`:
 
 ```
 ▶ a pool that learns
-  ✔ a HillClimbing pool settles where one more worker stops paying (1509.071ms)
-✔ a pool that learns (1509.567083ms)
+  ✔ a HillClimbing pool settles where one more worker stops paying (645.15325ms)
+✔ a pool that learns (645.815625ms)
 ℹ tests 1
 ℹ suites 1
 ℹ pass 1
@@ -138,12 +142,12 @@ Output of `node --test real-path.test.ts`:
 ℹ cancelled 0
 ℹ skipped 0
 ℹ todo 0
-ℹ duration_ms 1938.926333
+ℹ duration_ms 919.207209
 ```
 
 ## What the output shows
 
-- The test ran for 1.5 seconds of real time. The windows of the pool, at least 2 seconds each, ran on the fake clock.
+- The test ran for 0.6 seconds of real time. The windows of the pool, at least 2 seconds each, ran on the fake clock.
 - The pool started a fourth helper for a step, found that it did not pay, and closed it. Three helpers stayed.
 
 ## Things to know
@@ -152,5 +156,5 @@ Output of `node --test real-path.test.ts`:
 - **Give the clock to the pool, not to the process.** Do not replace the global timers with `t.mock.timers`. Node's mock does not replace `performance.now`, and it changes the time of every test in the process. A pool reads only the clock that you give ([ADR 0008](../adr/0008-the-pool-measures-and-waits-on-the-clock-that-the-caller-gives.md)).
 - **Let the clock give all the time of a job.** The clock moves at each turn of the event loop. A job that also waits for a real answer of its helper gets more time on the clock while it waits, so the sizing measures the load of the computer.
 - **Prove each test with a mutation.** Break the source on purpose, in a copy, the way the test says it guards against, and see the test fail. A test that passes while the code is broken proves nothing.
-- **Mock only what no operation can drive**, such as the free memory of the computer, and set the mock before you build the pool.
+- **Give inputs, not mocks.** The pool takes the clock and the computer as inputs, so a test replaces nothing that the whole process reads. To show other processes that take the memory, let the `availableMemory` of the computer return a variable, and change the variable.
 - **The pool tests of this package are examples.** See the suite `a pool whose sizing keeps learning` in [src/pool.test.ts](../../src/pool.test.ts).

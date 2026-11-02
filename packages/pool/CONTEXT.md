@@ -40,6 +40,10 @@ _Avoid_: Retire (the sizing stops keeping a slot), reap, scale down, close (the 
 The most workers the computer can give: one for each CPU, while each finds its memory free.
 _Avoid_: Size, limit, ceiling (the ceiling of a sizing is its capacity)
 
+**Computer**:
+The input from which a sizing reads the capacity: the CPU count (`availableParallelism()`) and the free memory (`availableMemory()`). Production gives the functions of Node; a test gives a plain object.
+_Avoid_: Machine, host (the host is the program that builds the pool), system, environment
+
 **Window**:
 The jobs that a sizing that learns measures at one number of workers: at least 20 jobs and 2 seconds.
 _Avoid_: Sample (one job is one sample), batch
