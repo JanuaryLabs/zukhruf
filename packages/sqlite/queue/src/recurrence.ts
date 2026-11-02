@@ -72,10 +72,11 @@ export class Recurrence {
       throw new Error(unusable);
     }
     try {
+      // Only the time zone is checked, so any fixed date serves.
       CronExpressionParser.parse('* * * * *', {
         tz,
         strict: false,
-        currentDate: new Date(),
+        currentDate: new Date(0),
       });
     } catch {
       throw new Error(unusable);

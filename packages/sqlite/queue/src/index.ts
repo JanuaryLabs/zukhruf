@@ -25,6 +25,7 @@ import {
   type WorkOptions,
   policies,
   scheduleKinds,
+  systemClock,
 } from 'pg-boss';
 
 import { Latch } from '@zukhruf/async';
@@ -381,16 +382,17 @@ export class SqliteJobQueue
       await shutdown();
       return;
     }
-    // Real time, not the configured clock: the deadline bounds shutdown, and
-    // under a test clock nothing would tick it while stop() waits.
-    let deadlineTimer: ReturnType<typeof setTimeout> | undefined;
+    // The system clock of pg-boss, not the configured clock: the deadline
+    // bounds shutdown, and under a test clock nothing would tick it while
+    // stop() waits. pg-boss runs this deadline on the real timers too.
+    let deadlineTimer: ClockTimer | undefined;
     const deadline = new Promise<void>((resolve) => {
-      deadlineTimer = setTimeout(resolve, timeout);
+      deadlineTimer = systemClock.setTimeout(resolve, timeout);
     });
     try {
       await Promise.race([this.#settleCleanups(), deadline]);
     } finally {
-      clearTimeout(deadlineTimer);
+      systemClock.clearTimeout(deadlineTimer);
     }
     await shutdown();
   }

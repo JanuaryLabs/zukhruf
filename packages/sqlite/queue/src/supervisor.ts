@@ -165,7 +165,7 @@ export class Supervisor extends EventEmitter<
       return;
     }
     const stats = await this.#query((db, now) =>
-      Supervisor.#cacheQueueStats(db, claimed, now),
+      Supervisor.#cacheQueueStats(db, claimed, now, this.#clock),
     );
     if (this.#stopped) {
       return;
@@ -315,8 +315,9 @@ export class Supervisor extends EventEmitter<
     db: DatabaseSync,
     names: string[],
     now: Date,
+    clock: Clock,
   ): QueueStatsRow[] {
-    const started = performance.now();
+    const started = clock.now();
     const isoNow = SqlValues.asIso(now);
     const queues = JSON.stringify(names);
     return transaction(
@@ -393,7 +394,7 @@ export class Supervisor extends EventEmitter<
                     written,
                     'warning_queue_size',
                   ),
-                  pinSeconds: (performance.now() - started) / 1000,
+                  pinSeconds: (clock.now() - started) / 1000,
                 },
               ];
         });
