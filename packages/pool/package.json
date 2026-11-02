@@ -43,5 +43,8 @@
   "dependencies": {
     "@zukhruf/async": "^0.6.10",
     "p-queue": "10.0.0"
+  },
+  "devDependencies": {
+    "@zukhruf/testing": "^0.6.10"
   }
 }
