@@ -1,6 +1,6 @@
 # @zukhruf/async
 
-Helpers for code that waits for promises: `untilAborted` cancels a wait, `Latch` holds callers until something happened, `delay` waits a fixed time on a clock, `poll` calls an attempt again until it gives a value, and `pollChanges` reads values again and again and tells which values changed. `@zukhruf/mutex`, `@zukhruf/single-flight` and `@zukhruf/election` use them.
+Helpers for code that waits for promises: `untilAborted` cancels a wait, `Latch` holds callers until something happened, `delay` waits a fixed time on a clock, `timeout` stops a wait after a time on a clock, `poll` calls an attempt again until it gives a value, and `pollChanges` reads values again and again and tells which values changed. `@zukhruf/mutex`, `@zukhruf/single-flight` and `@zukhruf/election` use them.
 
 The words in these documents have one meaning each. See the glossary in [CONTEXT.md](./CONTEXT.md).
 
@@ -181,6 +181,25 @@ await delay(100, { clock: globalThis, signal });
 - When `signal` aborts, also before the call, the timer stops and `delay` rejects with the reason of the signal.
 - No listener stays on the signal after `delay` settles, so a signal that lives long can serve many waits.
 - With `ref: false`, the timer does not keep the process alive.
+
+## Stop a wait after a time
+
+`timeout` gives a signal that aborts after a number of milliseconds on the clock that you give, as `AbortSignal.timeout` does on the real clock. Give the signal to a wait. Dispose the timeout when the wait ends.
+
+```ts
+import { timeout } from '@zukhruf/async';
+
+// Stop the read when the server does not answer in 5 seconds.
+using limit = timeout(5_000, { clock: globalThis });
+const state = await readState(container, { signal: limit.signal });
+```
+
+- The signal aborts with a `DOMException` whose name is `TimeoutError`, as the signal of `AbortSignal.timeout` does.
+- A disposal stops the timer, and the signal then does not abort. `using` disposes the timeout at the end of the block.
+- The timer keeps the process alive until it fires or until the disposal. The timer of `AbortSignal.timeout` does not keep the process alive, but no call can stop it.
+- To stop a wait at the timeout or at the signal of the caller, give `AbortSignal.any([signal, limit.signal])`.
+
+See [ADR 0006](./docs/adr/0006-a-timeout-is-a-signal-on-the-clock-that-the-caller-gives.md).
 
 ## Run a wait on a clock
 

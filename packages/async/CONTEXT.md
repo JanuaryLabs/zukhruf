@@ -36,6 +36,10 @@ _Avoid_: TimeProvider (the name in .NET), scheduler, timer (a timer is one wait 
 A wait of a fixed number of milliseconds on a clock. A cancel stops its timer.
 _Avoid_: Sleep, pause
 
+**Timeout**:
+A signal that aborts after a number of milliseconds on a clock. The caller gives the signal to a wait, and the wait stops when the signal aborts. A timeout is a duration that starts when the caller makes it. A disposal of the timeout stops its timer.
+_Avoid_: Deadline (a deadline is a time), `AbortSignal.timeout` (it runs only on the real clock), time limit
+
 **Deadline**:
 A time from `clock.performance.now()`, from the clock of the poll. After it, an attempt that gives no value ends the poll. A deadline is a time, not a duration.
 _Avoid_: Timeout (a timeout is a duration), time limit
