@@ -112,7 +112,7 @@ poll(() => queue.take(), {
 }).then(run);
 ```
 
-- With `ref: false`, `poll` calls `unref()` on the timer that `clock.setTimeout` gives.
+- With `ref: false`, `poll` calls `unref()` on the timer that `clock.setTimeout` gives, when the timer has one. The timers of Node.js and of `createClock()` have it.
 - Without `ref`, Node.js keeps its default: the wait keeps the process alive.
 - `ref` changes only the wait between two attempts. An attempt that runs can keep the process alive.
 

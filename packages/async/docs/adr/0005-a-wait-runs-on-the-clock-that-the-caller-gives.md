@@ -12,19 +12,19 @@ Status: design for review. The code does not take the clock yet (backlog #3570).
 
 ```ts
 /** The timer source of a wait. Production gives `globalThis`; a test gives a fake clock. */
-export interface Clock<Timer extends { unref(): unknown }> {
+export interface Clock<Timer> {
   setTimeout(callback: () => void, ms: number): Timer;
   clearTimeout(timer: Timer): void;
   performance: { now(): number };
 }
 ```
 
-The type has only the members that this package calls ([mutex ADR 0022](../../../mutex/docs/adr/0022-a-database-lock-store-takes-its-session-from-the-caller.md) does the same for a session). The type of the timer is a parameter: Node.js gives a `Timeout`, and `createClock()` of `@sinonjs/fake-timers` gives its own timer object. Both have `unref()`.
+The type has only the members that this package calls ([mutex ADR 0022](../../../mutex/docs/adr/0022-a-database-lock-store-takes-its-session-from-the-caller.md) does the same for a session). `globalThis` has these members, so the global object of Node.js is the system clock, with no wrapper. The type of the timer is a parameter: Node.js gives a `Timeout`, and `createClock()` of `@sinonjs/fake-timers` gives its own timer object. The parameter has no constraint. A constraint such as `Timer extends { unref(): unknown }` fails for both clocks: the `clearTimeout` of Node.js has overloads that stop the inference at `Timeout`, and sinon 15.4.0 types its timer as a union with `number`. TypeScript 6.0.3 showed both errors.
 
 A wait on the clock does these steps:
 
 1. Start a timer with `clock.setTimeout(resolve, interval)`.
-2. When `ref` is `false`, call `timer.unref()`. The wait then does not keep the process alive, as before ([ADR 0003](./0003-the-election-and-the-file-lock-stores-poll-through-one-function.md)).
+2. When `ref` is `false` and the timer is an object with an `unref` function, call `timer.unref()`. The wait then does not keep the process alive, as before ([ADR 0003](./0003-the-election-and-the-file-lock-stores-poll-through-one-function.md)). The check is a type guard on the timer, not an `as`. The timer of Node.js and the timer of `createClock()` on Node.js both have `unref()`.
 3. Wait through `untilAborted(wait, signal)`, so that a stopped event can not leave the wait pending ([ADR 0001](./0001-a-wait-listens-for-the-abort-through-addabortlistener.md)).
 4. When the signal aborts, call `clock.clearTimeout(timer)`. The signal stops the timer, as before. Then `poll` rejects with the reason of the signal, and `pollChanges` ends with no error ([ADR 0004](./0004-a-change-watcher-yields-each-check-with-the-keys-that-changed.md)).
 
@@ -38,6 +38,7 @@ A caller that has more work on the time, for example `Date.now()` or `setInterva
 - **An optional `clock` with `globalThis` as the default.** A caller can forget the clock, and the type check does not tell it ([relevance-filtering ADR 0007](../../../information-filtering/relevance-filtering/docs/adr/0007-a-score-takes-a-signal.md) refuses an optional signal for the same reason). A library that forgets it waits on real time in its tests, with no error.
 - **`util.promisify(clock.setTimeout)`.** For Node.js it gives the `setTimeout` of `node:timers/promises`. For `createClock()` it gives a promise that ignores the signal and gives no timer, so the wait can not stop the timer or call `unref()`.
 - **A `TestClock` in `@zukhruf/testing`.** The tests of this package can not import `@zukhruf/testing`, because the import makes a cycle in the build ([root ADR 0001](../../../../docs/adr/0001-zukhruf-is-a-layered-standard-library.md)). Also, `createClock()` already does the work.
+- **A default of `globalThis` at the entry of each library, with `clock` required only on `poll` and `pollChanges`.** About 72 product calls and 266 test calls would not change. But a library that does not give its clock to an inner library falls back to real time, and only a test finds it. The maintainer chose the required clock at each level (2026-11-02).
 - **A required `clock` with a structural type that is generic over the timer.** This option was selected.
 
 ## Consequences
