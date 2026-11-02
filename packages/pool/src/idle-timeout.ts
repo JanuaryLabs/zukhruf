@@ -1,4 +1,4 @@
-import { addAbortListener } from 'node:events';
+import { type Clock, delay } from '@zukhruf/async';
 
 import type { Eviction } from './eviction.ts';
 
@@ -24,11 +24,10 @@ export class IdleTimeout implements Eviction {
     this.#after = options.after;
   }
 
-  idle(busy: AbortSignal, evict: () => void): void {
-    // A signal that aborted before the call starts no timer, as when the owner
-    // disposed the pool while the worker became ready.
-    if (busy.aborted) return;
-    const timer = setTimeout(evict, this.#after);
-    addAbortListener(busy, () => clearTimeout(timer));
+  idle(busy: AbortSignal, evict: () => void, clock: Clock): void {
+    // An abort stops the timer, also an abort before the call, as when the
+    // owner disposed the pool while the worker became ready. The rejection of
+    // the wait is the abort.
+    delay(this.#after, { clock, signal: busy }).then(evict, () => {});
   }
 }

@@ -113,6 +113,7 @@ if (role === 'helper') {
         size: new Fixed(2),
         startup: new LeaderFirst(),
         eviction: new IdleTimeout({ after: 2_000 }),
+        clock: globalThis,
         create: () => new ModelWorker(this.#folder),
       });
       return this.#pool.use((worker) => worker.read(file));

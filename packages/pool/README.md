@@ -13,6 +13,7 @@ await using pool = new Pool({
   size: new Fixed(2),
   startup: new Parallel(),
   eviction: new IdleTimeout({ after: 300_000 }),
+  clock: globalThis,
   create: () => new VisionWorker('/path/to/vision-worker'),
 });
 const text = await pool.use((worker) => worker.read('/tmp/receipt.png'));
@@ -88,6 +89,12 @@ A worker that exited is in no count, and a slot whose worker the pool evicted is
 
 A job that needs the slot of an exited worker starts a new worker. An eager startup also replaces an idle worker that exits. After an early exit (a worker that ran less than 10 minutes), the pool waits first: 1 s, then 2 s, 4 s, and so on up to 60 s for each early exit in a row. A worker that runs 10 minutes ends this back-off. A job does not wait for a back-off: its worker starts now. Kubernetes restarts a container in CrashLoopBackOff with the same rule. The pool does not count an evicted worker as an exit: it does not replace the worker and does not start a back-off. An evicted worker that ran 10 minutes ends the back-off too. See [ADR 0005](./docs/adr/0005-an-eager-pool-backs-off-before-it-replaces-a-worker-that-exited-early.md).
 
+## Run the pool on a clock
+
+The pool measures the time of each job, waits before it replaces a worker that exited early, and gives the eviction the clock for its waits. All of these run on the `clock` that you give. Give `globalThis` in production. A test gives `createClock()` of `@sinonjs/fake-timers` and moves it with `await clock.tickAsync(ms)`, so a back-off of 60 seconds or a sizing window of 2 seconds takes no real time ([`@zukhruf/async`](../async/README.md#run-a-wait-on-a-clock)).
+
+An eviction of your own gets the clock of the pool as the third argument of `idle(busy, evict, clock)`, so the pool and its eviction always run on one clock. See [ADR 0008](./docs/adr/0008-the-pool-measures-and-waits-on-the-clock-that-the-caller-gives.md).
+
 ## Recipes
 
 1. [Let the pool find how many workers pay](./docs/recipes/find-how-many-workers-pay.md)
@@ -104,3 +111,4 @@ A job that needs the slot of an exited worker starts a new worker. An eager star
 - [ADR 0005](./docs/adr/0005-an-eager-pool-backs-off-before-it-replaces-a-worker-that-exited-early.md): an eager pool backs off before it replaces a worker that exited early.
 - [ADR 0006](./docs/adr/0006-the-pool-evicts-an-idle-worker-that-its-eviction-lets-go-and-lends-an-idle-worker-first.md): the pool evicts an idle worker that its eviction lets go, and lends an idle worker first.
 - [ADR 0007](./docs/adr/0007-a-sizing-that-learns-keeps-learning-in-steps-both-ways-and-pauses-between-steps-that-change-nothing.md): a sizing that learns keeps learning in steps both ways, and pauses between steps that change nothing.
+- [ADR 0008](./docs/adr/0008-the-pool-measures-and-waits-on-the-clock-that-the-caller-gives.md): the pool measures and waits on the clock that the caller gives.

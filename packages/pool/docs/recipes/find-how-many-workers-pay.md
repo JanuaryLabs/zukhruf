@@ -35,6 +35,7 @@ if (process.argv[2] === 'helper') {
     size: new HillClimbing({ memoryPerWorker: 256 * 2 ** 20 }),
     startup: new OnDemand(),
     eviction: new IdleTimeout({ after: 300_000 }),
+    clock: globalThis,
     create: () =>
       new Coprocess(process.execPath, [import.meta.filename, 'helper'], {
         name: 'helper',

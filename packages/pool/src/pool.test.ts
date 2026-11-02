@@ -4,6 +4,7 @@ import { availableParallelism } from 'node:os';
 import { createInterface } from 'node:readline';
 import { setTimeout } from 'node:timers/promises';
 
+import { createClock } from '@sinonjs/fake-timers';
 import PQueue from 'p-queue';
 
 import { Latch } from '@zukhruf/async';
@@ -121,6 +122,7 @@ test('an on-demand pool starts no worker until a job needs one, then reuses it',
       created.push(worker);
       return worker;
     },
+    clock: globalThis,
   });
   await pool.ready();
   assert.equal(created.length, 0);
@@ -151,6 +153,7 @@ test('a parallel pool starts every worker at once', async (t) => {
       created.push(worker);
       return worker;
     },
+    clock: globalThis,
   });
   // Nothing is ready yet, so only a parallel start reaches three workers.
   await t.waitFor(() => assert.equal(created.length, 3), {
@@ -172,6 +175,7 @@ test('an ordered-ready pool starts each worker after the previous one is ready',
       created.push(worker);
       return worker;
     },
+    clock: globalThis,
   });
   await t.waitFor(() => assert.equal(created.length, 1), {
     interval: 10,
@@ -210,6 +214,7 @@ test('a leader-first pool starts the others together once the first is ready, an
       if (created.length > 1) worker.release();
       return worker;
     },
+    clock: globalThis,
   });
   const job = pool.use((worker) => worker.echo('during warm-up'));
   await setTimeout(200);
@@ -243,6 +248,7 @@ test('a job aborted while it runs kills only its worker, and the next job takes 
       created.push(worker);
       return worker;
     },
+    clock: globalThis,
   });
   await pool.ready();
   const stop = new AbortController();
@@ -272,6 +278,7 @@ test('a queued job aborted before its turn never runs', async () => {
       worker.release();
       return worker;
     },
+    clock: globalThis,
   });
   await pool.ready();
   const first = Promise.withResolvers<void>();
@@ -304,6 +311,7 @@ test('a job aborted while its worker warms up leaves the warm-up running for lat
       created.push(worker);
       return worker;
     },
+    clock: globalThis,
   });
   const stop = new AbortController();
   const waiting = pool.use((worker) => worker.echo('never'), stop.signal);
@@ -331,6 +339,7 @@ test('a worker that fails to start fails the job waiting for it, and the next jo
       created.push(worker);
       return worker;
     },
+    clock: globalThis,
   });
 
   await assert.rejects(
@@ -352,6 +361,7 @@ test('disposing a pool stops every worker, rejects waiting and later jobs, and s
       created.push(worker);
       return worker;
     },
+    clock: globalThis,
   });
   await t.waitFor(() => assert.equal(created.length, 1), {
     interval: 10,
@@ -392,6 +402,7 @@ test('a resources sizing runs one worker per CPU while each finds its memory fre
         created.push(worker);
         return worker;
       },
+      clock: globalThis,
     });
     await pool.ready();
     assert.equal(created.length, expected);
@@ -503,6 +514,7 @@ test('a hill-climbing pool grows past its first two workers while a backlog of s
       created.push(worker);
       return worker;
     },
+    clock: globalThis,
   });
   assert.ok(availableParallelism() >= 4, 'this test needs four CPUs');
   await pool.ready();
@@ -553,6 +565,7 @@ void describe(
               created.push(worker);
               return worker;
             },
+            clock: globalThis,
           });
           assert.ok(availableParallelism() >= 4, 'this test needs four CPUs');
           const stop = new AbortController();
@@ -617,6 +630,7 @@ void describe(
               created.push(worker);
               return worker;
             },
+            clock: globalThis,
           });
           assert.ok(availableParallelism() >= 4, 'this test needs four CPUs');
           const stop = new AbortController();
@@ -726,6 +740,7 @@ void describe(
                 .then(() => died.set(worker, performance.now()));
               return worker;
             },
+            clock: globalThis,
           });
           assert.ok(availableParallelism() >= 4, 'this test needs four CPUs');
           const stop = new AbortController();
@@ -801,6 +816,7 @@ void describe(
               created.push(worker);
               return worker;
             },
+            clock: globalThis,
           });
           assert.ok(availableParallelism() >= 4, 'this test needs four CPUs');
           const busy = new AbortController();
@@ -870,6 +886,7 @@ void test.each(
           created.push(worker);
           return worker;
         },
+        clock: globalThis,
       });
       assert.ok(availableParallelism() >= 4, 'this test needs four CPUs');
       const stop = new AbortController();
@@ -931,6 +948,7 @@ void test.each(
               created.push({ worker, at: performance.now() });
               return worker;
             },
+            clock: globalThis,
           }),
         );
         return { engine, created, pool };
@@ -996,6 +1014,7 @@ void test.each([HillClimbing, Gradient], (Learning) =>
         created.push(worker);
         return worker;
       },
+      clock: globalThis,
     });
     assert.ok(availableParallelism() >= 4, 'this test needs four CPUs');
     const stop = new AbortController();
@@ -1042,6 +1061,7 @@ test('a Gradient pool measures the time of a job with two workers again, so it s
       created.push(worker);
       return worker;
     },
+    clock: globalThis,
   });
   assert.ok(availableParallelism() >= 4, 'this test needs four CPUs');
   const stop = new AbortController();
@@ -1099,6 +1119,7 @@ test('a pool keeps alive a worker it stops running while the sizing keeps it, an
       created.push(worker);
       return worker;
     },
+    clock: globalThis,
   });
   await pool.ready();
   const run = (text: string) => pool.use((worker) => worker.echo(text));
@@ -1131,6 +1152,7 @@ test('a job that started before the pool resized does not count toward the new s
       worker.release();
       return worker;
     },
+    clock: globalThis,
   });
   await pool.ready();
   const slow = pool.use((worker) => worker.echo('sleep 400'));
@@ -1162,6 +1184,7 @@ test('an eager pool replaces an idle worker that exits on its own, before any jo
       created.push(worker);
       return worker;
     },
+    clock: globalThis,
   });
   await pool.ready();
 
@@ -1193,6 +1216,7 @@ test('stats count the workers that start, wait idle or are lent, and the jobs th
       created.push(worker);
       return worker;
     },
+    clock: globalThis,
   });
   const until = (stats: object) =>
     t.waitFor(() => assert.deepEqual(pool.stats, stats), {
@@ -1248,6 +1272,7 @@ test('stats leave out a worker that exits while a job holds it, and a read keeps
       created.push(worker);
       return worker;
     },
+    clock: globalThis,
   });
   await pool.ready();
   const gate = new Latch();
@@ -1300,6 +1325,7 @@ test('stats leave out an idle worker that exits from an on-demand pool', async (
       created.push(worker);
       return worker;
     },
+    clock: globalThis,
   });
   assert.equal(await pool.use((worker) => worker.echo('one')), 'one');
   assert.deepEqual(pool.stats, { starting: 0, idle: 1, lent: 0, waiting: 0 });
@@ -1317,7 +1343,8 @@ test('stats leave out an idle worker that exits from an on-demand pool', async (
   );
 });
 
-test('an eager pool waits before it replaces a worker that exits early: 1 s, doubled for each early exit in a row, up to 60 s', async (t) => {
+test('an eager pool waits before it replaces a worker that exits early: 1 s, doubled for each early exit in a row, up to 60 s', async () => {
+  const clock = createClock();
   const created: EchoWorker[] = [];
   await using pool = new Pool({
     size: new Fixed(1),
@@ -1329,29 +1356,30 @@ test('an eager pool waits before it replaces a worker that exits early: 1 s, dou
       created.push(worker);
       return worker;
     },
+    clock,
   });
   await pool.ready();
   // A minute cannot pass in a test: the test moves the timers instead.
-  t.mock.timers.enable({ apis: ['setTimeout'] });
 
   for (const wait of [1_000, 2_000, 4_000, 8_000, 16_000, 32_000, 60_000]) {
     const worker = created.at(-1)!;
     worker.kill();
     await worker.exited();
-    t.mock.timers.tick(wait - 1);
+    await clock.tickAsync(wait - 1);
     assert.deepEqual(
       pool.stats,
       { starting: 0, idle: 0, lent: 0, waiting: 0 },
       `the pool still waits at ${wait - 1} ms`,
     );
-    t.mock.timers.tick(1);
+    await clock.tickAsync(1);
     assert.equal(pool.stats.starting, 1, `the pool starts at ${wait} ms`);
     assert.equal(await pool.use((next) => next.echo('up')), 'up');
   }
   assert.equal(created.length, 8);
 });
 
-test('a job that needs a slot in back-off starts its worker at once, and the back-off starts no other', async (t) => {
+test('a job that needs a slot in back-off starts its worker at once, and the back-off starts no other', async () => {
+  const clock = createClock();
   const created: EchoWorker[] = [];
   await using pool = new Pool({
     size: new Fixed(1),
@@ -1363,9 +1391,9 @@ test('a job that needs a slot in back-off starts its worker at once, and the bac
       created.push(worker);
       return worker;
     },
+    clock,
   });
   await pool.ready();
-  t.mock.timers.enable({ apis: ['setTimeout'] });
   created[0]!.kill();
   await created[0]!.exited();
   assert.deepEqual(pool.stats, { starting: 0, idle: 0, lent: 0, waiting: 0 });
@@ -1376,12 +1404,13 @@ test('a job that needs a slot in back-off starts its worker at once, and the bac
     await pool.use((worker) => worker.echo('now'), AbortSignal.timeout(5_000)),
     'now',
   );
-  t.mock.timers.tick(60_000);
+  await clock.tickAsync(60_000);
   assert.equal(created.length, 2);
   assert.deepEqual(pool.stats, { starting: 0, idle: 1, lent: 0, waiting: 0 });
 });
 
-test('disposing a pool in back-off leaves no timer that keeps the process alive', async () => {
+test('disposing a pool in back-off leaves no timer on its clock', async () => {
+  const clock = createClock();
   const created: EchoWorker[] = [];
   const pool = new Pool({
     size: new Fixed(1),
@@ -1393,13 +1422,11 @@ test('disposing a pool in back-off leaves no timer that keeps the process alive'
       created.push(worker);
       return worker;
     },
+    clock,
   });
   try {
     await pool.ready();
-    const timers = () =>
-      process
-        .getActiveResourcesInfo()
-        .filter((resource) => resource === 'Timeout').length;
+    const timers = () => clock.countTimers();
     const before = timers();
     created[0]!.kill();
     await created[0]!.exited();
@@ -1412,7 +1439,8 @@ test('disposing a pool in back-off leaves no timer that keeps the process alive'
   }
 });
 
-test('a worker that ran 10 minutes is replaced at once, and ends the back-off', async (t) => {
+test('a worker that ran 10 minutes is replaced at once, and ends the back-off', async () => {
+  const clock = createClock();
   const created: EchoWorker[] = [];
   await using pool = new Pool({
     size: new Fixed(1),
@@ -1424,23 +1452,23 @@ test('a worker that ran 10 minutes is replaced at once, and ends the back-off', 
       created.push(worker);
       return worker;
     },
+    clock,
   });
   await pool.ready();
-  t.mock.timers.enable({ apis: ['setTimeout'] });
   created[0]!.kill();
   await created[0]!.exited();
-  t.mock.timers.tick(1_000);
+  await clock.tickAsync(1_000);
   assert.equal(await pool.use((worker) => worker.echo('up')), 'up');
 
-  // Ten minutes cannot pass in a test: the clock moves on instead.
-  const now = performance.now.bind(performance);
-  t.mock.method(performance, 'now', () => now() + 600_000);
+  // The worker runs ten minutes on the clock. No timer of the pool waits.
+  await clock.tickAsync(600_000);
   created[1]!.kill();
   await created[1]!.exited();
   assert.equal(pool.stats.starting, 1);
 });
 
-test('a slot that the sizing stops keeping during its back-off starts no stray worker once the sizing runs it again', async (t) => {
+test('a slot that the sizing stops keeping during its back-off starts no stray worker once the sizing runs it again', async () => {
+  const clock = createClock();
   const created: EchoWorker[] = [];
   const sizing = new Steered();
   await using pool = new Pool({
@@ -1453,9 +1481,9 @@ test('a slot that the sizing stops keeping during its back-off starts no stray w
       created.push(worker);
       return worker;
     },
+    clock,
   });
   await pool.ready();
-  t.mock.timers.enable({ apis: ['setTimeout'] });
   const run = (text: string) => pool.use((worker) => worker.echo(text));
   created[1]!.kill();
   await created[1]!.exited();
@@ -1471,18 +1499,18 @@ test('a slot that the sizing stops keeping during its back-off starts no stray w
   assert.deepEqual(await Promise.all([run('c'), run('d')]), ['c', 'd']);
   assert.equal(created.length, 3);
 
-  t.mock.timers.tick(60_000);
+  await clock.tickAsync(60_000);
   assert.deepEqual(pool.stats, { starting: 0, idle: 2, lent: 0, waiting: 0 });
   // A stray worker would be created a microtask after its slot starts.
   await new Promise((resolve) => setImmediate(resolve));
   assert.equal(created.length, 3);
 });
 
-test('an idle worker closes once its idle timeout passes, and not 1 ms sooner, and the stats then count it nowhere', async (t) => {
+test('an idle worker closes once its idle timeout passes, and not 1 ms sooner, and the stats then count it nowhere', async () => {
+  const clock = createClock();
   const created: EchoWorker[] = [];
   // The idle wait starts when the worker becomes ready, so the timers move
   // from before that.
-  t.mock.timers.enable({ apis: ['setTimeout'] });
   await using pool = new Pool({
     size: new Fixed(1),
     startup: new Parallel(),
@@ -1493,22 +1521,23 @@ test('an idle worker closes once its idle timeout passes, and not 1 ms sooner, a
       created.push(worker);
       return worker;
     },
+    clock,
   });
   await pool.ready();
 
-  t.mock.timers.tick(999);
+  await clock.tickAsync(999);
   assert.deepEqual(pool.stats, { starting: 0, idle: 1, lent: 0, waiting: 0 });
   assert.equal(created[0]!.dead, false);
 
-  t.mock.timers.tick(1);
+  await clock.tickAsync(1);
   assert.deepEqual(pool.stats, { starting: 0, idle: 0, lent: 0, waiting: 0 });
   await created[0]!.exited();
   assert.equal(created.length, 1);
 });
 
-test('a job that takes an idle worker before its idle timeout passes keeps it, and its end starts a new idle timeout', async (t) => {
+test('a job that takes an idle worker before its idle timeout passes keeps it, and its end starts a new idle timeout', async () => {
+  const clock = createClock();
   const created: EchoWorker[] = [];
-  t.mock.timers.enable({ apis: ['setTimeout'] });
   await using pool = new Pool({
     size: new Fixed(1),
     startup: new Parallel(),
@@ -1519,24 +1548,33 @@ test('a job that takes an idle worker before its idle timeout passes keeps it, a
       created.push(worker);
       return worker;
     },
+    clock,
   });
   await pool.ready();
 
-  t.mock.timers.tick(999);
-  assert.equal(await pool.use((worker) => worker.echo('busy')), 'busy');
-  t.mock.timers.tick(999);
+  await clock.tickAsync(999);
+  let timersWhileLent: number | undefined;
+  assert.equal(
+    await pool.use((worker) => {
+      timersWhileLent = clock.countTimers();
+      return worker.echo('busy');
+    }),
+    'busy',
+  );
+  assert.equal(timersWhileLent, 0, 'the job must stop the idle timeout');
+  await clock.tickAsync(999);
   assert.deepEqual(pool.stats, { starting: 0, idle: 1, lent: 0, waiting: 0 });
   assert.equal(created[0]!.dead, false);
 
-  t.mock.timers.tick(1);
+  await clock.tickAsync(1);
   assert.deepEqual(pool.stats, { starting: 0, idle: 0, lent: 0, waiting: 0 });
   await created[0]!.exited();
   assert.equal(created.length, 1);
 });
 
 test('a pool does not evict a worker while a job holds it past its idle timeout, and the end of the job starts a new idle timeout', async (t) => {
+  const clock = createClock();
   const created: EchoWorker[] = [];
-  t.mock.timers.enable({ apis: ['setTimeout'] });
   await using pool = new Pool({
     size: new Fixed(1),
     startup: new Parallel(),
@@ -1547,6 +1585,7 @@ test('a pool does not evict a worker while a job holds it past its idle timeout,
       created.push(worker);
       return worker;
     },
+    clock,
   });
   await pool.ready();
   const gate = new Latch();
@@ -1555,10 +1594,8 @@ test('a pool does not evict a worker while a job holds it past its idle timeout,
     return worker.echo('held');
   });
   try {
-    // t.waitFor polls with setTimeout, which the mock freezes.
-    while (pool.stats.lent === 0)
-      await new Promise((resolve) => setImmediate(resolve));
-    t.mock.timers.tick(1_001);
+    await t.waitFor(() => assert.equal(pool.stats.lent, 1));
+    await clock.tickAsync(1_001);
     assert.equal(created[0]!.dead, false, 'the lent worker was evicted');
     assert.deepEqual(pool.stats, { starting: 0, idle: 0, lent: 1, waiting: 0 });
   } finally {
@@ -1566,16 +1603,16 @@ test('a pool does not evict a worker while a job holds it past its idle timeout,
     assert.equal(await held, 'held');
   }
 
-  t.mock.timers.tick(999);
+  await clock.tickAsync(999);
   assert.deepEqual(pool.stats, { starting: 0, idle: 1, lent: 0, waiting: 0 });
-  t.mock.timers.tick(1);
+  await clock.tickAsync(1);
   assert.deepEqual(pool.stats, { starting: 0, idle: 0, lent: 0, waiting: 0 });
   await created[0]!.exited();
 });
 
-test('an evicted worker starts no replacement and no back-off, and a job then starts a worker at once, also after a leader-first start', async (t) => {
-  t.mock.timers.enable({ apis: ['setTimeout'] });
+test('an evicted worker starts no replacement and no back-off, and a job then starts a worker at once, also after a leader-first start', async () => {
   for (const startup of [new Parallel(), new LeaderFirst()]) {
+    const clock = createClock();
     const created: EchoWorker[] = [];
     await using pool = new Pool({
       size: new Fixed(2),
@@ -1587,12 +1624,13 @@ test('an evicted worker starts no replacement and no back-off, and a job then st
         created.push(worker);
         return worker;
       },
+      clock,
     });
     await pool.ready();
 
-    t.mock.timers.tick(1_000);
+    await clock.tickAsync(1_000);
     await Promise.all(created.map((worker) => worker.exited()));
-    t.mock.timers.tick(60_000);
+    await clock.tickAsync(60_000);
     assert.equal(created.length, 2, `${startup.constructor.name} replaced`);
     assert.deepEqual(pool.stats, { starting: 0, idle: 0, lent: 0, waiting: 0 });
 
@@ -1609,11 +1647,9 @@ test('an evicted worker starts no replacement and no back-off, and a job then st
   }
 });
 
-test('disposing a pool leaves no idle timeout that keeps the process alive', async () => {
-  const timers = () =>
-    process
-      .getActiveResourcesInfo()
-      .filter((resource) => resource === 'Timeout').length;
+test('disposing a pool leaves no idle timeout on its clock', async () => {
+  const clock = createClock();
+  const timers = () => clock.countTimers();
   const before = timers();
   const pool = new Pool({
     size: new Fixed(1),
@@ -1624,6 +1660,7 @@ test('disposing a pool leaves no idle timeout that keeps the process alive', asy
       worker.release();
       return worker;
     },
+    clock,
   });
   try {
     await pool.ready();
@@ -1636,9 +1673,9 @@ test('disposing a pool leaves no idle timeout that keeps the process alive', asy
   }
 });
 
-test('a pool with no eviction keeps its idle workers', async (t) => {
+test('a pool with no eviction keeps its idle workers', async () => {
+  const clock = createClock();
   const created: EchoWorker[] = [];
-  t.mock.timers.enable({ apis: ['setTimeout'] });
   await using pool = new Pool({
     size: new Fixed(2),
     startup: new Parallel(),
@@ -1649,18 +1686,19 @@ test('a pool with no eviction keeps its idle workers', async (t) => {
       created.push(worker);
       return worker;
     },
+    clock,
   });
   await pool.ready();
 
-  t.mock.timers.tick(3_600_000);
+  await clock.tickAsync(3_600_000);
   assert.deepEqual(pool.stats, { starting: 0, idle: 2, lent: 0, waiting: 0 });
   assert.ok(created.every((worker) => !worker.dead));
 });
 
 test('a pool does not evict a worker that the sizing keeps but does not run, and evicts it once the sizing runs it again', async (t) => {
+  const clock = createClock();
   const created: EchoWorker[] = [];
   const sizing = new Steered();
-  t.mock.timers.enable({ apis: ['setTimeout'] });
   await using pool = new Pool({
     size: sizing,
     startup: new Parallel(),
@@ -1671,6 +1709,7 @@ test('a pool does not evict a worker that the sizing keeps but does not run, and
       created.push(worker);
       return worker;
     },
+    clock,
   });
   await pool.ready();
   const run = (text: string) => pool.use((worker) => worker.echo(text));
@@ -1684,10 +1723,8 @@ test('a pool does not evict a worker that the sizing keeps but does not run, and
     return worker.echo('held');
   });
   try {
-    // t.waitFor polls with setTimeout, which the mock freezes.
-    while (pool.stats.lent === 0)
-      await new Promise((resolve) => setImmediate(resolve));
-    t.mock.timers.tick(5_000);
+    await t.waitFor(() => assert.equal(pool.stats.lent, 1));
+    await clock.tickAsync(5_000);
     assert.equal(created[1]!.dead, false, 'the kept worker was evicted');
   } finally {
     gate.open();
@@ -1696,17 +1733,17 @@ test('a pool does not evict a worker that the sizing keeps but does not run, and
 
   sizing.current = 2;
   assert.equal(await run('b'), 'b');
-  t.mock.timers.tick(999);
+  await clock.tickAsync(999);
   assert.deepEqual(pool.stats, { starting: 0, idle: 2, lent: 0, waiting: 0 });
-  t.mock.timers.tick(1);
+  await clock.tickAsync(1);
   assert.deepEqual(pool.stats, { starting: 0, idle: 0, lent: 0, waiting: 0 });
   await Promise.all(created.map((worker) => worker.exited()));
   assert.equal(created.length, 2);
 });
 
 test('a worker evicted after it ran 10 minutes ends the back-off', async (t) => {
+  const clock = createClock();
   const created: EchoWorker[] = [];
-  t.mock.timers.enable({ apis: ['setTimeout'] });
   await using pool = new Pool({
     size: new Fixed(1),
     startup: new Parallel(),
@@ -1717,26 +1754,34 @@ test('a worker evicted after it ran 10 minutes ends the back-off', async (t) => 
       created.push(worker);
       return worker;
     },
+    clock,
   });
   await pool.ready();
   // An early exit starts the back-off.
   created[0]!.kill();
   await created[0]!.exited();
-  t.mock.timers.tick(1_000);
-  assert.equal(await pool.use((worker) => worker.echo('up')), 'up');
+  await clock.tickAsync(1_000);
 
-  // Ten minutes cannot pass in a test: the clock moves on instead.
-  const now = performance.now.bind(performance);
-  t.mock.method(performance, 'now', () => now() + 600_000);
-  t.mock.timers.tick(1_000);
+  // A job holds the next worker while it runs ten minutes on the clock, so
+  // no idle timeout runs. When the job ends, the idle timeout evicts it.
+  const done = Promise.withResolvers<void>();
+  const holding = pool.use(async (worker) => {
+    await done.promise;
+    return worker.echo('up');
+  });
+  await t.waitFor(() => assert.equal(pool.stats.lent, 1));
+  await clock.tickAsync(600_000);
+  done.resolve();
+  assert.equal(await holding, 'up');
+  await clock.tickAsync(1_000);
   await created[1]!.exited();
   assert.equal(await pool.use((worker) => worker.echo('again')), 'again');
 
   created[2]!.kill();
   await created[2]!.exited();
-  t.mock.timers.tick(999);
+  await clock.tickAsync(999);
   assert.equal(pool.stats.starting, 0, 'the pool still waits at 999 ms');
-  t.mock.timers.tick(1);
+  await clock.tickAsync(1);
   assert.equal(pool.stats.starting, 1, 'the pool starts at 1 s, not 2 s');
 });
 
@@ -1747,18 +1792,24 @@ test('an idle timeout throws a RangeError for a time that a timer cannot keep', 
     assert.doesNotThrow(() => new IdleTimeout({ after }), String(after));
 });
 
-test('an idle timeout evicts no worker and keeps no timer when its signal aborted before the call', (t) => {
-  t.mock.timers.enable({ apis: ['setTimeout'] });
-  try {
-    let evicted = 0;
-    new IdleTimeout({ after: 1_000 }).idle(AbortSignal.abort(), () => {
+test('an idle timeout evicts no worker and keeps no timer when its signal aborted before the call', async () => {
+  // Arrange
+  const clock = createClock();
+  let evicted = 0;
+
+  // Act
+  new IdleTimeout({ after: 1_000 }).idle(
+    AbortSignal.abort(),
+    () => {
       evicted++;
-    });
-    t.mock.timers.tick(1_000);
-    assert.equal(evicted, 0);
-  } finally {
-    t.mock.timers.reset();
-  }
+    },
+    clock,
+  );
+  await clock.tickAsync(1_000);
+
+  // Assert
+  assert.equal(evicted, 0);
+  assert.equal(clock.countTimers(), 0);
 });
 
 test('a job takes an idle worker before it starts or waits for one in a lower slot', async (t) => {
@@ -1775,6 +1826,7 @@ test('a job takes an idle worker before it starts or waits for one in a lower sl
         created.push(worker);
         return worker;
       },
+      clock: globalThis,
     });
     await assert.rejects(pool.ready(), /Echo worker exited/);
     await st.waitFor(() => assert.ok(pool.stats.idle > 0), {
@@ -1798,6 +1850,7 @@ test('a job takes an idle worker before it starts or waits for one in a lower sl
         created.push(worker);
         return worker;
       },
+      clock: globalThis,
     });
     assert.deepEqual(
       await Promise.all([
@@ -1814,6 +1867,7 @@ test('a job takes an idle worker before it starts or waits for one in a lower sl
   });
 
   await t.test('a slot in a back-off', async (st) => {
+    const clock = createClock();
     const created: EchoWorker[] = [];
     await using pool = new Pool({
       size: new Fixed(2),
@@ -1825,9 +1879,9 @@ test('a job takes an idle worker before it starts or waits for one in a lower sl
         created.push(worker);
         return worker;
       },
+      clock,
     });
     await pool.ready();
-    st.mock.timers.enable({ apis: ['setTimeout'] });
     created[0]!.kill();
     await created[0]!.exited();
 
@@ -1847,6 +1901,7 @@ test('a job takes an idle worker before it starts or waits for one in a lower sl
         created.push(worker);
         return worker;
       },
+      clock: globalThis,
     });
     try {
       await st.waitFor(() => assert.ok(pool.stats.idle > 0), {
@@ -1868,9 +1923,9 @@ test('a job takes an idle worker before it starts or waits for one in a lower sl
   });
 });
 
-test('jobs one at a time stay on the lowest idle worker, so the pool evicts the higher idle workers', async (t) => {
+test('jobs one at a time stay on the lowest idle worker, so the pool evicts the higher idle workers', async () => {
+  const clock = createClock();
   const created: EchoWorker[] = [];
-  t.mock.timers.enable({ apis: ['setTimeout'] });
   await using pool = new Pool({
     size: new Fixed(3),
     startup: new Parallel(),
@@ -1881,11 +1936,12 @@ test('jobs one at a time stay on the lowest idle worker, so the pool evicts the 
       created.push(worker);
       return worker;
     },
+    clock,
   });
   await pool.ready();
 
   for (let job = 0; job < 4; job++) {
-    t.mock.timers.tick(500);
+    await clock.tickAsync(500);
     assert.equal(await pool.use(async (worker) => worker.pid), created[0]!.pid);
   }
   await Promise.all([created[1]!.exited(), created[2]!.exited()]);
@@ -1894,7 +1950,8 @@ test('jobs one at a time stay on the lowest idle worker, so the pool evicts the 
   assert.equal(created.length, 3);
 });
 
-test('an eager pool replaces a worker that exits during a job once the job ends, after the back-off of an early exit', async (t) => {
+test('an eager pool replaces a worker that exits during a job once the job ends, after the back-off of an early exit', async () => {
+  const clock = createClock();
   const created: EchoWorker[] = [];
   await using pool = new Pool({
     size: new Fixed(1),
@@ -1906,9 +1963,9 @@ test('an eager pool replaces a worker that exits during a job once the job ends,
       created.push(worker);
       return worker;
     },
+    clock,
   });
   await pool.ready();
-  t.mock.timers.enable({ apis: ['setTimeout'] });
 
   // The job kills its own worker, as a job with its own time limit does.
   assert.equal(
@@ -1919,9 +1976,9 @@ test('an eager pool replaces a worker that exits during a job once the job ends,
     }),
     'done',
   );
-  t.mock.timers.tick(999);
+  await clock.tickAsync(999);
   assert.deepEqual(pool.stats, { starting: 0, idle: 0, lent: 0, waiting: 0 });
-  t.mock.timers.tick(1);
+  await clock.tickAsync(1);
   assert.equal(pool.stats.starting, 1, 'the pool starts at 1 s');
   // The worker is created a microtask after its slot starts.
   await new Promise((resolve) => setImmediate(resolve));
@@ -1941,6 +1998,7 @@ test('a job joins a worker that starts before it starts one in an empty slot', a
       created.push(worker);
       return worker;
     },
+    clock: globalThis,
   });
   const stop = new AbortController();
   const waiting = pool.use((worker) => worker.echo('never'), stop.signal);
@@ -1964,6 +2022,7 @@ test('a job joins a worker that starts before it starts one in an empty slot', a
 });
 
 test('a job takes an empty slot before a slot in back-off', async (t) => {
+  const clock = createClock();
   const created: EchoWorker[] = [];
   await using pool = new Pool({
     size: new Fixed(2),
@@ -1977,20 +2036,20 @@ test('a job takes an empty slot before a slot in back-off', async (t) => {
       created.push(worker);
       return worker;
     },
+    clock,
   });
   await assert.rejects(pool.ready(), /Echo worker exited/);
   await t.waitFor(() => assert.equal(pool.stats.idle, 1), {
     interval: 10,
     timeout: 5000,
   });
-  t.mock.timers.enable({ apis: ['setTimeout'] });
   // An early exit puts the first slot in a back-off of 1 s.
   created[0]!.kill();
   await created[0]!.exited();
 
   assert.equal(await pool.use((worker) => worker.echo('empty')), 'empty');
   assert.equal(created.length, 3);
-  t.mock.timers.tick(1_000);
+  await clock.tickAsync(1_000);
   // The worker is created a microtask after its slot starts.
   await new Promise((resolve) => setImmediate(resolve));
   assert.equal(created.length, 4, 'the back-off starts its own worker');
@@ -2011,6 +2070,7 @@ test('the pool aborts the signal of an idle wait when a job takes the worker, st
       worker.release();
       return worker;
     },
+    clock: globalThis,
   });
   try {
     await pool.ready();

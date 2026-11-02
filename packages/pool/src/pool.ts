@@ -1,6 +1,6 @@
 import PQueue from 'p-queue';
 
-import { Latch, untilAborted } from '@zukhruf/async';
+import { type Clock, Latch, untilAborted } from '@zukhruf/async';
 
 import type { Eviction } from './eviction.ts';
 import type { PoolStats } from './pool-stats.ts';
@@ -33,7 +33,7 @@ type State<T> =
     }
   | Ready<T>
   | { readonly kind: 'lost'; readonly worker: T; readonly since: number }
-  | { readonly kind: 'backoff'; readonly timer: NodeJS.Timeout };
+  | { readonly kind: 'backoff'; readonly timer: unknown };
 
 interface Slot<T> {
   readonly index: number;
@@ -60,15 +60,20 @@ export class Pool<T extends Worker> implements AsyncDisposable {
   readonly #workers = new Set<T>();
   readonly #stopped = new AbortController();
   readonly #started = new Latch<PromiseSettledResult<void>>();
+  readonly #clock: Clock;
   // When the pool last changed how many workers it runs.
-  #resized = performance.now();
+  #resized: number;
 
   constructor(options: {
     size: Sizing;
     startup: Startup;
     eviction: Eviction;
     create: () => T;
+    /** The clock of every time that the pool measures and waits: `globalThis` in production, a fake clock in a test. */
+    clock: Clock;
   }) {
+    this.#clock = options.clock;
+    this.#resized = this.#clock.performance.now();
     this.#create = options.create;
     this.#startup = options.startup;
     this.#sizing = options.size;
@@ -133,7 +138,7 @@ export class Pool<T extends Worker> implements AsyncDisposable {
           this.#lose(slot, worker);
         };
         stop.addEventListener('abort', kill, { once: true });
-        const started = performance.now();
+        const started = this.#clock.performance.now();
         try {
           const result = await job(worker);
           stop.throwIfAborted();
@@ -187,7 +192,7 @@ export class Pool<T extends Worker> implements AsyncDisposable {
       void this.#close(state.worker);
     }
     // A job does not wait out a back-off: its worker starts now.
-    if (state.kind === 'backoff') clearTimeout(state.timer);
+    if (state.kind === 'backoff') this.#clock.clearTimeout(state.timer);
     const worker = await settled(
       state.kind === 'starting' ? state.outcome : this.#spawn(slot),
     );
@@ -204,14 +209,14 @@ export class Pool<T extends Worker> implements AsyncDisposable {
     const steady = this.#steady();
     this.#sizing.record({
       started,
-      finished: performance.now(),
+      finished: this.#clock.performance.now(),
       measurable:
         steady !== undefined && started >= steady && this.#queue.size > 0,
     });
     for (const slot of this.#slots.slice(this.#sizing.kept)) this.#retire(slot);
     if (this.#sizing.current === this.#queue.concurrency) return;
     this.#queue.concurrency = this.#sizing.current;
-    this.#resized = performance.now();
+    this.#resized = this.#clock.performance.now();
     // An idle worker waits for its eviction only while the pool runs its slot.
     for (const slot of this.#slots.slice(0, this.#sizing.kept)) {
       const state = slot.state;
@@ -258,7 +263,7 @@ export class Pool<T extends Worker> implements AsyncDisposable {
       .then(
         (worker) => {
           if (slot.state.kind === 'starting' && slot.state.outcome === outcome)
-            this.#rest(slot, worker, performance.now());
+            this.#rest(slot, worker, this.#clock.performance.now());
           outcome.open({ status: 'fulfilled', value: worker });
           turn.resolve();
           void worker.exited().then(() => this.#ended(slot, worker));
@@ -298,6 +303,7 @@ export class Pool<T extends Worker> implements AsyncDisposable {
     this.#eviction.idle(
       AbortSignal.any([state.idle.signal, this.#stopped.signal]),
       () => this.#evict(slot, state),
+      this.#clock,
     );
   }
 
@@ -312,7 +318,8 @@ export class Pool<T extends Worker> implements AsyncDisposable {
       this.#stopped.signal.aborted
     )
       return;
-    if (performance.now() - state.since >= backoff.reset) slot.early = 0;
+    if (this.#clock.performance.now() - state.since >= backoff.reset)
+      slot.early = 0;
     this.#retire(slot);
   }
 
@@ -341,7 +348,10 @@ export class Pool<T extends Worker> implements AsyncDisposable {
     if (this.#stopped.signal.aborted || !this.#startup.eager) return;
     this.#enter(slot, { kind: 'empty' });
     void this.#close(worker);
-    slot.early = performance.now() - since < backoff.reset ? slot.early + 1 : 0;
+    slot.early =
+      this.#clock.performance.now() - since < backoff.reset
+        ? slot.early + 1
+        : 0;
     if (slot.index >= this.#sizing.current) return;
     if (slot.early === 0) {
       this.#spawn(slot);
@@ -350,7 +360,7 @@ export class Pool<T extends Worker> implements AsyncDisposable {
     const delay = Math.min(backoff.first * 2 ** (slot.early - 1), backoff.most);
     this.#enter(slot, {
       kind: 'backoff',
-      timer: setTimeout(() => {
+      timer: this.#clock.setTimeout(() => {
         this.#enter(slot, { kind: 'empty' });
         if (slot.index < this.#sizing.current) this.#spawn(slot);
       }, delay),
@@ -364,7 +374,7 @@ export class Pool<T extends Worker> implements AsyncDisposable {
     this.#enter(slot, { kind: 'empty' });
     if (state.kind === 'ready' || state.kind === 'lost')
       void this.#close(state.worker);
-    else if (state.kind === 'backoff') clearTimeout(state.timer);
+    else if (state.kind === 'backoff') this.#clock.clearTimeout(state.timer);
     else if (state.kind === 'starting')
       void settled(state.outcome).then(
         (worker) => this.#close(worker),
@@ -380,7 +390,7 @@ export class Pool<T extends Worker> implements AsyncDisposable {
   async [Symbol.asyncDispose](): Promise<void> {
     this.#stopped.abort();
     for (const { state } of this.#slots)
-      if (state.kind === 'backoff') clearTimeout(state.timer);
+      if (state.kind === 'backoff') this.#clock.clearTimeout(state.timer);
     for (const worker of this.#workers) worker.kill();
     await Promise.all([...this.#workers].map((worker) => worker.close()));
     await this.#queue.onIdle();

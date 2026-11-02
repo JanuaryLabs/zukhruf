@@ -48,6 +48,7 @@ if (process.argv[2] === 'helper') {
         size: new HillClimbing({ memoryPerWorker: 1 }),
         startup: new Parallel(),
         eviction: new NoEviction(),
+        clock: globalThis,
         create: () => {
           const helper = new Coprocess(
             process.execPath,

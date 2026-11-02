@@ -85,6 +85,7 @@ if (role === 'helper') {
         size: new Fixed(4),
         startup,
         eviction: new NoEviction(),
+        clock: globalThis,
         create: () => new ModelWorker(cache),
       });
       await pool.ready();

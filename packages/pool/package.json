@@ -45,6 +45,7 @@
     "p-queue": "10.0.0"
   },
   "devDependencies": {
+    "@sinonjs/fake-timers": "15.4.0",
     "@zukhruf/testing": "^0.6.13"
   }
 }
