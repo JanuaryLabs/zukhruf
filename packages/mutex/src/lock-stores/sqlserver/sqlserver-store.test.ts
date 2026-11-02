@@ -4,6 +4,7 @@ import { type Socket, connect, createServer } from 'node:net';
 import { type TestContext, test } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
 
+import { createClock } from '@sinonjs/fake-timers';
 import { Connection, Request, TYPES } from 'tedious';
 
 import { type Database, SqlServer } from '@zukhruf/testing/sqlserver';
@@ -99,6 +100,7 @@ const storeOver = (database: Database, endpoint: Endpoint = database) =>
     connect: () => sessionTo(database, endpoint),
     sequence,
     heartbeatInterval,
+    clock: globalThis,
   });
 
 /** Runs `text` on a session of the test, not of a store. */
@@ -316,6 +318,7 @@ test(
         connect: async () => open,
         sequence,
         heartbeatInterval,
+        clock: globalThis,
       });
       const handle = await holder.acquire(`report:${round}`);
       await handle[Symbol.asyncDispose]();
@@ -384,34 +387,43 @@ test(
 );
 
 test(
-  'a held key is lost within heartbeatInterval when the server stops answering',
+  'a held key is still held one heartbeat interval after the server stops answering, and lost at two, on the clock of the store',
   { timeout: 60_000 },
-  async () => {
+  async (t) => {
     // Arrange: the store reaches the server through a proxy, and holds a key.
     await using database = await sqlServerDatabase();
     await using proxy = await proxyTo(database);
-    const handle = await storeOver(database, proxy).acquire('report:daily');
-
-    // Act: the network stops silently while the key is held.
+    const clock = createClock();
+    const handle = await new SqlServerStore({
+      connect: () => sessionTo(database, proxy),
+      sequence,
+      heartbeatInterval,
+      clock,
+    }).acquire('report:daily');
+    // The network stops silently while the key is held.
     proxy.partition();
-    const started = performance.now();
-    const lost = await Promise.race([
-      once(handle.signal, 'abort').then(() => 'lost' as const),
-      delay(2000, 'still held' as const),
-    ]);
-    const after = performance.now() - started;
+    // The next heartbeat waits one interval on the clock.
+    await t.waitFor(() => assert.equal(clock.countTimers(), 1), {
+      timeout: 5_000,
+    });
 
-    // Assert: one interval to the next heartbeat, one interval for its answer.
+    // Act: the heartbeat asks, and the partition holds the answer.
+    await clock.tickAsync(heartbeatInterval);
+    // The time limit of the heartbeat waits on the clock.
+    await t.waitFor(() => assert.equal(clock.countTimers(), 1), {
+      timeout: 5_000,
+    });
+    const heldAfterOne = !handle.signal.aborted;
+    await clock.tickAsync(heartbeatInterval);
+
+    // Assert
+    assert.equal(heldAfterOne, true, 'The heartbeat must wait for its answer');
     assert.equal(
-      lost,
-      'lost',
+      handle.signal.aborted,
+      true,
       'The holder must learn that its session may be gone',
     );
     assert.ok(handle.signal.reason instanceof LeaseLostError);
-    assert.ok(
-      after < 2 * heartbeatInterval + 150,
-      `The lease was lost ${after.toFixed(0)} ms after the partition, later than two heartbeat intervals`,
-    );
   },
 );
 
@@ -425,6 +437,7 @@ test(
       connect: () => sessionTo(database, database),
       sequence,
       heartbeatInterval: 30_000,
+      clock: globalThis,
     });
     const handle = await store.acquire('report:daily');
     const [holder] = await observe(
@@ -517,6 +530,7 @@ test(
       connect: async () => reconnecting.session,
       sequence,
       heartbeatInterval: interval,
+      clock: globalThis,
     });
     const handle = await store.acquire('report:daily');
     await using other = new AsyncDisposableStack();

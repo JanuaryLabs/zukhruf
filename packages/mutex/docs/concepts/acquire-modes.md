@@ -4,11 +4,11 @@ A key is exclusive for every caller: one holder at a time. An **acquire mode** d
 
 ## The two acquire modes
 
-| Acquire mode                            | While the key is busy                                          | The task                      | Result type                                        |
-| --------------------------------------- | -------------------------------------------------------------- | ----------------------------- | -------------------------------------------------- |
-| `Modes.wait()` (default)                | The caller waits until the key is granted.                     | Always runs.                  | The task's value                                   |
-| `Modes.skipIfBusy()`                    | The caller gives up at once.                                   | Does not run.                 | `{ acquired: true, value } \| { acquired: false }` |
-| `Modes.skipIfBusy({ waitAtMost: 500 })` | The caller waits at most 500 ms for the holder, then gives up. | Runs only if granted in time. | `{ acquired: true, value } \| { acquired: false }` |
+| Acquire mode                                               | While the key is busy                                          | The task                      | Result type                                        |
+| ---------------------------------------------------------- | -------------------------------------------------------------- | ----------------------------- | -------------------------------------------------- |
+| `Modes.wait()` (default)                                   | The caller waits until the key is granted.                     | Always runs.                  | The task's value                                   |
+| `Modes.skipIfBusy()`                                       | The caller gives up at once.                                   | Does not run.                 | `{ acquired: true, value } \| { acquired: false }` |
+| `Modes.skipIfBusy({ waitAtMost: 500, clock: globalThis })` | The caller waits at most 500 ms for the holder, then gives up. | Runs only if granted in time. | `{ acquired: true, value } \| { acquired: false }` |
 
 ```ts
 import { Modes, Mutex } from '@zukhruf/mutex';
@@ -82,7 +82,7 @@ An acquire mode uses two operations of the lock store:
 
 The lock store has a third operation, `isHeld(key)`, for a [holder check](../../CONTEXT.md). An acquire mode does not use it: the holder can change before the answer arrives, so only an attempt can decide if a caller gets the key. See [ADR 0015](../adr/0015-a-holder-check-never-acquires-the-key.md).
 
-`skipIfBusy` always makes one `tryAcquire` first. Thus a free key is never skipped because of time. If the key is busy and `waitAtMost` is more than 0, it then calls `acquire` with one signal. This signal aborts at the end of `waitAtMost` or when the caller cancels (`AbortSignal.any`). Only the end of `waitAtMost` makes `skipIfBusy` give up.
+`skipIfBusy` always makes one `tryAcquire` first. Thus a free key is never skipped because of time. If the key is busy and `waitAtMost` is more than 0, it then calls `acquire` with one signal. This signal aborts at the end of `waitAtMost` or when the caller cancels (`AbortSignal.any`). Only the end of `waitAtMost` makes `skipIfBusy` give up. `waitAtMost` runs on the `clock` that you give with it, as a `timeout` of `@zukhruf/async`. `skipIfBusy()` with no options waits on no clock, so it takes none.
 
 **The time limit counts only the wait for another holder.** It starts when the lock store answers that the key is busy. A lock store with a coordinator can take longer to answer, for example while it connects, while a campaign runs, or while the leader is frozen. That time does not count, because a slow answer does not show that the key is busy. If `skipIfBusy` gave up then, `{ acquired: false }` would tell of a holder that maybe does not exist. To limit the total time of a call, also give a signal, for example `AbortSignal.timeout(2000)`. When that signal aborts, the call rejects. It does not give up. See [Cancel a wait](#cancel-a-wait) and [ADR 0010](../adr/0010-the-time-limit-of-skip-if-busy-counts-only-the-wait-for-a-holder.md).
 

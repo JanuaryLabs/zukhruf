@@ -1,3 +1,5 @@
+import type { Clock } from '@zukhruf/async';
+
 import {
   type GetLockServer,
   type GetLockSession,
@@ -28,6 +30,8 @@ export interface MariadbStoreOptions {
    * ended, before its signal aborts.
    */
   heartbeatInterval: number;
+  /** The clock of the heartbeat: `globalThis` in production, a fake clock in a test. */
+  clock: Clock;
 }
 
 /**
@@ -44,9 +48,14 @@ const oneYear = 31_536_000;
  * reaches one MariaDB database shares the locks.
  */
 export class MariadbStore extends SessionLockStore<MariadbSession> {
-  constructor({ connect, sequence, heartbeatInterval }: MariadbStoreOptions) {
+  constructor({
+    connect,
+    sequence,
+    heartbeatInterval,
+    clock,
+  }: MariadbStoreOptions) {
     super(
-      { connect, heartbeatInterval },
+      { connect, heartbeatInterval, clock },
       getLockDialect(mariadbServer(quoteName(sequence))),
     );
   }

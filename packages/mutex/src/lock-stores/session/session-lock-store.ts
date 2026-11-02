@@ -1,6 +1,4 @@
-import { setTimeout as delay } from 'node:timers/promises';
-
-import { untilAborted } from '@zukhruf/async';
+import { type Clock, delay, timeout, untilAborted } from '@zukhruf/async';
 import { FencingToken } from '@zukhruf/fencing';
 import { LeaseController } from '@zukhruf/lease';
 
@@ -66,6 +64,8 @@ export interface SessionLockStoreOptions<Session extends SessionEvents> {
    * ended, before its signal aborts.
    */
   heartbeatInterval: number;
+  /** The clock of the heartbeat: `globalThis` in production, a fake clock in a test. */
+  clock: Clock;
 }
 
 /**
@@ -139,6 +139,7 @@ export class SessionLockStore<
         new OwnedSession(await untilAborted(connecting, signal), dialect),
         key,
         this.#options.heartbeatInterval,
+        this.#options.clock,
         dialect,
       );
     } catch (error) {
@@ -204,6 +205,7 @@ class KeySession<Session extends SessionEvents> {
   readonly #owned: OwnedSession<Session>;
   readonly #lock: SessionLock;
   readonly #heartbeatInterval: number;
+  readonly #clock: Clock;
   readonly #dialect: SessionLockDialect<Session>;
   readonly #lease: LeaseController;
   /** Aborts when the store stops holding: a release, or a lost session. */
@@ -213,11 +215,13 @@ class KeySession<Session extends SessionEvents> {
     owned: OwnedSession<Session>,
     key: string,
     heartbeatInterval: number,
+    clock: Clock,
     dialect: SessionLockDialect<Session>,
   ) {
     this.#owned = owned;
     this.#lock = { key, name: dialect.lockName(key) };
     this.#heartbeatInterval = heartbeatInterval;
+    this.#clock = clock;
     this.#dialect = dialect;
     this.#lease = new LeaseController(key);
   }
@@ -275,10 +279,11 @@ class KeySession<Session extends SessionEvents> {
     const done = this.#done.signal;
     try {
       for (;;) {
-        await delay(interval, undefined, { signal: done });
+        await delay(interval, { clock: this.#clock, signal: done });
+        using limit = timeout(interval, { clock: this.#clock });
         const holds = await untilAborted(
           this.#dialect.holds(this.#owned.session, this.#lock),
-          AbortSignal.any([done, AbortSignal.timeout(interval)]),
+          AbortSignal.any([done, limit.signal]),
         );
         if (!holds) {
           throw new Error(

@@ -77,7 +77,7 @@ if (!tick.acquired) return;
 
 const fresh = await report.run(buildReport, { mode: Modes.wait() }); // an admin waits, then runs
 await mutex.acquire('product:42', reserve, {
-  mode: Modes.skipIfBusy({ waitAtMost: 500 }),
+  mode: Modes.skipIfBusy({ waitAtMost: 500, clock: globalThis }),
 });
 ```
 

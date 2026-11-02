@@ -4,6 +4,8 @@ import { test } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
 import { Worker } from 'node:worker_threads';
 
+import { createClock } from '@sinonjs/fake-timers';
+
 import { describe } from '@zukhruf/testing/node';
 
 import { MemoryStore } from '../lock-stores/memory/memory-store.ts';
@@ -106,33 +108,33 @@ void describe.each(storeCases, (store) =>
     });
 
     test(
-      'skipIfBusy({ waitAtMost }) gives up after the limit while the key stays busy',
+      'skipIfBusy({ waitAtMost }) gives up after exactly the limit on its clock while the key stays busy',
       { timeout: timeoutForGrants(store, 2) },
-      async () => {
-        // Arrange
+      async (t) => {
+        // Arrange: the limit runs on a fake clock; the lock store runs on real time.
         await using fixture = await store.fixture(process.env);
         await using host = store.open(fixture.location);
         const mutex = new Mutex(host.store);
         const holder = await hold(mutex, 'report:daily');
+        const clock = createClock();
 
         try {
+          const skipping = mutex.acquire('report:daily', async () => 'report', {
+            mode: Modes.skipIfBusy({ waitAtMost: 100, clock }),
+          });
+          // The lock store answered that the key is busy, so the limit runs.
+          await t.waitFor(() => assert.equal(clock.countTimers(), 1), {
+            timeout: timeoutForGrants(store, 1),
+          });
+
           // Act
-          const started = performance.now();
-          const result = await mutex.acquire(
-            'report:daily',
-            async () => 'report',
-            {
-              mode: Modes.skipIfBusy({ waitAtMost: 100 }),
-            },
-          );
-          const waited = performance.now() - started;
+          await clock.tickAsync(99);
+          const limitsAt99 = clock.countTimers();
+          await clock.tickAsync(1);
 
           // Assert
-          assert.deepEqual(result, { acquired: false });
-          assert.ok(
-            waited >= 90,
-            `The caller gave up after ${waited.toFixed(0)} ms, before its 100 ms limit`,
-          );
+          assert.equal(limitsAt99, 1, 'The limit must not end before 100 ms');
+          assert.deepEqual(await skipping, { acquired: false });
         } finally {
           await holder.release();
         }
@@ -151,7 +153,7 @@ void describe.each(storeCases, (store) =>
 
         // Act
         const attempt = mutex.acquire('report:daily', async () => 'report', {
-          mode: Modes.skipIfBusy({ waitAtMost: 2000 }),
+          mode: Modes.skipIfBusy({ waitAtMost: 2000, clock: globalThis }),
         });
         await delay(50);
         await holder.release();
@@ -174,7 +176,7 @@ void describe.each(storeCases, (store) =>
           'report:daily',
           async () => 'report',
           {
-            mode: Modes.skipIfBusy({ waitAtMost: 50 }),
+            mode: Modes.skipIfBusy({ waitAtMost: 50, clock: globalThis }),
           },
         );
         const waiter = mutex.acquire('report:daily', async () => 'report');
@@ -284,7 +286,7 @@ void describe.each(storeCases, (store) =>
         const cancel = new AbortController();
         const reason = new Error('cancelled');
         const attempt = mutex.acquire('report:daily', async () => 'report', {
-          mode: Modes.skipIfBusy({ waitAtMost: 10_000 }),
+          mode: Modes.skipIfBusy({ waitAtMost: 10_000, clock: globalThis }),
           signal: cancel.signal,
         });
 
@@ -324,7 +326,7 @@ void describe.each(storeCases, (store) =>
             'report:daily',
             async () => 'report',
             {
-              mode: Modes.skipIfBusy({ waitAtMost: 100 }),
+              mode: Modes.skipIfBusy({ waitAtMost: 100, clock: globalThis }),
               signal: new AbortController().signal,
             },
           );
@@ -358,7 +360,7 @@ void describe.each(storeCases, (store) =>
           signal,
         }),
         mutex.acquire('report:daily', task, {
-          mode: Modes.skipIfBusy({ waitAtMost: 100 }),
+          mode: Modes.skipIfBusy({ waitAtMost: 100, clock: globalThis }),
           signal,
         }),
       ]);
@@ -398,7 +400,10 @@ void describe.each(storeCases, (store) =>
         const skipped = await mutex.acquire(
           'report:daily',
           async () => 'skipped',
-          { mode: Modes.skipIfBusy({ waitAtMost: 50 }), signal },
+          {
+            mode: Modes.skipIfBusy({ waitAtMost: 50, clock: globalThis }),
+            signal,
+          },
         );
         await holder.release();
         await waited;
@@ -412,25 +417,29 @@ void describe.each(storeCases, (store) =>
 );
 
 describe('The time limit of skip if busy', () => {
-  test('the limit starts when the lock store answers, so a free key that it answers late is still acquired', async () => {
-    // Arrange: a lock store whose first answer comes after the limit, as while a coordinator connects.
+  test('the limit starts when the lock store answers, so a free key that it answers late is still acquired', async (t) => {
+    // Arrange: a lock store whose first answer comes 100 ms after the call, on
+    // the clock of the limit, as while a coordinator connects.
+    const clock = createClock();
     const inner = new MemoryStore();
     const mutex = new Mutex({
       acquire: (key, options) => inner.acquire(key, options),
       tryAcquire: async (key) => {
-        await delay(100);
+        await new Promise((resolve) => clock.setTimeout(resolve, 100));
         return inner.tryAcquire(key);
       },
       isHeld: (key) => inner.isHeld(key),
     });
+    const acquiring = mutex.acquire('report:daily', async () => 'report', {
+      mode: Modes.skipIfBusy({ waitAtMost: 20, clock }),
+    });
+    await t.waitFor(() => assert.equal(clock.countTimers(), 1));
 
     // Act
-    const result = await mutex.acquire('report:daily', async () => 'report', {
-      mode: Modes.skipIfBusy({ waitAtMost: 20 }),
-    });
+    await clock.tickAsync(100);
 
     // Assert: a slow answer is not a busy key, so the mode does not give up.
-    assert.deepEqual(result, { acquired: true, value: 'report' });
+    assert.deepEqual(await acquiring, { acquired: true, value: 'report' });
   });
 });
 
@@ -439,7 +448,7 @@ describe('Cancelling a wait', () => {
     // Arrange
     const mutex = new Mutex(new MemoryStore());
     const report = mutex.key('report:daily', {
-      mode: Modes.skipIfBusy({ waitAtMost: 10_000 }),
+      mode: Modes.skipIfBusy({ waitAtMost: 10_000, clock: globalThis }),
     });
     const holder = await hold(mutex, report.name);
     const cancel = new AbortController();
@@ -490,7 +499,7 @@ describe('Cancelling a wait', () => {
           signal: cancel.signal,
         }),
         mutex.acquire('report:daily', async () => {}, {
-          mode: Modes.skipIfBusy({ waitAtMost: 10_000 }),
+          mode: Modes.skipIfBusy({ waitAtMost: 10_000, clock: globalThis }),
           signal: cancel.signal,
         }),
       ]);
@@ -684,9 +693,16 @@ describe('Acquire mode result types', () => {
   });
 
   test('a negative or infinite time limit is refused', () => {
-    assert.throws(() => Modes.skipIfBusy({ waitAtMost: -1 }), RangeError);
     assert.throws(
-      () => Modes.skipIfBusy({ waitAtMost: Number.POSITIVE_INFINITY }),
+      () => Modes.skipIfBusy({ waitAtMost: -1, clock: globalThis }),
+      RangeError,
+    );
+    assert.throws(
+      () =>
+        Modes.skipIfBusy({
+          waitAtMost: Number.POSITIVE_INFINITY,
+          clock: globalThis,
+        }),
       RangeError,
     );
   });
@@ -695,7 +711,7 @@ describe('Acquire mode result types', () => {
 /** A child or thread that skips, then cancels a wait, while its host holds the key, and reports each result. */
 const skipperBody = `
 	const atOnce = await mutex.acquire('report:daily', async () => 'ran', { mode: Modes.skipIfBusy() });
-	const afterLimit = await mutex.acquire('report:daily', async () => 'ran', { mode: Modes.skipIfBusy({ waitAtMost: 100 }) });
+	const afterLimit = await mutex.acquire('report:daily', async () => 'ran', { mode: Modes.skipIfBusy({ waitAtMost: 100, clock: globalThis }) });
 	const cancel = new AbortController();
 	setTimeout(() => cancel.abort(new Error('cancelled')), 50);
 	const cancelled = await mutex.acquire('report:daily', async () => 'ran', { signal: cancel.signal }).catch((error) => error.message);

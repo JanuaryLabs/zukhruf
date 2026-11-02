@@ -1,4 +1,4 @@
-import { untilAborted } from '@zukhruf/async';
+import { type Clock, untilAborted } from '@zukhruf/async';
 
 import { keyDigest } from '../../shared/key-digest.ts';
 import {
@@ -34,6 +34,8 @@ export interface SqlServerStoreOptions {
    * ended, before its signal aborts.
    */
   heartbeatInterval: number;
+  /** The clock of the heartbeat: `globalThis` in production, a fake clock in a test. */
+  clock: Clock;
 }
 
 /** `0` is the principal ID of `public`, the default `@DbPrincipal` of `sp_getapplock`. */

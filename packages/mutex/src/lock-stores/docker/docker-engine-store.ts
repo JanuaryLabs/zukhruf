@@ -1,5 +1,4 @@
-import { setTimeout as delay } from 'node:timers/promises';
-
+import { type Clock, delay, timeout } from '@zukhruf/async';
 import {
   type CancelOptions,
   type Container,
@@ -34,6 +33,8 @@ export interface DockerEngineStoreOptions {
   heartbeatInterval: number;
   /** Labels on each claim and each rung, so that a cleanup can find them. The labels `zukhruf.mutex.*` of the store replace labels with the same names. */
   labels?: Readonly<Record<string, string>>;
+  /** The clock of the heartbeat and of each wait for the removal of a claim: `globalThis` in production, a fake clock in a test. */
+  clock: Clock;
 }
 
 const namespaceLabel = 'zukhruf.mutex.namespace';
@@ -223,17 +224,21 @@ class Claims {
     claim: Container,
     { signal }: CancelOptions,
   ): Promise<boolean> {
-    const patience = AbortSignal.timeout(this.#options.heartbeatInterval);
+    using patience = timeout(this.#options.heartbeatInterval, {
+      clock: this.#options.clock,
+    });
     try {
       await claim.wait({
         condition: 'removed',
         signal:
-          signal === undefined ? patience : AbortSignal.any([signal, patience]),
+          signal === undefined
+            ? patience.signal
+            : AbortSignal.any([signal, patience.signal]),
       });
       return true;
     } catch (error) {
       if (error instanceof ContainerNotFoundError) return true;
-      if (signal?.aborted || !patience.aborted) throw error;
+      if (signal?.aborted || !patience.signal.aborted) throw error;
       return false;
     }
   }
@@ -356,13 +361,14 @@ class Claim {
 
   /** Inspects the claim each interval. A claim that is gone or does not run, or a failed or late answer, loses the lease. */
   async #beat(): Promise<void> {
-    const interval = this.#options.heartbeatInterval;
+    const { heartbeatInterval: interval, clock } = this.#options;
     const done = this.#done.signal;
     try {
       for (;;) {
-        await delay(interval, undefined, { signal: done });
+        await delay(interval, { clock, signal: done });
+        using limit = timeout(interval, { clock });
         const state = await stateOf(this.#container, {
-          signal: AbortSignal.any([done, AbortSignal.timeout(interval)]),
+          signal: AbortSignal.any([done, limit.signal]),
         });
         if (state !== 'running') {
           throw new Error(

@@ -10,6 +10,8 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 
+import { createClock } from '@sinonjs/fake-timers';
+
 import { Docker } from '@zukhruf/docker';
 import { DockerTestbed } from '@zukhruf/testing/docker';
 import { TemporaryFiles } from '@zukhruf/testing/fs';
@@ -59,6 +61,7 @@ async function engine() {
         namespace,
         heartbeatInterval,
         labels: new DockerTestbed({ environment: process.env }).defaults.Labels,
+        clock: globalThis,
       }),
     [Symbol.asyncDispose]: async () => {
       await docker[Symbol.asyncDispose]();
@@ -200,7 +203,7 @@ const holderSource = (namespace: string, key: string) => `
 	setInterval(() => {}, 1000);
 	const docker = await Docker.connect({ clock: globalThis, environment: process.env });
 	const labels = new DockerTestbed({ environment: process.env }).defaults.Labels;
-	const store = new DockerEngineStore({ docker, image: ${JSON.stringify(image)}, namespace: ${JSON.stringify(namespace)}, heartbeatInterval: ${heartbeatInterval}, labels });
+	const store = new DockerEngineStore({ docker, image: ${JSON.stringify(image)}, namespace: ${JSON.stringify(namespace)}, heartbeatInterval: ${heartbeatInterval}, labels, clock: globalThis });
 	await new Mutex(store).acquire(${JSON.stringify(key)}, async (lease) => {
 		process.send({ type: 'holding', token: String(lease.token.value) });
 		await new Promise(() => {});
@@ -436,9 +439,9 @@ test(
 );
 
 test(
-  'a held key is lost within heartbeatInterval when the engine stops answering',
+  'a held key is still held one heartbeat interval after the engine stops answering, and lost at two, on the clock of the store',
   { timeout: 30_000 },
-  async () => {
+  async (t) => {
     // Arrange: the store reaches the engine through a proxy, and holds a key.
     await using fixture = await engine();
     await using proxy = await engineProxy(fixture.docker);
@@ -446,36 +449,44 @@ test(
       clock: globalThis,
       host: proxy.host,
     });
-    const seen = Promise.withResolvers<{
-      lost: 'lost' | 'still held';
-      after: number;
-    }>();
-
-    // Act: the connection stops silently while the task runs.
-    const run = new Mutex(fixture.store(client)).acquire(
-      'report:daily',
-      async (lease) => {
-        proxy.partition();
-        const started = performance.now();
-        const lost = await Promise.race([
-          once(lease.signal, 'abort').then(() => 'lost' as const),
-          delay(3000, 'still held' as const),
-        ]);
-        seen.resolve({ lost, after: performance.now() - started });
-      },
-    );
+    const clock = createClock();
+    const store = new DockerEngineStore({
+      docker: client,
+      image,
+      namespace: fixture.namespace,
+      heartbeatInterval,
+      labels: new DockerTestbed({ environment: process.env }).defaults.Labels,
+      clock,
+    });
+    const holding = Promise.withResolvers<AbortSignal>();
+    const run = new Mutex(store).acquire('report:daily', async (lease) => {
+      // The connection stops silently while the task runs.
+      proxy.partition();
+      holding.resolve(lease.signal);
+      await once(lease.signal, 'abort');
+    });
     run.catch(() => {});
-    const { lost, after } = await seen.promise;
+    const lease = await holding.promise;
+    // The next heartbeat waits one interval on the clock.
+    await t.waitFor(() => assert.equal(clock.countTimers(), 1), {
+      timeout: 5_000,
+    });
 
-    // Assert: one interval to the next heartbeat, one interval for its answer.
+    // Act: the heartbeat inspects the claim, and the partition holds the answer.
+    await clock.tickAsync(heartbeatInterval);
+    // The time limit of the heartbeat waits on the clock.
+    await t.waitFor(() => assert.equal(clock.countTimers(), 1), {
+      timeout: 5_000,
+    });
+    const heldAfterOne = !lease.aborted;
+    await clock.tickAsync(heartbeatInterval);
+
+    // Assert
+    assert.equal(heldAfterOne, true, 'The heartbeat must wait for its answer');
     assert.equal(
-      lost,
-      'lost',
+      lease.aborted,
+      true,
       'The holder must learn that its claim may be gone',
-    );
-    assert.ok(
-      after < 2 * heartbeatInterval + 300,
-      `The lease was lost ${after.toFixed(0)} ms after the partition, later than two heartbeat intervals`,
     );
   },
 );
@@ -989,6 +1000,7 @@ test(
       namespace: fixture.namespace,
       heartbeatInterval,
       labels: { 'com.example.owner': fixture.namespace },
+      clock: globalThis,
     });
 
     // Act
@@ -1021,6 +1033,7 @@ test(
           'zukhruf.mutex.key': other,
           'zukhruf.mutex.token': other,
         },
+        clock: globalThis,
       }),
     );
     await mutex.acquire('report:daily', async () => {});

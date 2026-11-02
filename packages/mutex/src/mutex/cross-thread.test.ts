@@ -453,7 +453,7 @@ void describe.each(
           const next = await mutex.acquire(
             'product:42',
             async (lease) => lease.token,
-            { mode: Modes.skipIfBusy({ waitAtMost: 2000 }) },
+            { mode: Modes.skipIfBusy({ waitAtMost: 2000, clock: globalThis }) },
           );
 
           // Assert: a terminated thread can never release, so nothing should keep its key.

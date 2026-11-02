@@ -19,6 +19,7 @@ import { type SocketRole, SocketStore } from './socket-store.ts';
 
 const mutexUrl = new URL('../../mutex/mutex.ts', import.meta.url);
 const socketStoreUrl = new URL('./socket-store.ts', import.meta.url);
+const fakeTimersUrl = import.meta.resolve('@sinonjs/fake-timers');
 const fencedRegisterUrl = new URL(
   '../../testing/fenced-register.ts',
   import.meta.url,
@@ -789,19 +790,20 @@ describe('Socket store follower failure', () => {
 
 /**
  * A process that is the only user of the directory: it takes one lock with
- * the default grace window, reports how long that took, and shuts down cleanly.
+ * the default grace window, on a clock that never moves, and shuts down
+ * cleanly. A wait for the grace window would never end, so a `done` report
+ * shows that the lock took no wait on the clock.
  */
 const loneProcess = (directory: string) => `
+	import { createClock } from ${JSON.stringify(fakeTimersUrl)};
 	import { Mutex } from ${JSON.stringify(mutexUrl.href)};
 	import { SocketStore } from ${JSON.stringify(socketStoreUrl.href)};
 
-	const store = new SocketStore(${JSON.stringify(directory)}, { clock: globalThis });
+	const store = new SocketStore(${JSON.stringify(directory)}, { clock: createClock() });
 	const mutex = new Mutex(store);
-	const started = performance.now();
 	await mutex.acquire('report:daily', async () => {});
-	const took = performance.now() - started;
 	await store[Symbol.asyncDispose]();
-	process.send({ type: 'done', took }, () => process.disconnect());
+	process.send({ type: 'done' }, () => process.disconnect());
 `;
 
 describe('Socket store after a clean shutdown', () => {
@@ -845,16 +847,10 @@ describe('Socket store after a clean shutdown', () => {
         '2',
         'The next process must lead the second term',
       );
-      const took = next.find('done')?.took;
-      assert.equal(
-        typeof took,
-        'number',
-        `The next process must lock.\n${next.stderr}`,
-      );
-      // The default grace window is 500 ms.
-      assert.ok(
-        Number(took) < 400,
-        `The lone process after a clean shutdown took ${Math.round(Number(took))} ms to lock`,
+      assert.deepEqual(
+        { exit: next.exit, done: next.has('done') },
+        { exit: { code: 0, signal: null }, done: true },
+        `The next process must lock with no wait on its clock.\n${next.stderr}`,
       );
     },
   );

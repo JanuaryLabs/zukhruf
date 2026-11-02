@@ -29,6 +29,7 @@ const mutex = new Mutex(
     connect: () => pool.getConnection(),
     sequence: 'app_lock_tokens',
     heartbeatInterval: 5_000,
+    clock: globalThis,
   }),
 );
 ```
@@ -96,11 +97,12 @@ The failure modes of [MysqlStore](./mysql-store.md#failure-modes) apply, except 
 
 ## Options
 
-| Option              | Default | Description                                                                                                                                                                                                                     |
-| ------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `connect`           | —       | A function that gives a new session. `pool.getConnection` of the mariadb driver fits. A session has `query(sql, values)`, `on('error' \| 'end')`, `off`, `release()` and `destroy()`. The store owns each session that it gets. |
-| `sequence`          | —       | The name of an existing sequence in the database of the session, for the fencing tokens. Create it before the app starts; the store runs no DDL.                                                                                |
-| `heartbeatInterval` | —       | Milliseconds between two heartbeats of a holder, and the time limit of each heartbeat. It is the longest time that a holder can work after its session ended, before its signal aborts.                                         |
+| Option              | Default | Description                                                                                                                                                                                                                                                                                |
+| ------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `connect`           | —       | A function that gives a new session. `pool.getConnection` of the mariadb driver fits. A session has `query(sql, values)`, `on('error' \| 'end')`, `off`, `release()` and `destroy()`. The store owns each session that it gets.                                                            |
+| `sequence`          | —       | The name of an existing sequence in the database of the session, for the fencing tokens. Create it before the app starts; the store runs no DDL.                                                                                                                                           |
+| `heartbeatInterval` | —       | Milliseconds between two heartbeats of a holder, and the time limit of each heartbeat. It is the longest time that a holder can work after its session ended, before its signal aborts.                                                                                                    |
+| `clock`             | —       | The clock of the heartbeat: the wait between two heartbeats, and the time limit of each heartbeat. Give `globalThis` in production; a test gives a fake clock, for example `createClock()` of `@sinonjs/fake-timers` ([`@zukhruf/async`](../../../async/README.md#run-a-wait-on-a-clock)). |
 
 All three options are required. No option has a default.
 

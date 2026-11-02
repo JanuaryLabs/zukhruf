@@ -1,4 +1,4 @@
-import { untilAborted } from '@zukhruf/async';
+import { type Clock, untilAborted } from '@zukhruf/async';
 
 import { keyDigest } from '../../shared/key-digest.ts';
 import {
@@ -33,6 +33,8 @@ export interface PostgresStoreOptions {
    * ended, before its signal aborts.
    */
   heartbeatInterval: number;
+  /** The clock of the heartbeat: `globalThis` in production, a fake clock in a test. */
+  clock: Clock;
 }
 
 /** The granted advisory locks of a lock number in the database of the session. */

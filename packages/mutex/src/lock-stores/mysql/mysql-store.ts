@@ -1,3 +1,5 @@
+import type { Clock } from '@zukhruf/async';
+
 import { SessionLockStore } from '../session/session-lock-store.ts';
 import {
   type GetLockServer,
@@ -32,6 +34,8 @@ export interface MysqlStoreOptions {
    * ended, before its signal aborts.
    */
   heartbeatInterval: number;
+  /** The clock of the heartbeat: `globalThis` in production, a fake clock in a test. */
+  clock: Clock;
 }
 
 /**
@@ -41,9 +45,9 @@ export interface MysqlStoreOptions {
  * MySQL database shares the locks.
  */
 export class MysqlStore extends SessionLockStore<MysqlSession> {
-  constructor({ connect, table, heartbeatInterval }: MysqlStoreOptions) {
+  constructor({ connect, table, heartbeatInterval, clock }: MysqlStoreOptions) {
     super(
-      { connect, heartbeatInterval },
+      { connect, heartbeatInterval, clock },
       getLockDialect(mysqlServer(quoteName(table))),
     );
   }

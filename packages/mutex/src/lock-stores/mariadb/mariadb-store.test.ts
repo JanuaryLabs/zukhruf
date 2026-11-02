@@ -5,6 +5,7 @@ import { type Socket, connect, createServer } from 'node:net';
 import { type TestContext, test } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
 
+import { createClock } from '@sinonjs/fake-timers';
 import mariadb, {
   type Pool,
   type PoolConfig,
@@ -56,6 +57,7 @@ const storeOver = (pool: Pool) =>
     connect: () => pool.getConnection(),
     sequence,
     heartbeatInterval,
+    clock: globalThis,
   });
 
 /** Holds `key` until the returned `release` is called. */
@@ -136,9 +138,9 @@ async function proxyTo(database: MariadbDatabase) {
 }
 
 test(
-  'a held key is lost within heartbeatInterval when the server stops answering',
+  'a held key is still held one heartbeat interval after the server stops answering, and lost at two, on the clock of the store',
   { timeout: 30_000 },
-  async () => {
+  async (t) => {
     // Arrange: the store reaches the server through a proxy, and holds a key.
     await using database = await mariadbDatabase();
     await using cleanup = new AsyncDisposableStack();
@@ -147,35 +149,46 @@ test(
     cleanup.defer(() => pool.end());
     // Closed first: the closed sockets end the sessions, so the pool can end.
     cleanup.use(proxy);
-    const mutex = new Mutex(storeOver(pool));
-
-    // Act: the network stops silently while the task runs.
-    const seen = Promise.withResolvers<{
-      lost: 'lost' | 'still held';
-      after: number;
-    }>();
+    const clock = createClock();
+    const mutex = new Mutex(
+      new MariadbStore({
+        connect: () => pool.getConnection(),
+        sequence,
+        heartbeatInterval,
+        clock,
+      }),
+    );
+    const holding = Promise.withResolvers<AbortSignal>();
     const run = mutex.acquire(uniqueKey(), async (lease) => {
+      // The network stops silently while the task runs.
       proxy.partition();
-      const started = performance.now();
-      const lost = await Promise.race([
-        once(lease.signal, 'abort').then(() => 'lost' as const),
-        delay(2000, 'still held' as const),
-      ]);
-      seen.resolve({ lost, after: performance.now() - started });
+      holding.resolve(lease.signal);
+      await once(lease.signal, 'abort');
     });
-    const { lost, after } = await seen.promise;
+    const lost = assert.rejects(run, LeaseLostError);
+    const lease = await holding.promise;
+    // The next heartbeat waits one interval on the clock.
+    await t.waitFor(() => assert.equal(clock.countTimers(), 1), {
+      timeout: 5_000,
+    });
 
-    // Assert: one interval to the next heartbeat, one interval for its answer.
+    // Act: the heartbeat asks, and the partition holds the answer.
+    await clock.tickAsync(heartbeatInterval);
+    // The time limit of the heartbeat waits on the clock.
+    await t.waitFor(() => assert.equal(clock.countTimers(), 1), {
+      timeout: 5_000,
+    });
+    const heldAfterOne = !lease.aborted;
+    await clock.tickAsync(heartbeatInterval);
+
+    // Assert
+    assert.equal(heldAfterOne, true, 'The heartbeat must wait for its answer');
     assert.equal(
-      lost,
-      'lost',
+      lease.aborted,
+      true,
       'The holder must learn that its session may be gone',
     );
-    assert.ok(
-      after < 2 * heartbeatInterval + 150,
-      `The lease was lost ${after.toFixed(0)} ms after the partition, later than two heartbeat intervals`,
-    );
-    await assert.rejects(run, LeaseLostError);
+    await lost;
   },
 );
 
@@ -195,6 +208,7 @@ test(
       },
       sequence,
       heartbeatInterval: 10_000,
+      clock: globalThis,
     });
     const admin = await mariadb.createConnection(connectionOf(database));
     try {
@@ -371,6 +385,7 @@ test(
         },
         sequence,
         heartbeatInterval,
+        clock: globalThis,
       });
       const waiting = new Mutex(waiter).acquire(key, async () => 'ran');
 

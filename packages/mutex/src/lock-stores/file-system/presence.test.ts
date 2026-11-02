@@ -83,7 +83,7 @@ const skipOnce = (store: Store, directory: string) =>
   new Mutex(store.create(directory)).acquire(
     'product-42',
     async () => 'got it',
-    { mode: Modes.skipIfBusy({ waitAtMost: 2000 }) },
+    { mode: Modes.skipIfBusy({ waitAtMost: 2000, clock: globalThis }) },
   );
 
 const presenceFilesIn = async (directory: string) =>
@@ -381,7 +381,7 @@ void test.each(stores, (store) => {
         const mutex = new Mutex(new ${store.name}(directory, { clock: globalThis, pollInterval: 5 }));
         // Opened inside the task, so the key serializes every write to the register, its creation too.
         let register;
-        const modes = [Modes.wait(), Modes.skipIfBusy(), Modes.skipIfBusy({ waitAtMost: 5 })];
+        const modes = [Modes.wait(), Modes.skipIfBusy(), Modes.skipIfBusy({ waitAtMost: 5, clock: globalThis })];
         let stale = 0;
         try {
           for (let round = 0; round < 30; round++) {
@@ -498,7 +498,7 @@ describe('TicketQueueFileStore: presence files of waiters', () => {
         'gives up',
         (mutex: Mutex) =>
           mutex.acquire('product-42', async () => {}, {
-            mode: Modes.skipIfBusy({ waitAtMost: 50 }),
+            mode: Modes.skipIfBusy({ waitAtMost: 50, clock: globalThis }),
           }),
       ],
       [

@@ -1,3 +1,5 @@
+import { type Clock, timeout } from '@zukhruf/async';
+
 import type { AcquireMode } from '../acquire-mode.ts';
 import type { LockHandle } from '../lease.ts';
 import type { AcquireOptions, LockStore } from '../lock-store.ts';
@@ -6,23 +8,28 @@ export interface SkipIfBusyOptions {
   /**
    * Milliseconds to wait for another holder before giving up. The limit
    * starts when the lock store answers that the key is busy: a slow answer
-   * does not show a busy key. Defaults to 0: one attempt only.
+   * does not show a busy key. Without options, the mode makes one attempt only.
    */
-  waitAtMost?: number;
+  waitAtMost: number;
+  /** The clock that `waitAtMost` runs on: `globalThis` in production, a fake clock in a test. */
+  clock: Clock;
 }
 
 /** Gives up when the key stays busy, at once or after `waitAtMost`, so the task may not run. */
 export class SkipIfBusyMode implements AcquireMode<'maybe'> {
   readonly outcome = 'maybe' as const;
-  readonly #waitAtMost: number;
+  readonly #wait: SkipIfBusyOptions | undefined;
 
-  constructor({ waitAtMost = 0 }: SkipIfBusyOptions = {}) {
-    if (!(waitAtMost >= 0) || !Number.isFinite(waitAtMost)) {
+  constructor(options?: SkipIfBusyOptions) {
+    if (
+      options &&
+      (!(options.waitAtMost >= 0) || !Number.isFinite(options.waitAtMost))
+    ) {
       throw new RangeError(
-        `waitAtMost must be a finite number of milliseconds >= 0, got ${waitAtMost}.`,
+        `waitAtMost must be a finite number of milliseconds >= 0, got ${options.waitAtMost}.`,
       );
     }
-    this.#waitAtMost = waitAtMost;
+    this.#wait = options;
   }
 
   async acquire(
@@ -32,16 +39,17 @@ export class SkipIfBusyMode implements AcquireMode<'maybe'> {
   ): Promise<LockHandle | undefined> {
     // Always one attempt first: a time limit must never skip a key that is free.
     const lease = await store.tryAcquire(key);
-    if (lease || this.#waitAtMost === 0) return lease;
+    if (lease || !this.#wait || this.#wait.waitAtMost === 0) return lease;
 
     // The caller comes first, so a caller that already cancelled is not read as giving up.
-    const timeout = AbortSignal.timeout(this.#waitAtMost);
+    using limit = timeout(this.#wait.waitAtMost, { clock: this.#wait.clock });
     try {
       return await store.acquire(key, {
-        signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
+        signal: signal ? AbortSignal.any([signal, limit.signal]) : limit.signal,
       });
     } catch (error) {
-      if (timeout.aborted && error === timeout.reason) return undefined;
+      if (limit.signal.aborted && error === limit.signal.reason)
+        return undefined;
       throw error;
     }
   }

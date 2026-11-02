@@ -56,7 +56,7 @@ const waiterSource = (storeName: string) => `
 	const result = await new Mutex(new ${storeName}('/locks', { clock: globalThis, pollInterval: 10 })).acquire(
 		'product:42',
 		async (lease) => String(lease.token),
-		{ mode: Modes.skipIfBusy({ waitAtMost: 1000 }) },
+		{ mode: Modes.skipIfBusy({ waitAtMost: 1000, clock: globalThis }) },
 	);
 	console.log(JSON.stringify(result));
 `;

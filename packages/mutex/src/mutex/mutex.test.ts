@@ -1019,7 +1019,7 @@ describe('A worker or child whose token cannot be minted', () => {
         const next = await mutex.acquire(
           'product:43',
           async () => 'granted' as const,
-          { mode: Modes.skipIfBusy({ waitAtMost: 2000 }) },
+          { mode: Modes.skipIfBusy({ waitAtMost: 2000, clock: globalThis }) },
         );
 
         // Assert
@@ -1091,7 +1091,7 @@ describe('A worker or child whose token cannot be minted', () => {
       const next = await mutex.acquire(
         'product:43',
         async () => 'granted' as const,
-        { mode: Modes.skipIfBusy({ waitAtMost: 2000 }) },
+        { mode: Modes.skipIfBusy({ waitAtMost: 2000, clock: globalThis }) },
       );
 
       // Assert

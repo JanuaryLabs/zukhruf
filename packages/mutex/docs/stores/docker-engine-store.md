@@ -26,6 +26,7 @@ const mutex = new Mutex(
     image: 'alpine:3',
     namespace: 'ci-cleanup',
     heartbeatInterval: 5_000,
+    clock: globalThis,
   }),
 );
 ```
@@ -198,6 +199,7 @@ See [failure modes](../concepts/failure-modes.md).
 | `image`             | —       | The image of each claim. It must be on the engine, and it must have `cat` on its `PATH`. The store never pulls it. A small image, for example `alpine:3` (8.4 MB), is enough.                                                                                                                                                                                                                                           |
 | `namespace`         | —       | The first part of each name and the value of the label `zukhruf.mutex.namespace`. Stores with the same namespace on one engine share their locks. It must match `[a-zA-Z0-9][a-zA-Z0-9_.-]*`.                                                                                                                                                                                                                           |
 | `heartbeatInterval` | —       | Milliseconds between two heartbeats of a holder, and the time limit of each heartbeat. It is also the time that a waiter gives a `created` claim before it removes it, and the time between two looks of a waiter at the claim. Make it larger than a create, an attach and a start: over SSH, 5 seconds or more.                                                                                                       |
+| `clock`             | —       | The clock of the heartbeat, and of each wait of a waiter for the removal of a claim. Give `globalThis` in production; a test gives a fake clock, for example `createClock()` of `@sinonjs/fake-timers` ([`@zukhruf/async`](../../../async/README.md#run-a-wait-on-a-clock)).                                                                                                                                            |
 | `labels`            | `{}`    | Labels that the store puts on each claim and each rung, so that a cleanup or an operator can find them. The labels `zukhruf.mutex.namespace`, `zukhruf.mutex.key` and `zukhruf.mutex.token` of the store replace labels with the same names. A test run gives `new DockerTestbed({ environment: process.env }).defaults.Labels` of `@zukhruf/testing`, so that its run cleanup removes what a killed test process left. |
 
 The first four options are required. `labels` is optional.

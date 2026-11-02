@@ -191,6 +191,7 @@ function postgresStore(pool: Pick<pg.Pool, 'connect'>) {
     connect: () => pool.connect(),
     sequence: 'mutex_tokens',
     heartbeatInterval: 200,
+    clock: globalThis,
   });
 }
 
@@ -349,6 +350,7 @@ const sqlServerStore = (location: string) =>
     connect: () => sqlServerSession(serverAt(location)),
     sequence: 'dbo.mutex_tokens',
     heartbeatInterval: 200,
+    clock: globalThis,
   });
 
 /** A new database with the token table that the app creates before it starts. */
@@ -370,7 +372,12 @@ async function mysqlFixture(
 }
 
 const mysqlStore = (connect: MysqlStoreOptions['connect']) =>
-  new MysqlStore({ connect, table: 'mutex_tokens', heartbeatInterval: 200 });
+  new MysqlStore({
+    connect,
+    table: 'mutex_tokens',
+    heartbeatInterval: 200,
+    clock: globalThis,
+  });
 
 /**
  * A mysql2 pool keeps its process alive until `end()`, and a child or a
@@ -415,6 +422,7 @@ const mariadbStore = (pool: Pool) =>
     connect: () => pool.getConnection(),
     sequence: 'mutex_tokens',
     heartbeatInterval: 200,
+    clock: globalThis,
   });
 
 const dockerNamespaceLabel = 'zukhruf.mutex.namespace';
@@ -509,6 +517,7 @@ function dockerEngineStore(location: string) {
         namespace,
         heartbeatInterval: 500,
         labels,
+        clock: globalThis,
       }),
   );
   const lockStore: LockStore = {
