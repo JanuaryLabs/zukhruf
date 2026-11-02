@@ -40,5 +40,8 @@
   ],
   "publishConfig": {
     "access": "public"
+  },
+  "devDependencies": {
+    "@sinonjs/fake-timers": "15.4.0"
   }
 }

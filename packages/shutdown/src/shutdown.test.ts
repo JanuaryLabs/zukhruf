@@ -13,7 +13,10 @@ import { ConnectionFailedError, Docker } from '@zukhruf/docker';
 const nodeImage = 'node:26-alpine';
 const noEngine = await (async () => {
   try {
-    const docker = await Docker.connect({ signal: AbortSignal.timeout(5_000) });
+    const docker = await Docker.connect({
+      clock: globalThis,
+      signal: AbortSignal.timeout(5_000),
+    });
     await docker[Symbol.asyncDispose]();
     return false;
   } catch (error) {
@@ -632,7 +635,7 @@ describe('Shutdown', () => {
       { skip: noEngine, timeout: 180_000 },
       async () => {
         // Arrange
-        await using docker = await Docker.connect();
+        await using docker = await Docker.connect({ clock: globalThis });
         if ((await docker.images.inspect(nodeImage)) === undefined) {
           await docker.images.pull(nodeImage);
         }

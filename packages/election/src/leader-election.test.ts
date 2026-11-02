@@ -1,7 +1,11 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 
+import { createClock } from '@sinonjs/fake-timers';
+
 // A backend is written against the package's public entry, as an outside author would.
+import type { Clock } from '@zukhruf/async';
+
 import { LeaderElection, LeaseLostError } from './index.ts';
 
 interface Script {
@@ -36,8 +40,8 @@ class ScriptedElection extends LeaderElection<number> {
   #attempts = 0;
   #tries = 0;
 
-  constructor(script: Script, pollInterval = 1) {
-    super(pollInterval);
+  constructor(clock: Clock, script: Script, pollInterval = 1) {
+    super(pollInterval, clock);
     this.#script = script;
   }
 
@@ -114,7 +118,7 @@ describe('A term that its backend takes away', () => {
     async () => {
       // Arrange
       const lease = new AbortController();
-      const election = new ScriptedElection({ lose: lease.signal });
+      const election = new ScriptedElection(globalThis, { lose: lease.signal });
       const term = await election.campaign();
       assert.ok(term);
 
@@ -146,7 +150,7 @@ describe('A term that its backend takes away', () => {
     async () => {
       // Arrange: freeing the claim fails, as a dead connection to a backend can.
       const lease = new AbortController();
-      const election = new ScriptedElection({
+      const election = new ScriptedElection(globalThis, {
         lose: lease.signal,
         closeFails: new Error('The connection to the backend is gone'),
       });
@@ -174,7 +178,7 @@ describe('A term that its backend takes away', () => {
     async () => {
       // Arrange: the backend reports a loss while the release is on its way.
       const losers: Array<(reason: Error) => void> = [];
-      const election = new ScriptedElection({
+      const election = new ScriptedElection(globalThis, {
         losers,
         duringRelease: async () => losers[0]?.(new Error('A late expiry')),
       });
@@ -203,7 +207,10 @@ describe('A term that its backend takes away', () => {
     async () => {
       // Arrange: the first won claim is lost while it starts to be watched.
       const losers: Array<(reason: Error) => void> = [];
-      const election = new ScriptedElection({ lostAtOnce: 1, losers });
+      const election = new ScriptedElection(globalThis, {
+        lostAtOnce: 1,
+        losers,
+      });
 
       // Act
       const term = await election.campaign();
@@ -246,7 +253,7 @@ describe('A term that its leader resigns', () => {
       const release = Promise.withResolvers<void>();
       const closing = Promise.withResolvers<void>();
       const close = Promise.withResolvers<void>();
-      const election = new ScriptedElection({
+      const election = new ScriptedElection(globalThis, {
         duringRelease: async () => {
           releasing.resolve();
           await release.promise;
@@ -309,7 +316,9 @@ describe('A term that its leader resigns', () => {
     async () => {
       // Arrange
       const failure = new Error('The backend refused the release');
-      const election = new ScriptedElection({ releaseFails: failure });
+      const election = new ScriptedElection(globalThis, {
+        releaseFails: failure,
+      });
       const term = await election.campaign();
       assert.ok(term);
 
@@ -331,7 +340,7 @@ describe('A term that its leader resigns clean', () => {
     { timeout: 10_000 },
     async () => {
       // Arrange
-      const election = new ScriptedElection({ tries: [7n] });
+      const election = new ScriptedElection(globalThis, { tries: [7n] });
       const term = await election.campaign();
       assert.ok(term);
 
@@ -356,7 +365,7 @@ describe('A term that its leader resigns clean', () => {
     { timeout: 10_000 },
     async () => {
       // Arrange
-      const election = new ScriptedElection({});
+      const election = new ScriptedElection(globalThis, {});
       const term = await election.campaign();
       assert.ok(term);
 
@@ -381,7 +390,9 @@ describe('A term that its leader resigns clean', () => {
     async () => {
       // Arrange
       const failure = new Error('The backend could not record the shutdown');
-      const election = new ScriptedElection({ recordFails: failure });
+      const election = new ScriptedElection(globalThis, {
+        recordFails: failure,
+      });
       const term = await election.campaign();
       assert.ok(term);
 
@@ -410,7 +421,7 @@ describe('A campaign', () => {
     { timeout: 10_000 },
     async () => {
       // Arrange
-      const election = new ScriptedElection({ tries: ['busy'] });
+      const election = new ScriptedElection(globalThis, { tries: ['busy'] });
 
       // Act
       const once = await election.campaign();
@@ -425,25 +436,42 @@ describe('A campaign', () => {
   test(
     'a campaign tries again every poll interval of its backend until it wins, and its term carries the exact epoch that the backend gave',
     { timeout: 10_000 },
-    async () => {
+    async (t) => {
       // Arrange: the backend's epoch is large and not one more than the last, as an etcd revision is.
+      const clock = createClock();
       const election = new ScriptedElection(
+        clock,
         { tries: ['busy', 'busy', 1_048_573n] },
         40,
       );
-      const started = performance.now();
 
       // Act
-      const term = await election.campaign({ timeout: 1000 });
-      const took = performance.now() - started;
+      let won = false;
+      const campaigning = election.campaign({ timeout: 1000 }).then((term) => {
+        won = true;
+        return term;
+      });
+      await t.waitFor(() =>
+        assert.equal(
+          clock.countTimers(),
+          1,
+          'The campaign must wait on the clock that it was given',
+        ),
+      );
+      await clock.tickAsync(79);
+      const wonEarly = won;
+      await clock.tickAsync(1);
+      assert.equal(won, true, 'The third try must come at exactly 80 ms');
+      const term = await campaigning;
 
       // Assert
+      assert.equal(
+        wonEarly,
+        false,
+        'The third try must come after two waits of 40 ms',
+      );
       assert.ok(term);
       assert.equal(term.epoch, 1_048_573n);
-      assert.ok(
-        took >= 70,
-        `Two waits of 40 ms took only ${Math.round(took)} ms`,
-      );
       assert.deepEqual(election.steps, [
         'open 1',
         'try 1',
@@ -456,11 +484,50 @@ describe('A campaign', () => {
   );
 
   test(
+    'a campaign that the backend keeps busy gives up at the first try at or after its timeout on the clock',
+    { timeout: 10_000 },
+    async (t) => {
+      // Arrange
+      const clock = createClock();
+      const election = new ScriptedElection(clock, { tries: ['busy'] }, 40);
+
+      // Act
+      let settled = false;
+      const campaigning = election.campaign({ timeout: 100 }).then((term) => {
+        settled = true;
+        return term;
+      });
+      await t.waitFor(() => assert.equal(clock.countTimers(), 1));
+      await clock.tickAsync(119);
+      const settledEarly = settled;
+      await clock.tickAsync(1);
+
+      // Assert
+      assert.equal(
+        settledEarly,
+        false,
+        'The campaign must keep trying until its timeout on the clock',
+      );
+      assert.equal(
+        settled,
+        true,
+        'The try at 120 ms is the first one after the timeout of 100 ms',
+      );
+      assert.equal(await campaigning, undefined);
+      assert.equal(
+        clock.countTimers(),
+        0,
+        'A campaign that gave up must not wait again',
+      );
+    },
+  );
+
+  test(
     'two campaigns of one election each get an attempt of their own, and each attempt is freed once',
     { timeout: 10_000 },
     async () => {
       // Arrange
-      const election = new ScriptedElection({ tries: ['busy'] });
+      const election = new ScriptedElection(globalThis, { tries: ['busy'] });
 
       // Act
       const results = await Promise.all([
@@ -483,7 +550,7 @@ describe('A campaign', () => {
     async () => {
       // Arrange
       const failure = new Error('The backend is unreachable');
-      const election = new ScriptedElection({
+      const election = new ScriptedElection(globalThis, {
         tries: [failure],
         closeFails: new Error('Freeing failed too'),
       });
@@ -503,7 +570,7 @@ describe('A campaign', () => {
     async () => {
       // Arrange
       const failure = new Error('The lease renewal could not start');
-      const election = new ScriptedElection({
+      const election = new ScriptedElection(globalThis, {
         watchFails: failure,
         releaseFails: new Error('The release failed'),
         closeFails: new Error('The close failed'),
@@ -532,7 +599,7 @@ describe('A campaign that its caller stops', () => {
     async () => {
       // Arrange
       const reason = new Error('Stopped before the campaign');
-      const election = new ScriptedElection({});
+      const election = new ScriptedElection(globalThis, {});
 
       // Act
       const result = await settle(
@@ -553,7 +620,11 @@ describe('A campaign that its caller stops', () => {
       const stop = new AbortController();
       const reason = new Error('Stopped while waiting');
       // A wait longer than this test may run: only an abort seen during the wait ends it in time.
-      const election = new ScriptedElection({ tries: ['busy'] }, 60_000);
+      const election = new ScriptedElection(
+        globalThis,
+        { tries: ['busy'] },
+        60_000,
+      );
 
       // Act: the first try is busy, so the campaign waits for its next one.
       const campaigning = settle(
@@ -583,7 +654,7 @@ describe('A campaign that its caller stops', () => {
       // Arrange: the caller leaves while the claim is being won, and the release and the close fail.
       const stop = new AbortController();
       const reason = new Error('Stopped while the claim was won');
-      const election = new ScriptedElection({
+      const election = new ScriptedElection(globalThis, {
         duringTry: () => stop.abort(reason),
         releaseFails: new Error('The release failed'),
         closeFails: new Error('The close failed'),

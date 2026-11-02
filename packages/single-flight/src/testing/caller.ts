@@ -60,7 +60,7 @@ export function callerSource(
         decode: () => { throw new SyntaxError('This text cannot be decoded'); },
       },
     };
-    const flights = new SingleFlight({
+    const flights = new SingleFlight({ clock: globalThis,
       directory: ${JSON.stringify(directory)},
       codec: codecs[${JSON.stringify(codec)}],
     });

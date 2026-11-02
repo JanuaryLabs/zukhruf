@@ -34,7 +34,7 @@ function scenarioEnvironment(standIn: string, home: string) {
 /** A scenario that connects to HOST, runs `body` with `docker`, and prints the JSON of its result. */
 const withClient = (body: string) => `
 import { Docker } from ${JSON.stringify(ENTRY)};
-const docker = await Docker.connect({ host: ${JSON.stringify(HOST)}, signal: AbortSignal.timeout(20_000) });
+const docker = await Docker.connect({ clock: globalThis, host: ${JSON.stringify(HOST)}, signal: AbortSignal.timeout(20_000) });
 ${body}
 `;
 
@@ -51,7 +51,7 @@ describe('the connection helper of an ssh:// host', () => {
       const scenario = `
 import { ConnectionFailedError, Docker } from ${JSON.stringify(ENTRY)};
 try {
-  await Docker.connect({ host: ${JSON.stringify(HOST)}, signal: AbortSignal.timeout(20_000) });
+  await Docker.connect({ clock: globalThis, host: ${JSON.stringify(HOST)}, signal: AbortSignal.timeout(20_000) });
   console.log(JSON.stringify({ connected: true }));
 } catch (error) {
   console.log(JSON.stringify({
@@ -91,7 +91,7 @@ try {
         await using standIn = await sshStandIn({ kind: 'permission-denied' });
         const scenario = `
 import { Docker } from ${JSON.stringify(ENTRY)};
-await Docker.connect({ host: ${JSON.stringify(host)} }).catch(() => undefined);
+await Docker.connect({ clock: globalThis, host: ${JSON.stringify(host)} }).catch(() => undefined);
 console.log('{}');
 `;
         await runScenario(
@@ -130,7 +130,7 @@ console.log('{}');
       await using standIn = await sshStandIn({ kind: 'permission-denied' });
       const scenario = `
 import { Docker } from ${JSON.stringify(ENTRY)};
-await Docker.connect({ host: 'ssh://tester@[fd00::1]:2222' }).catch(() => undefined);
+await Docker.connect({ clock: globalThis, host: 'ssh://tester@[fd00::1]:2222' }).catch(() => undefined);
 console.log('{}');
 `;
 
@@ -171,7 +171,7 @@ console.log('{}');
       const scenario = `
 import { ConnectionFailedError, Docker } from ${JSON.stringify(ENTRY)};
 try {
-  await Docker.connect({ host: ${JSON.stringify(HOST)}, signal: AbortSignal.timeout(20_000) });
+  await Docker.connect({ clock: globalThis, host: ${JSON.stringify(HOST)}, signal: AbortSignal.timeout(20_000) });
   console.log(JSON.stringify({ connected: true }));
 } catch (error) {
   console.log(JSON.stringify({

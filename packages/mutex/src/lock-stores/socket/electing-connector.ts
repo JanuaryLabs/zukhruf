@@ -1,8 +1,7 @@
 import { once } from 'node:events';
 import { type Socket, connect } from 'node:net';
-import { setTimeout as delay } from 'node:timers/promises';
 
-import { untilAborted } from '@zukhruf/async';
+import { type Clock, delay, untilAborted } from '@zukhruf/async';
 import type { LeaderElection, Term } from '@zukhruf/election';
 
 import type { ClientConnection, ClientConnector } from '../remote/connector.ts';
@@ -17,6 +16,8 @@ export interface ElectingConnectorOptions {
   /** Only `campaign`: the connector never runs a backend's own steps, so an election of any backend fits. */
   election: Pick<LeaderElection<unknown>, 'campaign'>;
   pollInterval: number;
+  /** The clock of the waits between two tries. */
+  clock: Clock;
   /** Starts serving for a term this process just won. */
   serve(term: Term): Promise<void>;
   /** Reached the server of another process, so this process follows it. */
@@ -36,7 +37,7 @@ export class ElectingConnector implements ClientConnector {
   }
 
   async connect(signal: AbortSignal): Promise<ClientConnection> {
-    const { socketPath, pollInterval } = this.#options;
+    const { socketPath, pollInterval, clock } = this.#options;
     for (;;) {
       const leader = await reachUnlessAborted(socketPath, signal);
       if (leader) {
@@ -50,7 +51,7 @@ export class ElectingConnector implements ClientConnector {
         const own = await this.#lead(term, signal);
         if (own) return own;
       } else {
-        await untilAborted(delay(pollInterval, undefined, { signal }), signal);
+        await delay(pollInterval, { clock, signal });
       }
     }
   }
@@ -65,7 +66,7 @@ export class ElectingConnector implements ClientConnector {
   async #outlastHangUp(
     signal: AbortSignal,
   ): Promise<ClientConnection | undefined> {
-    const { socketPath, pollInterval } = this.#options;
+    const { socketPath, pollInterval, clock } = this.#options;
     for (;;) {
       const term = await this.#campaign(0, signal);
       if (term) return this.#lead(term, signal);
@@ -73,7 +74,7 @@ export class ElectingConnector implements ClientConnector {
       if (!again) return undefined;
       const connection = await this.#follow(again, signal);
       if (connection) return connection;
-      await untilAborted(delay(pollInterval, undefined, { signal }), signal);
+      await delay(pollInterval, { clock, signal });
     }
   }
 

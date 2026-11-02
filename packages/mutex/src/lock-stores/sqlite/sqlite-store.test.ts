@@ -54,7 +54,10 @@ describe('SqliteStore', () => {
         'mutex-test-',
       );
       const mutex = new Mutex(
-        new SqliteStore(directory.path, { pollInterval: 10 }),
+        new SqliteStore(directory.path, {
+          clock: globalThis,
+          pollInterval: 10,
+        }),
       );
       const release = await hold(mutex, 'report:daily');
       const before = openFiles();
@@ -85,7 +88,10 @@ describe('SqliteStore', () => {
         'mutex-test-',
       );
       const mutex = new Mutex(
-        new SqliteStore(directory.path, { pollInterval: 10 }),
+        new SqliteStore(directory.path, {
+          clock: globalThis,
+          pollInterval: 10,
+        }),
       );
       const release = await hold(mutex, 'report:daily');
       const order: number[] = [];
@@ -114,7 +120,9 @@ describe('SqliteStore holder record', () => {
       await using directory = await new TemporaryFiles().directory(
         'mutex-test-',
       );
-      const mutex = new Mutex(new SqliteStore(directory.path));
+      const mutex = new Mutex(
+        new SqliteStore(directory.path, { clock: globalThis }),
+      );
       const folder = join(directory.path, 'report%3Adaily.lock.holder');
       const record = join(folder, 'caller');
       await mkdir(folder);
@@ -154,7 +162,7 @@ describe('SqliteStore holder record', () => {
         `
 				import { Mutex } from ${JSON.stringify(mutexUrl.href)};
 				import { SqliteStore } from ${JSON.stringify(storeUrl.href)};
-				const mutex = new Mutex(new SqliteStore(${JSON.stringify(directory.path)}));
+				const mutex = new Mutex(new SqliteStore(${JSON.stringify(directory.path)}, { clock: globalThis }));
 				setInterval(() => {}, 1000);
 				await mutex.acquire('report:daily', async () => {
 					process.send({ type: 'entered' });
@@ -173,7 +181,9 @@ describe('SqliteStore holder record', () => {
       );
       holder.child.kill('SIGKILL');
       await holder.closed;
-      const mutex = new Mutex(new SqliteStore(directory.path));
+      const mutex = new Mutex(
+        new SqliteStore(directory.path, { clock: globalThis }),
+      );
 
       // Act
       await mutex.acquire('report:daily', async () => {});
@@ -194,7 +204,9 @@ describe('SqliteStore holder record', () => {
       await using directory = await new TemporaryFiles().directory(
         'mutex-test-',
       );
-      const mutex = new Mutex(new SqliteStore(directory.path));
+      const mutex = new Mutex(
+        new SqliteStore(directory.path, { clock: globalThis }),
+      );
       const folder = join(directory.path, 'report%3Adaily.lock.holder');
 
       // Act

@@ -100,10 +100,10 @@ async function followerOfStandIn() {
   const directory = stack.use(
     await new TemporaryFiles().directory('mutex-test-'),
   );
-  stack.use(await socketElection(directory.path, 10).campaign());
+  stack.use(await socketElection(directory.path, 10, globalThis).campaign());
   const leader = stack.use(await standInLeader(directory.path));
   const store = stack.use(
-    new SocketStore(directory.path, { pollInterval: 10 }),
+    new SocketStore(directory.path, { clock: globalThis, pollInterval: 10 }),
   );
   const owned = stack.move();
   return {
@@ -766,12 +766,16 @@ describe('A follower process through a reconnect', () => {
       await using directory = await new TemporaryFiles().directory(
         'mutex-test-',
       );
-      await using _term = await socketElection(directory.path, 10).campaign();
+      await using _term = await socketElection(
+        directory.path,
+        10,
+        globalThis,
+      ).campaign();
       await using leader = await standInLeader(directory.path);
       await using waiter = startWorker(
         `
 					import { SocketStore } from ${JSON.stringify(socketUrl.href)};
-					const store = new SocketStore(${JSON.stringify(directory.path)}, { pollInterval: 10 });
+					const store = new SocketStore(${JSON.stringify(directory.path)}, { clock: globalThis, pollInterval: 10 });
 					const lease = await store.acquire('product:42');
 					process.send({ type: 'granted' });
 					await lease[Symbol.asyncDispose]();
@@ -827,13 +831,17 @@ describe('A follower process through a reconnect', () => {
       await using directory = await new TemporaryFiles().directory(
         'mutex-test-',
       );
-      await using _term = await socketElection(directory.path, 10).campaign();
+      await using _term = await socketElection(
+        directory.path,
+        10,
+        globalThis,
+      ).campaign();
       await using leader = await standInLeader(directory.path);
       await using holder = startWorker(
         `
 					import { SocketStore } from ${JSON.stringify(socketUrl.href)};
 					process.once('message', () => {});
-					const store = new SocketStore(${JSON.stringify(directory.path)}, { pollInterval: 10 });
+					const store = new SocketStore(${JSON.stringify(directory.path)}, { clock: globalThis, pollInterval: 10 });
 					await store.acquire('product:42');
 					process.send({ type: 'holding' });
 				`,

@@ -28,6 +28,7 @@ const [role, shared] = process.argv.slice(2);
 
 if (role === 'candidate') {
   const election = new SqliteElection({
+    clock: globalThis,
     directory: shared!,
     claimFile: 'cleanup.lock',
     epochFile: 'cleanup.epoch',

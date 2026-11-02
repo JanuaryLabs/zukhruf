@@ -111,6 +111,7 @@ async function coordinatorOf(t: TestContext, directory: string) {
 async function leadingCoordinator(directory: string) {
   await using serving = new AsyncDisposableStack();
   const term = await new SqliteElection({
+    clock: globalThis,
     directory,
     claimFile: 'flight.lock',
     epochFile: 'flight.epoch',

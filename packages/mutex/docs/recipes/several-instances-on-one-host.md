@@ -33,7 +33,9 @@ const [role, shared] = process.argv.slice(2);
 
 if (role === 'instance') {
   // One copy of the app. All copies use the same directory for their locks.
-  const mutex = new Mutex(new SqliteStore(join(shared!, 'locks')));
+  const mutex = new Mutex(
+    new SqliteStore(join(shared!, 'locks'), { clock: globalThis }),
+  );
   const counter = join(shared!, 'counter');
   for (let i = 0; i < 20; i++) {
     await mutex.acquire('counter', async () => {
@@ -59,7 +61,7 @@ Output:
 counter: 60
 ```
 
-To use another lock store, change one line. For example: `new TicketQueueFileStore(join(shared!, 'locks'))`.
+To use another lock store, change one line. For example: `new TicketQueueFileStore(join(shared!, 'locks'), { clock: globalThis })`.
 
 ## Why it works
 

@@ -36,7 +36,7 @@ const participant = (directory: string, body: string) => `
 
 	const name = process.argv[1];
 	const directory = ${JSON.stringify(directory)};
-	const store = new SocketStore(directory, { pollInterval: 10, graceWindow: ${graceWindow} });
+	const store = new SocketStore(directory, { clock: globalThis, pollInterval: 10, graceWindow: ${graceWindow} });
 	store.on('role', (role) => process.send({ type: 'role', role }));
 	const mutex = new Mutex(store);
 	const commands = new Map();
@@ -178,6 +178,7 @@ describe('Socket lock server failover', () => {
         'mutex-test-',
       );
       const leaderStore = new SocketStore(directory.path, {
+        clock: globalThis,
         pollInterval: 10,
         graceWindow,
       });
@@ -464,7 +465,10 @@ describe('Socket store disposal', () => {
   test('a store disposed while it becomes the leader leaves no lock server and no term behind', async () => {
     // Arrange: the first acquire in a directory makes the store campaign.
     await using directory = await new TemporaryFiles().directory('mutex-test-');
-    const store = new SocketStore(directory.path, { pollInterval: 10 });
+    const store = new SocketStore(directory.path, {
+      clock: globalThis,
+      pollInterval: 10,
+    });
     const roles: SocketRole[] = [];
     store.on('role', (role) => roles.push(role));
     const acquiring = watch(store.acquire('product:42'));
@@ -474,7 +478,11 @@ describe('Socket store disposal', () => {
     await delay(settle);
 
     // Assert
-    await using term = await socketElection(directory.path, 10).campaign();
+    await using term = await socketElection(
+      directory.path,
+      10,
+      globalThis,
+    ).campaign();
     assert.ok(term, 'A disposed store must not keep a leadership term');
     assert.deepEqual(roles, [], 'A disposed store must not start serving');
     assert.equal(
@@ -501,7 +509,10 @@ describe('Socket store lock server failure', () => {
       );
       const socketPath = join(directory.path, 'lock.sock');
       await mkdir(socketPath);
-      await using store = new SocketStore(directory.path, { pollInterval: 10 });
+      await using store = new SocketStore(directory.path, {
+        clock: globalThis,
+        pollInterval: 10,
+      });
 
       // Act
       const failure = await store.acquire('product:42').then(
@@ -516,7 +527,11 @@ describe('Socket store lock server failure', () => {
           failure.path === socketPath,
         `The acquire must fail with the lock server's own start error, got ${String(failure)}`,
       );
-      await using term = await socketElection(directory.path, 10).campaign();
+      await using term = await socketElection(
+        directory.path,
+        10,
+        globalThis,
+      ).campaign();
       assert.ok(
         term,
         'A leader whose lock server failed to start must end its term',
@@ -527,7 +542,10 @@ describe('Socket store lock server failure', () => {
   test('a leader whose role listener throws closes its lock server before ending its term', async () => {
     // Arrange: the first acquire in the directory makes this store the leader.
     await using directory = await new TemporaryFiles().directory('mutex-test-');
-    await using store = new SocketStore(directory.path, { pollInterval: 10 });
+    await using store = new SocketStore(directory.path, {
+      clock: globalThis,
+      pollInterval: 10,
+    });
     const listenerFailure = new Error('The role listener failed');
     store.once('role', () => {
       throw listenerFailure;
@@ -541,7 +559,10 @@ describe('Socket store lock server failure', () => {
 
     // Assert: no lock server may outlive its term, or a second leader could grant the same keys.
     assert.equal(failure, listenerFailure);
-    const otherLeader = new SocketStore(directory.path, { pollInterval: 10 });
+    const otherLeader = new SocketStore(directory.path, {
+      clock: globalThis,
+      pollInterval: 10,
+    });
     const roles: SocketRole[] = [];
     otherLeader.on('role', (role) => roles.push(role));
     try {
@@ -562,7 +583,10 @@ describe('Socket store roles', () => {
   test('a store that becomes the leader reports only the leader role', async () => {
     // Arrange
     await using directory = await new TemporaryFiles().directory('mutex-test-');
-    await using store = new SocketStore(directory.path, { pollInterval: 10 });
+    await using store = new SocketStore(directory.path, {
+      clock: globalThis,
+      pollInterval: 10,
+    });
     const roles: SocketRole[] = [];
     store.on('role', (role) => roles.push(role));
 
@@ -581,9 +605,13 @@ describe('Socket store roles', () => {
   test('a store that reaches another leader reports only the follower role', async () => {
     // Arrange: one store leads the directory.
     await using directory = await new TemporaryFiles().directory('mutex-test-');
-    await using leader = new SocketStore(directory.path, { pollInterval: 10 });
+    await using leader = new SocketStore(directory.path, {
+      clock: globalThis,
+      pollInterval: 10,
+    });
     await (await leader.acquire('warm-up'))[Symbol.asyncDispose]();
     await using follower = new SocketStore(directory.path, {
+      clock: globalThis,
       pollInterval: 10,
     });
     const roles: SocketRole[] = [];
@@ -601,10 +629,19 @@ describe('Socket store roles', () => {
     // Arrange: one store leads, and two stores follow it.
     await using directory = await new TemporaryFiles().directory('mutex-test-');
     const options = { pollInterval: 10, graceWindow: 50 };
-    const leader = new SocketStore(directory.path, options);
+    const leader = new SocketStore(directory.path, {
+      ...options,
+      clock: globalThis,
+    });
     await (await leader.acquire('warm-up'))[Symbol.asyncDispose]();
-    await using first = new SocketStore(directory.path, options);
-    await using second = new SocketStore(directory.path, options);
+    await using first = new SocketStore(directory.path, {
+      ...options,
+      clock: globalThis,
+    });
+    await using second = new SocketStore(directory.path, {
+      ...options,
+      clock: globalThis,
+    });
     const roles = new Map<SocketStore, SocketRole[]>([
       [first, []],
       [second, []],
@@ -649,6 +686,7 @@ describe('Socket store follower failure', () => {
         'mutex-test-',
       );
       await using leader = new SocketStore(directory.path, {
+        clock: globalThis,
         pollInterval: 10,
       });
       await (await leader.acquire('warm-up'))[Symbol.asyncDispose]();
@@ -659,7 +697,7 @@ describe('Socket store follower failure', () => {
 				import { Mutex } from ${JSON.stringify(mutexUrl.href)};
 				import { SocketStore } from ${JSON.stringify(socketStoreUrl.href)};
 
-				const store = new SocketStore(${JSON.stringify(directory.path)}, { pollInterval: 10 });
+				const store = new SocketStore(${JSON.stringify(directory.path)}, { clock: globalThis, pollInterval: 10 });
 				const mutex = new Mutex(store);
 				store.once('role', () => {
 					throw new Error('The role listener failed');
@@ -704,7 +742,11 @@ describe('Socket store follower failure', () => {
       await using directory = await new TemporaryFiles().directory(
         'mutex-test-',
       );
-      await using _term = await socketElection(directory.path, 10).campaign();
+      await using _term = await socketElection(
+        directory.path,
+        10,
+        globalThis,
+      ).campaign();
       let peerClosed = false;
       const leader = createServer((peer) => {
         peer.once('close', () => (peerClosed = true));
@@ -715,7 +757,10 @@ describe('Socket store follower failure', () => {
       });
       leader.listen(join(directory.path, 'lock.sock'));
       await once(leader, 'listening');
-      await using store = new SocketStore(directory.path, { pollInterval: 10 });
+      await using store = new SocketStore(directory.path, {
+        clock: globalThis,
+        pollInterval: 10,
+      });
       store.once('role', () => {
         throw new Error('The role listener failed');
       });
@@ -750,7 +795,7 @@ const loneProcess = (directory: string) => `
 	import { Mutex } from ${JSON.stringify(mutexUrl.href)};
 	import { SocketStore } from ${JSON.stringify(socketStoreUrl.href)};
 
-	const store = new SocketStore(${JSON.stringify(directory)});
+	const store = new SocketStore(${JSON.stringify(directory)}, { clock: globalThis });
 	const mutex = new Mutex(store);
 	const started = performance.now();
 	await mutex.acquire('report:daily', async () => {});

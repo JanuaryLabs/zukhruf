@@ -23,6 +23,7 @@ class LosableElection extends SqliteElection {
 
   constructor(directory: string, loss: AbortSignal) {
     super({
+      clock: globalThis,
       directory,
       claimFile: 'flight.lock',
       epochFile: 'flight.epoch',
@@ -93,7 +94,7 @@ describe('Flight server', () => {
 
       // Act
       const starting = FlightServer.start(socketPath, term, {
-        locks: new KeyLocks(directory.path, 10),
+        locks: new KeyLocks(directory.path, 10, globalThis),
       });
 
       // Assert
@@ -121,10 +122,11 @@ describe('Flight server', () => {
       const server = await FlightServer.start(
         join(directory.path, 'flight.sock'),
         term,
-        { locks: new KeyLocks(directory.path, 10) },
+        { locks: new KeyLocks(directory.path, 10, globalThis) },
       );
       try {
         await using flights = new SingleFlight({
+          clock: globalThis,
           directory: directory.path,
           codec: asText,
         });

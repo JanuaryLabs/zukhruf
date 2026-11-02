@@ -1,4 +1,4 @@
-import { pollChanges } from '@zukhruf/async';
+import { type Clock, pollChanges } from '@zukhruf/async';
 import { DataVersion } from '@zukhruf/sqlite-data-version';
 import { Snapshot } from '@zukhruf/sqlite-snapshot';
 
@@ -13,6 +13,8 @@ export type WatchOptions = {
   readonly interval: number;
   /** Stops the poll. The loop then rejects with `signal.reason`. */
   readonly signal: AbortSignal;
+  /** The clock of the poll: `globalThis` in production, a fake clock in a test. */
+  readonly clock: Clock;
 };
 
 // One run of watch: the position it compares with, and whether its first
@@ -54,12 +56,13 @@ export class Changefeed implements Disposable {
   async *watch({
     interval,
     signal,
+    clock,
   }: WatchOptions): AsyncGenerator<ChangeEvent[], void, undefined> {
     const { position, baseline } = this.#run();
     let silent = baseline;
     for await (const changed of pollChanges(
       new Map([['database', async () => this.#version.current]]),
-      { interval, signal },
+      { interval, signal, clock },
     )) {
       if (changed.size === 0) continue;
       const { events, update } = await pass(this.#path, position);

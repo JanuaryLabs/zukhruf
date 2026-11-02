@@ -42,7 +42,10 @@ const namespaceLabel = 'zukhruf.mutex.namespace';
  * of the namespace.
  */
 async function engine() {
-  const docker = await Docker.connect({ environment: process.env });
+  const docker = await Docker.connect({
+    clock: globalThis,
+    environment: process.env,
+  });
   if (!(await docker.images.inspect(image))) await docker.images.pull(image);
   const namespace = `zukhruf-mutex-test-${randomUUID()}`;
   const label = { label: [`${namespaceLabel}=${namespace}`] };
@@ -60,6 +63,7 @@ async function engine() {
     [Symbol.asyncDispose]: async () => {
       await docker[Symbol.asyncDispose]();
       await using cleaner = await Docker.connect({
+        clock: globalThis,
         environment: process.env,
       });
       for (const { Id } of await cleaner.containers.list({
@@ -194,7 +198,7 @@ const holderSource = (namespace: string, key: string) => `
 	import { DockerTestbed } from ${JSON.stringify(import.meta.resolve('@zukhruf/testing/docker'))};
 	import { DockerEngineStore } from ${JSON.stringify(new URL('./index.ts', import.meta.url).href)};
 	setInterval(() => {}, 1000);
-	const docker = await Docker.connect({ environment: process.env });
+	const docker = await Docker.connect({ clock: globalThis, environment: process.env });
 	const labels = new DockerTestbed({ environment: process.env }).defaults.Labels;
 	const store = new DockerEngineStore({ docker, image: ${JSON.stringify(image)}, namespace: ${JSON.stringify(namespace)}, heartbeatInterval: ${heartbeatInterval}, labels });
 	await new Mutex(store).acquire(${JSON.stringify(key)}, async (lease) => {
@@ -266,7 +270,10 @@ test(
     // Arrange: the waiter reaches the engine through a proxy that holds its requests after its create gets the name conflict.
     await using fixture = await engine();
     await using proxy = await engineProxy(fixture.docker);
-    await using waiterClient = await Docker.connect({ host: proxy.host });
+    await using waiterClient = await Docker.connect({
+      clock: globalThis,
+      host: proxy.host,
+    });
     const holder = await hold(new Mutex(fixture.store()), 'report:daily');
     const afterConflict = proxy.holdAfterNameConflict();
     const waiting = new Mutex(fixture.store(waiterClient)).acquire(
@@ -297,7 +304,10 @@ test(
     // Arrange: a caller created its claim, and the proxy keeps its start from the engine.
     await using fixture = await engine();
     await using proxy = await engineProxy(fixture.docker);
-    await using stoppedClient = await Docker.connect({ host: proxy.host });
+    await using stoppedClient = await Docker.connect({
+      clock: globalThis,
+      host: proxy.host,
+    });
     const beforeStart = proxy.holdRequestsFrom(
       /^POST \S*\/containers\/[0-9a-f]+\/start /,
     );
@@ -338,7 +348,10 @@ test(
     // Arrange: a slow caller's start is held until a waiter removed its created claim and took the key.
     await using fixture = await engine();
     await using proxy = await engineProxy(fixture.docker);
-    await using slowClient = await Docker.connect({ host: proxy.host });
+    await using slowClient = await Docker.connect({
+      clock: globalThis,
+      host: proxy.host,
+    });
     const beforeStart = proxy.holdRequestsFrom(
       /^POST \S*\/containers\/[0-9a-f]+\/start /,
     );
@@ -373,7 +386,10 @@ test(
     // Arrange: a holder read the ladder, and the proxy keeps its create of a rung from the engine.
     await using fixture = await engine();
     await using proxy = await engineProxy(fixture.docker);
-    await using staleClient = await Docker.connect({ host: proxy.host });
+    await using staleClient = await Docker.connect({
+      clock: globalThis,
+      host: proxy.host,
+    });
     const ran: string[] = [];
     const beforeRung = proxy.holdRequestsFrom(/^POST \S*\/volumes\/create /);
     const stale = new Mutex(fixture.store(staleClient)).acquire(
@@ -426,7 +442,10 @@ test(
     // Arrange: the store reaches the engine through a proxy, and holds a key.
     await using fixture = await engine();
     await using proxy = await engineProxy(fixture.docker);
-    await using client = await Docker.connect({ host: proxy.host });
+    await using client = await Docker.connect({
+      clock: globalThis,
+      host: proxy.host,
+    });
     const seen = Promise.withResolvers<{
       lost: 'lost' | 'still held';
       after: number;
@@ -666,7 +685,10 @@ test(
 
     // Arrange: a stale minter read the ladder, the proxy keeps its create of a rung, and then its claim is removed.
     await using staleProxy = await engineProxy(fixture.docker);
-    await using staleClient = await Docker.connect({ host: staleProxy.host });
+    await using staleClient = await Docker.connect({
+      clock: globalThis,
+      host: staleProxy.host,
+    });
     const staleRung = staleProxy.holdRequestsFrom(
       /^POST \S*\/volumes\/create /,
     );
@@ -687,7 +709,10 @@ test(
 
     // Arrange: the next holder gets the claim, reads the same ladder, and the proxy keeps its create of a rung.
     await using nextProxy = await engineProxy(fixture.docker);
-    await using nextClient = await Docker.connect({ host: nextProxy.host });
+    await using nextClient = await Docker.connect({
+      clock: globalThis,
+      host: nextProxy.host,
+    });
     const nextRung = nextProxy.holdRequestsFrom(/^POST \S*\/volumes\/create /);
     const next = new Mutex(fixture.store(nextClient)).acquire(
       'report:daily',
@@ -722,7 +747,10 @@ test(
   async () => {
     // Arrange: two stores, each with its own client, as two machines have.
     await using fixture = await engine();
-    await using other = await Docker.connect({ environment: process.env });
+    await using other = await Docker.connect({
+      clock: globalThis,
+      environment: process.env,
+    });
     const mutexes = [
       new Mutex(fixture.store()),
       new Mutex(fixture.store(other)),
@@ -760,7 +788,10 @@ test(
   async () => {
     // Arrange
     await using fixture = await engine();
-    await using other = await Docker.connect({ environment: process.env });
+    await using other = await Docker.connect({
+      clock: globalThis,
+      environment: process.env,
+    });
     const holder = await hold(new Mutex(fixture.store()), 'report:daily');
     const waiting = new Mutex(fixture.store(other)).acquire(
       'report:daily',
@@ -785,7 +816,10 @@ test(
   async () => {
     // Arrange
     await using fixture = await engine();
-    await using other = await Docker.connect({ environment: process.env });
+    await using other = await Docker.connect({
+      clock: globalThis,
+      environment: process.env,
+    });
     const store = fixture.store(other);
     const holder = await hold(new Mutex(fixture.store()), 'report:daily');
 
@@ -873,7 +907,10 @@ test(
   async () => {
     // Arrange
     await using fixture = await engine();
-    await using other = await Docker.connect({ environment: process.env });
+    await using other = await Docker.connect({
+      clock: globalThis,
+      environment: process.env,
+    });
     const holder = await hold(new Mutex(fixture.store()), 'report:daily');
     const cancel = new AbortController();
     const reason = new Error('cancelled');
@@ -1032,7 +1069,10 @@ test(
   'a rung left by a killed test process is removed when the run ends',
   { timeout: 180_000 },
   async (t) => {
-    await using docker = await Docker.connect({ environment: process.env });
+    await using docker = await Docker.connect({
+      clock: globalThis,
+      environment: process.env,
+    });
     if (!['unix:', 'npipe:'].includes(new URL(docker.host).protocol)) {
       t.skip(
         `the global setup of the run starts the shared database servers of the lock-store matrix on the engine ${docker.host}`,

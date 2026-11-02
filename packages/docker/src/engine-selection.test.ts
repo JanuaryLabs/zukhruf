@@ -30,7 +30,7 @@ async function selected(options: ConnectOptions): Promise<object> {
 /** In a child process, connects with `options` (source text) and prints the context and host of the client. */
 const connectScenario = (options: string) => `
 import { Docker } from ${JSON.stringify(ENTRY)};
-const docker = await Docker.connect(${options});
+const docker = await Docker.connect({ ...${options}, clock: globalThis });
 console.log(JSON.stringify({ context: docker.context, host: docker.host }));
 await docker[Symbol.asyncDispose]();
 `;
@@ -62,6 +62,7 @@ describe('Docker.connect() selects the engine in the order of the Docker CLI', (
 
     // Act
     const result = await selected({
+      clock: globalThis,
       environment: {
         DOCKER_CONFIG: config,
         DOCKER_HOST: fromHost.host,
@@ -96,6 +97,7 @@ describe('Docker.connect() selects the engine in the order of the Docker CLI', (
 
     // Act
     const result = await selected({
+      clock: globalThis,
       environment: { DOCKER_CONFIG: config, DOCKER_CONTEXT: 'from-variable' },
     });
 
@@ -120,7 +122,10 @@ describe('Docker.connect() selects the engine in the order of the Docker CLI', (
     });
 
     // Act
-    const result = await selected({ environment: { DOCKER_CONFIG: config } });
+    const result = await selected({
+      clock: globalThis,
+      environment: { DOCKER_CONFIG: config },
+    });
 
     // Assert
     assert.deepEqual(result, { context: 'from-config', host: fromConfig.host });
@@ -168,7 +173,7 @@ describe('Docker.connect() selects the engine in the order of the Docker CLI', (
     });
 
     // Act
-    const result = await runScenario(connectScenario(''), {
+    const result = await runScenario(connectScenario('{}'), {
       HOME: scratch.path,
       DOCKER_HOST: fromHost.host,
       DOCKER_CONTEXT: 'other',
@@ -189,6 +194,7 @@ describe('Docker.connect() selects the engine in the order of the Docker CLI', (
 
     // Act
     const result = await selected({
+      clock: globalThis,
       environment: { DOCKER_CONFIG: join(scratch.path, 'absent') },
     });
 
@@ -223,6 +229,7 @@ describe('Docker.connect() selects the engine in the order of the Docker CLI', (
 
     // Act
     const result = await selected({
+      clock: globalThis,
       context: 'named',
       environment: {
         DOCKER_CONFIG: config,
@@ -246,6 +253,7 @@ describe('Docker.connect() selects the engine in the order of the Docker CLI', (
 
     // Act
     const result = await selected({
+      clock: globalThis,
       context: 'default',
       environment: {
         DOCKER_CONFIG: join(scratch.path, 'absent'),
@@ -274,6 +282,7 @@ describe('Docker.connect() selects the engine in the order of the Docker CLI', (
 
     // Act
     const result = await selected({
+      clock: globalThis,
       host: given.host,
       environment: {
         DOCKER_CONFIG: config,
@@ -295,10 +304,12 @@ describe('Docker.connect() selects the engine in the order of the Docker CLI', (
 
     // Act
     const fromOption = await selected({
+      clock: globalThis,
       context: 'absent',
       environment: { DOCKER_CONFIG: config },
     });
     const fromVariable = await selected({
+      clock: globalThis,
       environment: { DOCKER_CONFIG: config, DOCKER_CONTEXT: 'absent' },
     });
 
@@ -327,11 +338,12 @@ describe('Docker.connect() selects the engine in the order of the Docker CLI', (
 
     // Act
     const results = [
-      await selected({ host: fromOption, environment }),
+      await selected({ clock: globalThis, host: fromOption, environment }),
       await selected({
+        clock: globalThis,
         environment: { ...environment, DOCKER_HOST: fromVariable },
       }),
-      await selected({ environment }),
+      await selected({ clock: globalThis, environment }),
     ];
 
     // Assert
@@ -360,6 +372,7 @@ describe('Docker.connect() selects the engine in the order of the Docker CLI', (
 
     // Act
     const result = await selected({
+      clock: globalThis,
       environment: {
         DOCKER_CONFIG: config,
         DOCKER_HOST: '',
@@ -451,8 +464,12 @@ describe('Docker.contexts()', () => {
 
     // Act
     const contexts = await Docker.contexts({ environment });
-    const named = await selected({ context: 'default', environment });
-    const current = await selected({ environment });
+    const named = await selected({
+      clock: globalThis,
+      context: 'default',
+      environment,
+    });
+    const current = await selected({ clock: globalThis, environment });
 
     // Assert
     assert.deepEqual(contexts, [

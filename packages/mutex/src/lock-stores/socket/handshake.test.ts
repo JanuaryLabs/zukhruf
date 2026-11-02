@@ -95,14 +95,21 @@ describe('Socket store protocol handshake', () => {
       await using directory = await new TemporaryFiles().directory(
         'mutex-test-',
       );
-      await using _term = await socketElection(directory.path, 10).campaign();
+      await using _term = await socketElection(
+        directory.path,
+        10,
+        globalThis,
+      ).campaign();
       await using _leader = await standInLeader(directory.path, (peer, line) =>
         // It answers only a well-formed hello, so a store that sends anything else fails another way.
         isHello(line)
           ? peer.end(`${JSON.stringify({ op: 'refused', version: 99 })}\n`)
           : peer.destroy(),
       );
-      await using store = new SocketStore(directory.path, { pollInterval: 10 });
+      await using store = new SocketStore(directory.path, {
+        clock: globalThis,
+        pollInterval: 10,
+      });
 
       // Act
       const result = await outcome(store.acquire('product:42'));
@@ -124,13 +131,20 @@ describe('Socket store protocol handshake', () => {
       await using directory = await new TemporaryFiles().directory(
         'mutex-test-',
       );
-      const term = await socketElection(directory.path, 10).campaign();
+      const term = await socketElection(
+        directory.path,
+        10,
+        globalThis,
+      ).campaign();
       assert.ok(term, 'The stand-in must win the first term');
       await using _leader = await standInLeader(directory.path, (peer) => {
         peer.destroy();
         setTimeout(() => void term.resign(), 100);
       });
-      await using store = new SocketStore(directory.path, { pollInterval: 10 });
+      await using store = new SocketStore(directory.path, {
+        clock: globalThis,
+        pollInterval: 10,
+      });
       const roles: SocketRole[] = [];
       store.on('role', (role) => roles.push(role));
 
@@ -160,7 +174,10 @@ describe('Socket store protocol handshake', () => {
       await using _leader = await standInLeader(directory.path, (peer) =>
         peer.destroy(),
       );
-      await using store = new SocketStore(directory.path, { pollInterval: 10 });
+      await using store = new SocketStore(directory.path, {
+        clock: globalThis,
+        pollInterval: 10,
+      });
       const roles: SocketRole[] = [];
       store.on('role', (role) => roles.push(role));
 
@@ -198,10 +215,12 @@ describe('Socket store protocol handshake', () => {
             'mutex-test-',
           );
           await using leader = new SocketStore(directory.path, {
+            clock: globalThis,
             pollInterval: 10,
           });
           await (await leader.acquire('warm-up'))[Symbol.asyncDispose]();
           await using follower = new SocketStore(directory.path, {
+            clock: globalThis,
             pollInterval: 10,
           });
           await (await follower.acquire('warm-up'))[Symbol.asyncDispose]();
@@ -239,9 +258,14 @@ describe('Socket store protocol handshake', () => {
       await using directory = await new TemporaryFiles().directory(
         'mutex-test-',
       );
-      const term = await socketElection(directory.path, 10).campaign();
+      const term = await socketElection(
+        directory.path,
+        10,
+        globalThis,
+      ).campaign();
       assert.ok(term, 'The stand-in must win the first term');
       await using successor = new SocketStore(directory.path, {
+        clock: globalThis,
         pollInterval: 10,
       });
       let stopping = true;
@@ -255,7 +279,10 @@ describe('Socket store protocol handshake', () => {
           peer.destroy();
         })();
       });
-      await using store = new SocketStore(directory.path, { pollInterval: 10 });
+      await using store = new SocketStore(directory.path, {
+        clock: globalThis,
+        pollInterval: 10,
+      });
       const roles: SocketRole[] = [];
       store.on('role', (role) => roles.push(role));
 
@@ -280,7 +307,11 @@ describe('Socket store protocol handshake', () => {
       await using directory = await new TemporaryFiles().directory(
         'mutex-test-',
       );
-      const term = await socketElection(directory.path, 10).campaign();
+      const term = await socketElection(
+        directory.path,
+        10,
+        globalThis,
+      ).campaign();
       assert.ok(term, 'The stand-in must win the first term');
       let hellos = 0;
       let first: Socket | undefined;
@@ -306,8 +337,12 @@ describe('Socket store protocol handshake', () => {
           }
         },
       );
-      await using store = new SocketStore(directory.path, { pollInterval: 10 });
+      await using store = new SocketStore(directory.path, {
+        clock: globalThis,
+        pollInterval: 10,
+      });
       await using successor = new SocketStore(directory.path, {
+        clock: globalThis,
         pollInterval: 10,
       });
       const lease = await store.acquire('product:42');
@@ -355,6 +390,7 @@ describe('Socket store protocol handshake', () => {
         'mutex-test-',
       );
       await using leader = new SocketStore(directory.path, {
+        clock: globalThis,
         pollInterval: 10,
       });
       await (await leader.acquire('warm-up'))[Symbol.asyncDispose]();
@@ -394,14 +430,21 @@ describe('Socket store protocol handshake', () => {
       await using directory = await new TemporaryFiles().directory(
         'mutex-test-',
       );
-      await using _term = await socketElection(directory.path, 10).campaign();
+      await using _term = await socketElection(
+        directory.path,
+        10,
+        globalThis,
+      ).campaign();
       let peerClosed = false;
       let greeted = false;
       await using _leader = await standInLeader(directory.path, (peer) => {
         greeted = true;
         peer.once('close', () => (peerClosed = true));
       });
-      const store = new SocketStore(directory.path, { pollInterval: 10 });
+      const store = new SocketStore(directory.path, {
+        clock: globalThis,
+        pollInterval: 10,
+      });
       const acquiring = outcome(store.acquire('product:42'));
       await t.waitFor(() => assert.ok(greeted, 'The store must say hello'), {
         interval: 5,
@@ -429,6 +472,7 @@ describe('Socket store protocol handshake', () => {
         'mutex-test-',
       );
       await using leader = new SocketStore(directory.path, {
+        clock: globalThis,
         pollInterval: 10,
       });
       await (await leader.acquire('warm-up'))[Symbol.asyncDispose]();

@@ -53,7 +53,7 @@ async function firstLeader() {
     await new TemporaryFiles().directory('mutex-test-'),
   );
   const store = stack.use(
-    new SocketStore(directory.path, { pollInterval: 10 }),
+    new SocketStore(directory.path, { clock: globalThis, pollInterval: 10 }),
   );
   return await serving(stack, directory.path, store);
 }
@@ -67,10 +67,18 @@ async function leaderAfterFailover(graceWindow: number) {
   const directory = stack.use(
     await new TemporaryFiles().directory('mutex-test-'),
   );
-  const earlier = await socketElection(directory.path, 10).campaign();
+  const earlier = await socketElection(
+    directory.path,
+    10,
+    globalThis,
+  ).campaign();
   await earlier?.resign();
   const store = stack.use(
-    new SocketStore(directory.path, { pollInterval: 10, graceWindow }),
+    new SocketStore(directory.path, {
+      clock: globalThis,
+      pollInterval: 10,
+      graceWindow,
+    }),
   );
   return await serving(stack, directory.path, store);
 }

@@ -18,7 +18,10 @@ import { SqlServer } from '../databases/sqlserver.ts';
 import { TemporaryFiles } from '../fs/temporary-files.ts';
 import { EngineProxy } from '../testing/engine-proxy.ts';
 
-const docker = await Docker.connect({ environment: process.env });
+const docker = await Docker.connect({
+  clock: globalThis,
+  environment: process.env,
+});
 /** The host of the engine that this process's context selects. */
 const engine =
   (await Docker.contexts({ environment: process.env })).find(

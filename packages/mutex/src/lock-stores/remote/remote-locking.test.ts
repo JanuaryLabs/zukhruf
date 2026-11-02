@@ -41,7 +41,7 @@ function grantingPeer() {
 function coordinatorAfterFailover(graceWindow: number) {
   const coordinator = new LockCoordinator({
     tokens: new CounterTokenSource(),
-    graceWindow,
+    grace: { window: graceWindow, clock: globalThis },
   });
   const connect = () => {
     const peer = scriptedPeer<LockResponse, LockRequest>();
@@ -197,7 +197,7 @@ describe('A request whose token cannot be minted', () => {
       tokens: tokensThatFailOnce(
         new Error('The token file could not be written.'),
       ),
-      graceWindow,
+      grace: { window: graceWindow, clock: globalThis },
     });
     const connect = () => {
       const peer = scriptedPeer<LockResponse, LockRequest>();

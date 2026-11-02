@@ -2,6 +2,7 @@ import { addAbortListener, once } from 'node:events';
 import { rm } from 'node:fs/promises';
 import { type Server, type Socket, createServer } from 'node:net';
 
+import type { Clock } from '@zukhruf/async';
 import type { Term } from '@zukhruf/election';
 import { EpochTokenSource } from '@zukhruf/fencing';
 
@@ -11,8 +12,12 @@ import { welcome } from './handshake.ts';
 import { SocketConnection } from './socket-connection.ts';
 
 export interface LockServerOptions {
-  /** Milliseconds the new term grants nothing, so holders from the last term can reassert. */
-  graceWindow: number;
+  /**
+   * The time the new term grants nothing, so holders from the last term can
+   * reassert: `window` milliseconds on `clock`. `undefined` when no earlier
+   * term can have left a holder.
+   */
+  grace: { window: number; clock: Clock } | undefined;
 }
 
 /**
@@ -44,7 +49,7 @@ export class LockServer {
   static async start(
     socketPath: string,
     term: Term,
-    { graceWindow }: LockServerOptions,
+    { grace }: LockServerOptions,
   ): Promise<LockServer> {
     // Only the leader gets here, so removing a dead leader's socket file cannot race another server.
     // Windows removes a named pipe when its process stops, so there is no file to remove.
@@ -53,7 +58,7 @@ export class LockServer {
     }
     const coordinator = new LockCoordinator({
       tokens: new EpochTokenSource(term.epoch),
-      graceWindow,
+      grace,
       // Only a new term has tokens again, so the leader steps down. Its
       // followers then reconnect, and a new term grants their requests. The
       // coordinator mints only for a connection that `started` serves.

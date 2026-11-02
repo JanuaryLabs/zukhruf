@@ -174,7 +174,7 @@ describe('A lock directory on a network file system', () => {
       );
       const notYet = join(directory.path, 'not', 'yet');
       using _mount = mountAs(t, directory.path, 0x6969n);
-      const store = new LockFileStore(notYet);
+      const store = new LockFileStore(notYet, { clock: globalThis });
 
       // Act
       const result = await outcome(store.acquire('product:42'));
@@ -197,8 +197,14 @@ describe('A lock directory on a network file system', () => {
         'mutex-test-',
       );
       const options = { pollInterval: 10, graceWindow: 50 };
-      const leader = new SocketStore(directory.path, options);
-      await using follower = new SocketStore(directory.path, options);
+      const leader = new SocketStore(directory.path, {
+        ...options,
+        clock: globalThis,
+      });
+      await using follower = new SocketStore(directory.path, {
+        ...options,
+        clock: globalThis,
+      });
       try {
         await (await leader.acquire('warm-up'))[Symbol.asyncDispose]();
         const held = await follower.acquire('product:42');
@@ -219,9 +225,9 @@ describe('A lock directory on a network file system', () => {
 
         // Assert: the mount is live, yet the takeover did not judge the directory again, so the holder never lost its key.
         await assert.rejects(
-          new LockFileStore(join(directory.path, 'sibling')).acquire(
-            'product:42',
-          ),
+          new LockFileStore(join(directory.path, 'sibling'), {
+            clock: globalThis,
+          }).acquire('product:42'),
           NetworkDirectoryError,
         );
         await held[Symbol.asyncDispose]();
@@ -262,12 +268,18 @@ describe('A lock directory on a network file system', () => {
         'mutex-test-',
       );
       const options = { pollInterval: 10, graceWindow: 50 };
-      await using leader = new SocketStore(directory.path, options);
+      await using leader = new SocketStore(directory.path, {
+        ...options,
+        clock: globalThis,
+      });
       await (await leader.acquire('warm-up'))[Symbol.asyncDispose]();
       const viaShare = join(directory.path, 'share');
       await symlink(directory.path, viaShare);
       using _mount = mountAs(t, viaShare, 0x6969n);
-      await using follower = new SocketStore(viaShare, options);
+      await using follower = new SocketStore(viaShare, {
+        ...options,
+        clock: globalThis,
+      });
 
       // Act
       const result = await outcome(follower.acquire('product:42'));

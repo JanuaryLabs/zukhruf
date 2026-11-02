@@ -2,6 +2,8 @@ import { createHash } from 'node:crypto';
 import { EventEmitter } from 'node:events';
 import { join, resolve } from 'node:path';
 
+import type { Clock } from '@zukhruf/async';
+
 import type { LockHandle } from '../../mutex/lease.ts';
 import type { AcquireOptions, LockStore } from '../../mutex/lock-store.ts';
 import { ConnectionSupervisor } from '../remote/connection-supervisor.ts';
@@ -24,6 +26,8 @@ export interface SocketStoreOptions {
    * term can reassert first. Must exceed how long a holder takes to reconnect.
    */
   graceWindow?: number;
+  /** The clock of every wait of the store: `globalThis` in production, a fake clock in a test. */
+  clock: Clock;
 }
 
 /**
@@ -46,7 +50,7 @@ export class SocketStore
 
   constructor(
     directory: string,
-    { pollInterval = 10, graceWindow = 500 }: SocketStoreOptions = {},
+    { pollInterval = 10, graceWindow = 500, clock }: SocketStoreOptions,
   ) {
     super();
     const socketPath = socketPathFor(directory);
@@ -56,8 +60,9 @@ export class SocketStore
           directory,
           new ElectingConnector({
             socketPath,
-            election: socketElection(directory, pollInterval),
+            election: socketElection(directory, pollInterval, clock),
             pollInterval,
+            clock,
             serve: async (term) => {
               // Until serving has fully started, a failure closes the new server, so no server outlives its term.
               await using starting = new AsyncDisposableStack();
@@ -65,10 +70,10 @@ export class SocketStore
                 await LockServer.start(socketPath, term, {
                   // The first term of a directory has no predecessor to wait for,
                   // and a term after a clean shutdown has no holder to wait for.
-                  graceWindow:
+                  grace:
                     term.epoch > 1n && !term.afterCleanShutdown
-                      ? graceWindow
-                      : 0,
+                      ? { window: graceWindow, clock }
+                      : undefined,
                 }),
                 (started) => started.close(),
               );

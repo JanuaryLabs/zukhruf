@@ -20,6 +20,7 @@ const HELLO = 'hello-world';
 /** The engine that the environment of the test run selects, with hello-world on it. */
 async function connectWithHello(): Promise<Docker> {
   const docker = await Docker.connect({
+    clock: globalThis,
     environment: process.env,
     signal: AbortSignal.timeout(15_000),
   });
@@ -84,7 +85,10 @@ async function bytesOf(
 describe('docker.images', () => {
   test('inspect() gives the image by a short or a full reference, or undefined for an image that is not on the engine', async () => {
     // Arrange
-    await using docker = await Docker.connect({ environment: process.env });
+    await using docker = await Docker.connect({
+      clock: globalThis,
+      environment: process.env,
+    });
     if (!(await docker.images.inspect('alpine:3'))) {
       await docker.images.pull('alpine:3');
     }
@@ -118,7 +122,10 @@ describe('docker.images', () => {
         );
       },
     });
-    await using docker = await Docker.connect({ host: engine.host });
+    await using docker = await Docker.connect({
+      clock: globalThis,
+      host: engine.host,
+    });
     const reference = 'zukhruf-missing/none:1';
 
     // Act
@@ -159,7 +166,10 @@ describe('docker.images', () => {
         });
       },
     });
-    await using docker = await Docker.connect({ host: engine.host });
+    await using docker = await Docker.connect({
+      clock: globalThis,
+      host: engine.host,
+    });
 
     // Act
     const pulling = docker.images.pull('app:1');
@@ -201,7 +211,10 @@ describe('docker.images', () => {
         });
       },
     });
-    await using docker = await Docker.connect({ host: engine.host });
+    await using docker = await Docker.connect({
+      clock: globalThis,
+      host: engine.host,
+    });
     const auth = {
       username: 'me',
       password: 'tok+/en?',
@@ -243,7 +256,10 @@ describe('docker.images', () => {
           response.end('{"status":"Done"}\n');
         },
       });
-      await using docker = await Docker.connect({ host: engine.host });
+      await using docker = await Docker.connect({
+        clock: globalThis,
+        host: engine.host,
+      });
       const auth = { username: 'me', password: 'pwd' };
       assert.notEqual(JSON.stringify(auth).length % 3, 0);
 
@@ -348,7 +364,10 @@ describe('docker.images', () => {
 
   test('load() of bytes that are not an image archive rejects with a DockerEngineError with no status', async () => {
     // Arrange
-    await using docker = await Docker.connect({ environment: process.env });
+    await using docker = await Docker.connect({
+      clock: globalThis,
+      environment: process.env,
+    });
 
     // Act
     const loading = docker.images.load(new Uint8Array(1024));
@@ -367,7 +386,10 @@ describe('docker.images', () => {
 
   test('push() of an image that is not on the engine rejects with ImageNotFoundError: the engine reports it in the progress after 200', async () => {
     // Arrange
-    await using docker = await Docker.connect({ environment: process.env });
+    await using docker = await Docker.connect({
+      clock: globalThis,
+      environment: process.env,
+    });
     const missing = `zukhruf-missing-${randomUUID()}:1`;
 
     // Act
@@ -412,7 +434,10 @@ describe('docker.images', () => {
         }
       },
     });
-    await using docker = await Docker.connect({ host: engine.host });
+    await using docker = await Docker.connect({
+      clock: globalThis,
+      host: engine.host,
+    });
 
     // Act
     const pushing = docker.images.push('registry.test/app:1', {
@@ -463,7 +488,10 @@ describe('docker.images', () => {
         }
       },
     });
-    await using docker = await Docker.connect({ host: engine.host });
+    await using docker = await Docker.connect({
+      clock: globalThis,
+      host: engine.host,
+    });
 
     // Act
     const pushing = docker.images.push('registry.test/app:1', {
@@ -555,7 +583,10 @@ describe('docker.images', () => {
         directory: scratch.path,
         apiVersion,
       });
-      await using docker = await Docker.connect({ host: engine.host });
+      await using docker = await Docker.connect({
+        clock: globalThis,
+        host: engine.host,
+      });
 
       // Act
       const calling = call(docker);
@@ -635,7 +666,10 @@ describe('docker.images', () => {
           response.end();
         },
       });
-      await using docker = await Docker.connect({ host: engine.host });
+      await using docker = await Docker.connect({
+        clock: globalThis,
+        host: engine.host,
+      });
 
       // Act
       await call(docker);
@@ -650,7 +684,10 @@ describe('docker.images', () => {
   test('save() with a platform gives only the content of that platform of a multi-platform image', async () => {
     // Arrange: a tag for each platform. The containerd image store keeps both
     // platforms under each tag; the classic image store keeps one platform per tag.
-    await using docker = await Docker.connect({ environment: process.env });
+    await using docker = await Docker.connect({
+      clock: globalThis,
+      environment: process.env,
+    });
     const run = randomUUID();
     const tags = [`zukhruf-test-${run}:amd64`, `zukhruf-test-${run}:arm64`];
     try {
@@ -679,7 +716,10 @@ describe('docker.images', () => {
 
   test('inspect() with a platform gives that platform of a multi-platform image, or UnsupportedEngineError below API 1.49', async () => {
     // Arrange
-    await using docker = await Docker.connect({ environment: process.env });
+    await using docker = await Docker.connect({
+      clock: globalThis,
+      environment: process.env,
+    });
     const run = randomUUID();
     const tags = [`zukhruf-test-${run}:amd64`, `zukhruf-test-${run}:arm64`];
     try {
@@ -722,7 +762,10 @@ describe('docker.images', () => {
 
   test('load() with a platform that the archive does not have loads no image', async () => {
     // Arrange: an archive of the amd64 platform only, under a name of this run.
-    await using docker = await Docker.connect({ environment: process.env });
+    await using docker = await Docker.connect({
+      clock: globalThis,
+      environment: process.env,
+    });
     const run = randomUUID();
     const name = `zukhruf-test-${run}:amd64`;
     try {

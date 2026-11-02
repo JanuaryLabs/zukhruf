@@ -22,6 +22,7 @@ class LosableElection extends SqliteElection {
 
   constructor(directory: string, loss: AbortSignal) {
     super({
+      clock: globalThis,
       directory,
       claimFile: 'leader.lock',
       epochFile: 'leader.epoch',
@@ -79,7 +80,7 @@ describe('Lock server', () => {
       loss.abort();
 
       // Act
-      const starting = LockServer.start(socketPath, term, { graceWindow: 0 });
+      const starting = LockServer.start(socketPath, term, { grace: undefined });
 
       // Assert
       await assert.rejects(starting, LeaseLostError);
@@ -108,10 +109,11 @@ describe('Lock server', () => {
       const server = await LockServer.start(
         join(directory.path, 'lock.sock'),
         term,
-        { graceWindow: 0 },
+        { grace: undefined },
       );
       try {
         await using store = new SocketStore(directory.path, {
+          clock: globalThis,
           pollInterval: 10,
           graceWindow: 50,
         });

@@ -1,4 +1,4 @@
-import { Latch, untilAborted } from '@zukhruf/async';
+import { type Clock, Latch, delay, untilAborted } from '@zukhruf/async';
 import {
   EpochExhaustedError,
   FencingToken,
@@ -18,11 +18,11 @@ import {
 export interface LockCoordinatorOptions {
   tokens: TokenSource;
   /**
-   * Milliseconds after start during which nothing is granted, so holders from a
-   * previous coordinator can reassert their keys first. Zero when no earlier
-   * coordinator can have left a holder.
+   * The time after start during which nothing is granted, so holders from a
+   * previous coordinator can reassert their keys first: `window` milliseconds
+   * on `clock`. None when no earlier coordinator can have left a holder.
    */
-  graceWindow?: number;
+  grace?: { window: number; clock: Clock } | undefined;
   /**
    * Called when the epoch of the token source has no tokens left. The request
    * that found it gets no answer: only a new term can grant it, so the owner
@@ -57,22 +57,22 @@ export class LockCoordinator implements LockStore {
   #phase: CoordinatorPhase;
   readonly #onTokensExhausted: (() => void) | undefined;
 
-  constructor({
-    tokens,
-    graceWindow = 0,
-    onTokensExhausted,
-  }: LockCoordinatorOptions) {
+  constructor({ tokens, grace, onTokensExhausted }: LockCoordinatorOptions) {
     this.#onTokensExhausted = onTokensExhausted;
     const store = new MemoryStore({ tokens });
     const granting = new Granting(store);
-    if (graceWindow > 0) {
+    if (grace && grace.window > 0) {
       const over = new Latch();
       this.#phase = new GraceWindow(store, over, granting);
-      setTimeout(() => {
+      void delay(grace.window, {
+        clock: grace.clock,
+        signal: undefined,
+        ref: false,
+      }).then(() => {
         // Granting is current before the latch lets the waiters resume.
         this.#phase = granting;
         over.open();
-      }, graceWindow).unref();
+      });
     } else {
       this.#phase = granting;
     }

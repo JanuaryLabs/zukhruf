@@ -15,7 +15,10 @@ import { Docker } from '@zukhruf/docker';
 import { Mutex } from '@zukhruf/mutex';
 import { DockerEngineStore } from '@zukhruf/mutex/docker';
 
-await using docker = await Docker.connect({ environment: process.env });
+await using docker = await Docker.connect({
+  clock: globalThis,
+  environment: process.env,
+});
 
 const mutex = new Mutex(
   new DockerEngineStore({

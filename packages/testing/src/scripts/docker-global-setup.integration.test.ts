@@ -29,7 +29,10 @@ import {
 } from '../fs/temporary-files.ts';
 import { EngineProxy } from '../testing/engine-proxy.ts';
 
-const docker = await Docker.connect({ environment: process.env });
+const docker = await Docker.connect({
+  clock: globalThis,
+  environment: process.env,
+});
 /** The host of the engine that this process's context selects. */
 const engine =
   (await Docker.contexts({ environment: process.env })).find(
@@ -899,7 +902,7 @@ test(
         const docker = new DockerTestbed({ environment: process.env });
         const shared = await docker.reuse({ Image: 'alpine:latest', Cmd: ['sleep', '600'], Labels: { ...docker.defaults.Labels, 'dev.zukhruf.testing.verification': ${JSON.stringify(scope)} } }, { internalPort: 80 });
         await shared.disconnect();
-        await using other = await Docker.connect({ environment: process.env });
+        await using other = await Docker.connect({ clock: globalThis, environment: process.env });
         const created = await other.containers.create({ Image: 'alpine:latest', Cmd: ['sleep', '600'], Labels: docker.defaults.Labels });
         await created.start();
         const { name: volume } = await other.volumes.create({ Labels: docker.defaults.Labels });
@@ -949,7 +952,7 @@ test(
       import { DockerTestbed } from ${library};
       test('resources of another Docker client', { timeout: 150000 }, async () => {
         const { Labels: labels } = new DockerTestbed({ environment: process.env }).defaults;
-        await using other = await Docker.connect({ environment: process.env });
+        await using other = await Docker.connect({ clock: globalThis, environment: process.env });
         const created = await other.containers.create({ Image: 'alpine:latest', Cmd: ['sleep', '600'], Labels: labels });
         await created.start();
         const { name: volume } = await other.volumes.create({ Labels: labels });
@@ -1079,7 +1082,7 @@ test(
       import { DockerTestbed } from ${JSON.stringify(import.meta.resolve('@zukhruf/testing/docker'))};
       test('a container of the run', { timeout: 150000 }, async () => {
         const { Labels: labels } = new DockerTestbed({ environment: process.env }).defaults;
-        await using other = await Docker.connect({ environment: process.env });
+        await using other = await Docker.connect({ clock: globalThis, environment: process.env });
         const created = await other.containers.create({ Image: 'alpine:latest', Cmd: ['sleep', '600'], Labels: labels });
         await created.start();
         await writeFile(${JSON.stringify(statePath)}, JSON.stringify({ container: created.id }));

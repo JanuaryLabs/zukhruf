@@ -14,6 +14,7 @@ describe('the engine that the environment of the test run selects', () => {
 
     // Act
     await using docker = await Docker.connect({
+      clock: globalThis,
       environment: process.env,
       signal,
     });
@@ -48,7 +49,7 @@ describe('the local engine of this machine on its Unix socket', () => {
 import { Docker } from ${JSON.stringify(ENTRY)};
 const warnings = [];
 process.on('warning', (warning) => warnings.push(warning.name + ': ' + warning.message));
-const docker = await Docker.connect({ host: ${JSON.stringify(`unix://${engineSocket}`)}, signal: AbortSignal.timeout(20_000) });
+const docker = await Docker.connect({ clock: globalThis, host: ${JSON.stringify(`unix://${engineSocket}`)}, signal: AbortSignal.timeout(20_000) });
 for (let request = 0; request < 20; request++) await docker.info();
 await docker[Symbol.asyncDispose]();
 console.log(JSON.stringify({ warnings }));

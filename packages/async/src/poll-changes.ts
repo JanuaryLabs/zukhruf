@@ -1,12 +1,13 @@
-import { setTimeout as delay } from 'node:timers/promises';
-
-import { untilAborted } from './until-aborted.ts';
+import type { Clock } from './clock.ts';
+import { delay } from './delay.ts';
 
 export interface PollChangesOptions {
   /** Milliseconds to wait after a check, from when the consumer asks for the next check. */
   interval: number;
   /** Stops the wait between two checks. The iteration then ends with no error. */
   signal: AbortSignal;
+  /** The clock that the wait runs on: `globalThis` in production, a fake clock in a test. */
+  clock: Clock;
 }
 
 /**
@@ -17,7 +18,7 @@ export interface PollChangesOptions {
  */
 export async function* pollChanges<K>(
   reads: ReadonlyMap<K, () => Promise<unknown>>,
-  { interval, signal }: PollChangesOptions,
+  { interval, signal, clock }: PollChangesOptions,
 ): AsyncGenerator<ReadonlySet<K>, void, undefined> {
   if (signal.aborted) return;
   const seen = new Map<K, unknown>();
@@ -25,8 +26,7 @@ export async function* pollChanges<K>(
   yield new Set(reads.keys());
   for (;;) {
     try {
-      // delay's signal frees the timer; untilAborted ends a stopped event too.
-      await untilAborted(delay(interval, undefined, { signal }), signal);
+      await delay(interval, { clock, signal });
     } catch (error) {
       if (signal.aborted) return;
       throw error;

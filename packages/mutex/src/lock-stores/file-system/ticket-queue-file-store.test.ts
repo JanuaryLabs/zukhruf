@@ -32,6 +32,7 @@ describe('TicketQueueFileStore', () => {
         'mutex-test-',
       );
       const store = new TicketQueueFileStore(directory.path, {
+        clock: globalThis,
         pollInterval: 10,
       });
       const queue = join(directory.path, 'product%3A42.lock');
@@ -98,7 +99,7 @@ describe('TicketQueueFileStore holder check', () => {
       const queue = join(directory.path, 'report%3Adaily.lock');
       const caller = (pollInterval: number) => `
 				import { TicketQueueFileStore } from ${JSON.stringify(storeUrl.href)};
-				const store = new TicketQueueFileStore(${JSON.stringify(directory.path)}, { pollInterval: ${pollInterval} });
+				const store = new TicketQueueFileStore(${JSON.stringify(directory.path)}, { clock: globalThis, pollInterval: ${pollInterval} });
 				setInterval(() => {}, 1000);
 				await store.acquire('report:daily');
 				process.send({ type: 'entered' });
@@ -122,7 +123,9 @@ describe('TicketQueueFileStore holder check', () => {
           ),
         { interval: 5, timeout: newProcessTimeout },
       );
-      const mutex = new Mutex(new TicketQueueFileStore(directory.path));
+      const mutex = new Mutex(
+        new TicketQueueFileStore(directory.path, { clock: globalThis }),
+      );
 
       // Act
       holder.child.kill('SIGKILL');
@@ -160,6 +163,7 @@ describe('TicketQueueFileStore damaged queue', () => {
         'mutex-test-',
       );
       const store = new TicketQueueFileStore(directory.path, {
+        clock: globalThis,
         pollInterval: 10,
       });
       const queue = join(directory.path, 'report-daily.lock');

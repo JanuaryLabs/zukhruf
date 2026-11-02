@@ -148,6 +148,7 @@ async function recover(root: string, endpoint: string): Promise<void> {
   const connection = async (): Promise<Docker> =>
     (engine ??= resources.use(
       await Docker.connect({
+        clock: globalThis,
         host: endpoint,
         signal: AbortSignal.timeout(ENGINE_CALL_TIMEOUT),
       }),

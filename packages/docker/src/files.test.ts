@@ -19,6 +19,7 @@ const IMAGE = 'alpine:3';
 /** The engine that the environment of the test run selects, with alpine:3 on it. */
 async function connect(): Promise<Docker> {
   const docker = await Docker.connect({
+    clock: globalThis,
     environment: process.env,
     signal: AbortSignal.timeout(15_000),
   });

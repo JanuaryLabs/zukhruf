@@ -22,7 +22,7 @@ describe('Docker.connect() refuses an engine it cannot use', () => {
     const host = `unix://${join(scratch.path, 'absent.sock')}`;
 
     // Act
-    const connecting = Docker.connect({ host });
+    const connecting = Docker.connect({ clock: globalThis, host });
 
     // Assert
     await assert.rejects(connecting, (error: unknown) => {
@@ -57,7 +57,10 @@ createServer().listen(${JSON.stringify(socketPath)}, () => console.log('listenin
       await exited;
 
       // Act
-      const connecting = Docker.connect({ host: `unix://${socketPath}` });
+      const connecting = Docker.connect({
+        clock: globalThis,
+        host: `unix://${socketPath}`,
+      });
 
       // Assert
       await assert.rejects(connecting, (error: unknown) => {
@@ -80,7 +83,7 @@ createServer().listen(${JSON.stringify(socketPath)}, () => console.log('listenin
     });
 
     // Act
-    const connecting = Docker.connect({ host: engine.host });
+    const connecting = Docker.connect({ clock: globalThis, host: engine.host });
 
     // Assert
     await assert.rejects(connecting, (error: unknown) => {
@@ -106,6 +109,7 @@ createServer().listen(${JSON.stringify(socketPath)}, () => console.log('listenin
 
     // Act
     const connecting = Docker.connect({
+      clock: globalThis,
       host: engine.host,
       signal: controller.signal,
     });
@@ -138,8 +142,14 @@ describe('Docker.connect() negotiates the API version', () => {
     });
 
     // Act
-    await using docker = await Docker.connect({ host: higher.host });
-    await using other = await Docker.connect({ host: longer.host });
+    await using docker = await Docker.connect({
+      clock: globalThis,
+      host: higher.host,
+    });
+    await using other = await Docker.connect({
+      clock: globalThis,
+      host: longer.host,
+    });
     await other.info();
 
     // Assert
@@ -161,7 +171,10 @@ describe('Docker.connect() negotiates the API version', () => {
     });
 
     // Act
-    await using docker = await Docker.connect({ host: engine.host });
+    await using docker = await Docker.connect({
+      clock: globalThis,
+      host: engine.host,
+    });
     const info = await docker.info();
 
     // Assert
@@ -189,7 +202,10 @@ describe('a request that the engine answers with an error', () => {
         );
       },
     });
-    await using docker = await Docker.connect({ host: engine.host });
+    await using docker = await Docker.connect({
+      clock: globalThis,
+      host: engine.host,
+    });
 
     // Act
     const info = docker.info();
@@ -221,7 +237,10 @@ describe('the connections of a client', () => {
           response.end('{}');
         },
       });
-      const docker = await Docker.connect({ host: engine.host });
+      const docker = await Docker.connect({
+        clock: globalThis,
+        host: engine.host,
+      });
       await docker.info();
       assert.ok(engine.openConnections > 0, 'the idle connection stays open');
 
@@ -247,7 +266,7 @@ describe('the connections of a client', () => {
     });
     const scenario = `
 import { Docker } from ${JSON.stringify(ENTRY)};
-const docker = await Docker.connect({ host: ${JSON.stringify(engine.host)} });
+const docker = await Docker.connect({ clock: globalThis, host: ${JSON.stringify(engine.host)} });
 await docker.info();
 console.log('connected');
 `;

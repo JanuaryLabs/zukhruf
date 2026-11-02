@@ -18,10 +18,11 @@ describe('Electing connector', () => {
   test('a connect aborted while it campaigns resigns the term it wins and never serves', async () => {
     // Arrange: nobody serves the directory, and the abort lands while the campaign wins.
     await using directory = await new TemporaryFiles().directory('flights-');
-    const election = flightElection(directory.path, 10);
+    const election = flightElection(directory.path, 10, globalThis);
     const abort = new AbortController();
     const served: Term[] = [];
     const connector = new ElectingConnector({
+      clock: globalThis,
       socketPath: join(directory.path, 'flight.sock'),
       election: {
         campaign: async (options?: CampaignOptions) => {
@@ -42,7 +43,11 @@ describe('Electing connector', () => {
     // Assert
     await assert.rejects(connecting, { name: 'AbortError' });
     assert.deepEqual(served, [], 'An aborted connect must not start serving');
-    await using next = await flightElection(directory.path, 10).campaign();
+    await using next = await flightElection(
+      directory.path,
+      10,
+      globalThis,
+    ).campaign();
     assert.ok(next, 'An aborted connect must resign the term it won');
   });
 
@@ -51,6 +56,7 @@ describe('Electing connector', () => {
     await using directory = await new TemporaryFiles().directory('flights-');
     let campaigns = 0;
     const connector = new ElectingConnector({
+      clock: globalThis,
       socketPath: join(directory.path, 'flight.sock'),
       election: {
         campaign: async () => {
@@ -82,6 +88,7 @@ describe('Electing connector', () => {
       const abort = new AbortController();
       const reason = new Error('The single flight closed');
       const connector = new ElectingConnector({
+        clock: globalThis,
         socketPath: join(directory.path, 'flight.sock'),
         election: {
           campaign: async () => {
@@ -142,6 +149,7 @@ describe('Electing connector', () => {
       };
       subscribe('net.client.socket', onSocket);
       const connector = new ElectingConnector({
+        clock: globalThis,
         socketPath,
         election: { campaign: async () => undefined },
         pollInterval: 60_000,

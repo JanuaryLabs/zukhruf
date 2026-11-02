@@ -1,8 +1,7 @@
 import { once } from 'node:events';
 import { type Socket, connect } from 'node:net';
-import { setTimeout as delay } from 'node:timers/promises';
 
-import { untilAborted } from '@zukhruf/async';
+import { type Clock, delay, untilAborted } from '@zukhruf/async';
 import type { LeaderElection, Term } from '@zukhruf/election';
 
 import type { FlightRequest } from '../protocol/flight-protocol.ts';
@@ -22,6 +21,8 @@ export interface ElectingConnectorOptions {
   /** Only `campaign`: the connector never runs a backend's own steps, so an election of any backend fits. */
   election: Pick<LeaderElection<unknown>, 'campaign'>;
   pollInterval: number;
+  /** The clock of the waits and of the patience after a hang-up. */
+  clock: Clock;
   /** Starts serving for a term this process just won. */
   serve(term: Term): Promise<void>;
 }
@@ -40,7 +41,7 @@ export class ElectingConnector implements FlightConnector {
   }
 
   async connect(signal: AbortSignal): Promise<FlightConnection> {
-    const { socketPath, pollInterval } = this.#options;
+    const { socketPath, pollInterval, clock } = this.#options;
     for (;;) {
       const coordinator = await reachUnlessAborted(socketPath, signal);
       if (coordinator) {
@@ -54,7 +55,7 @@ export class ElectingConnector implements FlightConnector {
         const own = await this.#coordinate(term, signal);
         if (own) return own;
       } else {
-        await untilAborted(delay(pollInterval, undefined, { signal }), signal);
+        await delay(pollInterval, { clock, signal });
       }
     }
   }
@@ -70,8 +71,8 @@ export class ElectingConnector implements FlightConnector {
   async #outlastHangUp(
     signal: AbortSignal,
   ): Promise<FlightConnection | undefined> {
-    const { socketPath, pollInterval } = this.#options;
-    const deadline = performance.now() + HANDSHAKE_PATIENCE;
+    const { socketPath, pollInterval, clock } = this.#options;
+    const deadline = clock.performance.now() + HANDSHAKE_PATIENCE;
     for (;;) {
       const term = await this.#campaign(0, signal);
       if (term) return this.#coordinate(term, signal);
@@ -79,10 +80,10 @@ export class ElectingConnector implements FlightConnector {
       if (!again) return undefined;
       const connection = await this.#follow(again, signal);
       if (connection) return connection;
-      if (performance.now() >= deadline) {
+      if (clock.performance.now() >= deadline) {
         throw new ProtocolVersionError(PROTOCOL_VERSION, undefined);
       }
-      await untilAborted(delay(pollInterval, undefined, { signal }), signal);
+      await delay(pollInterval, { clock, signal });
     }
   }
 

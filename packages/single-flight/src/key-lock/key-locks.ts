@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { poll } from '@zukhruf/async';
+import { type Clock, poll } from '@zukhruf/async';
 import { FileLock } from '@zukhruf/fs';
 
 /**
@@ -18,10 +18,12 @@ import { FileLock } from '@zukhruf/fs';
 export class KeyLocks {
   readonly #folder: string;
   readonly #pollInterval: number;
+  readonly #clock: Clock;
 
-  constructor(directory: string, pollInterval: number) {
+  constructor(directory: string, pollInterval: number, clock: Clock) {
     this.#folder = join(directory, 'execution-locks');
     this.#pollInterval = pollInterval;
+    this.#clock = clock;
   }
 
   /**
@@ -38,6 +40,7 @@ export class KeyLocks {
     await poll(async () => (lock.tryLock() ? lock : undefined), {
       interval: this.#pollInterval,
       signal,
+      clock: this.#clock,
     });
     opened.move();
     return lock;
@@ -68,7 +71,7 @@ export class KeyLocks {
         if (!wanted()) return false;
         return this.isHeld(key) ? undefined : true;
       },
-      { interval: this.#pollInterval, signal, ref: false },
+      { interval: this.#pollInterval, signal, clock: this.#clock, ref: false },
     );
   }
 

@@ -1,3 +1,4 @@
+import type { Clock } from '@zukhruf/async';
 import { SqliteElection } from '@zukhruf/election';
 
 /**
@@ -9,11 +10,13 @@ import { SqliteElection } from '@zukhruf/election';
 export function socketElection(
   directory: string,
   pollInterval: number,
+  clock: Clock,
 ): SqliteElection {
   return new SqliteElection({
     directory,
     claimFile: 'leader.lock',
     epochFile: 'leader.epoch',
     pollInterval,
+    clock,
   });
 }

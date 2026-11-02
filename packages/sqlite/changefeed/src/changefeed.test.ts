@@ -58,6 +58,7 @@ async function until(fact: () => boolean, expected: string): Promise<void> {
     await poll(async () => (fact() ? true : undefined), {
       interval: 5,
       signal: AbortSignal.timeout(5000),
+      clock: globalThis,
     });
   } catch (cause) {
     throw new Error(`no ${expected} within 5 s`, { cause });
@@ -98,7 +99,7 @@ test('the first run of a durable feed reads each row of each table, keyed by the
   const stop = new AbortController();
 
   const batch = await nextBatch(
-    feed.watch({ interval: 5, signal: stop.signal }),
+    feed.watch({ clock: globalThis, interval: 5, signal: stop.signal }),
     'the reads of each table',
   );
   stop.abort();
@@ -177,7 +178,11 @@ test('a durable feed goes on from its saved batch: a new run gives only what the
   {
     using feed = new Changefeed(path, position);
     const stop = new AbortController();
-    const batches = feed.watch({ interval: 5, signal: stop.signal });
+    const batches = feed.watch({
+      clock: globalThis,
+      interval: 5,
+      signal: stop.signal,
+    });
     await nextBatch(batches, 'the reads of notes');
     const next = batches.next();
     stop.abort(new Error('stopped'));
@@ -190,7 +195,11 @@ test('a durable feed goes on from its saved batch: a new run gives only what the
   const resumed = await (async () => {
     using feed = new Changefeed(path, position);
     const stop = new AbortController();
-    const batches = feed.watch({ interval: 5, signal: stop.signal });
+    const batches = feed.watch({
+      clock: globalThis,
+      interval: 5,
+      signal: stop.signal,
+    });
     const batch = await nextBatch(batches, 'the changes while stopped');
     const next = batches.next();
     stop.abort(new Error('stopped'));
@@ -201,7 +210,7 @@ test('a durable feed goes on from its saved batch: a new run gives only what the
   using feed = new Changefeed(path, position);
   const stop = new AbortController();
   const last = await nextBatch(
-    feed.watch({ interval: 5, signal: stop.signal }),
+    feed.watch({ clock: globalThis, interval: 5, signal: stop.signal }),
     'the delete of note 4',
   );
   stop.abort();
@@ -236,6 +245,7 @@ test('a batch that the loop leaves with break is given again at the next run', a
   {
     using feed = new Changefeed(path, position);
     const batches = feed.watch({
+      clock: globalThis,
       interval: 5,
       signal: new AbortController().signal,
     });
@@ -248,7 +258,7 @@ test('a batch that the loop leaves with break is given again at the next run', a
   using feed = new Changefeed(path, position);
   const stop = new AbortController();
   const batch = await nextBatch(
-    feed.watch({ interval: 5, signal: stop.signal }),
+    feed.watch({ clock: globalThis, interval: 5, signal: stop.signal }),
     'the insert of note 2 again',
   );
   stop.abort();
@@ -273,7 +283,11 @@ test('an observing feed gives no reads, then only the changes after it started',
   );
   using feed = new Changefeed(path);
   const stop = new AbortController();
-  const batches = feed.watch({ interval: 5, signal: stop.signal });
+  const batches = feed.watch({
+    clock: globalThis,
+    interval: 5,
+    signal: stop.signal,
+  });
 
   const first = batches.next();
   // The baseline pass runs in microtasks, with no I/O but node:sqlite's
@@ -312,7 +326,11 @@ test('a new table gives reads, an empty table it saw gives inserts, a dropped ta
   );
   using feed = new Changefeed(path, join(dir.path, 'position.sqlite'));
   const stop = new AbortController();
-  const batches = feed.watch({ interval: 5, signal: stop.signal });
+  const batches = feed.watch({
+    clock: globalThis,
+    interval: 5,
+    signal: stop.signal,
+  });
   await nextBatch(batches, 'the first reads');
 
   owner.exec(`DROP TABLE drafts;
@@ -374,7 +392,11 @@ test('an observing feed gives the truncate of a dropped table once', async () =>
   );
   using feed = new Changefeed(path);
   const stop = new AbortController();
-  const batches = feed.watch({ interval: 5, signal: stop.signal });
+  const batches = feed.watch({
+    clock: globalThis,
+    interval: 5,
+    signal: stop.signal,
+  });
   const first = batches.next();
   const firstSettled = settled(first);
   // The baseline takes no change, so the owner changes archive until a
@@ -416,7 +438,11 @@ test('a VACUUM that gives the rows of a table with no primary key new rowids giv
   );
   using feed = new Changefeed(path, join(dir.path, 'position.sqlite'));
   const stop = new AbortController();
-  const batches = feed.watch({ interval: 5, signal: stop.signal });
+  const batches = feed.watch({
+    clock: globalThis,
+    interval: 5,
+    signal: stop.signal,
+  });
   await nextBatch(batches, 'the reads of tags');
 
   owner.exec('VACUUM');
@@ -440,6 +466,7 @@ test('a database not in WAL mode is a JournalModeError at open, and at the pass 
   owned(path, 'CREATE TABLE notes (id INTEGER PRIMARY KEY)').close();
   using feed = new Changefeed(path);
   const batches = feed.watch({
+    clock: globalThis,
     interval: 5,
     signal: new AbortController().signal,
   });
@@ -490,7 +517,11 @@ test('a pass that finds no change gives no batch, and the next batch holds only 
   );
   using feed = new Changefeed(path, position);
   const stop = new AbortController();
-  const batches = feed.watch({ interval: 5, signal: stop.signal });
+  const batches = feed.watch({
+    clock: globalThis,
+    interval: 5,
+    signal: stop.signal,
+  });
   await nextBatch(batches, 'the read of note 1');
   using observer = new DatabaseSync(position, { readOnly: true });
   const positionVersion = () =>
@@ -542,7 +573,11 @@ test('an abort after a batch gives the batch again at the next run of a durable 
   {
     using feed = new Changefeed(path, position);
     const stop = new AbortController();
-    const batches = feed.watch({ interval: 5, signal: stop.signal });
+    const batches = feed.watch({
+      clock: globalThis,
+      interval: 5,
+      signal: stop.signal,
+    });
     assert.deepEqual(await nextBatch(batches, 'the read of note 1'), [read]);
     stop.abort(new Error('stopped'));
     await assert.rejects(batches.next(), /stopped/);
@@ -551,7 +586,7 @@ test('an abort after a batch gives the batch again at the next run of a durable 
   using feed = new Changefeed(path, position);
   const stop = new AbortController();
   const batch = await nextBatch(
-    feed.watch({ interval: 5, signal: stop.signal }),
+    feed.watch({ clock: globalThis, interval: 5, signal: stop.signal }),
     'the read of note 1 again',
   );
   stop.abort();
@@ -575,7 +610,7 @@ test('a primary key that can hold NULL keys a row by rowid, and an integer prima
   const stop = new AbortController();
 
   const batch = await nextBatch(
-    feed.watch({ interval: 5, signal: stop.signal }),
+    feed.watch({ clock: globalThis, interval: 5, signal: stop.signal }),
     'the reads of entries, items and ranks',
   );
   stop.abort();
@@ -626,7 +661,11 @@ test('a BLOB key saved in the position comes back as the same bytes in the updat
   {
     using feed = new Changefeed(path, position);
     const stop = new AbortController();
-    const batches = feed.watch({ interval: 5, signal: stop.signal });
+    const batches = feed.watch({
+      clock: globalThis,
+      interval: 5,
+      signal: stop.signal,
+    });
     await nextBatch(batches, 'the reads of files');
     const next = batches.next();
     stop.abort(new Error('stopped'));
@@ -638,7 +677,7 @@ test('a BLOB key saved in the position comes back as the same bytes in the updat
   using feed = new Changefeed(path, position);
   const stop = new AbortController();
   const batch = await nextBatch(
-    feed.watch({ interval: 5, signal: stop.signal }),
+    feed.watch({ clock: globalThis, interval: 5, signal: stop.signal }),
     'the update and delete of files',
   );
   stop.abort();

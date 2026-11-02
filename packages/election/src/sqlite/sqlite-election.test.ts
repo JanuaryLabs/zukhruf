@@ -22,6 +22,7 @@ const indexUrl = new URL('../index.ts', import.meta.url);
 /** An election in `directory` with the file names these tests use. */
 const electionIn = (directory: string) =>
   new SqliteElection({
+    clock: globalThis,
     directory,
     claimFile: 'term.lock',
     epochFile: 'term.epoch',
@@ -31,7 +32,7 @@ const electionIn = (directory: string) =>
 const candidateSource = (directory: string, timeout: number) => `
 	import { SqliteElection } from ${JSON.stringify(indexUrl.href)};
 	setInterval(() => {}, 1000);
-	const term = await new SqliteElection({
+	const term = await new SqliteElection({ clock: globalThis,
 		directory: ${JSON.stringify(directory)},
 		claimFile: 'term.lock',
 		epochFile: 'term.epoch',
@@ -48,7 +49,12 @@ class LosableElection extends SqliteElection {
   readonly #loss: AbortSignal;
 
   constructor(directory: string, loss: AbortSignal) {
-    super({ directory, claimFile: 'term.lock', epochFile: 'term.epoch' });
+    super({
+      clock: globalThis,
+      directory,
+      claimFile: 'term.lock',
+      epochFile: 'term.epoch',
+    });
     this.#loss = loss;
   }
 
@@ -223,7 +229,12 @@ describe('The files of a SQLite election', () => {
         'election-test-',
       );
       const electionOn = (claimFile: string, epochFile: string) =>
-        new SqliteElection({ directory: directory.path, claimFile, epochFile });
+        new SqliteElection({
+          clock: globalThis,
+          directory: directory.path,
+          claimFile,
+          epochFile,
+        });
       await using _leader = await electionOn('seat-a.db', 'count-a').campaign();
 
       // Act

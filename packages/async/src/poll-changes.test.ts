@@ -3,16 +3,19 @@ import { execFile } from 'node:child_process';
 import { describe, test } from 'node:test';
 import { promisify } from 'node:util';
 
+import { createClock } from '@sinonjs/fake-timers';
+
 import { pollChanges } from './poll-changes.ts';
 
 const execFileAsync = promisify(execFile);
 
 describe('pollChanges', () => {
   test(
-    'an abort during the wait ends the iteration with no error, and no read follows',
+    'an abort during the wait ends the iteration with no error, stops the timer, and no read follows',
     { timeout: 2_000 },
-    async () => {
+    async (t) => {
       // Arrange
+      const clock = createClock();
       const controller = new AbortController();
       let reads = 0;
       const checks = pollChanges(
@@ -25,12 +28,13 @@ describe('pollChanges', () => {
             },
           ],
         ]),
-        { interval: 60_000, signal: controller.signal },
+        { interval: 60_000, signal: controller.signal, clock },
       );
       await checks.next();
+      const next = checks.next();
+      await t.waitFor(() => assert.equal(clock.countTimers(), 1));
 
       // Act
-      const next = checks.next();
       controller.abort(new Error('the watch stopped'));
 
       // Assert
@@ -39,6 +43,8 @@ describe('pollChanges', () => {
         { done: true, value: undefined },
         'An elt source ends its watch on an abort, as its loop does today',
       );
+      assert.equal(clock.countTimers(), 0, 'The abort must stop the timer');
+      await clock.tickAsync(60_000);
       assert.equal(reads, 1);
     },
   );
@@ -48,6 +54,7 @@ describe('pollChanges', () => {
     { timeout: 2_000 },
     async () => {
       // Arrange
+      const clock = createClock();
       let reads = 0;
       const signal = AbortSignal.abort();
 
@@ -63,13 +70,14 @@ describe('pollChanges', () => {
               },
             ],
           ]),
-          { interval: 5, signal },
+          { interval: 5, signal, clock },
         ),
       );
 
       // Assert
       assert.deepEqual(checks, []);
       assert.equal(reads, 0, 'A stopped watch must not read the store');
+      assert.equal(clock.countTimers(), 0);
     },
   );
 
@@ -84,6 +92,7 @@ describe('pollChanges', () => {
         const checks = pollChanges(new Map([['store', async () => 1]]), {
           interval: 60_000,
           signal: controller.signal,
+          clock: globalThis,
         });
         await checks.next();
         setImmediate(() => controller.abort());
@@ -110,6 +119,7 @@ describe('pollChanges', () => {
     { timeout: 2_000 },
     async () => {
       // Arrange
+      const clock = createClock();
       const failure = new Error('database is locked');
       let reads = 0;
       const checks = pollChanges(
@@ -122,94 +132,106 @@ describe('pollChanges', () => {
             },
           ],
         ]),
-        { interval: 5, signal: new AbortController().signal },
+        { interval: 5, signal: new AbortController().signal, clock },
       );
       await checks.next();
 
       // Act
       const next = checks.next();
+      const rejected = assert.rejects(next, (error) => error === failure);
+      await clock.tickAsync(5);
 
       // Assert
-      await assert.rejects(next, (error) => error === failure);
+      await rejected;
     },
   );
 
   test(
     'the first check reads at once and yields every key, a later check yields only the keys whose value changed, and a check with no change yields an empty set',
     { timeout: 2_000 },
-    async () => {
+    async (t) => {
       // Arrange
-      const controller = new AbortController();
+      const clock = createClock();
+      const interval = 5;
       const books = [1, 1, 2, 2];
       const notes = ['a', 'b', 'b', 'b'];
       let bookReads = 0;
       let noteReads = 0;
-      const started = performance.now();
       const checks = pollChanges(
         new Map<string, () => Promise<unknown>>([
           ['books', async () => books[bookReads++]],
           ['notes', async () => notes[noteReads++]],
         ]),
-        { interval: 5, signal: controller.signal },
+        { interval, signal: new AbortController().signal, clock },
       );
 
       // Act
-      const yielded: (readonly string[])[] = [];
-      let firstAfter = 0;
-      for await (const changed of checks) {
-        if (yielded.length === 0) firstAfter = performance.now() - started;
-        yielded.push([...changed]);
-        if (yielded.length === books.length) controller.abort();
+      const firstCheck = checks.next();
+      await t.waitFor(() =>
+        assert.equal(bookReads, 1, 'The first check must read before any wait'),
+      );
+      assert.equal(clock.countTimers(), 0);
+      const first = await firstCheck;
+      const later: (readonly string[])[] = [];
+      for (let check = 1; check < books.length; check++) {
+        const next = checks.next();
+        await clock.tickAsync(interval);
+        const result = await next;
+        if (result.done) assert.fail(`The watch ended at check ${check + 1}`);
+        later.push([...result.value]);
       }
 
       // Assert
-      assert.deepEqual(yielded, [['books', 'notes'], ['notes'], ['books'], []]);
-      assert.ok(
-        firstAfter < 1_000,
-        `The first check must not wait for an interval, but it came after ${firstAfter} ms`,
+      if (first.done) assert.fail('The watch ended before its first check');
+      assert.deepEqual(
+        [...first.value],
+        ['books', 'notes'],
+        'The first check must yield every key, before any wait',
       );
+      assert.equal(clock.now, (books.length - 1) * interval);
+      assert.deepEqual(later, [['notes'], ['books'], []]);
     },
   );
 
   test(
-    'after a slow consumer, the next check still waits the full interval',
+    'after a slow consumer, the next check still waits the full interval from when the consumer asks',
     { timeout: 5_000 },
     async () => {
       // Arrange
+      const clock = createClock();
       const interval = 200;
-      const controller = new AbortController();
       const times: number[] = [];
       const checks = pollChanges(
         new Map([
           [
             'store',
             async () => {
-              times.push(performance.now());
+              times.push(clock.now);
               return times.length;
             },
           ],
         ]),
-        { interval, signal: controller.signal },
+        { interval, signal: new AbortController().signal, clock },
       );
+      await checks.next();
 
       // Act
-      for await (const _ of checks) {
-        if (times.length === 3) {
-          controller.abort();
-          continue;
-        }
-        const busyUntil = performance.now() + interval * 2;
-        while (performance.now() < busyUntil);
+      for (let slow = 0; slow < 2; slow++) {
+        await clock.tickAsync(interval * 2);
+        const next = checks.next();
+        await clock.tickAsync(interval - 1);
+        const early = times.length;
+        await clock.tickAsync(1);
+        await next;
+        assert.equal(
+          times.length,
+          early + 1,
+          'The check must come one full interval after the consumer asks, not before',
+        );
       }
 
       // Assert
-      for (let index = 1; index < times.length; index++) {
-        const gap = times[index]! - times[index - 1]!;
-        assert.ok(
-          gap >= interval * 3 - 5,
-          `Read ${index + 1} came ${gap} ms after the one before it; a slow body of ${interval * 2} ms must be followed by a full wait of ${interval} ms`,
-        );
-      }
+      assert.deepEqual(times, [0, interval * 3, interval * 6]);
     },
   );
 });

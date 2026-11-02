@@ -32,6 +32,10 @@ _Avoid_: Retry (`patiently` of `@zukhruf/fs` tries an operation again after an e
 The source of the timers and of the time of a wait. The caller gives it: production gives `globalThis`, and a test gives a fake clock that the test moves. It has only the members that the wait calls.
 _Avoid_: TimeProvider (the name in .NET), scheduler, timer (a timer is one wait that the clock starts)
 
+**Delay**:
+A wait of a fixed number of milliseconds on a clock. A cancel stops its timer.
+_Avoid_: Sleep, pause
+
 **Deadline**:
 A time from `clock.performance.now()`, from the clock of the poll. After it, an attempt that gives no value ends the poll. A deadline is a time, not a duration.
 _Avoid_: Timeout (a timeout is a duration), time limit

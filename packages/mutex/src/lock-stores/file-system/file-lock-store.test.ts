@@ -99,21 +99,24 @@ async function holdOpen(
 const namedStores = [
   {
     name: 'LockFileStore',
-    open: (directory: string) => new LockFileStore(directory),
+    open: (directory: string) =>
+      new LockFileStore(directory, { clock: globalThis }),
     longest: 204,
     fence: true,
     presence: true,
   },
   {
     name: 'TicketQueueFileStore',
-    open: (directory: string) => new TicketQueueFileStore(directory),
+    open: (directory: string) =>
+      new TicketQueueFileStore(directory, { clock: globalThis }),
     longest: 204,
     fence: true,
     presence: true,
   },
   {
     name: 'SqliteStore',
-    open: (directory: string) => new SqliteStore(directory),
+    open: (directory: string) =>
+      new SqliteStore(directory, { clock: globalThis }),
     longest: 208,
     fence: true,
     presence: false,
@@ -121,7 +124,10 @@ const namedStores = [
   {
     name: 'SqliteStore with tokens in memory',
     open: (directory: string) =>
-      new SqliteStore(directory, { tokens: new CounterTokenSource() }),
+      new SqliteStore(directory, {
+        clock: globalThis,
+        tokens: new CounterTokenSource(),
+      }),
     longest: 242,
     fence: false,
     presence: false,
@@ -190,8 +196,14 @@ describe('Lock file names', () => {
 });
 
 const fileStores: [string, (directory: string) => LockStore][] = [
-  ['LockFileStore', (directory) => new LockFileStore(directory)],
-  ['TicketQueueFileStore', (directory) => new TicketQueueFileStore(directory)],
+  [
+    'LockFileStore',
+    (directory) => new LockFileStore(directory, { clock: globalThis }),
+  ],
+  [
+    'TicketQueueFileStore',
+    (directory) => new TicketQueueFileStore(directory, { clock: globalThis }),
+  ],
 ];
 
 describe('File lock stores on Windows', () => {
@@ -308,7 +320,10 @@ describe('LockFileStore damaged lock file', () => {
       await using directory = await new TemporaryFiles().directory(
         'mutex-test-',
       );
-      const store = new LockFileStore(directory.path, { pollInterval: 10 });
+      const store = new LockFileStore(directory.path, {
+        clock: globalThis,
+        pollInterval: 10,
+      });
       const lockFile = join(directory.path, 'report-daily.lock');
       await writeFile(lockFile, damaged);
 
@@ -338,17 +353,29 @@ describe('File lock stores whose token source fails', () => {
       [
         'LockFileStore',
         (directory: string, tokens: TokenSource) =>
-          new LockFileStore(directory, { pollInterval: 10, tokens }),
+          new LockFileStore(directory, {
+            clock: globalThis,
+            pollInterval: 10,
+            tokens,
+          }),
       ],
       [
         'TicketQueueFileStore',
         (directory: string, tokens: TokenSource) =>
-          new TicketQueueFileStore(directory, { pollInterval: 10, tokens }),
+          new TicketQueueFileStore(directory, {
+            clock: globalThis,
+            pollInterval: 10,
+            tokens,
+          }),
       ],
       [
         'SqliteStore',
         (directory: string, tokens: TokenSource) =>
-          new SqliteStore(directory, { pollInterval: 10, tokens }),
+          new SqliteStore(directory, {
+            clock: globalThis,
+            pollInterval: 10,
+            tokens,
+          }),
       ],
     ] as const,
     ([name, open]) =>
@@ -395,7 +422,10 @@ test(
         throw failure;
       },
     };
-    const store = new LockFileStore(directory.path, { tokens });
+    const store = new LockFileStore(directory.path, {
+      clock: globalThis,
+      tokens,
+    });
 
     // Act
     let rejection: unknown;

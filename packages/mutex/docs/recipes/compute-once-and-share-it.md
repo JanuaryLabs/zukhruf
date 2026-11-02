@@ -36,7 +36,9 @@ import { SqliteStore } from '@zukhruf/mutex/sqlite';
 const [role, shared] = process.argv.slice(2);
 
 if (role === 'instance') {
-  const mutex = new Mutex(new SqliteStore(join(shared!, 'locks')));
+  const mutex = new Mutex(
+    new SqliteStore(join(shared!, 'locks'), { clock: globalThis }),
+  );
   const cache = join(shared!, 'schema.txt');
 
   const readCache = () =>

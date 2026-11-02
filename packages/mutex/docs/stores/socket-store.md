@@ -14,7 +14,9 @@ All processes that use `SocketStore` with the same directory are candidates. The
 import { Mutex } from '@zukhruf/mutex';
 import { SocketStore } from '@zukhruf/mutex/socket';
 
-await using store = new SocketStore('/var/lib/my-app/locks');
+await using store = new SocketStore('/var/lib/my-app/locks', {
+  clock: globalThis,
+});
 const mutex = new Mutex(store);
 store.on('role', (role) => console.log(`This process is the ${role}`));
 ```
@@ -105,11 +107,12 @@ Before a process sends its first request, it tells the leader its protocol versi
 
 ## Options
 
-| Option                       | Default | Description                                                                                                                                                         |
-| ---------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `directory` (first argument) | —       | The shared directory. All processes must use the same path. It belongs to the lock store alone: no other program may add, change, or remove files or folders in it. |
-| `pollInterval`               | `10`    | Milliseconds between two attempts to connect or to campaign.                                                                                                        |
-| `graceWindow`                | `500`   | Milliseconds after a failover in which the new leader grants no keys. It must be longer than the time that a holder needs to connect again.                         |
+| Option                       | Default | Description                                                                                                                                                                                                                                                                                |
+| ---------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `directory` (first argument) | —       | The shared directory. All processes must use the same path. It belongs to the lock store alone: no other program may add, change, or remove files or folders in it.                                                                                                                        |
+| `pollInterval`               | `10`    | Milliseconds between two attempts to connect or to campaign.                                                                                                                                                                                                                               |
+| `clock`                      | —       | The clock of the waits of the store: the attempts to connect or to campaign, and the grace window. Give `globalThis` in production; a test gives a fake clock, for example `createClock()` of `@sinonjs/fake-timers` ([`@zukhruf/async`](../../../async/README.md#run-a-wait-on-a-clock)). |
+| `graceWindow`                | `500`   | Milliseconds after a failover in which the new leader grants no keys. It must be longer than the time that a holder needs to connect again.                                                                                                                                                |
 
 `SocketStore` always uses `EpochTokenSource`. The safety of a failover depends on the epoch, so you cannot change the token source.
 

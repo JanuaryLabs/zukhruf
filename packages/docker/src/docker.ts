@@ -1,5 +1,5 @@
 import { negotiateApiVersion } from './api-version.ts';
-import { Containers } from './containers.ts';
+import { Containers, type EngineClock } from './containers.ts';
 import {
   type DockerContext,
   type Environment,
@@ -21,10 +21,14 @@ function isEventMessage(value: unknown): value is EngineApi.EventMessage {
   return typeof value === 'object' && value !== null;
 }
 
-/** A context or a host, never both. */
-export type ConnectOptions = CancelOptions & { environment?: Environment } & (
-    { context?: string; host?: never } | { host?: string; context?: never }
-  );
+/**
+ * A context or a host, never both. `clock` is the clock of the waits of the
+ * client: `globalThis` in production, a fake clock in a test.
+ */
+export type ConnectOptions = CancelOptions & {
+  environment?: Environment;
+  clock: EngineClock;
+} & ({ context?: string; host?: never } | { host?: string; context?: never });
 
 /** A client of one engine. Dispose it to close its connections. */
 export class Docker implements AsyncDisposable {
@@ -45,6 +49,7 @@ export class Docker implements AsyncDisposable {
     host: string,
     apiVersion: string,
     client: EngineClient,
+    clock: EngineClock,
   ) {
     this.context = context;
     this.host = host;
@@ -55,14 +60,14 @@ export class Docker implements AsyncDisposable {
     });
     this.#client = client;
     this.images = new Images(client);
-    this.containers = new Containers(client, this.images);
+    this.containers = new Containers(client, this.images, clock);
     this.volumes = new Volumes(client);
     this.networks = new Networks(client);
   }
 
   /** Selects the engine in the order of the Docker CLI, pings it and negotiates the API version. */
-  static async connect(options: ConnectOptions = {}): Promise<Docker> {
-    const { signal } = options;
+  static async connect(options: ConnectOptions): Promise<Docker> {
+    const { signal, clock } = options;
     const engine = await selectEngine(options);
     const parsed = parseHost(engine.host);
     const transport =
@@ -82,6 +87,7 @@ export class Docker implements AsyncDisposable {
         engine.host,
         apiVersion,
         unversioned.versioned(apiVersion),
+        clock,
       );
     } catch (error) {
       await transport.close();

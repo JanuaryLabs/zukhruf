@@ -72,6 +72,8 @@ The lease that the work gets comes from `@zukhruf/lease`, and its token comes fr
 
 The directory is the local folder where the processes that share flights meet. Each process that uses a `SingleFlight` keeps three files and a folder there: `flight.lock`, `flight.epoch`, `flight.sock` and `execution-locks/`. The election of [`@zukhruf/election`](../election/README.md) claims `flight.lock` with a file lock, and records the epoch of the last term in `flight.epoch`. The folder `execution-locks/` has one file for each key that ever led: the key lock of that key, named by the SHA-256 of the key. The process that runs the work of a key holds a file lock on that file (see [When a process stops](#when-a-process-stops)). The files stay after the flights, so do not remove them while a process uses the directory. The journal of the claim is in memory, so a coordinator that stops leaves no `flight.lock-journal` file. All the processes that name the same directory are one group, and the callers of one key share a flight in that group only.
 
+Each `SingleFlight` also takes a `clock`: the clock of the waits of the group, for example the wait for a key lock. Give `globalThis` in production. A test gives a fake clock, for example `createClock()` of `@sinonjs/fake-timers` ([`@zukhruf/async`](../async/README.md#run-a-wait-on-a-clock)).
+
 There is no default directory. One default would put each application on the host into one group, and unrelated applications that use the same key would join each other's flights. Give each group its own directory, for example a folder of your application's data.
 
 - The directory must be on a local file system. On a network file system, a call rejects with `NetworkDirectoryError`.
@@ -121,7 +123,11 @@ const syncs: Codec<Sync> = {
 };
 
 const directory = await mkdtemp(join(tmpdir(), 'syncs-'));
-const flights = new SingleFlight({ directory, codec: syncs });
+const flights = new SingleFlight({
+  clock: globalThis,
+  directory,
+  codec: syncs,
+});
 const { value } = await flights.run('sync', async () => ({
   at: new Date('2026-10-09T12:00:00Z'),
   files: 42,

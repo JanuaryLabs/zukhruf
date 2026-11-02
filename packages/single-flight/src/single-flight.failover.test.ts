@@ -341,6 +341,7 @@ async function rejectingSuccessor(
     coordinator.child.kill('SIGKILL');
     await coordinator.closed;
     const term = await new SqliteElection({
+      clock: globalThis,
       directory,
       claimFile: 'flight.lock',
       epochFile: 'flight.epoch',
@@ -504,6 +505,7 @@ describe('A single flight across processes when the coordinator disposes', () =>
       // Arrange: this process coordinates and leads, and the joiner's process will not read for a while.
       await using directory = await new TemporaryFiles().directory('flights-');
       await using flights = new SingleFlight({
+        clock: globalThis,
         directory: directory.path,
         codec: {
           encode: (value: string) => JSON.stringify(value),

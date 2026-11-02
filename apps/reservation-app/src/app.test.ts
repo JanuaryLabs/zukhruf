@@ -33,7 +33,7 @@ async function reserveFromOwnProcess(directory: string): Promise<number> {
 
 				const directory = ${JSON.stringify(directory)};
 				const app = createApp({
-					mutex: new Mutex(new TicketQueueFileStore(directory)),
+					mutex: new Mutex(new TicketQueueFileStore(directory, { clock: globalThis })),
 					stock: new FencedStock(join(directory, 'inventory.db')),
 				});
 				const response = await app.request('/reserve', { method: 'POST' });
@@ -55,7 +55,9 @@ describe('Reservation endpoint', () => {
       const stock = new FencedStock(join(directory.path, 'inventory.db'));
       stock.seed('product:42', 1);
       const app = createApp({
-        mutex: new Mutex(new TicketQueueFileStore(directory.path)),
+        mutex: new Mutex(
+          new TicketQueueFileStore(directory.path, { clock: globalThis }),
+        ),
         stock,
       });
 
@@ -109,7 +111,9 @@ describe('Reservation endpoint', () => {
       await using directory = await new TemporaryFiles().directory('app-test-');
       const stock = new FencedStock(join(directory.path, 'inventory.db'));
       stock.seed('product:42', 1);
-      const mutex = new Mutex(new TicketQueueFileStore(directory.path));
+      const mutex = new Mutex(
+        new TicketQueueFileStore(directory.path, { clock: globalThis }),
+      );
       const app = createApp({ mutex, stock });
       const entered = Promise.withResolvers<void>();
       const release = Promise.withResolvers<void>();

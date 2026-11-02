@@ -23,6 +23,7 @@ const IMAGE = 'alpine:3';
 /** The engine that the environment of the test run selects, with alpine:3 on it. */
 async function connect(): Promise<Docker> {
   const docker = await Docker.connect({
+    clock: globalThis,
     environment: process.env,
     signal: AbortSignal.timeout(15_000),
   });
@@ -217,7 +218,7 @@ const needsLocalEngine =
  */
 const holdAttach = (connect: string, run: string, attach: string) => `
 import { Docker } from ${JSON.stringify(ENTRY)};
-const docker = await Docker.connect(${connect});
+const docker = await Docker.connect({ ...${connect}, clock: globalThis });
 const container = await docker.containers.create({
   Image: ${JSON.stringify(IMAGE)},
   Entrypoint: ['cat'],
@@ -252,7 +253,7 @@ describe('container.attach({ ref: false })', () => {
       // Arrange
       await using home = await scratchDirectory();
       const host = `unix://${String(engineSocket)}`;
-      await using cleaner = await Docker.connect({ host });
+      await using cleaner = await Docker.connect({ clock: globalThis, host });
       if (!(await cleaner.images.inspect(IMAGE)))
         await cleaner.images.pull(IMAGE);
       const run = randomUUID();
@@ -286,7 +287,7 @@ describe('container.attach({ ref: false })', () => {
       // Arrange
       await using home = await scratchDirectory();
       const host = `unix://${String(engineSocket)}`;
-      await using cleaner = await Docker.connect({ host });
+      await using cleaner = await Docker.connect({ clock: globalThis, host });
       if (!(await cleaner.images.inspect(IMAGE)))
         await cleaner.images.pull(IMAGE);
       const run = randomUUID();
@@ -318,6 +319,7 @@ describe('container.attach({ ref: false })', () => {
         socketPath: String(engineSocket),
       });
       await using cleaner = await Docker.connect({
+        clock: globalThis,
         host: `unix://${String(engineSocket)}`,
       });
       if (!(await cleaner.images.inspect(IMAGE)))

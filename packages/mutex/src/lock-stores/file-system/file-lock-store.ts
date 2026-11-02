@@ -1,7 +1,7 @@
 import { mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 
-import { poll } from '@zukhruf/async';
+import { type Clock, poll } from '@zukhruf/async';
 import { FileTokenSource, type TokenSource } from '@zukhruf/fencing';
 import { FileLock, assertLocalDirectory, safeFileName } from '@zukhruf/fs';
 
@@ -13,6 +13,8 @@ export interface FileLockStoreOptions {
   pollInterval?: number;
   /** Defaults to durable per-key counter files beside the locks. */
   tokens?: TokenSource;
+  /** The clock that a waiter sleeps on: `globalThis` in production, a fake clock in a test. */
+  clock: Clock;
 }
 
 /** Shares one lock directory between processes: each key maps to `<directory>/<key>.lock`. */
@@ -20,17 +22,20 @@ export abstract class FileLockStore implements LockStore {
   readonly #directory: string;
   readonly #pollInterval: number;
   readonly #tokens: TokenSource;
+  readonly #clock: Clock;
 
   constructor(
     directory: string,
     {
       pollInterval = 10,
       tokens = new FileTokenSource(directory),
-    }: FileLockStoreOptions = {},
+      clock,
+    }: FileLockStoreOptions,
   ) {
     this.#directory = directory;
     this.#pollInterval = pollInterval;
     this.#tokens = tokens;
+    this.#clock = clock;
   }
 
   async acquire(
@@ -79,7 +84,11 @@ export abstract class FileLockStore implements LockStore {
     attempt: () => Promise<T | undefined>,
     signal: AbortSignal | undefined,
   ): Promise<T> {
-    return poll(attempt, { interval: this.#pollInterval, signal });
+    return poll(attempt, {
+      interval: this.#pollInterval,
+      signal,
+      clock: this.#clock,
+    });
   }
 
   /**

@@ -25,6 +25,7 @@ Then `connect()` sends `GET /_ping` and negotiates the API version. Dispose the 
 import { Docker } from '@zukhruf/docker';
 
 await using docker = await Docker.connect({
+  clock: globalThis,
   environment: process.env,
   signal: AbortSignal.timeout(5_000),
 });
@@ -32,14 +33,18 @@ console.log(docker.context, docker.host, docker.apiVersion);
 // desktop-linux unix:///Users/me/.docker/run/docker.sock 1.51
 ```
 
+`clock` is the clock of the waits of the client, for example the wait while another removal of a container ends. Give `globalThis` in production. A test gives a fake clock, for example `createClock()` of `@sinonjs/fake-timers` ([`@zukhruf/async`](../async/README.md#run-a-wait-on-a-clock)).
+
 A client keeps its engine. To use another engine, connect again with a context name or a host. A `context` ignores `DOCKER_CONTEXT` and `currentContext`. The `default` context still takes its host from `DOCKER_HOST`, as in the Docker CLI. A `host` ignores the environment:
 
 ```ts
 await using remote = await Docker.connect({
+  clock: globalThis,
   context: 'limerence-dokploy',
   environment: process.env,
 });
 await using local = await Docker.connect({
+  clock: globalThis,
   host: 'unix:///var/run/docker.sock',
 });
 ```
@@ -97,6 +102,7 @@ import {
 
 try {
   await using docker = await Docker.connect({
+    clock: globalThis,
     context: 'desktop-linux',
     environment: process.env,
   });
@@ -514,7 +520,7 @@ The lowest version is 1.44. From that version on, "`POST /networks/create` with 
 ```ts
 export class Docker implements AsyncDisposable {
   /** Selects the engine in the order of the Docker CLI, pings it and negotiates the API version. */
-  static connect(options?: ConnectOptions): Promise<Docker>;
+  static connect(options: ConnectOptions): Promise<Docker>;
   /** Each context of the context store, and the default context. */
   static contexts(options?: {
     environment?: Environment;
@@ -542,10 +548,19 @@ export class Docker implements AsyncDisposable {
 /** The environment of the host program, such as process.env. The package reads only DOCKER_HOST, DOCKER_CONTEXT and DOCKER_CONFIG. */
 export type Environment = Readonly<Record<string, string | undefined>>;
 
+/** The clock of the waits of a client, and of the time of the files that it writes. Production gives `globalThis`. */
+export type EngineClock = {
+  setTimeout(callback: () => void, ms: number): unknown;
+  clearTimeout(timer: unknown): void;
+  performance: { now(): number };
+  Date: { now(): number };
+};
+
 /** A context or a host, never both. */
-export type ConnectOptions = CancelOptions & { environment?: Environment } & (
-    { context?: string; host?: never } | { host?: string; context?: never }
-  );
+export type ConnectOptions = CancelOptions & {
+  environment?: Environment;
+  clock: EngineClock;
+} & ({ context?: string; host?: never } | { host?: string; context?: never });
 
 export interface DockerContext {
   name: string;

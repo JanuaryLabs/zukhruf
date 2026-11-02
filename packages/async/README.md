@@ -1,10 +1,8 @@
 # @zukhruf/async
 
-Helpers for code that waits for promises: `untilAborted` cancels a wait, `Latch` holds callers until something happened, `poll` calls an attempt again until it gives a value, and `pollChanges` reads values again and again and tells which values changed. `@zukhruf/mutex`, `@zukhruf/single-flight` and `@zukhruf/election` use them.
+Helpers for code that waits for promises: `untilAborted` cancels a wait, `Latch` holds callers until something happened, `delay` waits a fixed time on a clock, `poll` calls an attempt again until it gives a value, and `pollChanges` reads values again and again and tells which values changed. `@zukhruf/mutex`, `@zukhruf/single-flight` and `@zukhruf/election` use them.
 
 The words in these documents have one meaning each. See the glossary in [CONTEXT.md](./CONTEXT.md).
-
-> **Design for review.** The `clock` option of `poll` and `pollChanges` is not in the code yet ([ADR 0005](./docs/adr/0005-a-wait-runs-on-the-clock-that-the-caller-gives.md), backlog #3570). The released version does not take it.
 
 ## Cancel a wait
 
@@ -168,6 +166,21 @@ When `signal` aborts during the wait, `pollChanges` stops the timer, and the loo
 To reject when the signal aborts, call `signal.throwIfAborted()` after the loop.
 
 See [ADR 0004](./docs/adr/0004-a-change-watcher-yields-each-check-with-the-keys-that-changed.md).
+
+## Wait a fixed time
+
+`delay` waits a number of milliseconds on the clock that you give, as `setTimeout` of `node:timers/promises` does on the real clock.
+
+```ts
+import { delay } from '@zukhruf/async';
+
+// Wait 100 ms between two tries to reach the server.
+await delay(100, { clock: globalThis, signal });
+```
+
+- When `signal` aborts, also before the call, the timer stops and `delay` rejects with the reason of the signal.
+- No listener stays on the signal after `delay` settles, so a signal that lives long can serve many waits.
+- With `ref: false`, the timer does not keep the process alive.
 
 ## Run a wait on a clock
 

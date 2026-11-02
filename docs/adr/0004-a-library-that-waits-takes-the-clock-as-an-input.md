@@ -1,7 +1,5 @@
 # A library that waits takes the clock as an input
 
-Status: design for review. No package takes the clock yet (backlog #3570).
-
 Many tests depend on time. On 2026-11-02 a census read the tests of 19 repositories and found 2,278 tests that depend on time. The code under test reads the time, measures a duration, or waits on a timer. The tests used real time: they slept, they asserted elapsed times, and some waited 61 or 65 seconds. Some failed at random under load (#3057, #3433, #3515).
 
 Real time can not reach these behaviors in a test:
@@ -19,7 +17,7 @@ A test must control time to reach them. For HTTP, msw intercepts the request at 
 A library that waits on a timer or reads the time takes the clock as an input.
 
 - The clock is a required input, the way a lock store is ([mutex ADR 0022](../../packages/mutex/docs/adr/0022-a-database-lock-store-takes-its-session-from-the-caller.md)). It has no default.
-- The type of the clock is structural. It has only the members that the library calls. `@zukhruf/async` exports `Clock`, with `setTimeout`, `clearTimeout` and `performance.now()` ([async ADR 0005](../../packages/async/docs/adr/0005-a-wait-runs-on-the-clock-that-the-caller-gives.md)). A library that needs more members, for example `Date.now()` or `setInterval`, adds only those members to `Clock`.
+- The type of the clock is structural. It has only the members that the library calls. `@zukhruf/async` exports `Clock`, with `setTimeout`, `clearTimeout` and `performance.now()`, and `delay`, a wait of a fixed time on a clock ([async ADR 0005](../../packages/async/docs/adr/0005-a-wait-runs-on-the-clock-that-the-caller-gives.md)). A library that needs more members, for example `Date.now()` or `setInterval`, adds only those members to `Clock`.
 - An app or an entry script gives `globalThis`, in its own code. The app does not get a new option for the clock.
 - A test gives `createClock()` of `@sinonjs/fake-timers`. This clock does not replace a global. `await clock.tickAsync(ms)` moves the time and fires each timer that is due. `t.waitFor(() => assert.equal(clock.countTimers(), n))` waits until the code under test waits on the clock again. `clock.setSystemTime(time)` moves the wall clock and does not move `performance.now()`.
 - A decision about "now", for example whether a lease ended, stays a function that takes the time as an argument. A test of it gives a time and needs no clock.
@@ -42,4 +40,5 @@ The write-test skill records this decision as the one exception to its rules "No
 - Each consumer repository changes after the release of `@zukhruf/async`: elt (#3572), context-compiler (#3573), deepagents (#3574), text2sql (#3575), theagentlab (#3576) and trashbot (#3577).
 - Some code keeps real time. The timing of `@zukhruf/mteb` measures real time, because a benchmark measures real time. `settleWithin` and `timebox` of `@zukhruf/testing` give a test a real deadline. A timer inside a third-party package, for example the 60 second request limit of the MCP SDK, is outside our code.
 - Each package whose tests move the clock has `@sinonjs/fake-timers` as a dev dependency. `@zukhruf/async` can not import `@zukhruf/testing` in its tests ([root ADR 0001](./0001-zukhruf-is-a-layered-standard-library.md)), so no shared test clock is possible there, and none is necessary.
+- `@zukhruf/testing` gives `globalThis` to the Docker clients of its fixtures, because they wait on a real engine. The options of `Postgres`, `Mysql`, `Mariadb`, `SqlServer` and `ClickHouse` do not take a clock.
 - A deadline and the clock must agree. A deadline from `performance.now()` of one clock is wrong for a wait on another clock. The type can not see this, because both are numbers.

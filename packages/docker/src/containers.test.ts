@@ -24,6 +24,7 @@ const IMAGE = 'alpine:3';
 /** The engine that the environment of the test run selects, with alpine:3 on it. */
 async function connect(): Promise<Docker> {
   const docker = await Docker.connect({
+    clock: globalThis,
     environment: process.env,
     signal: AbortSignal.timeout(15_000),
   });
@@ -199,7 +200,10 @@ describe('a removal that is already in progress', () => {
         // Each other request, such as a wait, gets no answer.
       },
     });
-    await using docker = await Docker.connect({ host: engine.host });
+    await using docker = await Docker.connect({
+      clock: globalThis,
+      host: engine.host,
+    });
     const container = await docker.containers.find('c1');
     assert.ok(container);
 
@@ -237,7 +241,10 @@ describe('a removal that is already in progress', () => {
         }
       },
     });
-    await using docker = await Docker.connect({ host: engine.host });
+    await using docker = await Docker.connect({
+      clock: globalThis,
+      host: engine.host,
+    });
     const container = await docker.containers.find('c1');
     assert.ok(container);
     const controller = new AbortController();
@@ -396,7 +403,7 @@ describe('containers.run()', () => {
     const run = randomUUID();
     const scenario = `
 import { Docker } from ${JSON.stringify(ENTRY)};
-const docker = await Docker.connect({ environment: process.env });
+const docker = await Docker.connect({ clock: globalThis, environment: process.env });
 try {
   await docker.containers.run({
     Image: ${JSON.stringify(IMAGE)},
@@ -556,7 +563,10 @@ describe('a request that the engine refuses for one container', () => {
         }
       },
     });
-    await using docker = await Docker.connect({ host: engine.host });
+    await using docker = await Docker.connect({
+      clock: globalThis,
+      host: engine.host,
+    });
     const container = await docker.containers.find('c1');
     assert.ok(container);
 
@@ -686,7 +696,10 @@ describe('container.port()', () => {
         );
       },
     });
-    await using docker = await Docker.connect({ host: engine.host });
+    await using docker = await Docker.connect({
+      clock: globalThis,
+      host: engine.host,
+    });
     const container = await docker.containers.find('abc');
     assert.ok(container);
 

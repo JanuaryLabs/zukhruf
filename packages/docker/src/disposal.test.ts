@@ -49,7 +49,7 @@ async function removeLabeled(docker: Docker, run: string): Promise<void> {
  */
 const disposeWhileIterating = (connect: string, run: string) => `
 import { Docker, DockerError } from ${JSON.stringify(ENTRY)};
-const docker = await Docker.connect(${connect});
+const docker = await Docker.connect({ ...${connect}, clock: globalThis });
 const container = await docker.containers.create({
   Image: ${JSON.stringify(IMAGE)},
   Cmd: ['sh', '-c', 'echo up; sleep 300'],
@@ -73,12 +73,18 @@ console.log(JSON.stringify(await Promise.all(pending)));
 describe('disposal of a client with open streams', () => {
   test('an open followLogs() and an open spawn() iteration reject with a DockerError that says that the client was disposed', async () => {
     // Arrange
-    await using cleaner = await Docker.connect({ environment: process.env });
+    await using cleaner = await Docker.connect({
+      clock: globalThis,
+      environment: process.env,
+    });
     if (!(await cleaner.images.inspect(IMAGE)))
       await cleaner.images.pull(IMAGE);
     const run = randomUUID();
     try {
-      const docker = await Docker.connect({ environment: process.env });
+      const docker = await Docker.connect({
+        clock: globalThis,
+        environment: process.env,
+      });
       const container = await docker.containers.create({
         Image: IMAGE,
         Cmd: ['sh', '-c', 'echo up; sleep 300'],
@@ -118,7 +124,7 @@ describe('disposal of a client with open streams', () => {
       // Arrange
       await using home = await scratchDirectory();
       const host = `unix://${String(engineSocket)}`;
-      await using cleaner = await Docker.connect({ host });
+      await using cleaner = await Docker.connect({ clock: globalThis, host });
       if (!(await cleaner.images.inspect(IMAGE))) {
         await cleaner.images.pull(IMAGE);
       }
@@ -153,6 +159,7 @@ describe('disposal of a client with open streams', () => {
         socketPath: String(engineSocket),
       });
       await using cleaner = await Docker.connect({
+        clock: globalThis,
         host: `unix://${String(engineSocket)}`,
       });
       if (!(await cleaner.images.inspect(IMAGE))) {
@@ -207,7 +214,10 @@ describe('requests during and after disposal', () => {
       apiVersion: '1.51',
       answer: () => undefined,
     });
-    const docker = await Docker.connect({ host: engine.host });
+    const docker = await Docker.connect({
+      clock: globalThis,
+      host: engine.host,
+    });
     const inFlight = docker.info();
     inFlight.catch(() => undefined);
     await t.waitFor(() => assert.ok(engine.paths.includes('/v1.51/info')), {
@@ -261,7 +271,7 @@ const describe = (error) =>
     : error instanceof DockerError
       ? error.message
       : 'other: ' + error;
-const docker = await Docker.connect({ host: 'ssh://tester@machine' });
+const docker = await Docker.connect({ clock: globalThis, host: 'ssh://tester@machine' });
 const inFlight = docker.info().then(() => 'resolved', describe);
 while (!existsSync(${JSON.stringify(seen)})) await new Promise((resolve) => setTimeout(resolve, 10));
 const disposing = docker[Symbol.asyncDispose]();

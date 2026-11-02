@@ -1,0 +1,13 @@
+/**
+ * The source of the timers and of the time of a wait. Production gives
+ * `globalThis`; a test gives a fake clock, such as `createClock()` of
+ * `@sinonjs/fake-timers`, and moves it.
+ *
+ * The type has only the members that a wait calls. A timer is opaque: the wait
+ * keeps it to give it back to `clearTimeout`.
+ */
+export interface Clock {
+  setTimeout(callback: () => void, ms: number): unknown;
+  clearTimeout(timer: unknown): void;
+  performance: { now(): number };
+}

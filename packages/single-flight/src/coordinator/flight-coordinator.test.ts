@@ -24,7 +24,7 @@ describe('A run whose epoch has no tokens left', () => {
     let reports = 0;
     const coordinator = new FlightCoordinator({
       tokens: exhausted,
-      locks: new KeyLocks(directory.path, 10),
+      locks: new KeyLocks(directory.path, 10, globalThis),
       onTokensExhausted: () => reports++,
     });
     const sent: FlightResponse[] = [];
@@ -71,7 +71,7 @@ describe('A run whose token source fails for another reason', () => {
     let reports = 0;
     const coordinator = new FlightCoordinator({
       tokens: failing,
-      locks: new KeyLocks(directory.path, 10),
+      locks: new KeyLocks(directory.path, 10, globalThis),
       onTokensExhausted: () => reports++,
     });
     const sent: FlightResponse[] = [];

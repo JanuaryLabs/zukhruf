@@ -32,7 +32,11 @@ const asText = {
 
 /** A coordinator of this source, serving `directory`. */
 async function coordinatorOf(directory: string) {
-  const flights = new SingleFlight({ directory, codec: asText });
+  const flights = new SingleFlight({
+    clock: globalThis,
+    directory,
+    codec: asText,
+  });
   await flights.run('warm-up', async () => 'warm');
   return flights;
 }
@@ -184,6 +188,7 @@ describe('The wire of a single flight', () => {
       await once(server, 'listening');
       try {
         await using flights = new SingleFlight({
+          clock: globalThis,
           directory: directory.path,
           codec: asText,
         });
@@ -224,6 +229,7 @@ describe('The wire of a single flight', () => {
       claim.exec('BEGIN EXCLUSIVE');
       try {
         await using flights = new SingleFlight({
+          clock: globalThis,
           directory: directory.path,
           codec: asText,
         });
@@ -301,6 +307,7 @@ describe('The wire of a single flight', () => {
       await using directory = await new TemporaryFiles().directory('flights-');
       await writeFile(join(directory.path, 'flight.epoch'), '41');
       await using flights = new SingleFlight({
+        clock: globalThis,
         directory: directory.path,
         codec: asText,
       });
@@ -417,6 +424,7 @@ describe('The wire of a single flight', () => {
       await using directory = await new TemporaryFiles().directory('flights-');
       await writeFile(join(directory.path, 'flight.epoch'), '41');
       await using flights = new SingleFlight({
+        clock: globalThis,
         directory: directory.path,
         codec: asText,
       });

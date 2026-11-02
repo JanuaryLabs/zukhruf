@@ -30,13 +30,16 @@ const stores = [
     name: 'LockFileStore',
     url: new URL('./lock-file-store.ts', import.meta.url),
     create: (directory: string) =>
-      new LockFileStore(directory, { pollInterval: 10 }),
+      new LockFileStore(directory, { clock: globalThis, pollInterval: 10 }),
   },
   {
     name: 'TicketQueueFileStore',
     url: new URL('./ticket-queue-file-store.ts', import.meta.url),
     create: (directory: string) =>
-      new TicketQueueFileStore(directory, { pollInterval: 10 }),
+      new TicketQueueFileStore(directory, {
+        clock: globalThis,
+        pollInterval: 10,
+      }),
   },
 ] as const;
 
@@ -375,7 +378,7 @@ void test.each(stores, (store) => {
         import { ${store.name} } from ${JSON.stringify(store.url.href)};
         const name = process.argv[1];
         const directory = ${JSON.stringify(directory.path)};
-        const mutex = new Mutex(new ${store.name}(directory, { pollInterval: 5 }));
+        const mutex = new Mutex(new ${store.name}(directory, { clock: globalThis, pollInterval: 5 }));
         // Opened inside the task, so the key serializes every write to the register, its creation too.
         let register;
         const modes = [Modes.wait(), Modes.skipIfBusy(), Modes.skipIfBusy({ waitAtMost: 5 })];

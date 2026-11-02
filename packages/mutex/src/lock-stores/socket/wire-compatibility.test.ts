@@ -102,7 +102,10 @@ async function publishedPeer(directory: string, bytes: string) {
 
 /** A leader of this source, serving `directory`. */
 async function leaderOf(directory: string) {
-  const store = new SocketStore(directory, { pollInterval: 10 });
+  const store = new SocketStore(directory, {
+    clock: globalThis,
+    pollInterval: 10,
+  });
   await new Mutex(store).acquire('warm-up', async () => {});
   return store;
 }
@@ -126,7 +129,10 @@ describe('What a socket store shares with other versions in its directory', () =
         'mutex-test-',
       );
       using term = holdTerm(directory.path);
-      await using store = new SocketStore(directory.path, { pollInterval: 10 });
+      await using store = new SocketStore(directory.path, {
+        clock: globalThis,
+        pollInterval: 10,
+      });
       const roles: SocketRole[] = [];
       store.on('role', (role) => roles.push(role));
       const mutex = new Mutex(store);
@@ -200,6 +206,7 @@ describe('What a socket store shares with other versions in its directory', () =
       );
       await writeFile(join(directory.path, 'leader.epoch'), '6');
       await using store = new SocketStore(directory.path, {
+        clock: globalThis,
         pollInterval: 10,
         graceWindow: 50,
       });
@@ -250,6 +257,7 @@ describe('What a socket store shares with other versions in its directory', () =
         },
       );
       await using store = new SocketStore(directory.path, {
+        clock: globalThis,
         pollInterval: 10,
       });
       const roles: SocketRole[] = [];
@@ -410,7 +418,10 @@ describe('What a socket store shares with other versions in its directory', () =
       await using _leader = await publishedLeader(directory.path, (peer) =>
         peer.end('{"op":"refused","version":3}\n'),
       );
-      await using store = new SocketStore(directory.path, { pollInterval: 10 });
+      await using store = new SocketStore(directory.path, {
+        clock: globalThis,
+        pollInterval: 10,
+      });
 
       // Act
       const result = await outcome(
@@ -487,13 +498,19 @@ describe('What a socket store shares with other versions in its directory', () =
       assert.equal(Buffer.byteLength(join(tooLong, 'lock.sock')), 104);
 
       // Act
-      await using store = new SocketStore(longest, { pollInterval: 10 });
+      await using store = new SocketStore(longest, {
+        clock: globalThis,
+        pollInterval: 10,
+      });
       const taken = await outcome(
         new Mutex(store).acquire('product:42', async () => {}),
       );
       const refused = (() => {
         try {
-          return new SocketStore(tooLong, { pollInterval: 10 });
+          return new SocketStore(tooLong, {
+            clock: globalThis,
+            pollInterval: 10,
+          });
         } catch (error) {
           return error;
         }
@@ -545,7 +562,7 @@ describe('What a socket store shares with other versions on Windows', () => {
           createInterface({ input: peer }).once('line', (line) => process.send({ type: 'hello', line }));
         });
         leader.listen(${JSON.stringify(pipe)}, () => {
-          const store = new SocketStore(${JSON.stringify(directory)}, { pollInterval: 10 });
+          const store = new SocketStore(${JSON.stringify(directory)}, { clock: globalThis, pollInterval: 10 });
           store.on('role', (role) => process.send({ type: 'role', role }));
           void new Mutex(store).acquire('product:42', async () => {});
         });
@@ -588,7 +605,7 @@ describe('What a socket store shares with other versions on Windows', () => {
         import { Mutex } from ${JSON.stringify(mutexUrl.href)};
         import { SocketStore } from ${JSON.stringify(socketUrl.href)};
         process.chdir(${JSON.stringify(scratch.path)});
-        const store = new SocketStore(${JSON.stringify(directory)}, { pollInterval: 10 });
+        const store = new SocketStore(${JSON.stringify(directory)}, { clock: globalThis, pollInterval: 10 });
         store.on('role', (role) => process.send({ type: 'role', role }));
         await new Mutex(store).acquire('warm-up', async () => {});
         const follower = connect(${JSON.stringify(pipe)});

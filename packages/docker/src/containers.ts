@@ -1,8 +1,7 @@
 import type { IncomingHttpHeaders, IncomingMessage } from 'node:http';
 import { posix } from 'node:path';
-import { setTimeout } from 'node:timers/promises';
 
-import { poll } from '@zukhruf/async';
+import { type Clock, delay, poll } from '@zukhruf/async';
 
 import { ContainerProcess } from './container-process.ts';
 import type * as EngineApi from './engine-api.ts';
@@ -175,14 +174,19 @@ function networksOf(container: EngineApi.ContainerInspectResponse): string[] {
   return [...networks];
 }
 
+/** The clock of an engine client: its waits, and the time of the files that it writes. */
+export type EngineClock = Clock & { Date: { now(): number } };
+
 /** A container, by the ID that the engine gave it. It has no disposal. */
 export class Container {
   readonly id: string;
   readonly #client: EngineClient;
+  readonly #clock: EngineClock;
 
-  constructor(client: EngineClient, id: string) {
+  constructor(client: EngineClient, id: string, clock: EngineClock) {
     this.#client = client;
     this.id = id;
+    this.#clock = clock;
   }
 
   get #path(): string {
@@ -364,7 +368,7 @@ export class Container {
         if (again.status === 409) return undefined;
         throw this.#client.error(again, method, path);
       },
-      { interval: REMOVAL_POLL_MS, signal },
+      { interval: REMOVAL_POLL_MS, signal, clock: this.#clock },
     );
   }
 
@@ -505,7 +509,7 @@ export class Container {
           if (!inspect.Running && inspect.ExitCode !== null) {
             return inspect.ExitCode;
           }
-          await setTimeout(EXEC_EXIT_DELAY_MS, undefined, { signal });
+          await delay(EXEC_EXIT_DELAY_MS, { clock: this.#clock, signal });
         }
       },
     });
@@ -643,7 +647,7 @@ export class Container {
     options: CancelOptions = {},
   ): Promise<void> {
     if (files.length === 0) return;
-    const mtime = Math.floor(Date.now() / 1000);
+    const mtime = Math.floor(this.#clock.Date.now() / 1000);
     const absolute = files.map((file) => ({
       file,
       path: posix.resolve('/', file.path),
@@ -867,10 +871,12 @@ export class OwnedContainer extends Container implements AsyncDisposable {
 export class Containers {
   readonly #client: EngineClient;
   readonly #images: Images;
+  readonly #clock: EngineClock;
 
-  constructor(client: EngineClient, images: Images) {
+  constructor(client: EngineClient, images: Images, clock: EngineClock) {
     this.#client = client;
     this.#images = images;
+    this.#clock = clock;
   }
 
   async create(
@@ -888,7 +894,7 @@ export class Containers {
     });
     if (isSuccess(response)) {
       const { Id } = parseBody<EngineApi.ContainerCreateResponse>(response);
-      return new OwnedContainer(this.#client, Id);
+      return new OwnedContainer(this.#client, Id, this.#clock);
     }
     const error = this.#client.error(response, method, path);
     const answer = { status: response.status, request: { method, path } };
@@ -942,7 +948,7 @@ export class Containers {
       // A competing create reserves the name before an inspect finds it.
       const container = await this.find(options.name, options);
       if (container) return { created: false, container };
-      await setTimeout(NAME_RACE_DELAY_MS, undefined, { signal });
+      await delay(NAME_RACE_DELAY_MS, { clock: this.#clock, signal });
     }
   }
 
@@ -957,7 +963,7 @@ export class Containers {
     if (response.status === 404) return undefined;
     if (!isSuccess(response)) throw this.#client.error(response, method, path);
     const { Id } = parseBody<EngineApi.ContainerInspectResponse>(response);
-    return new Container(this.#client, Id);
+    return new Container(this.#client, Id, this.#clock);
   }
 
   async list(

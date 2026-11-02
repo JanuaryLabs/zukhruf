@@ -43,7 +43,7 @@ const holderSource = (storeName: string) => `
 	import { Mutex } from ${JSON.stringify(mutexInContainer)};
 	import { ${storeName} } from ${JSON.stringify(fileStoresInContainer)};
 	setInterval(() => {}, 1000);
-	await new Mutex(new ${storeName}('/locks', { pollInterval: 10 })).acquire('product:42', async (lease) => {
+	await new Mutex(new ${storeName}('/locks', { clock: globalThis, pollInterval: 10 })).acquire('product:42', async (lease) => {
 		console.log(JSON.stringify({ type: 'holding', pid: process.pid, token: String(lease.token) }));
 		await new Promise(() => {});
 	});
@@ -53,7 +53,7 @@ const holderSource = (storeName: string) => `
 const waiterSource = (storeName: string) => `
 	import { Modes, Mutex } from ${JSON.stringify(mutexInContainer)};
 	import { ${storeName} } from ${JSON.stringify(fileStoresInContainer)};
-	const result = await new Mutex(new ${storeName}('/locks', { pollInterval: 10 })).acquire(
+	const result = await new Mutex(new ${storeName}('/locks', { clock: globalThis, pollInterval: 10 })).acquire(
 		'product:42',
 		async (lease) => String(lease.token),
 		{ mode: Modes.skipIfBusy({ waitAtMost: 1000 }) },

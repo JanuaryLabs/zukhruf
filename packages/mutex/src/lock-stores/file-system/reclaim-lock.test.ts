@@ -19,7 +19,7 @@ const stores = [
     name: 'LockFileStore',
     url: new URL('./lock-file-store.ts', import.meta.url),
     create: (directory: string) =>
-      new LockFileStore(directory, { pollInterval: 10 }),
+      new LockFileStore(directory, { clock: globalThis, pollInterval: 10 }),
     // Evicting a dead holder deletes its lock file.
     evictionStep: 'unlink',
   },
@@ -27,7 +27,10 @@ const stores = [
     name: 'TicketQueueFileStore',
     url: new URL('./ticket-queue-file-store.ts', import.meta.url),
     create: (directory: string) =>
-      new TicketQueueFileStore(directory, { pollInterval: 10 }),
+      new TicketQueueFileStore(directory, {
+        clock: globalThis,
+        pollInterval: 10,
+      }),
     // Evicting a dead head renames a shorter queue over the lock file.
     evictionStep: 'rename',
   },

@@ -332,6 +332,7 @@ export async function connectAndCleanup(
 ): Promise<void> {
   // Disposal ends the connection, and with it the ssh child of an SSH engine.
   await using engine = await Docker.connect({
+    clock: globalThis,
     host: previous.endpoint,
     signal: AbortSignal.timeout(ENGINE_CALL_TIMEOUT),
   });

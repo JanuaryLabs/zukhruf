@@ -33,7 +33,7 @@ const [role, shared] = process.argv.slice(2);
 
 if (role === 'holder') {
   setInterval(() => {}, 1000); // Stay alive until the parent kills this process.
-  const mutex = new Mutex(new SqliteStore(shared!));
+  const mutex = new Mutex(new SqliteStore(shared!, { clock: globalThis }));
   await mutex.acquire('nightly-report', async () => {
     process.send!('holding');
     await new Promise(() => {}); // The crash occurs before the release.
@@ -47,7 +47,7 @@ if (role === 'holder') {
   await once(holder, 'exit');
   const crashed = performance.now();
 
-  const mutex = new Mutex(new SqliteStore(directory));
+  const mutex = new Mutex(new SqliteStore(directory, { clock: globalThis }));
   await mutex.acquire('nightly-report', async () => {
     console.log(
       `got the key ${Math.round(performance.now() - crashed)} ms after the crash`,

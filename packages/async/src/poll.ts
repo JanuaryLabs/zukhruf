@@ -1,21 +1,23 @@
-import { setTimeout as delay } from 'node:timers/promises';
-
-import { untilAborted } from './until-aborted.ts';
+import type { Clock } from './clock.ts';
+import { delay } from './delay.ts';
 
 export interface PollOptions {
   /** Milliseconds to wait after an attempt that gave nothing. */
   interval: number;
   /** Stops the wait between two attempts. The poll then rejects with `signal.reason`. */
   signal: AbortSignal | undefined;
+  /** The clock that the wait runs on: `globalThis` in production, a fake clock in a test. */
+  clock: Clock;
   /**
-   * A `performance.now()` time. After it, an attempt that gives nothing
+   * A `clock.performance.now()` time. After it, an attempt that gives nothing
    * resolves the poll with `undefined`. The first attempt always occurs.
    */
   deadline?: number | undefined;
   /**
-   * The `ref` of the Node.js timer of the wait between two attempts. With
-   * `false`, the wait does not keep the process alive: the process can end
-   * while the poll is pending. Without it, Node.js keeps its default.
+   * With `false`, the wait between two attempts does not keep the process
+   * alive: `poll` calls `unref()` on the timer of the clock, when the timer has
+   * one. The process can then end while the poll is pending. Without it, the
+   * timer keeps its default.
    */
   ref?: boolean;
 }
@@ -35,15 +37,14 @@ export function poll<T>(
 ): Promise<T>;
 export async function poll<T>(
   attempt: () => Promise<T | undefined>,
-  { interval, signal, deadline, ref }: PollOptions,
+  { interval, signal, clock, deadline, ref }: PollOptions,
 ): Promise<T | undefined> {
   for (;;) {
     const value = await attempt();
     if (value !== undefined) return value;
-    if (deadline !== undefined && performance.now() >= deadline) {
+    if (deadline !== undefined && clock.performance.now() >= deadline) {
       return undefined;
     }
-    // delay's signal frees the timer; untilAborted rejects with the reason.
-    await untilAborted(delay(interval, undefined, { signal, ref }), signal);
+    await delay(interval, { clock, signal, ref });
   }
 }

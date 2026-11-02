@@ -35,6 +35,7 @@ process.once('SIGINT', () => stop.abort());
 for await (const batch of feed.watch({
   interval: 1_000,
   signal: stop.signal,
+  clock: globalThis,
 })) {
   for (const event of batch) {
     if (event.op === 'truncate') await store.clear(event.table);
@@ -55,6 +56,7 @@ using feed = new Changefeed(
 for await (const batch of feed.watch({
   interval: 1_000,
   signal: stop.signal,
+  clock: globalThis,
 })) {
   for (const event of batch) console.log(event.table, event.op, event.key);
 }

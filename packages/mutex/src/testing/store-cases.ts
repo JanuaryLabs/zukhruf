@@ -450,7 +450,10 @@ async function dockerEngineFixture(
   environment: DatabaseOptions['environment'],
 ): Promise<StoreFixture> {
   const { host } = await (async () => {
-    await using docker = await Docker.connect({ environment });
+    await using docker = await Docker.connect({
+      clock: globalThis,
+      environment,
+    });
     if (!(await docker.images.inspect(dockerImage))) {
       await docker.images.pull(dockerImage);
     }
@@ -467,7 +470,7 @@ async function dockerEngineFixture(
   return {
     location: JSON.stringify(location),
     [Symbol.asyncDispose]: async () => {
-      await using cleaner = await Docker.connect({ host });
+      await using cleaner = await Docker.connect({ clock: globalThis, host });
       const filters = {
         label: [`${dockerNamespaceLabel}=${location.namespace}`],
       };
@@ -497,7 +500,7 @@ function dockerEngineStore(location: string) {
   // run's teardown waits for it and sweeps what it created
   // (@zukhruf/testing ADR 0006 and ADR 0013).
   const labels = new DockerTestbed({ environment: run }).defaults.Labels;
-  const docker = Docker.connect({ host });
+  const docker = Docker.connect({ clock: globalThis, host });
   const store = docker.then(
     (client) =>
       new DockerEngineStore({
@@ -578,7 +581,11 @@ export const storeCases: StoreCase[] = [
     releaseLatency: 10,
     fixture: directoryFixture,
     ...sharedByDirectory(
-      (directory) => new TicketQueueFileStore(directory, { pollInterval }),
+      (directory) =>
+        new TicketQueueFileStore(directory, {
+          clock: globalThis,
+          pollInterval,
+        }),
     ),
   },
   {
@@ -589,7 +596,8 @@ export const storeCases: StoreCase[] = [
     releaseLatency: 10,
     fixture: directoryFixture,
     ...sharedByDirectory(
-      (directory) => new LockFileStore(directory, { pollInterval }),
+      (directory) =>
+        new LockFileStore(directory, { clock: globalThis, pollInterval }),
     ),
   },
   {
@@ -600,7 +608,8 @@ export const storeCases: StoreCase[] = [
     releaseLatency: 10,
     fixture: directoryFixture,
     ...sharedByDirectory(
-      (directory) => new SqliteStore(directory, { pollInterval }),
+      (directory) =>
+        new SqliteStore(directory, { clock: globalThis, pollInterval }),
     ),
   },
   {
@@ -611,7 +620,12 @@ export const storeCases: StoreCase[] = [
     releaseLatency: 10,
     fixture: directoryFixture,
     ...sharedByDirectory(
-      (directory) => new SocketStore(directory, { pollInterval, graceWindow }),
+      (directory) =>
+        new SocketStore(directory, {
+          clock: globalThis,
+          pollInterval,
+          graceWindow,
+        }),
     ),
   },
   {

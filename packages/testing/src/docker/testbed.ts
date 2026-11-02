@@ -96,6 +96,7 @@ export class DockerTestbed {
   readonly #engine = pMemoize(async (): Promise<Engine> => {
     this.#run?.records.recordThisProcess();
     const client = await Docker.connect({
+      clock: globalThis,
       environment: this.#environment,
     }).catch((error: unknown) => {
       if (error instanceof ConnectionFailedError)

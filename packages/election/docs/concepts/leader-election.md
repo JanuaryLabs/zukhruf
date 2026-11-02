@@ -20,6 +20,7 @@
 import { SqliteElection } from '@zukhruf/election';
 
 const election = new SqliteElection({
+  clock: globalThis,
   directory: '/var/lib/my-app/election',
   claimFile: 'jobs.lock',
   epochFile: 'jobs.epoch',

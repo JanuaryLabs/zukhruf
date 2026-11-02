@@ -16,6 +16,6 @@ const stock = new FencedStock(join(directory, 'inventory.db'));
 stock.seed('product:42', 1);
 
 export default createApp({
-  mutex: new Mutex(new TicketQueueFileStore(directory)),
+  mutex: new Mutex(new TicketQueueFileStore(directory, { clock: globalThis })),
   stock,
 });

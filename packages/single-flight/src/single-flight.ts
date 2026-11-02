@@ -1,4 +1,4 @@
-import { untilAborted } from '@zukhruf/async';
+import { type Clock, untilAborted } from '@zukhruf/async';
 import type { FencedLease } from '@zukhruf/fencing';
 import { LeaseLostError } from '@zukhruf/lease';
 
@@ -37,6 +37,8 @@ export interface SingleFlightOptions<T> {
   directory: string;
   /** Turns the flight's value into text for the processes that joined it, and back. */
   codec: Codec<T>;
+  /** The clock of every wait of the group: `globalThis` in production, a fake clock in a test. */
+  clock: Clock;
 }
 
 export interface RunOptions {
@@ -68,11 +70,11 @@ export class SingleFlight<T> implements AsyncDisposable {
   /** The flight servers this process started; disposing closes them. */
   readonly #servers = new AsyncDisposableStack();
 
-  constructor({ directory, codec }: SingleFlightOptions<T>) {
+  constructor({ directory, codec, clock }: SingleFlightOptions<T>) {
     this.#codec = codec;
     const socketPath = socketPathFor(directory);
-    const election = flightElection(directory, POLL_INTERVAL);
-    const locks = new KeyLocks(directory, POLL_INTERVAL);
+    const election = flightElection(directory, POLL_INTERVAL, clock);
+    const locks = new KeyLocks(directory, POLL_INTERVAL, clock);
     this.#client = new FlightClient(
       new ConnectionSupervisor(
         new LocalDirectoryConnector(
@@ -81,6 +83,7 @@ export class SingleFlight<T> implements AsyncDisposable {
             socketPath,
             election,
             pollInterval: POLL_INTERVAL,
+            clock,
             serve: async (term) => {
               // Until serving has fully started, a failure closes the new server, so no server outlives its term.
               await using starting = new AsyncDisposableStack();

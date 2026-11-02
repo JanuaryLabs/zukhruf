@@ -14,7 +14,9 @@ A key is exclusive for every caller: one holder at a time. An **acquire mode** d
 import { Modes, Mutex } from '@zukhruf/mutex';
 import { SqliteStore } from '@zukhruf/mutex/sqlite';
 
-const mutex = new Mutex(new SqliteStore('/var/lib/my-app/locks'));
+const mutex = new Mutex(
+  new SqliteStore('/var/lib/my-app/locks', { clock: globalThis }),
+);
 
 // Wait (the default): the result is the task's value.
 const sold: boolean = await mutex.acquire('product:42', async () => reserve());

@@ -4,6 +4,7 @@ export {
   type ContainerFile,
   type Containers,
   type Created,
+  type EngineClock,
   type LogQuery,
   OwnedContainer,
 } from './containers.ts';

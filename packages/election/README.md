@@ -25,6 +25,7 @@ import { SqliteElection } from '@zukhruf/election';
 
 const directory = await mkdtemp(join(tmpdir(), 'jobs-'));
 const election = new SqliteElection({
+  clock: globalThis,
   directory,
   claimFile: 'jobs.lock',
   epochFile: 'jobs.epoch',
@@ -55,6 +56,7 @@ next term: 2n
 - A term that resigns clean writes a third file, `<claimFile>.clean`, beside `claimFile`. It holds the epoch of that term. The next term reads it and removes it.
 - The directory must be on a local file system. On a network file system, `campaign` rejects with `NetworkDirectoryError`.
 - `pollInterval` is the time between two tries, in milliseconds. It defaults to 10. A try never blocks the process.
+- `clock` is the clock that the campaign waits on, and that measures its `timeout`. It is required. Give `globalThis` in production. A test gives a fake clock, for example `createClock()` of `@sinonjs/fake-timers`, and moves the time of the campaign without a real wait ([`@zukhruf/async`](../async/README.md#run-a-wait-on-a-clock)).
 
 ## The term
 

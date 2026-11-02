@@ -1,6 +1,7 @@
 import { mkdir, readFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 
+import type { Clock } from '@zukhruf/async';
 import {
   FileLock,
   assertLocalDirectory,
@@ -26,6 +27,8 @@ export interface SqliteElectionOptions {
   epochFile: string;
   /** Milliseconds between two tries while another process leads. Defaults to 10. */
   pollInterval?: number | undefined;
+  /** The clock that the campaign waits on: `globalThis` in production, a fake clock in a test. */
+  clock: Clock;
 }
 
 /**
@@ -45,8 +48,9 @@ export class SqliteElection extends LeaderElection<FileLock> {
     claimFile,
     epochFile,
     pollInterval = 10,
+    clock,
   }: SqliteElectionOptions) {
-    super(pollInterval);
+    super(pollInterval, clock);
     this.#directory = directory;
     this.#claimPath = join(directory, claimFile);
     this.#epochPath = join(directory, epochFile);

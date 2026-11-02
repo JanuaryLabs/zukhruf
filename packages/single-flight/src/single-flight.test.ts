@@ -65,10 +65,12 @@ describe('A single flight when the work fails', () => {
       // Arrange
       await using directory = await new TemporaryFiles().directory('flights-');
       await using leading = new SingleFlight({
+        clock: globalThis,
         directory: directory.path,
         codec: asText,
       });
       await using other = new SingleFlight({
+        clock: globalThis,
         directory: directory.path,
         codec: asText,
       });
@@ -120,10 +122,12 @@ describe('A single flight when the work fails', () => {
       // Arrange
       await using directory = await new TemporaryFiles().directory('flights-');
       await using leading = new SingleFlight({
+        clock: globalThis,
         directory: directory.path,
         codec: asText,
       });
       await using other = new SingleFlight({
+        clock: globalThis,
         directory: directory.path,
         codec: asText,
       });
@@ -163,10 +167,12 @@ describe('A single flight when the work fails', () => {
         decode: (text) => text,
       };
       await using leading = new SingleFlight({
+        clock: globalThis,
         directory: directory.path,
         codec: failing,
       });
       await using other = new SingleFlight({
+        clock: globalThis,
         directory: directory.path,
         codec: failing,
       });
@@ -203,14 +209,17 @@ describe('A single flight when the work fails', () => {
         },
       };
       await using leading = new SingleFlight({
+        clock: globalThis,
         directory: directory.path,
         codec: asText,
       });
       await using decoding = new SingleFlight({
+        clock: globalThis,
         directory: directory.path,
         codec: asText,
       });
       await using refusing = new SingleFlight({
+        clock: globalThis,
         directory: directory.path,
         codec: failing,
       });
@@ -260,10 +269,12 @@ describe('A single flight when the leader cannot decode', () => {
         },
       };
       await using leading = new SingleFlight({
+        clock: globalThis,
         directory: directory.path,
         codec: refusing,
       });
       await using other = new SingleFlight({
+        clock: globalThis,
         directory: directory.path,
         codec: asText,
       });
@@ -295,10 +306,12 @@ describe('A single flight when a caller cancels', () => {
       // Arrange
       await using directory = await new TemporaryFiles().directory('flights-');
       await using leading = new SingleFlight({
+        clock: globalThis,
         directory: directory.path,
         codec: asText,
       });
       await using other = new SingleFlight({
+        clock: globalThis,
         directory: directory.path,
         codec: asText,
       });
@@ -344,10 +357,12 @@ describe('A single flight when a caller cancels', () => {
       // Arrange
       await using directory = await new TemporaryFiles().directory('flights-');
       await using leading = new SingleFlight({
+        clock: globalThis,
         directory: directory.path,
         codec: asText,
       });
       await using other = new SingleFlight({
+        clock: globalThis,
         directory: directory.path,
         codec: asText,
       });
@@ -384,6 +399,7 @@ describe('A single flight when a caller cancels', () => {
       // Arrange: a flight is in progress for one key, and none for another.
       await using directory = await new TemporaryFiles().directory('flights-');
       await using flights = new SingleFlight({
+        clock: globalThis,
         directory: directory.path,
         codec: asText,
       });
@@ -429,10 +445,12 @@ describe('A single flight shares the run in progress', () => {
       // Arrange: two callers of one instance, and one of another instance on the same directory.
       await using directory = await new TemporaryFiles().directory('flights-');
       await using first = new SingleFlight({
+        clock: globalThis,
         directory: directory.path,
         codec: asText,
       });
       await using second = new SingleFlight({
+        clock: globalThis,
         directory: directory.path,
         codec: asText,
       });
@@ -480,6 +498,7 @@ describe('A single flight shares the run in progress', () => {
       // Arrange
       await using directory = await new TemporaryFiles().directory('flights-');
       await using flights = new SingleFlight({
+        clock: globalThis,
         directory: directory.path,
         codec: asText,
       });
@@ -519,6 +538,7 @@ describe('A single flight shares the run in progress', () => {
       // Arrange: a first run elects the coordinator, so neither loop pays for the election.
       await using directory = await new TemporaryFiles().directory('flights-');
       await using flights = new SingleFlight({
+        clock: globalThis,
         directory: directory.path,
         codec: asText,
       });
@@ -558,10 +578,12 @@ describe('A single flight shares the run in progress', () => {
       await using one = await new TemporaryFiles().directory('flights-');
       await using another = await new TemporaryFiles().directory('flights-');
       await using flights = new SingleFlight({
+        clock: globalThis,
         directory: one.path,
         codec: asText,
       });
       await using elsewhere = new SingleFlight({
+        clock: globalThis,
         directory: another.path,
         codec: asText,
       });
@@ -598,6 +620,7 @@ describe('A single flight shares the run in progress', () => {
       // Arrange
       await using directory = await new TemporaryFiles().directory('flights-');
       await using flights = new SingleFlight({
+        clock: globalThis,
         directory: directory.path,
         codec: asText,
       });
@@ -610,7 +633,7 @@ describe('A single flight shares the run in progress', () => {
           `data:text/javascript,${encodeURIComponent(`
           import { parentPort } from 'node:worker_threads';
           import { SingleFlight } from ${JSON.stringify(index.href)};
-          const flights = new SingleFlight({
+          const flights = new SingleFlight({ clock: globalThis,
             directory: ${JSON.stringify(directory.path)},
             codec: { encode: (value) => value, decode: (text) => text },
           });
@@ -672,10 +695,12 @@ describe('A single flight gives the leader what the joiners get', () => {
         },
       };
       await using leading = new SingleFlight({
+        clock: globalThis,
         directory: directory.path,
         codec: dated,
       });
       await using other = new SingleFlight({
+        clock: globalThis,
         directory: directory.path,
         codec: dated,
       });
@@ -713,6 +738,7 @@ describe('A single flight gives the leader what the joiners get', () => {
       // Arrange: a new directory, so the coordinator's term is the first.
       await using directory = await new TemporaryFiles().directory('flights-');
       await using flights = new SingleFlight({
+        clock: globalThis,
         directory: directory.path,
         codec: asText,
       });
@@ -744,6 +770,7 @@ describe('A single flight in its directory', () => {
       // Arrange
       await using directory = await new TemporaryFiles().directory('flights-');
       await using flights = new SingleFlight({
+        clock: globalThis,
         directory: directory.path,
         codec: asText,
       });
@@ -765,6 +792,7 @@ describe('A single flight in its directory', () => {
       // Arrange: the first term resigns without a clean shutdown, as a coordinator of a published version does.
       await using directory = await new TemporaryFiles().directory('flights-');
       const earlier = await new SqliteElection({
+        clock: globalThis,
         directory: directory.path,
         claimFile: 'flight.lock',
         epochFile: 'flight.epoch',
@@ -775,6 +803,7 @@ describe('A single flight in its directory', () => {
       {
         // The second term disposes as soon as it serves, with a run of its own.
         await using second = new SingleFlight({
+          clock: globalThis,
           directory: directory.path,
           codec: asText,
         });
@@ -789,6 +818,7 @@ describe('A single flight in its directory', () => {
         );
       }
       await using next = new SingleFlight({
+        clock: globalThis,
         directory: directory.path,
         codec: asText,
       });
@@ -818,8 +848,11 @@ describe('A single flight in its directory', () => {
     async () => {
       // Arrange
       await using directory = await new TemporaryFiles().directory('flights-');
-      await using store = new SocketStore(directory.path);
+      await using store = new SocketStore(directory.path, {
+        clock: globalThis,
+      });
       await using flights = new SingleFlight({
+        clock: globalThis,
         directory: directory.path,
         codec: asText,
       });
@@ -865,6 +898,7 @@ describe('A single flight in its directory', () => {
       syncBuiltinESMExports();
       try {
         await using flights = new SingleFlight({
+          clock: globalThis,
           directory: directory.path,
           codec: asText,
         });
@@ -894,10 +928,12 @@ describe('A single flight when it is disposed', () => {
       // Arrange: the leader's instance is the coordinator too, so disposing it also ends the term.
       await using directory = await new TemporaryFiles().directory('flights-');
       await using leading = new SingleFlight({
+        clock: globalThis,
         directory: directory.path,
         codec: asText,
       });
       await using other = new SingleFlight({
+        clock: globalThis,
         directory: directory.path,
         codec: asText,
       });
@@ -931,11 +967,13 @@ describe('A single flight when it is disposed', () => {
       // Arrange: the first instance to call is the coordinator.
       await using directory = await new TemporaryFiles().directory('flights-');
       await using coordinating = new SingleFlight({
+        clock: globalThis,
         directory: directory.path,
         codec: asText,
       });
       await coordinating.run('warm-up', async () => 'warm');
       await using other = new SingleFlight({
+        clock: globalThis,
         directory: directory.path,
         codec: asText,
       });
