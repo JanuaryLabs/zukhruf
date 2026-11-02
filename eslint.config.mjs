@@ -263,6 +263,27 @@ export default defineConfig(
       ],
     },
   },
+  // sqlite-queue mirrors pg-boss's work() options, which still accepts
+  // priority and orderByCreatedOn and warns that they are ignored; the parity
+  // drops them when pg-boss's next major removes them.
+  {
+    files: ['packages/sqlite/queue/src/**'],
+    rules: {
+      '@typescript-eslint/no-deprecated': [
+        'error',
+        {
+          // A read of the options matches by name (they are plain booleans,
+          // which no package declares); an options literal matches by
+          // pg-boss's JobFetchOptions, where the two are declared.
+          allow: [
+            'priority',
+            'orderByCreatedOn',
+            { from: 'package', package: 'pg-boss', name: 'JobFetchOptions' },
+          ],
+        },
+      ],
+    },
+  },
   // The shadcn CLI writes these files (`nx run shadcn:sync`), and nobody edits
   // them by hand, so the rules that the stock code fails are off here only.
   {

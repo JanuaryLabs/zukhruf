@@ -194,6 +194,9 @@ export const base: Concept = {
             'error',
             { considerDefaultExhaustiveForUnions: true },
           ],
+          // A dependency marks an API @deprecated before it removes it; the
+          // note names the replacement, so move to it while it is one edit.
+          '@typescript-eslint/no-deprecated': 'error',
           'zukhruf/no-promise-field': 'error',
           'zukhruf/no-phase-flag': 'error',
         },
