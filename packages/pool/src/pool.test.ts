@@ -520,408 +520,462 @@ test('a hill-climbing pool grows past its first two workers while a backlog of s
 // These tests wait on real windows of two seconds, so they run at the same
 // time. The tests after them replace what the whole process reads, or measure
 // timing that other tests would disturb, so they run alone.
+//
+// In each test the jobs share an engine of a few units, as Vision workers
+// share the Neural Engine: a job past the units waits for one, while the other
+// jobs do their own part. Each sizing settles at three workers, so the tests
+// fit a computer with four CPUs: HillClimbing on three units, where a fourth
+// worker adds no jobs a second; Gradient on two units and 10 ms of the job's
+// own, where a job takes 60 ms with two workers, 75 ms (1.25 times) with
+// three, and 100 ms (1.67 times) with four.
 void describe(
   'a pool whose sizing keeps learning',
   { concurrency: true },
   () => {
-    void test.each([HillClimbing, Gradient], (Learning) =>
-      test(`a ${Learning.name} pool that settled grows again when the work changes so that one more worker pays`, async (t) => {
-        // The jobs share an engine of a few units, as Vision workers share the
-        // Neural Engine: a worker past the units only waits for one.
-        const engine = new PQueue({ concurrency: 3 });
-        const created: EchoWorker[] = [];
-        await using pool = new Pool({
-          // One worker for each CPU: free memory, which other processes change,
-          // does not decide.
-          size: new Learning({ memoryPerWorker: 1 }),
-          startup: new Parallel(),
-          eviction: new NoEviction(),
-          create: () => {
-            const worker = new EchoWorker();
-            worker.release();
-            created.push(worker);
-            return worker;
-          },
-        });
-        assert.ok(availableParallelism() >= 8, 'this test needs eight CPUs');
-        const stop = new AbortController();
-        const load = Array.from({ length: 16 }, async () => {
-          while (!stop.signal.aborted)
-            await pool.use((worker) =>
-              engine.add(() => worker.echo('sleep 50')),
+    void test.each(
+      [
+        { Learning: HillClimbing, units: 3, own: 0 },
+        { Learning: Gradient, units: 2, own: 10 },
+      ],
+      ({ Learning, units, own }) =>
+        test(`a ${Learning.name} pool that settled grows again when the work changes so that one more worker pays`, async (t) => {
+          const engine = new PQueue({ concurrency: units });
+          const created: EchoWorker[] = [];
+          await using pool = new Pool({
+            // One worker for each CPU: free memory, which other processes
+            // change, does not decide.
+            size: new Learning({ memoryPerWorker: 1 }),
+            startup: new Parallel(),
+            eviction: new NoEviction(),
+            create: () => {
+              const worker = new EchoWorker();
+              worker.release();
+              created.push(worker);
+              return worker;
+            },
+          });
+          assert.ok(availableParallelism() >= 4, 'this test needs four CPUs');
+          const stop = new AbortController();
+          const load = Array.from({ length: 16 }, async () => {
+            while (!stop.signal.aborted)
+              await pool.use(async (worker) => {
+                await worker.echo(`sleep ${own}`);
+                await engine.add(() => worker.echo('sleep 50'));
+              });
+          });
+          try {
+            // The pool closes the worker of a step that did not pay: it settled.
+            await t.waitFor(
+              () => assert.ok(created.some((worker) => worker.dead)),
+              { interval: 50, timeout: 60_000 },
             );
-        });
-        try {
-          // The pool closes the worker of a step that did not pay: it settled.
-          await t.waitFor(
-            () => assert.ok(created.some((worker) => worker.dead)),
-            {
+            const known = created.length;
+
+            // Four units: a fourth worker pays for both sizings.
+            engine.concurrency = 4;
+
+            // A step with one more worker starts it. The pool keeps the
+            // worker when it pays, and closes it after the step when it does
+            // not.
+            await t.waitFor(() => assert.ok(created.length > known), {
               interval: 50,
               timeout: 60_000,
-            },
-          );
-          const settled = created.filter((worker) => !worker.dead).length;
-
-          engine.concurrency = settled + 2;
-          const known = created.length;
-
-          // A step with one more worker starts it. The pool keeps the worker
-          // when it pays, and closes it after the step when it does not.
-          await t.waitFor(() => assert.ok(created.length > known), {
-            interval: 50,
-            timeout: 60_000,
-          });
-          const added = created[known]!;
-          await setTimeout(15_000);
-          assert.equal(added.dead, false, 'the pool kept the worker that paid');
-        } finally {
-          stop.abort();
-          await Promise.all(load);
-        }
-      }),
+            });
+            const added = created[known]!;
+            await setTimeout(15_000);
+            assert.equal(
+              added.dead,
+              false,
+              'the pool kept the worker that paid',
+            );
+          } finally {
+            stop.abort();
+            await Promise.all(load);
+          }
+        }),
     );
 
-    void test.each([HillClimbing, Gradient], (Learning) =>
-      test(`a ${Learning.name} pool shrinks only after fewer workers did as well in two steps in a row`, async (t) => {
-        // Three units: neither sizing settles on the edge of its test, so no
-        // step that counts toward a shrink comes before the work changes.
-        const engine = new PQueue({ concurrency: 3 });
-        const created: EchoWorker[] = [];
-        await using pool = new Pool({
-          // One worker for each CPU: free memory, which other processes change,
-          // does not decide.
-          size: new Learning({ memoryPerWorker: 1 }),
-          startup: new Parallel(),
-          eviction: new NoEviction(),
-          create: () => {
-            const worker = new EchoWorker();
-            worker.release();
-            created.push(worker);
-            return worker;
-          },
-        });
-        assert.ok(availableParallelism() >= 8, 'this test needs eight CPUs');
-        const stop = new AbortController();
-        const load = Array.from({ length: 16 }, async () => {
-          while (!stop.signal.aborted)
-            await pool.use((worker) =>
-              engine.add(() => worker.echo('sleep 50')),
+    void test.each(
+      [
+        { Learning: HillClimbing, units: 3, own: 0 },
+        { Learning: Gradient, units: 2, own: 10 },
+      ],
+      ({ Learning, units, own }) =>
+        test(`a ${Learning.name} pool shrinks only after fewer workers did as well in two steps in a row`, async (t) => {
+          const engine = new PQueue({ concurrency: units });
+          let thrashing = false;
+          const created: EchoWorker[] = [];
+          await using pool = new Pool({
+            // One worker for each CPU: free memory, which other processes
+            // change, does not decide.
+            size: new Learning({ memoryPerWorker: 1 }),
+            startup: new Parallel(),
+            eviction: new NoEviction(),
+            create: () => {
+              const worker = new EchoWorker();
+              worker.release();
+              created.push(worker);
+              return worker;
+            },
+          });
+          assert.ok(availableParallelism() >= 4, 'this test needs four CPUs');
+          const stop = new AbortController();
+          const load = Array.from({ length: 16 }, async () => {
+            while (!stop.signal.aborted)
+              await pool.use(async (worker) => {
+                await worker.echo(`sleep ${own}`);
+                await engine.add(() =>
+                  worker.echo(
+                    `sleep ${thrashing ? 30 * engine.pending ** 2 : 50}`,
+                  ),
+                );
+              });
+          });
+          const timeline: { at: number; lent: number; idle: number }[] = [];
+          const sampler = setInterval(() => {
+            const { lent, idle } = pool.stats;
+            timeline.push({ at: performance.now(), lent, idle });
+          }, 20);
+          try {
+            // The pool closes the worker of a step that did not pay: it settled.
+            await t.waitFor(
+              () => assert.ok(created.some((worker) => worker.dead)),
+              { interval: 50, timeout: 60_000 },
             );
-        });
-        const timeline: { at: number; lent: number; idle: number }[] = [];
-        const sampler = setInterval(() => {
-          const { lent, idle } = pool.stats;
-          timeline.push({ at: performance.now(), lent, idle });
-        }, 20);
-        try {
-          // The pool closes the worker of a step that did not pay: it settled.
-          await t.waitFor(
-            () => assert.ok(created.some((worker) => worker.dead)),
-            {
-              interval: 50,
-              timeout: 60_000,
-            },
-          );
-          const settled = created.filter((worker) => !worker.dead);
+            const settled = created.filter((worker) => !worker.dead);
 
-          engine.concurrency = 1;
+            // The engine thrashes: a job takes longer the more jobs share it,
+            // so fewer workers do as well for both sizings.
+            thrashing = true;
+            engine.concurrency = Infinity;
 
-          await t.waitFor(
-            () => assert.ok(settled.some((worker) => worker.dead)),
-            {
-              interval: 50,
-              timeout: 120_000,
-            },
-          );
-          const shrank = timeline.length;
-          // A step with fewer workers runs fewer for a whole window and keeps
-          // the others alive and idle. A step with one more lends one more, so
-          // the steps with fewer after it were in a row.
-          let steps = 0;
-          let since: number | undefined;
-          for (const { at, lent, idle } of timeline.slice(0, shrank)) {
-            if (lent > settled.length) {
-              steps = 0;
-              since = undefined;
-            } else if (lent < settled.length && lent + idle === settled.length)
-              since ??= at;
-            else {
-              if (since !== undefined && at - since >= 1_000) steps++;
-              since = undefined;
+            await t.waitFor(
+              () => assert.ok(settled.some((worker) => worker.dead)),
+              { interval: 50, timeout: 120_000 },
+            );
+            const shrank = timeline.length;
+            // A step with fewer workers runs fewer for a whole window and
+            // keeps the others alive and idle. A step with one more lends one
+            // more, so the steps with fewer after it were in a row.
+            let steps = 0;
+            let since: number | undefined;
+            for (const { at, lent, idle } of timeline.slice(0, shrank)) {
+              if (lent > settled.length) {
+                steps = 0;
+                since = undefined;
+              } else if (
+                lent < settled.length &&
+                lent + idle === settled.length
+              )
+                since ??= at;
+              else {
+                if (since !== undefined && at - since >= 1_000) steps++;
+                since = undefined;
+              }
             }
+            assert.equal(steps, 2, `the pool shrank after ${steps} such steps`);
+
+            // The work gets light again: the size the pool left pays again.
+            thrashing = false;
+            engine.concurrency = units;
+            const known = created.length;
+
+            await t.waitFor(() => assert.ok(created.length > known), {
+              interval: 50,
+              timeout: 90_000,
+            });
+            const added = created[known]!;
+            await setTimeout(15_000);
+            assert.equal(
+              added.dead,
+              false,
+              'the pool kept the worker that paid',
+            );
+          } finally {
+            clearInterval(sampler);
+            stop.abort();
+            await Promise.all(load);
           }
-          assert.equal(steps, 2, `the pool shrank after ${steps} such steps`);
-
-          // The work gets light again: the size the pool left pays again.
-          engine.concurrency = 5;
-          const known = created.length;
-
-          await t.waitFor(() => assert.ok(created.length > known), {
-            interval: 50,
-            timeout: 90_000,
-          });
-          const added = created[known]!;
-          await setTimeout(15_000);
-          assert.equal(added.dead, false, 'the pool kept the worker that paid');
-        } finally {
-          clearInterval(sampler);
-          stop.abort();
-          await Promise.all(load);
-        }
-      }),
+        }),
     );
 
-    void test.each([HillClimbing, Gradient], (Learning) =>
-      test(`a ${Learning.name} pool under steady work starts a worker to try less and less often`, async (t) => {
-        const engine = new PQueue({ concurrency: 3 });
-        const created: EchoWorker[] = [];
-        const born = new Map<EchoWorker, number>();
-        const died = new Map<EchoWorker, number>();
-        await using pool = new Pool({
-          // One worker for each CPU: free memory, which other processes change,
-          // does not decide.
-          size: new Learning({ memoryPerWorker: 1 }),
-          startup: new Parallel(),
-          eviction: new NoEviction(),
-          create: () => {
-            const worker = new EchoWorker();
-            worker.release();
-            created.push(worker);
-            born.set(worker, performance.now());
-            void worker
-              .exited()
-              .then(() => died.set(worker, performance.now()));
-            return worker;
-          },
-        });
-        assert.ok(availableParallelism() >= 8, 'this test needs eight CPUs');
-        const stop = new AbortController();
-        const load = Array.from({ length: 16 }, async () => {
-          while (!stop.signal.aborted)
-            await pool.use((worker) =>
-              engine.add(() => worker.echo('sleep 50')),
-            );
-        });
-        try {
-          // The pool closes the worker of a step that did not pay: it settled.
-          await t.waitFor(
-            () => assert.ok(created.some((worker) => worker.dead)),
-            {
-              interval: 50,
-              timeout: 60_000,
+    void test.each(
+      [
+        { Learning: HillClimbing, units: 3, own: 0 },
+        { Learning: Gradient, units: 2, own: 10 },
+      ],
+      ({ Learning, units, own }) =>
+        test(`a ${Learning.name} pool under steady work starts a worker to try less and less often`, async (t) => {
+          const engine = new PQueue({ concurrency: units });
+          const created: EchoWorker[] = [];
+          const born = new Map<EchoWorker, number>();
+          const died = new Map<EchoWorker, number>();
+          await using pool = new Pool({
+            // One worker for each CPU: free memory, which other processes
+            // change, does not decide.
+            size: new Learning({ memoryPerWorker: 1 }),
+            startup: new Parallel(),
+            eviction: new NoEviction(),
+            create: () => {
+              const worker = new EchoWorker();
+              worker.release();
+              created.push(worker);
+              born.set(worker, performance.now());
+              void worker
+                .exited()
+                .then(() => died.set(worker, performance.now()));
+              return worker;
             },
-          );
-          const settled = created.filter((worker) => !worker.dead);
-          const known = created.length;
+          });
+          assert.ok(availableParallelism() >= 4, 'this test needs four CPUs');
+          const stop = new AbortController();
+          const load = Array.from({ length: 16 }, async () => {
+            while (!stop.signal.aborted)
+              await pool.use(async (worker) => {
+                await worker.echo(`sleep ${own}`);
+                await engine.add(() => worker.echo('sleep 50'));
+              });
+          });
+          try {
+            // The pool closes the worker of a step that did not pay: it settled.
+            await t.waitFor(
+              () => assert.ok(created.some((worker) => worker.dead)),
+              { interval: 50, timeout: 60_000 },
+            );
+            const settled = created.filter((worker) => !worker.dead);
+            const known = created.length;
 
-          // Each worker that a step tries warms up for nothing: a step back to
-          // back would start one about every 12 seconds.
-          await setTimeout(60_000);
+            // Each worker that a step tries warms up for nothing: a step back
+            // to back would start one about every 12 seconds.
+            await setTimeout(60_000);
 
-          const now = performance.now();
-          const tried = created.slice(known);
-          assert.ok(
-            tried.length <= 2,
-            `the pool started ${tried.length} workers to try`,
-          );
-          // A step that does not pay closes the worker it tried when the step
-          // ends, about two windows after it started the worker.
-          for (const worker of tried) {
-            const start = born.get(worker)!;
-            if (now - start < 10_000) continue;
-            const lived = (died.get(worker) ?? now) - start;
+            const now = performance.now();
+            const tried = created.slice(known);
             assert.ok(
-              lived < 10_000,
-              `a worker that a step tried lived ${Math.round(lived)} ms`,
+              tried.length <= 2,
+              `the pool started ${tried.length} workers to try`,
             );
+            // A step that does not pay closes the worker it tried when the
+            // step ends, about two windows after it started the worker.
+            for (const worker of tried) {
+              const start = born.get(worker)!;
+              if (now - start < 10_000) continue;
+              const lived = (died.get(worker) ?? now) - start;
+              assert.ok(
+                lived < 10_000,
+                `a worker that a step tried lived ${Math.round(lived)} ms`,
+              );
+            }
+            // No step closed a worker the pool settled on, and each returned
+            // to it.
+            assert.ok(settled.every((worker) => !worker.dead));
+            await t.waitFor(
+              () => assert.equal(pool.stats.lent, settled.length),
+              { interval: 50, timeout: 60_000 },
+            );
+          } finally {
+            stop.abort();
+            await Promise.all(load);
           }
-          // No step closed a worker the pool settled on, and each returned to it.
-          assert.ok(settled.every((worker) => !worker.dead));
-          await t.waitFor(() => assert.equal(pool.stats.lent, settled.length), {
-            interval: 50,
-            timeout: 60_000,
-          });
-        } finally {
-          stop.abort();
-          await Promise.all(load);
-        }
-      }),
+        }),
     );
 
-    void test.each([HillClimbing, Gradient], (Learning) =>
-      test(`a ${Learning.name} pool takes no step while no job waits`, async (t) => {
-        const engine = new PQueue({ concurrency: 3 });
-        const created: EchoWorker[] = [];
-        await using pool = new Pool({
-          // One worker for each CPU: free memory, which other processes change,
-          // does not decide.
-          size: new Learning({ memoryPerWorker: 1 }),
-          startup: new Parallel(),
-          eviction: new NoEviction(),
-          create: () => {
-            const worker = new EchoWorker();
-            worker.release();
-            created.push(worker);
-            return worker;
-          },
-        });
-        assert.ok(availableParallelism() >= 8, 'this test needs eight CPUs');
-        const busy = new AbortController();
-        const load = Array.from({ length: 16 }, async () => {
-          while (!busy.signal.aborted)
-            await pool.use((worker) =>
-              engine.add(() => worker.echo('sleep 50')),
-            );
-        });
-        const quiet = new AbortController();
-        try {
-          // The pool closes the worker of a step that did not pay: it settled.
-          await t.waitFor(
-            () => assert.ok(created.some((worker) => worker.dead)),
-            {
-              interval: 50,
-              timeout: 60_000,
+    void test.each(
+      [
+        { Learning: HillClimbing, units: 3, own: 0 },
+        { Learning: Gradient, units: 2, own: 10 },
+      ],
+      ({ Learning, units, own }) =>
+        test(`a ${Learning.name} pool takes no step while no job waits`, async (t) => {
+          const engine = new PQueue({ concurrency: units });
+          const created: EchoWorker[] = [];
+          await using pool = new Pool({
+            // One worker for each CPU: free memory, which other processes
+            // change, does not decide.
+            size: new Learning({ memoryPerWorker: 1 }),
+            startup: new Parallel(),
+            eviction: new NoEviction(),
+            create: () => {
+              const worker = new EchoWorker();
+              worker.release();
+              created.push(worker);
+              return worker;
             },
-          );
-          busy.abort();
-          await Promise.all(load);
-          const settled = created.filter((worker) => !worker.dead);
-          const known = created.length;
+          });
+          assert.ok(availableParallelism() >= 4, 'this test needs four CPUs');
+          const busy = new AbortController();
+          const load = Array.from({ length: 16 }, async () => {
+            while (!busy.signal.aborted)
+              await pool.use(async (worker) => {
+                await worker.echo(`sleep ${own}`);
+                await engine.add(() => worker.echo('sleep 50'));
+              });
+          });
+          const quiet = new AbortController();
+          try {
+            // The pool closes the worker of a step that did not pay: it settled.
+            await t.waitFor(
+              () => assert.ok(created.some((worker) => worker.dead)),
+              { interval: 50, timeout: 60_000 },
+            );
+            busy.abort();
+            await Promise.all(load);
+            const settled = created.filter((worker) => !worker.dead);
+            const known = created.length;
 
-          // One job at a time: no job waits, so no window says how many pay.
-          const trickle = (async () => {
-            while (!quiet.signal.aborted)
-              await pool.use((worker) => worker.echo('sleep 50'));
-          })();
-          await setTimeout(30_000);
-          quiet.abort();
-          await trickle;
+            // One job at a time: no job waits, so no window says how many pay.
+            const trickle = (async () => {
+              while (!quiet.signal.aborted)
+                await pool.use((worker) => worker.echo('sleep 50'));
+            })();
+            await setTimeout(30_000);
+            quiet.abort();
+            await trickle;
 
-          assert.equal(created.length, known, 'no step started a worker');
-          assert.ok(
-            settled.every((worker) => !worker.dead),
-            'no step closed a worker',
-          );
-        } finally {
-          busy.abort();
-          quiet.abort();
-          await Promise.all(load);
-        }
-      }),
+            assert.equal(created.length, known, 'no step started a worker');
+            assert.ok(
+              settled.every((worker) => !worker.dead),
+              'no step closed a worker',
+            );
+          } finally {
+            busy.abort();
+            quiet.abort();
+            await Promise.all(load);
+          }
+        }),
     );
   },
 );
 
-void test.each([HillClimbing, Gradient], (Learning) =>
-  test(`a ${Learning.name} pool runs fewer workers when the memory they need is no longer free`, async (t) => {
-    const engine = new PQueue({ concurrency: 4 });
-    const created: EchoWorker[] = [];
-    // Room for eight workers on any Mac with eight CPUs.
-    const memoryPerWorker = Math.floor(process.availableMemory() / 8);
-    await using pool = new Pool({
-      size: new Learning({ memoryPerWorker }),
-      startup: new Parallel(),
-      eviction: new NoEviction(),
-      create: () => {
-        const worker = new EchoWorker();
-        worker.release();
-        created.push(worker);
-        return worker;
-      },
-    });
-    assert.ok(availableParallelism() >= 8, 'this test needs eight CPUs');
-    const stop = new AbortController();
-    const load = Array.from({ length: 16 }, async () => {
-      while (!stop.signal.aborted)
-        await pool.use((worker) => engine.add(() => worker.echo('sleep 50')));
-    });
-    try {
-      // The pool closes the worker of a step that did not pay: it settled.
-      await t.waitFor(() => assert.ok(created.some((worker) => worker.dead)), {
-        interval: 50,
-        timeout: 60_000,
-      });
-      const settled = created.filter((worker) => !worker.dead);
-      assert.ok(settled.length > 2, `the pool settled at ${settled.length}`);
-
-      // Other processes take the memory: two workers still find theirs free.
-      t.mock.method(process, 'availableMemory', () => 2.5 * memoryPerWorker);
-
-      await t.waitFor(
-        () => {
-          assert.equal(settled.filter((worker) => !worker.dead).length, 2);
-          assert.ok(pool.stats.lent <= 2);
+void test.each(
+  [
+    { Learning: HillClimbing, units: 3, own: 0 },
+    { Learning: Gradient, units: 2, own: 10 },
+  ],
+  ({ Learning, units, own }) =>
+    test(`a ${Learning.name} pool runs fewer workers when the memory they need is no longer free`, async (t) => {
+      const engine = new PQueue({ concurrency: units });
+      const created: EchoWorker[] = [];
+      // Free memory for eight workers, until other processes take it.
+      const memoryPerWorker = 2 ** 30;
+      let free = 8 * memoryPerWorker;
+      t.mock.method(process, 'availableMemory', () => free);
+      await using pool = new Pool({
+        size: new Learning({ memoryPerWorker }),
+        startup: new Parallel(),
+        eviction: new NoEviction(),
+        create: () => {
+          const worker = new EchoWorker();
+          worker.release();
+          created.push(worker);
+          return worker;
         },
-        { interval: 50, timeout: 60_000 },
-      );
-    } finally {
-      stop.abort();
-      await Promise.all(load);
-    }
-  }),
+      });
+      assert.ok(availableParallelism() >= 4, 'this test needs four CPUs');
+      const stop = new AbortController();
+      const load = Array.from({ length: 16 }, async () => {
+        while (!stop.signal.aborted)
+          await pool.use(async (worker) => {
+            await worker.echo(`sleep ${own}`);
+            await engine.add(() => worker.echo('sleep 50'));
+          });
+      });
+      try {
+        // The pool closes the worker of a step that did not pay: it settled.
+        await t.waitFor(
+          () => assert.ok(created.some((worker) => worker.dead)),
+          { interval: 50, timeout: 60_000 },
+        );
+        const settled = created.filter((worker) => !worker.dead);
+        assert.ok(settled.length > 2, `the pool settled at ${settled.length}`);
+
+        // Other processes take the memory: two workers still find theirs free.
+        free = 2.5 * memoryPerWorker;
+
+        await t.waitFor(
+          () => {
+            assert.equal(settled.filter((worker) => !worker.dead).length, 2);
+            assert.ok(pool.stats.lent <= 2);
+          },
+          { interval: 50, timeout: 60_000 },
+        );
+      } finally {
+        stop.abort();
+        await Promise.all(load);
+      }
+    }),
 );
 
-void test.each([HillClimbing, Gradient], (Learning) =>
-  test(`${Learning.name} pools under the same work do not try one more worker at the same moments`, async (t) => {
-    assert.ok(availableParallelism() >= 8, 'this test needs eight CPUs');
-    await using pools = new AsyncDisposableStack();
-    const runs = Array.from({ length: 6 }, () => {
-      const engine = new PQueue({ concurrency: 3 });
-      const created: { worker: EchoWorker; at: number }[] = [];
-      const pool = pools.use(
-        new Pool({
-          // One worker for each CPU: free memory, which other processes
-          // change, does not decide.
-          size: new Learning({ memoryPerWorker: 1 }),
-          startup: new Parallel(),
-          eviction: new NoEviction(),
-          create: () => {
-            const worker = new EchoWorker();
-            worker.release();
-            created.push({ worker, at: performance.now() });
-            return worker;
-          },
+void test.each(
+  [
+    { Learning: HillClimbing, units: 3, own: 0 },
+    { Learning: Gradient, units: 2, own: 10 },
+  ],
+  ({ Learning, units, own }) =>
+    test(`${Learning.name} pools under the same work do not try one more worker at the same moments`, async (t) => {
+      assert.ok(availableParallelism() >= 4, 'this test needs four CPUs');
+      await using pools = new AsyncDisposableStack();
+      const runs = Array.from({ length: 6 }, () => {
+        const engine = new PQueue({ concurrency: units });
+        const created: { worker: EchoWorker; at: number }[] = [];
+        const pool = pools.use(
+          new Pool({
+            // One worker for each CPU: free memory, which other processes
+            // change, does not decide.
+            size: new Learning({ memoryPerWorker: 1 }),
+            startup: new Parallel(),
+            eviction: new NoEviction(),
+            create: () => {
+              const worker = new EchoWorker();
+              worker.release();
+              created.push({ worker, at: performance.now() });
+              return worker;
+            },
+          }),
+        );
+        return { engine, created, pool };
+      });
+      const stop = new AbortController();
+      const load = runs.flatMap(({ engine, pool }) =>
+        Array.from({ length: 16 }, async () => {
+          while (!stop.signal.aborted)
+            await pool.use(async (worker) => {
+              await worker.echo(`sleep ${own}`);
+              await engine.add(() => worker.echo('sleep 50'));
+            });
         }),
       );
-      return { engine, created, pool };
-    });
-    const stop = new AbortController();
-    const load = runs.flatMap(({ engine, pool }) =>
-      Array.from({ length: 16 }, async () => {
-        while (!stop.signal.aborted)
-          await pool.use((worker) => engine.add(() => worker.echo('sleep 50')));
-      }),
-    );
-    try {
-      const delays = await Promise.all(
-        runs.map(async ({ created }) => {
-          // The pool closes the worker of a step that did not pay: it settled.
-          await t.waitFor(
-            () => assert.ok(created.some(({ worker }) => worker.dead)),
-            { interval: 50, timeout: 120_000 },
-          );
-          const settled = performance.now();
-          const known = created.length;
-          await t.waitFor(() => assert.ok(created.length > known), {
-            interval: 50,
-            timeout: 120_000,
-          });
-          return created[known]!.at - settled;
-        }),
-      );
+      try {
+        const delays = await Promise.all(
+          runs.map(async ({ created }) => {
+            // The pool closes the worker of a step that did not pay: it
+            // settled.
+            await t.waitFor(
+              () => assert.ok(created.some(({ worker }) => worker.dead)),
+              { interval: 50, timeout: 120_000 },
+            );
+            const settled = performance.now();
+            const known = created.length;
+            await t.waitFor(() => assert.ok(created.length > known), {
+              interval: 50,
+              timeout: 120_000,
+            });
+            return created[known]!.at - settled;
+          }),
+        );
 
-      // Pools that probe in step measure each other's probes, as .NET
-      // randomizes its hill climbing for other processes that run it.
-      const spread = Math.max(...delays) - Math.min(...delays);
-      assert.ok(
-        spread >= 1_000,
-        `the pools tried one more worker ${delays.map(Math.round).join(', ')} ms after they settled`,
-      );
-    } finally {
-      stop.abort();
-      await Promise.all(load);
-    }
-  }),
+        // Pools that probe in step measure each other's probes, as .NET
+        // randomizes its hill climbing for other processes that run it.
+        const spread = Math.max(...delays) - Math.min(...delays);
+        assert.ok(
+          spread >= 1_000,
+          `the pools tried one more worker ${delays.map(Math.round).join(', ')} ms after they settled`,
+        );
+      } finally {
+        stop.abort();
+        await Promise.all(load);
+      }
+    }),
 );
 
 void test.each([HillClimbing, Gradient], (Learning) =>
@@ -929,12 +983,11 @@ void test.each([HillClimbing, Gradient], (Learning) =>
     // Eight units: every worker up to eight adds as much as the one before.
     const engine = new PQueue({ concurrency: 8 });
     const created: EchoWorker[] = [];
+    // Free memory for three and a half workers.
+    const memoryPerWorker = 2 ** 30;
+    t.mock.method(process, 'availableMemory', () => 3.5 * memoryPerWorker);
     await using pool = new Pool({
-      // Room for three workers, while other processes take less than a
-      // fifth of the free memory.
-      size: new Learning({
-        memoryPerWorker: Math.floor(process.availableMemory() / 3.9),
-      }),
+      size: new Learning({ memoryPerWorker }),
       startup: new Parallel(),
       eviction: new NoEviction(),
       create: () => {
