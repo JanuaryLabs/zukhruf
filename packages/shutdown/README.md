@@ -1,7 +1,5 @@
 # @zukhruf/shutdown
 
-> **Status: design for review.** This README is the API on paper. No code exists yet. The decisions are in [ADR 0001](./docs/adr/0001-the-process-dies-by-its-termination-signal-after-the-cleanup.md), [ADR 0002](./docs/adr/0002-only-the-first-stop-request-starts-a-shutdown.md) and [ADR 0003](./docs/adr/0003-a-crash-starts-a-shutdown.md).
-
 A graceful shutdown for a Node.js program. When the user presses Ctrl-C, or Docker stops the container, the program does not end at once. Its work stops when the signal aborts, its cleanup runs, and then the process ends by the same termination signal. Thus the shell, Docker or Kubernetes sees an interrupted process, not a process that completed its work. The package has no dependencies.
 
 The words in these documents have one meaning each. See the glossary in [CONTEXT.md](./CONTEXT.md).
@@ -41,7 +39,7 @@ An exit code of 130 is not the same as a death by SIGINT. A Bash script stops it
 
 ## A second stop request
 
-The first stop request removes every signal and crash listener of the package. Thus a second termination signal gets the default action, and the process ends at once. Use this when the cleanup does not end. For example, a read from a pipe that no program writes waits in the thread pool of Node.js, and no signal can stop it. The second Ctrl-C ends the process.
+The first stop request removes the termination signal listeners of the package. Thus a second termination signal gets the default action, and the process ends at once. Use this when the cleanup does not end. For example, a read from a pipe that no program writes waits in the thread pool of Node.js, and no signal can stop it. The second Ctrl-C ends the process.
 
 The package has no timer. The supervisor owns the deadline of a shutdown:
 
@@ -64,11 +62,13 @@ A crash is an exception that no code catches, or a rejection that no code handle
 
 A second crash gets the default of Node.js: it writes the error and ends the process at once. A termination signal after the crash also ends the process at once.
 
+The exit status always follows the cause. A crash during the cleanup of a SIGINT shutdown ends the process at once, and the process dies by SIGINT. For this case the package keeps its crash listeners after a termination signal: it writes the error, and then it sends SIGINT to its own process. The default of Node.js cannot do it, because Node.js emits `'exit'` before it writes the error of a crash.
+
 ## Stop at the end of a scope
 
-When the `using` scope of a `Shutdown` ends, the package removes its listeners and aborts the signal. Its reason is a `DOMException` with the name `AbortError` and the message `The shutdown scope ended`. This is not a stop request: the process does not die by a termination signal. A termination signal after this gets the default action.
+When the `using` scope of a `Shutdown` ends, the package removes its listeners and aborts the signal. Its reason is a `DOMException` with the name `AbortError` and the message `The shutdown scope ended`. This is not a stop request: the process does not die by a termination signal. After this, a termination signal gets the default action, and a crash gets the default of Node.js.
 
-A stop request that came before the end of the scope stays. The process still ends by its cause at `'exit'`.
+A stop request that came before the end of the scope stays. Then the end of the scope removes no listener, and the process still ends by its cause.
 
 ## Run in a container
 
@@ -149,14 +149,15 @@ export class Shutdown implements Disposable {
 }
 ```
 
-| Call or event                | What the package does                                                                                                                                                                                     |
-| ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `new Shutdown()`             | `process.on()` for SIGINT, SIGTERM, SIGHUP, `'uncaughtException'` and `'unhandledRejection'`                                                                                                              |
-| The first termination signal | `process.off()` for each signal and crash listener of the package, then `AbortController.abort()` with the `AbortError`                                                                                   |
-| The first crash              | `process.off()` for each signal and crash listener of the package, `console.error()` of the error, then `abort()` with the error                                                                          |
-| `'exit'` after a signal      | `process.removeAllListeners()` for that termination signal, then `process.kill(process.pid, signal)`. When the process still runs: `process.exitCode = 128 + n` (`util.convertProcessSignalToExitCode()`) |
-| `'exit'` after a crash       | `process.exitCode = 1` when the exit code is 0                                                                                                                                                            |
-| `[Symbol.dispose]()`         | `process.off()` for each signal and crash listener of the package, then `abort()`. It keeps the `'exit'` listener only when a stop request came                                                           |
+| Call or event                       | What the package does                                                                                                                                                                                     |
+| ----------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `new Shutdown()`                    | `process.on()` for SIGINT, SIGTERM, SIGHUP, `'uncaughtException'`, `'unhandledRejection'` and `'exit'`                                                                                                    |
+| The first termination signal        | `process.off()` for each termination signal listener of the package, then `AbortController.abort()` with the `AbortError`                                                                                 |
+| The first crash                     | `console.error()` of the error, `process.off()` for each termination signal and crash listener of the package, then `abort()` with the error                                                              |
+| A crash after a termination signal  | `console.error()` of the error, then `process.exit()`. The `'exit'` listener then ends the process by the signal                                                                                          |
+| `'exit'` after a termination signal | `process.removeAllListeners()` for that termination signal, then `process.kill(process.pid, signal)`. When the process still runs: `process.exitCode = 128 + n` (`util.convertProcessSignalToExitCode()`) |
+| `'exit'` after a crash              | `process.exitCode \|\|= 1`: exit code 1, unless the program set a failure code                                                                                                                            |
+| `[Symbol.dispose]()`                | With no stop request: `process.off()` for each listener of the package, `'exit'` too, then `abort()`. After a stop request: nothing                                                                       |
 
 ## Who uses each part
 

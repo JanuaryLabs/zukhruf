@@ -16,5 +16,5 @@ The Node.js documentation of `'uncaughtException'` says: "It is not safe to resu
 - The package listens for `'uncaughtException'` and `'unhandledRejection'`. With a listener, Node.js does not write the error, so the package writes it to standard error with `console.error()`.
 - The signal aborts with the error of the crash as its reason. Code that reads `signal.reason` gets the error.
 - At `'exit'`, the package sets `process.exitCode` to 1 when it is 0. An exit code that the program set stays. A supervisor restarts a failed process only after a non-zero exit, so a crash must not exit with 0. With `useExit0: true`, terminus exits with 0 after a crash.
-- A second crash gets the default of Node.js ([ADR 0002](./0002-only-the-first-stop-request-starts-a-shutdown.md)). Thus a cleanup that crashes ends the process at once, with exit code 1.
+- A second crash gets the default of Node.js ([ADR 0002](./0002-only-the-first-stop-request-starts-a-shutdown.md)). Thus a cleanup that crashes ends the process at once, with exit code 1. After a termination signal, the package writes the error of the crash, and the process dies by that signal, because the exit status follows the cause.
 - A cleanup that does not end after a crash is ended by a termination signal, or by the deadline of the supervisor.

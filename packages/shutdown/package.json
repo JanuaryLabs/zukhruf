@@ -1,0 +1,47 @@
+{
+  "name": "@zukhruf/shutdown",
+  "version": "0.6.12",
+  "description": "A graceful shutdown for a Node.js program: SIGINT, SIGTERM, SIGHUP and crashes abort one AbortSignal, the program runs its cleanup, and then the process dies by the termination signal, so a shell, Docker or Kubernetes sees an interrupted process.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/JanuaryLabs/zukhruf",
+    "directory": "packages/shutdown"
+  },
+  "bugs": {
+    "url": "https://github.com/JanuaryLabs/zukhruf/issues"
+  },
+  "homepage": "https://github.com/JanuaryLabs/zukhruf/tree/main/packages/shutdown#readme",
+  "keywords": [
+    "shutdown",
+    "graceful-shutdown",
+    "signal",
+    "sigint",
+    "sigterm",
+    "sighup",
+    "abortsignal",
+    "exit"
+  ],
+  "type": "module",
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "@zukhruf/source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "!dist/spec/**",
+    "!**/*.tsbuildinfo",
+    "!**/*.test.*"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "devDependencies": {
+    "@zukhruf/docker": "^0.6.11"
+  }
+}

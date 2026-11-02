@@ -97,6 +97,9 @@
     },
     {
       "path": "./packages/nx"
+    },
+    {
+      "path": "./packages/shutdown"
     }
   ]
 }

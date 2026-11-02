@@ -14,7 +14,9 @@ A probe on Node.js 26.10.0 ran a process that removed its listener at the first 
 
 ## Consequences
 
-- The first termination signal or crash removes each signal and crash listener of the package. The `'exit'` listener stays.
+- The first termination signal removes the termination signal listeners of the package. The first crash removes the termination signal and crash listeners. The `'exit'` listener stays.
 - A second termination signal gets the default action, and a second crash gets the default of Node.js. A termination signal during the cleanup of a crash also ends the process at once.
+- The exit status follows the cause, not the later stop request. A crash during the cleanup of a SIGINT shutdown ends the process at once, and the process dies by SIGINT ([ADR 0001](./0001-the-process-dies-by-its-termination-signal-after-the-cleanup.md)). For example, work that rejects with the `AbortError` of the signal, and that no code catches, does not change an interrupt into a failure.
+- For this case, the crash listeners stay after a termination signal. The default of Node.js cannot end the process by the signal and also write the error: with no listener, Node.js emits `'exit'` before it writes the error (`lib/internal/process/execution.js:192-204` of Node.js 26.10.0), and the death by the signal at `'exit'` comes first. A test without the listener saw the process die by SIGINT with nothing on standard error. Thus the listener writes the error, and then it ends the process by the signal.
 - SIGINT, SIGTERM and SIGHUP start a shutdown, as the task runner of Nx and `signal-exit` do. SIGHUP comes when the terminal closes. Without a listener, a program that writes SQLite ends in the middle of a write, and a hot journal can stay. SIGQUIT keeps its default action, because Ctrl-\ asks for a core dump.
 - A listener for SIGHUP replaces the ignore of `nohup`: a probe showed that the listener of Node.js runs when the parent ignored SIGHUP. Go documents the same for `signal.Notify`. A program that must live on after its terminal closes runs under a supervisor or in tmux.

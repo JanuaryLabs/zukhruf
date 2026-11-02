@@ -146,6 +146,14 @@ export default defineConfig(
     ],
     rules: { 'island/no-console': 'off' },
   },
+  // @zukhruf/shutdown takes over the report of a crash from Node.js. With a
+  // listener for 'uncaughtException', Node.js does not write the error, and a
+  // crash after a termination signal ends the process before a host can log
+  // it, so the package writes the error to standard error (its ADR 0003).
+  {
+    files: ['packages/shutdown/src/shutdown.ts'],
+    rules: { 'island/no-console': 'off' },
+  },
   // The examples of @zukhruf/mteb are not shipped. They are command line
   // programs: they read their arguments and print the scores.
   {

@@ -9,7 +9,7 @@ The stop of a process after a stop request. The work stops at the signal, the cl
 _Avoid_: Exit (only the last step), termination (the kernel ends a process), teardown (a test has a teardown)
 
 **Stop request**:
-An event that starts a shutdown: a termination signal or a crash. Only the first stop request starts the shutdown. A later one gets the default action.
+An event that starts a shutdown: a termination signal or a crash. Only the first stop request starts the shutdown. A later one ends the process at once, by the cause.
 _Avoid_: Interrupt (SIGINT only), cancel (a caller cancels its own wait)
 
 **Termination signal**:
