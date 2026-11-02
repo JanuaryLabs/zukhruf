@@ -1,6 +1,6 @@
 {
   "name": "@zukhruf/pool",
-  "version": "0.6.11",
+  "version": "0.6.12",
   "description": "Lend long-lived workers, such as native helper processes, to one job at a time: startups that decide when workers start, sizings that decide how many run, evictions that decide when an idle worker closes, and replacement of a worker that exits.",
   "license": "MIT",
   "repository": {
@@ -41,10 +41,10 @@
     "access": "public"
   },
   "dependencies": {
-    "@zukhruf/async": "^0.6.11",
+    "@zukhruf/async": "^0.6.12",
     "p-queue": "10.0.0"
   },
   "devDependencies": {
-    "@zukhruf/testing": "^0.6.10"
+    "@zukhruf/testing": "^0.6.12"
   }
 }
