@@ -154,7 +154,6 @@ const rule = ESLintUtils.RuleCreator.withoutDocs({
         'Do not keep a promise in a field: it caches a rejection, can reject before anyone awaits it, and races when it is reset. Memoize the async function (p-memoize), model the phase as a State object, or wait on a one-shot latch.',
     },
   },
-  defaultOptions: [],
   create(context) {
     // Throws the standard "requires type information" error without typed lint.
     const services = ESLintUtils.getParserServices(context);

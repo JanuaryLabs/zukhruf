@@ -68,7 +68,6 @@ const rule = ESLintUtils.RuleCreator.withoutDocs({
         "instanceof misses an APIError of another class: better-auth's APIError subclasses better-call's, so an APIError that better-call throws is not an instance of it. Use isAPIError(error) from 'better-auth/api'.",
     },
   },
-  defaultOptions: [],
   create(context) {
     return {
       BinaryExpression(node) {

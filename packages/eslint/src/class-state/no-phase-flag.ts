@@ -235,7 +235,6 @@ const rule = ESLintUtils.RuleCreator.withoutDocs({
         'Do not keep a phase in a flag or optional variable that the returned object or function changes after its factory returns: every reader must know which phase holds. Model the phases as State objects, wait on a one-shot latch, push the fact as an event, or ask the platform for it.',
     },
   },
-  defaultOptions: [],
   create(context) {
     // Throws the standard "requires type information" error without typed lint.
     const services = ESLintUtils.getParserServices(context);

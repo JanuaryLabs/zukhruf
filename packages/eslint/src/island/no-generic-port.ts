@@ -31,7 +31,6 @@ const rule = ESLintUtils.RuleCreator.withoutDocs({
         'A port must not be generic in its response. Return unknown and narrow at the call site.',
     },
   },
-  defaultOptions: [],
   create(context) {
     const reported = new Set<Signature>();
     return {

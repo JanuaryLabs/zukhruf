@@ -57,7 +57,6 @@ const rule = ESLintUtils.RuleCreator.withoutDocs({
         "Hono catches a handler's error before next() returns, so this catch never runs. Translate the error where it is thrown, or read c.error after next().",
     },
   },
-  defaultOptions: [],
   create(context) {
     return {
       TryStatement(node) {

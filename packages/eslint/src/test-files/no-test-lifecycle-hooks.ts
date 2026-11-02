@@ -156,7 +156,6 @@ const rule = ESLintUtils.RuleCreator.withoutDocs({
         'No test lifecycle hooks. Write self-contained AAA tests: inline arrange in each test and run teardown (cleanup, mock restore, resource stop) in a per-test try/finally or with `await using` a disposable.',
     },
   },
-  defaultOptions: [],
   create(context) {
     const resolve: Resolve = (identifier) =>
       ASTUtils.findVariable(
