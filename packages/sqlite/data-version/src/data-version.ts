@@ -1,4 +1,8 @@
 import { FollowedDatabase } from './followed-database.ts';
+import { StampedDatabase } from './stamped-database.ts';
+
+// What tells one moment of the database from the next.
+type ObservedDatabase = Disposable & { observe(): string };
 
 // The owner commits through a WAL it keeps open, and file-change events
 // report a write only when the file closes. SQLite's data_version changes on
@@ -7,13 +11,24 @@ import { FollowedDatabase } from './followed-database.ts';
 // data_version starts again and can equal an old value, so current is a
 // count of the changes seen, not the data_version itself.
 export class DataVersion implements Disposable {
-  readonly #database: FollowedDatabase;
+  readonly #database: ObservedDatabase;
   #seen: string;
   #current = 0;
 
-  constructor(path: string) {
-    this.#database = new FollowedDatabase(path);
+  constructor(
+    path: string,
+    database: ObservedDatabase = new FollowedDatabase(path),
+  ) {
+    this.#database = database;
     this.#seen = this.#database.observe();
+  }
+
+  // The version of a database whose owner holds SQLite's exclusive locking
+  // mode, as Chromium holds its History: the owner lets no reader read
+  // data_version, so the file stamp of the database file tells its commits
+  // apart.
+  static ofExclusiveOwner(path: string): DataVersion {
+    return new DataVersion(path, new StampedDatabase(path));
   }
 
   get current(): number {

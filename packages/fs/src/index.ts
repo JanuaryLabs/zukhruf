@@ -2,6 +2,8 @@ export { atomicWrite } from './atomic-write.ts';
 export { createExclusive } from './create-exclusive.ts';
 export { draftSuffixLength } from './draft.ts';
 export { durableWrite } from './durable-write.ts';
+export { FileStamp } from './file-stamp.ts';
+export { FileStamps } from './file-stamps.ts';
 export { isErrno } from './errno.ts';
 export { FileLock } from './file-lock.ts';
 export { assertLocalDirectory } from './local-directory.ts';

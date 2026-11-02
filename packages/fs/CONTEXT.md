@@ -1,6 +1,6 @@
 # Fs
 
-Helpers that write files. A reader of the file never sees a part of a write. A process that stops during a write leaves the old content or the new content in the file. A file lock lets one process at a time hold a file, and the kernel frees it when that process stops.
+Helpers that write files, and a stamp that tells that a file changed. A reader of the file never sees a part of a write. A process that stops during a write leaves the old content or the new content in the file. A file lock lets one process at a time hold a file, and the kernel frees it when that process stops.
 
 ## Language
 
@@ -43,3 +43,11 @@ _Avoid_: Truncated name, short name
 **File lock**:
 A lock on a file that the kernel holds for one handle at a time. The kernel frees it when the process of the holder stops, however it stops. It is an exclusive SQLite transaction on the file.
 _Avoid_: Claim (the election uses a file lock as its claim), presence (the mutex uses a file lock as a presence), lock file (a file whose presence is the lock, which stays when its holder dies)
+
+**File stamp**:
+What the file system says about the file at a path: its device, its inode, its size, and the times of its last write and its last change, to the nanosecond. A write or a new file at the path changes it. A missing file has a stamp of its own.
+_Avoid_: Fingerprint (a hash of the content), version (`@zukhruf/sqlite-data-version` gives a different number), checksum, mtime (one part of the stamp)
+
+**Missing file**:
+No file is at the path, or a part of the path is a file and not a folder (`ENOENT`, `ENOTDIR`). A folder that the process may not search is not a missing file: its error reaches the caller.
+_Avoid_: Absent, deleted (a missing file can also never have existed)

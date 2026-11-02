@@ -1,6 +1,6 @@
 # @zukhruf/fs
 
-Helpers that write files, and a lock on a file that the kernel frees when its holder dies. A reader never sees a part of a write. `@zukhruf/mutex` uses them for its lock files, `@zukhruf/fencing` for its fencing counters, and `@zukhruf/election` for the claim and the epoch of each election. `@zukhruf/single-flight` keeps no lock files of its own: its election claims a `FileLock` through `@zukhruf/election`.
+Helpers that write files, a lock on a file that the kernel frees when its holder dies, and a stamp that tells that a file changed. A reader never sees a part of a write. `@zukhruf/mutex` uses them for its lock files, `@zukhruf/fencing` for its fencing counters, and `@zukhruf/election` for the claim and the epoch of each election. `@zukhruf/single-flight` keeps no lock files of its own: its election claims a `FileLock` through `@zukhruf/election`.
 
 The words in these documents have one meaning each. See the glossary in [CONTEXT.md](./CONTEXT.md).
 
@@ -168,6 +168,45 @@ try {
 - When `statfs` fails, the check does not reject. The directory is used as if the check did not exist.
 
 `@zukhruf/mutex` and `@zukhruf/single-flight` give this same `NetworkDirectoryError` class. A catch with `instanceof` works for each of them.
+
+## Tell that a file changed
+
+A program that watches a file reads it again after each write. A read of the whole file on each check costs too much, and a file-change event can come late or not at all. Git has the same problem for each file in a working tree. Git compares the stat data of the file with the stat data that it kept: when they are equal, the file did not change. A `FileStamp` is that stat data.
+
+```ts
+import { FileStamp } from '@zukhruf/fs';
+
+const before = await FileStamp.read('/var/lib/app/store.json');
+// ... later
+const now = await FileStamp.read('/var/lib/app/store.json');
+if (!now.equals(before)) console.log('The store changed. Read it again.');
+```
+
+- A file stamp holds the device, the inode, the size, the time of the last write and the time of the last change of the file. Each time is to the nanosecond.
+- A write changes the stamp. This is also true when the writer gives back the old write time, as `rsync -t` and `tar` do, because the kernel sets the time of the change. The writer cannot set that time.
+- A new file at the path changes the stamp, also with the same size and write time. A program that replaces its file with a rename makes a new file.
+- A missing file has a stamp of its own. Two missing stamps of one path are equal. When the file comes back, the stamp changes.
+- A path through a file, for example `file/store`, is missing too (`ENOTDIR`).
+- Each other error of `stat` reaches the caller, for example `EACCES` for a folder that the process may not search. A file that the process may not see is not a missing file.
+- `modifiedAt` is the time of the last write. It is `undefined` for a missing file.
+- `FileStamp.read(path)` reads the stamp. `FileStamp.readSync(path)` reads it and blocks.
+- `toString()` gives the stamp as text, so that you can keep it.
+
+`FileStamps` holds the stamps of several files that change together, for example a database and its journal, or the files of one store. A write of any file changes the whole. A missing file is a part of it.
+
+```ts
+import { FileStamps } from '@zukhruf/fs';
+
+const stamps = await FileStamps.read([
+  '/var/lib/app/History',
+  '/var/lib/app/History-journal',
+]);
+console.log(stamps.modifiedAt); // the newest write of the files that are present
+```
+
+`modifiedAt` of `FileStamps` is the newest write of the files that are present. It is `undefined` when no file is present.
+
+No package on npm does this job. [ADR 0004](./docs/adr/0004-a-file-stamp-is-the-stat-data-that-git-compares.md) tells why each candidate failed.
 
 ## Check the error code
 

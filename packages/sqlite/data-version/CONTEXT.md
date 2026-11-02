@@ -5,11 +5,11 @@ Another process owns a SQLite database and writes it while it runs. This package
 ## Language
 
 **Owner**:
-The other process that owns the database and writes it. The owner keeps the file open, and commits through a WAL. The owner can also replace the file at the path.
+The other process that owns the database and writes it. The owner keeps the file open, and commits through a WAL or a rollback journal. The owner can also replace the file at the path.
 _Avoid_: App, store, writer
 
 **Data version**:
-The number that `DataVersion` gives. It changes when another connection commits, or when the file at the path is a replaced file. Its value has no other meaning: compare it only with an earlier value from the same `DataVersion`. It is not the number of `PRAGMA data_version`, which is different on each connection.
+The number that `DataVersion` gives. It changes when another connection commits, or when the file at the path is a replaced file. For an exclusive owner, it changes when the file stamp of the database file changes. Its value has no other meaning: compare it only with an earlier value from the same `DataVersion`. It is not the number of `PRAGMA data_version`, which is different on each connection.
 _Avoid_: Revision, counter, schema version (`PRAGMA schema_version` is a different number)
 
 **Commit by another connection**:
@@ -27,3 +27,7 @@ _Avoid_: Modified time, mtime, last update
 **Unavailable**:
 SQLite cannot open the file, or the file system cannot give its times: the file is missing, or the system denies access. The package then throws `UnavailableError`, the class of `@zukhruf/sqlite-reader`. The caller can fix it, for example with a grant of access. Other failures are not unavailable.
 _Avoid_: Not found, permission error
+
+**Exclusive owner**:
+An owner that holds SQLite's exclusive locking mode, with a rollback journal, as Chromium holds its History. No other connection can read the database while it holds the lock, so no connection can read `PRAGMA data_version`.
+_Avoid_: Locked database, busy database (busy is the error code, not the owner)

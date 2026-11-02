@@ -3,6 +3,7 @@ import type { DatabaseSync, SQLInputValue, SQLOutputValue } from 'node:sqlite';
 import { openReader } from '@zukhruf/sqlite-reader';
 
 import { MissingColumnsError } from './missing-columns-error.ts';
+import { OwnerCopy } from './owner-copy.ts';
 
 // The columns a reader depends on, by table.
 export type SnapshotColumns = Readonly<Record<string, readonly string[]>>;
@@ -15,10 +16,13 @@ export type SnapshotColumns = Readonly<Record<string, readonly string[]>>;
 export class Snapshot implements Disposable {
   readonly path: string;
   readonly #database: DatabaseSync;
+  readonly #copy: Disposable;
 
-  constructor(path: string) {
+  // copy is the private copy that ofExclusiveOwner reads in place of path.
+  constructor(path: string, copy?: OwnerCopy) {
     this.path = path;
-    this.#database = openReader(path);
+    this.#copy = copy ?? { [Symbol.dispose]() {} };
+    this.#database = openReader(copy?.file ?? path);
     try {
       // The first read pins the snapshot, so it is taken now rather than at
       // the caller's first query; a file that is no database fails here.
@@ -28,6 +32,14 @@ export class Snapshot implements Disposable {
       this.#database.close();
       throw cause;
     }
+  }
+
+  // A database whose owner holds SQLite's exclusive locking mode, as Chromium
+  // holds its History: the owner lets no reader in, so the snapshot reads a
+  // private copy at the owner's last commit. Dispose it as soon as the read
+  // ends: the copy is a file until then.
+  static async ofExclusiveOwner(path: string): Promise<Snapshot> {
+    return new Snapshot(path, await OwnerCopy.take(path));
   }
 
   // Refuses a layout without these columns, and closes the database: the
@@ -71,8 +83,10 @@ export class Snapshot implements Disposable {
   }
 
   [Symbol.dispose](): void {
-    if (!this.#database.isOpen) return;
-    if (this.#database.isTransaction) this.#database.exec('COMMIT');
-    this.#database.close();
+    if (this.#database.isOpen) {
+      if (this.#database.isTransaction) this.#database.exec('COMMIT');
+      this.#database.close();
+    }
+    this.#copy[Symbol.dispose]();
   }
 }

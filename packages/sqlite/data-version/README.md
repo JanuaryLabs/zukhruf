@@ -1,6 +1,6 @@
 # @zukhruf/sqlite-data-version
 
-Some programs keep their data in a SQLite database, and write it while they run. Another program wants to know when the data changes, so that it reads again. A file-change event does not tell it: the owner keeps the file open and commits through a WAL, and the event comes only when the file closes. SQLite gives a number for this: `PRAGMA data_version`. It changes on each commit by another connection. This package keeps its own read-only connection to the database, and gives that number. Poll it, and read again when it changes.
+Some programs keep their data in a SQLite database, and write it while they run. Another program wants to know when the data changes, so that it reads again. A file-change event does not tell it: the owner keeps the file open and commits through a WAL, and the event comes only when the file closes. SQLite gives a number for this: `PRAGMA data_version`. It changes on each commit by another connection. This package keeps its own read-only connection to the database, and gives that number. Poll it, and read again when it changes. Some owners let no reader in, so `DataVersion.ofExclusiveOwner` observes the file stamp of the database file in its place.
 
 The words in these documents have one meaning each. See the glossary in [CONTEXT.md](./CONTEXT.md).
 
@@ -59,6 +59,27 @@ no change
 - Dispose closes the connection. Use `using`, or call `[Symbol.dispose]()`.
 - The package throws its own `UnavailableError`. It is the class of `@zukhruf/sqlite-reader`, which opens the connection. The package exports it, so a catch with `instanceof` works with either package. A host that needs its own error translates the error of the package at its boundary, and keeps the error of the package as `cause`. [ADR 0003](./docs/adr/0003-the-package-throws-its-own-errors.md) tells why.
 
+## An owner that lets no reader in
+
+An exclusive owner holds SQLite's exclusive locking mode, as Chromium holds its History. `new DataVersion(path)` then fails with `SQLITE_BUSY` (5). Observe the database with `DataVersion.ofExclusiveOwner(path)`:
+
+```ts
+import { DataVersion } from '@zukhruf/sqlite-data-version';
+
+using version = DataVersion.ofExclusiveOwner(historyPath);
+const seen = version.current;
+// ... later
+if (version.current !== seen) console.log('The owner committed. Read again.');
+```
+
+- It observes the file stamp of the database file (`@zukhruf/fs`). Each commit of the owner writes that file, so each commit is a change.
+- A write to the journal alone is a transaction that the owner did not commit. It is no change.
+- An open transaction that spills its pages into the database file is a change. A reader then reads the last commit again.
+- A path that this process cannot see is no change, as for `new DataVersion`. When a file is at the path again, that is a change.
+- It opens no connection, so it never waits for the lock of the owner.
+
+[ADR 0004](./docs/adr/0004-the-version-of-an-exclusive-owner-is-the-stamp-of-its-database-file.md) tells why.
+
 ## The last write
 
 The data version tells that the owner committed after you read it before. It does not tell when. A new process has no earlier value, so it cannot use the data version to find how old the data is.
@@ -81,11 +102,11 @@ console.log(`The owner last wrote at ${written.toISOString()}`);
 
 ## Errors
 
-| Error                        | When                                                                                                                                                                                                                                                      |
-| ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `UnavailableError`           | SQLite cannot open the file: `SQLITE_CANTOPEN` (14), for a missing file or a file that the system denies, a privacy denial too. `new DataVersion` throws it, and `current` throws it when it cannot open a replaced file. `cause` is the error of SQLite. |
-| The error of SQLite          | All other failures.                                                                                                                                                                                                                                       |
-| The error of the file system | `current` cannot read the status of the path, for a cause other than a missing path or a folder that denies this process.                                                                                                                                 |
+| Error                        | When                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `UnavailableError`           | SQLite cannot open the file: `SQLITE_CANTOPEN` (14), for a missing file or a file that the system denies, a privacy denial too. `new DataVersion` throws it, and `current` throws it when it cannot open a replaced file. `cause` is the error of SQLite. `ofExclusiveOwner` throws it when the file is missing (`ENOENT`) or a folder denies this process (`EACCES`); then `cause` is the error of the file system. |
+| The error of SQLite          | All other failures.                                                                                                                                                                                                                                                                                                                                                                                                  |
+| The error of the file system | `current` cannot read the status of the path, for a cause other than a missing path or a folder that denies this process.                                                                                                                                                                                                                                                                                            |
 
 `UnavailableError` has the `path`. `lastWrite` throws `UnavailableError` when the file is missing (`ENOENT`) or the mode of its folder denies this process (`EACCES`). Then `cause` is the error of the file system. `lastWrite` throws the error of the file system for all other failures.
 
@@ -105,6 +126,7 @@ console.log(`The owner last wrote at ${written.toISOString()}`);
 - [0001 Poll data_version](./docs/adr/0001-poll-data-version.md)
 - [0002 A replaced file is followed by name](./docs/adr/0002-a-replaced-file-is-followed-by-name.md)
 - [0003 The package throws its own errors](./docs/adr/0003-the-package-throws-its-own-errors.md)
+- [0004 The version of an exclusive owner is the stamp of its database file](./docs/adr/0004-the-version-of-an-exclusive-owner-is-the-stamp-of-its-database-file.md)
 
 ## Development
 
@@ -122,7 +144,9 @@ src/
   index.ts                the exports
   data-version.ts         DataVersion
   followed-database.ts    the connection that follows the path to a replaced file
+  stamped-database.ts     the file stamp of the database of an exclusive owner
   data-version.test.ts    the tests, on real SQLite files
+  exclusive-owner.test.ts the tests, with an owner in another process
   last-write.ts           lastWrite
   last-write.test.ts      the tests, on real SQLite files
 ```

@@ -1,7 +1,7 @@
 {
   "name": "@zukhruf/fs",
   "version": "0.6.11",
-  "description": "File writes that a reader never sees half done: replace a file in one step, with or without a sync to disk, or create it only when absent. A file lock that the kernel frees when its holder dies. Retries Windows' short refusals. Names a file after any key.",
+  "description": "File writes a reader never sees half done, a file lock the kernel frees when its holder dies, and a file stamp that tells that a file changed, as git does. Retries Windows' short refusals. Names a file after any key.",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -25,7 +25,10 @@
     "flock",
     "sqlite",
     "windows",
-    "eperm"
+    "eperm",
+    "stat",
+    "file-stamp",
+    "change-detection"
   ],
   "type": "module",
   "exports": {
