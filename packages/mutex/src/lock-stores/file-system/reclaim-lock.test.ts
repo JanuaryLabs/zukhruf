@@ -44,7 +44,7 @@ const settlementOf = <T>(watched: { readonly now: Settlement<T> }) =>
 const holderSource = (storeUrl: URL, storeName: string, directory: string) => `
 	import { ${storeName} } from ${JSON.stringify(storeUrl.href)};
 	setInterval(() => {}, 1000);
-	await new ${storeName}(${JSON.stringify(directory)}, { pollInterval: 10 }).acquire('product:42');
+	await new ${storeName}(${JSON.stringify(directory)}, { clock: globalThis, pollInterval: 10 }).acquire('product:42');
 	process.send({ type: 'holding' });
 `;
 
@@ -71,7 +71,7 @@ const evicterSource = (
 	};
 	syncBuiltinESMExports();
 	const { ${storeName} } = await import(${JSON.stringify(storeUrl.href)});
-	await new ${storeName}(${JSON.stringify(directory)}, { pollInterval: 10 }).acquire('product:42');
+	await new ${storeName}(${JSON.stringify(directory)}, { clock: globalThis, pollInterval: 10 }).acquire('product:42');
 `;
 
 /**

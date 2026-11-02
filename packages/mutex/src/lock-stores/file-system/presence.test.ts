@@ -65,7 +65,7 @@ const callerSource = (store: Store, directory: string) => `
 	const release = Promise.withResolvers();
 	process.on('message', (command) => command === 'release' && release.resolve());
 	setInterval(() => {}, 1000);
-	const mutex = new Mutex(new ${store.name}(${JSON.stringify(directory)}, { pollInterval: 10 }));
+	const mutex = new Mutex(new ${store.name}(${JSON.stringify(directory)}, { clock: globalThis, pollInterval: 10 }));
 	report({ type: 'asking', pid: process.pid });
 	try {
 		await mutex.acquire('product-42', async () => {
