@@ -13,6 +13,7 @@ import { test } from '@zukhruf/testing/node';
 
 import type { LockStore } from '../../mutex/lock-store.ts';
 import { Mutex } from '../../mutex/mutex.ts';
+import { tokensThatFailOnce } from '../../testing/tokens-that-fail-once.ts';
 import { SqliteStore } from '../sqlite/sqlite-store.ts';
 import { LockFileStore } from './lock-file-store.ts';
 import { TicketQueueFileStore } from './ticket-queue-file-store.ts';
@@ -331,19 +332,6 @@ describe('LockFileStore damaged lock file', () => {
   );
 });
 
-/** Fails the first token it is asked for, and counts after that. */
-function failingOnce(failure: Error): TokenSource {
-  const counter = new CounterTokenSource();
-  let failed = false;
-  return {
-    next(key) {
-      if (failed) return counter.next(key);
-      failed = true;
-      return Promise.reject(failure);
-    },
-  };
-}
-
 describe('File lock stores whose token source fails', () => {
   void test.each(
     [
@@ -370,7 +358,7 @@ describe('File lock stores whose token source fails', () => {
           'mutex-test-',
         );
         const failure = new Error('The token file could not be written.');
-        const store = open(directory.path, failingOnce(failure));
+        const store = open(directory.path, tokensThatFailOnce(failure));
 
         // Act
         const acquiring = store.acquire('report-daily');

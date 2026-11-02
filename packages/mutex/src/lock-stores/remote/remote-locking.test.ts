@@ -13,6 +13,7 @@ import {
   scriptedPeer,
 } from '../../testing/scripted-peer.ts';
 import { settle } from '../../testing/store-cases.ts';
+import { tokensThatFailOnce } from '../../testing/tokens-that-fail-once.ts';
 import { ConnectionSupervisor } from './connection-supervisor.ts';
 import type { ClientConnector } from './connector.ts';
 import { LockCoordinator } from './lock-coordinator.ts';
@@ -144,19 +145,6 @@ describe('Remote lock client connection lifecycle', () => {
     }
   });
 });
-
-/** Counts tokens like CounterTokenSource, but its first mint fails, as a token file on a full disk would. */
-function tokensThatFailOnce(failure: Error): TokenSource {
-  const counter = new CounterTokenSource();
-  let failed = false;
-  return {
-    async next(key) {
-      if (failed) return counter.next(key);
-      failed = true;
-      throw failure;
-    },
-  };
-}
 
 describe('A request whose token cannot be minted', () => {
   // Kept as a double: only a scripted peer shows that the coordinator never closes the connection.

@@ -27,6 +27,22 @@ interface DeclaredEnv {
 // process (an editor) picks up an edit to the schema.
 const declaredByStartupPath = new Map<string, DeclaredEnv>();
 
+/** The key and its property node, when `node` reads `process.env.<key>`. */
+function processEnvRead(
+  node: unknown,
+): { key: string; property: AstNode } | undefined {
+  if (
+    !isType(node, 'MemberExpression') ||
+    !isProcessEnvMember(node['object'])
+  ) {
+    return undefined;
+  }
+  const key = memberKey(node);
+  const property = node['property'];
+  if (!key || !isAstNode(property)) return undefined;
+  return { key, property };
+}
+
 function memberKey(node: AstNode): string | undefined {
   const property = node['property'];
   if (node['computed'] !== true) {
@@ -223,45 +239,38 @@ const rule: Rule.RuleModule = {
       startupFileSetting(context),
     );
     const declared = declaredEnvOf(startupPath);
-    let reportedStartupError = false;
+    const { error } = declared;
+
+    if (error) {
+      // One report per file, on its first read of process.env.
+      const reads: AstNode[] = [];
+      return {
+        MemberExpression(node) {
+          const read = processEnvRead(node);
+          if (read) reads.push(read.property);
+        },
+        'Program:exit'() {
+          const [first] = reads;
+          if (first) {
+            context.report({
+              node: first,
+              messageId: 'startupUnavailable',
+              data: { error },
+            });
+          }
+        },
+      };
+    }
 
     return {
       MemberExpression(node) {
-        if (
-          !isType(node, 'MemberExpression') ||
-          !isProcessEnvMember(node['object'])
-        ) {
-          return;
-        }
-
-        const key = memberKey(node);
-        const property = node['property'];
-        if (!key || !isAstNode(property)) {
-          return;
-        }
-
-        if (declared.error) {
-          if (reportedStartupError) {
-            return;
-          }
-          reportedStartupError = true;
-          context.report({
-            node: property,
-            messageId: 'startupUnavailable',
-            data: { error: declared.error },
-          });
-          return;
-        }
-
-        if (declared.keys.has(key)) {
-          return;
-        }
-
+        const read = processEnvRead(node);
+        if (!read || declared.keys.has(read.key)) return;
         context.report({
-          node: property,
+          node: read.property,
           messageId: 'undeclaredEnv',
           data: {
-            key,
+            key: read.key,
             startupFile: relativeToWorkspace(startupPath),
           },
         });

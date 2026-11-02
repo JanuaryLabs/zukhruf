@@ -10,11 +10,7 @@ import { Worker } from 'node:worker_threads';
 
 import { Hono } from 'hono';
 
-import {
-  CounterTokenSource,
-  type FencingToken,
-  type TokenSource,
-} from '@zukhruf/fencing';
+import type { FencingToken } from '@zukhruf/fencing';
 import { TemporaryFiles } from '@zukhruf/testing/fs';
 import { describe, test } from '@zukhruf/testing/node';
 
@@ -28,6 +24,7 @@ import {
   storeCases,
   timeoutForGrants,
 } from '../testing/store-cases.ts';
+import { tokensThatFailOnce } from '../testing/tokens-that-fail-once.ts';
 import { startWorker } from '../testing/worker-process.ts';
 import { Modes } from './acquire-modes/modes.ts';
 import { Mutex } from './mutex.ts';
@@ -965,19 +962,6 @@ describe('Process-tree mutex with IpcStore', () => {
   );
 });
 
-/** Counts tokens like CounterTokenSource, but its first mint fails, as a token file on a full disk would. */
-function tokensThatFailOnce(): TokenSource {
-  const counter = new CounterTokenSource();
-  let failed = false;
-  return {
-    async next(key) {
-      if (failed) return counter.next(key);
-      failed = true;
-      throw new Error('The token file could not be written.');
-    },
-  };
-}
-
 describe('A worker or child whose token cannot be minted', () => {
   test(
     'a worker thread learns that its acquire failed, takes another key, and that key is free once the thread stops',
@@ -985,7 +969,9 @@ describe('A worker or child whose token cannot be minted', () => {
     async () => {
       // Arrange: the parent's token source fails for the first grant.
       const coordinator = new ThreadLockCoordinator({
-        tokens: tokensThatFailOnce(),
+        tokens: tokensThatFailOnce(
+          new Error('The token file could not be written.'),
+        ),
       });
       const mutex = new Mutex(coordinator);
       const threadStoreUrl = new URL(
@@ -1058,7 +1044,9 @@ describe('A worker or child whose token cannot be minted', () => {
     async (t) => {
       // Arrange: the parent's token source fails for the first grant.
       const coordinator = new IpcLockCoordinator({
-        tokens: tokensThatFailOnce(),
+        tokens: tokensThatFailOnce(
+          new Error('The token file could not be written.'),
+        ),
       });
       const mutex = new Mutex(coordinator);
       const ipcStoreUrl = new URL(

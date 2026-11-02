@@ -120,7 +120,7 @@ function GraphFlowEffectsCanvas({
     if (!canvas) return;
     const data = segmentData(edges);
     const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)');
-    let cancelled = false;
+    const controller = new AbortController();
     let visible = false;
     let gpu: Gpu | undefined;
     let render: (() => void) | undefined;
@@ -134,7 +134,7 @@ function GraphFlowEffectsCanvas({
       previousTime = 0;
     };
     const fail = (error: unknown) => {
-      if (cancelled) return;
+      if (controller.signal.aborted) return;
       stop();
       render = undefined;
       resize = undefined;
@@ -201,16 +201,16 @@ function GraphFlowEffectsCanvas({
       // Import only for opted-in diagrams; the browser entry never loads Dawn.
       const [{ init, surface, storage, draw, frame }, { prepareShader }] =
         await Promise.all([import('vgpu'), import('@vgpu/wgsl/prepare')]);
-      if (cancelled) return;
+      if (controller.signal.aborted) return;
       gpu = await init({ powerPreference: 'low-power', label: 'diagram-flow' });
-      if (cancelled) {
+      if (controller.signal.aborted) {
         gpu.dispose();
         return;
       }
       const context = gpu;
       context.onError(fail);
       void context.lost.then((info) => {
-        if (!cancelled) fail(new Error(info.message));
+        if (!controller.signal.aborted) fail(new Error(info.message));
       });
       const target = surface(context, canvas, {
         autoResize: false,
@@ -267,7 +267,7 @@ function GraphFlowEffectsCanvas({
         colors: [target.format],
         sampleCount: target.sampleCount,
       });
-      if (cancelled || context.disposed) return;
+      if (controller.signal.aborted || context.disposed) return;
       setFailure(undefined);
       render = () => {
         const tint = readTint();
@@ -283,7 +283,7 @@ function GraphFlowEffectsCanvas({
     };
     void start().catch(fail);
     return () => {
-      cancelled = true;
+      controller.abort();
       stop();
       unsubscribe();
       unsubscribePlayhead?.();

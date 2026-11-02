@@ -2,24 +2,10 @@ import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
 
-import { CounterTokenSource, type TokenSource } from '@zukhruf/fencing';
-
 import { settle } from '../../testing/store-cases.ts';
+import { tokensThatFailOnce } from '../../testing/tokens-that-fail-once.ts';
 import { watch } from '../../testing/watch.ts';
 import { MemoryStore } from './memory-store.ts';
-
-/** Fails the first token it is asked for, and counts after that. */
-function failingOnce(failure: Error): TokenSource {
-  const counter = new CounterTokenSource();
-  let failed = false;
-  return {
-    next(key) {
-      if (failed) return counter.next(key);
-      failed = true;
-      return Promise.reject(failure);
-    },
-  };
-}
 
 describe('MemoryStore', () => {
   test('waiters get the key in the order they asked for it', async () => {
@@ -141,7 +127,7 @@ describe('MemoryStore', () => {
   test('an acquire whose token cannot be minted rejects with that error and leaves the key free', async () => {
     // Arrange
     const failure = new Error('The token source is unavailable.');
-    const store = new MemoryStore({ tokens: failingOnce(failure) });
+    const store = new MemoryStore({ tokens: tokensThatFailOnce(failure) });
 
     // Act
     const acquiring = store.acquire('product:42');

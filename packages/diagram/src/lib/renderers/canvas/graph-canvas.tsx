@@ -354,17 +354,17 @@ function GraphCanvas({
     const canvas = canvasRef.current;
     if (!canvas) return;
     const draw = () => drawGraphCanvas(canvas, layout, { accent, paper });
-    let stopped = false;
+    const controller = new AbortController();
     let unsubscribe: (() => void) | undefined;
     void Promise.all(
       canvasFonts(layout).map((font) => document.fonts.load(font)),
     ).then(() => {
-      if (stopped) return;
+      if (controller.signal.aborted) return;
       draw();
       unsubscribe = progress.on('change', draw);
     });
     return () => {
-      stopped = true;
+      controller.abort();
       unsubscribe?.();
     };
   }, [accent, layout, paper, progress]);

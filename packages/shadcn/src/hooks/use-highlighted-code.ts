@@ -11,18 +11,18 @@ export function useHighlightedCode(value: string, language: string) {
   const highlighter = loaded?.language === language ? loaded.highlighter : null;
 
   React.useEffect(() => {
-    let cancelled = false;
+    const controller = new AbortController();
 
     loadHighlighter(language)
       .then((next) => {
-        if (!cancelled) {
+        if (!controller.signal.aborted) {
           setLoaded({ language, highlighter: next });
         }
       })
       .catch(() => {});
 
     return () => {
-      cancelled = true;
+      controller.abort();
     };
   }, [language]);
 
