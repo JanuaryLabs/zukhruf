@@ -16,6 +16,7 @@ import {
 import { dependencyPolicy } from '../nx-policy/dependency-policy.ts';
 import { inIsland, inLibrary } from './island-scope.ts';
 import jsdomVirtualConsole from './jsdom-virtual-console.ts';
+import noAmbientTime from './no-ambient-time.ts';
 import noConsole from './no-console.ts';
 import noGenericPort from './no-generic-port.ts';
 import noProcessEnv from './no-process-env.ts';
@@ -32,6 +33,7 @@ const rules = {
   'dependency-checks': scopedRule(ruleOf(nx, 'dependency-checks'), inIsland),
   'no-process-env': scopedRule(noProcessEnv, inLibrary),
   'no-console': scopedRule(noConsole, inLibrary),
+  'no-ambient-time': scopedRule(noAmbientTime, inLibrary),
   'jsdom-virtual-console': scopedRule(jsdomVirtualConsole, inLibrary),
 };
 
@@ -71,6 +73,7 @@ configs['recommended'] = [
     rules: {
       'island/no-process-env': 'error',
       'island/no-console': 'error',
+      'island/no-ambient-time': 'error',
       'island/jsdom-virtual-console': 'error',
     },
   },

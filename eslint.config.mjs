@@ -116,11 +116,12 @@ export default defineConfig(
   // The event-detection eval is not shipped. Like the tests, it runs the
   // package with a real Collection of @zukhruf/embeddings. Its runner and its
   // fitter are command line programs: they read their environment and print
-  // the scores.
+  // the scores. An entry reads the time, as an app does.
   {
     files: ['packages/information-filtering/event-detection/eval/**'],
     rules: {
       '@nx/enforce-module-boundaries': moduleBoundaryRule('tests'),
+      'island/no-ambient-time': 'off',
     },
   },
   {
@@ -132,11 +133,13 @@ export default defineConfig(
   },
   // The relevance-filtering eval is not shipped. Like the tests, it runs the
   // package with real Collections of @zukhruf/embeddings. Its runner and its
-  // seed are command line programs: they print what they did.
+  // seed are command line programs: they print what they did. An entry reads
+  // the time, as an app does.
   {
     files: ['packages/information-filtering/relevance-filtering/eval/**'],
     rules: {
       '@nx/enforce-module-boundaries': moduleBoundaryRule('tests'),
+      'island/no-ambient-time': 'off',
     },
   },
   {
@@ -153,6 +156,13 @@ export default defineConfig(
   {
     files: ['packages/shutdown/src/shutdown.ts'],
     rules: { 'island/no-console': 'off' },
+  },
+  // The React components of @zukhruf/ui and @zukhruf/shadcn wait on the timers
+  // of the browser. How a component gets a clock is not decided yet (#3600),
+  // so island/no-ambient-time does not reach them.
+  {
+    files: ['packages/ui/src/**', 'packages/shadcn/src/**'],
+    rules: { 'island/no-ambient-time': 'off' },
   },
   // The examples of @zukhruf/mteb are not shipped. They are command line
   // programs: they read their arguments and print the scores.
