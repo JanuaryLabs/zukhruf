@@ -65,6 +65,33 @@ await preCommit([
 
 The step does not stage a file that was changed before the hook ran, or a changed file that `stage` does not name: another session can edit the same working tree. When `nx sync` fails, the commit stops, and the hook shows the reason that nx gave.
 
+## Refuse a Node or npm version written as a number
+
+`NoNumericPins` keeps every repo on the current LTS of Node and the latest npm. It reads the staged copy of each staged `.nvmrc`, workflow under `.github/`, Dockerfile and `package.json`. The commit stops when one of them picks a version by number:
+
+- an `.nvmrc` such as `22`, and a `node-version: '22.x'` of a workflow; write `lts/*`;
+- an image such as `FROM node:22-alpine`; write `node:lts-alpine`;
+- `npm@11` in a workflow or a Dockerfile, a `packageManager` such as `npm@11.0.0`, and an `allowScripts` key such as `esbuild@0.25.0`; write `npm@latest`, and name the package without a version;
+- `engines.node` and `engines.npm` in a `package.json`; drop them.
+
+Other files that hold versions stay out: `package-lock.json` keeps the engines of its dependencies, EAS requires an exact build Node in `eas.json`, an `@types/node` range is a dependency, `engines.vscode` names the editor, and dated docs record what ran.
+
+```ts
+import { Format, NoNumericPins, Sync, preCommit } from '@zukhruf/git-hooks';
+
+await preCommit([new Sync(), new Format(), new NoNumericPins()]);
+```
+
+## Lint the package.json of each touched project
+
+`DependencyChecks` lints the staged `package.json` of each project that the commit touches, with the repo's own ESLint config. The project of a staged file is the nearest folder above it that has a `package.json` in the commit. A dependency rule, such as Nx's `dependency-checks`, reports on `package.json`, so a lint of the staged source files alone never runs it. Without this step, an import of an undeclared package passes the commit and fails CI after the push. The step changes nothing. It needs `eslint` in the repo:
+
+```ts
+import { DependencyChecks, Format, preCommit } from '@zukhruf/git-hooks';
+
+await preCommit([new Format(), new DependencyChecks()]);
+```
+
 ## Build generated files
 
 `Codegen` runs nx targets that write generated files, and stages those files. With `when`, it builds only when nx says that the staged files affect one of those projects:

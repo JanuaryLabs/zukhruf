@@ -49,16 +49,22 @@
     "@zukhruf/fs": "^0.6.13"
   },
   "peerDependencies": {
+    "eslint": "^9.30.0 || ^10.0.0",
     "nx": ">=21.0.0",
     "prettier": "^3.0.0"
   },
   "peerDependenciesMeta": {
+    "eslint": {
+      "optional": true
+    },
     "nx": {
       "optional": true
     }
   },
   "devDependencies": {
     "@zukhruf/testing": "^0.6.13",
+    "eslint": "^10.12.0",
+    "jsonc-eslint-parser": "^3.3.0",
     "prettier": "^3.9.9"
   }
 }

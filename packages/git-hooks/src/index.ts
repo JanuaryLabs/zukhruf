@@ -1,7 +1,9 @@
 export { Build } from './build.ts';
 export { Codegen } from './codegen.ts';
 export { Commit } from './commit.ts';
+export { DependencyChecks } from './dependency-checks.ts';
 export { Format } from './format.ts';
+export { NoNumericPins } from './no-numeric-pins.ts';
 export { Push } from './push.ts';
 export type { RefUpdate } from './ref-update.ts';
 export { preCommit } from './scripts/pre-commit.ts';
