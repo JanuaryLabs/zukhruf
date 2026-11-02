@@ -1,73 +1,16 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { chmod, mkdir, symlink, writeFile } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
+import { mkdir } from 'node:fs/promises';
+import { join } from 'node:path';
 import { test } from 'node:test';
 import { promisify } from 'node:util';
 
 import { TemporaryFiles } from '@zukhruf/testing/fs';
 
-const execFileAsync = promisify(execFile);
-const packageEntry = import.meta.resolve('./index.ts');
+import { repository } from './testing/pre-commit-repository.ts';
 
-// A git repo in a temp folder whose pre-commit hook is `.husky/pre-commit.ts`,
-// reached through the committed link `.husky/pre-commit`, as a repo installs
-// it. git and the hook see none of the user's git config and no environment
-// of the Nx task that runs this test.
-async function repository(root: string, hook: string) {
-  const environment = {
-    PATH: `${dirname(process.execPath)}:/usr/bin:/bin`,
-    HOME: root,
-    GIT_CONFIG_GLOBAL: '/dev/null',
-    GIT_CONFIG_NOSYSTEM: '1',
-    GIT_AUTHOR_NAME: 'Test',
-    GIT_AUTHOR_EMAIL: 'test@example.com',
-    GIT_COMMITTER_NAME: 'Test',
-    GIT_COMMITTER_EMAIL: 'test@example.com',
-  };
-  const git = async (...args: string[]) =>
-    (await execFileAsync('git', args, { cwd: root, env: environment })).stdout;
-  await git('init', '--quiet', '--initial-branch=main');
-  await writeFile(join(root, 'package.json'), '{ "type": "module" }\n');
-  await writeFile(join(root, '.prettierrc'), '{ "singleQuote": true }\n');
-  await mkdir(join(root, '.husky'));
-  await writeFile(
-    join(root, '.husky/pre-commit.ts'),
-    `#!/usr/bin/env node\n${hook.replaceAll('@zukhruf/git-hooks', packageEntry)}`,
-  );
-  await chmod(join(root, '.husky/pre-commit.ts'), 0o755);
-  await symlink('pre-commit.ts', join(root, '.husky/pre-commit'));
-  return {
-    root,
-    git,
-    write: (path: string, content: string) =>
-      writeFile(join(root, path), content),
-    async commit(message: string) {
-      try {
-        const { stdout, stderr } = await execFileAsync(
-          'git',
-          ['-c', 'core.hooksPath=.husky', 'commit', '--quiet', '-m', message],
-          { cwd: root, env: environment },
-        );
-        return { code: 0, stdout, stderr };
-      } catch (error) {
-        if (
-          !(error instanceof Error) ||
-          !('code' in error) ||
-          !('stdout' in error) ||
-          !('stderr' in error)
-        )
-          throw error;
-        return {
-          code: Number(error.code),
-          stdout: String(error.stdout),
-          stderr: String(error.stderr),
-        };
-      }
-    },
-  };
-}
+const execFileAsync = promisify(execFile);
 
 test("a repo's own step stops the commit with its reason when it fails, a step that skips lets the next steps run, and no step runs after a failed one", async () => {
   // Arrange
