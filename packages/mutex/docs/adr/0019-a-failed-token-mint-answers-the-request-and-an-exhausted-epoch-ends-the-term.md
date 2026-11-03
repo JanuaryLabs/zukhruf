@@ -28,7 +28,7 @@ An answer cannot help here: no request of this term can get a token again. Only 
 
 ## Consequences
 
-- A worker or a child gets `GrantFailedError` for a failed mint. Its later requests are answered, and its keys are released when it stops. The tests in `A worker or child whose token cannot be minted` (`src/mutex/mutex.test.ts`) and `A request whose token cannot be minted` (`src/lock-stores/remote/remote-locking.test.ts`) show this.
+- A worker or a child gets `GrantFailedError` for a failed mint. Its later requests are answered, and its keys are released when it stops. The tests in `A worker or child whose token cannot be minted` (`src/mutex/mutex.test.ts`) and `A request whose token cannot be minted` (`src/lock-stores/remote/remote-locking.test.ts`) show this. [ADR 0030](./0030-each-lock-store-runs-the-lock-store-contract-from-its-own-tests-and-a-capability-is-a-typed-parameter.md) deletes `src/mutex/mutex.test.ts`. The worker test is now in `src/lock-stores/thread/thread-store.test.ts`, and the child test is in `src/lock-stores/ipc/ipc-store.test.ts`.
 - `GrantFailedError` has the `key`. The request did not run, and the key is not held.
 - A socket leader whose epoch has no tokens left steps down. Its followers continue with the next leader, and they keep their keys through its grace window. The test `A request whose epoch has no tokens left` (`src/lock-stores/remote/remote-locking.test.ts`) shows that the coordinator calls `onTokensExhausted` once and answers nothing. No test runs the step-down of `LockServer`, because a real epoch has its last token only after 2^32 grants.
 - The single flight has a copy of the coordinator session (`coordinator/session.ts`). That copy still closes the connection.

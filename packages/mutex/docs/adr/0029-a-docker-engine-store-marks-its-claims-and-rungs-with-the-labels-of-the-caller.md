@@ -31,7 +31,7 @@ new DockerEngineStore({
 });
 ```
 
-The README of `@zukhruf/testing` gives `defaults` as the seam for other container APIs. A read of `defaults` also records the test process. Thus the teardown of the run waits while that process runs. In the code step, the test fixtures of the mutex give these labels: `src/testing/store-cases.ts`, the fixture in `docker-engine-store.test.ts`, and its child script `holderSource`.
+The README of `@zukhruf/testing` gives `defaults` as the seam for other container APIs. A read of `defaults` also records the test process. Thus the teardown of the run waits while that process runs. In the code step, the test fixtures of the mutex give these labels: `src/testing/store-cases.ts`, the fixture in `docker-engine-store.test.ts`, and its child script `holderSource`. [ADR 0030](./0030-each-lock-store-runs-the-lock-store-contract-from-its-own-tests-and-a-capability-is-a-typed-parameter.md) deletes `src/testing/store-cases.ts`. The test fixture of `DockerEngineStore` is now in `src/testing/subjects/docker-engine.ts`, and it gives these labels.
 
 **A removal of rungs by these labels is safe.** A cleanup by the labels of the caller can remove the ladder of a key. Since [ADR 0028](./0028-a-docker-engine-token-is-the-higher-of-the-engine-time-and-the-ladder.md), the tokens after a removed ladder start at the engine time, which is higher than each earlier token. Thus no rule about who may remove the rungs is necessary.
 
