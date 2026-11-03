@@ -1,5 +1,5 @@
-import { existsSync } from 'node:fs';
-import { createRequire } from 'node:module';
+import { existsSync, readFileSync, realpathSync } from 'node:fs';
+import { createRequire, findPackageJSON } from 'node:module';
 import { basename, dirname, extname, join, relative } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
@@ -177,18 +177,40 @@ function tags(
 }
 
 // The project's own global setup wins; else the one of `@zukhruf/testing`,
-// resolved from the project root with the default conditions and written
-// relative to the `cwd` of the target (ADR 0005). Node reads the value as a
-// path, so a package name does not work.
+// found from the project root and written relative to the `cwd` of the target
+// (ADR 0005). Node reads the value as a path, so a package name does not work.
+// The path comes from the exports of the package, not from a resolve: the
+// build of `@zukhruf/testing` runs before the test (`^build`), but after the
+// project graph, so a fresh checkout has no file to resolve yet.
 function globalSetup(workspaceRoot: string, root: string) {
   const projectRoot = join(workspaceRoot, root);
   if (existsSync(join(projectRoot, ownGlobalSetup))) {
     return ownGlobalSetup;
   }
+  const missing = `${root} has the tag test:docker, so it needs @zukhruf/testing/docker-global-setup (install @zukhruf/testing) or a src/testing/docker-global-setup.ts of its own`;
+  let manifest: string | undefined;
+  try {
+    manifest = findPackageJSON(
+      '@zukhruf/testing',
+      join(projectRoot, 'package.json'),
+    );
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      'code' in error &&
+      error.code === 'ERR_MODULE_NOT_FOUND'
+    ) {
+      throw new Error(missing, { cause: error });
+    }
+    throw error;
+  }
+  if (manifest === undefined) throw new Error(missing);
+  const { exports } = JSON.parse(readFileSync(manifest, 'utf8'));
   return relative(
     projectRoot,
-    createRequire(join(projectRoot, 'package.json')).resolve(
-      '@zukhruf/testing/docker-global-setup',
+    join(
+      dirname(realpathSync(manifest)),
+      exports['./docker-global-setup'].default,
     ),
   );
 }

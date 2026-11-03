@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdir, realpath, symlink } from 'node:fs/promises';
+import { mkdir, readFile, realpath, symlink } from 'node:fs/promises';
 import { join, relative } from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
@@ -200,6 +200,36 @@ test('a test:docker project gets its own global setup, else the one of @zukhruf/
         false,
       ],
     ],
+  );
+});
+
+test('a test:docker project gets the global setup of @zukhruf/testing before that package is built', async () => {
+  // Arrange: a fresh checkout, where @zukhruf/testing has its exports but no dist yet.
+  await using folder = await new TemporaryFiles().directory('zukhruf-nx-');
+  const { exports } = JSON.parse(
+    await readFile(
+      join(zukhrufModules, '@zukhruf/testing/package.json'),
+      'utf8',
+    ),
+  );
+  const probe = await workspace(folder.path, {
+    'packages/shared/project.json':
+      '{ "name": "shared", "tags": ["test:docker"] }\n',
+    'packages/shared/src/x.test.ts': passing('x'),
+    'node_modules/@zukhruf/testing/package.json': JSON.stringify({
+      name: '@zukhruf/testing',
+      type: 'module',
+      exports,
+    }),
+  });
+
+  // Act
+  const targets = await probe.targets('shared');
+
+  // Assert: the path the run will find once the build of @zukhruf/testing ran.
+  assert.equal(
+    targets['test']?.options.command,
+    `node --test --no-warnings --test-timeout=240000 --test-global-setup=../../node_modules/@zukhruf/testing/dist/scripts/docker-global-setup.js --test-force-exit ${reporters}`,
   );
 });
 
