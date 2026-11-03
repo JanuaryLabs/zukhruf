@@ -32,6 +32,10 @@ _Avoid_: Retry (`patiently` of `@zukhruf/fs` tries an operation again after an e
 The source of the timers and of the time of a wait. The caller gives it: production gives `globalThis`, and a test gives a fake clock that the test moves. It has only the members that the wait calls.
 _Avoid_: TimeProvider (the name in .NET), scheduler, timer (a timer is one wait that the clock starts)
 
+**Wall clock**:
+A clock that also gives the wall time, from `Date.now()`. The wall time is the time of the calendar. It can jump, for example when the computer sleeps, but `performance.now()` does not jump. A caller that writes a date, for example the date of a result or the time of a file, takes a wall clock.
+_Avoid_: System clock (`globalThis` is the system clock), real-time clock (a hardware clock), calendar
+
 **Delay**:
 A wait of a fixed number of milliseconds on a clock. A cancel stops its timer.
 _Avoid_: Sleep, pause

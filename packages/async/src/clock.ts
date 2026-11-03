@@ -11,3 +11,13 @@ export interface Clock {
   clearTimeout(timer: unknown): void;
   performance: { now(): number };
 }
+
+/**
+ * A clock that also gives the wall time, from `Date.now()`. Production gives
+ * `globalThis`; a test gives `createClock()` and sets the wall time with
+ * `clock.setSystemTime(time)`. The wall time can jump, so a deadline uses
+ * `performance.now()`.
+ */
+export interface WallClock extends Clock {
+  Date: { now(): number };
+}

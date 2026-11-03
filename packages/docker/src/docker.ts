@@ -1,5 +1,7 @@
+import type { WallClock } from '@zukhruf/async';
+
 import { negotiateApiVersion } from './api-version.ts';
-import { Containers, type EngineClock } from './containers.ts';
+import { Containers } from './containers.ts';
 import {
   type DockerContext,
   type Environment,
@@ -27,7 +29,7 @@ function isEventMessage(value: unknown): value is EngineApi.EventMessage {
  */
 export type ConnectOptions = CancelOptions & {
   environment?: Environment;
-  clock: EngineClock;
+  clock: WallClock;
 } & ({ context?: string; host?: never } | { host?: string; context?: never });
 
 /** A client of one engine. Dispose it to close its connections. */
@@ -49,7 +51,7 @@ export class Docker implements AsyncDisposable {
     host: string,
     apiVersion: string,
     client: EngineClient,
-    clock: EngineClock,
+    clock: WallClock,
   ) {
     this.context = context;
     this.host = host;

@@ -1,4 +1,4 @@
-import type { Clock } from '@zukhruf/async';
+import type { WallClock } from '@zukhruf/async';
 
 import type { AbsTask, MTEBModels } from './abstasks/abstask.ts';
 import { AbsTaskRetrieval } from './abstasks/retrieval.ts';
@@ -45,11 +45,8 @@ export type EvaluateOptions = {
   readonly co2Tracker?: boolean;
   // The clock of the timings, of the date of each result and of the
   // emissions tracker: globalThis in a program, a fake clock in a test.
-  readonly clock: EvaluationClock;
+  readonly clock: WallClock;
 };
-
-/** The clock that an evaluation reads: the time of each phase and the date of each result. */
-export type EvaluationClock = Clock & { readonly Date: { now(): number } };
 
 type Splits = ReadonlyMap<SplitName, readonly HFSubset[]>;
 
@@ -79,7 +76,7 @@ export async function evaluate(
 }
 
 type Resolved = {
-  readonly clock: EvaluationClock;
+  readonly clock: WallClock;
   readonly raiseError: boolean;
   readonly encodeKwargs: EncodeKwargs;
   readonly cache: ResultCache | null;
@@ -167,7 +164,7 @@ function isTask(tasks: AbsTask | Iterable<AbsTask>): tasks is AbsTask {
 }
 
 type TaskOptions = {
-  readonly clock: EvaluationClock;
+  readonly clock: WallClock;
   readonly splits: Splits;
   readonly encodeKwargs: EncodeKwargs;
   readonly predictionFolder: string | null;

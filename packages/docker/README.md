@@ -548,18 +548,11 @@ export class Docker implements AsyncDisposable {
 /** The environment of the host program, such as process.env. The package reads only DOCKER_HOST, DOCKER_CONTEXT and DOCKER_CONFIG. */
 export type Environment = Readonly<Record<string, string | undefined>>;
 
-/** The clock of the waits of a client, and of the time of the files that it writes. Production gives `globalThis`. */
-export type EngineClock = {
-  setTimeout(callback: () => void, ms: number): unknown;
-  clearTimeout(timer: unknown): void;
-  performance: { now(): number };
-  Date: { now(): number };
-};
-
 /** A context or a host, never both. */
 export type ConnectOptions = CancelOptions & {
   environment?: Environment;
-  clock: EngineClock;
+  /** The clock of the waits of the client, and of the time of the files that it writes: a `WallClock` of `@zukhruf/async`. Production gives `globalThis`. */
+  clock: WallClock;
 } & ({ context?: string; host?: never } | { host?: string; context?: never });
 
 export interface DockerContext {

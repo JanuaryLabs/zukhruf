@@ -1,5 +1,7 @@
 # A wait runs on the clock that the caller gives
 
+Superseded in part on 2026-11-03 (#3706) for the type of a clock that also gives the wall time. Three packages of this workspace (`@zukhruf/docker`, `@zukhruf/git-hooks` and `@zukhruf/mteb`) and four types of elt declared the same type `Clock & { Date: { now(): number } }`. This package now exports it as `WallClock`, beside `Clock`. A caller that needs another member, for example `setInterval`, still declares its own type. The rest of the decision below stays true.
+
 `poll` and `pollChanges` wait between two attempts or two checks. Each wait calls `setTimeout` of `node:timers/promises` itself, and `poll` compares its deadline with the global `performance.now()`. A test can not move this time. A test of the election waits its full campaign. A test of an elt source waits a real one-second check, and then waits 1.5 seconds more to show that no other check found a change.
 
 [Root ADR 0004](../../../../docs/adr/0004-a-library-that-waits-takes-the-clock-as-an-input.md) decides that a library that waits takes the clock as an input. This ADR applies the decision to this package, the first package in the base layer.

@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 
-import { type Clock, poll } from '@zukhruf/async';
+import { type WallClock, poll } from '@zukhruf/async';
 import { FileLock } from '@zukhruf/fs';
 
 import { type RefUpdate, readRefUpdates } from './ref-update.ts';
@@ -39,7 +39,7 @@ interface PushOptions {
   readonly notice: (message: string) => void;
   // The clock of the wait for the lock, and of the time of each install:
   // `globalThis` in a hook, a fake clock in a test.
-  readonly clock: Clock & { readonly Date: { now(): number } };
+  readonly clock: WallClock;
 }
 
 // What `git push` is about to send: the remote and the ref updates. A step

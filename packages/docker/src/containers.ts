@@ -1,7 +1,7 @@
 import type { IncomingHttpHeaders, IncomingMessage } from 'node:http';
 import { posix } from 'node:path';
 
-import { type Clock, delay, poll } from '@zukhruf/async';
+import { type WallClock, delay, poll } from '@zukhruf/async';
 
 import { ContainerProcess } from './container-process.ts';
 import type * as EngineApi from './engine-api.ts';
@@ -174,16 +174,13 @@ function networksOf(container: EngineApi.ContainerInspectResponse): string[] {
   return [...networks];
 }
 
-/** The clock of an engine client: its waits, and the time of the files that it writes. */
-export type EngineClock = Clock & { Date: { now(): number } };
-
 /** A container, by the ID that the engine gave it. It has no disposal. */
 export class Container {
   readonly id: string;
   readonly #client: EngineClient;
-  readonly #clock: EngineClock;
+  readonly #clock: WallClock;
 
-  constructor(client: EngineClient, id: string, clock: EngineClock) {
+  constructor(client: EngineClient, id: string, clock: WallClock) {
     this.#client = client;
     this.id = id;
     this.#clock = clock;
@@ -871,9 +868,9 @@ export class OwnedContainer extends Container implements AsyncDisposable {
 export class Containers {
   readonly #client: EngineClient;
   readonly #images: Images;
-  readonly #clock: EngineClock;
+  readonly #clock: WallClock;
 
-  constructor(client: EngineClient, images: Images, clock: EngineClock) {
+  constructor(client: EngineClient, images: Images, clock: WallClock) {
     this.#client = client;
     this.#images = images;
     this.#clock = clock;

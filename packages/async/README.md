@@ -237,4 +237,20 @@ test('a job that comes during the second wait', async (t) => {
 - `createClock()` does not replace a global, so tests that run at the same time do not see each other's clock.
 - The type of the option is `Clock`. It has only the members that the wait calls: `setTimeout`, `clearTimeout` and `performance.now()`. `globalThis` and `createClock()` both have them.
 
+### Read the wall time from the clock
+
+A library that also reads the wall time, for example the date of a result, takes a `WallClock`. A `WallClock` is a `Clock` that also has `Date.now()`. `globalThis` and `createClock()` both have it. In a test, `clock.setSystemTime(time)` sets the wall time.
+
+```ts
+import type { WallClock } from '@zukhruf/async';
+
+function stamp(result: string, clock: WallClock) {
+  return { result, date: new Date(clock.Date.now()).toISOString() };
+}
+
+stamp('passed', globalThis);
+```
+
+The wall time can jump, for example when the computer sleeps. `performance.now()` does not jump. Thus a deadline uses `performance.now()`, and never the wall time.
+
 See [ADR 0005](./docs/adr/0005-a-wait-runs-on-the-clock-that-the-caller-gives.md).
