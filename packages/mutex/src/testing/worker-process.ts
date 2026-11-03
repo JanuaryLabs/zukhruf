@@ -22,7 +22,7 @@ const isWorkerMessage = (message: unknown): message is WorkerMessage =>
 
 export interface WorkerOptions {
   /** Joins the child to a coordinator before it can send anything. */
-  host?: { adoptProcess(child: ChildProcess): void };
+  admit?: (child: ChildProcess) => void;
   nodeOptions?: string[];
 }
 
@@ -45,7 +45,7 @@ const exitWithParent =
 export function startWorker(
   source: string,
   name: string,
-  { host, nodeOptions = [] }: WorkerOptions = {},
+  { admit, nodeOptions = [] }: WorkerOptions = {},
 ): WorkerProcess {
   const child = spawn(
     process.execPath,
@@ -58,7 +58,7 @@ export function startWorker(
     ],
     { stdio: ['pipe', 'ignore', 'pipe', 'ipc'] },
   );
-  host?.adoptProcess(child);
+  admit?.(child);
   const closed = Promise.withResolvers<void>();
   const worker: WorkerProcess = {
     child,

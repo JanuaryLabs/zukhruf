@@ -186,13 +186,13 @@ export default defineConfig(
           selector:
             "NewExpression[callee.object.name='pg'][callee.property.name='Pool']",
           message:
-            'Use postgresPool of src/testing/store-cases.ts with `await using`: it ends once the server has no session of the pool, so the database can be dropped (#3305).',
+            'Use postgresPool of src/testing/subjects/postgres.ts with `await using`: it ends once the server has no session of the pool, so the database can be dropped (#3305).',
         },
         {
           selector:
             "ImportDeclaration[source.value='pg'] > ImportSpecifier[imported.name='Pool']",
           message:
-            'Use postgresPool of src/testing/store-cases.ts with `await using` instead of a Pool of pg: it ends once the server has no session of the pool, so the database can be dropped (#3305).',
+            'Use postgresPool of src/testing/subjects/postgres.ts with `await using` instead of a Pool of pg: it ends once the server has no session of the pool, so the database can be dropped (#3305).',
         },
       ],
     },

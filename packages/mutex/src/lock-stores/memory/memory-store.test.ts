@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
 
-import { settle } from '../../testing/store-cases.ts';
+import { settle } from '../../testing/timing.ts';
 import { tokensThatFailOnce } from '../../testing/tokens-that-fail-once.ts';
 import { watch } from '../../testing/watch.ts';
 import { MemoryStore } from './memory-store.ts';

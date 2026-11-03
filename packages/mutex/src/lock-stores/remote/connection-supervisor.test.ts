@@ -7,7 +7,7 @@ import {
   scriptedConnector,
   scriptedPeer,
 } from '../../testing/scripted-peer.ts';
-import { settle } from '../../testing/store-cases.ts';
+import { settle } from '../../testing/timing.ts';
 import { watch } from '../../testing/watch.ts';
 import { ConnectionSupervisor } from './connection-supervisor.ts';
 

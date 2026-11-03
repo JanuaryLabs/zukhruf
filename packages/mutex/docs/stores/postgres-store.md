@@ -140,7 +140,7 @@ All three options are required. No option has a default.
 
 ## Evidence
 
-`PostgresStore` runs in each test of the lock-store matrix (`src/testing/store-cases.ts`) that its reach includes: in one process, across processes, and across threads. Each test gets a new database. The tests that read the files of a store do not run, because the store keeps no files.
+`PostgresStore` runs the lock-store contract from [`src/lock-stores/postgres/postgres-store.contract.test.ts`](../../src/lock-stores/postgres/postgres-store.contract.test.ts): the tests in one process, across processes, across threads, and the tests of a session and of a pool. Each test gets a new database. Its subject is [`src/testing/subjects/postgres.ts`](../../src/testing/subjects/postgres.ts).
 
 Each design error that the review found has a test in [`src/lock-stores/postgres/postgres-store.test.ts`](../../src/lock-stores/postgres/postgres-store.test.ts). The name of the test says what the wrong design broke:
 

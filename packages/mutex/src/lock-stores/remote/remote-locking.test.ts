@@ -12,7 +12,7 @@ import {
   scriptedConnector,
   scriptedPeer,
 } from '../../testing/scripted-peer.ts';
-import { settle } from '../../testing/store-cases.ts';
+import { settle } from '../../testing/timing.ts';
 import { tokensThatFailOnce } from '../../testing/tokens-that-fail-once.ts';
 import { ConnectionSupervisor } from './connection-supervisor.ts';
 import type { ClientConnector } from './connector.ts';

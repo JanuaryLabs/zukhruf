@@ -65,7 +65,7 @@ The token sources come from `@zukhruf/fencing`, for example `import { FileTokenS
 
 ## Evidence
 
-The single-process tests in `src/mutex/mutex.test.ts` run against `MemoryStore`:
+`src/lock-stores/memory/memory-store.contract.test.ts` runs the single-process tests of the lock-store contract against `MemoryStore`:
 
 - A waiter does not start before the holder finishes.
 - Three concurrent requests run one at a time, and each gets its own result.

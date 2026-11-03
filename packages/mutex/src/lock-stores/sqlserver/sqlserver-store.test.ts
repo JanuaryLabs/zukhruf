@@ -1,16 +1,11 @@
 import assert from 'node:assert/strict';
-import { once } from 'node:events';
-import { type Socket, connect, createServer } from 'node:net';
-import { type TestContext, test } from 'node:test';
-import { setTimeout as delay } from 'node:timers/promises';
+import { test } from 'node:test';
 
-import { createClock } from '@sinonjs/fake-timers';
 import { Connection, Request, TYPES } from 'tedious';
 
 import { type Database, SqlServer } from '@zukhruf/testing/sqlserver';
 
-import { LeaseLostError } from '../../index.ts';
-import { deadlineFor, storeCases } from '../../testing/store-cases.ts';
+import { type Endpoint } from '../../testing/tcp-proxy.ts';
 import { type SqlServerSession, SqlServerStore } from './index.ts';
 
 /**
@@ -26,11 +21,6 @@ const heartbeatInterval = 200;
 interface Column {
   metadata: { colName: string };
   value: unknown;
-}
-
-interface Endpoint {
-  host: string;
-  port: number;
 }
 
 /** A new database with the token sequence that the app creates before it starts. */
@@ -103,469 +93,65 @@ const storeOver = (database: Database, endpoint: Endpoint = database) =>
     clock: globalThis,
   });
 
-/** Runs `text` on a session of the test, not of a store. */
-async function observe(database: Database, text: string) {
-  const session = await sessionTo(database, database);
-  try {
-    return await session.query(text, {});
-  } finally {
-    session.close();
+test('the tokens of later grants are larger, across stores', async () => {
+  // Arrange
+  await using database = await sqlServerDatabase();
+  const stores = [storeOver(database), storeOver(database)];
+  const tokens: bigint[] = [];
+
+  // Act
+  for (let index = 0; index < 4; index++) {
+    const store = stores[index % 2];
+    assert.ok(store);
+    await using handle = await store.acquire('report:daily');
+    tokens.push(handle.token.value);
   }
-}
 
-/** Resolves when a session of the database waits for an application lock. */
-async function untilASessionWaitsForALock(t: TestContext, database: Database) {
-  await t.waitFor(
-    async () => {
-      const rows = await observe(
-        database,
-        `SELECT count(*) AS waiting FROM sys.dm_tran_locks
-         WHERE resource_type = N'APPLICATION' AND resource_database_id = DB_ID() AND request_status = N'WAIT'`,
-      );
-      assert.ok(Number(rows[0]?.waiting) > 0, 'No session waits for a lock.');
-    },
-    { interval: 10, timeout: 10_000 },
-  );
-}
+  // Assert
+  assert.deepEqual(tokens, [1n, 2n, 3n, 4n]);
+});
 
-/**
- * A TCP proxy in front of the server. `partition()` stops forwarding in both
- * directions and closes no socket: the network stopped without a reset.
- */
-async function proxyTo(target: Endpoint) {
-  const partitioned = new AbortController();
-  const sockets = new Set<Socket>();
-  const server = createServer((client) => {
-    const upstream = connect(target.port, target.host);
-    for (const [from, to] of [
-      [client, upstream],
-      [upstream, client],
-    ] as const) {
-      sockets.add(from);
-      from.on('error', () => {});
-      from.on('close', () => to.destroy());
-      from.on('data', (chunk) => {
-        if (!partitioned.signal.aborted) to.write(chunk);
-      });
-    }
-  });
-  server.listen(0, '127.0.0.1');
-  await once(server, 'listening');
-  const address = server.address();
-  assert.ok(address !== null && typeof address === 'object');
-  return {
-    host: '127.0.0.1',
-    port: address.port,
-    partition: () => partitioned.abort(),
-    [Symbol.asyncDispose]: async () => {
-      for (const socket of sockets) socket.destroy();
-      server.close();
-    },
-  };
-}
+test('a key is free for another store as soon as its release resolves', async () => {
+  // Arrange: the server sees a closed connection a little later than the
+  // close. The other store gets sessions that are already open, as from a pool.
+  await using database = await sqlServerDatabase();
+  const holder = storeOver(database);
+  let busy = 0;
 
-test(
-  'two stores on one database never hold a key at the same time',
-  { timeout: 60_000 },
-  async () => {
-    // Arrange
-    await using database = await sqlServerDatabase();
-    const stores = [storeOver(database), storeOver(database)];
-    let holders = 0;
-    let most = 0;
-
-    // Act: ten callers in each store want one key.
-    await Promise.all(
-      stores.flatMap((store) =>
-        Array.from({ length: 10 }, async () => {
-          await using _ = await store.acquire('report:daily');
-          holders++;
-          most = Math.max(most, holders);
-          await delay(5);
-          holders--;
-        }),
-      ),
-    );
-
-    // Assert
-    assert.equal(most, 1);
-  },
-);
-
-test(
-  'a waiter in another store gets the key after the holder releases',
-  { timeout: 60_000 },
-  async (t) => {
-    // Arrange
-    await using database = await sqlServerDatabase();
-    const holder = await storeOver(database).acquire('report:daily');
-    const waiting = storeOver(database).acquire('report:daily');
-    await untilASessionWaitsForALock(t, database);
-
-    // Act
-    await holder[Symbol.asyncDispose]();
-    const granted = await Promise.race([waiting, delay(5000, 'still waiting')]);
-
-    // Assert
-    assert.notEqual(granted, 'still waiting');
-    if (typeof granted !== 'string') await granted[Symbol.asyncDispose]();
-  },
-);
-
-test(
-  'tryAcquire gives up on a key that another store holds',
-  { timeout: 60_000 },
-  async () => {
-    // Arrange
-    await using database = await sqlServerDatabase();
-    await using _ = await storeOver(database).acquire('report:daily');
-
-    // Act
-    const attempt = await storeOver(database).tryAcquire('report:daily');
-
-    // Assert
-    assert.equal(attempt, undefined);
-  },
-);
-
-test(
-  'isHeld answers true for a holder in another store and false after the release, without taking the key',
-  { timeout: 60_000 },
-  async () => {
-    // Arrange
-    await using database = await sqlServerDatabase();
-    const checker = storeOver(database);
-    const holder = await storeOver(database).acquire('report:daily');
-
-    // Act
-    const whileHeld = await checker.isHeld('report:daily');
-    await holder[Symbol.asyncDispose]();
-    const afterRelease = await checker.isHeld('report:daily');
-    const attempt = await storeOver(database).tryAcquire('report:daily');
-
-    // Assert
-    assert.deepEqual([whileHeld, afterRelease], [true, false]);
-    assert.ok(attempt, 'A holder check must leave the free key free');
-    await attempt[Symbol.asyncDispose]();
-  },
-);
-
-test(
-  'the tokens of later grants are larger, across stores',
-  { timeout: 60_000 },
-  async () => {
-    // Arrange
-    await using database = await sqlServerDatabase();
-    const stores = [storeOver(database), storeOver(database)];
-    const tokens: bigint[] = [];
-
-    // Act
-    for (let index = 0; index < 4; index++) {
-      const store = stores[index % 2];
-      assert.ok(store);
-      await using handle = await store.acquire('report:daily');
-      tokens.push(handle.token.value);
-    }
-
-    // Assert
-    assert.deepEqual(tokens, [1n, 2n, 3n, 4n]);
-  },
-);
-
-test(
-  'a cancelled acquire rejects with the reason of its signal',
-  { timeout: 60_000 },
-  async (t) => {
-    // Arrange
-    await using database = await sqlServerDatabase();
-    await using _ = await storeOver(database).acquire('report:daily');
-    const cancel = new AbortController();
-    const reason = new Error('cancelled');
-    const waiting = storeOver(database).acquire('report:daily', {
-      signal: cancel.signal,
-    });
-    await untilASessionWaitsForALock(t, database);
-
-    // Act
-    cancel.abort(reason);
-    const outcome = await Promise.race([
-      waiting.then(
-        (value) => value,
-        (error: unknown) => error,
-      ),
-      delay(1000, 'still waiting' as const),
-    ]);
-
-    // Assert
-    assert.equal(outcome, reason);
-  },
-);
-
-test(
-  'a key is free for another store as soon as its release resolves',
-  { timeout: 120_000 },
-  async () => {
-    // Arrange: the server sees a closed connection a little later than the
-    // close. The other store gets sessions that are already open, as from a pool.
-    await using database = await sqlServerDatabase();
-    const holder = storeOver(database);
-    let busy = 0;
-
-    // Act
-    for (let round = 0; round < 200; round++) {
-      const open = await sessionTo(database, database);
-      const other = new SqlServerStore({
-        connect: async () => open,
-        sequence,
-        heartbeatInterval,
-        clock: globalThis,
-      });
-      const handle = await holder.acquire(`report:${round}`);
-      await handle[Symbol.asyncDispose]();
-      const attempt = await other.tryAcquire(`report:${round}`);
-      if (attempt) await attempt[Symbol.asyncDispose]();
-      else busy++;
-    }
-
-    // Assert
-    assert.equal(
-      busy,
-      0,
-      'A release must free the key on the server before it resolves',
-    );
-  },
-);
-
-test(
-  'a cancelled waiter that the server grants later gives the key to the next waiter',
-  { timeout: 60_000 },
-  async (t) => {
-    // Arrange: a holder, and a waiter in another store that cancels.
-    await using database = await sqlServerDatabase();
-    const holder = await storeOver(database).acquire('report:daily');
-    const cancel = new AbortController();
-    const waiting = storeOver(database).acquire('report:daily', {
-      signal: cancel.signal,
-    });
-    await untilASessionWaitsForALock(t, database);
-    cancel.abort(new Error('cancelled'));
-    await assert.rejects(waiting);
-
-    // Act: the holder releases, so the server can grant the cancelled waiter's place first.
-    await holder[Symbol.asyncDispose]();
-    const next = await Promise.race([
-      storeOver(database).acquire('report:daily'),
-      delay(2000, 'still waiting' as const),
-    ]);
-
-    // Assert
-    assert.notEqual(
-      next,
-      'still waiting',
-      'A grant to a cancelled waiter must be released, so the next waiter gets the key',
-    );
-    if (typeof next !== 'string') await next[Symbol.asyncDispose]();
-  },
-);
-
-test(
-  'two keys that differ only after 255 characters are two locks',
-  { timeout: 60_000 },
-  async () => {
-    // Arrange: sp_getapplock cuts a longer resource name to 255 characters.
-    await using database = await sqlServerDatabase();
-    const prefix = 'k'.repeat(255);
-    await using _ = await storeOver(database).acquire(`${prefix}:a`);
-
-    // Act
-    const other = await storeOver(database).tryAcquire(`${prefix}:b`);
-
-    // Assert
-    assert.ok(other, 'A key must not wait for another key');
-    await other[Symbol.asyncDispose]();
-  },
-);
-
-test(
-  'a held key is still held one heartbeat interval after the server stops answering, and lost at two, on the clock of the store',
-  { timeout: 60_000 },
-  async (t) => {
-    // Arrange: the store reaches the server through a proxy, and holds a key.
-    await using database = await sqlServerDatabase();
-    await using proxy = await proxyTo(database);
-    const clock = createClock();
-    const handle = await new SqlServerStore({
-      connect: () => sessionTo(database, proxy),
+  // Act
+  for (let round = 0; round < 200; round++) {
+    const open = await sessionTo(database, database);
+    const other = new SqlServerStore({
+      connect: async () => open,
       sequence,
       heartbeatInterval,
-      clock,
-    }).acquire('report:daily');
-    // The network stops silently while the key is held.
-    proxy.partition();
-    // The next heartbeat waits one interval on the clock.
-    await t.waitFor(() => assert.equal(clock.countTimers(), 1), {
-      timeout: 5_000,
-    });
-
-    // Act: the heartbeat asks, and the partition holds the answer.
-    await clock.tickAsync(heartbeatInterval);
-    // The time limit of the heartbeat waits on the clock.
-    await t.waitFor(() => assert.equal(clock.countTimers(), 1), {
-      timeout: 5_000,
-    });
-    const heldAfterOne = !handle.signal.aborted;
-    await clock.tickAsync(heartbeatInterval);
-
-    // Assert
-    assert.equal(heldAfterOne, true, 'The heartbeat must wait for its answer');
-    assert.equal(
-      handle.signal.aborted,
-      true,
-      'The holder must learn that its session may be gone',
-    );
-    assert.ok(handle.signal.reason instanceof LeaseLostError);
-  },
-);
-
-test(
-  'a held key is lost at once when the server kills its session',
-  { timeout: 60_000 },
-  async () => {
-    // Arrange: a heartbeat far away, so only the end of the session can tell the holder.
-    await using database = await sqlServerDatabase();
-    const store = new SqlServerStore({
-      connect: () => sessionTo(database, database),
-      sequence,
-      heartbeatInterval: 30_000,
       clock: globalThis,
     });
-    const handle = await store.acquire('report:daily');
-    const [holder] = await observe(
-      database,
-      `SELECT request_session_id AS id FROM sys.dm_tran_locks
-       WHERE resource_type = N'APPLICATION' AND resource_database_id = DB_ID() AND request_status = N'GRANT'`,
-    );
+    const handle = await holder.acquire(`report:${round}`);
+    await handle[Symbol.asyncDispose]();
+    const attempt = await other.tryAcquire(`report:${round}`);
+    if (attempt) await attempt[Symbol.asyncDispose]();
+    else busy++;
+  }
 
-    // Act: listen first, because the end of the session can arrive before the KILL answers.
-    const aborted = once(handle.signal, 'abort');
-    await observe(database, `KILL ${Number(holder?.id)}`);
-    const lost = await Promise.race([
-      aborted.then(() => 'lost' as const),
-      delay(2000, 'still held' as const),
-    ]);
+  // Assert
+  assert.equal(
+    busy,
+    0,
+    'A release must free the key on the server before it resolves',
+  );
+});
 
-    // Assert
-    assert.equal(lost, 'lost', 'The holder must learn that its session ended');
-    assert.ok(handle.signal.reason instanceof LeaseLostError);
-  },
-);
+test('two keys that differ only after 255 characters are two locks', async () => {
+  // Arrange: sp_getapplock cuts a longer resource name to 255 characters.
+  await using database = await sqlServerDatabase();
+  const prefix = 'k'.repeat(255);
+  await using _ = await storeOver(database).acquire(`${prefix}:a`);
 
-/**
- * A session that connects again by itself when the server ends its
- * connection, and tells the store nothing, as the `ConnectionPool` of mssql
- * does. The store's listeners hear nothing. A query that fails on the ended
- * connection runs again on the new one. `reconnected` resolves once the new
- * connection is up.
- * Queries on the new connection wait until `resume()`, so the test
- * decides when the store sees it.
- */
-async function silentlyReconnectingSession(database: Database) {
-  const open = async () => {
-    const connection = await sessionTo(database, database);
-    connection.on('error', () => {});
-    return connection;
-  };
-  let current = await open();
-  const [first] = await current.query('SELECT @@SPID AS id', {});
-  const reconnected = Promise.withResolvers<void>();
-  const resumed = Promise.withResolvers<void>();
-  let reconnectedYet = false;
-  current.on('end', () => {
-    open().then((next) => {
-      current = next;
-      reconnectedYet = true;
-      reconnected.resolve();
-    }, reconnected.reject);
-  });
-  const session: SqlServerSession = {
-    query: async (text, parameters) => {
-      try {
-        if (!reconnectedYet) return await current.query(text, parameters);
-      } catch {
-        await reconnected.promise;
-      }
-      await resumed.promise;
-      return current.query(text, parameters);
-    },
-    on: () => session,
-    close: () => current.close(),
-  };
-  return {
-    session,
-    id: Number(first?.id),
-    reconnected: reconnected.promise,
-    resume: () => resumed.resolve(),
-  };
-}
+  // Act
+  const other = await storeOver(database).tryAcquire(`${prefix}:b`);
 
-test(
-  'a session that reconnects silently loses its lease',
-  { timeout: 60_000 },
-  async () => {
-    // Arrange: the holder's session hides the end of its connection and connects again.
-    // The store sees the new connection only after the other store took the key, and
-    // a heartbeat interval longer than a reconnect and a take keeps its beat in time.
-    const interval = 1000;
-    const sqlServer = storeCases.find(
-      (candidate) => candidate.name === 'SqlServerStore',
-    );
-    assert.ok(sqlServer);
-    const deadline = deadlineFor(sqlServer, 2 * interval, {
-      grants: 1,
-      releases: 1,
-    });
-    await using database = await sqlServerDatabase();
-    const reconnecting = await silentlyReconnectingSession(database);
-    const store = new SqlServerStore({
-      connect: async () => reconnecting.session,
-      sequence,
-      heartbeatInterval: interval,
-      clock: globalThis,
-    });
-    const handle = await store.acquire('report:daily');
-    await using other = new AsyncDisposableStack();
-    try {
-      // Act: the server ends the holder's connection, which frees the key, and another store takes the key.
-      // Listen first, so the deadline counts from the end of the connection.
-      const lost = Promise.race([
-        once(handle.signal, 'abort').then(() => 'lost' as const),
-        delay(deadline, 'still held' as const),
-      ]);
-      await observe(database, `KILL ${reconnecting.id}`);
-      await reconnecting.reconnected;
-      const heldAfterReconnect = !handle.signal.aborted;
-      const taken = await storeOver(database).tryAcquire('report:daily');
-      if (taken) other.use(taken);
-      reconnecting.resume();
-
-      // Assert: the heartbeat asks whether this session holds the lock, not whether any session does.
-      assert.ok(
-        heldAfterReconnect,
-        'The reconnect itself must not lose the lease',
-      );
-      assert.ok(taken, 'The ended connection must have freed the key');
-      assert.equal(
-        await lost,
-        'lost',
-        `A session that answers but no longer holds the lock must lose the lease within ${deadline} ms of the end of its connection`,
-      );
-      const reason: unknown = handle.signal.reason;
-      assert.ok(reason instanceof LeaseLostError);
-      assert.match(String(reason.cause), /no longer holds the lock/);
-    } finally {
-      reconnecting.resume();
-      await other.disposeAsync();
-      await handle[Symbol.asyncDispose]();
-    }
-  },
-);
+  // Assert
+  assert.ok(other, 'A key must not wait for another key');
+  await other[Symbol.asyncDispose]();
+});

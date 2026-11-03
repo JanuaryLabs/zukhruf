@@ -1,48 +1,17 @@
 import assert from 'node:assert/strict';
-import { getEventListeners } from 'node:events';
 import { test } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
-import { Worker } from 'node:worker_threads';
 
 import { createClock } from '@sinonjs/fake-timers';
 
 import { describe } from '@zukhruf/testing/node';
 
 import { MemoryStore } from '../lock-stores/memory/memory-store.ts';
-import { newProcessTimeout } from '../testing/new-process-timeout.ts';
-import {
-  type StoreHost,
-  deadlineFor,
-  reaches,
-  settle,
-  storeCases,
-  timeoutForGrants,
-} from '../testing/store-cases.ts';
-import { startWorker } from '../testing/worker-process.ts';
+import { hold } from '../testing/hold.ts';
+import { settle } from '../testing/timing.ts';
 import type { AcquireMode } from './acquire-mode.ts';
 import { Modes } from './acquire-modes/modes.ts';
 import { Mutex } from './mutex.ts';
-
-const mutexUrl = new URL('./mutex.ts', import.meta.url);
-const modesUrl = new URL('./acquire-modes/modes.ts', import.meta.url);
-const storeCasesUrl = new URL('../testing/store-cases.ts', import.meta.url);
-
-/** Holds `key` until the returned `release` is called. */
-async function hold(mutex: Mutex, key: string) {
-  const entered = Promise.withResolvers<void>();
-  const finish = Promise.withResolvers<void>();
-  const held = mutex.acquire(key, async () => {
-    entered.resolve();
-    await finish.promise;
-  });
-  await entered.promise;
-  return {
-    release: async () => {
-      finish.resolve();
-      await held;
-    },
-  };
-}
 
 /** Resolves `'done'` if `work` settles within `milliseconds`, otherwise `'still waiting'`. */
 function within(work: Promise<unknown>, milliseconds: number) {
@@ -51,370 +20,6 @@ function within(work: Promise<unknown>, milliseconds: number) {
     delay(milliseconds, 'still waiting' as const, { ref: false }),
   ]);
 }
-
-void describe.each(storeCases, (store) =>
-  describe(`Acquire modes with ${store.name}`, () => {
-    test(
-      'skipIfBusy gives up at once while another holder has the key, and does not run the task',
-      { timeout: timeoutForGrants(store, 2) },
-      async () => {
-        // Arrange
-        await using fixture = await store.fixture(process.env);
-        await using host = store.open(fixture.location);
-        const mutex = new Mutex(host.store);
-        const holder = await hold(mutex, 'report:daily');
-        let ran = false;
-
-        try {
-          // Act
-          const started = performance.now();
-          const result = await mutex.acquire(
-            'report:daily',
-            async () => {
-              ran = true;
-              return 'report';
-            },
-            { mode: Modes.skipIfBusy() },
-          );
-          const waited = performance.now() - started;
-
-          // Assert
-          assert.deepEqual(result, { acquired: false });
-          assert.equal(ran, false, 'A skipped caller must not run its task');
-          const limit = deadlineFor(store, 2000, { grants: 1, releases: 0 });
-          assert.ok(
-            waited < limit,
-            `The caller gave up after ${waited.toFixed(0)} ms, not at once (within ${limit} ms)`,
-          );
-        } finally {
-          await holder.release();
-        }
-      },
-    );
-
-    test('skipIfBusy acquires a free key and gives back the task value', async () => {
-      // Arrange
-      await using fixture = await store.fixture(process.env);
-      await using host = store.open(fixture.location);
-      const mutex = new Mutex(host.store);
-
-      // Act
-      const result = await mutex.acquire('report:daily', async () => 'report', {
-        mode: Modes.skipIfBusy(),
-      });
-
-      // Assert
-      assert.deepEqual(result, { acquired: true, value: 'report' });
-    });
-
-    test(
-      'skipIfBusy({ waitAtMost }) gives up after exactly the limit on its clock while the key stays busy',
-      { timeout: timeoutForGrants(store, 2) },
-      async (t) => {
-        // Arrange: the limit runs on a fake clock; the lock store runs on real time.
-        await using fixture = await store.fixture(process.env);
-        await using host = store.open(fixture.location);
-        const mutex = new Mutex(host.store);
-        const holder = await hold(mutex, 'report:daily');
-        const clock = createClock();
-
-        try {
-          const skipping = mutex.acquire('report:daily', async () => 'report', {
-            mode: Modes.skipIfBusy({ waitAtMost: 100, clock }),
-          });
-          // The lock store answered that the key is busy, so the limit runs.
-          await t.waitFor(() => assert.equal(clock.countTimers(), 1), {
-            timeout: timeoutForGrants(store, 1),
-          });
-
-          // Act
-          await clock.tickAsync(99);
-          const limitsAt99 = clock.countTimers();
-          await clock.tickAsync(1);
-
-          // Assert
-          assert.equal(limitsAt99, 1, 'The limit must not end before 100 ms');
-          assert.deepEqual(await skipping, { acquired: false });
-        } finally {
-          await holder.release();
-        }
-      },
-    );
-
-    test(
-      'skipIfBusy({ waitAtMost }) acquires when the key is released within the limit',
-      { timeout: timeoutForGrants(store, 2) },
-      async () => {
-        // Arrange
-        await using fixture = await store.fixture(process.env);
-        await using host = store.open(fixture.location);
-        const mutex = new Mutex(host.store);
-        const holder = await hold(mutex, 'report:daily');
-
-        // Act
-        const attempt = mutex.acquire('report:daily', async () => 'report', {
-          mode: Modes.skipIfBusy({ waitAtMost: 2000, clock: globalThis }),
-        });
-        await delay(50);
-        await holder.release();
-
-        // Assert
-        assert.deepEqual(await attempt, { acquired: true, value: 'report' });
-      },
-    );
-
-    test(
-      'a caller that gave up does not block the callers after it',
-      { timeout: timeoutForGrants(store, 3) },
-      async () => {
-        // Arrange: a holder, a caller that gives up, and a caller that waits behind it.
-        await using fixture = await store.fixture(process.env);
-        await using host = store.open(fixture.location);
-        const mutex = new Mutex(host.store);
-        const holder = await hold(mutex, 'report:daily');
-        const gaveUp = await mutex.acquire(
-          'report:daily',
-          async () => 'report',
-          {
-            mode: Modes.skipIfBusy({ waitAtMost: 50, clock: globalThis }),
-          },
-        );
-        const waiter = mutex.acquire('report:daily', async () => 'report');
-
-        // Act
-        await holder.release();
-
-        // Assert
-        assert.deepEqual(gaveUp, { acquired: false });
-        assert.equal(
-          await waiter,
-          'report',
-          'The waiting caller must get the key; the caller that gave up must not keep it',
-        );
-      },
-    );
-
-    test(
-      "a key's default mode applies, and one call can override it",
-      { timeout: timeoutForGrants(store, 3) },
-      async () => {
-        // Arrange: callers of this key skip by default.
-        await using fixture = await store.fixture(process.env);
-        await using host = store.open(fixture.location);
-        const mutex = new Mutex(host.store);
-        const report = mutex.key('report:daily', { mode: Modes.skipIfBusy() });
-        const holder = await hold(mutex, report.name);
-
-        // Act: one caller uses the default, another overrides it and waits.
-        const skipped = await report.run(async () => 'cron run');
-        const waited = report.run(async () => 'admin run', {
-          mode: Modes.wait(),
-        });
-        await delay(50);
-        await holder.release();
-
-        // Assert
-        assert.deepEqual(skipped, { acquired: false });
-        assert.equal(
-          await waited,
-          'admin run',
-          'An override to wait must run the task and give its value',
-        );
-      },
-    );
-
-    test(
-      'a waiting caller that cancels rejects with its reason, and the callers after it still get the key',
-      { timeout: timeoutForGrants(store, 3) },
-      async () => {
-        // Arrange: a holder, a caller that will cancel, and a caller that waits.
-        await using fixture = await store.fixture(process.env);
-        await using host = store.open(fixture.location);
-        const mutex = new Mutex(host.store);
-        const holder = await hold(mutex, 'report:daily');
-        const cancel = new AbortController();
-        const reason = new Error('cancelled');
-        let ran = false;
-        const cancelled = mutex.acquire(
-          'report:daily',
-          async () => {
-            ran = true;
-          },
-          { signal: cancel.signal },
-        );
-        const next = mutex.acquire('report:daily', async () => 'next');
-
-        try {
-          assert.equal(
-            await within(
-              cancelled,
-              deadlineFor(store, settle, { grants: 1, releases: 0 }),
-            ),
-            'still waiting',
-          );
-
-          // Act
-          cancel.abort(reason);
-
-          // Assert
-          await assert.rejects(cancelled, (error) => error === reason);
-        } finally {
-          await holder.release();
-        }
-        assert.equal(
-          await next,
-          'next',
-          'The caller that cancelled must not keep the key from the caller after it',
-        );
-        assert.equal(
-          ran,
-          false,
-          'A caller that cancelled must not run its task',
-        );
-      },
-    );
-
-    test(
-      'skipIfBusy({ waitAtMost }) rejects with the reason when its caller cancels before the limit',
-      { timeout: timeoutForGrants(store, 2) },
-      async () => {
-        // Arrange
-        await using fixture = await store.fixture(process.env);
-        await using host = store.open(fixture.location);
-        const mutex = new Mutex(host.store);
-        const holder = await hold(mutex, 'report:daily');
-        const cancel = new AbortController();
-        const reason = new Error('cancelled');
-        const attempt = mutex.acquire('report:daily', async () => 'report', {
-          mode: Modes.skipIfBusy({ waitAtMost: 10_000, clock: globalThis }),
-          signal: cancel.signal,
-        });
-
-        try {
-          assert.equal(
-            await within(
-              attempt,
-              deadlineFor(store, settle, { grants: 1, releases: 0 }),
-            ),
-            'still waiting',
-          );
-
-          // Act
-          cancel.abort(reason);
-
-          // Assert: a cancel is a rejection, not a mode that gave up.
-          await assert.rejects(attempt, (error) => error === reason);
-        } finally {
-          await holder.release();
-        }
-      },
-    );
-
-    test(
-      'skipIfBusy({ waitAtMost }) still gives up after the limit when its caller has a signal that does not abort',
-      { timeout: timeoutForGrants(store, 2) },
-      async () => {
-        // Arrange
-        await using fixture = await store.fixture(process.env);
-        await using host = store.open(fixture.location);
-        const mutex = new Mutex(host.store);
-        const holder = await hold(mutex, 'report:daily');
-
-        try {
-          // Act
-          const result = await mutex.acquire(
-            'report:daily',
-            async () => 'report',
-            {
-              mode: Modes.skipIfBusy({ waitAtMost: 100, clock: globalThis }),
-              signal: new AbortController().signal,
-            },
-          );
-
-          // Assert
-          assert.deepEqual(result, { acquired: false });
-        } finally {
-          await holder.release();
-        }
-      },
-    );
-
-    test('a caller that already cancelled rejects in every mode, and leaves a free key free', async () => {
-      // Arrange
-      await using fixture = await store.fixture(process.env);
-      await using host = store.open(fixture.location);
-      const mutex = new Mutex(host.store);
-      const reason = new Error('cancelled');
-      const signal = AbortSignal.abort(reason);
-      let ran = false;
-      const task = async () => {
-        ran = true;
-      };
-
-      // Act
-      const results = await Promise.allSettled([
-        mutex.acquire('report:daily', task, { signal }),
-        mutex.acquire('report:daily', task, { mode: Modes.wait(), signal }),
-        mutex.acquire('report:daily', task, {
-          mode: Modes.skipIfBusy(),
-          signal,
-        }),
-        mutex.acquire('report:daily', task, {
-          mode: Modes.skipIfBusy({ waitAtMost: 100, clock: globalThis }),
-          signal,
-        }),
-      ]);
-
-      // Assert
-      assert.deepEqual(
-        results.map(
-          (result) => result.status === 'rejected' && result.reason === reason,
-        ),
-        [true, true, true, true],
-      );
-      assert.equal(ran, false, 'A caller that cancelled must not run its task');
-      assert.deepEqual(
-        await mutex.acquire('report:daily', async () => 'next', {
-          mode: Modes.skipIfBusy(),
-        }),
-        { acquired: true, value: 'next' },
-      );
-    });
-
-    test(
-      'one signal shared by many calls keeps no abort listeners after they finish',
-      { timeout: timeoutForGrants(store, 3) },
-      async () => {
-        // Arrange: a free key, a busy key, and a skip with a limit, all with one signal.
-        await using fixture = await store.fixture(process.env);
-        await using host = store.open(fixture.location);
-        const mutex = new Mutex(host.store);
-        const { signal } = new AbortController();
-        await mutex.acquire('report:daily', async () => 'free', { signal });
-        const holder = await hold(mutex, 'report:daily');
-        const waited = mutex.acquire('report:daily', async () => 'waited', {
-          signal,
-        });
-
-        // Act
-        const skipped = await mutex.acquire(
-          'report:daily',
-          async () => 'skipped',
-          {
-            mode: Modes.skipIfBusy({ waitAtMost: 50, clock: globalThis }),
-            signal,
-          },
-        );
-        await holder.release();
-        await waited;
-
-        // Assert
-        assert.deepEqual(skipped, { acquired: false });
-        assert.equal(getEventListeners(signal, 'abort').length, 0);
-      },
-    );
-  }),
-);
 
 describe('The time limit of skip if busy', () => {
   test('the limit starts when the lock store answers, so a free key that it answers late is still acquired', async (t) => {
@@ -476,127 +81,115 @@ describe('Cancelling a wait', () => {
     }
   });
 
-  test(
-    "each built-in mode passes the caller's signal on to the lock store, so the store stops waiting",
-    { timeout: 5000 },
-    async () => {
-      // Arrange: a lock store that records the signal of each wait, and a holder outside it.
-      const inner = new MemoryStore();
-      const signals: (AbortSignal | undefined)[] = [];
-      const mutex = new Mutex({
-        acquire: (key, options) => {
-          signals.push(options?.signal);
-          return inner.acquire(key, options);
-        },
-        tryAcquire: (key) => inner.tryAcquire(key),
-        isHeld: (key) => inner.isHeld(key),
-      });
-      await using _holder = await inner.acquire('report:daily');
-      const cancel = new AbortController();
-      const calls = Promise.allSettled([
-        mutex.acquire('report:daily', async () => {}, {
-          mode: Modes.wait(),
-          signal: cancel.signal,
-        }),
-        mutex.acquire('report:daily', async () => {}, {
-          mode: Modes.skipIfBusy({ waitAtMost: 10_000, clock: globalThis }),
-          signal: cancel.signal,
-        }),
-      ]);
-      assert.equal(await within(calls, settle), 'still waiting');
+  test("each built-in mode passes the caller's signal on to the lock store, so the store stops waiting", async () => {
+    // Arrange: a lock store that records the signal of each wait, and a holder outside it.
+    const inner = new MemoryStore();
+    const signals: (AbortSignal | undefined)[] = [];
+    const mutex = new Mutex({
+      acquire: (key, options) => {
+        signals.push(options?.signal);
+        return inner.acquire(key, options);
+      },
+      tryAcquire: (key) => inner.tryAcquire(key),
+      isHeld: (key) => inner.isHeld(key),
+    });
+    await using _holder = await inner.acquire('report:daily');
+    const cancel = new AbortController();
+    const calls = Promise.allSettled([
+      mutex.acquire('report:daily', async () => {}, {
+        mode: Modes.wait(),
+        signal: cancel.signal,
+      }),
+      mutex.acquire('report:daily', async () => {}, {
+        mode: Modes.skipIfBusy({ waitAtMost: 10_000, clock: globalThis }),
+        signal: cancel.signal,
+      }),
+    ]);
+    assert.equal(await within(calls, settle), 'still waiting');
 
+    // Act
+    cancel.abort(new Error('cancelled'));
+    await calls;
+
+    // Assert
+    assert.deepEqual(
+      signals.map((signal) => signal?.aborted),
+      [true, true],
+    );
+  });
+
+  test('a mode that does not pass the signal on still rejects at once, and gives back the key it gets later', async () => {
+    // Arrange: a custom mode that waits without the caller's signal.
+    const mutex = new Mutex(new MemoryStore());
+    const unheeding: AcquireMode<'always'> = {
+      outcome: 'always',
+      acquire: (store, key) => store.acquire(key),
+    };
+    const holder = await hold(mutex, 'report:daily');
+    const cancel = new AbortController();
+    const reason = new Error('cancelled');
+    let ran = false;
+    const cancelled = mutex.acquire(
+      'report:daily',
+      async () => {
+        ran = true;
+      },
+      { mode: unheeding, signal: cancel.signal },
+    );
+
+    try {
       // Act
-      cancel.abort(new Error('cancelled'));
-      await calls;
-
-      // Assert
-      assert.deepEqual(
-        signals.map((signal) => signal?.aborted),
-        [true, true],
-      );
-    },
-  );
-
-  test(
-    'a mode that does not pass the signal on still rejects at once, and gives back the key it gets later',
-    { timeout: 5000 },
-    async () => {
-      // Arrange: a custom mode that waits without the caller's signal.
-      const mutex = new Mutex(new MemoryStore());
-      const unheeding: AcquireMode<'always'> = {
-        outcome: 'always',
-        acquire: (store, key) => store.acquire(key),
-      };
-      const holder = await hold(mutex, 'report:daily');
-      const cancel = new AbortController();
-      const reason = new Error('cancelled');
-      let ran = false;
-      const cancelled = mutex.acquire(
-        'report:daily',
-        async () => {
-          ran = true;
-        },
-        { mode: unheeding, signal: cancel.signal },
-      );
-
-      try {
-        // Act
-        cancel.abort(reason);
-
-        // Assert: the caller does not wait for the holder to release.
-        await assert.rejects(cancelled, (error) => error === reason);
-      } finally {
-        await holder.release();
-      }
-      assert.equal(
-        await mutex.acquire('report:daily', async () => 'next'),
-        'next',
-        'The key that the mode got after the cancel must be given back',
-      );
-      assert.equal(ran, false, 'A caller that cancelled must not run its task');
-    },
-  );
-
-  test(
-    "skipIfBusy rejects when its caller cancels during the first attempt, and gives that attempt's key back",
-    { timeout: 5000 },
-    async () => {
-      // Arrange: a lock store whose one attempt answers only when the gate opens.
-      const inner = new MemoryStore();
-      const gate = Promise.withResolvers<void>();
-      const mutex = new Mutex({
-        acquire: (key, options) => inner.acquire(key, options),
-        tryAcquire: async (key) => {
-          await gate.promise;
-          return inner.tryAcquire(key);
-        },
-        isHeld: (key) => inner.isHeld(key),
-      });
-      const cancel = new AbortController();
-      const reason = new Error('cancelled');
-      let ran = false;
-      const attempt = mutex.acquire(
-        'report:daily',
-        async () => {
-          ran = true;
-        },
-        { mode: Modes.skipIfBusy(), signal: cancel.signal },
-      );
-
-      // Act: the caller cancels, and then its attempt gets the free key.
       cancel.abort(reason);
-      gate.resolve();
 
-      // Assert
-      await assert.rejects(attempt, (error) => error === reason);
-      assert.equal(
-        await mutex.acquire('report:daily', async () => 'next'),
-        'next',
-        'The key that the attempt got after the cancel must be given back',
-      );
-      assert.equal(ran, false, 'A caller that cancelled must not run its task');
-    },
-  );
+      // Assert: the caller does not wait for the holder to release.
+      await assert.rejects(cancelled, (error) => error === reason);
+    } finally {
+      await holder.release();
+    }
+    assert.equal(
+      await mutex.acquire('report:daily', async () => 'next'),
+      'next',
+      'The key that the mode got after the cancel must be given back',
+    );
+    assert.equal(ran, false, 'A caller that cancelled must not run its task');
+  });
+
+  test("skipIfBusy rejects when its caller cancels during the first attempt, and gives that attempt's key back", async () => {
+    // Arrange: a lock store whose one attempt answers only when the gate opens.
+    const inner = new MemoryStore();
+    const gate = Promise.withResolvers<void>();
+    const mutex = new Mutex({
+      acquire: (key, options) => inner.acquire(key, options),
+      tryAcquire: async (key) => {
+        await gate.promise;
+        return inner.tryAcquire(key);
+      },
+      isHeld: (key) => inner.isHeld(key),
+    });
+    const cancel = new AbortController();
+    const reason = new Error('cancelled');
+    let ran = false;
+    const attempt = mutex.acquire(
+      'report:daily',
+      async () => {
+        ran = true;
+      },
+      { mode: Modes.skipIfBusy(), signal: cancel.signal },
+    );
+
+    // Act: the caller cancels, and then its attempt gets the free key.
+    cancel.abort(reason);
+    gate.resolve();
+
+    // Assert
+    await assert.rejects(attempt, (error) => error === reason);
+    assert.equal(
+      await mutex.acquire('report:daily', async () => 'next'),
+      'next',
+      'The key that the attempt got after the cancel must be given back',
+    );
+    assert.equal(ran, false, 'A caller that cancelled must not run its task');
+  });
 
   test('a caller that cancels after its task started gets the task value, and holds the key until the task ends', async () => {
     // Arrange
@@ -707,151 +300,3 @@ describe('Acquire mode result types', () => {
     );
   });
 });
-
-/** A child or thread that skips, then cancels a wait, while its host holds the key, and reports each result. */
-const skipperBody = `
-	const atOnce = await mutex.acquire('report:daily', async () => 'ran', { mode: Modes.skipIfBusy() });
-	const afterLimit = await mutex.acquire('report:daily', async () => 'ran', { mode: Modes.skipIfBusy({ waitAtMost: 100, clock: globalThis }) });
-	const cancel = new AbortController();
-	setTimeout(() => cancel.abort(new Error('cancelled')), 50);
-	const cancelled = await mutex.acquire('report:daily', async () => 'ran', { signal: cancel.signal }).catch((error) => error.message);
-	report({ type: 'results', atOnce, afterLimit, cancelled });
-`;
-
-void describe.each(
-  storeCases.filter((candidate) => reaches(candidate, 'process-tree')),
-  (store) =>
-    describe(`Acquire modes across processes with ${store.name}`, () => {
-      test(
-        'a process that skips or cancels while another process holds gets no key, and leaves the key free',
-        { timeout: timeoutForGrants(store, 3) },
-        async (t) => {
-          // Arrange: this process holds the key; a child (kept alive) tries to skip.
-          await using fixture = await store.fixture(process.env);
-          await using host = store.open(fixture.location);
-          const mutex = new Mutex(host.store);
-          const holder = await hold(mutex, 'report:daily');
-          await using child = startWorker(
-            `
-					import { Mutex } from ${JSON.stringify(mutexUrl.href)};
-					import { Modes } from ${JSON.stringify(modesUrl.href)};
-					import { createChildStore } from ${JSON.stringify(storeCasesUrl.href)};
-					setInterval(() => {}, 1000);
-					const mutex = new Mutex(createChildStore(${JSON.stringify(store.name)}, ${JSON.stringify(fixture.location)}));
-					const report = (message) => process.send(message);
-					${skipperBody}
-				`,
-            'skipper',
-            { host },
-          );
-
-          // Act
-          await t.waitFor(
-            () =>
-              assert.ok(
-                child.has('results'),
-                `The child must report.\n${child.stderr}`,
-              ),
-            {
-              interval: 5,
-              // The child starts, then makes three attempts that each cost about one grant.
-              timeout: deadlineFor(store, newProcessTimeout, {
-                grants: 3,
-                releases: 0,
-              }),
-            },
-          );
-          await holder.release();
-
-          // Assert: both skips gave up, the wait was cancelled, and no grant was left with the child.
-          assert.deepEqual(
-            {
-              atOnce: child.find('results')?.atOnce,
-              afterLimit: child.find('results')?.afterLimit,
-              cancelled: child.find('results')?.cancelled,
-            },
-            {
-              atOnce: { acquired: false },
-              afterLimit: { acquired: false },
-              cancelled: 'cancelled',
-            },
-          );
-          assert.equal(
-            await mutex.acquire('report:daily', async () => 'next'),
-            'next',
-            'The key must be free after the holder releases it; the child that gave up must not keep it',
-          );
-        },
-      );
-    }),
-);
-
-void describe.each(
-  storeCases.filter((candidate) => candidate.reach === 'process'),
-  (store) =>
-    describe(`Acquire modes across threads with ${store.name}`, () => {
-      test(
-        'a thread that skips or cancels while another thread holds gets no key, and leaves the key free',
-        { timeout: timeoutForGrants(store, 3) },
-        async () => {
-          // Arrange: the main thread holds the key; a worker (kept alive) tries to skip.
-          await using fixture = await store.fixture(process.env);
-          await using host: StoreHost = store.open(fixture.location);
-          const mutex = new Mutex(host.store);
-          const holder = await hold(mutex, 'report:daily');
-          const thread = new Worker(
-            `
-					(async () => {
-						const { parentPort } = await import('node:worker_threads');
-						const { Mutex } = await import(${JSON.stringify(mutexUrl.href)});
-						const { Modes } = await import(${JSON.stringify(modesUrl.href)});
-						const { createThreadStore } = await import(${JSON.stringify(storeCasesUrl.href)});
-						setInterval(() => {}, 1000);
-						const mutex = new Mutex(createThreadStore(${JSON.stringify(store.name)}, ${JSON.stringify(fixture.location)}));
-						const report = (message) => parentPort.postMessage(message);
-						${skipperBody}
-					})();
-				`,
-            { eval: true },
-          );
-          host.adoptThread(thread);
-          const results = new Promise<{
-            atOnce: unknown;
-            afterLimit: unknown;
-            cancelled: unknown;
-          }>((resolve) =>
-            thread.on('message', (message) => {
-              if (message?.type === 'results') resolve(message);
-            }),
-          );
-
-          try {
-            // Act
-            const reported = await results;
-            await holder.release();
-
-            // Assert
-            assert.deepEqual(
-              {
-                atOnce: reported.atOnce,
-                afterLimit: reported.afterLimit,
-                cancelled: reported.cancelled,
-              },
-              {
-                atOnce: { acquired: false },
-                afterLimit: { acquired: false },
-                cancelled: 'cancelled',
-              },
-            );
-            assert.equal(
-              await mutex.acquire('report:daily', async () => 'next'),
-              'next',
-              'The key must be free after the holder releases it; the thread that gave up must not keep it',
-            );
-          } finally {
-            await thread.terminate();
-          }
-        },
-      );
-    }),
-);

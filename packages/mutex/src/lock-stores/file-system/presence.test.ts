@@ -107,7 +107,7 @@ void test.each(stores, (store) => {
   describe(`${store.name}: a caller that is gone`, () => {
     test(
       'a waiter gets the key of a holder that died but was never reaped',
-      { skip: posixOnly, timeout: 20_000 },
+      { skip: posixOnly },
       async (t) => {
         // Arrange: the shell starts the holder and then becomes `sleep`, which
         // never reaps it, so the killed holder stays a zombie that still
@@ -166,7 +166,7 @@ void test.each(stores, (store) => {
 
     test(
       'a holder whose release cannot remove its record frees the key anyway',
-      { skip: posixOnly, timeout: 20_000 },
+      { skip: posixOnly },
       async (t) => {
         // Arrange: a holder in another process holds the key, then the
         // directory turns read-only, so its release cannot remove the record.
@@ -207,49 +207,45 @@ void test.each(stores, (store) => {
       },
     );
 
-    test(
-      'a lock record without a presence file fails the acquire with both file names',
-      { timeout: 20_000 },
-      async () => {
-        // Arrange: an older version wrote the record, naming this live
-        // process, and keeps no presence file. Platform setup that no
-        // operation of this version exposes.
-        await using directory = await new TemporaryFiles().directory(
-          'mutex-test-',
-        );
-        const id = randomUUID();
-        const record = join(directory.path, 'product-42.lock');
-        await writeFile(
-          record,
-          `${JSON.stringify({ pid: process.pid, host: hostname(), id })}\n`,
-        );
+    test('a lock record without a presence file fails the acquire with both file names', async () => {
+      // Arrange: an older version wrote the record, naming this live
+      // process, and keeps no presence file. Platform setup that no
+      // operation of this version exposes.
+      await using directory = await new TemporaryFiles().directory(
+        'mutex-test-',
+      );
+      const id = randomUUID();
+      const record = join(directory.path, 'product-42.lock');
+      await writeFile(
+        record,
+        `${JSON.stringify({ pid: process.pid, host: hostname(), id })}\n`,
+      );
 
-        // Act
-        const acquiring = new Mutex(store.create(directory.path)).acquire(
-          'product-42',
-          async () => {},
-          { signal: AbortSignal.timeout(3000) },
-        );
+      // Act
+      const acquiring = new Mutex(store.create(directory.path)).acquire(
+        'product-42',
+        async () => {},
+        { signal: AbortSignal.timeout(3000) },
+      );
 
-        // Assert: the waiter names what is in the way instead of guessing,
-        // and leaves the record of the caller it cannot judge in place.
-        await assert.rejects(acquiring, (error: unknown) => {
-          assert.ok(error instanceof Error, String(error));
-          assert.match(error.message, /older version/);
-          // The message quotes the path as JSON, which doubles each Windows backslash.
-          assert.ok(
-            error.message.includes(JSON.stringify(record)),
-            error.message,
-          );
-          assert.ok(error.message.includes(`${id}.presence`), error.message);
-          return true;
-        });
+      // Assert: the waiter names what is in the way instead of guessing,
+      // and leaves the record of the caller it cannot judge in place.
+      await assert.rejects(acquiring, (error: unknown) => {
+        assert.ok(error instanceof Error, String(error));
+        assert.match(error.message, /older version/);
+        // The message quotes the path as JSON, which doubles each Windows backslash.
         assert.ok(
-          (await readFile(record, 'utf8')).includes(id),
-          'The record of a caller that may still run must not be evicted',
+          error.message.includes(JSON.stringify(record)),
+          error.message,
         );
-      },
-    );
+        assert.ok(error.message.includes(`${id}.presence`), error.message);
+        return true;
+      });
+      assert.ok(
+        (await readFile(record, 'utf8')).includes(id),
+        'The record of a caller that may still run must not be evicted',
+      );
+    });
   });
 
   describe(`${store.name}: presence files`, () => {
@@ -270,65 +266,57 @@ void test.each(stores, (store) => {
       assert.deepEqual(await presenceFilesIn(directory.path), []);
     });
 
-    test(
-      'a holder that was killed leaves no presence file once a waiter takes its key',
-      { timeout: 20_000 },
-      async (t) => {
-        // Arrange
-        await using directory = await new TemporaryFiles().directory(
-          'mutex-test-',
-        );
-        await using holder = startWorker(
-          callerSource(store, directory.path),
-          'holder',
-        );
-        await t.waitFor(() => assert.ok(holder.has('holding'), holder.stderr), {
-          interval: 5,
-          timeout: 5000,
-        });
-        assert.equal((await presenceFilesIn(directory.path)).length, 1);
-        holder.child.kill('SIGKILL');
-        await holder.closed;
+    test('a holder that was killed leaves no presence file once a waiter takes its key', async (t) => {
+      // Arrange
+      await using directory = await new TemporaryFiles().directory(
+        'mutex-test-',
+      );
+      await using holder = startWorker(
+        callerSource(store, directory.path),
+        'holder',
+      );
+      await t.waitFor(() => assert.ok(holder.has('holding'), holder.stderr), {
+        interval: 5,
+        timeout: 5000,
+      });
+      assert.equal((await presenceFilesIn(directory.path)).length, 1);
+      holder.child.kill('SIGKILL');
+      await holder.closed;
 
-        // Act
-        await takeAndRelease(store, directory.path);
+      // Act
+      await takeAndRelease(store, directory.path);
 
-        // Assert
-        assert.deepEqual(await presenceFilesIn(directory.path), []);
-      },
-    );
+      // Assert
+      assert.deepEqual(await presenceFilesIn(directory.path), []);
+    });
 
-    test(
-      'callers that ask for a free key at the same moment leave one holder and no presence file',
-      { timeout: 20_000 },
-      async () => {
-        // Arrange: twenty callers in this process skip the key if it is busy.
-        await using directory = await new TemporaryFiles().directory(
-          'mutex-test-',
-        );
-        const mutex = new Mutex(store.create(directory.path));
+    test('callers that ask for a free key at the same moment leave one holder and no presence file', async () => {
+      // Arrange: twenty callers in this process skip the key if it is busy.
+      await using directory = await new TemporaryFiles().directory(
+        'mutex-test-',
+      );
+      const mutex = new Mutex(store.create(directory.path));
 
-        // Act: all of them ask at once, and the winner holds the key for a moment.
-        const results = await Promise.all(
-          Array.from({ length: 20 }, () =>
-            mutex.acquire(
-              'product-42',
-              () => new Promise((resolve) => setTimeout(resolve, 50)),
-              { mode: Modes.skipIfBusy() },
-            ),
+      // Act: all of them ask at once, and the winner holds the key for a moment.
+      const results = await Promise.all(
+        Array.from({ length: 20 }, () =>
+          mutex.acquire(
+            'product-42',
+            () => new Promise((resolve) => setTimeout(resolve, 50)),
+            { mode: Modes.skipIfBusy() },
           ),
-        );
-        await takeAndRelease(store, directory.path);
+        ),
+      );
+      await takeAndRelease(store, directory.path);
 
-        // Assert: one caller held the key, and every caller that lost left nothing behind.
-        assert.equal(results.filter((result) => result.acquired).length, 1);
-        assert.deepEqual(await presenceFilesIn(directory.path), []);
-      },
-    );
+      // Assert: one caller held the key, and every caller that lost left nothing behind.
+      assert.equal(results.filter((result) => result.acquired).length, 1);
+      assert.deepEqual(await presenceFilesIn(directory.path), []);
+    });
 
     test(
       'a presence file that cannot be read fails the acquire instead of passing for missing',
-      { skip: posixOnly, timeout: 20_000 },
+      { skip: posixOnly },
       async (t) => {
         // Arrange: a live holder whose presence file nobody else may read.
         await using directory = await new TemporaryFiles().directory(
@@ -360,17 +348,12 @@ void test.each(stores, (store) => {
     );
   });
 
-  return test(
-    `${store.name}: busy processes that wait, skip and give up never hold the key together`,
-    { timeout: 60_000 },
-    async (t) => {
-      // Arrange: each process takes the key 30 times, in turn waiting,
-      // skipping at once, and giving up after 5 ms.
-      await using directory = await new TemporaryFiles().directory(
-        'mutex-test-',
-      );
-      const journal = join(directory.path, 'journal.log');
-      const source = `
+  return test(`${store.name}: busy processes that wait, skip and give up never hold the key together`, async (t) => {
+    // Arrange: each process takes the key 30 times, in turn waiting,
+    // skipping at once, and giving up after 5 ms.
+    await using directory = await new TemporaryFiles().directory('mutex-test-');
+    const journal = join(directory.path, 'journal.log');
+    const source = `
         import { appendFileSync } from 'node:fs';
         import { Mutex } from ${JSON.stringify(mutexUrl.href)};
         import { Modes } from ${JSON.stringify(modesUrl.href)};
@@ -398,99 +381,92 @@ void test.each(stores, (store) => {
           process.send({ type: 'failed', message: String(error && error.stack || error) });
         }
       `;
-      const workers = ['a', 'b', 'c', 'd'].map((name) =>
-        startWorker(source, name),
-      );
-      try {
-        // Act
-        await t
-          .waitFor(
-            () =>
-              assert.ok(
-                workers.every((w) => w.has('done') || w.has('failed')),
-                'Every process must finish its rounds',
-              ),
-            { interval: 5, timeout: 50_000 },
-          )
-          .catch((error: unknown) => {
-            throw new Error(workers.map((w) => w.stderr).join(''), {
-              cause: error,
-            });
+    const workers = ['a', 'b', 'c', 'd'].map((name) =>
+      startWorker(source, name),
+    );
+    try {
+      // Act
+      await t
+        .waitFor(
+          () =>
+            assert.ok(
+              workers.every((w) => w.has('done') || w.has('failed')),
+              'Every process must finish its rounds',
+            ),
+          { interval: 5, timeout: 50_000 },
+        )
+        .catch((error: unknown) => {
+          throw new Error(workers.map((w) => w.stderr).join(''), {
+            cause: error,
           });
+        });
 
-        // Assert: no caller failed, no write was fenced off, and no two callers were inside at once.
-        assert.deepEqual(
-          workers.map((w) => w.find('failed')?.message).filter(Boolean),
-          [],
+      // Assert: no caller failed, no write was fenced off, and no two callers were inside at once.
+      assert.deepEqual(
+        workers.map((w) => w.find('failed')?.message).filter(Boolean),
+        [],
+      );
+      assert.deepEqual(
+        workers.map((w) => w.find('done')?.stale),
+        [0, 0, 0, 0],
+      );
+      const lines = (await readFile(journal, 'utf8')).trim().split('\n');
+      for (let index = 0; index < lines.length; index += 2) {
+        const [who, step] = lines[index]!.split(':');
+        assert.equal(step, 'enter', `line ${index}: ${lines[index]}`);
+        assert.equal(
+          lines[index + 1],
+          `${who}:leave`,
+          `Two callers held the key at once at line ${index + 1}`,
         );
-        assert.deepEqual(
-          workers.map((w) => w.find('done')?.stale),
-          [0, 0, 0, 0],
-        );
-        const lines = (await readFile(journal, 'utf8')).trim().split('\n');
-        for (let index = 0; index < lines.length; index += 2) {
-          const [who, step] = lines[index]!.split(':');
-          assert.equal(step, 'enter', `line ${index}: ${lines[index]}`);
-          assert.equal(
-            lines[index + 1],
-            `${who}:leave`,
-            `Two callers held the key at once at line ${index + 1}`,
-          );
-        }
-      } finally {
-        for (const worker of workers) await worker[Symbol.asyncDispose]();
       }
-    },
-  );
+    } finally {
+      for (const worker of workers) await worker[Symbol.asyncDispose]();
+    }
+  });
 });
 
 describe('TicketQueueFileStore: presence files of waiters', () => {
   const queueIn = (directory: string) => join(directory, 'product-42.lock');
 
-  test(
-    'a waiter that was killed in line leaves no presence file once the key moves past it',
-    { timeout: 20_000 },
-    async (t) => {
-      // Arrange: a waiter lines up behind a holder and is killed there.
-      await using directory = await new TemporaryFiles().directory(
-        'mutex-test-',
-      );
-      await using holder = startWorker(
-        callerSource(ticketQueue, directory.path),
-        'holder',
-      );
-      await t.waitFor(() => assert.ok(holder.has('holding'), holder.stderr), {
-        interval: 5,
-        timeout: 5000,
-      });
-      await using waiter = startWorker(
-        callerSource(ticketQueue, directory.path),
-        'waiter',
-      );
-      await t.waitFor(
-        () =>
-          assert.ok(
-            ticketsIn(queueIn(directory.path)) === 2,
-            'The waiter must be in line',
-          ),
-        { interval: 5, timeout: 5000 },
-      );
-      assert.equal((await presenceFilesIn(directory.path)).length, 2);
-      waiter.child.kill('SIGKILL');
-      await waiter.closed;
-      holder.child.send('release');
-      await t.waitFor(() => assert.ok(holder.has('released'), holder.stderr), {
-        interval: 5,
-        timeout: 5000,
-      });
+  test('a waiter that was killed in line leaves no presence file once the key moves past it', async (t) => {
+    // Arrange: a waiter lines up behind a holder and is killed there.
+    await using directory = await new TemporaryFiles().directory('mutex-test-');
+    await using holder = startWorker(
+      callerSource(ticketQueue, directory.path),
+      'holder',
+    );
+    await t.waitFor(() => assert.ok(holder.has('holding'), holder.stderr), {
+      interval: 5,
+      timeout: 5000,
+    });
+    await using waiter = startWorker(
+      callerSource(ticketQueue, directory.path),
+      'waiter',
+    );
+    await t.waitFor(
+      () =>
+        assert.ok(
+          ticketsIn(queueIn(directory.path)) === 2,
+          'The waiter must be in line',
+        ),
+      { interval: 5, timeout: 5000 },
+    );
+    assert.equal((await presenceFilesIn(directory.path)).length, 2);
+    waiter.child.kill('SIGKILL');
+    await waiter.closed;
+    holder.child.send('release');
+    await t.waitFor(() => assert.ok(holder.has('released'), holder.stderr), {
+      interval: 5,
+      timeout: 5000,
+    });
 
-      // Act
-      await takeAndRelease(ticketQueue, directory.path);
+    // Act
+    await takeAndRelease(ticketQueue, directory.path);
 
-      // Assert
-      assert.deepEqual(await presenceFilesIn(directory.path), []);
-    },
-  );
+    // Assert
+    assert.deepEqual(await presenceFilesIn(directory.path), []);
+  });
 
   void test.each(
     [
@@ -517,90 +493,82 @@ describe('TicketQueueFileStore: presence files of waiters', () => {
       ],
     ] as const,
     ([ending, endWait]) =>
-      test(
-        `a waiter that ${ending} leaves its ticket for an evicter, and no presence file once the key moves past it`,
-        { timeout: 20_000 },
-        async (t) => {
-          // Arrange: a waiter lines up behind a holder and ends its wait.
-          await using directory = await new TemporaryFiles().directory(
-            'mutex-test-',
-          );
-          await using holder = startWorker(
-            callerSource(ticketQueue, directory.path),
-            'holder',
-          );
-          await t.waitFor(
-            () => assert.ok(holder.has('holding'), holder.stderr),
+      test(`a waiter that ${ending} leaves its ticket for an evicter, and no presence file once the key moves past it`, async (t) => {
+        // Arrange: a waiter lines up behind a holder and ends its wait.
+        await using directory = await new TemporaryFiles().directory(
+          'mutex-test-',
+        );
+        await using holder = startWorker(
+          callerSource(ticketQueue, directory.path),
+          'holder',
+        );
+        await t.waitFor(() => assert.ok(holder.has('holding'), holder.stderr), {
+          interval: 5,
+          timeout: 5000,
+        });
+        await endWait(new Mutex(ticketQueue.create(directory.path)), () =>
+          t.waitFor(
+            () =>
+              assert.ok(
+                ticketsIn(queueIn(directory.path)) === 2,
+                `The waiter must line up behind the holder.\n${holder.stderr}`,
+              ),
             { interval: 5, timeout: 5000 },
-          );
-          await endWait(new Mutex(ticketQueue.create(directory.path)), () =>
-            t.waitFor(
-              () =>
-                assert.ok(
-                  ticketsIn(queueIn(directory.path)) === 2,
-                  `The waiter must line up behind the holder.\n${holder.stderr}`,
-                ),
-              { interval: 5, timeout: 5000 },
-            ),
-          );
-          assert.equal(ticketsIn(queueIn(directory.path)), 2);
-          assert.equal((await presenceFilesIn(directory.path)).length, 2);
-          holder.child.send('release');
-          await t.waitFor(
-            () => assert.ok(holder.has('released'), holder.stderr),
-            { interval: 5, timeout: 5000 },
-          );
+          ),
+        );
+        assert.equal(ticketsIn(queueIn(directory.path)), 2);
+        assert.equal((await presenceFilesIn(directory.path)).length, 2);
+        holder.child.send('release');
+        await t.waitFor(
+          () => assert.ok(holder.has('released'), holder.stderr),
+          { interval: 5, timeout: 5000 },
+        );
 
-          // Act
-          await takeAndRelease(ticketQueue, directory.path);
+        // Act
+        await takeAndRelease(ticketQueue, directory.path);
 
-          // Assert
-          assert.deepEqual(await presenceFilesIn(directory.path), []);
-        },
-      ),
+        // Assert
+        assert.deepEqual(await presenceFilesIn(directory.path), []);
+      }),
   );
 });
 
-test(
-  'TicketQueueFileStore: a skip gets a key whose queue holds only callers that are gone',
-  { timeout: 20_000 },
-  async (t) => {
-    // Arrange: a holder and two waiters line up, then all three die.
-    await using directory = await new TemporaryFiles().directory('mutex-test-');
-    const queue = join(directory.path, 'product-42.lock');
-    await using holder = startWorker(
-      callerSource(ticketQueue, directory.path),
-      'holder',
-    );
-    await t.waitFor(() => assert.ok(holder.has('holding'), holder.stderr), {
-      interval: 5,
-      timeout: 5000,
-    });
-    await using first = startWorker(
-      callerSource(ticketQueue, directory.path),
-      'first',
-    );
-    await using second = startWorker(
-      callerSource(ticketQueue, directory.path),
-      'second',
-    );
-    await t.waitFor(
-      () => assert.ok(ticketsIn(queue) === 3, 'Both waiters must be in line'),
-      { interval: 5, timeout: 5000 },
-    );
-    for (const caller of [holder, first, second]) {
-      caller.child.kill('SIGKILL');
-      await caller.closed;
-    }
+test('TicketQueueFileStore: a skip gets a key whose queue holds only callers that are gone', async (t) => {
+  // Arrange: a holder and two waiters line up, then all three die.
+  await using directory = await new TemporaryFiles().directory('mutex-test-');
+  const queue = join(directory.path, 'product-42.lock');
+  await using holder = startWorker(
+    callerSource(ticketQueue, directory.path),
+    'holder',
+  );
+  await t.waitFor(() => assert.ok(holder.has('holding'), holder.stderr), {
+    interval: 5,
+    timeout: 5000,
+  });
+  await using first = startWorker(
+    callerSource(ticketQueue, directory.path),
+    'first',
+  );
+  await using second = startWorker(
+    callerSource(ticketQueue, directory.path),
+    'second',
+  );
+  await t.waitFor(
+    () => assert.ok(ticketsIn(queue) === 3, 'Both waiters must be in line'),
+    { interval: 5, timeout: 5000 },
+  );
+  for (const caller of [holder, first, second]) {
+    caller.child.kill('SIGKILL');
+    await caller.closed;
+  }
 
-    // Act
-    const result = await new Mutex(ticketQueue.create(directory.path)).acquire(
-      'product-42',
-      async () => 'got it',
-      { mode: Modes.skipIfBusy() },
-    );
+  // Act
+  const result = await new Mutex(ticketQueue.create(directory.path)).acquire(
+    'product-42',
+    async () => 'got it',
+    { mode: Modes.skipIfBusy() },
+  );
 
-    // Assert: nobody who is still running wants the key.
-    assert.deepEqual(result, { acquired: true, value: 'got it' });
-  },
-);
+  // Assert: nobody who is still running wants the key.
+  assert.deepEqual(result, { acquired: true, value: 'got it' });
+});

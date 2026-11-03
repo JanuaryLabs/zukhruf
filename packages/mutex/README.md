@@ -185,7 +185,7 @@ src/
   lock-stores/       one folder for each lock store
     remote/          the coordinator and client that ThreadStore, IpcStore and SocketStore share
   shared/            a record check (key file names, file writes and file locks are in @zukhruf/fs)
-  testing/           test helpers and the matrix of lock stores (not published)
+  testing/           test helpers, the lock-store contract and the subject of each lock store (not published)
 docs/
   concepts/  stores/  recipes/  adr/
 ```

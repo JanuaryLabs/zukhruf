@@ -2,168 +2,17 @@ import assert from 'node:assert/strict';
 // The default export is the module object itself, which mock.method can patch;
 // syncBuiltinESMExports then copies the patch to the named exports.
 import fsPromises, { symlink } from 'node:fs/promises';
-import { syncBuiltinESMExports } from 'node:module';
-import { join, sep } from 'node:path';
-import { type TestContext, describe } from 'node:test';
+import { join } from 'node:path';
+import { describe } from 'node:test';
 
 import { TemporaryFiles } from '@zukhruf/testing/fs';
 import { test } from '@zukhruf/testing/node';
 
-import { storeCases } from '../testing/store-cases.ts';
+import { mountAs, onLinux, outcome } from '../testing/network-mount.ts';
 import { LockFileStore, NetworkDirectoryError } from './file-system/index.ts';
 import { type SocketRole, SocketStore } from './socket/index.ts';
 
-/** The `f_type` that Linux's statfs reports for each network file system, from the kernel's and Lustre's headers. */
-const networkFileSystems = [
-  ['NFS', 0x6969n],
-  ['SMB', 0x517bn],
-  ['CIFS', 0xff534d42n],
-  ['SMB2', 0xfe534d42n],
-  ['Ceph', 0x00c36400n],
-  ['AFS', 0x5346414fn],
-  ['kAFS', 0x6b414653n],
-  ['Coda', 0x73757245n],
-  ['NCP', 0x564cn],
-  ['OCFS2', 0x7461636fn],
-  ['GFS2', 0x01161970n],
-  ['Lustre', 0x0bd00bd0n],
-  ['9p', 0x01021997n],
-] as const;
-
-const hostStores = storeCases.filter((store) => store.reach === 'host');
-
-/** Whether `path` is `directory` itself or lies inside it. */
-const within = (directory: string, path: string) =>
-  path === directory || path.startsWith(directory + sep);
-
-/**
- * Makes statfs report `type` for `directory` and everything inside it, as a
- * mount of that file system would. Every other path gets the real answer.
- */
-function mountAs(t: TestContext, directory: string, type: bigint) {
-  const statfs = fsPromises.statfs;
-  t.mock.method(
-    fsPromises,
-    'statfs',
-    async (...args: Parameters<typeof fsPromises.statfs>) => {
-      const stats = await statfs(...args);
-      return within(directory, String(args[0]))
-        ? Object.assign(stats, { type })
-        : stats;
-    },
-  );
-  syncBuiltinESMExports();
-  return {
-    [Symbol.dispose]() {
-      t.mock.restoreAll();
-      syncBuiltinESMExports();
-    },
-  };
-}
-
-const outcome = (acquiring: Promise<AsyncDisposable>) =>
-  acquiring.then(
-    async (lease) => {
-      await lease[Symbol.asyncDispose]();
-      return 'granted' as const;
-    },
-    (error: unknown) => error,
-  );
-
-const onLinux = {
-  skip:
-    process.platform === 'linux'
-      ? false
-      : 'Only Linux statfs reports a stable file system type',
-};
-
 describe('A lock directory on a network file system', () => {
-  void test.each(networkFileSystems, ([fileSystem, type]) =>
-    test.each(hostStores, (store) =>
-      test(
-        `${store.name} refuses a directory on ${fileSystem}`,
-        onLinux,
-        async (t) => {
-          // Arrange
-          await using directory = await new TemporaryFiles().directory(
-            'mutex-test-',
-          );
-          using _mount = mountAs(t, directory.path, type);
-          await using host = store.open(directory.path);
-
-          // Act
-          const failure = await host.store.acquire('product:42').then(
-            async (lease) => {
-              await lease[Symbol.asyncDispose]();
-              return undefined;
-            },
-            (error: unknown) => error,
-          );
-
-          // Assert
-          assert.ok(
-            failure instanceof NetworkDirectoryError,
-            `${store.name} must refuse a lock directory on ${fileSystem}, got ${String(failure)}`,
-          );
-          assert.equal(failure.fileSystem, fileSystem);
-          assert.equal(failure.directory, directory.path);
-        },
-      ),
-    ),
-  );
-
-  void test.each(hostStores, (store) =>
-    test(
-      `${store.name} leaves a refused directory untouched`,
-      onLinux,
-      async (t) => {
-        // Arrange
-        await using directory = await new TemporaryFiles().directory(
-          'mutex-test-',
-        );
-        using _mount = mountAs(t, directory.path, 0x6969n);
-        await using host = store.open(directory.path);
-
-        // Act
-        await assert.rejects(
-          host.store.acquire('product:42'),
-          NetworkDirectoryError,
-        );
-
-        // Assert: nothing was campaigned for, served, or locked there.
-        assert.deepEqual(await fsPromises.readdir(directory.path), []);
-      },
-    ),
-  );
-
-  void test.each(hostStores, (store) =>
-    test.each(
-      [
-        ['a FUSE mount', 0x65735546n],
-        ['ext4', 0xef53n],
-      ] as const,
-      ([name, type]) =>
-        test(
-          `${store.name} keeps working in a directory on ${name}`,
-          onLinux,
-          async (t) => {
-            // Arrange
-            await using directory = await new TemporaryFiles().directory(
-              'mutex-test-',
-            );
-            using _mount = mountAs(t, directory.path, type);
-            await using host = store.open(directory.path);
-
-            // Act
-            const result = await outcome(host.store.acquire('product:42'));
-
-            // Assert
-            assert.equal(result, 'granted');
-          },
-        ),
-    ),
-  );
-
   test(
     'a directory that does not exist yet is judged by its nearest existing parent',
     onLinux,
@@ -235,27 +84,6 @@ describe('A lock directory on a network file system', () => {
         await leader[Symbol.asyncDispose]();
       }
     },
-  );
-
-  void test.each(hostStores, (store) =>
-    test(
-      `${store.name} refuses a try on a network directory too`,
-      onLinux,
-      async (t) => {
-        // Arrange
-        await using directory = await new TemporaryFiles().directory(
-          'mutex-test-',
-        );
-        using _mount = mountAs(t, directory.path, 0x6969n);
-        await using host = store.open(directory.path);
-
-        // Act
-        const trying = host.store.tryAcquire('product:42');
-
-        // Assert
-        await assert.rejects(trying, NetworkDirectoryError);
-      },
-    ),
   );
 
   test(

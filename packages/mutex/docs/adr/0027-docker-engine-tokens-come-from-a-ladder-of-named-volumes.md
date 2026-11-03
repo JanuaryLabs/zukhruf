@@ -26,4 +26,4 @@ In probes, 15 rounds of 6 `volumes.create()` with one name at the same time gave
 - `docker volume prune -a` and `docker system prune -a --volumes` remove the ladder. The tokens then start again at 1. The docs of the store tell the operator to exclude the label `zukhruf.mutex.namespace`.
 - The ladder stays when the engine restarts, because volumes are on the disk of the engine host.
 - A stale holder that climbed and then failed its confirmation leaves a rung. The next mint goes above it, so tokens have gaps. Gaps are normal for fencing tokens.
-- The lock-store matrix gets a test: the tokens increase after `docker container prune`.
+- The lock-store matrix gets a test: the tokens increase after `docker container prune`. [ADR 0030](./0030-each-lock-store-runs-the-lock-store-contract-from-its-own-tests-and-a-capability-is-a-typed-parameter.md) replaces the matrix of lock stores: the store runs the lock-store contract from its own tests.

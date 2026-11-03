@@ -122,7 +122,7 @@ const outcome = (running: Promise<unknown>) =>
 describe('What a socket store shares with other versions in its directory', () => {
   test(
     'a store does not lead while another process holds the claim on leader.lock, and leads once it is released',
-    { ...onUnixSockets, timeout: 10_000 },
+    { ...onUnixSockets },
     async () => {
       // Arrange: a published leader holds the term and serves nothing yet.
       await using directory = await new TemporaryFiles().directory(
@@ -159,7 +159,7 @@ describe('What a socket store shares with other versions in its directory', () =
 
   test(
     'a store that leads holds the claim on leader.lock, so a candidate of a published version cannot take it',
-    { ...onUnixSockets, timeout: 10_000 },
+    { ...onUnixSockets },
     async () => {
       // Arrange
       await using directory = await new TemporaryFiles().directory(
@@ -198,7 +198,7 @@ describe('What a socket store shares with other versions in its directory', () =
 
   test(
     'a store that leads after the term in leader.epoch takes the next epoch, records it as decimal text, and grants tokens of it',
-    { ...onUnixSockets, timeout: 10_000 },
+    { ...onUnixSockets },
     async () => {
       // Arrange: the last leader in this directory, of a published version, recorded term 6.
       await using directory = await new TemporaryFiles().directory(
@@ -228,7 +228,7 @@ describe('What a socket store shares with other versions in its directory', () =
 
   test(
     'a store follows a published leader on lock.sock with the published hello and the published requests',
-    { ...onUnixSockets, timeout: 10_000 },
+    { ...onUnixSockets },
     async (t) => {
       // Arrange: a published leader holds the term, grants each acquire a token of its term 5, and answers each look that the key is held.
       await using directory = await new TemporaryFiles().directory(
@@ -300,7 +300,7 @@ describe('What a socket store shares with other versions in its directory', () =
 
   test(
     'a leader answers the published hello on lock.sock with the published welcome',
-    { ...onUnixSockets, timeout: 10_000 },
+    { ...onUnixSockets },
     async (t) => {
       // Arrange
       await using directory = await new TemporaryFiles().directory(
@@ -329,7 +329,7 @@ describe('What a socket store shares with other versions in its directory', () =
 
   test(
     'a leader answers a hello of another version with the published refusal, and hangs up',
-    { ...onUnixSockets, timeout: 10_000 },
+    { ...onUnixSockets },
     async (t) => {
       // Arrange
       await using directory = await new TemporaryFiles().directory(
@@ -358,7 +358,7 @@ describe('What a socket store shares with other versions in its directory', () =
 
   test(
     'a leader grants a published acquire with the published grant, and frees the key on a published release',
-    { ...onUnixSockets, timeout: 10_000 },
+    { ...onUnixSockets },
     async (t) => {
       // Arrange: a new directory, so the leader's term is 1, and its warm-up took the first token of the term.
       await using directory = await new TemporaryFiles().directory(
@@ -408,7 +408,7 @@ describe('What a socket store shares with other versions in its directory', () =
 
   test(
     'a store refused by a leader of another protocol version rejects with the ProtocolVersionError of this package',
-    { ...onUnixSockets, timeout: 10_000 },
+    { ...onUnixSockets },
     async () => {
       // Arrange: a leader of protocol version 3 holds the term and refuses every hello, as the published refusal does.
       await using directory = await new TemporaryFiles().directory(
@@ -437,7 +437,7 @@ describe('What a socket store shares with other versions in its directory', () =
 
   test(
     'a leader welcomes a hello of 1024 bytes and refuses one of 1025, not counting the newline',
-    { ...onUnixSockets, timeout: 10_000 },
+    { ...onUnixSockets },
     async (t) => {
       // Arrange: two hellos padded with JSON whitespace to their full length.
       await using directory = await new TemporaryFiles().directory(
@@ -476,7 +476,7 @@ describe('What a socket store shares with other versions in its directory', () =
 
   test(
     'a store takes a directory whose socket path has 103 bytes, and refuses one of 104 bytes, counting bytes and not characters',
-    { ...onUnixSockets, timeout: 10_000 },
+    { ...onUnixSockets },
     async () => {
       // Arrange: directory names in Arabic letters, which take two bytes each, so each path has fewer characters than bytes.
       await using scratch = await new TemporaryFiles().directory('mutex-test-');
@@ -541,17 +541,14 @@ describe('What a socket store shares with other versions on Windows', () => {
   const pipeFor = (absolute: string) =>
     `\\\\.\\pipe\\mutex-${createHash('sha256').update(absolute.toLowerCase()).digest('hex').slice(0, 32)}`;
 
-  test(
-    'a store says the published hello on the pipe named for its directory',
-    { timeout: 15_000 },
-    async (t) => {
-      // Arrange: a leader of a published version listens on the pipe of the directory.
-      await using scratch = await new TemporaryFiles().directory('mutex-test-');
-      const pipe = pipeFor(resolve(scratch.path, directory));
+  test('a store says the published hello on the pipe named for its directory', async (t) => {
+    // Arrange: a leader of a published version listens on the pipe of the directory.
+    await using scratch = await new TemporaryFiles().directory('mutex-test-');
+    const pipe = pipeFor(resolve(scratch.path, directory));
 
-      // Act
-      await using follower = startWorker(
-        `
+    // Act
+    await using follower = startWorker(
+      `
         import { createServer } from 'node:net';
         import { createInterface } from 'node:readline';
         import { Mutex } from ${JSON.stringify(mutexUrl.href)};
@@ -567,40 +564,36 @@ describe('What a socket store shares with other versions on Windows', () => {
           void new Mutex(store).acquire('product:42', async () => {});
         });
       `,
-        'windows-follower',
-        { nodeOptions: asOnWindows },
-      );
-      await t.waitFor(
-        () =>
-          assert.ok(
-            follower.has('hello') ||
-              follower.has('role') ||
-              follower.exit !== null,
-            `No hello on ${pipe}. ${follower.stderr}`,
-          ),
-        { interval: 5, timeout: newProcessTimeout },
-      );
+      'windows-follower',
+      { nodeOptions: asOnWindows },
+    );
+    await t.waitFor(
+      () =>
+        assert.ok(
+          follower.has('hello') ||
+            follower.has('role') ||
+            follower.exit !== null,
+          `No hello on ${pipe}. ${follower.stderr}`,
+        ),
+      { interval: 5, timeout: newProcessTimeout },
+    );
 
-      // Assert
-      assert.equal(
-        follower.find('hello')?.line,
-        '{"op":"hello","version":2}',
-        `Messages: ${JSON.stringify(follower.messages)} ${follower.stderr}`,
-      );
-    },
-  );
+    // Assert
+    assert.equal(
+      follower.find('hello')?.line,
+      '{"op":"hello","version":2}',
+      `Messages: ${JSON.stringify(follower.messages)} ${follower.stderr}`,
+    );
+  });
 
-  test(
-    'a store that leads listens on the pipe named for its directory',
-    { timeout: 15_000 },
-    async (t) => {
-      // Arrange
-      await using scratch = await new TemporaryFiles().directory('mutex-test-');
-      const pipe = pipeFor(resolve(scratch.path, directory));
+  test('a store that leads listens on the pipe named for its directory', async (t) => {
+    // Arrange
+    await using scratch = await new TemporaryFiles().directory('mutex-test-');
+    const pipe = pipeFor(resolve(scratch.path, directory));
 
-      // Act: the store leads, and a follower of a published version says hello on the pipe.
-      await using leader = startWorker(
-        `
+    // Act: the store leads, and a follower of a published version says hello on the pipe.
+    await using leader = startWorker(
+      `
         import { connect } from 'node:net';
         import { Mutex } from ${JSON.stringify(mutexUrl.href)};
         import { SocketStore } from ${JSON.stringify(socketUrl.href)};
@@ -618,27 +611,24 @@ describe('What a socket store shares with other versions on Windows', () => {
         follower.on('error', (error) => process.send({ type: 'failed', message: String(error) }));
         follower.write('{"op":"hello","version":2}\\n');
       `,
-        'windows-leader',
-        { nodeOptions: asOnWindows },
-      );
-      await t.waitFor(
-        () =>
-          assert.ok(
-            leader.has('answer') ||
-              leader.has('failed') ||
-              leader.exit !== null,
-            `No answer on ${pipe}. ${leader.stderr}`,
-          ),
-        { interval: 5, timeout: newProcessTimeout },
-      );
+      'windows-leader',
+      { nodeOptions: asOnWindows },
+    );
+    await t.waitFor(
+      () =>
+        assert.ok(
+          leader.has('answer') || leader.has('failed') || leader.exit !== null,
+          `No answer on ${pipe}. ${leader.stderr}`,
+        ),
+      { interval: 5, timeout: newProcessTimeout },
+    );
 
-      // Assert
-      assert.equal(leader.find('role')?.role, 'leader');
-      assert.equal(
-        leader.find('answer')?.received,
-        '{"op":"welcome"}\n',
-        `Messages: ${JSON.stringify(leader.messages)} ${leader.stderr}`,
-      );
-    },
-  );
+    // Assert
+    assert.equal(leader.find('role')?.role, 'leader');
+    assert.equal(
+      leader.find('answer')?.received,
+      '{"op":"welcome"}\n',
+      `Messages: ${JSON.stringify(leader.messages)} ${leader.stderr}`,
+    );
+  });
 });

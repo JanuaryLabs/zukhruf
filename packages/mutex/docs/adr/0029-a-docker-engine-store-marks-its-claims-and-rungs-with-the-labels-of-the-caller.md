@@ -49,4 +49,4 @@ The README of `@zukhruf/testing` gives `defaults` as the seam for other containe
 - The run cleanup of `@zukhruf/testing` removes the claims and the rungs that a killed test process left.
 - The code step adds two tests:
   - "Every claim and rung carries the labels of the caller."
-  - "A rung left by a killed test process is removed when the run ends." It runs `node --test` with the global setup of the mutex, through the `DockerEngineStore` case of the lock-store matrix. Its shape is a copy of `packages/testing/src/scripts/docker-global-setup.integration.test.ts`.
+  - "A rung left by a killed test process is removed when the run ends." It runs `node --test` with the global setup of `@zukhruf/testing`, through the `DockerEngineStore` subject of the lock-store contract. Its shape is a copy of `packages/testing/src/scripts/docker-global-setup.integration.test.ts`.

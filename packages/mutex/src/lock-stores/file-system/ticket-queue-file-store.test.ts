@@ -23,128 +23,116 @@ const ticketsIn = (queue: string) =>
   readFileSync(queue, 'utf8').split('\n').filter(Boolean).length;
 
 describe('TicketQueueFileStore', () => {
-  test(
-    'a waiter whose ticket a release rewrite lost appends it again and gets the key',
-    { timeout: 5000 },
-    async (t) => {
-      // Arrange: a holder, and a file system that pauses the rename that replaces the queue.
-      await using directory = await new TemporaryFiles().directory(
-        'mutex-test-',
-      );
-      const store = new TicketQueueFileStore(directory.path, {
-        clock: globalThis,
-        pollInterval: 10,
-      });
-      const queue = join(directory.path, 'product%3A42.lock');
-      const holder = await store.acquire('product:42');
-      const renaming = Promise.withResolvers<void>();
-      const proceed = Promise.withResolvers<void>();
-      const rename = fsPromises.rename;
-      t.mock.method(fsPromises, 'rename', async (from: string, to: string) => {
-        if (to === queue) {
-          renaming.resolve();
-          await proceed.promise;
-        }
-        return rename(from, to);
-      });
-      syncBuiltinESMExports();
-      const deadline = delay(2000, 'still waiting' as const, { ref: false });
-      let waiter: Promise<LockHandle> | undefined;
-
-      try {
-        // Act: the holder has read the queue and paused before it replaces the file.
-        const released = holder[Symbol.asyncDispose]();
-        await renaming.promise;
-        // A waiter appends its ticket to the file that the rename is about to replace.
-        waiter = store.acquire('product:42');
-        await t.waitFor(
-          () =>
-            assert.ok(
-              ticketsIn(queue) === 2,
-              'The waiter must append its ticket',
-            ),
-          { interval: 5, timeout: 2000 },
-        );
-        // The rename replaces the queue with a copy that has no ticket for the waiter.
-        proceed.resolve();
-        await released;
-
-        // Assert: the waiter notices its lost ticket, appends it again, and gets the key.
-        const outcome = await Promise.race([waiter, deadline]);
-        assert.notEqual(
-          outcome,
-          'still waiting',
-          'A waiter whose ticket was lost must append it again and get the key',
-        );
-      } finally {
-        proceed.resolve();
-        t.mock.restoreAll();
-        syncBuiltinESMExports();
-        const lease = await Promise.race([waiter, deadline]);
-        if (typeof lease === 'object') await lease[Symbol.asyncDispose]();
+  test('a waiter whose ticket a release rewrite lost appends it again and gets the key', async (t) => {
+    // Arrange: a holder, and a file system that pauses the rename that replaces the queue.
+    await using directory = await new TemporaryFiles().directory('mutex-test-');
+    const store = new TicketQueueFileStore(directory.path, {
+      clock: globalThis,
+      pollInterval: 10,
+    });
+    const queue = join(directory.path, 'product%3A42.lock');
+    const holder = await store.acquire('product:42');
+    const renaming = Promise.withResolvers<void>();
+    const proceed = Promise.withResolvers<void>();
+    const rename = fsPromises.rename;
+    t.mock.method(fsPromises, 'rename', async (from: string, to: string) => {
+      if (to === queue) {
+        renaming.resolve();
+        await proceed.promise;
       }
-    },
-  );
+      return rename(from, to);
+    });
+    syncBuiltinESMExports();
+    const deadline = delay(2000, 'still waiting' as const, { ref: false });
+    let waiter: Promise<LockHandle> | undefined;
+
+    try {
+      // Act: the holder has read the queue and paused before it replaces the file.
+      const released = holder[Symbol.asyncDispose]();
+      await renaming.promise;
+      // A waiter appends its ticket to the file that the rename is about to replace.
+      waiter = store.acquire('product:42');
+      await t.waitFor(
+        () =>
+          assert.ok(
+            ticketsIn(queue) === 2,
+            'The waiter must append its ticket',
+          ),
+        { interval: 5, timeout: 2000 },
+      );
+      // The rename replaces the queue with a copy that has no ticket for the waiter.
+      proceed.resolve();
+      await released;
+
+      // Assert: the waiter notices its lost ticket, appends it again, and gets the key.
+      const outcome = await Promise.race([waiter, deadline]);
+      assert.notEqual(
+        outcome,
+        'still waiting',
+        'A waiter whose ticket was lost must append it again and get the key',
+      );
+    } finally {
+      proceed.resolve();
+      t.mock.restoreAll();
+      syncBuiltinESMExports();
+      const lease = await Promise.race([waiter, deadline]);
+      if (typeof lease === 'object') await lease[Symbol.asyncDispose]();
+    }
+  });
 });
 
 describe('TicketQueueFileStore holder check', () => {
-  test(
-    'a queue whose first caller was killed reads as not held, though a waiter still waits behind it',
-    { timeout: 30000 },
-    async (t) => {
-      // Arrange: a holder process, and a waiter process in line that checks the queue only once a minute.
-      await using directory = await new TemporaryFiles().directory(
-        'mutex-test-',
-      );
-      const queue = join(directory.path, 'report%3Adaily.lock');
-      const caller = (pollInterval: number) => `
+  test('a queue whose first caller was killed reads as not held, though a waiter still waits behind it', async (t) => {
+    // Arrange: a holder process, and a waiter process in line that checks the queue only once a minute.
+    await using directory = await new TemporaryFiles().directory('mutex-test-');
+    const queue = join(directory.path, 'report%3Adaily.lock');
+    const caller = (pollInterval: number) => `
 				import { TicketQueueFileStore } from ${JSON.stringify(storeUrl.href)};
 				const store = new TicketQueueFileStore(${JSON.stringify(directory.path)}, { clock: globalThis, pollInterval: ${pollInterval} });
 				setInterval(() => {}, 1000);
 				await store.acquire('report:daily');
 				process.send({ type: 'entered' });
 			`;
-      await using holder = startWorker(caller(10), 'holder');
-      await t.waitFor(
-        () =>
-          assert.ok(
-            holder.has('entered'),
-            `The holder must enter.\n${holder.stderr}`,
-          ),
-        { interval: 5, timeout: newProcessTimeout },
-      );
-      await using waiter = startWorker(caller(60_000), 'waiter');
-      // No operation says that a waiter is in line, so the wait reads the queue.
-      await t.waitFor(
-        () =>
-          assert.ok(
-            ticketsIn(queue) === 2,
-            `The waiter must join the line.\n${waiter.stderr}`,
-          ),
-        { interval: 5, timeout: newProcessTimeout },
-      );
-      const mutex = new Mutex(
-        new TicketQueueFileStore(directory.path, { clock: globalThis }),
-      );
+    await using holder = startWorker(caller(10), 'holder');
+    await t.waitFor(
+      () =>
+        assert.ok(
+          holder.has('entered'),
+          `The holder must enter.\n${holder.stderr}`,
+        ),
+      { interval: 5, timeout: newProcessTimeout },
+    );
+    await using waiter = startWorker(caller(60_000), 'waiter');
+    // No operation says that a waiter is in line, so the wait reads the queue.
+    await t.waitFor(
+      () =>
+        assert.ok(
+          ticketsIn(queue) === 2,
+          `The waiter must join the line.\n${waiter.stderr}`,
+        ),
+      { interval: 5, timeout: newProcessTimeout },
+    );
+    const mutex = new Mutex(
+      new TicketQueueFileStore(directory.path, { clock: globalThis }),
+    );
 
-      // Act
-      holder.child.kill('SIGKILL');
-      await holder.closed;
-      const held = await mutex.isHeld('report:daily');
+    // Act
+    holder.child.kill('SIGKILL');
+    await holder.closed;
+    const held = await mutex.isHeld('report:daily');
 
-      // Assert
-      assert.equal(
-        held,
-        false,
-        'A waiter behind a gone caller holds nothing yet',
-      );
-      assert.equal(
-        waiter.exit,
-        null,
-        'The waiter must still be alive and in line',
-      );
-    },
-  );
+    // Assert
+    assert.equal(
+      held,
+      false,
+      'A waiter behind a gone caller holds nothing yet',
+    );
+    assert.equal(
+      waiter.exit,
+      null,
+      'The waiter must still be alive and in line',
+    );
+  });
 });
 
 /** The errors that `error` carries: a waiter that leaves reads the queue too, so its clean-up can fail as well. */

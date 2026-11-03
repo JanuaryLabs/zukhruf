@@ -11,7 +11,7 @@ import { TemporaryFiles } from '@zukhruf/testing/fs';
 import { Mutex } from '../../mutex/mutex.ts';
 import { FencedRegister } from '../../testing/fenced-register.ts';
 import { newProcessTimeout } from '../../testing/new-process-timeout.ts';
-import { graceWindow, settle } from '../../testing/store-cases.ts';
+import { graceWindow, settle } from '../../testing/timing.ts';
 import { watch } from '../../testing/watch.ts';
 import { startWorker } from '../../testing/worker-process.ts';
 import { socketElection } from './socket-election.ts';
@@ -58,309 +58,290 @@ const leaderBody = `
 `;
 
 describe('Socket lock server failover', () => {
-  test(
-    'a holder keeps its key when the leader dies, and a waiter enters only after it releases',
-    { timeout: 15000 },
-    async (t) => {
-      // Arrange: a leader, a holder inside its callback, and a waiter behind it.
-      await using directory = await new TemporaryFiles().directory(
-        'mutex-test-',
-      );
-      await using leader = startWorker(
-        participant(directory.path, leaderBody),
-        'leader',
-      );
-      await t.waitFor(
-        () =>
-          assert.ok(
-            leader.has('ready'),
-            `The leader must start.\n${leader.stderr}`,
-          ),
-        { interval: 5, timeout: 5000 },
-      );
-      assert.equal(
-        leader.find('role')?.role,
-        'leader',
-        'The first process to need a lock must lead',
-      );
+  test('a holder keeps its key when the leader dies, and a waiter enters only after it releases', async (t) => {
+    // Arrange: a leader, a holder inside its callback, and a waiter behind it.
+    await using directory = await new TemporaryFiles().directory('mutex-test-');
+    await using leader = startWorker(
+      participant(directory.path, leaderBody),
+      'leader',
+    );
+    await t.waitFor(
+      () =>
+        assert.ok(
+          leader.has('ready'),
+          `The leader must start.\n${leader.stderr}`,
+        ),
+      { interval: 5, timeout: 5000 },
+    );
+    assert.equal(
+      leader.find('role')?.role,
+      'leader',
+      'The first process to need a lock must lead',
+    );
 
-      await using holder = startWorker(
-        participant(
-          directory.path,
-          `const outcome = await mutex.acquire('product:42', async () => {
+    await using holder = startWorker(
+      participant(
+        directory.path,
+        `const outcome = await mutex.acquire('product:42', async () => {
 						journal('enter');
 						process.send({ type: 'entered' });
 						await command('finish');
 						journal('leave');
 					}).then(() => 'ok', (error) => error.name);
 					process.send({ type: 'done', outcome });`,
+      ),
+      'holder',
+    );
+    await t.waitFor(
+      () =>
+        assert.ok(
+          holder.has('entered'),
+          `The holder must enter.\n${holder.stderr}`,
         ),
-        'holder',
-      );
-      await t.waitFor(
-        () =>
-          assert.ok(
-            holder.has('entered'),
-            `The holder must enter.\n${holder.stderr}`,
-          ),
-        { interval: 5, timeout: 5000 },
-      );
-      await using waiter = startWorker(
-        participant(
-          directory.path,
-          `process.send({ type: 'attempted' });
+      { interval: 5, timeout: 5000 },
+    );
+    await using waiter = startWorker(
+      participant(
+        directory.path,
+        `process.send({ type: 'attempted' });
 					await mutex.acquire('product:42', async () => journal('enter'));
 					process.send({ type: 'done' });`,
+      ),
+      'waiter',
+    );
+    await t.waitFor(
+      () =>
+        assert.ok(
+          waiter.has('attempted'),
+          `The waiter must start.\n${waiter.stderr}`,
         ),
-        'waiter',
-      );
-      await t.waitFor(
-        () =>
-          assert.ok(
-            waiter.has('attempted'),
-            `The waiter must start.\n${waiter.stderr}`,
-          ),
-        { interval: 5, timeout: 5000 },
-      );
-      await delay(settle);
-      const journal = async () =>
-        (await readFile(join(directory.path, 'journal.log'), 'utf8'))
-          .trim()
-          .split('\n');
+      { interval: 5, timeout: 5000 },
+    );
+    await delay(settle);
+    const journal = async () =>
+      (await readFile(join(directory.path, 'journal.log'), 'utf8'))
+        .trim()
+        .split('\n');
 
-      // Act: the leader dies while the holder is inside its callback.
-      leader.child.kill('SIGKILL');
-      await leader.closed;
-      await delay(graceWindow * 2);
-      const duringFailover = await journal();
-      holder.child.send('finish');
+    // Act: the leader dies while the holder is inside its callback.
+    leader.child.kill('SIGKILL');
+    await leader.closed;
+    await delay(graceWindow * 2);
+    const duringFailover = await journal();
+    holder.child.send('finish');
 
-      // Assert: the holder reasserted its key, so the waiter waited for the release.
-      assert.deepEqual(
-        duringFailover,
-        ['holder:enter'],
-        'No one may enter while the holder still runs, even across a leader failover',
-      );
-      await t.waitFor(
-        () =>
-          assert.ok(
-            holder.has('done') && waiter.has('done'),
-            `Both must finish.\n${holder.stderr}${waiter.stderr}`,
-          ),
-        { interval: 5, timeout: 5000 },
-      );
-      assert.equal(
-        holder.find('done')?.outcome,
-        'ok',
-        'The holder must keep its lease through the failover',
-      );
-      assert.deepEqual(await journal(), [
-        'holder:enter',
-        'holder:leave',
-        'waiter:enter',
-      ]);
-      assert.ok(
-        [holder, waiter].some((worker) =>
-          worker.messages.some(
-            (message) => message.type === 'role' && message.role === 'leader',
-          ),
+    // Assert: the holder reasserted its key, so the waiter waited for the release.
+    assert.deepEqual(
+      duringFailover,
+      ['holder:enter'],
+      'No one may enter while the holder still runs, even across a leader failover',
+    );
+    await t.waitFor(
+      () =>
+        assert.ok(
+          holder.has('done') && waiter.has('done'),
+          `Both must finish.\n${holder.stderr}${waiter.stderr}`,
         ),
-        'A survivor must take over as leader',
-      );
-    },
-  );
+      { interval: 5, timeout: 5000 },
+    );
+    assert.equal(
+      holder.find('done')?.outcome,
+      'ok',
+      'The holder must keep its lease through the failover',
+    );
+    assert.deepEqual(await journal(), [
+      'holder:enter',
+      'holder:leave',
+      'waiter:enter',
+    ]);
+    assert.ok(
+      [holder, waiter].some((worker) =>
+        worker.messages.some(
+          (message) => message.type === 'role' && message.role === 'leader',
+        ),
+      ),
+      'A survivor must take over as leader',
+    );
+  });
 
-  test(
-    'a leader that shuts down hands over without its followers losing their keys',
-    { timeout: 15000 },
-    async (t) => {
-      // Arrange: this process leads, and a follower holds a key.
-      await using directory = await new TemporaryFiles().directory(
-        'mutex-test-',
-      );
-      const leaderStore = new SocketStore(directory.path, {
-        clock: globalThis,
-        pollInterval: 10,
-        graceWindow,
-      });
-      const leaderRoles: SocketRole[] = [];
-      leaderStore.on('role', (role) => leaderRoles.push(role));
-      await new Mutex(leaderStore).acquire('warm-up', async () => {});
-      assert.deepEqual(leaderRoles, ['leader']);
-      await using follower = startWorker(
-        participant(
-          directory.path,
-          `const outcome = await mutex.acquire('product:42', async () => {
+  test('a leader that shuts down hands over without its followers losing their keys', async (t) => {
+    // Arrange: this process leads, and a follower holds a key.
+    await using directory = await new TemporaryFiles().directory('mutex-test-');
+    const leaderStore = new SocketStore(directory.path, {
+      clock: globalThis,
+      pollInterval: 10,
+      graceWindow,
+    });
+    const leaderRoles: SocketRole[] = [];
+    leaderStore.on('role', (role) => leaderRoles.push(role));
+    await new Mutex(leaderStore).acquire('warm-up', async () => {});
+    assert.deepEqual(leaderRoles, ['leader']);
+    await using follower = startWorker(
+      participant(
+        directory.path,
+        `const outcome = await mutex.acquire('product:42', async () => {
 						process.send({ type: 'entered' });
 						await command('finish');
 					}).then(() => 'ok', (error) => error.name);
 					process.send({ type: 'done', outcome });`,
+      ),
+      'follower',
+    );
+    await t.waitFor(
+      () =>
+        assert.ok(
+          follower.has('entered'),
+          `The follower must enter.\n${follower.stderr}`,
         ),
-        'follower',
-      );
-      await t.waitFor(
-        () =>
-          assert.ok(
-            follower.has('entered'),
-            `The follower must enter.\n${follower.stderr}`,
-          ),
-        { interval: 5, timeout: 5000 },
-      );
-      const deadline = delay(2000, 'timed out' as const, { ref: false });
+      { interval: 5, timeout: 5000 },
+    );
+    const deadline = delay(2000, 'timed out' as const, { ref: false });
 
-      // Act: the leader shuts down while the follower still holds its key.
-      const shutdown = await Promise.race([
-        leaderStore[Symbol.asyncDispose]().then(() => 'closed' as const),
-        deadline,
-      ]);
-      follower.child.send('finish');
+    // Act: the leader shuts down while the follower still holds its key.
+    const shutdown = await Promise.race([
+      leaderStore[Symbol.asyncDispose]().then(() => 'closed' as const),
+      deadline,
+    ]);
+    follower.child.send('finish');
 
-      // Assert: shutdown does not wait on followers, and the holder keeps its key.
-      assert.equal(
-        shutdown,
-        'closed',
-        'A leader must shut down without waiting for followers to leave',
-      );
-      await t.waitFor(
-        () =>
-          assert.ok(
-            follower.has('done'),
-            `The follower must finish.\n${follower.stderr}`,
-          ),
-        { interval: 5, timeout: 5000 },
-      );
-      assert.equal(
-        follower.find('done')?.outcome,
-        'ok',
-        'A follower holding a key must keep it through the handover',
-      );
-    },
-  );
+    // Assert: shutdown does not wait on followers, and the holder keeps its key.
+    assert.equal(
+      shutdown,
+      'closed',
+      'A leader must shut down without waiting for followers to leave',
+    );
+    await t.waitFor(
+      () =>
+        assert.ok(
+          follower.has('done'),
+          `The follower must finish.\n${follower.stderr}`,
+        ),
+      { interval: 5, timeout: 5000 },
+    );
+    assert.equal(
+      follower.find('done')?.outcome,
+      'ok',
+      'A follower holding a key must keep it through the handover',
+    );
+  });
 
-  test(
-    'a leader that shuts down while a follower holds a key still lets a waiter enter only after the holder releases',
-    { timeout: 15000 },
-    async (t) => {
-      // Arrange: a leader, a holder inside its callback, and a waiter behind it.
-      await using directory = await new TemporaryFiles().directory(
-        'mutex-test-',
-      );
-      await using leader = startWorker(
-        participant(
-          directory.path,
-          `${leaderBody}
+  test('a leader that shuts down while a follower holds a key still lets a waiter enter only after the holder releases', async (t) => {
+    // Arrange: a leader, a holder inside its callback, and a waiter behind it.
+    await using directory = await new TemporaryFiles().directory('mutex-test-');
+    await using leader = startWorker(
+      participant(
+        directory.path,
+        `${leaderBody}
 					await command('dispose');
 					await store[Symbol.asyncDispose]();
 					process.send({ type: 'disposed' });`,
+      ),
+      'leader',
+    );
+    await t.waitFor(
+      () =>
+        assert.ok(
+          leader.has('ready'),
+          `The leader must start.\n${leader.stderr}`,
         ),
-        'leader',
-      );
-      await t.waitFor(
-        () =>
-          assert.ok(
-            leader.has('ready'),
-            `The leader must start.\n${leader.stderr}`,
-          ),
-        { interval: 5, timeout: 5000 },
-      );
-      await using holder = startWorker(
-        participant(
-          directory.path,
-          `const outcome = await mutex.acquire('product:42', async () => {
+      { interval: 5, timeout: 5000 },
+    );
+    await using holder = startWorker(
+      participant(
+        directory.path,
+        `const outcome = await mutex.acquire('product:42', async () => {
 						journal('enter');
 						process.send({ type: 'entered' });
 						await command('finish');
 						journal('leave');
 					}).then(() => 'ok', (error) => error.name);
 					process.send({ type: 'done', outcome });`,
+      ),
+      'holder',
+    );
+    await t.waitFor(
+      () =>
+        assert.ok(
+          holder.has('entered'),
+          `The holder must enter.\n${holder.stderr}`,
         ),
-        'holder',
-      );
-      await t.waitFor(
-        () =>
-          assert.ok(
-            holder.has('entered'),
-            `The holder must enter.\n${holder.stderr}`,
-          ),
-        { interval: 5, timeout: 5000 },
-      );
-      await using waiter = startWorker(
-        participant(
-          directory.path,
-          `await mutex.acquire('product:42', async () => journal('enter'));
+      { interval: 5, timeout: 5000 },
+    );
+    await using waiter = startWorker(
+      participant(
+        directory.path,
+        `await mutex.acquire('product:42', async () => journal('enter'));
 					process.send({ type: 'done' });`,
+      ),
+      'waiter',
+    );
+    await t.waitFor(
+      () =>
+        assert.ok(
+          waiter.has('role'),
+          `The waiter must reach the leader.\n${waiter.stderr}`,
         ),
-        'waiter',
-      );
-      await t.waitFor(
-        () =>
-          assert.ok(
-            waiter.has('role'),
-            `The waiter must reach the leader.\n${waiter.stderr}`,
-          ),
-        { interval: 5, timeout: 5000 },
-      );
-      const journal = async () =>
-        (await readFile(join(directory.path, 'journal.log'), 'utf8'))
-          .trim()
-          .split('\n');
-      const roles = (worker: typeof holder) =>
-        worker.messages.filter((message) => message.type === 'role').length;
+      { interval: 5, timeout: 5000 },
+    );
+    const journal = async () =>
+      (await readFile(join(directory.path, 'journal.log'), 'utf8'))
+        .trim()
+        .split('\n');
+    const roles = (worker: typeof holder) =>
+      worker.messages.filter((message) => message.type === 'role').length;
 
-      // Act: the leader shuts down while the holder is inside its callback.
-      leader.child.send('dispose');
-      await t.waitFor(
-        () =>
-          assert.ok(
-            leader.has('disposed'),
-            `The leader must shut down.\n${leader.stderr}`,
-          ),
-        { interval: 5, timeout: 5000 },
-      );
-      await t.waitFor(
-        () =>
-          assert.ok(
-            roles(holder) >= 2 && roles(waiter) >= 2,
-            `The holder and the waiter must reach the next leader.\n${holder.stderr}${waiter.stderr}`,
-          ),
-        { interval: 5, timeout: 5000 },
-      );
-      // Nothing happens while the holder keeps its key, so only time can show that the waiter stays out.
-      await delay(graceWindow * 2);
-      const duringFailover = await journal();
-      holder.child.send('finish');
+    // Act: the leader shuts down while the holder is inside its callback.
+    leader.child.send('dispose');
+    await t.waitFor(
+      () =>
+        assert.ok(
+          leader.has('disposed'),
+          `The leader must shut down.\n${leader.stderr}`,
+        ),
+      { interval: 5, timeout: 5000 },
+    );
+    await t.waitFor(
+      () =>
+        assert.ok(
+          roles(holder) >= 2 && roles(waiter) >= 2,
+          `The holder and the waiter must reach the next leader.\n${holder.stderr}${waiter.stderr}`,
+        ),
+      { interval: 5, timeout: 5000 },
+    );
+    // Nothing happens while the holder keeps its key, so only time can show that the waiter stays out.
+    await delay(graceWindow * 2);
+    const duringFailover = await journal();
+    holder.child.send('finish');
 
-      // Assert: the holder reasserted its key, so the waiter waited for the release.
-      assert.deepEqual(
-        duringFailover,
-        ['holder:enter'],
-        'No one may enter while the holder still runs, even when the leader shuts down',
-      );
-      await t.waitFor(
-        () =>
-          assert.ok(
-            holder.has('done') && waiter.has('done'),
-            `Both must finish.\n${holder.stderr}${waiter.stderr}`,
-          ),
-        { interval: 5, timeout: 5000 },
-      );
-      assert.equal(
-        holder.find('done')?.outcome,
-        'ok',
-        'The holder must keep its lease through the failover',
-      );
-      assert.deepEqual(await journal(), [
-        'holder:enter',
-        'holder:leave',
-        'waiter:enter',
-      ]);
-    },
-  );
+    // Assert: the holder reasserted its key, so the waiter waited for the release.
+    assert.deepEqual(
+      duringFailover,
+      ['holder:enter'],
+      'No one may enter while the holder still runs, even when the leader shuts down',
+    );
+    await t.waitFor(
+      () =>
+        assert.ok(
+          holder.has('done') && waiter.has('done'),
+          `Both must finish.\n${holder.stderr}${waiter.stderr}`,
+        ),
+      { interval: 5, timeout: 5000 },
+    );
+    assert.equal(
+      holder.find('done')?.outcome,
+      'ok',
+      'The holder must keep its lease through the failover',
+    );
+    assert.deepEqual(await journal(), [
+      'holder:enter',
+      'holder:leave',
+      'waiter:enter',
+    ]);
+  });
 
   test(
     'a holder frozen past the grace window is fenced off and learns its lock was lost',
     {
-      timeout: 15000,
       skip:
         process.platform === 'win32'
           ? 'Windows cannot freeze a process with SIGSTOP'
@@ -678,23 +659,18 @@ describe('Socket store roles', () => {
 });
 
 describe('Socket store follower failure', () => {
-  test(
-    'a follower whose role listener throws gives up that acquire and leaves nothing open',
-    { timeout: 10_000 },
-    async (t) => {
-      // Arrange: a leader serves the directory from this process.
-      await using directory = await new TemporaryFiles().directory(
-        'mutex-test-',
-      );
-      await using leader = new SocketStore(directory.path, {
-        clock: globalThis,
-        pollInterval: 10,
-      });
-      await (await leader.acquire('warm-up'))[Symbol.asyncDispose]();
+  test('a follower whose role listener throws gives up that acquire and leaves nothing open', async (t) => {
+    // Arrange: a leader serves the directory from this process.
+    await using directory = await new TemporaryFiles().directory('mutex-test-');
+    await using leader = new SocketStore(directory.path, {
+      clock: globalThis,
+      pollInterval: 10,
+    });
+    await (await leader.acquire('warm-up'))[Symbol.asyncDispose]();
 
-      // Act: a follower process whose role listener throws once acquires twice, then just ends.
-      await using follower = startWorker(
-        `
+    // Act: a follower process whose role listener throws once acquires twice, then just ends.
+    await using follower = startWorker(
+      `
 				import { Mutex } from ${JSON.stringify(mutexUrl.href)};
 				import { SocketStore } from ${JSON.stringify(socketStoreUrl.href)};
 
@@ -708,27 +684,22 @@ describe('Socket store follower failure', () => {
 				process.send({ type: 'first', outcome: await outcome(mutex.acquire('product:42', async () => {})) });
 				process.send({ type: 'second', outcome: await outcome(mutex.acquire('product:42', async () => {})) });
 			`,
-        'follower',
-      );
-      await t.waitFor(
-        () =>
-          assert.ok(
-            follower.exit !== null,
-            `The follower must end on its own once its work is done.\n${follower.stderr}`,
-          ),
-        { interval: 5, timeout: 5000 },
-      );
+      'follower',
+    );
+    await t.waitFor(
+      () =>
+        assert.ok(
+          follower.exit !== null,
+          `The follower must end on its own once its work is done.\n${follower.stderr}`,
+        ),
+      { interval: 5, timeout: 5000 },
+    );
 
-      // Assert: the failed acquire reported the listener's error, the next one worked, and nothing kept the process alive.
-      assert.equal(follower.find('first')?.outcome, 'The role listener failed');
-      assert.equal(follower.find('second')?.outcome, 'granted');
-      assert.deepEqual(
-        follower.exit,
-        { code: 0, signal: null },
-        follower.stderr,
-      );
-    },
-  );
+    // Assert: the failed acquire reported the listener's error, the next one worked, and nothing kept the process alive.
+    assert.equal(follower.find('first')?.outcome, 'The role listener failed');
+    assert.equal(follower.find('second')?.outcome, 'granted');
+    assert.deepEqual(follower.exit, { code: 0, signal: null }, follower.stderr);
+  });
 
   test(
     'a follower whose role listener throws closes its connection to the leader',
@@ -807,51 +778,45 @@ const loneProcess = (directory: string) => `
 `;
 
 describe('Socket store after a clean shutdown', () => {
-  test(
-    'a lone process after one that shut down cleanly acquires at once, without the grace window',
-    { timeout: 30_000 },
-    async (t) => {
-      // Arrange: the first process takes and releases a lock, then disposes its store and exits.
-      await using directory = await new TemporaryFiles().directory(
-        'mutex-test-',
-      );
-      await using first = startWorker(loneProcess(directory.path), 'first');
-      await t.waitFor(
-        () =>
-          assert.ok(
-            first.exit !== null,
-            `The first process must exit.\n${first.stderr}`,
-          ),
-        { interval: 5, timeout: newProcessTimeout },
-      );
-      assert.deepEqual(
-        { exit: first.exit, done: first.has('done') },
-        { exit: { code: 0, signal: null }, done: true },
-        `The first process must shut down cleanly.\n${first.stderr}`,
-      );
+  test('a lone process after one that shut down cleanly acquires at once, without the grace window', async (t) => {
+    // Arrange: the first process takes and releases a lock, then disposes its store and exits.
+    await using directory = await new TemporaryFiles().directory('mutex-test-');
+    await using first = startWorker(loneProcess(directory.path), 'first');
+    await t.waitFor(
+      () =>
+        assert.ok(
+          first.exit !== null,
+          `The first process must exit.\n${first.stderr}`,
+        ),
+      { interval: 5, timeout: newProcessTimeout },
+    );
+    assert.deepEqual(
+      { exit: first.exit, done: first.has('done') },
+      { exit: { code: 0, signal: null }, done: true },
+      `The first process must shut down cleanly.\n${first.stderr}`,
+    );
 
-      // Act
-      await using next = startWorker(loneProcess(directory.path), 'next');
-      await t.waitFor(
-        () =>
-          assert.ok(
-            next.exit !== null,
-            `The next process must exit.\n${next.stderr}`,
-          ),
-        { interval: 5, timeout: newProcessTimeout },
-      );
+    // Act
+    await using next = startWorker(loneProcess(directory.path), 'next');
+    await t.waitFor(
+      () =>
+        assert.ok(
+          next.exit !== null,
+          `The next process must exit.\n${next.stderr}`,
+        ),
+      { interval: 5, timeout: newProcessTimeout },
+    );
 
-      // Assert
-      assert.equal(
-        await readFile(join(directory.path, 'leader.epoch'), 'utf8'),
-        '2',
-        'The next process must lead the second term',
-      );
-      assert.deepEqual(
-        { exit: next.exit, done: next.has('done') },
-        { exit: { code: 0, signal: null }, done: true },
-        `The next process must lock with no wait on its clock.\n${next.stderr}`,
-      );
-    },
-  );
+    // Assert
+    assert.equal(
+      await readFile(join(directory.path, 'leader.epoch'), 'utf8'),
+      '2',
+      'The next process must lead the second term',
+    );
+    assert.deepEqual(
+      { exit: next.exit, done: next.has('done') },
+      { exit: { code: 0, signal: null }, done: true },
+      `The next process must lock with no wait on its clock.\n${next.stderr}`,
+    );
+  });
 });

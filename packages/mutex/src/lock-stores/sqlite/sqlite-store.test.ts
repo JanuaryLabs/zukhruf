@@ -11,6 +11,7 @@ import { test } from '@zukhruf/testing/node';
 import { Modes } from '../../mutex/acquire-modes/modes.ts';
 import { Mutex } from '../../mutex/mutex.ts';
 import { isRecord } from '../../shared/is-record.ts';
+import { hold } from '../../testing/hold.ts';
 import { newProcessTimeout } from '../../testing/new-process-timeout.ts';
 import { startWorker } from '../../testing/worker-process.ts';
 import { SqliteStore } from './sqlite-store.ts';
@@ -23,26 +24,10 @@ const storeUrl = new URL('./sqlite-store.ts', import.meta.url);
 
 const openFiles = () => readdirSync('/dev/fd').length;
 
-/** Holds `key` until the returned function is called. */
-async function hold(mutex: Mutex, key: string) {
-  const entered = Promise.withResolvers<void>();
-  const finish = Promise.withResolvers<void>();
-  const held = mutex.acquire(key, async () => {
-    entered.resolve();
-    await finish.promise;
-  });
-  await entered.promise;
-  return async () => {
-    finish.resolve();
-    await held;
-  };
-}
-
 describe('SqliteStore', () => {
   test(
     'many callers that wait in one process do not each keep a database file open',
     {
-      timeout: 10000,
       skip:
         process.platform === 'win32'
           ? 'Windows has no /dev/fd to count open files'
@@ -59,7 +44,7 @@ describe('SqliteStore', () => {
           pollInterval: 10,
         }),
       );
-      const release = await hold(mutex, 'report:daily');
+      const { release } = await hold(mutex, 'report:daily');
       const before = openFiles();
 
       // Act: fifty callers wait for the held key.
@@ -79,37 +64,31 @@ describe('SqliteStore', () => {
     },
   );
 
-  test(
-    'callers in one process get the key in the order they asked for it',
-    { timeout: 10000 },
-    async () => {
-      // Arrange
-      await using directory = await new TemporaryFiles().directory(
-        'mutex-test-',
-      );
-      const mutex = new Mutex(
-        new SqliteStore(directory.path, {
-          clock: globalThis,
-          pollInterval: 10,
-        }),
-      );
-      const release = await hold(mutex, 'report:daily');
-      const order: number[] = [];
+  test('callers in one process get the key in the order they asked for it', async () => {
+    // Arrange
+    await using directory = await new TemporaryFiles().directory('mutex-test-');
+    const mutex = new Mutex(
+      new SqliteStore(directory.path, {
+        clock: globalThis,
+        pollInterval: 10,
+      }),
+    );
+    const { release } = await hold(mutex, 'report:daily');
+    const order: number[] = [];
 
-      // Act
-      const waiters = [0, 1, 2, 3, 4].map((index) =>
-        mutex.acquire('report:daily', async () => {
-          order.push(index);
-        }),
-      );
-      await delay(50);
-      await release();
-      await Promise.all(waiters);
+    // Act
+    const waiters = [0, 1, 2, 3, 4].map((index) =>
+      mutex.acquire('report:daily', async () => {
+        order.push(index);
+      }),
+    );
+    await delay(50);
+    await release();
+    await Promise.all(waiters);
 
-      // Assert
-      assert.deepEqual(order, [0, 1, 2, 3, 4]);
-    },
-  );
+    // Assert
+    assert.deepEqual(order, [0, 1, 2, 3, 4]);
+  });
 });
 
 describe('SqliteStore holder record', () => {
@@ -130,7 +109,7 @@ describe('SqliteStore holder record', () => {
 
       // Act
       const heldBefore = await mutex.isHeld('report:daily');
-      const release = await hold(mutex, 'report:daily');
+      const { release } = await hold(mutex, 'report:daily');
       const heldWhileHolding = await mutex.isHeld('report:daily');
       const recordWhileHolding = await readFile(record, 'utf8');
       await release();
@@ -150,16 +129,11 @@ describe('SqliteStore holder record', () => {
     }),
   );
 
-  test(
-    'a holder that was killed leaves no file once the next holder took the key and let it go',
-    { timeout: 30000 },
-    async (t) => {
-      // Arrange: a holder process dies while it holds the key.
-      await using directory = await new TemporaryFiles().directory(
-        'mutex-test-',
-      );
-      await using holder = startWorker(
-        `
+  test('a holder that was killed leaves no file once the next holder took the key and let it go', async (t) => {
+    // Arrange: a holder process dies while it holds the key.
+    await using directory = await new TemporaryFiles().directory('mutex-test-');
+    await using holder = startWorker(
+      `
 				import { Mutex } from ${JSON.stringify(mutexUrl.href)};
 				import { SqliteStore } from ${JSON.stringify(storeUrl.href)};
 				const mutex = new Mutex(new SqliteStore(${JSON.stringify(directory.path)}, { clock: globalThis }));
@@ -169,36 +143,35 @@ describe('SqliteStore holder record', () => {
 					await new Promise(() => {});
 				});
 			`,
-        'holder',
-      );
-      await t.waitFor(
-        () =>
-          assert.ok(
-            holder.has('entered'),
-            `The holder must enter its task.\n${holder.stderr}`,
-          ),
-        { interval: 5, timeout: newProcessTimeout },
-      );
-      holder.child.kill('SIGKILL');
-      await holder.closed;
-      const mutex = new Mutex(
-        new SqliteStore(directory.path, { clock: globalThis }),
-      );
+      'holder',
+    );
+    await t.waitFor(
+      () =>
+        assert.ok(
+          holder.has('entered'),
+          `The holder must enter its task.\n${holder.stderr}`,
+        ),
+      { interval: 5, timeout: newProcessTimeout },
+    );
+    holder.child.kill('SIGKILL');
+    await holder.closed;
+    const mutex = new Mutex(
+      new SqliteStore(directory.path, { clock: globalThis }),
+    );
 
-      // Act
-      await mutex.acquire('report:daily', async () => {});
+    // Act
+    await mutex.acquire('report:daily', async () => {});
 
-      // Assert: the files of the killed holder do not pile up, one set for each crash.
-      assert.deepEqual(
-        readdirSync(join(directory.path, 'report%3Adaily.lock.holder')),
-        [],
-      );
-    },
-  );
+    // Assert: the files of the killed holder do not pile up, one set for each crash.
+    assert.deepEqual(
+      readdirSync(join(directory.path, 'report%3Adaily.lock.holder')),
+      [],
+    );
+  });
 
   test(
     'a release that cannot remove the holder record rejects with its name, and the key is free',
-    { skip: posixOnly, timeout: 10000 },
+    { skip: posixOnly },
     async () => {
       // Arrange: the holder folder turns read-only while the task holds the key, so the release cannot remove the record.
       await using directory = await new TemporaryFiles().directory(

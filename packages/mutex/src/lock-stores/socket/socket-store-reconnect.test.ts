@@ -14,7 +14,7 @@ import { test } from '@zukhruf/testing/node';
 import { LeaseLostError, type LockHandle, Mutex } from '../../index.ts';
 import { isRecord } from '../../shared/is-record.ts';
 import { newProcessTimeout } from '../../testing/new-process-timeout.ts';
-import { settle } from '../../testing/store-cases.ts';
+import { settle } from '../../testing/timing.ts';
 import { watch } from '../../testing/watch.ts';
 import { startWorker } from '../../testing/worker-process.ts';
 import { SocketStore } from './index.ts';
@@ -758,129 +758,117 @@ describe('A socket store that reconnects', () => {
 });
 
 describe('A follower process through a reconnect', () => {
-  test(
-    'a follower process that waits stays alive through a reconnect, and exits by itself once its key is released',
-    { timeout: 20_000 },
-    async (t) => {
-      // Arrange: a process waits for a key from its first call, before any connection exists.
-      await using directory = await new TemporaryFiles().directory(
-        'mutex-test-',
-      );
-      await using _term = await socketElection(
-        directory.path,
-        10,
-        globalThis,
-      ).campaign();
-      await using leader = await standInLeader(directory.path);
-      await using waiter = startWorker(
-        `
+  test('a follower process that waits stays alive through a reconnect, and exits by itself once its key is released', async (t) => {
+    // Arrange: a process waits for a key from its first call, before any connection exists.
+    await using directory = await new TemporaryFiles().directory('mutex-test-');
+    await using _term = await socketElection(
+      directory.path,
+      10,
+      globalThis,
+    ).campaign();
+    await using leader = await standInLeader(directory.path);
+    await using waiter = startWorker(
+      `
 					import { SocketStore } from ${JSON.stringify(socketUrl.href)};
 					const store = new SocketStore(${JSON.stringify(directory.path)}, { clock: globalThis, pollInterval: 10 });
 					const lease = await store.acquire('product:42');
 					process.send({ type: 'granted' });
 					await lease[Symbol.asyncDispose]();
 				`,
-        'waiter',
-      );
-      const first = await connection(t, leader, 0, newProcessTimeout);
-      first.welcome();
-      await request(t, first, 0);
-      await delay(settle);
-      assert.equal(
-        waiter.exit,
-        null,
-        `A follower that waits must keep its process alive.\n${waiter.stderr}`,
-      );
+      'waiter',
+    );
+    const first = await connection(t, leader, 0, newProcessTimeout);
+    first.welcome();
+    await request(t, first, 0);
+    await delay(settle);
+    assert.equal(
+      waiter.exit,
+      null,
+      `A follower that waits must keep its process alive.\n${waiter.stderr}`,
+    );
 
-      // Act: the connection drops, and the next leader reads the acquire again.
-      first.drop();
-      const second = await connection(t, leader, 1);
-      second.welcome();
-      const resent = await request(t, second, 0);
-      await delay(settle);
+    // Act: the connection drops, and the next leader reads the acquire again.
+    first.drop();
+    const second = await connection(t, leader, 1);
+    second.welcome();
+    const resent = await request(t, second, 0);
+    await delay(settle);
 
-      // Assert: still alive while it waits, then ends by itself once granted and released.
-      assert.equal(
-        waiter.exit,
-        null,
-        `A follower that waits must keep its process alive through a reconnect.\n${waiter.stderr}`,
-      );
-      second.answer({ op: 'granted', id: resent.id, token: '1' });
-      await t.waitFor(
-        () =>
-          assert.ok(
-            waiter.exit !== null,
-            `A follower with nothing left to wait for must exit.\n${waiter.stderr}`,
-          ),
-        { interval: 5, timeout: 5000 },
-      );
-      assert.deepEqual(waiter.exit, { code: 0, signal: null }, waiter.stderr);
-      assert.ok(waiter.has('granted'));
-      assert.deepEqual(
-        second.requests.map(({ op }) => op),
-        ['acquire', 'release'],
-      );
-    },
-  );
+    // Assert: still alive while it waits, then ends by itself once granted and released.
+    assert.equal(
+      waiter.exit,
+      null,
+      `A follower that waits must keep its process alive through a reconnect.\n${waiter.stderr}`,
+    );
+    second.answer({ op: 'granted', id: resent.id, token: '1' });
+    await t.waitFor(
+      () =>
+        assert.ok(
+          waiter.exit !== null,
+          `A follower with nothing left to wait for must exit.\n${waiter.stderr}`,
+        ),
+      { interval: 5, timeout: 5000 },
+    );
+    assert.deepEqual(waiter.exit, { code: 0, signal: null }, waiter.stderr);
+    assert.ok(waiter.has('granted'));
+    assert.deepEqual(
+      second.requests.map(({ op }) => op),
+      ['acquire', 'release'],
+    );
+  });
 
-  test(
-    'a follower process that only holds keys lets its process exit after a reconnect',
-    { timeout: 20_000 },
-    async (t) => {
-      // Arrange: a process holds a key, and stays alive only until the test says so.
-      await using directory = await new TemporaryFiles().directory(
-        'mutex-test-',
-      );
-      await using _term = await socketElection(
-        directory.path,
-        10,
-        globalThis,
-      ).campaign();
-      await using leader = await standInLeader(directory.path);
-      await using holder = startWorker(
-        `
+  test('a follower process that only holds keys lets its process exit after a reconnect', async (t) => {
+    // Arrange: a process holds a key, and stays alive only until the test says so.
+    await using directory = await new TemporaryFiles().directory('mutex-test-');
+    await using _term = await socketElection(
+      directory.path,
+      10,
+      globalThis,
+    ).campaign();
+    await using leader = await standInLeader(directory.path);
+    await using holder = startWorker(
+      `
 					import { SocketStore } from ${JSON.stringify(socketUrl.href)};
 					process.once('message', () => {});
 					const store = new SocketStore(${JSON.stringify(directory.path)}, { clock: globalThis, pollInterval: 10 });
 					await store.acquire('product:42');
 					process.send({ type: 'holding' });
 				`,
-        'holder',
-      );
-      const first = await connection(t, leader, 0, newProcessTimeout);
-      first.welcome();
-      first.answer({
-        op: 'granted',
-        id: (await request(t, first, 0)).id,
-        token: '1',
-      });
-      await t.waitFor(
-        () =>
-          assert.ok(
-            holder.has('holding'),
-            `The follower must hold the key.\n${holder.stderr}`,
-          ),
-        { interval: 5, timeout: 2000 },
-      );
+      'holder',
+    );
+    const first = await connection(t, leader, 0, newProcessTimeout);
+    first.welcome();
+    first.answer({
+      op: 'granted',
+      id: (await request(t, first, 0)).id,
+      token: '1',
+    });
+    await t.waitFor(
+      () =>
+        assert.ok(
+          holder.has('holding'),
+          `The follower must hold the key.\n${holder.stderr}`,
+        ),
+      { interval: 5, timeout: 2000 },
+    );
 
-      // Act: the connection drops, the next leader reads the reassert, and the process has nothing else to do.
-      first.drop();
-      const second = await connection(t, leader, 1);
-      second.welcome();
-      const reassert = await request(t, second, 0);
-      holder.child.send('done');
+    // Act: the connection drops, the next leader reads the reassert, and the process has nothing else to do.
+    first.drop();
+    const second = await connection(t, leader, 1);
+    second.welcome();
+    const reassert = await request(t, second, 0);
+    holder.child.send('done');
 
-      // Assert: holding a key alone does not keep the process alive.
-      assert.equal(reassert.op, 'reassert');
-      await t.waitFor(
-        () =>
-          assert.ok(
-            holder.exit !== null,
-            `A follower that only holds keys must let its process exit.\n${holder.stderr}`,
-          ),
-        { interval: 5, timeout: 5000 },
-      );
-      assert.deepEqual(holder.exit, { code: 0, signal: null }, holder.stderr);
-    },
-  );
+    // Assert: holding a key alone does not keep the process alive.
+    assert.equal(reassert.op, 'reassert');
+    await t.waitFor(
+      () =>
+        assert.ok(
+          holder.exit !== null,
+          `A follower that only holds keys must let its process exit.\n${holder.stderr}`,
+        ),
+      { interval: 5, timeout: 5000 },
+    );
+    assert.deepEqual(holder.exit, { code: 0, signal: null }, holder.stderr);
+  });
 });

@@ -226,7 +226,7 @@ Thus a file outside these globs does not run, for example a build output or a `t
 `--args` replaces the test selection. Use it to run one file:
 
 ```sh
-nx run mutex:test --args="src/mutex/mutex.test.ts"
+nx run mutex:test --args="src/lock-stores/memory/memory-store.contract.test.ts"
 ```
 
 A Node flag on the CLI keeps the test selection. Use it to run the tests with a name:
@@ -239,7 +239,7 @@ The command ends with `{args}`. For a command with `{args}`, Nx puts the CLI fla
 
 Without `{args}`, the order is different. Nx puts a CLI flag after `args` (`run-commands.impl.js:117-119` and `145-162`): only an unknown option that is not on the CLI comes before `args`. Then `nx run mutex:test --test-name-pattern=login` puts the flag after the globs, and Node reads it as a file name.
 
-A positional file does not replace the selection. In `nx run mutex:test src/mutex/mutex.test.ts`, Nx adds the file before the selection, and all the tests run. Use `--args`.
+A positional file does not replace the selection. In `nx run mutex:test src/lock-stores/memory/memory-store.contract.test.ts`, Nx adds the file before the selection, and all the tests run. Use `--args`.
 
 A probe on Nx 23.2.1 (2026-10-29) showed this, with `args` `DEFAULT` and a command that prints its arguments:
 

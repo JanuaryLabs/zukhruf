@@ -80,31 +80,77 @@ describe('Electing connector', () => {
 
   // A wait that ignores the abort lasts the 60 s poll interval, and it must
   // fail the test, not hang it.
-  test(
-    'a connect aborted while it waits for its next try rejects with the reason of the signal',
-    { timeout: 5000 },
-    async () => {
-      // Arrange: nobody serves the socket, and no campaign wins. The abort lands
-      // after the lost campaign returned, so the connect waits for its next try.
-      await using directory = await new TemporaryFiles().directory(
-        'mutex-test-',
-      );
-      const abort = new AbortController();
-      const reason = new Error('The store closed');
-      const connector = new ElectingConnector({
-        clock: globalThis,
-        socketPath: join(directory.path, 'lock.sock'),
-        election: {
-          campaign: async () => {
-            setImmediate(() => abort.abort(reason));
-            return undefined;
-          },
+  test('a connect aborted while it waits for its next try rejects with the reason of the signal', async () => {
+    // Arrange: nobody serves the socket, and no campaign wins. The abort lands
+    // after the lost campaign returned, so the connect waits for its next try.
+    await using directory = await new TemporaryFiles().directory('mutex-test-');
+    const abort = new AbortController();
+    const reason = new Error('The store closed');
+    const connector = new ElectingConnector({
+      clock: globalThis,
+      socketPath: join(directory.path, 'lock.sock'),
+      election: {
+        campaign: async () => {
+          setImmediate(() => abort.abort(reason));
+          return undefined;
         },
-        pollInterval: 60_000,
-        serve: async () => {},
-        connected: () => {},
-      });
+      },
+      pollInterval: 60_000,
+      serve: async () => {},
+      connected: () => {},
+    });
 
+    // Act
+    const error = await connector.connect(abort.signal).then(
+      () => assert.fail('An aborted connect must reject'),
+      (error: unknown) => error,
+    );
+
+    // Assert
+    assert.equal(error, reason);
+  });
+
+  // A connector that opens another number of sockets before it waits never
+  // gets the abort, and its 60 s wait must fail the test, not hang it.
+  test('a connect aborted while it outlasts a leader that hangs up rejects with the reason of the signal', async () => {
+    // Arrange: a leader hangs up on each hello, and no campaign wins.
+    await using directory = await new TemporaryFiles().directory('mutex-test-');
+    const socketPath =
+      process.platform === 'win32'
+        ? `\\\\.\\pipe\\mutex-test-${randomUUID()}`
+        : join(directory.path, 'lock.sock');
+    const peers = new Set<Socket>();
+    const leader = createServer((peer) => {
+      peers.add(peer);
+      peer.on('error', () => {});
+      createInterface({ input: peer }).once('line', () => peer.destroy());
+    });
+    leader.listen(socketPath);
+    await once(leader, 'listening');
+    const abort = new AbortController();
+    const reason = new Error('The store closed');
+    // The first hang-up sends the connect to outlast the leader. After the
+    // second hang-up, it waits for its next try: the abort lands in that wait,
+    // one turn after the socket closes.
+    let reached = 0;
+    const onSocket = (message: unknown) => {
+      if (!isRecord(message) || !(message.socket instanceof Socket)) return;
+      if (++reached !== 2) return;
+      message.socket.once('close', () =>
+        setImmediate(() => abort.abort(reason)),
+      );
+    };
+    subscribe('net.client.socket', onSocket);
+    const connector = new ElectingConnector({
+      clock: globalThis,
+      socketPath,
+      election: { campaign: async () => undefined },
+      pollInterval: 60_000,
+      serve: async () => {},
+      connected: () => {},
+    });
+
+    try {
       // Act
       const error = await connector.connect(abort.signal).then(
         () => assert.fail('An aborted connect must reject'),
@@ -113,69 +159,11 @@ describe('Electing connector', () => {
 
       // Assert
       assert.equal(error, reason);
-    },
-  );
-
-  // A connector that opens another number of sockets before it waits never
-  // gets the abort, and its 60 s wait must fail the test, not hang it.
-  test(
-    'a connect aborted while it outlasts a leader that hangs up rejects with the reason of the signal',
-    { timeout: 5000 },
-    async () => {
-      // Arrange: a leader hangs up on each hello, and no campaign wins.
-      await using directory = await new TemporaryFiles().directory(
-        'mutex-test-',
-      );
-      const socketPath =
-        process.platform === 'win32'
-          ? `\\\\.\\pipe\\mutex-test-${randomUUID()}`
-          : join(directory.path, 'lock.sock');
-      const peers = new Set<Socket>();
-      const leader = createServer((peer) => {
-        peers.add(peer);
-        peer.on('error', () => {});
-        createInterface({ input: peer }).once('line', () => peer.destroy());
-      });
-      leader.listen(socketPath);
-      await once(leader, 'listening');
-      const abort = new AbortController();
-      const reason = new Error('The store closed');
-      // The first hang-up sends the connect to outlast the leader. After the
-      // second hang-up, it waits for its next try: the abort lands in that wait,
-      // one turn after the socket closes.
-      let reached = 0;
-      const onSocket = (message: unknown) => {
-        if (!isRecord(message) || !(message.socket instanceof Socket)) return;
-        if (++reached !== 2) return;
-        message.socket.once('close', () =>
-          setImmediate(() => abort.abort(reason)),
-        );
-      };
-      subscribe('net.client.socket', onSocket);
-      const connector = new ElectingConnector({
-        clock: globalThis,
-        socketPath,
-        election: { campaign: async () => undefined },
-        pollInterval: 60_000,
-        serve: async () => {},
-        connected: () => {},
-      });
-
-      try {
-        // Act
-        const error = await connector.connect(abort.signal).then(
-          () => assert.fail('An aborted connect must reject'),
-          (error: unknown) => error,
-        );
-
-        // Assert
-        assert.equal(error, reason);
-        assert.equal(reached, 2, 'The connect must reach the leader two times');
-      } finally {
-        unsubscribe('net.client.socket', onSocket);
-        for (const peer of peers) peer.destroy();
-        await new Promise<void>((resolve) => leader.close(() => resolve()));
-      }
-    },
-  );
+      assert.equal(reached, 2, 'The connect must reach the leader two times');
+    } finally {
+      unsubscribe('net.client.socket', onSocket);
+      for (const peer of peers) peer.destroy();
+      await new Promise<void>((resolve) => leader.close(() => resolve()));
+    }
+  });
 });

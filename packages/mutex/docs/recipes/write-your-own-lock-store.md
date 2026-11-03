@@ -169,13 +169,49 @@ This example has no recovery: if a holder crashes, its directory stays. The stor
 
 ## Test your lock store
 
-Add your lock store to `src/testing/store-cases.ts`. Then all tests of the matrix run against it: the single-process tests, and the cross-process tests if its reach is a host or a process tree.
+Write the subject of your lock store in `src/testing/subjects/`. The subject tells the tests how to make a fixture, how to open a store over it, and how a child process or a worker thread opens the store. A host lock store that each process and thread opens in the same way over one directory uses `sharedByDirectory`:
 
 ```ts
-{
-	name: 'DirectoryLockStore',
-	reach: 'host',
-	durableTokens: true,
-	...sharedByDirectory((directory) => new DirectoryLockStore(directory, { pollInterval })),
-},
+// src/testing/subjects/directory-lock.ts
+import { DirectoryLockStore } from '../../lock-stores/directory/directory-lock-store.ts';
+import { pollInterval } from '../timing.ts';
+import { sharedByDirectory } from './directory.ts';
+
+export const openInProcess = (directory: string) =>
+  new DirectoryLockStore(directory, { pollInterval });
+
+export const { subject, sharing, threadSharing, disk } = sharedByDirectory(
+  'DirectoryLockStore',
+  openInProcess,
+  { url: new URL(import.meta.url), export: 'openInProcess' },
+  { grantLatency: 20, releaseLatency: 10 },
+);
 ```
+
+Then, beside the store, write a `<store>.contract.test.ts` that calls each contract function that the store can run:
+
+```ts
+// src/lock-stores/directory/directory-lock-store.contract.test.ts
+import { durableTokens } from '../../testing/contract/durable-tokens.ts';
+import { looksTakeNoToken } from '../../testing/contract/holder-check.ts';
+import { lockStore } from '../../testing/contract/lock-store.ts';
+import { onDisk, passiveLooks } from '../../testing/contract/on-disk.ts';
+import { processes } from '../../testing/contract/processes.ts';
+import { threads } from '../../testing/contract/threads.ts';
+import {
+  disk,
+  sharing,
+  subject,
+  threadSharing,
+} from '../../testing/subjects/directory-lock.ts';
+
+lockStore(subject);
+looksTakeNoToken(subject);
+durableTokens(subject);
+processes(subject, sharing);
+threads(subject, threadSharing);
+onDisk(subject, disk);
+passiveLooks(subject, disk, sharing);
+```
+
+A call that does not compile is a capability that your store does not have. When your store does not call a function, write the reason in a comment beside the calls. Tests of the rules that only your store has go in its other test files. See [ADR 0030](../adr/0030-each-lock-store-runs-the-lock-store-contract-from-its-own-tests-and-a-capability-is-a-typed-parameter.md).

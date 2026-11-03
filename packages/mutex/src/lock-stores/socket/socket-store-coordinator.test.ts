@@ -11,7 +11,7 @@ import { TemporaryFiles } from '@zukhruf/testing/fs';
 import { test } from '@zukhruf/testing/node';
 
 import { isRecord } from '../../shared/is-record.ts';
-import { settle } from '../../testing/store-cases.ts';
+import { settle } from '../../testing/timing.ts';
 import { SocketStore } from './index.ts';
 import { socketElection } from './socket-election.ts';
 
