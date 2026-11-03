@@ -61,11 +61,11 @@ The end of a worker. The pool learns of it from `exited()`, and replaces the wor
 _Avoid_: Death, crash (a crash is one kind of exit)
 
 **Early exit**:
-The exit of a worker that ran less than 10 minutes.
+The exit of a worker that ran less than 10 minutes. A worker whose warm-up fails also exits early.
 _Avoid_: Crash loop (many early exits in a row make one)
 
 **Back-off**:
-The time that an eager pool waits before it replaces a worker after an early exit: 1 s, doubled for each early exit in a row, up to 60 s.
+The time that an eager pool waits before it starts a worker again after an early exit: 1 s, doubled for each early exit in a row, up to 60 s.
 _Avoid_: Delay, cooldown, retry (the pool does not run a job again)
 
 **Idle**:

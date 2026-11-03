@@ -25,7 +25,7 @@ A job takes an idle worker first. When no worker is idle, the job takes a worker
 
 When a signal aborts a job that runs, the pool kills its worker. When a signal aborts a job whose worker still warms up, the warm-up continues for the next job.
 
-The pool waits for `ready()` with no time limit. Thus, if the warm-up of a worker can wait forever, the worker sets its own time limit, and `ready()` rejects when that limit ends. The pool then kills and closes the worker, and the job that waits for it fails. The next job starts a new worker.
+The pool waits for `ready()` with no time limit. Thus, if the warm-up of a worker can wait forever, the worker sets its own time limit, and `ready()` rejects when that limit ends. The pool then kills and closes the worker, and the job that waits for it fails. An eager startup starts a worker in that slot again after a back-off (see [Replace a worker that exits](#replace-a-worker-that-exits)). With `OnDemand`, the next job starts a new worker.
 
 ## Choose when the workers start
 
@@ -116,6 +116,8 @@ A worker that exited is in no count, and a slot whose worker the pool evicted is
 
 A job that needs the slot of an exited worker starts a new worker. An eager startup also replaces an idle worker that exits. After an early exit (a worker that ran less than 10 minutes), the pool waits first: 1 s, then 2 s, 4 s, and so on up to 60 s for each early exit in a row. A worker that runs 10 minutes ends this back-off. A job does not wait for a back-off: its worker starts now. Kubernetes restarts a container in CrashLoopBackOff with the same rule. The pool does not count an evicted worker as an exit: it does not replace the worker and does not start a back-off. An evicted worker that ran 10 minutes ends the back-off too. See [ADR 0005](./docs/adr/0005-an-eager-pool-backs-off-before-it-replaces-a-worker-that-exited-early.md).
 
+A worker whose warm-up fails is an early exit too. An eager startup starts that slot again after the back-off, also when a job started the worker, so the pool has warm workers again before the next job. See [ADR 0010](./docs/adr/0010-an-eager-pool-starts-a-worker-again-after-its-warm-up-fails.md).
+
 ## Run the pool on a clock
 
 The pool measures the time of each job, waits before it replaces a worker that exited early, and gives the eviction the clock for its waits. All of these run on the `clock` that you give. Give `globalThis` in production. A test gives `createClock()` of `@sinonjs/fake-timers` and moves it with `await clock.tickAsync(ms)`, so a back-off of 60 seconds or a sizing window of 2 seconds takes no real time ([`@zukhruf/async`](../async/README.md#run-a-wait-on-a-clock)).
@@ -140,3 +142,4 @@ An eviction of your own gets the clock of the pool as the third argument of `idl
 - [ADR 0007](./docs/adr/0007-a-sizing-that-learns-keeps-learning-in-steps-both-ways-and-pauses-between-steps-that-change-nothing.md): a sizing that learns keeps learning in steps both ways, and pauses between steps that change nothing.
 - [ADR 0008](./docs/adr/0008-the-pool-measures-and-waits-on-the-clock-that-the-caller-gives.md): the pool measures and waits on the clock that the caller gives.
 - [ADR 0009](./docs/adr/0009-a-sizing-reads-the-capacity-from-the-computer-that-the-caller-gives.md): a sizing reads the capacity from the computer that the caller gives.
+- [ADR 0010](./docs/adr/0010-an-eager-pool-starts-a-worker-again-after-its-warm-up-fails.md): an eager pool starts a worker again after its warm-up fails.

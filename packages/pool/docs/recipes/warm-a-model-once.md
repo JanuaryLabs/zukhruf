@@ -119,7 +119,7 @@ LeaderFirst: 1 of 4 helpers compiled the model, all ready after 2.6 s
 
 ## Things to know
 
-- **The others start when the first worker settles, also when its warm-up fails.** Then each of them may compile the model.
+- **The others start when the first worker settles, also when its warm-up fails.** Then each of them may compile the model. The pool starts the first slot again after the back-off ([ADR 0010](../adr/0010-an-eager-pool-starts-a-worker-again-after-its-warm-up-fails.md)).
 - **A worker that the pool starts later does not wait.** A replacement after an exit, or a worker that a sizing that learns tries, starts at once: the first worker settled long before.
 - **Set a time limit for the warm-up in the worker.** The pool waits for `ready()` with no time limit. See [Hold workers only while there is work](./hold-workers-only-while-there-is-work.md).
 - **Startups**: `OnDemand` starts a worker only when a job needs one, `Parallel` starts all workers together, and `OrderedReady` starts them one after the other. See [Choose when the workers start](../../README.md#choose-when-the-workers-start).

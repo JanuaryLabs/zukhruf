@@ -1571,6 +1571,233 @@ test('an eager pool waits before it replaces a worker that exits early: 1 s, dou
   assert.equal(created.length, 8);
 });
 
+test('an eager pool starts a worker again after its warm-up fails: 1 s, doubled for each failure in a row, up to 60 s, so a warm worker waits before any job', async (t) => {
+  const clock = createClock();
+  const created: EchoWorker[] = [];
+  const waits = [1_000, 2_000, 4_000, 8_000, 16_000, 32_000, 60_000, 60_000];
+  await using pool = new Pool({
+    size: new Fixed(1),
+    startup: new Parallel(),
+    eviction: new NoEviction(),
+    create: () => {
+      const worker = new EchoWorker();
+      if (created.length < waits.length) worker.fail();
+      else worker.release();
+      created.push(worker);
+      return worker;
+    },
+    clock,
+  });
+  await assert.rejects(pool.ready(), /Echo worker exited/);
+
+  for (const wait of waits) {
+    await created.at(-1)!.exited();
+    await t.waitFor(() => assert.equal(pool.stats.starting, 0), {
+      interval: 5,
+      timeout: 5_000,
+    });
+    await clock.tickAsync(wait - 1);
+    assert.deepEqual(
+      pool.stats,
+      { starting: 0, idle: 0, lent: 0, waiting: 0 },
+      `the pool still waits at ${wait - 1} ms`,
+    );
+    await clock.tickAsync(1);
+    assert.equal(pool.stats.starting, 1, `the pool starts at ${wait} ms`);
+  }
+
+  await t.waitFor(() => assert.equal(pool.stats.idle, 1), {
+    interval: 5,
+    timeout: 5_000,
+  });
+  assert.equal(created.length, waits.length + 1);
+});
+
+test('a leader-first pool whose leader fails its warm-up starts the others, then the slot of the leader again after the back-off, so every worker is warm before the first job', async (t) => {
+  const clock = createClock();
+  const created: EchoWorker[] = [];
+  await using pool = new Pool({
+    size: new Fixed(2),
+    startup: new LeaderFirst(),
+    eviction: new NoEviction(),
+    create: () => {
+      const worker = new EchoWorker();
+      if (created.length === 0) worker.fail();
+      else worker.release();
+      created.push(worker);
+      return worker;
+    },
+    clock,
+  });
+  await assert.rejects(pool.ready(), /Echo worker exited/);
+  await t.waitFor(() => assert.equal(pool.stats.idle, 1), {
+    interval: 5,
+    timeout: 5_000,
+  });
+  assert.equal(
+    created.length,
+    2,
+    'the other worker starts once the leader failed',
+  );
+
+  await clock.tickAsync(1_000);
+  await t.waitFor(() => assert.equal(pool.stats.idle, 2), {
+    interval: 5,
+    timeout: 5_000,
+  });
+  await clock.tickAsync(60_000);
+  assert.equal(created.length, 3, 'no worker starts twice');
+  assert.deepEqual(pool.stats, { starting: 0, idle: 2, lent: 0, waiting: 0 });
+});
+
+test('a worker that a job starts in an eager pool and whose warm-up fails fails the job, and its slot backs off for the early exits in a row and starts again', async (t) => {
+  const clock = createClock();
+  const created: EchoWorker[] = [];
+  await using pool = new Pool({
+    size: new Fixed(1),
+    startup: new Parallel(),
+    eviction: new NoEviction(),
+    create: () => {
+      const worker = new EchoWorker();
+      if (created.length === 1) worker.fail();
+      else worker.release();
+      created.push(worker);
+      return worker;
+    },
+    clock,
+  });
+  await pool.ready();
+  // An early exit puts the slot in a back-off of 1 s.
+  created[0]!.kill();
+  await created[0]!.exited();
+
+  // The job does not wait out the back-off: it starts a worker now, whose
+  // warm-up fails. A job that waits anyway fails on the real clock of
+  // AbortSignal.timeout.
+  await assert.rejects(
+    pool.use((worker) => worker.echo('now'), AbortSignal.timeout(5_000)),
+    /Echo worker exited/,
+  );
+  assert.equal(created.length, 2);
+  assert.equal(clock.countTimers(), 1, 'only the back-off of 2 s waits');
+
+  await clock.tickAsync(1_999);
+  assert.deepEqual(
+    pool.stats,
+    { starting: 0, idle: 0, lent: 0, waiting: 0 },
+    'the second early exit in a row waits 2 s',
+  );
+  await clock.tickAsync(1);
+  await t.waitFor(() => assert.equal(pool.stats.idle, 1), {
+    interval: 5,
+    timeout: 5_000,
+  });
+  assert.equal(created.length, 3);
+  await pool.ready();
+});
+
+test('a job that needs a slot in back-off after a failed warm-up starts its worker at once, and the back-off starts no other', async (t) => {
+  const clock = createClock();
+  const created: EchoWorker[] = [];
+  await using pool = new Pool({
+    size: new Fixed(1),
+    startup: new Parallel(),
+    eviction: new NoEviction(),
+    create: () => {
+      const worker = new EchoWorker();
+      if (created.length === 0) worker.fail();
+      else worker.release();
+      created.push(worker);
+      return worker;
+    },
+    clock,
+  });
+  await assert.rejects(pool.ready(), /Echo worker exited/);
+  await t.waitFor(() => assert.equal(clock.countTimers(), 1), {
+    interval: 5,
+    timeout: 5_000,
+  });
+
+  // The timers do not move, so the job cannot wait out the back-off.
+  assert.equal(
+    await pool.use((worker) => worker.echo('now'), AbortSignal.timeout(5_000)),
+    'now',
+  );
+  assert.equal(
+    clock.countTimers(),
+    0,
+    'the job ended the wait of the back-off',
+  );
+  await clock.tickAsync(60_000);
+  assert.equal(created.length, 2);
+  assert.deepEqual(pool.stats, { starting: 0, idle: 1, lent: 0, waiting: 0 });
+});
+
+test('disposing a pool in the back-off after a failed warm-up leaves no timer on its clock and starts no worker', async (t) => {
+  const clock = createClock();
+  const created: EchoWorker[] = [];
+  const pool = new Pool({
+    size: new Fixed(1),
+    startup: new Parallel(),
+    eviction: new NoEviction(),
+    create: () => {
+      const worker = new EchoWorker();
+      worker.fail();
+      created.push(worker);
+      return worker;
+    },
+    clock,
+  });
+  try {
+    await assert.rejects(pool.ready(), /Echo worker exited/);
+    await t.waitFor(
+      () =>
+        assert.equal(clock.countTimers(), 1, 'the back-off waits on a timer'),
+      { interval: 5, timeout: 5_000 },
+    );
+
+    await pool[Symbol.asyncDispose]();
+    assert.equal(clock.countTimers(), 0);
+    await clock.tickAsync(60_000);
+    assert.equal(created.length, 1);
+  } finally {
+    await pool[Symbol.asyncDispose]();
+  }
+});
+
+test('an on-demand pool starts no worker after a failed warm-up until a job needs one, and that job starts one at once', async () => {
+  const clock = createClock();
+  const created: EchoWorker[] = [];
+  await using pool = new Pool({
+    size: new Fixed(1),
+    startup: new OnDemand(),
+    eviction: new NoEviction(),
+    create: () => {
+      const worker = new EchoWorker();
+      if (created.length === 0) worker.fail();
+      else worker.release();
+      created.push(worker);
+      return worker;
+    },
+    clock,
+  });
+  await assert.rejects(
+    pool.use((worker) => worker.echo('first')),
+    /Echo worker exited/,
+  );
+
+  await clock.tickAsync(60_000);
+  assert.equal(created.length, 1, 'no worker starts by itself');
+  assert.equal(
+    await pool.use(
+      (worker) => worker.echo('second'),
+      AbortSignal.timeout(5_000),
+    ),
+    'second',
+  );
+  assert.equal(created.length, 2);
+});
+
 test('a job that needs a slot in back-off starts its worker at once, and the back-off starts no other', async () => {
   const clock = createClock();
   const created: EchoWorker[] = [];
@@ -2006,26 +2233,33 @@ test('an idle timeout evicts no worker and keeps no timer when its signal aborte
 });
 
 test('a job takes an idle worker before it starts or waits for one in a lower slot', async (t) => {
-  await t.test('an empty slot, whose worker failed to start', async (st) => {
+  await t.test('an empty slot, whose worker the eviction let go', async () => {
+    const clock = createClock();
     const created: EchoWorker[] = [];
     await using pool = new Pool({
       size: new Fixed(2),
       startup: new Parallel(),
-      eviction: new NoEviction(),
+      eviction: new IdleTimeout({ after: 60_000 }),
       create: () => {
         const worker = new EchoWorker();
-        if (created.length === 0) worker.fail();
-        else worker.release();
+        worker.release();
         created.push(worker);
         return worker;
       },
-      clock: globalThis,
+      clock,
     });
-    await assert.rejects(pool.ready(), /Echo worker exited/);
-    await st.waitFor(() => assert.ok(pool.stats.idle > 0), {
-      interval: 10,
-      timeout: 5000,
-    });
+    await pool.ready();
+    // Two jobs hold both workers. The first job ends, and the eviction lets
+    // its idle worker go while the second job holds the other one.
+    const first = new Latch();
+    const second = new Latch();
+    const jobs = [pool.use(() => first.wait()), pool.use(() => second.wait())];
+    first.open();
+    await jobs[0];
+    await clock.tickAsync(60_000);
+    await created[0]!.exited();
+    second.open();
+    await jobs[1];
 
     assert.equal(await pool.use(async (worker) => worker.pid), created[1]!.pid);
     assert.equal(created.length, 2);
@@ -2214,31 +2448,31 @@ test('a job joins a worker that starts before it starts one in an empty slot', a
   }
 });
 
-test('a job takes an empty slot before a slot in back-off', async (t) => {
+test('a job takes an empty slot before a slot in back-off', async () => {
   const clock = createClock();
   const created: EchoWorker[] = [];
   await using pool = new Pool({
     size: new Fixed(2),
     startup: new Parallel(),
-    eviction: new NoEviction(),
+    eviction: new IdleTimeout({ after: 60_000 }),
     create: () => {
       const worker = new EchoWorker();
-      // An eager pool does not start a failed creation again.
-      if (created.length === 1) worker.fail();
-      else worker.release();
+      worker.release();
       created.push(worker);
       return worker;
     },
     clock,
   });
-  await assert.rejects(pool.ready(), /Echo worker exited/);
-  await t.waitFor(() => assert.equal(pool.stats.idle, 1), {
-    interval: 10,
-    timeout: 5000,
-  });
-  // An early exit puts the first slot in a back-off of 1 s.
+  await pool.ready();
+  // A job holds the first worker while the eviction lets the idle second one
+  // go, which leaves its slot empty.
+  const held = pool.use((worker) => worker.echo('hang'));
+  await clock.tickAsync(60_000);
+  await created[1]!.exited();
+  // An early exit during the job puts the first slot in a back-off of 1 s
+  // once the job ends.
   created[0]!.kill();
-  await created[0]!.exited();
+  await assert.rejects(held, /Echo worker exited/);
 
   assert.equal(await pool.use((worker) => worker.echo('empty')), 'empty');
   assert.equal(created.length, 3);
