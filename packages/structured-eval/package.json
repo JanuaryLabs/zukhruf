@@ -1,0 +1,56 @@
+{
+  "name": "@zukhruf/structured-eval",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A runner-agnostic core for structured-output evals: scorers give scorecards of named ratios, a ratio of sums adds them. RecordScorer compares a stated record with an expected record field by field (set arrays pair by maximum matching; precision, recall, F1, presence, token F1, validity, type safety); SobScorer is a lossless port of SOB's evaluate.py. An adapter gives the scores to promptfoo.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/JanuaryLabs/zukhruf",
+    "directory": "packages/structured-eval"
+  },
+  "bugs": {
+    "url": "https://github.com/JanuaryLabs/zukhruf/issues"
+  },
+  "homepage": "https://github.com/JanuaryLabs/zukhruf/tree/main/packages/structured-eval#readme",
+  "keywords": [
+    "evaluation",
+    "structured-output",
+    "extraction",
+    "precision",
+    "recall",
+    "promptfoo"
+  ],
+  "type": "module",
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "@zukhruf/source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./promptfoo": {
+      "@zukhruf/source": "./src/promptfoo/index.ts",
+      "types": "./dist/promptfoo/index.d.ts",
+      "import": "./dist/promptfoo/index.js",
+      "default": "./dist/promptfoo/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "NOTICE",
+    "!dist/spec/**",
+    "!**/*.tsbuildinfo",
+    "!**/*.test.*"
+  ],
+  "dependencies": {
+    "@cfworker/json-schema": "4.1.4",
+    "json-schema-traverse": "^1.0.0",
+    "jsonc-parser": "^3.3.1",
+    "munkres": "^2.1.1"
+  },
+  "devDependencies": {
+    "python-random": "1.0.0"
+  }
+}
