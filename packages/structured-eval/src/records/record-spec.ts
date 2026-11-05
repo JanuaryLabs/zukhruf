@@ -12,13 +12,13 @@ export type RecordSpecOptions = {
   readonly ignore?: readonly string[];
 };
 
-const byPosition = new ByPosition();
-const exact = new Exact();
-
 // The rules to compare two records of one kind. A field is a path without its
 // item positions, such as `offers[].value.amount`; an array is named by its
 // field, such as `offers`.
 export class RecordSpec {
+  static readonly #byPosition = new ByPosition();
+  static readonly #exact = new Exact();
+
   readonly schema: SchemaRule;
   readonly #arrays: Readonly<Record<string, Alignment>>;
   readonly #fields: Readonly<Record<string, Comparator>>;
@@ -32,11 +32,11 @@ export class RecordSpec {
   }
 
   alignmentOf(field: string): Alignment {
-    return this.#arrays[field] ?? byPosition;
+    return this.#arrays[field] ?? RecordSpec.#byPosition;
   }
 
   comparatorOf(field: string): Comparator {
-    return this.#fields[field] ?? exact;
+    return this.#fields[field] ?? RecordSpec.#exact;
   }
 
   // An ignored field is out with all its children: the walk stops at it.

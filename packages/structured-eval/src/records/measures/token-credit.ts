@@ -1,38 +1,39 @@
+import { RatioOfSums } from '../../aggregation/ratio-of-sums.ts';
 import { Ratio } from '../../aggregation/ratio.ts';
 import type { Measure, NamedRatio } from '../measure.ts';
 import type { Leaf, RecordVisitor } from '../record-visitor.ts';
 import { hasValue } from '../values.ts';
 import { Words } from '../words.ts';
 
-const text = (value: unknown) =>
-  typeof value === 'string' ? value : JSON.stringify(value);
-
 // Partial credit for text: each expected value gets the F1 of the words that
 // its stated value shares with it, and a missing value gets 0. `token f1` is
-// the credit divided by the expected values.
+// the credit divided by the expected values: a ratio of sums, so the credit
+// adds up with CPython's sum, as every average of the package does (ADR 0004).
 export class TokenCredit implements Measure, RecordVisitor {
-  readonly #fields = new Map<string, { expected: number; credit: number }>();
+  readonly #total = new RatioOfSums();
+  readonly #fields = new Map<string, RatioOfSums>();
 
   leaf(leaf: Leaf): void {
     if (!hasValue(leaf.expected)) return;
-    const field = this.#fields.get(leaf.field) ?? { expected: 0, credit: 0 };
-    this.#fields.set(leaf.field, field);
-    field.expected++;
-    if (hasValue(leaf.stated))
-      field.credit += Words.of(text(leaf.stated)).f1(
-        Words.of(text(leaf.expected)),
-      );
+    const credit = hasValue(leaf.stated)
+      ? Words.of(TokenCredit.#text(leaf.stated)).f1(
+          Words.of(TokenCredit.#text(leaf.expected)),
+        )
+      : 0;
+    const ratio = new Ratio(credit, 1);
+    this.#total.add(ratio);
+    this.#fields
+      .getOrInsertComputed(leaf.field, () => new RatioOfSums())
+      .add(ratio);
   }
 
   *ratios(): Generator<NamedRatio> {
-    let expected = 0;
-    let credit = 0;
-    for (const field of this.#fields.values()) {
-      expected += field.expected;
-      credit += field.credit;
-    }
-    yield ['token f1', new Ratio(credit, expected)];
+    yield ['token f1', this.#total.ratio];
     for (const [name, field] of this.#fields)
-      yield [`${name} token f1`, new Ratio(field.credit, field.expected)];
+      yield [`${name} token f1`, field.ratio];
+  }
+
+  static #text(value: unknown): string {
+    return typeof value === 'string' ? value : JSON.stringify(value);
   }
 }

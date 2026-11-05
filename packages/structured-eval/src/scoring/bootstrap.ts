@@ -11,22 +11,6 @@ export type WeightedScorecard = {
   readonly weight: number;
 };
 
-// percentile_bounds of SOB's evaluate.py: the estimates at floor(0.025·(n−1))
-// and ceil(0.975·(n−1)) of the sorted estimates.
-function percentileBounds(
-  values: readonly number[],
-): readonly [number, number] {
-  const at = (index: number) => {
-    const value = values[index];
-    if (value === undefined) throw new RangeError(`No estimate at ${index}`);
-    return value;
-  };
-  return [
-    at(Math.max(0, Math.floor(0.025 * (values.length - 1)))),
-    at(Math.min(values.length - 1, Math.ceil(0.975 * (values.length - 1)))),
-  ];
-}
-
 // The 95% bootstrap interval of the mean of one name over many scorecards:
 // each sample draws as many scorecards as there are, with replacement, and
 // gives the ratio of sums of the name, each scorecard with its weight. The
@@ -58,6 +42,22 @@ export class Bootstrap {
       }
       estimates.push(sum.value);
     }
-    return percentileBounds(estimates.toSorted((a, b) => a - b));
+    return Bootstrap.#percentileBounds(estimates.toSorted((a, b) => a - b));
+  }
+
+  // percentile_bounds of SOB's evaluate.py: the estimates at floor(0.025·(n−1))
+  // and ceil(0.975·(n−1)) of the sorted estimates.
+  static #percentileBounds(
+    values: readonly number[],
+  ): readonly [number, number] {
+    const at = (index: number) => {
+      const value = values[index];
+      if (value === undefined) throw new RangeError(`No estimate at ${index}`);
+      return value;
+    };
+    return [
+      at(Math.max(0, Math.floor(0.025 * (values.length - 1)))),
+      at(Math.min(values.length - 1, Math.ceil(0.975 * (values.length - 1)))),
+    ];
   }
 }

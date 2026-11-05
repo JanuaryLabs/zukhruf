@@ -15,8 +15,10 @@ export abstract class FieldHits implements Measure, RecordVisitor {
   protected abstract hit(leaf: Leaf): boolean;
 
   leaf(leaf: Leaf): void {
-    const counts = this.fields.get(leaf.field) ?? new Counts();
-    this.fields.set(leaf.field, counts);
+    const counts = this.fields.getOrInsertComputed(
+      leaf.field,
+      () => new Counts(),
+    );
     if (hasValue(leaf.expected)) counts.expected++;
     if (hasValue(leaf.stated)) counts.stated++;
     if (this.hit(leaf)) counts.hits++;

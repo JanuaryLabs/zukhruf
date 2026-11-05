@@ -70,10 +70,10 @@ A rule that says if two values of a field agree: exact, a number in a tolerance,
 A class that gives one value for one stated value and its case, such as `LeafExactMatch`. A metric is named by what it measures, not by the benchmark that defined it.
 
 **Gate**:
-A metric whose value is 0 or 1, such as `SchemaCompliance`. `Gated` multiplies a metric by its gates for each record.
+A metric whose value is 0 or 1, such as `SchemaCompliance`. A gate extends `Gate` and says only what it checks. `Gated` multiplies a metric by its gates for each record.
 
 **Metric assertion**:
-A promptfoo assertion that gives the value of one metric. It reads the case from the vars of the test. The config of the assertion names the value, weighs it in the score of the test and says when it passes.
+A promptfoo assertion object that gives the value of one metric: its name, its weight in the score of the test, and the threshold at which it passes. A TypeScript config lists it in its defaultTest. It reads the case from the vars of the test.
 
 **Bootstrap interval**:
 The 95% interval of a mean: many samples draw the scorecards again, with replacement, and the interval spans the middle of their means.

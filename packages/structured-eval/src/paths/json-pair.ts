@@ -1,15 +1,5 @@
 import { type JsonCase, fromJavaScript } from './json-case.ts';
 import { type JsonData, JsonValue, isDict, isList } from './json-value.ts';
-import { flattenLeafPaths } from './leaf-paths.ts';
-
-// What a stated value is to the metrics: a value that JsonValue.parse read, as
-// it is; a string, which is text that was not parsed; or a JavaScript value,
-// read as json.loads reads its JSON text.
-const dataOf = (stated: unknown): JsonData => {
-  if (stated instanceof JsonValue) return stated.value;
-  if (typeof stated === 'string') return stated;
-  return fromJavaScript(stated);
-};
 
 // A stated value and its case, as evaluate_record of SOB's evaluate.py sees
 // them before it computes its metrics: the parsed candidate, the schema, and
@@ -26,13 +16,13 @@ export class JsonPair {
   readonly statedLeaves: ReadonlyMap<string, JsonData>;
 
   constructor(stated: unknown, testCase: JsonCase) {
-    const value = dataOf(stated);
+    const value = JsonPair.#dataOf(stated);
     this.testCase = testCase;
     this.parsed = isDict(value) || isList(value);
     this.candidate = this.parsed ? value : null;
-    this.expectedLeaves = flattenLeafPaths(testCase.expected);
+    this.expectedLeaves = JsonPair.#leaves(testCase.expected, '');
     this.statedLeaves = this.parsed
-      ? flattenLeafPaths(this.candidate)
+      ? JsonPair.#leaves(this.candidate, '')
       : new Map();
   }
 
@@ -49,9 +39,47 @@ export class JsonPair {
   }
 
   get sharedPaths(): number {
-    let shared = 0;
-    for (const path of this.expectedLeaves.keys())
-      if (this.statedLeaves.has(path)) shared++;
-    return shared;
+    return new Set(this.expectedLeaves.keys()).intersection(this.statedLeaves)
+      .size;
+  }
+
+  // What a stated value is to the metrics: a value that JsonValue.parse read,
+  // as it is; a string, which is text that was not parsed; or a JavaScript
+  // value, read as json.loads reads its JSON text.
+  static #dataOf(stated: unknown): JsonData {
+    if (stated instanceof JsonValue) return stated.value;
+    if (typeof stated === 'string') return stated;
+    return fromJavaScript(stated);
+  }
+
+  // The leaf paths of evaluate.py: `a.b[0].c`. A dict and a list give their
+  // children; any other value is a leaf (null too); a value at an empty path,
+  // such as a scalar root, is no leaf; a later equal path takes the value and
+  // keeps the first place, as dict.update does.
+  static #leaves(
+    value: JsonData | undefined,
+    prefix: string,
+  ): Map<string, JsonData> {
+    const leaves = new Map<string, JsonData>();
+    if (isDict(value)) {
+      for (const [key, child] of value)
+        for (const [path, leaf] of JsonPair.#leaves(
+          child,
+          prefix ? `${prefix}.${key}` : key,
+        ))
+          leaves.set(path, leaf);
+      return leaves;
+    }
+    if (isList(value)) {
+      for (const [index, child] of value.entries())
+        for (const [path, leaf] of JsonPair.#leaves(
+          child,
+          `${prefix}[${index}]`,
+        ))
+          leaves.set(path, leaf);
+      return leaves;
+    }
+    if (prefix && value !== undefined) leaves.set(prefix, value);
+    return leaves;
   }
 }

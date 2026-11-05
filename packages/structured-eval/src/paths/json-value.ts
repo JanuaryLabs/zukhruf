@@ -50,15 +50,13 @@ export function statedValue(stated: unknown): unknown {
   }
 }
 
-// The plain JSON value of a Python value, for a JSON Schema validator: a dict
-// becomes an object and an int a number. The validator compares 1 and 1.0 as
-// jsonschema does (an integral float is an integer).
-export function toJson(value: JsonData): unknown {
-  if (typeof value === 'bigint') return Number(value);
-  if (isList(value)) return value.map(toJson);
-  if (isDict(value))
-    return Object.fromEntries(
-      [...value].map(([key, item]) => [key, toJson(item)]),
-    );
-  return value;
+// dict.get(key, default) of Python: a key whose value is None gives None, and
+// only a missing key gives the default.
+export function dictGet(
+  dict: JsonObject,
+  key: string,
+  fallback: JsonData,
+): JsonData {
+  const value = dict.get(key);
+  return value === undefined ? fallback : value;
 }

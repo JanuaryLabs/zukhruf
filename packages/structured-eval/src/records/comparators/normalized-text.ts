@@ -1,12 +1,12 @@
-import type { Comparator } from '../comparator.ts';
 import { normalized } from '../normalized.ts';
+import { TypedComparator } from './typed-comparator.ts';
 
-export class NormalizedText implements Comparator {
-  agrees(stated: unknown, expected: unknown): boolean {
-    return (
-      typeof stated === 'string' &&
-      typeof expected === 'string' &&
-      normalized(stated) === normalized(expected)
-    );
+export class NormalizedText extends TypedComparator<string> {
+  protected accepts(value: unknown): value is string {
+    return typeof value === 'string';
+  }
+
+  protected compare(stated: string, expected: string): boolean {
+    return normalized(stated) === normalized(expected);
   }
 }

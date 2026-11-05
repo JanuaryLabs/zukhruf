@@ -1,8 +1,5 @@
 import type { Leaf, RecordVisitor } from '../record-visitor.ts';
 
-const shown = (value: unknown) =>
-  value === undefined ? 'nothing' : JSON.stringify(value);
-
 // Each leaf whose two values do not agree, named by its path.
 export class Differences implements RecordVisitor {
   readonly #lines: string[] = [];
@@ -10,7 +7,7 @@ export class Differences implements RecordVisitor {
   leaf(leaf: Leaf): void {
     if (!leaf.agrees)
       this.#lines.push(
-        `${leaf.path}: expected ${shown(leaf.expected)}, stated ${shown(leaf.stated)}`,
+        `${leaf.path}: expected ${Differences.#shown(leaf.expected)}, stated ${Differences.#shown(leaf.stated)}`,
       );
   }
 
@@ -20,5 +17,9 @@ export class Differences implements RecordVisitor {
 
   lines(): readonly string[] {
     return this.#lines;
+  }
+
+  static #shown(value: unknown): string {
+    return value === undefined ? 'nothing' : JSON.stringify(value);
   }
 }

@@ -27,6 +27,7 @@ import {
   ValidSchema,
   type WeightedScorecard,
 } from '../index.ts';
+import expectedJson from './fixtures/sob-evaluate/expected.json' with { type: 'json' };
 
 // fixtures/sob-evaluate/expected.json holds what the Structured Output
 // Benchmark's evaluate.py (commit da785a8, CPython 3.12.9, jsonschema 4.26.0)
@@ -49,7 +50,7 @@ const expected: {
     readonly overall: SummaryPart;
     readonly overall_weighted: SummaryPart;
   };
-} = JSON.parse(readFileSync(join(folder, 'expected.json'), 'utf8'));
+} = expectedJson;
 const lines = readFileSync(join(folder, 'responses.jsonl'), 'utf8').split('\n');
 
 // SOB's metrics, each labelled with its key in eval_records.

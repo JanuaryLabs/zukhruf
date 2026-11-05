@@ -200,31 +200,51 @@ scorer.score(stated, new JsonCase(expected, schema, 1)).ratios.get('truth'); // 
 | `RequiredKeyRecall` | the required paths of the schema that it has                              |
 | `CanonicalEquality` | 1 when its canonical JSON (sorted keys) equals that of the expected value |
 
-A gate is a metric whose value is 0 or 1. `Gated(metric, ...gates)` multiplies a metric by its gates for each record, `AtLeast(metric, threshold)` is 1 when the metric reaches the threshold, and `MeanOf(...metrics)` is the mean of some metrics for each record.
+A gate is a metric whose value is 0 or 1. A gate extends `Gate`: it says what it checks, and `Gate` gives 1 or 0. `Gated(metric, ...gates)` multiplies a metric by its gates for each record, `AtLeast(metric, threshold)` is 1 when the metric reaches the threshold, and `MeanOf(...metrics)` is the mean of some metrics for each record.
 
-With promptfoo, each metric is one assertion. `MetricAssertion` gives the value of one metric for the stated value of a test. It reads the case from the vars of the test, because an assertion that `defaultTest` shares gets only the vars of each test. The config of the assertion names the value (`metric`), weighs it in the score of the test (`weight`), and says when it passes (`threshold`):
+With promptfoo, each metric is one assertion. A `MetricAssertion` is a promptfoo assertion object, so a TypeScript config (`promptfooconfig.ts`) lists it in its `defaultTest`. Each one has a name (`metric`), how much it counts in the score of the test (`weight`), and when it passes (`threshold`). Both numbers are required:
 
 ```ts
-// assertions/canonical-equality.ts
-import { CanonicalEquality, JsonTextCase } from '@zukhruf/structured-eval';
+// promptfooconfig.ts
+import type { UnifiedConfig } from 'promptfoo';
+
+import {
+  AtLeast,
+  CanonicalEquality,
+  Gated,
+  LeafExactMatch,
+  PathF1,
+  SchemaCompliance,
+} from '@zukhruf/structured-eval';
 import { MetricAssertion } from '@zukhruf/structured-eval/promptfoo';
 
-export default new MetricAssertion(new CanonicalEquality(), JsonTextCase).grade;
+const validJson = new SchemaCompliance();
+const covered = new AtLeast(new PathF1(), 0.95);
+
+export default {
+  prompts: ['file://prompt.txt'],
+  providers: ['openai:gpt-6-luna'],
+  defaultTest: {
+    assert: [
+      new MetricAssertion('valid_json', validJson, { weight: 1, threshold: 1 }),
+      new MetricAssertion(
+        'field_recall',
+        new Gated(new LeafExactMatch(), validJson, covered),
+        { weight: 1, threshold: 0 },
+      ),
+      new MetricAssertion('exact_match', new CanonicalEquality(), {
+        weight: 1,
+        threshold: 0,
+      }),
+    ],
+  },
+  tests: ['file://tests.jsonl'],
+} satisfies UnifiedConfig;
 ```
 
-```yaml
-defaultTest:
-  assert:
-    - type: javascript
-      value: file://assertions/canonical-equality.ts
-      metric: canonical_equality
-      weight: 1
-      threshold: 0
-```
+promptfoo adds the value × the weight of each assertion of a test and divides by the sum of the weights: that is the score of the test. An assertion that gives a number passes when the number reaches its `threshold`. The test passes when all its assertions pass. The column header of a metric shows its mean over the tests.
 
-promptfoo adds the value × the weight of each assertion of a test and divides by the sum of the weights: that is the score of the test. An assertion that gives a number passes when the number reaches its `threshold`, or when it is above 0 without one. The column header of a metric shows its mean over the tests.
-
-`MetricAssertion` reads the text of the harness as `json.loads` does, without loss, and keeps text that is not JSON as an unparsed value. It keeps any other value, such as a JavaScript object, as a JavaScript value.
+`MetricAssertion` reads the text of the harness as `json.loads` does, without loss, and keeps text that is not JSON as an unparsed value. It reads the case from the vars of the test with `JsonTextCase`, because an assertion that `defaultTest` shares gets only the vars of each test.
 
 `JsonTextCase.from(vars)` reads `expected` as JSON text and `schema` as a JSON value. A row without a weight weighs 1. promptfoo parses each row, so an integral float such as `7.0` is already `7` in a JSON value. JSON text keeps `7.0` a float, as `json.loads` reads it. promptfoo resolves a `$ref` in the vars of a row to its JSON value when the config gives the file of rows in a list (`tests: [file://tests.jsonl]`):
 
@@ -268,6 +288,7 @@ The metric classes port the metrics of the Structured Output Benchmark (SOB), ev
 - [ADR 0004: scorers give ratios, a ratio of sums adds them, and runners are adapters](docs/adr/0004-scorers-give-ratios-and-runners-are-adapters.md)
 - [ADR 0005: metrics are classes named by what they measure, and a benchmark is a composition kept by its caller](docs/adr/0005-metrics-are-classes-named-by-what-they-measure.md)
 - [ADR 0006: with promptfoo, each metric is one assertion that reads the vars of its test](docs/adr/0006-with-promptfoo-each-metric-is-one-assertion-that-reads-the-vars-of-its-test.md)
+- [ADR 0007: a metric assertion is a promptfoo assertion object in a TypeScript config](docs/adr/0007-a-metric-assertion-is-a-promptfoo-assertion-object-in-a-typescript-config.md)
 
 ## Development
 

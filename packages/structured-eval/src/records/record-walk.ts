@@ -3,9 +3,6 @@ import type { RecordSpec } from './record-spec.ts';
 import type { Leaf, RecordVisitor } from './record-visitor.ts';
 import { hasValue, isRecord } from './values.ts';
 
-const child = (parent: string, key: string) =>
-  parent === '' ? key : `${parent}.${key}`;
-
 class AgreeingLeaves implements RecordVisitor {
   count = 0;
 
@@ -62,8 +59,8 @@ export class RecordWalk {
         this.#walk(
           statedRecord[key],
           expectedRecord[key],
-          child(field, key),
-          child(path, key),
+          RecordWalk.#child(field, key),
+          RecordWalk.#child(path, key),
           visitors,
         );
       return;
@@ -127,5 +124,9 @@ export class RecordWalk {
           `${path}[stated ${index}]`,
           visitors,
         );
+  }
+
+  static #child(parent: string, key: string): string {
+    return parent === '' ? key : `${parent}.${key}`;
   }
 }

@@ -174,6 +174,25 @@ test('a valid record whose every field is right and every item paired passes wit
   assert.deepEqual(empty.ratios.get('offers items precision'), new Ratio(2, 3));
 });
 
+test('with two set arrays, one expected item without a pair fails the record, and the reason names only that array', () => {
+  const scorer = new RecordScorer(
+    new RecordSpec({
+      arrays: { tags: new ByBestMatch(), notes: new ByBestMatch() },
+    }),
+  );
+
+  const scorecard = scorer.score(
+    { tags: [{ name: 'a' }], notes: [] },
+    new RecordCase({ tags: [{ name: 'a' }], notes: [{}] }),
+  );
+
+  assert.equal(scorecard.passed, false);
+  assert.equal(
+    scorecard.reason,
+    'notes: 0 pairs of 1 expected and 0 stated items',
+  );
+});
+
 test('a spec without a schema gives no valid or type safety ratio, and its record can pass', () => {
   const scorer = new RecordScorer(new RecordSpec());
 

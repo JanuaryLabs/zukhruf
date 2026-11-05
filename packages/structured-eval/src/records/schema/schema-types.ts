@@ -1,35 +1,9 @@
 import type { InstanceType, Schema } from '@cfworker/json-schema';
 
 import type { Step } from '../record-leaves.ts';
+import { isRecord } from '../values.ts';
 
 type Node = Schema | boolean;
-
-const jsonType = (value: unknown): InstanceType => {
-  if (value === null) return 'null';
-  if (typeof value === 'boolean') return 'boolean';
-  if (typeof value === 'bigint') return 'integer';
-  if (typeof value === 'number')
-    return Number.isInteger(value) ? 'integer' : 'number';
-  if (typeof value === 'string') return 'string';
-  if (Array.isArray(value)) return 'array';
-  return 'object';
-};
-
-const typeMatches = (declared: unknown, actual: InstanceType) => {
-  const types = Array.isArray(declared) ? declared : [declared];
-  return types.some(
-    (type) => type === actual || (type === 'number' && actual === 'integer'),
-  );
-};
-
-const isObject = (value: unknown): value is Readonly<Record<string, unknown>> =>
-  typeof value === 'object' && value !== null && !Array.isArray(value);
-
-const isNode = (value: unknown): value is Node =>
-  typeof value === 'boolean' || isObject(value);
-
-const decode = (token: string) =>
-  decodeURIComponent(token).replaceAll('~1', '/').replaceAll('~0', '~');
 
 // Answers if the JSON Schema allows the type of a value at a path. It follows
 // properties, patternProperties, additionalProperties, prefixItems, items
@@ -46,7 +20,7 @@ export class SchemaTypes {
     let nodes: readonly Node[] = [this.#root];
     for (const step of steps)
       nodes = nodes.flatMap((node) => this.#children(node, step, new Set()));
-    const type = jsonType(value);
+    const type = SchemaTypes.#jsonType(value);
     return nodes.some((node) => this.#admits(node, type, new Set()));
   }
 
@@ -54,7 +28,8 @@ export class SchemaTypes {
     if (typeof node === 'boolean') return node;
     if (visited.has(node)) return true;
     const seen = new Set(visited).add(node);
-    if (node.type !== undefined && !typeMatches(node.type, type)) return false;
+    if (node.type !== undefined && !SchemaTypes.#typeMatches(node.type, type))
+      return false;
     const reference = this.#reference(node);
     if (reference !== undefined && !this.#admits(reference, type, seen))
       return false;
@@ -86,7 +61,7 @@ export class SchemaTypes {
 
   #property(node: Schema, key: string): Node[] {
     const declares =
-      typeMatches(node.type, 'object') ||
+      SchemaTypes.#typeMatches(node.type, 'object') ||
       node.properties !== undefined ||
       node.patternProperties !== undefined ||
       node.additionalProperties !== undefined;
@@ -102,7 +77,7 @@ export class SchemaTypes {
 
   #item(node: Schema, index: number): Node[] {
     const declares =
-      typeMatches(node.type, 'array') ||
+      SchemaTypes.#typeMatches(node.type, 'array') ||
       node.items !== undefined ||
       node.prefixItems !== undefined;
     if (!declares) return [];
@@ -118,9 +93,37 @@ export class SchemaTypes {
     if (reference === undefined || !reference.startsWith('#')) return undefined;
     let target: unknown = this.#root;
     for (const token of reference.slice(1).split('/').slice(1)) {
-      if (!isObject(target)) return true;
-      target = target[decode(token)];
+      if (!isRecord(target)) return true;
+      target = target[SchemaTypes.#decode(token)];
     }
-    return isNode(target) ? target : true;
+    return SchemaTypes.#isNode(target) ? target : true;
+  }
+
+  static #jsonType(value: unknown): InstanceType {
+    if (value === null) return 'null';
+    if (typeof value === 'boolean') return 'boolean';
+    if (typeof value === 'bigint') return 'integer';
+    if (typeof value === 'number')
+      return Number.isInteger(value) ? 'integer' : 'number';
+    if (typeof value === 'string') return 'string';
+    if (Array.isArray(value)) return 'array';
+    return 'object';
+  }
+
+  static #typeMatches(declared: unknown, actual: InstanceType): boolean {
+    const types = Array.isArray(declared) ? declared : [declared];
+    return types.some(
+      (type) => type === actual || (type === 'number' && actual === 'integer'),
+    );
+  }
+
+  static #isNode(value: unknown): value is Node {
+    return typeof value === 'boolean' || isRecord(value);
+  }
+
+  static #decode(token: string): string {
+    return decodeURIComponent(token)
+      .replaceAll('~1', '/')
+      .replaceAll('~0', '~');
   }
 }

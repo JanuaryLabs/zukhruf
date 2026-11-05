@@ -8,9 +8,9 @@ export class Totals {
 
   add(scorecard: Scorecard, weight: number): void {
     for (const [name, ratio] of scorecard.ratios) {
-      const sum = this.#sums.get(name) ?? new RatioOfSums();
-      this.#sums.set(name, sum);
-      sum.add(ratio.times(weight));
+      this.#sums
+        .getOrInsertComputed(name, () => new RatioOfSums())
+        .add(ratio.times(weight));
     }
   }
 

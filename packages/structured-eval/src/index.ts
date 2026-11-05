@@ -18,6 +18,7 @@ export type { CaseReader, Scorer, Weighted } from './scoring/scorer.ts';
 export { Totals } from './scoring/totals.ts';
 export { AtLeast } from './paths/metrics/at-least.ts';
 export { CanonicalEquality } from './paths/metrics/canonical-equality.ts';
+export { Gate } from './paths/metrics/gate.ts';
 export { Gated } from './paths/metrics/gated.ts';
 export { LeafExactMatch } from './paths/metrics/leaf-exact-match.ts';
 export { LeafTokenF1 } from './paths/metrics/leaf-token-f1.ts';
