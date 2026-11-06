@@ -32,7 +32,7 @@ export class NxReleaseScope extends Step<CommitMessage> {
       nx.scope === scope &&
       nx.breaking === breaking
     )
-      return this.pass();
+      return this.pass('nx release reads the scope as written');
     return this.fail(
       [
         `nx release reads the scope of this subject as ${JSON.stringify(nx.scope)}${header === undefined ? '' : `, not ${JSON.stringify(scope)}`}:`,
