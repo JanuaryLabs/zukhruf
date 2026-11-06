@@ -3,12 +3,13 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 
+import { NeumaierSum } from '@zukhruf/python';
 import { TemporaryFiles } from '@zukhruf/testing/fs';
 
 import { AbsTaskRetrieval } from '../abstasks/retrieval.ts';
 import { TaskMetadata } from '../abstasks/task-metadata.ts';
 import { percentile } from '../dependencies/numpy.ts';
-import { pythonRound, pythonSum } from '../dependencies/python.ts';
+import { pythonRound } from '../dependencies/python.ts';
 import { evaluate } from '../evaluate.ts';
 import { bm25S } from '../models/model-implementations/bm25.ts';
 import { holm } from './holm.ts';
@@ -126,7 +127,7 @@ async function evaluated(
 
 // The mean of the values as the evaluation of a task takes it.
 function roundedMean(values: Map<string, number>): number {
-  return pythonRound(pythonSum(values.values()) / values.size, 5);
+  return pythonRound(NeumaierSum.of(values.values()) / values.size, 5);
 }
 
 test('perQueryScores gives the ndcg_cut_10 of each query that MTEB gives for BM25 and for BM25 with k1 1.2 and b 0.5, to the last bit', async () => {

@@ -10,17 +10,15 @@ import { isDeepStrictEqual } from 'node:util';
 import type { EmbeddingModel, RerankingModel } from 'ai';
 import { z } from 'zod';
 
+import { floatRepr } from '@zukhruf/python';
+
 import {
   checkLanguageCode,
   strDate,
   strUrl,
   validateModel,
 } from '../abstasks/task-metadata.ts';
-import {
-  compareStrings,
-  isPlainObject,
-  pythonFloatRepr,
-} from '../dependencies/python.ts';
+import { compareStrings, isPlainObject } from '../dependencies/python.ts';
 import type { EncodeKwargs } from '../types/encoder-io.ts';
 import { LICENSES, MODALITIES } from '../types/metadata.ts';
 import type {
@@ -726,7 +724,7 @@ function serializeValue(value: unknown): string {
           : typeof value === 'number'
             ? Number.isInteger(value) && !Object.is(value, -0)
               ? BigInt(value).toString()
-              : pythonFloatRepr(value)
+              : floatRepr(value)
             : value;
     return [...text]
       .map((character) => (INVALID_CHARACTERS.has(character) ? '_' : character))

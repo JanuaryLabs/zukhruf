@@ -5,13 +5,14 @@ import { test } from 'node:test';
 
 import { Random } from 'python-random';
 
+import type { JsonData } from '@zukhruf/python';
+
 import {
   AtLeast,
   Bootstrap,
   CanonicalEquality,
   Gated,
   JsonCase,
-  type JsonData,
   JsonValue,
   LeafExactMatch,
   LeafTokenF1,

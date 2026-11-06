@@ -1,0 +1,9 @@
+@zukhruf/python
+Copyright 2026 ezzabuzaid
+
+This package ports the semantics of parts of CPython 3.12 (the sum() of
+floats in Python/bltinmodule.c, float.__repr__ in Python/pystrtod.c, the
+json module's scanner and decoder in Lib/json, and str.isspace), Copyright
+(c) Python Software Foundation, PSF License Version 2,
+https://github.com/python/cpython. The package does not include CPython's
+code.

@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { pythonFloatRepr } from '../dependencies/python.ts';
 import {
   jsonLoadsInOrder,
   pydanticJsonDumps,
@@ -41,24 +40,6 @@ test('pythonJsonDumps writes the infinities and escapes an astral character as t
     text,
     '[Infinity, -Infinity, "\\ud83d\\ude00", "a\\"b\\\\c\\n"]',
   );
-});
-
-test('pythonFloatRepr gives the repr of Python for the positional and the scientific range', () => {
-  const values = [
-    2.749999111983925e-6, 1e16, 0.0001, 1.5e-5, 0.96995, 123.5, -0.5,
-  ];
-
-  const reprs = values.map(pythonFloatRepr);
-
-  assert.deepEqual(reprs, [
-    '2.749999111983925e-06',
-    '1e+16',
-    '0.0001',
-    '1.5e-05',
-    '0.96995',
-    '123.5',
-    '-0.5',
-  ]);
 });
 
 test('pythonJsonLoads reads the NaN and Infinity tokens and leaves the same words inside strings', () => {

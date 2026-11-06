@@ -1,5 +1,7 @@
+import type { JsonData } from '@zukhruf/python';
+
 import type { JsonPair } from '../json-pair.ts';
-import { type JsonData, dictGet, isDict, isList } from '../json-value.ts';
+import { dictGet, isDict, isList } from '../json-value.ts';
 import { LeafMean } from './leaf-mean.ts';
 
 // The stated leaves whose type is the type of their path in the schema,

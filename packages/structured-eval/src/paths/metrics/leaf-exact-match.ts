@@ -1,6 +1,7 @@
+import type { JsonData } from '@zukhruf/python';
+
 import { pythonEquals } from '../cpython/python-equals.ts';
 import type { JsonPair } from '../json-pair.ts';
-import type { JsonData } from '../json-value.ts';
 import { LeafMean } from './leaf-mean.ts';
 
 // The expected leaves whose path the stated value has with an equal value

@@ -1,6 +1,8 @@
+import type { JsonData } from '@zukhruf/python';
+
 import { Ratio } from '../../aggregation/ratio.ts';
 import type { JsonPair } from '../json-pair.ts';
-import { type JsonData, dictGet, isDict, isList } from '../json-value.ts';
+import { dictGet, isDict, isList } from '../json-value.ts';
 import type { Metric } from '../metric.ts';
 
 // The required paths of the schema that the stated value has

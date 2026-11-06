@@ -22,3 +22,4 @@ package-lock.json
 # The frozen files of the relevance-filtering research rounds, kept byte for
 # byte (the sha256 files beside them).
 /docs/research/relevance-filtering
+/packages/python/src/**/fixtures

@@ -1,7 +1,7 @@
+import { type JsonData, loadsJson } from '@zukhruf/python';
+
 import type { Weighted } from '../scoring/scorer.ts';
-import { loadsJson } from './cpython/python-json.ts';
 import { Draft7Schema } from './draft7-schema.ts';
-import type { JsonData } from './json-value.ts';
 
 // A JavaScript value as json.loads reads its JSON text: an integral number
 // becomes an int. JSON.stringify gives no text for undefined, which stands

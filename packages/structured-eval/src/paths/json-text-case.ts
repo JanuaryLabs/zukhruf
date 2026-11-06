@@ -1,4 +1,5 @@
-import { loadsJson } from './cpython/python-json.ts';
+import { loadsJson } from '@zukhruf/python';
+
 import { JsonCase, fromJavaScript } from './json-case.ts';
 
 // Reads a case whose expected value is JSON text, without loss, as json.loads

@@ -93,6 +93,9 @@
       "path": "./packages/structured-eval"
     },
     {
+      "path": "./packages/python"
+    },
+    {
       "path": "./packages/sqlite/reader"
     },
     {

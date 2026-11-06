@@ -1,0 +1,43 @@
+{
+  "name": "@zukhruf/python",
+  "version": "0.1.0",
+  "private": true,
+  "description": "CPython 3.12 results in JavaScript: the compensated sum() of floats, repr() of a float, json.loads with the order of keys and ints apart from floats, and the white space of str.isspace().",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/JanuaryLabs/zukhruf",
+    "directory": "packages/python"
+  },
+  "bugs": {
+    "url": "https://github.com/JanuaryLabs/zukhruf/issues"
+  },
+  "homepage": "https://github.com/JanuaryLabs/zukhruf/tree/main/packages/python#readme",
+  "keywords": [
+    "python",
+    "cpython",
+    "json",
+    "repr",
+    "sum"
+  ],
+  "type": "module",
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "@zukhruf/source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "NOTICE",
+    "!dist/spec/**",
+    "!**/*.tsbuildinfo",
+    "!**/*.test.*"
+  ],
+  "dependencies": {
+    "jsonc-parser": "^3.3.1"
+  }
+}

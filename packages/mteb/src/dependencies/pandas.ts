@@ -5,13 +5,10 @@
 // qcut, which MTEB's regression tasks call to bin their values.
 import { EOL } from 'node:os';
 
+import { floatRepr } from '@zukhruf/python';
+
 import { addReduceat, linspace, quantile } from './numpy.ts';
-import {
-  compareStrings,
-  pythonFloatRepr,
-  pythonFormatFixed,
-  pythonStrRepr,
-} from './python.ts';
+import { compareStrings, pythonFormatFixed, pythonStrRepr } from './python.ts';
 import { type TabulateValue, tabulate } from './tabulate.ts';
 
 // A value of a table. NaN is a number, as in a float64 column.
@@ -463,7 +460,7 @@ function isMultiIndex(columns: readonly ColumnLabel[]): boolean {
 function str(value: Cell): string {
   if (value === null) return 'None';
   if (typeof value === 'boolean') return value ? 'True' : 'False';
-  if (typeof value === 'number') return pythonFloatRepr(value);
+  if (typeof value === 'number') return floatRepr(value);
   return value;
 }
 

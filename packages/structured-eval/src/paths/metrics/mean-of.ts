@@ -1,4 +1,5 @@
-import { NeumaierSum } from '../../aggregation/neumaier-sum.ts';
+import { NeumaierSum } from '@zukhruf/python';
+
 import type { JsonPair } from '../json-pair.ts';
 import type { Metric } from '../metric.ts';
 

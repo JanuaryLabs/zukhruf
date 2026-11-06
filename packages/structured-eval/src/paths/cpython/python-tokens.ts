@@ -1,17 +1,16 @@
-import type { JsonData } from '../json-value.ts';
+import { type JsonData, PYTHON_SPACE } from '@zukhruf/python';
+
 import { pythonStr } from './python-text.ts';
 
-// Python's \s and str.split() whitespace (str.isspace). A probe over every
-// code point proved this class and [\p{L}\p{N}_] (Python's \w) equal to
+// Python's \w: a probe over every code point proved [\p{L}\p{N}_] equal to
 // Python's for each character that Python's Unicode database has; Node also
 // knows characters of later Unicode versions, which Python reads as not \w.
-const SPACE = String.raw`\t\n\v\f\r\x1c-\x1f \x85\xa0\u{1680}\u{2000}-\u{200a}\u{2028}\u{2029}\u{202f}\u{205f}\u{3000}`;
 const WORD = String.raw`\p{L}\p{N}_`;
-const PUNCTUATION = new RegExp(`[^${WORD}${SPACE}]`, 'gu');
+const PUNCTUATION = new RegExp(`[^${WORD}${PYTHON_SPACE}]`, 'gu');
 // Python's \b is a border between \w and not \w; JavaScript's \b knows only
 // ASCII words.
 const ARTICLES = new RegExp(`(?<![${WORD}])(?:a|an|the)(?![${WORD}])`, 'gu');
-const SPACES = new RegExp(`[${SPACE}]+`, 'u');
+const SPACES = new RegExp(`[${PYTHON_SPACE}]+`, 'u');
 
 // normalize_tokens of evaluate.py: str() of the value, lower case,
 // punctuation and the articles a, an, the as spaces, then the words.

@@ -1,23 +1,5 @@
 // The CPython 3.12 algorithms whose results MTEB depends on.
-
-// sum() of floats. CPython 3.12 adds with Neumaier's compensated summation
-// (Neumaier 1974), so the result can differ from a plain loop in the last
-// bit.
-export function pythonSum(values: Iterable<number>): number {
-  let sum = 0;
-  let compensation = 0;
-  for (const value of values) {
-    const total = sum + value;
-    compensation +=
-      Math.abs(sum) >= Math.abs(value)
-        ? sum - total + value
-        : value - total + sum;
-    sum = total;
-  }
-  return compensation !== 0 && Number.isFinite(compensation)
-    ? sum + compensation
-    : sum;
-}
+import { PYTHON_SPACE } from '@zukhruf/python';
 
 // round(value, digits). CPython rounds the exact binary value of the float to
 // the nearest decimal with the given digits, a tie to the even digit, and
@@ -128,27 +110,6 @@ export function isPlainObject(
   return prototype === Object.prototype || prototype === null;
 }
 
-// repr(float): the shortest digits that read back as the same float, in
-// positional notation when the exponent is from -4 to 15, else in scientific
-// notation with at least two exponent digits.
-export function pythonFloatRepr(value: number): string {
-  if (Number.isNaN(value)) return 'nan';
-  if (!Number.isFinite(value)) return value > 0 ? 'inf' : '-inf';
-  const [mantissa = '', exponentText = '0'] = value.toExponential().split('e');
-  const sign = mantissa.startsWith('-') || Object.is(value, -0) ? '-' : '';
-  const digits = mantissa.replace('-', '').replace('.', '');
-  const exponent = Number(exponentText);
-  if (exponent < -4 || exponent >= 16) {
-    const fraction = digits.slice(1);
-    const magnitude = String(Math.abs(exponent)).padStart(2, '0');
-    return `${sign}${digits[0]}${fraction ? `.${fraction}` : ''}e${exponent < 0 ? '-' : '+'}${magnitude}`;
-  }
-  if (exponent < 0) return `${sign}0.${'0'.repeat(-exponent - 1)}${digits}`;
-  const whole = digits.slice(0, exponent + 1).padEnd(exponent + 1, '0');
-  const fraction = digits.slice(exponent + 1);
-  return `${sign}${whole}.${fraction || '0'}`;
-}
-
 // format(value, '.<digits>f'): the exact binary value of the float rounded to
 // the given decimals, a tie to the even digit, as CPython's dtoa rounds.
 // toFixed rounds a tie up and writes 1e21 and above in scientific notation.
@@ -237,9 +198,6 @@ export function pythonStrRepr(text: string): string {
 // Cf, Cs, Co, Cn, Zl, Zp and Zs, but the space.
 const NOT_PRINTABLE = /^[\p{Cc}\p{Cf}\p{Cs}\p{Co}\p{Cn}\p{Zl}\p{Zp}\p{Zs}]$/u;
 
-// The characters of str.isspace(), which str.strip(), int() and float() strip.
-const PYTHON_SPACE =
-  '\\t\\n\\v\\f\\r\\x1c-\\x1f \\x85\\xa0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000';
 const PYTHON_STRIP = new RegExp(
   `^[${PYTHON_SPACE}]+|[${PYTHON_SPACE}]+$`,
   'gu',

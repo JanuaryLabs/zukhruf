@@ -1,6 +1,6 @@
-import { NeumaierSum } from '../../aggregation/neumaier-sum.ts';
+import { type JsonData, NeumaierSum } from '@zukhruf/python';
+
 import type { JsonPair } from '../json-pair.ts';
-import type { JsonData } from '../json-value.ts';
 import type { Metric } from '../metric.ts';
 
 // The mean of one value for each leaf of a pair, such as the share of the

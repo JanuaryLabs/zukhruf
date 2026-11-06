@@ -1,13 +1,18 @@
 import { printParseErrorCode, visit } from 'jsonc-parser';
 
-import type { JsonData } from '../json-value.ts';
+import type { JsonData } from './json-data.ts';
+
+// Python refuses to read an int of more than this many digits
+// (sys.int_info.default_max_str_digits, Python 3.11 and later).
+const maxIntDigits = 4300;
 
 // json.loads of CPython: each dict a Map in the order of its keys (a repeated
 // key keeps its first place and its last value), each number with a `.`, `e`
 // or `E` a float and any other an int (a bigint, exact), and the NaN,
 // Infinity and -Infinity tokens of Python's json module. A text that is not
-// JSON throws a SyntaxError: comments and trailing commas too. Copied from
-// @zukhruf/mteb jsonLoadsInOrder (docs/copied-code.md), with the ints.
+// JSON throws a SyntaxError, as Python raises a JSONDecodeError: comments and
+// trailing commas too. An int of more than 4300 digits throws a RangeError, as
+// Python raises a ValueError.
 export function loadsJson(text: string): JsonData {
   const tokens = pythonTokens(text);
   const containers: (JsonData[] | Map<string, JsonData>)[] = [];
@@ -51,8 +56,7 @@ export function loadsJson(text: string): JsonData {
           add(tokens.number(value));
           return;
         }
-        const literal = tokens.json.slice(offset, offset + length);
-        add(/[.eE]/.test(literal) ? value : BigInt(literal));
+        add(numberOf(tokens.json.slice(offset, offset + length), value));
       },
       onError: (error, offset) => {
         throw new SyntaxError(
@@ -64,6 +68,18 @@ export function loadsJson(text: string): JsonData {
   );
   if (root === undefined) throw new SyntaxError('The JSON text has no value.');
   return root;
+}
+
+// A number literal as Python reads it: with ".", "e" or "E" it is a float,
+// else an int, exact at any size up to Python's limit (Lib/json/scanner.py,
+// NUMBER_RE).
+function numberOf(literal: string, value: number): bigint | number {
+  if (/[.eE]/.test(literal)) return value;
+  if (literal.replace('-', '').length > maxIntDigits)
+    throw new RangeError(
+      `An int of more than ${maxIntDigits} digits, which Python does not read.`,
+    );
+  return BigInt(literal);
 }
 
 // Python's json module writes NaN, Infinity and -Infinity as bare tokens,

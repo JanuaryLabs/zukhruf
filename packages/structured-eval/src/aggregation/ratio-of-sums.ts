@@ -1,4 +1,5 @@
-import { NeumaierSum } from './neumaier-sum.ts';
+import { NeumaierSum } from '@zukhruf/python';
+
 import { Ratio } from './ratio.ts';
 
 // The sum of the parts of many ratios divided by the sum of their wholes.

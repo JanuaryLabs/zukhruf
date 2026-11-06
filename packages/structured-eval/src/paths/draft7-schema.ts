@@ -1,8 +1,10 @@
 import { type Schema, Validator } from '@cfworker/json-schema';
 import traverse from 'json-schema-traverse';
 
+import type { JsonData } from '@zukhruf/python';
+
 import { draft07 } from './draft-07-schema.ts';
-import { type JsonData, isDict, isList } from './json-value.ts';
+import { isDict, isList } from './json-value.ts';
 
 // The JSON Schema of an expected record, read as jsonschema's Draft7Validator
 // reads it.

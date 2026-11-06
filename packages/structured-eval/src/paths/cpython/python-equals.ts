@@ -1,4 +1,4 @@
-import type { JsonData } from '../json-value.ts';
+import type { JsonData } from '@zukhruf/python';
 
 const asNumber = (value: JsonData): bigint | number | undefined => {
   if (typeof value === 'boolean') return value ? 1n : 0n;

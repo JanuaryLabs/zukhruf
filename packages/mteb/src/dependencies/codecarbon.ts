@@ -15,6 +15,7 @@ import { bestMatch, createScorer, normalizeText, search } from 'rapidfuzz-js';
 import { ratio, tokenSetRatio } from 'rapidfuzz-js/fuzz';
 
 import { type Clock, delay, timeout } from '@zukhruf/async';
+import { NeumaierSum } from '@zukhruf/python';
 
 import { mean } from './numpy.ts';
 import {
@@ -22,7 +23,6 @@ import {
   pythonFloat,
   pythonStrRepr,
   pythonStrip,
-  pythonSum,
 } from './python.ts';
 
 // codecarbon 2.8.4: what EmissionsTracker reaches with the arguments of MTEB
@@ -204,7 +204,7 @@ function regionEmissionsPerKWh(geo: GeoMetadata): number | null {
 
 // _region_energy_mix_to_emissions_rate, with Python's sum.
 function regionMixPerKWh(mix: RegionMix): number {
-  return pythonSum([
+  return NeumaierSum.of([
     (mix.coal / mix.total) * 0.995725971,
     (mix.petroleum / mix.total) * 0.8166885263,
     (mix.naturalGas / mix.total) * 0.7438415916,

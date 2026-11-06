@@ -1,8 +1,10 @@
+import { NeumaierSum } from '@zukhruf/python';
+
 import type { MTEBModels } from '../abstasks/abstask.ts';
 import type { AbsTaskRetrieval } from '../abstasks/retrieval.ts';
 import type { ResultCache } from '../cache/result-cache.ts';
 import { DataFrame } from '../dependencies/pandas.ts';
-import { pythonRound, pythonSum } from '../dependencies/python.ts';
+import { pythonRound } from '../dependencies/python.ts';
 import { perQueryScores } from '../significance/per-query-scores.ts';
 import { page } from './page.ts';
 import {
@@ -197,7 +199,7 @@ export class Report {
             // another run give another mean: the page would then draw the
             // queries and the verdicts of one run and the scores of another.
             const averaged = pythonRound(
-              pythonSum(values.values()) / values.size,
+              NeumaierSum.of(values.values()) / values.size,
               5,
             );
             if (!Object.is(averaged, scores.get(score)))

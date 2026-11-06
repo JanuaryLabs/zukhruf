@@ -1,0 +1,7 @@
+{
+  "name": "python",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "packages/python/src",
+  "projectType": "library",
+  "tags": ["layer:island", "std:base"]
+}

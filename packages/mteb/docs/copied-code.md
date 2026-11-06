@@ -1,6 +1,6 @@
 # Copied code
 
-This package keeps copies of code from the information-filtering evals, and one copy inside the package: the reader of a file of the HuggingFace Hub.
+This package keeps copies of code from the information-filtering evals and from @zukhruf/structured-eval, and one copy inside the package: the reader of a file of the HuggingFace Hub.
 
 ## From the information-filtering evals
 
@@ -39,6 +39,13 @@ The article bootstrap of the relevance-filtering eval (`articleWeights`, `articl
 ### Backlog
 
 #3411 waits for a third place. Its interim rule: mirror every fix in all copies, and name the files in the commit.
+
+## From @zukhruf/structured-eval
+
+**`packages/structured-eval/src/paths/json-value.ts` `isDict` and `isList` → `src/results/json.ts` `isDict` and `isList`.**
+Both are type guards for a value of `loadsJson` of @zukhruf/python: `Array.isArray` and `instanceof Map` leave its readonly arrays and ReadonlyMaps in the union, so a check narrows through a guard. This package is the second place.
+Changes: these take a `JsonData`, not `JsonData | undefined`, and `isDict` gives a `ReadonlyMap<string, JsonData>`, not the `JsonObject` alias.
+The guards are part of the conversion of a `loadsJson` value to plain JavaScript (backlog #3818), which three places copied. When #3818 moves that conversion into @zukhruf/python, the guards move with it. Until then, make each fix in both copies, and name both files in the commit.
 
 ## The Hub file reader, inside this package
 

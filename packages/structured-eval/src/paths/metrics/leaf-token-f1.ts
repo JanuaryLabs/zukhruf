@@ -1,6 +1,7 @@
+import type { JsonData } from '@zukhruf/python';
+
 import { tokenF1 } from '../cpython/python-tokens.ts';
 import type { JsonPair } from '../json-pair.ts';
-import type { JsonData } from '../json-value.ts';
 import { LeafMean } from './leaf-mean.ts';
 
 // The mean token F1 of each expected leaf and the stated value at its path

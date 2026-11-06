@@ -34,7 +34,7 @@ export { JsonCase } from './paths/json-case.ts';
 export type { JsonPair } from './paths/json-pair.ts';
 export { JsonTextCase } from './paths/json-text-case.ts';
 export { JsonTextScorer } from './paths/json-text-scorer.ts';
-export { type JsonData, JsonValue } from './paths/json-value.ts';
+export { JsonValue } from './paths/json-value.ts';
 export type { Metric } from './paths/metric.ts';
 export { MetricScorer } from './paths/metric-scorer.ts';
 export {

@@ -1,5 +1,7 @@
+import type { JsonData } from '@zukhruf/python';
+
 import { type JsonCase, fromJavaScript } from './json-case.ts';
-import { type JsonData, JsonValue, isDict, isList } from './json-value.ts';
+import { JsonValue, isDict, isList } from './json-value.ts';
 
 // A stated value and its case, as evaluate_record of SOB's evaluate.py sees
 // them before it computes its metrics: the parsed candidate, the schema, and

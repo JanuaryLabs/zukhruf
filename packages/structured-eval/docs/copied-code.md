@@ -1,22 +1,14 @@
 # Copied code
 
-This package keeps copies of four parts of @zukhruf/mteb. The JSON metrics and the ratio of sums need the same CPython rules that mteb ports, and mteb is a large package with many dependencies, so this package does not import it.
-
-The reason is the Rule of Three (workspace ADR 0001, rule 2). This package is the second place for each part. A third place that needs one of these CPython rules starts the extraction (backlog #3770). Until then, make each fix in both copies, and name both files in the commit.
-
-Paths on the left are in `packages/mteb/src/`. Paths on the right are in `packages/structured-eval/src/`.
+This package keeps copies of two CPython rules that other places also hold. The reason is the Rule of Three (workspace ADR 0001, rule 2): each rule is in two places, so it stays a copy. A third place that needs one of these rules starts the extraction into @zukhruf/python, which already holds the CPython rules that three places copied (its ADR 0001). Until then, make each fix in both copies, and name both files in the commit.
 
 ## Copied without changes
 
-- `dependencies/python.ts` `pythonFloatRepr` → `paths/cpython/python-text.ts` `floatRepr`: the repr() of a float in CPython.
-- `dependencies/python.ts` `compareStrings` → `paths/cpython/python-text.ts` `compareStrings`: Python's order of two strings, by code point.
+**@zukhruf/mteb `src/dependencies/python.ts` `compareStrings` → `src/paths/cpython/python-text.ts` `compareStrings`.**
+Python's order of two strings, by code point.
 
 ## Copied with changes
 
-**`dependencies/python.ts` `pythonSum` → `aggregation/neumaier-sum.ts` `NeumaierSum`.**
-Both add floats with Neumaier's compensated summation, as the sum() of CPython 3.12 does.
-Changes: `NeumaierSum` is a running sum (`add`, `value`), because a ratio of sums adds one ratio at a time. The arithmetic is the same.
-
-**`results/json.ts` `jsonLoadsInOrder`, `pythonTokens`, `stringEnd` → `paths/cpython/python-json.ts` `loadsJson`.**
-Both read JSON as CPython's json.loads does: each object as a Map in the order of its keys, and the NaN, Infinity and -Infinity tokens of Python's json module, through the visitor of `jsonc-parser`.
-Changes: a number whose source text has no `.`, `e` or `E` becomes a bigint, as Python reads it as an int. The values have the type `JsonData`.
+**`src/paths/cpython/python-equals.ts` `pythonEquals` → offers-evals `src/scorers/python-equality.ts` `PythonEquality`.**
+Python's `==` for two JSON leaves: a bool, an int and a float compare as numbers, exactly, so `True == 1 == 1.0`.
+Changes: `PythonEquality` is a class that implements the `Equality` strategy of offers-evals, and the value on the right can be absent.

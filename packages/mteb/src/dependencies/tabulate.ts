@@ -5,9 +5,10 @@
 // tabulate measures text when it cannot import wcwidth: the width of a text
 // is its number of code points. ANSI escape codes, separating lines and
 // bytes are not ported.
+import { floatRepr } from '@zukhruf/python';
+
 import {
   pythonFloat,
-  pythonFloatRepr,
   pythonFormatG,
   pythonIsInt,
   pythonSplitlines,
@@ -92,7 +93,7 @@ export function tabulate(
 function pythonStr(value: TabulateValue): string {
   if (value === null) return 'None';
   if (typeof value === 'boolean') return value ? 'True' : 'False';
-  if (typeof value === 'number') return pythonFloatRepr(value);
+  if (typeof value === 'number') return floatRepr(value);
   return value;
 }
 

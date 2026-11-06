@@ -1,3 +1,5 @@
+import { NeumaierSum } from '@zukhruf/python';
+
 import {
   addReduceat,
   argsortStable,
@@ -8,7 +10,6 @@ import {
 import {
   pythonRound,
   pythonRoundToInteger,
-  pythonSum,
   rankByScore,
 } from '../dependencies/python.ts';
 import { RelevanceEvaluator } from '../dependencies/pytrec-eval.ts';
@@ -210,7 +211,7 @@ function parseMetricsFromScores(
     }
   if (scores.size === 0) throw new Error('ZeroDivisionError: division by zero');
   const average = (values: readonly number[] | undefined): number =>
-    pythonRound(pythonSum(values ?? []) / scores.size, 5);
+    pythonRound(NeumaierSum.of(values ?? []) / scores.size, 5);
   const ndcg: Record<string, number> = {};
   const map: Record<string, number> = {};
   const recall: Record<string, number> = {};
@@ -289,7 +290,7 @@ export function calculateRetrievalScores(
   const averageMrr = Object.fromEntries(
     Object.entries(mrrScores).map(([key, values]) => [
       key,
-      pythonSum(values) / values.length,
+      NeumaierSum.of(values) / values.length,
     ]),
   );
   return {
