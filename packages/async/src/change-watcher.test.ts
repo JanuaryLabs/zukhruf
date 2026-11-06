@@ -11,6 +11,7 @@ import {
   Collector,
   Gauge,
   Group,
+  Latch,
   type Outcome,
   Period,
   type Primitive,
@@ -427,14 +428,14 @@ describe('ChangeWatcher', () => {
   test(
     'an abort during the reads ends the iteration with no result of that check',
     { timeout: 2_000 },
-    async (t) => {
+    async () => {
       // Arrange
       const clock = createClock();
       const controller = new AbortController();
       class Slow extends Gauge<number> {
-        started = false;
+        readonly started = new Latch();
         protected read(check: Check) {
-          this.started = true;
+          this.started.open();
           return new Promise<number>((resolve) =>
             check.signal.addEventListener('abort', () => resolve(1)),
           );
@@ -447,7 +448,7 @@ describe('ChangeWatcher', () => {
         clock,
       }).watch(controller.signal);
       const first = checks.next();
-      await t.waitFor(() => assert.ok(slow.started));
+      await slow.started.wait();
 
       // Act
       controller.abort();
