@@ -1,5 +1,7 @@
 # A check is one read that gives the value of each key
 
+Superseded on 2026-11-06 (#3840) by [ADR 0008](./0008-a-change-watcher-reads-gauges.md): a change watcher reads gauges, and a collector gives the values of many keys in one read.
+
 [ADR 0004](./0004-a-change-watcher-yields-each-check-with-the-keys-that-changed.md) gave `pollChanges` one read for each key, and read the keys one after the other, in the order of the map. Microsoft SQL Server, one of its consumers in elt, reads the values of many keys in one query: each change signal gives a value for each table of the database. With one read for each key, the source made the query in the read of the first stream, kept the result in a variable that the reads of the other streams shared, and relied on the order of the map to start a new check (elt `9dab6767`). That is shared mutable state between functions, and its correctness depends on the order of the calls (temporal coupling). Nothing but a comment kept the order (#3840).
 
 ## Decision

@@ -49,16 +49,36 @@ A time from `clock.performance.now()`, from the clock of the poll. After it, an 
 _Avoid_: Timeout (a timeout is a duration), time limit
 
 **Change watcher**:
-`pollChanges`. It does a check, waits an interval, and does the next check. It gives the keys that changed at each check, also when no key changed. An abort ends it.
+`ChangeWatcher`. It does a check, waits an interval, and does the next check. It gives the outcome of each gauge at each check, also when no gauge changed. An abort ends it.
 _Avoid_: Observer, subscription (a subscription gets notifications; a change watcher reads)
 
+**Gauge**:
+A value that a change watcher reads at each check, for example a data version. Its value is a primitive or a list of values.
+_Avoid_: Probe, metric, signal (a signal is an `AbortSignal`)
+
+**Collector**:
+One read that gives the values of many keys, for example one query that gives a count for each table. The gauge of one key reads it.
+_Avoid_: Batch, loader
+
+**Group**:
+A gauge made of gauges. It changes when one member changes, and fails when one member fails.
+_Avoid_: Composite, bundle
+
+**Period**:
+The count of whole periods since the watch started: a gauge that changes on a schedule.
+_Avoid_: Tick, interval (an interval is the wait between two checks)
+
 **Check**:
-One round of a change watcher: it calls the read one time, which gives the value of each key, and compares each value with the value of the previous check. A check that finds no change is still a check.
-_Avoid_: Tick (a tick of a timer does not read), poll (a poll stops at a value), probe
+One round of a change watcher: it reads each gauge one time, and compares each value with the value of the previous check. A check that finds no change is still a check.
+_Avoid_: Tick (a tick of a timer does not read), poll (a poll stops at a value), scrape
 
 **Change**:
-A value that differs (`!==`) from the value of the same key at the previous check, or a key that only one of the two checks gave. At the first check, each key changed, because there is no previous check.
+A value that differs (by `Object.is`) from the value of the same gauge at the previous check that read it. At the first check, each gauge that the check read changed, because there is no previous value.
 _Avoid_: Update, event, diff
+
+**Outcome**:
+What one check found for one gauge: changed, unchanged, or failed with its error.
+_Avoid_: Result, status
 
 **Stopped event**:
 An `abort` event on which a listener called `event.stopImmediatePropagation()`. The listeners that were added after that listener do not run.

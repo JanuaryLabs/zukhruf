@@ -698,3 +698,33 @@ test('a BLOB key saved in the position comes back as the same bytes in the updat
     },
   ]);
 });
+
+test('a feed that is disposed during its watch ends the watch with the error of its data version, and does not poll a closed database', async () => {
+  await using dir = await new TemporaryFiles().directory('changefeed-');
+  const path = join(dir.path, 'owner.sqlite');
+  using _owner = owned(
+    path,
+    'CREATE TABLE notes (id INTEGER PRIMARY KEY, title TEXT);',
+  );
+  // An observing feed keeps its position in memory, so after the dispose
+  // only the read of the data version can fail.
+  const feed = new Changefeed(path);
+  const stop = new AbortController();
+  try {
+    const next = feed
+      .watch({ clock: globalThis, interval: 5, signal: stop.signal })
+      .next();
+    // The baseline pass ends before an immediate runs; the watch then waits
+    // for its next check.
+    await setImmediate();
+
+    feed[Symbol.dispose]();
+
+    await assert.rejects(
+      within(next, 'end of the watch'),
+      /statement has been finalized/,
+    );
+  } finally {
+    stop.abort();
+  }
+});

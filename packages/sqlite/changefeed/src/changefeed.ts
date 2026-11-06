@@ -1,4 +1,4 @@
-import { type Clock, pollChanges } from '@zukhruf/async';
+import { ChangeWatcher, Gauge, type WallClock } from '@zukhruf/async';
 import { DataVersion } from '@zukhruf/sqlite-data-version';
 import { Snapshot } from '@zukhruf/sqlite-snapshot';
 
@@ -14,8 +14,22 @@ export type WatchOptions = {
   /** Stops the poll. The loop then rejects with `signal.reason`. */
   readonly signal: AbortSignal;
   /** The clock of the poll: `globalThis` in production, a fake clock in a test. */
-  readonly clock: Clock;
+  readonly clock: WallClock;
 };
+
+// The data version of the database: a commit of another connection moves it.
+class DatabaseVersion extends Gauge<number> {
+  readonly #version: DataVersion;
+
+  constructor(version: DataVersion) {
+    super();
+    this.#version = version;
+  }
+
+  protected async read(): Promise<number> {
+    return this.#version.current;
+  }
+}
 
 // One run of watch: the position it compares with, and whether its first
 // pass is a baseline that gives no batch.
@@ -60,11 +74,19 @@ export class Changefeed implements Disposable {
   }: WatchOptions): AsyncGenerator<ChangeEvent[], void, undefined> {
     const { position, baseline } = this.#run();
     let silent = baseline;
-    for await (const changed of pollChanges(
-      async () => new Map([['database', this.#version.current]]),
-      { interval, signal, clock },
-    )) {
-      if (changed.size === 0) continue;
+    const version = new DatabaseVersion(this.#version);
+    // The data version is a local read: a check that takes the whole
+    // interval is stuck.
+    const watcher = new ChangeWatcher([version], {
+      interval,
+      timeout: interval,
+      clock,
+    });
+    for await (const outcomes of watcher.watch(signal)) {
+      const outcome = outcomes.get(version);
+      // The feed cannot go on without its data version.
+      if (outcome?.state === 'failed') throw outcome.error;
+      if (outcome?.state !== 'changed') continue;
       const { events, update } = await pass(this.#path, position);
       if (silent || events.length === 0) {
         // A baseline, or a pass with no events, has no batch to deliver.

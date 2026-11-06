@@ -1,6 +1,6 @@
 # @zukhruf/async
 
-Helpers for code that waits for promises: `untilAborted` cancels a wait, `Latch` holds callers until something happened, `delay` waits a fixed time on a clock, `timeout` stops a wait after a time on a clock, `poll` calls an attempt again until it gives a value, and `pollChanges` reads values again and again and tells which values changed. `@zukhruf/mutex`, `@zukhruf/single-flight` and `@zukhruf/election` use them.
+Helpers for code that waits for promises: `untilAborted` cancels a wait, `Latch` holds callers until something happened, `delay` waits a fixed time on a clock, `timeout` stops a wait after a time on a clock, `poll` calls an attempt again until it gives a value, and `ChangeWatcher` reads gauges again and again and tells which values changed. `@zukhruf/mutex`, `@zukhruf/single-flight` and `@zukhruf/election` use them.
 
 The words in these documents have one meaning each. See the glossary in [CONTEXT.md](./CONTEXT.md).
 
@@ -118,58 +118,78 @@ See [ADR 0003](./docs/adr/0003-the-election-and-the-file-lock-stores-poll-throug
 
 ## Watch values for a change
 
-A value can change while you are not looking, for example the `data_version` of a SQLite file. To see the changes, read the value again and again. `pollChanges` does this for you. Give it a read: a function that gives a map from each key to its current value. Each check calls the read one time, and yields the set of the keys whose value changed since the previous check.
+A value can change while you are not looking, for example the `data_version` of a SQLite file. To see the changes, read the value again and again. `ChangeWatcher` does this for you. Give it gauges: a gauge is a value that the watcher reads at each check. Each check reads each gauge one time, all at the same time, and gives the outcome of each gauge: `changed`, `unchanged` or `failed`.
 
 ```ts
-import { pollChanges } from '@zukhruf/async';
+import { ChangeWatcher, Gauge } from '@zukhruf/async';
 
-const read = async () => new Map([['messages', version.current]]);
-const watch = pollChanges(read, {
+class MessagesVersion extends Gauge<number> {
+  protected async read() {
+    return version.current;
+  }
+}
+
+const messages = new MessagesVersion();
+const watcher = new ChangeWatcher([messages], {
   interval: 1_000,
-  signal,
+  timeout: 1_000,
   clock: globalThis,
 });
-for await (const changed of watch) {
-  if (changed.size > 0) await copyMessages();
+for await (const outcomes of watcher.watch(signal)) {
+  if (outcomes.get(messages)?.state === 'changed') await copyMessages();
 }
 ```
 
-- The first check reads at once, and yields all keys: you have never seen the values.
-- After each check, `pollChanges` waits `interval` milliseconds after you ask for the next check. A slow loop body thus never gets two checks with no wait between them.
-- A check that found no change yields an empty set. Skip it when you need only the changes. Use it when you must know that a check occurred, for example to record that a value is still current.
-- `pollChanges` compares each value with `===` to its value at the previous check. Give values that `===` can compare, for example a version number or a string.
-- A key that only one of two checks gave also changed: it was added or removed. For example, a table that was dropped since the previous check is in the set.
-- An error from the read ends the loop with the same error.
+- The first check reads at once. Each gauge that it can read changed: you have never seen its value.
+- After each check, the watcher waits `interval` milliseconds after you ask for the next check. A slow loop body thus never gets two checks with no wait between them.
+- A check that found no change gives each gauge `unchanged`. Use it when you must know that a check occurred, for example to record that a value is still current.
+- A value is a primitive (a string, a number, a bigint, a boolean, `null` or `undefined`) or a list of values. The watcher compares it with `Object.is` to its value at the previous check, member by member for a list. Thus `NaN` does not change at each check.
 
-### Watch many values in one loop
+### A failed read fails only its gauge
 
-The map of a read can have many keys. The set names only the keys that changed. Thus one loop can watch many stores, and give the work only for the stores that changed. The read decides how it gets the values: one after the other, at the same time, or all from one query.
+When the read of a gauge fails, its outcome is `failed`, with the error. The other gauges of the check go on. A failed gauge keeps its last value: after it recovers, it changed only when its value differs from that last value. You decide what a failure means, for example to stop your loop.
+
+The reads of one check have `timeout` milliseconds. A read that takes longer fails with a `TimeoutError`, also a read that never answers. Give `check.signal` to the I/O of a read, so that the read stops too.
+
+### Watch many values
+
+Give the watcher many gauges. It reads each one at each check, and gives an outcome for each.
+
+When one read gives the values of many keys, for example one query that gives a count for each table, write a `Collector`. Its `collect` runs one time in each check, however many of its keys you watch. `collector.gauge(key)` gives the gauge of one key. Its value is `undefined` when the read did not give the key, so a key that appears or disappears changed.
 
 ```ts
-const read = async () =>
-  new Map([
-    ['library', await library.version()],
-    ['annotations', await annotations.version()],
-  ]);
-const watch = pollChanges(read, {
-  interval: 1_000,
-  signal,
-  clock: globalThis,
-});
-for await (const changed of watch) {
-  await copy(streams.filter((stream) => changed.has(stream.store)));
+class RowCounts extends Collector<string> {
+  protected collect(check: Check) {
+    return session.rowCounts(check.signal);
+  }
 }
+
+const rows = new RowCounts();
+const notes = rows.gauge('[dbo].[notes]');
+const orders = rows.gauge('[dbo].[orders]');
+const watcher = new ChangeWatcher([notes, orders], {
+  interval: 30_000,
+  timeout: 10_000,
+  clock,
+});
+```
+
+A `Group` is a gauge made of gauges. It changed when one of its members changed, and it failed when one of its members failed. Watch one group for each thing that you refresh, for example one table and the gauges that see its changes.
+
+A `Period` is the count of whole periods since the watch started. Put it in a group to read again on a schedule, also when no other gauge saw a change:
+
+```ts
+const hour = new Period(60 * 60_000);
+const table = new Group([rows.gauge('[dbo].[notes]'), hour]);
 ```
 
 ### Stop the watch
 
-When `signal` aborts during the wait, `pollChanges` stops the timer, and the loop ends with no error. When the signal aborted before the call, the loop ends before the first read. An abort does not stop a read that runs.
+When `signal` aborts, the loop ends with no error: during the wait, during the reads, and also while your loop body holds a check. The timer stops. When the signal aborted before the call, the loop ends before the first read. An abort does not stop a read that runs, but `check.signal` tells it.
 
 To reject when the signal aborts, call `signal.throwIfAborted()` after the loop.
 
-When one query gives the values of many keys, for example a count for each table of a database, the read runs the query one time and gives a map with all of them. Nothing of one check stays for the next check.
-
-See [ADR 0004](./docs/adr/0004-a-change-watcher-yields-each-check-with-the-keys-that-changed.md) and [ADR 0007](./docs/adr/0007-a-check-is-one-read-that-gives-the-value-of-each-key.md).
+See [ADR 0004](./docs/adr/0004-a-change-watcher-yields-each-check-with-the-keys-that-changed.md) and [ADR 0008](./docs/adr/0008-a-change-watcher-reads-gauges.md).
 
 ## Wait a fixed time
 
@@ -207,7 +227,7 @@ See [ADR 0006](./docs/adr/0006-a-timeout-is-a-signal-on-the-clock-that-the-calle
 
 ## Run a wait on a clock
 
-Each wait of `poll` and `pollChanges` runs on the clock that you give. In production, give `globalThis`: the wait then uses the timers of Node.js. In a test, give a fake clock. The test then moves the time, and the wait takes no real time.
+Each wait of `poll` and `ChangeWatcher` runs on the clock that you give. In production, give `globalThis`: the wait then uses the timers of Node.js. In a test, give a fake clock. The test then moves the time, and the wait takes no real time.
 
 ```ts
 import assert from 'node:assert/strict';
