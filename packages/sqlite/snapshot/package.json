@@ -1,6 +1,6 @@
 {
   "name": "@zukhruf/sqlite-snapshot",
-  "version": "0.6.16",
+  "version": "0.7.0",
   "description": "A read-only snapshot of a SQLite database that another process owns and writes, held by one read transaction so the tables agree, or by a checked copy when the owner holds the exclusive lock. Checks the columns a reader needs.",
   "license": "MIT",
   "repository": {
@@ -40,10 +40,10 @@
     "access": "public"
   },
   "dependencies": {
-    "@zukhruf/fs": "^0.6.16",
-    "@zukhruf/sqlite-open": "^0.6.16"
+    "@zukhruf/fs": "^0.7.0",
+    "@zukhruf/sqlite-open": "^0.7.0"
   },
   "devDependencies": {
-    "@zukhruf/testing": "^0.6.16"
+    "@zukhruf/testing": "^0.7.0"
   }
 }
