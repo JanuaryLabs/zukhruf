@@ -1,4 +1,4 @@
-import type { Weighted } from '../scoring/scorer.ts';
+import type { Weighted } from '../scoring/scorecard-scorer.ts';
 
 // What one test gives the record scorer: the expected record. A record case
 // weighs 1.

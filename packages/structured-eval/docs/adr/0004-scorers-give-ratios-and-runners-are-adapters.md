@@ -1,5 +1,7 @@
 # Scorers give ratios, a ratio of sums adds them, and runners are adapters
 
+Status: amended by [ADR 0009](0009-a-scorer-gives-a-value-for-one-answer-and-a-metric-adds-many.md). Its words changed: a metric of this ADR is a scorer now, a scorer is a scorecard scorer, `MetricScorer` is `ScorerSet`, `MetricAssertion` is `ScorerAssertion`, and `CanonicalEquality` is `ExactMatch`.
+
 Ezz expects to write his own eval framework, and promptfoo is the runner today. The first core had one function for many jobs: `score()` walked the records, counted, checked for a perfect record and listed the differences, and the promptfoo binding built the named scores. A change to one metric changed the function that computes all of them, and the binding held scoring rules.
 
 The core is now a standard that does not know any runner:

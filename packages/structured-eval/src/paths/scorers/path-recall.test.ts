@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { JsonCase, MetricScorer, PathRecall } from '../../index.ts';
+import { JsonCase, PathRecall, ScorerSet } from '../../index.ts';
 
 test('PathRecall gives the share of the expected leaf paths that the stated value has, whatever their values; a path that only the stated value has does not count', () => {
-  const scorer = new MetricScorer({
+  const scorer = new ScorerSet({
     recall: new PathRecall({ whenNoneExpected: 0 }),
   });
   const testCase = JsonCase.from({
@@ -21,7 +21,7 @@ test('PathRecall gives the share of the expected leaf paths that the stated valu
 });
 
 test('PathRecall gives the whenNoneExpected of its caller for an expected value that has no leaf', () => {
-  const scorer = new MetricScorer({
+  const scorer = new ScorerSet({
     quarter: new PathRecall({ whenNoneExpected: 0.25 }),
     half: new PathRecall({ whenNoneExpected: 0.5 }),
   });

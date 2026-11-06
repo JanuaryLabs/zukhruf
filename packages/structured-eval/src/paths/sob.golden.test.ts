@@ -10,7 +10,7 @@ import type { JsonData } from '@zukhruf/python';
 import {
   AtLeast,
   Bootstrap,
-  CanonicalEquality,
+  ExactMatch,
   Gated,
   JsonCase,
   JsonValue,
@@ -18,12 +18,12 @@ import {
   LeafTokenF1,
   LeafTypePrecision,
   MeanOf,
-  MetricScorer,
   ParseSuccess,
   PathF1,
   PathRecall,
   RequiredKeyRecall,
   SchemaCompliance,
+  ScorerSet,
   Totals,
   ValidSchema,
   type WeightedScorecard,
@@ -34,7 +34,7 @@ import expectedJson from './fixtures/sob-evaluate/expected.json' with { type: 'j
 // Benchmark's evaluate.py (commit da785a8, CPython 3.12.9, jsonschema 4.26.0)
 // wrote for the lines of fixtures/sob-evaluate/responses.jsonl: its
 // eval_records rows and the summary of build_summary. generate.py makes it.
-// This test composes SOB's report from the package's metrics and checks that
+// This test composes SOB's report from the package's scorers and checks that
 // the composition gives evaluate.py's numbers.
 type Row = Readonly<Record<string, number | string>>;
 type Interval = Readonly<Record<'mean' | 'ci95_low' | 'ci95_high', number>>;
@@ -54,7 +54,7 @@ const expected: {
 } = expectedJson;
 const lines = readFileSync(join(folder, 'responses.jsonl'), 'utf8').split('\n');
 
-// SOB's metrics, each labelled with its key in eval_records.
+// SOB's scorers, each labelled with its key in eval_records.
 const parsed = new ParseSuccess();
 const compliance = new SchemaCompliance();
 const coverage = new AtLeast(new PathF1({ whenNoPaths: 0 }), 0.95);
@@ -77,8 +77,8 @@ const typeSafety = new Gated(
   new LeafTypePrecision({ whenNoneStated: 0 }),
   compliance,
 );
-const perfect = new CanonicalEquality();
-const metrics = {
+const perfect = new ExactMatch();
+const scorers = {
   json_parse_success: parsed,
   json_root_structured: parsed,
   schema_valid_input: new ValidSchema(),
@@ -195,7 +195,7 @@ function sobLines(): { stated: JsonValue; testCase: JsonCase }[] {
 }
 
 test('each line gives the 11 values and the weight of its eval_records row', () => {
-  const scorer = new MetricScorer(metrics);
+  const scorer = new ScorerSet(scorers);
   const lines = sobLines();
 
   const rows = lines.map(({ stated, testCase }) => {
@@ -203,7 +203,7 @@ test('each line gives the 11 values and the weight of its eval_records row', () 
     return {
       difficulty_weight: testCase.weight,
       ...Object.fromEntries(
-        Object.keys(metrics).map((key) => [
+        Object.keys(scorers).map((key) => [
           key,
           scorecard.ratios.get(key)?.value,
         ]),
@@ -215,7 +215,7 @@ test('each line gives the 11 values and the weight of its eval_records row', () 
     rows,
     expected.records.map((row, index) => ({
       difficulty_weight: row['difficulty_weight'],
-      ...Object.fromEntries(Object.keys(metrics).map((key) => [key, row[key]])),
+      ...Object.fromEntries(Object.keys(scorers).map((key) => [key, row[key]])),
       // evaluate.py's walk is not draft 7, so its type_precision is not the
       // oracle (ADR 0008). By draft 7 a record that agrees with its schema
       // has no leaf of a type that the schema refuses, so SOB's gated
@@ -233,7 +233,7 @@ test('each line gives the 11 values and the weight of its eval_records row', () 
 });
 
 test('the means, the category means and the bootstrap intervals equal build_summary, without and with weights', () => {
-  const scorer = new MetricScorer({ ...metrics, ...categories });
+  const scorer = new ScorerSet({ ...scorers, ...categories });
   const scored = sobLines().map(({ stated, testCase }) => ({
     scorecard: scorer.score(stated, testCase),
     weight: testCase.weight,

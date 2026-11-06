@@ -1,25 +1,25 @@
 import { RatioOfSums } from '../aggregation/ratio-of-sums.ts';
 import { Ratio } from '../aggregation/ratio.ts';
+import type { ScorecardScorer } from '../scoring/scorecard-scorer.ts';
 import type { Scorecard } from '../scoring/scorecard.ts';
-import type { Scorer } from '../scoring/scorer.ts';
 import type { JsonCase } from './json-case.ts';
 import { JsonPair } from './json-pair.ts';
-import type { Metric } from './metric.ts';
+import type { Scorer } from './scorer.ts';
 
-// Scores a stated value with labelled metrics: each value is a Ratio(value,
+// Scores a stated value with labelled scorers: each value is a Ratio(value,
 // 1) under its label, so a ratio of sums of a label is the mean of its
 // values. The record passes when every value is 1; its score is the mean.
-export class MetricScorer implements Scorer<JsonCase> {
-  readonly #metrics: readonly (readonly [string, Metric])[];
+export class ScorerSet implements ScorecardScorer<JsonCase> {
+  readonly #scorers: readonly (readonly [string, Scorer])[];
 
-  constructor(metrics: Readonly<Record<string, Metric>>) {
-    this.#metrics = Object.entries(metrics);
+  constructor(scorers: Readonly<Record<string, Scorer>>) {
+    this.#scorers = Object.entries(scorers);
   }
 
   score(stated: unknown, testCase: JsonCase): Scorecard {
     const pair = new JsonPair(stated, testCase);
-    const values = this.#metrics.map(
-      ([label, metric]) => [label, metric.of(pair)] as const,
+    const values = this.#scorers.map(
+      ([label, scorer]) => [label, scorer.score(pair)] as const,
     );
     const mean = new RatioOfSums();
     for (const [, value] of values) mean.add(new Ratio(value, 1));

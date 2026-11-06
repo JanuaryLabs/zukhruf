@@ -1,7 +1,7 @@
 import { type JsonData, NeumaierSum } from '@zukhruf/python';
 
 import type { JsonPair } from '../json-pair.ts';
-import type { Metric } from '../metric.ts';
+import type { Scorer } from '../scorer.ts';
 
 // The mean of one value for each leaf of a pair, such as the share of the
 // expected leaves that the stated value has with an equal value, and a fixed
@@ -9,7 +9,7 @@ import type { Metric } from '../metric.ts';
 // that of evaluate.py, and a sum of 0s and 1s is the exact count. A subclass
 // says which leaves count and what one leaf gives, and its caller gives the
 // value without leaves (Template Method).
-export abstract class LeafMean implements Metric {
+export abstract class LeafMean implements Scorer {
   readonly #whenNone: number;
 
   constructor(whenNone: number) {
@@ -24,7 +24,7 @@ export abstract class LeafMean implements Metric {
     pair: JsonPair,
   ): number;
 
-  of(pair: JsonPair): number {
+  score(pair: JsonPair): number {
     const leaves = this.leaves(pair);
     if (leaves.size === 0) return this.#whenNone;
     const sum = new NeumaierSum();

@@ -6,7 +6,7 @@ export type Weighted = { readonly weight: number };
 
 // Scores one stated record against its case. A scorer keeps no result, so
 // one scorer scores any number of records.
-export interface Scorer<Case extends Weighted> {
+export interface ScorecardScorer<Case extends Weighted> {
   score(stated: unknown, testCase: Case): Scorecard;
 }
 

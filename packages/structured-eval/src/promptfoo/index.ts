@@ -3,4 +3,4 @@ export {
   type GradingResult,
   PromptfooAssertion,
 } from './promptfoo-assertion.ts';
-export { MetricAssertion, type VarsContext } from './metric-assertion.ts';
+export { ScorerAssertion, type VarsContext } from './scorer-assertion.ts';

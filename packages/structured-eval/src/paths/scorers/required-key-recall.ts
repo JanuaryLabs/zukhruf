@@ -3,21 +3,21 @@ import type { JsonData } from '@zukhruf/python';
 import { Ratio } from '../../aggregation/ratio.ts';
 import type { JsonPair } from '../json-pair.ts';
 import { dictGet } from '../json-value.ts';
-import type { Metric } from '../metric.ts';
+import type { Scorer } from '../scorer.ts';
 
 // The required paths of the schema that the stated value has
 // (compute_required_key_recall), and whenNoneRequired when the schema requires
 // none (evaluate.py gives 1). It has no gate: evaluate.py scores it only for a
 // parsed value and a valid schema (evaluate.py:296-300), and its caller
 // composes that with Gated.
-export class RequiredKeyRecall implements Metric {
+export class RequiredKeyRecall implements Scorer {
   readonly #whenNoneRequired: number;
 
   constructor({ whenNoneRequired }: { readonly whenNoneRequired: number }) {
     this.#whenNoneRequired = whenNoneRequired;
   }
 
-  of({ candidate, testCase: { schema } }: JsonPair): number {
+  score({ candidate, testCase: { schema } }: JsonPair): number {
     const required = new Set(
       RequiredKeyRecall.#requiredPaths(schema.value, ''),
     );

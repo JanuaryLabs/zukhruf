@@ -1,5 +1,7 @@
 # A metric assertion is a promptfoo assertion object in a TypeScript config
 
+Status: amended by [ADR 0009](0009-a-scorer-gives-a-value-for-one-answer-and-a-metric-adds-many.md). Its words changed: a metric of this ADR is a scorer now, a scorer is a scorecard scorer, `MetricScorer` is `ScorerSet`, `MetricAssertion` is `ScorerAssertion`, and `CanonicalEquality` is `ExactMatch`.
+
 ADR 0006 made each metric one promptfoo assertion. Its first form lived in YAML: a YAML config can point only at a file, and promptfoo loads a function from that file. So each metric needed its own file with `export default new MetricAssertion(metric, JsonTextCase).grade`. The YAML then named the same metric a second time (`metric:`), and the constructor took a case reader that has only one right value for vars. Ezz: "it looks ugly".
 
 promptfoo 0.125.1 also reads a TypeScript config (`promptfooconfig.ts` is one of its default config names). In such a config, an assertion is an object, and its `value` can be a function: promptfoo calls it with the text of the harness and the context of the test. A probe of this repo showed that a class instance works as that object, and that rows with `$ref`, an imported `defaultTest` and `file://` extension hooks work in a TypeScript config.

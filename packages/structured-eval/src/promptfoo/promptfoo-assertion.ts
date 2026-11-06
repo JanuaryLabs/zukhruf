@@ -1,4 +1,8 @@
-import type { CaseReader, Scorer, Weighted } from '../scoring/scorer.ts';
+import type {
+  CaseReader,
+  ScorecardScorer,
+  Weighted,
+} from '../scoring/scorecard-scorer.ts';
 
 // The part of promptfoo's GradingResult that the assertion gives (promptfoo
 // 0.125.1, src/types/index.ts). The package does not depend on promptfoo:
@@ -24,10 +28,10 @@ export type AssertionContext = {
 // (namedMetrics.ts, accumulateNamedMetric), which is the ratio of sums.
 // promptfoo calls a function, so a module exports `grade`.
 export class PromptfooAssertion<Case extends Weighted> {
-  readonly #scorer: Scorer<Case>;
+  readonly #scorer: ScorecardScorer<Case>;
   readonly #cases: CaseReader<Case>;
 
-  constructor(scorer: Scorer<Case>, cases: CaseReader<Case>) {
+  constructor(scorer: ScorecardScorer<Case>, cases: CaseReader<Case>) {
     this.#scorer = scorer;
     this.#cases = cases;
   }

@@ -1,6 +1,6 @@
 import { type JsonData, loadsJson } from '@zukhruf/python';
 
-import type { Weighted } from '../scoring/scorer.ts';
+import type { Weighted } from '../scoring/scorecard-scorer.ts';
 import { Draft7Schema } from './draft7-schema.ts';
 
 // A JavaScript value as json.loads reads its JSON text: an integral number
@@ -9,7 +9,7 @@ import { Draft7Schema } from './draft7-schema.ts';
 export const fromJavaScript = (value: unknown): JsonData =>
   value === undefined ? null : loadsJson(JSON.stringify(value));
 
-// What one test gives the metrics: the expected value, its JSON Schema, and
+// What one test gives the scorers: the expected value, its JSON Schema, and
 // the weight of the test.
 export class JsonCase implements Weighted {
   readonly expected: JsonData;

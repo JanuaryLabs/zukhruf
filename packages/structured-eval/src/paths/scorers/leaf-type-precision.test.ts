@@ -5,14 +5,14 @@ import {
   JsonCase,
   JsonValue,
   LeafTypePrecision,
-  MetricScorer,
+  ScorerSet,
 } from '../../index.ts';
 
 // The type precision of a stated value under a schema, with no gate: the
 // share of its leaves whose type the schema allows at their path, by the
 // rules of JSON Schema draft 7 (ADR 0008).
 const typePrecision = (schema: object, stated: unknown): number | undefined =>
-  new MetricScorer({
+  new ScorerSet({
     precision: new LeafTypePrecision({ whenNoneStated: 0 }),
   })
     .score(stated, JsonCase.from({ expected: {}, schema }))
@@ -282,7 +282,7 @@ test('a float with a zero fraction, such as 1.0, is an integer, as draft 7 says,
 });
 
 test('LeafTypePrecision gives the whenNoneStated of its caller for a stated value that has no leaf', () => {
-  const scorer = new MetricScorer({
+  const scorer = new ScorerSet({
     quarter: new LeafTypePrecision({ whenNoneStated: 0.25 }),
     half: new LeafTypePrecision({ whenNoneStated: 0.5 }),
   });

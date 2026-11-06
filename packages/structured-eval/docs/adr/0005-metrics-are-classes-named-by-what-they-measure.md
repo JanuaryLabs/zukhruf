@@ -1,5 +1,7 @@
 # Metrics are classes named by what they measure, and a benchmark is a composition kept by its caller
 
+Status: amended by [ADR 0009](0009-a-scorer-gives-a-value-for-one-answer-and-a-metric-adds-many.md). Its words changed: a metric of this ADR is a scorer now, a scorer is a scorecard scorer, `MetricScorer` is `ScorerSet`, `MetricAssertion` is `ScorerAssertion`, and `CanonicalEquality` is `ExactMatch`.
+
 The first port of the Structured Output Benchmark (SOB) had one scorer for the whole benchmark: `SobScorer` gave all 11 values and named each one `SOB …`, and `SobLine`, `SobSummary` and a table of SOB's labels lived in the package. A caller could not take one metric, the names told where a metric came from and not what it measures, and the package held one benchmark's format and report although no caller used them. Ezz: "why not indivual metric classes/assertion?" and "why still have sob in the code man?"
 
 Each metric is now its own class, named by what it measures: `ParseSuccess`, `ValidSchema`, `SchemaCompliance`, `LeafExactMatch`, `LeafTokenF1`, `PathRecall`, `PathF1`, `LeafTypePrecision`, `RequiredKeyRecall`, `CanonicalEquality`. A gate is a metric with the value 0 or 1, and `Gated`, `AtLeast` and `MeanOf` compose metrics for each record. `MetricScorer` scores any labelled set of metrics, so one metric can be one promptfoo assertion. `Totals` gives the means, and `Bootstrap` gives the intervals with a random generator that the caller gives.

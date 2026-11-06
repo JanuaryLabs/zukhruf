@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { JsonCase, LeafTokenF1, MetricScorer } from '../../index.ts';
+import { JsonCase, LeafTokenF1, ScorerSet } from '../../index.ts';
 
 const schema = { type: 'object' };
 
@@ -9,7 +9,7 @@ const sob = () =>
   new LeafTokenF1({ whenNoneExpected: 1, whenNoWords: 1, absentAs: null });
 
 test('LeafTokenF1 gives the token F1 of a leaf with the arithmetic of token_f1: 2·p·r/(p + r) gives 0.33333333333333337 where 2·overlap/(stated + expected) gives 1/3', () => {
-  const scorer = new MetricScorer({ f1: sob() });
+  const scorer = new ScorerSet({ f1: sob() });
 
   const scorecard = scorer.score(
     { a: 'x b c d e' },
@@ -20,7 +20,7 @@ test('LeafTokenF1 gives the token F1 of a leaf with the arithmetic of token_f1: 
 });
 
 test("LeafTokenF1 splits words as Python's \\w does: a letter outside ASCII is part of a word, so café is not caf and éthe holds no article", () => {
-  const scorer = new MetricScorer({ f1: sob() });
+  const scorer = new ScorerSet({ f1: sob() });
 
   const scorecard = scorer.score(
     { a: 'caf', b: 'é', c: 'x' },
@@ -31,7 +31,7 @@ test("LeafTokenF1 splits words as Python's \\w does: a letter outside ASCII is p
 });
 
 test('LeafTokenF1 gives the whenNoneExpected of its caller for an expected value that has no leaf', () => {
-  const scorer = new MetricScorer({
+  const scorer = new ScorerSet({
     quarter: new LeafTokenF1({
       whenNoneExpected: 0.25,
       whenNoWords: 1,
@@ -59,7 +59,7 @@ test('LeafTokenF1 gives the whenNoneExpected of its caller for an expected value
 });
 
 test('LeafTokenF1 gives the whenNoWords of its caller for a leaf where neither value has a word', () => {
-  const scorer = new MetricScorer({
+  const scorer = new ScorerSet({
     quarter: new LeafTokenF1({
       whenNoneExpected: 1,
       whenNoWords: 0.25,
@@ -87,7 +87,7 @@ test('LeafTokenF1 gives the whenNoWords of its caller for a leaf where neither v
 });
 
 test('LeafTokenF1 reads a path that the stated value does not have as the absentAs of its caller, and a stated null as null', () => {
-  const scorer = new MetricScorer({
+  const scorer = new ScorerSet({
     none: new LeafTokenF1({
       whenNoneExpected: 1,
       whenNoWords: 1,

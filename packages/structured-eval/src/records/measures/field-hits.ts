@@ -9,7 +9,7 @@ import { Counts } from './counts.ts';
 export abstract class FieldHits implements Measure, RecordVisitor {
   protected readonly fields = new Map<string, Counts>();
 
-  // Put before the metric name, such as 'presence ' in 'presence recall'.
+  // Put before the ratio name, such as 'presence ' in 'presence recall'.
   protected abstract readonly label: string;
 
   protected abstract hit(leaf: Leaf): boolean;

@@ -1,5 +1,5 @@
+import type { ScorecardScorer } from '../scoring/scorecard-scorer.ts';
 import type { Scorecard } from '../scoring/scorecard.ts';
-import type { Scorer } from '../scoring/scorer.ts';
 import { Correctness } from './measures/correctness.ts';
 import { Differences } from './measures/differences.ts';
 import { ItemPairing } from './measures/item-pairing.ts';
@@ -12,7 +12,7 @@ import { RecordWalk } from './record-walk.ts';
 
 // Compares a stated record with the expected record of its case, as the spec
 // says. It makes new measures for each record and keeps no result.
-export class RecordScorer implements Scorer<RecordCase> {
+export class RecordScorer implements ScorecardScorer<RecordCase> {
   readonly #spec: RecordSpec;
   readonly #walk: RecordWalk;
   readonly #leaves: RecordLeaves;

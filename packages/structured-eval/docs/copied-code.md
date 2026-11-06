@@ -7,5 +7,5 @@ This package keeps copies of two rules that another place also holds. The reason
 **@zukhruf/mteb `src/dependencies/python.ts` `compareStrings` → `src/paths/cpython/python-text.ts` `compareStrings`.**
 Python's order of two strings, by code point.
 
-**`src/paths/metrics/path-f1.ts` `PathF1.of` → `src/paths/metrics/leaf-token-f1.ts` `LeafTokenF1#tokenF1`.**
+**`src/paths/scorers/path-f1.ts` `PathF1.score` → `src/paths/scorers/leaf-token-f1.ts` `LeafTokenF1#tokenF1`.**
 The F1 of evaluate.py (f1_from_counts and token_f1): 0 when nothing is shared, else precision and recall first, then 2·p·r/(p + r). That arithmetic gives other bits than 2·shared/(stated + expected) on many counts, such as 1 shared of 1 expected and 5 stated. The records family's 2s/(a+b) form is other knowledge, not a third copy. Backlog #3852.

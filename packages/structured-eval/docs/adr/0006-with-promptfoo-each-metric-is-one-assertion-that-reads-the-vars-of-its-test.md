@@ -1,5 +1,7 @@
 # With promptfoo, each metric is one assertion that reads the vars of its test
 
+Status: amended by [ADR 0009](0009-a-scorer-gives-a-value-for-one-answer-and-a-metric-adds-many.md). Its words changed: a metric of this ADR is a scorer now, a scorer is a scorecard scorer, `MetricScorer` is `ScorerSet`, `MetricAssertion` is `ScorerAssertion`, and `CanonicalEquality` is `ExactMatch`.
+
 ADR 0005 says that one metric can be one promptfoo assertion: `PromptfooAssertion` adapts a `MetricScorer` that has one metric. The offers-evals repository used that form for the metrics of the Structured Output Benchmark (SOB), and the form has two faults:
 
 - It reads the case from the config of the assertion. One assertion in `defaultTest` serves every test of a dataset, so it has one config for all of them. promptfoo's docs say that an assertion in `defaultTest` reads the values of each test from its vars: "Use regular column names (like reference_answer) instead of __expected when referencing values in defaultTest assertions" (configuration/test-cases).

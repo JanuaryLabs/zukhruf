@@ -15,7 +15,7 @@ export class JsonValue {
   }
 }
 
-// The stated value of a harness as the metrics read it: its text read as
+// The stated value of a harness as the scorers read it: its text read as
 // json.loads reads it, and text that is not JSON kept as text, as the runner
 // of a benchmark keeps it. Any other value stays a JavaScript value. Only a
 // SyntaxError says that the text is not JSON.

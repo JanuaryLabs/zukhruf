@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import {
-  CanonicalEquality,
+  ExactMatch,
   Gated,
   JsonCase,
   JsonTextScorer,
@@ -10,20 +10,20 @@ import {
   LeafExactMatch,
   LeafTokenF1,
   LeafTypePrecision,
-  MetricScorer,
   ParseSuccess,
   PathF1,
   PathRecall,
   RequiredKeyRecall,
   SchemaCompliance,
+  ScorerSet,
   ValidSchema,
 } from '../index.ts';
 
 test('JsonTextScorer reads JSON text without loss: 1.0 is a float, so it equals 1 but is not canonically equal, while the object {a: 1} is', () => {
   const scorer = new JsonTextScorer(
-    new MetricScorer({
+    new ScorerSet({
       'leaf exact match': new LeafExactMatch({ whenNoneExpected: 1 }),
-      'canonical equality': new CanonicalEquality(),
+      'canonical equality': new ExactMatch(),
     }),
   );
   const testCase = JsonCase.from({
@@ -39,9 +39,9 @@ test('JsonTextScorer reads JSON text without loss: 1.0 is a float, so it equals 
   assert.equal(object.ratios.get('canonical equality')?.value, 1);
 });
 
-test('JsonTextScorer keeps text that is not JSON as an unparsed value: every metric but ValidSchema gives 0', () => {
+test('JsonTextScorer keeps text that is not JSON as an unparsed value: every scorer but ValidSchema gives 0', () => {
   const scorer = new JsonTextScorer(
-    new MetricScorer({
+    new ScorerSet({
       ParseSuccess: new ParseSuccess(),
       ValidSchema: new ValidSchema(),
       SchemaCompliance: new SchemaCompliance(),
@@ -59,7 +59,7 @@ test('JsonTextScorer keeps text that is not JSON as an unparsed value: every met
         new ParseSuccess(),
         new ValidSchema(),
       ),
-      CanonicalEquality: new CanonicalEquality(),
+      ExactMatch: new ExactMatch(),
     }),
   );
   const testCase = JsonCase.from({
@@ -83,7 +83,7 @@ test('JsonTextScorer keeps text that is not JSON as an unparsed value: every met
       PathF1: 0,
       LeafTypePrecision: 0,
       RequiredKeyRecall: 0,
-      CanonicalEquality: 0,
+      ExactMatch: 0,
     },
   );
 });
@@ -101,10 +101,10 @@ test('a JSON case needs its expected value and schema, and a weight that is a nu
   );
 });
 
-test('MetricScorer passes a value only when every metric gives 1, and scores it with the mean of the metrics', () => {
-  const scorer = new MetricScorer({
+test('ScorerSet passes a value only when every scorer gives 1, and scores it with the mean of the scorers', () => {
+  const scorer = new ScorerSet({
     'leaf exact match': new LeafExactMatch({ whenNoneExpected: 1 }),
-    'canonical equality': new CanonicalEquality(),
+    'canonical equality': new ExactMatch(),
   });
   const testCase = JsonCase.from({
     expected: { a: 1, b: 2 },
@@ -113,7 +113,7 @@ test('MetricScorer passes a value only when every metric gives 1, and scores it 
 
   const equal = scorer.score({ b: 2, a: 1 }, testCase);
   const half = scorer.score({ a: 1, b: 3 }, testCase);
-  const mixed = new MetricScorer({
+  const mixed = new ScorerSet({
     'parse success': new ParseSuccess(),
     'leaf exact match': new LeafExactMatch({ whenNoneExpected: 1 }),
   }).score({ a: 1, b: 3 }, testCase);
@@ -133,8 +133,8 @@ test('MetricScorer passes a value only when every metric gives 1, and scores it 
   );
 });
 
-test('MetricScorer reads a string as text that was not parsed, even when it looks like JSON, as evaluate.py reads a string candidate', () => {
-  const scorer = new MetricScorer({ 'parse success': new ParseSuccess() });
+test('ScorerSet reads a string as text that was not parsed, even when it looks like JSON, as evaluate.py reads a string candidate', () => {
+  const scorer = new ScorerSet({ 'parse success': new ParseSuccess() });
   const testCase = JsonCase.from({
     expected: { a: 'x' },
     schema: { type: 'object' },
@@ -146,7 +146,7 @@ test('MetricScorer reads a string as text that was not parsed, even when it look
 });
 
 test('LeafTypePrecision has no gate of its own: it reads the types that a schema that is not valid Draft 7 names, and Gated with ValidSchema gives 0', () => {
-  const scorer = new MetricScorer({
+  const scorer = new ScorerSet({
     alone: new LeafTypePrecision({ whenNoneStated: 0 }),
     gated: new Gated(
       new LeafTypePrecision({ whenNoneStated: 0 }),
@@ -183,7 +183,7 @@ test('LeafTypePrecision has no gate of its own: it reads the types that a schema
 });
 
 test('RequiredKeyRecall has no gate of its own: it counts the required keys of a schema that is not valid Draft 7, and it gives whenNoneRequired for text that is not JSON; Gated with ParseSuccess and ValidSchema gives 0 for both', () => {
-  const scorer = new MetricScorer({
+  const scorer = new ScorerSet({
     alone: new RequiredKeyRecall({ whenNoneRequired: 1 }),
     gated: new Gated(
       new RequiredKeyRecall({ whenNoneRequired: 1 }),
@@ -218,7 +218,7 @@ test('RequiredKeyRecall has no gate of its own: it counts the required keys of a
 });
 
 test('RequiredKeyRecall gives the whenNoneRequired of its caller for a schema that requires no key', () => {
-  const scorer = new MetricScorer({
+  const scorer = new ScorerSet({
     half: new RequiredKeyRecall({ whenNoneRequired: 0.5 }),
     quarter: new RequiredKeyRecall({ whenNoneRequired: 0.25 }),
   });

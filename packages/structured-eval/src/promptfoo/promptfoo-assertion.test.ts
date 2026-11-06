@@ -2,16 +2,16 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import {
-  CanonicalEquality,
+  ExactMatch,
   JsonCase,
   JsonTextCase,
   JsonTextScorer,
   LeafExactMatch,
   LeafTokenF1,
-  MetricScorer,
   RecordCase,
   RecordScorer,
   RecordSpec,
+  ScorerSet,
 } from '../index.ts';
 import { PromptfooAssertion } from './index.ts';
 
@@ -41,7 +41,7 @@ test('grade gives each ratio as a named score with its whole as the weight, with
 
 test('the weight of a row weighs its named scores, and a row without one weighs 1', () => {
   const grade = new PromptfooAssertion(
-    new MetricScorer({
+    new ScorerSet({
       'leaf exact match': new LeafExactMatch({ whenNoneExpected: 1 }),
     }),
     JsonCase,
@@ -71,8 +71,8 @@ test('a row without config.expected fails with a message that names it', () => {
 test('a row that gives its expected value as JSON text keeps 7.0 a float, as json.loads reads it', () => {
   const grade = new PromptfooAssertion(
     new JsonTextScorer(
-      new MetricScorer({
-        'canonical equality': new CanonicalEquality(),
+      new ScorerSet({
+        'canonical equality': new ExactMatch(),
         'leaf token f1': new LeafTokenF1({
           whenNoneExpected: 1,
           whenNoWords: 1,

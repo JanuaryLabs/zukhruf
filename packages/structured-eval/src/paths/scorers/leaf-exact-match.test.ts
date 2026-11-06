@@ -6,12 +6,12 @@ import {
   JsonTextCase,
   JsonTextScorer,
   LeafExactMatch,
-  MetricScorer,
+  ScorerSet,
 } from '../../index.ts';
 
 test("LeafExactMatch compares leaves as Python's == does: True == 1 == 1.0, an int and a float only when they are the same number exactly, and '1' is not 1", () => {
   const scorer = new JsonTextScorer(
-    new MetricScorer({
+    new ScorerSet({
       match: new LeafExactMatch({ whenNoneExpected: 1 }),
     }),
   );
@@ -30,7 +30,7 @@ test("LeafExactMatch compares leaves as Python's == does: True == 1 == 1.0, an i
 });
 
 test('LeafExactMatch gives the whenNoneExpected of its caller for an expected value that has no leaf', () => {
-  const scorer = new MetricScorer({
+  const scorer = new ScorerSet({
     quarter: new LeafExactMatch({ whenNoneExpected: 0.25 }),
     half: new LeafExactMatch({ whenNoneExpected: 0.5 }),
   });

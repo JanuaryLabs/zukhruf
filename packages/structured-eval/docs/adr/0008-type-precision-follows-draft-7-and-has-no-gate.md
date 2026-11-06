@@ -1,5 +1,7 @@
 # Type precision follows JSON Schema draft 7 and has no gate
 
+Status: amended by [ADR 0009](0009-a-scorer-gives-a-value-for-one-answer-and-a-metric-adds-many.md). Its words changed: a metric of this ADR is a scorer now, a scorer is a scorecard scorer, `MetricScorer` is `ScorerSet`, `MetricAssertion` is `ScorerAssertion`, and `CanonicalEquality` is `ExactMatch`.
+
 `LeafTypePrecision` gives the share of the stated leaves whose type the JSON Schema allows at their path. Its first form ported the walk of SOB's evaluate.py (`schema_type_for_path`): it read only `properties` and `items`, it read a type as Python names it (`1.0` is a float), and it gave 0 for a schema that is not valid. Ezz chose a complete walk on 2026-11-04 ("One complete walk"), and asked on 2026-11-06: "what is correct. our draft7 or sob's?".
 
 SOB's own data answers. evaluate.py checks each record twice: its validator (Python's jsonschema, draft 7) says whether the record agrees with the schema, and its walk says whether each leaf has an allowed type. On 18 of the 38 lines of the golden fixture, its validator accepts the record, but its walk calls a leaf's type wrong. The walk breaks six rules of draft 7:

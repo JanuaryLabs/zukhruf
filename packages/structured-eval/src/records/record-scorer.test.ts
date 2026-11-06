@@ -370,7 +370,7 @@ test('a field that the spec does not name agrees only on the same value', () => 
   assert.deepEqual(text.ratios.get('n recall'), new Ratio(0, 1));
 });
 
-test('an ignored field and its children are out of every metric', () => {
+test('an ignored field and its children are out of every ratio', () => {
   const scorer = new RecordScorer(new RecordSpec({ ignore: ['notes'] }));
 
   const scorecard = scorer.score(

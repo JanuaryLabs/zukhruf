@@ -4,8 +4,8 @@ import { type JsonCase, fromJavaScript } from './json-case.ts';
 import { JsonValue } from './json-value.ts';
 
 // A stated value and its case, as evaluate_record of SOB's evaluate.py sees
-// them before it computes its metrics: the parsed candidate, the schema, and
-// the leaves of both values. The metrics share it, so each fact is computed
+// them before it computes its scorers: the parsed candidate, the schema, and
+// the leaves of both values. The scorers share it, so each fact is computed
 // once.
 export class JsonPair {
   readonly testCase: JsonCase;
@@ -45,7 +45,7 @@ export class JsonPair {
       .size;
   }
 
-  // What a stated value is to the metrics: a value that JsonValue.parse read,
+  // What a stated value is to the scorers: a value that JsonValue.parse read,
   // as it is; a string, which is text that was not parsed; or a JavaScript
   // value, read as json.loads reads its JSON text.
   static #dataOf(stated: unknown): JsonData {

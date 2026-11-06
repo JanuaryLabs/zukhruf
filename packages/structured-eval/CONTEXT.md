@@ -17,14 +17,21 @@ The record that the harness gave for that test.
 _Avoid_: prediction, actual
 
 **Case**:
-What one test gives a scorer besides the stated record: the expected record or value, its JSON Schema when the scorer needs one, and its weight.
+What one test gives a scorer or a scorecard scorer besides the stated record: the expected record or value, its JSON Schema when the scorer needs one, and its weight.
 _Avoid_: test row, sample (runner words)
 
 **Scorer**:
-An object that scores one stated record against its case and gives a scorecard. It keeps no result.
+An object that gives one number for one stated value and its case, such as `LeafExactMatch`. A scorer is named by what it measures, not by the benchmark that defined it. It keeps no result.
+_Avoid_: metric (a metric adds the values of many records)
+
+**Scorecard scorer**:
+An object that scores one stated record against its case and gives a scorecard, such as `RecordScorer`. It keeps no result.
+
+**Scorer set**:
+A scorecard scorer that holds labelled scorers. The value of each scorer is a ratio of the value over 1, under its label.
 
 **Scorecard**:
-The result of a scorer for one record: passed, reason, checks and named ratios.
+The result of a scorecard scorer for one record: passed, reason, checks and named ratios.
 
 **Ratio**:
 A part and a whole, such as 2 right values of 3 expected values. Its value is the part divided by the whole, and 0 when the whole is 0.
@@ -67,13 +74,17 @@ One stated item and one expected item that the package compares field by field.
 A rule that says if two values of a field agree: exact, a number in a tolerance, normalized text, or token F1.
 
 **Metric**:
-A class that gives one value for one stated value and its case, such as `LeafExactMatch`. A metric is named by what it measures, not by the benchmark that defined it.
+A value over many scorecards, such as the means of `Totals` or the interval of `Bootstrap`. A scorer gives the number of one record. A metric adds the numbers of many records.
+_Avoid_: metric for the number of one record (that is a scorer)
 
 **Gate**:
-A metric whose value is 0 or 1, such as `SchemaCompliance`. A gate extends `Gate` and says only what it checks. `Gated` multiplies a metric by its gates for each record.
+A scorer whose value is 0 or 1, such as `SchemaCompliance`. A gate extends `Gate` and says only what it checks. `Gated` multiplies a scorer by its gates for each record.
 
-**Metric assertion**:
-A promptfoo assertion object that gives the value of one metric: its name, its weight in the score of the test, and the threshold at which it passes. A TypeScript config lists it in its defaultTest. It reads the case from the vars of the test.
+**Leaf**:
+A value at a path that is not an object or an array: a string, a number, a boolean or null.
+
+**Scorer assertion**:
+A promptfoo assertion object that gives the value of one scorer: its name, its weight in the score of the test, and the threshold at which it passes. A TypeScript config lists it in its defaultTest. It reads the case from the vars of the test.
 
 **Bootstrap interval**:
 The 95% interval of a mean: many samples draw the scorecards again, with replacement, and the interval spans the middle of their means.

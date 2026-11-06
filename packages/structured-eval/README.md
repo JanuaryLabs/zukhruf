@@ -1,19 +1,20 @@
 # @zukhruf/structured-eval
 
-A model or a harness gives a structured record, such as the offers of a web page. This package compares that record with the record that a person labelled, field by field. It gives the counts and the micro averages of each field and of all fields. The metrics are the precision, recall and F1 of the right values, the same three for presence, and token F1. When the spec has a JSON Schema, the package also gives validity and type safety. A second family of metrics compares two JSON values leaf by leaf, one metric class at a time. The words are defined in [CONTEXT.md](CONTEXT.md).
+A model or a harness gives a structured record, such as the offers of a web page. This package compares that record with the record that a person labelled, field by field. It gives the counts and the micro averages of each field and of all fields. The metrics are the precision, recall and F1 of the right values, the same three for presence, and token F1. When the spec has a JSON Schema, the package also gives validity and type safety. A second family compares two JSON values leaf by leaf, one scorer class at a time. The words are defined in [CONTEXT.md](CONTEXT.md).
 
 The package does not run the model and does not store results. A runner does that. The package has an adapter for promptfoo.
 
 ## The parts
 
-| Part        | Job                                                                                                      |
-| ----------- | -------------------------------------------------------------------------------------------------------- |
-| `Scorer`    | Scores one stated record against its case. It gives a `Scorecard`.                                       |
-| `Scorecard` | The result for one record: `passed`, `reason`, `checks`, and named `Ratio`s.                             |
-| `Ratio`     | A part and a whole, such as 2 right values of 3 expected values.                                         |
-| `Totals`    | Adds the ratios of many scorecards, name by name: the sum of the parts divided by the sum of the wholes. |
+| Part              | Job                                                                                                      |
+| ----------------- | -------------------------------------------------------------------------------------------------------- |
+| `ScorecardScorer` | Scores one stated record against its case. It gives a `Scorecard`.                                       |
+| `Scorer`          | Gives one number for one stated value and its case, such as `PathRecall`.                                |
+| `Scorecard`       | The result for one record: `passed`, `reason`, `checks`, and named `Ratio`s.                             |
+| `Ratio`           | A part and a whole, such as 2 right values of 3 expected values.                                         |
+| `Totals`          | Adds the ratios of many scorecards, name by name: the sum of the parts divided by the sum of the wholes. |
 
-Two scorers come with the package: `RecordScorer` compares a record with a labelled record, and `MetricScorer` gives the values of the metric classes that you give it. A runner calls a scorer and adds the scorecards. The package has an adapter for promptfoo, and any other runner can call the scorers directly.
+Two scorecard scorers come with the package: `RecordScorer` compares a record with a labelled record, and `ScorerSet` gives the values of the scorers that you give it. A runner calls a scorecard scorer and adds the scorecards. The values over many scorecards, such as the means of `Totals` and the intervals of `Bootstrap`, are the metrics (ADR 0009). The package has an adapter for promptfoo, and any other runner can call the scorecard scorers directly.
 
 ## Use it
 
@@ -161,9 +162,9 @@ A test row gives its expected record in the config of the assertion:
 
 The second argument reads the case from the config of the assertion: `RecordCase.from(config)` reads `config.expected`. The assertion passes when the scorecard passes. Each ratio becomes a named score, with its whole as the weight. promptfoo adds the value × the weight, so the column header shows the same ratio of sums as `Totals`. Each check becomes a component result.
 
-## Metrics
+## Scorers
 
-Each metric is a class that gives one value for one stated value and its case. The metrics pair the leaves of the two JSON values by path (`a.b[0].c`), and read numbers as Python's `json.loads` does, so `1` is not `1.0`.
+Each scorer is a class that gives one value for one stated value and its case. The scorers pair the leaves of the two JSON values by path (`a.b[0].c`), and read numbers as Python's `json.loads` does, so `1` is not `1.0`.
 
 ```ts
 import {
@@ -171,12 +172,12 @@ import {
   Gated,
   JsonCase,
   LeafExactMatch,
-  MetricScorer,
   PathF1,
   SchemaCompliance,
+  ScorerSet,
 } from '@zukhruf/structured-eval';
 
-const scorer = new MetricScorer({
+const scorer = new ScorerSet({
   'leaf exact match': new LeafExactMatch({ whenNoneExpected: 1 }),
   truth: new Gated(
     new LeafExactMatch({ whenNoneExpected: 1 }),
@@ -187,7 +188,7 @@ const scorer = new MetricScorer({
 scorer.score(stated, new JsonCase(expected, schema, 1)).ratios.get('truth'); // Ratio(value, 1)
 ```
 
-| Metric              | Value for one stated value                                                                                                                                                                                                                      |
+| Scorer              | Value for one stated value                                                                                                                                                                                                                      |
 | ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `ParseSuccess`      | 1 when it is a JSON object or array                                                                                                                                                                                                             |
 | `ValidSchema`       | 1 when the schema of the case is a valid Draft 7 schema                                                                                                                                                                                         |
@@ -198,11 +199,11 @@ scorer.score(stated, new JsonCase(expected, schema, 1)).ratios.get('truth'); // 
 | `PathF1`            | the F1 of the leaf paths that both values have; `whenNoPaths` when neither value has a leaf                                                                                                                                                     |
 | `LeafTypePrecision` | its leaves whose type the schema allows at their path, by the rules of draft 7; `whenNoneStated` when it has no leaf. It has no gate: a record that the schema accepts gives 1, so it grades a record that the schema refuses (ADR 0008)        |
 | `RequiredKeyRecall` | the required paths of the schema that it has; `whenNoneRequired` when the schema requires none. It has no gate: SOB composes `Gated(RequiredKeyRecall, ParseSuccess, ValidSchema)`                                                              |
-| `CanonicalEquality` | 1 when its canonical JSON (sorted keys) equals that of the expected value                                                                                                                                                                       |
+| `ExactMatch`        | 1 when its canonical JSON (sorted keys) equals that of the expected value                                                                                                                                                                       |
 
-A gate is a metric whose value is 0 or 1. A gate extends `Gate`: it says what it checks, and `Gate` gives 1 or 0. `Gated(metric, ...gates)` multiplies a metric by its gates for each record, `AtLeast(metric, threshold)` is 1 when the metric reaches the threshold, and `MeanOf(...metrics)` is the mean of some metrics for each record.
+A gate is a scorer whose value is 0 or 1. A gate extends `Gate`: it says what it checks, and `Gate` gives 1 or 0. `Gated(scorer, ...gates)` multiplies a scorer by its gates for each record, `AtLeast(scorer, threshold)` is 1 when the scorer reaches the threshold, and `MeanOf(...scorers)` is the mean of some scorers for each record.
 
-With promptfoo, each metric is one assertion. A `MetricAssertion` is a promptfoo assertion object, so a TypeScript config (`promptfooconfig.ts`) lists it in its `defaultTest`. Each one has a name (`metric`), how much it counts in the score of the test (`weight`), and when it passes (`threshold`). Both numbers are required:
+With promptfoo, each scorer is one assertion. A `ScorerAssertion` is a promptfoo assertion object, so a TypeScript config (`promptfooconfig.ts`) lists it in its `defaultTest`. Each one has a name (`metric`: promptfoo shows the mean of each name over the tests), how much it counts in the score of the test (`weight`), and when it passes (`threshold`). Both numbers are required:
 
 ```ts
 // promptfooconfig.ts
@@ -210,13 +211,13 @@ import type { UnifiedConfig } from 'promptfoo';
 
 import {
   AtLeast,
-  CanonicalEquality,
+  ExactMatch,
   Gated,
   LeafExactMatch,
   PathF1,
   SchemaCompliance,
 } from '@zukhruf/structured-eval';
-import { MetricAssertion } from '@zukhruf/structured-eval/promptfoo';
+import { ScorerAssertion } from '@zukhruf/structured-eval/promptfoo';
 
 const validJson = new SchemaCompliance();
 const covered = new AtLeast(new PathF1({ whenNoPaths: 0 }), 0.95);
@@ -226,8 +227,8 @@ export default {
   providers: ['openai:gpt-6-luna'],
   defaultTest: {
     assert: [
-      new MetricAssertion('valid_json', validJson, { weight: 1, threshold: 1 }),
-      new MetricAssertion(
+      new ScorerAssertion('valid_json', validJson, { weight: 1, threshold: 1 }),
+      new ScorerAssertion(
         'field_recall',
         new Gated(
           new LeafExactMatch({ whenNoneExpected: 1 }),
@@ -236,7 +237,7 @@ export default {
         ),
         { weight: 1, threshold: 0 },
       ),
-      new MetricAssertion('exact_match', new CanonicalEquality(), {
+      new ScorerAssertion('exact_match', new ExactMatch(), {
         weight: 1,
         threshold: 0,
       }),
@@ -248,7 +249,7 @@ export default {
 
 promptfoo adds the value × the weight of each assertion of a test and divides by the sum of the weights: that is the score of the test. An assertion that gives a number passes when the number reaches its `threshold`. The test passes when all its assertions pass. The column header of a metric shows its mean over the tests.
 
-`MetricAssertion` reads the text of the harness as `json.loads` does, without loss, and keeps text that is not JSON as an unparsed value. It reads the case from the vars of the test with `JsonTextCase`, because an assertion that `defaultTest` shares gets only the vars of each test.
+`ScorerAssertion` reads the text of the harness as `json.loads` does, without loss, and keeps text that is not JSON as an unparsed value. It reads the case from the vars of the test with `JsonTextCase`, because an assertion that `defaultTest` shares gets only the vars of each test.
 
 `JsonTextCase.from(vars)` reads `expected` as JSON text and `schema` as a JSON value. A row without a weight weighs 1. promptfoo parses each row, so an integral float such as `7.0` is already `7` in a JSON value. JSON text keeps `7.0` a float, as `json.loads` reads it. promptfoo resolves a `$ref` in the vars of a row to its JSON value when the config gives the file of rows in a list (`tests: [file://tests.jsonl]`):
 
@@ -258,11 +259,11 @@ promptfoo adds the value × the weight of each assertion of a test and divides b
 }
 ```
 
-`MetricScorer` gives the same values to a runner that adds scorecards. `JsonTextScorer` reads the text of the harness for it in the same way:
+`ScorerSet` gives the same values to a runner that adds scorecards. `JsonTextScorer` reads the text of the harness for it in the same way:
 
 ```ts
 const scorer = new JsonTextScorer(
-  new MetricScorer({ 'canonical equality': new CanonicalEquality() }),
+  new ScorerSet({ 'exact match': new ExactMatch() }),
 );
 ```
 
@@ -282,7 +283,7 @@ const rows = scorecards.map((scorecard, index) => ({
 new Bootstrap(new Random(42), 1000).interval(rows, 'truth'); // [low, high]
 ```
 
-The metric classes port the metrics of the Structured Output Benchmark (SOB), evaluate.py at commit da785a8. The golden test composes SOB's report from them (its labels, categories, weights and seeds) and proves that it gives the numbers of evaluate.py, record by record, with the same means and intervals. Do not compare these metrics with the micro averages of the record scorer.
+The scorer classes port the scores of the Structured Output Benchmark (SOB), evaluate.py at commit da785a8. The golden test composes SOB's report from them (its labels, categories, weights and seeds) and proves that it gives the numbers of evaluate.py, record by record, with the same means and intervals. Do not compare their means with the micro averages of the record scorer.
 
 ## Documentation
 
@@ -294,6 +295,7 @@ The metric classes port the metrics of the Structured Output Benchmark (SOB), ev
 - [ADR 0006: with promptfoo, each metric is one assertion that reads the vars of its test](docs/adr/0006-with-promptfoo-each-metric-is-one-assertion-that-reads-the-vars-of-its-test.md)
 - [ADR 0007: a metric assertion is a promptfoo assertion object in a TypeScript config](docs/adr/0007-a-metric-assertion-is-a-promptfoo-assertion-object-in-a-typescript-config.md)
 - [ADR 0008: type precision follows JSON Schema draft 7 and has no gate](docs/adr/0008-type-precision-follows-draft-7-and-has-no-gate.md)
+- [ADR 0009: a scorer gives a value for one answer, and a metric adds the values of many answers](docs/adr/0009-a-scorer-gives-a-value-for-one-answer-and-a-metric-adds-many.md)
 
 ## Development
 
