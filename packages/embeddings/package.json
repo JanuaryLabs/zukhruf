@@ -46,6 +46,7 @@
     "ai": "^7.0.154"
   },
   "devDependencies": {
+    "@zukhruf/sqlite-open": "^0.6.16",
     "@zukhruf/testing": "^0.6.16"
   }
 }

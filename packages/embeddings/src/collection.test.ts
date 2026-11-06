@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
 import { join } from 'node:path';
-import { DatabaseSync } from 'node:sqlite';
 import { describe, test } from 'node:test';
 
 import { MockEmbeddingModelV4 } from 'ai/test';
 
+import { open } from '@zukhruf/sqlite-open';
 import { TemporaryFiles } from '@zukhruf/testing/fs';
 
 import {
@@ -45,7 +45,7 @@ function day(n: number): Date {
 
 describe('Collection', () => {
   test('an upsert whose vectors have another dimension fails and stores none of its documents', async () => {
-    using database = new DatabaseSync(':memory:');
+    using database = open(':memory:');
     const collection = new Collection({
       database,
       model: model({ a: [1, 0], b: [1, 0, 0], c: [0, 1] }),
@@ -68,7 +68,7 @@ describe('Collection', () => {
   });
 
   test('an upsert that replaces only some documents cannot change their dimension', async () => {
-    using database = new DatabaseSync(':memory:');
+    using database = open(':memory:');
     await new Collection({
       database,
       model: model({ a: [1, 0], b: [1, 0] }, { modelId: 'small' }),
@@ -93,7 +93,7 @@ describe('Collection', () => {
   });
 
   test('an upsert fails and stores none of its documents when the model gives a vector of length zero', async () => {
-    using database = new DatabaseSync(':memory:');
+    using database = open(':memory:');
     const collection = new Collection({
       database,
       model: model({ a: [1, 0], zero: [0, 0] }),
@@ -114,7 +114,7 @@ describe('Collection', () => {
   });
 
   test('an upsert that replaces every document may change the dimension', async () => {
-    using database = new DatabaseSync(':memory:');
+    using database = open(':memory:');
     await new Collection({
       database,
       model: model({ a: [1, 0], b: [0, 1] }, { modelId: 'small' }),
@@ -136,7 +136,7 @@ describe('Collection', () => {
   });
 
   test('an unknown id is an UnknownDocumentError', async () => {
-    using database = new DatabaseSync(':memory:');
+    using database = open(':memory:');
     const collection = new Collection({ database, model: model({ a: [1] }) });
     await collection.upsert([{ id: 'a', text: 'a', publishedAt: day(1) }]);
 
@@ -153,7 +153,7 @@ describe('Collection', () => {
   });
 
   test('nearest gives the k most similar other documents, and equal similarities in id order', async () => {
-    using database = new DatabaseSync(':memory:');
+    using database = open(':memory:');
     const collection = new Collection({
       database,
       model: model({
@@ -185,7 +185,7 @@ describe('Collection', () => {
   });
 
   test('nearest compares only documents published at most withinDays before or after the document', async () => {
-    using database = new DatabaseSync(':memory:');
+    using database = open(':memory:');
     const collection = new Collection({
       database,
       model: model({ query: [1, 0], doc: [1, 0] }),
@@ -210,7 +210,7 @@ describe('Collection', () => {
   });
 
   test('the neighbour graph gives each document of the range exactly what nearest gives it, also for equal similarities and at the window edges', async () => {
-    using database = new DatabaseSync(':memory:');
+    using database = open(':memory:');
     // Equal vectors give equal similarities. The hours put documents exactly
     // on the edges of the window of 2 days and one minute outside them.
     const texts = {
@@ -260,7 +260,7 @@ describe('Collection', () => {
   });
 
   test('a document outside the range of the neighbour graph has no entry, but is a neighbour of the documents in the range', async () => {
-    using database = new DatabaseSync(':memory:');
+    using database = open(':memory:');
     const collection = new Collection({
       database,
       model: model({
@@ -298,7 +298,7 @@ describe('Collection', () => {
   });
 
   test('an upsert after the publish date changed moves the document in the window without embedding it again', async () => {
-    using database = new DatabaseSync(':memory:');
+    using database = open(':memory:');
     const fake = model({ query: [1, 0], doc: [1, 0] });
     const collection = new Collection({ database, model: fake });
     await collection.upsert([
@@ -320,13 +320,13 @@ describe('Collection', () => {
     const path = join(folder.path, 'collection.sqlite');
     const vectors = { a: [1, 0], b: [0, 1], c: [1, 1] };
     {
-      using database = new DatabaseSync(path);
+      using database = open(path);
       await new Collection({ database, model: model(vectors) }).upsert([
         { id: 'a', text: 'a', publishedAt: day(1) },
         { id: 'b', text: 'b', publishedAt: day(1) },
       ]);
     }
-    using database = new DatabaseSync(path);
+    using database = open(path);
     const fake = model(vectors);
     const collection = new Collection({ database, model: fake });
 
@@ -341,7 +341,7 @@ describe('Collection', () => {
   });
 
   test('a changed text is embedded again, and the search uses its new vector', async () => {
-    using database = new DatabaseSync(':memory:');
+    using database = open(':memory:');
     const fake = model({ query: [1, 0], old: [0, 1], new: [1, 0] });
     const collection = new Collection({ database, model: fake });
     await collection.upsert([
@@ -359,7 +359,7 @@ describe('Collection', () => {
   });
 
   test('a new provider or a new model id embeds an unchanged text again', async () => {
-    using database = new DatabaseSync(':memory:');
+    using database = open(':memory:');
     const documents = [
       { id: 'a', text: 'a', publishedAt: day(1) },
       { id: 'b', text: 'b', publishedAt: day(1) },
@@ -392,7 +392,7 @@ describe('Collection', () => {
   });
 
   test('similarity is the cosine of the two documents, whatever the length of their vectors', async () => {
-    using database = new DatabaseSync(':memory:');
+    using database = open(':memory:');
     const collection = new Collection({
       database,
       model: model({ a: [3, 4], b: [40, 30] }),
@@ -407,7 +407,7 @@ describe('Collection', () => {
   });
 
   test('query gives the similarity of a vector of any length to each document published in the range, the highest first and equal similarities in id order', async () => {
-    using database = new DatabaseSync(':memory:');
+    using database = open(':memory:');
     const collection = new Collection({
       database,
       model: model({
@@ -445,7 +445,7 @@ describe('Collection', () => {
   });
 
   test('a query with no date range gives the similarity of a vector to every document, whatever its publish date', async () => {
-    using database = new DatabaseSync(':memory:');
+    using database = open(':memory:');
     const collection = new Collection({
       database,
       model: model({ east: [1, 0], north: [0, 1] }),
@@ -466,7 +466,7 @@ describe('Collection', () => {
   });
 
   test('a query vector of another dimension is a DimensionMismatchError, and an empty collection gives no match', async () => {
-    using database = new DatabaseSync(':memory:');
+    using database = open(':memory:');
     const collection = new Collection({
       database,
       model: model({ a: [1, 0] }),
@@ -486,7 +486,7 @@ describe('Collection', () => {
   });
 
   test('fetch gives the stored unit vector of each id in the order of the ids, and one unknown id fails the call', async () => {
-    using database = new DatabaseSync(':memory:');
+    using database = open(':memory:');
     const collection = new Collection({
       database,
       model: model({ a: [3, 4], b: [0, 2] }),
@@ -513,7 +513,7 @@ describe('Collection', () => {
   });
 
   test('a vector that fetch gives is a copy, so a change to it does not change the stored vector', async () => {
-    using database = new DatabaseSync(':memory:');
+    using database = open(':memory:');
     const collection = new Collection({
       database,
       model: model({ a: [1, 0], b: [1, 0] }),
@@ -529,7 +529,7 @@ describe('Collection', () => {
   });
 
   test('delete removes the documents from every search and from the count, and a delete of an unknown or deleted id does nothing', async () => {
-    using database = new DatabaseSync(':memory:');
+    using database = open(':memory:');
     const collection = new Collection({
       database,
       model: model({ a: [1, 0], b: [1, 1], c: [0, 1] }),
@@ -556,7 +556,7 @@ describe('Collection', () => {
   });
 
   test('an upsert after a delete embeds the text again', async () => {
-    using database = new DatabaseSync(':memory:');
+    using database = open(':memory:');
     const fake = model({ a: [1, 0] });
     const collection = new Collection({ database, model: fake });
     await collection.upsert([{ id: 'a', text: 'a', publishedAt: day(1) }]);
@@ -569,7 +569,7 @@ describe('Collection', () => {
   });
 
   test('count gives the number of stored documents, and an upsert of a stored id does not add one', async () => {
-    using database = new DatabaseSync(':memory:');
+    using database = open(':memory:');
     const collection = new Collection({
       database,
       model: model({ a: [1, 0], b: [0, 1], new: [1, 1] }),

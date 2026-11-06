@@ -4,10 +4,10 @@ import { once } from 'node:events';
 import { chmod, readdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline';
-import { DatabaseSync } from 'node:sqlite';
 import { text } from 'node:stream/consumers';
 import { describe, test } from 'node:test';
 
+import { UnavailableError, UnchangedJournal, open } from '@zukhruf/sqlite-open';
 import { TemporaryFiles } from '@zukhruf/testing/fs';
 
 import { FileLock } from './file-lock.ts';
@@ -187,7 +187,10 @@ describe('FileLock', () => {
       );
       const path = join(directory.path, 'job.lock');
       const holder = await startHolder(keepsHandle(path));
-      using published = new DatabaseSync(path);
+      using published = open(path, {
+        journal: new UnchangedJournal(),
+        timeout: 0,
+      });
       try {
         // Act
         const beginning = () => published.exec('BEGIN EXCLUSIVE');
@@ -436,7 +439,13 @@ describe('FileLock', () => {
       const checking = () => FileLock.check(path);
 
       // Assert
-      assert.throws(checking, { errcode: 14 });
+      assert.throws(checking, (error: unknown) => {
+        assert.ok(error instanceof UnavailableError, String(error));
+        assert.equal(error.path, path);
+        assert.ok(error.cause instanceof Error && 'errcode' in error.cause);
+        assert.equal(error.cause.errcode, 14);
+        return true;
+      });
     },
   );
 

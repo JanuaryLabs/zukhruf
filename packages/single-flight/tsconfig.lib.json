@@ -24,10 +24,13 @@
       "path": "../async/tsconfig.lib.json"
     },
     {
-      "path": "../mutex/tsconfig.lib.json"
+      "path": "../testing/tsconfig.lib.json"
     },
     {
-      "path": "../testing/tsconfig.lib.json"
+      "path": "../sqlite/open/tsconfig.lib.json"
+    },
+    {
+      "path": "../mutex/tsconfig.lib.json"
     }
   ]
 }

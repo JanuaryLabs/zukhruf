@@ -1,4 +1,4 @@
-import { DatabaseSync } from 'node:sqlite';
+import type { DatabaseSync } from 'node:sqlite';
 
 import { PGlite } from '@electric-sql/pglite';
 import {
@@ -10,6 +10,8 @@ import {
   type WipData,
   fromPglite,
 } from 'pg-boss';
+
+import { open } from '@zukhruf/sqlite-open';
 
 import type { JobQueue } from '../index.ts';
 import { SqliteJobQueue } from '../index.ts';
@@ -234,7 +236,7 @@ export class SqliteBackend {
   async open(options: RunOptions = {}): Promise<ParityRun> {
     // The caller supplies the database, as the oracle's caller supplies
     // PGlite, and closes it after the queue stops.
-    const database = new DatabaseSync(':memory:');
+    const database = open(':memory:');
     const errors: Error[] = [];
     const clock = new TestClock(ParityRun.start);
     const events = new RunEvents(clock);

@@ -11,7 +11,7 @@ Two rules disagree with it:
 
 The package throws its own errors.
 
-- `UnavailableError` (of `@zukhruf/sqlite-reader` since #3224, before that `src/unavailable-error.ts`): SQLite cannot open the file (`SQLITE_CANTOPEN`, 14). It has the `path`, and its `cause` is the error of SQLite.
+- `UnavailableError` (of `@zukhruf/sqlite-open`, before that of `@zukhruf/sqlite-reader` since #3224, and before that `src/unavailable-error.ts`): SQLite cannot open the file (`SQLITE_CANTOPEN`, 14). It has the `path`, and its `cause` is the error of SQLite.
 - `MissingColumnsError` (`src/missing-columns-error.ts`): `requireColumns` finds missing columns. It has the `path`, and `missing` gives each missing column as `table.column`. `requireColumns` closes the snapshot before it throws.
 - `new Snapshot(path)` and `requireColumns(columns)` take no error class.
 
@@ -28,4 +28,4 @@ A host that needs its own error translates the error of the package at its bound
 - A host that needs its own error class translates at its boundary, and keeps the error of the package as `cause`. The message of the host can name what the user must do, for example the access that the user must give.
 - Each call has one parameter less.
 - A catch with `instanceof UnavailableError` or `instanceof MissingColumnsError` works with the package that the caller imports.
-- `UnavailableError` is the same knowledge as `UnavailableError` of `@zukhruf/sqlite-data-version`. It was the second place, so the class was a copy. At the third place, the class and the open that throws it moved into `@zukhruf/sqlite-reader` ([sqlite-reader ADR 0001](../../../reader/docs/adr/0001-one-package-opens-the-reader-and-owns-unavailable-error.md)). This package exports that class.
+- `UnavailableError` is the same knowledge as `UnavailableError` of `@zukhruf/sqlite-data-version`. It was the second place, so the class was a copy. At the third place, the class and the open that throws it moved into `@zukhruf/sqlite-reader`, now `@zukhruf/sqlite-open` ([sqlite-open ADR 0001](../../../open/docs/adr/0001-one-package-opens-the-reader-and-owns-unavailable-error.md)). This package exports that class.

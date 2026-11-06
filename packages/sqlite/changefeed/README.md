@@ -139,7 +139,7 @@ This package needed four changes in other packages. All four are done:
 1. `@zukhruf/snapshot-differential` gives `insert` and `update` in place of one `upsert`.
 2. `@zukhruf/async` gives the change watcher `pollChanges`. It polls a value, and yields when the value changes.
 3. `@zukhruf/snapshot-differential` fingerprints bytes (`Uint8Array`, `Buffer`) in a record and in a key. Thus a `BLOB` column can be in `after` and in a key.
-4. `@zukhruf/sqlite-reader` opens the read-only connection and throws `UnavailableError`. This package exports the same `UnavailableError` class as `@zukhruf/sqlite-snapshot` and `@zukhruf/sqlite-data-version` (repository ADR 0001, rule 6).
+4. `@zukhruf/sqlite-open` opens the read-only connection and throws `UnavailableError`. This package exports the same `UnavailableError` class as `@zukhruf/sqlite-snapshot` and `@zukhruf/sqlite-data-version` (repository ADR 0001, rule 6).
 
 ## Documentation
 

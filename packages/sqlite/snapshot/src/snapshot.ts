@@ -1,6 +1,6 @@
 import type { DatabaseSync, SQLInputValue, SQLOutputValue } from 'node:sqlite';
 
-import { openReader } from '@zukhruf/sqlite-reader';
+import { open } from '@zukhruf/sqlite-open';
 
 import { MissingColumnsError } from './missing-columns-error.ts';
 import { OwnerCopy } from './owner-copy.ts';
@@ -22,7 +22,7 @@ export class Snapshot implements Disposable {
   constructor(path: string, copy?: OwnerCopy) {
     this.path = path;
     this.#copy = copy ?? { [Symbol.dispose]() {} };
-    this.#database = openReader(copy?.file ?? path);
+    this.#database = open(copy?.file ?? path, { readOnly: true });
     try {
       // The first read pins the snapshot, so it is taken now rather than at
       // the caller's first query; a file that is no database fails here.

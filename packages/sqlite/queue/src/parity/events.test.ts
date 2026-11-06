@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
-import { DatabaseSync } from 'node:sqlite';
 import { describe, it } from 'node:test';
 
 import { PGlite } from '@electric-sql/pglite';
 import { type Job, PgBoss, TestClock, fromPglite } from 'pg-boss';
+
+import { open } from '@zukhruf/sqlite-open';
 
 import { SqliteJobQueue } from '../index.ts';
 import { ParityRun, type WipWorker } from './backends.ts';
@@ -514,7 +515,7 @@ describe('stopped events', () => {
     } finally {
       await pglite.close();
     }
-    const database = new DatabaseSync(':memory:');
+    const database = open(':memory:');
     let sqlite;
     try {
       sqlite = await observe(

@@ -2,17 +2,23 @@ import assert from 'node:assert/strict';
 import { once } from 'node:events';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { DatabaseSync } from 'node:sqlite';
 import { test } from 'node:test';
 import { Worker } from 'node:worker_threads';
 
+import { RollbackJournal, open } from '@zukhruf/sqlite-open';
 import { TemporaryFiles } from '@zukhruf/testing/fs';
 
-import { Federation, TooManyDatabasesError } from './index.ts';
+import {
+  Federation,
+  TooManyDatabasesError,
+  UnavailableError,
+} from './index.ts';
 
-// A database the host keeps: one table t with the values given.
+// A database the host keeps: one table t with the values given. The host
+// keeps a rollback journal, so a writer's exclusive transaction keeps
+// readers out.
 function writeDatabase(path: string, values: readonly number[]): void {
-  using database = new DatabaseSync(path);
+  using database = open(path, { journal: new RollbackJournal() });
   database.exec('CREATE TABLE t (x INTEGER)');
   const insert = database.prepare('INSERT INTO t (x) VALUES (?)');
   for (const value of values) insert.run(value);
@@ -60,7 +66,7 @@ test('a main database preserves its schema, presets and read-only behavior when 
       /no such table: unknown.t/,
     );
     assert.deepEqual(attachedNames(owned), ['main', 'temp']);
-    using writer = new DatabaseSync(path, { timeout: 0 });
+    using writer = open(path, { timeout: 0, journal: new RollbackJournal() });
     writer.exec('INSERT INTO t VALUES (2)');
     assert.deepEqual(owned.query('SELECT x FROM main.t ORDER BY x').rows, [
       [1],
@@ -71,7 +77,13 @@ test('a main database preserves its schema, presets and read-only behavior when 
   const absent = join(scratch.path, 'absent.sqlite');
   assert.throws(
     () => new Federation({ main: absent, locate }),
-    /unable to open database/,
+    (error: unknown) => {
+      assert.ok(error instanceof UnavailableError);
+      assert.equal(error.path, absent);
+      assert.ok(error.cause instanceof Error);
+      assert.match(error.cause.message, /unable to open database/);
+      return true;
+    },
   );
   assert.equal(existsSync(absent), false);
 });
@@ -124,7 +136,13 @@ test('a named main must resolve to an existing database and preserves locate err
   const absent = join(scratch.path, 'absent.sqlite');
   assert.throws(
     () => new Federation({ main: { name: 'absent' }, locate: () => absent }),
-    /unable to open database/,
+    (error: unknown) => {
+      assert.ok(error instanceof UnavailableError);
+      assert.equal(error.path, absent);
+      assert.ok(error.cause instanceof Error);
+      assert.match(error.cause.message, /unable to open database/);
+      return true;
+    },
   );
   assert.equal(existsSync(absent), false);
 });
@@ -287,7 +305,7 @@ test('a statement cannot change a database it reads', async () => {
     () => federation.sql.all`INSERT INTO d.t (x) VALUES (2) RETURNING x`,
     { message: /readonly database/ },
   );
-  using database = new DatabaseSync(path, { readOnly: true });
+  using database = open(path, { readOnly: true });
   assert.deepEqual(
     database
       .prepare('SELECT x FROM t')
@@ -310,7 +328,7 @@ test('a writer commits between two statements', async () => {
     [1],
   );
 
-  using writer = new DatabaseSync(path, { timeout: 0 });
+  using writer = open(path, { timeout: 0, journal: new RollbackJournal() });
   writer.exec('INSERT INTO t (x) VALUES (2)');
 
   assert.deepEqual(
@@ -437,7 +455,7 @@ test('a SQL file defines temporary views read by raw and tagged queries across d
   assert.deepEqual(attachedNames(federation), ['main', 'temp']);
   assert.equal(federation.sql.get`SELECT x FROM doubled`?.x, 4);
   assert.deepEqual(attachedNames(federation), ['main', 'temp']);
-  using writer = new DatabaseSync(right);
+  using writer = open(right, { journal: new RollbackJournal() });
   writer.exec('INSERT INTO t VALUES (1)');
   assert.deepEqual(federation.query('SELECT x FROM doubled ORDER BY x'), {
     columns: ['x'],

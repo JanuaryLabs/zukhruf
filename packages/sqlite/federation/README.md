@@ -20,18 +20,18 @@ The host gives `locate`. A statement names each database as a schema.
 import { mkdtempDisposable } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { DatabaseSync } from 'node:sqlite';
 
 import { Federation } from '@zukhruf/sqlite-federation';
+import { open } from '@zukhruf/sqlite-open';
 
 await using scratch = await mkdtempDisposable(join(tmpdir(), 'federation-'));
 const messagesPath = join(scratch.path, 'messages.sqlite');
 const contactsPath = join(scratch.path, 'contacts.sqlite');
 {
-  using messages = new DatabaseSync(messagesPath);
+  using messages = open(messagesPath);
   messages.exec(`CREATE TABLE messages (handle TEXT, text TEXT);
     INSERT INTO messages VALUES ('+962790000000', 'See you at 6');`);
-  using contacts = new DatabaseSync(contactsPath);
+  using contacts = open(contactsPath);
   contacts.exec(`CREATE TABLE contacts (phone TEXT, name TEXT);
     INSERT INTO contacts VALUES ('+962790000000', 'Sara');`);
 }
@@ -80,7 +80,7 @@ const result = federation.query('SELECT * FROM conversations');
 
 Qualified tables and PRAGMAs discover additional databases through `locate`. Both `PRAGMA contacts.table_info(contacts)` and `SELECT * FROM pragma_table_info('contacts', 'contacts')` locate Contacts, including when the schema is a bound parameter in a tagged query. Quoted schema names such as `"call-history"` work too. Every attachment made for the statement is detached afterwards, including on failure; `main` and temporary views remain on the connection. The additional databases count toward the attachment limit.
 
-The constructor accepts Node's `timeout` option for waiting on a writer's lock, in milliseconds. Omit it to use Node's native behavior. Hosts that need crash recovery perform it before supplying the paths, including inside `locate` for a named primary or additional database; Federation opens those files read-only.
+The constructor accepts Node's `timeout` option for waiting on a writer's lock, in milliseconds. Without it, the handle waits 5000 ms, the busy timeout of `@zukhruf/sqlite-open`. Hosts that need crash recovery perform it before supplying the paths, including inside `locate` for a named primary or additional database; Federation opens those files read-only.
 
 ## Read a primary database
 
@@ -108,16 +108,17 @@ const result = database.query(
 
 ## Errors
 
-| Error                                  | When                                                                                                                                              |
-| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `TooManyDatabasesError`                | A statement names more databases than the limit. `names` has at least one name more than the limit. The message tells you to split the statement. |
-| `Unknown main database <name>`         | The constructor cannot locate the named primary database.                                                                                         |
-| `no such table: <name>.<table>`        | The error of SQLite, when `locate` returns `undefined` for the name, or when the database does not have the table.                                |
-| `unable to open database file`         | The error of SQLite, when `locate` returns a path with no file.                                                                                   |
-| `attempt to write a readonly database` | The error of SQLite, when a statement writes.                                                                                                     |
-| The error of `locate`                  | The constructor or statement fails with that error. The databases that the statement attached before are detached.                                |
-| `unknown database <name>`              | The error of SQLite, when a PRAGMA names a database that `locate` cannot find. Quoting follows the statement or the table-valued PRAGMA argument. |
-| `Run one SQL statement at a time`      | A raw query contains a second statement.                                                                                                          |
+| Error                                  | When                                                                                                                                                                                               |
+| -------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `TooManyDatabasesError`                | A statement names more databases than the limit. `names` has at least one name more than the limit. The message tells you to split the statement.                                                  |
+| `Unknown main database <name>`         | The constructor cannot locate the named primary database.                                                                                                                                          |
+| `no such table: <name>.<table>`        | The error of SQLite, when `locate` returns `undefined` for the name, or when the database does not have the table.                                                                                 |
+| `UnavailableError`                     | The constructor cannot open the primary database: the file is missing, or the system denies access. `path` is the path. `cause` is the error of SQLite. It is the class of `@zukhruf/sqlite-open`. |
+| `unable to open database file`         | The error of SQLite, when `locate` returns a path with no file for a database that a statement attaches.                                                                                           |
+| `attempt to write a readonly database` | The error of SQLite, when a statement writes.                                                                                                                                                      |
+| The error of `locate`                  | The constructor or statement fails with that error. The databases that the statement attached before are detached.                                                                                 |
+| `unknown database <name>`              | The error of SQLite, when a PRAGMA names a database that `locate` cannot find. Quoting follows the statement or the table-valued PRAGMA argument.                                                  |
+| `Run one SQL statement at a time`      | A raw query contains a second statement.                                                                                                                                                           |
 
 ## The same concepts in other systems
 

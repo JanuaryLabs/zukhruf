@@ -5,7 +5,7 @@
 // Writes articles.json (kept articles: title, lead, body, vector text) and
 // prepare-report.json (dropped rows and why).
 import { readFileSync, writeFileSync } from 'node:fs';
-import { DatabaseSync } from 'node:sqlite';
+import { open } from '@zukhruf/sqlite-open';
 
 import { vectorText } from './vector-text.ts';
 
@@ -69,7 +69,7 @@ const stores = [
   ['siliconangle', 'edge/articles.sqlite', 'edge'],
 ] as const;
 for (const [source, store, table] of stores) {
-  const db = new DatabaseSync(store, { readOnly: true });
+  const db = open(store, { readOnly: true });
   const rows = db
     .prepare(`select articleUrl, title, publishedTime, excerpt, textContent, length, list from ${table} order by articleUrl`)
     .all() as Row[];

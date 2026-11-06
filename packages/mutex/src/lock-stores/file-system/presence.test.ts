@@ -9,6 +9,7 @@ import { join } from 'node:path';
 import { createInterface } from 'node:readline';
 import { describe } from 'node:test';
 
+import { UnavailableError } from '@zukhruf/sqlite-open';
 import { TemporaryFiles } from '@zukhruf/testing/fs';
 import { test } from '@zukhruf/testing/node';
 
@@ -339,8 +340,9 @@ void test.each(stores, (store) => {
 
         // Assert: the fault surfaces as it is, not as a record without a presence.
         await assert.rejects(acquiring, (error: unknown) => {
-          assert.ok(error instanceof Error, String(error));
-          assert.match(error.message, /unable to open/);
+          assert.ok(error instanceof UnavailableError, String(error));
+          assert.ok(error.cause instanceof Error);
+          assert.match(error.cause.message, /unable to open/);
           assert.doesNotMatch(error.message, /no presence file/);
           return true;
         });

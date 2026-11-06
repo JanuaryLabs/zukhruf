@@ -8,12 +8,26 @@
   "include": ["src/**/*.ts"],
   "exclude": ["src/**/*.test.ts"],
   "references": [
-    { "path": "../../async/tsconfig.lib.json" },
-    { "path": "../../snapshot-differential/tsconfig.lib.json" },
-    { "path": "../data-version/tsconfig.lib.json" },
-    { "path": "../reader/tsconfig.lib.json" },
-    { "path": "../snapshot/tsconfig.lib.json" },
-    { "path": "../transaction/tsconfig.lib.json" },
-    { "path": "../../testing/tsconfig.lib.json" }
+    {
+      "path": "../transaction/tsconfig.lib.json"
+    },
+    {
+      "path": "../snapshot/tsconfig.lib.json"
+    },
+    {
+      "path": "../open/tsconfig.lib.json"
+    },
+    {
+      "path": "../data-version/tsconfig.lib.json"
+    },
+    {
+      "path": "../../snapshot-differential/tsconfig.lib.json"
+    },
+    {
+      "path": "../../async/tsconfig.lib.json"
+    },
+    {
+      "path": "../../testing/tsconfig.lib.json"
+    }
   ]
 }

@@ -4,17 +4,18 @@ import { once } from 'node:events';
 import { chmod, mkdir, rename } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline';
-import { DatabaseSync } from 'node:sqlite';
 import { test } from 'node:test';
 
 import { FileStamp } from '@zukhruf/fs';
+import { RollbackJournal, open } from '@zukhruf/sqlite-open';
 import { TemporaryFiles } from '@zukhruf/testing/fs';
 
 import { DataVersion, UnavailableError } from './index.ts';
 
 // A database with one committed note, as its owner leaves it between runs.
+// The owner keeps a rollback journal, as Chromium keeps its History.
 function created(path: string) {
-  using database = new DatabaseSync(path);
+  using database = open(path, { journal: new RollbackJournal() });
   database.exec(`
     CREATE TABLE notes (id INTEGER PRIMARY KEY, title TEXT);
     INSERT INTO notes (title) VALUES ('first');
@@ -105,7 +106,7 @@ test('the version of an exclusive owner stays the same while the owner commits n
   assert.equal(version.current, before);
 });
 
-test('a missing database of an exclusive owner is the UnavailableError of @zukhruf/sqlite-reader', async () => {
+test('a missing database of an exclusive owner is the UnavailableError of @zukhruf/sqlite-open', async () => {
   await using dir = await new TemporaryFiles().directory('data-version-');
   const path = join(dir.path, 'missing', 'History');
 
@@ -148,7 +149,7 @@ test('a database that moves away, or that the process may no longer see, is no c
 });
 
 test(
-  'a database in a folder that the process may not search is the UnavailableError of @zukhruf/sqlite-reader',
+  'a database in a folder that the process may not search is the UnavailableError of @zukhruf/sqlite-open',
   { skip: process.platform === 'win32' || process.getuid?.() === 0 },
   async () => {
     await using dir = await new TemporaryFiles().directory('data-version-');

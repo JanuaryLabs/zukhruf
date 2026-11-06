@@ -1,6 +1,7 @@
-import { DatabaseSync } from 'node:sqlite';
+import type { DatabaseSync } from 'node:sqlite';
 
 import type { SnapshotState } from '@zukhruf/snapshot-differential';
+import { open } from '@zukhruf/sqlite-open';
 import { transaction } from '@zukhruf/sqlite-transaction';
 
 import type { Position, PositionUpdate } from './position.ts';
@@ -12,7 +13,7 @@ export class PositionFile implements Position, Disposable {
   readonly #database: DatabaseSync;
 
   constructor(path: string) {
-    this.#database = new DatabaseSync(path);
+    this.#database = open(path);
     try {
       this.#database.exec(`
         CREATE TABLE IF NOT EXISTS tables (

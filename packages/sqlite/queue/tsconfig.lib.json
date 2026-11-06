@@ -9,13 +9,16 @@
   "exclude": ["src/**/*.test.ts", "src/parity/**"],
   "references": [
     {
-      "path": "../../async/tsconfig.lib.json"
+      "path": "../transaction/tsconfig.lib.json"
+    },
+    {
+      "path": "../open/tsconfig.lib.json"
     },
     {
       "path": "../drift/tsconfig.lib.json"
     },
     {
-      "path": "../transaction/tsconfig.lib.json"
+      "path": "../../async/tsconfig.lib.json"
     },
     {
       "path": "../../testing/tsconfig.lib.json"

@@ -1,7 +1,7 @@
 import { statSync } from 'node:fs';
 import type { DatabaseSync, StatementSync } from 'node:sqlite';
 
-import { openReader } from '@zukhruf/sqlite-reader';
+import { open } from '@zukhruf/sqlite-open';
 
 // The device and inode of the file at the path, or undefined when this
 // process cannot see the path: it is missing, or a folder's mode denies it.
@@ -30,7 +30,7 @@ class OpenFile implements Disposable {
     // identity to the old connection, and then the replace is never seen.
     // A path this process cannot see fails the open too, as CANTOPEN.
     this.identity = identify(path);
-    this.#database = openReader(path);
+    this.#database = open(path, { readOnly: true });
     this.#version = this.#database.prepare('PRAGMA data_version');
   }
 

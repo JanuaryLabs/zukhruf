@@ -96,9 +96,6 @@
       "path": "./packages/python"
     },
     {
-      "path": "./packages/sqlite/reader"
-    },
-    {
       "path": "./packages/sqlite/changefeed"
     },
     {
@@ -106,6 +103,9 @@
     },
     {
       "path": "./packages/shutdown"
+    },
+    {
+      "path": "./packages/sqlite/open"
     }
   ]
 }

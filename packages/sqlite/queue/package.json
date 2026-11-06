@@ -43,6 +43,7 @@
   "dependencies": {
     "@zukhruf/async": "^0.6.16",
     "@zukhruf/sqlite-drift": "^0.6.16",
+    "@zukhruf/sqlite-open": "^0.6.16",
     "@zukhruf/sqlite-transaction": "^0.6.16",
     "cron-parser": "^5.10.1",
     "pg-boss": "12.35.1",

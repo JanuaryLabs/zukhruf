@@ -1,8 +1,9 @@
-import { DatabaseSync } from 'node:sqlite';
+import type { DatabaseSync } from 'node:sqlite';
 
 import type { EmbeddingModel } from 'ai';
 
 import { Collection } from '@zukhruf/embeddings';
+import { open } from '@zukhruf/sqlite-open';
 
 import { DAY_MS } from '../../src/day.ts';
 import type { Design } from '../../src/index.ts';
@@ -42,7 +43,7 @@ export class Stream {
     design: Pick<Design, 'embeddingModel' | 'lead' | 'vectorText'>,
     model: Exclude<EmbeddingModel, string>,
   ): Stream {
-    const database = new DatabaseSync(':memory:');
+    const database = open(':memory:');
     const vectors = new Collection({ database, model });
     const ids = JSON.stringify(fold.rows.map((row) => row.id));
     for (const set of sets) {

@@ -10,7 +10,7 @@ SQLite keeps three kinds of names on the connection, not in the database file:
 
 A connection that the package opens has only what SQLite has by default. Thus a declaration that names one of these could not be made. The statements must run in a connection that has the same modules, functions and collations as the target database. Only the caller knows how to open such a connection.
 
-Thus `new Declaration(statements, { rows, devDatabase })` takes `devDatabase`, a function that opens a new connection. The caller opens it as it opens the target database: it loads the same extensions and registers the same functions. When there is no `devDatabase`, the package opens `new DatabaseSync(':memory:')`. A caller that forgets the option gets the error of SQLite, for example `no such module: vec0`, and loses nothing.
+Thus `new Declaration(statements, { rows, devDatabase })` takes `devDatabase`, a function that opens a new connection. The caller opens it as it opens the target database: it loads the same extensions and registers the same functions. When there is no `devDatabase`, the package opens `open(':memory:')` of `@zukhruf/sqlite-open`. A caller that forgets the option gets the error of SQLite, for example `no such module: vec0`, and loses nothing.
 
 A declared object is the first row that a statement adds ([ADR 0004](./0004-a-statement-owns-the-objects-its-create-makes.md)). Thus the dev database must be empty when the declaration starts. When it has an object, `new Declaration` fails. Atlas also refuses a dev database that is not clean. `new Declaration` closes the connection when it finishes, also when it fails.
 

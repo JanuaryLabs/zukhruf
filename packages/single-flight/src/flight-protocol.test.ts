@@ -6,11 +6,11 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { type Socket, connect, createServer } from 'node:net';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline';
-import { DatabaseSync } from 'node:sqlite';
 import { describe, test } from 'node:test';
 import type { TestContext } from 'node:test';
 
 import { FileLock } from '@zukhruf/fs';
+import { UnchangedJournal, open } from '@zukhruf/sqlite-open';
 import { TemporaryFiles } from '@zukhruf/testing/fs';
 
 import { ProtocolVersionError, SingleFlight } from './index.ts';
@@ -165,7 +165,8 @@ describe('The wire of a single flight', () => {
     async () => {
       // Arrange: a coordinator of version 2 holds the term and refuses every hello.
       await using directory = await new TemporaryFiles().directory('flights-');
-      const claim = new DatabaseSync(join(directory.path, 'flight.lock'), {
+      const claim = open(join(directory.path, 'flight.lock'), {
+        journal: new UnchangedJournal(),
         timeout: 0,
       });
       claim.exec('BEGIN EXCLUSIVE');
@@ -223,7 +224,8 @@ describe('The wire of a single flight', () => {
     async () => {
       // Arrange: a coordinator of a published version holds the term and serves nothing yet.
       await using directory = await new TemporaryFiles().directory('flights-');
-      const claim = new DatabaseSync(join(directory.path, 'flight.lock'), {
+      const claim = open(join(directory.path, 'flight.lock'), {
+        journal: new UnchangedJournal(),
         timeout: 0,
       });
       claim.exec('BEGIN EXCLUSIVE');
@@ -269,7 +271,8 @@ describe('The wire of a single flight', () => {
       // Arrange
       await using directory = await new TemporaryFiles().directory('flights-');
       await using _coordinator = await coordinatorOf(directory.path);
-      const candidate = new DatabaseSync(join(directory.path, 'flight.lock'), {
+      const candidate = open(join(directory.path, 'flight.lock'), {
+        journal: new UnchangedJournal(),
         timeout: 0,
       });
 

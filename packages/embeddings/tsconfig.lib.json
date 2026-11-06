@@ -9,13 +9,16 @@
   "exclude": ["src/**/*.test.ts"],
   "references": [
     {
-      "path": "../sqlite/drift/tsconfig.lib.json"
-    },
-    {
       "path": "../sqlite/transaction/tsconfig.lib.json"
     },
     {
+      "path": "../sqlite/drift/tsconfig.lib.json"
+    },
+    {
       "path": "../testing/tsconfig.lib.json"
+    },
+    {
+      "path": "../sqlite/open/tsconfig.lib.json"
     }
   ]
 }

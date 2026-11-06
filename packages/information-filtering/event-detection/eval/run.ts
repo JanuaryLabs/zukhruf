@@ -1,9 +1,9 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { DatabaseSync } from 'node:sqlite';
 import { parseArgs } from 'node:util';
 
 import { Collection } from '@zukhruf/embeddings';
+import { open } from '@zukhruf/sqlite-open';
 
 import { type Design, design3152b } from '../src/index.ts';
 import { readEvents, writeEvents } from './accepted.ts';
@@ -113,7 +113,7 @@ for (const name of positionals.length > 0 ? positionals : setNames()) {
   // The vectors of a design: the cache of its model for the set.
   const vectorsOf = async (design: Design) =>
     new Collection({
-      database: caches.use(new DatabaseSync(vectorCache(design, name))),
+      database: caches.use(open(vectorCache(design, name))),
       model: await modelOf(design),
     });
   const fed = await feed(

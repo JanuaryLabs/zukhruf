@@ -127,7 +127,7 @@ Each write of this package uses `patiently` for its rename or link, with the clo
 
 A process can die while it holds a lock. When the lock is a file that is present, for example a file from `createExclusive`, the file stays after the process dies. Then the lock stays until somebody deletes the file. A `FileLock` is a lock that the kernel holds. When the process of the holder stops, however it stops, the kernel frees the lock at once.
 
-Node.js has no `flock`. Thus a `FileLock` is an exclusive SQLite transaction on the file. SQLite is part of Node.js (`node:sqlite`), so this package has no dependencies.
+Node.js has no `flock`. Thus a `FileLock` is an exclusive SQLite transaction on the file. SQLite is part of Node.js (`node:sqlite`). `FileLock` opens the file with `open` of `@zukhruf/sqlite-open`.
 
 ```ts
 import { FileLock } from '@zukhruf/fs';

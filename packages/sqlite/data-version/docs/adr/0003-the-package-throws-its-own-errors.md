@@ -9,11 +9,11 @@ Two rules disagree with it:
 
 ## Decision
 
-The package throws its own `UnavailableError` (of `@zukhruf/sqlite-reader` since #3224, before that `src/unavailable-error.ts`). It has the `path`.
+The package throws its own `UnavailableError` (of `@zukhruf/sqlite-open`, before that of `@zukhruf/sqlite-reader` since #3224, and before that `src/unavailable-error.ts`). It has the `path`.
 
 - `new DataVersion(path)` throws it when SQLite cannot open the file (`SQLITE_CANTOPEN`, 14). Its `cause` is the error of SQLite.
 - `current` throws it when the path names a replaced file and SQLite cannot open that file ([ADR 0002](./0002-a-replaced-file-is-followed-by-name.md)).
-- `lastWrite(path)` throws it when the file is missing (`ENOENT`) or the mode of its folder denies this process (`EACCES`). Its `cause` is the error of the file system.
+- `lastWrite(path)` throws it when the file is missing (`ENOENT`, `ENOTDIR`) or the system denies this process (`EACCES`, `EPERM`). `UnavailableError.from` of `@zukhruf/sqlite-open` gives this map. Its `cause` is the error of the file system.
 - `new DataVersion(path)` and `lastWrite(path)` take no error class.
 
 A host that needs its own error translates the error of the package at its boundary. It keeps the error of the package as `cause`. A host that gives a `DataVersion` to its own code translates `current` too.
@@ -29,4 +29,4 @@ A host that needs its own error translates the error of the package at its bound
 - A host that needs its own error class translates at its boundary, and keeps the error of the package as `cause`. The message of the host can name what the user must do, for example the access that the user must give.
 - Each call has one parameter less.
 - A catch with `instanceof UnavailableError` works with the package that the caller imports.
-- `UnavailableError` is the same knowledge as `UnavailableError` of `@zukhruf/sqlite-snapshot`. It was the second place, so the class was a copy. At the third place, the class and the open that throws it moved into `@zukhruf/sqlite-reader` ([sqlite-reader ADR 0001](../../../reader/docs/adr/0001-one-package-opens-the-reader-and-owns-unavailable-error.md)). This package exports that class.
+- `UnavailableError` is the same knowledge as `UnavailableError` of `@zukhruf/sqlite-snapshot`. It was the second place, so the class was a copy. At the third place, the class and the open that throws it moved into `@zukhruf/sqlite-reader`, now `@zukhruf/sqlite-open` ([sqlite-open ADR 0001](../../../open/docs/adr/0001-one-package-opens-the-reader-and-owns-unavailable-error.md)). This package exports that class.

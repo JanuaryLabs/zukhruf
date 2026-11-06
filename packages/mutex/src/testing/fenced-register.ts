@@ -1,6 +1,7 @@
-import { DatabaseSync } from 'node:sqlite';
+import type { DatabaseSync } from 'node:sqlite';
 
 import type { FencingToken } from '@zukhruf/fencing';
+import { open } from '@zukhruf/sqlite-open';
 
 /**
  * A durable counter that honours fencing tokens: a write that carries a token
@@ -11,7 +12,7 @@ export class FencedRegister {
   readonly #database: DatabaseSync;
 
   constructor(path: string) {
-    this.#database = new DatabaseSync(path, {
+    this.#database = open(path, {
       readBigInts: true,
       timeout: 1000,
     });

@@ -1,8 +1,9 @@
 import { existsSync } from 'node:fs';
-import { DatabaseSync } from 'node:sqlite';
+import type { DatabaseSync } from 'node:sqlite';
+
+import { UnavailableError, UnchangedJournal, open } from '@zukhruf/sqlite-open';
 
 const SQLITE_BUSY = 5;
-const SQLITE_CANTOPEN = 14;
 
 /** Garbage collection closes a connection that nobody references, and a lock that it holds goes with it. */
 const held = new Set<DatabaseSync>();
@@ -29,9 +30,13 @@ export class FileLock implements Disposable {
 
   /** Opens the file, and creates it empty when it is absent. Takes no lock. */
   static open(path: string): FileLock {
-    // No busy timeout (Node's default is 0): one above zero blocks the event
-    // loop while it waits, so a caller tries again instead.
-    return new FileLock(path, new DatabaseSync(path));
+    // No busy timeout: one above zero blocks the event loop while it waits, so
+    // a caller tries again instead. The open does not set the journal: that
+    // statement waits for the lock of the file, so each `tryLock` sets it.
+    return new FileLock(
+      path,
+      open(path, { journal: new UnchangedJournal(), timeout: 0 }),
+    );
   }
 
   /**
@@ -43,12 +48,12 @@ export class FileLock implements Disposable {
   static check(path: string): 'locked' | 'unlocked' | 'missing' {
     let database: DatabaseSync;
     try {
-      database = new DatabaseSync(path, { readOnly: true });
+      database = open(path, { readOnly: true, timeout: 0 });
     } catch (error) {
-      // A file that exists but cannot be opened is a fault, not a missing file.
-      if (hasResultCode(error, SQLITE_CANTOPEN) && !existsSync(path)) {
-        return 'missing';
-      }
+      if (!(error instanceof UnavailableError)) throw error;
+      if (!existsSync(path)) return 'missing';
+      // A file that exists but cannot be opened is a fault, not a missing
+      // file: it surfaces as the UnavailableError of the open.
       throw error;
     }
     try {

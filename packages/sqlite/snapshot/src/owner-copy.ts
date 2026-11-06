@@ -2,21 +2,15 @@ import { constants, rmSync } from 'node:fs';
 import { copyFile, mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { basename, join } from 'node:path';
-import { DatabaseSync } from 'node:sqlite';
 
 import { FileStamps, isErrno } from '@zukhruf/fs';
-import { UnavailableError } from '@zukhruf/sqlite-reader';
+import { RollbackJournal, UnavailableError, open } from '@zukhruf/sqlite-open';
 
 import { DatabaseChangingError } from './database-changing-error.ts';
 
 // Tries at once, without a wait: a commit writes the journal and the database
 // with syncs between them, so the next copy lands in a quiet moment.
 const attempts = 5;
-
-// A missing file, or one this process may not read: EACCES for its mode,
-// EPERM for the privacy controls of macOS.
-const unreadable = (error: unknown) =>
-  ['ENOENT', 'EACCES', 'EPERM'].some((code) => isErrno(error, code));
 
 // A clone where the file system can make one, as APFS and Btrfs can: it takes
 // no time and no space. Elsewhere, a copy of the bytes.
@@ -56,8 +50,7 @@ export class OwnerCopy implements Disposable {
     const files = [path, `${path}-journal`];
     const stamps = () =>
       FileStamps.read(files).catch((cause: unknown) => {
-        if (unreadable(cause)) throw new UnavailableError(path, cause);
-        throw cause;
+        throw UnavailableError.from(path, cause) ?? cause;
       });
     for (let attempt = 0; attempt < attempts; attempt++) {
       const before = await stamps();
@@ -77,8 +70,7 @@ export class OwnerCopy implements Disposable {
     try {
       await clone(path, this.file);
     } catch (cause) {
-      if (unreadable(cause)) throw new UnavailableError(path, cause);
-      throw cause;
+      throw UnavailableError.from(path, cause) ?? cause;
     }
     try {
       await clone(`${path}-journal`, journal);
@@ -92,9 +84,9 @@ export class OwnerCopy implements Disposable {
   }
 }
 
-// A first read through a connection that may write rolls back a hot journal,
-// so the copy holds the last commit and no part of an open transaction.
+// The first access of a connection that may write rolls back a hot journal,
+// so the copy holds the last commit and no part of an open transaction. The
+// rollback journal's PRAGMA is that first access.
 function rollBack(file: string): void {
-  using database = new DatabaseSync(file);
-  database.prepare('SELECT 1 FROM sqlite_schema LIMIT 1').get();
+  open(file, { journal: new RollbackJournal() }).close();
 }

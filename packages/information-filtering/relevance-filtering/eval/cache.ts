@@ -1,10 +1,11 @@
 import { mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { DatabaseSync } from 'node:sqlite';
+import type { DatabaseSync } from 'node:sqlite';
 
 import { MockEmbeddingModelV4 } from 'ai/test';
 
 import { Collection } from '@zukhruf/embeddings';
+import { open } from '@zukhruf/sqlite-open';
 
 import { EVAL_FOLDER } from './answer-key.ts';
 
@@ -46,9 +47,7 @@ export function collectionOf(
   vectors?: ReadonlyMap<string, readonly number[]>,
 ): { readonly database: DatabaseSync; readonly collection: Collection } {
   mkdirSync(join(CACHE_FOLDER, 'vectors'), { recursive: true });
-  const database = new DatabaseSync(
-    join(CACHE_FOLDER, 'vectors', `${set}.sqlite`),
-  );
+  const database = open(join(CACHE_FOLDER, 'vectors', `${set}.sqlite`));
   return {
     database,
     collection: new Collection({ database, model: frozenModel(vectors) }),

@@ -2,12 +2,12 @@ import assert from 'node:assert/strict';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { DatabaseSync } from 'node:sqlite';
 import { test } from 'node:test';
 
 import { MockEmbeddingModelV4 } from 'ai/test';
 
 import { Collection } from '@zukhruf/embeddings';
+import { open } from '@zukhruf/sqlite-open';
 
 import { EventDetector, design3152b } from './index.ts';
 import { leadOf } from './lead.ts';
@@ -216,7 +216,7 @@ async function detectorGroups(
   model: MockEmbeddingModelV4,
   publisherOf: (row: Row) => string | undefined,
 ): Promise<string[][]> {
-  using database = new DatabaseSync(':memory:');
+  using database = open(':memory:');
   const detector = new EventDetector({
     database,
     vectors: new Collection({ database, model }),

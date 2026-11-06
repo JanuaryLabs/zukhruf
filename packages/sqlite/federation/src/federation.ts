@@ -1,9 +1,11 @@
-import {
+import type {
   DatabaseSync,
-  type DatabaseSyncOptions,
-  type SQLOutputValue,
-  type SQLTagStore,
+  DatabaseSyncOptions,
+  SQLOutputValue,
+  SQLTagStore,
 } from 'node:sqlite';
+
+import { open } from '@zukhruf/sqlite-open';
 
 import { TooManyDatabasesError } from './too-many-databases-error.ts';
 
@@ -42,7 +44,7 @@ export class Federation implements Disposable {
         throw new Error(`Unknown main database ${main.name}`);
       main = path;
     }
-    this.#connection = new DatabaseSync(main, {
+    this.#connection = open(main, {
       ...options,
       readOnly: true,
     });

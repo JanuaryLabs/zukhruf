@@ -9,6 +9,9 @@
   "exclude": ["src/**/*.test.ts"],
   "references": [
     {
+      "path": "../sqlite/open/tsconfig.lib.json"
+    },
+    {
       "path": "../async/tsconfig.lib.json"
     },
     {

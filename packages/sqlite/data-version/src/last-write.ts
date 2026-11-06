@@ -1,11 +1,6 @@
 import { statSync } from 'node:fs';
 
-import { UnavailableError } from '@zukhruf/sqlite-reader';
-
-// A missing file, or one in a folder whose mode denies this process. macOS
-// privacy controls do not deny it: they stop a read of the file and a list of
-// its folder with EPERM, but not stat of the file.
-const unreadable = new Set(['ENOENT', 'EACCES']);
+import { UnavailableError } from '@zukhruf/sqlite-open';
 
 // The owner writes a database through its file and its WAL, so the later of
 // their times is when it last wrote. A reader writes the shared-memory index
@@ -21,12 +16,6 @@ export function lastWrite(path: string): Date {
       wal !== undefined && wal.size > 0 ? Math.max(file, wal.mtimeMs) : file,
     );
   } catch (cause) {
-    if (
-      cause instanceof Error &&
-      'code' in cause &&
-      unreadable.has(String(cause.code))
-    )
-      throw new UnavailableError(path, cause);
-    throw cause;
+    throw UnavailableError.from(path, cause) ?? cause;
   }
 }

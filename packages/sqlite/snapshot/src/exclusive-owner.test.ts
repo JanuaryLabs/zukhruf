@@ -6,9 +6,9 @@ import { chmod, mkdir, readFile, readdir, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline';
-import { DatabaseSync } from 'node:sqlite';
 import { test } from 'node:test';
 
+import { RollbackJournal, open } from '@zukhruf/sqlite-open';
 import { TemporaryFiles } from '@zukhruf/testing/fs';
 
 import {
@@ -19,8 +19,9 @@ import {
 } from './index.ts';
 
 // A database with two committed visits, as its owner leaves it between runs.
+// The owner keeps a rollback journal, as Chromium keeps its History.
 function created(path: string) {
-  using database = new DatabaseSync(path);
+  using database = open(path, { journal: new RollbackJournal() });
   database.exec(`
     CREATE TABLE visits (id INTEGER PRIMARY KEY, url TEXT);
     INSERT INTO visits (url) VALUES ('one'), ('two');
@@ -241,7 +242,7 @@ test('while the owner commits without end, each snapshot reads one commit or fai
   );
 });
 
-test('a missing database is the UnavailableError of @zukhruf/sqlite-reader, and leaves no copy', async () => {
+test('a missing database is the UnavailableError of @zukhruf/sqlite-open, and leaves no copy', async () => {
   await using dir = await new TemporaryFiles().directory('exclusive-');
   const path = join(dir.path, 'missing', 'History');
   const before = await copies();
@@ -301,7 +302,7 @@ test('a disposed snapshot of an exclusive owner leaves no copy', async () => {
 });
 
 test(
-  'a database in a folder that the process may not search is the UnavailableError of @zukhruf/sqlite-reader, and leaves no copy',
+  'a database in a folder that the process may not search is the UnavailableError of @zukhruf/sqlite-open, and leaves no copy',
   { skip: process.platform === 'win32' || process.getuid?.() === 0 },
   async () => {
     await using dir = await new TemporaryFiles().directory('exclusive-');

@@ -6,3 +6,4 @@ export {
   type QueryResult,
 } from './federation.ts';
 export { TooManyDatabasesError } from './too-many-databases-error.ts';
+export { UnavailableError } from '@zukhruf/sqlite-open';

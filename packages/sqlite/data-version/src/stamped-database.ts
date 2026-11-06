@@ -1,7 +1,7 @@
 import { statSync } from 'node:fs';
 
 import { FileStamp, isErrno } from '@zukhruf/fs';
-import { UnavailableError } from '@zukhruf/sqlite-reader';
+import { UnavailableError } from '@zukhruf/sqlite-open';
 
 // A database whose owner holds SQLite's exclusive locking mode, as Chromium
 // holds its History. The owner lets no reader read data_version, but each
@@ -17,9 +17,7 @@ export class StampedDatabase implements Disposable {
     try {
       statSync(path);
     } catch (cause) {
-      if (isErrno(cause, 'ENOENT') || isErrno(cause, 'EACCES'))
-        throw new UnavailableError(path, cause);
-      throw cause;
+      throw UnavailableError.from(path, cause) ?? cause;
     }
     this.#path = path;
     this.#observation = String(FileStamp.readSync(path));

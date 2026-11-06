@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
-import { DatabaseSync } from 'node:sqlite';
+import type { DatabaseSync } from 'node:sqlite';
 
+import { open } from '@zukhruf/sqlite-open';
 import { transaction } from '@zukhruf/sqlite-transaction';
 
 // How a database stores the objects of a declaration: none of them, each one
@@ -43,9 +44,7 @@ export class Declaration {
       readonly devDatabase?: () => DatabaseSync;
     },
   ) {
-    using blank = (
-      options.devDatabase ?? (() => new DatabaseSync(':memory:'))
-    )();
+    using blank = (options.devDatabase ?? (() => open(':memory:')))();
     empty(blank);
     this.#objects = statements.map((statement) => declare(blank, statement));
     this.#rows = options.rows;

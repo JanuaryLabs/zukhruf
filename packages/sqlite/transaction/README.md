@@ -16,12 +16,12 @@ npm install @zukhruf/sqlite-transaction
 import { mkdtempDisposable } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { DatabaseSync } from 'node:sqlite';
 
+import { open } from '@zukhruf/sqlite-open';
 import { transaction } from '@zukhruf/sqlite-transaction';
 
 await using scratch = await mkdtempDisposable(join(tmpdir(), 'transaction-'));
-using database = new DatabaseSync(join(scratch.path, 'app.sqlite'));
+using database = open(join(scratch.path, 'app.sqlite'));
 database.exec('CREATE TABLE notes (body TEXT) STRICT');
 
 const rows = transaction(

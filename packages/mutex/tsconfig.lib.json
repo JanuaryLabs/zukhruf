@@ -9,9 +9,6 @@
   "exclude": ["src/**/*.test.ts", "src/testing/**"],
   "references": [
     {
-      "path": "../docker/tsconfig.lib.json"
-    },
-    {
       "path": "../lease/tsconfig.lib.json"
     },
     {
@@ -28,6 +25,12 @@
     },
     {
       "path": "../testing/tsconfig.lib.json"
+    },
+    {
+      "path": "../sqlite/open/tsconfig.lib.json"
+    },
+    {
+      "path": "../docker/tsconfig.lib.json"
     }
   ]
 }

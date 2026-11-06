@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict';
-import { DatabaseSync } from 'node:sqlite';
 import { describe, it } from 'node:test';
 
 import { PGlite } from '@electric-sql/pglite';
@@ -10,6 +9,8 @@ import {
   type TestClock,
   fromPglite,
 } from 'pg-boss';
+
+import { open } from '@zukhruf/sqlite-open';
 
 import type { JobQueue } from '../index.ts';
 import { SqliteJobQueue } from '../index.ts';
@@ -1155,7 +1156,7 @@ describe('supervisor', () => {
     // Neither is started: pg-boss validates in its constructor
     // (index.js:65, attorney.js:407-426), before it touches its database.
     const pglite = new PGlite();
-    const database = new DatabaseSync(':memory:');
+    const database = open(':memory:');
     let pgBoss;
     let sqlite;
     try {

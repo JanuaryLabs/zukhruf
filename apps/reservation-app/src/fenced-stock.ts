@@ -1,6 +1,7 @@
-import { DatabaseSync } from 'node:sqlite';
+import type { DatabaseSync } from 'node:sqlite';
 
 import type { FencingToken } from '@zukhruf/fencing';
+import { open } from '@zukhruf/sqlite-open';
 
 export type Reservation = 'reserved' | 'sold-out' | 'stale';
 
@@ -14,7 +15,7 @@ export class FencedStock implements Disposable {
   readonly #database: DatabaseSync;
 
   constructor(path: string) {
-    this.#database = new DatabaseSync(path, {
+    this.#database = open(path, {
       readBigInts: true,
       timeout: 1000,
     });

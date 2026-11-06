@@ -2,10 +2,10 @@ import assert from 'node:assert/strict';
 import { renameSync, rmSync } from 'node:fs';
 import { chmod, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
-import { DatabaseSync } from 'node:sqlite';
+import type { DatabaseSync } from 'node:sqlite';
 import { test } from 'node:test';
 
-import * as reader from '@zukhruf/sqlite-reader';
+import * as sqliteOpen from '@zukhruf/sqlite-open';
 import { TemporaryFiles } from '@zukhruf/testing/fs';
 
 import { DataVersion, UnavailableError } from './index.ts';
@@ -13,9 +13,8 @@ import { DataVersion, UnavailableError } from './index.ts';
 test('the version stays the same until the owner commits, then changes', async () => {
   await using dir = await new TemporaryFiles().directory('data-version-');
   const path = join(dir.path, 'source.sqlite');
-  using owner = new DatabaseSync(path);
+  using owner = sqliteOpen.open(path);
   owner.exec(`
-    PRAGMA journal_mode = WAL;
     CREATE TABLE notes (id INTEGER PRIMARY KEY, title TEXT);
     INSERT INTO notes (title) VALUES ('first');
   `);
@@ -30,7 +29,9 @@ test('the version stays the same until the owner commits, then changes', async (
 
 // The owner's connection to a new database at the path, with one row.
 function created(path: string, journal: 'WAL' | 'DELETE'): DatabaseSync {
-  const owner = new DatabaseSync(path);
+  const owner = sqliteOpen.open(path, {
+    journal: new sqliteOpen.UnchangedJournal(),
+  });
   owner.exec(`
     PRAGMA journal_mode = ${journal};
     CREATE TABLE notes (id INTEGER PRIMARY KEY, title TEXT);
@@ -50,7 +51,9 @@ test('a new file renamed over the path changes the version, and its commits chan
 
   renameSync(replacement, path);
   const replaced = version.current;
-  using owner = new DatabaseSync(path);
+  using owner = sqliteOpen.open(path, {
+    journal: new sqliteOpen.RollbackJournal(),
+  });
   owner.exec("INSERT INTO notes (title) VALUES ('second')");
 
   assert.notEqual(replaced, before, 'the replaced file is not a change');
@@ -100,15 +103,15 @@ test('a missing path is no change until a file is created there again', async ()
   assert.notEqual(version.current, missing, 'the created file is not a change');
 });
 
-test('a missing file is the UnavailableError of @zukhruf/sqlite-reader', async () => {
+test('a missing file is the UnavailableError of @zukhruf/sqlite-open', async () => {
   await using dir = await new TemporaryFiles().directory('data-version-');
   const missing = join(dir.path, 'missing', 'source.sqlite');
 
   assert.throws(
     () => new DataVersion(missing),
     (error: unknown) => {
-      assert.equal(UnavailableError, reader.UnavailableError);
-      assert.ok(error instanceof reader.UnavailableError);
+      assert.equal(UnavailableError, sqliteOpen.UnavailableError);
+      assert.ok(error instanceof sqliteOpen.UnavailableError);
       assert.equal(error.path, missing);
       assert.ok(error.cause instanceof Error && 'errcode' in error.cause);
       assert.equal(error.cause.errcode, 14);
@@ -128,7 +131,7 @@ test(
     const folder = join(dir.path, 'denied');
     await mkdir(folder);
     const path = join(folder, 'source.sqlite');
-    new DatabaseSync(path).close();
+    sqliteOpen.open(path).close();
     await chmod(folder, 0o000);
     try {
       assert.throws(

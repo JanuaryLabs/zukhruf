@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
-import { DatabaseSync } from 'node:sqlite';
 import { describe, it } from 'node:test';
 import { setImmediate } from 'node:timers/promises';
 
 import { type Job, TestClock } from 'pg-boss';
+
+import { open } from '@zukhruf/sqlite-open';
 
 import { SqliteJobQueue } from './index.ts';
 
@@ -148,7 +149,7 @@ describe('SqliteJobQueue', () => {
   // surfaces every other fetch error (manager.js:1580-1586). The trigger stands
   // in for a disk failure, which no queue operation can cause on purpose.
   it('reports a claim that fails for a reason other than a policy index', async (t) => {
-    const database = new DatabaseSync(':memory:');
+    const database = open(':memory:');
     const queue = new SqliteJobQueue({ database });
     const errors: string[] = [];
     queue.on('error', (error) => errors.push(error.message));
@@ -181,7 +182,7 @@ describe('SqliteJobQueue', () => {
   // no transaction is active". RAISE(ROLLBACK) in the trigger ends it the same
   // way, as no queue operation can fill or break the disk on purpose.
   it('reports the original error of a claim whose transaction SQLite already rolled back', async (t) => {
-    const database = new DatabaseSync(':memory:');
+    const database = open(':memory:');
     const queue = new SqliteJobQueue({ database });
     const errors: string[] = [];
     queue.on('error', (error) => errors.push(error.message));
@@ -306,7 +307,7 @@ describe('SqliteJobQueue', () => {
   // SQLite's wake stays in its own process.
   it('wakes workers registered before start once it starts listening', async () => {
     const clock = new TestClock('2026-01-01T00:00:00.000Z');
-    const database = new DatabaseSync(':memory:');
+    const database = open(':memory:');
     const producer = new SqliteJobQueue({ database, clock, schedule: false });
     const consumer = new SqliteJobQueue({
       database,

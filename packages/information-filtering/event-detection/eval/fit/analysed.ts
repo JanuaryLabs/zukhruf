@@ -1,4 +1,4 @@
-import { DatabaseSync } from 'node:sqlite';
+import { open } from '@zukhruf/sqlite-open';
 
 import { analyse } from '../../src/analyse.ts';
 import type { AnalysedReport } from '../../src/event-table.ts';
@@ -14,7 +14,7 @@ export function analysedAsFed(
   reports: readonly Report[],
   design: Pick<Design, 'lead' | 'vectorText'>,
 ): Map<string, AnalysedReport> {
-  using database = new DatabaseSync(':memory:');
+  using database = open(':memory:');
   eventSchema.apply(database);
   const templates = new Templates(database, design.lead);
   const analysed = new Map<string, AnalysedReport>();

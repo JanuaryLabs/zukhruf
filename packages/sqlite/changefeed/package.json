@@ -44,7 +44,7 @@
     "@zukhruf/async": "^0.6.16",
     "@zukhruf/snapshot-differential": "^0.6.16",
     "@zukhruf/sqlite-data-version": "^0.6.16",
-    "@zukhruf/sqlite-reader": "^0.6.16",
+    "@zukhruf/sqlite-open": "^0.6.16",
     "@zukhruf/sqlite-snapshot": "^0.6.16",
     "@zukhruf/sqlite-transaction": "^0.6.16"
   },

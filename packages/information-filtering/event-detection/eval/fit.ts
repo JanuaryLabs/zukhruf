@@ -1,11 +1,11 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { DatabaseSync } from 'node:sqlite';
 import { parseArgs } from 'node:util';
 
 import type { EmbeddingModel } from 'ai';
 
 import { Collection } from '@zukhruf/embeddings';
+import { open } from '@zukhruf/sqlite-open';
 
 import { DAY_MS } from '../src/day.ts';
 import type { Design } from '../src/index.ts';
@@ -283,7 +283,7 @@ async function load(
       ...rule.candidates.map((candidate) => candidate.recipe),
       reference,
     ]) {
-      using cache = new DatabaseSync(vectorCache(design, name));
+      using cache = open(vectorCache(design, name));
       await new Collection({ database: cache, model: modelOf(design) }).upsert(
         [...analysedAsFed(reportsOf(set.rows, texts), design).values()].flatMap(
           ({ id, text, day }) =>

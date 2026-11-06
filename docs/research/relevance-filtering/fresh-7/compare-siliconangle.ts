@@ -5,7 +5,7 @@
 // Usage (cwd = fresh-7, after node ../crawl.ts parity in parity/): node compare-siliconangle.ts
 // Writes compare-siliconangle.json.
 import { writeFileSync } from 'node:fs';
-import { DatabaseSync } from 'node:sqlite';
+import { open } from '@zukhruf/sqlite-open';
 
 type Row = {
   articleUrl: string;
@@ -18,7 +18,7 @@ type Row = {
 const read = (path: string, table: string) =>
   new Map(
     (
-      new DatabaseSync(path, { readOnly: true })
+      open(path, { readOnly: true })
         .prepare(`select articleUrl, title, excerpt, textContent, publishedTime, list from ${table}`)
         .all() as Row[]
     ).map((r) => [r.articleUrl, r]),

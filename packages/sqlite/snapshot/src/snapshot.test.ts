@@ -1,10 +1,9 @@
 import assert from 'node:assert/strict';
 import { writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { DatabaseSync } from 'node:sqlite';
 import { test } from 'node:test';
 
-import * as reader from '@zukhruf/sqlite-reader';
+import * as sqliteOpen from '@zukhruf/sqlite-open';
 import { TemporaryFiles } from '@zukhruf/testing/fs';
 
 import { MissingColumnsError, Snapshot, UnavailableError } from './index.ts';
@@ -12,9 +11,8 @@ import { MissingColumnsError, Snapshot, UnavailableError } from './index.ts';
 test('a read stays on one moment while the owner commits, and the next snapshot sees the commit', async () => {
   await using dir = await new TemporaryFiles().directory('snapshot-');
   const path = join(dir.path, 'source.sqlite');
-  using owner = new DatabaseSync(path);
+  using owner = sqliteOpen.open(path);
   owner.exec(`
-    PRAGMA journal_mode = WAL;
     CREATE TABLE notes (id INTEGER PRIMARY KEY, title TEXT);
     INSERT INTO notes (title) VALUES ('first');
   `);
@@ -37,7 +35,7 @@ test('a read stays on one moment while the owner commits, and the next snapshot 
 test('a layout without the required columns fails with MissingColumnsError, naming each one, and closes', async () => {
   await using dir = await new TemporaryFiles().directory('snapshot-');
   const path = join(dir.path, 'source.sqlite');
-  using owner = new DatabaseSync(path);
+  using owner = sqliteOpen.open(path);
   owner.exec('CREATE TABLE notes (id INTEGER PRIMARY KEY)');
   using snapshot = new Snapshot(path);
 
@@ -53,7 +51,7 @@ test('a layout without the required columns fails with MissingColumnsError, nami
   assert.throws(() => snapshot.all('SELECT 1'), /not open/);
 });
 
-test('a missing file is the UnavailableError of @zukhruf/sqlite-reader, and a file that is no database is not', async () => {
+test('a missing file is the UnavailableError of @zukhruf/sqlite-open, and a file that is no database is not', async () => {
   await using dir = await new TemporaryFiles().directory('snapshot-');
   const missing = join(dir.path, 'missing', 'source.sqlite');
   const notDatabase = join(dir.path, 'notes.txt');
@@ -62,8 +60,8 @@ test('a missing file is the UnavailableError of @zukhruf/sqlite-reader, and a fi
   assert.throws(
     () => new Snapshot(missing),
     (error: unknown) => {
-      assert.equal(UnavailableError, reader.UnavailableError);
-      assert.ok(error instanceof reader.UnavailableError);
+      assert.equal(UnavailableError, sqliteOpen.UnavailableError);
+      assert.ok(error instanceof sqliteOpen.UnavailableError);
       assert.equal(error.path, missing);
       assert.ok(error.cause instanceof Error && 'errcode' in error.cause);
       assert.equal(error.cause.errcode, 14);

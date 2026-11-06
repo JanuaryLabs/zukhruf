@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict';
 import { renameSync } from 'node:fs';
 import { join } from 'node:path';
-import { DatabaseSync } from 'node:sqlite';
+import type { DatabaseSync } from 'node:sqlite';
 import { test } from 'node:test';
 import { setImmediate } from 'node:timers/promises';
 
 import { poll } from '@zukhruf/async';
-import * as reader from '@zukhruf/sqlite-reader';
+import * as sqliteOpen from '@zukhruf/sqlite-open';
 import { TemporaryFiles } from '@zukhruf/testing/fs';
 
 import {
@@ -18,8 +18,8 @@ import {
 
 // The owner's connection to a new WAL database at the path.
 function owned(path: string, sql: string): DatabaseSync {
-  const owner = new DatabaseSync(path);
-  owner.exec(`PRAGMA journal_mode = WAL; ${sql}`);
+  const owner = sqliteOpen.open(path);
+  owner.exec(sql);
   return owner;
 }
 
@@ -459,7 +459,9 @@ test('a VACUUM that gives the rows of a table with no primary key new rowids giv
 test('a database not in WAL mode is a JournalModeError at open, and at the pass after the owner replaced the file with one', async () => {
   await using dir = await new TemporaryFiles().directory('changefeed-');
   const rollback = join(dir.path, 'rollback.sqlite');
-  const journal = new DatabaseSync(rollback);
+  const journal = sqliteOpen.open(rollback, {
+    journal: new sqliteOpen.RollbackJournal(),
+  });
   journal.exec('CREATE TABLE notes (id INTEGER PRIMARY KEY)');
   journal.close();
   const path = join(dir.path, 'owner.sqlite');
@@ -491,15 +493,15 @@ test('a database not in WAL mode is a JournalModeError at open, and at the pass 
   await assert.rejects(next, isJournalMode);
 });
 
-test('a missing database is the UnavailableError of @zukhruf/sqlite-reader', async () => {
+test('a missing database is the UnavailableError of @zukhruf/sqlite-open', async () => {
   await using dir = await new TemporaryFiles().directory('changefeed-');
   const missing = join(dir.path, 'missing', 'owner.sqlite');
 
   assert.throws(
     () => new Changefeed(missing, join(dir.path, 'position.sqlite')),
     (error: unknown) => {
-      assert.equal(UnavailableError, reader.UnavailableError);
-      assert.ok(error instanceof reader.UnavailableError);
+      assert.equal(UnavailableError, sqliteOpen.UnavailableError);
+      assert.ok(error instanceof sqliteOpen.UnavailableError);
       assert.equal(error.path, missing);
       return true;
     },
@@ -523,7 +525,7 @@ test('a pass that finds no change gives no batch, and the next batch holds only 
     signal: stop.signal,
   });
   await nextBatch(batches, 'the read of note 1');
-  using observer = new DatabaseSync(position, { readOnly: true });
+  using observer = sqliteOpen.open(position, { readOnly: true });
   const positionVersion = () =>
     observer.prepare('PRAGMA data_version').get()?.data_version;
 

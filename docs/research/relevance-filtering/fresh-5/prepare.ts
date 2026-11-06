@@ -3,7 +3,7 @@
 // Writes articles.json (kept articles: title, lead, body, vector text) and
 // prepare-report.json (dropped rows and why).
 import { readFileSync, writeFileSync } from 'node:fs';
-import { DatabaseSync } from 'node:sqlite';
+import { open } from '@zukhruf/sqlite-open';
 
 import { vectorText } from './vector-text.ts';
 
@@ -53,7 +53,7 @@ const seenTitles = new Map<string, string>();
 const candidates: (Row & { source: string; time: number })[] = [];
 
 for (const source of ['decoder', 'siliconangle']) {
-  const db = new DatabaseSync(`${source}/articles.sqlite`, { readOnly: true });
+  const db = open(`${source}/articles.sqlite`, { readOnly: true });
   const rows = db
     .prepare(`select articleUrl, title, publishedTime, excerpt, textContent, length, list from ${source} order by articleUrl`)
     .all() as Row[];

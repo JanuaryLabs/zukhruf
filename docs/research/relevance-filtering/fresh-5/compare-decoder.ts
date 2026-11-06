@@ -3,12 +3,12 @@
 // match. Usage (cwd = fresh-5): node compare-decoder.ts
 // Writes compare-decoder.json.
 import { writeFileSync } from 'node:fs';
-import { DatabaseSync } from 'node:sqlite';
+import { open } from '@zukhruf/sqlite-open';
 
 type Row = { articleUrl: string; title: string | null; textContent: string; publishedTime: string | null; list: number | null };
 const read = (path: string) =>
   new Map(
-    (new DatabaseSync(path, { readOnly: true }).prepare('select articleUrl, title, textContent, publishedTime, list from decoder').all() as Row[]).map((r) => [
+    (open(path, { readOnly: true }).prepare('select articleUrl, title, textContent, publishedTime, list from decoder').all() as Row[]).map((r) => [
       r.articleUrl,
       r,
     ]),

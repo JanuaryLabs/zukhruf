@@ -1,8 +1,8 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { DatabaseSync } from 'node:sqlite';
 
 import { Collection } from '@zukhruf/embeddings';
+import { open } from '@zukhruf/sqlite-open';
 
 import { readArticles } from './answer-key.ts';
 import { CACHE_FOLDER, type Text, collectionOf, frozenModel } from './cache.ts';
@@ -83,7 +83,7 @@ const sources: Record<
   exam: {
     items: 'exam/items.json',
     vectors: () => {
-      using database = new DatabaseSync(eventDetection, { readOnly: true });
+      using database = open(eventDetection, { readOnly: true });
       const ids = readArticles('exam').map(({ id }) => id);
       const stored = new Collection({ database, model: frozenModel() }).fetch(
         ids,

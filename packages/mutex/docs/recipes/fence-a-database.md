@@ -19,14 +19,14 @@ This program shows a stale holder. Holder A gets the key and keeps its token. Ho
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { DatabaseSync } from 'node:sqlite';
 
 import { type FencingToken, FileTokenSource } from '@zukhruf/fencing';
 import { Mutex } from '@zukhruf/mutex';
 import { MemoryStore } from '@zukhruf/mutex/memory';
+import { open } from '@zukhruf/sqlite-open';
 
 const directory = await mkdtemp(join(tmpdir(), 'fenced-'));
-const database = new DatabaseSync(join(directory, 'shop.db'), {
+const database = open(join(directory, 'shop.db'), {
   readBigInts: true,
 });
 database.exec(`

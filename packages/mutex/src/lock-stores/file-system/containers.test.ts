@@ -23,17 +23,38 @@ const mutexInContainer = 'file:///pkg/src/index.ts';
 const fileStoresInContainer =
   'file:///pkg/src/lock-stores/file-system/index.ts';
 
-/** Each runtime dependency of the package, where Node.js finds it from /pkg, as an install puts it. */
-const manifest: unknown = JSON.parse(
-  readFileSync(new URL('../../../package.json', import.meta.url), 'utf8'),
+const manifestOf = (name: string) =>
+  new URL(import.meta.resolve(`${name}/package.json`));
+
+/** The names in the `dependencies` of the package.json at `url`. */
+function runtimeDependencies(url: URL): string[] {
+  const manifest: unknown = JSON.parse(readFileSync(url, 'utf8'));
+  assert.ok(isRecord(manifest), `${url.href} must hold an object`);
+  return isRecord(manifest.dependencies)
+    ? Object.keys(manifest.dependencies)
+    : [];
+}
+
+/**
+ * Each runtime dependency of the package and of its dependencies, where
+ * Node.js finds it from /pkg, as an install puts it.
+ */
+const pending = runtimeDependencies(
+  new URL('../../../package.json', import.meta.url),
 );
 assert.ok(
-  isRecord(manifest) && isRecord(manifest.dependencies),
+  pending.length > 0,
   'The package.json of the package must list its dependencies',
 );
-const dependencyBinds = Object.keys(manifest.dependencies).map(
+const installed = new Set<string>();
+for (let name = pending.pop(); name !== undefined; name = pending.pop()) {
+  if (installed.has(name)) continue;
+  installed.add(name);
+  pending.push(...runtimeDependencies(manifestOf(name)));
+}
+const dependencyBinds = [...installed].map(
   (name) =>
-    `${fileURLToPath(new URL('.', import.meta.resolve(`${name}/package.json`)))}:/node_modules/${name}:ro`,
+    `${fileURLToPath(new URL('.', manifestOf(name)))}:/node_modules/${name}:ro`,
 );
 
 const stores = ['LockFileStore', 'TicketQueueFileStore'] as const;

@@ -1,4 +1,4 @@
-import { DatabaseSync } from 'node:sqlite';
+import { open } from '@zukhruf/sqlite-open';
 
 import {
   type Design,
@@ -42,7 +42,7 @@ export async function feed(
   const sorted = reportsOf(rows, texts).toSorted(
     (a, b) => a.publishedAt.getTime() - b.publishedAt.getTime(),
   );
-  using database = new DatabaseSync(':memory:');
+  using database = open(':memory:');
   const detector = new EventDetector({ database, vectors, design });
   const adds: Add[] = [];
   for (const [day, batch] of Map.groupBy(sorted, (report) =>

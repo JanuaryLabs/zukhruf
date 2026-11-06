@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
 import { join } from 'node:path';
-import { DatabaseSync } from 'node:sqlite';
+import type { DatabaseSync } from 'node:sqlite';
 import { test } from 'node:test';
 
 import * as sqliteVec from 'sqlite-vec';
 
+import { open } from '@zukhruf/sqlite-open';
 import { TemporaryFiles } from '@zukhruf/testing/fs';
 
 import { Declaration } from './index.ts';
@@ -27,7 +28,7 @@ function count(database: DatabaseSync, table: string): number {
 
 test('a new database stores none of a declaration, and apply creates each object as declared', async () => {
   await using scratch = await new TemporaryFiles().directory('drift-');
-  using database = new DatabaseSync(join(scratch.path, 'data.sqlite'));
+  using database = open(join(scratch.path, 'data.sqlite'));
   const declaration = new Declaration(
     [
       'CREATE TABLE IF NOT EXISTS   events (at TEXT NOT NULL, kind TEXT) STRICT',
@@ -56,7 +57,7 @@ test('a new database stores none of a declaration, and apply creates each object
 
 test('a database that stores every object as declared fits, and apply keeps its rows', async () => {
   await using scratch = await new TemporaryFiles().directory('drift-');
-  using database = new DatabaseSync(join(scratch.path, 'data.sqlite'));
+  using database = open(join(scratch.path, 'data.sqlite'));
   database.exec(`CREATE TABLE events (at TEXT NOT NULL) STRICT;
     INSERT INTO events VALUES ('2026-10-15')`);
   const declaration = new Declaration(
@@ -76,7 +77,7 @@ test('a table whose columns or CHECK differ from its declaration is stale, and a
     "CREATE TABLE parents (id INTEGER PRIMARY KEY, status TEXT CHECK (status IN ('a'))) STRICT",
   ]) {
     await using scratch = await new TemporaryFiles().directory('drift-');
-    using database = new DatabaseSync(join(scratch.path, 'data.sqlite'));
+    using database = open(join(scratch.path, 'data.sqlite'));
     database.exec(`${older};
       CREATE TABLE children (parent INTEGER NOT NULL REFERENCES parents (id)) STRICT;
       INSERT INTO parents (id) VALUES (1);
@@ -100,7 +101,7 @@ test('a table whose columns or CHECK differ from its declaration is stale, and a
 
 test('a database that stores some objects of a declaration but not others has drifted, and apply creates only the missing ones', async () => {
   await using scratch = await new TemporaryFiles().directory('drift-');
-  using database = new DatabaseSync(join(scratch.path, 'data.sqlite'));
+  using database = open(join(scratch.path, 'data.sqlite'));
   database.exec(`CREATE TABLE attempts (id INTEGER PRIMARY KEY) STRICT;
     INSERT INTO attempts VALUES (7)`);
   const declaration = new Declaration(
@@ -127,7 +128,7 @@ test('a database that stores some objects of a declaration but not others has dr
 
 test('a view whose query differs from its declaration is stale', async () => {
   await using scratch = await new TemporaryFiles().directory('drift-');
-  using database = new DatabaseSync(join(scratch.path, 'data.sqlite'));
+  using database = open(join(scratch.path, 'data.sqlite'));
   database.exec(`CREATE TABLE attempts (id INTEGER, at TEXT) STRICT;
     CREATE VIEW latest AS SELECT id FROM attempts`);
 
@@ -146,10 +147,10 @@ test('drift reads a database opened read-only and changes nothing', async () => 
   await using scratch = await new TemporaryFiles().directory('drift-');
   const path = join(scratch.path, 'data.sqlite');
   {
-    using writer = new DatabaseSync(path);
+    using writer = open(path);
     writer.exec('CREATE TABLE events (at TEXT) STRICT');
   }
-  using reader = new DatabaseSync(path, { readOnly: true });
+  using reader = open(path, { readOnly: true });
   const declaration = new Declaration(
     ['CREATE TABLE events (at TEXT NOT NULL) STRICT'],
     { rows: 'replace' },
@@ -167,7 +168,7 @@ test('drift reads a database opened read-only and changes nothing', async () => 
 
 test("apply inside the caller's transaction is undone when the caller rolls back", async () => {
   await using scratch = await new TemporaryFiles().directory('drift-');
-  using database = new DatabaseSync(join(scratch.path, 'data.sqlite'));
+  using database = open(join(scratch.path, 'data.sqlite'));
   database.exec('CREATE TABLE events (at TEXT) STRICT');
   const declaration = new Declaration(
     ['CREATE TABLE events (at TEXT NOT NULL) STRICT'],
@@ -184,7 +185,7 @@ test("apply inside the caller's transaction is undone when the caller rolls back
 
 test('apply leaves every object the declaration does not name', async () => {
   await using scratch = await new TemporaryFiles().directory('drift-');
-  using database = new DatabaseSync(join(scratch.path, 'data.sqlite'));
+  using database = open(join(scratch.path, 'data.sqlite'));
   database.exec(`CREATE TABLE events (at TEXT) STRICT;
     CREATE TABLE notes (body TEXT) STRICT;
     INSERT INTO notes VALUES ('kept')`);
@@ -213,7 +214,7 @@ test('a declaration that cannot stand alone in an empty database fails when it i
 
 test("apply inside the caller's transaction fails with the error that made SQLite end that transaction", async () => {
   await using scratch = await new TemporaryFiles().directory('drift-');
-  using database = new DatabaseSync(join(scratch.path, 'data.sqlite'));
+  using database = open(join(scratch.path, 'data.sqlite'));
   // Dropping the stale parents table deletes its rows first. The cascade
   // reaches children, and its trigger ends the transaction.
   database.exec(`CREATE TABLE parents (id INTEGER PRIMARY KEY) STRICT;
@@ -248,7 +249,7 @@ function rows(database: DatabaseSync, sql: string): Record<string, unknown>[] {
 
 test('with rows keep, a table with a new column keeps its rows, the new column gets its default, and a dropped column is discarded', async () => {
   await using scratch = await new TemporaryFiles().directory('drift-');
-  using database = new DatabaseSync(join(scratch.path, 'data.sqlite'));
+  using database = open(join(scratch.path, 'data.sqlite'));
   database.exec(`CREATE TABLE runs (id INTEGER PRIMARY KEY, name TEXT NOT NULL, note TEXT) STRICT;
     INSERT INTO runs VALUES (1, 'first', 'gone'), (2, 'second', 'gone')`);
   const declaration = new Declaration(
@@ -271,7 +272,7 @@ test('with rows keep, a table with a new column keeps its rows, the new column g
 
 test('with rows keep, a row the new declaration refuses fails apply with the error of SQLite, and the table and its rows stay as they were', async () => {
   await using scratch = await new TemporaryFiles().directory('drift-');
-  using database = new DatabaseSync(join(scratch.path, 'data.sqlite'));
+  using database = open(join(scratch.path, 'data.sqlite'));
   database.exec(`CREATE TABLE runs (id INTEGER PRIMARY KEY, status TEXT CHECK (status IN ('a', 'b'))) STRICT;
     CREATE TABLE cases (run INTEGER NOT NULL REFERENCES runs (id) ON DELETE CASCADE) STRICT;
     INSERT INTO runs VALUES (1, 'a'), (2, 'b');
@@ -297,7 +298,7 @@ test('with rows keep, a row the new declaration refuses fails apply with the err
 
 test('with rows keep, a table that other tables reference keeps the rows of its children and grandchildren, and its cascade still works', async () => {
   await using scratch = await new TemporaryFiles().directory('drift-');
-  using database = new DatabaseSync(join(scratch.path, 'data.sqlite'));
+  using database = open(join(scratch.path, 'data.sqlite'));
   database.exec(`CREATE TABLE runs (id INTEGER PRIMARY KEY) STRICT;
     CREATE TABLE cases (id INTEGER PRIMARY KEY, run INTEGER NOT NULL REFERENCES runs (id) ON DELETE CASCADE) STRICT;
     CREATE TABLE scores (\`case\` INTEGER NOT NULL REFERENCES cases (id) ON DELETE CASCADE, value REAL) STRICT;
@@ -328,7 +329,7 @@ test('with rows keep, a table that other tables reference keeps the rows of its 
 
 test("with rows keep, a referenced table inside the caller's transaction fails before any change, because SQLite keeps foreign keys on there", async () => {
   await using scratch = await new TemporaryFiles().directory('drift-');
-  using database = new DatabaseSync(join(scratch.path, 'data.sqlite'));
+  using database = open(join(scratch.path, 'data.sqlite'));
   database.exec(`CREATE TABLE runs (id INTEGER PRIMARY KEY) STRICT;
     CREATE TABLE cases (run INTEGER NOT NULL REFERENCES runs (id) ON DELETE CASCADE) STRICT;
     INSERT INTO runs VALUES (1);
@@ -355,7 +356,7 @@ test("with rows keep, a referenced table inside the caller's transaction fails b
 
 test("with rows keep, a table that no table references is rebuilt inside the caller's transaction, with foreign keys on", async () => {
   await using scratch = await new TemporaryFiles().directory('drift-');
-  using database = new DatabaseSync(join(scratch.path, 'data.sqlite'));
+  using database = open(join(scratch.path, 'data.sqlite'));
   database.exec(`CREATE TABLE runs (id INTEGER PRIMARY KEY) STRICT;
     CREATE TABLE cases (run INTEGER NOT NULL REFERENCES runs (id)) STRICT;
     INSERT INTO runs VALUES (1);
@@ -381,7 +382,7 @@ test("with rows keep, a table that no table references is rebuilt inside the cal
 
 test('with rows keep, kept rows that break a foreign key of the new declaration fail apply, and the table stays as it was', async () => {
   await using scratch = await new TemporaryFiles().directory('drift-');
-  using database = new DatabaseSync(join(scratch.path, 'data.sqlite'));
+  using database = open(join(scratch.path, 'data.sqlite'));
   database.exec(`CREATE TABLE runs (id INTEGER PRIMARY KEY) STRICT;
     CREATE TABLE cases (run INTEGER NOT NULL) STRICT;
     INSERT INTO cases VALUES (9)`);
@@ -406,7 +407,7 @@ test('with rows keep, kept rows that break a foreign key of the new declaration 
 
 test('with rows keep, the indexes, triggers and views on a rebuilt table that the declaration does not name stay and work', async () => {
   await using scratch = await new TemporaryFiles().directory('drift-');
-  using database = new DatabaseSync(join(scratch.path, 'data.sqlite'));
+  using database = open(join(scratch.path, 'data.sqlite'));
   database.exec(`CREATE TABLE runs (id INTEGER PRIMARY KEY, name TEXT) STRICT;
     CREATE TABLE log (id INTEGER) STRICT;
     CREATE UNIQUE INDEX runs_name ON runs (name);
@@ -447,7 +448,7 @@ test('with rows keep, the indexes, triggers and views on a rebuilt table that th
 
 test('with rows keep, a stale index on a table that fits is made again, and the table keeps its rows', async () => {
   await using scratch = await new TemporaryFiles().directory('drift-');
-  using database = new DatabaseSync(join(scratch.path, 'data.sqlite'));
+  using database = open(join(scratch.path, 'data.sqlite'));
   database.exec(`CREATE TABLE runs (id INTEGER PRIMARY KEY, name TEXT) STRICT;
     CREATE INDEX runs_name ON runs (name);
     INSERT INTO runs VALUES (1, 'first')`);
@@ -467,7 +468,7 @@ test('with rows keep, a stale index on a table that fits is made again, and the 
 
 test("with rows keep, a table that refers to itself counts as referenced inside the caller's transaction", async () => {
   await using scratch = await new TemporaryFiles().directory('drift-');
-  using database = new DatabaseSync(join(scratch.path, 'data.sqlite'));
+  using database = open(join(scratch.path, 'data.sqlite'));
   database.exec(`CREATE TABLE steps (id INTEGER PRIMARY KEY, after INTEGER REFERENCES steps (id)) STRICT;
     INSERT INTO steps VALUES (1, NULL), (2, 1)`);
   const declaration = new Declaration(
@@ -489,7 +490,7 @@ test("with rows keep, a table that refers to itself counts as referenced inside 
 
 test('with rows keep, a trigger on a rebuilt table that names a dropped column fails apply with the error of SQLite, and the table and its rows stay as they were', async () => {
   await using scratch = await new TemporaryFiles().directory('drift-');
-  using database = new DatabaseSync(join(scratch.path, 'data.sqlite'));
+  using database = open(join(scratch.path, 'data.sqlite'));
   database.exec(`CREATE TABLE runs (id INTEGER PRIMARY KEY, note TEXT) STRICT;
     CREATE TABLE log (note TEXT) STRICT;
     CREATE TRIGGER runs_gone AFTER DELETE ON runs BEGIN INSERT INTO log VALUES (old.note); END;
@@ -512,7 +513,7 @@ test('with rows keep, a trigger on a rebuilt table that names a dropped column f
 
 test('with rows keep, a view that names a dropped column of a rebuilt table fails apply, and the table and its rows stay as they were', async () => {
   await using scratch = await new TemporaryFiles().directory('drift-');
-  using database = new DatabaseSync(join(scratch.path, 'data.sqlite'));
+  using database = open(join(scratch.path, 'data.sqlite'));
   database.exec(`CREATE TABLE runs (id INTEGER PRIMARY KEY, note TEXT) STRICT;
     CREATE VIEW notes AS SELECT note FROM runs;
     INSERT INTO runs VALUES (1, 'first')`);
@@ -539,7 +540,7 @@ test('with rows keep, a view that names a dropped column of a rebuilt table fail
 
 test('with rows keep, the triggers and views on a rebuilt table that do not name a dropped column work after apply', async () => {
   await using scratch = await new TemporaryFiles().directory('drift-');
-  using database = new DatabaseSync(join(scratch.path, 'data.sqlite'));
+  using database = open(join(scratch.path, 'data.sqlite'));
   database.exec(`CREATE TABLE runs (id INTEGER PRIMARY KEY, name TEXT, note TEXT) STRICT;
     CREATE TABLE log (kind TEXT, id INTEGER) STRICT;
     CREATE TRIGGER runs_added AFTER INSERT ON runs BEGIN INSERT INTO log VALUES ('insert', new.id); END;
@@ -571,7 +572,7 @@ test('with rows keep, the triggers and views on a rebuilt table that do not name
 
 test('with rows keep, a view that was broken before apply does not fail it', async () => {
   await using scratch = await new TemporaryFiles().directory('drift-');
-  using database = new DatabaseSync(join(scratch.path, 'data.sqlite'));
+  using database = open(join(scratch.path, 'data.sqlite'));
   database.exec(`CREATE TABLE runs (id INTEGER PRIMARY KEY) STRICT;
     CREATE VIEW lost AS SELECT missing FROM runs;
     INSERT INTO runs VALUES (1)`);
@@ -591,7 +592,7 @@ test('with rows keep, a view that was broken before apply does not fail it', asy
 test('a trigger on another table that was broken before apply does not fail it, with rows keep and with rows replace', async () => {
   for (const kept of ['keep', 'replace'] as const) {
     await using scratch = await new TemporaryFiles().directory('drift-');
-    using database = new DatabaseSync(join(scratch.path, 'data.sqlite'));
+    using database = open(join(scratch.path, 'data.sqlite'));
     database.exec(`CREATE TABLE runs (id INTEGER PRIMARY KEY) STRICT;
       CREATE TABLE log (id INTEGER) STRICT;
       CREATE TRIGGER log_added AFTER INSERT ON log BEGIN
@@ -611,7 +612,7 @@ test('a trigger on another table that was broken before apply does not fail it, 
 
 test('with rows keep, a rebuild that drops a column that a trigger on another table reads fails apply with the error of SQLite, and the tables and their rows stay as they were', async () => {
   await using scratch = await new TemporaryFiles().directory('drift-');
-  using database = new DatabaseSync(join(scratch.path, 'data.sqlite'));
+  using database = open(join(scratch.path, 'data.sqlite'));
   database.exec(`CREATE TABLE customers (id INTEGER PRIMARY KEY, legacy_code TEXT) STRICT;
     CREATE TABLE orders (id INTEGER PRIMARY KEY, customer INTEGER, code TEXT) STRICT;
     CREATE TRIGGER orders_added AFTER INSERT ON orders BEGIN
@@ -640,7 +641,7 @@ test('with rows keep, a rebuild that drops a column that a trigger on another ta
 
 test('with rows replace, a replace that drops a column that a trigger on another table reads fails apply with the error of SQLite, and the tables and their rows stay as they were', async () => {
   await using scratch = await new TemporaryFiles().directory('drift-');
-  using database = new DatabaseSync(join(scratch.path, 'data.sqlite'));
+  using database = open(join(scratch.path, 'data.sqlite'));
   database.exec(`CREATE TABLE chunks (id INTEGER PRIMARY KEY, document INTEGER) STRICT;
     CREATE TABLE documents (id INTEGER PRIMARY KEY) STRICT;
     CREATE TRIGGER documents_gone AFTER DELETE ON documents BEGIN
@@ -668,7 +669,7 @@ test('with rows replace, a replace that drops a column that a trigger on another
 test('a change that keeps the columns that a trigger on another table reads applies, with rows keep and with rows replace, and the trigger works after it', async () => {
   for (const kept of ['keep', 'replace'] as const) {
     await using scratch = await new TemporaryFiles().directory('drift-');
-    using database = new DatabaseSync(join(scratch.path, 'data.sqlite'));
+    using database = open(join(scratch.path, 'data.sqlite'));
     database.exec(`CREATE TABLE chunks (id INTEGER PRIMARY KEY, document INTEGER) STRICT;
       CREATE TABLE documents (id INTEGER PRIMARY KEY) STRICT;
       CREATE TRIGGER documents_gone AFTER DELETE ON documents BEGIN
@@ -695,7 +696,7 @@ test('a change that keeps the columns that a trigger on another table reads appl
 
 test('with rows replace, a stale AUTOINCREMENT table is replaced and the declaration fits', async () => {
   await using scratch = await new TemporaryFiles().directory('drift-');
-  using database = new DatabaseSync(join(scratch.path, 'data.sqlite'));
+  using database = open(join(scratch.path, 'data.sqlite'));
   database.exec(`CREATE TABLE jobs (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT) STRICT;
     INSERT INTO jobs (name) VALUES ('first')`);
   const declaration = new Declaration(
@@ -714,7 +715,7 @@ test('with rows replace, a stale AUTOINCREMENT table is replaced and the declara
 
 test('with rows replace, a stale FTS5 table is replaced, the declaration fits, and MATCH finds the new rows', async () => {
   await using scratch = await new TemporaryFiles().directory('drift-');
-  using database = new DatabaseSync(join(scratch.path, 'data.sqlite'));
+  using database = open(join(scratch.path, 'data.sqlite'));
   database.exec(`CREATE VIRTUAL TABLE m_fts USING fts5(body);
     INSERT INTO m_fts VALUES ('old')`);
   const declaration = new Declaration(
@@ -738,7 +739,7 @@ test('with rows replace, a stale FTS5 table is replaced, the declaration fits, a
 
 test('an AUTOINCREMENT declaration that the database does not store is missing, when another table already made sqlite_sequence', async () => {
   await using scratch = await new TemporaryFiles().directory('drift-');
-  using database = new DatabaseSync(join(scratch.path, 'data.sqlite'));
+  using database = open(join(scratch.path, 'data.sqlite'));
   database.exec(
     'CREATE TABLE notes (id INTEGER PRIMARY KEY AUTOINCREMENT, body TEXT) STRICT',
   );
@@ -771,7 +772,7 @@ test('with rows keep, a table without INTEGER PRIMARY KEY keeps the rowid of eac
     ],
   ] as const) {
     await using scratch = await new TemporaryFiles().directory('drift-');
-    using database = new DatabaseSync(join(scratch.path, 'data.sqlite'));
+    using database = open(join(scratch.path, 'data.sqlite'));
     database.exec(`${older};
       INSERT INTO notes (body) VALUES ('a'), ('b'), ('c');
       DELETE FROM notes WHERE body = 'a'`);
@@ -802,7 +803,7 @@ test('with rows keep, an AUTOINCREMENT table keeps its counter, so the id of a d
     ['DELETE FROM jobs', []],
   ] as const) {
     await using scratch = await new TemporaryFiles().directory('drift-');
-    using database = new DatabaseSync(join(scratch.path, 'data.sqlite'));
+    using database = open(join(scratch.path, 'data.sqlite'));
     database.exec(`CREATE TABLE jobs (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT) STRICT;
       INSERT INTO jobs (name) VALUES ('a'), ('b'), ('c');
       ${deleted}`);
@@ -826,7 +827,7 @@ test('with rows keep, an AUTOINCREMENT table keeps its counter, so the id of a d
 
 test('with rows keep, a table that loses AUTOINCREMENT keeps its rows and rowids, and sqlite_sequence has no row for it', async () => {
   await using scratch = await new TemporaryFiles().directory('drift-');
-  using database = new DatabaseSync(join(scratch.path, 'data.sqlite'));
+  using database = open(join(scratch.path, 'data.sqlite'));
   database.exec(`CREATE TABLE jobs (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT) STRICT;
     INSERT INTO jobs (name) VALUES ('a'), ('b'), ('c');
     DELETE FROM jobs WHERE id = 3`);
@@ -850,7 +851,7 @@ test('with rows keep, a table that loses AUTOINCREMENT keeps its rows and rowids
 
 test('with rows keep, a stale virtual table fails apply before any change, and its index still finds the right rows', async () => {
   await using scratch = await new TemporaryFiles().directory('drift-');
-  using database = new DatabaseSync(join(scratch.path, 'data.sqlite'));
+  using database = open(join(scratch.path, 'data.sqlite'));
   database.exec(`CREATE TABLE docs (id INTEGER PRIMARY KEY, body TEXT) STRICT;
     CREATE VIRTUAL TABLE docs_fts USING fts5(body, content='docs', content_rowid='id');
     INSERT INTO docs VALUES (10, 'apple'), (20, 'banana');
@@ -886,7 +887,7 @@ test('an element with two statements fails when the declaration is made, and one
     });
 
   await using scratch = await new TemporaryFiles().directory('drift-');
-  using database = new DatabaseSync(join(scratch.path, 'data.sqlite'));
+  using database = open(join(scratch.path, 'data.sqlite'));
   const declaration = new Declaration(
     ['CREATE TABLE events (at TEXT) STRICT; -- the log'],
     { rows: 'replace' },
@@ -922,7 +923,7 @@ test('an element that makes no object fails when the declaration is made', () =>
 
 test('with rows keep, a WITHOUT ROWID table keeps its rows', async () => {
   await using scratch = await new TemporaryFiles().directory('drift-');
-  using database = new DatabaseSync(join(scratch.path, 'data.sqlite'));
+  using database = open(join(scratch.path, 'data.sqlite'));
   database.exec(`CREATE TABLE tags (name TEXT PRIMARY KEY) STRICT, WITHOUT ROWID;
     INSERT INTO tags VALUES ('a'), ('b')`);
   const declaration = new Declaration(
@@ -953,7 +954,7 @@ test('with rows keep, a table that becomes a virtual table, or a virtual table t
     ],
   ] as const) {
     await using scratch = await new TemporaryFiles().directory('drift-');
-    using database = new DatabaseSync(join(scratch.path, 'data.sqlite'));
+    using database = open(join(scratch.path, 'data.sqlite'));
     database.exec(`${older};
       INSERT INTO notes VALUES ('kept')`);
     const before = stored(database);
@@ -977,7 +978,7 @@ test('with rows keep, a column that becomes the INTEGER PRIMARY KEY keeps its va
     ['CREATE TABLE notes (body TEXT) STRICT', [2, 3]],
   ] as const) {
     await using scratch = await new TemporaryFiles().directory('drift-');
-    using database = new DatabaseSync(join(scratch.path, 'data.sqlite'));
+    using database = open(join(scratch.path, 'data.sqlite'));
     database.exec(`${older};
       INSERT INTO notes (body) VALUES ('a'), ('b'), ('c');
       DELETE FROM notes WHERE body = 'a'`);
@@ -1000,12 +1001,12 @@ test('with rows keep, a column that becomes the INTEGER PRIMARY KEY keeps its va
 
 test('with a dev database that loads sqlite-vec, a vec0 declaration goes from missing to fits, and with rows replace a new dimension fits after apply', async () => {
   await using scratch = await new TemporaryFiles().directory('drift-');
-  using database = new DatabaseSync(join(scratch.path, 'data.sqlite'), {
+  using database = open(join(scratch.path, 'data.sqlite'), {
     allowExtension: true,
   });
   database.loadExtension(sqliteVec.getLoadablePath());
   const devDatabase = () => {
-    const dev = new DatabaseSync(':memory:', { allowExtension: true });
+    const dev = open(':memory:', { allowExtension: true });
     dev.loadExtension(sqliteVec.getLoadablePath());
     return dev;
   };
@@ -1034,7 +1035,7 @@ test('with a dev database that loads sqlite-vec, a vec0 declaration goes from mi
 
 test('with a dev database that registers a function, an index on an expression that calls it is declared, and apply makes it', async () => {
   await using scratch = await new TemporaryFiles().directory('drift-');
-  using database = new DatabaseSync(join(scratch.path, 'data.sqlite'));
+  using database = open(join(scratch.path, 'data.sqlite'));
   const slug = (title: unknown) =>
     String(title).toLowerCase().replaceAll(' ', '-');
   database.function('slug', { deterministic: true }, slug);
@@ -1046,7 +1047,7 @@ test('with a dev database that registers a function, an index on an expression t
     {
       rows: 'replace',
       devDatabase: () => {
-        const dev = new DatabaseSync(':memory:');
+        const dev = open(':memory:');
         dev.function('slug', { deterministic: true }, slug);
         return dev;
       },
@@ -1069,7 +1070,7 @@ test('a dev database that already holds an object fails when the declaration is 
       new Declaration(['CREATE TABLE events (at TEXT) STRICT'], {
         rows: 'replace',
         devDatabase: () => {
-          const dev = new DatabaseSync(':memory:');
+          const dev = open(':memory:');
           dev.exec('CREATE TABLE notes (body TEXT)');
           return dev;
         },

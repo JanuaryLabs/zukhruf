@@ -5,6 +5,7 @@
   "dependencies": {
     "@zukhruf/fencing": "*",
     "@zukhruf/mutex": "*",
+    "@zukhruf/sqlite-open": "*",
     "hono": "^4.13.13"
   },
   "devDependencies": {

@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
 import { chmod, mkdir, stat, utimes } from 'node:fs/promises';
 import { join } from 'node:path';
-import { DatabaseSync } from 'node:sqlite';
+import type { DatabaseSync } from 'node:sqlite';
 import { test } from 'node:test';
 
-import * as reader from '@zukhruf/sqlite-reader';
+import * as sqliteOpen from '@zukhruf/sqlite-open';
 import { TemporaryFiles } from '@zukhruf/testing/fs';
 
 import { DataVersion, UnavailableError, lastWrite } from './index.ts';
@@ -13,9 +13,8 @@ import { DataVersion, UnavailableError, lastWrite } from './index.ts';
 // into the WAL and does not checkpoint, so the file, the WAL and the
 // shared-memory index are all there.
 function owning(path: string): DatabaseSync {
-  const owner = new DatabaseSync(path);
+  const owner = sqliteOpen.open(path);
   owner.exec(`
-    PRAGMA journal_mode = WAL;
     PRAGMA wal_autocheckpoint = 0;
     CREATE TABLE notes (id INTEGER PRIMARY KEY, title TEXT);
     INSERT INTO notes (title) VALUES ('first');
@@ -97,15 +96,15 @@ test('a WAL that a reader made after the owner removed its own does not count', 
   assert.equal(written.getTime(), 1_000_000_000_000);
 });
 
-test('a missing file is the UnavailableError of @zukhruf/sqlite-reader', async () => {
+test('a missing file is the UnavailableError of @zukhruf/sqlite-open', async () => {
   await using dir = await new TemporaryFiles().directory('last-write-');
   const missing = join(dir.path, 'missing', 'source.sqlite');
 
   assert.throws(
     () => lastWrite(missing),
     (error: unknown) => {
-      assert.equal(UnavailableError, reader.UnavailableError);
-      assert.ok(error instanceof reader.UnavailableError);
+      assert.equal(UnavailableError, sqliteOpen.UnavailableError);
+      assert.ok(error instanceof sqliteOpen.UnavailableError);
       assert.equal(error.path, missing);
       assert.ok(error.cause instanceof Error && 'code' in error.cause);
       assert.equal(error.cause.code, 'ENOENT');
@@ -126,7 +125,7 @@ test(
     const folder = join(dir.path, 'denied');
     await mkdir(folder);
     const path = join(folder, 'source.sqlite');
-    new DatabaseSync(path).close();
+    sqliteOpen.open(path).close();
     await chmod(folder, 0o000);
     try {
       assert.throws(

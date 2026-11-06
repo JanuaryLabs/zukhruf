@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
-import { DatabaseSync } from 'node:sqlite';
 import { describe, test } from 'node:test';
 
 import { MockEmbeddingModelV4 } from 'ai/test';
+
+import { open } from '@zukhruf/sqlite-open';
 
 import { Collection, UnknownDocumentError, VectorSearch } from './index.ts';
 
@@ -32,7 +33,7 @@ describe('VectorSearch', () => {
       { id: 'f', vector: [0.8, 0.6], publishedAt: day(15) },
       { id: 'g', vector: [1, 0.1], publishedAt: day(16) },
     ];
-    using database = new DatabaseSync(':memory:');
+    using database = open(':memory:');
     const collection = new Collection({
       database,
       // A real embedding model cannot run in CI. The AI SDK's own mock model
@@ -107,7 +108,7 @@ describe('VectorSearch', () => {
   });
 
   test('a query with no date range compares every document of a vector table that has only an id and a vector, the highest first', () => {
-    using database = new DatabaseSync(':memory:');
+    using database = open(':memory:');
     database.exec(
       'CREATE TABLE passages (id TEXT PRIMARY KEY, vector BLOB NOT NULL) STRICT',
     );
@@ -132,7 +133,7 @@ describe('VectorSearch', () => {
   });
 
   test('an id that the vector table does not contain is an UnknownDocumentError', () => {
-    using database = new DatabaseSync(':memory:');
+    using database = open(':memory:');
     database.exec(
       'CREATE TABLE listing_vectors (id TEXT PRIMARY KEY, vector BLOB NOT NULL, published_at INTEGER NOT NULL) STRICT',
     );

@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
-import { DatabaseSync } from 'node:sqlite';
+import type { DatabaseSync } from 'node:sqlite';
 import { describe, test } from 'node:test';
 
 import { MockEmbeddingModelV4 } from 'ai/test';
 
 import { Collection } from '@zukhruf/embeddings';
+import { open } from '@zukhruf/sqlite-open';
 
 import {
   type Event,
@@ -88,7 +89,7 @@ function everything(detector: EventDetector): Event[] {
 
 describe('EventDetector', () => {
   test('a headline-only report never joins another report, and no report joins it', async () => {
-    using database = new DatabaseSync(':memory:');
+    using database = open(':memory:');
     const fake = model({
       'Storm closes port': at(0),
       'Storm shuts harbour': at(5),
@@ -114,7 +115,7 @@ describe('EventDetector', () => {
   });
 
   test('the vector text is the title and the first two real sentences, without URL lines, URLs and bylines', async () => {
-    using database = new DatabaseSync(':memory:');
+    using database = open(':memory:');
     const fake = model({ 'Storm closes port': at(0) });
 
     await detector(database, fake).add([
@@ -143,7 +144,7 @@ describe('EventDetector', () => {
   test('numbers that agree join a pair that is too far apart alone, and numbers that disagree split a pair that is near enough alone', async () => {
     const angle = (cosine: number) => Math.acos(cosine) * (180 / Math.PI);
     const group = async (cosine: number, first: string, second: string) => {
-      using database = new DatabaseSync(':memory:');
+      using database = open(':memory:');
       const events = detector(
         database,
         model({ North: at(0), South: at(angle(cosine)) }),
@@ -180,7 +181,7 @@ describe('EventDetector', () => {
   test('one publisher splits a pair that two publishers join, and a report without a publisher is never of the same publisher', async () => {
     const angle = (Math.acos(0.85) * 180) / Math.PI;
     const group = async (first?: string, second?: string) => {
-      using database = new DatabaseSync(':memory:');
+      using database = open(':memory:');
       const events = detector(
         database,
         model({ North: at(0), South: at(angle) }),
@@ -210,7 +211,7 @@ describe('EventDetector', () => {
   test('the detector keeps the publisher of a report for the reports of later adds', async () => {
     const angle = (Math.acos(0.85) * 180) / Math.PI;
     const group = async (later: string) => {
-      using database = new DatabaseSync(':memory:');
+      using database = open(':memory:');
       const events = detector(
         database,
         model({ North: at(0), South: at(angle) }),
@@ -231,7 +232,7 @@ describe('EventDetector', () => {
 
   test('a report joins a report of up to 7 publish days before it, and not of 8 days before it', async () => {
     const group = async (later: Date) => {
-      using database = new DatabaseSync(':memory:');
+      using database = open(':memory:');
       const events = detector(
         database,
         model({ 'Storm closes port': at(0), 'Storm shuts harbour': at(0) }),
@@ -249,7 +250,7 @@ describe('EventDetector', () => {
   });
 
   test('the first report of a new publish day makes the detector cluster the window again', async () => {
-    using database = new DatabaseSync(':memory:');
+    using database = open(':memory:');
     const events = detector(
       database,
       model({ A: at(0), B: at(35), C: at(65), D: at(180) }),
@@ -276,7 +277,7 @@ describe('EventDetector', () => {
   });
 
   test('the clustering takes the reports of the 7 publish days before the new day', async () => {
-    using database = new DatabaseSync(':memory:');
+    using database = open(':memory:');
     const events = detector(
       database,
       model({ A: at(0), B: at(35), C: at(65), D: at(180) }),
@@ -302,7 +303,7 @@ describe('EventDetector', () => {
     const results: string[][][] = [];
 
     for (const order of orders) {
-      using database = new DatabaseSync(':memory:');
+      using database = open(':memory:');
       const events = detector(
         database,
         model({ A: at(0), B: at(35), C: at(60), D: at(180) }),
@@ -318,7 +319,7 @@ describe('EventDetector', () => {
   });
 
   test('an event keeps its id through the clustering of a new day, by its largest overlap', async () => {
-    using database = new DatabaseSync(':memory:');
+    using database = open(':memory:');
     const events = detector(
       database,
       model({ Port: at(0), Harbour: at(90), Other: at(225) }),
@@ -364,7 +365,7 @@ describe('EventDetector', () => {
   });
 
   test('a cluster that takes reports of two old events keeps the id of the old event with more of its reports', async () => {
-    using database = new DatabaseSync(':memory:');
+    using database = open(':memory:');
     const events = detector(
       database,
       model({ Q: at(0), Pa: at(38), Pb: at(21), Far: at(200) }),
@@ -392,7 +393,7 @@ describe('EventDetector', () => {
 
   test('one add gives its reports their events in the order of their publish dates, with the same ids every time', async () => {
     const run = async () => {
-      using database = new DatabaseSync(':memory:');
+      using database = open(':memory:');
       const events = detector(
         database,
         model({ A: at(0), B: at(35), C: at(60), D: at(180) }),
@@ -425,7 +426,7 @@ describe('EventDetector', () => {
   });
 
   test('an add that fails gives none of its reports an event, and the same reports can be added again', async () => {
-    using database = new DatabaseSync(':memory:');
+    using database = open(':memory:');
     const events = detector(database, model({ A: at(0), B: at(5) }));
 
     // Two reports with one id fail on the second one.
@@ -453,7 +454,7 @@ describe('EventDetector', () => {
     const name = (index: number) =>
       `Decoy ${String.fromCodePoint(97 + Math.floor(index / 26), 97 + (index % 26))}`;
     const decoys = Array.from({ length: 79 }, (_, index) => index + 1);
-    using database = new DatabaseSync(':memory:');
+    using database = open(':memory:');
     const events = detector(
       database,
       model({
@@ -502,7 +503,7 @@ describe('EventDetector', () => {
     const name = (index: number) =>
       `Decoy ${String.fromCodePoint(97 + Math.floor(index / 26), 97 + (index % 26))}`;
     const decoys = Array.from({ length: 79 }, (_, index) => index + 1);
-    using database = new DatabaseSync(':memory:');
+    using database = open(':memory:');
     const events = detector(
       database,
       model({
@@ -547,7 +548,7 @@ describe('EventDetector', () => {
   });
 
   test('events gives only the events with a report published at or after since', async () => {
-    using database = new DatabaseSync(':memory:');
+    using database = open(':memory:');
     const events = detector(
       database,
       model({ Old: at(0), Running: at(90), New: at(91) }),
@@ -564,7 +565,7 @@ describe('EventDetector', () => {
   });
 
   test('a report that the detector has already is skipped and keeps its event', async () => {
-    using database = new DatabaseSync(':memory:');
+    using database = open(':memory:');
     const fake = model({ 'Storm closes port': at(0), 'Fire downtown': at(90) });
     const events = detector(database, fake);
     await events.add([report('storm', 'Storm closes port', day(1))]);
@@ -577,7 +578,7 @@ describe('EventDetector', () => {
   });
 
   test('with a clean lead rule, a segment that two reports of one publisher hold is in no lead, also in later adds, and a URL does not split a sentence', async () => {
-    using database = new DatabaseSync(':memory:');
+    using database = open(':memory:');
     const fake = model({
       Office: at(0),
       Speech: at(90),
@@ -647,7 +648,7 @@ describe('EventDetector', () => {
       },
     };
     const group = async (chosen: typeof design3152b, second: string) => {
-      using database = new DatabaseSync(':memory:');
+      using database = open(':memory:');
       const vectors = new Collection({
         database,
         model: model({ North: at(0), South: at(angle) }),
@@ -673,7 +674,7 @@ describe('EventDetector', () => {
 
   test('with a clean lead rule, the URLs go away before the sentence split, so a question mark in a URL splits no sentence and the sentence keeps its words', async () => {
     const text = async (design: typeof design3152b) => {
-      using database = new DatabaseSync(':memory:');
+      using database = open(':memory:');
       const fake = model({ 'Storm closes port': at(0) });
       const vectors = new Collection({ database, model: fake });
       await new EventDetector({ database, vectors, design }).add([

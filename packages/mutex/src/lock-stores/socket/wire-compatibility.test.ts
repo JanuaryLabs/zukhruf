@@ -5,9 +5,9 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { type Socket, connect, createServer } from 'node:net';
 import { join, resolve } from 'node:path';
 import { createInterface } from 'node:readline';
-import { DatabaseSync } from 'node:sqlite';
 import { describe } from 'node:test';
 
+import { UnchangedJournal, open } from '@zukhruf/sqlite-open';
 import { TemporaryFiles } from '@zukhruf/testing/fs';
 import { test } from '@zukhruf/testing/node';
 
@@ -34,7 +34,8 @@ const onUnixSockets = {
 
 /** Holds the term in `directory` as a published leader does: an exclusive SQLite transaction on `leader.lock`. */
 function holdTerm(directory: string) {
-  const claim = new DatabaseSync(join(directory, 'leader.lock'), {
+  const claim = open(join(directory, 'leader.lock'), {
+    journal: new UnchangedJournal(),
     timeout: 0,
   });
   claim.exec('BEGIN EXCLUSIVE');
@@ -166,7 +167,8 @@ describe('What a socket store shares with other versions in its directory', () =
         'mutex-test-',
       );
       await using _leader = await leaderOf(directory.path);
-      const candidate = new DatabaseSync(join(directory.path, 'leader.lock'), {
+      const candidate = open(join(directory.path, 'leader.lock'), {
+        journal: new UnchangedJournal(),
         timeout: 0,
       });
 

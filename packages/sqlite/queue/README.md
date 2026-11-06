@@ -56,7 +56,7 @@ const queue: JobQueue = new PgBoss(process.env.DATABASE_URL);
 ## The rules
 
 - `new SqliteJobQueue({ path })` owns the database file. `start()` opens it and makes the tables, and `stop()` closes it.
-- `new SqliteJobQueue({ database })` uses a `DatabaseSync` that the caller opened. The caller closes it.
+- `new SqliteJobQueue({ database })` uses a `DatabaseSync` that the caller opened. The caller closes it. The queue does not set the busy timeout of that connection. Open it with `open(path)` of `@zukhruf/sqlite-open`, which sets a busy timeout of 5000 ms.
 - With no `path` and no `database`, the queue keeps its jobs in memory.
 - The other options are the options of pg-boss with the same names: `clock`, `supervise`, `superviseIntervalSeconds`, `monitorIntervalSeconds`, `maintenanceIntervalSeconds`, `queueCacheIntervalSeconds`, `warningQueueSize`, `useListenNotify`, `schedule`, `cronMonitorIntervalSeconds`, `cronWorkerIntervalSeconds` and `clockMonitorIntervalSeconds`. The defaults are the defaults of pg-boss.
 - The types of the options, the jobs and the results come from pg-boss. Import them from `pg-boss`, for example `import type { Job, SendOptions } from 'pg-boss'`.

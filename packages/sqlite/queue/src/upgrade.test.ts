@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
 import { join } from 'node:path';
-import { DatabaseSync } from 'node:sqlite';
 import { describe, it } from 'node:test';
 
 import { TestClock } from 'pg-boss';
 
+import { open } from '@zukhruf/sqlite-open';
 import { TemporaryFiles } from '@zukhruf/testing/fs';
 
 import { SqliteJobQueue } from './index.ts';
@@ -37,7 +37,7 @@ async function scheduleTableBeforeKinds(path: string, clock: TestClock) {
   await earlier.createQueue('ticks');
   await earlier.send('jobs', { n: 1 }, { id: id(1) });
   await earlier.stop({ graceful: false, close: true });
-  using database = new DatabaseSync(path);
+  using database = open(path);
   database.exec(`DROP TABLE pgboss_version;
     DROP TABLE pgboss_schedule;
     CREATE TABLE pgboss_schedule (
@@ -95,7 +95,7 @@ describe('a queue file an earlier release made', () => {
       // queue and a job as its createQueue() and send() stored them. No
       // public operation makes an older shape, so they are written in that
       // release's SQL.
-      using database = new DatabaseSync(path);
+      using database = open(path);
       database.exec(`CREATE TABLE pgboss_queue (
         name TEXT PRIMARY KEY,
         policy TEXT NOT NULL DEFAULT 'standard',
@@ -209,7 +209,7 @@ describe('a queue file an earlier release made', () => {
       // The singleton index as text2sql 98d1eda8 made it. No public
       // operation makes an older shape, so it is written in that release's
       // SQL.
-      using database = new DatabaseSync(path);
+      using database = open(path);
       database.exec(`DROP INDEX pgboss_job_singleton_i;
         CREATE INDEX pgboss_job_singleton_i
           ON pgboss_job (queue_name, singleton_key)

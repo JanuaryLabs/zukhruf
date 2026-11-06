@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
-import { DatabaseSync } from 'node:sqlite';
 import { describe, it } from 'node:test';
 
 import { PGlite } from '@electric-sql/pglite';
 import { PgBoss, TestClock, fromPglite } from 'pg-boss';
+
+import { open } from '@zukhruf/sqlite-open';
 
 import type { JobQueue } from '../index.ts';
 import { SqliteJobQueue } from '../index.ts';
@@ -550,7 +551,7 @@ describe('timekeeper', () => {
     };
     const observe = async (options: object) => {
       const pglite = new PGlite();
-      const database = new DatabaseSync(':memory:');
+      const database = open(':memory:');
       try {
         const pgBossClock = new TestClock(ParityRun.start);
         const sqliteClock = new TestClock(ParityRun.start);
@@ -721,7 +722,7 @@ describe('timekeeper', () => {
       }
     };
     const pglite = new PGlite();
-    const database = new DatabaseSync(':memory:');
+    const database = open(':memory:');
     try {
       const pgBossClock = new TestClock(ParityRun.start);
       const sqliteClock = new TestClock(ParityRun.start);
@@ -787,7 +788,7 @@ describe('timekeeper', () => {
     // Neither is started: pg-boss validates in its constructor
     // (index.js:65, attorney.js:407-426), before it touches its database.
     const pglite = new PGlite();
-    const database = new DatabaseSync(':memory:');
+    const database = open(':memory:');
     const pgBoss: string[] = [];
     const sqlite: string[] = [];
     try {

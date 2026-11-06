@@ -49,6 +49,7 @@
   "devDependencies": {
     "@sinonjs/fake-timers": "15.4.0",
     "@zukhruf/mutex": "^0.6.16",
+    "@zukhruf/sqlite-open": "^0.6.16",
     "@zukhruf/testing": "^0.6.16"
   }
 }

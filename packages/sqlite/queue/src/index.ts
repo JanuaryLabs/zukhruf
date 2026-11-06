@@ -1,8 +1,7 @@
 import assert from 'node:assert';
 import { randomUUID } from 'node:crypto';
 import { EventEmitter } from 'node:events';
-import { DatabaseSync } from 'node:sqlite';
-import type { SQLInputValue } from 'node:sqlite';
+import type { DatabaseSync, SQLInputValue } from 'node:sqlite';
 import { setImmediate } from 'node:timers/promises';
 
 import {
@@ -29,6 +28,7 @@ import {
 } from 'pg-boss';
 
 import { Latch } from '@zukhruf/async';
+import { open } from '@zukhruf/sqlite-open';
 import { transaction } from '@zukhruf/sqlite-transaction';
 
 import { Activity } from './activity.ts';
@@ -273,7 +273,7 @@ export class SqliteJobQueue
     if (this.#connection.kind === 'closed') {
       this.#connection = {
         kind: 'open',
-        database: new DatabaseSync(this.#path),
+        database: open(this.#path),
       };
     }
     this.applySchema();
@@ -1208,8 +1208,6 @@ export class SqliteJobQueue
   }
 
   private applySchema(): void {
-    this.db.exec('PRAGMA foreign_keys = ON');
-    this.db.exec('PRAGMA busy_timeout = 5000');
     queueSchema.apply(this.db);
     // The cron claim's one row (plans.js:288-298).
     this.db.exec('INSERT OR IGNORE INTO pgboss_version (singleton) VALUES (1)');

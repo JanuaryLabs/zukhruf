@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
-import { DatabaseSync } from 'node:sqlite';
+import type { DatabaseSync } from 'node:sqlite';
 import { describe, test } from 'node:test';
 
 import { MockEmbeddingModelV4 } from 'ai/test';
 
 import { Collection, UnknownDocumentError } from '@zukhruf/embeddings';
+import { open } from '@zukhruf/sqlite-open';
 
 import {
   type Answer,
@@ -96,7 +97,7 @@ const expectedF05 = new ExpectedFThreshold({ beta: 0.5 });
 
 describe('SimilarityScorer', () => {
   test('the probabilities and the accepted articles are those of the research code (round 2 and round 6) on the stored vectors', async () => {
-    using database = new DatabaseSync(':memory:');
+    using database = open(':memory:');
     // The angles, matches and answers of the reference that the research
     // code computed (round-2 evaluate.py binormal and plugin_threshold, and
     // round-6 with_keyword) on float32 unit vectors, as a collection stores
@@ -166,7 +167,7 @@ describe('SimilarityScorer', () => {
   });
 
   test('the accepted articles are the m most probable articles that maximise the expected F0.5', async () => {
-    using database = new DatabaseSync(':memory:');
+    using database = open(':memory:');
     const { collection, articles } = await stored(
       database,
       Array.from({ length: 30 }, (_, index) => ({
@@ -208,7 +209,7 @@ describe('SimilarityScorer', () => {
   });
 
   test('a keyword that the yes answers match raises the probability of an article above an equally similar article without the keyword', async () => {
-    using database = new DatabaseSync(':memory:');
+    using database = open(':memory:');
     const { collection, articles } = await stored(
       database,
       Array.from({ length: 30 }, (_, index) => ({
@@ -240,7 +241,7 @@ describe('SimilarityScorer', () => {
   });
 
   test('ranks the stream by probability, equal vectors by id, and a range keeps that order for its days', async () => {
-    using database = new DatabaseSync(':memory:');
+    using database = open(':memory:');
     // stored() gives article n the publish day 10 + n.
     const { collection, articles } = await stored(
       database,
@@ -287,7 +288,7 @@ describe('SimilarityScorer', () => {
   });
 
   test('when the stream scores cannot hold a binormal fit, Platt calibrates on the answers, a constant probability stands in when the answers rank backwards, and the keyword matches come first when no answer is a no', async () => {
-    using database = new DatabaseSync(':memory:');
+    using database = open(':memory:');
     // Every stream article has one similarity, so the scores have no spread.
     const { collection, articles } = await stored(
       database,
@@ -358,7 +359,7 @@ describe('SimilarityScorer', () => {
   });
 
   test('when the fit cannot hold, no answer is a no and there is no keyword, the stream is ranked by similarity, with no error', async () => {
-    using database = new DatabaseSync(':memory:');
+    using database = open(':memory:');
     // The yes answer is less similar than the whole stream, so the relevant
     // mean is below the other mean and the binormal fit cannot hold.
     const { collection, articles } = await stored(
@@ -382,7 +383,7 @@ describe('SimilarityScorer', () => {
   });
 
   test('the length of the description vector does not change the probabilities: a scorer reads its direction only', async () => {
-    using database = new DatabaseSync(':memory:');
+    using database = open(':memory:');
     const { collection, articles } = await stored(
       database,
       [
@@ -436,7 +437,7 @@ describe('SimilarityScorer', () => {
   });
 
   test('a stream article that the vectors do not hold with its publish date is a MissingVectorError', async () => {
-    using database = new DatabaseSync(':memory:');
+    using database = open(':memory:');
     const { collection, articles } = await stored(
       database,
       [
@@ -468,7 +469,7 @@ describe('SimilarityScorer', () => {
   });
 
   test('a taught article that the vectors do not hold fails with the error of the vectors', async () => {
-    using database = new DatabaseSync(':memory:');
+    using database = open(':memory:');
     const { collection, articles } = await stored(database, [
       { id: 'a', degrees: 0, text: 'A' },
     ]);
@@ -485,7 +486,7 @@ describe('SimilarityScorer', () => {
   });
 
   test('a question about an article that is not in the stream is an UnknownArticleError', async () => {
-    using database = new DatabaseSync(':memory:');
+    using database = open(':memory:');
     const { collection, articles } = await stored(
       database,
       [{ id: 'a', degrees: 0, text: 'A' }],

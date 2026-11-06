@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
-import { DatabaseSync } from 'node:sqlite';
+import type { DatabaseSync } from 'node:sqlite';
 import { describe, test } from 'node:test';
 
 import { MockEmbeddingModelV4 } from 'ai/test';
 
 import { Collection } from '@zukhruf/embeddings';
+import { open } from '@zukhruf/sqlite-open';
 
 import {
   ExpectedFThreshold,
@@ -71,7 +72,7 @@ async function stored(
 
 describe('KeywordScorer', () => {
   test('gives the articles that match a keyword at the start of a word, in any case, or a regular expression as it is, the probability 1 and the others 0, and a threshold accepts the matches', async () => {
-    using database = new DatabaseSync(':memory:');
+    using database = open(':memory:');
     const { collection, articles } = await stored(database, [
       { id: 'title', degrees: 80, text: 'SECURITY firms merge' },
       { id: 'inside', degrees: 0, text: 'A cybersecurity startup' },
@@ -98,7 +99,7 @@ describe('KeywordScorer', () => {
   });
 
   test('ranks the matches first, the newest first, then the other articles by similarity, and a range keeps that order for its days', async () => {
-    using database = new DatabaseSync(':memory:');
+    using database = open(':memory:');
     // stored() gives article n the publish day 10 + n.
     const { collection, articles } = await stored(database, [
       { id: 'old-match', degrees: 0, text: 'Security news' },
@@ -148,7 +149,7 @@ describe('KeywordScorer', () => {
   });
 
   test('a stream article that the vectors do not hold with its publish date is a MissingVectorError', async () => {
-    using database = new DatabaseSync(':memory:');
+    using database = open(':memory:');
     const { collection, articles } = await stored(database, [
       { id: 'a', degrees: 0, text: 'Security' },
     ]);

@@ -40,6 +40,7 @@
     "access": "public"
   },
   "devDependencies": {
+    "@zukhruf/sqlite-open": "^0.6.16",
     "@zukhruf/testing": "^0.6.16"
   }
 }

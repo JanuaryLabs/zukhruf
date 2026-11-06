@@ -16,17 +16,16 @@ npm install @zukhruf/sqlite-data-version
 import { mkdtempDisposable } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { DatabaseSync } from 'node:sqlite';
 
 import { DataVersion } from '@zukhruf/sqlite-data-version';
+import { open } from '@zukhruf/sqlite-open';
 
 await using scratch = await mkdtempDisposable(join(tmpdir(), 'data-version-'));
 const path = join(scratch.path, 'notes.sqlite');
 
 // The owner: another connection that writes the database through a WAL.
-using owner = new DatabaseSync(path);
-owner.exec(`PRAGMA journal_mode = WAL;
-  CREATE TABLE notes (id INTEGER PRIMARY KEY, title TEXT)`);
+using owner = open(path);
+owner.exec(`CREATE TABLE notes (id INTEGER PRIMARY KEY, title TEXT)`);
 
 using version = new DataVersion(path);
 let seen = version.current;
@@ -57,7 +56,7 @@ no change
 - Each read of `current` reads the status of the file at the path one time (`stat`).
 - A commit by the same connection does not change the number. The `DataVersion` connection never writes, so each commit that it sees comes from another connection.
 - Dispose closes the connection. Use `using`, or call `[Symbol.dispose]()`.
-- The package throws its own `UnavailableError`. It is the class of `@zukhruf/sqlite-reader`, which opens the connection. The package exports it, so a catch with `instanceof` works with either package. A host that needs its own error translates the error of the package at its boundary, and keeps the error of the package as `cause`. [ADR 0003](./docs/adr/0003-the-package-throws-its-own-errors.md) tells why.
+- The package throws its own `UnavailableError`. It is the class of `@zukhruf/sqlite-open`, which opens the connection. The package exports it, so a catch with `instanceof` works with either package. A host that needs its own error translates the error of the package at its boundary, and keeps the error of the package as `cause`. [ADR 0003](./docs/adr/0003-the-package-throws-its-own-errors.md) tells why.
 
 ## An owner that lets no reader in
 
@@ -102,13 +101,13 @@ console.log(`The owner last wrote at ${written.toISOString()}`);
 
 ## Errors
 
-| Error                        | When                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `UnavailableError`           | SQLite cannot open the file: `SQLITE_CANTOPEN` (14), for a missing file or a file that the system denies, a privacy denial too. `new DataVersion` throws it, and `current` throws it when it cannot open a replaced file. `cause` is the error of SQLite. `ofExclusiveOwner` throws it when the file is missing (`ENOENT`) or a folder denies this process (`EACCES`); then `cause` is the error of the file system. |
-| The error of SQLite          | All other failures.                                                                                                                                                                                                                                                                                                                                                                                                  |
-| The error of the file system | `current` cannot read the status of the path, for a cause other than a missing path or a folder that denies this process.                                                                                                                                                                                                                                                                                            |
+| Error                        | When                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `UnavailableError`           | SQLite cannot open the file: `SQLITE_CANTOPEN` (14), for a missing file or a file that the system denies, a privacy denial too. `new DataVersion` throws it, and `current` throws it when it cannot open a replaced file. `cause` is the error of SQLite. `ofExclusiveOwner` throws it when the file is missing (`ENOENT`, `ENOTDIR`) or the system denies this process (`EACCES`, `EPERM`); then `cause` is the error of the file system. |
+| The error of SQLite          | All other failures.                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| The error of the file system | `current` cannot read the status of the path, for a cause other than a missing path or a folder that denies this process.                                                                                                                                                                                                                                                                                                                  |
 
-`UnavailableError` has the `path`. `lastWrite` throws `UnavailableError` when the file is missing (`ENOENT`) or the mode of its folder denies this process (`EACCES`). Then `cause` is the error of the file system. `lastWrite` throws the error of the file system for all other failures.
+`UnavailableError` has the `path`. `lastWrite` throws `UnavailableError` when the file is missing (`ENOENT`, `ENOTDIR`) or the system denies this process (`EACCES`, `EPERM`). Then `cause` is the error of the file system. `lastWrite` throws the error of the file system for all other failures.
 
 ## The same concepts in other systems
 

@@ -16,12 +16,12 @@ npm install @zukhruf/sqlite-drift
 import { mkdtempDisposable } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { DatabaseSync } from 'node:sqlite';
 
 import { Declaration } from '@zukhruf/sqlite-drift';
+import { open } from '@zukhruf/sqlite-open';
 
 await using scratch = await mkdtempDisposable(join(tmpdir(), 'drift-'));
-using database = new DatabaseSync(join(scratch.path, 'app.sqlite'));
+using database = open(join(scratch.path, 'app.sqlite'));
 // An earlier version made the table without failed_at.
 database.exec(`CREATE TABLE failures (directory TEXT PRIMARY KEY, error TEXT NOT NULL);
   INSERT INTO failures VALUES ('/data/notes', 'denied')`);
@@ -49,7 +49,7 @@ fits
 ## A declaration compares the text that SQLite stores
 
 - `new Declaration(statements, { rows, devDatabase })` makes the objects once in the dev database, and keeps the text that SQLite stores for each one. [ADR 0001](./docs/adr/0001-compare-the-text-that-sqlite-stores.md) tells why.
-- The dev database is an empty database in memory. `devDatabase` is an optional function that opens it. When there is no `devDatabase`, the package opens `new DatabaseSync(':memory:')`. See [Extensions and functions](#extensions-and-functions).
+- The dev database is an empty database in memory. `devDatabase` is an optional function that opens it. When there is no `devDatabase`, the package opens `open(':memory:')` of `@zukhruf/sqlite-open`. See [Extensions and functions](#extensions-and-functions).
 - Each string in `statements` holds one CREATE statement, and the statement makes one declared object. A closing semicolon and comments after the statement are permitted.
 - A statement can also add owned objects to `sqlite_schema`: the shadow tables of a virtual table, `sqlite_sequence` for `AUTOINCREMENT`, and the index of a `UNIQUE` column. SQLite makes and drops an owned object with its declared object. `drift` and `apply` examine only the declared objects. [ADR 0004](./docs/adr/0004-a-statement-owns-the-objects-its-create-makes.md) tells why.
 - `rows` is `'replace'` or `'keep'`. It tells `apply` what to do with the rows of a stale table. It has no default, so no caller loses rows because it forgot an option.
@@ -86,12 +86,12 @@ With `rows: 'keep'`, `apply` keeps the rows of each stale table. It replaces a s
 import { mkdtempDisposable } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { DatabaseSync } from 'node:sqlite';
 
 import { Declaration } from '@zukhruf/sqlite-drift';
+import { open } from '@zukhruf/sqlite-open';
 
 await using scratch = await mkdtempDisposable(join(tmpdir(), 'drift-'));
-using database = new DatabaseSync(join(scratch.path, 'app.sqlite'));
+using database = open(join(scratch.path, 'app.sqlite'));
 // An earlier version made runs without status. Cases refer to runs.
 database.exec(`CREATE TABLE runs (id INTEGER PRIMARY KEY, name TEXT NOT NULL);
   CREATE TABLE cases (run INTEGER NOT NULL REFERENCES runs (id) ON DELETE CASCADE);
@@ -137,24 +137,25 @@ SQLite keeps virtual-table modules, functions of the application and collations 
 import { mkdtempDisposable } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { DatabaseSync } from 'node:sqlite';
+import type { DatabaseSync } from 'node:sqlite';
 
 import * as sqliteVec from 'sqlite-vec';
 
 import { Declaration } from '@zukhruf/sqlite-drift';
+import { open } from '@zukhruf/sqlite-open';
 
-function open(path: string): DatabaseSync {
-  const database = new DatabaseSync(path, { allowExtension: true });
+function openWithVectors(path: string): DatabaseSync {
+  const database = open(path, { allowExtension: true });
   database.loadExtension(sqliteVec.getLoadablePath());
   return database;
 }
 
 await using scratch = await mkdtempDisposable(join(tmpdir(), 'drift-'));
-using database = open(join(scratch.path, 'app.sqlite'));
+using database = openWithVectors(join(scratch.path, 'app.sqlite'));
 
 const vectors = new Declaration(
   ['CREATE VIRTUAL TABLE vectors USING vec0(embedding float[4])'],
-  { rows: 'replace', devDatabase: () => open(':memory:') },
+  { rows: 'replace', devDatabase: () => openWithVectors(':memory:') },
 );
 console.log(vectors.drift(database));
 vectors.apply(database);

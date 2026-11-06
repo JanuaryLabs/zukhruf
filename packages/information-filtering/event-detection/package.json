@@ -49,6 +49,7 @@
     "@ai-sdk/openai-compatible": "3.0.79",
     "@mozilla/readability": "0.6.0",
     "@zukhruf/embeddings": "^0.6.16",
+    "@zukhruf/sqlite-open": "^0.6.16",
     "ai": "^7.0.154",
     "linkedom": "0.18.14",
     "ml-matrix": "6.15.1",

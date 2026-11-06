@@ -50,7 +50,8 @@
     "access": "public"
   },
   "dependencies": {
-    "@zukhruf/async": "^0.6.16"
+    "@zukhruf/async": "^0.6.16",
+    "@zukhruf/sqlite-open": "^0.6.16"
   },
   "devDependencies": {
     "@zukhruf/testing": "^0.6.16"
