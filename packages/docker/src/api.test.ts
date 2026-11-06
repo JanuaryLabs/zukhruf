@@ -14,6 +14,11 @@ const TSCONFIG = fileURLToPath(
 );
 const INDEX = fileURLToPath(new URL('index.ts', import.meta.url));
 const ENGINE_API = fileURLToPath(new URL('engine-api.ts', import.meta.url));
+// The README names the WallClock of @zukhruf/async, which the block cannot
+// import: it lies in a namespace.
+const ASYNC = fileURLToPath(
+  new URL('../../async/src/index.ts', import.meta.url),
+);
 
 /** The type arguments of each generic declaration of the README, for its check. */
 const TYPE_ARGUMENTS: Record<string, string> = { Created: "<'key', 1, 2>" };
@@ -68,6 +73,7 @@ test('each declaration of the README API block is exported from the package, and
     [
       `import type * as Package from ${JSON.stringify(INDEX)};`,
       `import type * as EngineApi from ${JSON.stringify(ENGINE_API)};`,
+      `import type { WallClock } from ${JSON.stringify(ASYNC)};`,
       `type EngineApiOfPackage = Package.EngineApi.ContainerCreateRequest;`,
       'type Expect<T extends true> = T;',
       // An `any` from a broken export would pass each check, so it fails here.
