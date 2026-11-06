@@ -24,3 +24,10 @@ A JSON number with `.`, `e` or `E`, or the token `NaN`, `Infinity` or `-Infinity
 
 **White space**:
 A character for which Python's `str.isspace()` is true.
+
+**JSON.parse value**:
+The value that `JSON.parse` gives for a JSON text: an object for each dict and the nearest number for each int. Code that reads only plain JavaScript, such as a JSON Schema validator, needs it.
+_Avoid_: plain JSON (JSON is text)
+
+**Edge**:
+The place where code gives a value to code that reads only plain JavaScript. A value stays `JsonData` up to an edge.

@@ -32,9 +32,6 @@ const oracle = (cases: readonly unknown[], least: number) => {
 const loads = expected.loads.filter((load) => 'value' in load);
 const refusals = expected.loads.filter((load) => 'error' in load);
 
-const isList = (value: JsonData): value is readonly JsonData[] =>
-  Array.isArray(value);
-
 // A value with its Python type written out, as generate.py writes it.
 const tagged = (value: JsonData): unknown => {
   if (value === null || typeof value === 'boolean')
@@ -46,7 +43,7 @@ const tagged = (value: JsonData): unknown => {
       type: 'str',
       code_points: [...value].map((char) => char.codePointAt(0)),
     };
-  if (isList(value)) return { type: 'list', items: value.map(tagged) };
+  if (Array.isArray(value)) return { type: 'list', items: value.map(tagged) };
   return {
     type: 'dict',
     items: [...value].map(([key, item]) => [key, tagged(item)]),

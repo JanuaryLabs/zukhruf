@@ -1,10 +1,9 @@
 import { type Schema, Validator } from '@cfworker/json-schema';
 import traverse from 'json-schema-traverse';
 
-import type { JsonData } from '@zukhruf/python';
+import { type JsonData, toJsonParseValue } from '@zukhruf/python';
 
 import { draft07 } from './draft-07-schema.ts';
-import { isDict, isList } from './json-value.ts';
 
 // The JSON Schema of an expected record, read as jsonschema's Draft7Validator
 // reads it.
@@ -34,8 +33,9 @@ export class Draft7Schema {
 
   constructor(value: JsonData) {
     this.value = value;
-    const json = Draft7Schema.#toJson(value);
-    this.valid = isDict(value) && Draft7Schema.#metaSchema.validate(json).valid;
+    const json = toJsonParseValue(value);
+    this.valid =
+      value instanceof Map && Draft7Schema.#metaSchema.validate(json).valid;
     const schema = Draft7Schema.#asDraft7(value);
     this.#validator =
       this.valid && Draft7Schema.#isSchema(schema)
@@ -43,13 +43,15 @@ export class Draft7Schema {
         : undefined;
   }
 
-  // validates of evaluate.py, which it calls only for a valid schema.
+  // validates of evaluate.py, which it calls only for a valid schema. The
+  // validator reads the JSON.parse value, and it compares 1 and 1.0 as
+  // jsonschema does: an integral float is an integer.
   validates(candidate: JsonData): boolean {
     if (this.#validator === undefined)
       throw new Error(
         'evaluate.py validates a record only against a valid schema',
       );
-    return this.#validator.validate(Draft7Schema.#toJson(candidate)).valid;
+    return this.#validator.validate(toJsonParseValue(candidate)).valid;
   }
 
   static #isSchema(value: unknown): value is Schema {
@@ -63,8 +65,8 @@ export class Draft7Schema {
   // visits each schema of a Draft 7 schema, and its pre callback runs before it
   // steps into a keyword, so a deleted keyword is not visited.
   static #asDraft7(schema: JsonData): unknown {
-    // #toJson builds new objects, so the walk deletes from a copy.
-    const copy = Draft7Schema.#toJson(schema);
+    // toJsonParseValue builds new objects, so the walk deletes from a copy.
+    const copy = toJsonParseValue(schema);
     if (Draft7Schema.#isSchema(copy))
       traverse(copy, {
         cb: {
@@ -75,18 +77,5 @@ export class Draft7Schema {
         },
       });
     return copy;
-  }
-
-  // The plain JSON value of a Python value, for the validator: a dict becomes
-  // an object and an int a number. The validator compares 1 and 1.0 as
-  // jsonschema does (an integral float is an integer).
-  static #toJson(value: JsonData): unknown {
-    if (typeof value === 'bigint') return Number(value);
-    if (isList(value)) return value.map((item) => Draft7Schema.#toJson(item));
-    if (isDict(value))
-      return Object.fromEntries(
-        [...value].map(([key, item]) => [key, Draft7Schema.#toJson(item)]),
-      );
-    return value;
   }
 }

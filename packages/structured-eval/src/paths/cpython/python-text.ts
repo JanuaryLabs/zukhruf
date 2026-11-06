@@ -1,7 +1,5 @@
 import { type JsonData, floatRepr } from '@zukhruf/python';
 
-import { isDict, isList } from '../json-value.ts';
-
 // UTF-16 code units order the strings that have no character above U+FFFF
 // as code points do.
 const SURROGATE = /[\u{10000}-\u{10FFFF}]/u;
@@ -59,8 +57,8 @@ export function canonicalJson(value: JsonData): string {
   if (typeof value === 'bigint') return value.toString();
   if (typeof value === 'number') return jsonFloat(value);
   if (typeof value === 'string') return jsonString(value);
-  if (isList(value)) return `[${value.map(canonicalJson).join(',')}]`;
-  if (isDict(value))
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
+  if (value instanceof Map)
     return `{${[...value]
       .toSorted(([left], [right]) => compareStrings(left, right))
       .map(([key, item]) => `${jsonString(key)}:${canonicalJson(item)}`)

@@ -1,7 +1,7 @@
 import type { JsonData } from '@zukhruf/python';
 
 import type { JsonPair } from '../json-pair.ts';
-import { dictGet, isDict, isList } from '../json-value.ts';
+import { dictGet } from '../json-value.ts';
 import { LeafMean } from './leaf-mean.ts';
 
 // The stated leaves whose type is the type of their path in the schema,
@@ -54,17 +54,17 @@ export class LeafTypePrecision extends LeafMean {
     schema: JsonData,
     path: string,
   ): string | undefined {
-    if (!isDict(schema)) return undefined;
+    if (!(schema instanceof Map)) return undefined;
     let current: JsonData | undefined = schema;
     for (const part of LeafTypePrecision.#splitPath(path)) {
-      if (!isDict(current))
+      if (!(current instanceof Map))
         throw new TypeError(
           `'${typeof current}' object has no attribute 'get'`,
         );
       if (typeof part === 'string') {
         if (current.get('type') !== 'object') return undefined;
         const properties = dictGet(current, 'properties', new Map());
-        if (!isDict(properties))
+        if (!(properties instanceof Map))
           throw new TypeError(
             `'${typeof properties}' object has no attribute 'get'`,
           );
@@ -75,7 +75,7 @@ export class LeafTypePrecision extends LeafMean {
       }
       if (current === undefined || current === null) return undefined;
     }
-    return isDict(current)
+    return current instanceof Map
       ? LeafTypePrecision.#normalizeSchemaType(current.get('type'))
       : undefined;
   }
@@ -112,13 +112,13 @@ export class LeafTypePrecision extends LeafMean {
   // type stays a list, which Python cannot look up in a set: it raises.
   static #normalizeSchemaType(type: JsonData | undefined): string | undefined {
     let normalized = type;
-    if (isList(normalized)) {
+    if (Array.isArray(normalized)) {
       const nonNull = normalized.filter((item) => item !== 'null');
       if (nonNull.length === 1) normalized = nonNull[0];
     }
-    if (isList(normalized) || isDict(normalized))
+    if (Array.isArray(normalized) || normalized instanceof Map)
       throw new TypeError(
-        `unhashable type: '${isList(normalized) ? 'list' : 'dict'}'`,
+        `unhashable type: '${Array.isArray(normalized) ? 'list' : 'dict'}'`,
       );
     return typeof normalized === 'string' &&
       LeafTypePrecision.#schemaTypes.has(normalized)
@@ -133,7 +133,7 @@ export class LeafTypePrecision extends LeafMean {
     if (typeof value === 'bigint') return 'integer';
     if (typeof value === 'number') return 'number';
     if (typeof value === 'string') return 'string';
-    if (isList(value)) return 'array';
+    if (Array.isArray(value)) return 'array';
     return 'object';
   }
 }

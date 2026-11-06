@@ -1,14 +1,5 @@
 import { type JsonData, loadsJson } from '@zukhruf/python';
 
-export type JsonObject = ReadonlyMap<string, JsonData>;
-
-export const isDict = (value: JsonData | undefined): value is JsonObject =>
-  value instanceof Map;
-
-export const isList = (
-  value: JsonData | undefined,
-): value is readonly JsonData[] => Array.isArray(value);
-
 // A value read without loss: JsonValue.parse reads JSON text as json.loads
 // does. A scorer reads any other stated value as a JavaScript value.
 export class JsonValue {
@@ -41,7 +32,7 @@ export function statedValue(stated: unknown): unknown {
 // dict.get(key, default) of Python: a key whose value is None gives None, and
 // only a missing key gives the default.
 export function dictGet(
-  dict: JsonObject,
+  dict: ReadonlyMap<string, JsonData>,
   key: string,
   fallback: JsonData,
 ): JsonData {

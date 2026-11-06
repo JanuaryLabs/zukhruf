@@ -1,5 +1,7 @@
 import { existsSync, readFileSync, statSync } from 'node:fs';
 
+import { type JsonData, loadsJson, toJsonParseValue } from '@zukhruf/python';
+
 import { RetrievalEvaluator } from '../evaluators/retrieval-evaluator.ts';
 import { makeScoreDict } from '../evaluators/retrieval-metrics.ts';
 import {
@@ -12,7 +14,6 @@ import {
   SearchCrossEncoderWrapper,
   SearchEncoderWrapper,
 } from '../models/search-wrappers.ts';
-import { type OrderedJson, jsonLoadsInOrder } from '../results/json.ts';
 import type { TimingStack } from '../timing.ts';
 import type {
   CorpusDatasetType,
@@ -50,7 +51,7 @@ export type PredictionsFile = {
 // json.load of a predictions file. A file of another shape throws.
 export function readPredictionsFile(path: string): PredictionsFile {
   const file = entriesOf(
-    jsonLoadsInOrder(readFileSync(path, 'utf8')),
+    loadsJson(readFileSync(path, 'utf8')),
     path,
     (value) => value,
   );
@@ -59,7 +60,7 @@ export function readPredictionsFile(path: string): PredictionsFile {
       entriesOf(
         file.get('mteb_model_meta'),
         `${path}: mteb_model_meta`,
-        plainScore,
+        toJsonParseValue,
       ),
     ),
     subsets: new Map(
@@ -80,9 +81,9 @@ export function readPredictionsFile(path: string): PredictionsFile {
 // The items of a JSON object, each value through each. Another value
 // throws.
 function entriesOf<T>(
-  value: OrderedJson | undefined,
+  value: JsonData | undefined,
   where: string,
-  each: (value: OrderedJson, where: string) => T,
+  each: (value: JsonData, where: string) => T,
 ): Map<string, T> {
   if (!(value instanceof Map))
     throw new TypeError(`${where} is not an object.`);
@@ -91,19 +92,11 @@ function entriesOf<T>(
   );
 }
 
-function numberOf(value: OrderedJson, where: string): number {
-  if (typeof value !== 'number')
+function numberOf(value: JsonData, where: string): number {
+  const number = toJsonParseValue(value);
+  if (typeof number !== 'number')
     throw new TypeError(`${where} is not a number.`);
-  return value;
-}
-
-// A JSON value with plain objects for its Maps.
-function plainScore(value: OrderedJson, where: string): Score {
-  if (value instanceof Map)
-    return Object.fromEntries(entriesOf(value, where, plainScore));
-  if (Array.isArray(value))
-    return value.map((item, index) => plainScore(item, `${where}[${index}]`));
-  return value;
+  return number;
 }
 
 // MTEB evaluates only the queries that have qrels. A query whose qrels all

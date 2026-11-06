@@ -2,7 +2,7 @@ import type { JsonData } from '@zukhruf/python';
 
 import { Ratio } from '../../aggregation/ratio.ts';
 import type { JsonPair } from '../json-pair.ts';
-import { dictGet, isDict, isList } from '../json-value.ts';
+import { dictGet } from '../json-value.ts';
 import type { Metric } from '../metric.ts';
 
 // The required paths of the schema that the stated value has
@@ -26,7 +26,7 @@ export class RequiredKeyRecall implements Metric {
   // required_paths of evaluate.py: the required keys of each object schema,
   // through `properties` and `items` only.
   static #requiredPaths(schema: JsonData, prefix: string): string[] {
-    if (!isDict(schema)) return [];
+    if (!(schema instanceof Map)) return [];
     const type = schema.get('type');
     const results: string[] = [];
     if (type === 'object') {
@@ -34,9 +34,10 @@ export class RequiredKeyRecall implements Metric {
       for (const key of RequiredKeyRecall.#iterate(
         dictGet(schema, 'required', []),
       )) {
-        const child = isDict(properties)
-          ? dictGet(properties, String(key), new Map())
-          : new Map();
+        const child =
+          properties instanceof Map
+            ? dictGet(properties, String(key), new Map())
+            : new Map();
         const path = prefix ? `${prefix}.${String(key)}` : String(key);
         results.push(path, ...RequiredKeyRecall.#requiredPaths(child, path));
       }
@@ -54,8 +55,8 @@ export class RequiredKeyRecall implements Metric {
   // A Python for loop over a list, the keys of a dict, or the characters of a
   // str.
   static #iterate(value: JsonData): readonly JsonData[] {
-    if (isList(value)) return value;
-    if (isDict(value)) return [...value.keys()];
+    if (Array.isArray(value)) return value;
+    if (value instanceof Map) return [...value.keys()];
     if (typeof value === 'string') return [...value];
     return [];
   }
@@ -67,14 +68,14 @@ export class RequiredKeyRecall implements Metric {
   ): Set<string> {
     const paths = new Set<string>();
     if (prefix) paths.add(prefix);
-    if (isDict(value))
+    if (value instanceof Map)
       for (const [key, child] of value)
         for (const path of RequiredKeyRecall.#presentPaths(
           child,
           prefix ? `${prefix}.${key}` : key,
         ))
           paths.add(path);
-    else if (isList(value))
+    else if (Array.isArray(value))
       for (const [index, child] of value.entries())
         for (const path of RequiredKeyRecall.#presentPaths(
           child,

@@ -1,7 +1,7 @@
 import type { JsonData } from '@zukhruf/python';
 
 import { type JsonCase, fromJavaScript } from './json-case.ts';
-import { JsonValue, isDict, isList } from './json-value.ts';
+import { JsonValue } from './json-value.ts';
 
 // A stated value and its case, as evaluate_record of SOB's evaluate.py sees
 // them before it computes its metrics: the parsed candidate, the schema, and
@@ -20,7 +20,7 @@ export class JsonPair {
   constructor(stated: unknown, testCase: JsonCase) {
     const value = JsonPair.#dataOf(stated);
     this.testCase = testCase;
-    this.parsed = isDict(value) || isList(value);
+    this.parsed = value instanceof Map || Array.isArray(value);
     this.candidate = this.parsed ? value : null;
     this.expectedLeaves = JsonPair.#leaves(testCase.expected, '');
     this.statedLeaves = this.parsed
@@ -63,7 +63,7 @@ export class JsonPair {
     prefix: string,
   ): Map<string, JsonData> {
     const leaves = new Map<string, JsonData>();
-    if (isDict(value)) {
+    if (value instanceof Map) {
       for (const [key, child] of value)
         for (const [path, leaf] of JsonPair.#leaves(
           child,
@@ -72,7 +72,7 @@ export class JsonPair {
           leaves.set(path, leaf);
       return leaves;
     }
-    if (isList(value)) {
+    if (Array.isArray(value)) {
       for (const [index, child] of value.entries())
         for (const [path, leaf] of JsonPair.#leaves(
           child,

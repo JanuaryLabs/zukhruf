@@ -156,6 +156,69 @@ test('evaluate refuses a predictions file whose subset is not an object, as MTEB
   );
 });
 
+test('evaluate adds its splits to a predictions file that holds int scores under integer-like ids, and writes the ids in their order and each int as Python writes it', async () => {
+  await using folder = await new TemporaryFiles().directory(
+    'mteb-predictions-',
+  );
+  const earlier =
+    '{"mteb_model_meta": {"model_name": "mteb/baseline-bm25s", "revision": "0_3_0"}, "default": {"train": {"q1": {"10": 1, "2": 18446744073709551616}}';
+  writeFileSync(join(folder.path, FILE_NAME), `${earlier}}}`);
+
+  await evaluate(bm25S.loadModel(), new KeyOrderTask(), {
+    cache: null,
+    predictionFolder: folder.path,
+    clock: globalThis,
+  });
+
+  const text = readFileSync(join(folder.path, FILE_NAME), 'utf8');
+  assert.equal(
+    text.slice(0, earlier.length + ', "test": '.length),
+    `${earlier}, "test": `,
+  );
+});
+
+test('readPredictionsFile reads an int score as the number that json.load gives', async () => {
+  await using folder = await new TemporaryFiles().directory(
+    'mteb-predictions-',
+  );
+  writeFileSync(
+    join(folder.path, FILE_NAME),
+    '{"mteb_model_meta": {"model_name": "mteb/baseline-bm25s", "revision": "0_3_0"}, "default": {"test": {"q1": {"d1": 1, "d2": 18446744073709551616, "d3": 0.5}}}}',
+  );
+
+  const file = readPredictionsFile(join(folder.path, FILE_NAME));
+
+  assert.deepEqual(
+    [...file.subsets].map(([subset, splits]) => [
+      subset,
+      [...splits].map(([split, queries]) => [
+        split,
+        [...queries].map(([query, scores]) => [query, [...scores]]),
+      ]),
+    ]),
+    [
+      [
+        'default',
+        [
+          [
+            'test',
+            [
+              [
+                'q1',
+                [
+                  ['d1', 1],
+                  ['d2', 2 ** 64],
+                  ['d3', 0.5],
+                ],
+              ],
+            ],
+          ],
+        ],
+      ],
+    ],
+  );
+});
+
 test('a predictions file with a trailing comma is refused, as json.load raises', async () => {
   await using folder = await new TemporaryFiles().directory(
     'mteb-predictions-',

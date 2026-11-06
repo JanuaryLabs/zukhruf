@@ -1,6 +1,8 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
+import { loadsJson } from '@zukhruf/python';
+
 import {
   type Dataset,
   type DatasetDict,
@@ -20,7 +22,7 @@ import {
   isEncoder,
   isSearch,
 } from '../models/models-protocols.ts';
-import { jsonLoadsInOrder, pythonJsonDumps } from '../results/json.ts';
+import { pythonJsonDumps } from '../results/json.ts';
 import { type TimingStack, monotonic } from '../timing.ts';
 import type { EncodeKwargs } from '../types/encoder-io.ts';
 import type { HFSubset, Score } from '../types/result.ts';
@@ -248,7 +250,7 @@ export abstract class AbsTask<SplitData = unknown> {
   ): void {
     const path = this.predictionsPath(predictionFolder);
     const existing: unknown = existsSync(path)
-      ? jsonLoadsInOrder(readFileSync(path, 'utf8'))
+      ? loadsJson(readFileSync(path, 'utf8'))
       : new Map([
           [
             'mteb_model_meta',

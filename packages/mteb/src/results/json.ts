@@ -1,4 +1,4 @@
-import { type JsonData, floatRepr, loadsJson } from '@zukhruf/python';
+import { floatRepr, loadsJson, toJsonParseValue } from '@zukhruf/python';
 
 import { isPlainObject } from '../dependencies/python.ts';
 
@@ -35,6 +35,7 @@ function pythonValue(
   if (value === null) return 'null';
   if (typeof value === 'boolean') return value ? 'true' : 'false';
   if (typeof value === 'number') return pythonNumber(value);
+  if (typeof value === 'bigint') return String(value);
   if (typeof value === 'string') return pythonString(value);
   const items = itemsOf(value);
   if (items === null) {
@@ -124,50 +125,8 @@ export function pydanticJsonDumps(value: unknown): string {
 }
 
 // json.loads: JSON with the NaN, Infinity and -Infinity tokens of Python's
-// json module, each dict a plain object.
+// json module, as plain JavaScript for the classes of this package: each dict
+// an object and each int a number.
 export function pythonJsonLoads(text: string): unknown {
-  return plainOf(jsonLoadsInOrder(text));
-}
-
-// A JSON value whose objects are Maps, as json.load gives dicts: the keys
-// keep the order of the text. JSON.parse puts integer-like keys ("10", "2")
-// first, in ascending order.
-export type OrderedJson =
-  null | boolean | number | string | OrderedJson[] | Map<string, OrderedJson>;
-
-// json.load, with each object as a Map in the order of its keys, and the
-// NaN, Infinity and -Infinity tokens of Python's json module. A text that is
-// not JSON throws a SyntaxError: comments and trailing commas too. An int of
-// more than 4300 digits throws a RangeError, as Python raises a ValueError.
-export function jsonLoadsInOrder(text: string): OrderedJson {
-  return orderedOf(loadsJson(text));
-}
-
-// Each int of json.loads as a number, as this module reads every number: an
-// int beyond 2^53 becomes the nearest float, as JSON.parse reads it.
-function orderedOf(value: JsonData): OrderedJson {
-  if (typeof value === 'bigint') return Number(value);
-  if (isList(value)) return value.map(orderedOf);
-  if (isDict(value))
-    return new Map([...value].map(([key, item]) => [key, orderedOf(item)]));
-  return value;
-}
-
-// isinstance(value, dict) and isinstance(value, list) for a json.loads value.
-// Array.isArray and instanceof Map leave a readonly array and a ReadonlyMap in
-// the union, so the checks narrow through these guards. Copied from
-// @zukhruf/structured-eval (docs/copied-code.md).
-const isDict = (value: JsonData): value is ReadonlyMap<string, JsonData> =>
-  value instanceof Map;
-
-const isList = (value: JsonData): value is readonly JsonData[] =>
-  Array.isArray(value);
-
-function plainOf(value: OrderedJson): unknown {
-  if (Array.isArray(value)) return value.map(plainOf);
-  if (value instanceof Map)
-    return Object.fromEntries(
-      [...value].map(([key, item]) => [key, plainOf(item)]),
-    );
-  return value;
+  return toJsonParseValue(loadsJson(text));
 }

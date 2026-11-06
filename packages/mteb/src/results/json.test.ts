@@ -1,12 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import {
-  jsonLoadsInOrder,
-  pydanticJsonDumps,
-  pythonJsonDumps,
-  pythonJsonLoads,
-} from './json.ts';
+import { pydanticJsonDumps, pythonJsonDumps, pythonJsonLoads } from './json.ts';
 
 // Python 3.12 printed these with json.dumps(value, indent=2) and repr().
 test('pythonJsonDumps indents like json.dump, keeps empty containers on one line and writes NaN as a token', () => {
@@ -62,13 +57,9 @@ for (const text of [
   '{-Infinity: 1}',
   '{"a": {NaN: 1}}',
 ])
-  for (const [name, load] of [
-    ['pythonJsonLoads', pythonJsonLoads],
-    ['jsonLoadsInOrder', jsonLoadsInOrder],
-  ] as const)
-    test(`${name} refuses ${text}, a token in the place of a key`, () => {
-      assert.throws(() => load(text), { name: 'SyntaxError' });
-    });
+  test(`pythonJsonLoads refuses ${text}, a token in the place of a key`, () => {
+    assert.throws(() => pythonJsonLoads(text), { name: 'SyntaxError' });
+  });
 
 test('pydanticJsonDumps writes NaN as null, a date as an ISO string and keeps characters outside ASCII', () => {
   const value = {
