@@ -372,6 +372,96 @@ describe('ChangeWatcher', () => {
   );
 
   test(
+    'a read that throws at once fails the gauge and every group it is in, with the same error and one read in the check',
+    { timeout: 2_000 },
+    async () => {
+      // Arrange
+      const failure = new Error('database is locked');
+      class Locked extends Gauge<number> {
+        reads = 0;
+        protected read(): Promise<number> {
+          this.reads++;
+          throw failure;
+        }
+      }
+      const locked = new Locked();
+      const group = new Group([locked]);
+      const checks = new ChangeWatcher([locked, group], {
+        interval: 5,
+        timeout: 5,
+        clock: globalThis,
+      }).watch(new AbortController().signal);
+
+      try {
+        // Act
+        const outcomes = (await checks.next()).value ?? undefined;
+
+        // Assert
+        assert.equal(locked.reads, 1, 'Both callers must share one read');
+        assert.deepEqual(outcomes?.get(locked), {
+          state: 'failed',
+          error: failure,
+        });
+        assert.deepEqual(
+          outcomes?.get(group),
+          { state: 'failed', error: failure },
+          'The group must fail with the error of its member, not hang or time out',
+        );
+      } finally {
+        await checks.return();
+      }
+    },
+  );
+
+  test(
+    'a caller that asks for a gauge after its read failed in the same check gets the same error, with no second read',
+    { timeout: 2_000 },
+    async () => {
+      // Arrange
+      const failure = new Error('database is locked');
+      class Locked extends Gauge<number> {
+        reads = 0;
+        protected read(): Promise<number> {
+          this.reads++;
+          throw failure;
+        }
+      }
+      const locked = new Locked();
+      // Asks for the gauge again only after the first read has failed.
+      class Retry extends Gauge<number> {
+        protected async read(check: Check) {
+          await locked.value(check).catch(() => {});
+          return locked.value(check);
+        }
+      }
+      const retry = new Retry();
+      const checks = new ChangeWatcher([locked, retry], {
+        interval: 5,
+        timeout: 5,
+        clock: globalThis,
+      }).watch(new AbortController().signal);
+
+      try {
+        // Act
+        const outcomes = (await checks.next()).value ?? undefined;
+
+        // Assert
+        assert.equal(
+          locked.reads,
+          1,
+          'A failed read must not run again in its check',
+        );
+        assert.deepEqual(outcomes?.get(retry), {
+          state: 'failed',
+          error: failure,
+        });
+      } finally {
+        await checks.return();
+      }
+    },
+  );
+
+  test(
     'an abort during the wait ends the iteration with no error, stops the timer, and no read follows',
     { timeout: 2_000 },
     async (t) => {
