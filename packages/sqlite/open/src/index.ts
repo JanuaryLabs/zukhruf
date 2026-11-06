@@ -4,4 +4,4 @@ export { PersistentWriteAheadLog } from './persistent-write-ahead-log.ts';
 export { RollbackJournal } from './rollback-journal.ts';
 export { UnavailableError } from './unavailable-error.ts';
 export { UnchangedJournal } from './unchanged-journal.ts';
-export { WriteAheadLog } from './write-ahead-log.ts';
+export { type PageSize, WriteAheadLog } from './write-ahead-log.ts';

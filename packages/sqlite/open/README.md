@@ -89,6 +89,8 @@ Each journal is a strategy object: the caller gives an instance, for example `op
 
 The size limit keeps a write-ahead log small after a large commit. Without it, the `-wal` file of a 20 MB commit stays 20 MB.
 
+`WriteAheadLog` and `PersistentWriteAheadLog` take an optional page size, for example `new WriteAheadLog({ pageSize: 32768 })`. SQLite sets the page size of a file only before its first write, and never in a write-ahead log. The write-ahead log step is that first write, so the journal sets the page size just before it. An existing file keeps its own page size.
+
 ## Errors
 
 | Error               | When                                                                                                                                                                                                                                                                                                                                                                                                    |

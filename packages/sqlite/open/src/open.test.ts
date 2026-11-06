@@ -578,3 +578,38 @@ test('the types refuse a journal for a reader and the option open, and take the 
   assert.equal(illegal.length, 2);
   for (const make of legal) make().close();
 });
+
+for (const [name, journal] of [
+  ['WriteAheadLog', () => new WriteAheadLog({ pageSize: 32768 })],
+  [
+    'PersistentWriteAheadLog',
+    () => new PersistentWriteAheadLog({ pageSize: 32768 }),
+  ],
+] as const) {
+  test(`${name} with a page size gives a new file that page size, in a write-ahead log`, async () => {
+    await using dir = await new TemporaryFiles().directory('open-');
+
+    using owner = open(join(dir.path, 'vectors.sqlite'), {
+      journal: journal(),
+    });
+
+    assert.equal(owner.prepare('PRAGMA page_size').get()?.page_size, 32768);
+    assert.equal(
+      owner.prepare('PRAGMA journal_mode').get()?.journal_mode,
+      'wal',
+    );
+  });
+}
+
+test('a page size does not change an existing write-ahead log, which keeps its own page size', async () => {
+  await using dir = await new TemporaryFiles().directory('open-');
+  const path = join(dir.path, 'vectors.sqlite');
+  {
+    using first = open(path);
+    first.exec('CREATE TABLE vectors (id INTEGER)');
+  }
+
+  using owner = open(path, { journal: new WriteAheadLog({ pageSize: 32768 }) });
+
+  assert.equal(owner.prepare('PRAGMA page_size').get()?.page_size, 4096);
+});

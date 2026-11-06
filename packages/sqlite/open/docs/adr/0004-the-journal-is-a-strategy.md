@@ -14,6 +14,7 @@ A string option such as `journal: 'wal'` makes `open` test the value to know whe
 - `Journal` is an interface with one method, `apply(database)`. `open` calls it on the connection of an owner that has a file. Each journal is its own class, in its own file. This is the Strategy pattern ("Replace Conditional with Polymorphism", Fowler).
 - `WriteAheadLog` is the default. It sets the write-ahead log, checks that SQLite gives `wal`, and sets `journal_size_limit` to 64 MiB (as Rails 8 does), so the `-wal` file does not stay large after a large commit.
 - `PersistentWriteAheadLog` loads the native library, and then does the steps of `WriteAheadLog`.
+- `WriteAheadLog` and `PersistentWriteAheadLog` take an optional page size, and set it just before the WAL step. SQLite sets the page size only before the first write of a file and never in a write-ahead log, and the WAL step is that first write, so no caller can set the page size after `open`. The page size is part of the journal strategy, because the write-ahead log is what fixes it. The vector store of deepagents uses 32768.
 - `RollbackJournal` sets the rollback journal, in SQLite's `DELETE` form, the only one that an owner needs. Its first access rolls back a hot journal.
 - `UnchangedJournal` does nothing. It is a special case for an owner that sets its own journal ("Introduce Special Case", Fowler).
 - The type of the options refuses `journal` together with `readOnly: true`.

@@ -3,7 +3,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import { fileURLToPath } from 'node:url';
 
 import type { Journal } from './journal.ts';
-import { WriteAheadLog } from './write-ahead-log.ts';
+import { type PageSize, WriteAheadLog } from './write-ahead-log.ts';
 
 // The native libraries are at the package root, so this file finds them from
 // src/ in the tests and from dist/ in the package (ADR 0006).
@@ -19,7 +19,11 @@ const suffixes: Partial<Record<NodeJS.Platform, string>> = {
  * closes, for readers that cannot write the folder (ADR 0003).
  */
 export class PersistentWriteAheadLog implements Journal {
-  readonly #log = new WriteAheadLog();
+  readonly #log: WriteAheadLog;
+
+  constructor(options: { readonly pageSize?: PageSize } = {}) {
+    this.#log = new WriteAheadLog(options);
+  }
 
   apply(database: DatabaseSync): void {
     const platform = `${process.platform}-${process.arch}`;
