@@ -74,7 +74,11 @@ const metrics = {
   hier_path_recall: pathRecall,
   path_set_f1: structureCoverage,
   type_precision: typeSafety,
-  required_key_recall: new RequiredKeyRecall(),
+  required_key_recall: new Gated(
+    new RequiredKeyRecall({ whenNoneRequired: 1 }),
+    new ParseSuccess(),
+    new ValidSchema(),
+  ),
   strict_json_em: perfect,
 };
 // CATEGORIES of evaluate.py: the mean of their components for each record.

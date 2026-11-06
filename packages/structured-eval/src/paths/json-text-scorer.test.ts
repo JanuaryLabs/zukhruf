@@ -3,6 +3,7 @@ import { test } from 'node:test';
 
 import {
   CanonicalEquality,
+  Gated,
   JsonCase,
   JsonTextScorer,
   JsonValue,
@@ -49,7 +50,11 @@ test('JsonTextScorer keeps text that is not JSON as an unparsed value: every met
       PathRecall: new PathRecall(),
       PathF1: new PathF1(),
       LeafTypePrecision: new LeafTypePrecision(),
-      RequiredKeyRecall: new RequiredKeyRecall(),
+      RequiredKeyRecall: new Gated(
+        new RequiredKeyRecall({ whenNoneRequired: 1 }),
+        new ParseSuccess(),
+        new ValidSchema(),
+      ),
       CanonicalEquality: new CanonicalEquality(),
     }),
   );
@@ -162,5 +167,61 @@ test('LeafTypePrecision gives 0 when the schema is not valid Draft 7, even where
       (scorecard) => scorecard.ratios.get('type precision')?.value,
     ),
     [0, 1],
+  );
+});
+
+test('RequiredKeyRecall has no gate of its own: it counts the required keys of a schema that is not valid Draft 7, and it gives whenNoneRequired for text that is not JSON; Gated with ParseSuccess and ValidSchema gives 0 for both', () => {
+  const scorer = new MetricScorer({
+    alone: new RequiredKeyRecall({ whenNoneRequired: 1 }),
+    gated: new Gated(
+      new RequiredKeyRecall({ whenNoneRequired: 1 }),
+      new ParseSuccess(),
+      new ValidSchema(),
+    ),
+  });
+  const invalid = JsonCase.from({
+    expected: { a: 'x' },
+    schema: { type: 'object', required: ['a'], minLength: 'not a number' },
+  });
+  const requiresNothing = JsonCase.from({
+    expected: { a: 'x' },
+    schema: { type: 'object' },
+  });
+
+  const scorecards = [
+    scorer.score({ a: 'x' }, invalid),
+    scorer.score('I cannot answer.', requiresNothing),
+  ];
+
+  assert.deepEqual(
+    scorecards.map((scorecard) => [
+      scorecard.ratios.get('alone')?.value,
+      scorecard.ratios.get('gated')?.value,
+    ]),
+    [
+      [1, 0],
+      [1, 0],
+    ],
+  );
+});
+
+test('RequiredKeyRecall gives the whenNoneRequired of its caller for a schema that requires no key', () => {
+  const scorer = new MetricScorer({
+    half: new RequiredKeyRecall({ whenNoneRequired: 0.5 }),
+    quarter: new RequiredKeyRecall({ whenNoneRequired: 0.25 }),
+  });
+  const testCase = JsonCase.from({
+    expected: { a: 'x' },
+    schema: { type: 'object', properties: { a: { type: 'string' } } },
+  });
+
+  const scorecard = scorer.score({ a: 'x' }, testCase);
+
+  assert.deepEqual(
+    [
+      scorecard.ratios.get('half')?.value,
+      scorecard.ratios.get('quarter')?.value,
+    ],
+    [0.5, 0.25],
   );
 });
