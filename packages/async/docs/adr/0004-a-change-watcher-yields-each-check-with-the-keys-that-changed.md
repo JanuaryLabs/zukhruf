@@ -1,5 +1,7 @@
 # A change watcher yields each check with the keys that changed
 
+Superseded in part on 2026-11-06 (#3840) for how a check reads: one read for each check gives the value of each key, in place of one read for each key in the order of the map (step 4 below). See [ADR 0007](./0007-a-check-is-one-read-that-gives-the-value-of-each-key.md). The rest of the decision below stays true.
+
 The sources of elt watch their upstream with 17 hand-written `observe()` loops. Each loop reads one or more versions of a store, for example the `data_version` of a SQLite file. It waits a poll interval, reads the versions again, and compares each version with the version of the previous read. The planned `@zukhruf/sqlite-changefeed` needs the same loop a next time: its `watch({ interval, signal })` polls the data version, and makes a pass only when the data version changed. That is far more than three places, so the Rule of Three of the [zukhruf ADR 0001](../../../../docs/adr/0001-zukhruf-is-a-layered-standard-library.md) moves the loop into one home. This package already has `poll`, and all the consumers can depend on it.
 
 ## The working copies

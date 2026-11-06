@@ -53,11 +53,11 @@ _Avoid_: Timeout (a timeout is a duration), time limit
 _Avoid_: Observer, subscription (a subscription gets notifications; a change watcher reads)
 
 **Check**:
-One round of a change watcher: it reads each value one time, and compares each value with the value of the previous check. A check that finds no change is still a check.
+One round of a change watcher: it calls the read one time, which gives the value of each key, and compares each value with the value of the previous check. A check that finds no change is still a check.
 _Avoid_: Tick (a tick of a timer does not read), poll (a poll stops at a value), probe
 
 **Change**:
-A value that differs (`!==`) from the value of the same key at the previous check. At the first check, each key changed, because there is no previous check.
+A value that differs (`!==`) from the value of the same key at the previous check, or a key that only one of the two checks gave. At the first check, each key changed, because there is no previous check.
 _Avoid_: Update, event, diff
 
 **Stopped event**:

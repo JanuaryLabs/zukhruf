@@ -19,15 +19,10 @@ describe('pollChanges', () => {
       const controller = new AbortController();
       let reads = 0;
       const checks = pollChanges(
-        new Map([
-          [
-            'store',
-            async () => {
-              reads++;
-              return 1;
-            },
-          ],
-        ]),
+        async () => {
+          reads++;
+          return new Map([['store', 1]]);
+        },
         { interval: 60_000, signal: controller.signal, clock },
       );
       await checks.next();
@@ -61,15 +56,10 @@ describe('pollChanges', () => {
       // Act
       const checks = await Array.fromAsync(
         pollChanges(
-          new Map([
-            [
-              'store',
-              async () => {
-                reads++;
-                return 1;
-              },
-            ],
-          ]),
+          async () => {
+            reads++;
+            return new Map([['store', 1]]);
+          },
           { interval: 5, signal, clock },
         ),
       );
@@ -89,7 +79,7 @@ describe('pollChanges', () => {
       const program = `
         import { pollChanges } from ${JSON.stringify(import.meta.resolve('./poll-changes.ts'))};
         const controller = new AbortController();
-        const checks = pollChanges(new Map([['store', async () => 1]]), {
+        const checks = pollChanges(async () => new Map([['store', 1]]), {
           interval: 60_000,
           signal: controller.signal,
           clock: globalThis,
@@ -123,15 +113,10 @@ describe('pollChanges', () => {
       const failure = new Error('database is locked');
       let reads = 0;
       const checks = pollChanges(
-        new Map([
-          [
-            'store',
-            async () => {
-              if (++reads === 2) throw failure;
-              return 1;
-            },
-          ],
-        ]),
+        async () => {
+          if (++reads === 2) throw failure;
+          return new Map([['store', 1]]);
+        },
         { interval: 5, signal: new AbortController().signal, clock },
       );
       await checks.next();
@@ -147,7 +132,7 @@ describe('pollChanges', () => {
   );
 
   test(
-    'the first check reads at once and yields every key, a later check yields only the keys whose value changed, and a check with no change yields an empty set',
+    'the first check reads at once and yields every key, a later check yields only the keys whose value changed, a check with no change yields an empty set, and each check reads one time for all keys',
     { timeout: 2_000 },
     async (t) => {
       // Arrange
@@ -155,20 +140,22 @@ describe('pollChanges', () => {
       const interval = 5;
       const books = [1, 1, 2, 2];
       const notes = ['a', 'b', 'b', 'b'];
-      let bookReads = 0;
-      let noteReads = 0;
+      let reads = 0;
       const checks = pollChanges(
-        new Map<string, () => Promise<unknown>>([
-          ['books', async () => books[bookReads++]],
-          ['notes', async () => notes[noteReads++]],
-        ]),
+        async () => {
+          const check = reads++;
+          return new Map<string, unknown>([
+            ['books', books[check]],
+            ['notes', notes[check]],
+          ]);
+        },
         { interval, signal: new AbortController().signal, clock },
       );
 
       // Act
       const firstCheck = checks.next();
       await t.waitFor(() =>
-        assert.equal(bookReads, 1, 'The first check must read before any wait'),
+        assert.equal(reads, 1, 'The first check must read before any wait'),
       );
       assert.equal(clock.countTimers(), 0);
       const first = await firstCheck;
@@ -190,6 +177,57 @@ describe('pollChanges', () => {
       );
       assert.equal(clock.now, (books.length - 1) * interval);
       assert.deepEqual(later, [['notes'], ['books'], []]);
+      assert.equal(
+        reads,
+        books.length,
+        'One read must give the values of all keys of a check, as one query of a database gives many values',
+      );
+    },
+  );
+
+  test(
+    'a key that a check gives and the previous check did not give, or that the previous check gave and this check does not give, changed',
+    { timeout: 2_000 },
+    async () => {
+      // Arrange
+      const clock = createClock();
+      const interval = 5;
+      const snapshots = [
+        new Map([['books', 1]]),
+        new Map([
+          ['books', 1],
+          ['notes', 1],
+        ]),
+        new Map([['notes', 1]]),
+      ];
+      let reads = 0;
+      const checks = pollChanges(
+        async () => {
+          const snapshot = snapshots[reads++];
+          if (snapshot === undefined)
+            assert.fail('A check read past the last snapshot');
+          return snapshot;
+        },
+        { interval, signal: new AbortController().signal, clock },
+      );
+      await checks.next();
+
+      // Act
+      const later: (readonly string[])[] = [];
+      for (let check = 1; check < snapshots.length; check++) {
+        const next = checks.next();
+        await clock.tickAsync(interval);
+        const result = await next;
+        if (result.done) assert.fail(`The watch ended at check ${check + 1}`);
+        later.push([...result.value]);
+      }
+
+      // Assert
+      assert.deepEqual(
+        later,
+        [['notes'], ['books']],
+        'A table that appears or is dropped between two checks must wake its consumer',
+      );
     },
   );
 
@@ -202,15 +240,10 @@ describe('pollChanges', () => {
       const interval = 200;
       const times: number[] = [];
       const checks = pollChanges(
-        new Map([
-          [
-            'store',
-            async () => {
-              times.push(clock.now);
-              return times.length;
-            },
-          ],
-        ]),
+        async () => {
+          times.push(clock.now);
+          return new Map([['store', times.length]]);
+        },
         { interval, signal: new AbortController().signal, clock },
       );
       await checks.next();
