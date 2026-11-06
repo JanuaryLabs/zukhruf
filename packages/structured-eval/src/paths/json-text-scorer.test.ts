@@ -22,7 +22,7 @@ import {
 test('JsonTextScorer reads JSON text without loss: 1.0 is a float, so it equals 1 but is not canonically equal, while the object {a: 1} is', () => {
   const scorer = new JsonTextScorer(
     new MetricScorer({
-      'leaf exact match': new LeafExactMatch(),
+      'leaf exact match': new LeafExactMatch({ whenNoneExpected: 1 }),
       'canonical equality': new CanonicalEquality(),
     }),
   );
@@ -45,10 +45,14 @@ test('JsonTextScorer keeps text that is not JSON as an unparsed value: every met
       ParseSuccess: new ParseSuccess(),
       ValidSchema: new ValidSchema(),
       SchemaCompliance: new SchemaCompliance(),
-      LeafExactMatch: new LeafExactMatch(),
-      LeafTokenF1: new LeafTokenF1(),
-      PathRecall: new PathRecall(),
-      PathF1: new PathF1(),
+      LeafExactMatch: new LeafExactMatch({ whenNoneExpected: 1 }),
+      LeafTokenF1: new LeafTokenF1({
+        whenNoneExpected: 1,
+        whenNoWords: 1,
+        absentAs: null,
+      }),
+      PathRecall: new PathRecall({ whenNoneExpected: 0 }),
+      PathF1: new PathF1({ whenNoPaths: 0 }),
       LeafTypePrecision: new LeafTypePrecision({ whenNoneStated: 0 }),
       RequiredKeyRecall: new Gated(
         new RequiredKeyRecall({ whenNoneRequired: 1 }),
@@ -99,7 +103,7 @@ test('a JSON case needs its expected value and schema, and a weight that is a nu
 
 test('MetricScorer passes a value only when every metric gives 1, and scores it with the mean of the metrics', () => {
   const scorer = new MetricScorer({
-    'leaf exact match': new LeafExactMatch(),
+    'leaf exact match': new LeafExactMatch({ whenNoneExpected: 1 }),
     'canonical equality': new CanonicalEquality(),
   });
   const testCase = JsonCase.from({
@@ -111,7 +115,7 @@ test('MetricScorer passes a value only when every metric gives 1, and scores it 
   const half = scorer.score({ a: 1, b: 3 }, testCase);
   const mixed = new MetricScorer({
     'parse success': new ParseSuccess(),
-    'leaf exact match': new LeafExactMatch(),
+    'leaf exact match': new LeafExactMatch({ whenNoneExpected: 1 }),
   }).score({ a: 1, b: 3 }, testCase);
 
   assert.equal(equal.passed, true);

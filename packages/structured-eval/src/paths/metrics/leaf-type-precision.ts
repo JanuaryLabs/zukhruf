@@ -12,11 +12,8 @@ import { LeafMean } from './leaf-mean.ts';
 // 302-309), which makes it equal to SchemaCompliance, and its caller composes
 // that with Gated (ADR 0008).
 export class LeafTypePrecision extends LeafMean {
-  protected readonly whenNone: number;
-
   constructor({ whenNoneStated }: { readonly whenNoneStated: number }) {
-    super();
-    this.whenNone = whenNoneStated;
+    super(whenNoneStated);
   }
 
   protected leaves({ statedLeaves }: JsonPair): ReadonlyMap<string, JsonData> {

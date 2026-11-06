@@ -177,28 +177,28 @@ import {
 } from '@zukhruf/structured-eval';
 
 const scorer = new MetricScorer({
-  'leaf exact match': new LeafExactMatch(),
+  'leaf exact match': new LeafExactMatch({ whenNoneExpected: 1 }),
   truth: new Gated(
-    new LeafExactMatch(),
+    new LeafExactMatch({ whenNoneExpected: 1 }),
     new SchemaCompliance(),
-    new AtLeast(new PathF1(), 0.95),
+    new AtLeast(new PathF1({ whenNoPaths: 0 }), 0.95),
   ),
 });
 scorer.score(stated, new JsonCase(expected, schema, 1)).ratios.get('truth'); // Ratio(value, 1)
 ```
 
-| Metric              | Value for one stated value                                                                                                                                                                                                               |
-| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ParseSuccess`      | 1 when it is a JSON object or array                                                                                                                                                                                                      |
-| `ValidSchema`       | 1 when the schema of the case is a valid Draft 7 schema                                                                                                                                                                                  |
-| `SchemaCompliance`  | 1 when it is parsed and agrees with a valid schema                                                                                                                                                                                       |
-| `LeafExactMatch`    | the expected leaves that it has at the same path with an equal value                                                                                                                                                                     |
-| `LeafTokenF1`       | the mean token F1 of each expected leaf and its value at the same path                                                                                                                                                                   |
-| `PathRecall`        | the expected leaf paths that it has                                                                                                                                                                                                      |
-| `PathF1`            | the F1 of the leaf paths that both values have                                                                                                                                                                                           |
-| `LeafTypePrecision` | its leaves whose type the schema allows at their path, by the rules of draft 7; `whenNoneStated` when it has no leaf. It has no gate: a record that the schema accepts gives 1, so it grades a record that the schema refuses (ADR 0008) |
-| `RequiredKeyRecall` | the required paths of the schema that it has; `whenNoneRequired` when the schema requires none. It has no gate: SOB composes `Gated(RequiredKeyRecall, ParseSuccess, ValidSchema)`                                                       |
-| `CanonicalEquality` | 1 when its canonical JSON (sorted keys) equals that of the expected value                                                                                                                                                                |
+| Metric              | Value for one stated value                                                                                                                                                                                                                      |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ParseSuccess`      | 1 when it is a JSON object or array                                                                                                                                                                                                             |
+| `ValidSchema`       | 1 when the schema of the case is a valid Draft 7 schema                                                                                                                                                                                         |
+| `SchemaCompliance`  | 1 when it is parsed and agrees with a valid schema                                                                                                                                                                                              |
+| `LeafExactMatch`    | the expected leaves that it has at the same path with an equal value (Python `==`); `whenNoneExpected` when the expected value has no leaf                                                                                                      |
+| `LeafTokenF1`       | the mean token F1 of each expected leaf and its value at the same path; `whenNoneExpected` when the expected value has no leaf, `whenNoWords` for a leaf where neither value has a word, and a path that it does not have is read as `absentAs` |
+| `PathRecall`        | the expected leaf paths that it has; `whenNoneExpected` when the expected value has no leaf                                                                                                                                                     |
+| `PathF1`            | the F1 of the leaf paths that both values have; `whenNoPaths` when neither value has a leaf                                                                                                                                                     |
+| `LeafTypePrecision` | its leaves whose type the schema allows at their path, by the rules of draft 7; `whenNoneStated` when it has no leaf. It has no gate: a record that the schema accepts gives 1, so it grades a record that the schema refuses (ADR 0008)        |
+| `RequiredKeyRecall` | the required paths of the schema that it has; `whenNoneRequired` when the schema requires none. It has no gate: SOB composes `Gated(RequiredKeyRecall, ParseSuccess, ValidSchema)`                                                              |
+| `CanonicalEquality` | 1 when its canonical JSON (sorted keys) equals that of the expected value                                                                                                                                                                       |
 
 A gate is a metric whose value is 0 or 1. A gate extends `Gate`: it says what it checks, and `Gate` gives 1 or 0. `Gated(metric, ...gates)` multiplies a metric by its gates for each record, `AtLeast(metric, threshold)` is 1 when the metric reaches the threshold, and `MeanOf(...metrics)` is the mean of some metrics for each record.
 
@@ -219,7 +219,7 @@ import {
 import { MetricAssertion } from '@zukhruf/structured-eval/promptfoo';
 
 const validJson = new SchemaCompliance();
-const covered = new AtLeast(new PathF1(), 0.95);
+const covered = new AtLeast(new PathF1({ whenNoPaths: 0 }), 0.95);
 
 export default {
   prompts: ['file://prompt.txt'],
@@ -229,7 +229,11 @@ export default {
       new MetricAssertion('valid_json', validJson, { weight: 1, threshold: 1 }),
       new MetricAssertion(
         'field_recall',
-        new Gated(new LeafExactMatch(), validJson, covered),
+        new Gated(
+          new LeafExactMatch({ whenNoneExpected: 1 }),
+          validJson,
+          covered,
+        ),
         { weight: 1, threshold: 0 },
       ),
       new MetricAssertion('exact_match', new CanonicalEquality(), {

@@ -9,8 +9,10 @@ rounded on the way. Never edit expected.json by hand; run
 
 import json
 import random
+import re
 import struct
 import sys
+import unicodedata
 
 assert sys.version_info[:2] == (3, 12), sys.version
 
@@ -120,6 +122,19 @@ for text, error in errors.items():
         assert error == "ValueError", text
     loads.append({"text": text, "error": error})
 
+def ranges(codes):
+    """Code points as [first, last] runs, so the file stays small."""
+    runs = []
+    for code in codes:
+        if runs and runs[-1][1] == code - 1:
+            runs[-1][1] = code
+        else:
+            runs.append([code, code])
+    return runs
+
+
+WORD_RE = re.compile(r"\w")
+
 expected = {
     "python": sys.version.split()[0],
     "sums": [
@@ -133,6 +148,11 @@ expected = {
     "reprs": [{"bits": bits(value), "repr": repr(value)} for value in reprs],
     "loads": loads,
     "isspace": [code for code in range(0x110000) if chr(code).isspace()],
+    "unicode": unicodedata.unidata_version,
+    "word": ranges(code for code in range(0x110000) if WORD_RE.match(chr(code))),
+    "unassigned": ranges(
+        code for code in range(0x110000) if unicodedata.category(chr(code)) == "Cn"
+    ),
 }
 
 with open("expected.json", "w", encoding="ascii") as file:

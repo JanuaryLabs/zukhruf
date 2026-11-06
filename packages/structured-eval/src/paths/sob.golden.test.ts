@@ -57,11 +57,22 @@ const lines = readFileSync(join(folder, 'responses.jsonl'), 'utf8').split('\n');
 // SOB's metrics, each labelled with its key in eval_records.
 const parsed = new ParseSuccess();
 const compliance = new SchemaCompliance();
-const coverage = new AtLeast(new PathF1(), 0.95);
-const truth = new Gated(new LeafExactMatch(), compliance, coverage);
-const faithfulness = new Gated(new LeafTokenF1(), compliance, coverage);
-const pathRecall = new Gated(new PathRecall(), compliance);
-const structureCoverage = new Gated(new PathF1(), compliance);
+const coverage = new AtLeast(new PathF1({ whenNoPaths: 0 }), 0.95);
+const truth = new Gated(
+  new LeafExactMatch({ whenNoneExpected: 1 }),
+  compliance,
+  coverage,
+);
+const faithfulness = new Gated(
+  new LeafTokenF1({ whenNoneExpected: 1, whenNoWords: 1, absentAs: null }),
+  compliance,
+  coverage,
+);
+const pathRecall = new Gated(
+  new PathRecall({ whenNoneExpected: 0 }),
+  compliance,
+);
+const structureCoverage = new Gated(new PathF1({ whenNoPaths: 0 }), compliance);
 const typeSafety = new Gated(
   new LeafTypePrecision({ whenNoneStated: 0 }),
   compliance,

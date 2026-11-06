@@ -1,3 +1,5 @@
+import { PYTHON_WORD } from '@zukhruf/python';
+
 import { STOPWORDS_EN } from './bm25s-stopwords.ts';
 import { log } from './libm.ts';
 import { mean, sumFloat32 } from './numpy.ts';
@@ -19,7 +21,7 @@ export type WordStemmer = {
 };
 
 // Python's (?u)\b\w\w+\b: runs of two or more letters, digits or "_".
-const TOKEN_PATTERN = /[\p{L}\p{N}_]{2,}/gu;
+const TOKEN_PATTERN = new RegExp(`[${PYTHON_WORD}]{2,}`, 'gu');
 
 // tokenize(texts, stopwords=..., stemmer=...) with lower=True and
 // return_ids=True. The stopwords leave before the stemmer runs.

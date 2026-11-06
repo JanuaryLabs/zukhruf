@@ -41,7 +41,9 @@ test('grade gives each ratio as a named score with its whole as the weight, with
 
 test('the weight of a row weighs its named scores, and a row without one weighs 1', () => {
   const grade = new PromptfooAssertion(
-    new MetricScorer({ 'leaf exact match': new LeafExactMatch() }),
+    new MetricScorer({
+      'leaf exact match': new LeafExactMatch({ whenNoneExpected: 1 }),
+    }),
     JsonCase,
   ).grade;
   const config = { expected: { a: 'x' }, schema: { type: 'object' } };
@@ -71,7 +73,11 @@ test('a row that gives its expected value as JSON text keeps 7.0 a float, as jso
     new JsonTextScorer(
       new MetricScorer({
         'canonical equality': new CanonicalEquality(),
-        'leaf token f1': new LeafTokenF1(),
+        'leaf token f1': new LeafTokenF1({
+          whenNoneExpected: 1,
+          whenNoWords: 1,
+          absentAs: null,
+        }),
       }),
     ),
     JsonTextCase,

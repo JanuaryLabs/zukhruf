@@ -6,6 +6,7 @@ import {
   type JsonData,
   NeumaierSum,
   PYTHON_SPACE,
+  PYTHON_WORD,
   floatRepr,
   loadsJson,
 } from './index.ts';
@@ -108,4 +109,34 @@ test('PYTHON_SPACE holds exactly the characters of str.isspace() in CPython 3.12
     if (space.test(String.fromCodePoint(code))) codePoints.push(code);
 
   assert.deepEqual(codePoints, expected.isspace);
+});
+
+// Each [first, last] run of code points that generate.py wrote, as a set.
+const codesOf = (runs: readonly (readonly number[])[]): Set<number> => {
+  const codes = new Set<number>();
+  for (const [first, last] of runs) {
+    if (typeof first !== 'number' || typeof last !== 'number')
+      throw new TypeError(
+        `Expected a [first, last] run, got ${first}, ${last}`,
+      );
+    for (let code = first; code <= last; code++) codes.add(code);
+  }
+  return codes;
+};
+
+test('PYTHON_WORD holds exactly the characters of \\w in CPython 3.12, for each code point that its Unicode database assigns', () => {
+  oracle(expected.word, 700);
+  const word = new RegExp(`^[${PYTHON_WORD}]$`, 'u');
+  const unassigned = codesOf(expected.unassigned);
+  const python = codesOf(expected.word);
+  const differ: number[] = [];
+  for (let code = 0; code <= 0x10ffff; code++)
+    if (
+      !unassigned.has(code) &&
+      word.test(String.fromCodePoint(code)) !== python.has(code)
+    )
+      differ.push(code);
+
+  assert.equal(expected.unicode, '15.0.0');
+  assert.deepEqual(differ, []);
 });
