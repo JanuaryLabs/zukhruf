@@ -9,7 +9,7 @@ The other process that owns the database and writes it. The owner keeps the file
 _Avoid_: App, store, writer
 
 **Data version**:
-The number that `DataVersion` gives. It changes when another connection commits, or when the file at the path is a replaced file. For an exclusive owner, it changes when the file stamp of the database file changes. Its value has no other meaning: compare it only with an earlier value from the same `DataVersion`. It is not the number of `PRAGMA data_version`, which is different on each connection.
+The number that `DataVersion` gives. It changes when another connection commits, or when the file at the path is a replaced file. For an exclusive owner, it changes when the file stamp of the database file changes. Its value has no other meaning: compare it only with an earlier value from the same `DataVersion`. It is not the number of `PRAGMA data_version`, which is different on each connection. A change watcher of `@zukhruf/async` reads it as a gauge.
 _Avoid_: Revision, counter, schema version (`PRAGMA schema_version` is a different number)
 
 **Commit by another connection**:

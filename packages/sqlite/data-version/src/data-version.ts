@@ -1,3 +1,5 @@
+import { Gauge } from '@zukhruf/async';
+
 import { FollowedDatabase } from './followed-database.ts';
 import { StampedDatabase } from './stamped-database.ts';
 
@@ -10,7 +12,8 @@ type ObservedDatabase = Disposable & { observe(): string };
 // The owner can also replace the file at the path. A new connection's
 // data_version starts again and can equal an old value, so current is a
 // count of the changes seen, not the data_version itself.
-export class DataVersion implements Disposable {
+// It exists to tell a change, so it is a gauge: a change watcher reads current.
+export class DataVersion extends Gauge<number> implements Disposable {
   readonly #database: ObservedDatabase;
   #seen: string;
   #current = 0;
@@ -19,6 +22,7 @@ export class DataVersion implements Disposable {
     path: string,
     database: ObservedDatabase = new FollowedDatabase(path),
   ) {
+    super();
     this.#database = database;
     this.#seen = this.#database.observe();
   }
@@ -38,6 +42,10 @@ export class DataVersion implements Disposable {
       this.#current += 1;
     }
     return this.#current;
+  }
+
+  protected async read(): Promise<number> {
+    return this.current;
   }
 
   [Symbol.dispose](): void {

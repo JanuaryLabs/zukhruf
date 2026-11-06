@@ -50,6 +50,7 @@ no change
 
 - `new DataVersion(path)` opens its own read-only connection to the database. It does not share a connection with a reader. [ADR 0001](./docs/adr/0001-poll-data-version.md) tells why.
 - `current` gives the data version now. It is the number of `DataVersion`, not the `PRAGMA data_version` of SQLite. Compare it with the value that you read before from the same `DataVersion`. A different value tells that another connection committed, or that the owner replaced the file. The same value tells that no change occurred.
+- `DataVersion` is a `Gauge<number>` of `@zukhruf/async`. Give it to a `ChangeWatcher`, and each check reads `current`. A check after a commit of the owner gives `changed`, and a check with no commit gives `unchanged`.
 - The number tells only that a change occurred. It does not count the commits, and it does not tell what changed.
 - `DataVersion` follows the path. The owner can replace the file at the path: it can rename a new file over it, or delete the file and create it again. A replaced file is a change. Then `DataVersion` reads the new file, and each later commit to the new file is a change too. [ADR 0002](./docs/adr/0002-a-replaced-file-is-followed-by-name.md) tells why.
 - A path that this process cannot see is no change. The path is missing, or the mode of a folder denies this process. The owner can delete the file and create it again a short time later. `DataVersion` keeps the old connection until it can see a file at the path again, and then a replaced file is a change.
@@ -57,6 +58,27 @@ no change
 - A commit by the same connection does not change the number. The `DataVersion` connection never writes, so each commit that it sees comes from another connection.
 - Dispose closes the connection. Use `using`, or call `[Symbol.dispose]()`.
 - The package throws its own `UnavailableError`. It is the class of `@zukhruf/sqlite-open`, which opens the connection. The package exports it, so a catch with `instanceof` works with either package. A host that needs its own error translates the error of the package at its boundary, and keeps the error of the package as `cause`. [ADR 0003](./docs/adr/0003-the-package-throws-its-own-errors.md) tells why.
+
+## Watch the data version
+
+```ts
+import { ChangeWatcher } from '@zukhruf/async';
+import { DataVersion } from '@zukhruf/sqlite-data-version';
+
+using version = new DataVersion(path);
+// The data version is a local read: a check that takes the whole interval is stuck.
+const watcher = new ChangeWatcher([version], {
+  interval: 1_000,
+  timeout: 1_000,
+  clock: globalThis,
+});
+for await (const outcomes of watcher.watch(signal)) {
+  const outcome = outcomes.get(version);
+  if (outcome?.state === 'failed') throw outcome.error;
+  if (outcome?.state === 'changed')
+    console.log('The owner committed. Read again.');
+}
+```
 
 ## An owner that lets no reader in
 

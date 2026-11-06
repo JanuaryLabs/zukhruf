@@ -40,6 +40,7 @@
     "access": "public"
   },
   "dependencies": {
+    "@zukhruf/async": "^0.6.16",
     "@zukhruf/fs": "^0.6.16",
     "@zukhruf/sqlite-open": "^0.6.16"
   },

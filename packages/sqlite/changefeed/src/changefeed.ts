@@ -1,4 +1,4 @@
-import { ChangeWatcher, Gauge, type WallClock } from '@zukhruf/async';
+import { ChangeWatcher, type WallClock } from '@zukhruf/async';
 import { DataVersion } from '@zukhruf/sqlite-data-version';
 import { Snapshot } from '@zukhruf/sqlite-snapshot';
 
@@ -16,20 +16,6 @@ export type WatchOptions = {
   /** The clock of the poll: `globalThis` in production, a fake clock in a test. */
   readonly clock: WallClock;
 };
-
-// The data version of the database: a commit of another connection moves it.
-class DatabaseVersion extends Gauge<number> {
-  readonly #version: DataVersion;
-
-  constructor(version: DataVersion) {
-    super();
-    this.#version = version;
-  }
-
-  protected async read(): Promise<number> {
-    return this.#version.current;
-  }
-}
 
 // One run of watch: the position it compares with, and whether its first
 // pass is a baseline that gives no batch.
@@ -74,16 +60,15 @@ export class Changefeed implements Disposable {
   }: WatchOptions): AsyncGenerator<ChangeEvent[], void, undefined> {
     const { position, baseline } = this.#run();
     let silent = baseline;
-    const version = new DatabaseVersion(this.#version);
     // The data version is a local read: a check that takes the whole
     // interval is stuck.
-    const watcher = new ChangeWatcher([version], {
+    const watcher = new ChangeWatcher([this.#version], {
       interval,
       timeout: interval,
       clock,
     });
     for await (const outcomes of watcher.watch(signal)) {
-      const outcome = outcomes.get(version);
+      const outcome = outcomes.get(this.#version);
       // The feed cannot go on without its data version.
       if (outcome?.state === 'failed') throw outcome.error;
       if (outcome?.state !== 'changed') continue;

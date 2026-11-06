@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
 import { test } from 'node:test';
 
+import { ChangeWatcher } from '@zukhruf/async';
 import * as sqliteOpen from '@zukhruf/sqlite-open';
 import { TemporaryFiles } from '@zukhruf/testing/fs';
 
@@ -25,6 +26,61 @@ test('the version stays the same until the owner commits, then changes', async (
   owner.exec("INSERT INTO notes (title) VALUES ('second')");
 
   assert.notEqual(version.current, before);
+});
+
+test('a change watcher over the version sees a commit of the owner as changed', async () => {
+  await using dir = await new TemporaryFiles().directory('data-version-');
+  const path = join(dir.path, 'source.sqlite');
+  using owner = sqliteOpen.open(path);
+  owner.exec(`
+    CREATE TABLE notes (id INTEGER PRIMARY KEY, title TEXT);
+    INSERT INTO notes (title) VALUES ('first');
+  `);
+  using version = new DataVersion(path);
+  const stop = new AbortController();
+  const checks = new ChangeWatcher([version], {
+    interval: 5,
+    timeout: 5,
+    clock: globalThis,
+  }).watch(stop.signal);
+  try {
+    await checks.next();
+
+    owner.exec("INSERT INTO notes (title) VALUES ('second')");
+    const check = await checks.next();
+
+    assert.deepEqual(check.value?.get(version), { state: 'changed' });
+  } finally {
+    stop.abort();
+    await checks.return();
+  }
+});
+
+test('a change watcher over the version sees no commit as unchanged', async () => {
+  await using dir = await new TemporaryFiles().directory('data-version-');
+  const path = join(dir.path, 'source.sqlite');
+  using owner = sqliteOpen.open(path);
+  owner.exec(`
+    CREATE TABLE notes (id INTEGER PRIMARY KEY, title TEXT);
+    INSERT INTO notes (title) VALUES ('first');
+  `);
+  using version = new DataVersion(path);
+  const stop = new AbortController();
+  const checks = new ChangeWatcher([version], {
+    interval: 5,
+    timeout: 5,
+    clock: globalThis,
+  }).watch(stop.signal);
+  try {
+    await checks.next();
+
+    const check = await checks.next();
+
+    assert.deepEqual(check.value?.get(version), { state: 'unchanged' });
+  } finally {
+    stop.abort();
+    await checks.return();
+  }
 });
 
 // The owner's connection to a new database at the path, with one row.
