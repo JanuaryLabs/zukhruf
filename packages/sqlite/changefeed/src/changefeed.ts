@@ -61,7 +61,7 @@ export class Changefeed implements Disposable {
     const { position, baseline } = this.#run();
     let silent = baseline;
     for await (const changed of pollChanges(
-      new Map([['database', async () => this.#version.current]]),
+      async () => new Map([['database', this.#version.current]]),
       { interval, signal, clock },
     )) {
       if (changed.size === 0) continue;
