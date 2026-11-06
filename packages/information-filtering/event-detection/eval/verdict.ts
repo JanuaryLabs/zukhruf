@@ -26,10 +26,10 @@ export function verdict(options: {
   const { exam, mainScore, baselines, regressionSets } = options;
   const beatsBaselines = mainScore > Math.max(...baselines);
   const noRegression = Object.values(regressionSets).every(
-    (interval) => interval.high >= 0,
+    (interval) => !interval.isBelow(0),
   );
   let result: Verdict['result'] = 'inconclusive';
-  if (!beatsBaselines || !noRegression || exam.high < 0) result = 'fail';
-  else if (exam.low > 0) result = 'pass';
+  if (!beatsBaselines || !noRegression || exam.isBelow(0)) result = 'fail';
+  else if (exam.isAbove(0)) result = 'pass';
   return { result, exam, beatsBaselines, regressionSets, noRegression };
 }

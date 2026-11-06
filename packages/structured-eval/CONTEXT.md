@@ -87,7 +87,7 @@ A value at a path that is not an object or an array: a string, a number, a boole
 A promptfoo assertion object that gives the value of one scorer: its name, its weight in the score of the test, and the threshold at which it passes. A TypeScript config lists it in its defaultTest. It reads the case from the vars of the test.
 
 **Bootstrap interval**:
-The 95% interval of a mean: many samples draw the scorecards again, with replacement, and the interval spans the middle of their means.
+The interval of a mean: many resamples draw the scorecards again, with replacement, and two quantiles of their means that the caller chooses, such as the 2.5% and the 97.5%, are its ends.
 
 **Counts**:
 For a field: the expected values, the stated values, the present values and the right values. For a set array: the expected items, the stated items, and the pairs.

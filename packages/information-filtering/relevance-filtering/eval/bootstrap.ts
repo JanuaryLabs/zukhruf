@@ -1,25 +1,32 @@
+import {
+  ConfidenceInterval,
+  IidBootstrap,
+  Linear,
+  PercentileInterval,
+} from '@zukhruf/statistics';
+
 import { mean } from './metrics.ts';
 import { NumpyGenerator } from './numpy-random.ts';
 
-// A 95% percentile interval of a difference (Efron and Tibshirani 1993).
-export type Interval = {
+// A 95% percentile interval of a difference (Efron and Tibshirani 1993), and
+// the difference that the data gives.
+export class Interval extends ConfidenceInterval {
   readonly observed: number;
-  readonly low: number;
-  readonly high: number;
-};
+
+  constructor(observed: number, low: number, high: number) {
+    super(low, high);
+    this.observed = observed;
+  }
+}
 
 const REPLICATES = 2000;
 
-// numpy.percentile with its default linear interpolation, on sorted values.
-export function percentile(sorted: readonly number[], q: number): number {
-  const position = (sorted.length - 1) * (q / 100);
-  const below = Math.floor(position);
-  const a = sorted[below] ?? Number.NaN;
-  const b = sorted[Math.min(below + 1, sorted.length - 1)] ?? Number.NaN;
-  const t = position - below;
-  const difference = b - a;
-  return t >= 0.5 ? b - difference * (1 - t) : a + difference * t;
-}
+// numpy.percentile(replicates, [2.5, 97.5]), the default linear method.
+const PERCENTILES = new PercentileInterval({
+  low: 0.025,
+  high: 0.975,
+  method: new Linear(),
+});
 
 // The topic bootstrap of the research rounds (round-2 evaluate.py,
 // topic_boot): each replicate draws as many profiles as there are, with
@@ -29,18 +36,14 @@ export function topicBootstrap(
   seed: number,
 ): Interval {
   const generator = new NumpyGenerator(seed);
-  const replicates = Array.from({ length: REPLICATES }, () =>
-    mean(
-      generator
-        .integers(0, differences.length, differences.length)
-        .map((index) => differences[index] ?? Number.NaN),
-    ),
-  ).toSorted((a, b) => a - b);
-  return {
-    observed: mean(differences),
-    low: percentile(replicates, 2.5),
-    high: percentile(replicates, 97.5),
-  };
+  // integers(0, n, n) draws its n indices one at a time, so one index for
+  // each call gives the same draws. integers(0, n, 1) always gives one.
+  const bootstrap = new IidBootstrap({
+    nResamples: REPLICATES,
+    randomIndex: (n) => generator.integers(0, n, 1)[0] ?? Number.NaN,
+  });
+  const { low, high } = bootstrap.interval(differences, mean, PERCENTILES);
+  return new Interval(mean(differences), low, high);
 }
 
 // The weights of the paired, label-stratified article bootstrap of the exam
@@ -82,10 +85,6 @@ export function articleBootstrap(
   observed: number,
   difference: (weights: readonly number[]) => number,
 ): Interval {
-  const replicates = weights.map(difference).toSorted((a, b) => a - b);
-  return {
-    observed,
-    low: percentile(replicates, 2.5),
-    high: percentile(replicates, 97.5),
-  };
+  const { low, high } = PERCENTILES.of(weights.map(difference));
+  return new Interval(observed, low, high);
 }

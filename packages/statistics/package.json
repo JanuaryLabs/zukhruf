@@ -1,0 +1,40 @@
+{
+  "name": "@zukhruf/statistics",
+  "version": "0.1.0",
+  "private": true,
+  "description": "The percentile bootstrap and the quantile methods of NumPy in JavaScript, to the last bit: resamples of a dataset with an injected random generator, the percentile interval of their statistic, and the quantile methods lower, higher, linear and inverted_cdf.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/JanuaryLabs/zukhruf",
+    "directory": "packages/statistics"
+  },
+  "bugs": {
+    "url": "https://github.com/JanuaryLabs/zukhruf/issues"
+  },
+  "homepage": "https://github.com/JanuaryLabs/zukhruf/tree/main/packages/statistics#readme",
+  "keywords": [
+    "statistics",
+    "bootstrap",
+    "confidence-interval",
+    "quantile",
+    "numpy"
+  ],
+  "type": "module",
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "@zukhruf/source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "NOTICE",
+    "!dist/spec/**",
+    "!**/*.tsbuildinfo",
+    "!**/*.test.*"
+  ]
+}

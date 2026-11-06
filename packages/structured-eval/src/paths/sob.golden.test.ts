@@ -6,6 +6,12 @@ import { test } from 'node:test';
 import { Random } from 'python-random';
 
 import type { JsonData } from '@zukhruf/python';
+import {
+  ConfidenceInterval,
+  type ConfidenceIntervalMethod,
+  Higher,
+  Lower,
+} from '@zukhruf/statistics';
 
 import {
   AtLeast,
@@ -239,6 +245,20 @@ test('the means, the category means and the bootstrap intervals equal build_summ
     weight: testCase.weight,
   }));
 
+  // percentile_bounds of SOB's evaluate.py: the estimates at
+  // floor(0.025(n - 1)) and ceil(0.975(n - 1)) of the sorted estimates, which
+  // are NumPy's lower method at the low end and its higher method at the high
+  // end. A percentile interval reads both ends with one method, so SOB's
+  // interval is SOB's own method.
+  const percentileBounds: ConfidenceIntervalMethod = {
+    of: (distribution) => {
+      const sorted = distribution.toSorted((a, b) => a - b);
+      return new ConfidenceInterval(
+        new Lower().of(sorted, 0.025),
+        new Higher().of(sorted, 0.975),
+      );
+    },
+  };
   // summarize_rows: one Random(seed) without weights, Random(seed + 1) with.
   const summary = (weighted: boolean, seed: number) => {
     const rows: WeightedScorecard[] = scored.map(({ scorecard, weight }) => ({
@@ -247,10 +267,15 @@ test('the means, the category means and the bootstrap intervals equal build_summ
     }));
     const totals = new Totals();
     for (const { scorecard, weight } of rows) totals.add(scorecard, weight);
-    const bootstrap = new Bootstrap(new Random(seed), 1000);
+    const random = new Random(seed);
+    const bootstrap = new Bootstrap({
+      nResamples: 1000,
+      randomIndex: (n) => random.randrange(n),
+      interval: percentileBounds,
+    });
     return Object.fromEntries(
       summarized.map((name) => {
-        const [low, high] = bootstrap.interval(rows, name);
+        const { low, high } = bootstrap.interval(rows, name);
         return [
           name,
           { mean: totals.get(name).value, ci95_low: low, ci95_high: high },

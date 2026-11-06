@@ -1,0 +1,10 @@
+@zukhruf/statistics
+Copyright 2026 ezzabuzaid
+
+This package ports the semantics of the methods lower, higher, linear and
+inverted_cdf of numpy.quantile in NumPy 2.5.4, including the _lerp of its
+linear method, Copyright (c) NumPy Developers, BSD 3-Clause License,
+https://github.com/numpy/numpy. The package does not include NumPy's code.
+The names of the percentile bootstrap follow SciPy (scipy.stats.bootstrap)
+and arch (arch.bootstrap.IIDBootstrap); the package includes no code of
+either.

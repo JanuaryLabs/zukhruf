@@ -271,16 +271,28 @@ const scorer = new JsonTextScorer(
 
 ## Means and intervals
 
-`Totals` gives the mean of each name over many scorecards, without weights (each weight 1) or with them. `Bootstrap` gives its 95% interval: each sample draws as many scorecards as there are, with replacement, from the random generator that you give it.
+`Totals` gives the mean of each name over many scorecards, without weights (each weight 1) or with them. `Bootstrap` gives its percentile interval with `@zukhruf/statistics`: each resample draws as many scorecards as there are, with replacement, from the random generator that you give it. You also give the number of resamples and the method of the interval: a `PercentileInterval`, or a `ConfidenceIntervalMethod` of your own, such as SOB's in the golden test (ADR 0010).
 
 ```ts
 import { Random } from 'python-random';
+
+import { Linear, PercentileInterval } from '@zukhruf/statistics';
 
 const rows = scorecards.map((scorecard, index) => ({
   scorecard,
   weight: weights[index],
 }));
-new Bootstrap(new Random(42), 1000).interval(rows, 'truth'); // [low, high]
+const random = new Random(42);
+const bootstrap = new Bootstrap({
+  nResamples: 1000,
+  randomIndex: (n) => random.randrange(n),
+  interval: new PercentileInterval({
+    low: 0.025,
+    high: 0.975,
+    method: new Linear(),
+  }),
+});
+bootstrap.interval(rows, 'truth'); // { low, high }
 ```
 
 The scorer classes port the scores of the Structured Output Benchmark (SOB), evaluate.py at commit da785a8. The golden test composes SOB's report from them (its labels, categories, weights and seeds) and proves that it gives the numbers of evaluate.py, record by record, with the same means and intervals. Do not compare their means with the micro averages of the record scorer.
@@ -296,6 +308,7 @@ The scorer classes port the scores of the Structured Output Benchmark (SOB), eva
 - [ADR 0007: a metric assertion is a promptfoo assertion object in a TypeScript config](docs/adr/0007-a-metric-assertion-is-a-promptfoo-assertion-object-in-a-typescript-config.md)
 - [ADR 0008: type precision follows JSON Schema draft 7 and has no gate](docs/adr/0008-type-precision-follows-draft-7-and-has-no-gate.md)
 - [ADR 0009: a scorer gives a value for one answer, and a metric adds the values of many answers](docs/adr/0009-a-scorer-gives-a-value-for-one-answer-and-a-metric-adds-many.md)
+- [ADR 0010: the caller gives the bootstrap its interval, and @zukhruf/statistics draws it](docs/adr/0010-the-caller-gives-the-bootstrap-its-interval.md)
 
 ## Development
 

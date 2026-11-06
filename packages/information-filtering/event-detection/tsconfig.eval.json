@@ -14,6 +14,9 @@
     },
     {
       "path": "../../embeddings/tsconfig.lib.json"
+    },
+    {
+      "path": "../../statistics/tsconfig.lib.json"
     }
   ]
 }

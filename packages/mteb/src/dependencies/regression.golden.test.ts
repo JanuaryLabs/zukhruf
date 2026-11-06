@@ -155,6 +155,17 @@ test('qcut gives the bins of pandas, with equal edges dropped and NaN for a cons
   );
 });
 
+// pandas 3.1.1: pd.qcut(np.array([]), 4, labels=False, duplicates="drop") is
+// [], and of np.array([np.nan, np.nan]) it is [nan, nan].
+test('qcut gives NaN for each value when no number is left, and no bins for no values, as pandas does', () => {
+  const options = { labels: false, duplicates: 'drop' } as const;
+
+  assert.deepEqual(
+    [qcut([], 4, options), qcut([Number.NaN, Number.NaN], 4, options)],
+    [[], [Number.NaN, Number.NaN]],
+  );
+});
+
 test('trainTestSplit gives the train and test rows of the stratified train_test_split of datasets, in their order, or its error', () => {
   const actual = expected.train_test_split.map((kase) => {
     const dataset = {

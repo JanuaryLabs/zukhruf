@@ -19,6 +19,9 @@
     },
     {
       "path": "../../sqlite/open/tsconfig.lib.json"
+    },
+    {
+      "path": "../../statistics/tsconfig.lib.json"
     }
   ]
 }

@@ -18,10 +18,12 @@ const MARGIN = 0.05;
 export function verdict(
   intervals: Readonly<Record<string, Interval>>,
 ): Verdict {
-  const low = (name: string) => intervals[name]?.low ?? Number.NaN;
-  const nonInferiorToKeyword = low('keywordNarrow') > -MARGIN;
-  const beatsOtherBaselines = ['keywordBroad', 'newest'].every(
-    (name) => low(name) > 0,
+  // A baseline with no interval is not beaten.
+  const isAbove = (name: string, value: number) =>
+    intervals[name]?.isAbove(value) ?? false;
+  const nonInferiorToKeyword = isAbove('keywordNarrow', -MARGIN);
+  const beatsOtherBaselines = ['keywordBroad', 'newest'].every((name) =>
+    isAbove(name, 0),
   );
   return {
     result: nonInferiorToKeyword && beatsOtherBaselines ? 'pass' : 'fail',

@@ -22,7 +22,7 @@ Both apply the exam verdict rule of the frozen plan to the first and only score 
 Changes: the rule is that of `freeze-ranking/plan.json`: non-inferiority to the typed keyword list (margin 0.05 MAP), and intervals above 0 against the broad keyword list and newest first. It has no "inconclusive" result and no regression sets.
 
 **`bootstrap.ts` → `bootstrap.ts`.**
-Both give a 95% percentile interval of a paired difference with a fixed seed.
+Both give a 95% percentile interval of a paired difference with a fixed seed. The interval, its quantile method and its `Interval` type come from `@zukhruf/statistics` in both (backlog #3819); what stays here is how each eval draws its units.
 Changes: the units are profiles (the topic bootstrap of the research) or exam articles in two strata, not blocks of gold events. The statistic of an article replicate is the MAP, with each article in as many ranks as its weight. The generator is numpy's (`numpy-random.ts`), not Mulberry32, because the research rounds and the exam rule name `numpy.random.default_rng`.
 
 **`run.ts` → `run.ts`.**

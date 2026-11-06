@@ -4,11 +4,11 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 
 import { NeumaierSum } from '@zukhruf/python';
+import { Linear } from '@zukhruf/statistics';
 import { TemporaryFiles } from '@zukhruf/testing/fs';
 
 import { AbsTaskRetrieval } from '../abstasks/retrieval.ts';
 import { TaskMetadata } from '../abstasks/task-metadata.ts';
-import { percentile } from '../dependencies/numpy.ts';
 import { pythonRound } from '../dependencies/python.ts';
 import { evaluate } from '../evaluate.ts';
 import { bm25S } from '../models/model-implementations/bm25.ts';
@@ -176,9 +176,12 @@ for (const synthetic of expected.synthetic)
     assert.deepEqual(actual, plain(synthetic.verdict));
   });
 
-test('a percentile interpolates as np.percentile, to the last bit', () => {
+// np.percentile(a, q) divides q by 100 and reads that quantile with the
+// linear method, which is what pairedBootstrapTest gives 0.025 and 0.975.
+test('np.percentile is the linear quantile of q / 100 of @zukhruf/statistics, to the last bit', () => {
+  const linear = new Linear();
   const actual = expected.percentiles.map(({ sorted, q }) =>
-    q.map((value) => percentile(sorted, value)),
+    q.map((value) => linear.of(sorted, value / 100)),
   );
 
   assert.deepEqual(

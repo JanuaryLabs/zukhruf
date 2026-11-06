@@ -20,6 +20,9 @@
     },
     {
       "path": "./tsconfig.snowball.json"
+    },
+    {
+      "path": "../statistics/tsconfig.lib.json"
     }
   ]
 }

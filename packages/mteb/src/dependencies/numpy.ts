@@ -63,24 +63,6 @@ export function linspace(start: number, stop: number, num: number): number[] {
   );
 }
 
-// np.percentile(values, q) with the default method "linear", for values
-// sorted in increasing order: np.quantile of q / 100.
-export function percentile(sorted: readonly number[], q: number): number {
-  return quantile(sorted, q / 100);
-}
-
-// np.quantile(values, q) with the default method "linear", for values sorted
-// in increasing order.
-export function quantile(sorted: readonly number[], q: number): number {
-  const position = (sorted.length - 1) * q;
-  const below = Math.floor(position);
-  const a = sorted[below] ?? Number.NaN;
-  const b = sorted[Math.min(below + 1, sorted.length - 1)] ?? Number.NaN;
-  const t = position - below;
-  const difference = b - a;
-  return t >= 0.5 ? b - difference * (1 - t) : a + difference * t;
-}
-
 // np.sum of a float32 array, also along the last axis of a C-contiguous
 // array: the identity 0 plus the float32 pairwise sum.
 export function sumFloat32(values: Float32Array): number {

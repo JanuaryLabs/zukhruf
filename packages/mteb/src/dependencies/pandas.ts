@@ -6,8 +6,9 @@
 import { EOL } from 'node:os';
 
 import { floatRepr } from '@zukhruf/python';
+import { Linear } from '@zukhruf/statistics';
 
-import { addReduceat, linspace, quantile } from './numpy.ts';
+import { addReduceat, linspace } from './numpy.ts';
 import { compareStrings, pythonFormatFixed, pythonStrRepr } from './python.ts';
 import { type TabulateValue, tabulate } from './tabulate.ts';
 
@@ -562,7 +563,11 @@ export function qcut(
   const quantiles = linspace(0, 1, q + 1).map((value, index) =>
     q * value === index ? value : nextUp(value),
   );
-  let bins = quantiles.map((value) => quantile(sorted, value));
+  // pandas gives each value the bin NaN when no number is left, and [] for no
+  // values (pandas 3.1.1), where a quantile of no values has no value.
+  if (sorted.length === 0) return x.map(() => Number.NaN);
+  const linear = new Linear();
+  let bins = quantiles.map((value) => linear.of(sorted, value));
   const uniqueBins = [...new Set(bins)];
   if (uniqueBins.length < bins.length && bins.length !== 2) bins = uniqueBins;
   const first = bins[0];

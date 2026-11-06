@@ -1,0 +1,7 @@
+{
+  "name": "statistics",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "packages/statistics/src",
+  "projectType": "library",
+  "tags": ["layer:island", "std:base"]
+}

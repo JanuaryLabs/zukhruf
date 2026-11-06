@@ -1,20 +1,46 @@
+import {
+  ConfidenceInterval,
+  InvertedCdf,
+  PercentileInterval,
+} from '@zukhruf/statistics';
+
 import type { AnswerRow } from './answer-key.ts';
 import type { Partition } from './metrics/contingency.ts';
 import { mainScore } from './metrics/metrics.ts';
 import { partitions } from './score.ts';
 
-export type Interval = {
-  // The difference on the reports as they are: run - latest.
+// The 2.5th and 97.5th percentiles of the resampled differences, with the
+// difference on the reports as they are (run - latest) and how it was drawn.
+export class Interval extends ConfidenceInterval {
   readonly observed: number;
-  // The 2.5th and 97.5th percentiles of the resampled differences.
-  readonly low: number;
-  readonly high: number;
   // The number of units. A design that joins many gold events makes few
   // units, and with one unit every replicate is the observed change.
   readonly blocks: number;
   readonly replicates: number;
   readonly seed: number;
-};
+
+  constructor(options: {
+    readonly observed: number;
+    readonly low: number;
+    readonly high: number;
+    readonly blocks: number;
+    readonly replicates: number;
+    readonly seed: number;
+  }) {
+    super(options.low, options.high);
+    this.observed = options.observed;
+    this.blocks = options.blocks;
+    this.replicates = options.replicates;
+    this.seed = options.seed;
+  }
+}
+
+// The nearest-rank 2.5th and 97.5th percentiles: numpy's inverted_cdf.
+const NEAREST_RANK = new PercentileInterval({
+  low: 0.025,
+  high: 0.975,
+  method: new InvertedCdf(),
+});
 
 // The paired cluster bootstrap of the difference of a statistic between two
 // partitions of the same reports (Efron and Tibshirani 1993, the percentile
@@ -61,18 +87,15 @@ export function pairedBootstrap(options: {
         }
     differences.push(statistic(key, runCopy) - statistic(key, latestCopy));
   }
-  differences.sort((a, b) => a - b);
-  // The nearest-rank percentile.
-  const percentile = (p: number) =>
-    differences[Math.max(0, Math.ceil(p * replicates) - 1)]!;
-  return {
+  const { low, high } = NEAREST_RANK.of(differences);
+  return new Interval({
     observed: statistic(gold, run) - statistic(gold, latest),
-    low: percentile(0.025),
-    high: percentile(0.975),
+    low,
+    high,
     blocks: blocks.length,
     replicates,
     seed,
-  };
+  });
 }
 
 // The change of the main score of a design against another design, on the

@@ -96,6 +96,9 @@
       "path": "./packages/python"
     },
     {
+      "path": "./packages/statistics"
+    },
+    {
       "path": "./packages/sqlite/changefeed"
     },
     {

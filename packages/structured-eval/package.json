@@ -47,6 +47,7 @@
   "dependencies": {
     "@cfworker/json-schema": "4.1.4",
     "@zukhruf/python": "*",
+    "@zukhruf/statistics": "*",
     "json-schema-traverse": "^1.0.0",
     "munkres": "^2.1.1"
   },

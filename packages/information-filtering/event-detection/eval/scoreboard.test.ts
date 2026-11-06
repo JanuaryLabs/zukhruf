@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import { design3152b } from '../src/index.ts';
-import type { Interval } from './bootstrap.ts';
+import { Interval } from './bootstrap.ts';
 import { METRICS_VERSION } from './metrics/metrics.ts';
 import {
   type Entry,
@@ -49,7 +49,14 @@ function entry(
 }
 
 function change(observed: number, low: number, high: number): Interval {
-  return { observed, low, high, blocks: 200, replicates: 2000, seed: 3182 };
+  return new Interval({
+    observed,
+    low,
+    high,
+    blocks: 200,
+    replicates: 2000,
+    seed: 3182,
+  });
 }
 
 test('a regression set is refused when the whole 95% interval of the change of the main score is below 0', () => {

@@ -41,8 +41,4 @@ export { JsonTextScorer } from './paths/json-text-scorer.ts';
 export { JsonValue } from './paths/json-value.ts';
 export type { Scorer } from './paths/scorer.ts';
 export { ScorerSet } from './paths/scorer-set.ts';
-export {
-  Bootstrap,
-  type RandomIndex,
-  type WeightedScorecard,
-} from './scoring/bootstrap.ts';
+export { Bootstrap, type WeightedScorecard } from './scoring/bootstrap.ts';

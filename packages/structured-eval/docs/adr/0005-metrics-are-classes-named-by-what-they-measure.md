@@ -21,5 +21,5 @@ This ADR replaces the parts of ADR 0003 that name `SobScorer`, `SobSummary`, `So
 ## Consequences
 
 - A caller that wants SOB's report composes it, as the golden test does.
-- `python-random` is a development dependency: only the golden test draws with it. Any generator with `randrange(stop)` works for `Bootstrap`.
+- `python-random` is a development dependency: only the golden test draws with it. Any generator with `randrange(stop)` works for `Bootstrap`, given as a random index function (ADR 0010).
 - NOTICE keeps SOB's MIT licence: the metric classes are a port of the functions of evaluate.py.

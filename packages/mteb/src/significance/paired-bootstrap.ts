@@ -1,5 +1,7 @@
+import { IidBootstrap, Linear, PercentileInterval } from '@zukhruf/statistics';
+
 import { NumpyGenerator } from '../dependencies/numpy-random.ts';
-import { mean, percentile } from '../dependencies/numpy.ts';
+import { mean } from '../dependencies/numpy.ts';
 import { compareStrings } from '../dependencies/python.ts';
 
 // Not from MTEB: MTEB has no significance test.
@@ -22,14 +24,22 @@ export type ChangeVerdict = {
 const REPLICATES = 2000;
 const SEED = 31957;
 
+// np.percentile(means, [2.5, 97.5]), the default linear method.
+const PERCENTILES = new PercentileInterval({
+  low: 0.025,
+  high: 0.975,
+  method: new Linear(),
+});
+
 // The paired bootstrap test over queries (Efron and Tibshirani 1993; Sakai
 // 2006 for retrieval): each replicate draws as many queries as there are,
 // with replacement, and takes the mean of their differences. The change is
 // better when the whole interval is above 0, worse when it is below 0, and
 // inconclusive else. p is twice the smaller share of replicate means at or
 // below 0 and at or above 0, at most 1, so p < 0.05 agrees with the 95%
-// interval but for its interpolation. The differences are in the order of the sorted query
-// ids, and the replicates are those of numpy.random.default_rng(seed).
+// interval but for its interpolation. The differences are in the order of the
+// sorted query ids, and the replicates are those of
+// numpy.random.default_rng(seed).
 export function pairedBootstrapTest(
   baseline: ReadonlyMap<string, number>,
   change: ReadonlyMap<string, number>,
@@ -50,15 +60,13 @@ export function pairedBootstrapTest(
       (change.get(query) ?? Number.NaN) - (baseline.get(query) ?? Number.NaN),
   );
   const generator = new NumpyGenerator(seed);
-  const means = Array.from({ length: replicates }, () =>
-    mean(
-      generator
-        .integers(0, differences.length, differences.length)
-        .map((index) => differences[index] ?? Number.NaN),
-    ),
-  ).toSorted((a, b) => a - b);
-  const low = percentile(means, 2.5);
-  const high = percentile(means, 97.5);
+  // integers(0, n, n) draws its n indices one at a time, so one index for
+  // each call gives the same draws. integers(0, n, 1) always gives one.
+  const means = new IidBootstrap({
+    nResamples: replicates,
+    randomIndex: (n) => generator.integers(0, n, 1)[0] ?? Number.NaN,
+  }).distribution(differences, mean);
+  const interval = PERCENTILES.of(means);
   const share = (side: (value: number) => boolean) =>
     means.filter(side).length / replicates;
   const p = Math.min(
@@ -70,13 +78,13 @@ export function pairedBootstrapTest(
       ),
   );
   let result: ChangeVerdict['result'] = 'inconclusive';
-  if (low > 0) result = 'better';
-  else if (high < 0) result = 'worse';
+  if (interval.isAbove(0)) result = 'better';
+  else if (interval.isBelow(0)) result = 'worse';
   return {
     result,
     observed: mean(differences),
-    low,
-    high,
+    low: interval.low,
+    high: interval.high,
     p,
     queries: queries.length,
     replicates,

@@ -1,18 +1,18 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import type { Interval } from './bootstrap.ts';
+import { Interval } from './bootstrap.ts';
 import { verdict } from './verdict.ts';
 
 function interval(low: number, high: number): Interval {
-  return {
+  return new Interval({
     observed: (low + high) / 2,
     low,
     high,
     blocks: 100,
     replicates: 2000,
     seed: 3182,
-  };
+  });
 }
 
 function result(options: {

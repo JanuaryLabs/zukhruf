@@ -23,5 +23,6 @@ package-lock.json
 # byte (the sha256 files beside them).
 /docs/research/relevance-filtering
 /packages/python/src/**/fixtures
+/packages/statistics/src/**/fixtures
 # The native libraries of @zukhruf/sqlite-open (binary build output).
 /packages/sqlite/open/lib
