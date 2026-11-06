@@ -53,11 +53,14 @@ The weighted harmonic mean of precision and recall, with a weight β: F1 when β
 **F-measure form**:
 The arithmetic that gives the value of an F-measure. Three forms give the same number in algebra and different numbers in the last bit: the counts form (scikit-learn), the errors form (torchmetrics, TREC) and the precision-recall form (van Rijsbergen, SOB). These three names are the names of this package.
 
-**Gate**:
-A scorer whose ratio is 1 of 1 or 0 of 1. A gate says what it checks and why it fails.
+**Penalty**:
+A factor in [0, 1] for one input, as BLEU's brevity penalty is. The factor 1 is no penalty. A penalty is also a scorer: its ratio is the factor over 1.
 
-**Gated**:
-A scorer whose part is multiplied by its gates, for each answer. Its whole stays.
+**Gate**:
+The penalty whose factor is 0 or 1. A gate says what it checks and why it fails.
+
+**Penalized**:
+A scorer whose part is multiplied by the factor of each of its penalties, for each answer. Its whole stays.
 
 **Scorer set**:
 A scorecard scorer that holds labelled scorers. Its comparer makes the input once. It passes when each of its gates holds.

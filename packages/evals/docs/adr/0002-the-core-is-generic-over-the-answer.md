@@ -4,7 +4,7 @@ Status: Proposed, for review (design on paper, 2026-11-06).
 
 ## Context
 
-ADR 0011 of `@zukhruf/structured-eval` (accepted on 2026-11-06) gives the package one comparison core. A `TreeWalk` compares an answer with its case and gives a `Comparison`. A scorer reads the `Comparison` and gives a `Ratio`. `Precision`, `Recall` and `F1` read the counts of a `Matches`, and `Gated`, `AtLeast`, `SampleAveraged`, `MeanOf` and `ScorerSet` combine scorers.
+ADR 0011 of `@zukhruf/structured-eval` (accepted on 2026-11-06) gives the package one comparison core. A `TreeWalk` compares an answer with its case and gives a `Comparison`. A scorer reads the `Comparison` and gives a `Ratio`. `Precision`, `Recall` and `F1` read the counts of a `Matches`, and `Penalized`, `AtLeast`, `ShortfallPenalty`, `SampleAveraged`, `MeanOf` and `ScorerSet` combine scorers. ADR 0012 of `@zukhruf/structured-eval` (accepted on 2026-11-06) made a gate a penalty whose factor is 0 or 1, and `Penalized` replaced `Gated`.
 
 Most of these parts do not depend on a structured value. Only their types name `Comparison`. A classification answer needs the same parts: a recall of one class is hits over expected, and a gate is a gate.
 
@@ -14,7 +14,7 @@ The core is generic over the input of its scorers:
 
 - `Scorer<Input>` gives a `Ratio` for one input.
 - `Matches<Input>` gives the hits, the stated and the expected of one input. `Precision`, `Recall`, `F1` and `FBeta` take any `Matches`.
-- `Gate`, `Gated`, `AtLeast`, `SampleAveraged` and `MeanOf` take scorers of one input type.
+- `Penalty`, `Gate`, `Penalized`, `AtLeast`, `ShortfallPenalty`, `SampleAveraged` and `MeanOf` take scorers of one input type.
 - A `Comparer<Case, Input>` compares an answer with its case and gives the input. `ScorerSet` and `ScorerAssertion` take a comparer, so they make the input once for each answer.
 - A family gives its own input, comparer and matches: `./structured` gives `Comparison`, `TreeWalk`, `PathMatches`, `ValueMatches` and `ItemMatches`; `./classification` gives `LabelComparison`, `LabelComparer`, `ClassMatches` and `AllClassMatches`.
 

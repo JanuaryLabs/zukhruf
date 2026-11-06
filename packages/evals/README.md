@@ -43,10 +43,11 @@ A `Ratio` is a part and a whole. Its value is the part divided by the whole, and
 
 ## Combine scorers
 
-A gate is a scorer whose ratio is 1 of 1 or 0 of 1. A gate says what it checks (`holds`) and why it fails (`explain`).
+A penalty is a factor in [0, 1] for one input, as BLEU's brevity penalty is. The factor 1 is no penalty. A penalty is also a scorer: its ratio is `Ratio(factor, 1)`. A gate is the penalty whose factor is 0 or 1. A gate says what it checks (`holds`) and why it fails (`explain`).
 
-- `new Gated(scorer, ...gates)` multiplies the part of the ratio by each gate. The whole stays, so a failed answer keeps its place in the denominator.
+- `new Penalized(scorer, ...penalties)` multiplies the part of the ratio by each factor. The whole stays, so a failed answer keeps its place in the denominator.
 - `new AtLeast(scorer, threshold)` is a gate that holds when the value of the scorer reaches the threshold.
+- `new ShortfallPenalty(scorer, { target, power })` gives `min(1, (value / target) ** power)`: 1 at the target, and less below it.
 - `new SampleAveraged(scorer, { whenEmpty })` gives the value of the scorer over 1. `whenEmpty` is the value of an answer whose ratio has the whole 0.
 - `new MeanOf(...scorers)` gives the mean of the values of some scorers for one answer.
 
@@ -55,7 +56,7 @@ A gate is a scorer whose ratio is 1 of 1 or 0 of 1. A gate says what it checks (
 A `ScorerSet` holds labelled scorers and gives a `Scorecard`: passed, reason, checks and one named ratio for each label. It passes when each of its gates holds. The family's comparer makes the input once, and each scorer reads it.
 
 ```ts
-import { Gated, Recall, ScorerSet } from '@zukhruf/evals';
+import { Recall, ScorerSet } from '@zukhruf/evals';
 import {
   AllClassMatches,
   LabelComparer,
@@ -248,16 +249,28 @@ export class CountsForm implements FMeasureForm {}
 export class ErrorsForm implements FMeasureForm {}
 export class PrecisionRecallForm implements FMeasureForm {}
 
-/** A scorer whose ratio is 1 of 1 or 0 of 1 (Template Method). */
-export abstract class Gate<Input> implements Scorer<Input> {
+/** A factor in [0, 1] for one input; its ratio is Ratio(factor, 1) (Template Method). */
+export abstract class Penalty<Input> implements Scorer<Input> {
+  protected abstract factor(input: Input): number;
+}
+/** The penalty whose factor is 1 when it holds, else 0. */
+export abstract class Gate<Input> extends Penalty<Input> {
   protected abstract holds(input: Input): boolean;
   abstract explain(input: Input): string;
 }
-export class Gated<Input> implements Scorer<Input> {
-  constructor(scorer: Scorer<Input>, ...gates: Gate<Input>[]);
+/** Multiplies the part of the ratio of its scorer by each factor; the whole stays (Decorator). */
+export class Penalized<Input> implements Scorer<Input> {
+  constructor(scorer: Scorer<Input>, ...penalties: Penalty<Input>[]);
 }
 export class AtLeast<Input> extends Gate<Input> {
   constructor(scorer: Scorer<Input>, threshold: number);
+}
+/** min(1, (value / target) ** power). */
+export class ShortfallPenalty<Input> extends Penalty<Input> {
+  constructor(
+    scorer: Scorer<Input>,
+    options: { target: number; power: number },
+  );
 }
 export class SampleAveraged<Input> implements Scorer<Input> {
   constructor(scorer: Scorer<Input>, options: { whenEmpty: number });
