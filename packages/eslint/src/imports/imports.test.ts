@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import { typescriptRuleTester } from '../testing/rule-tester.ts';
 import noOtherTestRunner from './no-other-test-runner.ts';
 import noPlaywrightTest from './no-playwright-test.ts';
+import noRawDatabaseSync from './no-raw-database-sync.ts';
 import noStateManagers from './no-state-managers.ts';
 import noTestFileImport from './no-test-file-import.ts';
 
@@ -80,6 +81,58 @@ test('no-test-file-import reports every import form of a .test. or .spec. file',
       { code: `export * from './api.test.cjs';` },
       { code: `const module = await import('./api.test.ts');` },
       { code: `const module = require('./api.test.cts');` },
+    ].map((item) => ({ ...item, errors: [{ messageId: 'matched' }] })),
+  });
+});
+
+test('no-raw-database-sync bans new DatabaseSync of node:sqlite under each binding', () => {
+  typescriptRuleTester().run('no-raw-database-sync', noRawDatabaseSync, {
+    valid: [
+      {
+        code: `import { open } from '@zukhruf/sqlite-open';\nopen(path, { readOnly: true });`,
+      },
+      // A type names the class, and constructs nothing.
+      {
+        code: `import type { DatabaseSync } from 'node:sqlite';\nfunction read(database: DatabaseSync) {}`,
+      },
+      {
+        code: `import { type DatabaseSync } from 'node:sqlite';\nfunction read(database: DatabaseSync) {}`,
+      },
+      // The same name that does not come from node:sqlite.
+      { code: `class DatabaseSync {}\nnew DatabaseSync();` },
+      {
+        code: `import { DatabaseSync } from 'other-sqlite';\nnew DatabaseSync(path);`,
+      },
+    ],
+    invalid: [
+      {
+        code: `import { DatabaseSync } from 'node:sqlite';\nnew DatabaseSync(':memory:');`,
+      },
+      {
+        code: `import { DatabaseSync as NodeDatabase } from 'node:sqlite';\nnew NodeDatabase(path);`,
+      },
+      {
+        code: `import * as sqlite from 'node:sqlite';\nnew sqlite.DatabaseSync(path);`,
+      },
+      {
+        code: `import sqlite from 'node:sqlite';\nnew sqlite.DatabaseSync(path);`,
+      },
+      {
+        code: `import * as sqlite from 'node:sqlite';\nnew sqlite['DatabaseSync'](path);`,
+      },
+      {
+        code: `const { DatabaseSync } = require('node:sqlite');\nnew DatabaseSync(path);`,
+      },
+      {
+        code: `const { DatabaseSync: Database } = require('node:sqlite');\nnew Database(path);`,
+      },
+      {
+        code: `const sqlite = require('node:sqlite');\nnew sqlite.DatabaseSync(path);`,
+      },
+      { code: `new (require('node:sqlite').DatabaseSync)(path);` },
+      {
+        code: `const { DatabaseSync } = await import('node:sqlite');\nnew DatabaseSync(path);`,
+      },
     ].map((item) => ({ ...item, errors: [{ messageId: 'matched' }] })),
   });
 });

@@ -205,6 +205,14 @@ export default defineConfig(
     files: ['packages/docker/**', 'packages/async/**'],
     rules: { 'zukhruf/no-raw-temp-directory': 'off' },
   },
+  // @zukhruf/sqlite-open is the one place that constructs DatabaseSync. The
+  // SQLite fixture of @zukhruf/testing cannot use it: sqlite-open tests with
+  // @zukhruf/testing, so that import would make a cycle in the build
+  // (docs/adr/0001, line 29), and its lock holder needs a busy timeout of 0.
+  {
+    files: ['packages/sqlite/open/**', 'packages/testing/src/databases/**'],
+    rules: { 'zukhruf/no-raw-database-sync': 'off' },
+  },
   // The Latch is the one-shot gate that zukhruf/no-promise-field tells code
   // to wait on, so its promise must live in its field. It never rejects and
   // is never replaced, so no hazard of the rule applies.

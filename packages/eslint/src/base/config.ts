@@ -21,6 +21,7 @@ import {
 } from '../files.ts';
 import noOtherTestRunner from '../imports/no-other-test-runner.ts';
 import noPlaywrightTest from '../imports/no-playwright-test.ts';
+import noRawDatabaseSync from '../imports/no-raw-database-sync.ts';
 import noStateManagers from '../imports/no-state-managers.ts';
 import noTestFileImport from '../imports/no-test-file-import.ts';
 import noEnum from '../language/no-enum.ts';
@@ -32,6 +33,7 @@ const importBans = {
   'no-playwright-test': noPlaywrightTest,
   'no-other-test-runner': noOtherTestRunner,
   'no-test-file-import': noTestFileImport,
+  'no-raw-database-sync': noRawDatabaseSync,
 };
 
 const rules = {
