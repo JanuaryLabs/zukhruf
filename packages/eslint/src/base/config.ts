@@ -8,6 +8,7 @@ import tseslint from 'typescript-eslint';
 import noCollectLoop from '../async-values/no-collect-loop.ts';
 import noPromiseField from '../async-values/no-promise-field.ts';
 import noPhaseFlag from '../class-state/no-phase-flag.ts';
+import noCapturedAssignment from '../closure-state/no-captured-assignment.ts';
 import { type Concept, enable } from '../concept.ts';
 import {
   BUILD_OUTPUT,
@@ -41,6 +42,7 @@ const rules = {
   'no-promise-field': noPromiseField,
   'no-phase-flag': noPhaseFlag,
   'no-collect-loop': noCollectLoop,
+  'no-captured-assignment': noCapturedAssignment,
   ...importBans,
 };
 
@@ -161,6 +163,15 @@ export const base: Concept = {
         files: TYPESCRIPT,
         ignores: [...TESTS, ...TEST_SUPPORT, ...FIXTURES],
         rules: { 'functional/no-let': ['error', noLet()] },
+      },
+      {
+        // A closure that assigns a variable of its enclosing function shares
+        // that state with every other closure, so the result depends on the
+        // order in which they run. Off until zukhruf, elt and
+        // context-compiler fix their findings (ADR 0007, #3878).
+        name: 'zukhruf/base/closure-state',
+        files: SOURCE,
+        rules: { 'zukhruf/no-captured-assignment': 'off' },
       },
       {
         // Typed lint: the project service gives each file its nearest
