@@ -187,18 +187,18 @@ const scorer = new MetricScorer({
 scorer.score(stated, new JsonCase(expected, schema, 1)).ratios.get('truth'); // Ratio(value, 1)
 ```
 
-| Metric              | Value for one stated value                                                                                                                                                         |
-| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ParseSuccess`      | 1 when it is a JSON object or array                                                                                                                                                |
-| `ValidSchema`       | 1 when the schema of the case is a valid Draft 7 schema                                                                                                                            |
-| `SchemaCompliance`  | 1 when it is parsed and agrees with a valid schema                                                                                                                                 |
-| `LeafExactMatch`    | the expected leaves that it has at the same path with an equal value                                                                                                               |
-| `LeafTokenF1`       | the mean token F1 of each expected leaf and its value at the same path                                                                                                             |
-| `PathRecall`        | the expected leaf paths that it has                                                                                                                                                |
-| `PathF1`            | the F1 of the leaf paths that both values have                                                                                                                                     |
-| `LeafTypePrecision` | its leaves whose type is the type of their path in the schema                                                                                                                      |
-| `RequiredKeyRecall` | the required paths of the schema that it has; `whenNoneRequired` when the schema requires none. It has no gate: SOB composes `Gated(RequiredKeyRecall, ParseSuccess, ValidSchema)` |
-| `CanonicalEquality` | 1 when its canonical JSON (sorted keys) equals that of the expected value                                                                                                          |
+| Metric              | Value for one stated value                                                                                                                                                                                                               |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ParseSuccess`      | 1 when it is a JSON object or array                                                                                                                                                                                                      |
+| `ValidSchema`       | 1 when the schema of the case is a valid Draft 7 schema                                                                                                                                                                                  |
+| `SchemaCompliance`  | 1 when it is parsed and agrees with a valid schema                                                                                                                                                                                       |
+| `LeafExactMatch`    | the expected leaves that it has at the same path with an equal value                                                                                                                                                                     |
+| `LeafTokenF1`       | the mean token F1 of each expected leaf and its value at the same path                                                                                                                                                                   |
+| `PathRecall`        | the expected leaf paths that it has                                                                                                                                                                                                      |
+| `PathF1`            | the F1 of the leaf paths that both values have                                                                                                                                                                                           |
+| `LeafTypePrecision` | its leaves whose type the schema allows at their path, by the rules of draft 7; `whenNoneStated` when it has no leaf. It has no gate: a record that the schema accepts gives 1, so it grades a record that the schema refuses (ADR 0008) |
+| `RequiredKeyRecall` | the required paths of the schema that it has; `whenNoneRequired` when the schema requires none. It has no gate: SOB composes `Gated(RequiredKeyRecall, ParseSuccess, ValidSchema)`                                                       |
+| `CanonicalEquality` | 1 when its canonical JSON (sorted keys) equals that of the expected value                                                                                                                                                                |
 
 A gate is a metric whose value is 0 or 1. A gate extends `Gate`: it says what it checks, and `Gate` gives 1 or 0. `Gated(metric, ...gates)` multiplies a metric by its gates for each record, `AtLeast(metric, threshold)` is 1 when the metric reaches the threshold, and `MeanOf(...metrics)` is the mean of some metrics for each record.
 
@@ -289,6 +289,7 @@ The metric classes port the metrics of the Structured Output Benchmark (SOB), ev
 - [ADR 0005: metrics are classes named by what they measure, and a benchmark is a composition kept by its caller](docs/adr/0005-metrics-are-classes-named-by-what-they-measure.md)
 - [ADR 0006: with promptfoo, each metric is one assertion that reads the vars of its test](docs/adr/0006-with-promptfoo-each-metric-is-one-assertion-that-reads-the-vars-of-its-test.md)
 - [ADR 0007: a metric assertion is a promptfoo assertion object in a TypeScript config](docs/adr/0007-a-metric-assertion-is-a-promptfoo-assertion-object-in-a-typescript-config.md)
+- [ADR 0008: type precision follows JSON Schema draft 7 and has no gate](docs/adr/0008-type-precision-follows-draft-7-and-has-no-gate.md)
 
 ## Development
 

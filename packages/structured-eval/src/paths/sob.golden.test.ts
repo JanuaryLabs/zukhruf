@@ -62,7 +62,10 @@ const truth = new Gated(new LeafExactMatch(), compliance, coverage);
 const faithfulness = new Gated(new LeafTokenF1(), compliance, coverage);
 const pathRecall = new Gated(new PathRecall(), compliance);
 const structureCoverage = new Gated(new PathF1(), compliance);
-const typeSafety = new Gated(new LeafTypePrecision(), compliance);
+const typeSafety = new Gated(
+  new LeafTypePrecision({ whenNoneStated: 0 }),
+  compliance,
+);
 const perfect = new CanonicalEquality();
 const metrics = {
   json_parse_success: parsed,
@@ -117,6 +120,35 @@ const weights = new Map<JsonData | undefined, number>([
 const field = (data: JsonData | undefined, key: string) =>
   data instanceof Map ? data.get(key) : undefined;
 
+// Whether a stated value has a leaf: a dict or a list that holds, at any
+// depth, a value that is not a dict or a list (flatten_leaf_paths).
+const hasLeaf = (value: JsonData | undefined): boolean =>
+  (value instanceof Map
+    ? [...value.values()]
+    : Array.isArray(value)
+      ? value
+      : []
+  ).some((child) =>
+    child instanceof Map || Array.isArray(child) ? hasLeaf(child) : true,
+  );
+
+// The numbers of the summary that average type_precision have no oracle:
+// build_summary averaged the type_precision of evaluate.py's walk, which is
+// not draft 7 (ADR 0008). Two categories average it with other metrics, so
+// they are left out whole. The draws pick positions, not values, so the
+// numbers that do not average type_precision keep their oracle.
+const averagesTypePrecision = new Set([
+  'type_precision',
+  'Complex Schema Handling',
+  'Output Contract Reliability',
+]);
+const withoutTypePrecision = (summary: Readonly<Record<string, unknown>>) =>
+  Object.fromEntries(
+    Object.entries(summary).filter(
+      ([name]) => !averagesTypePrecision.has(name),
+    ),
+  );
+
 // A SOB line, read as evaluate_file and evaluate_record read it: a blank line
 // and a line that is not JSON are skipped.
 function sobLines(): { stated: JsonValue; testCase: JsonCase }[] {
@@ -153,8 +185,9 @@ function sobLines(): { stated: JsonValue; testCase: JsonCase }[] {
 
 test('each line gives the 11 values and the weight of its eval_records row', () => {
   const scorer = new MetricScorer(metrics);
+  const lines = sobLines();
 
-  const rows = sobLines().map(({ stated, testCase }) => {
+  const rows = lines.map(({ stated, testCase }) => {
     const scorecard = scorer.score(stated, testCase);
     return {
       difficulty_weight: testCase.weight,
@@ -169,9 +202,21 @@ test('each line gives the 11 values and the weight of its eval_records row', () 
 
   assert.deepEqual(
     rows,
-    expected.records.map((row) => ({
+    expected.records.map((row, index) => ({
       difficulty_weight: row['difficulty_weight'],
       ...Object.fromEntries(Object.keys(metrics).map((key) => [key, row[key]])),
+      // evaluate.py's walk is not draft 7, so its type_precision is not the
+      // oracle (ADR 0008). By draft 7 a record that agrees with its schema
+      // has no leaf of a type that the schema refuses, so SOB's gated
+      // type_precision is evaluate.py's own schema_compliance, or 0
+      // (whenNoneStated) for a stated value with no leaf. This proves one
+      // direction only: the walk refuses no type of a valid record. The gate
+      // hides what it gives an invalid one; leaf-type-precision.test.ts
+      // proves that.
+      type_precision:
+        row['schema_compliance'] === 1 && hasLeaf(lines[index]?.stated.value)
+          ? 1
+          : 0,
     })),
   );
 });
@@ -212,10 +257,13 @@ test('the means, the category means and the bootstrap intervals equal build_summ
       ),
     );
 
-  assert.deepEqual(summary(false, 42), numbers(expected.summary.overall));
   assert.deepEqual(
-    summary(true, 43),
-    numbers(expected.summary.overall_weighted),
+    withoutTypePrecision(summary(false, 42)),
+    withoutTypePrecision(numbers(expected.summary.overall)),
+  );
+  assert.deepEqual(
+    withoutTypePrecision(summary(true, 43)),
+    withoutTypePrecision(numbers(expected.summary.overall_weighted)),
   );
   assert.equal(scored.length, expected.summary.overall.n);
 });

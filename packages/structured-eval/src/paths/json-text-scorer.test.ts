@@ -49,7 +49,7 @@ test('JsonTextScorer keeps text that is not JSON as an unparsed value: every met
       LeafTokenF1: new LeafTokenF1(),
       PathRecall: new PathRecall(),
       PathF1: new PathF1(),
-      LeafTypePrecision: new LeafTypePrecision(),
+      LeafTypePrecision: new LeafTypePrecision({ whenNoneStated: 0 }),
       RequiredKeyRecall: new Gated(
         new RequiredKeyRecall({ whenNoneRequired: 1 }),
         new ParseSuccess(),
@@ -141,9 +141,13 @@ test('MetricScorer reads a string as text that was not parsed, even when it look
   assert.equal(scorecard.ratios.get('parse success')?.value, 0);
 });
 
-test('LeafTypePrecision gives 0 when the schema is not valid Draft 7, even where it names the type of a path', () => {
+test('LeafTypePrecision has no gate of its own: it reads the types that a schema that is not valid Draft 7 names, and Gated with ValidSchema gives 0', () => {
   const scorer = new MetricScorer({
-    'type precision': new LeafTypePrecision(),
+    alone: new LeafTypePrecision({ whenNoneStated: 0 }),
+    gated: new Gated(
+      new LeafTypePrecision({ whenNoneStated: 0 }),
+      new ValidSchema(),
+    ),
   });
   const invalid = JsonCase.from({
     expected: { a: 'x' },
@@ -163,10 +167,14 @@ test('LeafTypePrecision gives 0 when the schema is not valid Draft 7, even where
   );
 
   assert.deepEqual(
-    scorecards.map(
-      (scorecard) => scorecard.ratios.get('type precision')?.value,
-    ),
-    [0, 1],
+    scorecards.map((scorecard) => [
+      scorecard.ratios.get('alone')?.value,
+      scorecard.ratios.get('gated')?.value,
+    ]),
+    [
+      [1, 0],
+      [1, 1],
+    ],
   );
 });
 
