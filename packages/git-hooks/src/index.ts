@@ -1,11 +1,14 @@
 export { Build } from './build.ts';
 export { Codegen } from './codegen.ts';
 export { Commit } from './commit.ts';
+export { CommitMessage } from './commit-message.ts';
 export { DependencyChecks } from './dependency-checks.ts';
 export { Format } from './format.ts';
 export { NoNumericPins } from './no-numeric-pins.ts';
+export { NxReleaseScope } from './nx-release-scope.ts';
 export { Push } from './push.ts';
 export type { RefUpdate } from './ref-update.ts';
+export { commitMsg } from './scripts/commit-msg.ts';
 export { preCommit } from './scripts/pre-commit.ts';
 export { prePush } from './scripts/pre-push.ts';
 export { type Outcome, Step } from './step.ts';

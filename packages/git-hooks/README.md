@@ -1,6 +1,6 @@
 # @zukhruf/git-hooks
 
-Git hooks written in TypeScript. A pre-commit hook runs steps in order against the staged commit. The steps check the staged copy of each file with Prettier and change nothing, run `nx sync` and stage only the files that sync wrote, and build generated files when nx says that their projects are affected. A pre-push hook runs steps in order against the push. Its build step builds each pushed commit in a snapshot, never the working tree. A repo adds a step of its own as a class.
+Git hooks written in TypeScript. A pre-commit hook runs steps in order against the staged commit. The steps check the staged copy of each file with Prettier and change nothing, run `nx sync` and stage only the files that sync wrote, and build generated files when nx says that their projects are affected. A pre-push hook runs steps in order against the push. Its build step builds each pushed commit in a snapshot, never the working tree. A commit-msg hook runs steps in order against the message of the commit. Its scope step stops a subject that nx release reads with the wrong scope. A repo adds a step of its own as a class.
 
 The words in these documents have one meaning each. See the glossary in [CONTEXT.md](./CONTEXT.md).
 
@@ -286,3 +286,59 @@ export class AffectedTest extends Step<Push> {
 ```
 
 Use the `base` and the `head` of each update, not `--base=origin/main --head=HEAD`. That pair checks the branch that is checked out, and a push can send other refs.
+
+## Install the commit-msg hook
+
+Git runs the commit-msg hook after you write the message, before git makes the commit. Write the hook in `.husky/commit-msg.ts`:
+
+```ts
+#!/usr/bin/env node
+import { NxReleaseScope, commitMsg } from '@zukhruf/git-hooks';
+
+await commitMsg([new NxReleaseScope()]);
+```
+
+Make it executable, and commit a link to it, as for the pre-commit hook:
+
+```sh
+chmod +x .husky/commit-msg.ts
+ln -s commit-msg.ts .husky/commit-msg
+```
+
+When `package.json` has no `"type": "module"`, name the file `commit-msg.mts`, and link to that name. The `prepare` script in [Install the hook](#install-the-hook) tells git where the hooks are.
+
+Git gives the hook the file that holds the message. `commitMsg` reads it into a `CommitMessage`, without the comment lines of the editor. It runs the steps in order and prints the outcome of each step. At the first fail, the commit stops.
+
+## Keep the scope that nx release reads
+
+`NxReleaseScope` stops a commit when nx release reads its subject with another scope than the first parenthesis. The parser of nx takes the scope up to the last `): ` of the subject. Thus `fix(fs): the lock (3da0916, #3840): reads it` gets the scope `fs): the lock (3da0916, #3840`, not `fs`. A scope that names no project gives the commit to no project. A scope piece that starts with `#` stops `nx release version` with `Invalid glob pattern`. A `!` before the first `: ` is lost too, so a breaking change ships as a patch.
+
+```text
+scope     nx release reads the scope of this subject as "fs): the lock (3da0916, #3840", not "fs":
+            its parser takes the scope up to the last "): " of the subject.
+          A scope that names no project gives the commit to no project, and a
+          scope piece that starts with "#" stops `nx release version`.
+          Write "; " after a parenthesis in the subject, as "(#3840); ", or move
+          the parenthesis to the body.
+✖ commit stopped by the commit-msg hook
+```
+
+The step asks the parser of the repo's own nx, so it judges the subject as `nx release` of the repo does. It needs `nx` in the repo. The subject is the first paragraph of the message, with its lines joined by spaces, as `git log --format=%s` gives it. The body is not checked. A merge commit and a release commit, such as `chore(release): publish 0.7.0`, pass.
+
+## Add a commit-msg step of your own
+
+A commit-msg step is a subclass of `Step<CommitMessage>`. `CommitMessage` has the `text` of the message without comment lines, and its `subject`:
+
+```ts
+import { type CommitMessage, Step } from '@zukhruf/git-hooks';
+
+export class NoTrailers extends Step<CommitMessage> {
+  readonly name = 'trailers';
+
+  async run(message: CommitMessage) {
+    return /^Co-Authored-By:/im.test(message.text)
+      ? this.fail('remove the Co-Authored-By trailer')
+      : this.pass();
+  }
+}
+```

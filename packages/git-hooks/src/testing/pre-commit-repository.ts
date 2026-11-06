@@ -6,11 +6,15 @@ import { promisify } from 'node:util';
 const execFileAsync = promisify(execFile);
 const packageEntry = import.meta.resolve('../index.ts');
 
-// A git repo in a temp folder whose pre-commit hook is `.husky/pre-commit.ts`,
-// reached through the committed link `.husky/pre-commit`, as a repo installs
-// it. git and the hook see none of the user's git config and no environment
-// of the Nx task that runs this test.
-export async function repository(root: string, hook: string) {
+// A git repo in a temp folder whose hook is `.husky/<name>.ts`, reached
+// through the committed link `.husky/<name>`, as a repo installs it. git and
+// the hook see none of the user's git config and no environment of the Nx task
+// that runs this test.
+export async function repository(
+  root: string,
+  hook: string,
+  name: 'pre-commit' | 'commit-msg' = 'pre-commit',
+) {
   const environment = {
     PATH: `${dirname(process.execPath)}:/usr/bin:/bin`,
     HOME: root,
@@ -28,11 +32,11 @@ export async function repository(root: string, hook: string) {
   await writeFile(join(root, '.prettierrc'), '{ "singleQuote": true }\n');
   await mkdir(join(root, '.husky'));
   await writeFile(
-    join(root, '.husky/pre-commit.ts'),
+    join(root, `.husky/${name}.ts`),
     `#!/usr/bin/env node\n${hook.replaceAll('@zukhruf/git-hooks', packageEntry)}`,
   );
-  await chmod(join(root, '.husky/pre-commit.ts'), 0o755);
-  await symlink('pre-commit.ts', join(root, '.husky/pre-commit'));
+  await chmod(join(root, `.husky/${name}.ts`), 0o755);
+  await symlink(`${name}.ts`, join(root, `.husky/${name}`));
   return {
     root,
     git,

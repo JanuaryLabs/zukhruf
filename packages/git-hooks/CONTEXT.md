@@ -1,6 +1,6 @@
 # Git hooks
 
-Git hooks written in TypeScript. A pre-commit hook runs steps in order against the commit that git is about to make. A pre-push hook runs steps in order against the commits that git is about to send. A step reads the commit, never the working tree. A pre-commit step stages only the files that it wrote itself.
+Git hooks written in TypeScript. A pre-commit hook runs steps in order against the commit that git is about to make. A commit-msg hook runs steps in order against the message of that commit. A pre-push hook runs steps in order against the commits that git is about to send. A step reads the commit, never the working tree. A pre-commit step stages only the files that it wrote itself.
 
 ## Language
 
@@ -9,7 +9,7 @@ A program that git runs at one point of its work, for example before a commit or
 _Avoid_: Script, trigger
 
 **Step**:
-One check or one task that a hook runs. A step reads its subject and gives an outcome. The subject of a pre-commit step is the staged commit (`Step<Commit>`). The subject of a pre-push step is the push (`Step<Push>`). A repo adds a step of its own as a subclass of `Step`.
+One check or one task that a hook runs. A step reads its subject and gives an outcome. The subject of a pre-commit step is the staged commit (`Step<Commit>`). The subject of a commit-msg step is the commit message (`Step<CommitMessage>`). The subject of a pre-push step is the push (`Step<Push>`). A repo adds a step of its own as a subclass of `Step`.
 _Avoid_: Task, job, plugin
 
 **Outcome**:
@@ -19,6 +19,10 @@ _Avoid_: Result, status
 **Staged commit**:
 The content that the next commit holds: the index of the repo. `Commit` is its object in the code.
 _Avoid_: Index (the word is correct, but it has other meanings), cache
+
+**Commit message**:
+The message of the commit that git is about to make, as git gives it to the commit-msg hook in a file, without the comment lines of the editor. Its subject is the first paragraph, with its lines joined by spaces, as `git log --format=%s` and nx release read it. `CommitMessage` is its object in the code.
+_Avoid_: Commit (that is the staged commit), header
 
 **Staged copy**:
 The content of one file in the staged commit. It can differ from the file in the working tree when only some changes of the file are staged. A link has no staged copy in this sense: the staged commit holds the path that the link points to, so a step that reads content skips links.
