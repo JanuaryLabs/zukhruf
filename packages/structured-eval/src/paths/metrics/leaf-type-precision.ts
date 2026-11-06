@@ -1,7 +1,6 @@
 import type { JsonData } from '@zukhruf/python';
 
 import type { JsonPair } from '../json-pair.ts';
-import { SchemaTypeWalk } from '../schema-type-walk.ts';
 import { LeafMean } from './leaf-mean.ts';
 
 // The stated leaves whose type the schema allows at their path, by the rules
@@ -25,6 +24,6 @@ export class LeafTypePrecision extends LeafMean {
     value: JsonData,
     { testCase: { schema } }: JsonPair,
   ): number {
-    return new SchemaTypeWalk(schema.value).allows(path, value) ? 1 : 0;
+    return schema.types.allows(path, value) ? 1 : 0;
   }
 }

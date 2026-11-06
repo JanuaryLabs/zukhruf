@@ -162,6 +162,41 @@ test('a local $ref is followed and its sibling keywords are ignored, as draft 7 
   assert.equal(value, 3 / 5);
 });
 
+test('a $ref names the schema that the validator resolves: a URL under the $id of the schema, and the draft-07 meta-schema at its URI, whose own $refs name its own definitions', () => {
+  const schema = {
+    $id: 'http://example.com/offer.json',
+    definitions: {
+      count: { type: 'integer' },
+      nonNegativeInteger: { type: 'string' },
+    },
+    type: 'object',
+    properties: {
+      a: { $ref: 'offer.json#/definitions/count' },
+      b: {
+        $ref: 'http://json-schema.org/draft-07/schema#/definitions/nonNegativeIntegerDefault0',
+      },
+      c: { $ref: '#/definitions/nonNegativeInteger' },
+    },
+  };
+
+  const allowed = typePrecision(schema, { a: 1, b: 1, c: 'x' });
+  const refused = typePrecision(schema, { b: 'x' });
+
+  assert.deepEqual([allowed, refused], [1, 0]);
+});
+
+test('a property named like a member of every JavaScript object, such as constructor, has only the schema that the JSON Schema gives it', () => {
+  const schema = {
+    type: 'object',
+    properties: { toString: { type: 'integer' } },
+    additionalProperties: { type: 'string' },
+  };
+
+  const value = typePrecision(schema, { constructor: 'x', toString: 'y' });
+
+  assert.equal(value, 1 / 2);
+});
+
 test('a path through objects and arrays reads the schema at each of its steps', () => {
   const schema = {
     type: 'object',

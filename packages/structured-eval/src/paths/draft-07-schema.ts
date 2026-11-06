@@ -1,9 +1,11 @@
 import type { Schema } from '@cfworker/json-schema';
 
-// The Draft 7 meta-schema (json-schema.org, as ajv 6 ships it in
-// lib/refs/json-schema-draft-07.json), for Draft7Validator.check_schema. It
-// keeps only the `regex` format: jsonschema without its format extras, as
-// evaluate.py runs it, checks no other format.
+// The draft-07 meta-schema of json-schema.org, as jsonschema 4.26.0 checks a
+// schema with it: the text of jsonschema-specifications 2025.9.1
+// (schemas/draft7/metaschema.json), with no change. Draft7Schema removes the
+// formats that jsonschema does not assert. Ajv ships an older text, whose enum
+// must have one item at least and unique items; the draft-07 spec says only
+// SHOULD for both (validation section 6.1.2).
 export const draft07: Schema = {
   $schema: 'http://json-schema.org/draft-07/schema#',
   $id: 'http://json-schema.org/draft-07/schema#',
@@ -54,12 +56,15 @@ export const draft07: Schema = {
   properties: {
     $id: {
       type: 'string',
+      format: 'uri-reference',
     },
     $schema: {
       type: 'string',
+      format: 'uri',
     },
     $ref: {
       type: 'string',
+      format: 'uri-reference',
     },
     $comment: {
       type: 'string',
@@ -188,8 +193,6 @@ export const draft07: Schema = {
     enum: {
       type: 'array',
       items: true,
-      minItems: 1,
-      uniqueItems: true,
     },
     type: {
       anyOf: [

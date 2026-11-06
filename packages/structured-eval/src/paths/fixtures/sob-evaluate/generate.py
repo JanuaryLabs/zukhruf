@@ -19,7 +19,11 @@
 # empty texts, an int at a number, null against the text null, key order, a
 # required path inside an array, a path F1 just below the gate, sums where
 # CPython's compensated sum differs from a plain one, a malformed line and a
-# blank line.
+# blank line, then the meta-schema lines (backlog #3806): a $ref to the
+# draft-07 meta-schema, with and without its empty fragment, a schema whose
+# own $id is that URI, an empty and a repeated enum, a pattern that is not a
+# regular expression, a $schema, an $id and a $ref that are not URIs, and a
+# regex format that Draft7Validator does not assert.
 #
 # expected.json holds the eval_records rows of evaluate.py for the lines it
 # scores, and the summary of build_summary (1000 bootstrap samples, seed 42).

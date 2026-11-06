@@ -1,7 +1,7 @@
 import type { InstanceType, Schema } from '@cfworker/json-schema';
 
+import { isRecord } from '../../shared/is-record.ts';
 import type { Step } from '../record-leaves.ts';
-import { isRecord } from '../values.ts';
 
 type Node = Schema | boolean;
 

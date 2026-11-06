@@ -1,7 +1,8 @@
+import { isRecord } from '../shared/is-record.ts';
 import type { Agreement } from './alignment.ts';
 import type { RecordSpec } from './record-spec.ts';
 import type { Leaf, RecordVisitor } from './record-visitor.ts';
-import { hasValue, isRecord } from './values.ts';
+import { hasValue } from './values.ts';
 
 class AgreeingLeaves implements RecordVisitor {
   count = 0;

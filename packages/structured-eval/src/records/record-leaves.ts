@@ -1,5 +1,6 @@
+import { isRecord } from '../shared/is-record.ts';
 import type { RecordSpec } from './record-spec.ts';
-import { hasValue, isRecord } from './values.ts';
+import { hasValue } from './values.ts';
 
 // One step from a record to a value: a key, or the position of an item.
 export type Step = string | number;
