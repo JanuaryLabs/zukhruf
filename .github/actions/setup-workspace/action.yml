@@ -1,5 +1,5 @@
 name: Set up the workspace
-description: Installs the newest Node.js LTS and the workspace's npm dependencies.
+description: Installs the newest Node.js LTS, zig for the native libraries of @zukhruf/sqlite-open, and the workspace's npm dependencies.
 
 inputs:
   registry-url:
@@ -15,6 +15,13 @@ runs:
         node-version: lts/*
         cache: npm
         registry-url: ${{ inputs.registry-url }}
+
+    # sqlite-open's native target builds the library of each platform with
+    # zig cc, here and in the release (packages/sqlite/open/docs/adr/0006).
+    - name: Setup Zig
+      uses: mlugg/setup-zig@v2
+      with:
+        version: 0.16.0
 
     - name: Install dependencies
       shell: bash

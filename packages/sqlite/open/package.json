@@ -1,0 +1,46 @@
+{
+  "name": "@zukhruf/sqlite-open",
+  "version": "0.6.16",
+  "description": "One open for every node:sqlite connection: a reader, or an owner whose journal is a strategy (WAL by default, persistent WAL for readers that cannot write the folder), a 5 s busy timeout, and UnavailableError.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/JanuaryLabs/zukhruf",
+    "directory": "packages/sqlite/open"
+  },
+  "bugs": {
+    "url": "https://github.com/JanuaryLabs/zukhruf/issues"
+  },
+  "homepage": "https://github.com/JanuaryLabs/zukhruf/tree/main/packages/sqlite/open#readme",
+  "keywords": [
+    "sqlite",
+    "node-sqlite",
+    "wal",
+    "persistent-wal",
+    "read-only",
+    "busy-timeout"
+  ],
+  "type": "module",
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "@zukhruf/source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "lib",
+    "!dist/spec/**",
+    "!**/*.tsbuildinfo",
+    "!**/*.test.*"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "devDependencies": {
+    "@zukhruf/testing": "^0.6.16"
+  }
+}

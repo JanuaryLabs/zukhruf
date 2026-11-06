@@ -164,3 +164,6 @@ packages/information-filtering/event-detection/eval/results
 # The texts, the vectors and the last scores of the relevance-filtering eval
 packages/information-filtering/relevance-filtering/eval/cache
 packages/information-filtering/relevance-filtering/eval/results
+
+# The native libraries of @zukhruf/sqlite-open, which its native target builds.
+/packages/sqlite/open/lib

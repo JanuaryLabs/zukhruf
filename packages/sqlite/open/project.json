@@ -1,0 +1,22 @@
+{
+  "name": "sqlite-open",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "packages/sqlite/open/src",
+  "projectType": "library",
+  "tags": ["layer:island", "std:base"],
+  "targets": {
+    "native": {
+      "executor": "nx:run-commands",
+      "cache": true,
+      "inputs": ["{projectRoot}/src/native/**"],
+      "outputs": ["{projectRoot}/lib"],
+      "options": {
+        "command": "node src/native/build.ts",
+        "cwd": "{projectRoot}"
+      }
+    },
+    "build": {
+      "dependsOn": ["^build", "native"]
+    }
+  }
+}
