@@ -185,7 +185,7 @@ run.add(new LabelComparer().compare('a', testCase), testCase.weight);
 
 `ScorerAssertion` holds one scorer with its `weight` (how much it counts in the score of the test) and its `threshold` (when it passes). Both numbers are required. It reads the case from the vars of the test.
 
-promptfoo stores the config of a run as JSON, and `--resume` and `--retry-errors` build the run from that stored config. A function does not survive JSON, so a config holds no scorer assertion. An `AssertionModule` holds the scorer assertions by name, in a module that promptfoo loads. Its `assert(...names)` gives JSON assertions whose `value` is the file reference `file://<module>:<name>`. promptfoo loads the function from the default export of the module when it grades, on the first run and on a resumed run (structured-eval ADR 0013).
+promptfoo stores the config of a run as JSON, and `--resume` and `--retry-errors` build the run from that stored config. A function does not survive JSON, so a config holds no scorer assertion. An `AssertionModule` holds the scorer assertions by name, in a module that promptfoo loads. Its `assert(...names)` gives JSON assertions whose `value` is the file reference `file://<module>:<name>`. promptfoo loads the function from the default export of the module when it grades, on the first run and on a resumed run (structured ADR 0013 in docs/adr/structured).
 
 ```ts
 // page-kinds/scorers.ts: the module that promptfoo loads
@@ -456,7 +456,7 @@ export type ModuleAssertion = {
   readonly threshold: number;
   readonly value: (output: string, context: VarsContext) => number;
 };
-/** The module that promptfoo loads the function of each scorer assertion from (structured-eval ADR 0013). */
+/** The module that promptfoo loads the function of each scorer assertion from (structured ADR 0013 in docs/adr/structured). */
 export class AssertionModule<Name extends string> {
   constructor(url: string, assertions: Readonly<Record<Name, ModuleAssertion>>);
   /** The default export of the module: the value function of each name. */
