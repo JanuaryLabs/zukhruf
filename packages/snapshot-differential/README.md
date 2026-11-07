@@ -162,11 +162,32 @@ const attachments = new SnapshotDifferential<Attachment>({
 
 - Equal bytes give equal fingerprints, in a `Buffer` or in a `Uint8Array`, and also in a view of a larger buffer.
 - Bytes and a string or an array of numbers with the same content give different fingerprints.
-- The snapshot keeps a key value of bytes as `{"bytes": "<base64url>"}`. No other key value is an object, so no string key has this form.
+- The snapshot keeps a key value of bytes as `{"bytes": "<base64url>"}`. Only bytes and a `bigint` are objects in a key, so no string key has this form.
 - A delete gives a key value of bytes back as a `Uint8Array`.
 - Other typed arrays, such as `Uint16Array`, are not bytes. A record that holds one fails.
 
 See [ADR 0006](./docs/adr/0006-a-record-and-a-key-can-hold-bytes.md).
+
+## A record and a key can hold a bigint
+
+A number holds an integer exactly only up to 2^53. An `INTEGER` of SQLite holds 64 bits, and `node:sqlite` gives it as a `bigint` with `readBigInts`. A record can hold a `bigint` at any depth, and a key value can be a `bigint`:
+
+```ts
+type Visit = { id: bigint; task: bigint };
+
+const visits = new SnapshotDifferential<Visit>({
+  name: 'visits',
+  primaryKey: ['id'],
+  key: (visit) => [visit.id],
+  policy: new ClosedWorld(),
+});
+```
+
+- Equal bigints give equal fingerprints. `5n` and `5` give different fingerprints.
+- The snapshot keeps a key value that is a `bigint` as `{"bigint": "<digits>"}`.
+- A delete gives a key value that is a `bigint` back as a `bigint`.
+
+See [ADR 0007](./docs/adr/0007-a-record-and-a-key-can-hold-a-bigint.md).
 
 ## When something fails
 
@@ -202,6 +223,7 @@ Airbyte has no equivalent. Outside change data capture, it deletes only when it 
 - [ADR 0004: A scan can keep a group without reading it](./docs/adr/0004-a-scan-can-keep-a-group-without-reading-it.md)
 - [ADR 0005: A change is an insert or an update](./docs/adr/0005-a-change-is-an-insert-or-an-update.md)
 - [ADR 0006: A record and a key can hold bytes](./docs/adr/0006-a-record-and-a-key-can-hold-bytes.md)
+- [ADR 0007: A record and a key can hold a bigint](./docs/adr/0007-a-record-and-a-key-can-hold-a-bigint.md)
 
 ## Development
 

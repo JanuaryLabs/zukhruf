@@ -299,5 +299,6 @@ export class SnapshotDifferential<Data extends Record<string, unknown>> {
 function valueText(value: KeyValue): string {
   if (typeof value === 'string') return value;
   if (value instanceof Uint8Array) return `bytes ${hex(value)}`;
+  if (typeof value === 'bigint') return String(value);
   return JSON.stringify(value);
 }

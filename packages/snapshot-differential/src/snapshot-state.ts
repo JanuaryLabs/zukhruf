@@ -99,25 +99,33 @@ export function fingerprintIn(entry: SavedEntry): string {
   return typeof entry === 'string' ? entry : entry[0];
 }
 
-// A key value as the JSON of a key holds it. Bytes are an object, and no
-// other key value is one, so no string key has the form of bytes.
-type SavedKeyValue = string | number | boolean | { readonly bytes: string };
+// A key value as the JSON of a key holds it. Bytes and a bigint are objects,
+// and no other key value is one, so no string key has the form of either.
+type SavedKeyValue =
+  | string
+  | number
+  | boolean
+  | { readonly bytes: string }
+  | { readonly bigint: string };
 
 // The JSON array of a record's primary key values.
 export function keyOf(values: readonly KeyValue[]): string {
   return JSON.stringify(
-    values.map((value): SavedKeyValue =>
-      value instanceof Uint8Array ? { bytes: base64url(value) } : value,
-    ),
+    values.map((value): SavedKeyValue => {
+      if (value instanceof Uint8Array) return { bytes: base64url(value) };
+      if (typeof value === 'bigint') return { bigint: String(value) };
+      return value;
+    }),
   );
 }
 
 // The primary key values of a key that keyOf wrote.
 export function keyValuesOf(key: string): KeyValue[] {
   const values: SavedKeyValue[] = JSON.parse(key);
-  return values.map((value) =>
-    typeof value === 'object' ? fromBase64url(value.bytes) : value,
-  );
+  return values.map((value) => {
+    if (typeof value !== 'object') return value;
+    return 'bytes' in value ? fromBase64url(value.bytes) : BigInt(value.bigint);
+  });
 }
 
 function entries(name: string, snapshot: unknown): Map<string, SavedEntry> {

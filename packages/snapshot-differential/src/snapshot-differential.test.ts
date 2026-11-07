@@ -821,6 +821,82 @@ test('a key of bytes survives the saved state: the next scan finds it, and a del
   ]);
 });
 
+test('a record that holds a bigint diffs by its exact value: the same bigint changes nothing, and the next integer or the number of the same value updates', async () => {
+  type Visit = { readonly id: string; readonly task: unknown };
+  const visits = new SnapshotDifferential<Visit>({
+    name: 'visits',
+    primaryKey: ['id'],
+    key: (record) => [record.id],
+    policy: new ClosedWorld(),
+  });
+  const run = async (records: Visit[], state: unknown) => {
+    const yielded: string[] = [];
+    let saved: unknown = null;
+    for await (const change of visits.diff(records, state))
+      if (change.type === 'state')
+        saved = JSON.parse(JSON.stringify(change.state));
+      else if (change.type !== 'delete')
+        yielded.push(`${change.type} ${change.record.id}`);
+    return { yielded, saved };
+  };
+  const first = await run(
+    [
+      { id: 'same', task: 13399287446400972n },
+      { id: 'next', task: 13399287446400972n },
+      { id: 'number', task: 5n },
+    ],
+    null,
+  );
+
+  const second = await run(
+    [
+      { id: 'same', task: 13399287446400972n },
+      { id: 'next', task: 13399287446400973n },
+      { id: 'number', task: 5 },
+    ],
+    first.saved,
+  );
+
+  assert.deepEqual(second.yielded, ['update next', 'update number']);
+});
+
+test('a key of bigints survives the saved state: the next scan finds it, and a delete gives it back as the same bigint, apart from the number and the string of its digits', async () => {
+  type Row = { readonly id: bigint | number | string };
+  const rows = new SnapshotDifferential<Row>({
+    name: 'rows',
+    primaryKey: ['id'],
+    key: (record) => [record.id],
+    policy: new ClosedWorld(),
+  });
+  const run = async (records: Row[], state: unknown) => {
+    const yielded: unknown[] = [];
+    let saved: unknown = null;
+    for await (const change of rows.diff(records, state))
+      if (change.type === 'state')
+        saved = JSON.parse(JSON.stringify(change.state));
+      else if (change.type === 'delete') yielded.push(change.key.id);
+      else yielded.push(`${change.type} ${String(change.record.id)}`);
+    return { yielded, saved };
+  };
+  const first = await run(
+    [{ id: 9223372036854775807n }, { id: 5n }, { id: 5 }, { id: '5' }],
+    null,
+  );
+
+  const unchanged = await run(
+    [{ id: 9223372036854775807n }, { id: 5n }, { id: 5 }, { id: '5' }],
+    first.saved,
+  );
+  const vanished = await run([], unchanged.saved);
+
+  assert.equal(first.yielded.length, 4);
+  assert.deepEqual(unchanged.yielded, []);
+  assert.deepEqual(
+    new Set(vanished.yielded),
+    new Set([9223372036854775807n, 5n, 5, '5']),
+  );
+});
+
 test('a scan that lists a key or a group twice, holds a record JSON cannot hold, or reads foreign state fails', async () => {
   const policy = new ClosedWorld();
   const loose = new SnapshotDifferential<Record<string, unknown>>({

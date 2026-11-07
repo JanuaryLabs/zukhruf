@@ -13,8 +13,9 @@ export function fingerprintOf(
 }
 
 // JSON with object keys sorted at every depth. Bytes are # and their
-// base64url: a JSON text has no # outside a string, so no JSON value has the
-// form of bytes. A value that JSON cannot hold with no change fails.
+// base64url, and a bigint is its digits and n: a JSON text has no # and no n
+// outside a string, so no JSON value has the form of bytes or of a bigint,
+// and 5n is not 5. A value that JSON cannot hold with no change fails.
 function canonical(name: string, value: unknown): string {
   if (
     value === null ||
@@ -25,6 +26,7 @@ function canonical(name: string, value: unknown): string {
       !Object.is(value, -0))
   )
     return JSON.stringify(value);
+  if (typeof value === 'bigint') return `${value}n`;
   if (value instanceof Uint8Array) return `#${base64url(value)}`;
   if (Array.isArray(value) && Object.keys(value).length === value.length)
     return `[${value.map((item) => canonical(name, item)).join(',')}]`;
