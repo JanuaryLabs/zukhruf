@@ -1,6 +1,6 @@
 {
   "name": "@zukhruf/evals",
-  "version": "0.8.1",
+  "version": "0.8.3",
   "description": "Scores the answers of an eval against their labels, with one import path for each shape of answer: a core of ratios, scorecards, totals and bootstrap intervals, ./structured for structured values, and ./promptfoo for promptfoo.",
   "license": "MIT",
   "repository": {
@@ -61,8 +61,8 @@
     "access": "public"
   },
   "dependencies": {
-    "@zukhruf/python": "^0.8.1",
-    "@zukhruf/statistics": "^0.8.1"
+    "@zukhruf/python": "^0.8.3",
+    "@zukhruf/statistics": "^0.8.3"
   },
   "peerDependencies": {
     "@cfworker/json-schema": "4.1.4",
@@ -78,7 +78,7 @@
   },
   "devDependencies": {
     "@cfworker/json-schema": "4.1.4",
-    "@zukhruf/testing": "^0.8.1",
+    "@zukhruf/testing": "^0.8.3",
     "munkres": "^2.1.1",
     "promptfoo": "0.125.1",
     "python-random": "1.0.0"
