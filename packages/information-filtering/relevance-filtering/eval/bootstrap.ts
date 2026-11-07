@@ -1,3 +1,4 @@
+import { defaultRng } from '@zukhruf/random';
 import {
   ConfidenceInterval,
   IidBootstrap,
@@ -6,7 +7,6 @@ import {
 } from '@zukhruf/statistics';
 
 import { mean } from './metrics.ts';
-import { NumpyGenerator } from './numpy-random.ts';
 
 // A 95% percentile interval of a difference (Efron and Tibshirani 1993), and
 // the difference that the data gives.
@@ -35,7 +35,7 @@ export function topicBootstrap(
   differences: readonly number[],
   seed: number,
 ): Interval {
-  const generator = new NumpyGenerator(seed);
+  const generator = defaultRng(seed);
   // integers(0, n, n) draws its n indices one at a time, so one index for
   // each call gives the same draws. integers(0, n, 1) always gives one.
   const bootstrap = new IidBootstrap({
@@ -56,7 +56,7 @@ export function articleWeights(
   relevantToAny: readonly boolean[],
   seed: number,
 ): number[][] {
-  const generator = new NumpyGenerator(seed);
+  const generator = defaultRng(seed);
   const weights = Array.from({ length: REPLICATES }, () =>
     new Array<number>(relevantToAny.length).fill(0),
   );

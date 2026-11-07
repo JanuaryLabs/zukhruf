@@ -1,6 +1,7 @@
+import { RandomState } from '@zukhruf/random';
+
 import { createDataloaderFromTexts } from '../create-dataloaders.ts';
 import { type Dataset, select } from '../dependencies/datasets.ts';
-import { RandomState } from '../dependencies/numpy-random.ts';
 import { mean } from '../dependencies/numpy.ts';
 import { LogisticRegression } from '../dependencies/sklearn-logistic.ts';
 import {

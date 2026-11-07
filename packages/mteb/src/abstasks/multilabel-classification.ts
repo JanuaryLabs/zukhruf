@@ -1,6 +1,7 @@
+import { defaultRng } from '@zukhruf/random';
+
 import { createDataloaderFromTexts } from '../create-dataloaders.ts';
 import { type Dataset, select } from '../dependencies/datasets.ts';
-import { NumpyGenerator } from '../dependencies/numpy-random.ts';
 import { mean } from '../dependencies/numpy.ts';
 import { pythonIntSetOrder } from '../dependencies/python-set.ts';
 import { KNeighborsClassifier } from '../dependencies/sklearn-neighbors.ts';
@@ -74,7 +75,7 @@ export abstract class AbsTaskMultilabelClassification extends ClassificationTask
   maxEvalSamples: number | null = 3000;
   // np_rng of AbsTask: default_rng(seed), made with the task. The shuffles of
   // every evaluation of the task draw from it in turn.
-  readonly npRng = new NumpyGenerator(this.seed);
+  readonly npRng = defaultRng(this.seed);
 
   protected override async evaluateSubset(
     mtebModel: MTEBModels,

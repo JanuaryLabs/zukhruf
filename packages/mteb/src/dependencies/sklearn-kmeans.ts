@@ -1,7 +1,8 @@
+import { RandomState } from '@zukhruf/random';
+
 import type { Embeddings } from '../types/encoder-io.ts';
 import { ddot } from './blas.ts';
 import { log } from './libm.ts';
-import { RandomState } from './numpy-random.ts';
 import { argsortStable } from './numpy.ts';
 import { rowNorms } from './sklearn.ts';
 
@@ -90,7 +91,7 @@ export class MiniBatchKMeans {
     let step = 0;
     for (; step < nSteps; step++) {
       const batch = random
-        .choiceWithProbabilities(normalizedWeights, batchSize)
+        .choice(nSamples, batchSize, { p: normalizedWeights })
         .map((index) => rowOf(x, index));
       sinceLastReassign += batchSize;
       let randomReassign = false;
@@ -145,10 +146,9 @@ export class MiniBatchKMeans {
         toReassign[index] = false;
     const nReassigns = toReassign.filter(Boolean).length;
     if (nReassigns === 0) return inertia;
-    const newCenters = random.choiceWithoutReplacement(
-      batch.length,
-      nReassigns,
-    );
+    const newCenters = random.choice(batch.length, nReassigns, {
+      replace: false,
+    });
     let next = 0;
     for (const [cluster, reassign] of toReassign.entries())
       if (reassign)
@@ -235,10 +235,9 @@ function kmeansPlusPlus(
   const nSamples = x.length;
   const nLocalTrials = 2 + Math.trunc(log(nClusters));
   const probability = Math.fround(1 / Math.fround(nSamples));
-  const [first = 0] = random.choiceWithProbabilities(
-    new Float32Array(nSamples).fill(probability),
-    1,
-  );
+  const [first = 0] = random.choice(nSamples, 1, {
+    p: new Float32Array(nSamples).fill(probability),
+  });
   const centers = [rowOf(x, first)];
   const norms = x.map((row) => ddot(row.length, row, 0, row, 0));
   let closest = squaredDistances(rowOf(x, first), x, norms);

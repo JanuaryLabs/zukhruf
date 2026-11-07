@@ -95,7 +95,7 @@ The results go to `results/daily-<set>.json` (`daily-smoke-<set>.json` for a smo
 
 Each slice teaches from the articles of its first 14 days and decides on the rest. For each profile and each N in {5, 10}, the reader shows the N articles most similar to the description and the N most similar matches of the narrow keyword. The answer key answers: relevant is a yes, not relevant is a no, and an ambiguous article is skipped. A profile is scored on a slice when the rest of the slice holds at least 15 strict relevant articles.
 
-The scores are those of the research code (round-2 `evaluate.py`, `metric_row`): T11F (F-measure with beta 0.5, TREC-11), and the Brier skill against the base rate of the stream. The macro score is the mean over the scored profiles. The interval of (design - baseline) is the topic bootstrap of the research with `numpy.random.default_rng(31957)`, and `numpy-random.ts` draws the same integers as numpy.
+The scores are those of the research code (round-2 `evaluate.py`, `metric_row`): T11F (F-measure with beta 0.5, TREC-11), and the Brier skill against the base rate of the stream. The macro score is the mean over the scored profiles. The interval of (design - baseline) is the topic bootstrap of the research with `numpy.random.default_rng(31957)`, and `defaultRng` of `@zukhruf/random` draws the same integers as NumPy.
 
 On 2026-10-29 the package gave the numbers of round 6: macro T11F 0.7014896592253096 against keywordNarrow 0.6559484434821066, interval [-0.0189, +0.1180], macro Brier skill +0.512.
 

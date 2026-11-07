@@ -24,5 +24,6 @@ package-lock.json
 /docs/research/relevance-filtering
 /packages/python/src/**/fixtures
 /packages/statistics/src/**/fixtures
+/packages/random/src/**/fixtures
 # The native libraries of @zukhruf/sqlite-open (binary build output).
 /packages/sqlite/open/lib

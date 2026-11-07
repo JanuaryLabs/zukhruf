@@ -17,6 +17,9 @@
     },
     {
       "path": "../../statistics/tsconfig.lib.json"
+    },
+    {
+      "path": "../../random/tsconfig.lib.json"
     }
   ]
 }

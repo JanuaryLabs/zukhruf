@@ -99,6 +99,9 @@
       "path": "./packages/statistics"
     },
     {
+      "path": "./packages/random"
+    },
+    {
       "path": "./packages/sqlite/changefeed"
     },
     {

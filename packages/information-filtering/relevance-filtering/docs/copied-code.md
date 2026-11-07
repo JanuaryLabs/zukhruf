@@ -23,7 +23,7 @@ Changes: the rule is that of `freeze-ranking/plan.json`: non-inferiority to the 
 
 **`bootstrap.ts` → `bootstrap.ts`.**
 Both give a 95% percentile interval of a paired difference with a fixed seed. The interval, its quantile method and its `Interval` type come from `@zukhruf/statistics` in both (backlog #3819); what stays here is how each eval draws its units.
-Changes: the units are profiles (the topic bootstrap of the research) or exam articles in two strata, not blocks of gold events. The statistic of an article replicate is the MAP, with each article in as many ranks as its weight. The generator is numpy's (`numpy-random.ts`), not Mulberry32, because the research rounds and the exam rule name `numpy.random.default_rng`.
+Changes: the units are profiles (the topic bootstrap of the research) or exam articles in two strata, not blocks of gold events. The statistic of an article replicate is the MAP, with each article in as many ranks as its weight. The generator is NumPy's (`defaultRng` of `@zukhruf/random`), not Mulberry32, because the research rounds and the exam rule name `numpy.random.default_rng`.
 
 **`run.ts` → `run.ts`.**
 Both are the command line runner: `parseArgs`, a usage text, a decision of the role of each set, and a results folder.

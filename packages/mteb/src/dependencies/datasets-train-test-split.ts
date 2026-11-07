@@ -1,3 +1,5 @@
+import { type Generator, defaultRng } from '@zukhruf/random';
+
 // Dataset.train_test_split of datasets 5.1.0 with an int test_size, a seed
 // and stratify_by_column (datasets/arrow_dataset.py), and
 // datasets/utils/stratify.py, which adapts the StratifiedShuffleSplit of
@@ -6,7 +8,6 @@
 // split without stratification, the split without a shuffle and the checks of
 // the sizes are not ported: MTEB does not reach them.
 import { type Dataset, type DatasetDict, select } from './datasets.ts';
-import { NumpyGenerator } from './numpy-random.ts';
 
 // The train and the test rows: the test side holds testSize rows, the train
 // side the others. The rows of each side are in the order of a permutation.
@@ -23,7 +24,7 @@ export function trainTestSplit(
   const { testSize, seed, stratifyByColumn } = options;
   const nTest = testSize;
   const nTrain = dataset.rows.length - nTest;
-  const generator = new NumpyGenerator(seed);
+  const generator = defaultRng(seed);
   const y = dataset.rows.map((row) => {
     const value = row[stratifyByColumn];
     if (typeof value !== 'number' || !Number.isInteger(value))
@@ -85,7 +86,7 @@ export function trainTestSplit(
 function approximateMode(
   classCounts: readonly number[],
   nDraws: number,
-  generator: NumpyGenerator,
+  generator: Generator,
 ): number[] {
   const total = classCounts.reduce((sum, count) => sum + count, 0);
   const continuous = classCounts.map((count) => (nDraws * count) / total);
@@ -97,7 +98,7 @@ function approximateMode(
     for (const value of values) {
       const inds = remainder.flatMap((r, i) => (r === value ? [i] : []));
       const addNow = Math.min(inds.length, needToAdd);
-      for (const i of generator.choiceWithoutReplacement(inds, addNow))
+      for (const i of generator.choice(inds, addNow, { replace: false }))
         floored[i] = (floored[i] ?? 0) + 1;
       needToAdd -= addNow;
       if (needToAdd === 0) break;

@@ -3,8 +3,9 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 
+import { defaultRng } from '@zukhruf/random';
+
 import { trainTestSplit } from './datasets-train-test-split.ts';
-import { NumpyGenerator } from './numpy-random.ts';
 import { qcut } from './pandas.ts';
 import { kendalltau } from './scipy.ts';
 import {
@@ -80,7 +81,7 @@ const nanOf = (values: readonly (number | null)[]) =>
 
 // The "generated" values of generate.py, from numpy's integers.
 function integers([seed, high, size]: Generated): number[] {
-  return new NumpyGenerator(seed).integers(0, high, size);
+  return defaultRng(seed).integers(0, high, size);
 }
 
 function generatedRows([seed, rows, columns]: readonly [

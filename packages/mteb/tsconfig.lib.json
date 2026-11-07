@@ -16,6 +16,9 @@
       "path": "../python/tsconfig.lib.json"
     },
     {
+      "path": "../random/tsconfig.lib.json"
+    },
+    {
       "path": "../testing/tsconfig.lib.json"
     },
     {

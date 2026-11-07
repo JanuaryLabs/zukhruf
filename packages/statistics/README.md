@@ -44,7 +44,7 @@ The random generator is an input. `randomIndex(n)` gives an index from 0 to n âˆ
 
 These parts stay with each caller, because each caller has its own rule:
 
-- the random generators: python-random is on npm, and the NumPy generator is a port in `@zukhruf/mteb` and in the eval of `@zukhruf/relevance-filtering`;
+- the random generators: python-random is on npm, and the NumPy generators are in `@zukhruf/random`. Each caller gives `randomIndex`;
 - a stratified bootstrap (relevance-filtering) and a block bootstrap (`@zukhruf/event-detection`): they draw their own resamples and give their distribution to `PercentileInterval`;
 - an interval with a rule of its own at each end, such as the `lower` method at the low end and the `higher` method at the high end of the Structured Output Benchmark: its caller writes it as a `ConfidenceIntervalMethod`;
 - a p-value and a verdict, such as "better" when the interval of a difference lies above 0: each caller builds its rule from `isAbove` and `isBelow`.

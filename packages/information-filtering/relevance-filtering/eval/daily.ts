@@ -1,8 +1,9 @@
+import { defaultRng } from '@zukhruf/random';
+
 import type { Label } from './answer-key.ts';
 import { type Interval, topicBootstrap } from './bootstrap.ts';
 import { joined, runDesign } from './design.ts';
 import { mean } from './metrics.ts';
-import { NumpyGenerator } from './numpy-random.ts';
 import type { EvalProfile } from './profiles.ts';
 import { newestFirst, poolOf, streamOf } from './ranking.ts';
 import type { StreamArticle } from './runs.ts';
@@ -277,7 +278,7 @@ export function randomLabels(
   articles: number,
   profiles: readonly EvalProfile[],
 ): Record<string, Label>[] {
-  const generator = new NumpyGenerator(9);
+  const generator = defaultRng(9);
   const labels = Array.from(
     { length: articles },
     (): Record<string, Label> => ({}),

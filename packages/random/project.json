@@ -1,0 +1,7 @@
+{
+  "name": "random",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "packages/random/src",
+  "projectType": "library",
+  "tags": ["layer:island", "std:base"]
+}

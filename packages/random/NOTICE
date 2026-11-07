@@ -1,0 +1,18 @@
+@zukhruf/random
+Copyright 2026 ezzabuzaid
+
+This package ports the semantics of numpy.random in NumPy 2.5.4:
+SeedSequence (bit_generator.pyx), PCG64 with the XSL-RR output, the MT19937
+of RandomState with its init_genrand seeding, the draws random_interval,
+random_bounded_uint64 and buffered_bounded_lemire_uint32 of distributions.c,
+and the shuffle, permutation, choice, randint and random_sample of
+_generator.pyx and mtrand.pyx. The package does not include NumPy's code.
+
+- NumPy: Copyright (c) 2005-2025, NumPy Developers, BSD 3-Clause License,
+  https://github.com/numpy/numpy.
+- numpy/random: Copyright (c) 2019 Kevin Sheppard, dual-licensed under the
+  University of Illinois/NCSA Open Source License and the BSD 3-Clause
+  License.
+- MT19937: Copyright (C) 1997-2002, Makoto Matsumoto and Takuji Nishimura,
+  and Copyright (c) 2003-2005, Jean-Sebastien Roy, BSD 3-Clause License.
+- PCG64: Copyright 2014 Melissa O'Neill, MIT License.

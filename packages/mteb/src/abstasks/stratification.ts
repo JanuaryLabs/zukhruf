@@ -1,4 +1,5 @@
-import { RandomState } from '../dependencies/numpy-random.ts';
+import { RandomState } from '@zukhruf/random';
+
 import type { LabelIndicator } from '../dependencies/sklearn.ts';
 
 // mteb/abstasks/_stratification.py, a copy of scikit-multilearn's iterative

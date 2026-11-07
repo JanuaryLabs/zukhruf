@@ -1,0 +1,40 @@
+{
+  "name": "@zukhruf/random",
+  "version": "0.1.0",
+  "private": true,
+  "description": "The generators of numpy.random in JavaScript, to the last bit: SeedSequence, PCG64, the legacy MT19937, Generator, default_rng and RandomState.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/JanuaryLabs/zukhruf",
+    "directory": "packages/random"
+  },
+  "bugs": {
+    "url": "https://github.com/JanuaryLabs/zukhruf/issues"
+  },
+  "homepage": "https://github.com/JanuaryLabs/zukhruf/tree/main/packages/random#readme",
+  "keywords": [
+    "random",
+    "numpy",
+    "pcg64",
+    "mt19937",
+    "seed-sequence"
+  ],
+  "type": "module",
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "@zukhruf/source": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "NOTICE",
+    "!dist/spec/**",
+    "!**/*.tsbuildinfo",
+    "!**/*.test.*"
+  ]
+}

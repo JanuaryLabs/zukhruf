@@ -1,6 +1,6 @@
+import { defaultRng } from '@zukhruf/random';
 import { IidBootstrap, Linear, PercentileInterval } from '@zukhruf/statistics';
 
-import { NumpyGenerator } from '../dependencies/numpy-random.ts';
 import { mean } from '../dependencies/numpy.ts';
 import { compareStrings } from '../dependencies/python.ts';
 
@@ -59,7 +59,7 @@ export function pairedBootstrapTest(
     (query) =>
       (change.get(query) ?? Number.NaN) - (baseline.get(query) ?? Number.NaN),
   );
-  const generator = new NumpyGenerator(seed);
+  const generator = defaultRng(seed);
   // integers(0, n, n) draws its n indices one at a time, so one index for
   // each call gives the same draws. integers(0, n, 1) always gives one.
   const means = new IidBootstrap({

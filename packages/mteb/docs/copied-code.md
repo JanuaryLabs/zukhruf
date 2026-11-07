@@ -1,32 +1,14 @@
 # Copied code
 
-This package keeps copies of code from the information-filtering evals, and one copy inside the package: the reader of a file of the HuggingFace Hub.
+This package keeps one copy inside the package: the reader of a file of the HuggingFace Hub. The parts that it copied from the information-filtering evals moved to `@zukhruf/statistics` and `@zukhruf/random`.
 
 ## From the information-filtering evals
 
-The paired bootstrap test of this package (`src/significance/paired-bootstrap.ts`) compares the scores of a change and its baseline query by query. The evals of `@zukhruf/relevance-filtering` and `@zukhruf/event-detection` (`packages/information-filtering/`) already compare two designs with a bootstrap and a verdict. This package kept its own copy of four parts of them. Three parts reached their third place and moved to `@zukhruf/statistics` (backlog #3819): the resample loop (`IidBootstrap`), NumPy's `linear` quantile (`Linear`, through `PercentileInterval`), and the side of a value on which an interval lies (`ConfidenceInterval.isAbove` and `isBelow`, from which each verdict builds its own rule). One part stays a copy: the port of `numpy.random.default_rng`.
-
-The reason is the Rule of Three (workspace ADR 0001, rule 2). This package is the second place of the generator port. A third port of `numpy.random.default_rng` starts its extraction (backlog #3411). Until then, make each fix in both copies, and name the files in the commit.
-
-Paths on the left are in `packages/information-filtering/`. Paths on the right are in `packages/mteb/src/`.
-
-### Copied without changes
-
-- `relevance-filtering/eval/numpy-random.test.ts` → `dependencies/numpy-random.test.ts`: the integers of `numpy.random.default_rng` for two seeds.
-
-### Copied with changes
-
-**`relevance-filtering/eval/numpy-random.ts` → `dependencies/numpy-random.ts`.**
-Both give `numpy.random.default_rng(seed).integers(low, high, size)` bit for bit: SeedSequence, PCG64 and Lemire's bounded integers.
-Changes: the first comment names the paired bootstrap test of this package and the tasks that draw from the generator, not the research code and the exam rule of the eval. The code of `integers` is the same. This copy also has `shuffle` and `permutation` (`random_interval`), `choiceWithoutReplacement` (Floyd's algorithm, which draws with the same Lemire's bounded integers as `integers`), and the legacy `RandomState`, which the eval does not have.
+The paired bootstrap test of this package (`src/significance/paired-bootstrap.ts`) compares the scores of a change and its baseline query by query. The evals of `@zukhruf/relevance-filtering` and `@zukhruf/event-detection` (`packages/information-filtering/`) already compare two designs with a bootstrap and a verdict. This package kept its own copy of four parts of them. Three parts reached their third place and moved to `@zukhruf/statistics` (backlog #3819): the resample loop (`IidBootstrap`), NumPy's `linear` quantile (`Linear`, through `PercentileInterval`), and the side of a value on which an interval lies (`ConfidenceInterval.isAbove` and `isBelow`, from which each verdict builds its own rule). The fourth part, the port of `numpy.random.default_rng`, moved to `@zukhruf/random` at its second place (backlog #3411, [random ADR 0001](../../random/docs/adr/0001-one-package-for-the-generators-of-numpy-random.md)). The legacy `RandomState` of this package moved with it. So no part stays a copy.
 
 ### Not copied
 
 The article bootstrap of the relevance-filtering eval (`articleWeights`, `articleBootstrap`), the block bootstrap and the Mulberry32 generator of the event-detection eval, and the roles, answer keys and runners of both evals. They are about frozen designs and their labelled sets, and this package has neither.
-
-### Backlog
-
-#3411 waits for a third port of the generator. Its interim rule: mirror every fix in both copies, and name the files in the commit.
 
 ## The Hub file reader, inside this package
 
