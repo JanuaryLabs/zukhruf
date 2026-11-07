@@ -90,9 +90,6 @@
       "path": "./packages/mteb"
     },
     {
-      "path": "./packages/structured-eval"
-    },
-    {
       "path": "./packages/evals"
     },
     {

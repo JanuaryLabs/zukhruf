@@ -1,4 +1,4 @@
-@zukhruf/structured-eval contains a TypeScript port of the scorer of the
+@zukhruf/evals contains a TypeScript port of the scorer of the
 Structured Output Benchmark (SOB): evaluate.py at commit da785a8 of
 https://github.com/interfazeai/sob. That code has this licence:
 
@@ -24,7 +24,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-@zukhruf/structured-eval contains test cases from the JSON-Schema-Test-Suite:
+@zukhruf/evals contains test cases from the JSON-Schema-Test-Suite:
 tests/draft2020-12/optional/ecmascript-regex.json and
 tests/draft7/optional/ecmascript-regex.json at commit
 245a45abc90190c0bff04d97e6d2b541b4bb9f12 of
@@ -53,7 +53,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
 
-@zukhruf/structured-eval contains the JSON Schema meta-schemas of draft 7 and
+@zukhruf/evals contains the JSON Schema meta-schemas of draft 7 and
 draft 2020-12 (src/schema/draft-07-schema.ts and
 src/schema/draft-2020-12-schema.ts), copied from jsonschema-specifications
 2025.9.1 (https://github.com/python-jsonschema/jsonschema-specifications). That

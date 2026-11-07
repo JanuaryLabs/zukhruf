@@ -4,7 +4,7 @@
 # ///
 # Makes the fixture of sob.golden.test.ts with SOB's evaluate.py at commit
 # da785a8521c8954283b2989d01e54d80c4e023c6 of https://github.com/interfazeai/sob:
-# uv run packages/structured-eval/src/scoring/fixtures/sob-evaluate/generate.py
+# uv run packages/evals/src/structured/scoring/fixtures/sob-evaluate/generate.py
 #
 # responses.jsonl holds hand-written SOB response lines, one for each edge
 # path of the port: int against float, a float repr, NaN, integer-like keys,
