@@ -32,6 +32,31 @@ test('a read stays on one moment while the owner commits, and the next snapshot 
   assert.equal(next.all('SELECT count(*) AS n FROM notes')[0]?.n, 2);
 });
 
+test('a statement that asks for bigints reads an integer beyond 2^53 exactly, at the moment of the snapshot', async () => {
+  await using dir = await new TemporaryFiles().directory('snapshot-');
+  const path = join(dir.path, 'source.sqlite');
+  using owner = sqliteOpen.open(path);
+  owner.exec(`
+    CREATE TABLE visits (id INTEGER PRIMARY KEY, task INTEGER);
+    INSERT INTO visits (task) VALUES (9223372036854775807);
+  `);
+
+  using snapshot = new Snapshot(path);
+  owner.exec('INSERT INTO visits (task) VALUES (13399287446400972)');
+  const read = snapshot.prepare('SELECT id, task FROM visits ORDER BY id', {
+    readBigInts: true,
+  });
+
+  assert.deepEqual(
+    read.all().map((row) => ({ ...row })),
+    [{ id: 1n, task: 9223372036854775807n }],
+  );
+  assert.throws(
+    () => snapshot.all('SELECT task FROM visits'),
+    /too large to be represented as a JavaScript number/,
+  );
+});
+
 test('a layout without the required columns fails with MissingColumnsError, naming each one, and closes', async () => {
   await using dir = await new TemporaryFiles().directory('snapshot-');
   const path = join(dir.path, 'source.sqlite');

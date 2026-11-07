@@ -1,4 +1,10 @@
-import type { DatabaseSync, SQLInputValue, SQLOutputValue } from 'node:sqlite';
+import type {
+  DatabaseSync,
+  PrepareOptions,
+  SQLInputValue,
+  SQLOutputValue,
+  StatementSync,
+} from 'node:sqlite';
 
 import { open } from '@zukhruf/sqlite-open';
 
@@ -80,6 +86,12 @@ export class Snapshot implements Disposable {
     ...parameters: SQLInputValue[]
   ): IteratorObject<Record<string, SQLOutputValue>, undefined> {
     return this.#database.prepare(sql).iterate(...parameters);
+  }
+
+  // A statement with its own options, such as readBigInts for an integer
+  // beyond 2^53, which a plain read throws on. It reads the same moment.
+  prepare(sql: string, options?: PrepareOptions): StatementSync {
+    return this.#database.prepare(sql, options);
   }
 
   [Symbol.dispose](): void {
