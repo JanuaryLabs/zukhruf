@@ -1,5 +1,5 @@
 name: Set up the workspace
-description: Installs the newest Node.js LTS, zig for the native libraries of @zukhruf/sqlite-open, and the workspace's npm dependencies.
+description: Installs the newest Node.js LTS, the latest npm, and the workspace's npm dependencies. Other repositories use it as JanuaryLabs/zukhruf/.github/actions/setup-workspace@main.
 
 inputs:
   registry-url:
@@ -16,12 +16,11 @@ runs:
         cache: npm
         registry-url: ${{ inputs.registry-url }}
 
-    # sqlite-open's native target builds the library of each platform with
-    # zig cc, here and in the release (packages/sqlite/open/docs/adr/0006).
-    - name: Setup Zig
-      uses: mlugg/setup-zig@v2
-      with:
-        version: 0.16.0
+    # The lockfile and allowScripts are npm 12's; the npm that Node bundles is
+    # older, runs every install script and resolves peer ranges differently.
+    - name: Install the latest npm
+      shell: bash
+      run: npm install -g npm@latest
 
     - name: Install dependencies
       shell: bash

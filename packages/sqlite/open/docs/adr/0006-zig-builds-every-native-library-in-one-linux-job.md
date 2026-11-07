@@ -10,7 +10,7 @@ The native library ([ADR 0003](./0003-persistent-wal-through-a-native-library.md
 - The library is at the root of the package, not in `dist` or `src`. The tests run the files in `src`, and the package runs the files in `dist`. Both find `../lib`.
 - The package has the official headers of SQLite 3.54.0, the version that `node:sqlite` 26.13 has, in `src/native/`. Linux has no macOS SDK, and the header of the macOS SDK turns off the macros of an extension.
 - The Linux library is built with `-nostdlib`. It calls no function of the C library, so one file can load with glibc and with musl. A test in the `node:26-slim` and `node:26-alpine` containers proves the load before the consumers use the release.
-- The shared action `setup-workspace` installs zig 0.16.0 with a published setup action. CI and the release both use it.
+- CI and the release install zig 0.16.0 with a published setup action, in a step after `setup-workspace`. Since #3274 (2026-11-07), `setup-workspace` is shared with other repositories that do not build native libraries, so zig is not in it.
 
 ## Considered Options
 

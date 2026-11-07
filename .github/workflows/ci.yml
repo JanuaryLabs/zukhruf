@@ -28,6 +28,13 @@ jobs:
       - name: Set up the workspace
         uses: ./.github/actions/setup-workspace
 
+      # sqlite-open's native target builds the library of each platform with
+      # zig cc, here and in the release (packages/sqlite/open/docs/adr/0006).
+      - name: Setup Zig
+        uses: mlugg/setup-zig@v2
+        with:
+          version: 0.16.0
+
       # The release commit changes every package.json and gets no CI run, so a
       # compare with the last green commit always sees every project changed.
       - name: Find what changed since the last release

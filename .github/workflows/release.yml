@@ -49,6 +49,14 @@ jobs:
         with:
           registry-url: https://registry.npmjs.org/
 
+      # sqlite-open's native target builds the library of each platform with
+      # zig cc, here and in CI (packages/sqlite/open/docs/adr/0006).
+      - name: Setup Zig
+        if: steps.tested.outputs.current == 'true'
+        uses: mlugg/setup-zig@v2
+        with:
+          version: 0.16.0
+
       - name: Verify npm authentication
         if: steps.tested.outputs.current == 'true'
         run: npm whoami
