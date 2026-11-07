@@ -34,7 +34,6 @@ export { ValidSchema } from './scorers/valid-schema.ts';
 export { Case } from './scoring/case.ts';
 export { ConfigCase } from './scoring/config-case.ts';
 export { TextVarsCase } from './scoring/text-vars-case.ts';
-export { ScorerSet } from './scoring/scorer-set.ts';
 export { PerField } from './scoring/per-field.ts';
 export {
   type Draft,
@@ -42,4 +41,3 @@ export {
   type Validation,
 } from './schema/json-schema.ts';
 export type { SchemaTypeWalk } from './schema/schema-type-walk.ts';
-export { ScorerAssertion } from './promptfoo/scorer-assertion.ts';

@@ -7,9 +7,6 @@ The Rule of Three (workspace ADR 0001, rule 2) keeps these rules in two places. 
 **@zukhruf/mteb `src/dependencies/python.ts` `compareStrings` → `src/structured/cpython/python-text.ts` `compareStrings`.**
 Python's order of two strings, by code point.
 
-**`src/promptfoo/assertion-module.ts` `VarsContext` → `src/structured/promptfoo/scorer-assertion.ts` `VarsContext`.**
-The vars that promptfoo gives an assertion of a shared `defaultTest`. `./structured` cannot import `./promptfoo` (ADR 0001), and `ScorerAssertion` stays in `./structured` until `./classification` (backlog #3889) moves it into `./promptfoo`. Then the copy goes.
-
 ## A frozen package
 
 **`packages/structured-eval` → this package, until offers-evals #3892 and context-compiler #3893 use the release of `@zukhruf/evals`.**

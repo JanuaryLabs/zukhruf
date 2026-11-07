@@ -1,14 +1,14 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { Recall } from '../../index.ts';
+import { Recall, ScorerSet } from '../../index.ts';
 import {
   ConfigCase,
   JsonSchema,
   JsonValue,
   PathMatches,
   RequiredKeyRecall,
-  ScorerSet,
+  TreeWalk,
   TypePrecision,
   ValueMatches,
 } from '../index.ts';
@@ -18,9 +18,12 @@ import {
 // path, and an empty key adds nothing to the path. Here each key is one step.
 
 test('a key that holds "." or "[" is one step, on each side: {"a.b": 1} is not {"a": {"b": 1}}, and {"a[0]": 1} is not {"a": [1]}', () => {
-  const scorer = new ScorerSet({
-    recall: new Recall(new PathMatches()),
-  });
+  const scorer = new ScorerSet(
+    {
+      recall: new Recall(new PathMatches()),
+    },
+    { comparer: new TreeWalk() },
+  );
   const recall = (stated: unknown, expected: unknown) =>
     scorer
       .score(
@@ -45,9 +48,12 @@ test('a key that holds "." or "[" is one step, on each side: {"a.b": 1} is not {
 });
 
 test('an empty key is a step: the leaf at {"": 1} is a leaf', () => {
-  const scorer = new ScorerSet({
-    match: new Recall(new ValueMatches()),
-  });
+  const scorer = new ScorerSet(
+    {
+      match: new Recall(new ValueMatches()),
+    },
+    { comparer: new TreeWalk() },
+  );
 
   const scorecard = scorer.score(
     { '': 1 },
@@ -62,9 +68,12 @@ test('an empty key is a step: the leaf at {"": 1} is a leaf', () => {
 });
 
 test('TypePrecision reads a name that holds "." or "[" as one property of the schema', () => {
-  const scorer = new ScorerSet({
-    precision: new TypePrecision(),
-  });
+  const scorer = new ScorerSet(
+    {
+      precision: new TypePrecision(),
+    },
+    { comparer: new TreeWalk() },
+  );
   const testCase = new ConfigCase({
     schema: new JsonSchema(
       JsonValue.from({
@@ -89,9 +98,12 @@ test('TypePrecision reads a name that holds "." or "[" as one property of the sc
 });
 
 test('RequiredKeyRecall compares fields by their steps: a required property named "a.b" is not met by {"a": {"b": 1}}, and a required empty key is not met by the keys under it', () => {
-  const scorer = new ScorerSet({
-    recall: new RequiredKeyRecall(),
-  });
+  const scorer = new ScorerSet(
+    {
+      recall: new RequiredKeyRecall(),
+    },
+    { comparer: new TreeWalk() },
+  );
   const dotted = new ConfigCase({
     schema: new JsonSchema(
       JsonValue.from({
@@ -124,9 +136,12 @@ test('RequiredKeyRecall compares fields by their steps: a required property name
 });
 
 test('RequiredKeyRecall reads a field without its item positions, and a key "0" is not an item', () => {
-  const scorer = new ScorerSet({
-    recall: new RequiredKeyRecall(),
-  });
+  const scorer = new ScorerSet(
+    {
+      recall: new RequiredKeyRecall(),
+    },
+    { comparer: new TreeWalk() },
+  );
   const items = new ConfigCase({
     schema: new JsonSchema(
       JsonValue.from({

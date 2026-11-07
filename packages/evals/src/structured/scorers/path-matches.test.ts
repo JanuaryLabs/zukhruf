@@ -1,20 +1,23 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { Precision, Recall } from '../../index.ts';
+import { Precision, Recall, ScorerSet } from '../../index.ts';
 import {
   ConfigCase,
   JsonSchema,
   JsonValue,
   PathMatches,
-  ScorerSet,
+  TreeWalk,
 } from '../index.ts';
 
 test('Recall and Precision of PathMatches count the leaf paths that both values have, whatever their values, of the expected paths and of the stated paths; a path that only one value has is no hit', () => {
-  const scorer = new ScorerSet({
-    recall: new Recall(new PathMatches()),
-    precision: new Precision(new PathMatches()),
-  });
+  const scorer = new ScorerSet(
+    {
+      recall: new Recall(new PathMatches()),
+      precision: new Precision(new PathMatches()),
+    },
+    { comparer: new TreeWalk() },
+  );
   const testCase = new ConfigCase({
     schema: new JsonSchema(JsonValue.from({ type: 'object' }), { draft: '7' }),
   }).from({ expected: { a: 1, b: { c: 2 }, d: [3] } });

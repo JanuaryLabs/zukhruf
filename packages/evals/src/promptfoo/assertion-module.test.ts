@@ -13,12 +13,14 @@ import { TemporaryFiles } from '@zukhruf/testing/fs';
 
 import { Recall, type Scorer } from '../index.ts';
 import {
+  type Case,
   type Comparison,
   ExactMatch,
   PathMatches,
-  ScorerAssertion,
+  TextVarsCase,
+  TreeWalk,
 } from '../structured/index.ts';
-import { AssertionModule } from './index.ts';
+import { AssertionModule, ScorerAssertion } from './index.ts';
 
 const execFileAsync = promisify(execFile);
 
@@ -29,15 +31,22 @@ test('a row that promptfoo eval --retry-errors runs again gets the named scores 
   await writeFile(
     join(folder.path, 'scorers.ts'),
     `import { Recall } from '${source('../index.ts')}';
-import { ExactMatch, PathMatches, ScorerAssertion } from '${source('../structured/index.ts')}';
-import { AssertionModule } from '${source('./index.ts')}';
+import { ExactMatch, PathMatches, TextVarsCase, TreeWalk } from '${source('../structured/index.ts')}';
+import { AssertionModule, ScorerAssertion } from '${source('./index.ts')}';
 
 export const scorers = new AssertionModule(import.meta.url, {
-  exact_match: new ScorerAssertion(new ExactMatch(), { weight: 1, threshold: 1 }),
+  exact_match: new ScorerAssertion(new ExactMatch(), {
+    weight: 1,
+    threshold: 1,
+    comparer: new TreeWalk(),
+    cases: new TextVarsCase(),
+  }),
   key_recall_b: new ScorerAssertion(new Recall(new PathMatches()), {
     metric: 'key_recall',
     weight: 1,
     threshold: 0,
+    comparer: new TreeWalk(),
+    cases: new TextVarsCase(),
   }),
 });
 export default scorers.functions;
@@ -140,11 +149,15 @@ test('assert gives each name a promptfoo javascript assertion of JSON only: the 
     exact_match: new ScorerAssertion(new ExactMatch(), {
       weight: 2,
       threshold: 0.5,
+      comparer: new TreeWalk(),
+      cases: new TextVarsCase(),
     }),
     key_recall_text: new ScorerAssertion(new Recall(new PathMatches()), {
       metric: 'key_recall',
       weight: 0,
       threshold: 0,
+      comparer: new TreeWalk(),
+      cases: new TextVarsCase(),
     }),
   });
 
@@ -181,12 +194,16 @@ test('a config cannot list a scorer assertion as a promptfoo assertion, a scorer
     exact_match: new ScorerAssertion(new ExactMatch(), {
       weight: 1,
       threshold: 1,
+      comparer: new TreeWalk(),
+      cases: new TextVarsCase(),
     }),
   });
   type Names = Parameters<typeof module.assert>[number];
   type Rule = ConstructorParameters<typeof ScorerAssertion>[1];
 
-  const scorerIsAssertion: [ScorerAssertion] extends [Assertion]
+  const scorerIsAssertion: [ScorerAssertion<Case, Comparison>] extends [
+    Assertion,
+  ]
     ? true
     : false = false;
   const referenceIsAssertion: [

@@ -2,11 +2,13 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import { F1 } from '../../index.ts';
+import { ScorerAssertion } from '../../promptfoo/index.ts';
 import {
   ExactMatch,
   PathMatches,
   SchemaCompliance,
-  ScorerAssertion,
+  TextVarsCase,
+  TreeWalk,
 } from '../index.ts';
 
 test('weight and threshold are both required: a rule without one of them does not type-check', () => {
@@ -23,6 +25,8 @@ test('an answer text that is not JSON scores 0 and does not fail the test: prose
   const { value } = new ScorerAssertion(new ExactMatch(), {
     weight: 1,
     threshold: 0,
+    comparer: new TreeWalk(),
+    cases: new TextVarsCase(),
   });
   const vars = { expected: '{"a": 1}', schema: { type: 'object' } };
 
@@ -37,6 +41,8 @@ test('a test is refused when its expected value is missing or not JSON text', ()
   const { value } = new ScorerAssertion(new ExactMatch(), {
     weight: 1,
     threshold: 0,
+    comparer: new TreeWalk(),
+    cases: new TextVarsCase(),
   });
   const schema = { type: 'object' };
 
@@ -57,7 +63,12 @@ test('a test is refused when its expected value is missing or not JSON text', ()
 // ADR 0011: a case has its JSON Schema only when the scorers need one, so
 // only a scorer that reads the schema refuses a test without one.
 test('a test without a schema is refused by a scorer that reads the schema, and scored by one that does not', () => {
-  const options = { weight: 1, threshold: 0 };
+  const options = {
+    weight: 1,
+    threshold: 0,
+    comparer: new TreeWalk(),
+    cases: new TextVarsCase(),
+  };
   const exact = new ScorerAssertion(new ExactMatch(), options);
   const valid = new ScorerAssertion(new SchemaCompliance(), options);
   const vars = { expected: '{"a": 1}' };
@@ -73,6 +84,8 @@ test('the answer and the expected value are read as json.loads reads their text:
   const { value } = new ScorerAssertion(new ExactMatch(), {
     weight: 1,
     threshold: 0,
+    comparer: new TreeWalk(),
+    cases: new TextVarsCase(),
   });
   const vars = { expected: '{"a": 7.0}', schema: { type: 'object' } };
 
@@ -87,6 +100,8 @@ test('the schema of a test is read as a JSON value: a schema that requires a key
   const { value } = new ScorerAssertion(new SchemaCompliance(), {
     weight: 1,
     threshold: 1,
+    comparer: new TreeWalk(),
+    cases: new TextVarsCase(),
   });
   const vars = {
     expected: '{"a": 1}',
@@ -101,6 +116,8 @@ test('canonical equality has no gate: an answer equal to the expected value scor
   const { value } = new ScorerAssertion(new ExactMatch(), {
     weight: 1,
     threshold: 0,
+    comparer: new TreeWalk(),
+    cases: new TextVarsCase(),
   });
   const vars = {
     expected: '{"a": "x"}',
@@ -114,6 +131,8 @@ test('the assertion gives the value of the ratio of its scorer: an F1 with the b
   const { value } = new ScorerAssertion(new F1(new PathMatches()), {
     weight: 1,
     threshold: 0,
+    comparer: new TreeWalk(),
+    cases: new TextVarsCase(),
   });
   const vars = { expected: '{"a": 1}', schema: { type: 'object' } };
 

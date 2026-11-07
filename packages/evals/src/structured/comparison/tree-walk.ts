@@ -1,11 +1,13 @@
 import type { JsonData } from '@zukhruf/python';
 
+import type { Comparer } from '../../scoring/comparer.ts';
 import type { Case } from '../scoring/case.ts';
 import type { Agreement } from './alignment.ts';
-import type { ComparisonSpec } from './comparison-spec.ts';
+import { ComparisonSpec } from './comparison-spec.ts';
 import { Comparison } from './comparison.ts';
 import { Field, type FieldStep } from './field.ts';
 import type { ItemPairs } from './item-pairs.ts';
+import { statedData } from './json-value.ts';
 import type { Leaf, LeafPair } from './leaf-pair.ts';
 import { Path, type Step } from './path.ts';
 
@@ -23,18 +25,20 @@ type Found = {
 // A value at the root is no leaf, so a stated value that is not an object or
 // an array has no leaves. Where the two sides differ in kind, each side is
 // walked alone. An excluded field adds no leaf pair and no item pairs, but its
-// stated values still have their fields.
-export class TreeWalk {
+// stated values still have their fields. A stated text is read as
+// json.loads reads it; a stated JsonValue stays as it is.
+export class TreeWalk implements Comparer<Case, Comparison> {
   readonly #spec: ComparisonSpec;
 
-  constructor(spec: ComparisonSpec) {
+  constructor(spec = new ComparisonSpec()) {
     this.#spec = spec;
   }
 
-  compare(stated: JsonData, testCase: Case): Comparison {
+  compare(stated: unknown, testCase: Case): Comparison {
+    const data = statedData(stated);
     const found = TreeWalk.#nothingFound();
     this.#walk(
-      stated,
+      data,
       testCase.expected,
       new Path([]),
       new Path([]),
@@ -43,7 +47,7 @@ export class TreeWalk {
     );
     return new Comparison(
       testCase,
-      stated,
+      data,
       found.leaves,
       found.statedPaths,
       found.arrays,

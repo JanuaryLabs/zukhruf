@@ -22,3 +22,6 @@ export { AtLeast } from './scorers/at-least.ts';
 export { ShortfallPenalty } from './scorers/shortfall-penalty.ts';
 export { SampleAveraged } from './scorers/sample-averaged.ts';
 export { MeanOf } from './scorers/mean-of.ts';
+export type { Comparer } from './scoring/comparer.ts';
+export { Grouped } from './scoring/grouped.ts';
+export { ScorerSet } from './scoring/scorer-set.ts';

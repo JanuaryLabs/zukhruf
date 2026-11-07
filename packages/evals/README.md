@@ -17,7 +17,7 @@ The answers of evals have different shapes: a structured record, a label, a rank
 
 A subpath imports only the core. It never imports another subpath.
 
-The first release (backlog #3888) has one family, so the core holds only the parts that are generic today: `Ratio`, `Counts`, `RatioOfSums`, `Scorecard`, `ScorecardScorer`, `CaseReader`, `Totals` and `Bootstrap`. The scorers, the penalties, `ScorerSet` and `ScorerAssertion` read a structured `Comparison`, so they are in `./structured` until `./classification` (#3889) brings the second input. Then they move into the core with a type parameter, as the API below shows (ADR 0002).
+The core holds the parts that all families share: the ratios, the scorers, the penalties, `Comparer`, `Grouped`, `ScorerSet`, `Totals` and `Bootstrap`. A part that reads an input has a type parameter for that input. So a scorer of one family cannot read the input of another family (ADR 0002). `./promptfoo` holds `ScorerAssertion`. Today `./structured` is the one family. `./classification` (#3889) is the next family.
 
 ## Score one answer
 
@@ -145,7 +145,7 @@ counts.confusionMatrix(); // confusion_matrix, labels in sorted order
 
 ## Use it with promptfoo
 
-> In this release, `ScorerAssertion` is exported by `@zukhruf/evals/structured`, and it scores a structured value (ADR 0002). The sample below shows the API after #3889, where it moves to `./promptfoo` and also scores labels. [docs/structured.md](docs/structured.md) has the structured sample of today.
+> `ScorerAssertion` is in `./promptfoo`. It takes the comparer and the case reader of a family. The sample below scores labels, and `./classification` is not in this release (#3889). [docs/structured.md](docs/structured.md) has a structured sample of today.
 
 `PromptfooAssertion` adapts a scorer set to a per-row assertion. Each ratio becomes a named score with its whole as the weight, so the column header shows the same ratio of sums as `Totals`. It reads the case from the config of the assertion.
 
@@ -330,7 +330,11 @@ export interface ScorecardScorer<Case extends Weighted> {
 }
 /** Gives one ratio for each group of an input, such as each field or each class. */
 export abstract class Grouped<Input> {
-  abstract ratios(input: Input, label: string): [string, Ratio][];
+  constructor(scorer: Scorer<Input>);
+  /** The groups of an input (Template Method). */
+  protected abstract groups(input: Input): Iterable<[string, Input]>;
+  /** The ratio of the scorer on each group, under `${group} ${label}`. A group whose whole is 0 gives no ratio. */
+  ratios(input: Input, label: string): [string, Ratio][];
 }
 export class ScorerSet<
   Case extends Weighted,
@@ -404,16 +408,22 @@ export type FileAssertion = {
   readonly threshold: number;
   readonly value: string; // file://<module>:<name>
 };
+/** The vars of the test that promptfoo gives a javascript assertion of a shared defaultTest. */
+export type VarsContext = {
+  readonly vars: Readonly<Record<string, unknown>>;
+};
+/** What an assertion module needs of an assertion. A ScorerAssertion is one. */
+export type ModuleAssertion = {
+  readonly metric?: string | undefined;
+  readonly weight: number;
+  readonly threshold: number;
+  readonly value: (output: string, context: VarsContext) => number;
+};
 /** The module that promptfoo loads the function of each scorer assertion from (structured-eval ADR 0013). */
 export class AssertionModule<Name extends string> {
-  constructor(
-    url: string,
-    assertions: Readonly<Record<Name, ScorerAssertion<Weighted, unknown>>>,
-  );
+  constructor(url: string, assertions: Readonly<Record<Name, ModuleAssertion>>);
   /** The default export of the module: the value function of each name. */
-  readonly functions: Readonly<
-    Record<string, ScorerAssertion<Weighted, unknown>['value']>
-  >;
+  readonly functions: Readonly<Record<string, ModuleAssertion['value']>>;
   assert(...names: Name[]): FileAssertion[];
 }
 

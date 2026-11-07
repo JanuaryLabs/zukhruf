@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { F1, Precision, Recall } from '../../index.ts';
+import { F1, Precision, Recall, ScorerSet } from '../../index.ts';
+import { ScorerAssertion } from '../../promptfoo/index.ts';
 import {
   ByBestMatch,
   ByPosition,
@@ -13,8 +14,7 @@ import {
   NormalizedText,
   NumberWithin,
   PythonEquality,
-  ScorerAssertion,
-  ScorerSet,
+  TextVarsCase,
   TokenOverlapAtLeast,
   TreeWalk,
   TypePrecision,
@@ -27,7 +27,10 @@ import {
 
 test('an array that the spec does not name pairs by position, as ByPosition does', () => {
   const recall = (spec: ComparisonSpec) =>
-    new ScorerSet({ recall: new Recall(new ValueMatches()) }, { spec })
+    new ScorerSet(
+      { recall: new Recall(new ValueMatches()) },
+      { comparer: new TreeWalk(spec) },
+    )
       .score(
         { xs: ['b', 'a'] },
         new ConfigCase({
@@ -67,7 +70,9 @@ test('ByBestMatch pairs a reordered list item by item, so each value and each it
     'item recall': new Recall(new ItemMatches()),
   };
   const score = (spec: ComparisonSpec) => {
-    const scorecard = new ScorerSet(scorers, { spec }).score(
+    const scorecard = new ScorerSet(scorers, {
+      comparer: new TreeWalk(spec),
+    }).score(
       { offers: [...expected.offers].reverse() },
       new ConfigCase({
         schema: new JsonSchema(JsonValue.from({}), { draft: '7' }),
@@ -100,7 +105,11 @@ test('ByBestMatch takes the pairing with the most agreeing leaves, where pairing
       'item recall': new Recall(new ItemMatches()),
       'value recall': new Recall(new ValueMatches()),
     },
-    { spec: new ComparisonSpec({ arrays: { '$.xs': new ByBestMatch() } }) },
+    {
+      comparer: new TreeWalk(
+        new ComparisonSpec({ arrays: { '$.xs': new ByBestMatch() } }),
+      ),
+    },
   );
   const expected = {
     xs: [
@@ -143,9 +152,11 @@ test('a match gets the stated item first and the expected item second, as JSON d
       'item precision': new Precision(new ItemMatches()),
     },
     {
-      spec: new ComparisonSpec({
-        arrays: { '$.xs': new ByBestMatch(sameOffer) },
-      }),
+      comparer: new TreeWalk(
+        new ComparisonSpec({
+          arrays: { '$.xs': new ByBestMatch(sameOffer) },
+        }),
+      ),
     },
   );
   const testCase = new ConfigCase({
@@ -181,7 +192,11 @@ test('without a match, ByBestMatch leaves items that agree on nothing unpaired',
       'item recall': new Recall(new ItemMatches()),
       'item precision': new Precision(new ItemMatches()),
     },
-    { spec: new ComparisonSpec({ arrays: { '$.xs': new ByBestMatch() } }) },
+    {
+      comparer: new TreeWalk(
+        new ComparisonSpec({ arrays: { '$.xs': new ByBestMatch() } }),
+      ),
+    },
   );
 
   const scorecard = scorer.score(
@@ -208,9 +223,11 @@ test('ItemMatches adds the items of every array: an expected item without a pair
       'item precision': new Precision(new ItemMatches()),
     },
     {
-      spec: new ComparisonSpec({
-        arrays: { '$.tags': new ByBestMatch(), '$.notes': new ByBestMatch() },
-      }),
+      comparer: new TreeWalk(
+        new ComparisonSpec({
+          arrays: { '$.tags': new ByBestMatch(), '$.notes': new ByBestMatch() },
+        }),
+      ),
     },
   );
 
@@ -239,7 +256,9 @@ test('Precision, Recall and F1 of ItemMatches count the paired items of the stat
     'value recall': new Recall(new ValueMatches()),
   };
   const score = (spec: ComparisonSpec) => {
-    const scorecard = new ScorerSet(scorers, { spec }).score(
+    const scorecard = new ScorerSet(scorers, {
+      comparer: new TreeWalk(spec),
+    }).score(
       { xs: [{ id: 1, ys: ['b', 'a', 'c'] }] },
       new ConfigCase({
         schema: new JsonSchema(JsonValue.from({}), { draft: '7' }),
@@ -282,7 +301,7 @@ test('each side of a leaf pair keeps its own path: a stated item that ByBestMatc
       { draft: '7' },
     ),
   }).from({ expected: { xs: ['x', 1] } });
-  const stated = JsonValue.parse('{"xs": [1, "x"]}').value;
+  const stated = JsonValue.parse('{"xs": [1, "x"]}');
 
   const comparison = new TreeWalk(spec).compare(stated, testCase);
   const precision = new TypePrecision().score(comparison);
@@ -307,9 +326,11 @@ test('NumberWithin on a field agrees inside its tolerance, an int with a float t
   const scorer = new ScorerSet(
     { recall: new Recall(new ValueMatches()) },
     {
-      spec: new ComparisonSpec({
-        fields: { '$.offers[*].value.amount': new NumberWithin(0.5) },
-      }),
+      comparer: new TreeWalk(
+        new ComparisonSpec({
+          fields: { '$.offers[*].value.amount': new NumberWithin(0.5) },
+        }),
+      ),
     },
   );
   const testCase = new ConfigCase({
@@ -330,9 +351,11 @@ test('NormalizedText on a field agrees across case, spaces and Unicode width, no
   const scorer = new ScorerSet(
     { recall: new Recall(new ValueMatches()) },
     {
-      spec: new ComparisonSpec({
-        fields: { '$.t': new NormalizedText(), '$.n': new NormalizedText() },
-      }),
+      comparer: new TreeWalk(
+        new ComparisonSpec({
+          fields: { '$.t': new NormalizedText(), '$.n': new NormalizedText() },
+        }),
+      ),
     },
   );
   const testCase = new ConfigCase({
@@ -350,12 +373,14 @@ test('TokenOverlapAtLeast on a field agrees when the F1 of the words, as SQuAD r
   const scorer = new ScorerSet(
     { recall: new Recall(new ValueMatches()) },
     {
-      spec: new ComparisonSpec({
-        fields: {
-          '$.t': new TokenOverlapAtLeast((2 * 2) / (2 + 4)),
-          '$.u': new TokenOverlapAtLeast(1),
-        },
-      }),
+      comparer: new TreeWalk(
+        new ComparisonSpec({
+          fields: {
+            '$.t': new TokenOverlapAtLeast((2 * 2) / (2 + 4)),
+            '$.u': new TokenOverlapAtLeast(1),
+          },
+        }),
+      ),
     },
   );
   const testCase = new ConfigCase({
@@ -375,7 +400,7 @@ test('the agreement that ByBestMatch maximizes uses the comparator of each field
   const recall = (spec: ComparisonSpec) => {
     const ratio = new ScorerSet(
       { items: new Recall(new ItemMatches()) },
-      { spec },
+      { comparer: new TreeWalk(spec) },
     )
       .score(
         { xs: [{ n: 10.2 }] },
@@ -407,7 +432,9 @@ test('an excluded field and all its children are out of the leaf pairs, the item
     'item recall': new Recall(new ItemMatches()),
   };
   const score = (spec: ComparisonSpec) => {
-    const scorecard = new ScorerSet(scorers, { spec }).score(
+    const scorecard = new ScorerSet(scorers, {
+      comparer: new TreeWalk(spec),
+    }).score(
       { a: 1, notes: { x: 'other' }, xs: [{ k: 'b', note: 'p' }], ys: [] },
       new ConfigCase({
         schema: new JsonSchema(JsonValue.from({}), { draft: '7' }),
@@ -453,7 +480,8 @@ test('a scorer assertion compares through its spec: true agrees with 1 only with
     new ScorerAssertion(new Recall(new ValueMatches()), {
       weight: 1,
       threshold: 0,
-      ...(spec === undefined ? {} : { spec }),
+      comparer: new TreeWalk(spec),
+      cases: new TextVarsCase(),
     });
 
   const values = [

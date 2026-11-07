@@ -1,13 +1,14 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
+import { ScorerSet } from '../../index.ts';
 import {
   ConfigCase,
   type Draft,
   JsonSchema,
   JsonValue,
   SchemaCompliance,
-  ScorerSet,
+  TreeWalk,
   TypePrecision,
 } from '../index.ts';
 
@@ -17,10 +18,13 @@ import {
 // JSON-Schema-Test-Suite tests/draft2020-12/optional/ecmascript-regex.json and
 // tests/draft7/optional/ecmascript-regex.json at commit 245a45a (see NOTICE).
 
-const scorer = new ScorerSet({
-  valid: new SchemaCompliance(),
-  types: new TypePrecision(),
-});
+const scorer = new ScorerSet(
+  {
+    valid: new SchemaCompliance(),
+    types: new TypePrecision(),
+  },
+  { comparer: new TreeWalk() },
+);
 
 const drafts: readonly (Draft | undefined)[] = [undefined, '7'];
 

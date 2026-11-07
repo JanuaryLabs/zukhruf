@@ -8,6 +8,7 @@ import {
   Penalty,
   Recall,
   SampleAveraged,
+  ScorerSet,
   ShortfallPenalty,
 } from '../../index.ts';
 import {
@@ -18,17 +19,20 @@ import {
   ParseSuccess,
   PathMatches,
   SchemaCompliance,
-  ScorerSet,
+  TreeWalk,
   ValidSchema,
   ValueMatches,
 } from '../index.ts';
 
 test('Penalized gives the part 0 for a record that fails any of its gates, and keeps the whole, so an invalid record keeps its expected values in the denominator of recall', () => {
   const recall = new Recall(new ValueMatches());
-  const scorer = new ScorerSet({
-    first: new Penalized(recall, new SchemaCompliance(), new ParseSuccess()),
-    last: new Penalized(recall, new ParseSuccess(), new SchemaCompliance()),
-  });
+  const scorer = new ScorerSet(
+    {
+      first: new Penalized(recall, new SchemaCompliance(), new ParseSuccess()),
+      last: new Penalized(recall, new ParseSuccess(), new SchemaCompliance()),
+    },
+    { comparer: new TreeWalk() },
+  );
   const testCase = new ConfigCase({
     schema: new JsonSchema(
       JsonValue.from({ type: 'object', required: ['z'] }),
@@ -54,11 +58,14 @@ test('each gate can fail a record: ParseSuccess for text that is not parsed, Val
   const whenEmpty = new SampleAveraged(new Recall(new ValueMatches()), {
     whenEmpty: 1,
   });
-  const scorer = new ScorerSet({
-    alone: whenEmpty,
-    parsed: new Penalized(whenEmpty, new ParseSuccess()),
-    schema: new Penalized(whenEmpty, new ValidSchema()),
-  });
+  const scorer = new ScorerSet(
+    {
+      alone: whenEmpty,
+      parsed: new Penalized(whenEmpty, new ParseSuccess()),
+      schema: new Penalized(whenEmpty, new ValidSchema()),
+    },
+    { comparer: new TreeWalk() },
+  );
   const valid = new ConfigCase({
     schema: new JsonSchema(JsonValue.from({ type: 'object' }), { draft: '7' }),
   }).from({ expected: {} });
@@ -97,13 +104,16 @@ test('each gate can fail a record: ParseSuccess for text that is not parsed, Val
 });
 
 test('Penalized gives the ratio of its scorer as it is when every gate holds, so an F1 keeps the bits of f1_from_counts', () => {
-  const scorer = new ScorerSet({
-    f1: new Penalized(
-      new F1(new PathMatches()),
-      new ParseSuccess(),
-      new SchemaCompliance(),
-    ),
-  });
+  const scorer = new ScorerSet(
+    {
+      f1: new Penalized(
+        new F1(new PathMatches()),
+        new ParseSuccess(),
+        new SchemaCompliance(),
+      ),
+    },
+    { comparer: new TreeWalk() },
+  );
 
   const scorecard = scorer.score(
     { a: 1, b: 2, c: 3, d: 4, e: 5 },
@@ -123,11 +133,14 @@ test('Penalized gives the ratio of its scorer as it is when every gate holds, so
 
 test('a gate gives 1 of 1 or 0 of 1, and AtLeast holds when the value of its scorer reaches the threshold, the value of an F1 and not its part over its whole', () => {
   const f1 = new F1(new PathMatches());
-  const scorer = new ScorerSet({
-    parsed: new ParseSuccess(),
-    reached: new AtLeast(f1, 0.33333333333333337),
-    above: new AtLeast(f1, 0.3333333333333334),
-  });
+  const scorer = new ScorerSet(
+    {
+      parsed: new ParseSuccess(),
+      reached: new AtLeast(f1, 0.33333333333333337),
+      above: new AtLeast(f1, 0.3333333333333334),
+    },
+    { comparer: new TreeWalk() },
+  );
 
   const scorecard = scorer.score(
     { a: 1, b: 2, c: 3, d: 4, e: 5 },
@@ -172,13 +185,16 @@ test('Penalized throws a RangeError for a factor above 1, below 0 or NaN, so a p
 
   const scores = [1.5, -0.25, Number.NaN].map(
     (factor) => () =>
-      new ScorerSet({
-        penalized: new Penalized(
-          recall,
-          new FixedPenalty(1),
-          new FixedPenalty(factor),
-        ),
-      }).score({ a: 1 }, testCase),
+      new ScorerSet(
+        {
+          penalized: new Penalized(
+            recall,
+            new FixedPenalty(1),
+            new FixedPenalty(factor),
+          ),
+        },
+        { comparer: new TreeWalk() },
+      ).score({ a: 1 }, testCase),
   );
 
   for (const score of scores) assert.throws(score, RangeError);
@@ -195,11 +211,14 @@ test('Penalized multiplies the part by each factor in the order of its arguments
     whenEmpty: 1,
   });
   const micro = new Recall(new ValueMatches());
-  const scorer = new ScorerSet({
-    nearFirst: new Penalized(values, near, far),
-    farFirst: new Penalized(values, far, near),
-    micro: new Penalized(micro, near),
-  });
+  const scorer = new ScorerSet(
+    {
+      nearFirst: new Penalized(values, near, far),
+      farFirst: new Penalized(values, far, near),
+      micro: new Penalized(micro, near),
+    },
+    { comparer: new TreeWalk() },
+  );
   const testCase = new ConfigCase().from({
     expected: { a: 1, b: 2, c: 3, d: 4, e: 5, f: 6 },
   });

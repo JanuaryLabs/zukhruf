@@ -9,3 +9,4 @@ export {
   type GradingResult,
   PromptfooAssertion,
 } from './promptfoo-assertion.ts';
+export { ScorerAssertion } from './scorer-assertion.ts';

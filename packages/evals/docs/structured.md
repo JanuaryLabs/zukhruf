@@ -11,10 +11,10 @@ It does not run the model and does not store results. A runner does that, and `@
 | Part             | Job                                                                                                      |
 | ---------------- | -------------------------------------------------------------------------------------------------------- |
 | `ComparisonSpec` | The rules to compare two values: the alignment of each array, the comparators, and the excluded fields.  |
-| `TreeWalk`       | Compares a stated value with the expected value of its case. It gives a `Comparison`.                    |
+| `TreeWalk`       | The comparer of this subpath. It compares a stated value with the expected value of its case.            |
 | `Comparison`     | The leaf pairs and the item pairs of one stated value and its case.                                      |
 | `Scorer`         | Gives one `Ratio` for one comparison, such as `new Recall(new ValueMatches())`.                          |
-| `ScorerSet`      | Scores one stated value with labelled scorers. It is a `ScorecardScorer`: it gives a `Scorecard`.        |
+| `ScorerSet`      | Of the core. Scores one stated value with labelled scorers. It gives a `Scorecard`.                      |
 | `Scorecard`      | The result for one record: `passed`, `reason`, `checks`, and named `Ratio`s.                             |
 | `Ratio`          | A part and a whole, such as 2 right values of 3 expected values.                                         |
 | `Totals`         | Adds the ratios of many scorecards, name by name: the sum of the parts divided by the sum of the wholes. |
@@ -86,6 +86,14 @@ comparison.arrays(); // the item pairs of each array
 
 A stated value that is not an object or an array is unparsed. It has no stated leaves. null is a leaf.
 
+`compare` reads the stated value itself:
+
+- It reads a text as `json.loads` reads it. A text that is not JSON stays a text, so it is unparsed.
+- It keeps a `JsonValue` as it is. Give a text that you already parsed as `new JsonValue(text)`.
+- It reads another JavaScript value through `JsonValue.from`.
+
+`JsonValue.from` throws a `TypeError` for a `Map` or a `Set`, at any depth, because `JSON.stringify` loses their entries. A dict of `JsonData` is a `Map`, so give it as a `new JsonValue(data)`.
+
 ## Score a comparison
 
 A scorer gives a `Ratio` for one comparison. A scorer keeps no result, so one scorer scores any number of records.
@@ -99,13 +107,8 @@ A scorer gives a `Ratio` for one comparison. A scorer keeps no result, so one sc
 | `ItemMatches`  | the item pairs                            | the stated items  | the expected items  |
 
 ```ts
-import {
-  F1,
-  PathMatches,
-  Precision,
-  Recall,
-  ValueMatches,
-} from '@zukhruf/evals/structured';
+import { F1, Precision, Recall } from '@zukhruf/evals';
+import { PathMatches, ValueMatches } from '@zukhruf/evals/structured';
 
 new Recall(new ValueMatches()).score(comparison); // Ratio { part: 2, whole: 3 }: 2 right of 3 expected
 new Precision(new PathMatches()).score(comparison); // Ratio { part: 3, whole: 4 }: 3 present of 4 stated
@@ -205,18 +208,15 @@ The validator is cfworker's. The validator and `SchemaTypeWalk` read the schema 
 
 ## Score a record with a scorer set
 
-A `ScorerSet` holds labelled scorers and gives a `Scorecard`. The spec goes to its walk. A `ScorerSet` reads a stated text as a `ScorerAssertion` reads it: JSON text as `json.loads` reads it, and text that is not JSON as an unparsed value. A `JsonValue` stays as it is, so a stated string that you already parsed goes in as `new JsonValue(text)`.
+A `ScorerSet` of the core holds labelled scorers and gives a `Scorecard`. Its comparer compares the stated value with the case once, and each scorer reads that comparison. In this subpath, the comparer is `new TreeWalk(spec)`.
 
 ```ts
+import { F1, Penalized, Precision, Recall, ScorerSet } from '@zukhruf/evals';
 import {
   AllMatched,
-  F1,
-  Penalized,
   PerField,
-  Precision,
-  Recall,
   SchemaCompliance,
-  ScorerSet,
+  TreeWalk,
   ValueMatches,
 } from '@zukhruf/evals/structured';
 
@@ -232,7 +232,7 @@ export const offerScorer = new ScorerSet(
     f1: new Penalized(new F1(values), valid),
     recall_by_field: new PerField(new Penalized(new Recall(values), valid)),
   },
-  { spec: offerSpec },
+  { comparer: new TreeWalk(offerSpec) },
 );
 
 const scorecard = offerScorer.score(stated, testCase);
@@ -242,7 +242,7 @@ scorecard.ratios.get('recall'); // Ratio { part: 2, whole: 3 }
 scorecard.ratios.get('$.offers[*].kind recall_by_field'); // Ratio { part: 2, whole: 2 }
 ```
 
-`new PerField(scorer)` gives one ratio for each field, under the label `${field} ${label}`. A field gets no ratio when the scorer counts nothing in it, that is, when the whole of its ratio is 0. So a scorer of leaves gives no ratio for an array such as `$.offers`, and a field of null leaves under `nullIsMissing` gets no ratio. `ItemMatches` gives a ratio for each array. A ratio with the whole 0 adds nothing to a ratio of sums, so the totals do not change. A gate in a `PerField` still reads the whole record. The score of the scorecard is the mean of the values of its scorers, without the ratios of a `PerField`. The checks of the scorecard are its gates.
+`new PerField(scorer)` extends `Grouped` of the core. It gives one ratio for each field, under the label `${field} ${label}`. A field gets no ratio when the scorer counts nothing in it, that is, when the whole of its ratio is 0. So a scorer of leaves gives no ratio for an array such as `$.offers`, and a field of null leaves under `nullIsMissing` gets no ratio. `ItemMatches` gives a ratio for each array. A ratio with the whole 0 adds nothing to a ratio of sums, so the totals do not change. A gate in a `PerField` still reads the whole record. The score of the scorecard is the mean of the values of its scorers, without the ratios of a `PerField`. The checks of the scorecard are its gates.
 
 ```ts
 import { Totals } from '@zukhruf/evals';
@@ -311,11 +311,16 @@ export default new PromptfooAssertion(
 
 The assertion passes when the scorecard passes. Each ratio becomes a named score, with its whole as the weight. promptfoo adds the value × the weight, so the column header shows the same ratio of sums as `Totals`.
 
-`ScorerAssertion` adapts one scorer. It reads the case from the vars of the test, because an assertion that `defaultTest` shares gets only the vars of each test. `weight` sets how much its value counts in the score of the test, and `threshold` sets when it passes. Both numbers are required:
+`ScorerAssertion` of `@zukhruf/evals/promptfoo` adapts one scorer. It reads the case from the vars of the test, because an assertion that `defaultTest` shares gets only the vars of each test. `weight` sets how much its value counts in the score of the test, and `threshold` sets when it passes. `comparer` compares the answer with the case, and `cases` reads the case. All four are required:
 
 ```ts
 // truth, spec and cases: see SOB as a configuration
-new ScorerAssertion(truth, { weight: 1, threshold: 0, spec, cases });
+new ScorerAssertion(truth, {
+  weight: 1,
+  threshold: 0,
+  comparer: new TreeWalk(spec),
+  cases,
+});
 ```
 
 The assertion gives the value of the ratio. promptfoo shows the mean of each metric over the tests, so give it a `SampleAveraged` scorer.
@@ -328,21 +333,26 @@ promptfoo stores the config of an eval as JSON, and `--resume` and `--retry-erro
 
 ```ts
 // evals/scorers.ts
-import { AssertionModule } from '@zukhruf/evals/promptfoo';
+import { AssertionModule, ScorerAssertion } from '@zukhruf/evals/promptfoo';
 import {
   ExactMatch,
   SchemaCompliance,
-  ScorerAssertion,
+  TextVarsCase,
+  TreeWalk,
 } from '@zukhruf/evals/structured';
+
+const structured = { comparer: new TreeWalk(), cases: new TextVarsCase() };
 
 export const scorers = new AssertionModule(import.meta.url, {
   valid_json: new ScorerAssertion(new SchemaCompliance(), {
     weight: 1,
     threshold: 1,
+    ...structured,
   }),
   exact_match: new ScorerAssertion(new ExactMatch(), {
     weight: 1,
     threshold: 0,
+    ...structured,
   }),
 });
 
@@ -389,18 +399,21 @@ The Structured Output Benchmark (SOB, evaluate.py at commit da785a8) is a config
 ```ts
 import {
   AtLeast,
-  ComparisonSpec,
   F1,
+  Penalized,
+  Recall,
+  SampleAveraged,
+  type Scorer,
+} from '@zukhruf/evals';
+import {
+  type Comparison,
+  ComparisonSpec,
   JsonSchema,
   ParseSuccess,
   PathMatches,
-  Penalized,
   PythonEquality,
-  Recall,
   RequiredKeyRecall,
-  SampleAveraged,
   SchemaCompliance,
-  type Scorer,
   TextVarsCase,
   TokenF1,
   TypePrecision,
@@ -413,7 +426,7 @@ const spec = new ComparisonSpec({ comparator: new PythonEquality() }); // each a
 const cases = new TextVarsCase({
   schema: (value) => new JsonSchema(value, { draft: '7' }),
 });
-const mean = (scorer: Scorer, whenEmpty: number) =>
+const mean = (scorer: Scorer<Comparison>, whenEmpty: number) =>
   new SampleAveraged(scorer, { whenEmpty });
 
 const compliance = new SchemaCompliance();
@@ -449,26 +462,33 @@ SOB pairs each array by position, compares values with Python's `==`, reads null
 SOB has three subsets, its modalities: text, image and audio. The coverage factor of evaluate.py depends on the subset (`compute_coverage_gate`, evaluate.py:615-618). It multiplies `leaf_value_em` and `value_token_f1` only (:305-306). The package has no class for a subset: the caller gives each test the scorers of its subset.
 
 ```ts
-import { AssertionModule, type FileAssertion } from '@zukhruf/evals/promptfoo';
 import {
   AtLeast,
   F1,
-  PathMatches,
   Penalized,
   type Penalty,
   Recall,
   SampleAveraged,
-  SchemaCompliance,
   type Scorer,
-  ScorerAssertion,
   ShortfallPenalty,
+} from '@zukhruf/evals';
+import {
+  AssertionModule,
+  type FileAssertion,
+  ScorerAssertion,
+} from '@zukhruf/evals/promptfoo';
+import {
+  type Comparison,
+  PathMatches,
+  SchemaCompliance,
   TokenF1,
+  TreeWalk,
   ValueMatches,
 } from '@zukhruf/evals/structured';
 
 type Modality = 'text' | 'image' | 'audio';
 
-const mean = (scorer: Scorer, whenEmpty: number) =>
+const mean = (scorer: Scorer<Comparison>, whenEmpty: number) =>
   new SampleAveraged(scorer, { whenEmpty });
 const compliance = new SchemaCompliance();
 const keys = mean(new F1(new PathMatches()), 0); // raw_path_set_f1
@@ -479,7 +499,7 @@ const coverage = {
   text: new AtLeast(keys, 0.95),
   image: soft,
   audio: soft,
-} satisfies Record<Modality, Penalty>;
+} satisfies Record<Modality, Penalty<Comparison>>;
 
 const scored = (modality: Modality) => ({
   truth: new Penalized(
@@ -501,7 +521,12 @@ Each subset has its own scorers, so each subset has its own names. The scorers o
 // evals/scorers.ts. spec, cases and scored: as above.
 const covered = (modality: Modality) => {
   const { truth, faithfulness } = scored(modality);
-  const rule = { weight: 1, threshold: 0, spec, cases };
+  const rule = {
+    weight: 1,
+    threshold: 0,
+    comparer: new TreeWalk(spec),
+    cases,
+  };
   return {
     truth: new ScorerAssertion(truth, { ...rule, metric: 'field_recall' }),
     faithfulness: new ScorerAssertion(faithfulness, {

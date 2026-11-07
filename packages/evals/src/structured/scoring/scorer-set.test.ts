@@ -9,6 +9,7 @@ import {
   Ratio,
   Recall,
   SampleAveraged,
+  ScorerSet,
 } from '../../index.ts';
 import {
   AllMatched,
@@ -24,8 +25,8 @@ import {
   PerField,
   RequiredKeyRecall,
   SchemaCompliance,
-  ScorerSet,
   TokenF1,
+  TreeWalk,
   TypePrecision,
   ValidSchema,
   ValueMatches,
@@ -63,7 +64,11 @@ test('an invalid record gives the part 0 and keeps its wholes: valid 0 of 1, rec
       recall: new Penalized(new Recall(values), valid),
       precision: new Penalized(new Precision(values), valid),
     },
-    { spec: new ComparisonSpec({ arrays: { '$.offers': new ByBestMatch() } }) },
+    {
+      comparer: new TreeWalk(
+        new ComparisonSpec({ arrays: { '$.offers': new ByBestMatch() } }),
+      ),
+    },
   );
   const cases = new ConfigCase({
     schema: new JsonSchema(JsonValue.from(offersSchema)),
@@ -99,10 +104,13 @@ test('an invalid record gives the part 0 and keeps its wholes: valid 0 of 1, rec
 // ADR 0011 decision 6: a text answer is unparsed, so it has no stated leaves
 // and its type precision is Ratio(0, 0), not 0 of 1.
 test('a text answer is unparsed: valid 0 of 1, type precision 0 of 0, and the reason says that it is not a JSON object or array', () => {
-  const scorer = new ScorerSet({
-    valid: new SchemaCompliance(),
-    'type precision': new TypePrecision(),
-  });
+  const scorer = new ScorerSet(
+    {
+      valid: new SchemaCompliance(),
+      'type precision': new TypePrecision(),
+    },
+    { comparer: new TreeWalk() },
+  );
   const cases = new ConfigCase({
     schema: new JsonSchema(JsonValue.from(offersSchema)),
   });
@@ -126,7 +134,11 @@ test('type precision counts the wrong-typed values of an invalid record and leav
       valid: new SchemaCompliance(),
       'type precision': new TypePrecision(),
     },
-    { spec: new ComparisonSpec({ exclude: ['$.offers[*].note'] }) },
+    {
+      comparer: new TreeWalk(
+        new ComparisonSpec({ exclude: ['$.offers[*].note'] }),
+      ),
+    },
   );
   const cases = new ConfigCase({
     schema: new JsonSchema(JsonValue.from(offersSchema)),
@@ -155,10 +167,13 @@ test('type precision counts the wrong-typed values of an invalid record and leav
 
 test('a record with every field right does not pass when the schema rejects it, also when nothing is expected', () => {
   const valid = new SchemaCompliance();
-  const scorer = new ScorerSet({
-    valid,
-    recall: new Penalized(new Recall(new ValueMatches()), valid),
-  });
+  const scorer = new ScorerSet(
+    {
+      valid,
+      recall: new Penalized(new Recall(new ValueMatches()), valid),
+    },
+    { comparer: new TreeWalk() },
+  );
   const cases = new ConfigCase({
     schema: new JsonSchema(
       JsonValue.from({
@@ -192,7 +207,7 @@ test('a valid record whose every leaf is right and every item paired passes with
     precision: new Penalized(new Precision(new ValueMatches()), valid),
     'items precision': new Precision(new ItemMatches()),
   };
-  const scorer = new ScorerSet(entries, { spec });
+  const scorer = new ScorerSet(entries, { comparer: new TreeWalk(spec) });
   const expected = {
     offers: [
       { kind: 'a', amount: 1 },
@@ -213,7 +228,7 @@ test('a valid record whose every leaf is right and every item paired passes with
       perfect: new AllMatched(),
       'items precision': new Precision(new ItemMatches()),
     },
-    { spec },
+    { comparer: new TreeWalk(spec) },
   ).score(
     { offers: [...expected.offers, {}] },
     new ConfigCase().from({ expected }),
@@ -241,9 +256,11 @@ test('with two set arrays, one expected item without a pair fails the record, an
   const scorer = new ScorerSet(
     { perfect: new AllMatched() },
     {
-      spec: new ComparisonSpec({
-        arrays: { '$.tags': new ByBestMatch(), '$.notes': new ByBestMatch() },
-      }),
+      comparer: new TreeWalk(
+        new ComparisonSpec({
+          arrays: { '$.tags': new ByBestMatch(), '$.notes': new ByBestMatch() },
+        }),
+      ),
     },
   );
 
@@ -260,10 +277,13 @@ test('with two set arrays, one expected item without a pair fails the record, an
 });
 
 test('a case without a schema passes when its scorers read none, and gives no schema ratio', () => {
-  const scorer = new ScorerSet({
-    perfect: new AllMatched(),
-    recall: new Recall(new ValueMatches()),
-  });
+  const scorer = new ScorerSet(
+    {
+      perfect: new AllMatched(),
+      recall: new Recall(new ValueMatches()),
+    },
+    { comparer: new TreeWalk() },
+  );
 
   const scorecard = scorer.score(
     { a: 1 },
@@ -276,10 +296,13 @@ test('a case without a schema passes when its scorers read none, and gives no sc
 
 test('PerField gives a ratio for each field that its scorer counts a value in, under "<field> <label>": null and an absent key both mean no value with nullIsMissing, so a field of nulls gives no ratio', () => {
   const values = new ValueMatches({ nullIsMissing: true });
-  const scorer = new ScorerSet({
-    recall: new PerField(new Recall(values)),
-    precision: new PerField(new Precision(values)),
-  });
+  const scorer = new ScorerSet(
+    {
+      recall: new PerField(new Recall(values)),
+      precision: new PerField(new Precision(values)),
+    },
+    { comparer: new TreeWalk() },
+  );
 
   const scorecard = scorer.score(
     { b: null, c: 1 },
@@ -297,12 +320,15 @@ test('PerField gives a ratio for each field that its scorer counts a value in, u
 });
 
 test('PerField gives no ratio for an array under a scorer of leaves, nor for a leaf under ItemMatches, and its ratios add up to the ratio of its scorer', () => {
-  const scorer = new ScorerSet({
-    recall: new Recall(new ValueMatches()),
-    items: new Recall(new ItemMatches()),
-    'recall by field': new PerField(new Recall(new ValueMatches())),
-    'items by field': new PerField(new Recall(new ItemMatches())),
-  });
+  const scorer = new ScorerSet(
+    {
+      recall: new Recall(new ValueMatches()),
+      items: new Recall(new ItemMatches()),
+      'recall by field': new PerField(new Recall(new ValueMatches())),
+      'items by field': new PerField(new Recall(new ItemMatches())),
+    },
+    { comparer: new TreeWalk() },
+  );
 
   const scorecard = scorer.score(
     { xs: [{ k: 1 }], n: 1 },
@@ -322,11 +348,14 @@ test('PerField gives no ratio for an array under a scorer of leaves, nor for a l
 });
 
 test('PerField of a wrong value at the right path: present but not right, field by field, with the field of a list item written with the wildcard selector [*]', () => {
-  const scorer = new ScorerSet({
-    recall: new Recall(new ValueMatches()),
-    presence: new PerField(new Recall(new PathMatches())),
-    'items f1': new PerField(new F1(new ItemMatches())),
-  });
+  const scorer = new ScorerSet(
+    {
+      recall: new Recall(new ValueMatches()),
+      presence: new PerField(new Recall(new PathMatches())),
+      'items f1': new PerField(new F1(new ItemMatches())),
+    },
+    { comparer: new TreeWalk() },
+  );
 
   const scorecard = scorer.score(
     { a: 'y', xs: [{ k: 1 }] },
@@ -342,10 +371,13 @@ test('PerField of a wrong value at the right path: present but not right, field 
 // ADR 0011 decision 7: one TokenF1, as SQuAD reads words, with the bits of
 // 2·p·r/(p + r); a stated value that is absent is read as absentAs.
 test('PerField(TokenF1) gives partial credit for shared words, compares a number as its Python text, and gives 0 for a missing value', () => {
-  const scorer = new ScorerSet({
-    'token f1': new TokenF1({ whenNoWords: 1, absentAs: null }),
-    'by field': new PerField(new TokenF1({ whenNoWords: 1, absentAs: null })),
-  });
+  const scorer = new ScorerSet(
+    {
+      'token f1': new TokenF1({ whenNoWords: 1, absentAs: null }),
+      'by field': new PerField(new TokenF1({ whenNoWords: 1, absentAs: null })),
+    },
+    { comparer: new TreeWalk() },
+  );
 
   const scorecard = scorer.score(
     { t: 'AWS credits', n: 1000 },
@@ -363,9 +395,14 @@ test('PerField(TokenF1) gives partial credit for shared words, compares a number
 
 test('a gate inside PerField reads the whole record: an invalid record gives each field the part 0 and keeps its whole', () => {
   const valid = new SchemaCompliance();
-  const scorer = new ScorerSet({
-    recall: new PerField(new Penalized(new Recall(new ValueMatches()), valid)),
-  });
+  const scorer = new ScorerSet(
+    {
+      recall: new PerField(
+        new Penalized(new Recall(new ValueMatches()), valid),
+      ),
+    },
+    { comparer: new TreeWalk() },
+  );
   const cases = new ConfigCase({
     schema: new JsonSchema(JsonValue.from({ type: 'object', required: ['z'] })),
   });
@@ -386,7 +423,10 @@ test('a gate inside PerField reads the whole record: an invalid record gives eac
 });
 
 test('the reason names each schema error once, and at most 5 of them with a count of the rest', () => {
-  const scorer = new ScorerSet({ valid: new SchemaCompliance() });
+  const scorer = new ScorerSet(
+    { valid: new SchemaCompliance() },
+    { comparer: new TreeWalk() },
+  );
   const sevenNumbers = new ConfigCase({
     schema: new JsonSchema(
       JsonValue.from({
@@ -431,15 +471,18 @@ test('the reason names each schema error once, and at most 5 of them with a coun
 });
 
 test('each gate explains why a record fails it, the checks are the gates, and the score is the mean of the values of the scorers, PerField aside', () => {
-  const scorer = new ScorerSet({
-    parsed: new ParseSuccess(),
-    'valid schema': new ValidSchema(),
-    exact: new ExactMatch(),
-    covered: new AtLeast(new Recall(new ValueMatches()), 0.75),
-    perfect: new AllMatched(),
-    recall: new Recall(new ValueMatches()),
-    'by field': new PerField(new Recall(new ValueMatches())),
-  });
+  const scorer = new ScorerSet(
+    {
+      parsed: new ParseSuccess(),
+      'valid schema': new ValidSchema(),
+      exact: new ExactMatch(),
+      covered: new AtLeast(new Recall(new ValueMatches()), 0.75),
+      perfect: new AllMatched(),
+      recall: new Recall(new ValueMatches()),
+      'by field': new PerField(new Recall(new ValueMatches())),
+    },
+    { comparer: new TreeWalk() },
+  );
   const cases = new ConfigCase({
     schema: new JsonSchema(
       JsonValue.from({ type: 'object', minProperties: -1 }),
@@ -475,10 +518,13 @@ test('each gate explains why a record fails it, the checks are the gates, and th
 });
 
 test('ScorerSet reads a stated JSON text as json.loads does, without loss: 1.0 is a float, so it equals 1 but is not canonically equal, while the object {a: 1} is', () => {
-  const scorer = new ScorerSet({
-    'leaf exact match': new Recall(new ValueMatches()),
-    'canonical equality': new ExactMatch(),
-  });
+  const scorer = new ScorerSet(
+    {
+      'leaf exact match': new Recall(new ValueMatches()),
+      'canonical equality': new ExactMatch(),
+    },
+    { comparer: new TreeWalk() },
+  );
   const testCase = new ConfigCase({
     schema: new JsonSchema(JsonValue.from({ type: 'object' }), { draft: '7' }),
   }).from({ expected: { a: 1 } });
@@ -492,22 +538,25 @@ test('ScorerSet reads a stated JSON text as json.loads does, without loss: 1.0 i
 });
 
 test('ScorerSet keeps a stated text that is not JSON as an unparsed value: every scorer but ValidSchema gives 0', () => {
-  const scorer = new ScorerSet({
-    ParseSuccess: new ParseSuccess(),
-    ValidSchema: new ValidSchema(),
-    SchemaCompliance: new SchemaCompliance(),
-    ValueRecall: new Recall(new ValueMatches()),
-    TokenF1: new TokenF1({ whenNoWords: 1, absentAs: null }),
-    PathMatchesRecall: new Recall(new PathMatches()),
-    PathMatchesF1: new F1(new PathMatches()),
-    TypePrecision: new TypePrecision(),
-    RequiredKeyRecall: new Penalized(
-      new SampleAveraged(new RequiredKeyRecall(), { whenEmpty: 1 }),
-      new ParseSuccess(),
-      new ValidSchema(),
-    ),
-    ExactMatch: new ExactMatch(),
-  });
+  const scorer = new ScorerSet(
+    {
+      ParseSuccess: new ParseSuccess(),
+      ValidSchema: new ValidSchema(),
+      SchemaCompliance: new SchemaCompliance(),
+      ValueRecall: new Recall(new ValueMatches()),
+      TokenF1: new TokenF1({ whenNoWords: 1, absentAs: null }),
+      PathMatchesRecall: new Recall(new PathMatches()),
+      PathMatchesF1: new F1(new PathMatches()),
+      TypePrecision: new TypePrecision(),
+      RequiredKeyRecall: new Penalized(
+        new SampleAveraged(new RequiredKeyRecall(), { whenEmpty: 1 }),
+        new ParseSuccess(),
+        new ValidSchema(),
+      ),
+      ExactMatch: new ExactMatch(),
+    },
+    { comparer: new TreeWalk() },
+  );
   const testCase = new ConfigCase({
     schema: new JsonSchema(JsonValue.from({ type: 'object' }), { draft: '7' }),
   }).from({ expected: { a: 'x' } });
@@ -537,20 +586,26 @@ test('ScorerSet keeps a stated text that is not JSON as an unparsed value: every
 // value is 1; its reason is the explanations of the gates that fail, and its
 // checks are its gates.
 test('ScorerSet passes a value when each of its gates holds, whatever the other values, and scores it with the mean of the scorers', () => {
-  const scorer = new ScorerSet({
-    'leaf exact match': new Recall(new ValueMatches()),
-    'canonical equality': new ExactMatch(),
-  });
+  const scorer = new ScorerSet(
+    {
+      'leaf exact match': new Recall(new ValueMatches()),
+      'canonical equality': new ExactMatch(),
+    },
+    { comparer: new TreeWalk() },
+  );
   const testCase = new ConfigCase({
     schema: new JsonSchema(JsonValue.from({ type: 'object' }), { draft: '7' }),
   }).from({ expected: { a: 1, b: 2 } });
 
   const equal = scorer.score({ b: 2, a: 1 }, testCase);
   const half = scorer.score({ a: 1, b: 3 }, testCase);
-  const mixed = new ScorerSet({
-    'parse success': new ParseSuccess(),
-    'leaf exact match': new Recall(new ValueMatches()),
-  }).score({ a: 1, b: 3 }, testCase);
+  const mixed = new ScorerSet(
+    {
+      'parse success': new ParseSuccess(),
+      'leaf exact match': new Recall(new ValueMatches()),
+    },
+    { comparer: new TreeWalk() },
+  ).score({ a: 1, b: 3 }, testCase);
 
   assert.equal(equal.passed, true);
   assert.equal(equal.score, 1);
@@ -569,7 +624,10 @@ test('ScorerSet passes a value when each of its gates holds, whatever the other 
 });
 
 test('ScorerSet reads a stated JsonValue as it is: a string candidate that looks like JSON is not parsed again, as evaluate.py reads a string candidate', () => {
-  const scorer = new ScorerSet({ 'parse success': new ParseSuccess() });
+  const scorer = new ScorerSet(
+    { 'parse success': new ParseSuccess() },
+    { comparer: new TreeWalk() },
+  );
   const testCase = new ConfigCase({
     schema: new JsonSchema(JsonValue.from({ type: 'object' }), { draft: '7' }),
   }).from({ expected: { a: 'x' } });
@@ -585,10 +643,13 @@ test('ScorerSet reads a stated JsonValue as it is: a string candidate that looks
 });
 
 test('TypePrecision has no gate of its own: it reads the types that a schema that is not valid Draft 7 names, and Penalized with ValidSchema gives 0', () => {
-  const scorer = new ScorerSet({
-    alone: new TypePrecision(),
-    gated: new Penalized(new TypePrecision(), new ValidSchema()),
-  });
+  const scorer = new ScorerSet(
+    {
+      alone: new TypePrecision(),
+      gated: new Penalized(new TypePrecision(), new ValidSchema()),
+    },
+    { comparer: new TreeWalk() },
+  );
   const invalid = new ConfigCase({
     schema: new JsonSchema(
       JsonValue.from({
@@ -623,14 +684,17 @@ test('TypePrecision has no gate of its own: it reads the types that a schema tha
 });
 
 test('RequiredKeyRecall has no gate of its own: it counts the required keys of a schema that is not valid Draft 7, and SampleAveraged gives its whenEmpty for text that is not JSON under a schema that requires none; Penalized with ParseSuccess and ValidSchema gives 0 for both', () => {
-  const scorer = new ScorerSet({
-    alone: new SampleAveraged(new RequiredKeyRecall(), { whenEmpty: 1 }),
-    gated: new Penalized(
-      new SampleAveraged(new RequiredKeyRecall(), { whenEmpty: 1 }),
-      new ParseSuccess(),
-      new ValidSchema(),
-    ),
-  });
+  const scorer = new ScorerSet(
+    {
+      alone: new SampleAveraged(new RequiredKeyRecall(), { whenEmpty: 1 }),
+      gated: new Penalized(
+        new SampleAveraged(new RequiredKeyRecall(), { whenEmpty: 1 }),
+        new ParseSuccess(),
+        new ValidSchema(),
+      ),
+    },
+    { comparer: new TreeWalk() },
+  );
   const invalid = new ConfigCase({
     schema: new JsonSchema(
       JsonValue.from({
@@ -663,11 +727,14 @@ test('RequiredKeyRecall has no gate of its own: it counts the required keys of a
 });
 
 test('RequiredKeyRecall gives a ratio with the whole 0 for a schema that requires no key, which SampleAveraged gives the whenEmpty of its caller', () => {
-  const scorer = new ScorerSet({
-    alone: new RequiredKeyRecall(),
-    half: new SampleAveraged(new RequiredKeyRecall(), { whenEmpty: 0.5 }),
-    quarter: new SampleAveraged(new RequiredKeyRecall(), { whenEmpty: 0.25 }),
-  });
+  const scorer = new ScorerSet(
+    {
+      alone: new RequiredKeyRecall(),
+      half: new SampleAveraged(new RequiredKeyRecall(), { whenEmpty: 0.5 }),
+      quarter: new SampleAveraged(new RequiredKeyRecall(), { whenEmpty: 0.25 }),
+    },
+    { comparer: new TreeWalk() },
+  );
   const testCase = new ConfigCase({
     schema: new JsonSchema(
       JsonValue.from({ type: 'object', properties: { a: { type: 'string' } } }),

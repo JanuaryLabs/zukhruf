@@ -1,8 +1,13 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { F1, SampleAveraged, ShortfallPenalty } from '../../index.ts';
-import { ConfigCase, ParseSuccess, PathMatches, ScorerSet } from '../index.ts';
+import {
+  F1,
+  SampleAveraged,
+  ScorerSet,
+  ShortfallPenalty,
+} from '../../index.ts';
+import { ConfigCase, ParseSuccess, PathMatches, TreeWalk } from '../index.ts';
 
 test('ShortfallPenalty throws a RangeError for a target or a power that is 0, below 0 or NaN', () => {
   const keys = new SampleAveraged(new F1(new PathMatches()), { whenEmpty: 0 });
@@ -22,11 +27,14 @@ test('ShortfallPenalty throws a RangeError for a target or a power that is 0, be
 
 test('ShortfallPenalty gives min(1, (value / target) ** power) with the bits of compute_coverage_gate of evaluate.py for image: 1 at the target and above it, 0 at 0, and the fraction to the power below it', () => {
   const keys = new SampleAveraged(new F1(new PathMatches()), { whenEmpty: 0 });
-  const scorer = new ScorerSet({
-    coverage: new ShortfallPenalty(keys, { target: 0.9, power: 2 }),
-    atTarget: new ShortfallPenalty(keys, { target: 0.5, power: 2 }),
-    cubed: new ShortfallPenalty(keys, { target: 0.9, power: 3 }),
-  });
+  const scorer = new ScorerSet(
+    {
+      coverage: new ShortfallPenalty(keys, { target: 0.9, power: 2 }),
+      atTarget: new ShortfallPenalty(keys, { target: 0.5, power: 2 }),
+      cubed: new ShortfallPenalty(keys, { target: 0.9, power: 3 }),
+    },
+    { comparer: new TreeWalk() },
+  );
   const testCase = new ConfigCase().from({
     expected: { a: 1, b: 2, c: 3, d: 4, e: 5, f: 6 },
   });
@@ -58,10 +66,13 @@ test('ShortfallPenalty gives min(1, (value / target) ** power) with the bits of 
 
 test('a ShortfallPenalty in a ScorerSet gives its factor over 1 and no check, so a record with a factor of 0 still passes; a gate stays a check', () => {
   const keys = new SampleAveraged(new F1(new PathMatches()), { whenEmpty: 0 });
-  const scorer = new ScorerSet({
-    coverage: new ShortfallPenalty(keys, { target: 0.9, power: 2 }),
-    parsed: new ParseSuccess(),
-  });
+  const scorer = new ScorerSet(
+    {
+      coverage: new ShortfallPenalty(keys, { target: 0.9, power: 2 }),
+      parsed: new ParseSuccess(),
+    },
+    { comparer: new TreeWalk() },
+  );
 
   const scorecard = scorer.score(
     { g: 7 },

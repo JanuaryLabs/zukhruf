@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { Recall } from '../../index.ts';
+import { Recall, ScorerSet } from '../../index.ts';
 import {
   AllMatched,
   ByBestMatch,
@@ -12,7 +12,6 @@ import {
   JsonValue,
   NumberWithin,
   PerField,
-  ScorerSet,
   TreeWalk,
   ValueMatches,
 } from '../index.ts';
@@ -84,7 +83,9 @@ test('the dot form, the bracket form in either quotes, the .* wildcard and blank
     new ScorerSet(
       { recall: new Recall(new ValueMatches()) },
       {
-        spec: new ComparisonSpec({ fields: { [key]: new NumberWithin(0.5) } }),
+        comparer: new TreeWalk(
+          new ComparisonSpec({ fields: { [key]: new NumberWithin(0.5) } }),
+        ),
       },
     )
       .score(
@@ -122,7 +123,7 @@ test('a quoted name is one step, also when it holds ".", "[" or "]" or is empty;
     x: [1.4],
     'x]': 1.4,
     '': 1.4,
-  }).value;
+  });
   const agreeing = (key: string) =>
     new TreeWalk(
       new ComparisonSpec({ fields: { [key]: new NumberWithin(0.5) } }),
@@ -154,7 +155,10 @@ test('a quoted name is one step, also when it holds ".", "[" or "]" or is empty;
 test('$ names the root: arrays aligns a root array by its key, and $[*] names its items', () => {
   const testCase = new ConfigCase().from({ expected: [10, 20] });
   const recall = (spec: ComparisonSpec) =>
-    new ScorerSet({ recall: new Recall(new ValueMatches()) }, { spec })
+    new ScorerSet(
+      { recall: new Recall(new ValueMatches()) },
+      { comparer: new TreeWalk(spec) },
+    )
       .score([20.4, 10], testCase)
       .ratios.get('recall')?.value;
 
@@ -181,7 +185,7 @@ test("exclude and arrays read the same keys: an excluded quoted name keeps the p
       'a.b': 1,
       a: { b: 1 },
       xs: [{ k: 'b' }, { k: 'a', n: 1 }],
-    }).value,
+    }),
     new ConfigCase().from({
       expected: {
         'a.b': 1,
@@ -223,7 +227,7 @@ test('a quoted name reads the escapes of RFC 9535: \\\' \\" \\\\ \\/ \\b \\f \\n
   const expected = Object.fromEntries(names.map((name) => [name, 1]));
   const stated = JsonValue.from(
     Object.fromEntries(names.map((name) => [name, 1.4])),
-  ).value;
+  );
   const agreeing = (key: string) =>
     new TreeWalk(
       new ComparisonSpec({ fields: { [key]: new NumberWithin(0.5) } }),
@@ -294,10 +298,13 @@ test('a label writes each field as JSONPath, with the bracket form of a Normaliz
   const testCase = new ConfigCase().from({ expected });
 
   const labels = [
-    ...new ScorerSet({
-      leaves: new PerField(new Recall(new ValueMatches())),
-      items: new PerField(new Recall(new ItemMatches())),
-    })
+    ...new ScorerSet(
+      {
+        leaves: new PerField(new Recall(new ValueMatches())),
+        items: new PerField(new Recall(new ItemMatches())),
+      },
+      { comparer: new TreeWalk() },
+    )
       .score(new JsonValue(stated), testCase)
       .ratios.keys(),
   ].map((label) => label.replace(/ (leaves|items)$/u, ''));
@@ -305,7 +312,7 @@ test('a label writes each field as JSONPath, with the bracket form of a Normaliz
     new TreeWalk(
       new ComparisonSpec({ fields: { [label]: new NumberWithin(0.5) } }),
     )
-      .compare(stated, testCase)
+      .compare(new JsonValue(stated), testCase)
       .leaves()
       .filter((pair) => pair.agrees)
       .map((pair) => String(pair.expected?.path.field)),
@@ -344,10 +351,10 @@ test('a label writes each field as JSONPath, with the bracket form of a Normaliz
 // escapes it for people to read, and no spec key can name it.
 test('an explanation writes each path as JSONPath, with an index selector for each position: at the root, after a name and after a position; a lone surrogate in a key is escaped', () => {
   const explain = (stated: unknown, expected: unknown) =>
-    new ScorerSet({ perfect: new AllMatched() }).score(
-      stated,
-      new ConfigCase().from({ expected }),
-    ).reason;
+    new ScorerSet(
+      { perfect: new AllMatched() },
+      { comparer: new TreeWalk() },
+    ).score(stated, new ConfigCase().from({ expected })).reason;
 
   const reasons = [
     explain([1, 3], [1, 2]),

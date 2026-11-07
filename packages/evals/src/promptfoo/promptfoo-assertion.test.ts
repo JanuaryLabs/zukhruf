@@ -1,26 +1,29 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { Recall } from '../index.ts';
+import { Recall, ScorerSet } from '../index.ts';
 import {
   AllMatched,
   ConfigCase,
   ExactMatch,
   PerField,
-  ScorerSet,
   TextVarsCase,
   TokenF1,
+  TreeWalk,
   ValueMatches,
 } from '../structured/index.ts';
 import { PromptfooAssertion } from './index.ts';
 
 test('grade gives each ratio as a named score with its whole as the weight, the field ratios of a PerField too, and one component for each gate', () => {
   const grade = new PromptfooAssertion(
-    new ScorerSet({
-      perfect: new AllMatched(),
-      recall: new Recall(new ValueMatches()),
-      'by field': new PerField(new Recall(new ValueMatches())),
-    }),
+    new ScorerSet(
+      {
+        perfect: new AllMatched(),
+        recall: new Recall(new ValueMatches()),
+        'by field': new PerField(new Recall(new ValueMatches())),
+      },
+      { comparer: new TreeWalk() },
+    ),
     new ConfigCase(),
   ).grade;
 
@@ -51,9 +54,12 @@ test('grade gives each ratio as a named score with its whole as the weight, the 
 
 test('the weight of a row weighs its named scores, and a row without one weighs 1', () => {
   const grade = new PromptfooAssertion(
-    new ScorerSet({
-      'leaf exact match': new Recall(new ValueMatches()),
-    }),
+    new ScorerSet(
+      {
+        'leaf exact match': new Recall(new ValueMatches()),
+      },
+      { comparer: new TreeWalk() },
+    ),
     new TextVarsCase(),
   ).grade;
   const config = { expected: '{"a": "x"}', schema: { type: 'object' } };
@@ -71,7 +77,10 @@ test('the weight of a row weighs its named scores, and a row without one weighs 
 
 test('a row without config.expected fails with a message that names it', () => {
   const grade = new PromptfooAssertion(
-    new ScorerSet({ recall: new Recall(new ValueMatches()) }),
+    new ScorerSet(
+      { recall: new Recall(new ValueMatches()) },
+      { comparer: new TreeWalk() },
+    ),
     new ConfigCase(),
   ).grade;
 
@@ -80,10 +89,13 @@ test('a row without config.expected fails with a message that names it', () => {
 
 test('a row that gives its expected value as JSON text keeps 7.0 a float, as json.loads reads it', () => {
   const grade = new PromptfooAssertion(
-    new ScorerSet({
-      'canonical equality': new ExactMatch(),
-      'leaf token f1': new TokenF1({ whenNoWords: 1, absentAs: null }),
-    }),
+    new ScorerSet(
+      {
+        'canonical equality': new ExactMatch(),
+        'leaf token f1': new TokenF1({ whenNoWords: 1, absentAs: null }),
+      },
+      { comparer: new TreeWalk() },
+    ),
     new TextVarsCase(),
   ).grade;
 

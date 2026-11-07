@@ -23,6 +23,7 @@ import {
   Recall,
   SampleAveraged,
   type Scorer,
+  ScorerSet,
   ShortfallPenalty,
   Totals,
   type WeightedScorecard,
@@ -39,8 +40,8 @@ import {
   PythonEquality,
   RequiredKeyRecall,
   SchemaCompliance,
-  ScorerSet,
   TokenF1,
+  TreeWalk,
   TypePrecision,
   ValidSchema,
   ValueMatches,
@@ -240,7 +241,7 @@ function sobLines(): { stated: JsonValue; testCase: Case }[] {
 
 for (const { modality, oracle, scorers, categories } of modalities) {
   test(`${modality}: each line gives the 11 values and the weight of its eval_records row`, () => {
-    const scorer = new ScorerSet(scorers, { spec });
+    const scorer = new ScorerSet(scorers, { comparer: new TreeWalk(spec) });
     const lines = sobLines();
 
     const rows = lines.map(({ stated, testCase }) => {
@@ -280,7 +281,10 @@ for (const { modality, oracle, scorers, categories } of modalities) {
   });
 
   test(`${modality}: the means, the category means and the bootstrap intervals equal build_summary, without and with weights`, () => {
-    const scorer = new ScorerSet({ ...scorers, ...categories }, { spec });
+    const scorer = new ScorerSet(
+      { ...scorers, ...categories },
+      { comparer: new TreeWalk(spec) },
+    );
     const scored = sobLines().map(({ stated, testCase }) => ({
       scorecard: scorer.score(stated, testCase),
       weight: testCase.weight,

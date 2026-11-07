@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { SampleAveraged } from '../../index.ts';
+import { SampleAveraged, ScorerSet } from '../../index.ts';
 import {
   ConfigCase,
   JsonSchema,
   JsonValue,
-  ScorerSet,
+  TreeWalk,
   TypePrecision,
 } from '../index.ts';
 
@@ -14,9 +14,12 @@ import {
 // share of its leaves whose type the schema allows at their path, by the
 // rules of JSON Schema draft 7 (ADR 0008).
 const typePrecision = (schema: object, stated: unknown): number | undefined =>
-  new ScorerSet({
-    precision: new TypePrecision(),
-  })
+  new ScorerSet(
+    {
+      precision: new TypePrecision(),
+    },
+    { comparer: new TreeWalk() },
+  )
     .score(
       stated,
       new ConfigCase({
@@ -289,11 +292,14 @@ test('a float with a zero fraction, such as 1.0, is an integer, as draft 7 says,
 });
 
 test('TypePrecision counts over the stated leaves, and a stated value that has no leaf gives a ratio with the whole 0, which SampleAveraged gives the whenEmpty of its caller', () => {
-  const scorer = new ScorerSet({
-    precision: new TypePrecision(),
-    quarter: new SampleAveraged(new TypePrecision(), { whenEmpty: 0.25 }),
-    half: new SampleAveraged(new TypePrecision(), { whenEmpty: 0.5 }),
-  });
+  const scorer = new ScorerSet(
+    {
+      precision: new TypePrecision(),
+      quarter: new SampleAveraged(new TypePrecision(), { whenEmpty: 0.25 }),
+      half: new SampleAveraged(new TypePrecision(), { whenEmpty: 0.5 }),
+    },
+    { comparer: new TreeWalk() },
+  );
   const testCase = new ConfigCase({
     schema: new JsonSchema(
       JsonValue.from({ type: 'object', properties: { a: { type: 'string' } } }),

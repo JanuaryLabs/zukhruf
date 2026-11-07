@@ -1,18 +1,21 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { F1, Precision, Recall } from '../../index.ts';
+import { F1, Precision, Recall, ScorerSet } from '../../index.ts';
 import {
   ComparisonSpec,
   JsonSchema,
   PythonEquality,
-  ScorerSet,
   TextVarsCase,
+  TreeWalk,
   ValueMatches,
 } from '../index.ts';
 
 test('by default ValueMatches compares leaves by JSON equality: 1 agrees with 1.0 and 2 with 2.0, true does not agree with 1, an int and a float only when they are the same number exactly, and "1" is not 1', () => {
-  const scorer = new ScorerSet({ recall: new Recall(new ValueMatches()) });
+  const scorer = new ScorerSet(
+    { recall: new Recall(new ValueMatches()) },
+    { comparer: new TreeWalk() },
+  );
   const testCase = new TextVarsCase({
     schema: (value) => new JsonSchema(value, { draft: '7' }),
   }).from({
@@ -33,7 +36,11 @@ test('by default ValueMatches compares leaves by JSON equality: 1 agrees with 1.
 test("with PythonEquality in the spec, ValueMatches compares leaves as Python's == does: True == 1 == 1.0, False == 0, an int and a float only when they are the same number exactly, and '1' is not 1", () => {
   const scorer = new ScorerSet(
     { recall: new Recall(new ValueMatches()) },
-    { spec: new ComparisonSpec({ comparator: new PythonEquality() }) },
+    {
+      comparer: new TreeWalk(
+        new ComparisonSpec({ comparator: new PythonEquality() }),
+      ),
+    },
   );
   const testCase = new TextVarsCase({
     schema: (value) => new JsonSchema(value, { draft: '7' }),
@@ -53,11 +60,14 @@ test("with PythonEquality in the spec, ValueMatches compares leaves as Python's 
 });
 
 test('Precision, Recall and F1 of ValueMatches count the leaf pairs whose two values are equal, of the stated leaves, of the expected leaves, and as 2·hits of stated + expected', () => {
-  const scorer = new ScorerSet({
-    precision: new Precision(new ValueMatches()),
-    recall: new Recall(new ValueMatches()),
-    f1: new F1(new ValueMatches()),
-  });
+  const scorer = new ScorerSet(
+    {
+      precision: new Precision(new ValueMatches()),
+      recall: new Recall(new ValueMatches()),
+      f1: new F1(new ValueMatches()),
+    },
+    { comparer: new TreeWalk() },
+  );
   const testCase = new TextVarsCase({
     schema: (value) => new JsonSchema(value, { draft: '7' }),
   }).from({

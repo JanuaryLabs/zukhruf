@@ -1,27 +1,30 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { Precision, Ratio, Recall } from '../../index.ts';
+import { Precision, Ratio, Recall, ScorerSet } from '../../index.ts';
 import {
   AllMatched,
   ConfigCase,
   JsonSchema,
   JsonValue,
   PathMatches,
-  ScorerSet,
   TokenF1,
+  TreeWalk,
   TypePrecision,
   ValueMatches,
 } from '../index.ts';
 
 test('with nullIsMissing, PathMatches and ValueMatches read a null as no value on both sides, as the table of the README counts; without it a null is a value', () => {
   const scorer = (nullIsMissing: boolean) =>
-    new ScorerSet({
-      'value recall': new Recall(new ValueMatches({ nullIsMissing })),
-      'value precision': new Precision(new ValueMatches({ nullIsMissing })),
-      'path recall': new Recall(new PathMatches({ nullIsMissing })),
-      'path precision': new Precision(new PathMatches({ nullIsMissing })),
-    });
+    new ScorerSet(
+      {
+        'value recall': new Recall(new ValueMatches({ nullIsMissing })),
+        'value precision': new Precision(new ValueMatches({ nullIsMissing })),
+        'path recall': new Recall(new PathMatches({ nullIsMissing })),
+        'path precision': new Precision(new PathMatches({ nullIsMissing })),
+      },
+      { comparer: new TreeWalk() },
+    );
   // same value, another value, no stated value, no expected value, neither.
   const stated = { same: 1, other: 2, gone: null, extra: 3, none: null };
   const testCase = new ConfigCase().from({
@@ -53,10 +56,13 @@ test('with nullIsMissing, TokenF1 leaves out an expected null and reads a stated
     }),
   );
   const scorer = (nullIsMissing: boolean) =>
-    new ScorerSet({
-      tokens: new TokenF1({ whenNoWords: 1, absentAs: 'x', nullIsMissing }),
-      types: new TypePrecision({ nullIsMissing }),
-    });
+    new ScorerSet(
+      {
+        tokens: new TokenF1({ whenNoWords: 1, absentAs: 'x', nullIsMissing }),
+        types: new TypePrecision({ nullIsMissing }),
+      },
+      { comparer: new TreeWalk() },
+    );
   const testCase = new ConfigCase({ schema }).from({
     expected: { a: 'x', b: null },
   });
@@ -76,13 +82,16 @@ test('with nullIsMissing, AllMatched passes an expected null that the stated ite
   });
   const stated = { offers: [{ kind: 'support' }] };
 
-  const missing = new ScorerSet({
-    perfect: new AllMatched({ nullIsMissing: true }),
-  }).score(stated, testCase);
-  const value = new ScorerSet({ perfect: new AllMatched() }).score(
-    stated,
-    testCase,
-  );
+  const missing = new ScorerSet(
+    {
+      perfect: new AllMatched({ nullIsMissing: true }),
+    },
+    { comparer: new TreeWalk() },
+  ).score(stated, testCase);
+  const value = new ScorerSet(
+    { perfect: new AllMatched() },
+    { comparer: new TreeWalk() },
+  ).score(stated, testCase);
 
   assert.deepEqual(
     [
@@ -99,9 +108,12 @@ test('with nullIsMissing, AllMatched passes an expected null that the stated ite
 });
 
 test('with nullIsMissing, AllMatched passes a stated null where the expected key is absent, and fails a stated null where a value is expected', () => {
-  const allMatched = new ScorerSet({
-    perfect: new AllMatched({ nullIsMissing: true }),
-  });
+  const allMatched = new ScorerSet(
+    {
+      perfect: new AllMatched({ nullIsMissing: true }),
+    },
+    { comparer: new TreeWalk() },
+  );
   const testCase = new ConfigCase().from({ expected: { a: 5 } });
 
   const extraNull = allMatched.score({ a: 5, b: null }, testCase);

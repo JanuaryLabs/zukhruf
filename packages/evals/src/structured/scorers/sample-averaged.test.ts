@@ -1,23 +1,26 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { F1, Recall, SampleAveraged, Totals } from '../../index.ts';
+import { F1, Recall, SampleAveraged, ScorerSet, Totals } from '../../index.ts';
 import {
   ConfigCase,
   JsonSchema,
   JsonValue,
   PathMatches,
-  ScorerSet,
+  TreeWalk,
   ValueMatches,
 } from '../index.ts';
 
 test('Totals gives the micro average of a plain scorer and the samples average of a SampleAveraged one: all hits over all expected values, or the mean of the values of the records', () => {
-  const scorer = new ScorerSet({
-    micro: new Recall(new ValueMatches()),
-    samples: new SampleAveraged(new Recall(new ValueMatches()), {
-      whenEmpty: 0,
-    }),
-  });
+  const scorer = new ScorerSet(
+    {
+      micro: new Recall(new ValueMatches()),
+      samples: new SampleAveraged(new Recall(new ValueMatches()), {
+        whenEmpty: 0,
+      }),
+    },
+    { comparer: new TreeWalk() },
+  );
   const schema = { type: 'object' };
   const totals = new Totals();
 
@@ -47,18 +50,21 @@ test('Totals gives the micro average of a plain scorer and the samples average o
 });
 
 test('SampleAveraged gives the value of its scorer over 1, F1 with the bits of f1_from_counts, and the whenEmpty of its caller for a ratio with the whole 0', () => {
-  const scorer = new ScorerSet({
-    f1: new SampleAveraged(new F1(new PathMatches()), { whenEmpty: 0.25 }),
-    recall: new SampleAveraged(new Recall(new PathMatches()), {
-      whenEmpty: 0.25,
-    }),
-    half: new SampleAveraged(new Recall(new PathMatches()), {
-      whenEmpty: 0.5,
-    }),
-    values: new SampleAveraged(new Recall(new ValueMatches()), {
-      whenEmpty: 0.75,
-    }),
-  });
+  const scorer = new ScorerSet(
+    {
+      f1: new SampleAveraged(new F1(new PathMatches()), { whenEmpty: 0.25 }),
+      recall: new SampleAveraged(new Recall(new PathMatches()), {
+        whenEmpty: 0.25,
+      }),
+      half: new SampleAveraged(new Recall(new PathMatches()), {
+        whenEmpty: 0.5,
+      }),
+      values: new SampleAveraged(new Recall(new ValueMatches()), {
+        whenEmpty: 0.75,
+      }),
+    },
+    { comparer: new TreeWalk() },
+  );
   const schema = { type: 'object' };
 
   const full = scorer.score(

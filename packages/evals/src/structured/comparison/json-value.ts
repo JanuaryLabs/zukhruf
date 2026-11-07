@@ -17,11 +17,23 @@ export class JsonValue {
 
   // An integral number becomes an int, so an integral float such as 7.0 is
   // already 7. JSON.stringify gives no text for undefined, which stands for no
-  // value (None).
+  // value (None). JSON.stringify gives {} for a Map and a Set, at any depth, so
+  // a dict of JsonData would become an empty object: that value is refused,
+  // and not read.
   static from(value: unknown): JsonValue {
     return new JsonValue(
-      value === undefined ? null : loadsJson(JSON.stringify(value)),
+      value === undefined
+        ? null
+        : loadsJson(JSON.stringify(value, JsonValue.#refuseCollections)),
     );
+  }
+
+  static #refuseCollections(this: void, _key: string, item: unknown): unknown {
+    if (item instanceof Map || item instanceof Set)
+      throw new TypeError(
+        `JsonValue.from cannot read a ${item instanceof Map ? 'Map' : 'Set'}, because JSON.stringify loses its entries. Give JSON text, a JsonValue or a plain JavaScript value.`,
+      );
+    return item;
   }
 }
 

@@ -1,23 +1,26 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { Ratio } from '../../index.ts';
+import { Ratio, ScorerSet } from '../../index.ts';
 import {
   ConfigCase,
   JsonSchema,
   JsonValue,
   SchemaCompliance,
-  ScorerSet,
   TextVarsCase,
+  TreeWalk,
   TypePrecision,
   ValidSchema,
 } from '../index.ts';
 
-const scorer = new ScorerSet({
-  valid: new SchemaCompliance(),
-  'valid schema': new ValidSchema(),
-  types: new TypePrecision(),
-});
+const scorer = new ScorerSet(
+  {
+    valid: new SchemaCompliance(),
+    'valid schema': new ValidSchema(),
+    types: new TypePrecision(),
+  },
+  { comparer: new TreeWalk() },
+);
 
 test('a $schema that names a draft the package does not read throws when the schema is built, and names it; a draft that the caller sets reads that schema anyway', () => {
   const schema = JsonValue.from({
