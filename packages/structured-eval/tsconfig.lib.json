@@ -9,10 +9,13 @@
   "exclude": ["src/**/*.test.ts", "src/testing/**"],
   "references": [
     {
+      "path": "../statistics/tsconfig.lib.json"
+    },
+    {
       "path": "../python/tsconfig.lib.json"
     },
     {
-      "path": "../statistics/tsconfig.lib.json"
+      "path": "../testing/tsconfig.lib.json"
     }
   ]
 }

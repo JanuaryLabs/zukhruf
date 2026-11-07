@@ -91,7 +91,10 @@ _Avoid_: macro average (that is the mean over the classes)
 The interval of a mean: many resamples draw the scorecards again, with replacement, and two quantiles of their means are its ends.
 
 **Scorer assertion**:
-A promptfoo assertion object that gives the value of one scorer: its name, its weight in the score of the test, and the threshold at which it passes. It reads the case from the vars of the test.
+A scorer with its weight, the threshold at which it passes, and the metric it reports under. It reads the case from the vars of the test. An assertion module gives it to promptfoo.
+
+**Assertion module**:
+The module that promptfoo loads the function of a scorer assertion from. A config names its scorer assertions, and gets JSON assertions with file references.
 
 ### Classification
 

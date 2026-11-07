@@ -141,12 +141,12 @@ counts.confusionMatrix(); // confusion_matrix, labels in sorted order
 
 `PromptfooAssertion` adapts a scorer set to a per-row assertion. Each ratio becomes a named score with its whole as the weight, so the column header shows the same ratio of sums as `Totals`. It reads the case from the config of the assertion.
 
-`ScorerAssertion` adapts one scorer. It is a promptfoo assertion object, so a TypeScript config lists it in its `defaultTest`. It reads the case from the vars of the test. Its `metric` names the value, `weight` sets how much it counts in the score of the test, and `threshold` sets when it passes. Both numbers are required.
+`ScorerAssertion` holds one scorer with its `weight` (how much it counts in the score of the test) and its `threshold` (when it passes). Both numbers are required. It reads the case from the vars of the test.
+
+promptfoo stores the config of a run as JSON, and `--resume` and `--retry-errors` build the run from that stored config. A function does not survive JSON, so a config holds no scorer assertion. An `AssertionModule` holds the scorer assertions by name, in a module that promptfoo loads. Its `assert(...names)` gives JSON assertions whose `value` is the file reference `file://<module>:<name>`. promptfoo loads the function from the default export of the module when it grades, on the first run and on a resumed run (structured-eval ADR 0013).
 
 ```ts
-// promptfooconfig.ts
-import type { UnifiedConfig } from 'promptfoo';
-
+// page-kinds/scorers.ts: the module that promptfoo loads
 import { Recall } from '@zukhruf/evals';
 import {
   AllClassMatches,
@@ -154,29 +154,37 @@ import {
   LabelVarsCase,
   LabelsMatch,
 } from '@zukhruf/evals/classification';
-import { ScorerAssertion } from '@zukhruf/evals/promptfoo';
+import { AssertionModule, ScorerAssertion } from '@zukhruf/evals/promptfoo';
 
 const labels = { comparer: new LabelComparer(), cases: new LabelVarsCase() };
 
+export const scorers = new AssertionModule(import.meta.url, {
+  accuracy: new ScorerAssertion(new LabelsMatch(), {
+    weight: 1,
+    threshold: 1,
+    ...labels,
+  }),
+  recall: new ScorerAssertion(new Recall(new AllClassMatches()), {
+    weight: 0,
+    threshold: 0,
+    ...labels,
+  }),
+});
+export default scorers.functions;
+```
+
+```ts
+// page-kinds/promptfooconfig.ts
+import type { UnifiedConfig } from 'promptfoo';
+
+import { scorers } from './scorers.ts';
+
 export default {
-  defaultTest: {
-    assert: [
-      new ScorerAssertion('accuracy', new LabelsMatch(), {
-        weight: 1,
-        threshold: 1,
-        ...labels,
-      }),
-      new ScorerAssertion('recall', new Recall(new AllClassMatches()), {
-        weight: 0,
-        threshold: 0,
-        ...labels,
-      }),
-    ],
-  },
+  defaultTest: { assert: scorers.assert('accuracy', 'recall') },
 } satisfies UnifiedConfig;
 ```
 
-promptfoo shows the mean of each `metric` over the tests. A `ScorerAssertion` gives one value for one test, so a micro average needs `PromptfooAssertion`, whose ratios keep their wholes.
+The name is the promptfoo `metric`, unless the scorer assertion gives its own `metric`. A name that the module does not hold is a compile error. promptfoo shows the mean of each `metric` over the tests. A `ScorerAssertion` gives one value for one test, so a micro average needs `PromptfooAssertion`, whose ratios keep their wholes.
 
 ## What the package does not do
 
@@ -194,6 +202,7 @@ promptfoo shows the mean of each `metric` over the tests. A `ScorerAssertion` gi
 | `ClassCounts`: add, then compute                   | torchmetrics: `update()` and `compute()` over `tp`, `fp`, `tn`, `fn`                           |
 | `average`, `zeroDivision`, `beta`                  | scikit-learn: `average=`, `zero_division=`, `beta=`                                            |
 | `ScorerAssertion`: `metric`, `weight`, `threshold` | promptfoo: the fields of an assertion                                                          |
+| `AssertionModule`: `file://<module>:<name>`        | promptfoo: a `javascript` assertion whose `value` is a file reference                          |
 | Optional peers of a subpath                        | torchmetrics extras, such as `torchmetrics[text]`                                              |
 
 ## API
@@ -346,25 +355,45 @@ export class PromptfooAssertion<Case extends Weighted> {
     context: { config?: Readonly<Record<string, unknown>> },
   ) => GradingResult;
 }
+/** One scorer with its weight and threshold. It is not a promptfoo assertion: an AssertionModule gives it to promptfoo. */
 export class ScorerAssertion<Case extends Weighted, Input> {
   constructor(
-    metric: string,
     scorer: Scorer<Input>,
     options: {
       weight: number;
       threshold: number;
+      metric?: string;
       comparer: Comparer<Case, Input>;
       cases: CaseReader<Case>;
     },
   );
-  readonly type: 'javascript';
-  readonly metric: string;
+  readonly metric: string | undefined;
   readonly weight: number;
   readonly threshold: number;
   readonly value: (
     output: string,
     context: { vars: Readonly<Record<string, unknown>> },
   ) => number;
+}
+/** A promptfoo javascript assertion that holds only JSON. */
+export type FileAssertion = {
+  readonly type: 'javascript';
+  readonly metric: string;
+  readonly weight: number;
+  readonly threshold: number;
+  readonly value: string; // file://<module>:<name>
+};
+/** The module that promptfoo loads the function of each scorer assertion from (structured-eval ADR 0013). */
+export class AssertionModule<Name extends string> {
+  constructor(
+    url: string,
+    assertions: Readonly<Record<Name, ScorerAssertion<Weighted, unknown>>>,
+  );
+  /** The default export of the module: the value function of each name. */
+  readonly functions: Readonly<
+    Record<string, ScorerAssertion<Weighted, unknown>['value']>
+  >;
+  assert(...names: Name[]): FileAssertion[];
 }
 
 // @zukhruf/evals/classification
