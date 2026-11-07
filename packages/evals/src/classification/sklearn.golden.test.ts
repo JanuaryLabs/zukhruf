@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
+import { isDeepStrictEqual } from 'node:util';
 
 import {
   F1,
@@ -13,13 +14,19 @@ import {
 } from '../index.ts';
 import {
   AllClassMatches,
+  type Average,
+  BinaryAverage,
+  ClassCounts,
   ClassMatches,
   type Label,
   LabelCase,
   LabelComparer,
   type LabelComparison,
   LabelsMatch,
+  MacroAverage,
+  MicroAverage,
   PerClass,
+  WeightedAverage,
 } from './index.ts';
 
 // fixtures/sklearn/expected.json holds what scikit-learn 1.9.1 (numpy 2.5.4,
@@ -42,9 +49,27 @@ type Sklearn = {
   readonly micro: Scores;
   readonly macro: Scores;
   readonly weighted: Scores;
+  readonly binary?: Scores & { readonly pos_label: Label };
+  readonly confusion_matrix?: readonly (readonly number[])[];
+};
+type Call = {
+  readonly case: string;
+  readonly metric: 'precision' | 'recall' | 'fbeta';
+  readonly y_true: readonly Label[];
+  readonly y_pred: readonly Label[];
+  readonly kwargs: {
+    readonly average: 'micro' | 'macro' | 'weighted' | 'binary' | null;
+    readonly beta?: number;
+    readonly labels?: readonly Label[];
+    readonly zero_division?: Value;
+    readonly pos_label?: Label;
+    readonly sample_weight?: readonly number[];
+  };
+  readonly value: Value | readonly Value[];
 };
 type Expected = {
   readonly multiclass: readonly Sklearn[];
+  readonly calls: readonly Call[];
   readonly multilabel: readonly Sklearn[];
 };
 
@@ -172,4 +197,170 @@ test("PerClass gives the ratio of each class under the label `${class} ${label}`
     (sklearn.labels ?? []).map((label) => totals.get(`${label} recall`).value),
     sklearn.none.recall,
   );
+});
+
+const number = (value: Value) => (value === 'NaN' ? Number.NaN : value);
+const averages = {
+  micro: new MicroAverage(),
+  macro: new MacroAverage(),
+  weighted: new WeightedAverage(),
+} as const;
+
+// The counts of a case: of the labels of each answer, or of the rows of its
+// label indicator matrices.
+const countsOf = (sklearn: Sklearn): ClassCounts => {
+  const weights =
+    sklearn.sample_weight === null || sklearn.sample_weight === undefined
+      ? {}
+      : { weights: sklearn.sample_weight };
+  const rows = (y: Sklearn['y_true']) =>
+    y.map((row) => {
+      assert.ok(typeof row === 'object');
+      return row;
+    });
+  return sklearn.labels === undefined
+    ? ClassCounts.ofIndicators({
+        expected: rows(sklearn.y_true),
+        stated: rows(sklearn.y_pred),
+        ...weights,
+      })
+    : ClassCounts.of({
+        expected: sklearn.y_true.map((label) => {
+          assert.ok(typeof label !== 'object');
+          return label;
+        }),
+        stated: sklearn.y_pred.map((label) => {
+          assert.ok(typeof label !== 'object');
+          return label;
+        }),
+        ...weights,
+      });
+};
+
+// The precision, recall and F1 of the counts: of the selected classes, with
+// the average.
+const scoresOf = (
+  counts: ClassCounts,
+  average: Average,
+  labels?: readonly Label[],
+) => {
+  const options = labels === undefined ? { average } : { average, labels };
+  return {
+    precision: counts.precision(options),
+    recall: counts.recall(options),
+    f1: counts.fBeta({ beta: 1, ...options }),
+  };
+};
+
+test("ClassCounts gives scikit-learn's accuracy, the micro, macro and weighted precision, recall and F1, the score of each class and the support, bit for bit, with float sample weights too, for a class and for a set of classes", () => {
+  const differ: string[] = [];
+
+  for (const sklearn of [...expected.multiclass, ...expected.multilabel]) {
+    const counts = countsOf(sklearn);
+    const got = {
+      accuracy: counts.accuracy(),
+      ...Object.fromEntries(
+        Object.entries(averages).map(([name, average]) => [
+          name,
+          scoresOf(counts, average),
+        ]),
+      ),
+      none: {
+        ...Object.fromEntries(
+          (['precision', 'recall', 'f1'] as const).map((metric) => [
+            metric,
+            classes(sklearn).map(
+              (label) => scoresOf(counts, new MacroAverage(), [label])[metric],
+            ),
+          ]),
+        ),
+        support: [...counts.support().values()],
+      },
+    };
+    const want = {
+      accuracy: sklearn.accuracy,
+      micro: sklearn.micro,
+      macro: sklearn.macro,
+      weighted: sklearn.weighted,
+      none: sklearn.none,
+    };
+    if (!isDeepStrictEqual(got, want)) differ.push(sklearn.case);
+  }
+
+  assert.deepEqual(differ, []);
+});
+
+test("BinaryAverage gives scikit-learn's average='binary' of the positive label for answers of two labels or fewer", () => {
+  const differ: string[] = [];
+
+  for (const sklearn of expected.multiclass) {
+    if (sklearn.binary === undefined) continue;
+    const { pos_label, ...want } = sklearn.binary;
+    const got = scoresOf(countsOf(sklearn), new BinaryAverage(pos_label));
+    if (!isDeepStrictEqual(got, want)) differ.push(sklearn.case);
+  }
+
+  assert.deepEqual(differ, []);
+});
+
+test("confusionMatrix gives scikit-learn's confusion_matrix: a row for each expected label and a column for each stated label, in the order of the labels", () => {
+  const differ = expected.multiclass
+    .filter((sklearn) => {
+      const matrix = countsOf(sklearn).confusionMatrix();
+      return !isDeepStrictEqual(
+        [matrix.labels, matrix.rows()],
+        [sklearn.labels, sklearn.confusion_matrix],
+      );
+    })
+    .map((sklearn) => sklearn.case);
+
+  assert.deepEqual(differ, []);
+});
+
+test("ClassCounts gives scikit-learn's value for each call with labels, zero_division 0, 1 or NaN, beta 0.5, 0.3 or 2, and the binary average", () => {
+  const differ: string[] = [];
+
+  for (const call of expected.calls) {
+    const { average, beta, labels, zero_division, pos_label, sample_weight } =
+      call.kwargs;
+    const counts = ClassCounts.of({
+      expected: call.y_true,
+      stated: call.y_pred,
+      ...(sample_weight === undefined ? {} : { weights: sample_weight }),
+    });
+    const score = (options: {
+      readonly average: Average;
+      readonly labels?: readonly Label[];
+    }) => {
+      const all = {
+        ...options,
+        ...(zero_division === undefined
+          ? {}
+          : { zeroDivision: number(zero_division) }),
+      };
+      if (call.metric === 'fbeta')
+        return counts.fBeta({ beta: beta ?? Number.NaN, ...all });
+      return counts[call.metric](all);
+    };
+    const value =
+      average === null
+        ? (labels ?? counts.labels()).map((label) =>
+            score({ average: new MacroAverage(), labels: [label] }),
+          )
+        : score({
+            average:
+              average === 'binary'
+                ? new BinaryAverage(pos_label ?? 1)
+                : averages[average],
+            ...(labels === undefined ? {} : { labels }),
+          });
+    const want =
+      typeof call.value === 'object'
+        ? call.value.map(number)
+        : number(call.value);
+    if (!isDeepStrictEqual(value, want))
+      differ.push(`${call.case}: ${call.metric} ${average}`);
+  }
+
+  assert.deepEqual(differ, []);
 });

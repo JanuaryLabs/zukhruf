@@ -18,8 +18,9 @@
 #   zero_division, beta, average, pos_label, sample_weight) and its value.
 # - multilabel: label indicator rows and the same metrics, without
 #   confusion_matrix. The first 3 cases are cases of @zukhruf/mteb's
-#   fixtures/multilabel, and the 200-row cases draw the same rows, because
+#   fixtures/multilabel, and its 200-row cases draw the same rows, because
 #   the script draws from random.Random(3243) in the order of that script.
+#   The last case adds float sample weights.
 # A float NaN is the string "NaN", because JSON has no NaN.
 # Never edit expected.json by hand: run this script again.
 import importlib.metadata
@@ -173,10 +174,39 @@ for beta in (0.5, 0.3, 2.0):
     calls.append(call(f"beta {beta} with float sample weights", "fbeta", weighted_true, weighted_pred,
                       beta=beta, average="macro", sample_weight=multiclass_cases[14]["sample_weight"]))
 
+banking_weights = [rng.random() * 4 for _ in banking]
+for metric in ("precision", "recall"):
+    calls.append(call("77 classes with float sample weights", metric, banking, multiclass_cases[11]["y_pred"],
+                      average="micro", sample_weight=banking_weights))
+    calls.append(call("30 labels, 20 of them absent, zero_division NaN", metric, ten, multiclass_cases[10]["y_pred"],
+                      average="macro", labels=list(range(-10, 20)), zero_division=np.nan))
 
-def multilabel(name, y_true, y_pred):
+
+
+# nanmean adds 0 in place of each NaN, so its pairwise sum can differ from the
+# sum of the other scores alone; draw until a case shows it.
+def compact_mean_differs(y_true, y_pred, labels):
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        per = precision_score(y_true, y_pred, average=None, labels=labels, zero_division=np.nan)
+        macro = precision_score(y_true, y_pred, average="macro", labels=labels, zero_division=np.nan)
+    kept = per[~np.isnan(per)]
+    return float(np.sum(kept)) / len(kept) != macro
+
+
+while True:
+    nan_true = [rng.randrange(28) for _ in range(58)]
+    nan_pred = [rng.randrange(28) if rng.random() < 0.6 else label for label in nan_true]
+    if compact_mean_differs(nan_true, nan_pred, list(range(-5, 33))):
+        break
+calls.append(call("38 labels, 10 of them absent, zero_division NaN, where the mean of the other scores alone differs",
+                  "precision", nan_true, nan_pred, average="macro", labels=list(range(-5, 33)), zero_division=np.nan))
+
+
+def multilabel(name, y_true, y_pred, sample_weight=None):
     true, pred = np.array(y_true), np.array(y_pred)
-    return plain({"case": name, "y_true": y_true, "y_pred": y_pred, **scores(true, pred, None, None)})
+    return plain({"case": name, "y_true": y_true, "y_pred": y_pred, "sample_weight": sample_weight,
+                  **scores(true, pred, sample_weight, None)})
 
 
 # @zukhruf/mteb's fixtures/multilabel/generate.py draws from its own
@@ -206,6 +236,10 @@ multilabel_cases = [
                [[1 - value if mteb.random() < 0.25 else value for value in row] for row in truth]),
     multilabel("200 rows predicted all 0", truth, [[0] * 9 for _ in truth]),
 ]
+# New cases, from the generator of this script.
+multilabel_cases.append(multilabel(
+    "200 rows of 9 labels with float sample weights", truth, multilabel_cases[3]["y_pred"],
+    sample_weight=[rng.random() * 2 for _ in truth]))
 
 generator = f"generate.py: numpy {VERSIONS['numpy']}, scikit-learn {VERSIONS['scikit-learn']}, CPython {platform.python_version()}"
 (HERE / "expected.json").write_text(

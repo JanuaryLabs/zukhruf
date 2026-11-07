@@ -7,7 +7,7 @@ import { notInstalled } from '@zukhruf/testing/preload';
 
 const execFileAsync = promisify(execFile);
 
-// The third-party dependencies of ./structured are optional peers (ADR 0001,
+// The third-party dependencies of a family are optional peers (ADR 0001,
 // rule 3), so a user of another import path does not install them. The
 // child sees each hidden package as not installed, as such a user sees the
 // package.
@@ -19,29 +19,34 @@ const importPath = (path: string, hidden: readonly string[]) =>
     `await import('${path}');`,
   ]);
 
-const structuredPeers = ['@cfworker/json-schema', 'munkres'];
+const peers = {
+  '@zukhruf/evals/structured': ['@cfworker/json-schema', 'munkres'],
+  '@zukhruf/evals/classification': ['@stdlib/blas-ext-base-gsumpw'],
+};
+const allPeers = Object.values(peers).flat();
 
-test('the core imports when the peers of ./structured are not installed', async () => {
-  await importPath('@zukhruf/evals', structuredPeers);
+test('the core imports when no peer of a family is installed', async () => {
+  await importPath('@zukhruf/evals', allPeers);
 });
 
-test('./promptfoo imports when the peers of ./structured are not installed', async () => {
-  await importPath('@zukhruf/evals/promptfoo', structuredPeers);
+test('./promptfoo imports when no peer of a family is installed', async () => {
+  await importPath('@zukhruf/evals/promptfoo', allPeers);
 });
 
-test('./classification imports when the peers of ./structured are not installed', async () => {
-  await importPath('@zukhruf/evals/classification', structuredPeers);
-});
-
-test('./structured imports with its peers, and needs each one of them', async () => {
-  await importPath('@zukhruf/evals/structured', []);
-  for (const peer of structuredPeers) {
-    await assert.rejects(
-      importPath('@zukhruf/evals/structured', [peer]),
-      (error: unknown) =>
-        error instanceof Error &&
-        'stderr' in error &&
-        String(error.stderr).includes(`Cannot find package '${peer}'`),
+for (const [path, own] of Object.entries(peers)) {
+  test(`${path} imports with its peers and without the peers of the other family, and needs each one of its own`, async () => {
+    await importPath(
+      path,
+      allPeers.filter((peer) => !own.includes(peer)),
     );
-  }
-});
+    for (const peer of own) {
+      await assert.rejects(
+        importPath(path, [peer]),
+        (error: unknown) =>
+          error instanceof Error &&
+          'stderr' in error &&
+          String(error.stderr).includes(`Cannot find package '${peer}'`),
+      );
+    }
+  });
+}
