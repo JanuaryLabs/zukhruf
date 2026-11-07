@@ -1,4 +1,13 @@
 import {
+  Counts,
+  F1,
+  type Matches,
+  Precision,
+  PrecisionRecallForm,
+  Recall,
+} from '@zukhruf/evals';
+
+import {
   type Dataset,
   type DatasetValue,
   datasetFromDict,
@@ -28,6 +37,14 @@ export type PairClassificationMetrics = {
 };
 
 const MAX_METRICS = ['f1', 'ap', 'precision', 'recall', 'accuracy'];
+
+// The counts of one threshold: the duplicates above it (hits), the pairs
+// above it (stated) and all duplicates (expected).
+const THRESHOLD_COUNTS: Matches<Counts> = { counts: (counts) => counts };
+const PRECISION = new Precision(THRESHOLD_COUNTS);
+const RECALL = new Recall(THRESHOLD_COUNTS);
+// mteb's F1 is 2·p·r/(p + r): the precision-recall form.
+const F1_SCORE = new F1(THRESHOLD_COUNTS, { form: new PrecisionRecallForm() });
 
 // A pair classification task: the label of each pair of inputs is 1 when
 // they are similar and 0 when not. Each score of the pairs (the cosine
@@ -204,16 +221,18 @@ export abstract class AbsTaskPairClassification extends AbsTask<Dataset> {
       const next = rows[i + 1]?.[0];
       if (label === 1) ncorrect += 1;
       if (score === next) continue;
-      if (ncorrect > 0) {
-        const precision = ncorrect / (i + 1);
-        const recall = ncorrect / totalNumDuplicates;
-        const f1 = (2 * precision * recall) / (precision + recall);
-        if (f1 > bestF1) {
-          bestF1 = f1;
-          bestPrecision = precision;
-          bestRecall = recall;
-          threshold = (score + (next ?? 0)) / 2;
-        }
+      const counts = new Counts({
+        hits: ncorrect,
+        stated: i + 1,
+        expected: totalNumDuplicates,
+      });
+      // With no hits the F1 is 0, which is never above the best F1.
+      const f1 = F1_SCORE.score(counts).value;
+      if (f1 > bestF1) {
+        bestF1 = f1;
+        bestPrecision = PRECISION.score(counts).value;
+        bestRecall = RECALL.score(counts).value;
+        threshold = (score + (next ?? 0)) / 2;
       }
     }
     return [bestF1, bestPrecision, bestRecall, threshold];
