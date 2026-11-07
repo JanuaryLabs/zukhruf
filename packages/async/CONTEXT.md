@@ -37,7 +37,7 @@ A clock that also gives the wall time, from `Date.now()`. The wall time is the t
 _Avoid_: System clock (`globalThis` is the system clock), real-time clock (a hardware clock), calendar
 
 **Delay**:
-A wait of a fixed number of milliseconds on a clock. A cancel stops its timer.
+A wait of a fixed number of milliseconds on a clock. A cancel stops its timer. A delay longer than one timer can hold (2^31-1 ms) runs on a chain of timers, so it lasts the full time.
 _Avoid_: Sleep, pause
 
 **Timeout**:

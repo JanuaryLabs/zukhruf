@@ -77,4 +77,32 @@ describe('timeout', () => {
       assert.equal(reason.message, 'The operation was aborted due to timeout');
     },
   );
+
+  test(
+    'a timeout longer than one timer can hold (2^31 ms; a Node timer fires such a delay at once) aborts after exactly that time, not before',
+    { timeout: 2_000 },
+    async () => {
+      // Arrange: createClock() fires a timer above 2^31-1 ms after 1 ms, as Node.js does.
+      const clock = createClock();
+      const thirtyDays = 30 * 24 * 60 * 60_000;
+      using limit = timeout(thirtyDays, { clock });
+
+      // Act
+      await clock.tickAsync(thirtyDays - 1);
+      const abortedEarly = limit.signal.aborted;
+      await clock.tickAsync(1);
+
+      // Assert
+      assert.equal(
+        abortedEarly,
+        false,
+        'The signal must not abort before 30 days',
+      );
+      assert.equal(
+        limit.signal.aborted,
+        true,
+        'The signal must abort at 30 days',
+      );
+    },
+  );
 });

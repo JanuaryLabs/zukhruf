@@ -1,4 +1,5 @@
 import type { Clock } from './clock.ts';
+import { delay } from './delay.ts';
 
 export interface TimeoutOptions {
   /** The clock that the timer runs on: `globalThis` in production, a fake clock in a test. */
@@ -14,20 +15,25 @@ export interface Timeout extends Disposable {
 /**
  * Gives a signal that aborts after `ms` milliseconds on the clock, as
  * `AbortSignal.timeout` does on the real clock. Dispose the timeout when the
- * wait ends: `using limit = timeout(ms, { clock })`.
+ * wait ends: `using limit = timeout(ms, { clock })`. The time runs on `delay`,
+ * so a timeout longer than one timer can hold lasts the full time.
  */
 export function timeout(ms: number, { clock }: TimeoutOptions): Timeout {
   const controller = new AbortController();
-  const timer = clock.setTimeout(() => {
-    controller.abort(
-      new DOMException(
-        'The operation was aborted due to timeout',
-        'TimeoutError',
+  const disposal = new AbortController();
+  delay(ms, { clock, signal: disposal.signal }).then(
+    () =>
+      controller.abort(
+        new DOMException(
+          'The operation was aborted due to timeout',
+          'TimeoutError',
+        ),
       ),
-    );
-  }, ms);
+    // The disposal stopped the wait: the signal never aborts.
+    () => {},
+  );
   return {
     signal: controller.signal,
-    [Symbol.dispose]: () => clock.clearTimeout(timer),
+    [Symbol.dispose]: () => disposal.abort(),
   };
 }

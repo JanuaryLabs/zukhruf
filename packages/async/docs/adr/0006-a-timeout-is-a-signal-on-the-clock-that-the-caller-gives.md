@@ -1,5 +1,7 @@
 # A timeout is a signal on the clock that the caller gives
 
+Superseded in part on 2026-11-07 (#3922) for the timer. `timeout` now runs its time on `delay`, and the disposal aborts that delay, so a timeout can be longer than one timer can hold ([ADR 0009](./0009-a-wait-longer-than-one-timer-runs-on-a-chain-of-timers.md)). The signal aborts one microtask after the timer fires. The rest of the decision below stays true.
+
 `AbortSignal.timeout(ms)` of Node.js gives a signal that aborts after `ms` milliseconds on the real clock. A test can not move this time. In this workspace, four waits of `@zukhruf/mutex` use it:
 
 - `skipIfBusy({ waitAtMost })` gives up on a busy key after `waitAtMost`. Its test asserts that the wait took 90 ms or more of real time.

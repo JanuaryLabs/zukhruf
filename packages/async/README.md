@@ -205,6 +205,9 @@ await delay(100, { clock: globalThis, signal });
 - When `signal` aborts, also before the call, the timer stops and `delay` rejects with the reason of the signal.
 - No listener stays on the signal after `delay` settles, so a signal that lives long can serve many waits.
 - With `ref: false`, the timer does not keep the process alive.
+- A wait can be longer than one timer can hold. A timer of Node.js holds at most 2^31-1 ms, about 24.8 days, and fires a longer delay after 1 ms. `delay` then waits on a chain of timers of at most 2^31-1 ms, so a wait of 30 days lasts 30 days. Thus `poll`, `timeout` and the `interval` and `timeout` of `ChangeWatcher` can also be that long.
+
+See [ADR 0009](./docs/adr/0009-a-wait-longer-than-one-timer-runs-on-a-chain-of-timers.md).
 
 ## Stop a wait after a time
 
@@ -222,6 +225,7 @@ const state = await readState(container, { signal: limit.signal });
 - A disposal stops the timer, and the signal then does not abort. `using` disposes the timeout at the end of the block.
 - The timer keeps the process alive until it fires or until the disposal. The timer of `AbortSignal.timeout` does not keep the process alive, but no call can stop it.
 - To stop a wait at the timeout or at the signal of the caller, give `AbortSignal.any([signal, limit.signal])`.
+- The time runs on `delay`, so a timeout can be longer than one timer can hold.
 
 See [ADR 0006](./docs/adr/0006-a-timeout-is-a-signal-on-the-clock-that-the-caller-gives.md).
 

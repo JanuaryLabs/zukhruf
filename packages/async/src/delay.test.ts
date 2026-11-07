@@ -71,6 +71,53 @@ describe('delay', () => {
   );
 
   test(
+    'a wait longer than one timer can hold (2^31 ms; a Node timer fires such a delay at once) ends after exactly that time, not before',
+    { timeout: 2_000 },
+    async () => {
+      // Arrange: createClock() fires a timer above 2^31-1 ms after 1 ms, as Node.js does.
+      const clock = createClock();
+      const thirtyDays = 30 * 24 * 60 * 60_000;
+      let ended = false;
+      void delay(thirtyDays, { clock, signal: undefined }).then(() => {
+        ended = true;
+      });
+
+      // Act
+      await clock.tickAsync(thirtyDays - 1);
+      const endedEarly = ended;
+      await clock.tickAsync(1);
+
+      // Assert
+      assert.equal(endedEarly, false, 'The wait must not end before 30 days');
+      assert.equal(ended, true, 'The wait must end at 30 days');
+    },
+  );
+
+  test(
+    'an abort in a middle timer of a wait of three timers rejects with its reason, and stops the timer',
+    { timeout: 2_000 },
+    async () => {
+      // Arrange: 60 days is three timers of at most 2^31-1 ms.
+      const clock = createClock();
+      const controller = new AbortController();
+      const reason = new Error('the caller left');
+      const waiting = delay(60 * 24 * 60 * 60_000, {
+        clock,
+        signal: controller.signal,
+      });
+      const rejected = assert.rejects(waiting, (error) => error === reason);
+
+      // Act
+      await clock.tickAsync(2 ** 31);
+      controller.abort(reason);
+
+      // Assert
+      await rejected;
+      assert.equal(clock.countTimers(), 0, 'The abort must stop the timer');
+    },
+  );
+
+  test(
     'no listener stays on the signal after the wait ends or is cancelled',
     { timeout: 2_000 },
     async () => {

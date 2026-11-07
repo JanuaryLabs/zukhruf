@@ -643,6 +643,40 @@ describe('ChangeWatcher', () => {
     },
   );
 
+  test(
+    'an interval longer than one timer can hold (2^31 ms; a Node timer fires such a delay at once) waits that long before the next check',
+    { timeout: 2_000 },
+    async (t) => {
+      // Arrange: createClock() fires a timer above 2^31-1 ms after 1 ms, as Node.js does.
+      const clock = createClock();
+      const thirtyDays = 30 * 24 * 60 * 60_000;
+      const books = new Setting(1);
+      const checks = new ChangeWatcher([books], {
+        interval: thirtyDays,
+        timeout: 5,
+        clock,
+      }).watch(new AbortController().signal);
+      await checks.next();
+
+      // Act
+      const second = checks.next();
+      await t.waitFor(() => assert.equal(clock.countTimers(), 1));
+      await clock.tickAsync(thirtyDays - 1);
+      const readsEarly = books.reads;
+      await clock.tickAsync(1);
+      await second;
+
+      // Assert
+      assert.equal(
+        readsEarly,
+        1,
+        'The second check must not read before 30 days',
+      );
+      assert.equal(books.reads, 2);
+      assert.equal(clock.now, thirtyDays);
+    },
+  );
+
   test('an interval, a timeout or a period that is not a positive number of milliseconds is refused', () => {
     // Arrange
     const clock = createClock();
