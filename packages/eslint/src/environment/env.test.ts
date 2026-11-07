@@ -17,6 +17,9 @@ test('zukhruf/env does not check a tool config file, which runs at build time wi
   // Arrange
   await using workspace = await fixtureWorkspace({
     'nx.json': '{}',
+    // A workspace has a package.json: eslint-plugin-import-x 4.17 crashes on a
+    // file with none above it (fixed in 4.18).
+    'package.json': '{}',
     'tsconfig.json': tsconfig,
     'eslint.config.mjs': fixtureConfig(`{
       plugins: { zukhruf },
@@ -42,6 +45,9 @@ test('zukhruf/env with settings.env.startupFile does not check test files', asyn
   // Arrange: a repo whose startup file is not src/startup.ts.
   await using workspace = await fixtureWorkspace({
     'nx.json': '{}',
+    // A workspace has a package.json: eslint-plugin-import-x 4.17 crashes on a
+    // file with none above it (fixed in 4.18).
+    'package.json': '{}',
     'tsconfig.json': tsconfig,
     'eslint.config.mjs': fixtureConfig(`
       { plugins: { zukhruf }, extends: ['zukhruf/base', 'zukhruf/env'] },
@@ -65,6 +71,9 @@ test('zukhruf/env with settings.env.startupFile reports an undeclared key agains
   // Arrange
   await using workspace = await fixtureWorkspace({
     'nx.json': '{}',
+    // A workspace has a package.json: eslint-plugin-import-x 4.17 crashes on a
+    // file with none above it (fixed in 4.18).
+    'package.json': '{}',
     'tsconfig.json': tsconfig,
     'eslint.config.mjs': fixtureConfig(`
       { plugins: { zukhruf }, extends: ['zukhruf/base', 'zukhruf/env'] },

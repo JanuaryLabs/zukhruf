@@ -149,6 +149,30 @@ export const base: Concept = {
         },
       },
       {
+        // ESM resolves a relative path as written, and TypeScript refuses an
+        // extensionless relative import in a published .d.ts under nodenext
+        // (TS2835), so every consumer of the package breaks. `./x.js` and
+        // `./x.ts` both pass. A `#` subpath import is skipped: its target in
+        // package.json `imports` carries the extension. CommonJS require()
+        // adds the extension itself.
+        name: 'zukhruf/base/import-extensions',
+        files: SOURCE,
+        ignores: COMMONJS,
+        rules: {
+          'import-x/extensions': [
+            'error',
+            'ignorePackages',
+            {
+              checkTypeImports: true,
+              pathGroupOverrides: [
+                { pattern: '#*', action: 'ignore' },
+                { pattern: '#*/**', action: 'ignore' },
+              ],
+            },
+          ],
+        },
+      },
+      {
         // An async iterable read to its end into an array is Array.fromAsync,
         // in shipped code and in tests alike.
         name: 'zukhruf/base/async-values',
