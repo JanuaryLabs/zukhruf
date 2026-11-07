@@ -6,7 +6,7 @@ import type { Agreement } from './alignment.ts';
 import { ComparisonSpec } from './comparison-spec.ts';
 import { Comparison } from './comparison.ts';
 import { Field, type FieldStep } from './field.ts';
-import type { ItemPairs } from './item-pairs.ts';
+import { type Item, ItemPairs, type Pair } from './item-pairs.ts';
 import { statedData } from './json-value.ts';
 import type { Leaf, LeafPair } from './leaf-pair.ts';
 import { Path, type Step } from './path.ts';
@@ -136,32 +136,41 @@ export class TreeWalk implements Comparer<Case, Comparison> {
       count: (statedItem, expectedItem) =>
         this.#agreeingLeaves(statedItem, expectedItem, item),
     };
-    const pairs = this.#spec
-      .alignmentOf(field)
-      .pairs(stated, expected, agreement);
-    found.arrays.push({
-      field,
-      expected: expected.length,
-      stated: stated.length,
-      paired: pairs.length,
-    });
-    const statedOf = new Map(
-      pairs.map(([statedIndex, expectedIndex]) => [expectedIndex, statedIndex]),
+    const expectedOf = new Map(
+      this.#spec.alignmentOf(field).pairs(stated, expected, agreement),
+    );
+    const statedOf = new Map<number, Item>();
+    const unpairedStated: Item[] = [];
+    for (const [index, value] of stated.entries()) {
+      const statedItem = { path: statedPath.child(index), value };
+      const expectedIndex = expectedOf.get(index);
+      if (expectedIndex === undefined) unpairedStated.push(statedItem);
+      else statedOf.set(expectedIndex, statedItem);
+    }
+    const pairs: Pair[] = [];
+    const unpairedExpected: Item[] = [];
+    for (const [index, value] of expected.entries()) {
+      const expectedItem = { path: expectedPath.child(index), value };
+      const statedItem = statedOf.get(index);
+      if (statedItem === undefined) unpairedExpected.push(expectedItem);
+      else pairs.push({ stated: statedItem, expected: expectedItem });
+    }
+    found.arrays.push(
+      new ItemPairs(field, pairs, unpairedStated, unpairedExpected),
     );
     for (const [index, value] of expected.entries()) {
-      const statedIndex = statedOf.get(index);
+      const statedItem = statedOf.get(index);
       this.#walk(
-        statedIndex === undefined ? undefined : stated[statedIndex],
+        statedItem?.value,
         value,
-        statedPath.child(statedIndex ?? index),
+        statedItem?.path ?? statedPath.child(index),
         expectedPath.child(index),
         item,
         found,
       );
     }
-    const paired = new Set(statedOf.values());
     for (const [index, value] of stated.entries())
-      if (!paired.has(index))
+      if (!expectedOf.has(index))
         this.#walk(
           value,
           undefined,
@@ -183,12 +192,14 @@ export class TreeWalk implements Comparer<Case, Comparison> {
     found: Found,
   ): void {
     if (Array.isArray(stated) || Array.isArray(expected))
-      found.arrays.push({
-        field,
-        expected: Array.isArray(expected) ? expected.length : 0,
-        stated: Array.isArray(stated) ? stated.length : 0,
-        paired: 0,
-      });
+      found.arrays.push(
+        new ItemPairs(
+          field,
+          [],
+          TreeWalk.#items(stated, statedPath),
+          TreeWalk.#items(expected, expectedPath),
+        ),
+      );
     for (const [step, fieldStep, value] of TreeWalk.#children(expected))
       this.#walk(
         undefined,
@@ -237,6 +248,15 @@ export class TreeWalk implements Comparer<Case, Comparison> {
     else if (Array.isArray(value))
       for (const [index, child] of value.entries())
         yield [index, Field.item, child];
+  }
+
+  // The items of a value that is an array, else none.
+  static #items(value: JsonData | undefined, path: Path): Item[] {
+    if (!Array.isArray(value)) return [];
+    return value.map((item, index) => ({
+      path: path.child(index),
+      value: item,
+    }));
   }
 
   static #leaf(value: JsonData | undefined, path: Path): Leaf | undefined {

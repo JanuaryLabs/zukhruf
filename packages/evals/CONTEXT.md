@@ -210,6 +210,9 @@ An array whose items pair by best match.
 **Match**:
 A rule that says if two items of a set array can be a pair, such as "the two quotes are the same sentence".
 
+**Item**:
+One element of an array on one side, with its path and its value. An item that has no pair is a stated item or an expected item without a pair.
+
 **Pair**:
 One stated item and one expected item that the walk compares leaf by leaf.
 

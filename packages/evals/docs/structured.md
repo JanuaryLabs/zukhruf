@@ -84,6 +84,13 @@ comparison.leaves(); // the leaf pairs: each side with its own path and value
 comparison.arrays(); // the item pairs of each array
 ```
 
+`arrays()` gives an `ItemPairs` for each array that the walk reached, on either side. An item has its path and its value on its own side. `pairs` holds the pairs that the alignment made, in the order of the expected items. `unpairedStated` and `unpairedExpected` hold the items without a pair, in the order of their side. When one side has no array at the path, each item of the other side has no pair. `expected`, `stated` and `paired` are counts of these lists.
+
+```ts
+const [offers] = comparison.arrays();
+offers.unpairedStated; // [{ path: $.offers[2], value: the stated offer }]: a stated offer without a pair
+```
+
 A stated value that is not an object or an array is unparsed. It has no stated leaves. null is a leaf.
 
 `compare` reads the stated value itself:

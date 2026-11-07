@@ -15,7 +15,7 @@ export {
 export { JsonValue } from './comparison/json-value.ts';
 export type { Comparison } from './comparison/comparison.ts';
 export type { Leaf, LeafPair, LeafValue } from './comparison/leaf-pair.ts';
-export type { ItemPairs } from './comparison/item-pairs.ts';
+export type { Item, ItemPairs, Pair } from './comparison/item-pairs.ts';
 export type { Field, FieldStep } from './comparison/field.ts';
 export type { Path, Step } from './comparison/path.ts';
 export { TreeWalk } from './comparison/tree-walk.ts';
