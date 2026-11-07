@@ -295,19 +295,25 @@ export default defineConfig(
           zones: [
             {
               target: './structured',
-              from: './promptfoo',
+              from: ['./classification', './promptfoo'],
+              message:
+                'A family of @zukhruf/evals imports only the core (ADR 0001, rule 1).',
+            },
+            {
+              target: './classification',
+              from: ['./structured', './promptfoo'],
               message:
                 'A family of @zukhruf/evals imports only the core (ADR 0001, rule 1).',
             },
             {
               target: './promptfoo',
-              from: './structured',
+              from: ['./structured', './classification'],
               message:
                 'The promptfoo adapter imports only the core (ADR 0001, rule 1).',
             },
             {
               target: ['./index.ts', './aggregation', './scoring', './scorers'],
-              from: ['./structured', './promptfoo'],
+              from: ['./structured', './classification', './promptfoo'],
               message:
                 'The core of @zukhruf/evals imports no subpath (ADR 0001, rule 1).',
             },

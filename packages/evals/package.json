@@ -31,6 +31,12 @@
       "import": "./dist/index.js",
       "default": "./dist/index.js"
     },
+    "./classification": {
+      "@zukhruf/source": "./src/classification/index.ts",
+      "types": "./dist/classification/index.d.ts",
+      "import": "./dist/classification/index.js",
+      "default": "./dist/classification/index.js"
+    },
     "./promptfoo": {
       "@zukhruf/source": "./src/promptfoo/index.ts",
       "types": "./dist/promptfoo/index.d.ts",

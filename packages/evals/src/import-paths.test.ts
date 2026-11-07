@@ -29,6 +29,10 @@ test('./promptfoo imports when the peers of ./structured are not installed', asy
   await importPath('@zukhruf/evals/promptfoo', structuredPeers);
 });
 
+test('./classification imports when the peers of ./structured are not installed', async () => {
+  await importPath('@zukhruf/evals/classification', structuredPeers);
+});
+
 test('./structured imports with its peers, and needs each one of them', async () => {
   await importPath('@zukhruf/evals/structured', []);
   for (const peer of structuredPeers) {
