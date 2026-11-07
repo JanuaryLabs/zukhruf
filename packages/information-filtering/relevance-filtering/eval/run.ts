@@ -2,6 +2,8 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parseArgs } from 'node:util';
 
+import { mean } from '@zukhruf/statistics';
+
 import {
   EVAL_FOLDER,
   SETS_FOLDER,
@@ -18,7 +20,7 @@ import { descriptionVectors } from './cache.ts';
 import { implementationCheck } from './check.ts';
 import { daily, randomLabels } from './daily.ts';
 import { joined } from './design.ts';
-import { mean, nanMean } from './metrics.ts';
+import { nanMean } from './metrics.ts';
 import { type EvalProfile, readProfiles } from './profiles.ts';
 import { rankingCheck } from './ranking-check.ts';
 import {

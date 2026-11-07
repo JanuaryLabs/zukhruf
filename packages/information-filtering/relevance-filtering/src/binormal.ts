@@ -1,4 +1,6 @@
-import { logAddExp, logistic, mean, populationSd, sum } from './statistics.ts';
+import { mean, sum } from '@zukhruf/statistics';
+
+import { logAddExp, logistic, populationSd } from './statistics.ts';
 
 const SD_FLOOR = 0.05;
 const ITERATIONS = 500;

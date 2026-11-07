@@ -1,4 +1,6 @@
-import { logAddExp, mean, sum } from './statistics.ts';
+import { mean, sum } from '@zukhruf/statistics';
+
+import { logAddExp } from './statistics.ts';
 
 // The calibration when the binormal fit cannot hold. With Platt's form,
 // p = 1 / (1 + exp(a * score + b)), so a relevant article needs a < 0.

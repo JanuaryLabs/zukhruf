@@ -1,9 +1,9 @@
 import { defaultRng } from '@zukhruf/random';
+import { mean } from '@zukhruf/statistics';
 
 import type { Label } from './answer-key.ts';
 import { type Interval, topicBootstrap } from './bootstrap.ts';
 import { joined, runDesign } from './design.ts';
-import { mean } from './metrics.ts';
 import type { EvalProfile } from './profiles.ts';
 import { newestFirst, poolOf, streamOf } from './ranking.ts';
 import type { StreamArticle } from './runs.ts';

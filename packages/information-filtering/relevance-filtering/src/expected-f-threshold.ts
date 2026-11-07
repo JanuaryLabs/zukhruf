@@ -1,5 +1,6 @@
+import { sum } from '@zukhruf/statistics';
+
 import type { Scores } from './scores.ts';
-import { sum } from './statistics.ts';
 import type { Threshold } from './threshold.ts';
 
 // The plug-in rule that maximises the expected F-beta over the probabilities

@@ -4,9 +4,8 @@ import {
   IidBootstrap,
   Linear,
   PercentileInterval,
+  mean,
 } from '@zukhruf/statistics';
-
-import { mean } from './metrics.ts';
 
 // A 95% percentile interval of a difference (Efron and Tibshirani 1993), and
 // the difference that the data gives.

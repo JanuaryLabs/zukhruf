@@ -33,7 +33,7 @@ The probabilities are not equal to 1e-9, and the cause is the storage, not the d
 
 Two details of the port matter at that precision:
 
-- **The sums follow numpy.** The EM stops when the log likelihood changes by less than 1e-9. On the check, that change is 1.0011e-9 at iteration 186 in numpy. A plain loop sums in another order, finds 9.993e-10, and stops one iteration early. The parameters then differ by 1e-6. Thus `sum` follows the pairwise order of `numpy.sum`, bit for bit.
+- **The sums follow numpy.** The EM stops when the log likelihood changes by less than 1e-9. On the check, that change is 1.0011e-9 at iteration 186 in numpy. A plain loop sums in another order, finds 9.993e-10, and stops one iteration early. The parameters then differ by 1e-6. Thus `sum` follows the pairwise order of `numpy.sum`, bit for bit. Since #3969 the package takes `sum` and `mean` from `@zukhruf/statistics`, which gives `numpy.sum` and `numpy.mean` of NumPy 2.5.4 bit for bit.
 - **Platt solves its 2 × 2 system by LU with partial pivoting**, as `numpy.linalg.solve`.
 
 On the two fresh slices, the package gives the macro T11F of round 6 to 16 digits (0.7014896592253096 against keywordNarrow 0.6559484434821066), the same bootstrap intervals, and the macro Brier skill to 6e-9.
