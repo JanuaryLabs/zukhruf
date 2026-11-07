@@ -1,21 +1,19 @@
 # @zukhruf/evals
 
-> **Status: design for review.** This README is the API on paper. No code exists yet. The decisions are in [ADR 0001](docs/adr/0001-one-package-with-a-subpath-for-each-shape-of-answer.md), [ADR 0002](docs/adr/0002-the-core-is-generic-over-the-answer.md) and [ADR 0003](docs/adr/0003-classification-follows-scikit-learn-from-the-counts-of-each-class.md).
-
 An eval sends inputs to a harness and scores each answer against its label. This package scores the answers. It does not run the harness, load the dataset, store the results or show them. A runner does that work, and the package has an adapter for promptfoo.
 
 The answers of evals have different shapes: a structured record, a label, a ranked list, a partition. Each shape has its own rules, so each shape has its own subpath. All subpaths share one core: a scorer gives a ratio for one answer, and a runner adds the ratios of many answers. The words are defined in [CONTEXT.md](CONTEXT.md).
 
 ## The parts
 
-| Import path                         | Job                                                                                                         |
-| ----------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| `@zukhruf/evals`                    | The core: scorers, ratios, gates, scorer sets, scorecards, totals and bootstrap intervals.                  |
-| `@zukhruf/evals/promptfoo`          | The adapter that makes a scorer or a scorer set a promptfoo assertion.                                      |
-| `@zukhruf/evals/structured`         | Compares a structured value with the value that a person labelled. Today: `@zukhruf/structured-eval`.       |
-| `@zukhruf/evals/classification`     | Compares the stated labels of an answer with its expected labels, as scikit-learn's `sklearn.metrics` does. |
-| `@zukhruf/evals/ranking` (later)    | Compares a ranked list with judged items, as trec_eval does.                                                |
-| `@zukhruf/evals/clustering` (later) | Compares a partition with a labelled partition, as the CoNLL reference scorer does.                         |
+| Import path                            | Job                                                                                                                                                       |
+| -------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@zukhruf/evals`                       | The core: scorers, ratios, gates, scorer sets, scorecards, totals and bootstrap intervals.                                                                |
+| `@zukhruf/evals/promptfoo`             | The adapter that makes a scorer or a scorer set a promptfoo assertion.                                                                                    |
+| `@zukhruf/evals/structured`            | Compares a structured value with the value that a person labelled.                                                                                        |
+| `@zukhruf/evals/classification` (next) | Compares the stated labels of an answer with its expected labels, as scikit-learn's `sklearn.metrics` does. Designed in ADR 0003; built in backlog #3889. |
+| `@zukhruf/evals/ranking` (later)       | Compares a ranked list with judged items, as trec_eval does.                                                                                              |
+| `@zukhruf/evals/clustering` (later)    | Compares a partition with a labelled partition, as the CoNLL reference scorer does.                                                                       |
 
 A subpath imports only the core. It never imports another subpath.
 
@@ -87,9 +85,13 @@ const pageKinds = new ScorerSet(
 
 ## Compare structured values
 
-`./structured` is `@zukhruf/structured-eval`, after the six slices of backlog #3884 ([its ADR 0011](../structured-eval/docs/adr/0011-one-comparison-core-alignment-per-array-and-sob-is-a-configuration.md)). Its API is in [its README](../structured-eval/README.md): `ComparisonSpec`, `TreeWalk`, `Comparison`, `PathMatches`, `ValueMatches`, `ItemMatches`, `TokenF1`, `TypePrecision`, `RequiredKeyRecall`, its gates, `PerField`, `JsonSchema`, `ConfigCase` and `TextVarsCase`. The move changes the import paths. It does not change the API (backlog #3888).
+`./structured` compares a structured value with the value that a person labelled: one walk pairs the leaves of the two values, the alignment of each array is a Strategy (by position, or by best match with the Hungarian algorithm), and each scorer gives a ratio for one record. SOB's evaluate.py is a configuration of the same scorers. [docs/structured.md](docs/structured.md) shows the whole API: `ComparisonSpec`, `TreeWalk`, `Comparison`, `PathMatches`, `ValueMatches`, `ItemMatches`, `TokenF1`, `TypePrecision`, `RequiredKeyRecall`, the gates, `PerField`, `JsonSchema`, `ConfigCase` and `TextVarsCase`. Its decisions are the ADRs in [docs/adr/structured](docs/adr/structured), from the time when it was `@zukhruf/structured-eval`.
+
+It needs two optional peers: `npm install @zukhruf/evals @cfworker/json-schema munkres`.
 
 ## Score labels
+
+> **Designed, not in this release.** `./classification` is built in backlog #3889 (ADR 0003). This section is its API on paper.
 
 `./classification` compares the stated labels of an answer with its expected labels. One label is a set of one label, so one model serves a class (multiclass) and a set of classes (multilabel). The arithmetic follows scikit-learn 1.9.1, bit for bit.
 
@@ -142,6 +144,8 @@ counts.confusionMatrix(); // confusion_matrix, labels in sorted order
 `BrierScore` compares the stated probability of each class with the expected labels, as scikit-learn's `brier_score_loss` does. Its ratio is the score of one answer over 1, so `Totals` gives the mean.
 
 ## Use it with promptfoo
+
+> In this release, `ScorerAssertion` is exported by `@zukhruf/evals/structured`, and it scores a structured value (ADR 0002). The sample below shows the API after #3889, where it moves to `./promptfoo` and also scores labels. [docs/structured.md](docs/structured.md) has the structured sample of today.
 
 `PromptfooAssertion` adapts a scorer set to a per-row assertion. Each ratio becomes a named score with its whole as the weight, so the column header shows the same ratio of sums as `Totals`. It reads the case from the config of the assertion.
 
@@ -413,7 +417,7 @@ export class AssertionModule<Name extends string> {
   assert(...names: Name[]): FileAssertion[];
 }
 
-// @zukhruf/evals/classification
+// @zukhruf/evals/classification (designed; built in #3889)
 
 /** A label: an int or a string, as scikit-learn reads a label. */
 export type Label = number | string;

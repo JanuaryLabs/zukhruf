@@ -1,5 +1,7 @@
 # One home for the CPython rules that three places copied, reached through a workspace path
 
+Status: the private exception of this ADR ended on 2026-11-07. The package is public, because `@zukhruf/evals` is public and depends on it (workspace ADR 0001, rule 7: a zukhruf package is a dependency, not a peer; backlog #3888, Ezz: "Public").
+
 `@zukhruf/mteb` ports MTEB, and its results must match those that MTEB writes in Python. It wrote the CPython rules that this needs: the compensated `sum()` of floats, the `repr()` of a float, a `json.loads` that keeps the order of keys, and the white space of `str.isspace()`. `@zukhruf/structured-eval` copied four of them for its port of the scorer of the Structured Output Benchmark, and recorded the copies (its docs/copied-code.md, backlog #3770). The offers-evals repository then copied three of them again. That made three places for each rule, and workspace ADR 0001, rule 2, moves code into one home at the third place.
 
 This package is that home. It holds only the rules that three places had, and it takes their identical parts:

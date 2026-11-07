@@ -1,7 +1,6 @@
 {
   "name": "@zukhruf/python",
-  "version": "0.1.0",
-  "private": true,
+  "version": "0.8.1",
   "description": "CPython 3.12 results in JavaScript: the compensated sum() of floats, repr() of a float, json.loads with the order of keys and ints apart from floats, and the white space of str.isspace().",
   "license": "MIT",
   "repository": {
@@ -39,5 +38,8 @@
   ],
   "dependencies": {
     "jsonc-parser": "^3.3.1"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

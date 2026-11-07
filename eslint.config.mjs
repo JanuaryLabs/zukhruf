@@ -281,6 +281,41 @@ export default defineConfig(
       ],
     },
   },
+  // A family of @zukhruf/evals imports only the core, never another family or
+  // the adapter, and the core imports no subpath (packages/evals ADR 0001,
+  // rule 1). A test may compose the core with a family, so tests are out.
+  {
+    files: ['packages/evals/src/**'],
+    ignores: ['packages/evals/src/**/*.test.ts'],
+    rules: {
+      'import-x/no-restricted-paths': [
+        'error',
+        {
+          basePath: `${import.meta.dirname}/packages/evals/src`,
+          zones: [
+            {
+              target: './structured',
+              from: './promptfoo',
+              message:
+                'A family of @zukhruf/evals imports only the core (ADR 0001, rule 1).',
+            },
+            {
+              target: './promptfoo',
+              from: './structured',
+              message:
+                'The promptfoo adapter imports only the core (ADR 0001, rule 1).',
+            },
+            {
+              target: ['./index.ts', './aggregation', './scoring'],
+              from: ['./structured', './promptfoo'],
+              message:
+                'The core of @zukhruf/evals imports no subpath (ADR 0001, rule 1).',
+            },
+          ],
+        },
+      ],
+    },
+  },
   // sqlite-queue mirrors pg-boss's work() options, which still accepts
   // priority and orderByCreatedOn and warns that they are ignored; the parity
   // drops them when pg-boss's next major removes them.

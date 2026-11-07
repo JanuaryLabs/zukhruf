@@ -50,7 +50,7 @@
     "@mozilla/readability": "0.6.0",
     "@zukhruf/embeddings": "^0.8.1",
     "@zukhruf/sqlite-open": "^0.8.1",
-    "@zukhruf/statistics": "*",
+    "@zukhruf/statistics": "^0.8.1",
     "ai": "^7.0.154",
     "linkedom": "0.18.14",
     "ml-matrix": "6.15.1",

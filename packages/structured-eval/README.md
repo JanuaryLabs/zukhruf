@@ -1,5 +1,7 @@
 # @zukhruf/structured-eval
 
+> **Frozen.** This package moved to [`@zukhruf/evals`](../evals) (`./structured`, `./promptfoo` and the core) on 2026-11-07. It gets no fixes, and it is deleted after offers-evals #3892 and context-compiler #3893 use the release of `@zukhruf/evals` (mutex #3888).
+
 > This README describes the one comparison core of [ADR 0011](docs/adr/0011-one-comparison-core-alignment-per-array-and-sob-is-a-configuration.md) (accepted 2026-11-06). The code has this core only.
 
 A model or a harness gives a structured record, such as the offers of a web page. This package compares that record with the record that a person labelled. One walk pairs the leaves of the two values, and each scorer gives a `Ratio` for one record. A runner adds the ratios of many records. The words are defined in [CONTEXT.md](CONTEXT.md).

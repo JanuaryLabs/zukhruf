@@ -2,7 +2,7 @@
 
 The percentile bootstrap and the quantile methods of NumPy in JavaScript, to the last bit. Use it when a TypeScript eval must give the same interval as a Python program, such as the summary of a benchmark or the comparison of two models.
 
-The package is private: a workspace reaches it through its path (ADR 0001).
+The package is public on npm. Until 2026-11-07 it was private and reached through a workspace path (ADR 0001); it became public with `@zukhruf/evals`, which depends on it (backlog #3888).
 
 ## Use it
 

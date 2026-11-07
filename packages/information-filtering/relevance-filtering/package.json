@@ -47,6 +47,6 @@
     "@zukhruf/embeddings": "^0.8.1",
     "@zukhruf/random": "*",
     "@zukhruf/sqlite-open": "^0.8.1",
-    "@zukhruf/statistics": "*"
+    "@zukhruf/statistics": "^0.8.1"
   }
 }

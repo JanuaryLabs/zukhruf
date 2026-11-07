@@ -2,7 +2,7 @@
 
 The results of CPython 3.12 in JavaScript, to the last bit: the `sum()` of floats, the `repr()` of a float, `json.loads`, the white space of `str.isspace()`, and the word characters of `\w`. Use it when a TypeScript port must give the same numbers and text as a Python program, such as a benchmark's scorer.
 
-The package is private: a workspace reaches it through its path (ADR 0001).
+The package is public on npm. Until 2026-11-07 it was private and reached through a workspace path (ADR 0001); it became public with `@zukhruf/evals`, which depends on it (backlog #3888).
 
 ## Use it
 

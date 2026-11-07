@@ -7,6 +7,7 @@
 package-lock.json
 /packages/mteb/src/**/fixtures
 /packages/structured-eval/src/**/fixtures
+/packages/evals/src/**/fixtures
 # Snowball's JavaScript stemmers, kept byte for byte (sha256 in
 # packages/mteb/src/dependencies/snowball/SHA256SUMS).
 /packages/mteb/src/dependencies/snowball

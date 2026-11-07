@@ -93,6 +93,9 @@
       "path": "./packages/structured-eval"
     },
     {
+      "path": "./packages/evals"
+    },
+    {
       "path": "./packages/python"
     },
     {
