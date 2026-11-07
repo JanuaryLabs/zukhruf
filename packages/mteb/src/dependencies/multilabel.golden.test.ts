@@ -4,6 +4,8 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 
+import { ClassCounts, MacroAverage } from '@zukhruf/evals/classification';
+
 import { multilabelSubsampling } from '../abstasks/abstask.ts';
 import { iterativeTrainTestSplit } from '../abstasks/stratification.ts';
 import { hammingScore } from '../evaluators/classification-metrics.ts';
@@ -12,8 +14,6 @@ import { KNeighborsClassifier } from './sklearn-neighbors.ts';
 import {
   type ClassLabel,
   MultiLabelBinarizer,
-  accuracyScore,
-  f1Score,
   labelRankingAveragePrecisionScore,
 } from './sklearn.ts';
 
@@ -127,9 +127,11 @@ for (const testCase of expected.metrics)
   test(`accuracy, macro F1, LRAP and MTEB's hamming score of label indicator matrices equal Python's to the last bit: ${testCase.case}`, () => {
     const { y_true: yTrue, y_pred: yPred } = testCase;
 
+    const counts = ClassCounts.ofIndicators({ expected: yTrue, stated: yPred });
+
     const scores = {
-      accuracy: accuracyScore(yTrue, yPred),
-      f1: f1Score(yTrue, yPred, 'macro'),
+      accuracy: counts.accuracy(),
+      f1: counts.fBeta({ beta: 1, average: new MacroAverage() }),
       lrap: labelRankingAveragePrecisionScore(yTrue, yPred),
       hamming: hammingScore(yTrue, yPred),
     };

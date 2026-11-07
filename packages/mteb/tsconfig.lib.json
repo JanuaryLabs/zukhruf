@@ -26,6 +26,9 @@
     },
     {
       "path": "../statistics/tsconfig.lib.json"
+    },
+    {
+      "path": "../evals/tsconfig.lib.json"
     }
   ]
 }

@@ -1,3 +1,8 @@
+import {
+  ClassCounts,
+  MacroAverage,
+  WeightedAverage,
+} from '@zukhruf/evals/classification';
 import { RandomState } from '@zukhruf/random';
 
 import { createDataloaderFromTexts } from '../create-dataloaders.ts';
@@ -6,11 +11,7 @@ import { mean } from '../dependencies/numpy.ts';
 import { LogisticRegression } from '../dependencies/sklearn-logistic.ts';
 import {
   type ClassLabel,
-  accuracyScore,
   averagePrecisionScore,
-  f1Score,
-  precisionScore,
-  recallScore,
 } from '../dependencies/sklearn.ts';
 import {
   type ClassifierModel,
@@ -289,14 +290,17 @@ export abstract class AbsTaskClassification extends SklearnEvaluatorTask<
   ): ClassificationMetrics {
     const binary = new Set(yTest).size === 2;
     const ap = binary ? averagePrecision(yTest, yPred) : null;
+    const counts = ClassCounts.of({ expected: yTest, stated: yPred });
+    const macro = new MacroAverage();
+    const weighted = new WeightedAverage();
     return {
-      accuracy: accuracyScore(yTest, yPred),
-      f1: f1Score(yTest, yPred, 'macro'),
-      f1_weighted: f1Score(yTest, yPred, 'weighted'),
-      precision: precisionScore(yTest, yPred, 'macro'),
-      precision_weighted: precisionScore(yTest, yPred, 'weighted'),
-      recall: recallScore(yTest, yPred, 'macro'),
-      recall_weighted: recallScore(yTest, yPred, 'weighted'),
+      accuracy: counts.accuracy(),
+      f1: counts.fBeta({ beta: 1, average: macro }),
+      f1_weighted: counts.fBeta({ beta: 1, average: weighted }),
+      precision: counts.precision({ average: macro }),
+      precision_weighted: counts.precision({ average: weighted }),
+      recall: counts.recall({ average: macro }),
+      recall_weighted: counts.recall({ average: weighted }),
       // For binary labels, scikit-learn ignores the average.
       ap,
       ap_weighted: ap,

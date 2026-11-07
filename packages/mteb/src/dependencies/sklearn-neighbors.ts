@@ -1,8 +1,10 @@
 import { availableParallelism } from 'node:os';
 
+import { ClassCounts } from '@zukhruf/evals/classification';
+
 import type { Embeddings } from '../types/encoder-io.ts';
 import { ddot } from './blas.ts';
-import { type LabelIndicator, accuracyScore } from './sklearn.ts';
+import type { LabelIndicator } from './sklearn.ts';
 
 // sklearn.neighbors.KNeighborsClassifier of scikit-learn 1.9.1
 // (neighbors/_classification.py, _base.py) with the uniform weights and the
@@ -173,7 +175,10 @@ export class FittedKNeighborsClassifier {
   // ClassifierMixin.score: the accuracy of the predictions, which for a
   // label indicator matrix is the share of rows with all labels right.
   score(x: Embeddings, y: LabelIndicator): number {
-    return accuracyScore(y, this.predict(x));
+    return ClassCounts.ofIndicators({
+      expected: y,
+      stated: this.predict(x),
+    }).accuracy();
   }
 }
 

@@ -1,3 +1,4 @@
+import { ClassCounts, MacroAverage } from '@zukhruf/evals/classification';
 import { defaultRng } from '@zukhruf/random';
 
 import { createDataloaderFromTexts } from '../create-dataloaders.ts';
@@ -9,7 +10,6 @@ import {
   type ClassLabel,
   type LabelIndicator,
   MultiLabelBinarizer,
-  f1Score,
   labelRankingAveragePrecisionScore,
 } from '../dependencies/sklearn.ts';
 import { hammingScore } from '../evaluators/classification-metrics.ts';
@@ -202,7 +202,10 @@ export abstract class AbsTaskMultilabelClassification extends ClassificationTask
     return {
       accuracy,
       lrap: labelRankingAveragePrecisionScore(yTest, yPred),
-      f1: f1Score(yTest, yPred, 'macro'),
+      f1: ClassCounts.ofIndicators({ expected: yTest, stated: yPred }).fBeta({
+        beta: 1,
+        average: new MacroAverage(),
+      }),
       hamming: hammingScore(yTest, yPred),
     };
   }
