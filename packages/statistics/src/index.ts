@@ -7,3 +7,5 @@ export { InvertedCdf } from './quantile/inverted-cdf.ts';
 export { Linear } from './quantile/linear.ts';
 export { Lower } from './quantile/lower.ts';
 export { QuantileMethod } from './quantile/quantile-method.ts';
+export { mean } from './sum/mean.ts';
+export { sum } from './sum/sum.ts';

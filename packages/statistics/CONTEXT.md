@@ -4,6 +4,10 @@ An eval gives a number for a dataset, such as a mean score. This context says ho
 
 ## Language
 
+**Pairwise sum**:
+The order in which `numpy.sum` adds float64 values: blocks of up to 128 values in 8 accumulators, and two halves for more values. Another order can give other last bits.
+_Avoid_: sum (without the order), Kahan sum (another algorithm)
+
 **Resample**:
 A sample of the data with as many items as the data, drawn with replacement. An item can come twice, and another item can be absent.
 
