@@ -55,6 +55,8 @@ A penalty is a factor in [0, 1] for one input, as BLEU's brevity penalty is. The
 
 A `ScorerSet` holds labelled scorers and gives a `Scorecard`: passed, reason, checks and one named ratio for each label. It passes when each of its gates holds. The family's comparer makes the input once, and each scorer reads it.
 
+A grouped scorer gives one ratio for each group of an input, under the label `${group} ${label}`: `PerField` gives one for each field in `./structured`, and `PerClass` gives one for each class in `./classification`. Both extend `Grouped` of the core, so a `ScorerSet` holds them beside plain scorers (Inspect AI's `grouped()` applies a metric to each group in the same way).
+
 ```ts
 import { Recall, ScorerSet } from '@zukhruf/evals';
 import {
@@ -224,9 +226,16 @@ export interface Scorer<Input> {
   score(input: Input): Ratio;
 }
 
-/** The counts of one input that precision, recall and F1 read. */
+/** The hits, the stated and the expected of one input. */
+export class Counts {
+  constructor(counts: { hits: number; stated: number; expected: number });
+  readonly hits: number;
+  readonly stated: number;
+  readonly expected: number;
+}
+/** The counts of one input that precision, recall and the F-measure read. */
 export interface Matches<Input> {
-  of(input: Input): { hits: number; stated: number; expected: number };
+  counts(input: Input): Counts;
 }
 
 export class Precision<Input> implements Scorer<Input> {
@@ -249,10 +258,7 @@ export class F1<Input> implements Scorer<Input> {
 
 /** The arithmetic of the value of an F-measure (ADR 0003). */
 export interface FMeasureForm {
-  of(
-    counts: { hits: number; stated: number; expected: number },
-    beta: number,
-  ): number;
+  of(counts: Counts, beta: number): number;
 }
 export class CountsForm implements FMeasureForm {}
 export class ErrorsForm implements FMeasureForm {}
@@ -260,11 +266,11 @@ export class PrecisionRecallForm implements FMeasureForm {}
 
 /** A factor in [0, 1] for one input; its ratio is Ratio(factor, 1) (Template Method). */
 export abstract class Penalty<Input> implements Scorer<Input> {
-  protected abstract factor(input: Input): number;
+  abstract factor(input: Input): number;
 }
 /** The penalty whose factor is 1 when it holds, else 0. */
 export abstract class Gate<Input> extends Penalty<Input> {
-  protected abstract holds(input: Input): boolean;
+  abstract holds(input: Input): boolean;
   abstract explain(input: Input): string;
 }
 /** Multiplies the part of the ratio of its scorer by each factor; the whole stays (Decorator). */
@@ -317,21 +323,31 @@ export type Scorecard = {
 export interface ScorecardScorer<Case extends Weighted> {
   score(stated: unknown, testCase: Case): Scorecard;
 }
+/** Gives one ratio for each group of an input, such as each field or each class. */
+export abstract class Grouped<Input> {
+  abstract ratios(input: Input, label: string): [string, Ratio][];
+}
 export class ScorerSet<
   Case extends Weighted,
   Input,
 > implements ScorecardScorer<Case> {
   constructor(
-    scorers: Readonly<Record<string, Scorer<Input>>>,
+    scorers: Readonly<Record<string, Scorer<Input> | Grouped<Input>>>,
     options: { comparer: Comparer<Case, Input> },
   );
 }
 
+/** Adds ratios: the sum of the parts divided by the sum of the wholes. */
+export class RatioOfSums {
+  add(ratio: Ratio): void;
+  get ratio(): Ratio;
+  get value(): number;
+}
 /** The ratio of sums of each name over many scorecards. */
 export class Totals {
-  add(scorecard: Scorecard, weight?: number): void;
-  get(name: string): Ratio;
-  names(): string[];
+  add(scorecard: Scorecard, weight: number): void;
+  get(name: string): RatioOfSums;
+  names(): IterableIterator<string>;
 }
 /** The interval of one name over weighted scorecards (@zukhruf/statistics). */
 export class Bootstrap {
@@ -427,8 +443,11 @@ export class ClassMatches implements Matches<LabelComparison> {
 export class AllClassMatches implements Matches<LabelComparison> {}
 /** Holds when the stated labels are the expected labels. */
 export class LabelsMatch extends Gate<LabelComparison> {}
-export class PerClass<Input> {
-  constructor(scorer: Scorer<Input>, options: { labels: readonly Label[] });
+export class PerClass extends Grouped<LabelComparison> {
+  constructor(
+    scorer: Scorer<LabelComparison>,
+    options: { labels: readonly Label[] },
+  );
 }
 
 /** How the scores of the classes become one number (Strategy). */

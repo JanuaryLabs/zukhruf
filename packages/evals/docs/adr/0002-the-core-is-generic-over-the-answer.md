@@ -13,12 +13,13 @@ Most of these parts do not depend on a structured value. Only their types name `
 The core is generic over the input of its scorers:
 
 - `Scorer<Input>` gives a `Ratio` for one input.
-- `Matches<Input>` gives the hits, the stated and the expected of one input. `Precision`, `Recall`, `F1` and `FBeta` take any `Matches`.
+- `Matches<Input>` gives the `Counts` of one input: the hits, the stated and the expected. `Precision`, `Recall`, `F1` and `FBeta` take any `Matches`. `Counts` moves to the core with them.
 - `Penalty`, `Gate`, `Penalized`, `AtLeast`, `ShortfallPenalty`, `SampleAveraged` and `MeanOf` take scorers of one input type.
 - A `Comparer<Case, Input>` compares an answer with its case and gives the input. `ScorerSet` and `ScorerAssertion` take a comparer, so they make the input once for each answer.
-- A family gives its own input, comparer and matches: `./structured` gives `Comparison`, `TreeWalk`, `PathMatches`, `ValueMatches` and `ItemMatches`; `./classification` gives `LabelComparison`, `LabelComparer`, `ClassMatches` and `AllClassMatches`.
+- `Grouped<Input>` is an abstract class of the core: it gives one ratio for each group of an input, under the label `${group} ${label}`. A `ScorerSet` holds a grouped scorer beside plain scorers. Today the `ScorerSet` of structured-eval holds `Scorer | PerField` and tells them apart with `instanceof PerField` (`src/scoring/scorer-set.ts:26, 39`), so the core would import a type of a family. With `Grouped`, it checks `instanceof Grouped`, as it already checks `instanceof Gate`. `PerField` of `./structured` and `PerClass` of `./classification` extend it. Inspect AI's `grouped()` applies a metric to each group of the samples in the same way.
+- A family gives its own input, comparer, matches and grouped scorers: `./structured` gives `Comparison`, `TreeWalk`, `PathMatches`, `ValueMatches`, `ItemMatches` and `PerField`; `./classification` gives `LabelComparison`, `LabelComparer`, `ClassMatches`, `AllClassMatches` and `PerClass`.
 
-`Ratio`, `Scorecard`, `Totals`, `Bootstrap`, `CaseReader` and `PromptfooAssertion` are already generic, and they move to the core without a change.
+`Ratio`, `RatioOfSums`, `Scorecard`, `Totals`, `Bootstrap`, `CaseReader`, `PromptfooAssertion` and `AssertionModule` are already generic, and they move to the core without a change. (Read against structured-eval at mutex 11442c09, 2026-11-07.)
 
 ## When
 
