@@ -51,7 +51,7 @@ The counts of one input that precision, recall and the F-measure read: the hits,
 The weighted harmonic mean of precision and recall, with a weight β: F1 when β is 1, F0.5 when precision counts more. Its part is (1 + β²) × hits, and its whole is β² × expected + stated.
 
 **F-measure form**:
-The arithmetic that gives the value of an F-measure. Three forms give the same number in algebra and different numbers in the last bit: the counts form (scikit-learn), the errors form (torchmetrics, TREC) and the precision-recall form (van Rijsbergen, SOB). These three names are the names of this package.
+The arithmetic that gives the value of an F-measure. Two forms give the same number in algebra and different numbers in the last bit: the counts form (scikit-learn) and the precision-recall form (van Rijsbergen, SOB). These two names are the names of this package.
 
 **Penalty**:
 A factor in [0, 1] for one input, as BLEU's brevity penalty is. The factor 1 is no penalty. A penalty is also a scorer: its ratio is the factor over 1.

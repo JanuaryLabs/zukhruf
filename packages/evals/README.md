@@ -19,6 +19,8 @@ The answers of evals have different shapes: a structured record, a label, a rank
 
 A subpath imports only the core. It never imports another subpath.
 
+The first release (backlog #3888) has one family, so the core holds only the parts that are generic today: `Ratio`, `Counts`, `RatioOfSums`, `Scorecard`, `ScorecardScorer`, `CaseReader`, `Totals` and `Bootstrap`. The scorers, the penalties, `ScorerSet` and `ScorerAssertion` read a structured `Comparison`, so they are in `./structured` until `./classification` (#3889) brings the second input. Then they move into the core with a type parameter, as the API below shows (ADR 0002).
+
 ## Score one answer
 
 A family compares a stated answer with its case. The result is the input of its scorers: a `Comparison` in `./structured`, a `LabelComparison` in `./classification`. A scorer reads that input and gives one `Ratio`.
@@ -132,7 +134,7 @@ counts.confusionMatrix(); // confusion_matrix, labels in sorted order
 
 - `average` is a Strategy: `new MicroAverage()`, `new MacroAverage()`, `new WeightedAverage()` or `new BinaryAverage(positiveLabel)`. The samples average is a `SampleAveraged` scorer, because it needs the value of each answer.
 - `zeroDivision` is the value of a class score whose denominator is 0: 0 (the default, as scikit-learn's `"warn"` gives), 1 or `NaN`.
-- `form` is the arithmetic of the F-measure (ADR 0003). `new CountsForm()` is scikit-learn's and the default. `new ErrorsForm()` is torchmetrics' and TREC's. `new PrecisionRecallForm()` is van Rijsbergen's and SOB's.
+- `form` is the arithmetic of the F-measure (ADR 0003). `new CountsForm()` is scikit-learn's and the default; it also gives the bits of TREC's F0.5 for integer counts. `new PrecisionRecallForm()` is van Rijsbergen's and SOB's.
 - `ClassCounts.of(stated, expected)` builds the counts from two arrays of labels, as a batch.
 
 ### Probabilities
@@ -261,7 +263,6 @@ export interface FMeasureForm {
   of(counts: Counts, beta: number): number;
 }
 export class CountsForm implements FMeasureForm {}
-export class ErrorsForm implements FMeasureForm {}
 export class PrecisionRecallForm implements FMeasureForm {}
 
 /** A factor in [0, 1] for one input; its ratio is Ratio(factor, 1) (Template Method). */
@@ -512,7 +513,7 @@ The consumers below come from the search of 2026-11-06 (eight evals in four repo
 | context-compiler, startup-credits offers     | core, `./structured` (`ByBestMatch`), `./promptfoo`                                                | context-compiler #3893, #3882 |
 | context-compiler, startup-credits page kinds | `./classification` (accuracy, the precision and recall of each class, the confusion matrix)        | #3882 slice 2                 |
 | `@zukhruf/mteb`, classification tasks        | `./classification` (`ClassCounts`: accuracy, macro and weighted P, R and F1; label-indicator rows) | mutex #3890                   |
-| relevance-filtering eval                     | `./classification` (`BinaryAverage`, F0.5 with `ErrorsForm`, `BrierScore`)                         | mutex #3891                   |
+| relevance-filtering eval                     | `./classification` (`BinaryAverage`, F0.5 with `CountsForm`, `BrierScore`)                         | mutex #3891                   |
 | event-detection eval                         | nothing yet: its MUC, B³, CEAF-e and BLANC wait for `./clustering`                                 | —                             |
 
 The build is in two items: mutex #3888 (the core, `./promptfoo` and the move of `./structured`) and mutex #3889 (`./classification`).

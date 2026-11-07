@@ -1,6 +1,6 @@
 # The core is generic over the answer
 
-Status: Proposed, for review (design on paper, 2026-11-06).
+Status: Accepted 2026-11-07 by Ezz ("Approved, start #3888").
 
 ## Context
 
@@ -19,11 +19,11 @@ The core is generic over the input of its scorers:
 - `Grouped<Input>` is an abstract class of the core: it gives one ratio for each group of an input, under the label `${group} ${label}`. A `ScorerSet` holds a grouped scorer beside plain scorers. Today the `ScorerSet` of structured-eval holds `Scorer | PerField` and tells them apart with `instanceof PerField` (`src/scoring/scorer-set.ts:26, 39`), so the core would import a type of a family. With `Grouped`, it checks `instanceof Grouped`, as it already checks `instanceof Gate`. `PerField` of `./structured` and `PerClass` of `./classification` extend it. Inspect AI's `grouped()` applies a metric to each group of the samples in the same way.
 - A family gives its own input, comparer, matches and grouped scorers: `./structured` gives `Comparison`, `TreeWalk`, `PathMatches`, `ValueMatches`, `ItemMatches` and `PerField`; `./classification` gives `LabelComparison`, `LabelComparer`, `ClassMatches`, `AllClassMatches` and `PerClass`.
 
-`Ratio`, `RatioOfSums`, `Scorecard`, `Totals`, `Bootstrap`, `CaseReader`, `PromptfooAssertion` and `AssertionModule` are already generic, and they move to the core without a change. (Read against structured-eval at mutex 11442c09, 2026-11-07.)
+`Ratio`, `Counts`, `F1Ratio`, `RatioOfSums`, `Scorecard`, `Check`, `ScorecardScorer`, `CaseReader`, `Weighted`, `Totals` and `Bootstrap` import no structured type, and they move to the core without a change. `PromptfooAssertion` imports only these, so it moves to `./promptfoo` without a change. `AssertionModule` names the type `ScorerAssertion` (structured-eval `src/promptfoo/assertion-module.ts:3`), but it reads only `value`, `metric`, `weight` and `threshold`, so it moves to `./promptfoo` with a structural type for those four fields. (Read against structured-eval at mutex 11442c09, 2026-11-07.)
 
 ## When
 
-The type parameter comes with the second input. Ezz's Rule of Three says, at strike 1: "no generic type for one use". So the move of `./structured` (#3888) keeps `Comparison` as the one input of the core. `./classification` (#3889) brings the second input, and that item adds the type parameter. The session of #3884 agreed to this order on 2026-11-06.
+The type parameter comes with the second input. Ezz's Rule of Three says, at strike 1: "no generic type for one use". The core also must not depend on a family: dependencies point toward the stable package (the Stable Dependencies Principle). Both rules hold only in one way. In #3888, the core holds only the parts that are generic today (the list above). Each part that reads a `Comparison` stays in `./structured`: `Scorer`, `Matches`, `Precision`, `Recall`, `F1`, `Penalty`, `Gate`, `Penalized`, `AtLeast`, `ShortfallPenalty`, `SampleAveraged`, `MeanOf`, `ScorerSet`, `PerField` and `ScorerAssertion`. `./classification` (#3889) brings the second input. That item adds the type parameter and moves these parts into the core (and `ScorerAssertion` into `./promptfoo`). The session of #3884 agreed to this order on 2026-11-06.
 
 ## Considered Options
 

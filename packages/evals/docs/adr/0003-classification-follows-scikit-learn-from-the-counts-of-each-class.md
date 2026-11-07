@@ -1,6 +1,6 @@
 # Classification follows scikit-learn, from the counts of each class
 
-Status: Proposed, for review (design on paper, 2026-11-06). It proposes an amendment to ADR 0011 of `@zukhruf/structured-eval`; see "The form of the F-measure".
+Status: Accepted 2026-11-07 by Ezz ("accept and use remove code skill"), with its amendment to ADR 0011 of `@zukhruf/structured-eval` (see "The form of the F-measure"). It is built in backlog #3889.
 
 ## Context
 
@@ -23,17 +23,18 @@ The three places have the same knowledge: the counts of each class. The rule of 
 
 ### The form of the F-measure
 
-Three forms of the F-measure give the same number in algebra and different numbers in the last bit:
+Two forms of the F-measure give the same number in algebra and different numbers in the last bit:
 
-| Form (names of this package) | Arithmetic                               | Who uses it                                                                            |
-| ---------------------------- | ---------------------------------------- | -------------------------------------------------------------------------------------- |
-| `CountsForm`                 | (1 + β²)·tp / (β²·true + predicted)      | scikit-learn; mteb; the micro value of a ratio of sums                                 |
-| `ErrorsForm`                 | (1 + β²)·tp / ((1 + β²)·tp + β²·fn + fp) | torchmetrics; relevance-filtering's T11F (β = 0.5)                                     |
-| `PrecisionRecallForm`        | (1 + β²)·P·R / (β²·P + R)                | van Rijsbergen (1979); event-detection; SOB's `evaluate.py` (2·p·r/(p + r) when β = 1) |
+| Form (names of this package) | Arithmetic                          | Who uses it                                                                                                |
+| ---------------------------- | ----------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `CountsForm`                 | (1 + β²)·tp / (β²·true + predicted) | scikit-learn 1.9.1 `fbeta_score`; mteb; relevance-filtering's T11F (β = 0.5); the value of a ratio of sums |
+| `PrecisionRecallForm`        | (1 + β²)·P·R / (β²·P + R)           | van Rijsbergen (1979); event-detection; SOB's `evaluate.py` (2·p·r/(p + r) when β = 1)                     |
+
+A third form, (1 + β²)·tp / ((1 + β²)·tp + β²·fn + fp), is the arithmetic of torchmetrics and of relevance-filtering's T11F. A probe on 2026-11-07 compared it with the counts form on 223,260 integer counts (tp 1-60, fn 0-60, fp 0-60). The two gave the same bits in every case for β = 1, 0.5 and 2, because β² is a binary fraction there and each sum is exact. They differed in 56,916 cases for β = 0.3, and in 24,528 cases when the hits are fractional (a penalized part). The counts form and the precision-recall form differed in 85,265 to 118,798 cases. So no caller needs the third form: T11F has integer counts and β = 0.5, and the counts form gives its bits.
 
 The form is a Strategy, as the quantile method of `@zukhruf/statistics` is. `CountsForm` is the default, because it is the form of scikit-learn. With it, the value of an F-measure ratio is its part divided by its whole, as for every other ratio.
 
-This is an amendment to ADR 0011 of `@zukhruf/structured-eval`, which Ezz accepted on 2026-11-06. There, `F1Ratio` always gives the value of `evaluate.py` (2·p·r/(p + r)), and that value is "the one exception to the rule of a ratio". With the amendment, SOB's caller gives `PrecisionRecallForm`, as it gives `PythonEquality` and `ByPosition` (ADR 0011, decision 8: "SOB is a configuration in its caller"). The pooled micro value already uses the counts form, because `Totals` divides the sum of the parts by the sum of the wholes. Only the value of one answer changes with the form. So with SOB's form the exception stays, but it moves from the core into SOB's configuration. #3884 builds `F1Ratio` as ADR 0011 says. If Ezz accepts this amendment, the arithmetic moves out of `F1Ratio` into the Strategy, in #3889.
+This is an amendment to ADR 0011 of `@zukhruf/structured-eval`, which Ezz accepted on 2026-11-06. There, `F1Ratio` always gives the value of `evaluate.py` (2·p·r/(p + r)), and that value is "the one exception to the rule of a ratio". With the amendment, SOB's caller gives `PrecisionRecallForm`, as it gives `PythonEquality` and `ByPosition` (ADR 0011, decision 8: "SOB is a configuration in its caller"). The pooled micro value already uses the counts form, because `Totals` divides the sum of the parts by the sum of the wholes. Only the value of one answer changes with the form. So with SOB's form the exception stays, but it moves from the core into SOB's configuration. #3884 builds `F1Ratio` as ADR 0011 says. Ezz accepted the amendment on 2026-11-07. The arithmetic moves out of `F1Ratio` into the Strategy in #3889, through the coding:remove-code skill.
 
 ### Brier score
 
@@ -48,5 +49,5 @@ This is an amendment to ADR 0011 of `@zukhruf/structured-eval`, which Ezz accept
 ## Consequences
 
 - startup-credits' page kinds get the full confusion matrix and the precision and recall of each class in place of the list of wrong pairs (#3882, slice 2).
-- relevance-filtering's T11F keeps its bits with `ErrorsForm` (#3891).
+- relevance-filtering's T11F keeps its bits with `CountsForm` (#3891), because its counts are integers and β is 0.5.
 - mteb keeps its numbers. Its `hammingScore` and its LRAP stay in mteb until a second place needs them (#3890).

@@ -1,6 +1,6 @@
 # One package, with a subpath for each shape of answer
 
-Status: Proposed, for review (design on paper, 2026-11-06).
+Status: Accepted 2026-11-07 by Ezz ("Approved, start #3888").
 
 ## Context
 
