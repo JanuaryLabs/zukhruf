@@ -48,9 +48,6 @@
     "!**/*.tsbuildinfo",
     "!**/*.test.*"
   ],
-  "publishConfig": {
-    "access": "public"
-  },
   "dependencies": {
     "@huggingface/tokenizers": "^0.2.0",
     "@stdlib/blas-ext-base-gsumpw": "^0.3.1",
