@@ -290,7 +290,7 @@ export function calculateRetrievalScores(
   const averageMrr = Object.fromEntries(
     Object.entries(mrrScores).map(([key, values]) => [
       key,
-      NeumaierSum.of(values) / values.length,
+      NeumaierSum.mean(values),
     ]),
   );
   return {

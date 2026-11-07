@@ -5,17 +5,21 @@ import type { Comparison } from '../comparison/comparison.ts';
 import type { Scorer } from './scorer.ts';
 
 // The mean of the values of some scorers for one record, over 1, with
-// CPython's sum, such as a category of a benchmark.
+// CPython's sum, such as a category of a benchmark. It takes one scorer or
+// more, because the mean of no value has no value.
 export class MeanOf implements Scorer {
   readonly #scorers: readonly Scorer[];
 
-  constructor(...scorers: readonly Scorer[]) {
-    this.#scorers = scorers;
+  constructor(scorer: Scorer, ...scorers: readonly Scorer[]) {
+    this.#scorers = [scorer, ...scorers];
   }
 
   score(comparison: Comparison): Ratio {
-    const sum = new NeumaierSum();
-    for (const scorer of this.#scorers) sum.add(scorer.score(comparison).value);
-    return new Ratio(sum.value / this.#scorers.length, 1);
+    return new Ratio(
+      NeumaierSum.mean(
+        this.#scorers.map((scorer) => scorer.score(comparison).value),
+      ),
+      1,
+    );
   }
 }

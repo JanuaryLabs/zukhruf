@@ -76,6 +76,35 @@ test('a running NeumaierSum gives the sum() of CPython 3.12 after each value', (
   }
 });
 
+const means = expected.sums.filter((sum) => sum.mean !== 'ZeroDivisionError');
+const meanRefusals = expected.sums.filter(
+  (sum) => sum.mean === 'ZeroDivisionError',
+);
+
+// Each mean takes its values from a one-pass iterator, as report.ts of
+// @zukhruf/mteb gives the values of a Map, so a mean that reads them twice
+// or that counts them apart fails.
+test('NeumaierSum.mean throws a RangeError for no value, where sum(values) / len(values) raises ZeroDivisionError in CPython 3.12', () => {
+  oracle(meanRefusals, 1);
+
+  for (const sum of meanRefusals)
+    assert.throws(
+      () => NeumaierSum.mean(sum.values.map(double).values()),
+      RangeError,
+    );
+});
+
+test('NeumaierSum.mean gives sum(values) / len(values) of CPython 3.12 to the last bit, not the math.fsum of statistics.fmean', () => {
+  oracle(means, 200);
+
+  for (const [index, sum] of means.entries())
+    assert.equal(
+      NeumaierSum.mean(sum.values.map(double).values()),
+      double(sum.mean),
+      `mean ${index}`,
+    );
+});
+
 test('floatRepr gives the repr() of a float in CPython 3.12', () => {
   oracle(expected.reprs, 2500);
 

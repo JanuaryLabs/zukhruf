@@ -12,6 +12,10 @@ _Avoid_: Python semantics (the language, not one interpreter)
 A sum that keeps the error of each addition and adds it back at the end: Neumaier's algorithm, the `sum()` of CPython 3.12 for floats.
 _Avoid_: exact sum (`math.fsum` is exact; this is not)
 
+**Compensated mean** (ADR 0003):
+The **compensated sum** of some floats divided by their number: what a Python program gives for `sum(values) / len(values)`. Python raises `ZeroDivisionError` for no value. CPython has no function for it, so the name is our name.
+_Avoid_: fmean (`statistics.fmean` uses `math.fsum`), mean (`statistics.mean` uses exact fractions, and numpy's mean uses the pairwise sum)
+
 **Float repr**:
 The text that `repr()` gives for a float: the shortest digits that read back as the same float.
 

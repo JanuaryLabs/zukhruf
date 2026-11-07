@@ -49,7 +49,7 @@ A penalty is a factor in [0, 1] for one input, as BLEU's brevity penalty is. The
 - `new AtLeast(scorer, threshold)` is a gate that holds when the value of the scorer reaches the threshold.
 - `new ShortfallPenalty(scorer, { target, power })` gives `min(1, (value / target) ** power)`: 1 at the target, and less below it.
 - `new SampleAveraged(scorer, { whenEmpty })` gives the value of the scorer over 1. `whenEmpty` is the value of an answer whose ratio has the whole 0.
-- `new MeanOf(...scorers)` gives the mean of the values of some scorers for one answer.
+- `new MeanOf(scorer, ...scorers)` gives the mean of the values of some scorers for one answer.
 
 ## Score with many scorers at once
 
@@ -296,7 +296,7 @@ export class SampleAveraged<Input> implements Scorer<Input> {
   constructor(scorer: Scorer<Input>, options: { whenEmpty: number });
 }
 export class MeanOf<Input> implements Scorer<Input> {
-  constructor(...scorers: Scorer<Input>[]);
+  constructor(scorer: Scorer<Input>, ...scorers: Scorer<Input>[]);
 }
 
 /** What one test gives a scorer besides the stated answer. */

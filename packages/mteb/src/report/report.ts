@@ -198,10 +198,7 @@ export class Report {
             // 5 digits, as the evaluation calculates it. Predictions of
             // another run give another mean: the page would then draw the
             // queries and the verdicts of one run and the scores of another.
-            const averaged = pythonRound(
-              NeumaierSum.of(values.values()) / values.size,
-              5,
-            );
+            const averaged = pythonRound(NeumaierSum.mean(values.values()), 5);
             if (!Object.is(averaged, scores.get(score)))
               throw new Error(
                 `The predictions of ${label(model)} in ${options.predictionFolder(model)} do not match its result on ${split} (subset ${subset}): the ${score} of their queries averages ${averaged}, and the result has ${scores.has(score) ? String(scores.get(score)) : `no ${score}`}. They come from another run, or the qrels changed after the run. Run evaluate again with predictionFolder set to this folder and overwriteStrategy 'always'.`,

@@ -127,7 +127,7 @@ async function evaluated(
 
 // The mean of the values as the evaluation of a task takes it.
 function roundedMean(values: Map<string, number>): number {
-  return pythonRound(NeumaierSum.of(values.values()) / values.size, 5);
+  return pythonRound(NeumaierSum.mean(values.values()), 5);
 }
 
 test('perQueryScores gives the ndcg_cut_10 of each query that MTEB gives for BM25 and for BM25 with k1 1.2 and b 0.5, to the last bit', async () => {

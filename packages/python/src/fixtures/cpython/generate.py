@@ -59,6 +59,9 @@ sums = [
     [float("inf"), float("-inf")],
     [float("nan"), 1.0],
     [1.0, float("-inf")],
+    # statistics.fmean (math.fsum) gives 4397822907536522.0 here; sum / len
+    # gives 4397822907536521.5.
+    [6.999991804172626e-17, 4590793573456045.0, 8602675149153520.0],
 ] + [
     [generator.uniform(-1e6, 1e6) for _ in range(generator.randrange(1, 40))]
     for _ in range(200)
@@ -133,6 +136,14 @@ def ranges(codes):
     return runs
 
 
+def mean(values):
+    """The bits of sum(values) / len(values), or the error that Python raises."""
+    try:
+        return bits(sum(values) / len(values))
+    except ZeroDivisionError:
+        return "ZeroDivisionError"
+
+
 WORD_RE = re.compile(r"\w")
 
 expected = {
@@ -142,6 +153,7 @@ expected = {
             "values": [bits(value) for value in values],
             "sum": bits(float(sum(values))),
             "prefixes": [bits(float(sum(values[: index + 1]))) for index in range(len(values))],
+            "mean": mean(values),
         }
         for values in sums
     ],

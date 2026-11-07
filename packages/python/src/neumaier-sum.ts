@@ -13,6 +13,22 @@ export class NeumaierSum {
     return sum.value;
   }
 
+  // sum(values) / len(values) (ADR 0003). The values are read once, so a
+  // one-pass iterator gives its own count.
+  static mean(values: Iterable<number>): number {
+    const sum = new NeumaierSum();
+    let count = 0;
+    for (const value of values) {
+      sum.add(value);
+      count++;
+    }
+    if (count === 0)
+      throw new RangeError(
+        'The mean of no value, for which Python raises ZeroDivisionError.',
+      );
+    return sum.value / count;
+  }
+
   add(value: number): void {
     const total = this.#sum + value;
     this.#compensation +=

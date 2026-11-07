@@ -193,7 +193,7 @@ A runner adds the ratios of many records with `Totals`: the sum of the parts div
 - A plain scorer gives its counts, such as Ratio(2, 3). `Totals` then gives the micro average: all hits divided by all expected values.
 - `new SampleAveraged(scorer, { whenEmpty })` gives the value of the scorer over 1, such as Ratio(0.67, 1). `Totals` then gives the samples average: the mean of the values of the records (scikit-learn `average='samples'`). `whenEmpty` is the value of a record whose ratio has the whole 0 (Decorator).
 
-`new MeanOf(...scorers)` gives the mean of the values of some scorers for one record.
+`new MeanOf(scorer, ...scorers)` gives the mean of the values of some scorers for one record.
 
 Do not compare a micro average with a samples average.
 
