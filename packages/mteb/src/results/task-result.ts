@@ -4,13 +4,13 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { z } from 'zod';
 
 import { compareStrings } from '@zukhruf/python';
+import { mean } from '@zukhruf/statistics';
 
 import type { AbsTask } from '../abstasks/abstask.ts';
 import {
   type TaskMetadata,
   checkLanguageCode,
 } from '../abstasks/task-metadata.ts';
-import { mean } from '../dependencies/numpy.ts';
 import { Version } from '../dependencies/packaging.ts';
 import { isPlainObject, pythonRound } from '../dependencies/python.ts';
 import { type PhaseTiming, plotPhases } from '../timing.ts';

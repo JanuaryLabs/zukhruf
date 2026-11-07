@@ -1,19 +1,12 @@
 // The NumPy 2.5 algorithms whose results MTEB depends on, for 1-D arrays of
-// float64. gsumpw of stdlib is the pairwise summation of numpy's add loop
-// (loops_utils.h): blocks of up to 128 values in 8 accumulators, larger arrays
-// split in two. ssumpw is the same summation in float32.
+// float64, beside numpy.sum and numpy.mean of @zukhruf/statistics. gsumpw of
+// stdlib is the pairwise summation of numpy's add loop (loops_utils.h):
+// blocks of up to 128 values in 8 accumulators, larger arrays split in two.
+// ssumpw is the same summation in float32.
 import gsumpw from '@stdlib/blas-ext-base-gsumpw';
 import ssumpw from '@stdlib/blas-ext-base-ssumpw';
 
-// np.sum: the identity 0 plus the pairwise sum.
-export function sum(values: ArrayLike<number>): number {
-  return 0 + gsumpw(values.length, values, 1);
-}
-
-// np.mean. NumPy gives NaN for an empty array.
-export function mean(values: ArrayLike<number>): number {
-  return sum(values) / values.length;
-}
+import { mean, sum } from '@zukhruf/statistics';
 
 // np.std with ddof=0.
 export function std(values: ArrayLike<number>): number {

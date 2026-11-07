@@ -2,7 +2,9 @@ import { createRequire } from 'node:module';
 
 import type * as Cephes from 'cephes' with { 'resolution-mode': 'require' };
 
-import { argsortStable, corrcoef, mean, sum } from './numpy.ts';
+import { mean, sum } from '@zukhruf/statistics';
+
+import { argsortStable, corrcoef } from './numpy.ts';
 import { pythonRoundToInteger } from './python.ts';
 
 // The SciPy 1.18 statistics that MTEB's STS task uses, for 1-D arrays of

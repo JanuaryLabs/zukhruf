@@ -1,8 +1,9 @@
 import { PYTHON_WORD } from '@zukhruf/python';
+import { mean } from '@zukhruf/statistics';
 
 import { STOPWORDS_EN } from './bm25s-stopwords.ts';
 import { log } from './libm.ts';
-import { mean, sumFloat32 } from './numpy.ts';
+import { sumFloat32 } from './numpy.ts';
 
 // bm25s 0.3.16: tokenize (tokenization.py), the BM25 variants
 // (scoring.py) and the numpy path of BM25.index and BM25.retrieve

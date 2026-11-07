@@ -1,8 +1,9 @@
 import { compareStrings } from '@zukhruf/python';
+import { mean, sum } from '@zukhruf/statistics';
 
 import type { Embeddings } from '../types/encoder-io.ts';
 import { log } from './libm.ts';
-import { mean, meanFloat32, sum, sumFloat32 } from './numpy.ts';
+import { meanFloat32, sumFloat32 } from './numpy.ts';
 import { gammaln, rankdata } from './scipy.ts';
 
 // sklearn.metrics.auc of scikit-learn 1.9: the area under a curve by the

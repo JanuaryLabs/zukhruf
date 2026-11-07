@@ -4,10 +4,10 @@ import {
   WeightedAverage,
 } from '@zukhruf/evals/classification';
 import { RandomState } from '@zukhruf/random';
+import { mean } from '@zukhruf/statistics';
 
 import { createDataloaderFromTexts } from '../create-dataloaders.ts';
 import { type Dataset, select } from '../dependencies/datasets.ts';
-import { mean } from '../dependencies/numpy.ts';
 import { LogisticRegression } from '../dependencies/sklearn-logistic.ts';
 import {
   type ClassLabel,

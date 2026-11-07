@@ -1,6 +1,8 @@
+import { mean } from '@zukhruf/statistics';
+
 // mteb/models/hybrid_wrappers.py: HybridSearch and its three fusions.
 import type { MTEBModels } from '../abstasks/abstask.ts';
-import { mean, std } from '../dependencies/numpy.ts';
+import { std } from '../dependencies/numpy.ts';
 import {
   type ScoredId,
   compareScoredIds,

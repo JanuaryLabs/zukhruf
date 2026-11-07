@@ -1,10 +1,10 @@
 import { NeumaierSum } from '@zukhruf/python';
+import { mean } from '@zukhruf/statistics';
 
 import {
   addReduceat,
   argsortStable,
   linspace,
-  mean,
   std,
 } from '../dependencies/numpy.ts';
 import {

@@ -16,8 +16,8 @@ import { ratio, tokenSetRatio } from 'rapidfuzz-js/fuzz';
 
 import { type Clock, delay, timeout } from '@zukhruf/async';
 import { NeumaierSum } from '@zukhruf/python';
+import { mean } from '@zukhruf/statistics';
 
-import { mean } from './numpy.ts';
 import {
   asciiDigits,
   pythonFloat,

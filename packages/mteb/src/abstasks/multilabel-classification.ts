@@ -1,9 +1,9 @@
 import { ClassCounts, MacroAverage } from '@zukhruf/evals/classification';
 import { defaultRng } from '@zukhruf/random';
+import { mean } from '@zukhruf/statistics';
 
 import { createDataloaderFromTexts } from '../create-dataloaders.ts';
 import { type Dataset, select } from '../dependencies/datasets.ts';
-import { mean } from '../dependencies/numpy.ts';
 import { pythonIntSetOrder } from '../dependencies/python-set.ts';
 import { KNeighborsClassifier } from '../dependencies/sklearn-neighbors.ts';
 import {

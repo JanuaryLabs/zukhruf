@@ -1,4 +1,5 @@
-import { mean } from '../dependencies/numpy.ts';
+import { mean } from '@zukhruf/statistics';
+
 import type { LabelIndicator } from '../dependencies/sklearn.ts';
 
 // mteb/_evaluators/classification_metrics.py.
