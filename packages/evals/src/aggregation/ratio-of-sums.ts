@@ -10,6 +10,13 @@ export class RatioOfSums {
   readonly #parts = new NeumaierSum();
   readonly #wholes = new NeumaierSum();
 
+  // The ratio of sums of the ratios, in their order.
+  static of(ratios: Iterable<Ratio>): RatioOfSums {
+    const sum = new RatioOfSums();
+    for (const ratio of ratios) sum.add(ratio);
+    return sum;
+  }
+
   add(ratio: Ratio): void {
     this.#parts.add(ratio.part);
     this.#wholes.add(ratio.whole);

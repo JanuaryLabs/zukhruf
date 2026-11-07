@@ -46,6 +46,14 @@ test('a ratio of sums keeps a small part that a large one hides, as CPython give
   assert.deepEqual(sum.ratio, new Ratio(2, 4));
 });
 
+test('RatioOfSums.of pools a list of ratios in one call, with the compensated sum of CPython', () => {
+  const sum = RatioOfSums.of(
+    [1, 1e100, 1, -1e100].map((part) => new Ratio(part, 1)),
+  );
+
+  assert.deepEqual(sum.ratio, new Ratio(2, 4));
+});
+
 test('a ratio with no whole has the value 0', () => {
   assert.equal(new Ratio(3, 0).value, 0);
 });

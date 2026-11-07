@@ -48,13 +48,13 @@ export class Bootstrap {
   }
 
   static #mean(rows: readonly WeightedScorecard[], name: string): number {
-    const sum = new RatioOfSums();
-    for (const { scorecard, weight } of rows) {
-      const ratio = scorecard.ratios.get(name);
-      if (ratio === undefined)
-        throw new Error(`No scorecard ratio named "${name}"`);
-      sum.add(new Ratio(ratio.value, 1).times(weight));
-    }
-    return sum.value;
+    return RatioOfSums.of(
+      rows.map(({ scorecard, weight }) => {
+        const ratio = scorecard.ratios.get(name);
+        if (ratio === undefined)
+          throw new Error(`No scorecard ratio named "${name}"`);
+        return new Ratio(ratio.value, 1).times(weight);
+      }),
+    ).value;
   }
 }

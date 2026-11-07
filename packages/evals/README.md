@@ -348,6 +348,8 @@ export class ScorerSet<
 
 /** Adds ratios: the sum of the parts divided by the sum of the wholes. */
 export class RatioOfSums {
+  /** The ratio of sums of a list of ratios, in one call. */
+  static of(ratios: Iterable<Ratio>): RatioOfSums;
   add(ratio: Ratio): void;
   get ratio(): Ratio;
   get value(): number;
