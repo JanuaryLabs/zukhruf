@@ -16,5 +16,10 @@ export { MacroAverage } from './macro-average.ts';
 export { MicroAverage } from './micro-average.ts';
 export { WeightedAverage } from './weighted-average.ts';
 export { BrierScore } from './brier-score.ts';
+export {
+  type BrierForm,
+  SquaredErrorForm,
+  TwoColumnForm,
+} from './brier-form.ts';
 export { ProbabilityComparer } from './probability-comparer.ts';
 export { ProbabilityComparison } from './probability-comparison.ts';

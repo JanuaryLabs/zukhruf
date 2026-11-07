@@ -40,6 +40,8 @@ This is an amendment to ADR 0011 of `@zukhruf/structured-eval`, which Ezz accept
 
 `BrierScore` follows `brier_score_loss`: for a binary answer, the mean of the squares of (expected − probability) over the two columns, times 0.5. relevance-filtering's evaluate.py takes the mean of (probability − expected)² with numpy's pairwise sum. The two can differ in the last bit. A golden test of #3891 shows if they do. If they do, the form of the Brier score becomes a Strategy too. If they do not, one form stays.
 
+The golden test of #3891 shows that they differ. For a negative answer with p = 0.1, scikit-learn's form gives 0.009999999999999998 and evaluate.py gives 0.010000000000000002, because 1 − (1 − p) is not p. So the form of the Brier score of a positive label is a Strategy, `BrierForm`, as `FMeasureForm` is for the F-measure. `TwoColumnForm` is scikit-learn's form and the default. `SquaredErrorForm` is (p − y)², the form of evaluate.py. A form needs a positive label: `BrierScore` refuses a form without one in its type.
+
 ## Considered Options
 
 - **The numbers of each place, each with its own code.** The three places stay copies, and the next eval adds a fourth.
@@ -49,5 +51,5 @@ This is an amendment to ADR 0011 of `@zukhruf/structured-eval`, which Ezz accept
 ## Consequences
 
 - startup-credits' page kinds get the full confusion matrix and the precision and recall of each class in place of the list of wrong pairs (#3882, slice 2).
-- relevance-filtering's T11F keeps its bits with `CountsForm` (#3891), because its counts are integers and β is 0.5.
+- relevance-filtering's T11F keeps its bits with `CountsForm` (#3891), because its counts are integers and β is 0.5. Its Brier score gets the bits of evaluate.py with `SquaredErrorForm` (#3891).
 - mteb keeps its numbers. Its `hammingScore` and its LRAP stay in mteb until a second place needs them (#3890).

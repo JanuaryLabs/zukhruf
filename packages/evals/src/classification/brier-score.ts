@@ -2,6 +2,7 @@ import gsumpw from '@stdlib/blas-ext-base-gsumpw';
 
 import { Ratio } from '../aggregation/ratio.ts';
 import type { Scorer } from '../scorers/scorer.ts';
+import { type BrierForm, TwoColumnForm } from './brier-form.ts';
 import { type Label, compareLabels } from './label.ts';
 import type { ProbabilityComparison } from './probability-comparison.ts';
 
@@ -10,13 +11,21 @@ import type { ProbabilityComparison } from './probability-comparison.ts';
 // stated probability) squared, with numpy's pairwise sum over the classes in
 // their sorted order; times 0.5 for two classes. With a positive label, the
 // answer gives the probability p of that label only, and the two classes are
-// 1 - p and p, as scikit-learn reads a one-dimensional y_proba. Its ratio is
-// the score over 1, and mean gives the score of a whole run.
+// 1 - p and p, as scikit-learn reads a one-dimensional y_proba; the form
+// (TwoColumnForm by default) gives the score of p. Its ratio is the score
+// over 1, and mean gives the score of a whole run.
 export class BrierScore implements Scorer<ProbabilityComparison> {
   readonly #positiveLabel: Label | undefined;
+  readonly #form: BrierForm;
 
-  constructor({ positiveLabel }: { readonly positiveLabel?: Label } = {}) {
+  constructor({
+    positiveLabel,
+    form = new TwoColumnForm(),
+  }:
+    | { readonly positiveLabel?: undefined; readonly form?: undefined }
+    | { readonly positiveLabel: Label; readonly form?: BrierForm } = {}) {
     this.#positiveLabel = positiveLabel;
+    this.#form = form;
   }
 
   score(comparison: ProbabilityComparison): Ratio {
@@ -51,10 +60,7 @@ export class BrierScore implements Scorer<ProbabilityComparison> {
         throw new RangeError(
           `The answer gives no probability of the positive label ${JSON.stringify(this.#positiveLabel)}.`,
         );
-      const y = expected === this.#positiveLabel ? 1 : 0;
-      const negative = 1 - y - (1 - p);
-      const positive = y - p;
-      return 0.5 * (negative * negative + positive * positive);
+      return this.#form.of(p, expected === this.#positiveLabel ? 1 : 0);
     }
     if (!probabilities.has(expected))
       throw new RangeError(

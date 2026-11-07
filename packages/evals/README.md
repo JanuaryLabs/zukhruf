@@ -175,7 +175,7 @@ run.add(new LabelComparer().compare('a', testCase), testCase.weight);
 
 `ProbabilityComparer` reads the stated probability of each class of an answer and gives a `ProbabilityComparison`. The answer is a `Map`, a plain object or the JSON text of an object. A key is a number label when the expected label is a number. A probability outside [0, 1] throws a `RangeError`. The case has one expected label.
 
-`BrierScore` follows scikit-learn's `brier_score_loss`. For one answer, it adds the squares of (1 for the expected label, else 0, minus the probability) over the classes in sorted order, with numpy's pairwise sum. For two classes, it multiplies the sum by 0.5. `new BrierScore({ positiveLabel })` reads only the probability p of the positive label, and the two classes are 1 − p and p. Its ratio is the score of one answer over 1. `brierScore.mean(comparisons, weights)` gives the score of a whole run with numpy's pairwise sum, bit for bit.
+`BrierScore` follows scikit-learn's `brier_score_loss`. For one answer, it adds the squares of (1 for the expected label, else 0, minus the probability) over the classes in sorted order, with numpy's pairwise sum. For two classes, it multiplies the sum by 0.5. `new BrierScore({ positiveLabel })` reads only the probability p of the positive label, and the two classes are 1 − p and p. `form` is the arithmetic of the score of p (ADR 0003). `new TwoColumnForm()` is scikit-learn's and the default: 0.5 × the sum of the squares of the two classes. `new SquaredErrorForm()` is (p − y)², as numpy gives `np.mean((p - y) ** 2)`. The two forms can differ in the last bit. A form needs `positiveLabel`. Its ratio is the score of one answer over 1. `brierScore.mean(comparisons, weights)` gives the score of a whole run with numpy's pairwise sum, bit for bit.
 
 ## Use it with promptfoo
 
@@ -570,8 +570,18 @@ export class ProbabilityComparer implements Comparer<
   LabelCase,
   ProbabilityComparison
 > {}
+/** The arithmetic of the Brier score of the probability p of the positive label (ADR 0003). */
+export interface BrierForm {
+  of(probability: number, expected: 0 | 1): number;
+}
+export class TwoColumnForm implements BrierForm {}
+export class SquaredErrorForm implements BrierForm {}
 export class BrierScore implements Scorer<ProbabilityComparison> {
-  constructor(options?: { positiveLabel?: Label });
+  constructor(
+    options?:
+      | { positiveLabel?: undefined; form?: undefined }
+      | { positiveLabel: Label; form?: BrierForm },
+  );
   /** The score of a whole run, with numpy's pairwise sum. */
   mean(
     comparisons: readonly ProbabilityComparison[],
@@ -590,7 +600,7 @@ The consumers below come from the search of 2026-11-06 (eight evals in four repo
 | context-compiler, startup-credits offers     | core, `./structured` (`ByBestMatch`), `./promptfoo`                                                | context-compiler #3893, #3882 |
 | context-compiler, startup-credits page kinds | `./classification` (accuracy, the precision and recall of each class, the confusion matrix)        | #3882 slice 2                 |
 | `@zukhruf/mteb`, classification tasks        | `./classification` (`ClassCounts`: accuracy, macro and weighted P, R and F1; label-indicator rows) | mutex #3890                   |
-| relevance-filtering eval                     | `./classification` (`BinaryAverage`, F0.5 with `CountsForm`, `BrierScore`)                         | mutex #3891                   |
+| relevance-filtering eval                     | `./classification` (`BinaryAverage`, F0.5 with `CountsForm`, `BrierScore` with `SquaredErrorForm`) | mutex #3891                   |
 | event-detection eval                         | nothing yet: its MUC, B³, CEAF-e and BLANC wait for `./clustering`                                 | —                             |
 
 The package was built in two items: mutex #3888 (the core, `./promptfoo` and the move of `./structured`) and mutex #3889 (the generic core, the F-measure form and `./classification`).

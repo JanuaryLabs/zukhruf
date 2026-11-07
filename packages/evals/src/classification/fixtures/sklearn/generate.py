@@ -25,6 +25,9 @@
 #   row for each answer with a column for each sorted label), the sample
 #   weights (or null) and the pos_label (or null) of each case, and
 #   brier_score_loss of them.
+# - squared_error: the true labels (0 or 1) and the probabilities of the
+#   label 1 of each case, and numpy's np.mean((p - y) ** 2) of them, the
+#   Brier score of relevance-filtering's research evaluate.py.
 # A float NaN is the string "NaN", because JSON has no NaN.
 # Never edit expected.json by hand: run this script again.
 import importlib.metadata
@@ -277,11 +280,26 @@ brier_cases = [
           sample_weight=[rng.random() * 3 for _ in twelve]),
 ]
 
+def squared_error(name, y_true, p):
+    value = np.mean((np.array(p, np.float64) - np.array(y_true)) ** 2)
+    return plain({"case": name, "y_true": y_true, "p": p, "value": value})
+
+
+many = [rng.randrange(2) for _ in range(1000)]
+squared_error_cases = [
+    squared_error("one answer of the negative label, where 1 - (1 - p) is not p", [0], [0.1]),
+    squared_error("300 answers", relevant, [rng.random() for _ in relevant]),
+    squared_error("1000 answers, more than one block of numpy's pairwise sum", many,
+                  [rng.random() ** 4 for _ in many]),
+]
+
 generator = f"generate.py: numpy {VERSIONS['numpy']}, scikit-learn {VERSIONS['scikit-learn']}, CPython {platform.python_version()}"
 (HERE / "expected.json").write_text(
     json.dumps({"generator": generator, "multiclass": multiclass_cases, "calls": calls,
-                "multilabel": multilabel_cases, "brier": brier_cases}, ensure_ascii=False) + "\n",
+                "multilabel": multilabel_cases, "brier": brier_cases,
+                "squared_error": squared_error_cases}, ensure_ascii=False) + "\n",
     encoding="utf-8",
 )
 print(f"{generator}: {len(multiclass_cases)} multiclass cases, {len(calls)} calls, "
-      f"{len(multilabel_cases)} multilabel cases, {len(brier_cases)} brier cases", file=sys.stderr)
+      f"{len(multilabel_cases)} multilabel cases, {len(brier_cases)} brier cases, "
+      f"{len(squared_error_cases)} squared error cases", file=sys.stderr)

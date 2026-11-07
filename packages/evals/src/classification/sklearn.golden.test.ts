@@ -28,6 +28,7 @@ import {
   MicroAverage,
   PerClass,
   ProbabilityComparer,
+  SquaredErrorForm,
   WeightedAverage,
 } from './index.ts';
 
@@ -77,11 +78,18 @@ type Brier = {
   readonly pos_label: Label | null;
   readonly value: number;
 };
+type SquaredError = {
+  readonly case: string;
+  readonly y_true: readonly (0 | 1)[];
+  readonly p: readonly number[];
+  readonly value: number;
+};
 type Expected = {
   readonly multiclass: readonly Sklearn[];
   readonly calls: readonly Call[];
   readonly multilabel: readonly Sklearn[];
   readonly brier: readonly Brier[];
+  readonly squared_error: readonly SquaredError[];
 };
 
 const expected: Expected = JSON.parse(
@@ -427,4 +435,24 @@ test("the ratio of BrierScore for one answer is its score over 1, scikit-learn's
   const ratio = new BrierScore({ positiveLabel: 1 }).score(comparison);
 
   assert.deepEqual([ratio.part, ratio.whole], [brier.value, 1]);
+});
+
+test("BrierScore with the SquaredErrorForm gives numpy's np.mean((p - y) ** 2) bit for bit, also where scikit-learn's form differs in the last bit", () => {
+  const differ = expected.squared_error
+    .filter(({ y_true, p, value }) => {
+      const comparisons = y_true.map((label, index) =>
+        new ProbabilityComparer().compare(
+          { 1: p[index] },
+          new LabelCase({ expected: label, weight: 1 }),
+        ),
+      );
+      const score = new BrierScore({
+        positiveLabel: 1,
+        form: new SquaredErrorForm(),
+      });
+      return !Object.is(score.mean(comparisons), value);
+    })
+    .map(({ case: name }) => name);
+
+  assert.deepEqual(differ, []);
 });
