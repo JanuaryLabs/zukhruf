@@ -3,7 +3,8 @@
 // TaskMetadata and ModelMeta throw.
 import { z } from 'zod';
 
-import { compareStrings } from '../dependencies/python.ts';
+import { compareStrings } from '@zukhruf/python';
+
 import type { PromptType } from '../types/encoder-io.ts';
 import {
   type ISOLanguageScript,

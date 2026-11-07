@@ -10,7 +10,7 @@ import { isDeepStrictEqual } from 'node:util';
 import type { EmbeddingModel, RerankingModel } from 'ai';
 import { z } from 'zod';
 
-import { floatRepr } from '@zukhruf/python';
+import { compareStrings, floatRepr } from '@zukhruf/python';
 
 import {
   checkLanguageCode,
@@ -18,7 +18,7 @@ import {
   strUrl,
   validateModel,
 } from '../abstasks/task-metadata.ts';
-import { compareStrings, isPlainObject } from '../dependencies/python.ts';
+import { isPlainObject } from '../dependencies/python.ts';
 import type { EncodeKwargs } from '../types/encoder-io.ts';
 import { LICENSES, MODALITIES } from '../types/metadata.ts';
 import type {

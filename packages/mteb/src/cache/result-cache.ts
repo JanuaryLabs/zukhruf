@@ -14,7 +14,9 @@ import {
 import { homedir } from 'node:os';
 import { basename, dirname, join } from 'node:path';
 
-import { compareStrings, isPlainObject } from '../dependencies/python.ts';
+import { compareStrings } from '@zukhruf/python';
+
+import { isPlainObject } from '../dependencies/python.ts';
 import {
   ModelMeta,
   serializeExperimentKwargsToName,

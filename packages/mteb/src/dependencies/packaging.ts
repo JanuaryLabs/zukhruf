@@ -1,4 +1,4 @@
-import { compareStrings } from './python.ts';
+import { compareStrings } from '@zukhruf/python';
 
 // packaging 26.3 (packaging.version): the PEP 440 versions that MTEB reads in
 // result files. Each number is a bigint, as Python's int keeps every digit.

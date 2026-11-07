@@ -5,11 +5,11 @@
 // qcut, which MTEB's regression tasks call to bin their values.
 import { EOL } from 'node:os';
 
-import { floatRepr } from '@zukhruf/python';
+import { compareStrings, floatRepr } from '@zukhruf/python';
 import { Linear } from '@zukhruf/statistics';
 
 import { addReduceat, linspace } from './numpy.ts';
-import { compareStrings, pythonFormatFixed, pythonStrRepr } from './python.ts';
+import { pythonFormatFixed, pythonStrRepr } from './python.ts';
 import { type TabulateValue, tabulate } from './tabulate.ts';
 
 // A value of a table. NaN is a number, as in a float64 column.

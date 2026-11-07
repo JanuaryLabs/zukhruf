@@ -15,7 +15,7 @@ import { parquetMetadata, parquetReadObjects, parquetSchema } from 'hyparquet';
 import { parse } from 'yaml';
 import { z } from 'zod';
 
-import { compareStrings } from './python.ts';
+import { compareStrings } from '@zukhruf/python';
 
 // The part of the HuggingFace datasets library (version 5.1.0) that
 // load_dataset uses to read a dataset of JSON or parquet files: the configs of

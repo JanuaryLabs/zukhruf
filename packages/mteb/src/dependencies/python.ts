@@ -1,5 +1,5 @@
 // The CPython 3.12 algorithms whose results MTEB depends on.
-import { PYTHON_SPACE } from '@zukhruf/python';
+import { PYTHON_SPACE, compareStrings } from '@zukhruf/python';
 
 // round(value, digits). CPython rounds the exact binary value of the float to
 // the nearest decimal with the given digits, a tie to the even digit, and
@@ -32,25 +32,6 @@ export function pythonRoundToInteger(value: number): number {
   if (fraction < 0.5) return floor;
   return floor % 2 === 0 ? floor : floor + 1;
 }
-
-// Compares two strings as Python does: by Unicode code point. UTF-8 bytes,
-// which C's strcmp compares, have the same order.
-export function compareStrings(left: string, right: string): number {
-  if (!SURROGATE.test(left) && !SURROGATE.test(right))
-    return left < right ? -1 : left > right ? 1 : 0;
-  const a = [...left];
-  const b = [...right];
-  for (let index = 0; index < Math.min(a.length, b.length); index++) {
-    const difference =
-      (a[index]?.codePointAt(0) ?? 0) - (b[index]?.codePointAt(0) ?? 0);
-    if (difference !== 0) return difference;
-  }
-  return a.length - b.length;
-}
-
-// UTF-16 code units order the strings that have no character above U+FFFF
-// as code points do.
-const SURROGATE = /[\u{10000}-\u{10FFFF}]/u;
 
 // A (score, id) tuple. Python compares tuples item by item.
 export type ScoredId = readonly [score: number, id: string];

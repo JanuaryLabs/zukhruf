@@ -6,13 +6,14 @@ import { dirname } from 'node:path';
 
 import { z } from 'zod';
 
+import { compareStrings } from '@zukhruf/python';
+
 import {
   computeMeanTask,
   computeMeanTaskType,
 } from '../benchmarks/benchmark-metrics.ts';
 import { Version } from '../dependencies/packaging.ts';
 import { DataFrame, Frame } from '../dependencies/pandas.ts';
-import { compareStrings } from '../dependencies/python.ts';
 import type { ModelMeta } from '../models/model-meta.ts';
 import { pydanticJsonDumps, pythonJsonLoads } from './json.ts';
 import {

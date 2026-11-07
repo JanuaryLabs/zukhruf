@@ -1,3 +1,4 @@
+export { compareStrings } from './compare-strings.ts';
 export { floatRepr } from './float-repr.ts';
 export type { JsonData } from './json-data.ts';
 export { loadsJson } from './loads-json.ts';

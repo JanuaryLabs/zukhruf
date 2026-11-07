@@ -1,4 +1,4 @@
-import { compareStrings } from './python.ts';
+import { compareStrings } from '@zukhruf/python';
 
 // pytrec_eval 0.5.11 (RelevanceEvaluator) and the trec_eval 9.0.8 measures
 // that MTEB asks it for. trec_eval stores a score as a C float, so scores

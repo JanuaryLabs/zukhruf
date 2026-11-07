@@ -1,8 +1,8 @@
+import { compareStrings } from '@zukhruf/python';
 import { defaultRng } from '@zukhruf/random';
 import { IidBootstrap, Linear, PercentileInterval } from '@zukhruf/statistics';
 
 import { mean } from '../dependencies/numpy.ts';
-import { compareStrings } from '../dependencies/python.ts';
 
 // Not from MTEB: MTEB has no significance test.
 

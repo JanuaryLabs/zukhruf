@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { compareStrings, pythonRound, pythonRoundToInteger } from './python.ts';
+import { pythonRound, pythonRoundToInteger } from './python.ts';
 
 // The expected values are those of CPython 3.12.
 
@@ -50,10 +50,4 @@ test('round to an integer rounds a tie to even', () => {
     rounded,
     cases.map(([, integer]) => integer),
   );
-});
-
-test('strings sort by code point, as in Python', () => {
-  const sorted = ['b', 'a', 'é', '😀', '￿', 'A'].sort(compareStrings);
-
-  assert.deepEqual(sorted, ['A', 'a', 'b', 'é', '￿', '😀']);
 });
