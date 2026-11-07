@@ -21,6 +21,10 @@
 #   fixtures/multilabel, and its 200-row cases draw the same rows, because
 #   the script draws from random.Random(3243) in the order of that script.
 #   The last case adds float sample weights.
+# - brier: the true labels, the probabilities (of the positive label, or a
+#   row for each answer with a column for each sorted label), the sample
+#   weights (or null) and the pos_label (or null) of each case, and
+#   brier_score_loss of them.
 # A float NaN is the string "NaN", because JSON has no NaN.
 # Never edit expected.json by hand: run this script again.
 import importlib.metadata
@@ -40,6 +44,7 @@ assert platform.python_version() == "3.12.9", platform.python_version()
 import numpy as np
 from sklearn.metrics import (
     accuracy_score,
+    brier_score_loss,
     confusion_matrix,
     fbeta_score,
     precision_recall_fscore_support,
@@ -241,11 +246,42 @@ multilabel_cases.append(multilabel(
     "200 rows of 9 labels with float sample weights", truth, multilabel_cases[3]["y_pred"],
     sample_weight=[rng.random() * 2 for _ in truth]))
 
+
+
+def brier(name, y_true, y_proba, sample_weight=None, pos_label=None):
+    value = brier_score_loss(y_true, y_proba, sample_weight=sample_weight, pos_label=pos_label)
+    return plain({"case": name, "y_true": y_true, "y_proba": y_proba, "sample_weight": sample_weight,
+                  "pos_label": pos_label, "value": value})
+
+
+def distribution(k):
+    row = [rng.random() for _ in range(k)]
+    total = sum(row)
+    return [value / total for value in row]
+
+
+relevant = [rng.randrange(2) for _ in range(300)]
+three = [rng.choice(["a", "b", "c"]) for _ in range(150)]
+twelve = [rng.randrange(12) for _ in range(250)]
+two_columns = [distribution(2) for _ in relevant]
+brier_cases = [
+    brier("one answer", [1], [0.3], pos_label=1),
+    brier("one answer of the negative label, where 1 - (1 - p) is not p", [0], [0.1], pos_label=1),
+    brier("300 answers of two labels, the probability of the positive label", relevant,
+          [rng.random() for _ in relevant], pos_label=1),
+    brier("the positive label 0", relevant, [rng.random() for _ in relevant], pos_label=0),
+    brier("300 answers of two labels, a column for each label", relevant, two_columns),
+    brier("150 answers of three string labels", three, [distribution(3) for _ in three]),
+    brier("250 answers of 12 labels", twelve, [distribution(12) for _ in twelve]),
+    brier("250 answers of 12 labels with float sample weights", twelve, [distribution(12) for _ in twelve],
+          sample_weight=[rng.random() * 3 for _ in twelve]),
+]
+
 generator = f"generate.py: numpy {VERSIONS['numpy']}, scikit-learn {VERSIONS['scikit-learn']}, CPython {platform.python_version()}"
 (HERE / "expected.json").write_text(
     json.dumps({"generator": generator, "multiclass": multiclass_cases, "calls": calls,
-                "multilabel": multilabel_cases}, ensure_ascii=False) + "\n",
+                "multilabel": multilabel_cases, "brier": brier_cases}, ensure_ascii=False) + "\n",
     encoding="utf-8",
 )
 print(f"{generator}: {len(multiclass_cases)} multiclass cases, {len(calls)} calls, "
-      f"{len(multilabel_cases)} multilabel cases", file=sys.stderr)
+      f"{len(multilabel_cases)} multilabel cases, {len(brier_cases)} brier cases", file=sys.stderr)

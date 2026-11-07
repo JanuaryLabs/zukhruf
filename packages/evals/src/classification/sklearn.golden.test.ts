@@ -16,6 +16,7 @@ import {
   AllClassMatches,
   type Average,
   BinaryAverage,
+  BrierScore,
   ClassCounts,
   ClassMatches,
   type Label,
@@ -26,6 +27,7 @@ import {
   MacroAverage,
   MicroAverage,
   PerClass,
+  ProbabilityComparer,
   WeightedAverage,
 } from './index.ts';
 
@@ -67,10 +69,19 @@ type Call = {
   };
   readonly value: Value | readonly Value[];
 };
+type Brier = {
+  readonly case: string;
+  readonly y_true: readonly Label[];
+  readonly y_proba: readonly (number | readonly number[])[];
+  readonly sample_weight: readonly number[] | null;
+  readonly pos_label: Label | null;
+  readonly value: number;
+};
 type Expected = {
   readonly multiclass: readonly Sklearn[];
   readonly calls: readonly Call[];
   readonly multilabel: readonly Sklearn[];
+  readonly brier: readonly Brier[];
 };
 
 const expected: Expected = JSON.parse(
@@ -363,4 +374,57 @@ test("ClassCounts gives scikit-learn's value for each call with labels, zero_div
   }
 
   assert.deepEqual(differ, []);
+});
+
+// The comparisons of a Brier case, as an answer gives them: an object of the
+// probability of each label, or of the positive label only.
+const probabilitiesOf = (brier: Brier) => {
+  const labels = [...new Set(brier.y_true)].toSorted((left, right) =>
+    typeof left === 'number' && typeof right === 'number'
+      ? left - right
+      : String(left) < String(right)
+        ? -1
+        : 1,
+  );
+  return brier.y_true.map((label, index) => {
+    const row = brier.y_proba[index] ?? [];
+    const stated =
+      typeof row === 'number'
+        ? { [String(brier.pos_label)]: row }
+        : Object.fromEntries(
+            labels.map((name, column) => [String(name), row[column]]),
+          );
+    return new ProbabilityComparer().compare(
+      JSON.stringify(stated),
+      new LabelCase({ expected: label, weight: 1 }),
+    );
+  });
+};
+
+test("BrierScore gives scikit-learn's brier_score_loss bit for bit: of the positive label, of a column for each of two, three and 12 labels, and with float sample weights", () => {
+  const differ = expected.brier
+    .filter((brier) => {
+      const score = new BrierScore(
+        brier.pos_label === null ? {} : { positiveLabel: brier.pos_label },
+      );
+      const value =
+        brier.sample_weight === null
+          ? score.mean(probabilitiesOf(brier))
+          : score.mean(probabilitiesOf(brier), brier.sample_weight);
+      return !Object.is(value, brier.value);
+    })
+    .map((brier) => brier.case);
+
+  assert.deepEqual(differ, []);
+});
+
+test("the ratio of BrierScore for one answer is its score over 1, scikit-learn's brier_score_loss of that answer", () => {
+  const brier = expected.brier.find(({ case: name }) => name === 'one answer');
+  assert.ok(brier);
+  const [comparison] = probabilitiesOf(brier);
+  assert.ok(comparison);
+
+  const ratio = new BrierScore({ positiveLabel: 1 }).score(comparison);
+
+  assert.deepEqual([ratio.part, ratio.whole], [brier.value, 1]);
 });
