@@ -35,4 +35,4 @@ The rule that gives a confidence interval from a bootstrap distribution, such as
 The confidence interval that two quantiles of the bootstrap distribution give, both read with one quantile method.
 
 **Difference interval**:
-The confidence interval of (change − baseline). It lies above 0 when the change is better on every likely resample, and below 0 when it is worse.
+The confidence interval of (change − baseline). It lies above 0 when the change is better on every likely resample, and below 0 when it is worse. `DifferenceInterval` also holds the observed difference: the difference that the data gives (design for review, #3870). The verdict that a caller reads from it stays with the caller.

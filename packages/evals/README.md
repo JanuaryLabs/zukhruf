@@ -92,6 +92,122 @@ const pageKinds = new ScorerSet(
 
 `Bootstrap` gives the interval of one name over the scorecards, with `@zukhruf/statistics`. You give it the number of resamples, the random index and the method of the interval.
 
+## Compare two runs
+
+Status: design for review (backlog #3870, [ADR 0004](docs/adr/0004-two-runs-are-compared-by-a-paired-bootstrap-over-their-tests.md)). The released package does not have `Run` or `PairedBootstrap` yet.
+
+A caller runs one harness two times on the same tests: once with the baseline model and once with a change, such as another model. Two means side by side do not say if the change is better. `PairedBootstrap` gives one verdict for each name: better, worse or inconclusive, with the difference, its interval and a p-value.
+
+```ts
+import { PairedBootstrap, Run } from '@zukhruf/evals';
+import { defaultRng } from '@zukhruf/random';
+import { Linear, PercentileInterval } from '@zukhruf/statistics';
+
+const baseline = new Run();
+const change = new Run();
+for (const answer of baselineAnswers)
+  baseline.add(
+    answer.testId,
+    scorer.score(answer.stated, answer.case),
+    answer.case.weight,
+  );
+for (const answer of changeAnswers)
+  change.add(
+    answer.testId,
+    scorer.score(answer.stated, answer.case),
+    answer.case.weight,
+  );
+
+const generator = defaultRng(31957);
+const paired = new PairedBootstrap({
+  nResamples: 2000,
+  randomIndex: (n) => generator.integers(0, n, 1)[0] ?? Number.NaN,
+  interval: new PercentileInterval({
+    low: 0.025,
+    high: 0.975,
+    method: new Linear(),
+  }),
+});
+
+const recall = paired.verdict(baseline, change, 'recall', {
+  higherIsBetter: true,
+});
+recall.result; // 'better', 'worse' or 'inconclusive'
+recall.difference.observed; // Totals of the change minus Totals of the baseline
+recall.difference.low; // the 2.5% quantile of the resample differences
+recall.p; // the two-sided p-value of the same resamples
+recall.improvements; // the tests whose value is higher in the change
+
+const brier = paired.verdict(baseline, change, 'brier', {
+  higherIsBetter: false,
+});
+```
+
+A run holds the scorecards of one model. A second `add` of a test id is one more epoch of that test: startup-credits adds three runs of one model as three epochs of one `Run`. To test many names, call `verdict` once for each name, and correct the p-values, such as with `holm` of `@zukhruf/mteb`. To test one name, use its p-value as it is.
+
+```ts
+// @zukhruf/evals: two runs side by side (design for review)
+import type {
+  ConfidenceIntervalMethod,
+  DifferenceInterval,
+} from '@zukhruf/statistics';
+
+/** The scorecards of one model on many tests. A test can have many epochs. */
+export class Run {
+  /** Adds one epoch of a test. Another weight for a test id that the run has is a RangeError. */
+  add(testId: string, scorecard: Scorecard, weight: number): void;
+}
+
+export type Verdict = {
+  readonly name: string;
+  readonly result: 'better' | 'worse' | 'inconclusive';
+  /** change − baseline: its observed value and its interval. */
+  readonly difference: DifferenceInterval;
+  /** The two-sided percentile-bootstrap p-value, with no correction. */
+  readonly p: number;
+  readonly improvements: number;
+  readonly regressions: number;
+  readonly ties: number;
+  readonly tests: number;
+};
+
+/** The paired bootstrap of two runs on the same tests (Koehn 2004). */
+export class PairedBootstrap {
+  constructor(options: {
+    nResamples: number;
+    randomIndex: (n: number) => number;
+    interval: ConfidenceIntervalMethod;
+  });
+  /** A test id in one run only, or a test with two weights, is a RangeError. A name that one run does not give is an Error. */
+  verdict(
+    baseline: Run,
+    change: Run,
+    name: string,
+    options: { higherIsBetter: boolean },
+  ): Verdict;
+}
+```
+
+| Call                                        | What it does underneath                                                                                                                                                                                                                |
+| ------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `run.add(testId, scorecard, weight)`        | Keeps the scorecard as one epoch of the test. The weight belongs to the case, so another weight for the same test id throws.                                                                                                           |
+| `paired.verdict(baseline, change, …)`: join | Pairs the tests by test id, in the order in which the baseline run first got them. A test id in one run only throws, with each such id, as mteb's `pairedBootstrapTest` does. A test whose weight differs between the two runs throws. |
+| reduce                                      | Takes the mean of the epochs of each test, name by name: Ratio(sum of the parts / k, sum of the wholes / k) for k epochs (Miller 2024, §3.1). A scorecard without the name counts as Ratio(0, 0), as in `Totals`.                      |
+| resample                                    | `IidBootstrap` of `@zukhruf/statistics` draws the pairs of tests `nResamples` times. Each resample takes one `randomIndex` for each test.                                                                                              |
+| statistic                                   | On the same resampled tests: the ratio of sums of the name over the change, minus the same over the baseline, with each weight (Koehn 2004). `difference.observed` is the same statistic on all the tests.                             |
+| interval and verdict                        | The `ConfidenceIntervalMethod` gives the interval. With `higherIsBetter: true`, `isAbove(0)` is better and `isBelow(0)` is worse. With `false`, the two change places. Else the verdict is inconclusive.                               |
+| p                                           | Two times the smaller share of the resample differences that are at or below 0 and at or above 0, at most 1, as mteb's `pairedBootstrapTest` gives it. The caller applies a correction, such as Holm.                                  |
+| counts                                      | Counts the tests by the sign of (change value − baseline value), with the direction: improvements, regressions and ties.                                                                                                               |
+
+`Bootstrap` and `PairedBootstrap` use different statistics. `Bootstrap` takes the mean of the values of the scorecards: the samples average. For a plain scorer, `Totals` gives the micro average, so the interval of `Bootstrap` is not the interval of the number of `Totals`. `PairedBootstrap` uses the statistic of `Totals`, so its interval is the interval of its observed difference (ADR 0004, "Consequences").
+
+The design does not resample clustered tests, such as many questions about one page, and it reduces the epochs only by the mean.
+
+| Who uses it                                               | For                                                                                    | Backlog                                     |
+| --------------------------------------------------------- | -------------------------------------------------------------------------------------- | ------------------------------------------- |
+| context-compiler, startup-credits page kinds              | jev-1.14 against another model on the 121 pages, with the runs of each model as epochs | context-compiler #3882 slice 2, mutex #3870 |
+| offers-evals and context-compiler, startup-credits offers | a run against the baseline run of its harness, for recall, precision, kind and amount  | mutex #3870, context-compiler #3882         |
+
 ## Compare structured values
 
 `./structured` compares a structured value with the value that a person labelled: one walk pairs the leaves of the two values, the alignment of each array is a Strategy (by position, or by best match with the Hungarian algorithm), and each scorer gives a ratio for one record. SOB's evaluate.py is a configuration of the same scorers. [docs/structured.md](docs/structured.md) shows the whole API: `ComparisonSpec`, `TreeWalk`, `Comparison`, `PathMatches`, `ValueMatches`, `ItemMatches`, `TokenF1`, `TypePrecision`, `RequiredKeyRecall`, the gates, `PerField`, `JsonSchema`, `ConfigCase` and `TextVarsCase`. Its decisions are the ADRs in [docs/adr/structured](docs/adr/structured), from the time when it was `@zukhruf/structured-eval`.
@@ -610,3 +726,4 @@ The package was built in two items: mutex #3888 (the core, `./promptfoo` and the
 - [ADR 0001: one package, with a subpath for each shape of answer](docs/adr/0001-one-package-with-a-subpath-for-each-shape-of-answer.md)
 - [ADR 0002: the core is generic over the answer](docs/adr/0002-the-core-is-generic-over-the-answer.md)
 - [ADR 0003: classification follows scikit-learn, from the counts of each class](docs/adr/0003-classification-follows-scikit-learn-from-the-counts-of-each-class.md)
+- [ADR 0004: two runs are compared by a paired bootstrap over their tests](docs/adr/0004-two-runs-are-compared-by-a-paired-bootstrap-over-their-tests.md) (design for review)

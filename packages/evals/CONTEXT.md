@@ -91,6 +91,36 @@ _Avoid_: macro average (that is the mean over the classes)
 **Bootstrap interval**:
 The interval of a mean: many resamples draw the scorecards again, with replacement, and two quantiles of their means are its ends.
 
+**Run**:
+The scorecards that one model gives on many tests of one harness, each with its test id and its weight. A paired bootstrap reads two runs (design for review, ADR 0004).
+
+**Baseline run** and **change run**:
+The two runs of a paired bootstrap: the run to compare against, and the run with the change, such as another model. mteb's `pairedBootstrapTest(baseline, change)` and Braintrust's "baseline experiment" use the same words.
+_Avoid_: control and treatment, before and after
+
+**Test id**:
+The key that pairs a test of the baseline run with the same test of the change run. The caller gives it, because promptfoo has no stable id. Inspect AI calls it `Sample.id`, and Braintrust calls it the comparison key.
+_Avoid_: row id (a case is not a row)
+
+**Epoch**:
+One answer of one run to one test. A run can have many epochs of a test, and it takes their mean, name by name. The word is Inspect AI's: promptfoo calls it a repeat, and Braintrust calls it a trial.
+_Avoid_: repeat, trial
+
+**Paired bootstrap**:
+The bootstrap of two runs on the same tests: each resample draws the tests with replacement, and both runs read the same draw (Koehn 2004; Efron and Tibshirani 1993). `PairedBootstrap` gives a verdict for one name.
+
+**Paired difference**:
+For one name, the ratio of sums over the change run minus the ratio of sums over the baseline run, on the same tests (Koehn 2004). When each whole and each weight is 1, it is the mean of the differences of the tests.
+
+**Verdict**:
+The result of a paired bootstrap for one name: better, worse or inconclusive, with the paired difference, its difference interval, a p-value and the counts of the tests. The words better, worse and inconclusive are mteb's `ChangeVerdict.result`. The p-value has no correction: a caller that tests many names corrects it, such as with Holm.
+
+**Improvements**, **regressions** and **ties**:
+The tests whose value is better, worse or the same in the change run, by the direction of the name. Braintrust's `summarize()` gives improvements and regressions. "Ties" is the label of this package.
+
+**Direction**:
+If a higher value of a name is better: `higherIsBetter`, as lm-evaluation-harness gives each metric a `higher_is_better`. The caller gives it, because a scorecard holds names and not scorers. The Brier score is lower-is-better.
+
 **Scorer assertion**:
 A scorer with its weight, the threshold at which it passes, and the metric it reports under. It reads the case from the vars of the test. An assertion module gives it to promptfoo.
 
