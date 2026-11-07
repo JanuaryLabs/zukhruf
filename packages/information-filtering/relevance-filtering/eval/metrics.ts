@@ -1,5 +1,13 @@
 import gsumpw from '@stdlib/blas-ext-base-gsumpw';
 
+import {
+  BinaryAverage,
+  BrierScore,
+  ClassCounts,
+  ProbabilityComparison,
+  SquaredErrorForm,
+} from '@zukhruf/evals/classification';
+
 // The scores of one design on one stream for one profile, as the research
 // code computes them (round-2 evaluate.py, metric_row). T11F is the F-measure
 // with beta 0.5 of TREC-11 Filtering (Robertson and Soboroff 2002): precision
@@ -18,38 +26,49 @@ export type Scores = {
   readonly fn: number;
 };
 
-export function f05(tp: number, fp: number, fn: number): number {
-  return tp === 0 ? 0 : (1.25 * tp) / (1.25 * tp + 0.25 * fn + fp);
-}
+// The research code reads the decisions and the relevance as the labels 1
+// and 0 of two classes, with 1 the positive class.
+const RELEVANT = 1;
+const NOT_RELEVANT = 0;
+const binary = new BinaryAverage(RELEVANT);
+// np.mean((p - y) ** 2), as metric_row computes the Brier score.
+const brierScore = new BrierScore({
+  positiveLabel: RELEVANT,
+  form: new SquaredErrorForm(),
+});
 
 export function scores(
   accepted: readonly boolean[],
   probabilities: readonly number[],
   relevant: readonly boolean[],
 ): Scores {
-  let tp = 0;
-  let fp = 0;
-  let fn = 0;
-  let squares = 0;
-  let positives = 0;
-  for (const [index, isRelevant] of relevant.entries()) {
-    const accept = accepted[index] ?? false;
-    if (accept && isRelevant) tp++;
-    else if (accept) fp++;
-    else if (isRelevant) fn++;
-    if (isRelevant) positives++;
-    squares += ((probabilities[index] ?? 0) - (isRelevant ? 1 : 0)) ** 2;
-  }
-  const rate = positives / relevant.length;
+  const counts = ClassCounts.of({
+    expected: relevant.map(Number),
+    stated: accepted.map(Number),
+  });
+  const matrix = counts.confusionMatrix();
+  const tp = matrix.count(RELEVANT, RELEVANT);
+  const fp = matrix.count(NOT_RELEVANT, RELEVANT);
+  const fn = matrix.count(RELEVANT, NOT_RELEVANT);
+  // The Brier skill score stays here: @zukhruf/evals has no skill score.
+  const rate = (tp + fn) / relevant.length;
   const climatology = rate * (1 - rate);
-  const brier = squares / relevant.length;
+  const brier = brierScore.mean(
+    relevant.map(
+      (isRelevant, index) =>
+        new ProbabilityComparison({
+          probabilities: new Map([[RELEVANT, probabilities[index] ?? 0]]),
+          expected: isRelevant ? RELEVANT : NOT_RELEVANT,
+        }),
+    ),
+  );
   return {
-    f05: f05(tp, fp, fn),
-    precision: tp + fp > 0 ? tp / (tp + fp) : 0,
-    recall: tp + fn > 0 ? tp / (tp + fn) : 0,
+    f05: counts.fBeta({ beta: 0.5, average: binary }),
+    precision: counts.precision({ average: binary }),
+    recall: counts.recall({ average: binary }),
     brier,
     brierSkill: climatology > 0 ? 1 - brier / climatology : Number.NaN,
-    accepted: accepted.filter(Boolean).length,
+    accepted: tp + fp,
     tp,
     fp,
     fn,
