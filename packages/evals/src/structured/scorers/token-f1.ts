@@ -2,11 +2,11 @@ import { NeumaierSum } from '@zukhruf/python';
 
 import { F1Ratio } from '../../aggregation/f1-ratio.ts';
 import { Ratio } from '../../aggregation/ratio.ts';
+import type { Scorer } from '../../scorers/scorer.ts';
 import { BagOfWords } from '../comparison/bag-of-words.ts';
 import type { Comparison } from '../comparison/comparison.ts';
 import type { LeafValue } from '../comparison/leaf-pair.ts';
 import type { LeafOptions } from './leaf-matches.ts';
-import type { Scorer } from './scorer.ts';
 
 // The sum of the token F1 of each expected leaf and the stated value at its
 // path, over the expected leaves (mean_token_f1 of evaluate.py). Words are
@@ -15,7 +15,7 @@ import type { Scorer } from './scorer.ts';
 // value does not have is read as absentAs (evaluate.py reads None). With
 // nullIsMissing, a null leaf is no value: an expected null is not counted,
 // and a stated null is read as absentAs.
-export class TokenF1 implements Scorer {
+export class TokenF1 implements Scorer<Comparison> {
   readonly #whenNoWords: number;
   readonly #absentAs: LeafValue;
   readonly #nullIsMissing: boolean;

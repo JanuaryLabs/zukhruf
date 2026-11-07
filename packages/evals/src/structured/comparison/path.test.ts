@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
+import { Recall } from '../../index.ts';
 import {
   ConfigCase,
   JsonSchema,
   JsonValue,
   PathMatches,
-  Recall,
   RequiredKeyRecall,
   ScorerSet,
   TypePrecision,

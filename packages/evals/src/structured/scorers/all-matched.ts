@@ -1,7 +1,7 @@
+import { Gate } from '../../scorers/gate.ts';
 import type { Comparison } from '../comparison/comparison.ts';
 import type { Leaf } from '../comparison/leaf-pair.ts';
 import { canonicalJson } from '../cpython/python-text.ts';
-import { Gate } from './gate.ts';
 import type { LeafOptions } from './leaf-matches.ts';
 
 // 1 when every leaf pair of the comparison agrees and every item of every
@@ -9,7 +9,7 @@ import type { LeafOptions } from './leaf-matches.ts';
 // both sides, as the matches of leaves read it. Its explanation names each
 // array whose items do not all have a pair, and each leaf that does not
 // agree.
-export class AllMatched extends Gate {
+export class AllMatched extends Gate<Comparison> {
   readonly #nullIsMissing: boolean;
 
   constructor({ nullIsMissing = false }: LeafOptions = {}) {

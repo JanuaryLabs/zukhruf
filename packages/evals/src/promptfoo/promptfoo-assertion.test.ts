@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
+import { Recall } from '../index.ts';
 import {
   AllMatched,
   ConfigCase,
   ExactMatch,
   PerField,
-  Recall,
   ScorerSet,
   TextVarsCase,
   TokenF1,

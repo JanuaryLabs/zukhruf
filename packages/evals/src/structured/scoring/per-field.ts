@@ -1,6 +1,6 @@
 import type { Ratio } from '../../aggregation/ratio.ts';
+import type { Scorer } from '../../scorers/scorer.ts';
 import type { Comparison } from '../comparison/comparison.ts';
-import type { Scorer } from '../scorers/scorer.ts';
 
 // A scorer for each field of a comparison: in a ScorerSet, it gives the
 // ratio of its scorer on the leaf pairs and item pairs of each field, under
@@ -10,9 +10,9 @@ import type { Scorer } from '../scorers/scorer.ts';
 // all null under nullIsMissing. A ratio with the whole 0 adds nothing to a
 // ratio of sums, so the totals stay the same.
 export class PerField {
-  readonly #scorer: Scorer;
+  readonly #scorer: Scorer<Comparison>;
 
-  constructor(scorer: Scorer) {
+  constructor(scorer: Scorer<Comparison>) {
     this.#scorer = scorer;
   }
 

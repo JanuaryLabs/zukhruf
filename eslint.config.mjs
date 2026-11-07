@@ -306,7 +306,7 @@ export default defineConfig(
                 'The promptfoo adapter imports only the core (ADR 0001, rule 1).',
             },
             {
-              target: ['./index.ts', './aggregation', './scoring'],
+              target: ['./index.ts', './aggregation', './scoring', './scorers'],
               from: ['./structured', './promptfoo'],
               message:
                 'The core of @zukhruf/evals imports no subpath (ADR 0001, rule 1).',

@@ -1,7 +1,7 @@
 import { Ratio } from '../../aggregation/ratio.ts';
+import type { Scorer } from '../../scorers/scorer.ts';
 import type { Comparison } from '../comparison/comparison.ts';
 import type { LeafOptions } from './leaf-matches.ts';
-import type { Scorer } from './scorer.ts';
 
 // The stated leaves whose type the schema allows at their path, by the rules
 // of the draft of the schema, over the stated leaves. With nullIsMissing, a
@@ -10,7 +10,7 @@ import type { Scorer } from './scorer.ts';
 // has no gate: evaluate.py shows it only for a record that agrees with its
 // schema (evaluate.py:291-295, 302-309), which makes it equal to
 // SchemaCompliance, and its caller composes that with Penalized (ADR 0008).
-export class TypePrecision implements Scorer {
+export class TypePrecision implements Scorer<Comparison> {
   readonly #nullIsMissing: boolean;
 
   constructor({ nullIsMissing = false }: LeafOptions = {}) {

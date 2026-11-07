@@ -1,5 +1,4 @@
-import { Ratio } from '../../aggregation/ratio.ts';
-import type { Comparison } from '../comparison/comparison.ts';
+import { Ratio } from '../aggregation/ratio.ts';
 import type { Penalty } from './penalty.ts';
 import type { Scorer } from './scorer.ts';
 
@@ -9,19 +8,19 @@ import type { Scorer } from './scorer.ts';
 // recall. A penalty on the means would give mean(a) × mean(b), so the
 // penalty is per record (ADR 0004). When every factor is 1, the ratio of the
 // scorer stays as it is, so an F1Ratio keeps its value (ADR 0012).
-export class Penalized implements Scorer {
-  readonly #scorer: Scorer;
-  readonly #penalties: readonly Penalty[];
+export class Penalized<Input> implements Scorer<Input> {
+  readonly #scorer: Scorer<Input>;
+  readonly #penalties: readonly Penalty<Input>[];
 
-  constructor(scorer: Scorer, ...penalties: readonly Penalty[]) {
+  constructor(scorer: Scorer<Input>, ...penalties: readonly Penalty<Input>[]) {
     this.#scorer = scorer;
     this.#penalties = penalties;
   }
 
-  score(comparison: Comparison): Ratio {
-    const ratio = this.#scorer.score(comparison);
+  score(input: Input): Ratio {
+    const ratio = this.#scorer.score(input);
     const factors = this.#penalties.map((penalty) => {
-      const factor = penalty.factor(comparison);
+      const factor = penalty.factor(input);
       if (!(factor >= 0 && factor <= 1))
         throw new RangeError(
           `A penalty gave the factor ${factor}, which is not in [0, 1].`,

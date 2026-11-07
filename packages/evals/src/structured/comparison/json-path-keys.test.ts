@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
+import { Recall } from '../../index.ts';
 import {
   AllMatched,
   ByBestMatch,
@@ -11,7 +12,6 @@ import {
   JsonValue,
   NumberWithin,
   PerField,
-  Recall,
   ScorerSet,
   TreeWalk,
   ValueMatches,

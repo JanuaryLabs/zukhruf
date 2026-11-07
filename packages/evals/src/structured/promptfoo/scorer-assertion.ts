@@ -1,8 +1,9 @@
+import type { Scorer } from '../../scorers/scorer.ts';
 import type { CaseReader } from '../../scoring/scorecard-scorer.ts';
 import { ComparisonSpec } from '../comparison/comparison-spec.ts';
+import type { Comparison } from '../comparison/comparison.ts';
 import { statedData } from '../comparison/json-value.ts';
 import { TreeWalk } from '../comparison/tree-walk.ts';
-import type { Scorer } from '../scorers/scorer.ts';
 import type { Case } from '../scoring/case.ts';
 import { TextVarsCase } from '../scoring/text-vars-case.ts';
 
@@ -36,7 +37,7 @@ export class ScorerAssertion {
   readonly value: (output: string, context: VarsContext) => number;
 
   constructor(
-    scorer: Scorer,
+    scorer: Scorer<Comparison>,
     {
       weight,
       threshold,

@@ -1,26 +1,28 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { Ratio } from '../../index.ts';
+import {
+  AtLeast,
+  F1,
+  Penalized,
+  Precision,
+  Ratio,
+  Recall,
+  SampleAveraged,
+} from '../../index.ts';
 import {
   AllMatched,
-  AtLeast,
   ByBestMatch,
   ComparisonSpec,
   ConfigCase,
   ExactMatch,
-  F1,
   ItemMatches,
   JsonSchema,
   JsonValue,
   ParseSuccess,
   PathMatches,
-  Penalized,
   PerField,
-  Precision,
-  Recall,
   RequiredKeyRecall,
-  SampleAveraged,
   SchemaCompliance,
   ScorerSet,
   TokenF1,

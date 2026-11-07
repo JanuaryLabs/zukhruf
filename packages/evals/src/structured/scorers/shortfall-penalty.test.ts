@@ -1,15 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import {
-  ConfigCase,
-  F1,
-  ParseSuccess,
-  PathMatches,
-  SampleAveraged,
-  ScorerSet,
-  ShortfallPenalty,
-} from '../index.ts';
+import { F1, SampleAveraged, ShortfallPenalty } from '../../index.ts';
+import { ConfigCase, ParseSuccess, PathMatches, ScorerSet } from '../index.ts';
 
 test('ShortfallPenalty throws a RangeError for a target or a power that is 0, below 0 or NaN', () => {
   const keys = new SampleAveraged(new F1(new PathMatches()), { whenEmpty: 0 });

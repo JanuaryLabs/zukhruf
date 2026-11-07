@@ -11,11 +11,11 @@ import type { Assertion } from 'promptfoo';
 
 import { TemporaryFiles } from '@zukhruf/testing/fs';
 
+import { Recall, type Scorer } from '../index.ts';
 import {
+  type Comparison,
   ExactMatch,
   PathMatches,
-  Recall,
-  type Scorer,
   ScorerAssertion,
 } from '../structured/index.ts';
 import { AssertionModule } from './index.ts';
@@ -28,7 +28,8 @@ test('a row that promptfoo eval --retry-errors runs again gets the named scores 
   const source = (path: string) => new URL(path, import.meta.url).href;
   await writeFile(
     join(folder.path, 'scorers.ts'),
-    `import { ExactMatch, PathMatches, Recall, ScorerAssertion } from '${source('../structured/index.ts')}';
+    `import { Recall } from '${source('../index.ts')}';
+import { ExactMatch, PathMatches, ScorerAssertion } from '${source('../structured/index.ts')}';
 import { AssertionModule } from '${source('./index.ts')}';
 
 export const scorers = new AssertionModule(import.meta.url, {
@@ -197,7 +198,7 @@ test('a config cannot list a scorer assertion as a promptfoo assertion, a scorer
   const otherNameAllowed: ['key_f1'] extends [Names] ? true : false = false;
   const firstIsScorer: [
     ConstructorParameters<typeof ScorerAssertion>[0],
-  ] extends [Scorer]
+  ] extends [Scorer<Comparison>]
     ? true
     : false = true;
   const metricIsOptional: [undefined] extends [Rule['metric']] ? true : false =

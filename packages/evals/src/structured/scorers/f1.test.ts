@@ -1,14 +1,12 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { Totals } from '../../index.ts';
+import { F1, SampleAveraged, Totals } from '../../index.ts';
 import {
   ConfigCase,
-  F1,
   JsonSchema,
   JsonValue,
   PathMatches,
-  SampleAveraged,
   ScorerSet,
 } from '../index.ts';
 

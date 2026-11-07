@@ -1,20 +1,18 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
+import { F1, Precision, Recall } from '../../index.ts';
 import {
   ByBestMatch,
   ByPosition,
   ComparisonSpec,
   ConfigCase,
-  F1,
   ItemMatches,
   JsonSchema,
   JsonValue,
   NormalizedText,
   NumberWithin,
-  Precision,
   PythonEquality,
-  Recall,
   ScorerAssertion,
   ScorerSet,
   TokenOverlapAtLeast,

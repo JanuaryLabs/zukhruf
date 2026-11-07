@@ -1,8 +1,8 @@
+import { Gate } from '../../scorers/gate.ts';
 import type { Comparison } from '../comparison/comparison.ts';
-import { Gate } from './gate.ts';
 
 // 1 when the stated value is a JSON object or array, else 0.
-export class ParseSuccess extends Gate {
+export class ParseSuccess extends Gate<Comparison> {
   holds({ parsed }: Comparison): boolean {
     return parsed;
   }

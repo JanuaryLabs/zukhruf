@@ -1,13 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { Ratio, RatioOfSums, Totals } from '../index.ts';
-import {
-  ConfigCase,
-  Recall,
-  ScorerSet,
-  ValueMatches,
-} from '../structured/index.ts';
+import { Ratio, RatioOfSums, Recall, Totals } from '../index.ts';
+import { ConfigCase, ScorerSet, ValueMatches } from '../structured/index.ts';
 
 test('Totals adds the scorecards of a run into micro averages: all right values over all expected values, not the mean of each record', () => {
   const scorer = new ScorerSet({ recall: new Recall(new ValueMatches()) });

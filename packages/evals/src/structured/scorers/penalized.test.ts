@@ -3,20 +3,22 @@ import { test } from 'node:test';
 
 import {
   AtLeast,
-  type Comparison,
-  ConfigCase,
   F1,
-  JsonSchema,
-  JsonValue,
-  ParseSuccess,
-  PathMatches,
   Penalized,
   Penalty,
   Recall,
   SampleAveraged,
+  ShortfallPenalty,
+} from '../../index.ts';
+import {
+  type Comparison,
+  ConfigCase,
+  JsonSchema,
+  JsonValue,
+  ParseSuccess,
+  PathMatches,
   SchemaCompliance,
   ScorerSet,
-  ShortfallPenalty,
   ValidSchema,
   ValueMatches,
 } from '../index.ts';
@@ -151,7 +153,7 @@ test('a gate gives 1 of 1 or 0 of 1, and AtLeast holds when the value of its sco
 
 // A penalty whose factor the test gives, for the factors that no penalty of
 // the package gives.
-class FixedPenalty extends Penalty {
+class FixedPenalty extends Penalty<Comparison> {
   readonly #factor: number;
 
   constructor(factor: number) {

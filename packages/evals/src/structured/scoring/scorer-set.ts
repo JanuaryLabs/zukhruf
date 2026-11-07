@@ -1,12 +1,13 @@
 import { RatioOfSums } from '../../aggregation/ratio-of-sums.ts';
 import { Ratio } from '../../aggregation/ratio.ts';
+import { Gate } from '../../scorers/gate.ts';
+import type { Scorer } from '../../scorers/scorer.ts';
 import type { ScorecardScorer } from '../../scoring/scorecard-scorer.ts';
 import type { Check, Scorecard } from '../../scoring/scorecard.ts';
 import { ComparisonSpec } from '../comparison/comparison-spec.ts';
+import type { Comparison } from '../comparison/comparison.ts';
 import { statedData } from '../comparison/json-value.ts';
 import { TreeWalk } from '../comparison/tree-walk.ts';
-import { Gate } from '../scorers/gate.ts';
-import type { Scorer } from '../scorers/scorer.ts';
 import type { Case } from './case.ts';
 import { PerField } from './per-field.ts';
 
@@ -19,11 +20,14 @@ import { PerField } from './per-field.ts';
 // as json.loads reads it, as a ScorerAssertion reads it; a stated JsonValue
 // stays as it is.
 export class ScorerSet implements ScorecardScorer<Case> {
-  readonly #entries: readonly (readonly [string, Scorer | PerField])[];
+  readonly #entries: readonly (readonly [
+    string,
+    Scorer<Comparison> | PerField,
+  ])[];
   readonly #walk: TreeWalk;
 
   constructor(
-    entries: Readonly<Record<string, Scorer | PerField>>,
+    entries: Readonly<Record<string, Scorer<Comparison> | PerField>>,
     { spec = new ComparisonSpec() }: { readonly spec?: ComparisonSpec } = {},
   ) {
     this.#entries = Object.entries(entries);

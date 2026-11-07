@@ -1,8 +1,8 @@
+import { Gate } from '../../scorers/gate.ts';
 import type { Comparison } from '../comparison/comparison.ts';
-import { Gate } from './gate.ts';
 
 // 1 when the case's JSON Schema is a valid schema of its draft, else 0.
-export class ValidSchema extends Gate {
+export class ValidSchema extends Gate<Comparison> {
   holds({ schema }: Comparison): boolean {
     return schema.valid;
   }

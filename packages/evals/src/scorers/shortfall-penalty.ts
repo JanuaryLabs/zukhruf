@@ -1,4 +1,3 @@
-import type { Comparison } from '../comparison/comparison.ts';
 import { Penalty } from './penalty.ts';
 import type { Scorer } from './scorer.ts';
 
@@ -7,13 +6,13 @@ import type { Scorer } from './scorer.ts';
 // to the power. SOB gives image and audio records the factor of the key F1
 // with the target 0.90 and the power 2 (compute_coverage_gate,
 // sob-bench/evaluate.py:615-618), with the same arithmetic.
-export class ShortfallPenalty extends Penalty {
-  readonly #scorer: Scorer;
+export class ShortfallPenalty<Input> extends Penalty<Input> {
+  readonly #scorer: Scorer<Input>;
   readonly #target: number;
   readonly #power: number;
 
   constructor(
-    scorer: Scorer,
+    scorer: Scorer<Input>,
     { target, power }: { readonly target: number; readonly power: number },
   ) {
     super();
@@ -26,10 +25,10 @@ export class ShortfallPenalty extends Penalty {
     this.#power = power;
   }
 
-  factor(comparison: Comparison): number {
+  factor(input: Input): number {
     return Math.min(
       1,
-      (this.#scorer.score(comparison).value / this.#target) ** this.#power,
+      (this.#scorer.score(input).value / this.#target) ** this.#power,
     );
   }
 }

@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
+import { SampleAveraged } from '../../index.ts';
 import {
   ConfigCase,
   JsonSchema,
   JsonValue,
-  SampleAveraged,
   ScorerSet,
   TypePrecision,
 } from '../index.ts';

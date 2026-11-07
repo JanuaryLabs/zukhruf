@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
+import { F1 } from '../../index.ts';
 import {
   ExactMatch,
-  F1,
   PathMatches,
   SchemaCompliance,
   ScorerAssertion,

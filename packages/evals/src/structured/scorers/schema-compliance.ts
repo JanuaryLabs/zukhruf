@@ -1,11 +1,11 @@
+import { Gate } from '../../scorers/gate.ts';
 import type { Comparison } from '../comparison/comparison.ts';
-import { Gate } from './gate.ts';
 import { ParseSuccess } from './parse-success.ts';
 import { ValidSchema } from './valid-schema.ts';
 
 // 1 when the stated value is parsed and agrees with a valid schema, else 0.
 // Its explanation names the schema errors.
-export class SchemaCompliance extends Gate {
+export class SchemaCompliance extends Gate<Comparison> {
   static readonly #parsed = new ParseSuccess();
   static readonly #validSchema = new ValidSchema();
 

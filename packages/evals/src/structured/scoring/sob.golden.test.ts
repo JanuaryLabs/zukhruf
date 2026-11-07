@@ -13,28 +13,33 @@ import {
   Lower,
 } from '@zukhruf/statistics';
 
-import { Bootstrap, Totals, type WeightedScorecard } from '../../index.ts';
 import {
   AtLeast,
-  Case,
-  ComparisonSpec,
-  ExactMatch,
+  Bootstrap,
   F1,
-  JsonSchema,
-  JsonValue,
   MeanOf,
-  ParseSuccess,
-  PathMatches,
   Penalized,
   type Penalty,
-  PythonEquality,
   Recall,
-  RequiredKeyRecall,
   SampleAveraged,
-  SchemaCompliance,
   type Scorer,
-  ScorerSet,
   ShortfallPenalty,
+  Totals,
+  type WeightedScorecard,
+} from '../../index.ts';
+import {
+  Case,
+  type Comparison,
+  ComparisonSpec,
+  ExactMatch,
+  JsonSchema,
+  JsonValue,
+  ParseSuccess,
+  PathMatches,
+  PythonEquality,
+  RequiredKeyRecall,
+  SchemaCompliance,
+  ScorerSet,
   TokenF1,
   TypePrecision,
   ValidSchema,
@@ -77,13 +82,13 @@ const lines = readFileSync(join(folder, 'responses.jsonl'), 'utf8').split('\n');
 // the record. SOB pairs each array by position and compares values with
 // Python's ==.
 const spec = new ComparisonSpec({ comparator: new PythonEquality() });
-const mean = (scorer: Scorer, whenEmpty: number) =>
+const mean = (scorer: Scorer<Comparison>, whenEmpty: number) =>
   new SampleAveraged(scorer, { whenEmpty });
 const parsed = new ParseSuccess();
 const compliance = new SchemaCompliance();
 const keyF1 = mean(new F1(new PathMatches()), 0);
 
-function sob(coverage: Penalty) {
+function sob(coverage: Penalty<Comparison>) {
   const truth = new Penalized(
     mean(new Recall(new ValueMatches()), 1),
     compliance,

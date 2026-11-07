@@ -1,15 +1,13 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { Ratio } from '../../index.ts';
+import { Precision, Ratio, Recall } from '../../index.ts';
 import {
   AllMatched,
   ConfigCase,
   JsonSchema,
   JsonValue,
   PathMatches,
-  Precision,
-  Recall,
   ScorerSet,
   TokenF1,
   TypePrecision,
