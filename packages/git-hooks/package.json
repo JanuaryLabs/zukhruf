@@ -1,6 +1,6 @@
 {
   "name": "@zukhruf/git-hooks",
-  "version": "0.8.6",
+  "version": "0.8.7",
   "description": "Git hooks in TypeScript, a class per step. Pre-commit checks staged files with Prettier, stages only what nx sync wrote, and builds generated files. Commit-msg stops a subject whose scope nx release misreads. Pre-push builds pushed commits in snapshots.",
   "license": "MIT",
   "repository": {
@@ -47,8 +47,8 @@
     "access": "public"
   },
   "dependencies": {
-    "@zukhruf/async": "^0.8.6",
-    "@zukhruf/fs": "^0.8.6"
+    "@zukhruf/async": "^0.8.7",
+    "@zukhruf/fs": "^0.8.7"
   },
   "peerDependencies": {
     "eslint": "^9.30.0 || ^10.0.0",
@@ -64,7 +64,7 @@
     }
   },
   "devDependencies": {
-    "@zukhruf/testing": "^0.8.6",
+    "@zukhruf/testing": "^0.8.7",
     "eslint": "^10.12.0",
     "jsonc-eslint-parser": "^3.3.0",
     "prettier": "^3.9.9"
