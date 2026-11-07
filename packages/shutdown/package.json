@@ -1,6 +1,6 @@
 {
   "name": "@zukhruf/shutdown",
-  "version": "0.8.4",
+  "version": "0.8.5",
   "description": "A graceful shutdown for a Node.js program: SIGINT, SIGTERM, SIGHUP and crashes abort one AbortSignal, the program runs its cleanup, and then the process dies by the termination signal, so a shell, Docker or Kubernetes sees an interrupted process.",
   "license": "MIT",
   "repository": {
@@ -42,6 +42,6 @@
     "access": "public"
   },
   "devDependencies": {
-    "@zukhruf/docker": "^0.8.4"
+    "@zukhruf/docker": "^0.8.5"
   }
 }
