@@ -80,7 +80,7 @@ const result = federation.query('SELECT * FROM conversations');
 
 Qualified tables and PRAGMAs discover additional databases through `locate`. Both `PRAGMA contacts.table_info(contacts)` and `SELECT * FROM pragma_table_info('contacts', 'contacts')` locate Contacts, including when the schema is a bound parameter in a tagged query. Quoted schema names such as `"call-history"` work too. Every attachment made for the statement is detached afterwards, including on failure; `main` and temporary views remain on the connection. The additional databases count toward the attachment limit.
 
-The constructor accepts Node's `timeout` option for waiting on a writer's lock, in milliseconds. Without it, the handle waits 5000 ms, the busy timeout of `@zukhruf/sqlite-open`. Hosts that need crash recovery perform it before supplying the paths, including inside `locate` for a named primary or additional database; Federation opens those files read-only.
+The constructor accepts Node's `timeout` option for waiting on a writer's lock, in milliseconds. Without it, the handle waits 5000 ms, the busy timeout of `@zukhruf/sqlite-open`. It also accepts Node's `readBigInts` option. An `INTEGER` of SQLite holds 64 bits, and a number holds an integer exactly only up to 2^53, so a plain handle throws `ERR_OUT_OF_RANGE` for a larger one. With `readBigInts: true`, `query` and `sql` give each integer as a `bigint`. A host that reads databases it does not know, such as an agent's SQL over the imports of Context Compiler, sets it. Hosts that need crash recovery perform it before supplying the paths, including inside `locate` for a named primary or additional database; Federation opens those files read-only.
 
 ## Read a primary database
 

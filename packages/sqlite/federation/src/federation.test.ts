@@ -650,3 +650,28 @@ test('a configured busy timeout waits for a writer before reading an attached da
     await writer.terminate();
   }
 });
+
+test('a handle that asks for bigints reads an integer above 2^53 exactly from main and from an attached database, and a plain handle throws', async () => {
+  await using scratch = await new TemporaryFiles().directory('federation-');
+  const main = join(scratch.path, 'main.sqlite');
+  const visits = join(scratch.path, 'visits.sqlite');
+  writeDatabase(main, []);
+  {
+    using owner = open(visits);
+    owner.exec(`CREATE TABLE t (x INTEGER);
+      INSERT INTO t VALUES (9223372036854775807), (13399287446400972)`);
+  }
+  const locate = (name: string) => (name === 'visits' ? visits : undefined);
+  using exact = new Federation({ main, locate, readBigInts: true });
+  using plain = new Federation({ main, locate });
+
+  const read = exact.query('SELECT x FROM visits.t ORDER BY rowid');
+  const tagged = exact.sql.get`SELECT count(*) AS n FROM main.t`;
+
+  assert.deepEqual(read.rows, [[9223372036854775807n], [13399287446400972n]]);
+  assert.equal(tagged?.n, 0n);
+  assert.throws(
+    () => plain.query('SELECT x FROM visits.t'),
+    /too large to be represented as a JavaScript number/,
+  );
+});

@@ -23,7 +23,12 @@ export type QueryResult = {
 // undefined when the host has no database by that name.
 export type Locate = (name: string) => string | undefined;
 
-export type FederationOptions = Pick<DatabaseSyncOptions, 'timeout'> & {
+// readBigInts gives each integer as a bigint: an INTEGER of SQLite holds 64
+// bits, and a number holds one exactly only up to 2^53.
+export type FederationOptions = Pick<
+  DatabaseSyncOptions,
+  'timeout' | 'readBigInts'
+> & {
   readonly main: string | { readonly name: string };
   readonly locate: Locate;
 };
