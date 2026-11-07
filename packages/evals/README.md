@@ -6,18 +6,18 @@ The answers of evals have different shapes: a structured record, a label, a rank
 
 ## The parts
 
-| Import path                            | Job                                                                                                                                                       |
-| -------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `@zukhruf/evals`                       | The core: scorers, ratios, gates, scorer sets, scorecards, totals and bootstrap intervals.                                                                |
-| `@zukhruf/evals/promptfoo`             | The adapter that makes a scorer or a scorer set a promptfoo assertion.                                                                                    |
-| `@zukhruf/evals/structured`            | Compares a structured value with the value that a person labelled.                                                                                        |
-| `@zukhruf/evals/classification` (next) | Compares the stated labels of an answer with its expected labels, as scikit-learn's `sklearn.metrics` does. Designed in ADR 0003; built in backlog #3889. |
-| `@zukhruf/evals/ranking` (later)       | Compares a ranked list with judged items, as trec_eval does.                                                                                              |
-| `@zukhruf/evals/clustering` (later)    | Compares a partition with a labelled partition, as the CoNLL reference scorer does.                                                                       |
+| Import path                         | Job                                                                                                                    |
+| ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `@zukhruf/evals`                    | The core: scorers, ratios, gates, scorer sets, scorecards, totals and bootstrap intervals.                             |
+| `@zukhruf/evals/promptfoo`          | The adapter that makes a scorer or a scorer set a promptfoo assertion.                                                 |
+| `@zukhruf/evals/structured`         | Compares a structured value with the value that a person labelled.                                                     |
+| `@zukhruf/evals/classification`     | Compares the stated labels of an answer with its expected labels, as scikit-learn's `sklearn.metrics` does (ADR 0003). |
+| `@zukhruf/evals/ranking` (later)    | Compares a ranked list with judged items, as trec_eval does.                                                           |
+| `@zukhruf/evals/clustering` (later) | Compares a partition with a labelled partition, as the CoNLL reference scorer does.                                    |
 
 A subpath imports only the core. It never imports another subpath.
 
-The core holds the parts that all families share: the ratios, the scorers, the penalties, `Comparer`, `Grouped`, `ScorerSet`, `Totals` and `Bootstrap`. A part that reads an input has a type parameter for that input. So a scorer of one family cannot read the input of another family (ADR 0002). `./promptfoo` holds `ScorerAssertion`. Today `./structured` is the one family. `./classification` (#3889) is the next family.
+The core holds the parts that all families share: the ratios, the scorers, the penalties, `Comparer`, `Grouped`, `ScorerSet`, `Totals` and `Bootstrap`. A part that reads an input has a type parameter for that input. So a scorer of one family cannot read the input of another family (ADR 0002). `./promptfoo` holds `ScorerAssertion`. The families are `./structured` and `./classification`.
 
 ## Score one answer
 
@@ -41,6 +41,11 @@ new Precision(new ClassMatches('home')).score(comparison); // Ratio { part: 0, w
 
 A `Ratio` is a part and a whole. Its value is the part divided by the whole, and 0 when the whole is 0. `Precision`, `Recall`, `F1` and `FBeta` read the counts of a `Matches`: the hits, the stated and the expected. Each family gives its own matches, and these scorers take any of them.
 
+The ratio of `new FBeta(matches, { beta, form })` has the part (1 + β²) × hits and the whole β² × expected + stated, so many of them add up to the micro F-measure. `F1` is `FBeta` with β = 1. The form gives the value (ADR 0003):
+
+- `new CountsForm()` is the default. It is scikit-learn's arithmetic, and its value is the part divided by the whole: 0 when the whole is 0. So 1 hit of 5 stated and 1 expected gives 1/3.
+- `new PrecisionRecallForm()` is (1 + β²)·P·R / (β²·P + R): 0 when there are no hits. SOB's evaluate.py uses it. The same counts give 0.33333333333333337.
+
 ## Combine scorers
 
 A penalty is a factor in [0, 1] for one input, as BLEU's brevity penalty is. The factor 1 is no penalty. A penalty is also a scorer: its ratio is `Ratio(factor, 1)`. A gate is the penalty whose factor is 0 or 1. A gate says what it checks (`holds`) and why it fails (`explain`).
@@ -53,9 +58,9 @@ A penalty is a factor in [0, 1] for one input, as BLEU's brevity penalty is. The
 
 ## Score with many scorers at once
 
-A `ScorerSet` holds labelled scorers and gives a `Scorecard`: passed, reason, checks and one named ratio for each label. It passes when each of its gates holds. The family's comparer makes the input once, and each scorer reads it.
+A `ScorerSet` holds labelled scorers and gives a `Scorecard`: passed, reason, checks and one named ratio for each label. It passes when each of its gates holds. Each gate gives a check, whose `name` is the label of the gate. The `comparer` of the family is required, because the core cannot know a family: `new ScorerSet(scorers, { comparer: new LabelComparer() })`. It makes the input once, and each scorer reads it.
 
-A grouped scorer gives one ratio for each group of an input, under the label `${group} ${label}`: `PerField` gives one for each field in `./structured`, and `PerClass` gives one for each class in `./classification`. Both extend `Grouped` of the core, so a `ScorerSet` holds them beside plain scorers (Inspect AI's `grouped()` applies a metric to each group in the same way).
+A grouped scorer gives one ratio for each group of an input, under the label `${group} ${label}`: `PerField` gives one for each field in `./structured`, and `PerClass` gives one for each class in `./classification`. Both extend `Grouped` of the core: a subclass gives its groups with `groups(input)`, and `ratios` drops a group whose whole is 0. So a `ScorerSet` holds them beside plain scorers (Inspect AI's `grouped()` applies a metric to each group in the same way).
 
 ```ts
 import { Recall, ScorerSet } from '@zukhruf/evals';
@@ -81,6 +86,10 @@ const pageKinds = new ScorerSet(
 - A plain scorer gives its counts, such as Ratio(2, 3). `Totals` then gives the micro average.
 - A `SampleAveraged` scorer gives its value over 1. `Totals` then gives the samples average: the mean of the values of the answers.
 
+`Totals` adds with CPython's compensated `sum()`. A sum of integer weights is exact, so its means and accuracies equal scikit-learn's for integer weights. A sum of float weights can differ from numpy's pairwise sum in the last bit. For float weights, use `ClassCounts` and `BrierScore.mean` of `./classification`.
+
+`RatioOfSums.of(ratios)` adds a list of ratios in one call.
+
 `Bootstrap` gives the interval of one name over the scorecards, with `@zukhruf/statistics`. You give it the number of resamples, the random index and the method of the interval.
 
 ## Compare structured values
@@ -91,61 +100,86 @@ It needs two optional peers: `npm install @zukhruf/evals @cfworker/json-schema m
 
 ## Score labels
 
-> **Designed, not in this release.** `./classification` is built in backlog #3889 (ADR 0003). This section is its API on paper.
+`./classification` compares the stated labels of an answer with its expected labels. One label is a set of one label, so one model serves multiclass answers (one class) and multilabel answers (a set of classes). The arithmetic follows scikit-learn 1.9.1, bit for bit (ADR 0003). The golden tests compare each number with the output of `src/classification/fixtures/sklearn/generate.py`.
 
-`./classification` compares the stated labels of an answer with its expected labels. One label is a set of one label, so one model serves a class (multiclass) and a set of classes (multilabel). The arithmetic follows scikit-learn 1.9.1, bit for bit.
+It needs one optional peer: `npm install @zukhruf/evals @stdlib/blas-ext-base-gsumpw`. That package gives numpy's pairwise sum.
 
 ### For each answer
 
-`LabelComparer` reads the stated labels from the answer and gives a `LabelComparison`. Its matches count one answer:
+A case holds the expected labels and the weight: `new LabelCase({ expected, weight })`. `expected` is a label or a list of labels. `LabelVarsCase` reads `vars.expected` and `vars.weight` of a test (a test without a weight weighs 1). `LabelConfigCase` reads `config.expected` of an assertion, with the weight 1.
+
+`LabelComparer` reads the stated labels of an answer and gives a `LabelComparison`. It reads a label or a list of labels as they are. It reads text in this order:
+
+1. A JSON array of labels gives those labels.
+2. A number gives a number label, but only when each expected label of the case is a number. So `"7"` matches the label `7` and the label `"7"`.
+3. Other text is one string label, without its white space at the start and the end.
+
+`comparison.only(label)` gives the comparison of one class: each side keeps the label when it has it.
+
+The matches of a comparison count one answer:
 
 | Matches                   | Hits                             | Stated                   | Expected               |
 | ------------------------- | -------------------------------- | ------------------------ | ---------------------- |
 | `new ClassMatches(label)` | 1 when both sides have the label | 1 when the answer has it | 1 when the case has it |
 | `new AllClassMatches()`   | the labels that both sides have  | the stated labels        | the expected labels    |
 
-`LabelsMatch` is a gate: it holds when the stated labels are the expected labels. `Totals` of its ratios gives the accuracy (for a set of classes: the subset accuracy of scikit-learn). `new PerClass(scorer, { labels })` gives one ratio for each class, under the label `${class} ${label}`.
+`LabelsMatch` is a gate: it holds when the stated labels are the expected labels. `new PerClass(scorer, { labels })` gives one ratio for each class, under the label `${class} ${label}`. Without `labels`, the classes are the labels of both sides of the answer, in the order of numpy's `unique()` (numbers by value, strings by code point).
 
-So a promptfoo run gives the micro precision, recall and F1, and the precision and recall of each class, in its column headers.
+`Totals` of these ratios gives scikit-learn's numbers, bit for bit, for integer weights:
+
+- `ClassMatches` gives the precision, recall and F1 of each class (`average=None`).
+- `AllClassMatches` gives the micro average.
+- `LabelsMatch` gives `accuracy_score` (for multilabel answers, the subset accuracy).
+
+So a promptfoo run gives the micro precision, recall and F1, and the score of each class, in its column headers.
 
 ### For a whole run
 
-A macro or weighted average is not a ratio of sums: it takes the value of each class first. `ClassCounts` keeps the counts of each class (true positives, predicted, true), as scikit-learn's `multilabel_confusion_matrix` gives them. Add each comparison, then read the metrics:
+A macro average or a weighted average is not a ratio of sums: it needs the score of each class first. `ClassCounts` keeps the counts of each class: the true positives (hits), the predicted (stated) and the true (expected). It adds the weight of each answer in the order of the answers, as numpy's `bincount` does. torchmetrics does the same with `update()` and `compute()`.
 
 ```ts
 import {
   ClassCounts,
-  CountsForm,
+  LabelCase,
+  LabelComparer,
   MacroAverage,
   WeightedAverage,
 } from '@zukhruf/evals/classification';
 
-const counts = new ClassCounts();
-for (const comparison of comparisons) counts.add(comparison);
+const counts = ClassCounts.of({
+  expected: ['a', 'b', 'b'],
+  stated: ['a', 'a', 'b'],
+});
 
 counts.accuracy(); // accuracy_score
 counts.fBeta({ beta: 1, average: new MacroAverage() }); // f1_score(average='macro')
 counts.precision({ average: new WeightedAverage() }); // precision_score(average='weighted')
-counts.fBeta({
-  beta: 0.5,
-  average: new MacroAverage(),
-  form: new CountsForm(),
-});
-counts.confusionMatrix(); // confusion_matrix, labels in sorted order
+counts.confusionMatrix().rows(); // confusion_matrix, labels in sorted order
+
+// The same counts, one answer at a time:
+const run = new ClassCounts({ multilabel: false });
+const testCase = new LabelCase({ expected: 'a', weight: 1 });
+run.add(new LabelComparer().compare('a', testCase), testCase.weight);
 ```
 
-- `average` is a Strategy: `new MicroAverage()`, `new MacroAverage()`, `new WeightedAverage()` or `new BinaryAverage(positiveLabel)`. The samples average is a `SampleAveraged` scorer, because it needs the value of each answer.
-- `zeroDivision` is the value of a class score whose denominator is 0: 0 (the default, as scikit-learn's `"warn"` gives), 1 or `NaN`.
-- `form` is the arithmetic of the F-measure (ADR 0003). `new CountsForm()` is scikit-learn's and the default; it also gives the bits of TREC's F0.5 for integer counts. `new PrecisionRecallForm()` is van Rijsbergen's and SOB's.
-- `ClassCounts.of(stated, expected)` builds the counts from two arrays of labels, as a batch.
+- `ClassCounts.of({ expected, stated, weights })` builds multiclass counts from two arrays of labels. `weights` is optional, and an answer without a weight weighs 1.
+- `ClassCounts.ofIndicators({ expected, stated, weights })` builds multilabel counts from two label indicator matrices. Each column is a class, also when no answer has it.
+- `new ClassCounts({ multilabel })` starts empty, and `add(comparison, weight)` adds one answer. Multiclass counts refuse an answer with no label or more than one label on a side.
+- `average` is a Strategy: `new MicroAverage()`, `new MacroAverage()`, `new WeightedAverage()` or `new BinaryAverage(positiveLabel)`. `Average.of(classes, score)` gives one number from the score of each class. The micro average adds the counts with numpy's pairwise sum. The macro average is numpy's `nanmean`. The weighted average is scikit-learn's `_nanaverage`: it drops each NaN score with its weight, and it gives the plain mean when the weights add up to 0. `BinaryAverage` throws when scikit-learn raises: for multilabel counts, for more than two classes, and for a positive label that is not one of two classes. The samples average is a `SampleAveraged` scorer, because it needs the value of each answer.
+- `labels` selects the classes to score, in its order. By default it is every class, in sorted order.
+- `zeroDivision` is the score of a class whose denominator is 0: 0 (the default, as scikit-learn's `"warn"` gives), 1 or `NaN`. A macro average and a weighted average skip a `NaN` score.
+- `form` is the arithmetic of the F-measure (ADR 0003). `new CountsForm()` is scikit-learn's and the default. It also gives the bits of TREC's F0.5 for integer counts. `new PrecisionRecallForm()` is van Rijsbergen's and SOB's.
+- `confusionMatrix()` throws for multilabel counts, as scikit-learn raises.
 
 ### Probabilities
 
-`BrierScore` compares the stated probability of each class with the expected labels, as scikit-learn's `brier_score_loss` does. Its ratio is the score of one answer over 1, so `Totals` gives the mean.
+`ProbabilityComparer` reads the stated probability of each class of an answer and gives a `ProbabilityComparison`. The answer is a `Map`, a plain object or the JSON text of an object. A key is a number label when the expected label is a number. A probability outside [0, 1] throws a `RangeError`. The case has one expected label.
+
+`BrierScore` follows scikit-learn's `brier_score_loss`. For one answer, it adds the squares of (1 for the expected label, else 0, minus the probability) over the classes in sorted order, with numpy's pairwise sum. For two classes, it multiplies the sum by 0.5. `new BrierScore({ positiveLabel })` reads only the probability p of the positive label, and the two classes are 1 − p and p. Its ratio is the score of one answer over 1. `brierScore.mean(comparisons, weights)` gives the score of a whole run with numpy's pairwise sum, bit for bit.
 
 ## Use it with promptfoo
 
-> `ScorerAssertion` is in `./promptfoo`. It takes the comparer and the case reader of a family. The sample below scores labels, and `./classification` is not in this release (#3889). [docs/structured.md](docs/structured.md) has a structured sample of today.
+`ScorerAssertion` is in `./promptfoo`. It takes the comparer and the case reader of a family. The sample below scores labels. [docs/structured.md](docs/structured.md) has a structured sample.
 
 `PromptfooAssertion` adapts a scorer set to a per-row assertion. Each ratio becomes a named score with its whole as the weight, so the column header shows the same ratio of sums as `Totals`. It reads the case from the config of the assertion.
 
@@ -313,6 +347,7 @@ export interface Comparer<Case extends Weighted, Input> {
 }
 
 export type Check = {
+  readonly name: string;
   readonly passed: boolean;
   readonly score: number;
   readonly reason: string;
@@ -429,30 +464,36 @@ export class AssertionModule<Name extends string> {
   assert(...names: Name[]): FileAssertion[];
 }
 
-// @zukhruf/evals/classification (designed; built in #3889)
+// @zukhruf/evals/classification
 
-/** A label: an int or a string, as scikit-learn reads a label. */
+/** A label: a number or a string, as scikit-learn reads a label. */
 export type Label = number | string;
 
 /** The expected labels of one test, and its weight. */
 export class LabelCase implements Weighted {
-  constructor(expected: Label | readonly Label[], weight?: number);
+  constructor(options: { expected: Label | readonly Label[]; weight: number });
   readonly expected: ReadonlySet<Label>;
   readonly weight: number;
 }
-/** Reads `vars.expected` (a label or a list of labels) and `vars.weight`. */
+/** Reads `vars.expected` (a label or a list of labels) and `vars.weight` (1 when none). */
 export class LabelVarsCase implements CaseReader<LabelCase> {}
-/** Reads `config.expected`. */
+/** Reads `config.expected`, with the weight 1. */
 export class LabelConfigCase implements CaseReader<LabelCase> {}
 
 export class LabelComparison {
+  constructor(sides: {
+    stated: ReadonlySet<Label>;
+    expected: ReadonlySet<Label>;
+  });
   readonly stated: ReadonlySet<Label>;
   readonly expected: ReadonlySet<Label>;
+  /** The labels of both sides, in the order of numpy's unique(). */
+  labels(): Label[];
+  /** The comparison of one class. */
+  only(label: Label): LabelComparison;
 }
-/** Reads the stated labels of an answer: a label, a list of labels, or their JSON text. */
-export class LabelComparer implements Comparer<LabelCase, LabelComparison> {
-  constructor(options?: { normalize?: (label: string) => string });
-}
+/** Reads the stated labels: a label, a list of labels, a JSON array of labels, a number, or one string label. */
+export class LabelComparer implements Comparer<LabelCase, LabelComparison> {}
 
 export class ClassMatches implements Matches<LabelComparison> {
   constructor(label: Label);
@@ -463,12 +504,20 @@ export class LabelsMatch extends Gate<LabelComparison> {}
 export class PerClass extends Grouped<LabelComparison> {
   constructor(
     scorer: Scorer<LabelComparison>,
-    options: { labels: readonly Label[] },
+    options?: { labels?: readonly Label[] },
   );
 }
 
+/** The classes that an average reads. */
+export type Classes = {
+  readonly selected: ReadonlyMap<Label, Counts>;
+  readonly present: ReadonlyMap<Label, Counts>;
+  readonly multilabel: boolean;
+};
 /** How the scores of the classes become one number (Strategy). */
-export interface Average {}
+export interface Average {
+  of(classes: Classes, score: (counts: Counts) => number): number;
+}
 export class MicroAverage implements Average {}
 export class MacroAverage implements Average {}
 export class WeightedAverage implements Average {}
@@ -476,33 +525,33 @@ export class BinaryAverage implements Average {
   constructor(positiveLabel: Label);
 }
 
+type ScoreOptions = {
+  average: Average;
+  labels?: readonly Label[];
+  /** 0 (the default), 1 or NaN. */
+  zeroDivision?: number;
+};
 /** The counts of each class over many answers: true positives, predicted and true. */
 export class ClassCounts {
-  static of(
-    stated: readonly (Label | readonly Label[])[],
-    expected: readonly (Label | readonly Label[])[],
-  ): ClassCounts;
-  add(comparison: LabelComparison): void;
+  constructor(options: { multilabel: boolean });
+  static of(answers: {
+    expected: readonly Label[];
+    stated: readonly Label[];
+    weights?: readonly number[];
+  }): ClassCounts;
+  static ofIndicators(answers: {
+    expected: readonly (readonly number[])[];
+    stated: readonly (readonly number[])[];
+    weights?: readonly number[];
+  }): ClassCounts;
+  add(comparison: LabelComparison, weight: number): void;
   labels(): Label[];
   accuracy(): number;
-  precision(options: {
-    average: Average;
-    zeroDivision?: number;
-    labels?: readonly Label[];
-  }): number;
-  recall(options: {
-    average: Average;
-    zeroDivision?: number;
-    labels?: readonly Label[];
-  }): number;
-  fBeta(options: {
-    beta: number;
-    average: Average;
-    zeroDivision?: number;
-    labels?: readonly Label[];
-    form?: FMeasureForm;
-  }): number;
+  precision(options: ScoreOptions): number;
+  recall(options: ScoreOptions): number;
+  fBeta(options: ScoreOptions & { beta: number; form?: FMeasureForm }): number;
   support(): ReadonlyMap<Label, number>;
+  /** Throws for multilabel counts. */
   confusionMatrix(): ConfusionMatrix;
 }
 export class ConfusionMatrix {
@@ -511,12 +560,24 @@ export class ConfusionMatrix {
   rows(): number[][];
 }
 
-/** The stated probability of each class of one answer. */
+/** The stated probability of each class of one answer, and its expected label. */
 export class ProbabilityComparison {
   readonly probabilities: ReadonlyMap<Label, number>;
-  readonly expected: ReadonlySet<Label>;
+  readonly expected: Label;
 }
-export class BrierScore implements Scorer<ProbabilityComparison> {}
+/** Reads the probability of each label from a Map, an object or its JSON text. */
+export class ProbabilityComparer implements Comparer<
+  LabelCase,
+  ProbabilityComparison
+> {}
+export class BrierScore implements Scorer<ProbabilityComparison> {
+  constructor(options?: { positiveLabel?: Label });
+  /** The score of a whole run, with numpy's pairwise sum. */
+  mean(
+    comparisons: readonly ProbabilityComparison[],
+    weights?: readonly number[],
+  ): number;
+}
 ```
 
 ## Who uses each part
@@ -532,7 +593,7 @@ The consumers below come from the search of 2026-11-06 (eight evals in four repo
 | relevance-filtering eval                     | `./classification` (`BinaryAverage`, F0.5 with `CountsForm`, `BrierScore`)                         | mutex #3891                   |
 | event-detection eval                         | nothing yet: its MUC, B³, CEAF-e and BLANC wait for `./clustering`                                 | —                             |
 
-The build is in two items: mutex #3888 (the core, `./promptfoo` and the move of `./structured`) and mutex #3889 (`./classification`).
+The package was built in two items: mutex #3888 (the core, `./promptfoo` and the move of `./structured`) and mutex #3889 (the generic core, the F-measure form and `./classification`).
 
 ## Documentation
 

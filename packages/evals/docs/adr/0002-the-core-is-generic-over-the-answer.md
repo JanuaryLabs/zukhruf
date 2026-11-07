@@ -35,3 +35,7 @@ The type parameter comes with the second input. Ezz's Rule of Three says, at str
 
 - `ScorerAssertion` takes a `comparer` in place of the `spec` of structured-eval's ADR 0011.
 - A family has no case of another family. A structured case adds its JSON Schema. A label case has only its labels and its weight.
+
+## Note (2026-11-07, #3889)
+
+The list above names `F1Ratio` among the parts that moved without a change. #3889 removed `F1Ratio`. The value of an F-measure now comes from an `FMeasureForm` (ADR 0003, "The form of the F-measure"), and an unexported `FMeasureRatio` holds the part and the whole. `FBeta` and `F1` of the core take the form.

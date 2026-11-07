@@ -1,7 +1,7 @@
 {
   "name": "@zukhruf/evals",
   "version": "0.8.3",
-  "description": "Scores the answers of an eval against their labels, with one import path for each shape of answer: a core of ratios, scorecards, totals and bootstrap intervals, ./structured for structured values, and ./promptfoo for promptfoo.",
+  "description": "Scores the answers of an eval against their labels, with one import path for each shape of answer: a core of ratios and totals, ./structured for structured values, ./classification for labels as scikit-learn scores them, and ./promptfoo.",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -18,6 +18,8 @@
     "scorers",
     "structured-output",
     "extraction",
+    "classification",
+    "scikit-learn",
     "precision",
     "recall",
     "promptfoo"

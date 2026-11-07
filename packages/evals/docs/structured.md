@@ -139,6 +139,8 @@ The other scorers:
 
 `TokenF1` reads words as SQuAD's `normalize_answer` does: lower case, punctuation and the articles a, an and the become spaces, and a word is a run of Python's `\w`. A value that is not text becomes its text as Python's `str()` gives it.
 
+`TokenF1` takes a `form`, as `F1` does. The token F1 of each leaf uses it. `CountsForm` is the default. SOB's caller gives `new TokenF1({ whenNoWords: 1, absentAs: null, form: new PrecisionRecallForm() })`, because evaluate.py's `token_f1` is 2·p·r/(p + r).
+
 ## Gates
 
 A gate is a scorer whose ratio is 1 of 1 or 0 of 1. A gate extends `Gate` (Template Method): it says what it checks (`holds`) and why it fails (`explain`). A gate is also a penalty, with the factor 1 or 0 (see Penalties).
@@ -208,7 +210,7 @@ The validator is cfworker's. The validator and `SchemaTypeWalk` read the schema 
 
 ## Score a record with a scorer set
 
-A `ScorerSet` of the core holds labelled scorers and gives a `Scorecard`. Its comparer compares the stated value with the case once, and each scorer reads that comparison. In this subpath, the comparer is `new TreeWalk(spec)`.
+A `ScorerSet` of the core holds labelled scorers and gives a `Scorecard`. Its comparer compares the stated value with the case once, and each scorer reads that comparison. In this subpath, the comparer is `new TreeWalk(spec)`. The comparer is required: the core has no default comparer, because it cannot know a family.
 
 ```ts
 import { F1, Penalized, Precision, Recall, ScorerSet } from '@zukhruf/evals';

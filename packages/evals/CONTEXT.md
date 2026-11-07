@@ -139,6 +139,9 @@ The count of each pair of an expected label and a stated label, with the labels 
 **Accuracy**:
 The answers whose stated labels are their expected labels, divided by the answers. For multilabel answers, scikit-learn calls it the subset accuracy.
 
+**Probability**:
+The stated chance of one class in an answer: a number in [0, 1].
+
 **Brier score**:
 The mean squared difference between the stated probability of each class and its expected label, as scikit-learn's `brier_score_loss` gives it.
 
@@ -222,8 +225,8 @@ Two values agree as Python's `==` says: `true` agrees with `1` and with `1.0`. S
 **Presence**:
 The expected record and the stated record both have a value at one path. The two values can be different. A path match counts presence.
 
-**F1 ratio**:
-The ratio of an F1: its part is 2 × hits, and its whole is the stated and the expected. Its value is 2·p·r/(p + r), as SOB's evaluate.py gives it, so it can differ from the part divided by the whole in the last bit. It is the one exception to the rule of a ratio.
+**F1 of SOB**:
+SOB's evaluate.py gives each F1 as 2·p·r/(p + r): the precision-recall form of the F-measure. SOB's caller gives that form to `F1` and `TokenF1`. The default form, the counts form, gives the part divided by the whole.
 
 **Token F1**:
 The F1 of the words that a stated value shares with its expected value, as SQuAD reads words. It gives partial credit to text.
