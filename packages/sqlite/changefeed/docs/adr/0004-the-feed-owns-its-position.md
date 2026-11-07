@@ -1,5 +1,7 @@
 # The feed owns its position
 
+Superseded in part on 2026-11-07 for how the host selects the kind of the feed: the presence of a position path no longer sets both where the position is and what the first run gives. The host gives a `Position` and a `Start`. See [ADR 0007](./0007-the-host-gives-the-position-and-the-start.md). The feed still owns its position: its format, its save at the next request for a batch, and delivery at least once.
+
 A pass compares the rows of each table with what the feed saw before. A reader that was not running can find the changes of that time, and the deletes above all, only by this comparison. Thus the record of what the feed saw, its position, is the domain of the feed. The host does not need to know its format.
 
 Debezium's embedded engine gives a precedent. The host names a file (`offset.storage.file.filename`), and the engine writes its offsets into it in its own format. Kafka's consumer gives a precedent for the time of the save: with auto-commit, a poll commits the offsets of the records that the last poll gave. Delivery is at least once.

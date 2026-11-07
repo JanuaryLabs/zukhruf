@@ -36,18 +36,18 @@ export function tablesOf(snapshot: Snapshot): Table[] {
           name: table,
           keyColumns: ['rowid'],
           rows: () =>
-            snapshot
-              .iterate(`SELECT rowid AS rowid, * ${from}`)
-              .map(({ rowid, ...after }) => ({
+            rowsOf(snapshot, `SELECT rowid AS rowid, * ${from}`).map(
+              ({ rowid, ...after }) => ({
                 key: { rowid: keyValue(rowid) },
                 after,
-              })),
+              }),
+            ),
         };
       return {
         name: table,
         keyColumns: primaryKey,
         rows: () =>
-          snapshot.iterate(`SELECT * ${from}`).map((row) => {
+          rowsOf(snapshot, `SELECT * ${from}`).map((row) => {
             const after = { ...row };
             return {
               key: Object.fromEntries(
@@ -94,10 +94,18 @@ function text(value: SQLOutputValue | undefined): string {
   return value;
 }
 
-// The schema rules above keep NULL out of a key, and node:sqlite gives a
-// bigint only to a statement that asks for it.
+// The rows of a table, each integer as a bigint: an INTEGER of SQLite holds
+// 64 bits, and a number holds an integer exactly only up to 2^53.
+function rowsOf(
+  snapshot: Snapshot,
+  sql: string,
+): IteratorObject<Record<string, SQLOutputValue>, undefined> {
+  return snapshot.prepare(sql, { readBigInts: true }).iterate();
+}
+
+// The schema rules above keep NULL out of a key.
 function keyValue(value: SQLOutputValue | undefined): KeyValue {
-  if (value === null || value === undefined || typeof value === 'bigint')
+  if (value === null || value === undefined)
     throw new TypeError(`SQLite gave ${String(value)} for a key value`);
   return value;
 }

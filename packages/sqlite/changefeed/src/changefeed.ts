@@ -4,9 +4,8 @@ import { Snapshot } from '@zukhruf/sqlite-snapshot';
 
 import type { ChangeEvent } from './change-event.ts';
 import { pass, requireWal } from './pass.ts';
-import { PositionFile } from './position-file.ts';
-import { PositionInMemory } from './position-in-memory.ts';
 import type { Position } from './position.ts';
+import type { Start } from './start.ts';
 
 export type WatchOptions = {
   /** Milliseconds between two polls of the data version. */
@@ -17,34 +16,34 @@ export type WatchOptions = {
   readonly clock: WallClock;
 };
 
-// One run of watch: the position it compares with, and whether its first
-// pass is a baseline that gives no batch.
-type Run = { readonly position: Position; readonly baseline: boolean };
+export type ChangefeedOptions = {
+  /** Where the feed keeps what it saw. The feed owns it, and disposes it. */
+  readonly position: Position;
+  /** What the first pass gives, until the position is saved once. */
+  readonly start: Start;
+};
 
 /**
  * A change event for each changed row of each table of a SQLite database
- * that another process owns. With a position path the feed is durable and
- * goes on from its last saved batch; without one it observes from now.
+ * that another process owns.
  */
 export class Changefeed implements Disposable {
   readonly #path: string;
   readonly #version: DataVersion;
-  readonly #run: () => Run;
+  readonly #position: Position;
+  readonly #start: Start;
   readonly #resources: DisposableStack;
 
-  constructor(databasePath: string, positionPath?: string) {
+  constructor(databasePath: string, { position, start }: ChangefeedOptions) {
     using resources = new DisposableStack();
+    // The feed owns its position also when the database fails to open.
+    this.#position = resources.use(position);
+    this.#start = start;
     this.#path = databasePath;
     this.#version = resources.use(new DataVersion(databasePath));
     {
       using snapshot = new Snapshot(databasePath);
       requireWal(snapshot);
-    }
-    if (positionPath === undefined) {
-      this.#run = () => ({ position: new PositionInMemory(), baseline: true });
-    } else {
-      const file = resources.use(new PositionFile(positionPath));
-      this.#run = () => ({ position: file, baseline: false });
     }
     this.#resources = resources.move();
   }
@@ -58,8 +57,6 @@ export class Changefeed implements Disposable {
     signal,
     clock,
   }: WatchOptions): AsyncGenerator<ChangeEvent[], void, undefined> {
-    const { position, baseline } = this.#run();
-    let silent = baseline;
     // The data version is a local read: a check that takes the whole
     // interval is stuck.
     const watcher = new ChangeWatcher([this.#version], {
@@ -72,17 +69,20 @@ export class Changefeed implements Disposable {
       // The feed cannot go on without its data version.
       if (outcome?.state === 'failed') throw outcome.error;
       if (outcome?.state !== 'changed') continue;
-      const { events, update } = await pass(this.#path, position);
-      if (silent || events.length === 0) {
-        // A baseline, or a pass with no events, has no batch to deliver.
-        position.save(update);
-        silent = false;
+      const { events, update } = await pass(
+        this.#path,
+        this.#position,
+        this.#start,
+      );
+      if (events.length === 0) {
+        // A pass with no events, a baseline too, has no batch to deliver.
+        this.#position.save(update);
         continue;
       }
       yield events;
       // The loop may not have applied a batch that an abort stopped.
       signal.throwIfAborted();
-      position.save(update);
+      this.#position.save(update);
     }
     // The poll ends only when the signal aborts.
     signal.throwIfAborted();

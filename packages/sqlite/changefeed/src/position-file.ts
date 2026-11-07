@@ -6,10 +6,13 @@ import { transaction } from '@zukhruf/sqlite-transaction';
 
 import type { Position, PositionUpdate } from './position.ts';
 
-// The position of a durable feed: a SQLite file of the feed, with the key
-// columns of each table and one fingerprint for each (table, key). A missing
-// or empty file is a position with no tables.
-export class PositionFile implements Position, Disposable {
+/**
+ * A position in a SQLite file of the feed, at the path that the host gives:
+ * the key columns of each table and one fingerprint for each (table, key). A
+ * new run of a feed goes on from it. A missing or empty file is a position
+ * that no pass saved.
+ */
+export class PositionFile implements Position {
   readonly #database: DatabaseSync;
 
   constructor(path: string) {
@@ -31,6 +34,13 @@ export class PositionFile implements Position, Disposable {
       this.#database.close();
       throw cause;
     }
+  }
+
+  // The user version of the file is 1 after the first save.
+  started(): boolean {
+    return (
+      this.#database.prepare('PRAGMA user_version').get()?.user_version !== 0
+    );
   }
 
   keyColumns(): ReadonlyMap<string, readonly string[]> {
@@ -84,6 +94,7 @@ export class PositionFile implements Position, Disposable {
           for (const [key, entry] of Object.entries(state.snapshot))
             keepRow.run(table, key, fingerprintOf(entry));
         }
+        this.#database.exec('PRAGMA user_version = 1');
       },
       { mode: 'immediate' },
     );

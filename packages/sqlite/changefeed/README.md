@@ -22,11 +22,21 @@ npm install @zukhruf/sqlite-changefeed
 The owner is a notes app. It keeps its database in WAL mode. The reader copies each table into its own store:
 
 ```ts
-import { Changefeed } from '@zukhruf/sqlite-changefeed';
+import {
+  Baseline,
+  Changefeed,
+  PositionFile,
+  ReadEveryRow,
+} from '@zukhruf/sqlite-changefeed';
 
 using feed = new Changefeed(
   `${process.env.HOME}/Library/Application Support/Notes/notes.sqlite`,
-  `${process.env.HOME}/.notes-copy/notes.position.sqlite`,
+  {
+    position: new PositionFile(
+      `${process.env.HOME}/.notes-copy/notes.position.sqlite`,
+    ),
+    start: new ReadEveryRow(),
+  },
 );
 
 const stop = new AbortController();
@@ -46,11 +56,19 @@ for await (const batch of feed.watch({
 }
 ```
 
-This is a durable feed: it has a position file, and a new run goes on from the last saved batch. Without a position path, the feed observes from now. It reads each table one time with no events, and then gives only the changes after that moment:
+The feed gets two objects. The position tells where the feed keeps what it saw. The start tells what the first pass gives. This is a durable feed: its position is a file, and a new run goes on from the last saved batch. Its start is `ReadEveryRow`, so the first run gives each row as a read event.
+
+A host that sends a message for each change does not want the rows that were there before it started. Give it the start `Baseline`. The first pass is then a baseline: it keeps the fingerprints, and gives no events. A position file keeps the baseline, so a new run gives the changes that the owner made while the feed was stopped:
 
 ```ts
 using feed = new Changefeed(
   `${process.env.HOME}/Library/Application Support/Notes/notes.sqlite`,
+  {
+    position: new PositionFile(
+      `${process.env.HOME}/.notes-alerts/notes.position.sqlite`,
+    ),
+    start: new Baseline(),
+  },
 );
 
 for await (const batch of feed.watch({
@@ -62,14 +80,14 @@ for await (const batch of feed.watch({
 }
 ```
 
-The first run of a durable feed gives a `read` event for each row of each table. Each later batch gives only the rows that changed:
+With `ReadEveryRow`, the first run gives a `read` event for each row of each table. Each later batch gives only the rows that changed. Each integer is a `bigint`:
 
 ```
-{ table: 'notes',  op: 'read',   key: { id: 1 }, after: { id: 1, folder_id: 7, title: 'Plan', body: '…' } }
-{ table: 'tags',   op: 'read',   key: { rowid: 3 }, after: { note_id: 1, tag: 'q4' } }
+{ table: 'notes',  op: 'read',   key: { id: 1n }, after: { id: 1n, folder_id: 7n, title: 'Plan', body: '…' } }
+{ table: 'tags',   op: 'read',   key: { rowid: 3n }, after: { note_id: 1n, tag: 'q4' } }
 …
-{ table: 'notes',  op: 'update', key: { id: 1 }, after: { id: 1, folder_id: 7, title: 'Plan v2', body: '…' } }
-{ table: 'tags',   op: 'delete', key: { rowid: 3 } }
+{ table: 'notes',  op: 'update', key: { id: 1n }, after: { id: 1n, folder_id: 7n, title: 'Plan v2', body: '…' } }
+{ table: 'tags',   op: 'delete', key: { rowid: 3n } }
 { table: 'drafts', op: 'truncate' }
 ```
 
@@ -77,7 +95,7 @@ The table `tags` has no primary key, so its key is the `rowid`. The owner droppe
 
 ## The rules
 
-- The database must be in WAL mode. `new Changefeed(databasePath, positionPath?)` reads `PRAGMA journal_mode`, and throws `JournalModeError` for each other mode. Each pass reads it again, because the owner can replace the file. [ADR 0002](./docs/adr/0002-wal-is-required.md) tells why.
+- The database must be in WAL mode. `new Changefeed(databasePath, { position, start })` reads `PRAGMA journal_mode`, and throws `JournalModeError` for each other mode. Each pass reads it again, because the owner can replace the file. [ADR 0002](./docs/adr/0002-wal-is-required.md) tells why.
 - The feed reads each table that `PRAGMA table_list` gives with type `table`, except a name that starts with `sqlite_`. It does not read an internal table of SQLite (`sqlite_schema`, `sqlite_sequence`, `sqlite_stat*`), a `view`, a `virtual` table, or a `shadow` table. A shadow table holds the data of a virtual table, for example the `notes_fts_data` of an FTS5 table. It is internal to the module of the virtual table. [ADR 0006](./docs/adr/0006-every-table-keyed-by-its-primary-key.md) tells why.
 - The key of a row is the identity that SQLite makes unique and not `NULL`. The feed finds it from the schema of each table:
   - A `WITHOUT ROWID` table: its declared primary key. SQLite makes each column of it `NOT NULL`, and `PRAGMA table_info` gives `notnull` 1 for each column of it.
@@ -85,14 +103,19 @@ The table `tags` has no primary key, so its key is the `rowid`. The owner droppe
   - Each other rowid table: the key `{ rowid }`. A declared primary key of a rowid table can hold `NULL` in many rows, so it does not identify a row.
   - The columns of a primary key are the columns of `PRAGMA table_info` with a `pk` above 0, in the order of `pk`.
 - `VACUUM` can change the `rowid` of each row of a table with no primary key. The feed compares the rows by `rowid`, so it then gives an event for each `rowid` whose row changed: an `insert` for a new `rowid`, an `update` for a `rowid` that now holds a different row, and a `delete` for a `rowid` that is gone. The SQLite documentation advises an `INTEGER PRIMARY KEY` for a stable `rowid`.
-- A pass copies each row into a plain object, because `node:sqlite` gives rows with no prototype. `after` keeps the values that SQLite gives: a number, a string, `null`, or a `Uint8Array` for a `BLOB`.
+- A pass copies each row into a plain object, because `node:sqlite` gives rows with no prototype. `after` keeps the values that SQLite gives: a `bigint` for an `INTEGER`, a number for a `REAL`, a string, `null`, or a `Uint8Array` for a `BLOB`. A key value is a `bigint` for an `INTEGER` too, such as each `rowid`. [ADR 0008](./docs/adr/0008-every-integer-is-a-bigint.md) tells why.
 - A change event is `{ table, op, key, after? }`, or `{ table, op: 'truncate' }`. `op` is `read`, `insert`, `update`, `delete` or `truncate`. `after` is the full row for `read`, `insert` and `update`. There is no `before`. [ADR 0003](./docs/adr/0003-the-change-event.md) tells why.
 - `read` is each row of a table that the position does not have: each row at the first run, and each row of a new table.
 - `truncate` tells that the owner dropped a table, or changed the columns of its primary key. Remove all rows of that table from your copy. When the primary key changed, a `read` for each row comes after the `truncate`.
 - A change to the other columns of a table, for example a new column, changes the `after` of its rows. Each row then gives an `update`.
-- The feed owns its position. `positionPath` is optional, and it sets the kind of the feed. [ADR 0004](./docs/adr/0004-the-feed-owns-its-position.md) tells why.
-  - With `positionPath`, the feed is durable. It keeps its position in its own SQLite file at that path: one fingerprint for each row of each table. It creates the file when the file is missing. A missing or empty file is a first run, and the first pass gives each row as `read`. A later run goes on from the saved position. Give each durable feed its own position file.
-  - Without `positionPath`, the feed observes from now. The first pass of each `watch` is the baseline: it reads each table, keeps the fingerprints in memory, and gives no batch. Then it gives only the changes after the baseline. It writes nothing to disk. A new run takes a new baseline, so it does not see the changes that the owner made while the feed was stopped.
+- `new Changefeed(databasePath, { position, start })` takes two strategies. Both are required. [ADR 0007](./docs/adr/0007-the-host-gives-the-position-and-the-start.md) tells why.
+  - `position` is where the feed keeps what it saw. The feed owns it: the feed disposes it, also when `new Changefeed` throws. A new position is a class that implements `Position`.
+    - `new PositionFile(path)` keeps the position in its own SQLite file at that path: one fingerprint for each row of each table. It creates the file when the file is missing. A missing or empty file is a position that no pass saved. A later run goes on from the saved position. Give each feed its own position file.
+    - `new PositionInMemory()` keeps the position in memory. It writes nothing to disk. A new feed starts with a new position, so it does not see the changes that the owner made while no feed ran.
+  - `start` is what the first pass gives for each table, until a pass saves the position. A new start is a class that implements `Start`.
+    - `new ReadEveryRow()` gives each row as `read`.
+    - `new Baseline()` keeps the fingerprint of each row, and gives no events. The feed then gives only the changes after the baseline.
+  - After the first save, a table that the position does not have gives a `read` for each row, with each start. Thus a table that the owner creates after a baseline gives its rows.
 - `watch({ interval, signal })` gives batches. A batch is an array of change events. The feed makes a first pass at once. Then it polls the data version each `interval` milliseconds, and makes a pass only when the data version changed. A pass that finds no change gives no batch, and the feed saves its position at once: for example, the key columns of a new table with no rows.
 - A durable feed saves the position of a batch when the loop asks for the next batch. It writes the position in one transaction. Apply each event of a batch before the loop goes on.
 - Delivery of a durable feed is at least once. If the process stops before the loop asks for the next batch, the next run gives the same batch again. A loop that stops with `break`, an error or an abort also gives its last batch again at the next run. Apply each event so that a second apply has no effect: a `put` by key, a `remove` by key, a `clear` by table.
@@ -104,8 +127,9 @@ The table `tags` has no primary key, so its key is the `rowid`. The owner droppe
 
 - You see only the net change between two passes. A row that the owner inserts and deletes between two passes gives no event. A row that the owner changes two times gives one `update`.
 - Each commit of the owner makes a pass that reads each table in full. The cost of a pass grows with the size of the database, also when the commit changed one row. [ADR 0001](./docs/adr/0001-capture-by-snapshot-differential.md) names a later option that reads only the changed tables.
-- The position keeps one fingerprint for each row of each table. It grows with the number of rows. A durable feed keeps it on disk. A feed that observes from now keeps it in memory.
-- A feed that observes from now does not see the changes that the owner made while the feed was stopped.
+- The position keeps one fingerprint for each row of each table. It grows with the number of rows. A `PositionFile` keeps it on disk. A `PositionInMemory` keeps it in memory.
+- A feed with a `PositionInMemory` does not see the changes that the owner made while no feed ran.
+- A batch holds all the change events of one pass, with the full rows. A first run with `ReadEveryRow`, a new table, or a new primary key of a large table gives a large batch. A `Baseline` keeps no rows, only the fingerprints.
 - Precedent for scale: Fivetran's Teleport Sync, which also compares data sets, gives a warning when more than 50,000 records change between two syncs.
 
 ## Errors
@@ -123,7 +147,8 @@ The table `tags` has no primary key, so its key is the `rowid`. The owner droppe
 | CockroachDB `CREATE CHANGEFEED`    | A changefeed for each table that it names. Each message is keyed by the primary key of the row.                                                                                                                                                                                                                                                                                                                     |
 | Azure Cosmos DB change feed        | A feed of the changes to the items of a container. A reader goes on from the last position that it read.                                                                                                                                                                                                                                                                                                            |
 | Debezium                           | Change data capture from the log of the database. It gives one topic for each table, keyed by the primary key. Its event has the envelope `before`, `after`, `op` (`c`, `u`, `d`, `r`, `t`), `source` and `ts_ms`. This package keeps `op` and `after`. Its `read` is the `r`, and its `truncate` is the `t`. The embedded engine keeps its offsets in a file that the host names (`offset.storage.file.filename`). |
-| Kafka `auto.offset.reset`          | It applies when a consumer has no committed offset. `earliest` reads each record again, and `latest` reads only the records that come after the consumer starts. Spring Cloud Stream gives `earliest` to a consumer with a group, which keeps committed offsets, and `latest` to a consumer with no group. A feed with a position path is the first case, and a feed with no path is the second.                    |
+| Kafka `auto.offset.reset`          | It applies when a consumer has no committed offset. `earliest` reads each record again, and `latest` reads only the records that come after the consumer starts. The group, which keeps the committed offsets, is a separate choice. The `position` of the feed is the group, and its `start` is the reset: `ReadEveryRow` is `earliest`, and `Baseline` is `latest`.                                               |
+| Debezium `snapshot.mode`           | `initial` reads each row of each table at the first start, and `no_data` reads none. A custom mode is a class of its `Snapshotter` interface. The offsets go to a store that the host selects (`offset.storage`, a file or memory). `ReadEveryRow` is `initial`, `Baseline` is `no_data`, and `Position` is the store.                                                                                              |
 | Kafka consumer auto-commit         | A poll commits the offsets of the records that the last poll gave. Delivery is at least once. The feed saves its position in the same way: at the next request for a batch.                                                                                                                                                                                                                                         |
 | Kafka Connect JDBC source          | Change data capture by query. Its modes are `bulk`, `incrementing`, `timestamp` and `timestamp+incrementing`. It does not see a hard delete: a deleted row is not in the next query. This package compares the full table, so it sees each delete.                                                                                                                                                                  |
 | Fivetran Teleport Sync             | It compares the data set of the source with the data set of the last sync, with no log. It needs only a read-only user and no timestamp columns. This package does the same for a SQLite file.                                                                                                                                                                                                                      |
@@ -149,6 +174,8 @@ This package needed four changes in other packages. All four are done:
 - [0004 The feed owns its position](./docs/adr/0004-the-feed-owns-its-position.md)
 - [0005 One snapshot for each pass](./docs/adr/0005-one-snapshot-for-each-pass.md)
 - [0006 Every table, keyed by its primary key](./docs/adr/0006-every-table-keyed-by-its-primary-key.md)
+- [0007 The host gives the position and the start](./docs/adr/0007-the-host-gives-the-position-and-the-start.md)
+- [0008 Every integer is a bigint](./docs/adr/0008-every-integer-is-a-bigint.md)
 
 ## Development
 
@@ -164,10 +191,13 @@ src/
   changefeed.ts           Changefeed: the connections, the runs of watch, and the save of a batch
   pass.ts                 one pass in one snapshot, and the WAL check
   tables.ts               the tables of PRAGMA table_list, the key of each table, and its rows
-  table-changes.ts        the change events of one table, from the differential
-  position.ts             the position, and what a pass changes in it
-  position-file.ts        the position of a durable feed, in its SQLite file
-  position-in-memory.ts   the position of an observing feed
+  table-changes.ts        the change events of one table, and its snapshot with no events
+  position.ts             Position, and what a pass changes in it
+  position-file.ts        PositionFile: the position in its own SQLite file
+  position-in-memory.ts   PositionInMemory: the position in memory
+  start.ts                Start: what the first pass gives for a table
+  read-every-row.ts       ReadEveryRow: a read for each row
+  baseline.ts             Baseline: fingerprints, and no events
   change-event.ts         the change event
   journal-mode-error.ts   JournalModeError
   index.ts                the public exports

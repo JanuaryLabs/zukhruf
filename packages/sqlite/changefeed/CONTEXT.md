@@ -25,15 +25,15 @@ A table that `PRAGMA table_list` gives with type `shadow`: it holds the data of 
 _Avoid_: Backing table, index table
 
 **Durable feed**:
-A feed with a position file. Its first run gives each row as a read event. A later run goes on from the saved position. Delivery is at least once.
+A feed whose position is a position file (`PositionFile`). A later run goes on from the saved position. Delivery is at least once.
 _Avoid_: Persistent feed, earliest
 
-**Observing feed**:
-A feed with no position file. Each `watch` takes a baseline when it starts, and then gives only the changes after it. It writes nothing to disk. A new run starts from a new baseline.
-_Avoid_: Live feed, ephemeral feed, latest
+**Start**:
+What the first pass gives for each table, until a pass saves the position (`Start`). The host gives it to the feed. `ReadEveryRow` gives a read event for each row. `Baseline` gives a baseline.
+_Avoid_: Offset reset, snapshot mode, earliest, latest
 
 **Baseline**:
-The first pass of each `watch` of an observing feed. It reads each table and keeps the fingerprints in memory, and it gives no events.
+A first pass that keeps the fingerprint of each row of each table, and gives no events (`Baseline`). Later passes give only the changes after it.
 _Avoid_: Initial scan, snapshot (a snapshot holds one moment of the database)
 
 **Pass**:
@@ -49,7 +49,7 @@ What a pass gives for one row: `{ table, op, key, after? }`. `op` is `read`, `in
 _Avoid_: Change (the word of `@zukhruf/snapshot-differential`), message, record
 
 **Read event**:
-A change event with `op: 'read'`. A pass gives it for each row of a table that the position does not have: each row at the first run of a durable feed, and each row of a new table. It is the `r` of Debezium.
+A change event with `op: 'read'`. A pass gives it for each row of a table that the position does not have: each row of the first pass when the start is `ReadEveryRow`, and each row of a new table after the first save. It is the `r` of Debezium.
 _Avoid_: Insert, initial load, backfill
 
 **Truncate event**:
@@ -57,11 +57,11 @@ A change event with `op: 'truncate'`: `{ table, op: 'truncate' }`. A pass gives 
 _Avoid_: Reset, clear, drop
 
 **Position**:
-What the feed saw at its last saved batch: the key columns of each table, and one fingerprint for each row. A durable feed keeps it in its own SQLite file, at the path that the host gives. An observing feed keeps it in memory. It does not keep the rows.
+What the feed saw at its last saved batch: the key columns of each table, and one fingerprint for each row (`Position`). The host gives it to the feed, and the feed owns it. A `PositionFile` keeps it in its own SQLite file, at the path that the host gives. A `PositionInMemory` keeps it in memory. It does not keep the rows. A position that no pass saved is not started.
 _Avoid_: State, offset, checkpoint (a checkpoint copies the WAL of the owner into its file), cursor, snapshot (a snapshot holds one moment of the database)
 
 **Save**:
-The write of the position of a batch by a durable feed, in one transaction. It occurs when the host asks for the next batch.
+The write of the position of a batch, in one transaction. It occurs when the host asks for the next batch. The first save starts the position.
 _Avoid_: Commit (a commit is what the owner does), ack, flush
 
 **Net change**:
