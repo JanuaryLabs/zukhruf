@@ -1,6 +1,6 @@
 {
   "name": "@zukhruf/embeddings",
-  "version": "0.8.5",
+  "version": "0.8.6",
   "description": "Document embeddings in SQLite. Embeds only new or changed text through an AI SDK model. Finds the nearest documents of a document by exact cosine similarity in a publish-date window, and the similarity of a query vector to each document of a date range.",
   "license": "MIT",
   "repository": {
@@ -41,12 +41,12 @@
     "access": "public"
   },
   "dependencies": {
-    "@zukhruf/sqlite-drift": "^0.8.5",
-    "@zukhruf/sqlite-transaction": "^0.8.5",
+    "@zukhruf/sqlite-drift": "^0.8.6",
+    "@zukhruf/sqlite-transaction": "^0.8.6",
     "ai": "^7.0.154"
   },
   "devDependencies": {
-    "@zukhruf/sqlite-open": "^0.8.5",
-    "@zukhruf/testing": "^0.8.5"
+    "@zukhruf/sqlite-open": "^0.8.6",
+    "@zukhruf/testing": "^0.8.6"
   }
 }
