@@ -1,4 +1,4 @@
-import gsumpw from '@stdlib/blas-ext-base-gsumpw';
+import { mean, sum } from '@zukhruf/statistics';
 
 import { Ratio } from '../aggregation/ratio.ts';
 import type { Scorer } from '../scorers/scorer.ts';
@@ -39,8 +39,7 @@ export class BrierScore implements Scorer<ProbabilityComparison> {
     weights?: readonly number[],
   ): number {
     const scores = comparisons.map((comparison) => this.#value(comparison));
-    if (weights === undefined)
-      return gsumpw(scores.length, scores, 1) / scores.length;
+    if (weights === undefined) return mean(scores);
     if (weights.length !== scores.length)
       throw new RangeError(
         `The answers and the weights have ${scores.length} and ${weights.length} values.`,
@@ -48,9 +47,7 @@ export class BrierScore implements Scorer<ProbabilityComparison> {
     const weighted = scores.map(
       (score, index) => score * (weights[index] ?? 0),
     );
-    return (
-      gsumpw(weighted.length, weighted, 1) / gsumpw(weights.length, weights, 1)
-    );
+    return sum(weighted) / sum(weights);
   }
 
   #value({ probabilities, expected }: ProbabilityComparison): number {
@@ -72,7 +69,7 @@ export class BrierScore implements Scorer<ProbabilityComparison> {
         const difference = (label === expected ? 1 : 0) - probability;
         return difference * difference;
       });
-    const sum = gsumpw(squares.length, squares, 1);
-    return squares.length < 3 ? 0.5 * sum : sum;
+    const total = sum(squares);
+    return squares.length < 3 ? 0.5 * total : total;
   }
 }

@@ -1,4 +1,4 @@
-import gsumpw from '@stdlib/blas-ext-base-gsumpw';
+import { sum } from '@zukhruf/statistics';
 
 import { Counts } from '../aggregation/counts.ts';
 import {
@@ -173,10 +173,7 @@ export class ClassCounts {
   // stated labels are its expected labels (the subset accuracy for a set of
   // classes).
   accuracy(): number {
-    return (
-      gsumpw(this.#rights.length, this.#rights, 1) /
-      gsumpw(this.#weights.length, this.#weights, 1)
-    );
+    return sum(this.#rights) / sum(this.#weights);
   }
 
   // precision_score: hits / stated of each class, then the average.

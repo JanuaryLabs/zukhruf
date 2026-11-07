@@ -1,4 +1,4 @@
-import gsumpw from '@stdlib/blas-ext-base-gsumpw';
+import { sum } from '@zukhruf/statistics';
 
 import { Counts } from '../aggregation/counts.ts';
 import type { Average, Classes } from './average.ts';
@@ -8,13 +8,13 @@ import type { Average, Classes } from './average.ts';
 export class MicroAverage implements Average {
   of({ selected }: Classes, score: (counts: Counts) => number): number {
     const classes = [...selected.values()];
-    const sum = (count: (counts: Counts) => number) =>
-      gsumpw(classes.length, classes.map(count), 1);
+    const total = (count: (counts: Counts) => number) =>
+      sum(classes.map(count));
     return score(
       new Counts({
-        hits: sum(({ hits }) => hits),
-        stated: sum(({ stated }) => stated),
-        expected: sum(({ expected }) => expected),
+        hits: total(({ hits }) => hits),
+        stated: total(({ stated }) => stated),
+        expected: total(({ expected }) => expected),
       }),
     );
   }

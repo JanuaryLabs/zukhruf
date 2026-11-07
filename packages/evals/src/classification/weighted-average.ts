@@ -1,4 +1,4 @@
-import gsumpw from '@stdlib/blas-ext-base-gsumpw';
+import { sum } from '@zukhruf/statistics';
 
 import type { Counts } from '../aggregation/counts.ts';
 import type { Average, Classes } from './average.ts';
@@ -13,7 +13,6 @@ export class WeightedAverage implements Average {
       .map((counts) => ({ value: score(counts), weight: counts.expected }))
       .filter(({ value }) => !Number.isNaN(value));
     if (kept.length === 0) return Number.NaN;
-    const sum = (values: readonly number[]) => gsumpw(values.length, values, 1);
     const weights = sum(kept.map(({ weight }) => weight));
     if (weights === 0) return sum(kept.map(({ value }) => value)) / kept.length;
     return sum(kept.map(({ value, weight }) => value * weight)) / weights;

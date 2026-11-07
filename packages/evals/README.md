@@ -102,7 +102,7 @@ It needs two optional peers: `npm install @zukhruf/evals @cfworker/json-schema m
 
 `./classification` compares the stated labels of an answer with its expected labels. One label is a set of one label, so one model serves multiclass answers (one class) and multilabel answers (a set of classes). The arithmetic follows scikit-learn 1.9.1, bit for bit (ADR 0003). The golden tests compare each number with the output of `src/classification/fixtures/sklearn/generate.py`.
 
-It needs one optional peer: `npm install @zukhruf/evals @stdlib/blas-ext-base-gsumpw`. That package gives numpy's pairwise sum.
+It needs no peer: `npm install @zukhruf/evals`. Its sums are `sum` and `mean` of `@zukhruf/statistics`, which give `numpy.sum` and `numpy.mean` bit for bit.
 
 ### For each answer
 

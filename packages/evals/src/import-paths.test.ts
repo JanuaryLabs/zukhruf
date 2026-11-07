@@ -19,9 +19,9 @@ const importPath = (path: string, hidden: readonly string[]) =>
     `await import('${path}');`,
   ]);
 
-const peers = {
+const peers: Readonly<Record<string, readonly string[]>> = {
   '@zukhruf/evals/structured': ['@cfworker/json-schema', 'munkres'],
-  '@zukhruf/evals/classification': ['@stdlib/blas-ext-base-gsumpw'],
+  '@zukhruf/evals/classification': [],
 };
 const allPeers = Object.values(peers).flat();
 
