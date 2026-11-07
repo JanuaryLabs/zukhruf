@@ -1,7 +1,14 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { F1, Recall, SampleAveraged, ScorerSet, Totals } from '../../index.ts';
+import {
+  F1,
+  PrecisionRecallForm,
+  Recall,
+  SampleAveraged,
+  ScorerSet,
+  Totals,
+} from '../../index.ts';
 import {
   ConfigCase,
   JsonSchema,
@@ -52,7 +59,10 @@ test('Totals gives the micro average of a plain scorer and the samples average o
 test('SampleAveraged gives the value of its scorer over 1, F1 with the bits of f1_from_counts, and the whenEmpty of its caller for a ratio with the whole 0', () => {
   const scorer = new ScorerSet(
     {
-      f1: new SampleAveraged(new F1(new PathMatches()), { whenEmpty: 0.25 }),
+      f1: new SampleAveraged(
+        new F1(new PathMatches(), { form: new PrecisionRecallForm() }),
+        { whenEmpty: 0.25 },
+      ),
       recall: new SampleAveraged(new Recall(new PathMatches()), {
         whenEmpty: 0.25,
       }),

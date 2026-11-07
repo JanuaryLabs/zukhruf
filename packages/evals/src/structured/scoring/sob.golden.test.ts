@@ -20,6 +20,7 @@ import {
   MeanOf,
   Penalized,
   type Penalty,
+  PrecisionRecallForm,
   Recall,
   SampleAveraged,
   type Scorer,
@@ -81,13 +82,14 @@ const lines = readFileSync(join(folder, 'responses.jsonl'), 'utf8').split('\n');
 // the records, so each scorer is SampleAveraged, with SOB's value for a
 // record whose ratio has the whole 0, and Penalized multiplies the value of
 // the record. SOB pairs each array by position and compares values with
-// Python's ==.
+// Python's ==, and each F1 is evaluate.py's 2·p·r/(p + r).
+const form = new PrecisionRecallForm();
 const spec = new ComparisonSpec({ comparator: new PythonEquality() });
 const mean = (scorer: Scorer<Comparison>, whenEmpty: number) =>
   new SampleAveraged(scorer, { whenEmpty });
 const parsed = new ParseSuccess();
 const compliance = new SchemaCompliance();
-const keyF1 = mean(new F1(new PathMatches()), 0);
+const keyF1 = mean(new F1(new PathMatches(), { form }), 0);
 
 function sob(coverage: Penalty<Comparison>) {
   const truth = new Penalized(
@@ -96,7 +98,7 @@ function sob(coverage: Penalty<Comparison>) {
     coverage,
   );
   const faithfulness = new Penalized(
-    mean(new TokenF1({ whenNoWords: 1, absentAs: null }), 1),
+    mean(new TokenF1({ whenNoWords: 1, absentAs: null, form }), 1),
     compliance,
     coverage,
   );

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { SampleAveraged, ScorerSet } from '../../index.ts';
+import { PrecisionRecallForm, SampleAveraged, ScorerSet } from '../../index.ts';
 import {
   ConfigCase,
   JsonSchema,
@@ -16,7 +16,11 @@ const schema = { type: 'object' };
 test('TokenF1 gives the token F1 of a leaf with the arithmetic of token_f1: 2·p·r/(p + r) gives 0.33333333333333337 where 2·overlap/(stated + expected) gives 1/3', () => {
   const scorer = new ScorerSet(
     {
-      f1: new TokenF1({ whenNoWords: 1, absentAs: null }),
+      f1: new TokenF1({
+        whenNoWords: 1,
+        absentAs: null,
+        form: new PrecisionRecallForm(),
+      }),
     },
     { comparer: new TreeWalk() },
   );
@@ -30,6 +34,22 @@ test('TokenF1 gives the token F1 of a leaf with the arithmetic of token_f1: 2·p
 
   const ratio = scorecard.ratios.get('f1');
   assert.deepEqual([ratio?.part, ratio?.whole], [0.33333333333333337, 1]);
+});
+
+test('TokenF1 gives by default the token F1 in the counts form of scikit-learn: 1/3 for one shared word of 5 stated words and 1 expected word', () => {
+  const scorer = new ScorerSet(
+    { f1: new TokenF1({ whenNoWords: 1, absentAs: null }) },
+    { comparer: new TreeWalk() },
+  );
+
+  const scorecard = scorer.score(
+    { a: 'x b c d e' },
+    new ConfigCase({
+      schema: new JsonSchema(JsonValue.from(schema), { draft: '7' }),
+    }).from({ expected: { a: 'X' } }),
+  );
+
+  assert.equal(scorecard.ratios.get('f1')?.value, 1 / 3);
 });
 
 test("TokenF1 gives the sum of the token F1 of each expected leaf over the expected leaves, and splits words as Python's \\w does: a letter outside ASCII is part of a word, so café is not caf and éthe holds no article", () => {

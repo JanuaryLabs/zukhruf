@@ -1,7 +1,13 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { F1, Precision, Recall, ScorerSet } from '../../index.ts';
+import {
+  F1,
+  Precision,
+  PrecisionRecallForm,
+  Recall,
+  ScorerSet,
+} from '../../index.ts';
 import { ScorerAssertion } from '../../promptfoo/index.ts';
 import {
   ByBestMatch,
@@ -394,6 +400,35 @@ test('TokenOverlapAtLeast on a field agrees when the F1 of the words, as SQuAD r
   );
 
   assert.deepEqual(values, [1, 0.5]);
+});
+
+test('TokenOverlapAtLeast compares the F1 in the counts form by default, and in the form of its caller: 1 shared word of 5 stated and 1 expected is 1/3, below 0.33333333333333337, which the precision-recall form gives', () => {
+  const scorer = new ScorerSet(
+    { recall: new Recall(new ValueMatches()) },
+    {
+      comparer: new TreeWalk(
+        new ComparisonSpec({
+          fields: {
+            '$.a': new TokenOverlapAtLeast(1 / 3),
+            '$.b': new TokenOverlapAtLeast(0.33333333333333337),
+            '$.c': new TokenOverlapAtLeast(0.33333333333333337, {
+              form: new PrecisionRecallForm(),
+            }),
+          },
+        }),
+      ),
+    },
+  );
+  const testCase = new ConfigCase({
+    schema: new JsonSchema(JsonValue.from({}), { draft: '7' }),
+  }).from({ expected: { a: 'X', b: 'X', c: 'X' } });
+
+  const stated = 'x b c d e';
+  const recall = scorer
+    .score({ a: stated, b: stated, c: stated }, testCase)
+    .ratios.get('recall');
+
+  assert.deepEqual([recall?.part, recall?.whole], [2, 3]);
 });
 
 test('the agreement that ByBestMatch maximizes uses the comparator of each field: items that agree only inside the tolerance of NumberWithin pair', () => {

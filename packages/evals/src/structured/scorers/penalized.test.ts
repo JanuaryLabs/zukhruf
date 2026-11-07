@@ -6,6 +6,7 @@ import {
   F1,
   Penalized,
   Penalty,
+  PrecisionRecallForm,
   Recall,
   SampleAveraged,
   ScorerSet,
@@ -107,7 +108,7 @@ test('Penalized gives the ratio of its scorer as it is when every gate holds, so
   const scorer = new ScorerSet(
     {
       f1: new Penalized(
-        new F1(new PathMatches()),
+        new F1(new PathMatches(), { form: new PrecisionRecallForm() }),
         new ParseSuccess(),
         new SchemaCompliance(),
       ),
@@ -132,7 +133,7 @@ test('Penalized gives the ratio of its scorer as it is when every gate holds, so
 });
 
 test('a gate gives 1 of 1 or 0 of 1, and AtLeast holds when the value of its scorer reaches the threshold, the value of an F1 and not its part over its whole', () => {
-  const f1 = new F1(new PathMatches());
+  const f1 = new F1(new PathMatches(), { form: new PrecisionRecallForm() });
   const scorer = new ScorerSet(
     {
       parsed: new ParseSuccess(),
@@ -204,7 +205,10 @@ test('Penalized multiplies the part by each factor in the order of its arguments
   // Path F1 4 hits of 7 stated and 6 expected: 0.6153846153846153. Its
   // factors are 0.46752867265687764 for the target 0.9 and
   // 0.7728535201062673 for 0.7, and the recall of the values is 2 of 6.
-  const keys = new SampleAveraged(new F1(new PathMatches()), { whenEmpty: 0 });
+  const keys = new SampleAveraged(
+    new F1(new PathMatches(), { form: new PrecisionRecallForm() }),
+    { whenEmpty: 0 },
+  );
   const near = new ShortfallPenalty(keys, { target: 0.9, power: 2 });
   const far = new ShortfallPenalty(keys, { target: 0.7, power: 2 });
   const values = new SampleAveraged(new Recall(new ValueMatches()), {

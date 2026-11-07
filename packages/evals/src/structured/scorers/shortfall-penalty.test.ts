@@ -3,6 +3,7 @@ import { test } from 'node:test';
 
 import {
   F1,
+  PrecisionRecallForm,
   SampleAveraged,
   ScorerSet,
   ShortfallPenalty,
@@ -26,7 +27,10 @@ test('ShortfallPenalty throws a RangeError for a target or a power that is 0, be
 });
 
 test('ShortfallPenalty gives min(1, (value / target) ** power) with the bits of compute_coverage_gate of evaluate.py for image: 1 at the target and above it, 0 at 0, and the fraction to the power below it', () => {
-  const keys = new SampleAveraged(new F1(new PathMatches()), { whenEmpty: 0 });
+  const keys = new SampleAveraged(
+    new F1(new PathMatches(), { form: new PrecisionRecallForm() }),
+    { whenEmpty: 0 },
+  );
   const scorer = new ScorerSet(
     {
       coverage: new ShortfallPenalty(keys, { target: 0.9, power: 2 }),

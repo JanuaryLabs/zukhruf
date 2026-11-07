@@ -57,7 +57,7 @@ export const offerSpec = new ComparisonSpec({
 
 - `arrays`: the alignment of each array (a Strategy). `new ByPosition()` pairs item 0 with item 0, item 1 with item 1, and so on. `new ByBestMatch(match?)` pairs the items in any order: of all pairings, it takes the one with the most agreeing leaves (the Hungarian algorithm). A `Match` can forbid a pair. An array that the spec does not name pairs by position.
 - `comparator`: the comparator of all leaves (a Strategy). The default is `new JsonEquality()`: two values agree when JSON Schema calls them equal, so `1` agrees with `1.0`, and `true` does not agree with `1`. `new PythonEquality()` agrees as Python's `==` does, so `true` agrees with `1`.
-- `fields`: the comparator of one field, in place of `comparator`. The package has `new NumberWithin(tolerance)`, `new NormalizedText()` and `new TokenOverlapAtLeast(threshold)`. Your own comparator implements `Comparator`.
+- `fields`: the comparator of one field, in place of `comparator`. The package has `new NumberWithin(tolerance)`, `new NormalizedText()` and `new TokenOverlapAtLeast(threshold, { form })`, whose `form` is the arithmetic of its F1 (`CountsForm` when you give none). Your own comparator implements `Comparator`.
 - `exclude`: the fields that the walk does not compare.
 
 A field is a path without its item positions, such as `$.offers[*].value.amount`. A `Path` is a list of steps, so `{"a.b": 1}` and `{"a": {"b": 1}}` have different paths.
@@ -112,7 +112,7 @@ import { PathMatches, ValueMatches } from '@zukhruf/evals/structured';
 
 new Recall(new ValueMatches()).score(comparison); // Ratio { part: 2, whole: 3 }: 2 right of 3 expected
 new Precision(new PathMatches()).score(comparison); // Ratio { part: 3, whole: 4 }: 3 present of 4 stated
-new F1(new ValueMatches()).score(comparison); // F1Ratio { part: 4, whole: 7 }
+new F1(new ValueMatches()).score(comparison); // a ratio { part: 4, whole: 7 }, with the value 4 / 7
 ```
 
 `PathMatches` and `ValueMatches` read the same leaf pairs, and each one says only what a hit is (Template Method). `Precision`, `Recall` and `F1` take any `Matches`.
@@ -127,7 +127,7 @@ A leaf has no value when its key is absent. `new ValueMatches({ nullIsMissing: t
 | no value | value          | stated                        |
 | no value | no value       | nothing                       |
 
-`F1` gives an `F1Ratio`. Its part is 2 × hits and its whole is stated + expected, so many F1 ratios add up to the micro F1. Its value is 0 with no hits, else 2·p·r/(p + r), the arithmetic of SOB's evaluate.py. That value can differ from part / whole in the last bit. This is the one exception to the rule of `Ratio` (ADR 0011).
+The ratio of `F1` has the part 2 × hits and the whole stated + expected, so many F1 ratios add up to the micro F1. Its form gives its value (ADR 0003). The default form, `CountsForm`, gives part / whole, as scikit-learn does. `new F1(matches, { form: new PrecisionRecallForm() })` gives 0 with no hits, else 2·p·r/(p + r), the arithmetic of SOB's evaluate.py. That value can differ from part / whole in the last bit.
 
 The other scorers:
 
@@ -168,7 +168,7 @@ A penalty is a factor in [0, 1] for one comparison, as BLEU's brevity penalty is
 | a `Gate`           | 1 when the gate holds, else 0                                                                                                         |
 | `ShortfallPenalty` | `new ShortfallPenalty(scorer, { target, power })`: `min(1, (value / target) ** power)`, with the value of the scorer; 1 at the target |
 
-`new Penalized(scorer, ...penalties)` multiplies the part of the ratio by each factor, for each record (Decorator). The whole stays. When the product is 1, the ratio of the scorer stays as it is, so an `F1Ratio` keeps its value. A factor outside [0, 1] throws a `RangeError`.
+`new Penalized(scorer, ...penalties)` multiplies the part of the ratio by each factor, for each record (Decorator). The whole stays. When the product is 1, the ratio of the scorer stays as it is, so an F1 keeps the value of its form. A factor outside [0, 1] throws a `RangeError`.
 
 ```ts
 const valid = new SchemaCompliance();
@@ -187,7 +187,7 @@ What a factor f does to each average:
 
 - Samples average: a record gives Ratio(v × f, 1), so `Totals` gives the mean of v × f.
 - Micro average: a record gives Ratio(hits × f, expected), so each hit counts with the factor of its record, and each expected value stays in the denominator.
-- `F1Ratio`: a factor between 0 and 1 gives a plain `Ratio`, whose value is part / whole.
+- An F1 with `PrecisionRecallForm`: a factor between 0 and 1 gives a plain `Ratio`, whose value is part / whole.
 
 ## Micro average and samples average
 
@@ -401,6 +401,7 @@ import {
   AtLeast,
   F1,
   Penalized,
+  PrecisionRecallForm,
   Recall,
   SampleAveraged,
   type Scorer,
@@ -429,8 +430,12 @@ const cases = new TextVarsCase({
 const mean = (scorer: Scorer<Comparison>, whenEmpty: number) =>
   new SampleAveraged(scorer, { whenEmpty });
 
+const form = new PrecisionRecallForm(); // each F1 is 2·p·r/(p + r)
 const compliance = new SchemaCompliance();
-const coverage = new AtLeast(mean(new F1(new PathMatches()), 0), 0.95);
+const coverage = new AtLeast(
+  mean(new F1(new PathMatches(), { form }), 0),
+  0.95,
+);
 
 const truth = new Penalized(
   mean(new Recall(new ValueMatches()), 1),
@@ -438,7 +443,7 @@ const truth = new Penalized(
   coverage,
 );
 const faithfulness = new Penalized(
-  mean(new TokenF1({ whenNoWords: 1, absentAs: null }), 1),
+  mean(new TokenF1({ whenNoWords: 1, absentAs: null, form }), 1),
   compliance,
   coverage,
 );
@@ -446,7 +451,10 @@ const pathRecall = new Penalized(
   mean(new Recall(new PathMatches()), 0),
   compliance,
 );
-const structure = new Penalized(mean(new F1(new PathMatches()), 0), compliance);
+const structure = new Penalized(
+  mean(new F1(new PathMatches(), { form }), 0),
+  compliance,
+);
 const types = new Penalized(mean(new TypePrecision(), 0), compliance);
 const required = new Penalized(
   mean(new RequiredKeyRecall(), 1),
@@ -455,7 +463,7 @@ const required = new Penalized(
 );
 ```
 
-SOB pairs each array by position, compares values with Python's `==`, reads null as a value, and takes the mean over the records. SOB's caller keeps its labels, its categories (`MeanOf`), its weights, its seeds and its interval method. The golden test composes SOB's report so and proves that it gives the numbers of evaluate.py, record by record.
+SOB pairs each array by position, compares values with Python's `==`, gives each F1 in the precision-recall form, reads null as a value, and takes the mean over the records. SOB's caller keeps its labels, its categories (`MeanOf`), its weights, its seeds and its interval method. The golden test composes SOB's report so and proves that it gives the numbers of evaluate.py, record by record.
 
 ### The subsets of SOB
 
@@ -467,6 +475,7 @@ import {
   F1,
   Penalized,
   type Penalty,
+  PrecisionRecallForm,
   Recall,
   SampleAveraged,
   type Scorer,
@@ -490,8 +499,9 @@ type Modality = 'text' | 'image' | 'audio';
 
 const mean = (scorer: Scorer<Comparison>, whenEmpty: number) =>
   new SampleAveraged(scorer, { whenEmpty });
+const form = new PrecisionRecallForm();
 const compliance = new SchemaCompliance();
-const keys = mean(new F1(new PathMatches()), 0); // raw_path_set_f1
+const keys = mean(new F1(new PathMatches(), { form }), 0); // raw_path_set_f1
 
 // compute_coverage_gate: text 1 or 0 at 0.95; image and audio min(1, (keys / 0.90) ** 2)
 const soft = new ShortfallPenalty(keys, { target: 0.9, power: 2 });
@@ -508,7 +518,7 @@ const scored = (modality: Modality) => ({
     coverage[modality],
   ),
   faithfulness: new Penalized(
-    mean(new TokenF1({ whenNoWords: 1, absentAs: null }), 1),
+    mean(new TokenF1({ whenNoWords: 1, absentAs: null, form }), 1),
     compliance,
     coverage[modality],
   ),

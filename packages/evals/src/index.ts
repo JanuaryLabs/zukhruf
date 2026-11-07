@@ -1,7 +1,11 @@
 export { Ratio } from './aggregation/ratio.ts';
 export { RatioOfSums } from './aggregation/ratio-of-sums.ts';
 export { Counts } from './aggregation/counts.ts';
-export { F1Ratio } from './aggregation/f1-ratio.ts';
+export {
+  CountsForm,
+  type FMeasureForm,
+  PrecisionRecallForm,
+} from './aggregation/f-measure-form.ts';
 export type { Check, Scorecard } from './scoring/scorecard.ts';
 export type {
   CaseReader,
@@ -14,6 +18,7 @@ export type { Scorer } from './scorers/scorer.ts';
 export type { Matches } from './scorers/matches.ts';
 export { Precision } from './scorers/precision.ts';
 export { Recall } from './scorers/recall.ts';
+export { FBeta } from './scorers/f-beta.ts';
 export { F1 } from './scorers/f1.ts';
 export { Penalty } from './scorers/penalty.ts';
 export { Gate } from './scorers/gate.ts';

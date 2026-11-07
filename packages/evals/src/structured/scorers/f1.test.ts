@@ -1,7 +1,13 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { F1, SampleAveraged, ScorerSet, Totals } from '../../index.ts';
+import {
+  F1,
+  PrecisionRecallForm,
+  SampleAveraged,
+  ScorerSet,
+  Totals,
+} from '../../index.ts';
 import {
   ConfigCase,
   JsonSchema,
@@ -12,7 +18,7 @@ import {
 
 test('F1 gives one record the bits of f1_from_counts, 2·p·r/(p + r) = 0.33333333333333337 where part/whole gives 1/3, and its part 2·hits and whole stated + expected add up to the micro F1 over many records', () => {
   const scorer = new ScorerSet(
-    { f1: new F1(new PathMatches()) },
+    { f1: new F1(new PathMatches(), { form: new PrecisionRecallForm() }) },
     { comparer: new TreeWalk() },
   );
   const testCase = new ConfigCase({
@@ -34,6 +40,23 @@ test('F1 gives one record the bits of f1_from_counts, 2·p·r/(p + r) = 0.333333
   const pooled = totals.get('f1').ratio;
   assert.deepEqual([pooled.part, pooled.whole], [6, 10]);
   assert.equal(totals.get('f1').value, 0.6);
+});
+
+test("F1 gives by default the counts form of scikit-learn's fbeta_score, so the value of one record is its part over its whole: 1/3 for 1 hit of 5 stated and 1 expected", () => {
+  const scorer = new ScorerSet(
+    { f1: new F1(new PathMatches()) },
+    { comparer: new TreeWalk() },
+  );
+  const testCase = new ConfigCase({
+    schema: new JsonSchema(JsonValue.from({ type: 'object' }), { draft: '7' }),
+  }).from({ expected: { a: 1 } });
+
+  const ratio = scorer
+    .score({ a: 'other', b: 2, c: 3, d: 4, e: 5 }, testCase)
+    .ratios.get('f1');
+
+  assert.equal(ratio?.value, 1 / 3);
+  assert.deepEqual([ratio?.part, ratio?.whole], [2, 6]);
 });
 
 test('F1 gives 0 when only one value has paths, and a ratio with the whole 0 when neither has one, which SampleAveraged gives the whenEmpty of its caller', () => {

@@ -7,7 +7,8 @@ import type { Scorer } from './scorer.ts';
 // record that fails a gate keeps its expected values in the denominator of
 // recall. A penalty on the means would give mean(a) × mean(b), so the
 // penalty is per record (ADR 0004). When every factor is 1, the ratio of the
-// scorer stays as it is, so an F1Ratio keeps its value (ADR 0012).
+// scorer stays as it is, so an F-measure keeps the value of its form (ADR
+// 0012).
 export class Penalized<Input> implements Scorer<Input> {
   readonly #scorer: Scorer<Input>;
   readonly #penalties: readonly Penalty<Input>[];

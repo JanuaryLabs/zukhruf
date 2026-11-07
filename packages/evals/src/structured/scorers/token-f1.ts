@@ -1,6 +1,9 @@
 import { NeumaierSum } from '@zukhruf/python';
 
-import { F1Ratio } from '../../aggregation/f1-ratio.ts';
+import {
+  CountsForm,
+  type FMeasureForm,
+} from '../../aggregation/f-measure-form.ts';
 import { Ratio } from '../../aggregation/ratio.ts';
 import type { Scorer } from '../../scorers/scorer.ts';
 import { BagOfWords } from '../comparison/bag-of-words.ts';
@@ -14,23 +17,28 @@ import type { LeafOptions } from './leaf-matches.ts';
 // a word gives whenNoWords (evaluate.py gives 1), and a path that the stated
 // value does not have is read as absentAs (evaluate.py reads None). With
 // nullIsMissing, a null leaf is no value: an expected null is not counted,
-// and a stated null is read as absentAs.
+// and a stated null is read as absentAs. The form is the arithmetic of each
+// F1: evaluate.py's is PrecisionRecallForm.
 export class TokenF1 implements Scorer<Comparison> {
   readonly #whenNoWords: number;
   readonly #absentAs: LeafValue;
   readonly #nullIsMissing: boolean;
+  readonly #form: FMeasureForm;
 
   constructor({
     whenNoWords,
     absentAs,
     nullIsMissing = false,
+    form = new CountsForm(),
   }: {
     readonly whenNoWords: number;
     readonly absentAs: LeafValue;
+    readonly form?: FMeasureForm;
   } & LeafOptions) {
     this.#whenNoWords = whenNoWords;
     this.#absentAs = absentAs;
     this.#nullIsMissing = nullIsMissing;
+    this.#form = form;
   }
 
   score(comparison: Comparison): Ratio {
@@ -52,12 +60,12 @@ export class TokenF1 implements Scorer<Comparison> {
     return new Ratio(sum.value, expected);
   }
 
-  // token_f1 of evaluate.py: the F1 of the shared words.
+  // token_f1 of evaluate.py: the F1 of the shared words, in the form.
   #tokenF1(expected: LeafValue, stated: LeafValue): number {
     const expectedWords = BagOfWords.of(expected);
     const statedWords = BagOfWords.of(stated);
     if (expectedWords.size === 0 && statedWords.size === 0)
       return this.#whenNoWords;
-    return new F1Ratio(expectedWords.shared(statedWords)).value;
+    return this.#form.of(expectedWords.shared(statedWords), 1);
   }
 }

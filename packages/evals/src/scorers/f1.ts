@@ -1,16 +1,13 @@
-import { F1Ratio } from '../aggregation/f1-ratio.ts';
+import type { FMeasureForm } from '../aggregation/f-measure-form.ts';
+import { FBeta } from './f-beta.ts';
 import type { Matches } from './matches.ts';
-import type { Scorer } from './scorer.ts';
 
-// The F1 of the hits: an F1Ratio of the counts.
-export class F1<Input> implements Scorer<Input> {
-  readonly #matches: Matches<Input>;
-
-  constructor(matches: Matches<Input>) {
-    this.#matches = matches;
-  }
-
-  score(input: Input): F1Ratio {
-    return new F1Ratio(this.#matches.counts(input));
+// The F1 of the hits: the F-beta with β = 1.
+export class F1<Input> extends FBeta<Input> {
+  constructor(
+    matches: Matches<Input>,
+    options: { readonly form?: FMeasureForm } = {},
+  ) {
+    super(matches, { ...options, beta: 1 });
   }
 }

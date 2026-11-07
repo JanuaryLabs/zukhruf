@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { F1 } from '../../index.ts';
+import { F1, PrecisionRecallForm } from '../../index.ts';
 import { ScorerAssertion } from '../../promptfoo/index.ts';
 import {
   ExactMatch,
@@ -128,12 +128,15 @@ test('canonical equality has no gate: an answer equal to the expected value scor
 });
 
 test('the assertion gives the value of the ratio of its scorer: an F1 with the bits of f1_from_counts, 0.33333333333333337 and not 1/3', () => {
-  const { value } = new ScorerAssertion(new F1(new PathMatches()), {
-    weight: 1,
-    threshold: 0,
-    comparer: new TreeWalk(),
-    cases: new TextVarsCase(),
-  });
+  const { value } = new ScorerAssertion(
+    new F1(new PathMatches(), { form: new PrecisionRecallForm() }),
+    {
+      weight: 1,
+      threshold: 0,
+      comparer: new TreeWalk(),
+      cases: new TextVarsCase(),
+    },
+  );
   const vars = { expected: '{"a": 1}', schema: { type: 'object' } };
 
   const f1 = value('{"a": 1, "b": 2, "c": 3, "d": 4, "e": 5}', { vars });
