@@ -1,5 +1,7 @@
 # A scorer gives a value for one answer, and a metric adds the values of many answers
 
+Status: amended by [ADR 0011](0011-one-comparison-core-alignment-per-array-and-sob-is-a-configuration.md) (accepted 2026-11-06). `Scorer.score` reads a `Comparison` and gives a `Ratio`, the scorers are in `src/scorers/`, and a `ScorerSet` passes when each of its gates holds.
+
 The package has three levels. A class such as `PathRecall` gives one number for one answer. `Totals` and `Bootstrap` add the numbers of many answers. An assertion connects a class to promptfoo. Before this ADR, the package called the first level a metric, as lm-evaluation-harness and DeepEval do. Ezz asked what the words mean ("I want to build lib of scoreres/metrics/assertion (not really sure what they are)", 2026-11-04). On 2026-11-06 he saw how widely used tools name the levels, and he chose the words of Inspect AI ("Inspect AI camp").
 
 How the tools name the levels (their source, read on 2026-11-06):

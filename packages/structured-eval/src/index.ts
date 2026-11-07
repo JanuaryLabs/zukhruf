@@ -1,18 +1,21 @@
 export { Ratio } from './aggregation/ratio.ts';
 export { RatioOfSums } from './aggregation/ratio-of-sums.ts';
-export type { Agreement, Alignment, Pairs } from './records/alignment.ts';
-export { ByBestMatch } from './records/alignments/by-best-match.ts';
-export { ByPosition } from './records/alignments/by-position.ts';
-export type { Comparator } from './records/comparator.ts';
-export { Exact } from './records/comparators/exact.ts';
-export { NormalizedText } from './records/comparators/normalized-text.ts';
-export { NumberWithin } from './records/comparators/number-within.ts';
-export { TokenOverlapAtLeast } from './records/comparators/token-overlap-at-least.ts';
-export type { Match } from './records/match.ts';
-export { RecordCase } from './records/record-case.ts';
-export { RecordScorer } from './records/record-scorer.ts';
-export { RecordSpec, type RecordSpecOptions } from './records/record-spec.ts';
-export { RecordSchema } from './records/schema/record-schema.ts';
+export { Counts } from './aggregation/counts.ts';
+export { F1Ratio } from './aggregation/f1-ratio.ts';
+export type { Agreement, Alignment, Pairs } from './comparison/alignment.ts';
+export { ByBestMatch } from './comparison/alignments/by-best-match.ts';
+export { ByPosition } from './comparison/alignments/by-position.ts';
+export type { Comparator } from './comparison/comparator.ts';
+export { JsonEquality } from './comparison/comparators/json-equality.ts';
+export { PythonEquality } from './comparison/comparators/python-equality.ts';
+export { NormalizedText } from './comparison/comparators/normalized-text.ts';
+export { NumberWithin } from './comparison/comparators/number-within.ts';
+export { TokenOverlapAtLeast } from './comparison/comparators/token-overlap-at-least.ts';
+export type { Match } from './comparison/match.ts';
+export {
+  ComparisonSpec,
+  type ComparisonSpecOptions,
+} from './comparison/comparison-spec.ts';
 export type { Check, Scorecard } from './scoring/scorecard.ts';
 export type {
   CaseReader,
@@ -20,25 +23,46 @@ export type {
   Weighted,
 } from './scoring/scorecard-scorer.ts';
 export { Totals } from './scoring/totals.ts';
-export { AtLeast } from './paths/scorers/at-least.ts';
-export { ExactMatch } from './paths/scorers/exact-match.ts';
-export { Gate } from './paths/scorers/gate.ts';
-export { Gated } from './paths/scorers/gated.ts';
-export { LeafExactMatch } from './paths/scorers/leaf-exact-match.ts';
-export { LeafTokenF1 } from './paths/scorers/leaf-token-f1.ts';
-export { LeafTypePrecision } from './paths/scorers/leaf-type-precision.ts';
-export { MeanOf } from './paths/scorers/mean-of.ts';
-export { ParseSuccess } from './paths/scorers/parse-success.ts';
-export { PathF1 } from './paths/scorers/path-f1.ts';
-export { PathRecall } from './paths/scorers/path-recall.ts';
-export { RequiredKeyRecall } from './paths/scorers/required-key-recall.ts';
-export { SchemaCompliance } from './paths/scorers/schema-compliance.ts';
-export { ValidSchema } from './paths/scorers/valid-schema.ts';
-export { JsonCase } from './paths/json-case.ts';
-export type { JsonPair } from './paths/json-pair.ts';
-export { JsonTextCase } from './paths/json-text-case.ts';
-export { JsonTextScorer } from './paths/json-text-scorer.ts';
-export { JsonValue } from './paths/json-value.ts';
-export type { Scorer } from './paths/scorer.ts';
-export { ScorerSet } from './paths/scorer-set.ts';
+export { AtLeast } from './scorers/at-least.ts';
+export { ExactMatch } from './scorers/exact-match.ts';
+export { Gate } from './scorers/gate.ts';
+export { Penalized } from './scorers/penalized.ts';
+export { Penalty } from './scorers/penalty.ts';
+export { ShortfallPenalty } from './scorers/shortfall-penalty.ts';
+export { MeanOf } from './scorers/mean-of.ts';
+export type { Matches } from './scorers/matches.ts';
+export { PathMatches } from './scorers/path-matches.ts';
+export { ValueMatches } from './scorers/value-matches.ts';
+export { ItemMatches } from './scorers/item-matches.ts';
+export { Precision } from './scorers/precision.ts';
+export { Recall } from './scorers/recall.ts';
+export { F1 } from './scorers/f1.ts';
+export { SampleAveraged } from './scorers/sample-averaged.ts';
+export { TokenF1 } from './scorers/token-f1.ts';
+export { TypePrecision } from './scorers/type-precision.ts';
+export { ParseSuccess } from './scorers/parse-success.ts';
+export { RequiredKeyRecall } from './scorers/required-key-recall.ts';
+export { SchemaCompliance } from './scorers/schema-compliance.ts';
+export { ValidSchema } from './scorers/valid-schema.ts';
+export { Case } from './scoring/case.ts';
+export { ConfigCase } from './scoring/config-case.ts';
+export { TextVarsCase } from './scoring/text-vars-case.ts';
+export {
+  type Draft,
+  JsonSchema,
+  type Validation,
+} from './schema/json-schema.ts';
+export type { SchemaTypeWalk } from './schema/schema-type-walk.ts';
+export { JsonValue } from './comparison/json-value.ts';
+export type { Scorer } from './scorers/scorer.ts';
+export { ScorerSet } from './scoring/scorer-set.ts';
+export { PerField } from './scoring/per-field.ts';
+export { AllMatched } from './scorers/all-matched.ts';
+export type { LeafOptions } from './scorers/leaf-matches.ts';
+export type { Comparison } from './comparison/comparison.ts';
+export type { Leaf, LeafPair, LeafValue } from './comparison/leaf-pair.ts';
+export type { ItemPairs } from './comparison/item-pairs.ts';
+export type { Field, FieldStep } from './comparison/field.ts';
+export type { Path, Step } from './comparison/path.ts';
+export { TreeWalk } from './comparison/tree-walk.ts';
 export { Bootstrap, type WeightedScorecard } from './scoring/bootstrap.ts';

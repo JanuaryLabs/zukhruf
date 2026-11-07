@@ -1,5 +1,7 @@
 # With promptfoo, each metric is one assertion that reads the vars of its test
 
+Status: amended by [ADR 0011](0011-one-comparison-core-alignment-per-array-and-sob-is-a-configuration.md) (accepted 2026-11-06). `JsonPair` is replaced by `Comparison`, and `JsonTextCase` is replaced by `TextVarsCase`. One assertion for each scorer, with the case from the vars of the test, stays.
+
 Status: amended by [ADR 0009](0009-a-scorer-gives-a-value-for-one-answer-and-a-metric-adds-many.md). Its words changed: a metric of this ADR is a scorer now, a scorer is a scorecard scorer, `MetricScorer` is `ScorerSet`, `MetricAssertion` is `ScorerAssertion`, and `CanonicalEquality` is `ExactMatch`.
 
 ADR 0005 says that one metric can be one promptfoo assertion: `PromptfooAssertion` adapts a `MetricScorer` that has one metric. The offers-evals repository used that form for the metrics of the Structured Output Benchmark (SOB), and the form has two faults:

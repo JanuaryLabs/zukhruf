@@ -1,5 +1,7 @@
 # Set items pair by maximum matching, and the metrics are micro averages
 
+Status: amended by [ADR 0011](0011-one-comparison-core-alignment-per-array-and-sob-is-a-configuration.md) (accepted 2026-11-06). Maximum matching becomes the alignment `ByBestMatch`, and the micro average is what a plain scorer gives. SOB numbers come from `ByPosition` and `SampleAveraged` in SOB's caller, not from a separate port.
+
 The items of a set array have no order. A harness can state the same offers in a different order, or state one more. A pair by position then compares the wrong items, and every later item is wrong.
 
 The package pairs set items by maximum matching: of all possible pairings, it takes the one with the most agreeing fields (the Hungarian algorithm, `munkres`). A match rule can forbid a pair, such as two offers whose quotes are different sentences. An item with no pair counts as a stated or an expected item only. Then each field of each pair goes through its comparator.

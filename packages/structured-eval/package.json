@@ -2,7 +2,7 @@
   "name": "@zukhruf/structured-eval",
   "version": "0.1.0",
   "private": true,
-  "description": "A runner-agnostic core for structured-output evals: scorers give scorecards of named ratios, a ratio of sums adds them. RecordScorer compares a stated record with an expected record field by field (set arrays pair by maximum matching; precision, recall, F1, presence, token F1, validity, type safety); SobScorer is a lossless port of SOB's evaluate.py. An adapter gives the scores to promptfoo.",
+  "description": "A runner-agnostic core for structured-output evals: one walk compares a stated value with its case, each scorer gives a ratio for one record, and a ratio of sums adds the ratios of many records. Each array has its alignment (by position, or by best match), and SOB's evaluate.py is a configuration of the same scorers. An adapter gives the scores to promptfoo.",
   "license": "MIT",
   "repository": {
     "type": "git",
@@ -48,10 +48,11 @@
     "@cfworker/json-schema": "4.1.4",
     "@zukhruf/python": "*",
     "@zukhruf/statistics": "*",
-    "json-schema-traverse": "^1.0.0",
     "munkres": "^2.1.1"
   },
   "devDependencies": {
+    "@zukhruf/testing": "*",
+    "promptfoo": "0.125.1",
     "python-random": "1.0.0"
   }
 }

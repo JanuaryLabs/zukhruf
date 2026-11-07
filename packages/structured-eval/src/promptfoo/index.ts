@@ -1,3 +1,4 @@
+export { AssertionModule, type FileAssertion } from './assertion-module.ts';
 export {
   type AssertionContext,
   type GradingResult,

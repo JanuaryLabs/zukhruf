@@ -1,5 +1,9 @@
 # A metric assertion is a promptfoo assertion object in a TypeScript config
 
+Status: amended by [ADR 0013](0013-a-scorer-assertion-reaches-promptfoo-as-a-file-reference-to-a-function-of-its-assertion-module.md) (accepted 2026-11-07). A config does not hold the assertion object now: a scorer assertion reaches promptfoo as a file reference to a function of its assertion module, because promptfoo stores a config as JSON and `--resume` and `--retry-errors` build the run from it. A TypeScript config and one assertion for each scorer stay.
+
+Status: amended by [ADR 0011](0011-one-comparison-core-alignment-per-array-and-sob-is-a-configuration.md) (accepted 2026-11-06). `JsonTextCase` is replaced by `TextVarsCase`, and `ScorerAssertion` also takes the `spec` of its walk and the `cases` reader. The assertion object in a TypeScript config stays.
+
 Status: amended by [ADR 0009](0009-a-scorer-gives-a-value-for-one-answer-and-a-metric-adds-many.md). Its words changed: a metric of this ADR is a scorer now, a scorer is a scorecard scorer, `MetricScorer` is `ScorerSet`, `MetricAssertion` is `ScorerAssertion`, and `CanonicalEquality` is `ExactMatch`.
 
 ADR 0006 made each metric one promptfoo assertion. Its first form lived in YAML: a YAML config can point only at a file, and promptfoo loads a function from that file. So each metric needed its own file with `export default new MetricAssertion(metric, JsonTextCase).grade`. The YAML then named the same metric a second time (`metric:`), and the constructor took a case reader that has only one right value for vars. Ezz: "it looks ugly".

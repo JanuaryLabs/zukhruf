@@ -1,5 +1,7 @@
 # Scorers give ratios, a ratio of sums adds them, and runners are adapters
 
+Status: amended by [ADR 0011](0011-one-comparison-core-alignment-per-array-and-sob-is-a-configuration.md) (accepted 2026-11-06). A scorer gives a `Ratio` for one comparison, `Penalized` multiplies the part of that ratio ([ADR 0012](0012-a-penalty-multiplies-the-part-of-a-ratio-and-the-caller-scores-each-subset-with-its-own-scorers.md) replaced `Gated`), and the folders `records/` and `paths/` are gone.
+
 Status: amended by [ADR 0009](0009-a-scorer-gives-a-value-for-one-answer-and-a-metric-adds-many.md). Its words changed: a metric of this ADR is a scorer now, a scorer is a scorecard scorer, `MetricScorer` is `ScorerSet`, `MetricAssertion` is `ScorerAssertion`, and `CanonicalEquality` is `ExactMatch`.
 
 Ezz expects to write his own eval framework, and promptfoo is the runner today. The first core had one function for many jobs: `score()` walked the records, counted, checked for a perfect record and listed the differences, and the promptfoo binding built the named scores. A change to one metric changed the function that computes all of them, and the binding held scoring rules.

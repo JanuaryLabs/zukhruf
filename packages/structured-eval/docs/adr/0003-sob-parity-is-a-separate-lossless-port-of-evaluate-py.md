@@ -1,5 +1,7 @@
 # SOB parity is a separate, lossless port of evaluate.py
 
+Status: replaced by [ADR 0011](0011-one-comparison-core-alignment-per-array-and-sob-is-a-configuration.md) (accepted 2026-11-06). SOB is a configuration of the one comparison core in its caller. The rules about Python's results move to `JsonData` and `PythonEquality`.
+
 Status: replaced in part by ADR 0005. The metrics are now classes named by what they measure, and SOB's report is composed by its caller. The rules below about Python's results still hold.
 
 Ezz wants numbers that compare with the Structured Output Benchmark (SOB). SOB pairs list items by position and takes a mean over records. ADR 0002 pairs set items by maximum matching and adds the counts of all records together. One flag on the spec would mix the two methods in one scorer. So SOB parity is a separate scorer, `SobScorer`, with its own summary, `SobSummary`.

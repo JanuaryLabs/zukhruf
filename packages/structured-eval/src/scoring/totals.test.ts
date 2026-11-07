@@ -2,23 +2,24 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
 import {
+  ConfigCase,
   Ratio,
   RatioOfSums,
-  RecordCase,
-  RecordScorer,
-  RecordSpec,
+  Recall,
+  ScorerSet,
   Totals,
+  ValueMatches,
 } from '../index.ts';
 
 test('Totals adds the scorecards of a run into micro averages: all right values over all expected values, not the mean of each record', () => {
-  const scorer = new RecordScorer(new RecordSpec());
+  const scorer = new ScorerSet({ recall: new Recall(new ValueMatches()) });
   const totals = new Totals();
 
   for (const [stated, expected] of [
     [{ a: 1 }, { a: 1 }],
     [{ a: 1 }, { a: 1, b: 2, c: 3 }],
   ] as const)
-    totals.add(scorer.score(stated, new RecordCase(expected)), 1);
+    totals.add(scorer.score(stated, new ConfigCase().from({ expected })), 1);
 
   assert.equal(totals.get('recall').value, 2 / 4);
 });

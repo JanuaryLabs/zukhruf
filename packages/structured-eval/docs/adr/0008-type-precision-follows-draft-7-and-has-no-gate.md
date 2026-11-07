@@ -1,5 +1,7 @@
 # Type precision follows JSON Schema draft 7 and has no gate
 
+Status: amended by [ADR 0011](0011-one-comparison-core-alignment-per-array-and-sob-is-a-configuration.md) (accepted 2026-11-06). Type precision follows the draft of the schema, the same draft as the validator; SOB's caller sets draft 7, so this ADR's walk stays for SOB. `SchemaTypeWalk` reads the steps of a `Path`, and it is the one walk of the types: `SchemaTypes` is deleted. `LeafTypePrecision` is `TypePrecision`, and `whenNoneStated` is the `whenEmpty` of `SampleAveraged`.
+
 Status: amended by [ADR 0009](0009-a-scorer-gives-a-value-for-one-answer-and-a-metric-adds-many.md). Its words changed: a metric of this ADR is a scorer now, a scorer is a scorecard scorer, `MetricScorer` is `ScorerSet`, `MetricAssertion` is `ScorerAssertion`, and `CanonicalEquality` is `ExactMatch`.
 
 `LeafTypePrecision` gives the share of the stated leaves whose type the JSON Schema allows at their path. Its first form ported the walk of SOB's evaluate.py (`schema_type_for_path`): it read only `properties` and `items`, it read a type as Python names it (`1.0` is a float), and it gave 0 for a schema that is not valid. Ezz chose a complete walk on 2026-11-04 ("One complete walk"), and asked on 2026-11-06: "what is correct. our draft7 or sob's?".
