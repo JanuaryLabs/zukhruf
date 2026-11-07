@@ -1,6 +1,6 @@
 {
   "name": "@zukhruf/statistics",
-  "version": "0.8.3",
+  "version": "0.8.4",
   "description": "The percentile bootstrap and the quantile methods of NumPy in JavaScript, to the last bit: resamples of a dataset with a random generator that the caller gives, the percentile interval of their statistic, and NumPy's quantile methods.",
   "license": "MIT",
   "repository": {
