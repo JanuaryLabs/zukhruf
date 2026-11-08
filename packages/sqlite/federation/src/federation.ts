@@ -75,20 +75,17 @@ export class Federation implements Disposable {
     return this.#statement(() => {
       const statement = this.#connection.prepare(sql);
       // SQLite compiles no statement from a tail of spaces, comments and
-      // semicolons. On Node 26 prepare then throws ERR_INVALID_ARG_VALUE. On
-      // Node 24 prepare gives an empty statement, and its sourceSQL throws
-      // ERR_INVALID_STATE.
+      // semicolons, and prepare then throws ERR_INVALID_ARG_VALUE. Any other
+      // failure means that the tail holds a statement that does not compile.
       let another: boolean;
       try {
-        another =
-          typeof this.#connection.prepare(sql.slice(statement.sourceSQL.length))
-            .sourceSQL === 'string';
+        this.#connection.prepare(sql.slice(statement.sourceSQL.length));
+        another = true;
       } catch (error) {
         another = !(
           error instanceof Error &&
           'code' in error &&
-          (error.code === 'ERR_INVALID_ARG_VALUE' ||
-            error.code === 'ERR_INVALID_STATE')
+          error.code === 'ERR_INVALID_ARG_VALUE'
         );
       }
       if (another) throw new Error('Run one SQL statement at a time');
