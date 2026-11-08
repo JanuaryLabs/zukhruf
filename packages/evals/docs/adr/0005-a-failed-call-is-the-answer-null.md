@@ -1,6 +1,6 @@
 # A failed call is the answer null
 
-Status: Proposed (2026-11-08, backlog #3970). Ezz approved the design on 2026-11-08 ("Approve (Recommended)") and its retry rule ("Final null (Recommended)"). No code exists yet. The meaning of the answer null in `./classification` is in ADR 0006.
+Status: Accepted 2026-11-08 by Ezz ("Approve both (Recommended)", backlog #3970), after he approved the design ("Approve (Recommended)") and its retry rule ("Final null (Recommended)"). The code is not built yet. The meaning of the answer null in `./classification` is in ADR 0006.
 
 ## Context
 

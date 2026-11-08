@@ -1,6 +1,6 @@
 # Classification counts only the classes that the caller gives
 
-Status: Proposed (2026-11-08, backlog #3970). It amends decision 2 of ADR 0003. Ezz gave the rule for it: "design the package and force consumer to change not the other way around." No code exists yet.
+Status: Accepted 2026-11-08 by Ezz ("Approve both (Recommended)", backlog #3970). It amends decision 2 of ADR 0003. Ezz gave the rule for it: "design the package and force consumer to change not the other way around." The code is not built yet.
 
 ## Context
 

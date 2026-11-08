@@ -1,6 +1,6 @@
 # Classification follows scikit-learn, from the counts of each class
 
-Status: Accepted 2026-11-07 by Ezz ("accept and use remove code skill"), with its amendment to ADR 0011 of `@zukhruf/structured-eval` (see "The form of the F-measure"). It is built in backlog #3889.
+Status: Accepted 2026-11-07 by Ezz ("accept and use remove code skill"), with its amendment to ADR 0011 of `@zukhruf/structured-eval` (see "The form of the F-measure"). It is built in backlog #3889. Decision 2 is amended by ADR 0006 (accepted 2026-11-08): the caller gives the class set.
 
 ## Context
 
