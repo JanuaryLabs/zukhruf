@@ -16,7 +16,13 @@ import { projectRootFiles } from '../project-roots.ts';
 export const createNodes: CreateNodes = [
   '{package.json,**/package.json,project.json,**/project.json}',
   async (configFiles, options, context) => {
-    const rootFiles = projectRootFiles(configFiles, context.workspaceRoot);
+    // The workspace root gets no targets, also when its package.json has an
+    // nx key: its check would be `prettier --check .`, which checks each
+    // project again (ADR 0003).
+    const rootFiles = projectRootFiles(
+      configFiles,
+      context.workspaceRoot,
+    ).filter((file) => dirname(file) !== '.');
     const formatCheck: TargetConfiguration = {
       command: 'prettier --check {projectRoot}',
       cache: true,

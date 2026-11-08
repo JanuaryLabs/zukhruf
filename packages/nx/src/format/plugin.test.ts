@@ -77,6 +77,37 @@ test('no folder outside the projects of Nx becomes a project', async () => {
   );
 });
 
+test('a workspace root with an nx key gets no format targets, so each file is checked once', async () => {
+  await using folder = await new TemporaryFiles().directory('zukhruf-nx-');
+  const probe = await workspace(folder.path, {
+    'package.json': `${JSON.stringify({ name: 'probe', private: true, nx: {}, workspaces: ['packages/*'] })}\n`,
+    'packages/a/package.json': packageJson('a'),
+    'packages/a/index.ts': unformatted,
+  });
+
+  const projects: unknown = JSON.parse(
+    (await probe.nx('show', 'projects', '--json')).output,
+  );
+  const root = await probe.targets('probe');
+  const run = await probe.nx(
+    'run-many',
+    '-t',
+    'format:check',
+    '--skip-nx-cache',
+  );
+
+  assert.ok(Array.isArray(projects) && projects.includes('probe'));
+  assert.deepEqual(
+    [root['format'], root['format:check']],
+    [undefined, undefined],
+  );
+  assert.equal(
+    run.output.match(/packages\/a\/index\.ts/g)?.length,
+    1,
+    run.output,
+  );
+});
+
 test('format:check fails on an unformatted file and leaves it as it was', async () => {
   await using folder = await new TemporaryFiles().directory('zukhruf-nx-');
   const probe = await workspace(folder.path, {

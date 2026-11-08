@@ -86,7 +86,7 @@ The plugin gives targets only to the projects that Nx finds, by the rule and the
 
 - Each folder with a `project.json` is a project.
 - A folder with a `package.json` is a project only when the workspace globs of the package manager match its path, or when it has a `project.json` too. The globs are `workspaces` in the root `package.json`, `pnpm-workspace.yaml` and `lerna.json`, with their `!` negations.
-- The workspace root is a project only when it has a `project.json`, or its `package.json` has an `nx` key.
+- The workspace root is a project only when it has a `project.json`, or its `package.json` has an `nx` key. Even then it gets no format targets: its check would be `prettier --check .`, which checks each project again.
 
 Thus a fixture outside the workspace globs gets no targets, and you do not add it to `exclude`. The root files stay checked by the `Format` step of `@zukhruf/git-hooks` and by `npx prettier --check .` in CI.
 
