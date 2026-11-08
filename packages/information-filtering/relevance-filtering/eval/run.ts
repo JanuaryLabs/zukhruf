@@ -2,7 +2,7 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { parseArgs } from 'node:util';
 
-import { mean } from '@zukhruf/statistics';
+import { mean, nanmean } from '@zukhruf/statistics';
 
 import {
   EVAL_FOLDER,
@@ -20,7 +20,6 @@ import { descriptionVectors } from './cache.ts';
 import { implementationCheck } from './check.ts';
 import { daily, randomLabels } from './daily.ts';
 import { joined } from './design.ts';
-import { nanMean } from './metrics.ts';
 import { type EvalProfile, readProfiles } from './profiles.ts';
 import { rankingCheck } from './ranking-check.ts';
 import {
@@ -201,7 +200,7 @@ async function slices(): Promise<void> {
     perProfile[profile] = byName((name) =>
       mean(used.map(({ rows }) => rows[name].strict.f05)),
     );
-    skill[profile] = nanMean(
+    skill[profile] = nanmean(
       used.map(({ rows }) => rows[DESIGN].strict.brierSkill),
     );
   }
@@ -419,9 +418,9 @@ async function examProtocol(streamName: string, poolNames: readonly string[]) {
   // over N, mean over the profiles. A profile whose relevant articles a
   // replicate does not draw has no AP, and is left out of that replicate.
   const map = (name: RankName, weights?: ReadonlyMap<string, number>) =>
-    nanMean(
+    nanmean(
       ids.map((profile) =>
-        nanMean(
+        nanmean(
           (runs[profile] ?? []).map(({ orders }) =>
             averagePrecision(
               orders[name],
@@ -457,7 +456,7 @@ async function examProtocol(streamName: string, poolNames: readonly string[]) {
       ids.map((profile) => [
         profile,
         byRank((name) =>
-          nanMean((runs[profile] ?? []).map(({ ap }) => ap[name])),
+          nanmean((runs[profile] ?? []).map(({ ap }) => ap[name])),
         ),
       ]),
     ),

@@ -5,7 +5,6 @@ import {
   ProbabilityComparison,
   SquaredErrorForm,
 } from '@zukhruf/evals/classification';
-import { mean } from '@zukhruf/statistics';
 
 // The scores of one design on one stream for one profile, as the research
 // code computes them (round-2 evaluate.py, metric_row). T11F is the F-measure
@@ -73,9 +72,4 @@ export function scores(
     fp,
     fn,
   };
-}
-
-// The mean of the values that are not NaN, as numpy.nanmean.
-export function nanMean(values: readonly number[]): number {
-  return mean(values.filter((value) => !Number.isNaN(value)));
 }

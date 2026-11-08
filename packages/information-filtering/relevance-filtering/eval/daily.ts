@@ -1,5 +1,5 @@
 import { defaultRng } from '@zukhruf/random';
-import { mean } from '@zukhruf/statistics';
+import { mean, nanmean } from '@zukhruf/statistics';
 
 import type { Label } from './answer-key.ts';
 import { type Interval, topicBootstrap } from './bootstrap.ts';
@@ -185,7 +185,7 @@ export async function daily(options: {
     }
     const average = (rows: ReturnType<typeof dayScores>[]): DailyScores => ({
       recall: mean(rows.map(({ recall }) => recall)),
-      precision: nanMeanOf(rows.map(({ precision }) => precision)),
+      precision: nanmean(rows.map(({ precision }) => precision)),
       emptyDays: mean(rows.map(({ emptyDays }) => emptyDays)),
       missedDays: mean(rows.map(({ missedDays }) => missedDays)),
     });
@@ -199,11 +199,11 @@ export async function daily(options: {
       equalCount: {
         ranker: {
           recall: mean(equal.ranker.recall),
-          precision: nanMeanOf(equal.ranker.precision),
+          precision: nanmean(equal.ranker.precision),
         },
         keyword: {
           recall: mean(equal.keyword.recall),
-          precision: nanMeanOf(equal.keyword.precision),
+          precision: nanmean(equal.keyword.precision),
         },
       },
     };
@@ -264,11 +264,6 @@ export async function daily(options: {
     pass,
     perProfile: results,
   };
-}
-
-function nanMeanOf(values: readonly number[]): number {
-  const kept = values.filter((value) => !Number.isNaN(value));
-  return kept.length > 0 ? mean(kept) : Number.NaN;
 }
 
 // Labels made in memory for a smoke test: for each profile in turn, each
