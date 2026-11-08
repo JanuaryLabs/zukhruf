@@ -61,7 +61,7 @@ The penalty whose factor is 0 or 1. A gate says what it checks and why it fails.
 A scorer whose part is multiplied by the factor of each of its penalties, for each answer. Its whole stays.
 
 **Grouped scorer**:
-A scorer that gives one ratio for each group of an input, such as each field (`PerField`) or each class (`PerClass`), under the label of the group and its own label.
+A scorer that gives one ratio for each group of an input, such as each field (`PerField`) or each class (`PerClass`), under the label of the group and its own label. A group is a part of the input or a projection of it, such as the stated items of one kind. It is a breakdown, so its ratios stay out of the score of the record.
 
 **Scorer set**:
 A scorecard scorer that holds labelled scorers and grouped scorers. Its comparer makes the input once. It passes when each of its gates holds.

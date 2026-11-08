@@ -60,7 +60,7 @@ A penalty is a factor in [0, 1] for one input, as BLEU's brevity penalty is. The
 
 A `ScorerSet` holds labelled scorers and gives a `Scorecard`: passed, reason, checks and one named ratio for each label. It passes when each of its gates holds. Each gate gives a check, whose `name` is the label of the gate. The `comparer` of the family is required, because the core cannot know a family: `new ScorerSet(scorers, { comparer: new LabelComparer() })`. It makes the input once, and each scorer reads it.
 
-A grouped scorer gives one ratio for each group of an input, under the label `${group} ${label}`: `PerField` gives one for each field in `./structured`, and `PerClass` gives one for each class in `./classification`. Both extend `Grouped` of the core: a subclass gives its groups with `groups(input)`, and `ratios` drops a group whose whole is 0. So a `ScorerSet` holds them beside plain scorers (Inspect AI's `grouped()` applies a metric to each group in the same way).
+A grouped scorer gives one ratio for each group of an input, under the label `${group} ${label}`: `PerField` gives one for each field in `./structured`, and `PerClass` gives one for each class in `./classification`. Both extend `Grouped` of the core: a subclass gives its groups with `groups(input)`, and `ratios` drops a group whose whole is 0. So a `ScorerSet` holds them beside plain scorers (Inspect AI's `grouped()` applies a metric to each group in the same way). A group can also be a projection of the input, of another type: `Grouped<Input, Group>` takes a `Scorer<Group>`, such as a count of the stated items without a pair, for each of their kinds. A grouped scorer is a breakdown, so its ratios stay out of the score of the record, which is the mean of the plain scorers.
 
 ```ts
 import { Recall, ScorerSet } from '@zukhruf/evals';
@@ -544,10 +544,10 @@ export interface ScorecardScorer<Case extends Weighted> {
   score(stated: unknown, testCase: Case): Scorecard;
 }
 /** Gives one ratio for each group of an input, such as each field or each class. */
-export abstract class Grouped<Input> {
-  constructor(scorer: Scorer<Input>);
-  /** The groups of an input (Template Method). */
-  protected abstract groups(input: Input): Iterable<[string, Input]>;
+export abstract class Grouped<Input, Group = Input> {
+  constructor(scorer: Scorer<Group>);
+  /** The groups of an input (Template Method): a part of it, or a projection of another type. */
+  protected abstract groups(input: Input): Iterable<[string, Group]>;
   /** The ratio of the scorer on each group, under `${group} ${label}`. A group whose whole is 0 gives no ratio. */
   ratios(input: Input, label: string): [string, Ratio][];
 }
@@ -556,7 +556,7 @@ export class ScorerSet<
   Input,
 > implements ScorecardScorer<Case> {
   constructor(
-    scorers: Readonly<Record<string, Scorer<Input> | Grouped<Input>>>,
+    scorers: Readonly<Record<string, Scorer<Input> | Grouped<Input, unknown>>>,
     options: { comparer: Comparer<Case, Input> },
   );
 }

@@ -19,12 +19,12 @@ export class ScorerSet<
 > implements ScorecardScorer<Case> {
   readonly #entries: readonly (readonly [
     string,
-    Scorer<Input> | Grouped<Input>,
+    Scorer<Input> | Grouped<Input, unknown>,
   ])[];
   readonly #comparer: Comparer<Case, Input>;
 
   constructor(
-    entries: Readonly<Record<string, Scorer<Input> | Grouped<Input>>>,
+    entries: Readonly<Record<string, Scorer<Input> | Grouped<Input, unknown>>>,
     { comparer }: { readonly comparer: Comparer<Case, Input> },
   ) {
     this.#entries = Object.entries(entries);
