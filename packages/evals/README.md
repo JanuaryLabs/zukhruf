@@ -287,6 +287,23 @@ run.add(new LabelComparer().compare('a', testCase), testCase.weight);
 - `form` is the arithmetic of the F-measure (ADR 0003). `new CountsForm()` is scikit-learn's and the default. It also gives the bits of TREC's F0.5 for integer counts. `new PrecisionRecallForm()` is van Rijsbergen's and SOB's.
 - `confusionMatrix()` throws for multilabel counts, as scikit-learn raises.
 
+### The class set
+
+Status: design for review (backlog #3970, [ADR 0006](docs/adr/0006-classification-counts-only-the-classes-that-the-caller-gives.md)). The released package takes the classes from the answers, as scikit-learn's `labels=None` does.
+
+A harness can state any text, such as the answer null of a failed call. If the answers give the classes, each such text adds a class, and the macro averages change. So the caller gives the class set, scikit-learn's `labels`, to the comparer and to the counts. The answers never add a class.
+
+```ts
+// Proposal: no code exists yet.
+import { ClassCounts, LabelComparer } from '@zukhruf/evals/classification';
+
+const pageKinds = ['program', 'home', 'list', 'investor', 'other'];
+const comparer = new LabelComparer({ labels: pageKinds });
+const counts = new ClassCounts({ labels: pageKinds, multilabel: false });
+```
+
+A label outside the class set counts in no class, as scikit-learn gives it when the caller gives `labels`. A stated label outside it is a miss of the expected class, and it is not a predicted count of any class. `LabelsMatch` still reads it as a wrong answer. `PerClass` and `AllClassMatches` read the class set of the comparison, so they take no `labels`. `ClassCounts.ofIndicators` takes its classes from the columns, as today. To port a scikit-learn call with `labels=None`, give the sorted labels of both sides.
+
 ### Probabilities
 
 `ProbabilityComparer` reads the stated probability of each class of an answer and gives a `ProbabilityComparison`. The answer is a `Map`, a plain object or the JSON text of an object. A key is a number label when the expected label is a number. A probability outside [0, 1] throws a `RangeError`. The case has one expected label.
@@ -343,6 +360,53 @@ export default {
 ```
 
 The name is the promptfoo `metric`, unless the scorer assertion gives its own `metric`. A name that the module does not hold is a compile error. promptfoo shows the mean of each `metric` over the tests. A `ScorerAssertion` gives one value for one test, so a micro average needs `PromptfooAssertion`, whose ratios keep their wholes.
+
+### A failed call
+
+Status: design for review (backlog #3970, [ADR 0005](docs/adr/0005-a-failed-call-is-the-answer-null.md)). The released package does not have `FailedCall` yet.
+
+A failed call is a model call that failed for its one test, also after its retries. promptfoo does not grade a result whose provider gives `error` or no output. That result is an error result: it has no named scores, so its case adds nothing to the wholes, and the recall goes up. A failed call is an answer of the harness: the answer null, the text `'null'`. promptfoo grades it, and each family reads it as no answer. `FailedCall` is a coinage of this package. A consumer uses one of two forms.
+
+When the provider is your own, return `new FailedCall(reason).response(metadata)`. promptfoo grades the result, and `promptfoo retry <evalId>` does not run it again. The reason is in `metadata.failed`.
+
+```ts
+// Proposal: no code exists yet.
+import { FailedCall } from '@zukhruf/evals/promptfoo';
+
+const [result] = await rule.compute([row.input], options?.abortSignal);
+if (result !== undefined && 'error' in result)
+  return new FailedCall(result.error).response(metadata);
+```
+
+When the provider is a built-in one, such as `openai:chat`, an `afterEach` extension hook grades each error result on `FailedCall.answer`. The result stays an error result, so `promptfoo retry <evalId>` and `--retry-errors` run it again.
+
+```ts
+// Proposal: no code exists yet.
+import {
+  type AfterEachExtensionHookContext,
+  ResultFailureReason,
+  assertions,
+} from 'promptfoo';
+
+import { FailedCall } from '@zukhruf/evals/promptfoo';
+
+export async function afterEach({
+  test,
+  result,
+}: AfterEachExtensionHookContext): Promise<void> {
+  if (result.failureReason !== ResultFailureReason.ERROR) return;
+  const graded = await assertions.runAssertions({
+    test,
+    providerResponse: { output: FailedCall.answer },
+    vars: test.vars ?? {},
+  });
+  Object.assign(result.namedScores, graded.namedScores);
+}
+```
+
+A hook cannot write `namedScoreWeights`, so promptfoo gives each score of the hook the weight 1. Use the hook only with scorer assertions whose metrics weigh 1, as in SOB. A `PromptfooAssertion` gives each ratio its whole as the weight, so it needs the first form.
+
+A failure of the run, such as a 401, is not a failed call: each call would fail. Throw it. The result then stays an error result, and `promptfoo retry <evalId>` runs it again.
 
 ## What the package does not do
 
@@ -727,3 +791,5 @@ The package was built in two items: mutex #3888 (the core, `./promptfoo` and the
 - [ADR 0002: the core is generic over the answer](docs/adr/0002-the-core-is-generic-over-the-answer.md)
 - [ADR 0003: classification follows scikit-learn, from the counts of each class](docs/adr/0003-classification-follows-scikit-learn-from-the-counts-of-each-class.md)
 - [ADR 0004: two runs are compared by a paired bootstrap over their tests](docs/adr/0004-two-runs-are-compared-by-a-paired-bootstrap-over-their-tests.md) (design for review)
+- [ADR 0005: a failed call is the answer null](docs/adr/0005-a-failed-call-is-the-answer-null.md) (design for review)
+- [ADR 0006: classification counts only the classes that the caller gives](docs/adr/0006-classification-counts-only-the-classes-that-the-caller-gives.md) (design for review)

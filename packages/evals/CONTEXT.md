@@ -127,6 +127,19 @@ A scorer with its weight, the threshold at which it passes, and the metric it re
 **Assertion module**:
 The module that promptfoo loads the function of a scorer assertion from. A config names its scorer assertions, and gets JSON assertions with file references.
 
+**Failed call**:
+A model call that failed for its one test, also after its retries, such as a timeout or a 500. The harness gives the answer null for it, so its case keeps its expected values in the wholes (design for review, ADR 0005). HELM calls it a non-fatal error, and Inspect AI calls it an errored sample. `FailedCall` of `./promptfoo` is a coinage of this package.
+_Avoid_: error row, failed sample
+
+**Answer null**:
+The answer of a failed call: the text `null`. Each family reads it as no answer: in `./structured` it is unparsed, and in `./classification` it is a stated label outside the class set.
+
+**Failure of the run**:
+A failure that each call would have, such as a 401. It is not a failed call. The provider throws it, so the result stays an error result, and `promptfoo retry` runs it again. HELM calls it a fatal error.
+
+**Error result**:
+A promptfoo result whose `failureReason` is `ResultFailureReason.ERROR`. promptfoo does not grade it, so its case adds nothing to the wholes. The word is promptfoo's.
+
 ### Classification
 
 **Label**:
@@ -144,6 +157,9 @@ Each answer and each case has a set of zero or more labels.
 
 **Class**:
 One label that the counts follow, such as `program` of the page kinds.
+
+**Class set**:
+The classes of the task, in the order that the caller gives. scikit-learn calls it `labels`. The caller gives it, and the answers never add a class. A label outside the class set counts in no class. So a stated label outside it, such as the answer null, is a miss of the expected class (design for review, ADR 0006).
 
 **Positive label**:
 The class whose scores a binary average gives.
@@ -193,7 +209,7 @@ _Avoid_: prediction, actual
 The value model of the package, `JsonData` of @zukhruf/python. An int and a float stay apart, and a dict keeps the order of its keys. A JavaScript value or JSON text becomes JSON data at the boundary, through `JsonValue`. A scorer set and a scorer assertion read a stated text as JSON text.
 
 **Unparsed**:
-A stated value that is not an object or an array, such as text that is not JSON. An unparsed value has no stated leaves.
+A stated value that is not an object or an array, such as text that is not JSON. An unparsed value has no stated leaves. The answer null is unparsed, because JSON null is not an object or an array. SOB's `None` is the same.
 
 **Path**:
 The steps to one value: keys and item positions, such as `offers`, `1`, `value`, `amount`. A path is its steps, not a string. `$.offers[1].value.amount` is only how a path is written.
