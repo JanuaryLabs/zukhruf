@@ -25,7 +25,7 @@ No golden test of mteb, relevance-filtering or evals changed its expected values
 
 These parts stay with each caller, because each caller has its own rule:
 
-- the `nanMean` of the relevance-filtering eval: it removes the NaN values before the mean. `numpy.nanmean` sets them to 0 and adds all values, so its order is not the same;
+- the `nanMean` of the relevance-filtering eval: it removes the NaN values before the mean. `numpy.nanmean` sets them to 0 and adds all values, so its order is not the same. Amended on 2026-11-08 (backlog #3991): `numpy.nanmean` was then in three places, so this package gives `nanmean`, and the eval uses it;
 - the population standard deviation (mteb `std`, relevance-filtering `populationSd`): two places;
 - `addReduceat` of mteb: each segment is its first value plus the pairwise sum of the other values, with no identity. So mteb still uses `gsumpw`;
 - the float32 sums of mteb (`ssumpw`): one place.

@@ -8,6 +8,10 @@ An eval gives a number for a dataset, such as a mean score. This context says ho
 The order in which `numpy.sum` adds float64 values: blocks of up to 128 values in 8 accumulators, and two halves for more values. Another order can give other last bits.
 _Avoid_: sum (without the order), Kahan sum (another algorithm)
 
+**NaN mean**:
+The mean that `numpy.nanmean` gives: each NaN becomes 0, the pairwise sum adds all the values, and the sum is divided by the number of values that are not NaN. A mean of only the values that are not NaN adds in other blocks, so it can give other last bits.
+_Avoid_: mean of the values that are not NaN (another order)
+
 **Resample**:
 A sample of the data with as many items as the data, drawn with replacement. An item can come twice, and another item can be absent.
 

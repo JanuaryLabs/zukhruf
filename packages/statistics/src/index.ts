@@ -9,4 +9,5 @@ export { Linear } from './quantile/linear.ts';
 export { Lower } from './quantile/lower.ts';
 export { QuantileMethod } from './quantile/quantile-method.ts';
 export { mean } from './sum/mean.ts';
+export { nanmean } from './sum/nanmean.ts';
 export { sum } from './sum/sum.ts';

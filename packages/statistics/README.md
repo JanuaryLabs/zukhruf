@@ -1,6 +1,6 @@
 # @zukhruf/statistics
 
-The percentile bootstrap, the quantile methods of NumPy and `numpy.sum` and `numpy.mean` in JavaScript, to the last bit. Use it when a TypeScript eval must give the same interval as a Python program, such as the summary of a benchmark or the comparison of two models.
+The percentile bootstrap, the quantile methods of NumPy, and `numpy.sum`, `numpy.mean` and `numpy.nanmean` in JavaScript, to the last bit. Use it when a TypeScript eval must give the same interval as a Python program, such as the summary of a benchmark or the comparison of two models.
 
 The package is public on npm. Until 2026-11-07 it was private and reached through a workspace path (ADR 0001); it became public with `@zukhruf/evals`, which depends on it (backlog #3888).
 
@@ -14,6 +14,7 @@ import {
   Linear,
   PercentileInterval,
   mean,
+  nanmean,
   sum,
 } from '@zukhruf/statistics';
 
@@ -34,12 +35,14 @@ interval.isAbove(0); // true when the whole interval lies above 0
 new Linear().of([1, 2, 3, 4], 0.5); // 2.5, as numpy.quantile(a, 0.5)
 sum([0.1, 0.2, 0.3]); // 0.6000000000000001, as numpy.sum(a)
 mean([1, 2, 3, 4]); // 2.5, as numpy.mean(a)
+nanmean([1, NaN, 3]); // 2, as numpy.nanmean(a)
 ```
 
 | Export                     | NumPy, SciPy or arch                                                               | What it does                                                                                                                                                                                                                                                                                                                                                                           |
 | -------------------------- | ---------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `sum`                      | `numpy.sum` of a 1-D float64 array                                                 | The pairwise sum of NumPy: blocks of up to 128 values in 8 accumulators, and two halves for more values. It starts from 0, so values of −0 give 0. No values give 0.                                                                                                                                                                                                                   |
 | `mean`                     | `numpy.mean` of a 1-D float64 array                                                | `sum` divided by the number of values. No values give NaN.                                                                                                                                                                                                                                                                                                                             |
+| `nanmean`                  | `numpy.nanmean` of a 1-D float64 array                                             | Each NaN becomes 0, `sum` adds all the values, and the sum is divided by the number of values that are not NaN. A `mean` of only the values that are not NaN can give other last bits. No values, or only NaN values, give NaN.                                                                                                                                                        |
 | `QuantileMethod`           | the `method` of `numpy.quantile`                                                   | A rule that gives the value at the quantile `q` of sorted values: `of(sorted, q)`. `q` is from 0 to 1. A `q` out of that range, or no values, throws a `RangeError`.                                                                                                                                                                                                                   |
 | `Lower`                    | `method='lower'`                                                                   | The value at the index `floor((n − 1)q)`.                                                                                                                                                                                                                                                                                                                                              |
 | `Higher`                   | `method='higher'`                                                                  | The value at the index `ceil((n − 1)q)`.                                                                                                                                                                                                                                                                                                                                               |
