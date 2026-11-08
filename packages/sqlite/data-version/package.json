@@ -1,6 +1,6 @@
 {
   "name": "@zukhruf/sqlite-data-version",
-  "version": "0.8.7",
+  "version": "0.8.8",
   "description": "The data version of a SQLite database that another process owns and writes: PRAGMA data_version on its own read-only connection, or the file stamp of the database when the owner holds the exclusive lock.",
   "license": "MIT",
   "repository": {
@@ -40,11 +40,11 @@
     "access": "public"
   },
   "dependencies": {
-    "@zukhruf/async": "^0.8.7",
-    "@zukhruf/fs": "^0.8.7",
-    "@zukhruf/sqlite-open": "^0.8.7"
+    "@zukhruf/async": "^0.8.8",
+    "@zukhruf/fs": "^0.8.8",
+    "@zukhruf/sqlite-open": "^0.8.8"
   },
   "devDependencies": {
-    "@zukhruf/testing": "^0.8.7"
+    "@zukhruf/testing": "^0.8.8"
   }
 }
