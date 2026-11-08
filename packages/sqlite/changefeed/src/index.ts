@@ -1,4 +1,5 @@
 export { Baseline } from './baseline.ts';
+export { Batch, SequencedBatch } from './batch.ts';
 export type { ChangeEvent, Key, Row } from './change-event.ts';
 export {
   Changefeed,

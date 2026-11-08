@@ -1,5 +1,7 @@
 # The change event
 
+Superseded in part on 2026-11-08: an `update` now names its changed columns (`changed`), with no `before`. See [ADR 0009](./0009-an-update-names-its-changed-columns.md). The rest of the decision below stays true.
+
 A pass finds the rows of each table that changed. The host applies each change to its own copy. The host must know the table, the kind of each change, the key of the row, and the new row.
 
 Debezium gives the common envelope of change data capture: `before`, `after`, `op`, `source` and `ts_ms`. `op` is `c` (create), `u` (update), `d` (delete), `r` (read) or `t` (truncate). `r` is a row of the first snapshot of a table, not a change that occurred. `t` tells that all rows of a table are gone. Debezium and CockroachDB give one feed for each table, keyed by the primary key.

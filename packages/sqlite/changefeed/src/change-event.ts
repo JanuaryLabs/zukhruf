@@ -13,9 +13,17 @@ export type Row = Readonly<Record<string, SQLOutputValue>>;
 export type ChangeEvent =
   | {
       readonly table: string;
-      readonly op: 'read' | 'insert' | 'update';
+      readonly op: 'read' | 'insert';
       readonly key: Key;
       readonly after: Row;
+    }
+  | {
+      readonly table: string;
+      readonly op: 'update';
+      readonly key: Key;
+      readonly after: Row;
+      /** The columns whose values changed: never empty. */
+      readonly changed: readonly [string, ...string[]];
     }
   | { readonly table: string; readonly op: 'delete'; readonly key: Key }
   | { readonly table: string; readonly op: 'truncate' };

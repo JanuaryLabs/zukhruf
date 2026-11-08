@@ -5,6 +5,8 @@ import {
 } from '@zukhruf/snapshot-differential';
 
 import type { ChangeEvent } from './change-event.ts';
+import { changedColumns, columnHashes } from './column-hashes.ts';
+import type { TablePosition } from './position.ts';
 import type { KeyedRow, Table } from './tables.ts';
 
 /** The change events of one table in a pass, and its new snapshot. */
@@ -13,15 +15,18 @@ export type TableChanges = {
   readonly state: SnapshotState;
 };
 
-// The change events of one table against its snapshot in the position, and
-// its new snapshot. null as the snapshot: the position does not have the
-// table, so each row is a read.
+// The change events of one table against what the position saved of it, and
+// its new snapshot. null: the position does not have the table, so each row
+// is a read.
 export async function tableChanges(
   table: Table,
-  saved: SnapshotState | null,
+  saved: TablePosition | null,
 ): Promise<TableChanges> {
   const events: ChangeEvent[] = [];
-  for await (const change of differentialOf(table).diff(table.rows(), saved)) {
+  for await (const change of differentialOf(table).diff(
+    table.rows(),
+    saved?.state ?? null,
+  )) {
     switch (change.type) {
       case 'insert':
         events.push({
@@ -32,11 +37,22 @@ export async function tableChanges(
         });
         break;
       case 'update':
+        // The differential gives an update only for a key of the saved
+        // snapshot.
+        if (saved === null)
+          throw new TypeError(`${table.name} gave an update with no snapshot`);
         events.push({
           table: table.name,
           op: 'update',
           key: change.record.key,
           after: change.record.after,
+          changed: changedColumns(
+            { hashes: change.savedFingerprint, columns: saved.columns },
+            {
+              hashes: columnHashes(change.record.after, table.columns),
+              columns: table.columns,
+            },
+          ),
         });
         break;
       case 'delete':
@@ -62,6 +78,7 @@ function differentialOf(table: Table): SnapshotDifferential<KeyedRow> {
     name: table.name,
     primaryKey: table.keyColumns,
     key: (row) => table.keyColumns.map((column) => keyValueOf(row, column)),
+    fingerprint: (row) => columnHashes(row.after, table.columns),
     // A pass reads each row of the table, so a key it does not find was
     // deleted.
     policy: new ClosedWorld(),

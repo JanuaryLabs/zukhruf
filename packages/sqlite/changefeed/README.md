@@ -86,7 +86,7 @@ With `ReadEveryRow`, the first run gives a `read` event for each row of each tab
 { table: 'notes',  op: 'read',   key: { id: 1n }, after: { id: 1n, folder_id: 7n, title: 'Plan', body: '…' } }
 { table: 'tags',   op: 'read',   key: { rowid: 3n }, after: { note_id: 1n, tag: 'q4' } }
 …
-{ table: 'notes',  op: 'update', key: { id: 1n }, after: { id: 1n, folder_id: 7n, title: 'Plan v2', body: '…' } }
+{ table: 'notes',  op: 'update', key: { id: 1n }, after: { id: 1n, folder_id: 7n, title: 'Plan v2', body: '…' }, changed: ['title'] }
 { table: 'tags',   op: 'delete', key: { rowid: 3n } }
 { table: 'drafts', op: 'truncate' }
 ```
@@ -105,6 +105,7 @@ The table `tags` has no primary key, so its key is the `rowid`. The owner droppe
 - `VACUUM` can change the `rowid` of each row of a table with no primary key. The feed compares the rows by `rowid`, so it then gives an event for each `rowid` whose row changed: an `insert` for a new `rowid`, an `update` for a `rowid` that now holds a different row, and a `delete` for a `rowid` that is gone. The SQLite documentation advises an `INTEGER PRIMARY KEY` for a stable `rowid`.
 - A pass copies each row into a plain object, because `node:sqlite` gives rows with no prototype. `after` keeps the values that SQLite gives: a `bigint` for an `INTEGER`, a number for a `REAL`, a string, `null`, or a `Uint8Array` for a `BLOB`. A key value is a `bigint` for an `INTEGER` too, such as each `rowid`. [ADR 0008](./docs/adr/0008-every-integer-is-a-bigint.md) tells why.
 - A change event is `{ table, op, key, after? }`, or `{ table, op: 'truncate' }`. `op` is `read`, `insert`, `update`, `delete` or `truncate`. `after` is the full row for `read`, `insert` and `update`. There is no `before`. [ADR 0003](./docs/adr/0003-the-change-event.md) tells why.
+- An `update` also has `changed`: the columns whose values changed, never empty. The position keeps one 8-byte hash for each column of each row, so the feed can name them with no copy of the row. A new column, or a dropped one, is the change of each row of its table. Thus a host can tell a change of a state column, such as `is_read`, from a change of the content. [ADR 0009](./docs/adr/0009-an-update-names-its-changed-columns.md) tells why.
 - `read` is each row of a table that the position does not have: each row at the first run, and each row of a new table.
 - `truncate` tells that the owner dropped a table, or changed the columns of its primary key. Remove all rows of that table from your copy. When the primary key changed, a `read` for each row comes after the `truncate`.
 - A change to the other columns of a table, for example a new column, changes the `after` of its rows. Each row then gives an `update`.
@@ -116,9 +117,9 @@ The table `tags` has no primary key, so its key is the `rowid`. The owner droppe
     - `new ReadEveryRow()` gives each row as `read`.
     - `new Baseline()` keeps the fingerprint of each row, and gives no events. The feed then gives only the changes after the baseline.
   - After the first save, a table that the position does not have gives a `read` for each row, with each start. Thus a table that the owner creates after a baseline gives its rows.
-- `watch({ interval, signal })` gives batches. A batch is an array of change events. The feed makes a first pass at once. Then it polls the data version each `interval` milliseconds, and makes a pass only when the data version changed. A pass that finds no change gives no batch, and the feed saves its position at once: for example, the key columns of a new table with no rows.
+- `watch({ interval, signal })` gives batches. A batch (`Batch`) holds the change events of one pass in `events`, and `for (const event of batch)` iterates them. The position sets the kind of the batch: a `PositionFile` gives a `SequencedBatch`, whose `sequence` is the number of the save that keeps it. A batch that comes again after a stop has the same `sequence`. A `PositionInMemory` gives a `Batch` with no `sequence`, because its numbers would not last past the run. [ADR 0010](./docs/adr/0010-a-batch-of-a-durable-position-has-a-sequence.md) tells why. The feed makes a first pass at once. Then it polls the data version each `interval` milliseconds, and makes a pass only when the data version changed. A pass that finds no change gives no batch, and the feed saves its position at once: for example, the key columns of a new table with no rows.
 - A durable feed saves the position of a batch when the loop asks for the next batch. It writes the position in one transaction. Apply each event of a batch before the loop goes on.
-- Delivery of a durable feed is at least once. If the process stops before the loop asks for the next batch, the next run gives the same batch again. A loop that stops with `break`, an error or an abort also gives its last batch again at the next run. Apply each event so that a second apply has no effect: a `put` by key, a `remove` by key, a `clear` by table.
+- Delivery of a durable feed is at least once. If the process stops before the loop asks for the next batch, the next run gives the same batch again. A loop that stops with `break`, an error or an abort also gives its last batch again at the next run. Apply each event so that a second apply has no effect: a `put` by key, a `remove` by key, a `clear` by table. Or keep the `sequence` of the last batch that you applied in the transaction of your own work, and skip a batch whose `sequence` you have (an idempotent consumer).
 - An abort of `signal` stops the poll, and the loop rejects with `signal.reason`.
 - A pass holds its read transaction only while it reads. It closes the snapshot before it gives the batch. The poll holds no read transaction. [ADR 0005](./docs/adr/0005-one-snapshot-for-each-pass.md) tells why.
 - Dispose closes the connections of the feed. Use `using`, or call `[Symbol.dispose]()`.
@@ -126,8 +127,9 @@ The table `tags` has no primary key, so its key is the `rowid`. The owner droppe
 ## Limits
 
 - You see only the net change between two passes. A row that the owner inserts and deletes between two passes gives no event. A row that the owner changes two times gives one `update`.
-- Each commit of the owner makes a pass that reads each table in full. The cost of a pass grows with the size of the database, also when the commit changed one row. [ADR 0001](./docs/adr/0001-capture-by-snapshot-differential.md) names a later option that reads only the changed tables.
-- The position keeps one fingerprint for each row of each table. It grows with the number of rows. A `PositionFile` keeps it on disk. A `PositionInMemory` keeps it in memory.
+- A pass reads only the tables whose b-tree pages the owner's WAL frames wrote since the last pass, when the WAL still holds all those frames. It finds the table of each page from the interior pages of the b-trees only, which it reads from the file and the WAL. Else it reads each table in full: at the first pass, after a reset of the WAL, when a frame wrote a page of the schema, or when the owner has no WAL. An owner that checkpoints its WAL when it closes its last connection, such as elt's SQLite destination at the end of each pass, leaves no frames, so its passes read each table. [ADR 0011](./docs/adr/0011-a-pass-reads-the-tables-that-the-wal-frames-wrote.md) tells why.
+- A full pass reads each table in full. Its cost grows with the size of the database, also when the commit changed one row.
+- The position keeps one 8-byte hash for each column of each row of each table. It grows with the number of rows and columns. A `PositionFile` keeps it on disk. A `PositionInMemory` keeps it in memory.
 - A feed with a `PositionInMemory` does not see the changes that the owner made while no feed ran.
 - A batch holds all the change events of one pass, with the full rows. A first run with `ReadEveryRow`, a new table, or a new primary key of a large table gives a large batch. A `Baseline` keeps no rows, only the fingerprints.
 - Precedent for scale: Fivetran's Teleport Sync, which also compares data sets, gives a warning when more than 50,000 records change between two syncs.
@@ -176,6 +178,9 @@ This package needed four changes in other packages. All four are done:
 - [0006 Every table, keyed by its primary key](./docs/adr/0006-every-table-keyed-by-its-primary-key.md)
 - [0007 The host gives the position and the start](./docs/adr/0007-the-host-gives-the-position-and-the-start.md)
 - [0008 Every integer is a bigint](./docs/adr/0008-every-integer-is-a-bigint.md)
+- [0009 An update names its changed columns](./docs/adr/0009-an-update-names-its-changed-columns.md)
+- [0010 A batch of a durable position has a sequence](./docs/adr/0010-a-batch-of-a-durable-position-has-a-sequence.md)
+- [0011 A pass reads the tables that the WAL frames wrote](./docs/adr/0011-a-pass-reads-the-tables-that-the-wal-frames-wrote.md)
 
 ## Development
 
@@ -189,7 +194,12 @@ npx nx run sqlite-changefeed:typecheck   # formats, lints, then type checks
 ```
 src/
   changefeed.ts           Changefeed: the connections, the runs of watch, and the save of a batch
+  batch.ts                Batch and SequencedBatch: the events of one pass
   pass.ts                 one pass in one snapshot, and the WAL check
+  wal-frames.ts           the frames of the owner's WAL since the saved progress
+  page-owners.ts          the table of each b-tree page, from the interior pages
+  touched-tables.ts       the tables that the new frames wrote
+  column-hashes.ts        the hash of each column of a row, and the changed columns
   tables.ts               the tables of PRAGMA table_list, the key of each table, and its rows
   table-changes.ts        the change events of one table, and its snapshot with no events
   position.ts             Position, and what a pass changes in it

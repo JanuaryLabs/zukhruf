@@ -2,7 +2,7 @@ import { ChangeWatcher, type WallClock } from '@zukhruf/async';
 import { DataVersion } from '@zukhruf/sqlite-data-version';
 import { Snapshot } from '@zukhruf/sqlite-snapshot';
 
-import type { ChangeEvent } from './change-event.ts';
+import type { Batch } from './batch.ts';
 import { pass, requireWal } from './pass.ts';
 import type { Position } from './position.ts';
 import type { Start } from './start.ts';
@@ -16,9 +16,12 @@ export type WatchOptions = {
   readonly clock: WallClock;
 };
 
-export type ChangefeedOptions = {
-  /** Where the feed keeps what it saw. The feed owns it, and disposes it. */
-  readonly position: Position;
+export type ChangefeedOptions<B extends Batch = Batch> = {
+  /**
+   * Where the feed keeps what it saw. The feed owns it, and disposes it. Its
+   * kind sets the batches: a PositionFile gives a SequencedBatch.
+   */
+  readonly position: Position<B>;
   /** What the first pass gives, until the position is saved once. */
   readonly start: Start;
 };
@@ -27,14 +30,14 @@ export type ChangefeedOptions = {
  * A change event for each changed row of each table of a SQLite database
  * that another process owns.
  */
-export class Changefeed implements Disposable {
+export class Changefeed<B extends Batch = Batch> implements Disposable {
   readonly #path: string;
   readonly #version: DataVersion;
-  readonly #position: Position;
+  readonly #position: Position<B>;
   readonly #start: Start;
   readonly #resources: DisposableStack;
 
-  constructor(databasePath: string, { position, start }: ChangefeedOptions) {
+  constructor(databasePath: string, { position, start }: ChangefeedOptions<B>) {
     using resources = new DisposableStack();
     // The feed owns its position also when the database fails to open.
     this.#position = resources.use(position);
@@ -56,7 +59,7 @@ export class Changefeed implements Disposable {
     interval,
     signal,
     clock,
-  }: WatchOptions): AsyncGenerator<ChangeEvent[], void, undefined> {
+  }: WatchOptions): AsyncGenerator<B, void, undefined> {
     // The data version is a local read: a check that takes the whole
     // interval is stuck.
     const watcher = new ChangeWatcher([this.#version], {
@@ -79,7 +82,7 @@ export class Changefeed implements Disposable {
         this.#position.save(update);
         continue;
       }
-      yield events;
+      yield this.#position.batch(events);
       // The loop may not have applied a batch that an abort stopped.
       signal.throwIfAborted();
       this.#position.save(update);

@@ -22,6 +22,8 @@ elt runs this composition in production for 14 databases of macOS apps. This pac
 
 ### For later: read again only the tables that changed
 
+Done on 2026-11-08, with the interior pages of the b-trees in place of `dbstat`. See [ADR 0011](./0011-a-pass-reads-the-tables-that-the-wal-frames-wrote.md).
+
 A pass reads each table, also when the commit of the owner changed one row. A later version can read the page numbers of the WAL frames that the owner wrote since the last pass, find the table of each page with the `dbstat` virtual table, and read again only those tables. The page numbers are in the header of each frame, so the feed does not need to read the content of a page. A checkpoint restart writes the WAL again from its start, and the frames before it are gone. The feed then makes a full pass. This option assumes the format of the WAL, so it is an optimization, not the method of capture.
 
 ## Consequences

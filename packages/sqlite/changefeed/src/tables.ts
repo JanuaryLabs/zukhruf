@@ -13,6 +13,8 @@ export type KeyedRow = { readonly key: Key; readonly after: Row };
 export type Table = {
   readonly name: string;
   readonly keyColumns: readonly string[];
+  /** The columns of a row's after, in their order. */
+  readonly columns: readonly string[];
   rows(): Iterable<KeyedRow>;
 };
 
@@ -31,10 +33,16 @@ export function tablesOf(snapshot: Snapshot): Table[] {
       const table = text(name);
       const primaryKey = identifyingPrimaryKey(snapshot, table);
       const from = `FROM "${table.replaceAll('"', '""')}"`;
+      // The statement names its columns also when the table has no row.
+      const columns = snapshot
+        .prepare(`SELECT * ${from}`)
+        .columns()
+        .map((column) => column.name);
       if (primaryKey === null)
         return {
           name: table,
           keyColumns: ['rowid'],
+          columns,
           rows: () =>
             rowsOf(snapshot, `SELECT rowid AS rowid, * ${from}`).map(
               ({ rowid, ...after }) => ({
@@ -46,6 +54,7 @@ export function tablesOf(snapshot: Snapshot): Table[] {
       return {
         name: table,
         keyColumns: primaryKey,
+        columns,
         rows: () =>
           rowsOf(snapshot, `SELECT * ${from}`).map((row) => {
             const after = { ...row };
@@ -63,9 +72,9 @@ export function tablesOf(snapshot: Snapshot): Table[] {
 // The columns of the declared primary key when SQLite makes it unique and
 // not NULL: as an alias of the rowid, or when each of its columns is NOT
 // NULL. PRAGMA table_info gives NOT NULL for each primary key column of a
-// WITHOUT ROWID table, because SQLite enforces it there. null when the rowid identifies the row: a table
-// with no primary key, or one whose declared primary key can hold NULL in
-// many rows.
+// WITHOUT ROWID table, because SQLite enforces it there. null when the rowid
+// identifies the row: a table with no primary key, or one whose declared
+// primary key can hold NULL in many rows.
 function identifyingPrimaryKey(
   snapshot: Snapshot,
   table: string,

@@ -41,8 +41,20 @@ One read of all tables in one snapshot. A pass compares the rows of each table w
 _Avoid_: Scan (the word of `@zukhruf/snapshot-differential` for the rows of one table), sync, poll (a poll reads only the data version)
 
 **Batch**:
-The change events of one pass, as an array. The feed saves the position of a batch when the host asks for the next batch.
+The change events of one pass (`Batch`). The feed saves the position of a batch when the host asks for the next batch.
 _Avoid_: Page, chunk, part (a part is a concept of `@zukhruf/snapshot-differential`)
+
+**Sequence**:
+The number of the save that keeps a batch of a durable feed (`SequencedBatch.sequence`). A batch that comes again after a stop has the same sequence. A feed whose position is in memory gives no sequence.
+_Avoid_: Offset, ID, version
+
+**Changed columns**:
+The columns whose values an update changed (`changed`). It is never empty. A new or a dropped column is a changed column of each row.
+_Avoid_: Diff, delta, before
+
+**WAL progress**:
+How far a pass read the owner's WAL: the salt of its header and the number of frames up to its last commit. A reset of the WAL changes the salt.
+_Avoid_: Offset, checkpoint (a checkpoint copies the WAL into the file of the owner), cursor
 
 **Change event**:
 What a pass gives for one row: `{ table, op, key, after? }`. `op` is `read`, `insert`, `update` or `delete`. `after` is the full row, except for a `delete`. A truncate event is a change event too, but it is for a table, not for a row.
@@ -57,7 +69,7 @@ A change event with `op: 'truncate'`: `{ table, op: 'truncate' }`. A pass gives 
 _Avoid_: Reset, clear, drop
 
 **Position**:
-What the feed saw at its last saved batch: the key columns of each table, and one fingerprint for each row (`Position`). The host gives it to the feed, and the feed owns it. A `PositionFile` keeps it in its own SQLite file, at the path that the host gives. A `PositionInMemory` keeps it in memory. It does not keep the rows. A position that no pass saved is not started.
+What the feed saw at its last saved batch: the key columns and the columns of each table, one hash for each column of each row, and the WAL progress (`Position`). The host gives it to the feed, and the feed owns it. A `PositionFile` keeps it in its own SQLite file, at the path that the host gives. A `PositionInMemory` keeps it in memory. It does not keep the rows. A position that no pass saved is not started.
 _Avoid_: State, offset, checkpoint (a checkpoint copies the WAL of the owner into its file), cursor, snapshot (a snapshot holds one moment of the database)
 
 **Save**:
