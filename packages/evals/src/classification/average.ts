@@ -1,12 +1,11 @@
 import type { Counts } from '../aggregation/counts.ts';
 import type { Label } from './label.ts';
 
-// The classes that an average reads: the counts of the classes that the
-// caller selects, in their order, and of every class of the answers. A set of
-// classes (multilabel) is not a class with two labels (binary).
+// The classes that an average reads: the counts of each class of the class
+// set, in its order. A set of classes (multilabel) is not a class with two
+// labels (binary).
 export type Classes = {
-  readonly selected: ReadonlyMap<Label, Counts>;
-  readonly present: ReadonlyMap<Label, Counts>;
+  readonly counts: ReadonlyMap<Label, Counts>;
   readonly multilabel: boolean;
 };
 

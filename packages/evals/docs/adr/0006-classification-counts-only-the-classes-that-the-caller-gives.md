@@ -1,6 +1,6 @@
 # Classification counts only the classes that the caller gives
 
-Status: Accepted 2026-11-08 by Ezz ("Approve both (Recommended)", backlog #3970). It amends decision 2 of ADR 0003. Ezz gave the rule for it: "design the package and force consumer to change not the other way around." The code is not built yet.
+Status: Accepted 2026-11-08 by Ezz ("Approve both (Recommended)", backlog #3970). It amends decision 2 of ADR 0003. Ezz gave the rule for it: "design the package and force consumer to change not the other way around." The package part is built (2026-11-08): `./classification`, and the consumers in mutex (`relevance-filtering` and `@zukhruf/mteb`). The consumers in context-compiler change after the release.
 
 ## Context
 

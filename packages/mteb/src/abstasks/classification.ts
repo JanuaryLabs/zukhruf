@@ -12,6 +12,7 @@ import { LogisticRegression } from '../dependencies/sklearn-logistic.ts';
 import {
   type ClassLabel,
   averagePrecisionScore,
+  uniqueInverse,
 } from '../dependencies/sklearn.ts';
 import {
   type ClassifierModel,
@@ -290,7 +291,13 @@ export abstract class AbsTaskClassification extends SklearnEvaluatorTask<
   ): ClassificationMetrics {
     const binary = new Set(yTest).size === 2;
     const ap = binary ? averagePrecision(yTest, yPred) : null;
-    const counts = ClassCounts.of({ expected: yTest, stated: yPred });
+    // MTEB passes labels=None: the class set is the sorted labels of both
+    // sides, as scikit-learn's unique_labels gives them.
+    const counts = ClassCounts.of({
+      labels: uniqueInverse([...yTest, ...yPred]).unique,
+      expected: yTest,
+      stated: yPred,
+    });
     const macro = new MacroAverage();
     const weighted = new WeightedAverage();
     return {

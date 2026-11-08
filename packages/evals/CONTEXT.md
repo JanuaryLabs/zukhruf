@@ -159,7 +159,7 @@ Each answer and each case has a set of zero or more labels.
 One label that the counts follow, such as `program` of the page kinds.
 
 **Class set**:
-The classes of the task, in the order that the caller gives. scikit-learn calls it `labels`. The caller gives it, and the answers never add a class. A label outside the class set counts in no class. So a stated label outside it, such as the answer null, is a miss of the expected class (design for review, ADR 0006).
+The classes of the task, in the order that the caller gives. scikit-learn calls it `labels`. The caller gives it, and the answers never add a class. A label outside the class set counts in no class. So a stated label outside it, such as the answer null, is a miss of the expected class (ADR 0006).
 
 **Positive label**:
 The class whose scores a binary average gives.
@@ -180,7 +180,7 @@ The mean of the scores of the classes, weighted by their support.
 The score of the positive label only.
 
 **Confusion matrix**:
-The count of each pair of an expected label and a stated label, with the labels in sorted order.
+The count of each pair of an expected class and a stated class, with the classes of the class set in its order. A pair with a label outside the class set has no count.
 
 **Accuracy**:
 The answers whose stated labels are their expected labels, divided by the answers. For multilabel answers, scikit-learn calls it the subset accuracy.

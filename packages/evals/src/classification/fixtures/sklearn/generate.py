@@ -209,6 +209,14 @@ while True:
         break
 calls.append(call("38 labels, 10 of them absent, zero_division NaN, where the mean of the other scores alone differs",
                   "precision", nan_true, nan_pred, average="macro", labels=list(range(-5, 33)), zero_division=np.nan))
+# A stated label outside labels, as the answer null of a failed call: the
+# page kinds of startup-credits' promptfoo test, with the kinds of its labels.
+kinds_true = ["program", "home", "program", "list", "investor", "home"]
+kinds_pred = ["program", "program", "home", "null", "investor", "program"]
+for metric in ("precision", "recall"):
+    for average in ("micro", "macro"):
+        calls.append(call("a stated label outside labels", metric, kinds_true, kinds_pred,
+                          average=average, labels=["home", "investor", "list", "program"]))
 
 
 def multilabel(name, y_true, y_pred, sample_weight=None):

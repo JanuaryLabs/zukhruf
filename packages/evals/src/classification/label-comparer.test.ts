@@ -9,8 +9,10 @@ import {
 } from './index.ts';
 
 const stated = (answer: unknown, expected: number | string | string[]) => [
-  ...new LabelComparer().compare(answer, new LabelCase({ expected, weight: 1 }))
-    .stated,
+  ...new LabelComparer({ labels: [expected].flat() }).compare(
+    answer,
+    new LabelCase({ expected, weight: 1 }),
+  ).stated,
 ];
 
 test('LabelComparer reads a JSON array of labels in the text as a set of labels, and other text as one label without its outer white space', () => {
@@ -52,5 +54,17 @@ test('LabelVarsCase reads vars.expected and vars.weight, and LabelConfigCase rea
   assert.throws(
     () => new LabelVarsCase().from({ expected: 'a', weight: 'heavy' }),
     /vars\.weight is a number, not "heavy"/,
+  );
+});
+
+test('a comparison holds the class set of its comparer in the order that the caller gives, and the comparison of one class has the class set of that class only', () => {
+  const comparison = new LabelComparer({ labels: ['b', 'c', 'a'] }).compare(
+    'x',
+    new LabelCase({ expected: 'a', weight: 1 }),
+  );
+
+  assert.deepEqual(
+    [comparison.labels(), comparison.only('c').labels()],
+    [['b', 'c', 'a'], ['c']],
   );
 });

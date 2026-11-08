@@ -31,7 +31,7 @@ import {
   LabelVarsCase,
 } from '@zukhruf/evals/classification';
 
-const comparer = new LabelComparer();
+const comparer = new LabelComparer({ labels: ['program', 'home', 'list'] });
 const testCase = new LabelVarsCase().from({ expected: 'program' });
 const comparison = comparer.compare('home', testCase);
 
@@ -58,7 +58,7 @@ A penalty is a factor in [0, 1] for one input, as BLEU's brevity penalty is. The
 
 ## Score with many scorers at once
 
-A `ScorerSet` holds labelled scorers and gives a `Scorecard`: passed, reason, checks and one named ratio for each label. It passes when each of its gates holds. Each gate gives a check, whose `name` is the label of the gate. The `comparer` of the family is required, because the core cannot know a family: `new ScorerSet(scorers, { comparer: new LabelComparer() })`. It makes the input once, and each scorer reads it.
+A `ScorerSet` holds labelled scorers and gives a `Scorecard`: passed, reason, checks and one named ratio for each label. It passes when each of its gates holds. Each gate gives a check, whose `name` is the label of the gate. The `comparer` of the family is required, because the core cannot know a family: `new ScorerSet(scorers, { comparer: new LabelComparer({ labels }) })`. It makes the input once, and each scorer reads it.
 
 A grouped scorer gives one ratio for each group of an input, under the label `${group} ${label}`: `PerField` gives one for each field in `./structured`, and `PerClass` gives one for each class in `./classification`. Both extend `Grouped` of the core: a subclass gives its groups with `groups(input)`, and `ratios` drops a group whose whole is 0. So a `ScorerSet` holds them beside plain scorers (Inspect AI's `grouped()` applies a metric to each group in the same way). A group can also be a projection of the input, of another type: `Grouped<Input, Group>` takes a `Scorer<Group>`, such as a count of the stated items without a pair, for each of their kinds. A grouped scorer is a breakdown, so its ratios stay out of the score of the record, which is the mean of the plain scorers.
 
@@ -75,7 +75,7 @@ const pageKinds = new ScorerSet(
     accuracy: new LabelsMatch(),
     recall: new Recall(new AllClassMatches()),
   },
-  { comparer: new LabelComparer() },
+  { comparer: new LabelComparer({ labels: ['program', 'home', 'list'] }) },
 );
 ```
 
@@ -224,22 +224,22 @@ It needs no peer: `npm install @zukhruf/evals`. Its sums are `sum` and `mean` of
 
 A case holds the expected labels and the weight: `new LabelCase({ expected, weight })`. `expected` is a label or a list of labels. `LabelVarsCase` reads `vars.expected` and `vars.weight` of a test (a test without a weight weighs 1). `LabelConfigCase` reads `config.expected` of an assertion, with the weight 1.
 
-`LabelComparer` reads the stated labels of an answer and gives a `LabelComparison`. It reads a label or a list of labels as they are. It reads text in this order:
+`new LabelComparer({ labels })` reads the stated labels of an answer and gives a `LabelComparison`. `labels` is the class set (see [The class set](#the-class-set)), and each comparison holds it. The comparer reads a label or a list of labels as they are. It reads text in this order:
 
 1. A JSON array of labels gives those labels.
 2. A number gives a number label, but only when each expected label of the case is a number. So `"7"` matches the label `7` and the label `"7"`.
 3. Other text is one string label, without its white space at the start and the end.
 
-`comparison.only(label)` gives the comparison of one class: each side keeps the label when it has it.
+`comparison.labels()` gives the class set, in the order that the caller gives. `comparison.only(label)` gives the comparison of one class: its class set is `[label]`, and each side keeps the label when it has it.
 
 The matches of a comparison count one answer:
 
 | Matches                   | Hits                             | Stated                   | Expected               |
 | ------------------------- | -------------------------------- | ------------------------ | ---------------------- |
 | `new ClassMatches(label)` | 1 when both sides have the label | 1 when the answer has it | 1 when the case has it |
-| `new AllClassMatches()`   | the labels that both sides have  | the stated labels        | the expected labels    |
+| `new AllClassMatches()`   | the classes that both sides have | the stated classes       | the expected classes   |
 
-`LabelsMatch` is a gate: it holds when the stated labels are the expected labels. `new PerClass(scorer, { labels })` gives one ratio for each class, under the label `${class} ${label}`. Without `labels`, the classes are the labels of both sides of the answer, in the order of numpy's `unique()` (numbers by value, strings by code point).
+`AllClassMatches` counts only the classes of the class set of the comparison. `LabelsMatch` is a gate: it holds when the stated labels are the expected labels. `new PerClass(scorer)` gives one ratio for each class of the class set, under the label `${class} ${label}`, in the order of the class set.
 
 `Totals` of these ratios gives scikit-learn's numbers, bit for bit, for integer weights:
 
@@ -263,6 +263,7 @@ import {
 } from '@zukhruf/evals/classification';
 
 const counts = ClassCounts.of({
+  labels: ['a', 'b'],
   expected: ['a', 'b', 'b'],
   stated: ['a', 'a', 'b'],
 });
@@ -270,31 +271,29 @@ const counts = ClassCounts.of({
 counts.accuracy(); // accuracy_score
 counts.fBeta({ beta: 1, average: new MacroAverage() }); // f1_score(average='macro')
 counts.precision({ average: new WeightedAverage() }); // precision_score(average='weighted')
-counts.confusionMatrix().rows(); // confusion_matrix, labels in sorted order
+counts.confusionMatrix().rows(); // confusion_matrix, the classes in the order of labels
 
 // The same counts, one answer at a time:
-const run = new ClassCounts({ multilabel: false });
+const run = new ClassCounts({ labels: ['a', 'b'], multilabel: false });
 const testCase = new LabelCase({ expected: 'a', weight: 1 });
-run.add(new LabelComparer().compare('a', testCase), testCase.weight);
+const comparer = new LabelComparer({ labels: ['a', 'b'] });
+run.add(comparer.compare('a', testCase), testCase.weight);
 ```
 
-- `ClassCounts.of({ expected, stated, weights })` builds multiclass counts from two arrays of labels. `weights` is optional, and an answer without a weight weighs 1.
+- `ClassCounts.of({ labels, expected, stated, weights })` builds multiclass counts from two arrays of labels. `labels` is the class set. `weights` is optional, and an answer without a weight weighs 1.
 - `ClassCounts.ofIndicators({ expected, stated, weights })` builds multilabel counts from two label indicator matrices. Each column is a class, also when no answer has it.
-- `new ClassCounts({ multilabel })` starts empty, and `add(comparison, weight)` adds one answer. Multiclass counts refuse an answer with no label or more than one label on a side.
-- `average` is a Strategy: `new MicroAverage()`, `new MacroAverage()`, `new WeightedAverage()` or `new BinaryAverage(positiveLabel)`. `Average.of(classes, score)` gives one number from the score of each class. The micro average adds the counts with numpy's pairwise sum. The macro average is numpy's `nanmean`. The weighted average is scikit-learn's `_nanaverage`: it drops each NaN score with its weight, and it gives the plain mean when the weights add up to 0. `BinaryAverage` throws when scikit-learn raises: for multilabel counts, for more than two classes, and for a positive label that is not one of two classes. The samples average is a `SampleAveraged` scorer, because it needs the value of each answer.
-- `labels` selects the classes to score, in its order. By default it is every class, in sorted order.
+- `new ClassCounts({ labels, multilabel })` starts empty, and `add(comparison, weight)` adds one answer to the classes of the class set of the counts. Multiclass counts refuse an answer with no label or more than one label on a side.
+- `labels()`, `support()` and `confusionMatrix()` give the classes of the class set, in its order.
+- `average` is a Strategy: `new MicroAverage()`, `new MacroAverage()`, `new WeightedAverage()` or `new BinaryAverage(positiveLabel)`. `Average.of(classes, score)` gives one number from the score of each class. The micro average adds the counts with numpy's pairwise sum. The macro average is numpy's `nanmean`. The weighted average is scikit-learn's `_nanaverage`: it drops each NaN score with its weight, and it gives the plain mean when the weights add up to 0. `BinaryAverage` reads the class set. It throws for multilabel counts, for a class set of more than two classes, and for a positive label outside the class set. The samples average is a `SampleAveraged` scorer, because it needs the value of each answer.
 - `zeroDivision` is the score of a class whose denominator is 0: 0 (the default, as scikit-learn's `"warn"` gives), 1 or `NaN`. A macro average and a weighted average skip a `NaN` score.
 - `form` is the arithmetic of the F-measure (ADR 0003). `new CountsForm()` is scikit-learn's and the default. It also gives the bits of TREC's F0.5 for integer counts. `new PrecisionRecallForm()` is van Rijsbergen's and SOB's.
 - `confusionMatrix()` throws for multilabel counts, as scikit-learn raises.
 
 ### The class set
 
-Status: design for review (backlog #3970, [ADR 0006](docs/adr/0006-classification-counts-only-the-classes-that-the-caller-gives.md)). The released package takes the classes from the answers, as scikit-learn's `labels=None` does.
-
-A harness can state any text, such as the answer null of a failed call. If the answers give the classes, each such text adds a class, and the macro averages change. So the caller gives the class set, scikit-learn's `labels`, to the comparer and to the counts. The answers never add a class.
+[ADR 0006](docs/adr/0006-classification-counts-only-the-classes-that-the-caller-gives.md) gives this rule. A harness can state any text, such as the answer null of a failed call. If the answers give the classes, each such text adds a class, and the macro averages change. So the caller gives the class set, scikit-learn's `labels`, to the comparer and to the counts. The answers never add a class.
 
 ```ts
-// Proposal: no code exists yet.
 import { ClassCounts, LabelComparer } from '@zukhruf/evals/classification';
 
 const pageKinds = ['program', 'home', 'list', 'investor', 'other'];
@@ -302,7 +301,7 @@ const comparer = new LabelComparer({ labels: pageKinds });
 const counts = new ClassCounts({ labels: pageKinds, multilabel: false });
 ```
 
-A label outside the class set counts in no class, as scikit-learn gives it when the caller gives `labels`. A stated label outside it is a miss of the expected class, and it is not a predicted count of any class. `LabelsMatch` still reads it as a wrong answer. `PerClass` and `AllClassMatches` read the class set of the comparison, so they take no `labels`. `ClassCounts.ofIndicators` takes its classes from the columns, as today. To port a scikit-learn call with `labels=None`, give the sorted labels of both sides.
+A label outside the class set counts in no class, as scikit-learn gives it when the caller gives `labels`. A stated label outside it is a miss of the expected class, and it is not a predicted count of any class. `LabelsMatch` still reads it as a wrong answer. `PerClass` and `AllClassMatches` read the class set of the comparison, so they take no `labels`. `ClassCounts.ofIndicators` takes its classes from the columns. To port a scikit-learn call with `labels=None`, give the sorted labels of both sides.
 
 ### Probabilities
 
@@ -331,7 +330,10 @@ import {
 } from '@zukhruf/evals/classification';
 import { AssertionModule, ScorerAssertion } from '@zukhruf/evals/promptfoo';
 
-const labels = { comparer: new LabelComparer(), cases: new LabelVarsCase() };
+const labels = {
+  comparer: new LabelComparer({ labels: ['program', 'home', 'list'] }),
+  cases: new LabelVarsCase(),
+};
 
 export const scorers = new AssertionModule(import.meta.url, {
   accuracy: new ScorerAssertion(new LabelsMatch(), {
@@ -662,34 +664,36 @@ export class LabelComparison {
   constructor(sides: {
     stated: ReadonlySet<Label>;
     expected: ReadonlySet<Label>;
+    labels: readonly Label[];
   });
   readonly stated: ReadonlySet<Label>;
   readonly expected: ReadonlySet<Label>;
-  /** The labels of both sides, in the order of numpy's unique(). */
+  /** The class set, in the order that the caller gives. */
   labels(): Label[];
-  /** The comparison of one class. */
+  /** The comparison of one class: its class set is [label]. */
   only(label: Label): LabelComparison;
 }
 /** Reads the stated labels: a label, a list of labels, a JSON array of labels, a number, or one string label. */
-export class LabelComparer implements Comparer<LabelCase, LabelComparison> {}
+export class LabelComparer implements Comparer<LabelCase, LabelComparison> {
+  /** labels: the class set. */
+  constructor(options: { labels: readonly Label[] });
+}
 
 export class ClassMatches implements Matches<LabelComparison> {
   constructor(label: Label);
 }
+/** Counts only the classes of the class set of the comparison. */
 export class AllClassMatches implements Matches<LabelComparison> {}
 /** Holds when the stated labels are the expected labels. */
 export class LabelsMatch extends Gate<LabelComparison> {}
+/** A ratio for each class of the class set of the comparison. */
 export class PerClass extends Grouped<LabelComparison> {
-  constructor(
-    scorer: Scorer<LabelComparison>,
-    options?: { labels?: readonly Label[] },
-  );
+  constructor(scorer: Scorer<LabelComparison>);
 }
 
-/** The classes that an average reads. */
+/** The classes that an average reads: the counts of each class of the class set. */
 export type Classes = {
-  readonly selected: ReadonlyMap<Label, Counts>;
-  readonly present: ReadonlyMap<Label, Counts>;
+  readonly counts: ReadonlyMap<Label, Counts>;
   readonly multilabel: boolean;
 };
 /** How the scores of the classes become one number (Strategy). */
@@ -705,14 +709,14 @@ export class BinaryAverage implements Average {
 
 type ScoreOptions = {
   average: Average;
-  labels?: readonly Label[];
   /** 0 (the default), 1 or NaN. */
   zeroDivision?: number;
 };
-/** The counts of each class over many answers: true positives, predicted and true. */
+/** The counts of each class of the class set over many answers: true positives, predicted and true. */
 export class ClassCounts {
-  constructor(options: { multilabel: boolean });
+  constructor(options: { labels: readonly Label[]; multilabel: boolean });
   static of(answers: {
+    labels: readonly Label[];
     expected: readonly Label[];
     stated: readonly Label[];
     weights?: readonly number[];
@@ -723,6 +727,7 @@ export class ClassCounts {
     weights?: readonly number[];
   }): ClassCounts;
   add(comparison: LabelComparison, weight: number): void;
+  /** The class set, in the order that the caller gives. */
   labels(): Label[];
   accuracy(): number;
   precision(options: ScoreOptions): number;
@@ -790,4 +795,4 @@ The package was built in two items: mutex #3888 (the core, `./promptfoo` and the
 - [ADR 0003: classification follows scikit-learn, from the counts of each class](docs/adr/0003-classification-follows-scikit-learn-from-the-counts-of-each-class.md)
 - [ADR 0004: two runs are compared by a paired bootstrap over their tests](docs/adr/0004-two-runs-are-compared-by-a-paired-bootstrap-over-their-tests.md)
 - [ADR 0005: a failed call is the answer null](docs/adr/0005-a-failed-call-is-the-answer-null.md)
-- [ADR 0006: classification counts only the classes that the caller gives](docs/adr/0006-classification-counts-only-the-classes-that-the-caller-gives.md) (design for review)
+- [ADR 0006: classification counts only the classes that the caller gives](docs/adr/0006-classification-counts-only-the-classes-that-the-caller-gives.md)

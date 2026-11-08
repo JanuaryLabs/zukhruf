@@ -116,7 +116,8 @@ const answers = (sklearn: Sklearn) =>
     };
   });
 
-// The labels of a case: its sorted labels, or the columns of its rows.
+// The class set of a case: the sorted labels that scikit-learn recorded, or
+// the columns of its rows.
 const classes = (sklearn: Sklearn): readonly Label[] => {
   if (sklearn.labels !== undefined) return sklearn.labels;
   const row = sklearn.y_true[0];
@@ -128,7 +129,9 @@ const totalsOf = (
   sklearn: Sklearn,
   scorers: Readonly<Record<string, Scorer<LabelComparison> | PerClass>>,
 ) => {
-  const scorer = new ScorerSet(scorers, { comparer: new LabelComparer() });
+  const scorer = new ScorerSet(scorers, {
+    comparer: new LabelComparer({ labels: classes(sklearn) }),
+  });
   const totals = new Totals();
   for (const { testCase, stated } of answers(sklearn))
     totals.add(scorer.score(stated, testCase), testCase.weight);
@@ -187,6 +190,62 @@ test("AllClassMatches pooled by Totals gives scikit-learn's micro precision, rec
   assert.deepEqual(differ, []);
 });
 
+test("a stated label outside the class set, as the answer null of a failed call, is a miss of its expected class and a predicted count of no class: AllClassMatches pooled by Totals and ClassCounts give scikit-learn's micro precision 0.4 and micro recall 1/3 with labels, and its macro precision and recall", () => {
+  const calls = expected.calls.filter(
+    (call) => call.case === 'a stated label outside labels',
+  );
+  const [call] = calls;
+  assert.ok(call?.kwargs.labels);
+  const labels = call.kwargs.labels;
+  const scorer = new ScorerSet(
+    {
+      precision: new Precision(new AllClassMatches()),
+      recall: new Recall(new AllClassMatches()),
+    },
+    { comparer: new LabelComparer({ labels }) },
+  );
+  const totals = new Totals();
+  for (const [index, label] of call.y_true.entries())
+    totals.add(
+      scorer.score(
+        call.y_pred[index],
+        new LabelCase({ expected: label, weight: 1 }),
+      ),
+      1,
+    );
+  const counts = ClassCounts.of({
+    labels,
+    expected: call.y_true,
+    stated: call.y_pred,
+  });
+  const averageOf = { micro: new MicroAverage(), macro: new MacroAverage() };
+
+  const got = calls.map(({ metric, kwargs }) => {
+    assert.ok(metric !== 'fbeta');
+    assert.ok(kwargs.average === 'micro' || kwargs.average === 'macro');
+    return [
+      metric,
+      kwargs.average,
+      counts[metric]({ average: averageOf[kwargs.average] }),
+    ];
+  });
+
+  assert.deepEqual(
+    got,
+    calls.map(({ metric, kwargs, value }) => [metric, kwargs.average, value]),
+  );
+  assert.deepEqual(
+    [totals.get('precision').value, totals.get('recall').value],
+    [0.4, 0.3333333333333333],
+  );
+  assert.deepEqual(
+    calls
+      .filter(({ kwargs }) => kwargs.average === 'micro')
+      .map(({ value }) => value),
+    [0.4, 0.3333333333333333],
+  );
+});
+
 test("LabelsMatch pooled by Totals gives scikit-learn's accuracy_score, the subset accuracy for a set of classes", () => {
   const differ = integerWeights
     .filter(
@@ -225,8 +284,8 @@ const averages = {
   weighted: new WeightedAverage(),
 } as const;
 
-// The counts of a case: of the labels of each answer, or of the rows of its
-// label indicator matrices.
+// The counts of a case: of the labels of each answer with the class set that
+// scikit-learn recorded, or of the rows of its label indicator matrices.
 const countsOf = (sklearn: Sklearn): ClassCounts => {
   const weights =
     sklearn.sample_weight === null || sklearn.sample_weight === undefined
@@ -244,6 +303,7 @@ const countsOf = (sklearn: Sklearn): ClassCounts => {
         ...weights,
       })
     : ClassCounts.of({
+        labels: sklearn.labels,
         expected: sklearn.y_true.map((label) => {
           assert.ok(typeof label !== 'object');
           return label;
@@ -256,19 +316,24 @@ const countsOf = (sklearn: Sklearn): ClassCounts => {
       });
 };
 
-// The precision, recall and F1 of the counts: of the selected classes, with
-// the average.
-const scoresOf = (
-  counts: ClassCounts,
-  average: Average,
-  labels?: readonly Label[],
-) => {
-  const options = labels === undefined ? { average } : { average, labels };
-  return {
-    precision: counts.precision(options),
-    recall: counts.recall(options),
-    f1: counts.fBeta({ beta: 1, ...options }),
-  };
+// The precision, recall and F1 of the counts, with the average.
+const scoresOf = (counts: ClassCounts, average: Average) => ({
+  precision: counts.precision({ average }),
+  recall: counts.recall({ average }),
+  f1: counts.fBeta({ beta: 1, average }),
+});
+
+// The counts of one class of a case, as scikit-learn's labels=[label]: each
+// answer is added to counts whose class set is [label].
+const classCountsOf = (sklearn: Sklearn, label: Label): ClassCounts => {
+  const counts = new ClassCounts({
+    labels: [label],
+    multilabel: sklearn.labels === undefined,
+  });
+  const comparer = new LabelComparer({ labels: classes(sklearn) });
+  for (const { testCase, stated } of answers(sklearn))
+    counts.add(comparer.compare(stated, testCase), testCase.weight);
+  return counts;
 };
 
 test("ClassCounts gives scikit-learn's accuracy, the micro, macro and weighted precision, recall and F1, the score of each class and the support, bit for bit, with float sample weights too, for a class and for a set of classes", () => {
@@ -289,7 +354,10 @@ test("ClassCounts gives scikit-learn's accuracy, the micro, macro and weighted p
           (['precision', 'recall', 'f1'] as const).map((metric) => [
             metric,
             classes(sklearn).map(
-              (label) => scoresOf(counts, new MacroAverage(), [label])[metric],
+              (label) =>
+                scoresOf(classCountsOf(sklearn, label), new MacroAverage())[
+                  metric
+                ],
             ),
           ]),
         ),
@@ -342,37 +410,40 @@ test("ClassCounts gives scikit-learn's value for each call with labels, zero_div
   for (const call of expected.calls) {
     const { average, beta, labels, zero_division, pos_label, sample_weight } =
       call.kwargs;
-    const counts = ClassCounts.of({
-      expected: call.y_true,
-      stated: call.y_pred,
-      ...(sample_weight === undefined ? {} : { weights: sample_weight }),
-    });
-    const score = (options: {
-      readonly average: Average;
-      readonly labels?: readonly Label[];
-    }) => {
-      const all = {
-        ...options,
+    // scikit-learn's labels, or the sorted labels of both sides for
+    // labels=None, as unique_labels gives them.
+    const classSet =
+      labels ??
+      [...new Set([...call.y_true, ...call.y_pred])].toSorted((left, right) => {
+        assert.ok(typeof left === 'number' && typeof right === 'number');
+        return left - right;
+      });
+    const score = (classLabels: readonly Label[], average: Average) => {
+      const counts = ClassCounts.of({
+        labels: classLabels,
+        expected: call.y_true,
+        stated: call.y_pred,
+        ...(sample_weight === undefined ? {} : { weights: sample_weight }),
+      });
+      const options = {
+        average,
         ...(zero_division === undefined
           ? {}
           : { zeroDivision: number(zero_division) }),
       };
       if (call.metric === 'fbeta')
-        return counts.fBeta({ beta: beta ?? Number.NaN, ...all });
-      return counts[call.metric](all);
+        return counts.fBeta({ beta: beta ?? Number.NaN, ...options });
+      return counts[call.metric](options);
     };
     const value =
       average === null
-        ? (labels ?? counts.labels()).map((label) =>
-            score({ average: new MacroAverage(), labels: [label] }),
-          )
-        : score({
-            average:
-              average === 'binary'
-                ? new BinaryAverage(pos_label ?? 1)
-                : averages[average],
-            ...(labels === undefined ? {} : { labels }),
-          });
+        ? classSet.map((label) => score([label], new MacroAverage()))
+        : score(
+            classSet,
+            average === 'binary'
+              ? new BinaryAverage(pos_label ?? 1)
+              : averages[average],
+          );
     const want =
       typeof call.value === 'object'
         ? call.value.map(number)

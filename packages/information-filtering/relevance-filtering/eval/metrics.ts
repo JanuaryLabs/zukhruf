@@ -42,6 +42,7 @@ export function scores(
   relevant: readonly boolean[],
 ): Scores {
   const counts = ClassCounts.of({
+    labels: [NOT_RELEVANT, RELEVANT],
     expected: relevant.map(Number),
     stated: accepted.map(Number),
   });

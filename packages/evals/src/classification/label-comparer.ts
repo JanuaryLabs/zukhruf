@@ -8,15 +8,25 @@ import { type Label, isLabel } from './label.ts';
 // a JSON array of labels gives those labels; a number gives a number label
 // only when each expected label of the case is a number; any other text,
 // without its white space at the start and the end, is one string label.
+// Its comparisons hold the class set: the classes of the task, in the order
+// that the caller gives (scikit-learn's labels). The answers never add a
+// class.
 export class LabelComparer implements Comparer<LabelCase, LabelComparison> {
+  readonly #labels: readonly Label[];
+
+  constructor({ labels }: { readonly labels: readonly Label[] }) {
+    this.#labels = labels;
+  }
+
   compare(stated: unknown, testCase: LabelCase): LabelComparison {
     return new LabelComparison({
-      stated: new Set(LabelComparer.#labels(stated, testCase)),
+      stated: new Set(LabelComparer.#stated(stated, testCase)),
       expected: testCase.expected,
+      labels: this.#labels,
     });
   }
 
-  static #labels(stated: unknown, testCase: LabelCase): readonly Label[] {
+  static #stated(stated: unknown, testCase: LabelCase): readonly Label[] {
     if (Array.isArray(stated) && stated.every(isLabel)) return stated;
     if (typeof stated === 'number' && isLabel(stated)) return [stated];
     if (typeof stated !== 'string')
