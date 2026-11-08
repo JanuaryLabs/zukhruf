@@ -1,6 +1,7 @@
 export { IidBootstrap } from './bootstrap/iid-bootstrap.ts';
 export { ConfidenceInterval } from './interval/confidence-interval.ts';
 export type { ConfidenceIntervalMethod } from './interval/confidence-interval-method.ts';
+export { DifferenceInterval } from './interval/difference-interval.ts';
 export { PercentileInterval } from './interval/percentile-interval.ts';
 export { Higher } from './quantile/higher.ts';
 export { InvertedCdf } from './quantile/inverted-cdf.ts';
