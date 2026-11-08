@@ -1,6 +1,6 @@
 # Two runs are compared by a paired bootstrap over their tests
 
-Status: design for review (2026-11-07, backlog #3870). Ezz decided the p-value. The other decisions come from the review of the owner of `@zukhruf/statistics` (session statistics-bootstrap-consolidation, ADR 0001 of that package). No code exists yet.
+Status: accepted (2026-11-08, backlog #3870). Ezz decided the p-value, and he approved the design on 2026-11-08. The other decisions come from the review of the owner of `@zukhruf/statistics` (session statistics-bootstrap-consolidation, ADR 0001 of that package).
 
 ## Context
 
@@ -44,7 +44,7 @@ The Rule of Three counts the places that have the same knowledge (read 2026-11-0
 | The verdict "interval against 0"                             | mteb `pairedBootstrapTest`; `PairedBootstrap`. relevance-filtering's margin of −0.05 and event-detection's rule of two baselines are other rules                                                                                                         | 2           | Strike 2: each caller keeps its rule (ADR 0001 of `@zukhruf/statistics`)                               |
 | The two-sided percentile-bootstrap p-value                   | mteb `pairedBootstrapTest`; `PairedBootstrap`                                                                                                                                                                                                            | 2           | Strike 2: each caller keeps it (ADR 0001 of `@zukhruf/statistics`)                                     |
 
-The code of #3870 records each strike-2 copy in a ledger (the model is `packages/single-flight/docs/copied-from-mutex.md`) and files one backlog item whose trigger is "a third consumer". Until then, a fix to one copy goes into the other copy too.
+The ledger [docs/copied-code.md](../copied-code.md) records each strike-2 copy (the model is `packages/single-flight/docs/copied-from-mutex.md`). Backlog #4009 waits for "a third consumer". Until then, a fix to one copy goes into the other copy too.
 
 ## Considered Options
 

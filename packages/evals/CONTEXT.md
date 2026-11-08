@@ -92,7 +92,7 @@ _Avoid_: macro average (that is the mean over the classes)
 The interval of a mean: many resamples draw the scorecards again, with replacement, and two quantiles of their means are its ends.
 
 **Run**:
-The scorecards that one model gives on many tests of one harness, each with its test id and its weight. A paired bootstrap reads two runs (design for review, ADR 0004).
+The scorecards that one model gives on many tests of one harness, each with its test id and its weight. A paired bootstrap reads two runs (ADR 0004).
 
 **Baseline run** and **change run**:
 The two runs of a paired bootstrap: the run to compare against, and the run with the change, such as another model. mteb's `pairedBootstrapTest(baseline, change)` and Braintrust's "baseline experiment" use the same words.

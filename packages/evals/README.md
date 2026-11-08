@@ -94,7 +94,7 @@ const pageKinds = new ScorerSet(
 
 ## Compare two runs
 
-Status: design for review (backlog #3870, [ADR 0004](docs/adr/0004-two-runs-are-compared-by-a-paired-bootstrap-over-their-tests.md)). The released package does not have `Run` or `PairedBootstrap` yet.
+The package has `Run` and `PairedBootstrap` (backlog #3870, [ADR 0004](docs/adr/0004-two-runs-are-compared-by-a-paired-bootstrap-over-their-tests.md)).
 
 A caller runs one harness two times on the same tests: once with the baseline model and once with a change, such as another model. Two means side by side do not say if the change is better. `PairedBootstrap` gives one verdict for each name: better, worse or inconclusive, with the difference, its interval and a p-value.
 
@@ -146,7 +146,7 @@ const brier = paired.verdict(baseline, change, 'brier', {
 A run holds the scorecards of one model. A second `add` of a test id is one more epoch of that test: startup-credits adds three runs of one model as three epochs of one `Run`. To test many names, call `verdict` once for each name, and correct the p-values, such as with `holm` of `@zukhruf/mteb`. To test one name, use its p-value as it is.
 
 ```ts
-// @zukhruf/evals: two runs side by side (design for review)
+// @zukhruf/evals: two runs side by side
 import type {
   ConfidenceIntervalMethod,
   DifferenceInterval,
@@ -790,6 +790,6 @@ The package was built in two items: mutex #3888 (the core, `./promptfoo` and the
 - [ADR 0001: one package, with a subpath for each shape of answer](docs/adr/0001-one-package-with-a-subpath-for-each-shape-of-answer.md)
 - [ADR 0002: the core is generic over the answer](docs/adr/0002-the-core-is-generic-over-the-answer.md)
 - [ADR 0003: classification follows scikit-learn, from the counts of each class](docs/adr/0003-classification-follows-scikit-learn-from-the-counts-of-each-class.md)
-- [ADR 0004: two runs are compared by a paired bootstrap over their tests](docs/adr/0004-two-runs-are-compared-by-a-paired-bootstrap-over-their-tests.md) (design for review)
+- [ADR 0004: two runs are compared by a paired bootstrap over their tests](docs/adr/0004-two-runs-are-compared-by-a-paired-bootstrap-over-their-tests.md)
 - [ADR 0005: a failed call is the answer null](docs/adr/0005-a-failed-call-is-the-answer-null.md) (design for review)
 - [ADR 0006: classification counts only the classes that the caller gives](docs/adr/0006-classification-counts-only-the-classes-that-the-caller-gives.md) (design for review)
