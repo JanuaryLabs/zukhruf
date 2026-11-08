@@ -128,7 +128,7 @@ A scorer with its weight, the threshold at which it passes, and the metric it re
 The module that promptfoo loads the function of a scorer assertion from. A config names its scorer assertions, and gets JSON assertions with file references.
 
 **Failed call**:
-A model call that failed for its one test, also after its retries, such as a timeout or a 500. The harness gives the answer null for it, so its case keeps its expected values in the wholes (design for review, ADR 0005). HELM calls it a non-fatal error, and Inspect AI calls it an errored sample. `FailedCall` of `./promptfoo` is a coinage of this package.
+A model call that failed for its one test, also after its retries, such as a timeout or a 500. The harness gives the answer null for it, so its case keeps its expected values in the wholes (ADR 0005). HELM calls it a non-fatal error, and Inspect AI calls it an errored sample. `FailedCall` of `./promptfoo` is a coinage of this package.
 _Avoid_: error row, failed sample
 
 **Answer null**:

@@ -363,14 +363,13 @@ The name is the promptfoo `metric`, unless the scorer assertion gives its own `m
 
 ### A failed call
 
-Status: design for review (backlog #3970, [ADR 0005](docs/adr/0005-a-failed-call-is-the-answer-null.md)). The released package does not have `FailedCall` yet.
+[ADR 0005](docs/adr/0005-a-failed-call-is-the-answer-null.md) gives the reasons (backlog #3970).
 
 A failed call is a model call that failed for its one test, also after its retries. promptfoo does not grade a result whose provider gives `error` or no output. That result is an error result: it has no named scores, so its case adds nothing to the wholes, and the recall goes up. A failed call is an answer of the harness: the answer null, the text `'null'`. promptfoo grades it, and each family reads it as no answer. `FailedCall` is a coinage of this package. A consumer uses one of two forms.
 
 When the provider is your own, return `new FailedCall(reason).response(metadata)`. promptfoo grades the result, and `promptfoo retry <evalId>` does not run it again. The reason is in `metadata.failed`.
 
 ```ts
-// Proposal: no code exists yet.
 import { FailedCall } from '@zukhruf/evals/promptfoo';
 
 const [result] = await rule.compute([row.input], options?.abortSignal);
@@ -381,7 +380,6 @@ if (result !== undefined && 'error' in result)
 When the provider is a built-in one, such as `openai:chat`, an `afterEach` extension hook grades each error result on `FailedCall.answer`. The result stays an error result, so `promptfoo retry <evalId>` and `--retry-errors` run it again.
 
 ```ts
-// Proposal: no code exists yet.
 import {
   type AfterEachExtensionHookContext,
   ResultFailureReason,
@@ -791,5 +789,5 @@ The package was built in two items: mutex #3888 (the core, `./promptfoo` and the
 - [ADR 0002: the core is generic over the answer](docs/adr/0002-the-core-is-generic-over-the-answer.md)
 - [ADR 0003: classification follows scikit-learn, from the counts of each class](docs/adr/0003-classification-follows-scikit-learn-from-the-counts-of-each-class.md)
 - [ADR 0004: two runs are compared by a paired bootstrap over their tests](docs/adr/0004-two-runs-are-compared-by-a-paired-bootstrap-over-their-tests.md)
-- [ADR 0005: a failed call is the answer null](docs/adr/0005-a-failed-call-is-the-answer-null.md) (design for review)
+- [ADR 0005: a failed call is the answer null](docs/adr/0005-a-failed-call-is-the-answer-null.md)
 - [ADR 0006: classification counts only the classes that the caller gives](docs/adr/0006-classification-counts-only-the-classes-that-the-caller-gives.md) (design for review)

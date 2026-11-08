@@ -10,3 +10,4 @@ export {
   PromptfooAssertion,
 } from './promptfoo-assertion.ts';
 export { ScorerAssertion } from './scorer-assertion.ts';
+export { FailedCall, type FailedCallResponse } from './failed-call.ts';

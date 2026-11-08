@@ -1,6 +1,6 @@
 # A failed call is the answer null
 
-Status: Accepted 2026-11-08 by Ezz ("Approve both (Recommended)", backlog #3970), after he approved the design ("Approve (Recommended)") and its retry rule ("Final null (Recommended)"). The code is not built yet. The meaning of the answer null in `./classification` is in ADR 0006.
+Status: Accepted 2026-11-08 by Ezz ("Approve both (Recommended)", backlog #3970), after he approved the design ("Approve (Recommended)") and its retry rule ("Final null (Recommended)"). The package part is built: `FailedCall` in `./promptfoo` (2026-11-08). The three places move to it after its release. The meaning of the answer null in `./classification` is in ADR 0006.
 
 ## Context
 
