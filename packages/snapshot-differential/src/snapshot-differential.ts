@@ -29,6 +29,10 @@ export type SnapshotDifferentialOptions<Data> = {
   // kept with its key for the policy to read.
   readonly expiresBy?: string | undefined;
   readonly policy: DeletionPolicy;
+  // A record's fingerprint, when the caller knows a better one, such as one
+  // hash for each field so that an update can name what changed. The default
+  // is the SHA-256 of the record's canonical form.
+  readonly fingerprint?: (record: Data) => string;
 };
 
 // The records one input produced (a file, a message), keyed by that input,
@@ -49,7 +53,12 @@ export type KeptGroup = {
 
 export type SnapshotChange<Data, State> =
   | { readonly type: 'insert'; readonly record: Data }
-  | { readonly type: 'update'; readonly record: Data }
+  | {
+      readonly type: 'update';
+      readonly record: Data;
+      // The fingerprint that the snapshot saved for the record's key.
+      readonly savedFingerprint: string;
+    }
   | {
       readonly type: 'delete';
       readonly key: Readonly<Record<string, KeyValue>>;
@@ -69,6 +78,7 @@ export class SnapshotDifferential<Data extends Record<string, unknown>> {
   readonly expiresBy: string | undefined;
   readonly policy: DeletionPolicy;
   readonly #key: (record: Data) => readonly KeyValue[];
+  readonly #fingerprint: (record: Data) => string;
 
   constructor({
     name,
@@ -76,10 +86,12 @@ export class SnapshotDifferential<Data extends Record<string, unknown>> {
     key,
     expiresBy,
     policy,
+    fingerprint = (record) => fingerprintOf(name, record),
   }: SnapshotDifferentialOptions<Data>) {
     this.name = name;
     this.primaryKey = primaryKey;
     this.#key = key;
+    this.#fingerprint = fingerprint;
     this.expiresBy = expiresBy;
     this.policy = policy;
   }
@@ -107,13 +119,17 @@ export class SnapshotDifferential<Data extends Record<string, unknown>> {
     const current = new Map<string, SavedEntry>();
     for await (const record of records) {
       const key = this.#claim(seen, record);
-      const fingerprint = fingerprintOf(this.name, record);
+      const fingerprint = this.#fingerprint(record);
       if (rereads?.(record) ?? true)
         current.set(key, this.#entry(record, fingerprint));
       const before = previous.get(key);
       if (before === undefined) yield { type: 'insert', record };
       else if (fingerprintIn(before) !== fingerprint)
-        yield { type: 'update', record };
+        yield {
+          type: 'update',
+          record,
+          savedFingerprint: fingerprintIn(before),
+        };
     }
     const listedSoFar = new Set([...listed, ...seen]);
     for (const [key, entry] of previous)
@@ -179,12 +195,16 @@ export class SnapshotDifferential<Data extends Record<string, unknown>> {
       const snapshot = new Map<string, SavedEntry>();
       for await (const record of group.records()) {
         const key = this.#claim(seen, record);
-        const fingerprint = fingerprintOf(this.name, record);
+        const fingerprint = this.#fingerprint(record);
         snapshot.set(key, this.#entry(record, fingerprint));
         const before = saved.get(key);
         if (before === undefined) yield { type: 'insert', record };
         else if (fingerprintIn(before) !== fingerprint)
-          yield { type: 'update', record };
+          yield {
+            type: 'update',
+            record,
+            savedFingerprint: fingerprintIn(before),
+          };
       }
       current.set(group.key, {
         fingerprint: group.fingerprint,

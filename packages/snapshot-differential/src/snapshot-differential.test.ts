@@ -1012,3 +1012,46 @@ test('a grouped scan reads its saved snapshot where it lies, so a large snapshot
     deletes: 10,
   });
 });
+
+test("a caller's fingerprint decides what changed, and an update gives the fingerprint that the snapshot saved", async () => {
+  type Row = {
+    readonly id: string;
+    readonly title: string;
+    readonly seen: number;
+  };
+  const rows = new SnapshotDifferential<Row>({
+    name: 'rows',
+    primaryKey: ['id'],
+    key: (row) => [row.id],
+    // The title alone: a change of seen is no change.
+    fingerprint: (row) => `title:${row.title}`,
+    policy: new ClosedWorld(),
+  });
+  const run = async (records: Row[], state: unknown) => {
+    const updates: { id: string; saved: string }[] = [];
+    let saved: unknown = null;
+    for await (const change of rows.diff(records, state))
+      if (change.type === 'state')
+        saved = JSON.parse(JSON.stringify(change.state));
+      else if (change.type === 'update')
+        updates.push({ id: change.record.id, saved: change.savedFingerprint });
+    return { updates, saved };
+  };
+  const first = await run(
+    [
+      { id: 'a', title: 'Plan', seen: 0 },
+      { id: 'b', title: 'Draft', seen: 0 },
+    ],
+    null,
+  );
+
+  const second = await run(
+    [
+      { id: 'a', title: 'Plan', seen: 1 },
+      { id: 'b', title: 'Final', seen: 0 },
+    ],
+    first.saved,
+  );
+
+  assert.deepEqual(second.updates, [{ id: 'b', saved: 'title:Draft' }]);
+});

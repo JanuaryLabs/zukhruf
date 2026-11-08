@@ -32,11 +32,34 @@ for await (const change of differential.diff(contacts, saved)) {
 
 - Give `null` as the snapshot for the first scan.
 - The diff yields an insert for each record whose key the snapshot does not have.
-- The diff yields an update for each record whose key the snapshot has with a different fingerprint.
+- The diff yields an update for each record whose key the snapshot has with a different fingerprint. The update has `savedFingerprint`, the fingerprint that the snapshot saved for the key.
 - The diff yields nothing for a record that did not change.
 - The diff yields the new snapshot last. Save it only after you applied the changes before it.
 - Equal scans give byte-identical snapshots, in any order of records.
 - A failed read must throw. An empty scan makes every key a vanished key.
+
+## You can give the fingerprint
+
+By default, a record's fingerprint is the SHA-256 of its canonical form. Give `fingerprint` when you know a better one, for example one hash for each field, so that an update can name the fields that changed:
+
+```ts
+const rows = new SnapshotDifferential<Row>({
+  name: 'rows',
+  primaryKey: ['id'],
+  key: (row) => [row.id],
+  fingerprint: (row) => hashOfEachField(row),
+  policy: new ClosedWorld(),
+});
+
+for await (const change of rows.diff(records, state))
+  if (change.type === 'update')
+    compare(change.savedFingerprint, hashOfEachField(change.record));
+```
+
+- The diff compares the fingerprints that your function gives. Two records with the same fingerprint are the same record to the diff.
+- `@zukhruf/sqlite-changefeed` gives one 8-byte hash for each column, and names the changed columns of each update.
+
+See [ADR 0008](./docs/adr/0008-the-caller-can-give-the-fingerprint.md).
 
 ## A deletion policy judges each vanished key
 
@@ -224,6 +247,7 @@ Airbyte has no equivalent. Outside change data capture, it deletes only when it 
 - [ADR 0005: A change is an insert or an update](./docs/adr/0005-a-change-is-an-insert-or-an-update.md)
 - [ADR 0006: A record and a key can hold bytes](./docs/adr/0006-a-record-and-a-key-can-hold-bytes.md)
 - [ADR 0007: A record and a key can hold a bigint](./docs/adr/0007-a-record-and-a-key-can-hold-a-bigint.md)
+- [ADR 0008: The caller can give the fingerprint](./docs/adr/0008-the-caller-can-give-the-fingerprint.md)
 
 ## Development
 
