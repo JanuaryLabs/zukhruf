@@ -1,7 +1,5 @@
 import { createHash } from 'node:crypto';
 
-import { base64url } from './bytes.ts';
-
 // A record's SHA-256 over its canonical form, so equal records hash equally.
 export function fingerprintOf(
   name: string,
@@ -27,7 +25,8 @@ function canonical(name: string, value: unknown): string {
   )
     return JSON.stringify(value);
   if (typeof value === 'bigint') return `${value}n`;
-  if (value instanceof Uint8Array) return `#${base64url(value)}`;
+  if (value instanceof Uint8Array)
+    return `#${value.toBase64({ alphabet: 'base64url', omitPadding: true })}`;
   if (Array.isArray(value) && Object.keys(value).length === value.length)
     return `[${value.map((item) => canonical(name, item)).join(',')}]`;
   if (isPlainObject(value) && Object.getOwnPropertySymbols(value).length === 0)
