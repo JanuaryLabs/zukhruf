@@ -45,6 +45,7 @@
     "eslint-plugin-react-you-might-not-need-an-effect": "1.1.0",
     "fontkit": "2.0.4",
     "happy-dom": "20.14.5",
+    "jscpd": "5.4.3",
     "jsonc-eslint-parser": "3.3.0",
     "motion": "12.43.0",
     "nx": "23.2.1",

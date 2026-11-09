@@ -1,0 +1,16 @@
+{
+  "name": "copy-check",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "tools/copy-check/src",
+  "projectType": "application",
+  "tags": ["std:tool"],
+  "targets": {
+    "check": {
+      "executor": "nx:run-commands",
+      "cache": false,
+      "options": {
+        "command": "node tools/copy-check/src/main.ts"
+      }
+    }
+  }
+}

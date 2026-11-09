@@ -55,6 +55,7 @@ npm install
 npx nx run-many -t test        # builds, then runs every test
 npx nx run-many -t typecheck   # formats, lints, then type checks
 npx nx run <project>:test      # one project, e.g. mutex
+npx nx run copy-check:check    # each copy in the test files has a line in a copy ledger
 ```
 
 ## Use a package's source from another repo

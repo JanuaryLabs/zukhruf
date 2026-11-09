@@ -112,6 +112,9 @@
     },
     {
       "path": "./packages/sqlite/open"
+    },
+    {
+      "path": "./tools/copy-check"
     }
   ]
 }
