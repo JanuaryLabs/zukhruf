@@ -273,7 +273,7 @@ If the app installs an npm polyfill that has a Node module's name, allow it: `'i
 
 Node and JavaScript add APIs that replace older code. `modern-node/recommended` reports the older code on each lint run, so a repo learns about a replacement and no person has to look for it.
 
-The config is for code that runs on Node. Keep a browser bundle out of it with `ignores`. `Error.isError` and `Uint8Array.prototype.toHex` do not work in all the browsers that people use, so the fix can throw in a browser.
+The config is for code that runs on Node. Keep a browser bundle out of it. When a project has its own `eslint.config` that spreads the root config, ESLint resolves each glob from the folder of the project, so `ignores` in the root does not apply there. In that repo, add this config to the config of each Node project. Check the result with `eslint --print-config` in a browser project. `Error.isError` and `Uint8Array.prototype.toHex` do not work in all the browsers that people use, so the fix can throw in a browser.
 
 `@zukhruf/eslint/modern-node` needs `@e18e/eslint-plugin` and `eslint-plugin-unicorn`. `eslint-plugin-unicorn` 79 needs ESLint 10.4 or later.
 
