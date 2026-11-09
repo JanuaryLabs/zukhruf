@@ -3,18 +3,15 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 
-import type { EmbeddingModelV4 } from '@ai-sdk/provider';
-
 import { TemporaryFiles } from '@zukhruf/testing/fs';
 
 import type { Dataset } from '../dependencies/datasets.ts';
 import { KNeighborsClassifier } from '../dependencies/sklearn-neighbors.ts';
 import { evaluate } from '../evaluate.ts';
 import { labelSetsOf } from '../evaluators/sklearn-evaluator.ts';
-import { AiSdkEncoder } from '../models/ai-sdk-encoder.ts';
-import { ModelMeta } from '../models/model-meta.ts';
 import { pythonJsonLoads } from '../results/json.ts';
 import { KorHateSpeechMLClassification } from '../tasks/multilabel-classification/kor/kor-hate-speech-ml-classification.ts';
+import { embedVector, recordingEncoder } from '../testing/encoders.ts';
 import { AbsTaskMultilabelClassification } from './multilabel-classification.ts';
 import { TaskMetadata } from './task-metadata.ts';
 
@@ -32,14 +29,15 @@ import { TaskMetadata } from './task-metadata.ts';
 // single). generate.py makes it.
 const FOLDER = join(import.meta.dirname, 'fixtures/multilabel-classification');
 
-type EncoderCall = { readonly hf_split: string; readonly texts: string[] };
-
 type Run = {
   readonly undersampling: readonly {
     readonly sample_indices: number[];
     readonly idxs: number[];
   }[];
-  readonly encoder_calls: readonly EncoderCall[];
+  readonly encoder_calls: readonly {
+    readonly hf_split: string;
+    readonly texts: string[];
+  }[];
   readonly scores: { readonly test: Record<string, unknown>[] };
   readonly predictions: unknown;
   readonly second_scores: { readonly test: Record<string, unknown>[] };
@@ -123,44 +121,8 @@ const TASKS = [
   ['kor', () => new KorSlice()],
 ] as const;
 
-// An encoder whose texts the test reads back.
-function recordingEncoder(
-  name: string,
-  embed: (text: string) => number[],
-): { readonly encoder: AiSdkEncoder; readonly calls: EncoderCall[] } {
-  const calls: EncoderCall[] = [];
-  const model: EmbeddingModelV4 = {
-    specificationVersion: 'v4',
-    provider: 'test',
-    modelId: name,
-    maxEmbeddingsPerCall: undefined,
-    supportsParallelCalls: true,
-    async doEmbed({ values }) {
-      return {
-        embeddings: values.map(embed),
-        usage: { tokens: values.length },
-        warnings: [],
-      };
-    },
-  };
-  const encoder = new AiSdkEncoder({
-    model,
-    modelMeta: ModelMeta.createEmpty({ name: `test/${name}`, revision: '1' }),
-  });
-  const encode = encoder.encode.bind(encoder);
-  encoder.encode = async (inputs, options) => {
-    calls.push({
-      hf_split: options.hfSplit,
-      texts: inputs.flatMap((batch) => batch.text),
-    });
-    return encode(inputs, options);
-  };
-  return { encoder, calls };
-}
-
-// The vector encoder of generate.py.
 function vectorEncoder() {
-  return recordingEncoder('vector', (text) => text.split(' ').map(Number));
+  return recordingEncoder('vector', embedVector);
 }
 
 // The code point encoder of generate.py.

@@ -20,24 +20,22 @@ Changes: `hubFile` reads a model repository, so its URL has no `datasets/` part,
 
 @huggingface/hub 2.17.10 cannot replace either copy. For a branch, `downloadFileToCacheDir` keeps the file under the last commit that changed the file, not under the commit of the branch (`src/lib/download-file-to-cache-dir.ts`: `const snapshotId = commitHash ?? info.lastCommit?.id ?? etag;`). It asks the Hub before it reads the cache, so it cannot load a branch without the network, and it does not check the bytes.
 
-## Test helpers in more than two places
+## Test helpers in two places
 
-The golden tests of the abstract tasks keep these copies. The Rule of Three asks to move them into `src/testing` (backlog #4081). Until then, a fix to one place goes into each place, and the commit names each file.
+The golden tests of the abstract tasks keep these copies. A fix in one copy goes into the other copy, and the commit names both files.
 
-**`recordingEncoder`.** Three places.
+**`codePointEncoder` that gives shares.**
 
-- Places: `src/abstasks/classification.golden.test.ts`, `src/abstasks/multilabel-classification.golden.test.ts` and `src/abstasks/regression.golden.test.ts`.
-- Same: an encoder with a mock model. The test reads back the texts that the model received.
-- Not counted: `recordingEncoder` in `src/models/cache-wrappers/cache-wrapper.golden.test.ts` takes other options.
+- Places: `src/abstasks/classification.golden.test.ts` and `src/abstasks/multilabel-classification.golden.test.ts`.
+- Same: the value at k is the float32 share of the code points of the text.
+- Not counted: `embedCodePointCounts` in `src/testing/encoders.ts` gives counts, so it has other knowledge.
 
-**`vectorEncoder` and `codePointEncoder`.** Five places.
-
-- Places: `src/abstasks/classification.golden.test.ts`, `src/abstasks/multilabel-classification.golden.test.ts`, `src/abstasks/clustering.golden.test.ts`, `src/abstasks/pair-classification.golden.test.ts` and `src/abstasks/sts.golden.test.ts`.
-- Same: the encoders of `generate.py`. The vector encoder reads each text as numbers. The code point encoder counts the code points of each text.
-- Differs: the copies in the classification and multilabel tests declare no return type.
-
-**The test of the undersampling.** Two places.
+**The test of the undersampling.**
 
 - Places: `src/abstasks/classification.golden.test.ts` and `src/abstasks/multilabel-classification.golden.test.ts`.
 - Same: the test compares the experiments of a task with `expected.json`.
 - Not counted: the test in `src/abstasks/regression.golden.test.ts` reads each subset of a task.
+
+## Same name, other knowledge
+
+`recordingEncoder` in `src/models/cache-wrappers/cache-wrapper.golden.test.ts` keeps its own body. It builds the encoder of a different `generate.py`, and it records the texts that reached the model, not the calls of the encoder.

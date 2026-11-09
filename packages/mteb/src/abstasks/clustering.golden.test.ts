@@ -3,8 +3,6 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 
-import type { EmbeddingModelV4 } from '@ai-sdk/provider';
-
 import { TemporaryFiles } from '@zukhruf/testing/fs';
 
 import { log } from '../dependencies/libm.ts';
@@ -18,12 +16,16 @@ import {
   vMeasureScore,
 } from '../dependencies/sklearn.ts';
 import { evaluate } from '../evaluate.ts';
-import { AiSdkEncoder } from '../models/ai-sdk-encoder.ts';
-import { ModelMeta } from '../models/model-meta.ts';
+import type { AiSdkEncoder } from '../models/ai-sdk-encoder.ts';
 import {
   BiorxivClusteringS2S,
   BiorxivClusteringS2SFast,
 } from '../tasks/clustering/eng/biorxiv-clustering-s2s.ts';
+import {
+  embedCodePointCounts,
+  embedVector,
+  embeddingEncoder,
+} from '../testing/encoders.ts';
 import type { AbsTask } from './abstask.ts';
 import { AbsTaskClusteringLegacy } from './clustering-legacy.ts';
 import {
@@ -161,58 +163,15 @@ function assertScores(actual: unknown, python: unknown) {
   }
 }
 
-function vectorEncoder(): AiSdkEncoder {
-  const model: EmbeddingModelV4 = {
-    specificationVersion: 'v4',
-    provider: 'test',
-    modelId: 'vector',
-    maxEmbeddingsPerCall: undefined,
-    supportsParallelCalls: true,
-    async doEmbed({ values }) {
-      return {
-        embeddings: values.map((value) => value.split(' ').map(Number)),
-        usage: { tokens: values.length },
-        warnings: [],
-      };
-    },
-  };
-  return new AiSdkEncoder({
-    model,
-    modelMeta: ModelMeta.createEmpty({ name: 'test/vector', revision: '1' }),
-  });
+function vectorEncoder() {
+  return embeddingEncoder('vector', embedVector);
 }
 
-// The code point encoder of generate.py: the value at k is the number of
-// code points c of the text with c % code_point_dim == k.
-function codePointEncoder(): AiSdkEncoder {
-  return new AiSdkEncoder({
-    model: {
-      specificationVersion: 'v4',
-      provider: 'test',
-      modelId: 'code-points',
-      maxEmbeddingsPerCall: undefined,
-      supportsParallelCalls: true,
-      async doEmbed({ values }) {
-        return {
-          embeddings: values.map((value) => {
-            const vector = new Array<number>(expected.code_point_dim).fill(0);
-            for (const character of value) {
-              const k =
-                (character.codePointAt(0) ?? 0) % expected.code_point_dim;
-              vector[k] = (vector[k] ?? 0) + 1;
-            }
-            return vector;
-          }),
-          usage: { tokens: values.length },
-          warnings: [],
-        };
-      },
-    },
-    modelMeta: ModelMeta.createEmpty({
-      name: 'test/code-points',
-      revision: '1',
-    }),
-  });
+function codePointEncoder() {
+  return embeddingEncoder(
+    'code-points',
+    embedCodePointCounts(expected.code_point_dim),
+  );
 }
 
 function fixtureMetadata(name: string, folder: string): TaskMetadata {

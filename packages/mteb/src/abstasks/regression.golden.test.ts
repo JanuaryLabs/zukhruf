@@ -4,8 +4,6 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 
-import type { EmbeddingModelV4 } from '@ai-sdk/provider';
-
 import { TemporaryFiles } from '@zukhruf/testing/fs';
 
 import type { Dataset } from '../dependencies/datasets.ts';
@@ -15,10 +13,13 @@ import {
 } from '../dependencies/sklearn-linear-regression.ts';
 import { evaluate } from '../evaluate.ts';
 import { valuesOf } from '../evaluators/sklearn-evaluator.ts';
-import { AiSdkEncoder } from '../models/ai-sdk-encoder.ts';
-import { ModelMeta } from '../models/model-meta.ts';
 import { pythonJsonLoads } from '../results/json.ts';
 import { RuSciBenchCitedCountRegression } from '../tasks/regression/multilingual/ru-sci-bench-regression.ts';
+import {
+  embedCodePointCounts,
+  embedVector,
+  recordingEncoder,
+} from '../testing/encoders.ts';
 import type { Embeddings } from '../types/encoder-io.ts';
 import { AbsTaskRegression } from './regression.ts';
 import { TaskMetadata } from './task-metadata.ts';
@@ -172,58 +173,8 @@ const TASKS = [
 
 type Name = (typeof TASKS)[number][0];
 
-// An encoder whose calls the test reads back.
-function recordingEncoder(
-  name: string,
-  embed: (text: string) => number[],
-): { readonly encoder: AiSdkEncoder; readonly calls: EncoderCall[] } {
-  const calls: EncoderCall[] = [];
-  const model: EmbeddingModelV4 = {
-    specificationVersion: 'v4',
-    provider: 'test',
-    modelId: name,
-    maxEmbeddingsPerCall: undefined,
-    supportsParallelCalls: true,
-    async doEmbed({ values }) {
-      return {
-        embeddings: values.map(embed),
-        usage: { tokens: values.length },
-        warnings: [],
-      };
-    },
-  };
-  const encoder = new AiSdkEncoder({
-    model,
-    modelMeta: ModelMeta.createEmpty({ name: `test/${name}`, revision: '1' }),
-  });
-  const encode = encoder.encode.bind(encoder);
-  encoder.encode = async (inputs, options) => {
-    const texts = inputs.flatMap((batch) => batch.text);
-    calls.push({
-      hf_split: options.hfSplit,
-      count: texts.length,
-      sha256: hash('sha256', texts.join('\0')),
-    });
-    return encode(inputs, options);
-  };
-  return { encoder, calls };
-}
-
-// The vector encoder of generate.py.
-const embedVector = (text: string) => text.split(' ').map(Number);
-
-// The code point count encoder of generate.py.
-function embedCodePointCounts(text: string): number[] {
-  const vector = new Array<number>(expected.code_point_dim).fill(0);
-  for (const character of text) {
-    const k = (character.codePointAt(0) ?? 0) % expected.code_point_dim;
-    vector[k] = (vector[k] ?? 0) + 1;
-  }
-  return vector;
-}
-
 const embedOf = (name: Name) =>
-  name === 'hub' ? embedCodePointCounts : embedVector;
+  name === 'hub' ? embedCodePointCounts(expected.code_point_dim) : embedVector;
 
 const encoderOf = (name: Name) =>
   recordingEncoder(
@@ -328,7 +279,15 @@ async function evaluated(name: Name, task: AbsTaskRegression) {
       return { ...subset, scores_per_experiment: perExperiment };
     },
   );
-  return { calls, scores, file };
+  return {
+    calls: calls.map(({ hf_split, texts }): EncoderCall => ({
+      hf_split,
+      count: texts.length,
+      sha256: hash('sha256', texts.join('\0')),
+    })),
+    scores,
+    file,
+  };
 }
 
 for (const [name, makeTask] of TASKS)

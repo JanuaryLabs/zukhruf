@@ -3,15 +3,16 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
 
-import type { EmbeddingModelV4 } from '@ai-sdk/provider';
-
 import { TemporaryFiles } from '@zukhruf/testing/fs';
 
 import { evaluate } from '../evaluate.ts';
 import type { PairClassificationDistances } from '../evaluators/pair-classification-evaluator.ts';
-import { AiSdkEncoder } from '../models/ai-sdk-encoder.ts';
-import { ModelMeta } from '../models/model-meta.ts';
 import { SprintDuplicateQuestionsPC } from '../tasks/pair-classification/eng/sprint-duplicate-questions-pc.ts';
+import {
+  embedCodePointCounts,
+  embedVector,
+  embeddingEncoder,
+} from '../testing/encoders.ts';
 import { AbsTaskPairClassification } from './pair-classification.ts';
 import { TaskMetadata } from './task-metadata.ts';
 
@@ -157,30 +158,8 @@ class FolderTask extends AbsTaskPairClassification {
   }
 }
 
-// The vector encoder of generate.py: each text is numbers with spaces
-// between them.
-function vectorModel(): EmbeddingModelV4 {
-  return {
-    specificationVersion: 'v4',
-    provider: 'test',
-    modelId: 'vector',
-    maxEmbeddingsPerCall: undefined,
-    supportsParallelCalls: true,
-    async doEmbed({ values }) {
-      return {
-        embeddings: values.map((value) => value.split(' ').map(Number)),
-        usage: { tokens: values.length },
-        warnings: [],
-      };
-    },
-  };
-}
-
-function vectorEncoder(): AiSdkEncoder {
-  return new AiSdkEncoder({
-    model: vectorModel(),
-    modelMeta: ModelMeta.createEmpty({ name: 'test/vector', revision: '1' }),
-  });
+function vectorEncoder() {
+  return embeddingEncoder('vector', embedVector);
 }
 
 const python = expected.folder.predictions.default.test;
@@ -297,37 +276,11 @@ for (const metricCase of expected.metric_cases)
     assert.deepEqual(actual, { high: metricCase.high, low: metricCase.low });
   });
 
-// The code point encoder of generate.py: the value at k is the number of
-// code points c of the text with c % code_point_dim == k.
-function codePointEncoder(): AiSdkEncoder {
-  return new AiSdkEncoder({
-    model: {
-      specificationVersion: 'v4',
-      provider: 'test',
-      modelId: 'code-points',
-      maxEmbeddingsPerCall: undefined,
-      supportsParallelCalls: true,
-      async doEmbed({ values }) {
-        return {
-          embeddings: values.map((value) => {
-            const vector = new Array<number>(expected.code_point_dim).fill(0);
-            for (const character of value) {
-              const k =
-                (character.codePointAt(0) ?? 0) % expected.code_point_dim;
-              vector[k] = (vector[k] ?? 0) + 1;
-            }
-            return vector;
-          }),
-          usage: { tokens: values.length },
-          warnings: [],
-        };
-      },
-    },
-    modelMeta: ModelMeta.createEmpty({
-      name: 'test/code-points',
-      revision: '1',
-    }),
-  });
+function codePointEncoder() {
+  return embeddingEncoder(
+    'code-points',
+    embedCodePointCounts(expected.code_point_dim),
+  );
 }
 
 // The Hub slice of generate.py, read from the cache. An endpoint that
