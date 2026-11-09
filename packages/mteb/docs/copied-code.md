@@ -19,3 +19,25 @@ Both read a file from `.../<repository>/resolve/<revision>/<path>` of the endpoi
 Changes: `hubFile` reads a model repository, so its URL has no `datasets/` part, and its default cache folder is `~/.cache/mteb/models`. MTEB reads the tokenizer at `main`, a branch, so `hubFile` does what `hf_hub_download` does for a branch: a HEAD request gives the commit (`X-Repo-Commit`) and the content id (the `ETag`), the file stays under the commit, and `refs/main` keeps the commit. When the Hub cannot be reached, `refs/main` gives the commit and the file. `hubFile` downloads from the `Location` of the HEAD response, and it checks the bytes against the content id. `HubRepository` reads a dataset at a fixed commit, so it needs none of these.
 
 @huggingface/hub 2.17.10 cannot replace either copy. For a branch, `downloadFileToCacheDir` keeps the file under the last commit that changed the file, not under the commit of the branch (`src/lib/download-file-to-cache-dir.ts`: `const snapshotId = commitHash ?? info.lastCommit?.id ?? etag;`). It asks the Hub before it reads the cache, so it cannot load a branch without the network, and it does not check the bytes.
+
+## Test helpers in more than two places
+
+The golden tests of the abstract tasks keep these copies. The Rule of Three asks to move them into `src/testing` (backlog #4081). Until then, a fix to one place goes into each place, and the commit names each file.
+
+**`recordingEncoder`.** Three places.
+
+- Places: `src/abstasks/classification.golden.test.ts`, `src/abstasks/multilabel-classification.golden.test.ts` and `src/abstasks/regression.golden.test.ts`.
+- Same: an encoder with a mock model. The test reads back the texts that the model received.
+- Not counted: `recordingEncoder` in `src/models/cache-wrappers/cache-wrapper.golden.test.ts` takes other options.
+
+**`vectorEncoder` and `codePointEncoder`.** Five places.
+
+- Places: `src/abstasks/classification.golden.test.ts`, `src/abstasks/multilabel-classification.golden.test.ts`, `src/abstasks/clustering.golden.test.ts`, `src/abstasks/pair-classification.golden.test.ts` and `src/abstasks/sts.golden.test.ts`.
+- Same: the encoders of `generate.py`. The vector encoder reads each text as numbers. The code point encoder counts the code points of each text.
+- Differs: the copies in the classification and multilabel tests declare no return type.
+
+**The test of the undersampling.** Two places.
+
+- Places: `src/abstasks/classification.golden.test.ts` and `src/abstasks/multilabel-classification.golden.test.ts`.
+- Same: the test compares the experiments of a task with `expected.json`.
+- Not counted: the test in `src/abstasks/regression.golden.test.ts` reads each subset of a task.

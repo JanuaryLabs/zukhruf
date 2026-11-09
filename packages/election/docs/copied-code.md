@@ -36,7 +36,7 @@ Three test helpers are in the tests of this package and in the tests of two othe
 
 **`mountAs` and `within`.** Three places.
 
-- Places: `packages/election/src/sqlite/sqlite-election.test.ts`, `packages/fs/src/local-directory.test.ts` and `packages/mutex/src/lock-stores/network-directory.test.ts`.
+- Places: `packages/election/src/sqlite/sqlite-election.test.ts`, `packages/fs/src/local-directory.test.ts` and `packages/mutex/src/testing/network-mount.ts`.
 - Same: `within` tells if a path is a directory or is in that directory. `mountAs` takes `t`, and makes `statfs` give `type` for the directory and for each path in it, as a mount of that file system does. Each other path gets the real answer.
 - Differs: the code is byte-identical. The comment in fs has two more lines that name the other two places and this ledger.
 

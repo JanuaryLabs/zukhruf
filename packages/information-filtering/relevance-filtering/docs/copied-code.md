@@ -33,6 +33,18 @@ Changes: the commands are `check`, `slices`, `ranking`, `rehearse` and `--exam`.
 
 The scoreboard, the pins, the accepted events, the text sources, the probes and the coreference metrics. They are about the partitions of event detection or about a live model, and this eval has neither.
 
+## In two places inside this package
+
+The paths are in `packages/information-filtering/relevance-filtering/src`.
+
+**The helpers of the scorer tests (test helper).**
+
+- Places: `model`, `day` and `stored` in `keyword-scorer.test.ts` and in `similarity-scorer.test.ts`.
+- Same: `model` is the mock embedding model that gives the unit vector at the angle of each document. `stored` makes the collection and the articles of a stream.
+- Not counted: `model` in `decision-scorer.test.ts` and in `coalescing-decision-model.test.ts` answers with a decision, not with a vector.
+
+A third place of `model` is the time to move these helpers into `src/testing` (backlog #4086).
+
 ## Backlog
 
 #3261 waits for a third consumer. Its interim rule: mirror every fix in both copies, and name both files in the commit.

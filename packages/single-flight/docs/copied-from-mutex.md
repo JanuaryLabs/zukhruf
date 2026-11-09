@@ -232,6 +232,13 @@ The paths are in `packages/single-flight/src`.
 **Not counted.**
 `Party.lead` sends the token as text, and `Flight.id` is the token as text too. The `lead` answer carries the token of the lease, and `Flight.id` is the name of the flight on the wire. They change for different reasons, so they are not one piece of knowledge (`261b8b4`).
 
+**`firstOf` (test helper).**
+
+- Places: `single-flight.failover.test.ts` and `single-flight.key-lock.test.ts`.
+- Same: nothing differs. `firstOf` waits until a worker reported one of the types for a call, and gives the first such report.
+
+A third place is the time to move it into `src/testing` (backlog #4087).
+
 ## What the extraction can share
 
 - **As is:** the connection, the connection supervisor, and the socket connection.

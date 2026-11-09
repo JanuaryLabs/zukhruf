@@ -78,7 +78,7 @@ Backlog #2899 is about this code. A third dialect with a pool is the time to mov
 
 **The magic numbers of the network file systems.**
 
-- Places: `networkFileSystems` in `packages/mutex/src/lock-stores/network-directory.test.ts`, and in `packages/fs/src/local-directory.test.ts`.
+- Places: `networkFileSystems` in `packages/mutex/src/testing/network-mount.ts`, and in `packages/fs/src/local-directory.test.ts`.
 - Same: the 13 pairs of a name and the `f_type` that the `statfs` of Linux gives for that network file system, from NFS (`0x6969`) to 9p (`0x01021997`). Each test file makes a test for each pair.
 - Differs: nothing in the code.
 - Why it stays: this knowledge is only in this repository, and no package exports a shared test module. `linuxNetworkFileSystems` in `packages/fs/src/local-directory.ts` has the same numbers, but it is the code under test. A test that imports that table cannot find a wrong number in it. Thus each test file keeps its own table.
@@ -108,10 +108,34 @@ Backlog #2899 is about this code. A third dialect with a pool is the time to mov
 - Same: each helper skips a test on Windows.
 - Differs: the reason of the skip.
 
+**The helpers of the MariaDB and MySQL subjects (test helper).**
+
+- Places: `packages/mutex/src/testing/subjects/mariadb.ts` and `packages/mutex/src/testing/subjects/mysql.ts`.
+- Same: three blocks, byte for byte: the store with its disposal, `silentlyReconnectingSession`, and `watched` of `sessionControl`. The MySQL subject also uses the `mariadb` driver in these blocks.
+- Differs: the imports, the fixture, and the pool of each driver.
+
+**The test of a user with few grants.**
+
+- Places: `mariadb/mariadb-store.test.ts` and `mysql/mysql-store.test.ts`.
+- Same: the act and the assert. The token is 1 for a user that has only the grants that the store page names.
+- Differs: the grants. MariaDB gives `SELECT` and `INSERT` on the sequence. MySQL gives `SELECT` and `UPDATE` on the token table.
+
+**The connection of a SQL Server session (test helper).**
+
+- Places: `sessionTo` in `sqlserver/sqlserver-store.test.ts`, and `sqlServerSession` in `packages/mutex/src/testing/subjects/sqlserver.ts`.
+- Same: the `Connection` of `tedious` with its options, and the session that wraps it.
+- Differs: the names, and the source of the host and the user: an endpoint and a database, or a server.
+
+**The arrange step of a look at a holder in another process or thread.**
+
+- Places: `packages/mutex/src/testing/contract/on-disk.ts`, `packages/mutex/src/testing/contract/processes.ts` and `thread/thread-store.test.ts`.
+- Same: a fixture, a host, and a holder that takes the key. These lines are the arrange step of each test.
+- Why it stays: each test has its own arrange step, and a test has no lifecycle hooks. Thus the Rule of Three does not ask to extract these lines.
+
 **Not counted: test helpers with one name and different knowledge.** Each of these has its name in three or more places, but each place holds other knowledge. Thus they stay with each test.
 
 - `holderSource`: each child process holds a key of another lock store, in another place. One runs in a container, and one has no `Mutex`.
-- `storeOver`, `storeOn`, `sessionControl`, `poolControl`, `poolOf` and `silentlyReconnectingSession`: each one uses the driver of its server.
+- `storeOver`, `storeOn`, `sessionControl`, `poolControl`, `poolOf` and `silentlyReconnectingSession`: each one uses the driver of its server. The MariaDB and MySQL subjects are the exception: see [the helpers of the MariaDB and MySQL subjects](#in-two-places).
 - `heartbeatInterval`, `sequence` and `image`: each test file sets the value for its own test.
 - `askLeader` in `socket/handshake.test.ts`, `publishedPeer` in `socket/wire-compatibility.test.ts` and `rawPeer` in `socket/socket-store-coordinator.test.ts`: each client keeps another thing, and only `rawPeer` does the handshake.
 - `outcomeOf` in `docker/docker-engine-store.test.ts`: it also reports a promise that did not settle.
