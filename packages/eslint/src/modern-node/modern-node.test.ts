@@ -22,7 +22,6 @@ test('modern-node/recommended reports each check it turns on', async () => {
     'nx.json': '{}',
     'eslint.config.mjs': recommendedConfig(),
     'src/modern-node-crypto-hash.js': `import { createHash } from 'node:crypto';\nexport const a = createHash('sha256').update('x').digest('hex');`,
-    'src/e18e-ban-dependencies.js': `import { v4 } from 'uuid';\nexport const a = v4;`,
     'src/e18e-prefer-array-at.js': `export const a = (x) => x[x.length - 1];`,
     'src/e18e-prefer-array-to-reversed.js': `export const a = (s) => [...s].reverse();`,
     'src/e18e-prefer-array-to-sorted.js': `export const a = (s) => [...s].sort();`,
@@ -32,12 +31,16 @@ test('modern-node/recommended reports each check it turns on', async () => {
     'src/e18e-prefer-nullish-coalescing.js': `export const a = (x, y) => (x === null || x === undefined ? y : x);`,
     'src/e18e-prefer-object-has-own.js': `export const a = (x, k) => x.hasOwnProperty(k);`,
     'src/e18e-prefer-url-canparse.js': `export const a = (x) => { try { new URL(x); return true; } catch { return false; } };`,
+    'src/unicorn-no-new-buffer.js': `export const a = () => new Buffer(1);`,
+    'src/unicorn-prefer-abort-signal-any.js': `export function a(userSignal, timeSignal) { const c = new AbortController(); userSignal.addEventListener('abort', () => c.abort()); timeSignal.addEventListener('abort', () => c.abort()); return c.signal; }`,
+    'src/unicorn-prefer-array-from-async.js': `export const a = async (source) => { const items = []; for await (const item of source) items.push(item); return items; };`,
     'src/unicorn-prefer-error-is-error.js': `export const a = (e) => e instanceof Error;`,
     'src/unicorn-prefer-group-by.js': `export const a = (xs) => { const g = {}; for (const x of xs) { (g[x.k] ??= []).push(x); } return g; };`,
     'src/unicorn-prefer-import-meta-properties.js': `import { dirname } from 'node:path';\nimport { fileURLToPath } from 'node:url';\nexport const a = dirname(fileURLToPath(import.meta.url));`,
     'src/unicorn-prefer-iterator-helpers.js': `export const a = (m) => [...m.values()].some((x) => x);`,
     'src/unicorn-prefer-promise-with-resolvers.js': `let resolve;\nexport const a = new Promise((r) => { resolve = r; });\nresolve();`,
     'src/unicorn-prefer-set-methods.js': `const a = new Set(x);\nconst b = new Set(y);\nexport const all = new Set([...a, ...b]);`,
+    'src/unicorn-prefer-url-search-parameters.js': `export const a = (search) => Object.fromEntries(search.slice(1).split('&').map((pair) => pair.split('=')));`,
     'src/unicorn-prefer-uint8array-hex.js': `export const a = (b) => Buffer.from(b).toString('hex');`,
   });
 
@@ -49,7 +52,6 @@ test('modern-node/recommended reports each check it turns on', async () => {
     .map(({ file, ruleId }) => `${basename(file, '.js')} ${ruleId}`)
     .sort();
   assert.deepEqual(reported, [
-    'e18e-ban-dependencies e18e/ban-dependencies',
     'e18e-prefer-array-at e18e/prefer-array-at',
     'e18e-prefer-array-to-reversed e18e/prefer-array-to-reversed',
     'e18e-prefer-array-to-sorted e18e/prefer-array-to-sorted',
@@ -60,6 +62,9 @@ test('modern-node/recommended reports each check it turns on', async () => {
     'e18e-prefer-object-has-own e18e/prefer-object-has-own',
     'e18e-prefer-url-canparse e18e/prefer-url-canparse',
     'modern-node-crypto-hash modern-node/crypto-hash',
+    'unicorn-no-new-buffer unicorn/no-new-buffer',
+    'unicorn-prefer-abort-signal-any unicorn/prefer-abort-signal-any',
+    'unicorn-prefer-array-from-async unicorn/prefer-array-from-async',
     'unicorn-prefer-error-is-error unicorn/prefer-error-is-error',
     'unicorn-prefer-group-by unicorn/prefer-group-by',
     'unicorn-prefer-import-meta-properties unicorn/prefer-import-meta-properties',
@@ -67,6 +72,7 @@ test('modern-node/recommended reports each check it turns on', async () => {
     'unicorn-prefer-promise-with-resolvers unicorn/prefer-promise-with-resolvers',
     'unicorn-prefer-set-methods unicorn/prefer-set-methods',
     'unicorn-prefer-uint8array-hex unicorn/prefer-uint8array-hex',
+    'unicorn-prefer-url-search-parameters unicorn/prefer-url-search-parameters',
   ]);
 });
 
@@ -81,6 +87,11 @@ test('modern-node/recommended leaves off the checks that break code or fix nothi
     'src/array-sort.js': `export const a = (o) => Object.keys(o).sort();`,
     'src/array-reverse.js': `export const a = (o) => Object.keys(o).reverse();`,
     'src/dispose.js': `export const a = (open) => { const r = open(); try { r.read(); } finally { r.close(); } };`,
+    // e18e/ban-dependencies reads only the name of a package, and the code can
+    // need that package, such as uuid for v5 (ADR 0008).
+    'src/uuid.js': `import { v5 } from 'uuid';\nexport const a = v5;`,
+    'package.json': '{ "dependencies": { "uuid": "1.0.0" } }',
+    'src/abort-signal-timeout.js': `export const a = () => { const c = new AbortController(); setTimeout(() => c.abort(), 1000); return c.signal; };`,
   });
 
   // Act
@@ -90,14 +101,26 @@ test('modern-node/recommended leaves off the checks that break code or fix nothi
   assert.deepEqual(findings, []);
 });
 
-test('e18e/ban-dependencies reports a package that a native API replaces, and leaves a package that only has a different package', async () => {
+test('unicorn/prefer-dispose reads types: a TypeScript resource with a disposer is reported, one with only close() and a JavaScript file are not', async () => {
   // Arrange
+  const disposable = `class Resource { read() {} close() {} [Symbol.dispose]() {} }`;
   await using workspace = await fixtureWorkspace({
     'nx.json': '{}',
-    'eslint.config.mjs': recommendedConfig(),
-    'src/native.js': `import { v4 } from 'uuid';\nexport const a = v4;`,
-    'src/execa.js': `import { execa } from 'execa';\nexport const a = execa;`,
-    'src/express.js': `import express from 'express';\nexport const a = express;`,
+    'package.json': '{ "name": "fixture", "type": "module" }',
+    'tsconfig.json':
+      '{ "compilerOptions": { "target": "esnext", "module": "nodenext", "strict": true, "types": [] }, "include": ["src"] }',
+    'eslint.config.mjs': [
+      `import { defineConfig } from '${import.meta.resolve('eslint/config')}';`,
+      `import zukhruf from '${import.meta.resolve('@zukhruf/eslint')}';`,
+      `import modernNode from '${import.meta.resolve('@zukhruf/eslint/modern-node')}';`,
+      `export default defineConfig({`,
+      `  plugins: { zukhruf, 'modern-node': modernNode },`,
+      `  extends: ['zukhruf/base', 'modern-node/recommended'],`,
+      `});`,
+    ].join('\n'),
+    'src/disposer.ts': `${disposable}\nexport function a() { const r = new Resource(); try { r.read(); } finally { r.close(); } }`,
+    'src/only-close.ts': `class Resource { read() {} close() {} }\nexport function a() { const r = new Resource(); try { r.read(); } finally { r.close(); } }`,
+    'src/disposer.mjs': `${disposable}\nexport function a() { const r = new Resource(); try { r.read(); } finally { r.close(); } }`,
   });
 
   // Act
@@ -105,8 +128,10 @@ test('e18e/ban-dependencies reports a package that a native API replaces, and le
 
   // Assert
   assert.deepEqual(
-    findings.map(({ file, ruleId }) => `${basename(file)} ${ruleId}`),
-    ['native.js e18e/ban-dependencies'],
+    findings
+      .filter(({ ruleId }) => ruleId === 'unicorn/prefer-dispose')
+      .map(({ file }) => basename(file)),
+    ['disposer.ts'],
   );
 });
 

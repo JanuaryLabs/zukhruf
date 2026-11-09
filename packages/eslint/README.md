@@ -291,8 +291,8 @@ The config turns on:
 - `modern-node/crypto-hash`: `createHash(algorithm).update(data).digest(encoding)` becomes `hash(algorithm, data, encoding)` of `node:crypto`. `createHash` stays for several updates and for a stream. When the file already has a different `hash`, the rule reports and does not fix. Rename that `hash`, and the fix applies.
 - e18e's `modernization` config, without `prefer-array-fill`, `prefer-array-to-spliced` and `prefer-spread-syntax`;
 - `e18e/prefer-exponentiation-operator` and `e18e/prefer-flatmap-over-map-flat`;
-- `e18e/ban-dependencies`, which reports a package that a native API replaces. Its `allowed` option names the packages that it would only replace with a different package.
-- `unicorn/prefer-error-is-error`, `prefer-import-meta-properties`, `prefer-iterator-helpers`, `prefer-promise-with-resolvers`, `prefer-group-by`, `prefer-set-methods` and `prefer-uint8array-hex`.
+- `unicorn/no-new-buffer`, `prefer-abort-signal-any`, `prefer-array-from-async`, `prefer-error-is-error`, `prefer-group-by`, `prefer-import-meta-properties`, `prefer-iterator-helpers`, `prefer-promise-with-resolvers`, `prefer-set-methods`, `prefer-uint8array-hex` and `prefer-url-search-parameters`;
+- `unicorn/prefer-dispose`, for TypeScript files only. It needs type information, which `zukhruf/base` gives. A repo that lints TypeScript with no type information must turn it off.
 
 `unicorn/prefer-uint8array-hex` needs Node 26. Code that runs on Node 24 turns it off: `'unicorn/prefer-uint8array-hex': 'off'`.
 

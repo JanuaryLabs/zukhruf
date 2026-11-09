@@ -3,7 +3,7 @@ import type { ESLint, Linter } from 'eslint';
 import unicorn from 'eslint-plugin-unicorn';
 import { defineConfig } from 'eslint/config';
 
-import { SOURCE } from '../files.ts';
+import { SOURCE, TYPESCRIPT } from '../files.ts';
 import cryptoHash from './crypto-hash.ts';
 
 const rules = {
@@ -22,24 +22,6 @@ const plugin = {
   configs,
 } satisfies ESLint.Plugin;
 
-// e18e/ban-dependencies gives these packages only a different package, such as
-// express to h3. That is a choice of the repo, not a new API. The rule has no
-// option for the type of replacement (ADR 0008).
-const ONLY_A_DIFFERENT_PACKAGE = [
-  'debug',
-  'detect-package-manager',
-  'execa',
-  'express',
-  'fast-glob',
-  'glob',
-  'gray-matter',
-  'js-yaml',
-  'ora',
-  'semver',
-  'tar-stream',
-  'yargs',
-];
-
 configs['recommended'] = defineConfig(
   {
     name: 'modern-node/recommended/plugins',
@@ -51,7 +33,6 @@ configs['recommended'] = defineConfig(
     extends: [e18e.configs.modernization],
     rules: {
       'modern-node/crypto-hash': 'error',
-      'e18e/ban-dependencies': ['error', { allowed: ONLY_A_DIFFERENT_PACKAGE }],
       // The fixer changes a.concat(b) to [...a, b]. When b is an array, the
       // result changes and no error occurs.
       'e18e/prefer-spread-syntax': 'off',
@@ -62,6 +43,9 @@ configs['recommended'] = defineConfig(
       'e18e/prefer-array-fill': 'off',
       'e18e/prefer-exponentiation-operator': 'error',
       'e18e/prefer-flatmap-over-map-flat': 'error',
+      'unicorn/no-new-buffer': 'error',
+      'unicorn/prefer-abort-signal-any': 'error',
+      'unicorn/prefer-array-from-async': 'error',
       'unicorn/prefer-error-is-error': 'error',
       'unicorn/prefer-group-by': 'error',
       'unicorn/prefer-import-meta-properties': 'error',
@@ -69,6 +53,16 @@ configs['recommended'] = defineConfig(
       'unicorn/prefer-promise-with-resolvers': 'error',
       'unicorn/prefer-set-methods': 'error',
       'unicorn/prefer-uint8array-hex': 'error',
+      'unicorn/prefer-url-search-parameters': 'error',
+    },
+  },
+  {
+    name: 'modern-node/recommended/typescript',
+    files: TYPESCRIPT,
+    rules: {
+      // Only types prove that a value has a disposer. In a JavaScript file the
+      // rule reports each close(), and the fix throws at run time (ADR 0008).
+      'unicorn/prefer-dispose': 'error',
     },
   },
 );
