@@ -105,16 +105,6 @@ const outcomeOf = <T>(promise: Promise<T>, within: number) =>
     delay(within, { settled: 'pending' as const }),
   ]);
 
-/** A signal that aborts after `within` ms with an error that names the step. */
-const step = (name: string, within = 20_000) => {
-  const stalled = new AbortController();
-  setTimeout(
-    () => stalled.abort(new Error(`The step "${name}" took over ${within} ms`)),
-    within,
-  ).unref();
-  return stalled.signal;
-};
-
 test("a killed holder's key goes to the next waiter", async (t) => {
   // Arrange: another process holds the key.
   await using fixture = await engine();
@@ -305,13 +295,13 @@ test('a holder that lost its claim during the mint gets no token', async () => {
 });
 
 test('the tokens increase after docker container prune', async () => {
-  // Arrange: each step has its own time limit, so a time-out names the step that stalled.
+  // Arrange: each step has its own time limit, so one stalled step cannot use up the whole test's time.
   await using fixture = await engine();
   const mutex = new Mutex(fixture.store());
   const first = await mutex.acquire(
     'report:daily',
     async (lease) => lease.token.value,
-    { signal: step('first acquire') },
+    { signal: AbortSignal.timeout(20_000) },
   );
 
   // Act: an operator prunes the containers of the namespace that do not run.
@@ -324,12 +314,12 @@ test('the tokens increase after docker container prune', async () => {
       '--filter',
       `label=${namespaceLabel}=${fixture.namespace}`,
     ],
-    { signal: step('prune') },
+    { signal: AbortSignal.timeout(20_000) },
   );
   const second = await mutex.acquire(
     'report:daily',
     async (lease) => lease.token.value,
-    { signal: step('second acquire') },
+    { signal: AbortSignal.timeout(20_000) },
   );
 
   // Assert

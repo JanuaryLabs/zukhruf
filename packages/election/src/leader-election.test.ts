@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
+import { setImmediate as drain } from 'node:timers/promises';
 
 import { createClock } from '@sinonjs/fake-timers';
 
@@ -107,9 +108,6 @@ const settle = <T>(running: Promise<T>) =>
     (value) => ({ value }),
     (error: unknown) => ({ error }),
   );
-
-/** Lets every queued step run, so a step that does not wait happens now. */
-const drain = () => new Promise((resolve) => setImmediate(resolve));
 
 describe('A term that its backend takes away', () => {
   test(
