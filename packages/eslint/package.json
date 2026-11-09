@@ -44,6 +44,12 @@
       "types": "./dist/react.d.ts",
       "import": "./dist/react.js",
       "default": "./dist/react.js"
+    },
+    "./modern-node": {
+      "@zukhruf/source": "./src/modern-node.ts",
+      "types": "./dist/modern-node.d.ts",
+      "import": "./dist/modern-node.js",
+      "default": "./dist/modern-node.js"
     }
   },
   "files": [
@@ -65,6 +71,7 @@
     "@zukhruf/testing": "^0.8.9"
   },
   "peerDependencies": {
+    "@e18e/eslint-plugin": "^0.8.1",
     "@eslint-react/eslint-plugin": "^5.28.8",
     "@eslint/js": "^9.30.0 || ^10.0.0",
     "@nx/devkit": ">=21.0.0",
@@ -76,12 +83,16 @@
     "eslint-plugin-jsx-a11y-x": "^0.2.0",
     "eslint-plugin-react-hooks": "^7.0.0",
     "eslint-plugin-react-you-might-not-need-an-effect": "^1.1.0",
+    "eslint-plugin-unicorn": "^79.0.0",
     "jsonc-eslint-parser": "^2.4.0 || ^3.0.0",
     "react": "*",
     "typescript": ">=5.8.0 <6.1.0",
     "typescript-eslint": "^8.47.0"
   },
   "peerDependenciesMeta": {
+    "@e18e/eslint-plugin": {
+      "optional": true
+    },
     "@eslint-react/eslint-plugin": {
       "optional": true
     },
@@ -101,6 +112,9 @@
       "optional": true
     },
     "eslint-plugin-react-you-might-not-need-an-effect": {
+      "optional": true
+    },
+    "eslint-plugin-unicorn": {
       "optional": true
     },
     "react": {

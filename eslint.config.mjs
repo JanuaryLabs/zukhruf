@@ -4,6 +4,7 @@ import * as jsonc from 'jsonc-eslint-parser';
 
 import { TESTS, TEST_SUPPORT } from './packages/eslint/src/files.ts';
 import zukhruf from './packages/eslint/src/index.ts';
+import modernNode from './packages/eslint/src/modern-node.ts';
 import island, {
   islandConstraint,
   manifest,
@@ -101,6 +102,18 @@ export default defineConfig(
     ],
     plugins: { zukhruf },
     extends: ['zukhruf/react', 'zukhruf/tailwind'],
+  },
+  // Modern Node is for code that runs on Node, and these packages run in
+  // browsers (packages/eslint/docs/adr/0008).
+  {
+    ignores: [
+      'packages/shadcn/**',
+      'packages/diagram/**',
+      'packages/ui/**',
+      'apps/diagram-playground/**',
+    ],
+    plugins: { 'modern-node': modernNode },
+    extends: ['modern-node/recommended'],
   },
   // A release rewrites only the ranges of the npm:public group. A caret in a
   // private package stops matching at the next minor, and npm then locks a

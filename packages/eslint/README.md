@@ -269,6 +269,35 @@ export default defineConfig({
 
 If the app installs an npm polyfill that has a Node module's name, allow it: `'import-x/no-nodejs-modules': ['error', { allow: ['buffer'] }]`.
 
+## Modern Node
+
+Node and JavaScript add APIs that replace older code. `modern-node/recommended` reports the older code on each lint run, so a repo learns about a replacement and no person has to look for it.
+
+The config is for code that runs on Node. Keep a browser bundle out of it with `ignores`. `Error.isError` and `Uint8Array.prototype.toHex` do not work in all the browsers that people use, so the fix can throw in a browser.
+
+`@zukhruf/eslint/modern-node` needs `@e18e/eslint-plugin` and `eslint-plugin-unicorn`. `eslint-plugin-unicorn` 79 needs ESLint 10.4 or later.
+
+```js
+import modernNode from '@zukhruf/eslint/modern-node';
+
+export default defineConfig({
+  plugins: { zukhruf, 'modern-node': modernNode },
+  extends: ['zukhruf/base', 'modern-node/recommended'],
+});
+```
+
+The config turns on:
+
+- `modern-node/crypto-hash`: `createHash(algorithm).update(data).digest(encoding)` becomes `hash(algorithm, data, encoding)` of `node:crypto`. `createHash` stays for several updates and for a stream. When the file already has a different `hash`, the rule reports and does not fix. Rename that `hash`, and the fix applies.
+- e18e's `modernization` config, without `prefer-array-fill`, `prefer-array-to-spliced` and `prefer-spread-syntax`;
+- `e18e/prefer-exponentiation-operator` and `e18e/prefer-flatmap-over-map-flat`;
+- `e18e/ban-dependencies`, which reports a package that a native API replaces. Its `allowed` option names the packages that it would only replace with a different package.
+- `unicorn/prefer-error-is-error`, `prefer-import-meta-properties`, `prefer-iterator-helpers`, `prefer-promise-with-resolvers`, `prefer-group-by`, `prefer-set-methods` and `prefer-uint8array-hex`.
+
+`unicorn/prefer-uint8array-hex` needs Node 26. Code that runs on Node 24 turns it off: `'unicorn/prefer-uint8array-hex': 'off'`.
+
+Run `eslint --fix` first. The e18e fixers do not read types, so `[...set].sort()` becomes `set.toSorted()`. Run the type check after the fix, and read each change to a `.mjs` file. [ADR 0008](docs/adr/0008-modern-node-is-a-namespace-and-a-config.md) gives the measurement, and it tells why each other rule is off.
+
 ## Development
 
 The workspace lints itself with this package's source: the root `eslint.config.mjs` imports `packages/eslint/src/index.ts`. Nx loads that config while it builds the project graph, before anything is built. A rule edit applies on the next lint.

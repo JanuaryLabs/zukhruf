@@ -161,3 +161,15 @@ for (const specifier of specifiers) {
     assert.deepEqual([...undeclared.values()], []);
   });
 }
+
+test('@zukhruf/eslint loads neither plugin of modern-node, so a repo that does not use it does not need them', () => {
+  // Act
+  const names = loadsOf('@zukhruf/eslint')
+    .filter(({ url }) => url.startsWith('file:'))
+    .map(({ url }) => nameOf(packageFolderOf(url)));
+
+  // Assert
+  assert.ok(names.length > 0, '@zukhruf/eslint loaded no modules');
+  assert.equal(names.includes('@e18e/eslint-plugin'), false);
+  assert.equal(names.includes('eslint-plugin-unicorn'), false);
+});

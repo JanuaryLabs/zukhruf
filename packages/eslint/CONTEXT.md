@@ -18,6 +18,10 @@ _Avoid_: Category, preset
 A named flat-config array that the plugin ships, such as `zukhruf/base`. A repo uses it with `extends: ['zukhruf/base']`.
 _Avoid_: Preset, profile
 
+**Modern Node**:
+The namespace `modern-node` and the config `modern-node/recommended`. Its checks report code that a newer Node or JavaScript API can replace. A new check of this kind joins the namespace, and it does not get a name under `zukhruf/`.
+_Avoid_: Modernization preset, node-native rule
+
 **Repo-owned rule**:
 A rule whose options are one list that each repo fills with its own entries: `no-restricted-syntax`, `no-restricted-imports`, `@typescript-eslint/no-restricted-imports`. The package never sets these rules.
 _Avoid_: Shared rule
