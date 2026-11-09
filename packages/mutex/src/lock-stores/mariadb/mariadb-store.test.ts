@@ -32,11 +32,10 @@ const connectionOf = (database: MariadbDatabase) => ({
 /** A new database with the token sequence that the app creates before it starts. */
 async function mariadbDatabase() {
   const database = await new Mariadb({ environment: process.env }).database();
-  const owner = await mariadb.createConnection(connectionOf(database));
-  try {
+  {
+    await using owner = await mariadb.createConnection(connectionOf(database));
+
     await owner.query(`CREATE SEQUENCE ${sequence}`);
-  } finally {
-    await owner.end();
   }
   return database;
 }
@@ -120,19 +119,17 @@ test('a user with only SELECT and INSERT on the sequence can acquire', async () 
     await owner.query(
       `GRANT SELECT, INSERT ON \`${database.database}\`.${sequence} TO '${user}'@'%'`,
     );
-    const pool = poolOf(database, { user, password: 'app' });
-    try {
-      // Act
-      const token = await new Mutex(storeOver(pool)).acquire(
-        uniqueKey(),
-        async (lease) => lease.token,
-      );
 
-      // Assert
-      assert.equal(token.value, 1n);
-    } finally {
-      await pool.end();
-    }
+    await using pool = poolOf(database, { user, password: 'app' });
+
+    // Act
+    const token = await new Mutex(storeOver(pool)).acquire(
+      uniqueKey(),
+      async (lease) => lease.token,
+    );
+
+    // Assert
+    assert.equal(token.value, 1n);
   } finally {
     // A user belongs to the server, not to the database of the test.
     await owner.query(`DROP USER '${user}'@'%'`);

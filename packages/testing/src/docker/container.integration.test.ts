@@ -13,31 +13,29 @@ test(
     // Arrange
     const testbed = new DockerTestbed({ environment: process.env });
     const client = await testbed.client();
-    const container = await testbed.start({
+
+    await using container = await testbed.start({
       Image: image,
       Cmd: ['sh', '-c', 'echo printed; echo complained >&2'],
     });
-    try {
-      await t.waitFor(
-        async () => {
-          assert.equal((await container.inspect()).State?.Status, 'exited');
-        },
-        { timeout: 10_000 },
-      );
 
-      // Act
-      const { output } = await container.logs();
-      await container[Symbol.asyncDispose]();
+    await t.waitFor(
+      async () => {
+        assert.equal((await container.inspect()).State?.Status, 'exited');
+      },
+      { timeout: 10_000 },
+    );
 
-      // Assert
-      assert.deepEqual(output.trimEnd().split('\n').toSorted(), [
-        'complained',
-        'printed',
-      ]);
-      assert.equal(await client.containers.find(container.id), undefined);
-    } finally {
-      await container[Symbol.asyncDispose]();
-    }
+    // Act
+    const { output } = await container.logs();
+    await container[Symbol.asyncDispose]();
+
+    // Assert
+    assert.deepEqual(output.trimEnd().split('\n').toSorted(), [
+      'complained',
+      'printed',
+    ]);
+    assert.equal(await client.containers.find(container.id), undefined);
   },
 );
 

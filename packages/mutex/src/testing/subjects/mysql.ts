@@ -33,15 +33,12 @@ export async function mysqlFixture(
 ): Promise<Fixture> {
   const database = await new Mysql({ environment }).database();
   return serverFixture(database, async () => {
-    const owner = await mysql.createConnection(database.connectionString);
-    try {
-      await owner.query(
-        'CREATE TABLE mutex_tokens (id BIGINT UNSIGNED NOT NULL)',
-      );
-      await owner.query('INSERT INTO mutex_tokens VALUES (0)');
-    } finally {
-      await owner.end();
-    }
+    await using owner = await mysql.createConnection(database.connectionString);
+
+    await owner.query(
+      'CREATE TABLE mutex_tokens (id BIGINT UNSIGNED NOT NULL)',
+    );
+    await owner.query('INSERT INTO mutex_tokens VALUES (0)');
   });
 }
 
@@ -221,24 +218,21 @@ export const sessionControl: SessionControl = {
     };
   },
   async untilASessionWaits(t, location) {
-    const observer = await mysql.createConnection(serverAt(location));
-    try {
-      await t.waitFor(
-        async () => {
-          const [rows] = await observer.query<mysql.RowDataPacket[]>(
-            `SELECT COUNT(*) AS waiting FROM information_schema.PROCESSLIST
+    await using observer = await mysql.createConnection(serverAt(location));
+
+    await t.waitFor(
+      async () => {
+        const [rows] = await observer.query<mysql.RowDataPacket[]>(
+          `SELECT COUNT(*) AS waiting FROM information_schema.PROCESSLIST
              WHERE DB = DATABASE() AND STATE = 'User lock'`,
-          );
-          assert.ok(
-            Number(rows[0]?.['waiting']) > 0,
-            'No session waits for a lock.',
-          );
-        },
-        { interval: 10, timeout: 10_000 },
-      );
-    } finally {
-      await observer.end();
-    }
+        );
+        assert.ok(
+          Number(rows[0]?.['waiting']) > 0,
+          'No session waits for a lock.',
+        );
+      },
+      { interval: 10, timeout: 10_000 },
+    );
   },
 };
 

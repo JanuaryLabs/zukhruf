@@ -25,15 +25,16 @@ test(
         ?.Config?.Image;
       assert.equal(image, 'mariadb:lts');
       assert.equal(owned.image, image);
-      const connection = await mariadb.createConnection(owned.connectionString);
-      try {
+      {
+        await using connection = await mariadb.createConnection(
+          owned.connectionString,
+        );
+
         const [row] = await connection.query(
           'SELECT VERSION() AS version, DATABASE() AS name',
         );
         assert.match(row.version, /MariaDB/);
         assert.equal(row.name, database);
-      } finally {
-        await connection.end();
       }
       assert.deepEqual(
         await owned.query('SELECT 42 AS value, NULL AS missing'),

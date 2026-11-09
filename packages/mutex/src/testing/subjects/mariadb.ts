@@ -32,12 +32,9 @@ export async function mariadbFixture(
 ): Promise<Fixture> {
   const database = await new Mariadb({ environment }).database();
   return serverFixture(database, async () => {
-    const owner = await mariadb.createConnection(serverOf(database));
-    try {
-      await owner.query('CREATE SEQUENCE mutex_tokens');
-    } finally {
-      await owner.end();
-    }
+    await using owner = await mariadb.createConnection(serverOf(database));
+
+    await owner.query('CREATE SEQUENCE mutex_tokens');
   });
 }
 
@@ -221,24 +218,21 @@ export const sessionControl: SessionControl = {
     };
   },
   async untilASessionWaits(t, location) {
-    const observer = await mariadb.createConnection(serverAt(location));
-    try {
-      await t.waitFor(
-        async () => {
-          const rows = await observer.query<{ waiting: bigint }[]>(
-            `SELECT COUNT(*) AS waiting FROM information_schema.PROCESSLIST
+    await using observer = await mariadb.createConnection(serverAt(location));
+
+    await t.waitFor(
+      async () => {
+        const rows = await observer.query<{ waiting: bigint }[]>(
+          `SELECT COUNT(*) AS waiting FROM information_schema.PROCESSLIST
              WHERE DB = DATABASE() AND STATE = 'User lock'`,
-          );
-          assert.ok(
-            Number(rows[0]?.['waiting']) > 0,
-            'No session waits for a lock.',
-          );
-        },
-        { interval: 10, timeout: 10_000 },
-      );
-    } finally {
-      await observer.end();
-    }
+        );
+        assert.ok(
+          Number(rows[0]?.['waiting']) > 0,
+          'No session waits for a lock.',
+        );
+      },
+      { interval: 10, timeout: 10_000 },
+    );
   },
 };
 

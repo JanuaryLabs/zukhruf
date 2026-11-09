@@ -1736,7 +1736,8 @@ test('a job that needs a slot in back-off after a failed warm-up starts its work
 test('disposing a pool in the back-off after a failed warm-up leaves no timer on its clock and starts no worker', async (t) => {
   const clock = createClock();
   const created: EchoWorker[] = [];
-  const pool = new Pool({
+
+  await using pool = new Pool({
     size: new Fixed(1),
     startup: new Parallel(),
     eviction: new NoEviction(),
@@ -1748,21 +1749,17 @@ test('disposing a pool in the back-off after a failed warm-up leaves no timer on
     },
     clock,
   });
-  try {
-    await assert.rejects(pool.ready(), /Echo worker exited/);
-    await t.waitFor(
-      () =>
-        assert.equal(clock.countTimers(), 1, 'the back-off waits on a timer'),
-      { interval: 5, timeout: 5_000 },
-    );
 
-    await pool[Symbol.asyncDispose]();
-    assert.equal(clock.countTimers(), 0);
-    await clock.tickAsync(60_000);
-    assert.equal(created.length, 1);
-  } finally {
-    await pool[Symbol.asyncDispose]();
-  }
+  await assert.rejects(pool.ready(), /Echo worker exited/);
+  await t.waitFor(
+    () => assert.equal(clock.countTimers(), 1, 'the back-off waits on a timer'),
+    { interval: 5, timeout: 5_000 },
+  );
+
+  await pool[Symbol.asyncDispose]();
+  assert.equal(clock.countTimers(), 0);
+  await clock.tickAsync(60_000);
+  assert.equal(created.length, 1);
 });
 
 test('an on-demand pool starts no worker after a failed warm-up until a job needs one, and that job starts one at once', async () => {
@@ -1832,7 +1829,8 @@ test('a job that needs a slot in back-off starts its worker at once, and the bac
 test('disposing a pool in back-off leaves no timer on its clock', async () => {
   const clock = createClock();
   const created: EchoWorker[] = [];
-  const pool = new Pool({
+
+  await using pool = new Pool({
     size: new Fixed(1),
     startup: new Parallel(),
     eviction: new NoEviction(),
@@ -1844,19 +1842,16 @@ test('disposing a pool in back-off leaves no timer on its clock', async () => {
     },
     clock,
   });
-  try {
-    await pool.ready();
-    const timers = () => clock.countTimers();
-    const before = timers();
-    created[0]!.kill();
-    await created[0]!.exited();
-    assert.equal(timers(), before + 1, 'the back-off waits on a timer');
 
-    await pool[Symbol.asyncDispose]();
-    assert.equal(timers(), before);
-  } finally {
-    await pool[Symbol.asyncDispose]();
-  }
+  await pool.ready();
+  const timers = () => clock.countTimers();
+  const before = timers();
+  created[0]!.kill();
+  await created[0]!.exited();
+  assert.equal(timers(), before + 1, 'the back-off waits on a timer');
+
+  await pool[Symbol.asyncDispose]();
+  assert.equal(timers(), before);
 });
 
 test('a worker that ran 10 minutes is replaced at once, and ends the back-off', async () => {
@@ -2071,7 +2066,8 @@ test('disposing a pool leaves no idle timeout on its clock', async () => {
   const clock = createClock();
   const timers = () => clock.countTimers();
   const before = timers();
-  const pool = new Pool({
+
+  await using pool = new Pool({
     size: new Fixed(1),
     startup: new Parallel(),
     eviction: new IdleTimeout({ after: 60_000 }),
@@ -2082,15 +2078,12 @@ test('disposing a pool leaves no idle timeout on its clock', async () => {
     },
     clock,
   });
-  try {
-    await pool.ready();
-    assert.equal(timers(), before + 1, 'the idle worker waits on a timer');
 
-    await pool[Symbol.asyncDispose]();
-    assert.equal(timers(), before);
-  } finally {
-    await pool[Symbol.asyncDispose]();
-  }
+  await pool.ready();
+  assert.equal(timers(), before + 1, 'the idle worker waits on a timer');
+
+  await pool[Symbol.asyncDispose]();
+  assert.equal(timers(), before);
 });
 
 test('a pool with no eviction keeps its idle workers', async () => {
@@ -2484,7 +2477,8 @@ test('a job takes an empty slot before a slot in back-off', async () => {
 
 test('the pool aborts the signal of an idle wait when a job takes the worker, starts a new wait when the job ends, and aborts it at dispose', async () => {
   const signals: AbortSignal[] = [];
-  const pool = new Pool({
+
+  await using pool = new Pool({
     size: new Fixed(1),
     startup: new Parallel(),
     eviction: {
@@ -2499,23 +2493,20 @@ test('the pool aborts the signal of an idle wait when a job takes the worker, st
     },
     clock: globalThis,
   });
-  try {
-    await pool.ready();
-    assert.equal(signals.length, 1);
-    assert.equal(signals[0]!.aborted, false);
 
-    await pool.use(async (worker) => {
-      assert.equal(signals[0]!.aborted, true, 'a job took the worker');
-      return worker.echo('busy');
-    });
-    assert.equal(signals.length, 2);
-    assert.equal(signals[1]!.aborted, false);
+  await pool.ready();
+  assert.equal(signals.length, 1);
+  assert.equal(signals[0]!.aborted, false);
 
-    await pool[Symbol.asyncDispose]();
-    assert.equal(signals[1]!.aborted, true);
-  } finally {
-    await pool[Symbol.asyncDispose]();
-  }
+  await pool.use(async (worker) => {
+    assert.equal(signals[0]!.aborted, true, 'a job took the worker');
+    return worker.echo('busy');
+  });
+  assert.equal(signals.length, 2);
+  assert.equal(signals[1]!.aborted, false);
+
+  await pool[Symbol.asyncDispose]();
+  assert.equal(signals[1]!.aborted, true);
 });
 
 /**

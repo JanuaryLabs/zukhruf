@@ -24,12 +24,11 @@ const heartbeatInterval = 200;
 /** A new database with the token table that the app creates before it starts. */
 async function mysqlDatabase() {
   const database = await new Mysql({ environment: process.env }).database();
-  const owner = await mysql.createConnection(database.connectionString);
-  try {
+  {
+    await using owner = await mysql.createConnection(database.connectionString);
+
     await owner.query(`CREATE TABLE ${table} (id BIGINT UNSIGNED NOT NULL)`);
     await owner.query(`INSERT INTO ${table} VALUES (0)`);
-  } finally {
-    await owner.end();
   }
   return database;
 }
@@ -151,19 +150,17 @@ test('a user with only SELECT and UPDATE on the token table can acquire', async 
     await owner.query(
       `GRANT SELECT, UPDATE ON \`${database.database}\`.${table} TO '${user}'@'%'`,
     );
-    const pool = poolOf(database, { user, password: 'app' });
-    try {
-      // Act
-      const token = await new Mutex(storeOver(pool)).acquire(
-        uniqueKey(),
-        async (lease) => lease.token,
-      );
 
-      // Assert
-      assert.equal(token.value, 1n);
-    } finally {
-      await pool.end();
-    }
+    await using pool = poolOf(database, { user, password: 'app' });
+
+    // Act
+    const token = await new Mutex(storeOver(pool)).acquire(
+      uniqueKey(),
+      async (lease) => lease.token,
+    );
+
+    // Assert
+    assert.equal(token.value, 1n);
   } finally {
     // A user belongs to the server, not to the database of the test.
     await owner.query(`DROP USER '${user}'@'%'`);

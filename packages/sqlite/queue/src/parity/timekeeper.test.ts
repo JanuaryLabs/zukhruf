@@ -532,36 +532,32 @@ describe('timekeeper', () => {
       }
     };
     const observe = async (options: object) => {
-      const pglite = new PGlite();
-      const database = open(':memory:');
-      try {
-        const pgBossClock = new TestClock(ParityRun.start);
-        const sqliteClock = new TestClock(ParityRun.start);
-        return {
-          pgBoss: await read(
-            new PgBoss({
-              backend: 'pglite',
-              db: fromPglite(pglite),
-              clock: pgBossClock,
-              supervise: false,
-              ...options,
-            }),
-            pgBossClock,
-          ),
-          sqlite: await read(
-            new SqliteJobQueue({
-              database,
-              clock: sqliteClock,
-              supervise: false,
-              ...options,
-            }),
-            sqliteClock,
-          ),
-        };
-      } finally {
-        database.close();
-        await pglite.close();
-      }
+      await using pglite = new PGlite();
+      using database = open(':memory:');
+
+      const pgBossClock = new TestClock(ParityRun.start);
+      const sqliteClock = new TestClock(ParityRun.start);
+      return {
+        pgBoss: await read(
+          new PgBoss({
+            backend: 'pglite',
+            db: fromPglite(pglite),
+            clock: pgBossClock,
+            supervise: false,
+            ...options,
+          }),
+          pgBossClock,
+        ),
+        sqlite: await read(
+          new SqliteJobQueue({
+            database,
+            clock: sqliteClock,
+            supervise: false,
+            ...options,
+          }),
+          sqliteClock,
+        ),
+      };
     };
 
     const keeping = { sendIt: 'resolved', targets: 1 };
@@ -703,31 +699,28 @@ describe('timekeeper', () => {
         await queue.stop({ graceful: false, close: false });
       }
     };
-    const pglite = new PGlite();
-    const database = open(':memory:');
-    try {
-      const pgBossClock = new TestClock(ParityRun.start);
-      const sqliteClock = new TestClock(ParityRun.start);
-      const pgBoss = await observe(
-        new PgBoss({
-          backend: 'pglite',
-          db: fromPglite(pglite),
-          clock: pgBossClock,
-          supervise: false,
-        }),
-        pgBossClock,
-      );
-      const sqlite = await observe(
-        new SqliteJobQueue({ database, clock: sqliteClock, supervise: false }),
-        sqliteClock,
-      );
 
-      assert.deepStrictEqual(sqlite, pgBoss);
-      assert.deepStrictEqual(pgBoss, ['completed']);
-    } finally {
-      database.close();
-      await pglite.close();
-    }
+    await using pglite = new PGlite();
+    using database = open(':memory:');
+
+    const pgBossClock = new TestClock(ParityRun.start);
+    const sqliteClock = new TestClock(ParityRun.start);
+    const pgBoss = await observe(
+      new PgBoss({
+        backend: 'pglite',
+        db: fromPglite(pglite),
+        clock: pgBossClock,
+        supervise: false,
+      }),
+      pgBossClock,
+    );
+    const sqlite = await observe(
+      new SqliteJobQueue({ database, clock: sqliteClock, supervise: false }),
+      sqliteClock,
+    );
+
+    assert.deepStrictEqual(sqlite, pgBoss);
+    assert.deepStrictEqual(pgBoss, ['completed']);
   });
 
   it('runs no timekeeper with schedule: false', async () => {

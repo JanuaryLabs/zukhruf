@@ -26,14 +26,15 @@ test(
       assert.equal(image, 'mysql:lts');
       assert.equal(owned.image, image);
       assert.equal(new URL(owned.connectionString).protocol, 'mysql:');
-      const connection = await mysql.createConnection(owned.connectionString);
-      try {
+      {
+        await using connection = await mysql.createConnection(
+          owned.connectionString,
+        );
+
         const [[row]] = await connection.query<RowDataPacket[]>(
           'SELECT DATABASE() AS name',
         );
         assert.equal(row?.name, database);
-      } finally {
-        await connection.end();
       }
       assert.deepEqual(
         await owned.query('SELECT 42 AS value, NULL AS missing'),

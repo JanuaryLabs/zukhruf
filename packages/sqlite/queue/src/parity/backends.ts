@@ -183,12 +183,9 @@ export class ParityRun {
 // each run instead unpacks this one dump of a bare database into its own
 // in-memory instance; the dump is read-only and no run shares a database.
 const bareDatabase = (async () => {
-  const pglite = new PGlite();
-  try {
-    return await pglite.dumpDataDir('none');
-  } finally {
-    await pglite.close();
-  }
+  await using pglite = new PGlite();
+
+  return await pglite.dumpDataDir('none');
 })();
 
 // The oracle: real pg-boss on an in-memory PGlite, which pg-boss runs its own
