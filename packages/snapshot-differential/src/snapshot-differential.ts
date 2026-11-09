@@ -130,7 +130,7 @@ export class SnapshotDifferential<Data extends Record<string, unknown>> {
           savedFingerprint: fingerprintIn(before),
         };
     }
-    const listedSoFar = new Set([...listed, ...seen]);
+    const listedSoFar = listed.union(seen);
     for (const [key, entry] of previous)
       if (!seen.has(key) && (continues || listed.has(key)))
         current.set(key, entry);
