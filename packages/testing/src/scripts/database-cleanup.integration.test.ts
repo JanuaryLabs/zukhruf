@@ -6,9 +6,6 @@ import { existsSync } from 'node:fs';
 import { readFile, readdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { type TestContext, test } from 'node:test';
-import { fileURLToPath } from 'node:url';
-
-import { Docker } from '@zukhruf/docker';
 
 import type { Database } from '../databases/database.ts';
 import { Mariadb } from '../databases/mariadb.ts';
@@ -16,27 +13,15 @@ import { Mysql } from '../databases/mysql.ts';
 import { Postgres } from '../databases/postgres.ts';
 import { SqlServer } from '../databases/sqlserver.ts';
 import { TemporaryFiles } from '../fs/temporary-files.ts';
+import { engine, proxyless } from '../testing/current-engine.ts';
+import { docker } from '../testing/engine-client.ts';
 import { EngineProxy } from '../testing/engine-proxy.ts';
+import { runEnvironment, runnerArgs } from '../testing/global-setup-run.ts';
 
-const docker = await Docker.connect({
-  clock: globalThis,
-  environment: process.env,
-});
-/** The host of the engine that this process's context selects. */
-const engine =
-  (await Docker.contexts({ environment: process.env })).find(
-    (context) => context.current,
-  )?.host ?? '';
-const proxyless = engine.startsWith('unix://')
-  ? false
-  : `the engine proxy forwards to a local unix:// engine only, not ${engine}`;
 const signals =
   process.platform === 'win32'
     ? 'Windows ends a process on a signal, so it runs no global teardown'
     : false;
-const setup = fileURLToPath(
-  new URL('./docker-global-setup.ts', import.meta.url),
-);
 const VERIFICATION = 'dev.zukhruf.testing.verification';
 
 /** A database fixture, and how the test sees a database on its server. */
@@ -153,23 +138,12 @@ const workerSource = (
 `;
 
 /** The environment of a runner that keeps its runs under `state`. */
-const runEnvironment = (state: string): Record<string, string | undefined> => ({
-  ...process.env,
-  XDG_STATE_HOME: state,
-  // A runner launched from a test worker would otherwise skip its files.
-  NODE_TEST_CONTEXT: undefined,
-  // This test runs in a run; the nested run must start its own.
-  ZUKHRUF_TESTING_RUN_ID: undefined,
-  ZUKHRUF_TESTING_RUN_DIR: undefined,
-});
-
 /** Runs `file` with the Docker global setup, and gives its exit code and output. */
 async function runFile(file: string, env: Record<string, string | undefined>) {
-  const child = spawn(
-    process.execPath,
-    ['--test', `--test-global-setup=${setup}`, '--test-force-exit', file],
-    { env, stdio: ['ignore', 'pipe', 'pipe'] },
-  );
+  const child = spawn(process.execPath, runnerArgs('--test-force-exit', file), {
+    env,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
   let output = '';
   child.stdout.on('data', (data) => (output += data));
   child.stderr.on('data', (data) => (output += data));
@@ -462,11 +436,10 @@ test(
         execs += 1;
         if (execs === 2) await release.promise;
       });
-      dead = spawn(
-        process.execPath,
-        ['--test', `--test-global-setup=${setup}`, file],
-        { env, stdio: 'ignore' },
-      );
+      dead = spawn(process.execPath, runnerArgs(file), {
+        env,
+        stdio: 'ignore',
+      });
       await t.waitFor(() => readFile(join(directory.path, 'pid.json')), {
         timeout: 120_000,
         interval: 250,

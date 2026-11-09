@@ -5,34 +5,19 @@ import { access, readFile, readdir, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { type TestContext, test } from 'node:test';
 import { setTimeout } from 'node:timers/promises';
-import { fileURLToPath } from 'node:url';
-
-import { Docker } from '@zukhruf/docker';
 
 import {
   type TemporaryDirectory,
   TemporaryFiles,
 } from '../fs/temporary-files.ts';
+import { engine, proxyless } from '../testing/current-engine.ts';
+import { docker } from '../testing/engine-client.ts';
 import { EngineProxy } from '../testing/engine-proxy.ts';
-
-const docker = await Docker.connect({
-  clock: globalThis,
-  environment: process.env,
-});
-/** The host of the engine that this process's context selects. */
-const engine =
-  (await Docker.contexts({ environment: process.env })).find(
-    (context) => context.current,
-  )?.host ?? '';
-const proxyless = engine.startsWith('unix://')
-  ? false
-  : `the engine proxy forwards to a local unix:// engine only, not ${engine}`;
-const setup = fileURLToPath(
-  new URL('./docker-global-setup.ts', import.meta.url),
-);
-const library = JSON.stringify(
-  new URL('../docker/index.ts', import.meta.url).href,
-);
+import {
+  library,
+  runEnvironment,
+  runnerArgs,
+} from '../testing/global-setup-run.ts';
 
 /** What a small worker of a run created. */
 interface SmallState {
@@ -57,23 +42,6 @@ const smallWorkerSource = (statePath: string, ending: string) => `
   });
 `;
 
-/** The environment of a runner that keeps its runs under `state`. */
-const runEnvironment = (
-  state: string,
-  path = process.env.PATH,
-): Record<string, string | undefined> => ({
-  ...process.env,
-  XDG_STATE_HOME: state,
-  PATH: path,
-  // Undefined, not deleted: nano-spawn adds process.env back, and Node
-  // passes no variable whose value is undefined.
-  // A runner launched from a test worker would otherwise skip its files.
-  NODE_TEST_CONTEXT: undefined,
-  // This test may itself run in a run; a nested run must start its own.
-  ZUKHRUF_TESTING_RUN_ID: undefined,
-  ZUKHRUF_TESTING_RUN_DIR: undefined,
-});
-
 /** The environment of a runner whose engine is `proxy`. */
 const proxiedEnvironment = (
   state: string,
@@ -84,13 +52,6 @@ const proxiedEnvironment = (
   DOCKER_CONTEXT: undefined,
   DOCKER_HOST: proxy.host,
 });
-
-/** `node --test` with the Docker global setup. */
-const runnerArgs = (...args: string[]) => [
-  '--test',
-  `--test-global-setup=${setup}`,
-  ...args,
-];
 
 const removeContainer = async (id: string): Promise<void> =>
   (await docker.containers.find(id))?.remove({ force: true, v: true });

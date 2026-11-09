@@ -13,19 +13,12 @@ import { ConnectionFailedError, Docker } from '@zukhruf/docker';
 
 import { timebox } from '../async/index.ts';
 import { TemporaryFiles } from '../fs/temporary-files.ts';
+import { engine, proxyless } from '../testing/current-engine.ts';
 import { EngineProxy } from '../testing/engine-proxy.ts';
+import { library } from '../testing/global-setup-run.ts';
 import { DockerTestbed } from './index.ts';
 
 const image = 'alpine:latest';
-/** The host of the engine that this process's context selects. */
-const engine =
-  (await Docker.contexts({ environment: process.env })).find(
-    (context) => context.current,
-  )?.host ?? '';
-const proxyless = engine.startsWith('unix://')
-  ? false
-  : `the engine proxy forwards to a local unix:// engine only, not ${engine}`;
-const library = JSON.stringify(new URL('./index.ts', import.meta.url).href);
 
 function alive(pid: number): boolean {
   try {
