@@ -36,7 +36,11 @@ function alive(pid: number): boolean {
   }
 }
 
-/** Removes each container that carries `label=value`, shared servers too. */
+/**
+ * Removes each container that carries `label=value`. A reuse() server has no
+ * run label, and the global teardown keeps the servers of this version, so only
+ * this removes a server that one test made.
+ */
 async function removeLabelled(docker: Docker, label: string): Promise<void> {
   for (const { Id } of await docker.containers.list({
     all: true,
@@ -215,45 +219,38 @@ test(
     const testbed = new DockerTestbed({ environment: process.env });
     const client = await testbed.client();
     const scope = randomUUID();
-    const label = `dev.zukhruf.testing.verification=${scope}`;
     const served: string[] = [];
-    try {
-      // Act
-      const failure = await testbed
-        .serve(
-          {
-            Image: image,
-            Cmd: ['sleep', '60'],
-            Labels: { 'dev.zukhruf.testing.verification': scope },
-          },
-          {
-            internalPort: 8080,
-            healthy: ({ container }) => {
-              served.push(container.id);
-              throw new Error('not ready');
-            },
-          },
-        )
-        .then(
-          () => assert.fail('serve resolved'),
-          (error: unknown) => error,
-        );
 
-      // Assert
-      assert.ok(failure instanceof Error);
-      assert.deepEqual(failure.cause, new Error('not ready'));
-      assert.equal(served.length, 1);
-      await t.waitFor(
-        async () =>
-          assert.equal(
-            await client.containers.find(served[0] ?? ''),
-            undefined,
-          ),
-        { timeout: 10_000 },
+    // Act
+    const failure = await testbed
+      .serve(
+        {
+          Image: image,
+          Cmd: ['sleep', '60'],
+          Labels: { 'dev.zukhruf.testing.verification': scope },
+        },
+        {
+          internalPort: 8080,
+          healthy: ({ container }) => {
+            served.push(container.id);
+            throw new Error('not ready');
+          },
+        },
+      )
+      .then(
+        () => assert.fail('serve resolved'),
+        (error: unknown) => error,
       );
-    } finally {
-      await removeLabelled(client, label);
-    }
+
+    // Assert
+    assert.ok(failure instanceof Error);
+    assert.deepEqual(failure.cause, new Error('not ready'));
+    assert.equal(served.length, 1);
+    await t.waitFor(
+      async () =>
+        assert.equal(await client.containers.find(served[0] ?? ''), undefined),
+      { timeout: 10_000 },
+    );
   },
 );
 
@@ -267,48 +264,42 @@ test(
     const scope = randomUUID();
     const readiness = new Error('the server stopped');
     const served: string[] = [];
-    try {
-      // Act
-      const failure = await testbed
-        .serve(
-          {
-            Image: image,
-            Cmd: ['sh', '-c', `echo printed-${scope}; sleep 1; exit 3`],
-            Labels: { 'dev.zukhruf.testing.verification': scope },
-          },
-          {
-            internalPort: 8080,
-            healthy: async ({ container }) => {
-              served.push(container.id);
-              await timebox(async () => {
-                const { State } = await container.inspect();
-                if (State?.Running) throw new Error('still running');
-              });
-              throw readiness;
-            },
-          },
-        )
-        .then(
-          () => assert.fail('serve resolved'),
-          (error: unknown) => error,
-        );
 
-      // Assert
-      assert.ok(failure instanceof Error);
-      assert.match(failure.message, new RegExp(`printed-${scope}`));
-      assert.equal(failure.cause, readiness);
-      assert.equal(served.length, 1);
-      await t.waitFor(
-        async () =>
-          assert.equal(
-            await client.containers.find(served[0] ?? ''),
-            undefined,
-          ),
-        { timeout: 10_000 },
+    // Act
+    const failure = await testbed
+      .serve(
+        {
+          Image: image,
+          Cmd: ['sh', '-c', `echo printed-${scope}; sleep 1; exit 3`],
+          Labels: { 'dev.zukhruf.testing.verification': scope },
+        },
+        {
+          internalPort: 8080,
+          healthy: async ({ container }) => {
+            served.push(container.id);
+            await timebox(async () => {
+              const { State } = await container.inspect();
+              if (State?.Running) throw new Error('still running');
+            });
+            throw readiness;
+          },
+        },
+      )
+      .then(
+        () => assert.fail('serve resolved'),
+        (error: unknown) => error,
       );
-    } finally {
-      await removeLabelled(client, `dev.zukhruf.testing.verification=${scope}`);
-    }
+
+    // Assert
+    assert.ok(failure instanceof Error);
+    assert.match(failure.message, new RegExp(`printed-${scope}`));
+    assert.equal(failure.cause, readiness);
+    assert.equal(served.length, 1);
+    await t.waitFor(
+      async () =>
+        assert.equal(await client.containers.find(served[0] ?? ''), undefined),
+      { timeout: 10_000 },
+    );
   },
 );
 

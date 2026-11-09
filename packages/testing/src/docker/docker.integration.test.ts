@@ -7,7 +7,11 @@ import type { Docker } from '@zukhruf/docker';
 import { timebox } from '../async/index.ts';
 import { DockerTestbed } from './index.ts';
 
-/** Removes each container that carries `label`, shared servers too. */
+/**
+ * Removes each container that carries `label`. A reuse() server has no run
+ * label, and the global teardown keeps the servers of this version, so only
+ * this removes a server that one test made.
+ */
 async function removeLabelled(client: Docker, label: string): Promise<void> {
   for (const { Id } of await client.containers.list({
     all: true,
