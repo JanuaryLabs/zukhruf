@@ -24,6 +24,14 @@ _Avoid_: Busy, pending (a pending promise is a different thing)
 The time in milliseconds from the start of loading to the spinner. A load that ends before the delay shows no spinner.
 _Avoid_: Debounce (a debounce waits for the input to stop), timeout
 
+**Clock**:
+The object that gives the timers and the time to the components of one React tree. The type is `UiClock`. An app gives `globalThis`, and a test gives `createClock()` of `@sinonjs/fake-timers`. There is no default.
+_Avoid_: Timer (a timer is one wait on the clock), time provider, scheduler
+
+**Clock provider**:
+`ClockProvider`, the component that gives the clock to the tree below it. `useClock` throws when no clock provider is above the component.
+_Avoid_: Clock context (the context is private to this package), wrapper
+
 **Spinner**:
 The `Loader2` icon of Lucide that turns while the delay has passed and the button is still loading. It takes the place of the icon.
 _Avoid_: Loader (Lucide names its icons loaders), progress (a progress bar shows an amount)

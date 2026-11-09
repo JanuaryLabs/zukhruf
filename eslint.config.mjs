@@ -204,11 +204,10 @@ export default defineConfig(
     files: ['packages/shutdown/src/shutdown.ts'],
     rules: { 'island/no-console': 'off' },
   },
-  // The React components of @zukhruf/ui and @zukhruf/shadcn wait on the timers
-  // of the browser. How a component gets a clock is not decided yet (#3600),
-  // so island/no-ambient-time does not reach them.
+  // The CLI of shadcn writes this source, and a UI package can not import the
+  // clock of @zukhruf/ui, so its timers stay (packages/ui ADR 0001).
   {
-    files: ['packages/ui/src/**', 'packages/shadcn/src/**'],
+    files: ['packages/shadcn/src/**'],
     rules: { 'island/no-ambient-time': 'off' },
   },
   // The examples of @zukhruf/mteb are not shipped. They are command line

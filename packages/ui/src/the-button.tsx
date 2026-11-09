@@ -9,6 +9,8 @@ import {
   TooltipTrigger,
 } from '@zukhruf/shadcn';
 
+import { useClock } from './clock.tsx';
+
 interface TheButtonProps extends React.ComponentProps<typeof Button> {
   /**
    * Shows a loading spinner after the delay period.
@@ -35,6 +37,7 @@ interface TheButtonProps extends React.ComponentProps<typeof Button> {
 // --- Internal Components ---
 
 function useDelayedLoading(loading: boolean | undefined, delay: number) {
+  const clock = useClock();
   const isLoading = !!loading;
   const [delayPassed, setDelayPassed] = useState(false);
 
@@ -43,15 +46,15 @@ function useDelayedLoading(loading: boolean | undefined, delay: number) {
       return;
     }
 
-    const timerId = setTimeout(() => {
+    const timerId = clock.setTimeout(() => {
       setDelayPassed(true);
     }, delay);
 
     return () => {
-      clearTimeout(timerId);
+      clock.clearTimeout(timerId);
       queueMicrotask(() => setDelayPassed(false));
     };
-  }, [isLoading, delay]);
+  }, [clock, isLoading, delay]);
 
   return isLoading && delayPassed;
 }
