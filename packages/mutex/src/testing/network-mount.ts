@@ -51,15 +51,6 @@ export function mountAs(t: TestContext, directory: string, type: bigint) {
   };
 }
 
-export const outcome = (acquiring: Promise<AsyncDisposable>) =>
-  acquiring.then(
-    async (lease) => {
-      await lease[Symbol.asyncDispose]();
-      return 'granted' as const;
-    },
-    (error: unknown) => error,
-  );
-
 export const onLinux = {
   skip:
     process.platform === 'linux'

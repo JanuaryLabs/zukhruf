@@ -10,14 +10,15 @@ import { TemporaryFiles } from '@zukhruf/testing/fs';
 
 import { Mutex } from '../../mutex/mutex.ts';
 import { FencedRegister } from '../../testing/fenced-register.ts';
+import { mutexUrl } from '../../testing/module-urls.ts';
 import { newProcessTimeout } from '../../testing/new-process-timeout.ts';
+import { onUnixSockets } from '../../testing/on-unix-sockets.ts';
 import { graceWindow, settle } from '../../testing/timing.ts';
 import { watch } from '../../testing/watch.ts';
 import { startWorker } from '../../testing/worker-process.ts';
 import { socketElection } from './socket-election.ts';
 import { type SocketRole, SocketStore } from './socket-store.ts';
 
-const mutexUrl = new URL('../../mutex/mutex.ts', import.meta.url);
 const socketStoreUrl = new URL('./socket-store.ts', import.meta.url);
 const fakeTimersUrl = import.meta.resolve('@sinonjs/fake-timers');
 const fencedRegisterUrl = new URL(
@@ -703,12 +704,7 @@ describe('Socket store follower failure', () => {
 
   test(
     'a follower whose role listener throws closes its connection to the leader',
-    {
-      skip:
-        process.platform === 'win32'
-          ? 'The stand-in leader listens on the Unix socket path'
-          : false,
-    },
+    onUnixSockets,
     async (t) => {
       // Arrange: a stand-in leader holds the term and serves the socket path; it records when its peer goes away.
       await using directory = await new TemporaryFiles().directory(

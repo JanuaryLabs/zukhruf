@@ -7,13 +7,9 @@ import { describe, test } from '@zukhruf/testing/node';
 
 import { NetworkDirectoryError } from '../../lock-stores/file-system/index.ts';
 import { Mutex } from '../../mutex/mutex.ts';
-import {
-  mountAs,
-  networkFileSystems,
-  onLinux,
-  outcome,
-} from '../network-mount.ts';
+import { mountAs, networkFileSystems, onLinux } from '../network-mount.ts';
 import { newProcessTimeout } from '../new-process-timeout.ts';
+import { outcome } from '../outcome.ts';
 import { startWorker } from '../worker-process.ts';
 import { holderSource } from './peers.ts';
 import type { Host, OnDisk, SharedByProcesses, Subject } from './subject.ts';

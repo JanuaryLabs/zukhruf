@@ -83,6 +83,39 @@ Backlog #2899 is about this code. A third dialect with a pool is the time to mov
 - Differs: nothing in the code.
 - Why it stays: this knowledge is only in this repository, and no package exports a shared test module. `linuxNetworkFileSystems` in `packages/fs/src/local-directory.ts` has the same numbers, but it is the code under test. A test that imports that table cannot find a wrong number in it. Thus each test file keeps its own table.
 
+**The tickets in a queue file (test helper).**
+
+- Places: `ticketsIn` in `file-system/presence.test.ts` and in `file-system/ticket-queue-file-store.test.ts`.
+- Same: each helper reads the queue file and counts its tickets.
+- Differs: the copy in `presence.test.ts` gives 0 for a missing file, and counts line ends. The copy in `ticket-queue-file-store.test.ts` throws an error for a missing file, and counts lines that are not empty.
+
+**The published socket path (test helper).**
+
+- Places: `publishedSocketPath` in `socket/socket-store-coordinator.test.ts` and in `socket/socket-store-reconnect.test.ts`.
+- Same: nothing differs.
+- Not counted: `socketPathFor` in `socket/socket-store.ts` is the code under test. `pipeFor` in `socket/wire-compatibility.test.ts` spells out the published name, because that test pins it.
+
+**The file stores of a test (test helper).**
+
+- Places: `stores` in `file-system/presence.test.ts` and in `file-system/reclaim-lock.test.ts`.
+- Same: the name, the URL and the `create` function of `LockFileStore` and of `TicketQueueFileStore`.
+- Differs: `reclaim-lock.test.ts` adds `evictionStep`.
+- Not counted: `stores` in `file-system/containers.test.ts` holds only the names, because its stores run in a container.
+
+**The skip outside POSIX (test helper).**
+
+- Places: `posixOnly` in `file-system/presence.test.ts` and in `sqlite/sqlite-store.test.ts`.
+- Same: each helper skips a test on Windows.
+- Differs: the reason of the skip.
+
+**Not counted: test helpers with one name and different knowledge.** Each of these has its name in three or more places, but each place holds other knowledge. Thus they stay with each test.
+
+- `holderSource`: each child process holds a key of another lock store, in another place. One runs in a container, and one has no `Mutex`.
+- `storeOver`, `storeOn`, `sessionControl`, `poolControl`, `poolOf` and `silentlyReconnectingSession`: each one uses the driver of its server.
+- `heartbeatInterval`, `sequence` and `image`: each test file sets the value for its own test.
+- `askLeader` in `socket/handshake.test.ts`, `publishedPeer` in `socket/wire-compatibility.test.ts` and `rawPeer` in `socket/socket-store-coordinator.test.ts`: each client keeps another thing, and only `rawPeer` does the handshake.
+- `outcomeOf` in `docker/docker-engine-store.test.ts`: it also reports a promise that did not settle.
+
 Three more test helpers of the mutex are also in other packages. `mountAs` and `LosableElection` are in three places, and [the ledger of the election](../../election/docs/copied-code.md#test-helpers-in-more-than-two-places) records them. `listening` is in two places, and [the note of the single flight](../../single-flight/docs/copied-from-mutex.md#tests-copied) records it.
 
 ## In more than two places

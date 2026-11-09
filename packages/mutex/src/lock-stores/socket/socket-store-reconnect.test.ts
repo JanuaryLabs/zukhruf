@@ -14,6 +14,7 @@ import { test } from '@zukhruf/testing/node';
 import { LeaseLostError, type LockHandle, Mutex } from '../../index.ts';
 import { isRecord } from '../../shared/is-record.ts';
 import { newProcessTimeout } from '../../testing/new-process-timeout.ts';
+import { standInServer } from '../../testing/stand-in-server.ts';
 import { settle } from '../../testing/timing.ts';
 import { watch } from '../../testing/watch.ts';
 import { startWorker } from '../../testing/worker-process.ts';
@@ -56,39 +57,31 @@ interface LeaderSide {
  */
 async function standInLeader(directory: string) {
   const connections: LeaderSide[] = [];
-  const sockets = new Set<Socket>();
-  const server = createServer((socket: Socket) => {
-    sockets.add(socket);
-    socket.on('error', () => {});
-    const write = (message: Record<string, unknown>) =>
-      socket.write(`${JSON.stringify(message)}\n`);
-    const side: LeaderSide = {
-      hello: undefined,
-      requests: [],
-      closed: false,
-      welcome: () => write({ op: 'welcome' }),
-      refuse: () =>
-        socket.end(`${JSON.stringify({ op: 'refused', version: 99 })}\n`),
-      answer: write,
-      drop: () => socket.destroy(),
-    };
-    socket.once('close', () => (side.closed = true));
-    connections.push(side);
-    createInterface({ input: socket }).on('line', (line) => {
-      const message: unknown = JSON.parse(line);
-      if (side.hello === undefined) side.hello = message;
-      else side.requests.push(isRecord(message) ? message : { line });
-    });
-  });
-  server.listen(publishedSocketPath(directory));
-  await once(server, 'listening');
-  return {
-    connections,
-    [Symbol.asyncDispose]: async () => {
-      for (const socket of sockets) socket.destroy();
-      await new Promise<void>((done) => server.close(() => done()));
+  const server = await standInServer(
+    publishedSocketPath(directory),
+    (socket) => {
+      const write = (message: Record<string, unknown>) =>
+        socket.write(`${JSON.stringify(message)}\n`);
+      const side: LeaderSide = {
+        hello: undefined,
+        requests: [],
+        closed: false,
+        welcome: () => write({ op: 'welcome' }),
+        refuse: () =>
+          socket.end(`${JSON.stringify({ op: 'refused', version: 99 })}\n`),
+        answer: write,
+        drop: () => socket.destroy(),
+      };
+      socket.once('close', () => (side.closed = true));
+      connections.push(side);
+      createInterface({ input: socket }).on('line', (line) => {
+        const message: unknown = JSON.parse(line);
+        if (side.hello === undefined) side.hello = message;
+        else side.requests.push(isRecord(message) ? message : { line });
+      });
     },
-  };
+  );
+  return Object.assign(server, { connections });
 }
 
 /**

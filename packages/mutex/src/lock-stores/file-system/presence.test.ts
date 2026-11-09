@@ -15,12 +15,11 @@ import { test } from '@zukhruf/testing/node';
 
 import { Modes } from '../../mutex/acquire-modes/modes.ts';
 import { Mutex } from '../../mutex/mutex.ts';
+import { modesUrl, mutexUrl } from '../../testing/module-urls.ts';
 import { startWorker } from '../../testing/worker-process.ts';
 import { LockFileStore } from './lock-file-store.ts';
 import { TicketQueueFileStore } from './ticket-queue-file-store.ts';
 
-const mutexUrl = new URL('../../mutex/mutex.ts', import.meta.url);
-const modesUrl = new URL('../../mutex/acquire-modes/modes.ts', import.meta.url);
 const registerUrl = new URL(
   '../../testing/fenced-register.ts',
   import.meta.url,

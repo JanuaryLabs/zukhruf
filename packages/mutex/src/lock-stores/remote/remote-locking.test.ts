@@ -8,6 +8,7 @@ import {
   type TokenSource,
 } from '@zukhruf/fencing';
 
+import { grantedWithin } from '../../testing/granted-within.ts';
 import {
   scriptedConnector,
   scriptedPeer,
@@ -49,14 +50,6 @@ function coordinatorAfterFailover(graceWindow: number) {
     return peer;
   };
   return { coordinator, connect };
-}
-
-/** Resolves `'granted'` if `lease` arrives within `milliseconds`, otherwise `'waiting'`. */
-function grantedWithin(lease: Promise<unknown>, milliseconds: number) {
-  return Promise.race([
-    lease.then(() => 'granted' as const),
-    delay(milliseconds, 'waiting' as const, { ref: false }),
-  ]);
 }
 
 describe('Claims that a coordinator registers in the same turn as another event', () => {

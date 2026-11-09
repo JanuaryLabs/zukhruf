@@ -7,19 +7,12 @@ import { createClock } from '@sinonjs/fake-timers';
 import { describe } from '@zukhruf/testing/node';
 
 import { MemoryStore } from '../lock-stores/memory/memory-store.ts';
+import { grantedWithin } from '../testing/granted-within.ts';
 import { hold } from '../testing/hold.ts';
 import { settle } from '../testing/timing.ts';
 import type { AcquireMode } from './acquire-mode.ts';
 import { Modes } from './acquire-modes/modes.ts';
 import { Mutex } from './mutex.ts';
-
-/** Resolves `'done'` if `work` settles within `milliseconds`, otherwise `'still waiting'`. */
-function within(work: Promise<unknown>, milliseconds: number) {
-  return Promise.race([
-    work.then(() => 'done' as const),
-    delay(milliseconds, 'still waiting' as const, { ref: false }),
-  ]);
-}
 
 describe('The time limit of skip if busy', () => {
   test('the limit starts when the lock store answers, so a free key that it answers late is still acquired', async (t) => {
@@ -105,7 +98,7 @@ describe('Cancelling a wait', () => {
         signal: cancel.signal,
       }),
     ]);
-    assert.equal(await within(calls, settle), 'still waiting');
+    assert.equal(await grantedWithin(calls, settle), 'waiting');
 
     // Act
     cancel.abort(new Error('cancelled'));

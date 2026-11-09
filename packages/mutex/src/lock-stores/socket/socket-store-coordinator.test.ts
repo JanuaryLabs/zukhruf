@@ -11,6 +11,7 @@ import { TemporaryFiles } from '@zukhruf/testing/fs';
 import { test } from '@zukhruf/testing/node';
 
 import { isRecord } from '../../shared/is-record.ts';
+import { grantedWithin } from '../../testing/granted-within.ts';
 import { settle } from '../../testing/timing.ts';
 import { SocketStore } from './index.ts';
 import { socketElection } from './socket-election.ts';
@@ -123,14 +124,6 @@ async function rawPeer(t: TestContext, directory: string) {
       socket.destroy();
     },
   };
-}
-
-/** Resolves `'granted'` if `lease` arrives within `milliseconds`, otherwise `'waiting'`. */
-function grantedWithin(lease: Promise<unknown>, milliseconds: number) {
-  return Promise.race([
-    lease.then(() => 'granted' as const),
-    delay(milliseconds, 'waiting' as const, { ref: false }),
-  ]);
 }
 
 describe('A leader after a failover', () => {

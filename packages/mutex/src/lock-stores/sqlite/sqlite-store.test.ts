@@ -12,6 +12,7 @@ import { Modes } from '../../mutex/acquire-modes/modes.ts';
 import { Mutex } from '../../mutex/mutex.ts';
 import { isRecord } from '../../shared/is-record.ts';
 import { hold } from '../../testing/hold.ts';
+import { mutexUrl } from '../../testing/module-urls.ts';
 import { newProcessTimeout } from '../../testing/new-process-timeout.ts';
 import { startWorker } from '../../testing/worker-process.ts';
 import { SqliteStore } from './sqlite-store.ts';
@@ -19,7 +20,6 @@ import { SqliteStore } from './sqlite-store.ts';
 const posixOnly =
   process.platform === 'win32' ? 'Windows has no read-only directories' : false;
 
-const mutexUrl = new URL('../../mutex/mutex.ts', import.meta.url);
 const storeUrl = new URL('./sqlite-store.ts', import.meta.url);
 
 const openFiles = () => readdirSync('/dev/fd').length;

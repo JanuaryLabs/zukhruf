@@ -8,13 +8,12 @@ import { describe, test } from '@zukhruf/testing/node';
 
 import { Modes } from '../../mutex/acquire-modes/modes.ts';
 import { Mutex } from '../../mutex/mutex.ts';
+import { mutexUrl } from '../../testing/module-urls.ts';
 import { newProcessTimeout } from '../../testing/new-process-timeout.ts';
 import { settle } from '../../testing/timing.ts';
 import { tokensThatFailOnce } from '../../testing/tokens-that-fail-once.ts';
 import { startWorker } from '../../testing/worker-process.ts';
 import { IpcLockCoordinator } from './index.ts';
-
-const mutexUrl = new URL('../../mutex/mutex.ts', import.meta.url);
 
 describe('Process-tree mutex with IpcStore', () => {
   test('messages of its own and unreadable lock messages from a child leave its locks working', async (t) => {

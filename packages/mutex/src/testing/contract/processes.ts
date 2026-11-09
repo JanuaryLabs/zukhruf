@@ -8,6 +8,7 @@ import { describe, test } from '@zukhruf/testing/node';
 
 import { Mutex } from '../../mutex/mutex.ts';
 import { hold } from '../hold.ts';
+import { modesUrl, mutexUrl } from '../module-urls.ts';
 import { newProcessTimeout } from '../new-process-timeout.ts';
 import { settle } from '../timing.ts';
 import { watch } from '../watch.ts';
@@ -16,9 +17,6 @@ import { deadlineFor } from './deadlines.ts';
 import { label, longKey } from './keys.ts';
 import { childPrelude, holderSource, storeIn } from './peers.ts';
 import type { Host, SharedByProcesses, Subject } from './subject.ts';
-
-const mutexUrl = new URL('../../mutex/mutex.ts', import.meta.url);
-const modesUrl = new URL('../../mutex/acquire-modes/modes.ts', import.meta.url);
 
 /** A child or thread that skips, then cancels a wait, while its host holds the key, and reports each result. */
 export const skipperBody = `

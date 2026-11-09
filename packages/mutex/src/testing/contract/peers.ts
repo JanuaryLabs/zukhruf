@@ -1,8 +1,7 @@
 import { Worker } from 'node:worker_threads';
 
+import { mutexUrl } from '../module-urls.ts';
 import type { Host, SharedByThreads, StoreModule } from './subject.ts';
-
-const mutexUrl = new URL('../../mutex/mutex.ts', import.meta.url);
 
 /** Source of an expression, for an async context, that builds the store of `module` over `location`. */
 export const storeIn = (module: StoreModule, location: string) =>

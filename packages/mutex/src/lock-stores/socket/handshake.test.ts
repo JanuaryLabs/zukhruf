@@ -9,43 +9,27 @@ import { setTimeout as delay } from 'node:timers/promises';
 import { TemporaryFiles } from '@zukhruf/testing/fs';
 import { test } from '@zukhruf/testing/node';
 
+import { onUnixSockets } from '../../testing/on-unix-sockets.ts';
+import { outcome } from '../../testing/outcome.ts';
+import { standInServer } from '../../testing/stand-in-server.ts';
 import { isLockRequest } from '../remote/protocol.ts';
 import { PROTOCOL_VERSION } from './handshake.ts';
 import { ProtocolVersionError } from './index.ts';
 import { socketElection } from './socket-election.ts';
 import { type SocketRole, SocketStore } from './socket-store.ts';
 
-const onUnixSockets = {
-  skip:
-    process.platform === 'win32'
-      ? 'The stand-in leader and client use the Unix socket path'
-      : false,
-};
-
 /**
  * A stand-in leader on the store's socket path. It reads each line of each
  * connection and lets `answer` reply or hang up, as a leader that runs
  * another version would.
  */
-async function standInLeader(
+const standInLeader = (
   directory: string,
   answer: (peer: Socket, line: string) => void,
-) {
-  const peers = new Set<Socket>();
-  const server = createServer((peer) => {
-    peers.add(peer);
-    peer.on('error', () => {});
+) =>
+  standInServer(join(directory, 'lock.sock'), (peer) => {
     createInterface({ input: peer }).on('line', (line) => answer(peer, line));
   });
-  server.listen(join(directory, 'lock.sock'));
-  await once(server, 'listening');
-  return {
-    [Symbol.asyncDispose]: async () => {
-      for (const peer of peers) peer.destroy();
-      await new Promise<void>((resolve) => server.close(() => resolve()));
-    },
-  };
-}
 
 /** Sends `line` to the leader on the socket path, and reads its one answer before the connection ends. */
 async function askLeader(directory: string, line: string) {
@@ -76,15 +60,6 @@ function isHello(line: string) {
     return false;
   }
 }
-
-const outcome = (acquiring: Promise<AsyncDisposable>) =>
-  acquiring.then(
-    async (lease) => {
-      await lease[Symbol.asyncDispose]();
-      return 'granted' as const;
-    },
-    (error: unknown) => error,
-  );
 
 describe('Socket store protocol handshake', () => {
   test(

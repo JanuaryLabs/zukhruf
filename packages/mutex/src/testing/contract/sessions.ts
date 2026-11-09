@@ -14,6 +14,7 @@ import type { LockStore } from '../../mutex/lock-store.ts';
 import { Mutex } from '../../mutex/mutex.ts';
 import { hold } from '../hold.ts';
 import { newProcessTimeout } from '../new-process-timeout.ts';
+import { uniqueKey } from './keys.ts';
 import type { Host, Subject } from './subject.ts';
 
 /** A store whose locks live on a session of a server, behind a TCP proxy. */
@@ -74,9 +75,6 @@ export interface PoolControl {
   /** A store over a pool of at most `size` sessions to the database at `location`. */
   pooled(location: string, size: number): Pooled;
 }
-
-/** Lock names of some servers belong to the whole server, and other tests share it. */
-const uniqueKey = () => `report:${randomUUID()}`;
 
 /** A store that beats a heartbeat: a held key survives one silent interval and is lost at two. */
 export function leaseLoss<H extends Host>(

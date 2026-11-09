@@ -8,19 +8,12 @@ import { describe, test } from '@zukhruf/testing/node';
 
 import { Modes } from '../../mutex/acquire-modes/modes.ts';
 import { Mutex } from '../../mutex/mutex.ts';
+import { grantedWithin } from '../granted-within.ts';
 import { hold } from '../hold.ts';
 import { newProcessTimeout } from '../new-process-timeout.ts';
 import { settle } from '../timing.ts';
 import { deadlineFor } from './deadlines.ts';
 import type { Host, Subject } from './subject.ts';
-
-/** Resolves `'done'` if `work` settles within `milliseconds`, otherwise `'still waiting'`. */
-function within(work: Promise<unknown>, milliseconds: number) {
-  return Promise.race([
-    work.then(() => 'done' as const),
-    delay(milliseconds, 'still waiting' as const, { ref: false }),
-  ]);
-}
 
 /** Every lock store: each acquire mode. */
 export function acquireModes<H extends Host>(store: Subject<H>): void {
@@ -190,11 +183,11 @@ export function acquireModes<H extends Host>(store: Subject<H>): void {
 
       try {
         assert.equal(
-          await within(
+          await grantedWithin(
             cancelled,
             deadlineFor(store, settle, { grants: 1, releases: 0 }),
           ),
-          'still waiting',
+          'waiting',
         );
 
         // Act
@@ -228,11 +221,11 @@ export function acquireModes<H extends Host>(store: Subject<H>): void {
 
       try {
         assert.equal(
-          await within(
+          await grantedWithin(
             attempt,
             deadlineFor(store, settle, { grants: 1, releases: 0 }),
           ),
-          'still waiting',
+          'waiting',
         );
 
         // Act

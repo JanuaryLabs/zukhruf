@@ -16,6 +16,7 @@ import {
 } from '../../testing/contract/peers.ts';
 import { skipperBody } from '../../testing/contract/processes.ts';
 import { hold } from '../../testing/hold.ts';
+import { modesUrl, mutexUrl } from '../../testing/module-urls.ts';
 import { newProcessTimeout } from '../../testing/new-process-timeout.ts';
 import {
   type ThreadHost,
@@ -25,9 +26,6 @@ import {
 import { settle } from '../../testing/timing.ts';
 import { tokensThatFailOnce } from '../../testing/tokens-that-fail-once.ts';
 import { ThreadLockCoordinator } from './index.ts';
-
-const mutexUrl = new URL('../../mutex/mutex.ts', import.meta.url);
-const modesUrl = new URL('../../mutex/acquire-modes/modes.ts', import.meta.url);
 
 /** The answer a worker thread reports; the thread's lock requests share its port. */
 function lookFrom(worker: Worker): Promise<unknown> {

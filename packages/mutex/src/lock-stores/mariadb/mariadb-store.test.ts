@@ -8,6 +8,7 @@ import mariadb, { type Pool, type PoolConfig } from 'mariadb';
 import { Mariadb, type MariadbDatabase } from '@zukhruf/testing/mariadb';
 
 import { Mutex } from '../../index.ts';
+import { uniqueKey } from '../../testing/contract/keys.ts';
 import { hold } from '../../testing/hold.ts';
 import { MariadbStore } from './index.ts';
 
@@ -39,9 +40,6 @@ async function mariadbDatabase() {
   }
   return database;
 }
-
-/** Lock names belong to the whole server, and other tests share it. */
-const uniqueKey = () => `report:${randomUUID()}`;
 
 const poolOf = (database: MariadbDatabase, options: PoolConfig = {}) =>
   mariadb.createPool({ ...connectionOf(database), ...options });

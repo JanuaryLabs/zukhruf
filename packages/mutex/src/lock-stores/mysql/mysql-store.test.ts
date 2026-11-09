@@ -8,6 +8,7 @@ import mysql from 'mysql2/promise';
 import { Mysql, type MysqlDatabase } from '@zukhruf/testing/mysql';
 
 import { Mutex } from '../../index.ts';
+import { uniqueKey } from '../../testing/contract/keys.ts';
 import { hold } from '../../testing/hold.ts';
 import { MysqlStore } from './index.ts';
 
@@ -32,9 +33,6 @@ async function mysqlDatabase() {
   }
   return database;
 }
-
-/** Lock names belong to the whole server, and other tests share it. */
-const uniqueKey = () => `report:${randomUUID()}`;
 
 const poolOf = (database: MysqlDatabase, options: mysql.PoolOptions = {}) =>
   mysql.createPool({

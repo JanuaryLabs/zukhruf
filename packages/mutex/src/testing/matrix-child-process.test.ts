@@ -6,11 +6,11 @@ import { test } from 'node:test';
 
 import { TemporaryFiles } from '@zukhruf/testing/fs';
 
+import { mutexUrl } from './module-urls.ts';
 import { newProcessTimeout } from './new-process-timeout.ts';
 import { subject as dockerSubject } from './subjects/docker-engine.ts';
 import { startWorker } from './worker-process.ts';
 
-const mutexUrl = new URL('../mutex/mutex.ts', import.meta.url);
 const memoryUrl = new URL('./subjects/memory.ts', import.meta.url);
 const dockerUrl = new URL('./subjects/docker-engine.ts', import.meta.url);
 const workerProcessUrl = new URL('./worker-process.ts', import.meta.url);

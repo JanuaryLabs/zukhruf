@@ -9,6 +9,7 @@ import type { FileLock } from '@zukhruf/fs';
 import { LeaseLostError } from '@zukhruf/lease';
 import { TemporaryFiles } from '@zukhruf/testing/fs';
 
+import { onUnixSockets } from '../../testing/on-unix-sockets.ts';
 import { LockServer } from './lock-server.ts';
 import { type SocketRole, SocketStore } from './socket-store.ts';
 
@@ -53,13 +54,6 @@ function listening(socketPath: string): Promise<boolean> {
     socket.once('error', () => resolve(false));
   });
 }
-
-const onUnixSockets = {
-  skip:
-    process.platform === 'win32'
-      ? 'The server listens on the Unix socket path'
-      : false,
-};
 
 describe('Lock server', () => {
   test(

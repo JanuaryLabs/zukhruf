@@ -13,6 +13,9 @@ import { test } from '@zukhruf/testing/node';
 
 import { Mutex } from '../../index.ts';
 import { newProcessTimeout } from '../../testing/new-process-timeout.ts';
+import { onUnixSockets } from '../../testing/on-unix-sockets.ts';
+import { taskOutcome } from '../../testing/outcome.ts';
+import { standInServer } from '../../testing/stand-in-server.ts';
 import { startWorker } from '../../testing/worker-process.ts';
 import { ProtocolVersionError, type SocketRole, SocketStore } from './index.ts';
 
@@ -24,13 +27,6 @@ import { ProtocolVersionError, type SocketRole, SocketStore } from './index.ts';
 // then lead side by side, or never find each other, and no error would tell.
 // The other messages are spelled out too: a change to one of them must change
 // PROTOCOL_VERSION, so that the hello tells two versions apart.
-
-const onUnixSockets = {
-  skip:
-    process.platform === 'win32'
-      ? 'A socket store on Windows meets its leader on a named pipe'
-      : false,
-};
 
 /** Holds the term in `directory` as a published leader does: an exclusive SQLite transaction on `leader.lock`. */
 function holdTerm(directory: string) {
@@ -55,11 +51,8 @@ async function publishedLeader(
   directory: string,
   answer: (peer: Socket, line: string, opens: boolean) => void,
 ) {
-  const peers = new Set<Socket>();
   const firstLines: string[] = [];
-  const server = createServer((peer) => {
-    peers.add(peer);
-    peer.on('error', () => {});
+  const server = await standInServer(join(directory, 'lock.sock'), (peer) => {
     let opens = true;
     createInterface({ input: peer }).on('line', (line) => {
       if (opens) firstLines.push(line);
@@ -67,15 +60,7 @@ async function publishedLeader(
       opens = false;
     });
   });
-  server.listen(join(directory, 'lock.sock'));
-  await once(server, 'listening');
-  return {
-    firstLines,
-    [Symbol.asyncDispose]: async () => {
-      for (const peer of peers) peer.destroy();
-      await new Promise<void>((resolve) => server.close(() => resolve()));
-    },
-  };
+  return Object.assign(server, { firstLines });
 }
 
 /** A process of a published version on `<directory>/lock.sock`: it sends `bytes` and keeps every byte the leader sends back. */
@@ -114,12 +99,6 @@ async function leaderOf(directory: string) {
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null;
 
-const outcome = (running: Promise<unknown>) =>
-  running.then(
-    () => 'granted' as const,
-    (error: unknown) => error,
-  );
-
 describe('What a socket store shares with other versions in its directory', () => {
   test(
     'a store does not lead while another process holds the claim on leader.lock, and leads once it is released',
@@ -139,14 +118,14 @@ describe('What a socket store shares with other versions in its directory', () =
       const mutex = new Mutex(store);
 
       // Act
-      const whileHeld = await outcome(
+      const whileHeld = await taskOutcome(
         mutex.acquire('product:42', async () => {}, {
           signal: AbortSignal.timeout(300),
         }),
       );
       const rolesWhileHeld = [...roles];
       term.release();
-      const afterRelease = await outcome(
+      const afterRelease = await taskOutcome(
         mutex.acquire('product:42', async () => {}),
       );
 
@@ -426,7 +405,7 @@ describe('What a socket store shares with other versions in its directory', () =
       });
 
       // Act
-      const result = await outcome(
+      const result = await taskOutcome(
         new Mutex(store).acquire('product:42', async () => {}),
       );
 
@@ -504,7 +483,7 @@ describe('What a socket store shares with other versions in its directory', () =
         clock: globalThis,
         pollInterval: 10,
       });
-      const taken = await outcome(
+      const taken = await taskOutcome(
         new Mutex(store).acquire('product:42', async () => {}),
       );
       const refused = (() => {

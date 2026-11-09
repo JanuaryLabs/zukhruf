@@ -11,6 +11,7 @@ import { describe, test } from '@zukhruf/testing/node';
 
 import { Modes } from '../../mutex/acquire-modes/modes.ts';
 import { Mutex } from '../../mutex/mutex.ts';
+import { mutexUrl } from '../module-urls.ts';
 import { newProcessTimeout } from '../new-process-timeout.ts';
 import { settle } from '../timing.ts';
 import { startWorker } from '../worker-process.ts';
@@ -18,8 +19,6 @@ import { deadlineFor } from './deadlines.ts';
 import { label, longKey } from './keys.ts';
 import { storeIn } from './peers.ts';
 import type { Host, Subject } from './subject.ts';
-
-const mutexUrl = new URL('../../mutex/mutex.ts', import.meta.url);
 
 /** Every lock store: one process, one Mutex. */
 export function singleProcess<H extends Host>(store: Subject<H>): void {

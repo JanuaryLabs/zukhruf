@@ -8,7 +8,8 @@ import { describe } from 'node:test';
 import { TemporaryFiles } from '@zukhruf/testing/fs';
 import { test } from '@zukhruf/testing/node';
 
-import { mountAs, onLinux, outcome } from '../testing/network-mount.ts';
+import { mountAs, onLinux } from '../testing/network-mount.ts';
+import { outcome } from '../testing/outcome.ts';
 import { LockFileStore, NetworkDirectoryError } from './file-system/index.ts';
 import { type SocketRole, SocketStore } from './socket/index.ts';
 
