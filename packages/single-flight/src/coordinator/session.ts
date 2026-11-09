@@ -2,10 +2,9 @@ import { EpochExhaustedError, FencingToken } from '@zukhruf/fencing';
 
 import type { Connection } from '../connection/connection.ts';
 import {
+  type FlightRequest,
   type FlightResponse,
-  type RequestEnvelope,
   isFlightRequest,
-  isRequestEnvelope,
 } from '../protocol/flight-protocol.ts';
 import type { FlightCoordinator } from './flight-coordinator.ts';
 import { type Inbox, Party } from './party.ts';
@@ -30,8 +29,8 @@ export class Session implements Inbox {
     this.#onTokensExhausted = onTokensExhausted;
     this.#phase = new Serving(connection);
     connection.on('message', (message) => {
-      // A message with no op or no id cannot be answered, so it is ignored, and the peer keeps its flights (ADR 0008).
-      if (!isRequestEnvelope(message)) return;
+      // A message that is not a flight request is ignored, and the peer keeps its flights (ADR 0008).
+      if (!isFlightRequest(message)) return;
       this.#handle(message);
     });
     connection.once('close', () => this.#end());
@@ -45,12 +44,7 @@ export class Session implements Inbox {
     this.#parties.delete(id);
   }
 
-  #handle(request: RequestEnvelope) {
-    // A newer process may ask what this version does not know. The answer
-    // keeps its connection, and with it every flight it leads.
-    if (!isFlightRequest(request)) {
-      return this.reply({ op: 'unsupported', id: request.id });
-    }
+  #handle(request: FlightRequest) {
     switch (request.op) {
       case 'run': {
         const party = this.#open(request.id);

@@ -10,18 +10,12 @@ import { type Greeting, PROTOCOL_VERSION, greet } from './handshake.ts';
 import { ProtocolVersionError } from './protocol-version-error.ts';
 import { SocketConnection } from './socket-connection.ts';
 
-/**
- * How long a coordinator may keep its term while it hangs up on every hello.
- * One that stops ends its term within moments.
- */
-const HANDSHAKE_PATIENCE = 1000;
-
 export interface ElectingConnectorOptions {
   socketPath: string;
   /** Only `campaign`: the connector never runs a backend's own steps, so an election of any backend fits. */
   election: Pick<LeaderElection<unknown>, 'campaign'>;
   pollInterval: number;
-  /** The clock of the waits and of the patience after a hang-up. */
+  /** The clock of the waits. */
   clock: Clock;
   /** Starts serving for a term this process just won. */
   serve(term: Term): Promise<void>;
@@ -63,16 +57,13 @@ export class ElectingConnector implements FlightConnector {
   /**
    * After a coordinator hung up on the hello: a coordinator that stops frees
    * its term within moments, so this process coordinates or reaches the
-   * successor soon enough to reassert its flights in the successor's grace
-   * window. A coordinator that keeps its term and hangs up on every hello
-   * fails the connect after HANDSHAKE_PATIENCE. Resolves `undefined` once
+   * successor at once, and reasserts its flights. Resolves `undefined` once
    * nothing listens.
    */
   async #outlastHangUp(
     signal: AbortSignal,
   ): Promise<FlightConnection | undefined> {
     const { socketPath, pollInterval, clock } = this.#options;
-    const deadline = clock.performance.now() + HANDSHAKE_PATIENCE;
     for (;;) {
       const term = await this.#campaign(0, signal);
       if (term) return this.#coordinate(term, signal);
@@ -80,9 +71,6 @@ export class ElectingConnector implements FlightConnector {
       if (!again) return undefined;
       const connection = await this.#follow(again, signal);
       if (connection) return connection;
-      if (clock.performance.now() >= deadline) {
-        throw new ProtocolVersionError(PROTOCOL_VERSION, undefined);
-      }
       await delay(pollInterval, { clock, signal });
     }
   }

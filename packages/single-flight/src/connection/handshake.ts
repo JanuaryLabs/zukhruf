@@ -9,10 +9,9 @@ const PROTOCOL = 'single-flight';
 
 /**
  * The version of the messages a single flight's processes exchange. It changes
- * only when they change, so processes that run different package versions
- * with the same protocol still share a directory. The `hello` and the
- * `refused` answer keep their shape in every version: they are how two
- * versions find out that they differ.
+ * whenever a message changes. The `hello` and the `refused` answer keep their
+ * shape in every version: they are how a coordinator and a process find out
+ * that they cannot read each other.
  */
 export const PROTOCOL_VERSION = 1;
 
@@ -41,19 +40,19 @@ export async function greet(socket: Socket): Promise<Greeting> {
 }
 
 /**
- * Reads a new process's `hello`. A process that speaks this protocol is
- * welcomed. A `hello` of another protocol or version is refused with this
- * coordinator's version, and the connection ends once that answer is
- * written. A process that opens with anything else is no single flight, and
- * its connection ends at once.
+ * Reads a new process's first line. A `hello` of this protocol and version is
+ * welcomed. Anything else, a `hello` of another protocol or version included,
+ * is refused with this coordinator's version, and the connection ends once
+ * that answer is written.
  */
 export async function welcome(socket: Socket): Promise<boolean> {
   const hello = parse(await readLine(socket));
-  if (!isRecord(hello) || hello.op !== 'hello') {
-    socket.destroy();
-    return false;
-  }
-  if (hello.protocol === PROTOCOL && hello.version === PROTOCOL_VERSION) {
+  if (
+    isRecord(hello) &&
+    hello.op === 'hello' &&
+    hello.protocol === PROTOCOL &&
+    hello.version === PROTOCOL_VERSION
+  ) {
     socket.write(jsonLine({ op: 'welcome' }));
     return true;
   }

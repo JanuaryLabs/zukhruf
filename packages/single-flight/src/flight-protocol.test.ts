@@ -6,12 +6,13 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { type Socket, connect, createServer } from 'node:net';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline';
-import { describe, test } from 'node:test';
+import { describe } from 'node:test';
 import type { TestContext } from 'node:test';
 
 import { FileLock } from '@zukhruf/fs';
 import { UnchangedJournal, open } from '@zukhruf/sqlite-open';
 import { TemporaryFiles } from '@zukhruf/testing/fs';
+import { test } from '@zukhruf/testing/node';
 
 import { ProtocolVersionError, SingleFlight } from './index.ts';
 
@@ -358,25 +359,37 @@ describe('The wire of a single flight', () => {
     },
   );
 
-  test(
-    'a coordinator hangs up without an answer on a process whose first line is not a hello',
-    { ...onUnixSockets, timeout: 10_000 },
-    async (t) => {
-      // Arrange
-      await using directory = await new TemporaryFiles().directory('flights-');
-      await using _coordinator = await coordinatorOf(directory.path);
-      using peer = await peerOf(directory.path);
+  void test.each(
+    [
+      ['a line that is not JSON', 'not json'],
+      ['a flight request with no hello', '{"op":"run","id":"a","key":"sync"}'],
+    ] as const,
+    ([what, line]) =>
+      test(
+        `a coordinator refuses a process that opens with ${what}, and hangs up`,
+        { ...onUnixSockets, timeout: 10_000 },
+        async (t) => {
+          // Arrange
+          await using directory = await new TemporaryFiles().directory(
+            'flights-',
+          );
+          await using _coordinator = await coordinatorOf(directory.path);
+          using peer = await peerOf(directory.path);
 
-      // Act: the process opens with a request, as no single flight does.
-      peer.send('{"op":"run","id":"a","key":"sync"}');
+          // Act
+          peer.send(line);
 
-      // Assert
-      await t.waitFor(
-        () => assert.ok(peer.closed, 'The coordinator must hang up'),
-        { interval: 5, timeout: 2000 },
-      );
-      assert.equal(peer.received, '');
-    },
+          // Assert
+          await t.waitFor(
+            () => assert.ok(peer.closed, 'The coordinator must hang up'),
+            { interval: 5, timeout: 2000 },
+          );
+          assert.equal(
+            peer.received,
+            '{"op":"refused","protocol":"single-flight","version":1}\n',
+          );
+        },
+      ),
   );
 
   test(
@@ -541,31 +554,6 @@ describe('The wire of a single flight', () => {
   );
 
   test(
-    'a coordinator answers a request it does not know with unsupported, and keeps serving the connection',
-    { ...onUnixSockets, timeout: 10_000 },
-    async (t) => {
-      // Arrange: a process of a later version is welcomed.
-      await using directory = await new TemporaryFiles().directory('flights-');
-      await using _coordinator = await coordinatorOf(directory.path);
-      using peer = await peerOf(directory.path);
-      peer.send('{"op":"hello","protocol":"single-flight","version":1}');
-      await linesOf(t, peer, 1);
-
-      // Act: it asks for something this version does not know, and then runs a flight.
-      peer.send('{"op":"look","id":"a","key":"sync"}');
-      peer.send('{"op":"run","id":"b","key":"sync"}');
-      await linesOf(t, peer, 3);
-
-      // Assert
-      const [welcome, unsupported, lead] = peer.received.split('\n');
-      assert.equal(welcome, '{"op":"welcome"}');
-      assert.equal(unsupported, '{"op":"unsupported","id":"a"}');
-      assert.match(lead ?? '', /^\{"op":"lead","id":"b","token":"\d+"\}$/);
-      assert.equal(peer.closed, false);
-    },
-  );
-
-  test(
     'a peer that sends a JSON line that is not a request keeps its flight',
     { ...onUnixSockets, timeout: 10_000 },
     async (t) => {
@@ -585,11 +573,12 @@ describe('The wire of a single flight', () => {
       );
       await joined.promise;
 
-      // Act: JSON lines that are not requests (no record, no id, no op, neither), then a run, then the landing.
+      // Act: JSON lines that are not requests (no record, no id, no op, neither, an op it does not know), then a run, then the landing.
       peer.send('null');
       peer.send('{"op":"run","key":"other"}');
       peer.send('{"id":"x"}');
       peer.send('{"note":"not a flight request"}');
+      peer.send('{"op":"look","id":"r","key":"sync"}');
       peer.send('{"op":"run","id":"b","key":"other"}');
       await linesOf(t, peer, 3);
       peer.send('{"op":"land","id":"a","outcome":{"value":"from the peer"}}');

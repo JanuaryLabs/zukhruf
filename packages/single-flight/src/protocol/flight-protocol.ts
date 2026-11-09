@@ -42,55 +42,26 @@ export type FlightResponse =
   /** The coordinator handed a landing to the joiners. */
   | { op: 'ack'; id: string }
   /** The flight of `id` is no longer its leader's: a flight of the key with a newer token took it, or it ended. */
-  | { op: 'rejected'; id: string }
-  /** The coordinator does not know the request: it runs an older version. */
-  | { op: 'unsupported'; id: string };
-
-/** A request whose `op` this process may not know. A coordinator answers one it does not know with `unsupported`. */
-export interface RequestEnvelope {
-  op: string;
-  id: string;
-}
+  | { op: 'rejected'; id: string };
 
 const isToken = (value: unknown): value is string =>
   typeof value === 'string' && FencingToken.parse(value) !== null;
 
-export function isRequestEnvelope(
-  message: unknown,
-): message is RequestEnvelope {
-  return (
-    isRecord(message) &&
-    typeof message.op === 'string' &&
-    typeof message.id === 'string'
-  );
-}
-
-/**
- * Messages arrive from another process, so their shape is checked before
- * use. `isRequestEnvelope` already checked the `op` and the `id`, so only the
- * fields of each request are left.
- */
-export function isFlightRequest(
-  request: RequestEnvelope,
-): request is FlightRequest {
-  switch (request.op) {
+/** Messages arrive from another process, so their shape is checked before use. */
+export function isFlightRequest(message: unknown): message is FlightRequest {
+  if (!isRecord(message) || typeof message.id !== 'string') return false;
+  switch (message.op) {
     case 'run':
       return (
-        'key' in request &&
-        typeof request.key === 'string' &&
-        (!('flight' in request) || isToken(request.flight))
+        typeof message.key === 'string' &&
+        (!('flight' in message) || isToken(message.flight))
       );
     case 'land':
-      return 'outcome' in request && isOutcome(request.outcome);
+      return isOutcome(message.outcome);
     case 'cancel':
       return true;
     case 'reassert':
-      return (
-        'key' in request &&
-        typeof request.key === 'string' &&
-        'token' in request &&
-        isToken(request.token)
-      );
+      return typeof message.key === 'string' && isToken(message.token);
     default:
       return false;
   }
@@ -108,7 +79,6 @@ export function isFlightResponse(message: unknown): message is FlightResponse {
     case 'interrupted':
     case 'ack':
     case 'rejected':
-    case 'unsupported':
       return true;
     default:
       return false;

@@ -7,6 +7,8 @@ import { join } from 'node:path';
 import { createInterface } from 'node:readline';
 import { describe, test } from 'node:test';
 
+import { createClock } from '@sinonjs/fake-timers';
+
 import type { CampaignOptions, Term } from '@zukhruf/election';
 import { TemporaryFiles } from '@zukhruf/testing/fs';
 
@@ -172,6 +174,59 @@ describe('Electing connector', () => {
         );
       } finally {
         unsubscribe('net.client.socket', onSocket);
+        for (const peer of peers) peer.destroy();
+        await new Promise<void>((resolve) =>
+          coordinator.close(() => resolve()),
+        );
+      }
+    },
+  );
+
+  test(
+    'a connect outlasts a coordinator that keeps its term and hangs up on each hello, for as long as that lasts',
+    { timeout: 5000 },
+    async () => {
+      // Arrange: for five seconds on the clock, a coordinator hangs up on each hello and no campaign wins. After them, it welcomes.
+      await using directory = await new TemporaryFiles().directory('flights-');
+      const socketPath =
+        process.platform === 'win32'
+          ? `\\\\.\\pipe\\single-flight-test-${randomUUID()}`
+          : join(directory.path, 'flight.sock');
+      const clock = createClock();
+      const peers = new Set<Socket>();
+      let hangUps = 0;
+      const coordinator = createServer((peer) => {
+        peers.add(peer);
+        peer.on('error', () => {});
+        // readline emits the socket's errors again, e.g. a reset on Linux when the client closes with unread data.
+        createInterface({ input: peer })
+          .on('error', () => {})
+          .once('line', () => {
+            if (clock.now >= 5000) return peer.write('{"op":"welcome"}\n');
+            hangUps++;
+            peer.destroy();
+          });
+      });
+      coordinator.listen(socketPath);
+      await once(coordinator, 'listening');
+      const connector = new ElectingConnector({
+        clock,
+        socketPath,
+        election: { campaign: async () => undefined },
+        pollInterval: 10,
+        serve: async () => {},
+      });
+      const ticking = setInterval(() => clock.tick(10), 1);
+
+      try {
+        // Act
+        const connection = await connector.connect(AbortSignal.timeout(4000));
+        connection.close();
+
+        // Assert
+        assert.ok(hangUps > 1, `The coordinator hung up ${hangUps} times`);
+      } finally {
+        clearInterval(ticking);
         for (const peer of peers) peer.destroy();
         await new Promise<void>((resolve) =>
           coordinator.close(() => resolve()),

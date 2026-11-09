@@ -321,11 +321,6 @@ export class FlightClient {
       case 'rejected':
         this.#lose(response.id);
         return;
-      case 'unsupported':
-        this.#take(response.id)?.reject(
-          new Error("The single flight's coordinator does not know a run."),
-        );
-        return;
     }
   }
 

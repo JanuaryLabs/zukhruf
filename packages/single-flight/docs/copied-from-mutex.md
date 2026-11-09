@@ -10,6 +10,8 @@ Paths on the left are in `packages/mutex/src`. Paths on the right are in `packag
 
 On 2026-10-10, the mutex changed several of these originals. The maintainer chose to change the mutex first, and this package later. Backlog #2541 lists each change and the mutex commit that this package copied. The same day, this package copied each change (commits `dab7a50` to `a402b02`). Thus the copies match the mutex again, except for the differences below.
 
+On 2026-11-09, this package copied the mutex commits `39f1cb3` and `d9a7c36` (backlog #3111). The maintainer's rule is: do not design for older versions. Thus a coordinator refuses each first line that is not a hello of its protocol and version. A hang-up has no deadline. `ProtocolVersionError` always has `theirs`. The `unsupported` answer and `RequestEnvelope` are gone.
+
 ## Moved to `@zukhruf/fs`
 
 The file helpers and the check that refuses a network directory are no longer copies. Both packages use `@zukhruf/fs` (its ADR 0001): `durableWrite`, `isErrno`, `patiently`, `assertLocalDirectory`, and one `NetworkDirectoryError` class that this package gives from its entry point.
@@ -58,20 +60,18 @@ Only its types and comments change.
 **`lock-stores/socket/handshake.ts` → `connection/handshake.ts`.**
 
 - The hello names the protocol: `{"op":"hello","protocol":"single-flight","version":1}`. The refusal names it too.
-- The welcome is `{"op":"welcome"}`. It lists no requests, because this protocol has no request that came after version 1.
-- A process that opens with something other than a hello is closed at once. The mutex keeps such a connection open, for its processes from before the handshake. No such process of this package exists.
 - `FIRST_LINE_LIMIT` stays 1024 bytes.
+- `PROTOCOL_VERSION` stays 1. The mutex is at 2 (`dc933c5`), because its welcome stopped listing requests. This welcome never listed requests. A process of version 1 sends only requests that a coordinator of version 1 knows, so no `unsupported` answer crossed the wire between such processes, and removing that answer changes no message that they exchange.
 
 Why: a hello that names its protocol cannot be read as a hello of another protocol.
 
 **`lock-stores/socket/protocol-version-error.ts` → `connection/protocol-version-error.ts`.**
-The messages name the single flight's coordinator, not the socket store's leader.
+The message names the single flight's coordinator, not the socket store's leader.
 
 **`lock-stores/socket/electing-connector.ts` → `connection/electing-connector.ts`.**
 
 - It has no `connected` callback. In the mutex, that callback only emits the `follower` role event. This package has no role event. Thus `#follow` needs no stack that destroys the socket when the callback throws.
-- It does not wrap the connection in `AdvertisedOpsConnection`, because the welcome lists no requests.
-- `#lead` is `#coordinate`. The comments do not name a process from before the handshake, because no such process of this package exists.
+- `#lead` is `#coordinate`.
 - In the mutex, `#lead` wraps its own socket in `OwnServerConnection`, so its close waits until the own lock server read the last release ([mutex ADR 0018](../../mutex/docs/adr/0018-the-next-leader-skips-the-grace-window-after-a-clean-shutdown.md)). `#coordinate` uses a plain `SocketConnection`.
 
 **`lock-stores/socket/socket-store.ts` (`socketPathFor`, `SOCKET_PATH_LIMIT`) → `connection/socket-path.ts`.**
@@ -89,9 +89,6 @@ Note: on macOS 27 with Node.js 26, a probe listened and connected on socket path
 Why: a coordinator process can also lead a flight. When it lands the flight and stops at once, `destroy` can drop a `landed` answer that is still on its way to a joiner. `destroySoon` sends what was written first, and then closes.
 
 As in the mutex, the server closes itself when its term is lost. A second `close` then does not wait for the connections of the first `close` (`c142572`, after the mutex's `5ac2a20`). Thus the disposal of a single flight can end before an old connection sent a `landed` answer. The election of a single flight never takes a term from a coordinator that runs, so this cannot occur with `SqliteElection`.
-
-**`lock-stores/remote/protocol.ts` (`RequestEnvelope`, `isRequestEnvelope`) → `protocol/flight-protocol.ts`.**
-They are copied as they are. The rest of that file is the lock protocol, and this package has its own. As the mutex's `isLockRequest` does, `isFlightRequest` checks only the fields of each request, because the session already ran `isRequestEnvelope` ([ADR 0008](./adr/0008-a-connection-closes-only-when-its-framing-breaks.md)). `isFlightResponse` checks the whole answer, as the mutex's `isLockResponse` does.
 
 ## Tests copied
 
@@ -125,7 +122,7 @@ These helpers do not belong in `@zukhruf/coordinator`. They stay copies, also in
 
 ## Not copied
 
-- `lock-stores/socket/advertised-ops-connection.ts`: the welcome lists no requests yet.
+- `lock-stores/remote/protocol.ts`: it is the lock protocol, and this package has its own in `protocol/flight-protocol.ts`. `isFlightRequest` and `isFlightResponse` have the shape of the mutex's `isLockRequest` and `isLockResponse`.
 - `lock-stores/remote/envelope.ts` and `queries.ts`: this package uses no IPC channel and no look requests.
 - `lock-stores/file-system/file-lock-store.ts`. The mutex holds a `FileLock` for each key too, but the key locks are this package's own code (see the next paragraph). Both take `FileLock` from `@zukhruf/fs`. The single flight names each file by the SHA-256 of the key, so two keys that differ only in case never share a file on APFS or NTFS. The mutex names it with `safeFileName`, which encodes each uppercase letter for the same reason. The names differ in kind, so they are not one piece of knowledge.
 - `lock-stores/remote/lock-coordinator.ts` and `remote-lock-client.ts`. `FlightCoordinator`, its sessions and `FlightClient` are this package's own code: one request leads or joins, and an outcome goes to every joiner. But they repeat rules of the mutex code. The next section lists them.
@@ -162,8 +159,7 @@ The rules below are not file copies. Each package writes them in its own code, s
 
 - Places: `Session`, `Serving` and `Ended` in `coordinator/session.ts`, and the same three classes in `lock-stores/remote/lock-coordinator.ts`.
 - Same:
-  - A message with no `op` or no `id` cannot be answered, so the session ignores it ([ADR 0008](./adr/0008-a-connection-closes-only-when-its-framing-breaks.md), mutex ADR 0017).
-  - The session answers a request that this version does not know with `unsupported` and the id of the request. The connection stays open.
+  - The session ignores a message that is not a request that it knows, and the connection stays open ([ADR 0008](./adr/0008-a-connection-closes-only-when-its-framing-breaks.md), mutex ADR 0017).
   - The session ignores a second request with an id that it already has (`#open` and `#register`).
   - A send that fails is ignored: the client is gone, and `close` comes next.
   - A request whose handling fails closes the connection.
@@ -242,7 +238,7 @@ The paths are in `packages/single-flight/src`.
 - **With parameters:**
   - the election: done in `@zukhruf/election`, where the names of its two files are options. The mutex and this package use it;
   - the socket path: the file name and the pipe prefix;
-  - the handshake: the protocol name, the version, and what the welcome lists;
+  - the handshake: the protocol name and the version;
   - the electing connector: the `connected` callback, and what wraps the connection. It checks no message: the class that reads the protocol checks it;
   - the server: what serves each connection, and how `close` ends each connection;
   - the protocol error: the subject of its message.

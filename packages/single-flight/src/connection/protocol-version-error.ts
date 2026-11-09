@@ -5,14 +5,12 @@
 export class ProtocolVersionError extends Error {
   /** The protocol this process speaks. */
   readonly ours: number;
-  /** The protocol the coordinator speaks, or `undefined` when it closed the handshake without saying. */
-  readonly theirs: number | undefined;
+  /** The protocol the coordinator speaks. */
+  readonly theirs: number;
 
-  constructor(ours: number, theirs: number | undefined) {
+  constructor(ours: number, theirs: number) {
     super(
-      theirs === undefined
-        ? `The single flight's coordinator closed the handshake without an answer while it still coordinates, so it does not speak protocol version ${ours}.`
-        : `The single flight's coordinator speaks protocol version ${theirs}, and this process speaks version ${ours}. Run one version per flight directory.`,
+      `The single flight's coordinator speaks protocol version ${theirs}, and this process speaks version ${ours}. Run one version per flight directory.`,
     );
     this.name = 'ProtocolVersionError';
     this.ours = ours;
