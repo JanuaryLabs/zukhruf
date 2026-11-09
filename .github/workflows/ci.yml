@@ -51,6 +51,9 @@ jobs:
           - name: Check formatting
             run: npx prettier --check .
 
+          - name: Check that the lockfile holds no registry copy of a workspace package
+            run: npx eslint package-lock.json
+
       - name: Lint, type check, test and build what changed
         run: npx nx affected -t lint typecheck test test-network build
         env:

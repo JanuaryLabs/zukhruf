@@ -1,5 +1,6 @@
 import nx from '@nx/eslint-plugin';
 import { defineConfig, globalIgnores } from 'eslint/config';
+import * as jsonc from 'jsonc-eslint-parser';
 
 import { TESTS, TEST_SUPPORT } from './packages/eslint/src/files.ts';
 import zukhruf from './packages/eslint/src/index.ts';
@@ -100,6 +101,39 @@ export default defineConfig(
     ],
     plugins: { zukhruf },
     extends: ['zukhruf/react', 'zukhruf/tailwind'],
+  },
+  // A release rewrites only the ranges of the npm:public group. A caret in a
+  // private package stops matching at the next minor, and npm then locks a
+  // registry copy of the workspace package under that package (#3438).
+  {
+    files: ['**/package.json'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector:
+            "JSONObjectExpression:has(> JSONProperty[key.value='private'][value.value=true]) > JSONProperty[key.value=/^(dev|peer|optional)?[dD]ependencies$/] > JSONObjectExpression > JSONProperty[key.value=/^@zukhruf./][value.value!='*']",
+          message:
+            'A private package takes a workspace @zukhruf/* package with "*": a release does not rewrite its ranges (#3438).',
+        },
+      ],
+    },
+  },
+  // No project holds the lockfile, so CI lints it in its own step.
+  {
+    files: ['package-lock.json'],
+    languageOptions: { parser: jsonc },
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector:
+            "JSONProperty[key.value=/.node_modules.@zukhruf./] > JSONObjectExpression > JSONProperty[key.value='resolved'][value.value=/^https?:/]",
+          message:
+            'A workspace package is locked from the registry: its range stopped matching the workspace version. Fix the range and drop this entry (#3438).',
+        },
+      ],
+    },
   },
   {
     files: ['**/*.ts', '**/*.tsx', '**/*.js'],
