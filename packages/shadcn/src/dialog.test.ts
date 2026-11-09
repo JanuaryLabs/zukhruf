@@ -1,22 +1,9 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { fileURLToPath } from 'node:url';
 
 import { GlobalRegistrator } from '@happy-dom/global-registrator';
-import { compile } from '@tailwindcss/node';
-import { Scanner } from '@tailwindcss/oxide';
 
-const packageDirectory = fileURLToPath(new URL('..', import.meta.url));
-
-/** Builds an app stylesheet the way the Tailwind CLI does (see styles.test.ts). */
-async function buildAppStylesheet() {
-  const compiler = await compile(
-    '@import "tailwindcss" source(none);\n@import "@zukhruf/shadcn/styles.css";',
-    { base: packageDirectory, onDependency() {} },
-  );
-  const candidates = new Scanner({ sources: compiler.sources }).scan();
-  return compiler.build(candidates);
-}
+import { buildAppStylesheet } from './testing/build-app-stylesheet.ts';
 
 test('the height cap of the stylesheet selects the content of an open Dialog', async () => {
   // Arrange: the selector of the cap comes from the stylesheet that an app

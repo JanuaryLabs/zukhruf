@@ -1,26 +1,7 @@
 import assert from 'node:assert/strict';
 import { describe, test } from 'node:test';
-import { fileURLToPath } from 'node:url';
 
-import { compile } from '@tailwindcss/node';
-import { Scanner } from '@tailwindcss/oxide';
-
-const packageDirectory = fileURLToPath(new URL('..', import.meta.url));
-
-/**
- * Builds an app stylesheet the way the Tailwind CLI does: compile, scan the
- * sources that the stylesheets register, then build from what the scan found.
- * `source(none)` turns off the automatic scan, so only the `@source` of the
- * package's own stylesheet can find its classes.
- */
-async function buildAppStylesheet(appRules: string) {
-  const compiler = await compile(
-    `@import "tailwindcss" source(none);\n@import "@zukhruf/shadcn/styles.css";\n${appRules}`,
-    { base: packageDirectory, onDependency() {} },
-  );
-  const candidates = new Scanner({ sources: compiler.sources }).scan();
-  return compiler.build(candidates);
-}
+import { buildAppStylesheet } from './testing/build-app-stylesheet.ts';
 
 /**
  * The name of the innermost `@layer` block that encloses the first match of
@@ -51,7 +32,7 @@ function layerOf(css: string, rule: RegExp) {
 describe('the stylesheet of @zukhruf/shadcn', () => {
   test('an app that imports it gets the classes of the components, colored by variables it can override', async () => {
     // Act
-    const css = await buildAppStylesheet('');
+    const css = await buildAppStylesheet();
 
     // Assert
     assert.match(
@@ -68,7 +49,7 @@ describe('the stylesheet of @zukhruf/shadcn', () => {
 
   test('it keeps the pointer cursor on buttons and the height cap on dialogs, both in layers that app utilities override', async () => {
     // Act
-    const css = await buildAppStylesheet('');
+    const css = await buildAppStylesheet();
 
     // Assert
     assert.equal(
@@ -89,7 +70,7 @@ describe('the stylesheet of @zukhruf/shadcn', () => {
 
   test('a dark: utility of the components applies under a .dark ancestor, not under the dark color scheme of the system', async () => {
     // Act
-    const css = await buildAppStylesheet('');
+    const css = await buildAppStylesheet();
 
     // Assert
     assert.match(
@@ -131,7 +112,7 @@ describe('the stylesheet of @zukhruf/shadcn', () => {
 
   test('the .dark defaults follow the :root defaults in the same layer, so the .dark class switches the theme', async () => {
     // Act
-    const css = await buildAppStylesheet('');
+    const css = await buildAppStylesheet();
 
     // Assert
     const light = /:root\s*\{[^}]*--background:/;
