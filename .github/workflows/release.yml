@@ -69,7 +69,10 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           npx nx release version
-          npx nx release publish
+          # One failed publish, such as a Rekor 409 (0.5.0, 0.6.3), makes Nx skip
+          # the dependents and leaves the version half-published. The second run
+          # skips what is on npm and publishes the rest; a second failure stays red.
+          npx nx release publish || npx nx release publish
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_ACCESS_TOKEN }}
           NPM_CONFIG_PROVENANCE: true
