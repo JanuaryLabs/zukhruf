@@ -254,4 +254,19 @@ export class Images {
     }
     throw error;
   }
+
+  /** Deletes the images that no container uses and that `filters` selects. */
+  async prune(
+    options: CancelOptions & { filters?: Filters } = {},
+  ): Promise<EngineApi.ImagePruneResponse> {
+    // The engine answers null when it deleted nothing, though its reference says an array (API 1.56).
+    const { ImagesDeleted, SpaceReclaimed } = await this.#client.json<{
+      ImagesDeleted: EngineApi.ImageDeleteResponseItem[] | null;
+      SpaceReclaimed: number;
+    }>('POST', '/images/prune', {
+      query: { filters: options.filters },
+      signal: options.signal,
+    });
+    return { ImagesDeleted: ImagesDeleted ?? [], SpaceReclaimed };
+  }
 }

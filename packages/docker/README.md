@@ -428,6 +428,10 @@ const archive = await docker.images.save(['alpine:3'], { platform: amd64 });
 await archive.pipeTo(Writable.toWeb(createWriteStream('alpine.tar')));
 await docker.images.load(Readable.toWeb(createReadStream('alpine.tar')));
 await docker.images.remove('alpine:3');
+
+const { ImagesDeleted, SpaceReclaimed } = await docker.images.prune({
+  filters: { dangling: ['false'], label: ['example.app=1'] },
+});
 ```
 
 `pull()`, `push()` and `load()` read the progress of the engine until the end. They reject with `DockerEngineError` when the engine reports an error in the progress. Then `status` is `undefined`, because the HTTP status was 200. The engine answers a push of an image that it does not have with 200 too, and reports the error in the progress. Thus `push()` inspects the image after an error in the progress: when the engine does not have the image, `push()` rejects with `ImageNotFoundError`.
@@ -443,6 +447,8 @@ await docker.images.remove('alpine:3');
 An engine below that version ignores one platform: a save then writes each platform of the image, and an inspect gives the platform of the host. It refuses more than one platform with 400. Thus, when the API version of the client is lower, the call rejects with `UnsupportedEngineError` before the request ([ADR 0009](./docs/adr/0009-a-platform-below-its-api-version-fails-and-is-not-ignored.md)).
 
 A save with a platform writes only the content of that platform. A load with a platform loads only that platform: when the archive does not have it, the containerd image store rejects with `DockerEngineError`, and the classic image store loads nothing and resolves. An inspect with a platform gives that platform of the image.
+
+`images.prune()` deletes the images that no container uses. The engine selects them, and the `filters` of the Engine API narrow its selection: `dangling`, `until` and `label`. With no `dangling` filter, the engine deletes only images that have no name. `dangling: ['false']` also deletes unused images that have a name. On an engine that other programs use, give a `label` filter, because a prune without one can delete their images. A filter does not protect their pulls: on the containerd image store, each prune ends each pull in progress on the engine, and that pull rejects with `lease does not exist` (the engine does this, not this package: `daemon/containerd/image_prune.go` of [Moby at 402d0a16f131](https://github.com/moby/moby/blob/402d0a16f131/daemon/containerd/image_prune.go)). Do not prune while another program pulls. `ImagesDeleted` lists each deleted image and each removed name, and it is empty when the engine deleted nothing. A second prune while one runs rejects with `DockerEngineError` and status 409.
 
 `images.remove()` of one name of an image that has more names removes only that name. A removal of an image that a container uses, or a removal by ID of an image with more than one name, rejects with `ImageInUseError`. `auth` holds explicit credentials. The package runs no credential helper, because a helper is a program on the `PATH`.
 
@@ -828,6 +834,10 @@ export interface Images {
     reference: string,
     options?: CancelOptions & { force?: boolean; noprune?: boolean },
   ): Promise<void>;
+  /** Deletes the images that no container uses and that `filters` selects. */
+  prune(
+    options?: CancelOptions & { filters?: Filters },
+  ): Promise<EngineApi.ImagePruneResponse>;
 }
 
 /** The base of every error of the package. */
@@ -924,24 +934,24 @@ export type * as EngineApi from './engine-api.ts';
 
 Each call sends these requests of the Engine API:
 
-| Call                                                                         | Request                                                                                                                                                                                      |
-| ---------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Docker.connect()`                                                           | `GET /_ping`                                                                                                                                                                                 |
-| `docker.info()`, `docker.events()`                                           | `GET /info`, `GET /events`                                                                                                                                                                   |
-| `containers.create()`, `createOrGet()`                                       | `POST /containers/create`, and `GET /containers/{id}/json` after a 409                                                                                                                       |
-| `containers.run()`                                                           | `create`, `attach`, `start`, `wait`, `DELETE /containers/{id}`                                                                                                                               |
-| `containers.find()`, `container.inspect()`, `container.port()`               | `GET /containers/{id}/json`                                                                                                                                                                  |
-| `containers.list()`                                                          | `GET /containers/json`                                                                                                                                                                       |
-| `start()`, `stop()`, `restart()`, `kill()`, `pause()`, `unpause()`, `wait()` | `POST /containers/{id}/start`, `/stop`, `/restart`, `/kill`, `/pause`, `/unpause`, `/wait`                                                                                                   |
-| `container.remove()`                                                         | `DELETE /containers/{id}`                                                                                                                                                                    |
-| `container.logs()`, `followLogs()`                                           | `GET /containers/{id}/logs`                                                                                                                                                                  |
-| `container.attach()`                                                         | `POST /containers/{id}/attach` (hijacked)                                                                                                                                                    |
-| `container.exec()`, `spawn()`                                                | `POST /containers/{id}/exec`, `POST /exec/{id}/start` (hijacked), `GET /exec/{id}/json`                                                                                                      |
-| `container.stat()`, `readFile()`, `getArchive()`                             | `HEAD`, `GET /containers/{id}/archive`                                                                                                                                                       |
-| `container.writeFiles()`, `putArchive()`                                     | `PUT /containers/{id}/archive`                                                                                                                                                               |
-| `volumes.*`, `volume.*`                                                      | `POST /volumes/create`, `GET /volumes/{name}`, `GET /volumes`, `DELETE /volumes/{name}`                                                                                                      |
-| `networks.*`, `network.*`                                                    | `POST /networks/create`, `GET /networks/{id}`, `GET /networks`, `POST /networks/{id}/connect`, `/disconnect`, `DELETE /networks/{id}`                                                        |
-| `images.*`                                                                   | `GET /images/{name}/json`, `GET /images/json`, `POST /images/create`, `POST /images/{name}/tag`, `POST /images/{name}/push`, `GET /images/get`, `POST /images/load`, `DELETE /images/{name}` |
+| Call                                                                         | Request                                                                                                                                                                                                            |
+| ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `Docker.connect()`                                                           | `GET /_ping`                                                                                                                                                                                                       |
+| `docker.info()`, `docker.events()`                                           | `GET /info`, `GET /events`                                                                                                                                                                                         |
+| `containers.create()`, `createOrGet()`                                       | `POST /containers/create`, and `GET /containers/{id}/json` after a 409                                                                                                                                             |
+| `containers.run()`                                                           | `create`, `attach`, `start`, `wait`, `DELETE /containers/{id}`                                                                                                                                                     |
+| `containers.find()`, `container.inspect()`, `container.port()`               | `GET /containers/{id}/json`                                                                                                                                                                                        |
+| `containers.list()`                                                          | `GET /containers/json`                                                                                                                                                                                             |
+| `start()`, `stop()`, `restart()`, `kill()`, `pause()`, `unpause()`, `wait()` | `POST /containers/{id}/start`, `/stop`, `/restart`, `/kill`, `/pause`, `/unpause`, `/wait`                                                                                                                         |
+| `container.remove()`                                                         | `DELETE /containers/{id}`                                                                                                                                                                                          |
+| `container.logs()`, `followLogs()`                                           | `GET /containers/{id}/logs`                                                                                                                                                                                        |
+| `container.attach()`                                                         | `POST /containers/{id}/attach` (hijacked)                                                                                                                                                                          |
+| `container.exec()`, `spawn()`                                                | `POST /containers/{id}/exec`, `POST /exec/{id}/start` (hijacked), `GET /exec/{id}/json`                                                                                                                            |
+| `container.stat()`, `readFile()`, `getArchive()`                             | `HEAD`, `GET /containers/{id}/archive`                                                                                                                                                                             |
+| `container.writeFiles()`, `putArchive()`                                     | `PUT /containers/{id}/archive`                                                                                                                                                                                     |
+| `volumes.*`, `volume.*`                                                      | `POST /volumes/create`, `GET /volumes/{name}`, `GET /volumes`, `DELETE /volumes/{name}`                                                                                                                            |
+| `networks.*`, `network.*`                                                    | `POST /networks/create`, `GET /networks/{id}`, `GET /networks`, `POST /networks/{id}/connect`, `/disconnect`, `DELETE /networks/{id}`                                                                              |
+| `images.*`                                                                   | `GET /images/{name}/json`, `GET /images/json`, `POST /images/create`, `POST /images/{name}/tag`, `POST /images/{name}/push`, `GET /images/get`, `POST /images/load`, `DELETE /images/{name}`, `POST /images/prune` |
 
 ## What each repository changes
 

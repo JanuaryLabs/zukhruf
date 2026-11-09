@@ -465,6 +465,18 @@ export interface NetworkConnectRequest {
   EndpointConfig?: EndpointSettings;
 }
 
+/** One entry of ImagePruneResponse: a name that the engine removed, or an image that it deleted. */
+export interface ImageDeleteResponseItem {
+  Untagged?: string;
+  Deleted?: string;
+}
+
+/** The answer of POST /images/prune. SpaceReclaimed is in bytes. */
+export interface ImagePruneResponse {
+  ImagesDeleted: ImageDeleteResponseItem[];
+  SpaceReclaimed: number;
+}
+
 /** One image of GET /images/json. */
 export interface ImageSummary {
   Id: string;
