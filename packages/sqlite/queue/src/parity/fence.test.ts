@@ -1,19 +1,9 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import type { TestClock } from 'pg-boss';
-
+import { flush } from '../testing/flush.ts';
+import { id } from '../testing/job-id.ts';
 import { Parity } from './parity.ts';
-
-const id = (n: number) =>
-  `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
-
-// Lets everything due now finish on both backends: tick(0) waits until each
-// one's statements in flight have settled, SQLite's through its attached
-// Activity (node_modules/pg-boss/dist/clock.js:88-117, activity.js:77-93).
-async function flush(clock: TestClock) {
-  await clock.tick(0);
-}
 
 // What a call did: its result, or the error class and message it rejected with.
 async function outcome(call: () => Promise<unknown>) {

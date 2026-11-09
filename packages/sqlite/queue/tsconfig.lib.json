@@ -6,7 +6,7 @@
     "tsBuildInfoFile": "dist/tsconfig.lib.tsbuildinfo"
   },
   "include": ["src/**/*.ts"],
-  "exclude": ["src/**/*.test.ts", "src/parity/**"],
+  "exclude": ["src/**/*.test.ts", "src/parity/**", "src/testing/**"],
   "references": [
     {
       "path": "../transaction/tsconfig.lib.json"

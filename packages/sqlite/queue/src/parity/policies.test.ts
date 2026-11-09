@@ -4,6 +4,7 @@ import { describe, it } from 'node:test';
 import { type SendOptions, type TestClock, policies } from 'pg-boss';
 
 import type { JobQueue } from '../index.ts';
+import { id } from '../testing/job-id.ts';
 import { ParityRun } from './backends.ts';
 import { Observe } from './observe.ts';
 import { Parity } from './parity.ts';
@@ -29,9 +30,6 @@ const keyed = (options: SendOptions, singletonKey: string | undefined) => {
   Reflect.set(options, 'singletonKey', singletonKey);
   return options;
 };
-
-const id = (n: number) =>
-  `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 
 // Each job's id and state, in id order.
 async function jobStates(queue: JobQueue, name: string) {

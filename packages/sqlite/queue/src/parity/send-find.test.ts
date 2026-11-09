@@ -1,20 +1,9 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
+import { outcome } from '../testing/outcome.ts';
 import { Observe } from './observe.ts';
 import { Parity } from './parity.ts';
-
-// What a call did: resolved, or the error class and message it rejected with.
-async function outcome(call: () => Promise<unknown>) {
-  try {
-    await call();
-    return 'resolved';
-  } catch (error) {
-    return Error.isError(error)
-      ? `${error.name}: ${error.message}`
-      : String(error);
-  }
-}
 
 describe('send and findJobs', () => {
   it('validates send arguments the way pg-boss does', async () => {

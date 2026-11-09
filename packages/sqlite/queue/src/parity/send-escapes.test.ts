@@ -3,10 +3,8 @@ import { describe, it } from 'node:test';
 
 import type { SendOptions } from 'pg-boss';
 
+import { id } from '../testing/job-id.ts';
 import { Parity } from './parity.ts';
-
-const id = (n: number) =>
-  `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 
 // What a call did: 'resolved', or the error class, message and code it
 // rejected with.

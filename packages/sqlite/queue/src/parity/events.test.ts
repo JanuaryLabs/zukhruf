@@ -7,11 +7,10 @@ import { type Job, PgBoss, TestClock, fromPglite } from 'pg-boss';
 import { open } from '@zukhruf/sqlite-open';
 
 import { SqliteJobQueue } from '../index.ts';
+import { id } from '../testing/job-id.ts';
+import { outcome } from '../testing/outcome.ts';
 import { ParityRun, type WipWorker } from './backends.ts';
 import { Parity } from './parity.ts';
-
-const id = (n: number) =>
-  `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 
 // A handler that records each batch and holds every batch until released.
 function holding() {
@@ -25,18 +24,6 @@ function holding() {
       await release.promise;
     },
   };
-}
-
-// What a call did: 'resolved', or the error class and message it rejected with.
-async function outcome(call: () => Promise<unknown>) {
-  try {
-    await call();
-    return 'resolved';
-  } catch (error) {
-    return Error.isError(error)
-      ? `${error.name}: ${error.message}`
-      : String(error);
-  }
 }
 
 // A TestClock that refuses to attach, so start() throws once it has begun.

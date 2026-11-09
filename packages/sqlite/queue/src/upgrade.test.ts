@@ -8,9 +8,7 @@ import { open } from '@zukhruf/sqlite-open';
 import { TemporaryFiles } from '@zukhruf/testing/fs';
 
 import { SqliteJobQueue } from './index.ts';
-
-const id = (n: number) =>
-  `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
+import { id } from './testing/job-id.ts';
 
 // Each job's id and state, in id order.
 async function jobStates(queue: SqliteJobQueue, name: string) {

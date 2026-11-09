@@ -8,6 +8,8 @@ import { open } from '@zukhruf/sqlite-open';
 
 import type { JobQueue } from '../index.ts';
 import { SqliteJobQueue } from '../index.ts';
+import { flush } from '../testing/flush.ts';
+import { outcome } from '../testing/outcome.ts';
 import { ParityRun, type RunOptions } from './backends.ts';
 import { Observe } from './observe.ts';
 import { Parity } from './parity.ts';
@@ -22,13 +24,6 @@ const SEND_IT = '__pgboss__send-it';
 const timekeeping = { schedule: true } satisfies RunOptions;
 
 const origin = Date.parse(ParityRun.start);
-
-// Lets everything due now finish on both backends: tick(0) waits until each
-// one's statements in flight have settled (node_modules/pg-boss/dist/
-// clock.js:88-117).
-async function flush(clock: TestClock) {
-  await clock.tick(0);
-}
 
 // Starts the queue and lets its first cron pass finish. pg-boss runs that
 // pass on a real setImmediate (timekeeper.js:258), outside the clock, so
@@ -59,19 +54,6 @@ async function createdOn(queue: JobQueue, name: string) {
 
 function errorsOf(errors: Error[]) {
   return errors.map((error) => ({ name: error.name, message: error.message }));
-}
-
-// What a call did: 'resolved', or the error class and message it rejected
-// or threw with.
-async function outcome(call: () => unknown) {
-  try {
-    await call();
-    return 'resolved';
-  } catch (error) {
-    return Error.isError(error)
-      ? `${error.name}: ${error.message}`
-      : String(error);
-  }
 }
 
 describe('timekeeper', () => {

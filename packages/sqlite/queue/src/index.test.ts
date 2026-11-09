@@ -7,9 +7,7 @@ import { type Job, TestClock } from 'pg-boss';
 import { open } from '@zukhruf/sqlite-open';
 
 import { SqliteJobQueue } from './index.ts';
-
-const id = (n: number) =>
-  `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
+import { id } from './testing/job-id.ts';
 
 // Lets what a tick fired finish: SQLite's fetch waits one event-loop turn.
 async function settle(clock: TestClock) {
