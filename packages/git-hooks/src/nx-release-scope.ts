@@ -16,7 +16,7 @@ export class NxReleaseScope extends Step<CommitMessage> {
 
   async run(message: CommitMessage): Promise<Outcome> {
     const { parseConventionalCommitsMessage } =
-      await import('nx/src/command-line/release/utils/git');
+      await import('nx/src/command-line/release/utils/git.js');
     // nx gives the type __INVALID__ to a subject that is no conventional
     // header, such as that of a merge commit.
     const nx = parseConventionalCommitsMessage(message.subject) ?? {
