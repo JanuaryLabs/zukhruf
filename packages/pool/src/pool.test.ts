@@ -2544,9 +2544,11 @@ async function drive(
 
 /**
  * Moves the fake clock of a pool, as drive does, until the pool lets one of
- * `workers` go: fewer of them run than the pool holds. Then it waits for that
- * worker's real exit with the clock still, so that the pool takes no next
- * step on the clock meanwhile.
+ * `workers` go: it holds fewer than they are, and all of them ran when this
+ * began. Then it waits for that worker's real exit with the clock still, so
+ * that the pool takes no next step on the clock meanwhile. It does not compare
+ * `alive(workers)` with what the pool holds: a worker counts as alive only until
+ * its real exit, so that holds for a moment, and a busy machine can miss it.
  */
 async function untilDropped(
   t: TestContext,
@@ -2555,7 +2557,7 @@ async function untilDropped(
   workers: readonly EchoWorker[],
   limit: number,
 ): Promise<void> {
-  await drive(clock, [pool], () => alive(workers) > holds(pool), limit);
+  await drive(clock, [pool], () => holds(pool) < workers.length, limit);
   await untilExited(t, pool, workers);
 }
 
