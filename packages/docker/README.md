@@ -348,6 +348,8 @@ const stat = await postgres.stat('/srv/run.sh');
 - `writeFiles()` sends one archive. It extracts the archive in the deepest directory that holds each entry and that already exists, which it finds with `stat()`. The engine creates each parent directory that an entry implies below that directory. Thus a container with a read-only root filesystem can still get files in a writable volume: the engine checks only the directory of the extraction.
 - A written entry belongs to its `uid` and `gid`, or to root (0:0) when it has none. The package puts them in the archive, and the engine keeps the owner of each entry in the archive.
 - `putArchive(directory, archive, { copyUIDGID: true })` gives each extracted entry to the user of the container (`Config.User`) in place of the owner in the archive.
+- `writeFiles()` does not replace a directory with a file, or a file with a directory. It rejects with `DockerEngineError`, the directory or file stays, and `message` is the message of the engine. A directory entry onto a symlink to a directory also rejects. The engine extracts entries in order and stops at the conflict, so the entries before it stay written.
+- `putArchive(directory, archive, { noOverwriteDirNonDir: true })` applies the same refusal to an archive. Without this option, the engine replaces the existing entry: a file over a directory deletes the directory tree.
 - `readFile()` gives the bytes of one regular file. A missing path makes it reject with `PathNotFoundError`, and a directory, a link or another kind of entry with `NotAFileError`.
 - `stat()` gives `undefined` for a missing path. A missing container makes each file request reject with `ContainerNotFoundError`.
 - `getArchive(path)` and `putArchive(directory, archive)` give the tar streams themselves, for a directory or a large tree.
@@ -668,7 +670,10 @@ export class Container {
   putArchive(
     directory: string,
     archive: ReadableStream<Uint8Array> | Uint8Array,
-    options?: CancelOptions & { copyUIDGID?: boolean },
+    options?: CancelOptions & {
+      copyUIDGID?: boolean;
+      noOverwriteDirNonDir?: boolean;
+    },
   ): Promise<void>;
 }
 

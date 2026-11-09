@@ -8,6 +8,7 @@ import {
   type Container,
   ContainerNotFoundError,
   Docker,
+  DockerEngineError,
   NotAFileError,
   PathNotFoundError,
   ReadOnlyPathError,
@@ -421,6 +422,78 @@ describe('the files of a container', () => {
           "stat -c '%u %g' /tmp/source/owned.txt /tmp/kept/owned.txt /tmp/copied/owned.txt",
         ),
         '0 0\n0 0\n1000 1000\n',
+      );
+    } finally {
+      await removeLabeled(docker, run);
+    }
+  });
+
+  test('writeFiles() of a file onto a directory rejects, and the tree of the directory stays', async () => {
+    // Arrange
+    await using docker = await connect();
+    const run = randomUUID();
+    try {
+      const container = await docker.containers.create({
+        Image: IMAGE,
+        Cmd: ['sleep', '300'],
+        Labels: { [TEST_LABEL]: run },
+      });
+      await container.writeFiles([
+        { path: '/workspace/dir/keep.txt', data: 'keep\n' },
+      ]);
+
+      // Act
+      const refused = container.writeFiles([
+        { path: '/workspace/dir', data: 'not a directory\n' },
+      ]);
+
+      // Assert
+      await assert.rejects(refused, (error) => {
+        assert.ok(error instanceof DockerEngineError);
+        assert.match(error.message, /^cannot overwrite directory /);
+        return true;
+      });
+      assert.equal(
+        new TextDecoder().decode(
+          await container.readFile('/workspace/dir/keep.txt'),
+        ),
+        'keep\n',
+      );
+    } finally {
+      await removeLabeled(docker, run);
+    }
+  });
+
+  test('writeFiles() of a directory onto a file rejects, and the file stays', async () => {
+    // Arrange
+    await using docker = await connect();
+    const run = randomUUID();
+    try {
+      const container = await docker.containers.create({
+        Image: IMAGE,
+        Cmd: ['sleep', '300'],
+        Labels: { [TEST_LABEL]: run },
+      });
+      await container.writeFiles([
+        { path: '/workspace/file.txt', data: 'keep\n' },
+      ]);
+
+      // Act
+      const refused = container.writeFiles([
+        { path: '/workspace/file.txt', directory: true },
+      ]);
+
+      // Assert
+      await assert.rejects(refused, (error) => {
+        assert.ok(error instanceof DockerEngineError);
+        assert.match(error.message, /^cannot overwrite non-directory /);
+        return true;
+      });
+      assert.equal(
+        new TextDecoder().decode(
+          await container.readFile('/workspace/file.txt'),
+        ),
+        'keep\n',
       );
     } finally {
       await removeLabeled(docker, run);

@@ -674,7 +674,10 @@ export class Container {
         mtime,
       };
     });
-    await this.putArchive(directory, tarArchive(entries), options);
+    await this.putArchive(directory, tarArchive(entries), {
+      ...options,
+      noOverwriteDirNonDir: true,
+    });
   }
 
   /** The tar stream of a path in the container: a file, or a directory with its tree. */
@@ -688,12 +691,19 @@ export class Container {
   /**
    * Extracts a tar archive in a directory of the container. With copyUIDGID,
    * each entry belongs to the user of the container (Config.User), not to
-   * the owner in the archive.
+   * the owner in the archive. With noOverwriteDirNonDir, the engine does not
+   * replace a directory with a file, or a file with a directory. writeFiles()
+   * always sends it, so it rejects with DockerEngineError on such a conflict
+   * and on a directory entry onto a symlink to a directory. The entries before
+   * the conflict stay written.
    */
   async putArchive(
     directory: string,
     archive: ReadableStream<Uint8Array> | Uint8Array,
-    options: CancelOptions & { copyUIDGID?: boolean } = {},
+    options: CancelOptions & {
+      copyUIDGID?: boolean;
+      noOverwriteDirNonDir?: boolean;
+    } = {},
   ): Promise<void> {
     const { signal } = options;
     const method = 'PUT';
@@ -702,6 +712,8 @@ export class Container {
       query: {
         path: directory,
         copyUIDGID: options.copyUIDGID === true ? 1 : undefined,
+        noOverwriteDirNonDir:
+          options.noOverwriteDirNonDir === true ? 1 : undefined,
       },
       content: { type: 'application/x-tar', data: archive },
       signal,
