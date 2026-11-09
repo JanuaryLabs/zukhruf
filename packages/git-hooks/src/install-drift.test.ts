@@ -1,98 +1,24 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import {
-  chmod,
-  mkdir,
-  readFile,
-  readdir,
-  rm,
-  symlink,
-  writeFile,
-} from 'node:fs/promises';
-import { dirname, join } from 'node:path';
+import { mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { test } from 'node:test';
 import { promisify } from 'node:util';
 
 import { TemporaryFiles } from '@zukhruf/testing/fs';
 
-const execFileAsync = promisify(execFile);
-const packageEntry = import.meta.resolve('./index.ts');
+import { repository } from './testing/pre-push-repository.ts';
 
-// A git repo in a temp folder whose pre-push hook is `.husky/pre-push.ts`,
-// reached through the committed link `.husky/pre-push`, as a repo installs
-// it, and a bare remote `origin` beside it. git, npm and the hook see none of
-// the user's config and no environment of the Nx task that runs this test.
-// PROBE_MARKS is the folder where a script of the repo leaves a mark when it
-// runs.
-async function repository(top: string, hook: string) {
-  const root = join(top, 'repo');
-  const remote = join(top, 'remote.git');
+const execFileAsync = promisify(execFile);
+
+// A repo whose scripts leave a mark in the folder PROBE_MARKS when they run.
+async function markingRepository(top: string, hook: string) {
   const marks = join(top, 'marks');
-  await mkdir(root);
   await mkdir(marks);
-  await mkdir(join(top, 'home'));
-  const environment = {
-    PATH: `${dirname(process.execPath)}:/usr/bin:/bin`,
-    HOME: join(top, 'home'),
-    GIT_CONFIG_GLOBAL: '/dev/null',
-    GIT_CONFIG_NOSYSTEM: '1',
-    GIT_AUTHOR_NAME: 'Test',
-    GIT_AUTHOR_EMAIL: 'test@example.com',
-    GIT_COMMITTER_NAME: 'Test',
-    GIT_COMMITTER_EMAIL: 'test@example.com',
-    PROBE_MARKS: marks,
-  };
-  const gitIn = async (cwd: string, ...args: string[]) =>
-    (await execFileAsync('git', args, { cwd, env: environment })).stdout;
-  const git = (...args: string[]) => gitIn(root, ...args);
-  await gitIn(
-    top,
-    'init',
-    '--quiet',
-    '--bare',
-    '--initial-branch=main',
-    remote,
-  );
-  await git('init', '--quiet', '--initial-branch=main');
-  await git('remote', 'add', 'origin', remote);
-  await mkdir(join(root, '.husky'));
-  await writeFile(
-    join(root, '.husky/pre-push.ts'),
-    `#!/usr/bin/env node\n${hook.replaceAll('@zukhruf/git-hooks', packageEntry)}`,
-  );
-  await chmod(join(root, '.husky/pre-push.ts'), 0o755);
-  await symlink('pre-push.ts', join(root, '.husky/pre-push'));
-  const write = async (path: string, content: string) => {
-    await mkdir(dirname(join(root, path)), { recursive: true });
-    await writeFile(join(root, path), content);
-  };
   return {
-    top,
-    root,
+    ...(await repository(top, hook, { PROBE_MARKS: marks })),
     marks,
-    environment,
-    git,
-    write,
-    async commit(message: string) {
-      await git('add', '--all');
-      await git('commit', '--quiet', '--no-verify', '-m', message);
-      return (await git('rev-parse', 'HEAD')).trim();
-    },
-    async push(...args: string[]) {
-      try {
-        const { stderr } = await execFileAsync(
-          'git',
-          ['-c', 'core.hooksPath=.husky', 'push', ...args],
-          { cwd: root, env: environment },
-        );
-        return { code: 0, stderr };
-      } catch (error) {
-        if (!Error.isError(error) || !('code' in error) || !('stderr' in error))
-          throw error;
-        return { code: Number(error.code), stderr: String(error.stderr) };
-      }
-    },
   };
 }
 
@@ -106,7 +32,7 @@ async function repository(top: string, hook: string) {
 // `install(dependencies)` sets the dependencies of package.json and runs
 // `npm install` the way a person does, with no scripts.
 async function workspace(folder: string, hook: string) {
-  const repo = await repository(folder, hook);
+  const repo = await markingRepository(folder, hook);
   const npm = (cwd: string, ...args: string[]) =>
     execFileAsync('npm', [...args, '--offline', '--no-audit', '--no-fund'], {
       cwd,
@@ -451,7 +377,7 @@ test(
 // the snapshot of the pushed commit, and shows the value that it reads through
 // the link. `vendor(value)` writes the folder with that value.
 async function vendored(folder: string) {
-  const repo = await repository(
+  const repo = await markingRepository(
     folder,
     `import { createRequire } from 'node:module';
 import { join } from 'node:path';

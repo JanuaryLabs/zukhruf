@@ -1,106 +1,39 @@
 import assert from 'node:assert/strict';
-import { execFile, spawn } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import { existsSync } from 'node:fs';
-import {
-  chmod,
-  mkdir,
-  readFile,
-  rm,
-  symlink,
-  writeFile,
-} from 'node:fs/promises';
-import { dirname, join } from 'node:path';
+import { mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { test } from 'node:test';
 import { setTimeout as delay } from 'node:timers/promises';
-import { promisify } from 'node:util';
 
 import { TemporaryFiles } from '@zukhruf/testing/fs';
 
-const execFileAsync = promisify(execFile);
-const packageEntry = import.meta.resolve('./index.ts');
+import { repository } from './testing/pre-push-repository.ts';
+
 const zukhrufModules = new URL('../../../node_modules', import.meta.url)
   .pathname;
 
-// A git repo in a temp folder whose pre-push hook is `.husky/pre-push.ts`,
-// reached through the committed link `.husky/pre-push`, as a repo installs
-// it, and a bare remote `origin` beside it. git, npm and the hook see none of
-// the user's config and no environment of the Nx task that runs this test.
-async function repository(top: string, hook: string) {
-  const root = join(top, 'repo');
-  const remote = join(top, 'remote.git');
-  await mkdir(root);
-  await mkdir(join(top, 'home'));
-  const environment = {
-    PATH: `${dirname(process.execPath)}:/usr/bin:/bin`,
-    HOME: join(top, 'home'),
-    GIT_CONFIG_GLOBAL: '/dev/null',
-    GIT_CONFIG_NOSYSTEM: '1',
-    GIT_AUTHOR_NAME: 'Test',
-    GIT_AUTHOR_EMAIL: 'test@example.com',
-    GIT_COMMITTER_NAME: 'Test',
-    GIT_COMMITTER_EMAIL: 'test@example.com',
-  };
-  const gitIn = async (cwd: string, ...args: string[]) =>
-    (await execFileAsync('git', args, { cwd, env: environment })).stdout;
-  const git = (...args: string[]) => gitIn(root, ...args);
-  await gitIn(
-    top,
-    'init',
-    '--quiet',
-    '--bare',
-    '--initial-branch=main',
-    remote,
-  );
-  await git('init', '--quiet', '--initial-branch=main');
-  await git('remote', 'add', 'origin', remote);
-  await mkdir(join(root, '.husky'));
-  await writeFile(
-    join(root, '.husky/pre-push.ts'),
-    `#!/usr/bin/env node\n${hook.replaceAll('@zukhruf/git-hooks', packageEntry)}`,
-  );
-  await chmod(join(root, '.husky/pre-push.ts'), 0o755);
-  await symlink('pre-push.ts', join(root, '.husky/pre-push'));
-  const write = async (path: string, content: string) => {
-    await mkdir(dirname(join(root, path)), { recursive: true });
-    await writeFile(join(root, path), content);
-  };
-  // Starts `git push` with more environment variables for the hook.
-  const start = (extra: Record<string, string>, ...args: string[]) => {
-    const child = spawn(
-      'git',
-      ['-c', 'core.hooksPath=.husky', 'push', ...args],
-      {
-        cwd: root,
-        env: { ...environment, ...extra },
-      },
-    );
-    let stderr = '';
-    child.stderr.setEncoding('utf8');
-    child.stderr.on('data', (chunk: string) => {
-      stderr += chunk;
-    });
-    const exited = once(child, 'close').then(([code]) => ({
-      code: Number(code),
-      stderr,
-    }));
-    return { exited, stderr: () => stderr };
-  };
-  return {
-    top,
-    root,
-    remote,
-    git,
-    gitIn,
-    write,
-    start,
-    async commit(message: string) {
-      await git('add', '--all');
-      await git('commit', '--quiet', '--no-verify', '-m', message);
-      return (await git('rev-parse', 'HEAD')).trim();
-    },
-    push: (...args: string[]) => start({}, ...args).exited,
-  };
+// Starts `git push` with more environment variables for the hook.
+function start(
+  repo: { readonly root: string; readonly environment: NodeJS.ProcessEnv },
+  extra: Record<string, string>,
+  ...args: string[]
+) {
+  const child = spawn('git', ['-c', 'core.hooksPath=.husky', 'push', ...args], {
+    cwd: repo.root,
+    env: { ...repo.environment, ...extra },
+  });
+  let stderr = '';
+  child.stderr.setEncoding('utf8');
+  child.stderr.on('data', (chunk: string) => {
+    stderr += chunk;
+  });
+  const exited = once(child, 'close').then(([code]) => ({
+    code: Number(code),
+    stderr,
+  }));
+  return { exited, stderr: () => stderr };
 }
 
 // An Nx workspace of npm, installed the way npm installs it: a real
@@ -287,7 +220,8 @@ test(
     const record = join(repo.top, 'snapshot-folder');
 
     // Act
-    const result = await repo.start(
+    const result = await start(
+      repo,
       { PROBE_RECORD: record },
       '--quiet',
       'origin',
@@ -455,14 +389,21 @@ test(
     await repo.gitIn(repo.top, 'init', '--quiet', '--bare', second);
     await repo.git('remote', 'add', 'second', second);
     const gate = join(repo.top, 'gate');
-    const first = repo.start({ PROBE_GATE: gate }, '--quiet', 'origin', 'main');
+    const first = start(
+      repo,
+      { PROBE_GATE: gate },
+      '--quiet',
+      'origin',
+      'main',
+    );
     await t.waitFor(() => assert.ok(existsSync(`${gate}.started`)), {
       interval: 50,
       timeout: 20_000,
     });
 
     // Act
-    const waiting = repo.start(
+    const waiting = start(
+      repo,
       { PROBE_AFTER: gate },
       '--quiet',
       'second',

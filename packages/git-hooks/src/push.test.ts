@@ -1,105 +1,16 @@
 import assert from 'node:assert/strict';
-import { execFile } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { chmod, mkdir, readFile, symlink, writeFile } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
+import { mkdir, readFile, symlink, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { test } from 'node:test';
-import { promisify } from 'node:util';
 
 import { TemporaryFiles } from '@zukhruf/testing/fs';
 
 import { Format, prePush } from './index.ts';
+import { repository } from './testing/pre-push-repository.ts';
 
-const execFileAsync = promisify(execFile);
-const packageEntry = import.meta.resolve('./index.ts');
 const zukhrufModules = new URL('../../../node_modules', import.meta.url)
   .pathname;
-
-// A git repo in a temp folder whose pre-push hook is `.husky/pre-push.ts`,
-// reached through the committed link `.husky/pre-push`, as a repo installs
-// it, and a bare remote `origin` beside it. git, npm and the hook see none of
-// the user's config and no environment of the Nx task that runs this test.
-async function repository(top: string, hook: string) {
-  const root = join(top, 'repo');
-  const remote = join(top, 'remote.git');
-  await mkdir(root);
-  await mkdir(join(top, 'home'));
-  const environment = {
-    PATH: `${dirname(process.execPath)}:/usr/bin:/bin`,
-    HOME: join(top, 'home'),
-    GIT_CONFIG_GLOBAL: '/dev/null',
-    GIT_CONFIG_NOSYSTEM: '1',
-    GIT_AUTHOR_NAME: 'Test',
-    GIT_AUTHOR_EMAIL: 'test@example.com',
-    GIT_COMMITTER_NAME: 'Test',
-    GIT_COMMITTER_EMAIL: 'test@example.com',
-  };
-  const gitIn = async (cwd: string, ...args: string[]) =>
-    (await execFileAsync('git', args, { cwd, env: environment })).stdout;
-  const git = (...args: string[]) => gitIn(root, ...args);
-  await gitIn(
-    top,
-    'init',
-    '--quiet',
-    '--bare',
-    '--initial-branch=main',
-    remote,
-  );
-  await git('init', '--quiet', '--initial-branch=main');
-  await git('remote', 'add', 'origin', remote);
-  await writeFile(join(root, 'package.json'), '{ "type": "module" }\n');
-  await mkdir(join(root, '.husky'));
-  await writeFile(
-    join(root, '.husky/pre-push.ts'),
-    `#!/usr/bin/env node\n${hook.replaceAll('@zukhruf/git-hooks', packageEntry)}`,
-  );
-  await chmod(join(root, '.husky/pre-push.ts'), 0o755);
-  await symlink('pre-push.ts', join(root, '.husky/pre-push'));
-  const write = async (path: string, content: string) => {
-    await mkdir(dirname(join(root, path)), { recursive: true });
-    await writeFile(join(root, path), content);
-  };
-  return {
-    top,
-    root,
-    remote,
-    environment,
-    git,
-    gitIn,
-    write,
-    async commit(message: string) {
-      await git('add', '--all');
-      await git('commit', '--quiet', '--no-verify', '-m', message);
-      return (await git('rev-parse', 'HEAD')).trim();
-    },
-    push(...args: string[]) {
-      return this.pushWith([], ...args);
-    },
-    async pushWith(gitOptions: readonly string[], ...args: string[]) {
-      try {
-        const { stdout, stderr } = await execFileAsync(
-          'git',
-          ['-c', 'core.hooksPath=.husky', ...gitOptions, 'push', ...args],
-          { cwd: root, env: environment },
-        );
-        return { code: 0, stdout, stderr };
-      } catch (error) {
-        if (
-          !Error.isError(error) ||
-          !('code' in error) ||
-          !('stdout' in error) ||
-          !('stderr' in error)
-        )
-          throw error;
-        return {
-          code: Number(error.code),
-          stdout: String(error.stdout),
-          stderr: String(error.stderr),
-        };
-      }
-    },
-  };
-}
 
 // A hook whose one step gives the remote and the ref updates that prePush
 // read, as JSON on its outcome line.
