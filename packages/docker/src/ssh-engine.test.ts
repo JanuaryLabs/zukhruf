@@ -360,6 +360,7 @@ const { readdirSync } = await import('node:fs');
 const runs = ${JSON.stringify(`${standIn.path}/runs`)};
 const [first] = readdirSync(runs).map((name) => Number.parseInt(name, 10));
 const alive = (pid) => { try { process.kill(pid, 0); return true; } catch { return false; } };
+// The client holds the ssh child and does not expose it, and no event reports the end of another process's child.
 while (alive(first)) await new Promise((resolve) => setTimeout(resolve, 20));
 const info = await docker.info().then((answer) => answer.ID, (error) => error.name + ': ' + error.message);
 console.log(JSON.stringify({ info, started: readdirSync(runs).length }));

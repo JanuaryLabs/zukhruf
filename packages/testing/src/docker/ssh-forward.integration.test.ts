@@ -164,6 +164,7 @@ async function scenario(directory: string, body: string, path?: string) {
       try { process.kill(Number(readFileSync(directory + '/ssh.pid', 'utf8')), 0); return true; }
       catch { return false; }
     };
+    // No event reports that a port closed: only a refused connection does, so callers retry this.
     const refuses = (port) => new Promise((resolve) => {
       const socket = connect(port, '127.0.0.1');
       socket.once('connect', () => { socket.destroy(); resolve(false); });

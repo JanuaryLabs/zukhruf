@@ -80,7 +80,7 @@ const workerSource = (statePath: string, ending: string, timeout: number) => `
   import { readFile, readdir, writeFile } from 'node:fs/promises';
   import { setTimeout } from 'node:timers/promises';
   import { DockerTestbed } from ${library};
-  test('disposable resources before interruption', { timeout: ${timeout} }, async () => {
+  test('disposable resources before interruption', { timeout: ${timeout} }, async (t) => {
     const docker = new DockerTestbed({ environment: process.env });
     const { container } = await docker.serve({ Image: 'postgres:18-alpine', Env: ['POSTGRES_PASSWORD=test'] }, { internalPort: 5432 });
     const general = await docker.start({ Image: 'postgres:18-alpine', Cmd: ['sleep', '600'] });
@@ -329,7 +329,7 @@ for (const mode of [
           statePath,
           [
             mode === 'recovery'
-              ? `while (!existsSync(${JSON.stringify(stopped)})) await setTimeout(100);`
+              ? `await t.waitFor(() => { if (!existsSync(${JSON.stringify(stopped)})) throw new Error('the proxy has not stopped'); }, { timeout: 80_000 });`
               : '',
             mode === 'failure'
               ? "throw new Error('intentional assertion failure');"

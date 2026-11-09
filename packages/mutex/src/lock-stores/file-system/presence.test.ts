@@ -374,6 +374,7 @@ void test.each(stores, (store) => {
               appendFileSync(${JSON.stringify(journal)}, name + ':enter\\n');
               register ??= new FencedRegister(directory + '/register.db');
               if (register.write(lease.token) === 'stale') stale++;
+              // Not a wait for a fact: the turn lets a second holder, if the lock lets one in, write between enter and leave.
               await new Promise((resolve) => setTimeout(resolve, 1));
               appendFileSync(${JSON.stringify(journal)}, name + ':leave\\n');
             }, { mode: modes[round % modes.length] });

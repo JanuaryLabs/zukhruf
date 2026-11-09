@@ -253,17 +253,19 @@ describe('requests during and after disposal', () => {
       // Arrange: the engine never answers /info, and marks that it got it.
       await using home = await scratchDirectory();
       const seen = join(home.path, 'info-seen');
+      await writeFile(seen, '');
       await using engine = await fakeEngine({
         directory: home.path,
         apiVersion: '1.51',
-        answer: () => void writeFile(seen, ''),
+        answer: () => void writeFile(seen, 'seen'),
       });
       await using standIn = await sshStandIn({
         kind: 'engine',
         socketPath: engine.socketPath,
       });
       const scenario = `
-import { existsSync, readdirSync } from 'node:fs';
+import { once } from 'node:events';
+import { readdirSync, watch } from 'node:fs';
 import { ConnectionFailedError, Docker, DockerError } from ${JSON.stringify(ENTRY)};
 const describe = (error) =>
   error instanceof ConnectionFailedError
@@ -272,8 +274,10 @@ const describe = (error) =>
       ? error.message
       : 'other: ' + error;
 const docker = await Docker.connect({ clock: globalThis, host: 'ssh://tester@machine' });
+const seen = watch(${JSON.stringify(seen)});
 const inFlight = docker.info().then(() => 'resolved', describe);
-while (!existsSync(${JSON.stringify(seen)})) await new Promise((resolve) => setTimeout(resolve, 10));
+await once(seen, 'change');
+seen.close();
 const disposing = docker[Symbol.asyncDispose]();
 const late = docker.info().then(() => 'resolved', describe);
 await disposing;

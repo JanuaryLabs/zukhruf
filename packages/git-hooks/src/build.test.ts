@@ -113,8 +113,8 @@ async function repository(top: string, hook: string) {
 // error lines when the file that it reads holds BROKEN, and also when it does
 // not run with the production configuration. c's lint passes only with
 // PROBE_ENV=yes. With PROBE_RECORD, a build writes its folder there; with
-// PROBE_GATE, b's build waits for the file `<gate>.release`, and then writes
-// `<gate>.done`. With PROBE_AFTER, b's build writes `<gate>.second`, and fails
+// PROBE_GATE, b's build waits for a write to the file `<gate>.release`, and then
+// writes `<gate>.done`. With PROBE_AFTER, b's build writes `<gate>.second`, and fails
 // unless `<gate>.done` is there: it ran while the gated build had not ended.
 async function workspace(folder: string, hook: string) {
   const repo = await repository(folder, hook);
@@ -126,9 +126,9 @@ async function workspace(folder: string, hook: string) {
   await repo.write('nx.json', '{}\n');
   await repo.write(
     'tools/build.mjs',
-    `import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+    `import { once } from 'node:events';
+import { existsSync, readFileSync, watch, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import { setTimeout } from 'node:timers/promises';
 const [project, configuration] = process.argv.slice(2);
 if (configuration !== 'production') {
   console.error('not the production configuration');
@@ -137,8 +137,12 @@ if (configuration !== 'production') {
 if (process.env.PROBE_RECORD) writeFileSync(process.env.PROBE_RECORD, process.cwd());
 const gate = process.env.PROBE_GATE;
 if (gate && project === 'b') {
+  // The watch starts before \`.started\` tells the test to write, so the write cannot be missed.
+  writeFileSync(\`\${gate}.release\`, '');
+  const release = watch(\`\${gate}.release\`);
   writeFileSync(\`\${gate}.started\`, '');
-  while (!existsSync(\`\${gate}.release\`)) await setTimeout(50);
+  await once(release, 'change');
+  release.close();
   writeFileSync(\`\${gate}.done\`, '');
 }
 const after = process.env.PROBE_AFTER;
@@ -471,7 +475,7 @@ test(
     // The gate stays closed for 5 s, a window in which the second build must
     // not start its tasks: if it does, it writes `<gate>.second` and fails.
     await delay(5000);
-    await writeFile(`${gate}.release`, '');
+    await writeFile(`${gate}.release`, 'released');
     const [one, two] = await Promise.all([first.exited, waiting.exited]);
 
     // Assert
