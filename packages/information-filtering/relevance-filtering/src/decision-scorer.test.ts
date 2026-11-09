@@ -275,13 +275,16 @@ describe('DecisionScorer', () => {
       ['Nvidia ships a new GPU', 0.95],
       ['A chip plant opens in Arizona', 0.7],
     ]);
-    // The first article of the stream is answered last, and the last first.
-    const delays = new Map([
-      ['A chip of paint falls off a bridge', 40],
-      ['TSMC raises chip output', 30],
-      ['Nvidia ships a new GPU', 20],
-      ['A chip plant opens in Arizona', 10],
-    ]);
+    // The first article of the stream is answered last. TSMC ties with Arizona
+    // and is answered before it, so only the id puts Arizona first.
+    const order = [
+      'Nvidia ships a new GPU',
+      'TSMC raises chip output',
+      'A chip plant opens in Arizona',
+      'A chip of paint falls off a bridge',
+    ];
+    const turns = order.map(() => Promise.withResolvers<void>());
+    turns[0]?.resolve();
     const answered: string[] = [];
     const late: Experimental_DecisionModel = {
       specificationVersion: 'v4',
@@ -291,8 +294,10 @@ describe('DecisionScorer', () => {
       doDecide: async ({ state, questions }) => {
         const [part] = state;
         const text = part?.type === 'text' ? part.text : '';
-        await new Promise((resolve) => setTimeout(resolve, delays.get(text)));
+        const turn = order.indexOf(text);
+        await turns[turn]?.promise;
         answered.push(text);
+        turns[turn + 1]?.resolve();
         return {
           answers: Object.fromEntries(
             Object.keys(questions).map((id) => [
@@ -318,12 +323,7 @@ describe('DecisionScorer', () => {
       { signal: running },
     );
 
-    assert.deepEqual(answered, [
-      'A chip plant opens in Arizona',
-      'Nvidia ships a new GPU',
-      'TSMC raises chip output',
-      'A chip of paint falls off a bridge',
-    ]);
+    assert.deepEqual(answered, order);
     assert.deepEqual(scores.ranked(), ['gpu', 'arizona', 'tsmc', 'paint']);
   });
 
