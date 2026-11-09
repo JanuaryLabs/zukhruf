@@ -263,9 +263,11 @@ describe('requests during and after disposal', () => {
         kind: 'engine',
         socketPath: engine.socketPath,
       });
+      // The scenario reads the file because a watcher registers on the next turn
+      // of the event loop, so it can miss a write that lands first (#4094).
       const scenario = `
-import { once } from 'node:events';
-import { readdirSync, watch } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
+import { setTimeout as delay } from 'node:timers/promises';
 import { ConnectionFailedError, Docker, DockerError } from ${JSON.stringify(ENTRY)};
 const describe = (error) =>
   error instanceof ConnectionFailedError
@@ -274,10 +276,8 @@ const describe = (error) =>
       ? error.message
       : 'other: ' + error;
 const docker = await Docker.connect({ clock: globalThis, host: 'ssh://tester@machine' });
-const seen = watch(${JSON.stringify(seen)});
 const inFlight = docker.info().then(() => 'resolved', describe);
-await once(seen, 'change');
-seen.close();
+while (readFileSync(${JSON.stringify(seen)}, 'utf8') === '') await delay(10);
 const disposing = docker[Symbol.asyncDispose]();
 const late = docker.info().then(() => 'resolved', describe);
 await disposing;
