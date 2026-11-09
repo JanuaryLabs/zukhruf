@@ -1,6 +1,6 @@
 {
   "name": "@zukhruf/sqlite-transaction",
-  "version": "0.8.12",
+  "version": "0.8.13",
   "description": "A transaction function for node:sqlite: it commits when the function returns and rolls back when it throws. A nested call uses a savepoint. When SQLite ends the transaction itself, the caller gets the original error, not \"cannot rollback\".",
   "license": "MIT",
   "repository": {
@@ -40,7 +40,7 @@
     "access": "public"
   },
   "devDependencies": {
-    "@zukhruf/sqlite-open": "^0.8.12",
-    "@zukhruf/testing": "^0.8.12"
+    "@zukhruf/sqlite-open": "^0.8.13",
+    "@zukhruf/testing": "^0.8.13"
   }
 }
