@@ -130,7 +130,7 @@ export class RandomState {
       total += p[index] ?? 0;
       cdf[index] = total;
     }
-    const last = cdf[cdf.length - 1] ?? 1;
+    const last = cdf.at(-1) ?? 1;
     for (let index = 0; index < cdf.length; index++)
       cdf[index] = (cdf[index] ?? 0) / last;
     return this.randomSample(size).map((value) => {

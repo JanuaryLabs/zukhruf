@@ -12,7 +12,7 @@ describe('LeaseLostError', () => {
     const error = new LeaseLostError(subject);
 
     // Assert
-    assert.ok(error instanceof Error);
+    assert.ok(Error.isError(error));
     assert.equal(error.name, 'LeaseLostError');
     assert.equal(error.subject, subject);
     assert.equal(

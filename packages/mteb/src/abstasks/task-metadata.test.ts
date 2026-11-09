@@ -384,7 +384,7 @@ describe('checkLanguageCode', () => {
       assert.throws(
         () => checkLanguageCode(code),
         (error: unknown) =>
-          error instanceof Error && error.message.startsWith(message),
+          Error.isError(error) && error.message.startsWith(message),
       );
   });
 });

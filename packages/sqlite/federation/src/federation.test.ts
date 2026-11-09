@@ -80,7 +80,7 @@ test('a main database preserves its schema, presets and read-only behavior when 
     (error: unknown) => {
       assert.ok(error instanceof UnavailableError);
       assert.equal(error.path, absent);
-      assert.ok(error.cause instanceof Error);
+      assert.ok(Error.isError(error.cause));
       assert.match(error.cause.message, /unable to open database/);
       return true;
     },
@@ -139,7 +139,7 @@ test('a named main must resolve to an existing database and preserves locate err
     (error: unknown) => {
       assert.ok(error instanceof UnavailableError);
       assert.equal(error.path, absent);
-      assert.ok(error.cause instanceof Error);
+      assert.ok(Error.isError(error.cause));
       assert.match(error.cause.message, /unable to open database/);
       return true;
     },
@@ -209,7 +209,7 @@ test('a statement that names more than 10 databases fails with TooManyDatabasesE
         SELECT x FROM d10.t`,
     (error) => {
       assert.ok(error instanceof TooManyDatabasesError);
-      assert.deepEqual([...error.names].sort(), [...paths.keys()].sort());
+      assert.deepEqual(error.names.toSorted(), [...paths.keys()].sort());
       assert.match(error.message, /split/i);
       return true;
     },

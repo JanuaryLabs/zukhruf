@@ -21,7 +21,7 @@ export async function hasInstallDrift(
   try {
     installed = await packagesOf(hiddenLockfile);
   } catch (error) {
-    if (error instanceof Error && 'code' in error && error.code === 'ENOENT')
+    if (Error.isError(error) && 'code' in error && error.code === 'ENOENT')
       return true;
     throw error;
   }

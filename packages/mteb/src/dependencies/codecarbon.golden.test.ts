@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { createHash } from 'node:crypto';
+import { hash } from 'node:crypto';
 import { readFileSync, readdirSync, writeFileSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
 import { test } from 'node:test';
@@ -91,7 +91,7 @@ function outcome(call: () => number | null): Outcome {
   try {
     return { value: call() };
   } catch (error) {
-    assert.ok(error instanceof Error);
+    assert.ok(Error.isError(error));
     const type = Object.entries(ERRORS).find(
       ([, constructor]) => error.constructor === constructor,
     );
@@ -132,12 +132,7 @@ test('each data file has the sha256 of SHA256SUMS, which are those of codecarbon
       relative(folder, join(entry.parentPath, entry.name)).replaceAll(sep, '/'),
     )
     .sort()
-    .map((file) => [
-      file,
-      createHash('sha256')
-        .update(readFileSync(join(folder, file)))
-        .digest('hex'),
-    ]);
+    .map((file) => [file, hash('sha256', readFileSync(join(folder, file)))]);
 
   assert.deepEqual(files, listed);
   assert.deepEqual(Object.fromEntries(listed), expected.sha256);

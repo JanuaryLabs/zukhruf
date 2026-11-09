@@ -243,7 +243,7 @@ test(
       );
 
     // Assert
-    assert.ok(failure instanceof Error);
+    assert.ok(Error.isError(failure));
     assert.deepEqual(failure.cause, new Error('not ready'));
     assert.equal(served.length, 1);
     await t.waitFor(
@@ -291,7 +291,7 @@ test(
       );
 
     // Assert
-    assert.ok(failure instanceof Error);
+    assert.ok(Error.isError(failure));
     assert.match(failure.message, new RegExp(`printed-${scope}`));
     assert.equal(failure.cause, readiness);
     assert.equal(served.length, 1);
@@ -350,7 +350,7 @@ test(
     );
 
     // Assert
-    assert.ok(failure instanceof Error);
+    assert.ok(Error.isError(failure));
     assert.equal(
       failure.message,
       'Docker is required for container-backed tests',

@@ -130,7 +130,7 @@ function selection(tests: string[]) {
       const extension =
         found.size === 1
           ? [...found].join('')
-          : `{${[...found].sort().join(',')}}`;
+          : `{${[...found].toSorted().join(',')}}`;
       return `"${folder === '' ? '' : `${folder}/**/`}*.test.${extension}"`;
     })
     .join(' ');
@@ -196,7 +196,7 @@ function globalSetup(workspaceRoot: string, root: string) {
     );
   } catch (error) {
     if (
-      error instanceof Error &&
+      Error.isError(error) &&
       'code' in error &&
       error.code === 'ERR_MODULE_NOT_FOUND'
     ) {

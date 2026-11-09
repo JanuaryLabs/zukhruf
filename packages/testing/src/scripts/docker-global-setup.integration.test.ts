@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawn as spawnProcess } from 'node:child_process';
-import { createHash, randomUUID } from 'node:crypto';
+import { hash, randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import {
   access,
@@ -1420,7 +1420,7 @@ test(
 
 /** The name of the sweep lease of `version`: the name every teardown and every test process of the version agree on. */
 const sweepLease = (version: string): string =>
-  `zukhruf-testing-sweep-${createHash('sha256').update(version).digest('hex')}`;
+  `zukhruf-testing-sweep-${hash('sha256', version)}`;
 
 /** The running process leases of `version`. */
 const processLeases = async (version: string): Promise<string[]> =>

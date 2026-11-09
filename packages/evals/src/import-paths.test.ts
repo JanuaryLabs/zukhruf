@@ -43,7 +43,7 @@ for (const [path, own] of Object.entries(peers)) {
       await assert.rejects(
         importPath(path, [peer]),
         (error: unknown) =>
-          error instanceof Error &&
+          Error.isError(error) &&
           'stderr' in error &&
           String(error.stderr).includes(`Cannot find package '${peer}'`),
       );

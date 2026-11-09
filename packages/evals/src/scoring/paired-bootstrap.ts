@@ -159,7 +159,7 @@ export class PairedBootstrap {
       ['baseline', baselineTests],
       ['change', changeTests],
     ] as const)
-      if (![...tests.values()].some((test) => test.gives(name)))
+      if (!tests.values().some((test) => test.gives(name)))
         throw new Error(
           `No scorecard of the ${run} run gave a ratio named "${name}"`,
         );

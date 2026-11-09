@@ -13,7 +13,7 @@ async function outcome(call: () => Promise<unknown>) {
   try {
     return { resolved: await call() };
   } catch (error) {
-    return error instanceof Error
+    return Error.isError(error)
       ? `${error.name}: ${error.message}`
       : String(error);
   }

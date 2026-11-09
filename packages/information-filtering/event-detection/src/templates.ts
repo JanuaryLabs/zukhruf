@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { hash } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 
 import type { Design } from './design.ts';
@@ -36,7 +36,7 @@ export class Templates {
         for (const key of new Set(
           segmentsOf(report.body, this.#rule).map(({ key }) => key),
         ))
-          insert.run(report.publisher, hash(key), report.id);
+          insert.run(report.publisher, shortHash(key), report.id);
   }
 
   // The test of the template segments of one publisher. A report without a
@@ -52,10 +52,10 @@ export class Templates {
         .all(publisher, reports)
         .map((row) => String(row.segment)),
     );
-    return templates.size === 0 ? none : (key) => templates.has(hash(key));
+    return templates.size === 0 ? none : (key) => templates.has(shortHash(key));
   }
 }
 
-function hash(key: string): string {
-  return createHash('sha256').update(key).digest('base64url').slice(0, 22);
+function shortHash(key: string): string {
+  return hash('sha256', key, 'base64url').slice(0, 22);
 }

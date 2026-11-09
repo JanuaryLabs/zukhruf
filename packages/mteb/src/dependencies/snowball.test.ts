@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { createHash } from 'node:crypto';
+import { hash } from 'node:crypto';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
@@ -20,12 +20,7 @@ test('each Snowball file has the sha256 of its file in jsstemmer-3.1.0.tar.gz, a
   const files = readdirSync(FOLDER)
     .filter((file) => file !== 'SHA256SUMS')
     .sort()
-    .map((file) => [
-      file,
-      createHash('sha256')
-        .update(readFileSync(join(FOLDER, file)))
-        .digest('hex'),
-    ]);
+    .map((file) => [file, hash('sha256', readFileSync(join(FOLDER, file)))]);
 
   assert.deepEqual(files, listed);
 });

@@ -204,7 +204,7 @@ function declaredEnvOf(startupPath: string): DeclaredEnv {
     const entry: DeclaredEnv = {
       mtimeMs: -1,
       keys: new Set(),
-      error: error instanceof Error ? error.message : String(error),
+      error: Error.isError(error) ? error.message : String(error),
     };
     declaredByStartupPath.set(startupPath, entry);
     return entry;

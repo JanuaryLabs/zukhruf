@@ -11,7 +11,7 @@ function identify(path: string): string | undefined {
     const stats = statSync(path, { bigint: true, throwIfNoEntry: false });
     return stats === undefined ? undefined : `${stats.dev}:${stats.ino}`;
   } catch (cause) {
-    if (cause instanceof Error && 'code' in cause && cause.code === 'EACCES')
+    if (Error.isError(cause) && 'code' in cause && cause.code === 'EACCES')
       return undefined;
     throw cause;
   }

@@ -30,7 +30,7 @@ describe('heartbeats', () => {
             aborts.push({
               id: job.id,
               at: clock.now() - origin,
-              reason: reason instanceof Error ? reason.message : String(reason),
+              reason: Error.isError(reason) ? reason.message : String(reason),
             });
           });
         }
@@ -137,7 +137,7 @@ describe('heartbeats', () => {
           aborts.push({
             attempt,
             at: clock.now() - origin,
-            reason: reason instanceof Error ? reason.message : String(reason),
+            reason: Error.isError(reason) ? reason.message : String(reason),
           });
         });
         const release = Promise.withResolvers<void>();
@@ -310,7 +310,7 @@ describe('heartbeats', () => {
         await clock.tick(5000);
         await flush(clock);
         const reported = errors.map((error) => ({
-          isError: error instanceof Error,
+          isError: Error.isError(error),
           keys: Object.keys(error),
           name: error.name,
           message: error.message,

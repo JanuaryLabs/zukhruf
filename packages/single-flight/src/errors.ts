@@ -34,7 +34,7 @@ export class FlightInterruptedError extends Error {
 
 /** The parts of a thrown value that cross to the joiners. A value that is not an error keeps only its text. */
 export function failureOf(error: unknown): Failure {
-  if (!(error instanceof Error)) {
+  if (!Error.isError(error)) {
     return { name: 'Error', message: String(error) };
   }
   const { name, message } = error;

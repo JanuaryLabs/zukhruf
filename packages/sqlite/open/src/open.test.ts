@@ -163,7 +163,7 @@ function unavailable(path: string, errcode: 14 | 1544 = 14) {
   return (error: unknown) => {
     assert.ok(error instanceof UnavailableError, String(error));
     assert.equal(error.path, path);
-    assert.ok(error.cause instanceof Error && 'errcode' in error.cause);
+    assert.ok(Error.isError(error.cause) && 'errcode' in error.cause);
     assert.equal(error.cause.errcode, errcode);
     return true;
   };
@@ -227,7 +227,7 @@ test('a file that is not a database is the error of SQLite, not an UnavailableEr
   ])
     assert.throws(attempt, (error: unknown) => {
       assert.ok(!(error instanceof UnavailableError), String(error));
-      assert.ok(error instanceof Error && 'errcode' in error);
+      assert.ok(Error.isError(error) && 'errcode' in error);
       assert.equal(error.errcode, 26);
       return true;
     });
@@ -248,7 +248,7 @@ test(
     assert.throws(
       () => open(path),
       (error: unknown) =>
-        error instanceof Error && 'errcode' in error && error.errcode === 26,
+        Error.isError(error) && 'errcode' in error && error.errcode === 26,
     );
 
     assert.equal(readdirSync('/dev/fd').length, before);
@@ -276,7 +276,7 @@ test(
     for (const [code, fail] of Object.entries(failures)) {
       const error = thrown(fail);
       assert.ok(
-        error instanceof Error && 'code' in error && error.code === code,
+        Error.isError(error) && 'code' in error && error.code === code,
         code,
       );
       const unavailable = UnavailableError.from(file, error);
@@ -370,7 +370,7 @@ test('with timeout 0, an owner fails at once on the write lock of another progra
     assert.throws(
       () => owner.exec('CREATE TABLE notes (title TEXT)'),
       (error: unknown) => {
-        assert.ok(error instanceof Error && 'errcode' in error);
+        assert.ok(Error.isError(error) && 'errcode' in error);
         assert.equal(error.errcode, 5);
         return true;
       },

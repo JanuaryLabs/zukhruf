@@ -95,7 +95,7 @@ export class SqlServerStore extends SessionLockStore<SqlServerSession> {
  * a resource, so the holder check sees the whole name.
  */
 function resourceName(key: string): string {
-  return keyDigest(key).subarray(0, 16).toString('hex');
+  return keyDigest(key).subarray(0, 16).toHex();
 }
 
 function sqlServerDialect(

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { createHash } from 'node:crypto';
+import { hash } from 'node:crypto';
 import { once } from 'node:events';
 import { readFile, writeFile } from 'node:fs/promises';
 import { type Socket, connect, createServer } from 'node:net';
@@ -164,7 +164,7 @@ describe('What a socket store shares with other versions in its directory', () =
 
         // Assert: SQLITE_BUSY (5, in the low byte) is how a published candidate learns that it lost.
         assert.ok(
-          campaign instanceof Error &&
+          Error.isError(campaign) &&
             'errcode' in campaign &&
             typeof campaign.errcode === 'number' &&
             (campaign.errcode & 0xff) === 5,
@@ -520,7 +520,7 @@ describe('What a socket store shares with other versions on Windows', () => {
   const directory = `Shared-Locks-${'X'.repeat(100)}`;
   /** The pipe of every published version: `mutex-` and the first 32 hex digits of the SHA-256 of the lowercased absolute directory. */
   const pipeFor = (absolute: string) =>
-    `\\\\.\\pipe\\mutex-${createHash('sha256').update(absolute.toLowerCase()).digest('hex').slice(0, 32)}`;
+    `\\\\.\\pipe\\mutex-${hash('sha256', absolute.toLowerCase()).slice(0, 32)}`;
 
   test('a store says the published hello on the pipe named for its directory', async (t) => {
     // Arrange: a leader of a published version listens on the pipe of the directory.

@@ -4,7 +4,7 @@
 // sentence-transformers constructors, the training-data helpers that need
 // the task registry (get_training_datasets, is_zero_shot_on,
 // zero_shot_percentage) and the model card helpers.
-import { createHash } from 'node:crypto';
+import { hash } from 'node:crypto';
 import { isDeepStrictEqual } from 'node:util';
 
 import type { EmbeddingModel, RerankingModel } from 'ai';
@@ -199,7 +199,7 @@ const FIELD_SCHEMAS = {
         } catch (error) {
           context.addIssue({
             code: 'custom',
-            message: `Value error, ${error instanceof Error ? error.message : String(error)}`,
+            message: `Value error, ${Error.isError(error) ? error.message : String(error)}`,
           });
         }
       }
@@ -734,7 +734,7 @@ function serializeValue(value: unknown): string {
   if (value instanceof Map || isPlainObject(value)) {
     const entries = [
       ...(value instanceof Map ? value.entries() : Object.entries(value)),
-    ].sort(([a], [b]) => compareStrings(String(a), String(b)));
+    ].toSorted(([a], [b]) => compareStrings(String(a), String(b)));
     return `{${entries.map(([key, item]) => `${String(key)}:${serializeValue(item)}`).join(',')}}`;
   }
   const type =
@@ -772,7 +772,7 @@ export function serializeExperimentKwargsToName(
     [...params].length > 200 ||
     [...params].some((character) => INVALID_CHARACTERS.has(character))
   )
-    return `exp_${createHash('sha256').update(params).digest('hex').slice(0, 16)}`;
+    return `exp_${hash('sha256', params).slice(0, 16)}`;
   return params;
 }
 

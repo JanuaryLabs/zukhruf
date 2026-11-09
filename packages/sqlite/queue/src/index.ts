@@ -66,7 +66,7 @@ export { UnsupportedStartAfterError } from './start-after.ts';
 export type { FoundJob, JobQueue } from './job-queue.ts';
 
 function toError(value: unknown): Error {
-  return value instanceof Error ? value : new Error(String(value));
+  return Error.isError(value) ? value : new Error(String(value));
 }
 
 // pg-boss emits a spread copy of a worker's error, not the Error itself
@@ -533,9 +533,11 @@ export class SqliteJobQueue
   // manager.js:463-471: a queue's group tracking goes with its last worker
   // neither stopping nor stopped.
   #forgetLocalGroups(name: string): void {
-    const live = Array.from(this.workers.values()).some(
-      (worker) => worker.name === name && !worker.stopping && !worker.stopped,
-    );
+    const live = this.workers
+      .values()
+      .some(
+        (worker) => worker.name === name && !worker.stopping && !worker.stopped,
+      );
     if (!live) {
       this.#localGroups.forget(name);
     }

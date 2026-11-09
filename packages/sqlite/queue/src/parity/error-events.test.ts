@@ -24,7 +24,7 @@ function describeError(error: Error) {
   const worker =
     'worker' in error && typeof error.worker === 'string' ? error.worker : '';
   return {
-    isError: error instanceof Error,
+    isError: Error.isError(error),
     keys: Object.keys(error).sort(),
     hasStack: typeof error.stack === 'string',
     queue: 'queue' in error ? error.queue : undefined,
@@ -48,7 +48,7 @@ describe('error events', () => {
         );
         registration = 'registered';
       } catch (error) {
-        registration = error instanceof Error ? error.message : String(error);
+        registration = Error.isError(error) ? error.message : String(error);
       }
       const error = await reported;
       return {

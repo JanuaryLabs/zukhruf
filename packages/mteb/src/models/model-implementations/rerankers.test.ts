@@ -243,7 +243,7 @@ test('each cross-encoder throws the error of its MTEB wrapper for 2 queries and 
         await wrapper.predict(queries, documents, options).then(
           () => 'no error',
           (error: unknown) =>
-            error instanceof Error ? error.message : String(error),
+            Error.isError(error) ? error.message : String(error),
         ),
       ]),
     ),

@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { hash } from 'node:crypto';
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -76,7 +76,7 @@ export class KeyLocks {
   }
 
   #pathOf(key: string): string {
-    const digest = createHash('sha256').update(key).digest('hex');
+    const digest = hash('sha256', key);
     return join(this.#folder, `${digest}.lock`);
   }
 }

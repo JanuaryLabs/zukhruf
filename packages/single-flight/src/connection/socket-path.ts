@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { hash } from 'node:crypto';
 import { join, resolve } from 'node:path';
 
 /** macOS allows 104 bytes including the terminating NUL; Linux allows 108. */
@@ -11,10 +11,7 @@ const SOCKET_PATH_LIMIT = 103;
  */
 export function socketPathFor(directory: string): string {
   if (process.platform === 'win32') {
-    const id = createHash('sha256')
-      .update(resolve(directory).toLowerCase())
-      .digest('hex')
-      .slice(0, 32);
+    const id = hash('sha256', resolve(directory).toLowerCase()).slice(0, 32);
     return `\\\\.\\pipe\\single-flight-${id}`;
   }
   const socketPath = join(directory, 'flight.sock');

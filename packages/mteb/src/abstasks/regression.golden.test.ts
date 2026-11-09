@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { createHash } from 'node:crypto';
+import { hash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
@@ -202,7 +202,7 @@ function recordingEncoder(
     calls.push({
       hf_split: options.hfSplit,
       count: texts.length,
-      sha256: createHash('sha256').update(texts.join('\0')).digest('hex'),
+      sha256: hash('sha256', texts.join('\0')),
     });
     return encode(inputs, options);
   };
@@ -496,7 +496,7 @@ test('stratifiedSubsampling gives the rows of MTEB in their order, all the rows 
       );
       return { case: kase.case, rows: result.get('test')?.rows };
     } catch (error) {
-      if (!(error instanceof Error)) throw error;
+      if (!Error.isError(error)) throw error;
       return { case: kase.case, error: error.message };
     }
   });

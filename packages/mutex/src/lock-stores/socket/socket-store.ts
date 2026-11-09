@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { hash } from 'node:crypto';
 import { EventEmitter } from 'node:events';
 import { join, resolve } from 'node:path';
 
@@ -113,10 +113,7 @@ export class SocketStore
  */
 function socketPathFor(directory: string): string {
   if (process.platform === 'win32') {
-    const id = createHash('sha256')
-      .update(resolve(directory).toLowerCase())
-      .digest('hex')
-      .slice(0, 32);
+    const id = hash('sha256', resolve(directory).toLowerCase()).slice(0, 32);
     return `\\\\.\\pipe\\mutex-${id}`;
   }
   const socketPath = join(directory, 'lock.sock');

@@ -19,7 +19,7 @@ export class Database {
   // table.column`), or undefined for any other error.
   static notNullColumn(error: unknown): string | undefined {
     if (
-      !(error instanceof Error) ||
+      !Error.isError(error) ||
       !Database.#hasErrcode(error, SQLITE_CONSTRAINT_NOTNULL)
     ) {
       return undefined;
@@ -29,7 +29,7 @@ export class Database {
 
   static #hasErrcode(error: unknown, errcode: number): boolean {
     return (
-      error instanceof Error && 'errcode' in error && error.errcode === errcode
+      Error.isError(error) && 'errcode' in error && error.errcode === errcode
     );
   }
 }

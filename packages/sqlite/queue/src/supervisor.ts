@@ -125,7 +125,7 @@ export class Supervisor extends EventEmitter<
     } catch (error) {
       this.emit(
         'error',
-        error instanceof Error ? error : new Error(String(error)),
+        Error.isError(error) ? error : new Error(String(error)),
       );
     }
   }

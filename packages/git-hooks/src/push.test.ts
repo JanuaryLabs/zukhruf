@@ -85,7 +85,7 @@ async function repository(top: string, hook: string) {
         return { code: 0, stdout, stderr };
       } catch (error) {
         if (
-          !(error instanceof Error) ||
+          !Error.isError(error) ||
           !('code' in error) ||
           !('stdout' in error) ||
           !('stderr' in error)

@@ -88,7 +88,7 @@ function holding(clock: TestClock) {
           aborts.push({
             id: job.id,
             at: clock.now() - origin,
-            reason: reason instanceof Error ? reason.message : String(reason),
+            reason: Error.isError(reason) ? reason.message : String(reason),
           });
         });
       }
@@ -1091,7 +1091,7 @@ describe('supervisor', () => {
           return {
             batches,
             warnings: warnings.map((warning) => warning.at),
-            errors: errors.map((error) => error instanceof Error),
+            errors: errors.map((error) => Error.isError(error)),
           };
         } finally {
           held.release();
@@ -1148,7 +1148,7 @@ describe('supervisor', () => {
         build();
         return 'built';
       } catch (error) {
-        return error instanceof Error
+        return Error.isError(error)
           ? `${error.name}: ${error.message}`
           : String(error);
       }

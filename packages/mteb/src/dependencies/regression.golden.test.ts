@@ -183,7 +183,7 @@ test('trainTestSplit gives the train and test rows of the stratified train_test_
         split.get(name)?.rows.map((row) => row['i']);
       return { case: kase.case, train: rowsOf('train'), test: rowsOf('test') };
     } catch (error) {
-      if (!(error instanceof Error)) throw error;
+      if (!Error.isError(error)) throw error;
       return { case: kase.case, error: error.message };
     }
   });

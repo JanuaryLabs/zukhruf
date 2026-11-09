@@ -190,7 +190,7 @@ function holdCodecarbonLock(): Disposable {
   try {
     closeSync(openSync(path, 'wx'));
   } catch (error) {
-    if (error instanceof Error && 'code' in error && error.code === 'EEXIST')
+    if (Error.isError(error) && 'code' in error && error.code === 'EEXIST')
       return { [Symbol.dispose]() {} };
     throw error;
   }
@@ -221,7 +221,7 @@ test('with co2Tracker, a task that runs while another codecarbon run holds the l
     (error) => {
       assert.ok(error instanceof TypeError);
       assert.equal(error.message, NO_FINAL_EMISSIONS);
-      assert.ok(error.cause instanceof Error);
+      assert.ok(Error.isError(error.cause));
       assert.match(error.cause.message, /Another instance of codecarbon/);
       return true;
     },

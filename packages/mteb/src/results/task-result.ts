@@ -449,8 +449,7 @@ export class TaskResult {
       if (resolved.isAggregate) seenSubsets.add('default');
       newScores[split] = kept;
       const complete =
-        seenSubsets.size === subsets.size &&
-        [...subsets].every((subset) => seenSubsets.has(subset));
+        seenSubsets.size === subsets.size && subsets.isSubsetOf(seenSubsets);
       if (!complete && !(resolved.isAggregate && seenSubsets.has('default')))
         for (const subset of subsets)
           if (!seenSubsets.has(subset)) kept.push(missingEntry(subset));
@@ -585,9 +584,7 @@ export class TaskResult {
       const present = new Set(
         scores.map((entry) => String(entry['hf_subset'])),
       );
-      const subsets = [...new Set(task.hfSubsets)].filter(
-        (subset) => !present.has(subset),
-      );
+      const subsets = [...new Set(task.hfSubsets).difference(present)];
       if (subsets.length > 0) missing.set(split, subsets);
     }
     return missing;
@@ -870,7 +867,7 @@ export function writeAndMergeKeyedJson(
         pythonJsonDumps(
           {
             task,
-            splits: [...row.splits].sort(compareStrings),
+            splits: row.splits.toSorted(compareStrings),
             ...settingsByKey.get(key),
             subsets: row.subsets,
           },

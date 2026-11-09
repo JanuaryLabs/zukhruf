@@ -293,7 +293,7 @@ class Session {
     if (error instanceof EpochExhaustedError && this.#onTokensExhausted) {
       return this.#onTokensExhausted();
     }
-    const message = error instanceof Error ? error.message : String(error);
+    const message = Error.isError(error) ? error.message : String(error);
     switch (request.op) {
       case 'acquire':
       case 'try':

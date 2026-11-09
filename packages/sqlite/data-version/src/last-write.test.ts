@@ -106,7 +106,7 @@ test('a missing file is the UnavailableError of @zukhruf/sqlite-open', async () 
       assert.equal(UnavailableError, sqliteOpen.UnavailableError);
       assert.ok(error instanceof sqliteOpen.UnavailableError);
       assert.equal(error.path, missing);
-      assert.ok(error.cause instanceof Error && 'code' in error.cause);
+      assert.ok(Error.isError(error.cause) && 'code' in error.cause);
       assert.equal(error.cause.code, 'ENOENT');
       return true;
     },
@@ -133,7 +133,7 @@ test(
         (error: unknown) => {
           assert.ok(error instanceof UnavailableError);
           assert.equal(error.path, path);
-          assert.ok(error.cause instanceof Error && 'code' in error.cause);
+          assert.ok(Error.isError(error.cause) && 'code' in error.cause);
           assert.equal(error.cause.code, 'EACCES');
           return true;
         },

@@ -22,7 +22,7 @@ const isRunning = (pid: number) => {
     return true;
   } catch (error) {
     if (
-      error instanceof Error &&
+      Error.isError(error) &&
       'code' in error &&
       (error.code === 'ESRCH' || error.code === 'EPERM')
     )

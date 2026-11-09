@@ -139,7 +139,7 @@ export class Build extends Step<Push> {
             `${short} has no package-lock.json; Build works with npm workspaces`,
           ],
         };
-      if (!(error instanceof Error)) throw error;
+      if (!Error.isError(error)) throw error;
       return {
         kind: 'failed',
         lines: [`${short}: ${error.message.trimEnd()}`],
@@ -169,7 +169,7 @@ async function lastRun(cache: string): Promise<Task[]> {
   try {
     summary = JSON.parse(await readFile(join(cache, 'run.json'), 'utf8'));
   } catch (error) {
-    if (error instanceof Error && 'code' in error && error.code === 'ENOENT')
+    if (Error.isError(error) && 'code' in error && error.code === 'ENOENT')
       return [];
     throw error;
   }

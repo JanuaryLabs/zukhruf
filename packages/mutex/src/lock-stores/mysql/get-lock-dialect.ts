@@ -78,7 +78,7 @@ export function getLockDialect<Session extends GetLockSession>(
     };
   return {
     server: server.server,
-    lockName: (key) => keyDigest(key).toString('hex'),
+    lockName: (key) => keyDigest(key).toHex(),
     // A timeout of `GET_LOCK` (MariaDB's longest is one year) waits again.
     wait: async (session, { name }, signal) => {
       for (;;) {

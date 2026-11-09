@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { createHash } from 'node:crypto';
+import { hash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
@@ -45,9 +45,7 @@ test('each name and alias of libstemmer stems the probe words as in PyStemmer', 
   const hashes = Object.fromEntries(
     Object.keys(expected.aliases).map((name) => [
       name,
-      createHash('sha256')
-        .update(new Stemmer(name).stemWords(expected.probe).join('\n'))
-        .digest('hex'),
+      hash('sha256', new Stemmer(name).stemWords(expected.probe).join('\n')),
     ]),
   );
 
@@ -59,7 +57,7 @@ test('a name that PyStemmer refuses throws its error', () => {
     try {
       new Stemmer(name);
     } catch (error) {
-      assert.ok(error instanceof Error);
+      assert.ok(Error.isError(error));
       return [
         name,
         error instanceof RangeError ? 'UnicodeEncodeError' : 'KeyError',

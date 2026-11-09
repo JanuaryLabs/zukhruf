@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { createHash } from 'node:crypto';
+import { hash } from 'node:crypto';
 import { once } from 'node:events';
 import { readFile, rm, writeFile } from 'node:fs/promises';
 import { type Socket, createServer } from 'node:net';
@@ -22,10 +22,7 @@ import { type WorkerProcess, startWorker } from './testing/worker-process.ts';
  */
 function socketPathOf(directory: string) {
   if (process.platform !== 'win32') return join(directory, 'flight.sock');
-  const id = createHash('sha256')
-    .update(resolve(directory).toLowerCase())
-    .digest('hex')
-    .slice(0, 32);
+  const id = hash('sha256', resolve(directory).toLowerCase()).slice(0, 32);
   return `\\\\.\\pipe\\single-flight-${id}`;
 }
 

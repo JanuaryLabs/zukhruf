@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { createHash } from 'node:crypto';
+import { hash } from 'node:crypto';
 import { once } from 'node:events';
 import { type Socket, createServer } from 'node:net';
 import { join, resolve } from 'node:path';
@@ -30,10 +30,7 @@ const socketUrl = new URL('./index.ts', import.meta.url);
  */
 function publishedSocketPath(directory: string) {
   if (process.platform !== 'win32') return join(directory, 'lock.sock');
-  const id = createHash('sha256')
-    .update(resolve(directory).toLowerCase())
-    .digest('hex')
-    .slice(0, 32);
+  const id = hash('sha256', resolve(directory).toLowerCase()).slice(0, 32);
   return `\\\\.\\pipe\\mutex-${id}`;
 }
 
@@ -457,7 +454,7 @@ describe('A socket store whose caller gives up or disposes it', () => {
     const ended = acquiring.now;
     assert.ok(
       ended.status === 'rejected' &&
-        ended.reason instanceof Error &&
+        Error.isError(ended.reason) &&
         /closed/.test(ended.reason.message),
       `A disposed store must reject its acquire as closed, not ${JSON.stringify(ended)}`,
     );
@@ -506,7 +503,7 @@ describe('A socket store whose caller gives up or disposes it', () => {
       delay(settle, 'still waiting', { ref: false }),
     ]);
     assert.ok(
-      later instanceof Error && /closed/.test(later.message),
+      Error.isError(later) && /closed/.test(later.message),
       `A disposed store must refuse new calls at once, not ${String(later)}`,
     );
     await delay(settle);

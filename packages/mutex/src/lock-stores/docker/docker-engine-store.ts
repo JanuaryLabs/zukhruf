@@ -101,7 +101,7 @@ export class DockerEngineStore implements LockStore {
 
 /** The key digest in hexadecimal. */
 function digestOf(key: string): string {
-  return keyDigest(key).toString('hex');
+  return keyDigest(key).toHex();
 }
 
 function claimName(key: string, namespace: string): string {

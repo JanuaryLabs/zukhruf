@@ -83,7 +83,7 @@ export class Federation implements Disposable {
         another = true;
       } catch (error) {
         another = !(
-          error instanceof Error &&
+          Error.isError(error) &&
           'code' in error &&
           error.code === 'ERR_INVALID_ARG_VALUE'
         );
@@ -136,7 +136,7 @@ export class Federation implements Disposable {
 // SQLite preserves identifier quoting, and table-valued PRAGMAs quote it
 // as a string. Decode that token, without parsing the statement itself.
 function missingDatabase(error: unknown): string | undefined {
-  if (!(error instanceof Error)) return undefined;
+  if (!Error.isError(error)) return undefined;
   const token = /^unknown database (.+)$/s.exec(error.message)?.[1];
   if (token === undefined)
     return /^no such table: ([^.]+)\./.exec(error.message)?.[1];

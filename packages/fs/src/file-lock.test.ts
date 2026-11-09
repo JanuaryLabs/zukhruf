@@ -442,7 +442,7 @@ describe('FileLock', () => {
       assert.throws(checking, (error: unknown) => {
         assert.ok(error instanceof UnavailableError, String(error));
         assert.equal(error.path, path);
-        assert.ok(error.cause instanceof Error && 'errcode' in error.cause);
+        assert.ok(Error.isError(error.cause) && 'errcode' in error.cause);
         assert.equal(error.cause.errcode, 14);
         return true;
       });

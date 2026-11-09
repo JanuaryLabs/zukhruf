@@ -60,7 +60,7 @@ class ScriptedElection extends LeaderElection<number> {
     const answer = answers[Math.min(this.#tries, answers.length - 1)];
     this.#tries += 1;
     this.#script.duringTry?.();
-    if (answer instanceof Error) throw answer;
+    if (Error.isError(answer)) throw answer;
     if (answer === 'busy' || answer === undefined) return undefined;
     return { epoch: answer, afterCleanShutdown: false };
   }

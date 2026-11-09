@@ -68,7 +68,7 @@ async function outcome(call: () => unknown) {
     await call();
     return 'resolved';
   } catch (error) {
-    return error instanceof Error
+    return Error.isError(error)
       ? `${error.name}: ${error.message}`
       : String(error);
   }

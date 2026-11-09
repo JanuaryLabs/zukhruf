@@ -57,7 +57,7 @@ function byColumn({ hashes, columns }: ColumnHashes): Map<string, string> {
   return new Map(
     columns.map((column, at) => [
       column,
-      bytes.subarray(at * width, (at + 1) * width).toString('hex'),
+      bytes.subarray(at * width, (at + 1) * width).toHex(),
     ]),
   );
 }

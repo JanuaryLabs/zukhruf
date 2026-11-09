@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict';
-import { createHash } from 'node:crypto';
+import { hash } from 'node:crypto';
 import { describe, test } from 'node:test';
 
 import { safeFileName } from './index.ts';
 
 /** The digest that names a long key: SHA-256 of its UTF-16 code units, in lowercase hex. */
 function digestOf(key: string): string {
-  return createHash('sha256').update(Buffer.from(key, 'utf16le')).digest('hex');
+  return hash('sha256', Buffer.from(key, 'utf16le'));
 }
 
 /** The device names that Windows reserves, before the first dot of a file name and in any case. */

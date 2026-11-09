@@ -29,7 +29,7 @@ export class Sync extends Step<Commit> {
     } catch (error) {
       // A failed sync is the step's outcome: the author reads nx's reason, not
       // a stack trace of the hook.
-      if (!(error instanceof Error)) throw error;
+      if (!Error.isError(error)) throw error;
       return this.fail(error.message.trimEnd());
     }
     const synced = (await commit.modified()).filter(

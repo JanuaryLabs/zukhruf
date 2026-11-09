@@ -143,7 +143,7 @@ async function evaluateResolved(
     } catch (error) {
       result = {
         taskName: task.metadata.name,
-        exception: error instanceof Error ? error.message : String(error),
+        exception: Error.isError(error) ? error.message : String(error),
       };
     }
   if (!(result instanceof TaskResult))
@@ -310,7 +310,7 @@ function checkModelModalities(
       if (covered(queryModalities) && covered(documentModalities)) continue;
       if (!overlaps(queryModalities) || !overlaps(documentModalities))
         errors.push(
-          `Model ${model.name} supports [${[...supported].join(', ')}], but none overlap with task ${task.metadata.name} query=[${[...queryModalities].sort().join(', ')}], document=[${[...documentModalities].sort().join(', ')}].`,
+          `Model ${model.name} supports [${[...supported].join(', ')}], but none overlap with task ${task.metadata.name} query=[${queryModalities.toSorted().join(', ')}], document=[${documentModalities.toSorted().join(', ')}].`,
         );
     } else if (
       !task.metadata.modalities.every((modality) => supported.has(modality))

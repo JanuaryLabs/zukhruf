@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { createHash } from 'node:crypto';
+import { hash } from 'node:crypto';
 import { readFile, readdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { describe, test } from 'node:test';
@@ -236,9 +236,7 @@ describe('Token sources', () => {
     const tokens = new FileTokenSource(directory.path, { clock: globalThis });
     const longest = 'a'.repeat(208);
     const tooLong = 'a'.repeat(209);
-    const digest = createHash('sha256')
-      .update(Buffer.from(tooLong, 'utf16le'))
-      .digest('hex');
+    const digest = hash('sha256', Buffer.from(tooLong, 'utf16le'));
 
     // Act
     await tokens.next(longest);

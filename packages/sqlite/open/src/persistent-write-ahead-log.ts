@@ -35,7 +35,7 @@ export class PersistentWriteAheadLog implements Journal {
       database.loadExtension(fileURLToPath(library));
     } catch (cause) {
       if (
-        !(cause instanceof Error) ||
+        !Error.isError(cause) ||
         !('code' in cause) ||
         cause.code !== 'ERR_LOAD_SQLITE_EXTENSION'
       )

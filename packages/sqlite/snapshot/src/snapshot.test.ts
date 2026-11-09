@@ -88,7 +88,7 @@ test('a missing file is the UnavailableError of @zukhruf/sqlite-open, and a file
       assert.equal(UnavailableError, sqliteOpen.UnavailableError);
       assert.ok(error instanceof sqliteOpen.UnavailableError);
       assert.equal(error.path, missing);
-      assert.ok(error.cause instanceof Error && 'errcode' in error.cause);
+      assert.ok(Error.isError(error.cause) && 'errcode' in error.cause);
       assert.equal(error.cause.errcode, 14);
       return true;
     },

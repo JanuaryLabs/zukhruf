@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from 'node:crypto';
+import { hash, randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 
 import pMemoize from 'p-memoize';
@@ -216,17 +216,16 @@ export class DockerTestbed {
       ...body,
       HostConfig: { ...RESOURCES, ...body.HostConfig },
     };
-    const fingerprint = createHash('sha256')
-      .update(
-        JSON.stringify(
-          canonical({
-            version: PACKAGE_VERSION,
-            internalPort: options.internalPort,
-            body: configured,
-          }),
-        ),
-      )
-      .digest('hex');
+    const fingerprint = hash(
+      'sha256',
+      JSON.stringify(
+        canonical({
+          version: PACKAGE_VERSION,
+          internalPort: options.internalPort,
+          body: configured,
+        }),
+      ),
+    );
     const name = options.name ?? `zukhruf-testing-${fingerprint}`;
     const published = this.#published(
       {

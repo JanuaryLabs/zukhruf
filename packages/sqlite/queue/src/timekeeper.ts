@@ -225,7 +225,7 @@ export class Timekeeper extends EventEmitter<Pick<PgBossEventMap, 'error'>> {
     } catch (error) {
       this.emit(
         'error',
-        error instanceof Error ? error : new Error(String(error)),
+        Error.isError(error) ? error : new Error(String(error)),
       );
     }
   }
@@ -431,7 +431,7 @@ export class Timekeeper extends EventEmitter<Pick<PgBossEventMap, 'error'>> {
     try {
       this.emit(
         'error',
-        error instanceof Error ? error : new Error(String(error)),
+        Error.isError(error) ? error : new Error(String(error)),
       );
     } catch {
       // nothing left to report it to

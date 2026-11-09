@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { hash } from 'node:crypto';
 import { mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -60,10 +60,10 @@ export function vectorCache(
     CACHE_FOLDER,
     'vectors',
     design.embeddingModel,
-    createHash('sha256')
-      .update(JSON.stringify([design.lead, design.vectorText]))
-      .digest('hex')
-      .slice(0, 12),
+    hash('sha256', JSON.stringify([design.lead, design.vectorText])).slice(
+      0,
+      12,
+    ),
   );
   mkdirSync(folder, { recursive: true });
   return join(folder, `${set}.sqlite`);

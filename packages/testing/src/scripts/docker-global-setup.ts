@@ -39,7 +39,7 @@ import { ENGINE_CALL_TIMEOUT, type Run, cleanup } from './run-cleanup.ts';
 const CLEANUP_TIMEOUT = 250_000;
 
 const codeOf = (error: unknown): unknown =>
-  error instanceof Error && 'code' in error ? error.code : undefined;
+  Error.isError(error) && 'code' in error ? error.code : undefined;
 
 function alive(pid: number): boolean {
   try {
@@ -87,7 +87,7 @@ function createInFlight(directory: string): boolean {
  * `.js` when it runs the build.
  */
 function cleanupWorker(): URL {
-  const extension = extname(fileURLToPath(import.meta.url));
+  const extension = extname(import.meta.filename);
   const url = new URL(`./docker-cleanup-worker${extension}`, import.meta.url);
   if (!existsSync(url))
     throw new Error(

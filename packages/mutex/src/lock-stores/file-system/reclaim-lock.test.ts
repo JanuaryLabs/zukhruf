@@ -239,7 +239,7 @@ describe('A waiter that dies while it evicts a dead holder', () => {
 
       // Assert: the waiter says which file is in the way instead of waiting forever.
       await assert.rejects(acquiring, (error: unknown) => {
-        assert.ok(error instanceof Error);
+        assert.ok(Error.isError(error));
         assert.match(error.message, /older version/);
         // The message quotes the path as JSON, which doubles each Windows backslash.
         assert.ok(

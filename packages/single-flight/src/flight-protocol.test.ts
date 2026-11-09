@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { createHash } from 'node:crypto';
+import { hash } from 'node:crypto';
 import { once } from 'node:events';
 import { existsSync, mkdirSync, rmSync } from 'node:fs';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
@@ -147,7 +147,7 @@ function tokenIn(lead: string) {
 
 /** Where a process of this protocol holds the kernel lock of `key` while it runs the key's work. */
 function keyLockPath(directory: string, key: string) {
-  const digest = createHash('sha256').update(key).digest('hex');
+  const digest = hash('sha256', key);
   return join(directory, 'execution-locks', `${digest}.lock`);
 }
 
@@ -290,7 +290,7 @@ describe('The wire of a single flight', () => {
 
         // Assert: SQLITE_BUSY (5, in the low byte) is how a published candidate learns that it lost.
         assert.ok(
-          campaign instanceof Error &&
+          Error.isError(campaign) &&
             'errcode' in campaign &&
             typeof campaign.errcode === 'number' &&
             (campaign.errcode & 0xff) === 5,

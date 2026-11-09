@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
  */
 export function notInstalled(...packages: [string, ...string[]]): string {
   // The preload next to this module: `.ts` when Node runs the source, `.js` when it runs the build.
-  const extension = extname(fileURLToPath(import.meta.url));
+  const extension = extname(import.meta.filename);
   const preload = new URL(`./not-installed${extension}`, import.meta.url);
   for (const name of packages) preload.searchParams.append('package', name);
   return preload.href;

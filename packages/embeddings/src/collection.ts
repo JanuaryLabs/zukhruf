@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { hash } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 
 import { type EmbeddingModel, embedMany } from 'ai';
@@ -174,9 +174,10 @@ export class Collection {
 
   // The model is part of the hash, so a new model embeds the text again.
   #hash(text: string): string {
-    return createHash('sha256')
-      .update(JSON.stringify([this.#model.provider, this.#model.modelId, text]))
-      .digest('hex');
+    return hash(
+      'sha256',
+      JSON.stringify([this.#model.provider, this.#model.modelId, text]),
+    );
   }
 
   // Before the upsert, each stored vector has one dimension. The new vectors

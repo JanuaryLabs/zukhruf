@@ -127,7 +127,7 @@ test('SQLite write locks surface startup failure without waiting for readiness',
   await assert.rejects(
     sqlite.writeLock(missing, 10_000),
     (error: unknown) =>
-      error instanceof Error &&
+      Error.isError(error) &&
       'stderr' in error &&
       /unable to open database file/.test(String(error.stderr)),
   );

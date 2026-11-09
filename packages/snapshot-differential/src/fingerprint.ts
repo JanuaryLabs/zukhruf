@@ -1,13 +1,11 @@
-import { createHash } from 'node:crypto';
+import { hash } from 'node:crypto';
 
 // A record's SHA-256 over its canonical form, so equal records hash equally.
 export function fingerprintOf(
   name: string,
   record: Record<string, unknown>,
 ): string {
-  return createHash('sha256')
-    .update(canonical(name, record))
-    .digest('base64url');
+  return hash('sha256', canonical(name, record), 'base64url');
 }
 
 // JSON with object keys sorted at every depth. Bytes are # and their

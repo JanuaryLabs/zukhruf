@@ -430,7 +430,7 @@ describe('Socket store protocol handshake', () => {
       await store[Symbol.asyncDispose]();
 
       // Assert: closing does not wait for an answer that never comes, and the connection is closed.
-      assert.ok((await acquiring) instanceof Error);
+      assert.ok(Error.isError(await acquiring));
       await t.waitFor(
         () => assert.ok(peerClosed, 'The store must close the connection'),
         { interval: 5, timeout: 2000 },

@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { hash } from 'node:crypto';
 
 import { type Clock, timeout } from '@zukhruf/async';
 import {
@@ -26,7 +26,7 @@ const endedStates = new Set(['exited', 'dead']);
 
 /** The name of the sweep lease of `version` on an engine. */
 export function sweepLeaseName(version: string): string {
-  return `zukhruf-testing-sweep-${createHash('sha256').update(version).digest('hex')}`;
+  return `zukhruf-testing-sweep-${hash('sha256', version)}`;
 }
 
 /** The state of the container, or undefined when it is gone. */

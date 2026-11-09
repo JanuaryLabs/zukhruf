@@ -107,7 +107,7 @@ function withWal<T>(
   try {
     fd = openSync(`${databasePath}-wal`, 'r');
   } catch (error) {
-    if (error instanceof Error && 'code' in error && error.code === 'ENOENT')
+    if (Error.isError(error) && 'code' in error && error.code === 'ENOENT')
       return absent;
     throw error;
   }

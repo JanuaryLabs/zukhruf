@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHash, hash } from 'node:crypto';
 import {
   existsSync,
   mkdirSync,
@@ -109,7 +109,7 @@ async function hubFile(
     const bytes = new Uint8Array(await download.arrayBuffer());
     const digest =
       content.kind === 'lfs'
-        ? createHash('sha256').update(bytes).digest('hex')
+        ? hash('sha256', bytes)
         : createHash('sha1')
             .update(`blob ${bytes.length}\0`)
             .update(bytes)
@@ -167,7 +167,7 @@ function readIfPresent(path: string): Uint8Array | null {
   try {
     return readFileSync(path);
   } catch (error) {
-    if (error instanceof Error && 'code' in error && error.code === 'ENOENT')
+    if (Error.isError(error) && 'code' in error && error.code === 'ENOENT')
       return null;
     throw error;
   }

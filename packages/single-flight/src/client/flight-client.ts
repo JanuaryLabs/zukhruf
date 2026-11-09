@@ -148,7 +148,7 @@ export class FlightClient {
    * flights this process still leads without an outcome.
    */
   async close() {
-    while ([...this.#held.values()].some(({ landing }) => landing)) {
+    while (this.#held.values().some(({ landing }) => landing)) {
       await new Promise<void>((resolve) => this.#released.add(resolve));
     }
     const closing = this.#link.close();
@@ -377,7 +377,7 @@ export class FlightClient {
 
   /** A run waiting for its answer, or a landing not yet acknowledged, keeps the process alive. */
   #updateRef() {
-    const landing = [...this.#held.values()].some(({ landing }) => landing);
+    const landing = this.#held.values().some(({ landing }) => landing);
     if (this.#pending.size > 0 || landing) this.#link.ref();
     else this.#link.unref();
   }

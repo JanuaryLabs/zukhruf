@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { hash } from 'node:crypto';
 
 /**
  * The SHA-256 digest of the UTF-16 code units of `key`. The code units, not
@@ -7,5 +7,5 @@ import { createHash } from 'node:crypto';
  * takes.
  */
 export function keyDigest(key: string): Buffer {
-  return createHash('sha256').update(Buffer.from(key, 'utf16le')).digest();
+  return hash('sha256', Buffer.from(key, 'utf16le'), 'buffer');
 }

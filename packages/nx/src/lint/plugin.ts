@@ -57,7 +57,7 @@ function lintTargetNames({
   const entries = (nxJsonConfiguration.plugins ?? []).map((entry) =>
     typeof entry === 'string' ? { plugin: entry } : entry,
   );
-  const self = fileURLToPath(import.meta.url);
+  const self = import.meta.filename;
   const paths = [join(workspaceRoot, '.nx', 'installation'), workspaceRoot];
   const eslintEntries = entries.filter(
     (entry) => entry.plugin === eslintPlugin,
@@ -95,9 +95,7 @@ function targetName(options: unknown) {
 
 function notFound(error: unknown) {
   return (
-    error instanceof Error &&
-    'code' in error &&
-    error.code === 'MODULE_NOT_FOUND'
+    Error.isError(error) && 'code' in error && error.code === 'MODULE_NOT_FOUND'
   );
 }
 

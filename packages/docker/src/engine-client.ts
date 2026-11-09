@@ -65,7 +65,7 @@ const CONNECTION_FAILURES = new Set([
 ]);
 
 function errorCode(error: unknown): string | undefined {
-  return error instanceof Error &&
+  return Error.isError(error) &&
     'code' in error &&
     typeof error.code === 'string'
     ? error.code
@@ -379,7 +379,7 @@ export class EngineClient {
     } else {
       // A body that comes as a stream goes with chunked encoding, at the pace of the connection.
       pipeline(Readable.from(payload), request).catch((error: unknown) => {
-        request.destroy(error instanceof Error ? error : undefined);
+        request.destroy(Error.isError(error) ? error : undefined);
       });
     }
     try {

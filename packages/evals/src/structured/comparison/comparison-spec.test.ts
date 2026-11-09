@@ -79,7 +79,7 @@ test('ByBestMatch pairs a reordered list item by item, so each value and each it
     const scorecard = new ScorerSet(scorers, {
       comparer: new TreeWalk(spec),
     }).score(
-      { offers: [...expected.offers].reverse() },
+      { offers: expected.offers.toReversed() },
       new ConfigCase({
         schema: new JsonSchema(JsonValue.from({}), { draft: '7' }),
       }).from({ expected: expected }),

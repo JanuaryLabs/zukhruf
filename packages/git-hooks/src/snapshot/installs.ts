@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import { createHash } from 'node:crypto';
+import { hash } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import {
   copyFile,
@@ -37,9 +37,9 @@ export async function installFor(
   clock: { readonly Date: { now(): number } },
 ): Promise<string> {
   const lockfile = await readFile(join(snapshot, 'package-lock.json'));
-  const hash = createHash('sha256').update(lockfile).digest('hex');
+  const lockfileHash = hash('sha256', lockfile);
   const installs = join(state, 'installs');
-  const folder = join(installs, hash.slice(0, 16));
+  const folder = join(installs, lockfileHash.slice(0, 16));
   if (existsSync(join(folder, marker))) {
     const now = new Date(clock.Date.now());
     await utimes(join(folder, marker), now, now);
@@ -139,7 +139,7 @@ async function npm(
       shell: process.platform === 'win32',
     });
   } catch (error) {
-    if (!(error instanceof Error) || !('stderr' in error)) throw error;
+    if (!Error.isError(error) || !('stderr' in error)) throw error;
     throw new Error(
       `npm ${args.join(' ')} failed:\n${String(error.stderr).trimEnd()}`,
       { cause: error },

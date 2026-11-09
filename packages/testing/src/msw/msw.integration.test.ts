@@ -8,7 +8,7 @@ import { Msw } from './msw.ts';
 
 const bypassRejected = (error: unknown) =>
   error instanceof TypeError &&
-  error.cause instanceof Error &&
+  Error.isError(error.cause) &&
   error.cause.message.includes(
     'Cannot bypass a request when using the "error" strategy',
   );

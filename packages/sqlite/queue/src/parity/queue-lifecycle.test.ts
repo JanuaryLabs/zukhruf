@@ -25,7 +25,7 @@ async function outcome(call: () => Promise<unknown>) {
     await call();
     return 'resolved';
   } catch (error) {
-    if (!(error instanceof Error)) {
+    if (!Error.isError(error)) {
       return String(error);
     }
     const code =
@@ -51,7 +51,7 @@ describe('queue lifecycle', () => {
         construct();
         return 'constructed';
       } catch (error) {
-        return error instanceof Error
+        return Error.isError(error)
           ? `${error.name}: ${error.message}`
           : String(error);
       }

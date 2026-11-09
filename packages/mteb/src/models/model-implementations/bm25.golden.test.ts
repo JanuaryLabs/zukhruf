@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { createHash } from 'node:crypto';
+import { hash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
@@ -425,10 +425,7 @@ async function tinyHub() {
       'X-Repo-Commit',
       '0123456789abcdef0123456789abcdef01234567',
     );
-    response.setHeader(
-      'X-Linked-Etag',
-      `"${createHash('sha256').update(bytes).digest('hex')}"`,
-    );
+    response.setHeader('X-Linked-Etag', `"${hash('sha256', bytes)}"`);
     response.end(request.method === 'HEAD' ? undefined : bytes);
   });
   return server;

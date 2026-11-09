@@ -17,7 +17,7 @@ const hex = (runId: string): string => runId.replaceAll('-', '');
  */
 export const databaseName = (id: string | undefined): string =>
   id
-    ? `test_${hex(id)}_${randomBytes(8).toString('hex')}`
+    ? `test_${hex(id)}_${randomBytes(8).toHex()}`
     : `test_${hex(randomUUID())}`;
 
 /**

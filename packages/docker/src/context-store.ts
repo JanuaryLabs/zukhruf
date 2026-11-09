@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { hash } from 'node:crypto';
 import { readFile, readdir } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
@@ -48,7 +48,7 @@ function configDirectory(environment: Environment): string {
 
 function isMissingFile(error: unknown): boolean {
   return (
-    error instanceof Error &&
+    Error.isError(error) &&
     'code' in error &&
     (error.code === 'ENOENT' || error.code === 'ENOTDIR')
   );
@@ -108,7 +108,7 @@ async function storedHost(
   environment: Environment,
   name: string,
 ): Promise<string> {
-  const id = createHash('sha256').update(name).digest('hex');
+  const id = hash('sha256', name);
   try {
     const meta: unknown = JSON.parse(
       await readFile(join(metaDirectory(environment), id, 'meta.json'), 'utf8'),

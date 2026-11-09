@@ -15,12 +15,13 @@ import {
 // generate.py writes it. A float crosses as the hex of its 8 bytes, so no
 // float is rounded on the way. assert/strict compares numbers as Object.is
 // does: -0 is not 0, and any NaN is NaN, whatever its payload bits.
-const double = (hex: string): number => Buffer.from(hex, 'hex').readDoubleBE(0);
+const double = (hex: string): number =>
+  new DataView(Uint8Array.fromHex(hex).buffer).getFloat64(0);
 
 const bits = (value: number): string => {
   const bytes = Buffer.alloc(8);
   bytes.writeDoubleBE(value);
-  return bytes.toString('hex');
+  return bytes.toHex();
 };
 
 // The oracle came from CPython 3.12, and a loop over an empty list of cases

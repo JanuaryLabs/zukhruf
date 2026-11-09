@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { createHash } from 'node:crypto';
+import { hash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
@@ -100,10 +100,7 @@ test(`a set of ints that fills the table to 3/5 grows, in CPython's order: ${exp
     Array.from({ length: count }, (_, index) => index * step),
   );
 
-  assert.equal(
-    createHash('sha256').update(JSON.stringify(order)).digest('hex'),
-    sha256,
-  );
+  assert.equal(hash('sha256', JSON.stringify(order)), sha256);
 });
 
 for (const testCase of expected.binarizer)

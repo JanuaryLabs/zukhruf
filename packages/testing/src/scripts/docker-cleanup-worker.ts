@@ -33,8 +33,8 @@ async function sweep(): Promise<CleanupOutcome> {
   } catch (error) {
     return {
       error: {
-        name: error instanceof Error ? error.name : 'Error',
-        message: error instanceof Error ? error.message : String(error),
+        name: Error.isError(error) ? error.name : 'Error',
+        message: Error.isError(error) ? error.message : String(error),
         detail: inspect(error),
       },
     };

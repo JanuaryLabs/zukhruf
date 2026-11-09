@@ -231,7 +231,7 @@ void test.each(stores, (store) => {
       // Assert: the waiter names what is in the way instead of guessing,
       // and leaves the record of the caller it cannot judge in place.
       await assert.rejects(acquiring, (error: unknown) => {
-        assert.ok(error instanceof Error, String(error));
+        assert.ok(Error.isError(error), String(error));
         assert.match(error.message, /older version/);
         // The message quotes the path as JSON, which doubles each Windows backslash.
         assert.ok(
@@ -340,7 +340,7 @@ void test.each(stores, (store) => {
         // Assert: the fault surfaces as it is, not as a record without a presence.
         await assert.rejects(acquiring, (error: unknown) => {
           assert.ok(error instanceof UnavailableError, String(error));
-          assert.ok(error.cause instanceof Error);
+          assert.ok(Error.isError(error.cause));
           assert.match(error.cause.message, /unable to open/);
           assert.doesNotMatch(error.message, /no presence file/);
           return true;

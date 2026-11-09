@@ -66,7 +66,7 @@ export function confidenceScores(similarityScores: readonly number[]): {
   diff1: number;
 } {
   if (similarityScores.length === 0) return { max: 0, std: 0, diff1: 0 };
-  const sorted = [...similarityScores].sort((left, right) => right - left);
+  const sorted = similarityScores.toSorted((left, right) => right - left);
   const [first = 0, second] = sorted;
   return {
     max: first,

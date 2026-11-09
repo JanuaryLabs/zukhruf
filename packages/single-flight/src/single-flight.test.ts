@@ -975,7 +975,7 @@ describe('A single flight when it is disposed', () => {
       );
 
       // Assert
-      assert.ok('error' in refused && refused.error instanceof Error);
+      assert.ok('error' in refused && Error.isError(refused.error));
       assert.equal(refused.error.message, 'This single flight is closed.');
       assert.deepEqual(carriedOn, {
         value: { value: 'carried on', joined: false },

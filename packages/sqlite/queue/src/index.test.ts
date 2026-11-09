@@ -348,10 +348,8 @@ describe('SqliteJobQueue', () => {
     assert.ok(secondJobId);
 
     const activeJobs: Job<unknown>[] = [];
-    let releaseHandlers!: () => void;
-    const handlersReleased = new Promise<void>((resolve) => {
-      releaseHandlers = resolve;
-    });
+    const { promise: handlersReleased, resolve: releaseHandlers } =
+      Promise.withResolvers<void>();
 
     await queue.work('chat-run', { localConcurrency: 2 }, async ([job]) => {
       assert.ok(job);
@@ -434,10 +432,8 @@ describe('SqliteJobQueue', () => {
     );
     assert.ok(jobId);
 
-    let resolveHandler!: () => void;
-    const handlerBlocked = new Promise<void>((resolve) => {
-      resolveHandler = resolve;
-    });
+    const { promise: handlerBlocked, resolve: resolveHandler } =
+      Promise.withResolvers<void>();
 
     await queue.work('chat-run', { localConcurrency: 1 }, async () => {
       await handlerBlocked;

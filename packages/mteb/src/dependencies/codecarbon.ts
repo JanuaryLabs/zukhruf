@@ -955,11 +955,7 @@ export class Lock {
     try {
       unlinkSync(LOCKFILE);
     } catch (error) {
-      if (!(
-        error instanceof Error &&
-        'code' in error &&
-        error.code === 'ENOENT'
-      ))
+      if (!(Error.isError(error) && 'code' in error && error.code === 'ENOENT'))
         throw error;
     }
   }
@@ -1015,7 +1011,7 @@ function lockUnlessHeld(): Lock | null {
   try {
     return new Lock();
   } catch (error) {
-    if (error instanceof Error && 'code' in error && error.code === 'EEXIST')
+    if (Error.isError(error) && 'code' in error && error.code === 'EEXIST')
       return null;
     throw error;
   }

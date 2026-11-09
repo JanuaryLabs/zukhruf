@@ -134,8 +134,9 @@ export class Worker<TJob> {
         this.jobs = [];
       } catch (caught) {
         const erroredOn = this.#clock.now();
-        const error =
-          caught instanceof Error ? caught : new Error(String(caught));
+        const error = Error.isError(caught)
+          ? caught
+          : new Error(String(caught));
         this.#observed = {
           ...this.#observed,
           lastError: error,

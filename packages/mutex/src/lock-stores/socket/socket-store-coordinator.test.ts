@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { createHash } from 'node:crypto';
+import { hash } from 'node:crypto';
 import { once } from 'node:events';
 import { connect } from 'node:net';
 import { join, resolve } from 'node:path';
@@ -23,10 +23,7 @@ import { socketElection } from './socket-election.ts';
  */
 function publishedSocketPath(directory: string) {
   if (process.platform !== 'win32') return join(directory, 'lock.sock');
-  const id = createHash('sha256')
-    .update(resolve(directory).toLowerCase())
-    .digest('hex')
-    .slice(0, 32);
+  const id = hash('sha256', resolve(directory).toLowerCase()).slice(0, 32);
   return `\\\\.\\pipe\\mutex-${id}`;
 }
 
@@ -708,7 +705,7 @@ describe('Requests a leader does not know, and looks', () => {
       'Holders may still reassert, so no look is answered yet',
     );
     assert.deepEqual(
-      [...looker.received].sort((a, b) =>
+      looker.received.toSorted((a, b) =>
         String(a.id).localeCompare(String(b.id)),
       ),
       [

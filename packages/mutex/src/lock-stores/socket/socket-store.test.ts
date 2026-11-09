@@ -505,7 +505,7 @@ describe('Socket store lock server failure', () => {
 
       // Assert
       assert.ok(
-        failure instanceof Error &&
+        Error.isError(failure) &&
           'path' in failure &&
           failure.path === socketPath,
         `The acquire must fail with the lock server's own start error, got ${String(failure)}`,
@@ -639,12 +639,12 @@ describe('Socket store roles', () => {
     await t.waitFor(
       () =>
         assert.ok(
-          [...roles.values()].some((seen) => seen.includes('leader')),
+          roles.values().some((seen) => seen.includes('leader')),
           'A follower must take over as leader',
         ),
       { interval: 5, timeout: 2000 },
     );
-    const stayed = [...roles.values()].find((seen) => !seen.includes('leader'));
+    const stayed = roles.values().find((seen) => !seen.includes('leader'));
     await t.waitFor(
       () =>
         assert.ok(

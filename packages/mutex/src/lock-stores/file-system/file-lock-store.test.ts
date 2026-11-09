@@ -298,7 +298,7 @@ describe('File lock stores on Windows', () => {
 
         // Assert: the release names the file it could not delete, and the key is free anyway.
         await assert.rejects(holder, (error: unknown) => {
-          assert.ok(error instanceof Error, String(error));
+          assert.ok(Error.isError(error), String(error));
           assert.ok(error.message.includes(presence), error.message);
           return true;
         });

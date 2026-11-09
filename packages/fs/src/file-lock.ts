@@ -108,7 +108,7 @@ export class FileLock implements Disposable {
 /** The low byte of SQLite's extended result code is the primary code, so this covers each variant of `code`. */
 function hasResultCode(error: unknown, code: number): boolean {
   return (
-    error instanceof Error &&
+    Error.isError(error) &&
     'errcode' in error &&
     typeof error.errcode === 'number' &&
     (error.errcode & 0xff) === code

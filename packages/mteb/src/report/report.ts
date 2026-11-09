@@ -376,7 +376,7 @@ async function queryScores(
         values: await perQueryScores(task, folder, { split, subset, score }),
       };
     } catch (error) {
-      if (error instanceof Error && 'code' in error && error.code === 'ENOENT')
+      if (Error.isError(error) && 'code' in error && error.code === 'ENOENT')
         throw new Error(
           `${label} has no predictions in ${folder}. Run evaluate with predictionFolder set to this folder and overwriteStrategy 'always': a result read from the cache writes no predictions.`,
           { cause: error },

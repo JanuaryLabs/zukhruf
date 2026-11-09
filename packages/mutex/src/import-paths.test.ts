@@ -113,7 +113,7 @@ test('the remote and session internals have no import path', async () => {
     await assert.rejects(
       exportsOf(`@zukhruf/mutex/${internal}`),
       (error: unknown) => {
-        assert.ok(error instanceof Error && 'stderr' in error);
+        assert.ok(Error.isError(error) && 'stderr' in error);
         assert.match(String(error.stderr), /ERR_PACKAGE_PATH_NOT_EXPORTED/);
         return true;
       },

@@ -288,7 +288,7 @@ function holds(database: DatabaseSync, text: string): boolean {
     return true;
   } catch (error) {
     return !(
-      error instanceof Error &&
+      Error.isError(error) &&
       'code' in error &&
       error.code === 'ERR_INVALID_ARG_VALUE'
     );

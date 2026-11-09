@@ -29,7 +29,7 @@ export class UnavailableError extends Error {
    * means the file is missing or denied (ADR 0005), else undefined.
    */
   static from(path: string, error: unknown): UnavailableError | undefined {
-    if (!(error instanceof Error)) return undefined;
+    if (!Error.isError(error)) return undefined;
     if (
       'errcode' in error &&
       typeof error.errcode === 'number' &&

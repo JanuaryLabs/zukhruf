@@ -39,7 +39,7 @@ export class Codegen extends Step<Commit> {
     } catch (error) {
       // A failed build is the step's outcome: the author reads the reason that
       // the target gave, not a stack trace of the hook.
-      if (!(error instanceof Error)) throw error;
+      if (!Error.isError(error)) throw error;
       return this.fail(error.message.trimEnd());
     }
     await commit.stage(this.#stage);

@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { hash } from 'node:crypto';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
@@ -21,12 +21,7 @@ export async function writeContextStore(
     ),
   );
   for (const [name, host] of Object.entries(store.contexts)) {
-    const meta = join(
-      directory,
-      'contexts',
-      'meta',
-      createHash('sha256').update(name).digest('hex'),
-    );
+    const meta = join(directory, 'contexts', 'meta', hash('sha256', name));
     await mkdir(meta, { recursive: true });
     await writeFile(
       join(meta, 'meta.json'),

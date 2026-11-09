@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { hash } from 'node:crypto';
 
 /** The longest file name that ext4, APFS, NTFS and tmpfs accept. */
 const longestFileName = 255;
@@ -41,9 +41,7 @@ export function safeFileName(key: string, longestSuffix: number): string {
   const start = encode(key.toWellFormed())
     .slice(0, visibleStart)
     .replace(/%[0-9A-F]?$/, '');
-  const digest = createHash('sha256')
-    .update(Buffer.from(key, 'utf16le'))
-    .digest('hex');
+  const digest = hash('sha256', Buffer.from(key, 'utf16le'));
   return `${start}%%${digest}`;
 }
 

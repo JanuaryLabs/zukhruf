@@ -371,7 +371,7 @@ function chance(view: View): string {
       ? signed(number * 100, 0)
       : signed(number, step === 0.05 || step === 0.25 ? 2 : 1);
   const primaryScore = (pair: Pair) =>
-    [...pair.verdicts.values()].find((verdict) => verdict.primary)?.score;
+    pair.verdicts.values().find((verdict) => verdict.primary)?.score;
   const cell = (pair: Pair, score: string) => {
     const verdict = pair.verdicts.get(score);
     if (verdict === undefined) return '<span></span><span></span>';
@@ -442,7 +442,7 @@ function chance(view: View): string {
       <li data-result="better">${results.better.icon} Better, beyond chance</li>
       <li data-result="worse">${results.worse.icon} Worse, beyond chance</li>
       <li data-result="inconclusive">Unclear: the deciding p-value is 0.05 or more</li>${
-        view.pairs.some((pair) => [...pair.verdicts.values()].some(clearsAlone))
+        view.pairs.some((pair) => pair.verdicts.values().some(clearsAlone))
           ? `
       <li data-result="inconclusive" class="alone">Dashed: its own p-value is below 0.05, but not after the correction for the number of comparisons</li>`
           : ''

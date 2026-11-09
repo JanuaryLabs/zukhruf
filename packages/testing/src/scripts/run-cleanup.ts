@@ -47,7 +47,7 @@ export interface Run {
 const execute = promisify(execFile);
 
 const codeOf = (error: unknown): unknown =>
-  error instanceof Error && 'code' in error ? error.code : undefined;
+  Error.isError(error) && 'code' in error ? error.code : undefined;
 
 /**
  * The collector of each kind, loaded when a server of the kind runs. A

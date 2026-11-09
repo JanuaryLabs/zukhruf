@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { hash } from 'node:crypto';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -94,5 +94,5 @@ export function textHash(text: Text): string {
 }
 
 export function sha256(data: string | Uint8Array): string {
-  return createHash('sha256').update(data).digest('hex');
+  return hash('sha256', data);
 }

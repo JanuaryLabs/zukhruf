@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { createHash } from 'node:crypto';
+import { hash } from 'node:crypto';
 import { once } from 'node:events';
 import { chmod, mkdir, readFile, readdir, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -85,10 +85,7 @@ async function startOwner(path: string, work: string) {
   return { kill, [Symbol.asyncDispose]: kill };
 }
 
-const digest = async (path: string) =>
-  createHash('sha256')
-    .update(await readFile(path))
-    .digest('hex');
+const digest = async (path: string) => hash('sha256', await readFile(path));
 
 // The copies in the temporary folder. Another process that takes a copy at
 // the same moment would show here too.

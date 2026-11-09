@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { createHash } from 'node:crypto';
+import { createHash, hash } from 'node:crypto';
 import { readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { test } from 'node:test';
@@ -57,7 +57,7 @@ async function hub(first: Revision) {
         response.statusCode = 302;
         response.setHeader(
           'X-Linked-Etag',
-          `"${main.id ?? createHash('sha256').update(main.bytes).digest('hex')}"`,
+          `"${main.id ?? hash('sha256', main.bytes)}"`,
         );
         response.setHeader('Location', `/cdn/${main.commit}`);
       } else {
@@ -169,7 +169,7 @@ test('a download whose sha256 is not the sha256 that the Hub names throws, and t
     commit: COMMIT_1,
     bytes: MERGES,
     storage: 'lfs',
-    id: createHash('sha256').update(NO_MERGES).digest('hex'),
+    id: hash('sha256', NO_MERGES),
   });
   await using cache = await new TemporaryFiles().directory('mteb-tok-');
 
@@ -199,7 +199,7 @@ test('a file outside Git LFS is checked against the git blob id of its ETag', as
     commit: COMMIT_1,
     bytes: MERGES,
     storage: 'git',
-    id: createHash('sha1').update(MERGES).digest('hex'),
+    id: hash('sha1', MERGES),
   });
   await using cache = await new TemporaryFiles().directory('mteb-tok-');
   await using other = await new TemporaryFiles().directory('mteb-tok-');

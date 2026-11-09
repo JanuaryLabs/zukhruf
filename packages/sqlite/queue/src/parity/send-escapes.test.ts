@@ -15,7 +15,7 @@ async function outcome(call: () => Promise<unknown>) {
     await call();
     return 'resolved';
   } catch (error) {
-    if (!(error instanceof Error)) {
+    if (!Error.isError(error)) {
       return String(error);
     }
     const code =

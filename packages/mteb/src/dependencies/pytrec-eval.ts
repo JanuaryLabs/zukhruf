@@ -86,7 +86,9 @@ export class RelevanceEvaluator {
     this.#qrels = new Map(
       [...queryRelevance].map(([query, documents]) => [
         query,
-        [...documents].sort(([left], [right]) => compareStrings(left, right)),
+        [...documents].toSorted(([left], [right]) =>
+          compareStrings(left, right),
+        ),
       ]),
     );
     this.#measures = [...measures]

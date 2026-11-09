@@ -39,7 +39,7 @@ function model(
       const answer = answers.get(part.text);
       if (answer === undefined)
         throw new Error(`The test has no answer about ${part.text}.`);
-      if (answer instanceof Error) throw answer;
+      if (Error.isError(answer)) throw answer;
       return {
         answers: {
           [id]:

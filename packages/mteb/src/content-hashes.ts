@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { hash } from 'node:crypto';
 
 // mteb/_content_hashes.py, for text. MTEB appends the hashes of the image,
 // audio and video of an item; this package has text only.
@@ -18,5 +18,5 @@ export function hashItem(item: { readonly text: string }): string {
       `'utf-8' codec can't encode character '\\u${code}' in position ${position}: surrogates not allowed`,
     );
   }
-  return createHash('sha256').update(text, 'utf8').digest('hex');
+  return hash('sha256', text);
 }
