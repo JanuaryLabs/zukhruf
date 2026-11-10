@@ -1,4 +1,4 @@
-import type { Rule } from 'eslint';
+import type { Rule, Scope } from 'eslint';
 
 import { isRecord } from '../unknown-values.ts';
 
@@ -17,4 +17,17 @@ export function identifierName(value: unknown): string | undefined {
   return isType(value, 'Identifier') && typeof value['name'] === 'string'
     ? value['name']
     : undefined;
+}
+
+/** The variable that `identifier` reads or writes, when this file declares it. */
+export function resolvedVariable(
+  context: Rule.RuleContext,
+  identifier: AstNode,
+): Scope.Variable | undefined {
+  return (
+    context.sourceCode
+      .getScope(identifier)
+      .references.find((reference) => reference.identifier === identifier)
+      ?.resolved ?? undefined
+  );
 }

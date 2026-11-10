@@ -5,6 +5,7 @@ import {
   identifierName,
   isAstNode,
   isType,
+  resolvedVariable,
 } from '../authoring/ast.ts';
 
 /** The one statement of a loop body, with or without braces. */
@@ -195,10 +196,8 @@ function readWhileFilling(
     ? callee['object']
     : undefined;
   if (!isType(array, 'Identifier')) return false;
-  const variable = context.sourceCode
-    .getScope(array)
-    .references.find(({ identifier }) => identifier === array)?.resolved;
-  if (variable === null || variable === undefined) return true;
+  const variable = resolvedVariable(context, array);
+  if (variable === undefined) return true;
   if (contains(fn, variable.scope.block)) return false;
   const holder = call['parent'];
   return !(
@@ -322,14 +321,8 @@ function readAfterFailure(
   let array = push['callee'];
   while (isType(array, 'MemberExpression')) array = array['object'];
   if (!isType(array, 'Identifier')) return true;
-  const variable = context.sourceCode
-    .getScope(array)
-    .references.find(({ identifier }) => identifier === array)?.resolved;
-  return (
-    variable === null ||
-    variable === undefined ||
-    !contains(region, variable.scope.block)
-  );
+  const variable = resolvedVariable(context, array);
+  return variable === undefined || !contains(region, variable.scope.block);
 }
 
 /** The identifiers in `node`, a binding pattern or an expression. */

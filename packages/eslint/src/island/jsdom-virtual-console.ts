@@ -1,16 +1,13 @@
 import type { Rule } from 'eslint';
 
-import { identifierName, isType } from '../authoring/ast.ts';
+import { identifierName, isType, resolvedVariable } from '../authoring/ast.ts';
 import { isRecord } from '../unknown-values.ts';
 
 /** Whether `node` names the JSDOM class that the `jsdom` package exports. */
 function isJsdomClass(context: Rule.RuleContext, node: unknown): boolean {
   if (!isType(node, 'Identifier')) return false;
-  const reference = context.sourceCode
-    .getScope(node)
-    .references.find(({ identifier }) => identifier === node);
   return (
-    reference?.resolved?.defs.some(
+    resolvedVariable(context, node)?.defs.some(
       (def) =>
         def.type === 'ImportBinding' &&
         isType(def.node, 'ImportSpecifier') &&

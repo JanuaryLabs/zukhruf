@@ -5,9 +5,11 @@ import noDirectMswServer from './no-direct-msw-server.ts';
 import noGlobalTestMock from './no-global-test-mock.ts';
 import noProcessEnvWrite from './no-process-env-write.ts';
 import noRawTempDirectory from './no-raw-temp-directory.ts';
+import noShortTestTimeout from './no-short-test-timeout.ts';
 import noSleepPollLoop from './no-sleep-poll-loop.ts';
 import noTestLifecycleHooks from './no-test-lifecycle-hooks.ts';
 import noTimerRace from './no-timer-race.ts';
+import noWallClockBound from './no-wall-clock-bound.ts';
 
 const rules = {
   'no-test-lifecycle-hooks': noTestLifecycleHooks,
@@ -16,6 +18,8 @@ const rules = {
   'no-catch-all-msw-handler': noCatchAllMswHandler,
   'no-timer-race': noTimerRace,
   'no-sleep-poll-loop': noSleepPollLoop,
+  'no-wall-clock-bound': noWallClockBound,
+  'no-short-test-timeout': noShortTestTimeout,
   'no-global-test-mock': noGlobalTestMock,
   'no-raw-temp-directory': noRawTempDirectory,
 };

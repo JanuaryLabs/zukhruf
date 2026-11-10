@@ -48,3 +48,40 @@ test('no-timer-race reports a race against a timer that rejects or throws', () =
     ].map((code) => ({ code, errors: [{ messageId: 'matched' }] })),
   });
 });
+
+test('no-timer-race reports a marker race whose result must not be the marker, which is a deadline in disguise', () => {
+  typescriptRuleTester().run('no-timer-race', rule, {
+    valid: [
+      // The promise stays pending: load only makes this more true.
+      {
+        code: `assert.equal(await Promise.race([work, delay(ms, 'waiting')]), 'waiting');`,
+      },
+      {
+        code: `const now = await Promise.race([work, delay(ms, 'still waiting' as const, { ref: false })]);\nassert.equal(now, 'still waiting');`,
+      },
+      {
+        code: `const timer = delay(ms, 'waiting');\nconst now = await Promise.race([work, timer]);\nassert.strictEqual(now, 'waiting');`,
+      },
+      {
+        code: `assert.notEqual(await Promise.race([work, delay(ms, 'waiting')]), 'done');`,
+      },
+      // The result is not compared.
+      { code: `const now = await Promise.race([work, delay(ms, 'waiting')]);` },
+      // No timer in the race.
+      { code: `assert.equal(await Promise.race([first, second]), 'first');` },
+    ],
+    invalid: [
+      // packages/mutex postgres-store, the 300 ms race of #3476.
+      `const next = await Promise.race([running, delay(300, 'still waiting')]);\nassert.equal(next, 'ran');`,
+      `assert.equal(await Promise.race([running, delay(300, 'still waiting')]), 'ran');`,
+      // packages/mutex socket-store: the deadline is a variable.
+      `const deadline = delay(2000, 'timed out' as const, { ref: false });\nconst shutdown = await Promise.race([closing, deadline]);\nassert.equal(shutdown, 'closed');`,
+      // packages/mutex ticket-queue-file-store: not the marker.
+      `const outcome = await Promise.race([waiter, delay(2000, 'still waiting')]);\nassert.notEqual(outcome, 'still waiting');`,
+      // packages/mutex process contract: the result is a value of the promise, and the marker is null.
+      `const acquired = await Promise.race([acquire(), delay(limit, null, { ref: false })]);\nassert.equal(acquired, true);`,
+      `const done = await Promise.race([work, sleep(ms).then(() => false)]);\nassert.equal(done, true);`,
+      `assert.deepEqual(await Promise.race([work, setTimeout(ms)]), { ok: true });`,
+    ].map((code) => ({ code, errors: [{ messageId: 'deadline' }] })),
+  });
+});

@@ -93,6 +93,13 @@ export default defineConfig(
       island: { libraries: ['packages/**/*.ts', 'packages/**/*.tsx'] },
     },
   },
+  // A test has the limit of its test target, the default of @zukhruf/nx/test.
+  {
+    files: ['**/*.{test,spec}.ts', '**/*.{test,spec}.tsx', '**/src/testing/**'],
+    rules: {
+      'zukhruf/no-short-test-timeout': ['error', { minimum: 240_000 }],
+    },
+  },
   {
     files: [
       'packages/shadcn/**',
