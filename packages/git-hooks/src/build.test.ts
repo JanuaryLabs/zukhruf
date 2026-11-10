@@ -175,398 +175,339 @@ const build = `import { Build, prePush } from '@zukhruf/git-hooks';
 await prePush([new Build()]);
 `;
 
-test(
-  'an uncommitted fix in the working tree does not pass a broken pushed commit',
-  { timeout: 60_000 },
-  async () => {
-    // Arrange
-    await using folder = await new TemporaryFiles().directory('git-hooks-');
-    const repo = await workspace(folder.path, build);
-    await repo.write('packages/c/index.js', 'export const value = "BROKEN";\n');
-    const head = await repo.commit('break c');
-    await repo.write('packages/c/index.js', 'export const value = 2;\n');
+test('an uncommitted fix in the working tree does not pass a broken pushed commit', async () => {
+  // Arrange
+  await using folder = await new TemporaryFiles().directory('git-hooks-');
+  const repo = await workspace(folder.path, build);
+  await repo.write('packages/c/index.js', 'export const value = "BROKEN";\n');
+  const head = await repo.commit('break c');
+  await repo.write('packages/c/index.js', 'export const value = 2;\n');
 
-    // Act
-    const result = await repo.push('--quiet', 'origin', 'main');
+  // Act
+  const result = await repo.push('--quiet', 'origin', 'main');
 
-    // Assert
-    assert.notEqual(result.code, 0, result.stderr);
-    assert.match(
-      result.stderr,
-      new RegExp(
-        `^build\\s+${head.slice(0, 7)}: 1 of 2 tasks failed: @probe/c:build$`,
-        'm',
-      ),
-    );
-    assert.match(result.stderr, /^✖ push stopped by the pre-push hook$/m);
-    assert.equal(
-      await repo.gitIn(repo.top, '--git-dir', repo.remote, 'rev-list', '--all'),
-      '',
-      'The remote must get no commit',
-    );
-  },
-);
-
-test(
-  'an uncommitted break in a workspace dependency does not block a good push, the build uses the installed packages, and the snapshot is gone after the build',
-  { timeout: 60_000 },
-  async () => {
-    // Arrange
-    await using folder = await new TemporaryFiles().directory('git-hooks-');
-    const repo = await workspace(folder.path, build);
-    const head = await repo.commit('good');
-    // b's build reads a through node_modules/@probe/a.
-    await repo.write('packages/a/index.js', 'export const value = "BROKEN";\n');
-    const record = join(repo.top, 'snapshot-folder');
-
-    // Act
-    const result = await start(
-      repo,
-      { PROBE_RECORD: record },
-      '--quiet',
-      'origin',
-      'main',
-    ).exited;
-
-    // Assert
-    assert.equal(result.code, 0, result.stderr);
-    assert.match(
-      result.stderr,
-      new RegExp(
-        `^build\\s+${head.slice(0, 7)}: built 2 projects, 0 of 2 tasks from cache$`,
-        'm',
-      ),
-    );
-    assert.doesNotMatch(result.stderr, /installing/, 'No install drift');
-    const snapshot = await readFile(record, 'utf8');
-    assert.notEqual(snapshot, repo.root, 'The build ran in a snapshot');
-    assert.equal(existsSync(snapshot), false, 'The snapshot must be deleted');
-    assert.equal(
-      (
-        await repo.gitIn(
-          repo.top,
-          '--git-dir',
-          repo.remote,
-          'rev-parse',
-          'main',
-        )
-      ).trim(),
-      head,
-    );
-  },
-);
-
-test(
-  'a failing build stops the push, names each failed task, and shows at most 20 lines of the output of each, then the number of the other lines',
-  { timeout: 60_000 },
-  async () => {
-    // Arrange
-    await using folder = await new TemporaryFiles().directory('git-hooks-');
-    const repo = await workspace(folder.path, build);
-    await repo.write('packages/a/index.js', 'export const value = "BROKEN";\n');
-    await repo.write('packages/c/index.js', 'export const value = "BROKEN";\n');
-    const head = await repo.commit('break b and c');
-
-    // Act
-    const result = await repo.push('--quiet', 'origin', 'main');
-
-    // Assert
-    assert.notEqual(result.code, 0, result.stderr);
-    const header = new RegExp(
-      `^build\\s+${head.slice(0, 7)}: 2 of 2 tasks failed: (\\S+), (\\S+)$`,
+  // Assert
+  assert.notEqual(result.code, 0, result.stderr);
+  assert.match(
+    result.stderr,
+    new RegExp(
+      `^build\\s+${head.slice(0, 7)}: 1 of 2 tasks failed: @probe/c:build$`,
       'm',
-    ).exec(result.stderr);
-    assert.ok(header, result.stderr);
-    assert.deepEqual([header[1], header[2]].sort(), [
-      '@probe/b:build',
-      '@probe/c:build',
-    ]);
-    for (const project of ['b', 'c']) {
-      for (let line = 0; line < 20; line++)
-        assert.match(
-          result.stderr,
-          new RegExp(`^ {12}error ${line} in ${project}$`, 'm'),
-        );
-      assert.doesNotMatch(result.stderr, new RegExp(`error 20 in ${project}`));
+    ),
+  );
+  assert.match(result.stderr, /^✖ push stopped by the pre-push hook$/m);
+  assert.equal(
+    await repo.gitIn(repo.top, '--git-dir', repo.remote, 'rev-list', '--all'),
+    '',
+    'The remote must get no commit',
+  );
+});
+
+test('an uncommitted break in a workspace dependency does not block a good push, the build uses the installed packages, and the snapshot is gone after the build', async () => {
+  // Arrange
+  await using folder = await new TemporaryFiles().directory('git-hooks-');
+  const repo = await workspace(folder.path, build);
+  const head = await repo.commit('good');
+  // b's build reads a through node_modules/@probe/a.
+  await repo.write('packages/a/index.js', 'export const value = "BROKEN";\n');
+  const record = join(repo.top, 'snapshot-folder');
+
+  // Act
+  const result = await start(
+    repo,
+    { PROBE_RECORD: record },
+    '--quiet',
+    'origin',
+    'main',
+  ).exited;
+
+  // Assert
+  assert.equal(result.code, 0, result.stderr);
+  assert.match(
+    result.stderr,
+    new RegExp(
+      `^build\\s+${head.slice(0, 7)}: built 2 projects, 0 of 2 tasks from cache$`,
+      'm',
+    ),
+  );
+  assert.doesNotMatch(result.stderr, /installing/, 'No install drift');
+  const snapshot = await readFile(record, 'utf8');
+  assert.notEqual(snapshot, repo.root, 'The build ran in a snapshot');
+  assert.equal(existsSync(snapshot), false, 'The snapshot must be deleted');
+  assert.equal(
+    (
+      await repo.gitIn(repo.top, '--git-dir', repo.remote, 'rev-parse', 'main')
+    ).trim(),
+    head,
+  );
+});
+
+test('a failing build stops the push, names each failed task, and shows at most 20 lines of the output of each, then the number of the other lines', async () => {
+  // Arrange
+  await using folder = await new TemporaryFiles().directory('git-hooks-');
+  const repo = await workspace(folder.path, build);
+  await repo.write('packages/a/index.js', 'export const value = "BROKEN";\n');
+  await repo.write('packages/c/index.js', 'export const value = "BROKEN";\n');
+  const head = await repo.commit('break b and c');
+
+  // Act
+  const result = await repo.push('--quiet', 'origin', 'main');
+
+  // Assert
+  assert.notEqual(result.code, 0, result.stderr);
+  const header = new RegExp(
+    `^build\\s+${head.slice(0, 7)}: 2 of 2 tasks failed: (\\S+), (\\S+)$`,
+    'm',
+  ).exec(result.stderr);
+  assert.ok(header, result.stderr);
+  assert.deepEqual([header[1], header[2]].sort(), [
+    '@probe/b:build',
+    '@probe/c:build',
+  ]);
+  for (const project of ['b', 'c']) {
+    for (let line = 0; line < 20; line++)
       assert.match(
         result.stderr,
-        new RegExp(
-          `^ {12}@probe/${project}:build\\n {12}error 0 in ${project}$`,
-          'm',
-        ),
-        'The lines of each task come under its name',
+        new RegExp(`^ {12}error ${line} in ${project}$`, 'm'),
       );
-    }
-    assert.equal(
-      result.stderr.match(/^ {12}… 11 more lines$/gm)?.length,
-      2,
-      'Each failed task gives the number of the lines it does not show',
-    );
-  },
-);
-
-test(
-  'a push that only deletes refs is skipped and goes through',
-  { timeout: 60_000 },
-  async () => {
-    // Arrange
-    await using folder = await new TemporaryFiles().directory('git-hooks-');
-    const repo = await workspace(folder.path, build);
-    await repo.commit('first');
-    await repo.git('push', '--quiet', 'origin', 'main', 'main:refs/heads/copy');
-
-    // Act
-    const result = await repo.push('--quiet', 'origin', '--delete', 'copy');
-
-    // Assert
-    assert.equal(result.code, 0, result.stderr);
-    assert.match(
-      result.stderr,
-      /^build\s+skipped: the push only deletes refs$/m,
-    );
-  },
-);
-
-test(
-  'a push of a commit that the remote has already is skipped and goes through',
-  { timeout: 60_000 },
-  async () => {
-    // Arrange
-    await using folder = await new TemporaryFiles().directory('git-hooks-');
-    const repo = await workspace(folder.path, build);
-    const head = await repo.commit('first');
-    await repo.git('push', '--quiet', 'origin', 'main');
-
-    // Act
-    const result = await repo.push('--quiet', 'origin', 'main:refs/heads/copy');
-
-    // Assert
-    assert.equal(result.code, 0, result.stderr);
+    assert.doesNotMatch(result.stderr, new RegExp(`error 20 in ${project}`));
     assert.match(
       result.stderr,
       new RegExp(
-        `^build\\s+skipped: the remote already has ${head.slice(0, 7)}$`,
+        `^ {12}@probe/${project}:build\\n {12}error 0 in ${project}$`,
         'm',
       ),
+      'The lines of each task come under its name',
     );
-  },
-);
+  }
+  assert.equal(
+    result.stderr.match(/^ {12}… 11 more lines$/gm)?.length,
+    2,
+    'Each failed task gives the number of the lines it does not show',
+  );
+});
 
-test(
-  'a pushed commit without package-lock.json stops the push with the setup error',
-  { timeout: 60_000 },
-  async () => {
-    // Arrange
-    await using folder = await new TemporaryFiles().directory('git-hooks-');
-    const repo = await workspace(folder.path, build);
-    await rm(join(repo.root, 'package-lock.json'));
-    const head = await repo.commit('no lockfile');
+test('a push that only deletes refs is skipped and goes through', async () => {
+  // Arrange
+  await using folder = await new TemporaryFiles().directory('git-hooks-');
+  const repo = await workspace(folder.path, build);
+  await repo.commit('first');
+  await repo.git('push', '--quiet', 'origin', 'main', 'main:refs/heads/copy');
 
-    // Act
-    const result = await repo.push('--quiet', 'origin', 'main');
+  // Act
+  const result = await repo.push('--quiet', 'origin', '--delete', 'copy');
 
-    // Assert
-    assert.notEqual(result.code, 0, result.stderr);
-    assert.match(
-      result.stderr,
-      new RegExp(
-        `^build\\s+${head.slice(0, 7)} has no package-lock.json; Build works with npm workspaces\\n✖ push stopped by the pre-push hook$`,
-        'm',
-      ),
-    );
-  },
-);
+  // Assert
+  assert.equal(result.code, 0, result.stderr);
+  assert.match(result.stderr, /^build\s+skipped: the push only deletes refs$/m);
+});
 
-test(
-  'a second pre-push build in the same repo waits for the first, prints that it waits, and both pushes go through',
-  { timeout: 60_000 },
-  async (t) => {
-    // Arrange
-    await using folder = await new TemporaryFiles().directory('git-hooks-');
-    const repo = await workspace(folder.path, build);
-    const head = await repo.commit('first');
-    const second = join(repo.top, 'second.git');
-    await repo.gitIn(repo.top, 'init', '--quiet', '--bare', second);
-    await repo.git('remote', 'add', 'second', second);
-    const gate = join(repo.top, 'gate');
-    const first = start(
-      repo,
-      { PROBE_GATE: gate },
-      '--quiet',
-      'origin',
-      'main',
-    );
-    await t.waitFor(() => assert.ok(existsSync(`${gate}.started`)), {
-      interval: 50,
-      timeout: 20_000,
-    });
+test('a push of a commit that the remote has already is skipped and goes through', async () => {
+  // Arrange
+  await using folder = await new TemporaryFiles().directory('git-hooks-');
+  const repo = await workspace(folder.path, build);
+  const head = await repo.commit('first');
+  await repo.git('push', '--quiet', 'origin', 'main');
 
-    // Act
-    const waiting = start(
-      repo,
-      { PROBE_AFTER: gate },
-      '--quiet',
-      'second',
-      'main',
-    );
-    await t.waitFor(() => assert.match(waiting.stderr(), /waiting/), {
-      interval: 50,
-      timeout: 20_000,
-    });
-    // The gate stays closed for 5 s, a window in which the second build must
-    // not start its tasks: if it does, it writes `<gate>.second` and fails.
-    await delay(5000);
-    await writeFile(`${gate}.release`, 'released');
-    const [one, two] = await Promise.all([first.exited, waiting.exited]);
+  // Act
+  const result = await repo.push('--quiet', 'origin', 'main:refs/heads/copy');
 
-    // Assert
-    assert.equal(one.code, 0, one.stderr);
-    assert.equal(two.code, 0, two.stderr);
-    assert.match(
-      two.stderr,
-      /^build\s+waiting for another pre-push build in this repo$/m,
-    );
-    assert.match(
-      two.stderr,
-      new RegExp(`^build\\s+${head.slice(0, 7)}: built 2 projects`, 'm'),
-    );
-  },
-);
+  // Assert
+  assert.equal(result.code, 0, result.stderr);
+  assert.match(
+    result.stderr,
+    new RegExp(
+      `^build\\s+skipped: the remote already has ${head.slice(0, 7)}$`,
+      'm',
+    ),
+  );
+});
 
-test(
-  'a push of several refs gives one line for each pushed commit, builds a commit sent to two refs one time, and stops at a failed commit',
-  { timeout: 60_000 },
-  async () => {
-    // Arrange
-    await using folder = await new TemporaryFiles().directory('git-hooks-');
-    const repo = await workspace(folder.path, build);
-    const old = await repo.commit('first');
-    await repo.git('push', '--quiet', 'origin', 'main');
-    await repo.write('packages/b/notes.md', 'notes\n');
-    const good = await repo.commit('second');
-    await repo.git('switch', '--quiet', '--create', 'broken');
-    await repo.write('packages/c/index.js', 'export const value = "BROKEN";\n');
-    const broken = await repo.commit('break c');
+test('a pushed commit without package-lock.json stops the push with the setup error', async () => {
+  // Arrange
+  await using folder = await new TemporaryFiles().directory('git-hooks-');
+  const repo = await workspace(folder.path, build);
+  await rm(join(repo.root, 'package-lock.json'));
+  const head = await repo.commit('no lockfile');
 
-    // Act
-    const result = await repo.push(
-      '--quiet',
-      'origin',
-      'main',
-      'main:refs/heads/also',
-      `${old}:refs/heads/copy`,
-      'broken',
-    );
+  // Act
+  const result = await repo.push('--quiet', 'origin', 'main');
 
-    // Assert
-    assert.notEqual(result.code, 0, result.stderr);
-    const lines = result.stderr.split('\n');
-    const builtLines = lines.filter((line) =>
-      line.includes(`${good.slice(0, 7)}: built`),
-    );
-    assert.equal(builtLines.length, 1, result.stderr);
-    assert.match(
-      result.stderr,
-      new RegExp(
-        `^(build| )\\s+skipped: the remote already has ${old.slice(0, 7)}$`,
-        'm',
-      ),
-    );
-    assert.match(
-      result.stderr,
-      new RegExp(
-        `^(build| )\\s+${broken.slice(0, 7)}: 1 of 2 tasks failed: @probe/c:build$`,
-        'm',
-      ),
-    );
-    assert.equal(
-      await repo.gitIn(repo.top, '--git-dir', repo.remote, 'rev-parse', 'main'),
-      `${old}\n`,
-      'The remote must get none of the refs',
-    );
-  },
-);
+  // Assert
+  assert.notEqual(result.code, 0, result.stderr);
+  assert.match(
+    result.stderr,
+    new RegExp(
+      `^build\\s+${head.slice(0, 7)} has no package-lock.json; Build works with npm workspaces\\n✖ push stopped by the pre-push hook$`,
+      'm',
+    ),
+  );
+});
 
-test(
-  'Build runs its targets with the production configuration and gives env to nx',
-  { timeout: 60_000 },
-  async () => {
-    // Arrange
-    await using folder = await new TemporaryFiles().directory('git-hooks-');
-    const repo = await workspace(
-      folder.path,
-      `import { Build, prePush } from '@zukhruf/git-hooks';
+test('a second pre-push build in the same repo waits for the first, prints that it waits, and both pushes go through', async (t) => {
+  // Arrange
+  await using folder = await new TemporaryFiles().directory('git-hooks-');
+  const repo = await workspace(folder.path, build);
+  const head = await repo.commit('first');
+  const second = join(repo.top, 'second.git');
+  await repo.gitIn(repo.top, 'init', '--quiet', '--bare', second);
+  await repo.git('remote', 'add', 'second', second);
+  const gate = join(repo.top, 'gate');
+  const first = start(repo, { PROBE_GATE: gate }, '--quiet', 'origin', 'main');
+  await t.waitFor(() => assert.ok(existsSync(`${gate}.started`)), {
+    interval: 50,
+    timeout: 20_000,
+  });
+
+  // Act
+  const waiting = start(
+    repo,
+    { PROBE_AFTER: gate },
+    '--quiet',
+    'second',
+    'main',
+  );
+  await t.waitFor(() => assert.match(waiting.stderr(), /waiting/), {
+    interval: 50,
+    timeout: 20_000,
+  });
+  // The gate stays closed for 5 s, a window in which the second build must
+  // not start its tasks: if it does, it writes `<gate>.second` and fails.
+  await delay(5000);
+  await writeFile(`${gate}.release`, 'released');
+  const [one, two] = await Promise.all([first.exited, waiting.exited]);
+
+  // Assert
+  assert.equal(one.code, 0, one.stderr);
+  assert.equal(two.code, 0, two.stderr);
+  assert.match(
+    two.stderr,
+    /^build\s+waiting for another pre-push build in this repo$/m,
+  );
+  assert.match(
+    two.stderr,
+    new RegExp(`^build\\s+${head.slice(0, 7)}: built 2 projects`, 'm'),
+  );
+});
+
+test('a push of several refs gives one line for each pushed commit, builds a commit sent to two refs one time, and stops at a failed commit', async () => {
+  // Arrange
+  await using folder = await new TemporaryFiles().directory('git-hooks-');
+  const repo = await workspace(folder.path, build);
+  const old = await repo.commit('first');
+  await repo.git('push', '--quiet', 'origin', 'main');
+  await repo.write('packages/b/notes.md', 'notes\n');
+  const good = await repo.commit('second');
+  await repo.git('switch', '--quiet', '--create', 'broken');
+  await repo.write('packages/c/index.js', 'export const value = "BROKEN";\n');
+  const broken = await repo.commit('break c');
+
+  // Act
+  const result = await repo.push(
+    '--quiet',
+    'origin',
+    'main',
+    'main:refs/heads/also',
+    `${old}:refs/heads/copy`,
+    'broken',
+  );
+
+  // Assert
+  assert.notEqual(result.code, 0, result.stderr);
+  const lines = result.stderr.split('\n');
+  const builtLines = lines.filter((line) =>
+    line.includes(`${good.slice(0, 7)}: built`),
+  );
+  assert.equal(builtLines.length, 1, result.stderr);
+  assert.match(
+    result.stderr,
+    new RegExp(
+      `^(build| )\\s+skipped: the remote already has ${old.slice(0, 7)}$`,
+      'm',
+    ),
+  );
+  assert.match(
+    result.stderr,
+    new RegExp(
+      `^(build| )\\s+${broken.slice(0, 7)}: 1 of 2 tasks failed: @probe/c:build$`,
+      'm',
+    ),
+  );
+  assert.equal(
+    await repo.gitIn(repo.top, '--git-dir', repo.remote, 'rev-parse', 'main'),
+    `${old}\n`,
+    'The remote must get none of the refs',
+  );
+});
+
+test('Build runs its targets with the production configuration and gives env to nx', async () => {
+  // Arrange
+  await using folder = await new TemporaryFiles().directory('git-hooks-');
+  const repo = await workspace(
+    folder.path,
+    `import { Build, prePush } from '@zukhruf/git-hooks';
 await prePush([new Build({ targets: ['lint', 'build'], parallel: 1, env: { PROBE_ENV: 'yes' } })]);
 `,
-    );
-    const head = await repo.commit('first');
+  );
+  const head = await repo.commit('first');
 
-    // Act
-    const result = await repo.push('--quiet', 'origin', 'main');
+  // Act
+  const result = await repo.push('--quiet', 'origin', 'main');
 
-    // Assert
-    assert.equal(result.code, 0, result.stderr);
-    assert.match(
-      result.stderr,
-      new RegExp(
-        `^build\\s+${head.slice(0, 7)}: built 2 projects, 0 of 3 tasks from cache$`,
-        'm',
-      ),
-    );
-  },
-);
+  // Assert
+  assert.equal(result.code, 0, result.stderr);
+  assert.match(
+    result.stderr,
+    new RegExp(
+      `^build\\s+${head.slice(0, 7)}: built 2 projects, 0 of 3 tasks from cache$`,
+      'm',
+    ),
+  );
+});
 
-test(
-  'a second push gets its unchanged tasks from the nx cache of the state folder, and the .nx folder of the working tree stays absent',
-  { timeout: 60_000 },
-  async () => {
-    // Arrange
-    await using folder = await new TemporaryFiles().directory('git-hooks-');
-    const repo = await workspace(folder.path, build);
-    await repo.commit('first');
-    const first = await repo.push('--quiet', 'origin', 'main');
-    assert.equal(first.code, 0, first.stderr);
-    await repo.write('README.md', 'not an input of a project\n');
-    const head = await repo.commit('second');
+test('a second push gets its unchanged tasks from the nx cache of the state folder, and the .nx folder of the working tree stays absent', async () => {
+  // Arrange
+  await using folder = await new TemporaryFiles().directory('git-hooks-');
+  const repo = await workspace(folder.path, build);
+  await repo.commit('first');
+  const first = await repo.push('--quiet', 'origin', 'main');
+  assert.equal(first.code, 0, first.stderr);
+  await repo.write('README.md', 'not an input of a project\n');
+  const head = await repo.commit('second');
 
-    // Act
-    const result = await repo.push('--quiet', 'origin', 'main');
+  // Act
+  const result = await repo.push('--quiet', 'origin', 'main');
 
-    // Assert
-    assert.equal(result.code, 0, result.stderr);
-    assert.match(
-      result.stderr,
-      new RegExp(
-        `^build\\s+${head.slice(0, 7)}: built 2 projects, 2 of 2 tasks from cache$`,
-        'm',
-      ),
-    );
-    assert.equal(existsSync(join(repo.root, '.nx')), false);
-  },
-);
+  // Assert
+  assert.equal(result.code, 0, result.stderr);
+  assert.match(
+    result.stderr,
+    new RegExp(
+      `^build\\s+${head.slice(0, 7)}: built 2 projects, 2 of 2 tasks from cache$`,
+      'm',
+    ),
+  );
+  assert.equal(existsSync(join(repo.root, '.nx')), false);
+});
 
-test(
-  'nx that fails before it runs a task stops the push with its exit code and its output',
-  { timeout: 60_000 },
-  async () => {
-    // Arrange
-    await using folder = await new TemporaryFiles().directory('git-hooks-');
-    const repo = await workspace(folder.path, build);
-    await repo.write('nx.json', '{ "targetDefaults": \n');
-    const head = await repo.commit('break nx.json');
+test('nx that fails before it runs a task stops the push with its exit code and its output', async () => {
+  // Arrange
+  await using folder = await new TemporaryFiles().directory('git-hooks-');
+  const repo = await workspace(folder.path, build);
+  await repo.write('nx.json', '{ "targetDefaults": \n');
+  const head = await repo.commit('break nx.json');
 
-    // Act
-    const result = await repo.push('--quiet', 'origin', 'main');
+  // Act
+  const result = await repo.push('--quiet', 'origin', 'main');
 
-    // Assert
-    assert.notEqual(result.code, 0, result.stderr);
-    assert.match(
-      result.stderr,
-      new RegExp(
-        `^build\\s+${head.slice(0, 7)}: nx exited with \\d+\\n {12}\\S`,
-        'm',
-      ),
-    );
-    assert.match(result.stderr, /^✖ push stopped by the pre-push hook$/m);
-  },
-);
+  // Assert
+  assert.notEqual(result.code, 0, result.stderr);
+  assert.match(
+    result.stderr,
+    new RegExp(
+      `^build\\s+${head.slice(0, 7)}: nx exited with \\d+\\n {12}\\S`,
+      'm',
+    ),
+  );
+  assert.match(result.stderr, /^✖ push stopped by the pre-push hook$/m);
+});

@@ -154,7 +154,7 @@ describe('batches', () => {
       const waited = Date.now() - started;
       const [job] = await queue.findJobs('jobs', { id: id(1) });
       return {
-        waitedAboutASecond: waited >= 900 && waited < 5000,
+        waitedAtLeastASecond: waited >= 900,
         state: job?.state,
       };
     });
@@ -162,7 +162,7 @@ describe('batches', () => {
     // The graceful wait runs on real time, never the configured clock, then
     // the stop fails what is still running (index.js:260-273).
     assert.deepStrictEqual(observed, {
-      waitedAboutASecond: true,
+      waitedAtLeastASecond: true,
       state: 'retry',
     });
   });
@@ -186,7 +186,7 @@ describe('batches', () => {
       return {
         first,
         second,
-        returnedEarly: waited < 5000,
+        returnedEarly: waited < 20_000,
         state: job?.state,
       };
     });

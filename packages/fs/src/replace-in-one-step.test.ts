@@ -131,145 +131,115 @@ const writers = [
 ] as const;
 
 describe('A replacement in one step', () => {
-  test(
-    'an atomic write that cannot replace the path leaves no draft and leaves the path as it was',
-    { timeout: 2_000 },
-    async () => {
-      // Arrange: a directory with content sits at the path, so the rename fails after the draft exists.
-      await using directory = await new TemporaryFiles().directory(
-        'zukhruf-fs-',
-      );
-      const path = join(directory.path, 'queue');
-      await mkdir(path);
-      await writeFile(join(path, 'kept'), 'old');
+  test('an atomic write that cannot replace the path leaves no draft and leaves the path as it was', async () => {
+    // Arrange: a directory with content sits at the path, so the rename fails after the draft exists.
+    await using directory = await new TemporaryFiles().directory('zukhruf-fs-');
+    const path = join(directory.path, 'queue');
+    await mkdir(path);
+    await writeFile(join(path, 'kept'), 'old');
 
-      // Act
-      const writing = atomicWrite(path, 'first\n', { clock: globalThis });
+    // Act
+    const writing = atomicWrite(path, 'first\n', { clock: globalThis });
 
-      // Assert
-      await assert.rejects(writing, { code: 'EISDIR' });
-      assert.deepEqual(
-        await readdir(directory.path),
-        ['queue'],
-        'A failed write must not leave its draft',
-      );
-      assert.equal(await readFile(join(path, 'kept'), 'utf8'), 'old');
-    },
-  );
+    // Assert
+    await assert.rejects(writing, { code: 'EISDIR' });
+    assert.deepEqual(
+      await readdir(directory.path),
+      ['queue'],
+      'A failed write must not leave its draft',
+    );
+    assert.equal(await readFile(join(path, 'kept'), 'utf8'), 'old');
+  });
 
-  test(
-    'a durable write that cannot replace the path leaves no draft and leaves the path as it was',
-    { timeout: 2_000 },
-    async () => {
-      // Arrange: a directory with content sits at the path, so the rename fails after the draft exists.
-      await using directory = await new TemporaryFiles().directory(
-        'zukhruf-fs-',
-      );
-      const path = join(directory.path, 'counter');
-      await mkdir(path);
-      await writeFile(join(path, 'kept'), 'old');
+  test('a durable write that cannot replace the path leaves no draft and leaves the path as it was', async () => {
+    // Arrange: a directory with content sits at the path, so the rename fails after the draft exists.
+    await using directory = await new TemporaryFiles().directory('zukhruf-fs-');
+    const path = join(directory.path, 'counter');
+    await mkdir(path);
+    await writeFile(join(path, 'kept'), 'old');
 
-      // Act
-      const writing = durableWrite(path, '42', { clock: globalThis });
+    // Act
+    const writing = durableWrite(path, '42', { clock: globalThis });
 
-      // Assert
-      await assert.rejects(writing, { code: 'EISDIR' });
-      assert.deepEqual(
-        await readdir(directory.path),
-        ['counter'],
-        'A failed write must not leave its draft',
-      );
-      assert.equal(await readFile(join(path, 'kept'), 'utf8'), 'old');
-    },
-  );
+    // Assert
+    await assert.rejects(writing, { code: 'EISDIR' });
+    assert.deepEqual(
+      await readdir(directory.path),
+      ['counter'],
+      'A failed write must not leave its draft',
+    );
+    assert.equal(await readFile(join(path, 'kept'), 'utf8'), 'old');
+  });
 
-  test(
-    'a durable write that cannot sync its draft rejects, leaves no draft, and keeps the old content',
-    { timeout: 2_000 },
-    async (t) => {
-      // Arrange
-      await using directory = await new TemporaryFiles().directory(
-        'zukhruf-fs-',
-      );
-      const path = join(directory.path, 'counter');
-      await writeFile(path, '41');
-      using _refused = refuseSync(
-        t,
-        (opened) => opened !== directory.path,
-        'EIO',
-      );
+  test('a durable write that cannot sync its draft rejects, leaves no draft, and keeps the old content', async (t) => {
+    // Arrange
+    await using directory = await new TemporaryFiles().directory('zukhruf-fs-');
+    const path = join(directory.path, 'counter');
+    await writeFile(path, '41');
+    using _refused = refuseSync(
+      t,
+      (opened) => opened !== directory.path,
+      'EIO',
+    );
 
-      // Act
-      const writing = durableWrite(path, '42', { clock: globalThis });
+    // Act
+    const writing = durableWrite(path, '42', { clock: globalThis });
 
-      // Assert
-      await assert.rejects(writing, { code: 'EIO' });
-      assert.deepEqual(await readdir(directory.path), ['counter']);
-      assert.equal(await readFile(path, 'utf8'), '41');
-    },
-  );
+    // Assert
+    await assert.rejects(writing, { code: 'EIO' });
+    assert.deepEqual(await readdir(directory.path), ['counter']);
+    assert.equal(await readFile(path, 'utf8'), '41');
+  });
 
-  test(
-    'an atomic write puts the new content in place with one rename of a draft beside the path',
-    { timeout: 2_000 },
-    async (t) => {
-      // Arrange
-      await using directory = await new TemporaryFiles().directory(
-        'zukhruf-fs-',
-      );
-      const path = join(directory.path, 'queue');
-      await writeFile(path, 'first\n');
-      using disk = recordDiskWrites(t);
+  test('an atomic write puts the new content in place with one rename of a draft beside the path', async (t) => {
+    // Arrange
+    await using directory = await new TemporaryFiles().directory('zukhruf-fs-');
+    const path = join(directory.path, 'queue');
+    await writeFile(path, 'first\n');
+    using disk = recordDiskWrites(t);
 
-      // Act
-      await atomicWrite(path, 'first\nsecond\n', { clock: globalThis });
+    // Act
+    await atomicWrite(path, 'first\nsecond\n', { clock: globalThis });
 
-      // Assert
-      const replacement = disk.replacementIn(directory.path);
-      assert.equal(replacement.to, path);
-      assert.equal(dirname(replacement.from), directory.path);
-      assert.equal(await readFile(path, 'utf8'), 'first\nsecond\n');
-      assert.deepEqual(await readdir(directory.path), ['queue']);
-    },
-  );
+    // Assert
+    const replacement = disk.replacementIn(directory.path);
+    assert.equal(replacement.to, path);
+    assert.equal(dirname(replacement.from), directory.path);
+    assert.equal(await readFile(path, 'utf8'), 'first\nsecond\n');
+    assert.deepEqual(await readdir(directory.path), ['queue']);
+  });
 
-  test(
-    'a durable write writes and syncs its draft before the rename that puts it in place',
-    { timeout: 2_000 },
-    async (t) => {
-      // Arrange
-      await using directory = await new TemporaryFiles().directory(
-        'zukhruf-fs-',
-      );
-      const path = join(directory.path, 'counter');
-      await writeFile(path, '41');
-      using disk = recordDiskWrites(t);
+  test('a durable write writes and syncs its draft before the rename that puts it in place', async (t) => {
+    // Arrange
+    await using directory = await new TemporaryFiles().directory('zukhruf-fs-');
+    const path = join(directory.path, 'counter');
+    await writeFile(path, '41');
+    using disk = recordDiskWrites(t);
 
-      // Act
-      await durableWrite(path, '42', { clock: globalThis });
+    // Act
+    await durableWrite(path, '42', { clock: globalThis });
 
-      // Assert: content first, then its sync, then the one-step replacement.
-      const replacement = disk.replacementIn(directory.path);
-      const before = disk.events.slice(0, replacement.index);
-      const written = before.findIndex(
-        (event) => event.op === 'write' && event.path === replacement.from,
-      );
-      const synced = before.findIndex(
-        (event) => event.op === 'sync' && event.path === replacement.from,
-      );
-      assert.equal(replacement.to, path);
-      assert.ok(written >= 0, 'The draft must be written');
-      assert.ok(
-        synced > written,
-        'The draft must reach the disk after it is written and before it replaces the old file',
-      );
-      assert.equal(await readFile(path, 'utf8'), '42');
-    },
-  );
+    // Assert: content first, then its sync, then the one-step replacement.
+    const replacement = disk.replacementIn(directory.path);
+    const before = disk.events.slice(0, replacement.index);
+    const written = before.findIndex(
+      (event) => event.op === 'write' && event.path === replacement.from,
+    );
+    const synced = before.findIndex(
+      (event) => event.op === 'sync' && event.path === replacement.from,
+    );
+    assert.equal(replacement.to, path);
+    assert.ok(written >= 0, 'The draft must be written');
+    assert.ok(
+      synced > written,
+      'The draft must reach the disk after it is written and before it replaces the old file',
+    );
+    assert.equal(await readFile(path, 'utf8'), '42');
+  });
 
   test(
     'a durable write syncs the directory after the rename, so a power loss cannot undo it',
-    { ...neverOnWindows, timeout: 2_000 },
+    { ...neverOnWindows },
     async (t) => {
       // Arrange
       await using directory = await new TemporaryFiles().directory(
@@ -301,7 +271,7 @@ describe('A replacement in one step', () => {
   ] as const) {
     test(
       `a directory sync that fails with ${code} ${outcome === 'writes' ? 'still completes the durable write' : 'fails the durable write'}`,
-      { ...neverOnWindows, timeout: 2_000 },
+      { ...neverOnWindows },
       async (t) => {
         // Arrange: a file system whose directories answer fsync with `code`.
         await using directory = await new TemporaryFiles().directory(
@@ -329,31 +299,27 @@ describe('A replacement in one step', () => {
   }
 
   for (const [writer, write] of writers) {
-    test(
-      `${writer} puts bytes at the path byte for byte`,
-      { timeout: 2_000 },
-      async () => {
-        // Arrange: bytes that are not valid UTF-8, so a text round trip would change them.
-        await using directory = await new TemporaryFiles().directory(
-          'zukhruf-fs-',
-        );
-        const fromArray = join(directory.path, 'array');
-        const fromBuffer = join(directory.path, 'buffer');
-        const bytes = new Uint8Array([0x00, 0xff, 0xc3, 0x28, 0x0a, 0x80]);
+    test(`${writer} puts bytes at the path byte for byte`, async () => {
+      // Arrange: bytes that are not valid UTF-8, so a text round trip would change them.
+      await using directory = await new TemporaryFiles().directory(
+        'zukhruf-fs-',
+      );
+      const fromArray = join(directory.path, 'array');
+      const fromBuffer = join(directory.path, 'buffer');
+      const bytes = new Uint8Array([0x00, 0xff, 0xc3, 0x28, 0x0a, 0x80]);
 
-        // Act
-        await write(fromArray, bytes, { clock: globalThis });
-        await write(fromBuffer, Buffer.from(bytes), { clock: globalThis });
+      // Act
+      await write(fromArray, bytes, { clock: globalThis });
+      await write(fromBuffer, Buffer.from(bytes), { clock: globalThis });
 
-        // Assert
-        assert.deepEqual(new Uint8Array(await readFile(fromArray)), bytes);
-        assert.deepEqual(new Uint8Array(await readFile(fromBuffer)), bytes);
-      },
-    );
+      // Assert
+      assert.deepEqual(new Uint8Array(await readFile(fromArray)), bytes);
+      assert.deepEqual(new Uint8Array(await readFile(fromBuffer)), bytes);
+    });
 
     test(
       `${writer} with a mode gives the draft that mode before the rename, also over a file with another mode`,
-      { ...posixModesOnly, timeout: 2_000 },
+      { ...posixModesOnly },
       async (t) => {
         // Arrange: an old file that others can read, and a recorder of the draft's mode at the rename.
         await using directory = await new TemporaryFiles().directory(
@@ -391,7 +357,7 @@ describe('A replacement in one step', () => {
 
     test(
       `${writer} without a mode gives the file the mode that writeFile gives a new file`,
-      { ...posixModesOnly, timeout: 2_000 },
+      { ...posixModesOnly },
       async () => {
         // Arrange: a file that writeFile creates, so its mode comes from the process umask.
         await using directory = await new TemporaryFiles().directory(

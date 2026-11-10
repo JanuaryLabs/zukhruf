@@ -452,7 +452,7 @@ function checkTypes() {
   void parameterizedTest.each([1], (n) =>
     test(
       String(n),
-      { timeout: 1000, skip: false, concurrency: false },
+      { timeout: 240_000, skip: false, concurrency: false },
       async (t) => {
         t.assert.equal(n.toFixed(), '1');
       },

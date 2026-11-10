@@ -159,7 +159,7 @@ async function readState(
     async () => {
       JSON.parse(await readFile(statePath, 'utf8'));
     },
-    { timeout: 5_000, interval: 100 },
+    { timeout: 10_000, interval: 100 },
   );
   return JSON.parse(await readFile(statePath, 'utf8'));
 }

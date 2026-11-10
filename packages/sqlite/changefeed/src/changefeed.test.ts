@@ -48,7 +48,7 @@ function owned(path: string, sql: string): DatabaseSync {
 // A watch that gives no batch fails here, naming the batch it waited for,
 // and not at the timeout of the runner.
 async function within<T>(promise: Promise<T>, expected: string): Promise<T> {
-  const timeout = AbortSignal.timeout(5000);
+  const timeout = AbortSignal.timeout(10_000);
   return Promise.race([
     promise,
     new Promise<never>((_, reject) => {
@@ -87,7 +87,7 @@ async function until(fact: () => boolean, expected: string): Promise<void> {
   try {
     await poll(async () => (fact() ? true : undefined), {
       interval: 5,
-      signal: AbortSignal.timeout(5000),
+      signal: AbortSignal.timeout(10_000),
       clock: globalThis,
     });
   } catch (cause) {

@@ -13,7 +13,7 @@ const offWindows = {
 describe('patiently, off Windows', () => {
   test(
     'an operation runs one time and its value reaches the caller',
-    { ...offWindows, timeout: 2_000 },
+    { ...offWindows },
     async () => {
       // Arrange
       let runs = 0;
@@ -35,7 +35,7 @@ describe('patiently, off Windows', () => {
 
   test(
     'an error that Windows uses for a refusal reaches the caller at once and unchanged',
-    { ...offWindows, timeout: 2_000 },
+    { ...offWindows },
     async () => {
       // Arrange
       let runs = 0;

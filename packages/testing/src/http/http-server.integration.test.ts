@@ -34,29 +34,25 @@ test('HTTP servers listen before acquisition resolves and dispose independently'
   assert.equal(await (await fetch(second.origin)).text(), 'second');
 });
 
-test(
-  'HTTP disposal closes an unfinished response after scope failure',
-  { timeout: 2_000 },
-  async () => {
-    await using server = await new HttpServer().start((_request, response) => {
-      response.writeHead(200);
-      response.write('unfinished');
-    });
-    const response = await fetch(server.origin);
-    const bodyClosed = assert.rejects(response.text());
-    const failure = new Error('intentional scope failure');
+test('HTTP disposal closes an unfinished response after scope failure', async () => {
+  await using server = await new HttpServer().start((_request, response) => {
+    response.writeHead(200);
+    response.write('unfinished');
+  });
+  const response = await fetch(server.origin);
+  const bodyClosed = assert.rejects(response.text());
+  const failure = new Error('intentional scope failure');
 
-    await assert.rejects(async () => {
-      await using scoped = server;
-      assert.equal(scoped.server.listening, true);
-      throw failure;
-    }, failure);
+  await assert.rejects(async () => {
+    await using scoped = server;
+    assert.equal(scoped.server.listening, true);
+    throw failure;
+  }, failure);
 
-    await bodyClosed;
-    assert.equal(server.server.listening, false);
-    await assert.rejects(fetch(server.origin));
-  },
-);
+  await bodyClosed;
+  assert.equal(server.server.listening, false);
+  await assert.rejects(fetch(server.origin));
+});
 
 test('HTTP acquisition preserves native bind errors without closing another server', async (t) => {
   const http = new HttpServer();
@@ -89,7 +85,7 @@ test('HTTP acquisition preserves native bind errors without closing another serv
   assert.equal(await (await fetch(occupied.origin)).text(), 'occupied');
 });
 
-test('an async handler answers', { timeout: 5_000 }, async () => {
+test('an async handler answers', async () => {
   await using server = await new HttpServer().start(
     async (_request, response) => {
       await Promise.resolve();
@@ -100,36 +96,32 @@ test('an async handler answers', { timeout: 5_000 }, async () => {
   assert.equal(await (await fetch(server.origin)).text(), 'async');
 });
 
-test(
-  'a rejected async handler fails its process with its own error',
-  { timeout: 15_000 },
-  async () => {
-    // A server that answered or reset instead would hide a broken fake.
-    const child = spawn(
-      process.execPath,
-      [
-        '--input-type=module',
-        '--eval',
-        `
+test('a rejected async handler fails its process with its own error', async () => {
+  // A server that answered or reset instead would hide a broken fake.
+  const child = spawn(
+    process.execPath,
+    [
+      '--input-type=module',
+      '--eval',
+      `
           const { HttpServer } = await import(${JSON.stringify(new URL('./http-server.ts', import.meta.url).href)});
           await using server = await new HttpServer().start(async () => {
             throw new Error('the fake broke');
           });
           await fetch(server.origin);
         `,
-      ],
-      { timeout: 10_000 },
-    );
+    ],
+    { timeout: 10_000 },
+  );
 
-    await assert.rejects(
-      child,
-      (error: unknown) =>
-        error instanceof SubprocessError &&
-        error.exitCode === 1 &&
-        error.stderr.includes('Error: the fake broke'),
-    );
-  },
-);
+  await assert.rejects(
+    child,
+    (error: unknown) =>
+      error instanceof SubprocessError &&
+      error.exitCode === 1 &&
+      error.stderr.includes('Error: the fake broke'),
+  );
+});
 
 test('HTTP servers listen on the IPv4 loopback interface only', async () => {
   await using server = await new HttpServer().start((_request, response) => {

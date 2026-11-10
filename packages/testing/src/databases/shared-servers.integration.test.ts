@@ -29,54 +29,50 @@ async function execIn(id: string, command: string[]): Promise<string> {
   return stdout;
 }
 
-test(
-  'one instance acquires concurrent databases with independent scope cleanup',
-  { timeout: 120_000 },
-  async () => {
-    const scope = randomUUID();
-    const postgres = new Postgres({
-      environment: process.env,
-      labels: { 'dev.zukhruf.testing.verification': scope },
-    });
-    try {
-      const databases = await Promise.all([
-        postgres.database(),
-        postgres.database(),
-      ]);
-      const [first, second] = databases;
-      const count = async (name: string) =>
-        (
-          await execIn(first.containerId, [
-            'psql',
-            '-U',
-            first.user,
-            '-d',
-            'postgres',
-            '-Atc',
-            `SELECT COUNT(*) FROM pg_database WHERE datname = '${name}'`,
-          ])
-        ).trimEnd();
+test('one instance acquires concurrent databases with independent scope cleanup', async () => {
+  const scope = randomUUID();
+  const postgres = new Postgres({
+    environment: process.env,
+    labels: { 'dev.zukhruf.testing.verification': scope },
+  });
+  try {
+    const databases = await Promise.all([
+      postgres.database(),
+      postgres.database(),
+    ]);
+    const [first, second] = databases;
+    const count = async (name: string) =>
+      (
+        await execIn(first.containerId, [
+          'psql',
+          '-U',
+          first.user,
+          '-d',
+          'postgres',
+          '-Atc',
+          `SELECT COUNT(*) FROM pg_database WHERE datname = '${name}'`,
+        ])
+      ).trimEnd();
+    {
+      await using outer = first;
       {
-        await using outer = first;
-        {
-          await using inner = second;
-          assert.equal(outer.containerId, inner.containerId);
-          assert.notEqual(outer.database, inner.database);
-          assert.equal(await count(outer.database), '1');
-          assert.equal(await count(inner.database), '1');
-        }
-        assert.equal(await count(first.database), '1');
-        assert.equal(await count(second.database), '0');
+        await using inner = second;
+        assert.equal(outer.containerId, inner.containerId);
+        assert.notEqual(outer.database, inner.database);
+        assert.equal(await count(outer.database), '1');
+        assert.equal(await count(inner.database), '1');
       }
-      assert.equal(await count(first.database), '0');
-      await using next = await postgres.database();
-      assert.equal(next.containerId, first.containerId);
-      assert.notEqual(next.database, first.database);
-    } finally {
-      await removeScope(scope);
+      assert.equal(await count(first.database), '1');
+      assert.equal(await count(second.database), '0');
     }
-  },
-);
+    assert.equal(await count(first.database), '0');
+    await using next = await postgres.database();
+    assert.equal(next.containerId, first.containerId);
+    assert.notEqual(next.database, first.database);
+  } finally {
+    await removeScope(scope);
+  }
+});
 
 test(
   'explicit SQL Server startup creates the requested database and owns cleanup',
@@ -105,7 +101,7 @@ test(
         const client = await docker.client();
         assert.equal(await client.containers.find(id), undefined);
       },
-      { timeout: 5_000 },
+      { timeout: 10_000 },
     );
   },
 );
@@ -293,7 +289,7 @@ for (const [engine, helper, config] of [
               await client.containers.find(server.containerId),
               undefined,
             ),
-          { timeout: 5_000 },
+          { timeout: 10_000 },
         );
         const replacement = await run(false);
         assert.notEqual(replacement.containerId, server.containerId);

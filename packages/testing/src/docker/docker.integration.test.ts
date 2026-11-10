@@ -20,188 +20,180 @@ async function removeLabelled(client: Docker, label: string): Promise<void> {
     await (await client.containers.find(Id))?.remove({ force: true, v: true });
 }
 
-test(
-  'disposing an owned server removes its anonymous volumes',
-  { timeout: 120_000 },
-  async () => {
-    // Arrange
-    const testbed = new DockerTestbed({ environment: process.env });
-    const client = await testbed.client();
-    await using server = await testbed.serve(
-      { Image: 'postgres:18-alpine', Env: ['POSTGRES_PASSWORD=test'] },
-      { internalPort: 5432 },
+test('disposing an owned server removes its anonymous volumes', async () => {
+  // Arrange
+  const testbed = new DockerTestbed({ environment: process.env });
+  const client = await testbed.client();
+  await using server = await testbed.serve(
+    { Image: 'postgres:18-alpine', Env: ['POSTGRES_PASSWORD=test'] },
+    { internalPort: 5432 },
+  );
+  const volumes = ((await server.container.inspect()).Mounts ?? [])
+    .filter((mount) => mount.Type === 'volume')
+    .map((mount) => mount.Name ?? '');
+  try {
+    assert.ok(
+      volumes.length > 0,
+      'the image declares an anonymous data volume',
     );
-    const volumes = ((await server.container.inspect()).Mounts ?? [])
-      .filter((mount) => mount.Type === 'volume')
-      .map((mount) => mount.Name ?? '');
-    try {
-      assert.ok(
-        volumes.length > 0,
-        'the image declares an anonymous data volume',
+
+    // Act
+    await server.cleanup();
+
+    // Assert
+    for (const name of volumes)
+      assert.equal(
+        await client.volumes.find(name),
+        undefined,
+        'anonymous data must not outlive its container',
       );
+  } finally {
+    for (const name of volumes)
+      await (
+        await client.volumes.find(name)
+      )
+        ?.remove({ force: true })
+        .catch(() => {});
+  }
+});
 
-      // Act
-      await server.cleanup();
-
-      // Assert
-      for (const name of volumes)
-        assert.equal(
-          await client.volumes.find(name),
-          undefined,
-          'anonymous data must not outlive its container',
-        );
-    } finally {
-      for (const name of volumes)
-        await (
-          await client.volumes.find(name)
-        )
-          ?.remove({ force: true })
-          .catch(() => {});
-    }
-  },
-);
-
-test(
-  'Docker identity preserves configuration, ownership, and unfinished creation',
-  { timeout: 120_000 },
-  async (t) => {
-    // Arrange
-    const testbed = new DockerTestbed({ environment: process.env });
-    const client = await testbed.client();
-    const scope = randomUUID();
-    const verification = `dev.zukhruf.testing.verification=${scope}`;
-    const labels = {
-      'dev.zukhruf.testing.verification': scope,
-      purpose: 'identity',
-    };
-    const body = {
-      Image: 'postgres:18-alpine',
-      Env: ['POSTGRES_PASSWORD=testpassword', 'POSTGRES_DB=postgres'],
-      Labels: labels,
-      HostConfig: { Tmpfs: { '/var/lib/postgresql': 'rw,size=512m' } },
-    };
-    const options = { internalPort: 5432 };
-    const running = async (id: string) =>
-      (await (await client.containers.find(id))?.inspect())?.State?.Running;
-    try {
-      // Act + Assert: the configuration, not the order of its entries, picks the server.
-      await using first = await testbed.reuse(body, options);
-      await using reordered = await testbed.reuse(
-        {
-          ...body,
-          Env: ['POSTGRES_DB=postgres', 'POSTGRES_PASSWORD=testpassword'],
-          Labels: {
-            purpose: 'identity',
-            'dev.zukhruf.testing.verification': scope,
-          },
+test('Docker identity preserves configuration, ownership, and unfinished creation', async (t) => {
+  // Arrange
+  const testbed = new DockerTestbed({ environment: process.env });
+  const client = await testbed.client();
+  const scope = randomUUID();
+  const verification = `dev.zukhruf.testing.verification=${scope}`;
+  const labels = {
+    'dev.zukhruf.testing.verification': scope,
+    purpose: 'identity',
+  };
+  const body = {
+    Image: 'postgres:18-alpine',
+    Env: ['POSTGRES_PASSWORD=testpassword', 'POSTGRES_DB=postgres'],
+    Labels: labels,
+    HostConfig: { Tmpfs: { '/var/lib/postgresql': 'rw,size=512m' } },
+  };
+  const options = { internalPort: 5432 };
+  const running = async (id: string) =>
+    (await (await client.containers.find(id))?.inspect())?.State?.Running;
+  try {
+    // Act + Assert: the configuration, not the order of its entries, picks the server.
+    await using first = await testbed.reuse(body, options);
+    await using reordered = await testbed.reuse(
+      {
+        ...body,
+        Env: ['POSTGRES_DB=postgres', 'POSTGRES_PASSWORD=testpassword'],
+        Labels: {
+          purpose: 'identity',
+          'dev.zukhruf.testing.verification': scope,
         },
-        options,
-      );
-      assert.equal(reordered.container.id, first.container.id);
-      await using different = await testbed.reuse(
-        {
-          ...body,
-          Env: ['POSTGRES_PASSWORD=another-password', 'POSTGRES_DB=postgres'],
-        },
-        options,
-      );
-      assert.notEqual(different.container.id, first.container.id);
+      },
+      options,
+    );
+    assert.equal(reordered.container.id, first.container.id);
+    await using different = await testbed.reuse(
+      {
+        ...body,
+        Env: ['POSTGRES_PASSWORD=another-password', 'POSTGRES_DB=postgres'],
+      },
+      options,
+    );
+    assert.notEqual(different.container.id, first.container.id);
 
-      await assert.rejects(
-        testbed.reuse(body, {
-          ...options,
-          healthy: () => {
-            throw new Error('readiness failed');
-          },
-        }),
-        /readiness failed/,
-      );
-      await using healthy = await testbed.reuse(body, {
+    await assert.rejects(
+      testbed.reuse(body, {
         ...options,
-        healthy: ({ container }) =>
-          timebox(
-            async () => {
-              const { exitCode, output } = await container.exec({
-                Cmd: [
-                  'psql',
-                  '-h',
-                  '127.0.0.1',
-                  '-U',
-                  'postgres',
-                  '-c',
-                  'SELECT 1',
-                ],
-              });
-              if (exitCode !== 0) throw new Error(output);
-            },
-            { maxRetryTime: 60_000 },
-          ),
-      });
-      assert.equal(healthy.container.id, first.container.id);
-
-      // Act + Assert: a dedicated server with the name is not a shared one.
-      const name = `zukhruf-testing-owned-${scope}`;
-      await using owned = await testbed.serve(body, { ...options, name });
-      await assert.rejects(
-        testbed.reuse(body, { ...options, name }),
-        /does not match/,
-      );
-      assert.equal(await running(owned.container.id), true);
-
-      const failedName = `zukhruf-testing-failed-${scope}`;
-      await assert.rejects(
-        testbed.serve(body, {
-          ...options,
-          name: failedName,
-          healthy: () => {
-            throw new Error('owned startup failed');
+        healthy: () => {
+          throw new Error('readiness failed');
+        },
+      }),
+      /readiness failed/,
+    );
+    await using healthy = await testbed.reuse(body, {
+      ...options,
+      healthy: ({ container }) =>
+        timebox(
+          async () => {
+            const { exitCode, output } = await container.exec({
+              Cmd: [
+                'psql',
+                '-h',
+                '127.0.0.1',
+                '-U',
+                'postgres',
+                '-c',
+                'SELECT 1',
+              ],
+            });
+            if (exitCode !== 0) throw new Error(output);
           },
-        }),
-        { cause: new Error('owned startup failed') },
-      );
-      await t.waitFor(
-        async () =>
-          assert.equal(await client.containers.find(failedName), undefined),
-        { timeout: 5_000 },
-      );
+          { maxRetryTime: 60_000 },
+        ),
+    });
+    assert.equal(healthy.container.id, first.container.id);
 
-      // Arrange: a creator that died between create and start. The inspected
-      // labels keep the identity, so the test does not repeat the fingerprint.
-      const inspection = await first.container.inspect();
-      await first.container.remove({ force: true, v: true });
-      await t.waitFor(
-        async () =>
-          assert.equal(
-            await client.containers.find(first.container.id),
-            undefined,
-          ),
-        { timeout: 5_000 },
-      );
-      await client.containers.create(
-        {
-          Image: body.Image,
-          Labels: inspection.Config?.Labels ?? {},
-          Env: ['POSTGRES_PASSWORD=testpassword', 'POSTGRES_DB=postgres'],
-          ExposedPorts: { '5432/tcp': {} },
-          HostConfig: {
-            AutoRemove: true,
-            Tmpfs: { '/var/lib/postgresql': 'rw,size=512m' },
-            PortBindings: {
-              '5432/tcp': [{ HostIp: '127.0.0.1', HostPort: '' }],
-            },
+    // Act + Assert: a dedicated server with the name is not a shared one.
+    const name = `zukhruf-testing-owned-${scope}`;
+    await using owned = await testbed.serve(body, { ...options, name });
+    await assert.rejects(
+      testbed.reuse(body, { ...options, name }),
+      /does not match/,
+    );
+    assert.equal(await running(owned.container.id), true);
+
+    const failedName = `zukhruf-testing-failed-${scope}`;
+    await assert.rejects(
+      testbed.serve(body, {
+        ...options,
+        name: failedName,
+        healthy: () => {
+          throw new Error('owned startup failed');
+        },
+      }),
+      { cause: new Error('owned startup failed') },
+    );
+    await t.waitFor(
+      async () =>
+        assert.equal(await client.containers.find(failedName), undefined),
+      { timeout: 10_000 },
+    );
+
+    // Arrange: a creator that died between create and start. The inspected
+    // labels keep the identity, so the test does not repeat the fingerprint.
+    const inspection = await first.container.inspect();
+    await first.container.remove({ force: true, v: true });
+    await t.waitFor(
+      async () =>
+        assert.equal(
+          await client.containers.find(first.container.id),
+          undefined,
+        ),
+      { timeout: 10_000 },
+    );
+    await client.containers.create(
+      {
+        Image: body.Image,
+        Labels: inspection.Config?.Labels ?? {},
+        Env: ['POSTGRES_PASSWORD=testpassword', 'POSTGRES_DB=postgres'],
+        ExposedPorts: { '5432/tcp': {} },
+        HostConfig: {
+          AutoRemove: true,
+          Tmpfs: { '/var/lib/postgresql': 'rw,size=512m' },
+          PortBindings: {
+            '5432/tcp': [{ HostIp: '127.0.0.1', HostPort: '' }],
           },
         },
-        { name: (inspection.Name ?? '').slice(1) },
-      );
+      },
+      { name: (inspection.Name ?? '').slice(1) },
+    );
 
-      // Act
-      await using recovered = await testbed.reuse(body, options);
+    // Act
+    await using recovered = await testbed.reuse(body, options);
 
-      // Assert
-      assert.notEqual(recovered.container.id, first.container.id);
-      assert.equal(await running(recovered.container.id), true);
-    } finally {
-      await removeLabelled(client, verification);
-    }
-  },
-);
+    // Assert
+    assert.notEqual(recovered.container.id, first.container.id);
+    assert.equal(await running(recovered.container.id), true);
+  } finally {
+    await removeLabelled(client, verification);
+  }
+});

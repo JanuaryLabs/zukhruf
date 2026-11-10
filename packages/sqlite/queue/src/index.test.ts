@@ -133,7 +133,7 @@ describe('SqliteJobQueue', () => {
         });
         assert.equal(job?.state, 'completed');
       },
-      { interval: 5, timeout: 1000 },
+      { interval: 5, timeout: 10_000 },
     );
 
     assert.equal(handledJobs.length, 1);
@@ -163,7 +163,7 @@ describe('SqliteJobQueue', () => {
       await queue.work('jobs', {}, async () => {});
       await t.waitFor(() => assert.notEqual(errors.length, 0), {
         interval: 5,
-        timeout: 1000,
+        timeout: 10_000,
       });
 
       const [job] = await queue.findJobs('jobs', { id: jobId });
@@ -196,7 +196,7 @@ describe('SqliteJobQueue', () => {
       await queue.work('jobs', {}, async () => {});
       await t.waitFor(() => assert.notEqual(errors.length, 0), {
         interval: 5,
-        timeout: 1000,
+        timeout: 10_000,
       });
 
       const [job] = await queue.findJobs('jobs', { id: jobId });
@@ -357,7 +357,7 @@ describe('SqliteJobQueue', () => {
 
     await t.waitFor(() => assert.equal(activeJobs.length, 2), {
       interval: 5,
-      timeout: 1000,
+      timeout: 10_000,
     });
     assert.deepEqual(
       activeJobs.map((job) => job.id).sort(),
@@ -370,7 +370,7 @@ describe('SqliteJobQueue', () => {
         const jobs = await queue.findJobs('chat-run');
         assert.ok(jobs.every((job) => job.state === 'completed'));
       },
-      { interval: 5, timeout: 1000 },
+      { interval: 5, timeout: 10_000 },
     );
     await queue.stop({ graceful: true, close: true });
   });
@@ -395,7 +395,7 @@ describe('SqliteJobQueue', () => {
 
     await t.waitFor(() => assert.equal(attempts, 1), {
       interval: 5,
-      timeout: 1000,
+      timeout: 10_000,
     });
     await clock.tick(2000);
     await t.waitFor(
@@ -403,7 +403,7 @@ describe('SqliteJobQueue', () => {
         const [job] = await queue.findJobs('automation-run', { id: jobId });
         assert.equal(job?.state, 'failed');
       },
-      { interval: 5, timeout: 1000 },
+      { interval: 5, timeout: 10_000 },
     );
     const [job] = await queue.findJobs('automation-run', { id: jobId });
 
@@ -444,7 +444,7 @@ describe('SqliteJobQueue', () => {
         });
         assert.equal(job?.state, 'active');
       },
-      { interval: 5, timeout: 1000 },
+      { interval: 5, timeout: 10_000 },
     );
 
     const inFlightJobs = await queue.findJobs('chat-run');

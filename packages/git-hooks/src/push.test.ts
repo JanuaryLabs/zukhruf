@@ -47,194 +47,167 @@ function isShown(value: unknown): value is Shown {
   );
 }
 
-test(
-  'the first push of a history to an empty remote is a create with no base, so a step checks the whole history',
-  { timeout: 60_000 },
-  async () => {
-    // Arrange
-    await using folder = await new TemporaryFiles().directory('git-hooks-');
-    const repo = await repository(folder.path, showUpdates);
-    await repo.write('a.txt', 'a\n');
-    const head = await repo.commit('first');
+test('the first push of a history to an empty remote is a create with no base, so a step checks the whole history', async () => {
+  // Arrange
+  await using folder = await new TemporaryFiles().directory('git-hooks-');
+  const repo = await repository(folder.path, showUpdates);
+  await repo.write('a.txt', 'a\n');
+  const head = await repo.commit('first');
 
-    // Act
-    const result = await repo.push('--quiet', 'origin', 'main');
+  // Act
+  const result = await repo.push('--quiet', 'origin', 'main');
 
-    // Assert
-    assert.equal(result.code, 0, result.stderr);
-    assert.deepEqual(shown(result.stderr), {
-      remote: { name: 'origin', url: repo.remote },
-      updates: [
-        {
-          kind: 'create',
-          localRef: 'refs/heads/main',
-          localSha: head,
-          remoteRef: 'refs/heads/main',
-          remoteSha: '0'.repeat(40),
-          head,
-        },
-      ],
-    });
-  },
-);
-
-test(
-  'a new branch is a create whose base is the newest commit that the remote has, from the commits that no remote ref has',
-  { timeout: 60_000 },
-  async () => {
-    // Arrange
-    await using folder = await new TemporaryFiles().directory('git-hooks-');
-    const repo = await repository(folder.path, showUpdates);
-    await repo.write('a.txt', 'a\n');
-    const pushed = await repo.commit('first');
-    await repo.git('push', '--quiet', 'origin', 'main');
-    await repo.git('switch', '--quiet', '--create', 'feature');
-    await repo.write('b.txt', 'b\n');
-    await repo.commit('second');
-    await repo.write('c.txt', 'c\n');
-    const head = await repo.commit('third');
-
-    // Act
-    const result = await repo.push('--quiet', 'origin', 'feature');
-
-    // Assert
-    assert.equal(result.code, 0, result.stderr);
-    const [update] = shown(result.stderr).updates;
-    assert.equal(update?.kind, 'create');
-    assert.equal(update.head, head);
-    assert.equal(
-      update.base,
-      pushed,
-      'The base is the parent of the first commit that the remote does not have',
-    );
-  },
-);
-
-test(
-  'an update has the remote sha as its base',
-  { timeout: 60_000 },
-  async () => {
-    // Arrange
-    await using folder = await new TemporaryFiles().directory('git-hooks-');
-    const repo = await repository(folder.path, showUpdates);
-    await repo.write('a.txt', 'a\n');
-    const pushed = await repo.commit('first');
-    await repo.git('push', '--quiet', 'origin', 'main');
-    await repo.write('b.txt', 'b\n');
-    const head = await repo.commit('second');
-
-    // Act
-    const result = await repo.push('--quiet', 'origin', 'main');
-
-    // Assert
-    assert.equal(result.code, 0, result.stderr);
-    const [update] = shown(result.stderr).updates;
-    assert.equal(update?.kind, 'update');
-    assert.equal(update.remoteSha, pushed);
-    assert.equal(update.base, pushed);
-    assert.equal(update.head, head);
-  },
-);
-
-test(
-  'a force push over a remote commit that was never fetched gets its base from the commits that no remote ref has',
-  { timeout: 60_000 },
-  async () => {
-    // Arrange
-    await using folder = await new TemporaryFiles().directory('git-hooks-');
-    const repo = await repository(folder.path, showUpdates);
-    await repo.write('a.txt', 'a\n');
-    const pushed = await repo.commit('first');
-    await repo.git('push', '--quiet', 'origin', 'main');
-    // Another clone pushes a commit that this repo never fetches.
-    const other = join(repo.top, 'other');
-    await repo.gitIn(repo.top, 'clone', '--quiet', repo.remote, other);
-    await writeFile(join(other, 'x.txt'), 'x\n');
-    await repo.gitIn(other, 'add', 'x.txt');
-    await repo.gitIn(other, 'commit', '--quiet', '-m', 'unseen');
-    await repo.gitIn(other, 'push', '--quiet', 'origin', 'main');
-    const unseen = (await repo.gitIn(other, 'rev-parse', 'HEAD')).trim();
-    await repo.write('b.txt', 'b\n');
-    const head = await repo.commit('second');
-
-    // Act
-    const result = await repo.push('--quiet', '--force', 'origin', 'main');
-
-    // Assert
-    assert.equal(result.code, 0, result.stderr);
-    const [update] = shown(result.stderr).updates;
-    assert.equal(update?.kind, 'update');
-    assert.equal(update.remoteSha, unseen);
-    assert.equal(
-      update.base,
-      pushed,
-      'The remote sha is not in the local repo, so the base is the parent of the first commit that no remote ref has',
-    );
-    assert.equal(update.head, head);
-  },
-);
-
-test(
-  'a push of a commit that the remote has already has an empty range: the base is the head',
-  { timeout: 60_000 },
-  async () => {
-    // Arrange
-    await using folder = await new TemporaryFiles().directory('git-hooks-');
-    const repo = await repository(folder.path, showUpdates);
-    await repo.write('a.txt', 'a\n');
-    const head = await repo.commit('first');
-    await repo.git('push', '--quiet', 'origin', 'main');
-
-    // Act
-    const result = await repo.push('--quiet', 'origin', 'main:refs/heads/copy');
-
-    // Assert
-    assert.equal(result.code, 0, result.stderr);
-    const [update] = shown(result.stderr).updates;
-    assert.equal(update?.kind, 'create');
-    assert.equal(update.remoteRef, 'refs/heads/copy');
-    assert.equal(update.base, head);
-    assert.equal(update.head, head);
-  },
-);
-
-test(
-  'a push that deletes a ref gives a delete with no head and no base',
-  { timeout: 60_000 },
-  async () => {
-    // Arrange
-    await using folder = await new TemporaryFiles().directory('git-hooks-');
-    const repo = await repository(folder.path, showUpdates);
-    await repo.write('a.txt', 'a\n');
-    const pushed = await repo.commit('first');
-    await repo.git('push', '--quiet', 'origin', 'main', 'main:refs/heads/copy');
-
-    // Act
-    const result = await repo.push('--quiet', 'origin', ':refs/heads/copy');
-
-    // Assert
-    assert.equal(result.code, 0, result.stderr);
-    assert.deepEqual(shown(result.stderr).updates, [
+  // Assert
+  assert.equal(result.code, 0, result.stderr);
+  assert.deepEqual(shown(result.stderr), {
+    remote: { name: 'origin', url: repo.remote },
+    updates: [
       {
-        kind: 'delete',
-        localRef: '(delete)',
-        localSha: '0'.repeat(40),
-        remoteRef: 'refs/heads/copy',
-        remoteSha: pushed,
+        kind: 'create',
+        localRef: 'refs/heads/main',
+        localSha: head,
+        remoteRef: 'refs/heads/main',
+        remoteSha: '0'.repeat(40),
+        head,
       },
-    ]);
-  },
-);
+    ],
+  });
+});
 
-test(
-  'a pre-push step that fails stops the push with its reason, and no step runs after it',
-  { timeout: 60_000 },
-  async () => {
-    // Arrange
-    await using folder = await new TemporaryFiles().directory('git-hooks-');
-    const repo = await repository(
-      folder.path,
-      `import { type Push, Step, prePush } from '@zukhruf/git-hooks';
+test('a new branch is a create whose base is the newest commit that the remote has, from the commits that no remote ref has', async () => {
+  // Arrange
+  await using folder = await new TemporaryFiles().directory('git-hooks-');
+  const repo = await repository(folder.path, showUpdates);
+  await repo.write('a.txt', 'a\n');
+  const pushed = await repo.commit('first');
+  await repo.git('push', '--quiet', 'origin', 'main');
+  await repo.git('switch', '--quiet', '--create', 'feature');
+  await repo.write('b.txt', 'b\n');
+  await repo.commit('second');
+  await repo.write('c.txt', 'c\n');
+  const head = await repo.commit('third');
+
+  // Act
+  const result = await repo.push('--quiet', 'origin', 'feature');
+
+  // Assert
+  assert.equal(result.code, 0, result.stderr);
+  const [update] = shown(result.stderr).updates;
+  assert.equal(update?.kind, 'create');
+  assert.equal(update.head, head);
+  assert.equal(
+    update.base,
+    pushed,
+    'The base is the parent of the first commit that the remote does not have',
+  );
+});
+
+test('an update has the remote sha as its base', async () => {
+  // Arrange
+  await using folder = await new TemporaryFiles().directory('git-hooks-');
+  const repo = await repository(folder.path, showUpdates);
+  await repo.write('a.txt', 'a\n');
+  const pushed = await repo.commit('first');
+  await repo.git('push', '--quiet', 'origin', 'main');
+  await repo.write('b.txt', 'b\n');
+  const head = await repo.commit('second');
+
+  // Act
+  const result = await repo.push('--quiet', 'origin', 'main');
+
+  // Assert
+  assert.equal(result.code, 0, result.stderr);
+  const [update] = shown(result.stderr).updates;
+  assert.equal(update?.kind, 'update');
+  assert.equal(update.remoteSha, pushed);
+  assert.equal(update.base, pushed);
+  assert.equal(update.head, head);
+});
+
+test('a force push over a remote commit that was never fetched gets its base from the commits that no remote ref has', async () => {
+  // Arrange
+  await using folder = await new TemporaryFiles().directory('git-hooks-');
+  const repo = await repository(folder.path, showUpdates);
+  await repo.write('a.txt', 'a\n');
+  const pushed = await repo.commit('first');
+  await repo.git('push', '--quiet', 'origin', 'main');
+  // Another clone pushes a commit that this repo never fetches.
+  const other = join(repo.top, 'other');
+  await repo.gitIn(repo.top, 'clone', '--quiet', repo.remote, other);
+  await writeFile(join(other, 'x.txt'), 'x\n');
+  await repo.gitIn(other, 'add', 'x.txt');
+  await repo.gitIn(other, 'commit', '--quiet', '-m', 'unseen');
+  await repo.gitIn(other, 'push', '--quiet', 'origin', 'main');
+  const unseen = (await repo.gitIn(other, 'rev-parse', 'HEAD')).trim();
+  await repo.write('b.txt', 'b\n');
+  const head = await repo.commit('second');
+
+  // Act
+  const result = await repo.push('--quiet', '--force', 'origin', 'main');
+
+  // Assert
+  assert.equal(result.code, 0, result.stderr);
+  const [update] = shown(result.stderr).updates;
+  assert.equal(update?.kind, 'update');
+  assert.equal(update.remoteSha, unseen);
+  assert.equal(
+    update.base,
+    pushed,
+    'The remote sha is not in the local repo, so the base is the parent of the first commit that no remote ref has',
+  );
+  assert.equal(update.head, head);
+});
+
+test('a push of a commit that the remote has already has an empty range: the base is the head', async () => {
+  // Arrange
+  await using folder = await new TemporaryFiles().directory('git-hooks-');
+  const repo = await repository(folder.path, showUpdates);
+  await repo.write('a.txt', 'a\n');
+  const head = await repo.commit('first');
+  await repo.git('push', '--quiet', 'origin', 'main');
+
+  // Act
+  const result = await repo.push('--quiet', 'origin', 'main:refs/heads/copy');
+
+  // Assert
+  assert.equal(result.code, 0, result.stderr);
+  const [update] = shown(result.stderr).updates;
+  assert.equal(update?.kind, 'create');
+  assert.equal(update.remoteRef, 'refs/heads/copy');
+  assert.equal(update.base, head);
+  assert.equal(update.head, head);
+});
+
+test('a push that deletes a ref gives a delete with no head and no base', async () => {
+  // Arrange
+  await using folder = await new TemporaryFiles().directory('git-hooks-');
+  const repo = await repository(folder.path, showUpdates);
+  await repo.write('a.txt', 'a\n');
+  const pushed = await repo.commit('first');
+  await repo.git('push', '--quiet', 'origin', 'main', 'main:refs/heads/copy');
+
+  // Act
+  const result = await repo.push('--quiet', 'origin', ':refs/heads/copy');
+
+  // Assert
+  assert.equal(result.code, 0, result.stderr);
+  assert.deepEqual(shown(result.stderr).updates, [
+    {
+      kind: 'delete',
+      localRef: '(delete)',
+      localSha: '0'.repeat(40),
+      remoteRef: 'refs/heads/copy',
+      remoteSha: pushed,
+    },
+  ]);
+});
+
+test('a pre-push step that fails stops the push with its reason, and no step runs after it', async () => {
+  // Arrange
+  await using folder = await new TemporaryFiles().directory('git-hooks-');
+  const repo = await repository(
+    folder.path,
+    `import { type Push, Step, prePush } from '@zukhruf/git-hooks';
 class Refuse extends Step<Push> {
   readonly name = 'refuse';
   async run() {
@@ -249,25 +222,24 @@ class After extends Step<Push> {
 }
 await prePush([new Refuse(), new After()]);
 `,
-    );
-    await repo.write('a.txt', 'a\n');
-    await repo.commit('first');
+  );
+  await repo.write('a.txt', 'a\n');
+  await repo.commit('first');
 
-    // Act
-    const result = await repo.push('--quiet', 'origin', 'main');
+  // Act
+  const result = await repo.push('--quiet', 'origin', 'main');
 
-    // Assert
-    assert.notEqual(result.code, 0, 'The step fails');
-    assert.match(result.stderr, /^refuse\s+this repo takes no push today$/m);
-    assert.match(result.stderr, /^✖ push stopped by the pre-push hook$/m);
-    assert.doesNotMatch(result.stderr, /ran after the failed step/);
-    assert.equal(
-      await repo.gitIn(repo.top, '--git-dir', repo.remote, 'rev-list', '--all'),
-      '',
-      'The remote must get no commit',
-    );
-  },
-);
+  // Assert
+  assert.notEqual(result.code, 0, 'The step fails');
+  assert.match(result.stderr, /^refuse\s+this repo takes no push today$/m);
+  assert.match(result.stderr, /^✖ push stopped by the pre-push hook$/m);
+  assert.doesNotMatch(result.stderr, /ran after the failed step/);
+  assert.equal(
+    await repo.gitIn(repo.top, '--git-dir', repo.remote, 'rev-list', '--all'),
+    '',
+    'The remote must get no commit',
+  );
+});
 
 // An Nx workspace of npm with three projects, installed the way npm installs
 // it: a real node_modules with the workspace links, nx (linked from
@@ -332,15 +304,12 @@ async function workspace(folder: string, hook: string) {
   return repo;
 }
 
-test(
-  'push.nx sees a clean checkout of the head: nx affected lists the projects of the pushed range, and not the edits or new files in the working tree',
-  { timeout: 60_000 },
-  async () => {
-    // Arrange
-    await using folder = await new TemporaryFiles().directory('git-hooks-');
-    const repo = await workspace(
-      folder.path,
-      `import { type Push, Step, prePush } from '@zukhruf/git-hooks';
+test('push.nx sees a clean checkout of the head: nx affected lists the projects of the pushed range, and not the edits or new files in the working tree', async () => {
+  // Arrange
+  await using folder = await new TemporaryFiles().directory('git-hooks-');
+  const repo = await workspace(
+    folder.path,
+    `import { type Push, Step, prePush } from '@zukhruf/git-hooks';
 class Affected extends Step<Push> {
   readonly name = 'affected';
   async run(push: Push) {
@@ -356,57 +325,53 @@ class Affected extends Step<Push> {
 }
 await prePush([new Affected()]);
 `,
-    );
-    await repo.commit('base');
-    await repo.git('push', '--quiet', 'origin', 'main');
-    await repo.write('packages/a/index.js', 'export const value = 2;\n');
-    await repo.commit('change a');
-    // A peer's edit and a new file, both only in the working tree.
-    await repo.write('packages/b/index.js', 'export const value = 3;\n');
-    await repo.git('add', 'packages/b/index.js');
-    await repo.write('packages/c/new.js', 'export const added = true;\n');
+  );
+  await repo.commit('base');
+  await repo.git('push', '--quiet', 'origin', 'main');
+  await repo.write('packages/a/index.js', 'export const value = 2;\n');
+  await repo.commit('change a');
+  // A peer's edit and a new file, both only in the working tree.
+  await repo.write('packages/b/index.js', 'export const value = 3;\n');
+  await repo.git('add', 'packages/b/index.js');
+  await repo.write('packages/c/new.js', 'export const added = true;\n');
 
-    // Act
-    const result = await repo.push('--quiet', 'origin', 'main');
+  // Act
+  const result = await repo.push('--quiet', 'origin', 'main');
 
-    // Assert
-    assert.equal(result.code, 0, result.stderr);
-    const line = /^affected\s+(\{.*\})$/m.exec(result.stderr);
-    assert.ok(line, result.stderr);
-    assert.deepEqual(JSON.parse(line[1] ?? ''), {
-      ranged: ['@probe/a'],
-      uncommitted: ['@probe/a'],
-    });
-    assert.equal(
-      existsSync(join(repo.root, '.nx')),
-      false,
-      'nx must not write the .nx folder of the working tree',
-    );
-    assert.equal(
-      await repo.git('diff', '--cached', '--name-only'),
-      'packages/b/index.js\n',
-      'The index of the repo must keep what the peer staged',
-    );
-  },
-);
+  // Assert
+  assert.equal(result.code, 0, result.stderr);
+  const line = /^affected\s+(\{.*\})$/m.exec(result.stderr);
+  assert.ok(line, result.stderr);
+  assert.deepEqual(JSON.parse(line[1] ?? ''), {
+    ranged: ['@probe/a'],
+    uncommitted: ['@probe/a'],
+  });
+  assert.equal(
+    existsSync(join(repo.root, '.nx')),
+    false,
+    'nx must not write the .nx folder of the working tree',
+  );
+  assert.equal(
+    await repo.git('diff', '--cached', '--name-only'),
+    'packages/b/index.js\n',
+    'The index of the repo must keep what the peer staged',
+  );
+});
 
-test(
-  'a build task that runs git init and git config in its own temp folder makes a repo there, and the git config of the pushing repo does not change',
-  { timeout: 60_000 },
-  async () => {
-    // Arrange
-    await using folder = await new TemporaryFiles().directory('git-hooks-');
-    const repo = await workspace(
-      folder.path,
-      `import { Build, prePush } from '@zukhruf/git-hooks';
+test('a build task that runs git init and git config in its own temp folder makes a repo there, and the git config of the pushing repo does not change', async () => {
+  // Arrange
+  await using folder = await new TemporaryFiles().directory('git-hooks-');
+  const repo = await workspace(
+    folder.path,
+    `import { Build, prePush } from '@zukhruf/git-hooks';
 await prePush([new Build()]);
 `,
-    );
-    const taskRepo = join(repo.top, 'task-repo');
-    // A task such as a CLI test that makes a repo of its own in a temp folder.
-    await repo.write(
-      'tools/git-init.mjs',
-      `import { execFileSync } from 'node:child_process';
+  );
+  const taskRepo = join(repo.top, 'task-repo');
+  // A task such as a CLI test that makes a repo of its own in a temp folder.
+  await repo.write(
+    'tools/git-init.mjs',
+    `import { execFileSync } from 'node:child_process';
 import { mkdirSync, writeFileSync } from 'node:fs';
 const [folder] = process.argv.slice(2);
 mkdirSync(folder);
@@ -415,68 +380,63 @@ execFileSync('git', ['config', 'probe.owner', 'task'], { cwd: folder });
 writeFileSync(\`\${folder}/staged.txt\`, 'staged\\n');
 execFileSync('git', ['add', 'staged.txt'], { cwd: folder });
 `,
-    );
-    await repo.write(
-      'packages/a/package.json',
-      `${JSON.stringify({
-        name: '@probe/a',
-        version: '0.0.0',
-        type: 'module',
-        nx: {
-          targets: {
-            build: {
-              executor: 'nx:run-commands',
-              options: { command: `node tools/git-init.mjs ${taskRepo}` },
-            },
+  );
+  await repo.write(
+    'packages/a/package.json',
+    `${JSON.stringify({
+      name: '@probe/a',
+      version: '0.0.0',
+      type: 'module',
+      nx: {
+        targets: {
+          build: {
+            executor: 'nx:run-commands',
+            options: { command: `node tools/git-init.mjs ${taskRepo}` },
           },
         },
-      })}\n`,
-    );
-    await repo.commit('a task that runs git in a temp folder');
-    const config = await readFile(join(repo.root, '.git/config'));
+      },
+    })}\n`,
+  );
+  await repo.commit('a task that runs git in a temp folder');
+  const config = await readFile(join(repo.root, '.git/config'));
 
-    // Act
-    // With --git-dir and --work-tree, git gives the hook GIT_DIR and
-    // GIT_WORK_TREE of the pushing repo.
-    const result = await repo.pushWith(
-      [`--git-dir=${join(repo.root, '.git')}`, `--work-tree=${repo.root}`],
-      '--quiet',
-      'origin',
-      'main',
-    );
+  // Act
+  // With --git-dir and --work-tree, git gives the hook GIT_DIR and
+  // GIT_WORK_TREE of the pushing repo.
+  const result = await repo.pushWith(
+    [`--git-dir=${join(repo.root, '.git')}`, `--work-tree=${repo.root}`],
+    '--quiet',
+    'origin',
+    'main',
+  );
 
-    // Assert
-    assert.equal(result.code, 0, result.stderr);
-    assert.equal(
-      (await readFile(join(repo.root, '.git/config'))).toString(),
-      config.toString(),
-      'The git config of the pushing repo must not change',
-    );
-    assert.equal(
-      (await repo.gitIn(taskRepo, 'config', '--local', 'probe.owner')).trim(),
-      'task',
-      'git init must make a repo in the temp folder, with the config that the task wrote',
-    );
-    assert.equal(
-      (await repo.gitIn(taskRepo, 'rev-parse', '--absolute-git-dir')).trim(),
-      join(taskRepo, '.git'),
-    );
-    assert.equal(
-      await repo.gitIn(taskRepo, 'ls-files'),
-      'staged.txt\n',
-      'git add must write the index of the temp repo',
-    );
-  },
-);
+  // Assert
+  assert.equal(result.code, 0, result.stderr);
+  assert.equal(
+    (await readFile(join(repo.root, '.git/config'))).toString(),
+    config.toString(),
+    'The git config of the pushing repo must not change',
+  );
+  assert.equal(
+    (await repo.gitIn(taskRepo, 'config', '--local', 'probe.owner')).trim(),
+    'task',
+    'git init must make a repo in the temp folder, with the config that the task wrote',
+  );
+  assert.equal(
+    (await repo.gitIn(taskRepo, 'rev-parse', '--absolute-git-dir')).trim(),
+    join(taskRepo, '.git'),
+  );
+  assert.equal(
+    await repo.gitIn(taskRepo, 'ls-files'),
+    'staged.txt\n',
+    'git add must write the index of the temp repo',
+  );
+});
 
-test(
-  'prePush takes only pre-push steps: a pre-commit step is a type error',
-  { timeout: 60_000 },
-  () => {
-    // A function that is never called: the type checker reads it.
-    const hook = () =>
-      // @ts-expect-error a Step<Commit> has no push to judge.
-      prePush([new Format()]);
-    assert.equal(typeof hook, 'function');
-  },
-);
+test('prePush takes only pre-push steps: a pre-commit step is a type error', () => {
+  // A function that is never called: the type checker reads it.
+  const hook = () =>
+    // @ts-expect-error a Step<Commit> has no push to judge.
+    prePush([new Format()]);
+  assert.equal(typeof hook, 'function');
+});

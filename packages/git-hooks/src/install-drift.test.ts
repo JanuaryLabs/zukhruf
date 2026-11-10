@@ -130,244 +130,220 @@ const installing = (head: string) =>
     'm',
   );
 
-test(
-  'a different installed version makes the snapshot use an install of the pushed lockfile, which ran the install scripts of the dependencies and no script of the repo',
-  { timeout: 60_000 },
-  async () => {
-    // Arrange
-    await using folder = await new TemporaryFiles().directory('git-hooks-');
-    const repo = await workspace(folder.path, inspect);
-    await repo.install({
-      'probe-dep': repo.tarball.probe2,
-      'scripted-dep': repo.tarball.scripted,
-    });
-    const head = await repo.commit('probe-dep 2');
-    // A peer installs another version and does not commit it.
-    await repo.install({
+test('a different installed version makes the snapshot use an install of the pushed lockfile, which ran the install scripts of the dependencies and no script of the repo', async () => {
+  // Arrange
+  await using folder = await new TemporaryFiles().directory('git-hooks-');
+  const repo = await workspace(folder.path, inspect);
+  await repo.install({
+    'probe-dep': repo.tarball.probe2,
+    'scripted-dep': repo.tarball.scripted,
+  });
+  const head = await repo.commit('probe-dep 2');
+  // A peer installs another version and does not commit it.
+  await repo.install({
+    'probe-dep': repo.tarball.probe1,
+    'scripted-dep': repo.tarball.scripted,
+  });
+
+  // Act
+  const result = await repo.push('--quiet', 'origin', 'main');
+
+  // Assert
+  assert.equal(result.code, 0, result.stderr);
+  assert.match(result.stderr, installing(head));
+  assert.deepEqual(seen(result.stderr), {
+    probe: '2.0.0',
+    built: true,
+    extra: false,
+    workspace: true,
+  });
+  assert.deepEqual(
+    await readdir(repo.marks),
+    [],
+    'No script of the repo or its workspace packages may run',
+  );
+});
+
+test('a package that the pushed lockfile names and that is not installed makes the snapshot use an install of the pushed lockfile', async () => {
+  // Arrange
+  await using folder = await new TemporaryFiles().directory('git-hooks-');
+  const repo = await workspace(folder.path, inspect);
+  await repo.install({
+    'probe-dep': repo.tarball.probe1,
+    'scripted-dep': repo.tarball.scripted,
+  });
+  const head = await repo.commit('two dependencies');
+  await repo.install({ 'probe-dep': repo.tarball.probe1 });
+
+  // Act
+  const result = await repo.push('--quiet', 'origin', 'main');
+
+  // Assert
+  assert.equal(result.code, 0, result.stderr);
+  assert.match(result.stderr, installing(head));
+  assert.deepEqual(seen(result.stderr), {
+    probe: '1.0.0',
+    built: true,
+    extra: false,
+    workspace: true,
+  });
+});
+
+test('a repo with no node_modules gets an install of the pushed lockfile', async () => {
+  // Arrange
+  await using folder = await new TemporaryFiles().directory('git-hooks-');
+  const repo = await workspace(folder.path, inspect);
+  await repo.install({
+    'probe-dep': repo.tarball.probe1,
+    'scripted-dep': repo.tarball.scripted,
+  });
+  const head = await repo.commit('first');
+  await rm(join(repo.root, 'node_modules'), { recursive: true });
+
+  // Act
+  const result = await repo.push('--quiet', 'origin', 'main');
+
+  // Assert
+  assert.equal(result.code, 0, result.stderr);
+  assert.match(result.stderr, installing(head));
+  assert.deepEqual(seen(result.stderr), {
+    probe: '1.0.0',
+    built: true,
+    extra: false,
+    workspace: true,
+  });
+});
+
+test('an installed package that the pushed lockfile does not name makes the snapshot use an install without it', async () => {
+  // Arrange
+  await using folder = await new TemporaryFiles().directory('git-hooks-');
+  const repo = await workspace(folder.path, inspect);
+  await repo.install({
+    'probe-dep': repo.tarball.probe1,
+    'scripted-dep': repo.tarball.scripted,
+  });
+  const head = await repo.commit('first');
+  await repo.install({
+    'probe-dep': repo.tarball.probe1,
+    'scripted-dep': repo.tarball.scripted,
+    'extra-dep': repo.tarball.extra,
+  });
+
+  // Act
+  const result = await repo.push('--quiet', 'origin', 'main');
+
+  // Assert
+  assert.equal(result.code, 0, result.stderr);
+  assert.match(result.stderr, installing(head));
+  assert.deepEqual(seen(result.stderr), {
+    probe: '1.0.0',
+    built: true,
+    extra: false,
+    workspace: true,
+  });
+});
+
+test('a push with a lockfile that was installed before uses that install, and the hook keeps the two installs that it used last', async () => {
+  // Arrange
+  await using folder = await new TemporaryFiles().directory('git-hooks-');
+  const repo = await workspace(folder.path, inspect);
+  const lockfiles = {
+    one: { 'probe-dep': repo.tarball.probe1 },
+    two: { 'probe-dep': repo.tarball.probe2 },
+    three: {
       'probe-dep': repo.tarball.probe1,
-      'scripted-dep': repo.tarball.scripted,
-    });
-
-    // Act
-    const result = await repo.push('--quiet', 'origin', 'main');
-
-    // Assert
-    assert.equal(result.code, 0, result.stderr);
-    assert.match(result.stderr, installing(head));
-    assert.deepEqual(seen(result.stderr), {
-      probe: '2.0.0',
-      built: true,
-      extra: false,
-      workspace: true,
-    });
-    assert.deepEqual(
-      await readdir(repo.marks),
-      [],
-      'No script of the repo or its workspace packages may run',
-    );
-  },
-);
-
-test(
-  'a package that the pushed lockfile names and that is not installed makes the snapshot use an install of the pushed lockfile',
-  { timeout: 60_000 },
-  async () => {
-    // Arrange
-    await using folder = await new TemporaryFiles().directory('git-hooks-');
-    const repo = await workspace(folder.path, inspect);
-    await repo.install({
-      'probe-dep': repo.tarball.probe1,
-      'scripted-dep': repo.tarball.scripted,
-    });
-    const head = await repo.commit('two dependencies');
-    await repo.install({ 'probe-dep': repo.tarball.probe1 });
-
-    // Act
-    const result = await repo.push('--quiet', 'origin', 'main');
-
-    // Assert
-    assert.equal(result.code, 0, result.stderr);
-    assert.match(result.stderr, installing(head));
-    assert.deepEqual(seen(result.stderr), {
-      probe: '1.0.0',
-      built: true,
-      extra: false,
-      workspace: true,
-    });
-  },
-);
-
-test(
-  'a repo with no node_modules gets an install of the pushed lockfile',
-  { timeout: 60_000 },
-  async () => {
-    // Arrange
-    await using folder = await new TemporaryFiles().directory('git-hooks-');
-    const repo = await workspace(folder.path, inspect);
-    await repo.install({
-      'probe-dep': repo.tarball.probe1,
-      'scripted-dep': repo.tarball.scripted,
-    });
-    const head = await repo.commit('first');
-    await rm(join(repo.root, 'node_modules'), { recursive: true });
-
-    // Act
-    const result = await repo.push('--quiet', 'origin', 'main');
-
-    // Assert
-    assert.equal(result.code, 0, result.stderr);
-    assert.match(result.stderr, installing(head));
-    assert.deepEqual(seen(result.stderr), {
-      probe: '1.0.0',
-      built: true,
-      extra: false,
-      workspace: true,
-    });
-  },
-);
-
-test(
-  'an installed package that the pushed lockfile does not name makes the snapshot use an install without it',
-  { timeout: 60_000 },
-  async () => {
-    // Arrange
-    await using folder = await new TemporaryFiles().directory('git-hooks-');
-    const repo = await workspace(folder.path, inspect);
-    await repo.install({
-      'probe-dep': repo.tarball.probe1,
-      'scripted-dep': repo.tarball.scripted,
-    });
-    const head = await repo.commit('first');
-    await repo.install({
-      'probe-dep': repo.tarball.probe1,
-      'scripted-dep': repo.tarball.scripted,
       'extra-dep': repo.tarball.extra,
-    });
-
-    // Act
-    const result = await repo.push('--quiet', 'origin', 'main');
-
-    // Assert
-    assert.equal(result.code, 0, result.stderr);
-    assert.match(result.stderr, installing(head));
-    assert.deepEqual(seen(result.stderr), {
-      probe: '1.0.0',
-      built: true,
-      extra: false,
-      workspace: true,
-    });
-  },
-);
-
-test(
-  'a push with a lockfile that was installed before uses that install, and the hook keeps the two installs that it used last',
-  { timeout: 120_000 },
-  async () => {
-    // Arrange
-    await using folder = await new TemporaryFiles().directory('git-hooks-');
-    const repo = await workspace(folder.path, inspect);
-    const lockfiles = {
-      one: { 'probe-dep': repo.tarball.probe1 },
-      two: { 'probe-dep': repo.tarball.probe2 },
-      three: {
-        'probe-dep': repo.tarball.probe1,
-        'extra-dep': repo.tarball.extra,
-      },
-    };
-    // Each push has drift: no packages are installed.
-    const pushWith = async (
-      dependencies: Record<string, string>,
-      note: string,
-    ) => {
-      await repo.install(dependencies);
-      await repo.write('notes.txt', `${note}\n`);
-      const head = await repo.commit(note);
-      await rm(join(repo.root, 'node_modules'), { recursive: true });
-      const result = await repo.push('--quiet', 'origin', 'main');
-      assert.equal(result.code, 0, result.stderr);
-      return { head, stderr: result.stderr };
-    };
-    await pushWith(lockfiles.one, 'one');
-    await pushWith(lockfiles.two, 'two');
-
-    // Act
-    const reused = await pushWith(lockfiles.one, 'one again');
-    await pushWith(lockfiles.three, 'three');
-    const pruned = await pushWith(lockfiles.two, 'two again');
-
-    // Assert
-    assert.doesNotMatch(
-      reused.stderr,
-      /installing/,
-      'The install of lockfile one is used again',
-    );
-    assert.deepEqual(seen(reused.stderr), {
-      probe: '1.0.0',
-      built: false,
-      extra: false,
-      workspace: true,
-    });
-    assert.match(
-      pruned.stderr,
-      installing(pruned.head),
-      'Lockfile two was used least recently, so its install was deleted',
-    );
-    // The state folder is documented, and the pruning has no other output.
-    assert.equal(
-      (await readdir(join(repo.root, '.git/git-hooks/installs'))).length,
-      2,
-    );
-  },
-);
-
-test(
-  'an install that fails stops the push with the reason npm gave, and the next push installs that lockfile again',
-  { timeout: 60_000 },
-  async () => {
-    // Arrange
-    await using folder = await new TemporaryFiles().directory('git-hooks-');
-    const repo = await workspace(folder.path, inspect);
-    await repo.install({
-      'probe-dep': repo.tarball.probe1,
-      'scripted-dep': repo.tarball.scripted,
-    });
-    const head = await repo.commit('first');
+    },
+  };
+  // Each push has drift: no packages are installed.
+  const pushWith = async (
+    dependencies: Record<string, string>,
+    note: string,
+  ) => {
+    await repo.install(dependencies);
+    await repo.write('notes.txt', `${note}\n`);
+    const head = await repo.commit(note);
     await rm(join(repo.root, 'node_modules'), { recursive: true });
-    const tarball = repo.tarball.probe1.slice('file:'.length);
-    const content = await readFile(tarball);
-    await writeFile(tarball, 'not a tarball');
+    const result = await repo.push('--quiet', 'origin', 'main');
+    assert.equal(result.code, 0, result.stderr);
+    return { head, stderr: result.stderr };
+  };
+  await pushWith(lockfiles.one, 'one');
+  await pushWith(lockfiles.two, 'two');
 
-    // Act
-    const failed = await repo.push('--quiet', 'origin', 'main');
-    await writeFile(tarball, content);
-    const retried = await repo.push('--quiet', 'origin', 'main');
+  // Act
+  const reused = await pushWith(lockfiles.one, 'one again');
+  await pushWith(lockfiles.three, 'three');
+  const pruned = await pushWith(lockfiles.two, 'two again');
 
-    // Assert
-    assert.notEqual(failed.code, 0, failed.stderr);
-    assert.match(
-      failed.stderr,
-      /^inspect\s+npm ci --ignore-scripts --no-audit --no-fund failed:$/m,
-    );
-    assert.match(
-      failed.stderr,
-      /^ {10}npm error code TAR_BAD_ARCHIVE$/m,
-      'The hook must show the reason that npm gave',
-    );
-    assert.match(failed.stderr, /^✖ push stopped by the pre-push hook$/m);
-    assert.equal(retried.code, 0, retried.stderr);
-    assert.match(
-      retried.stderr,
-      installing(head),
-      'The install that did not end is not used',
-    );
-    assert.deepEqual(seen(retried.stderr), {
-      probe: '1.0.0',
-      built: true,
-      extra: false,
-      workspace: true,
-    });
-  },
-);
+  // Assert
+  assert.doesNotMatch(
+    reused.stderr,
+    /installing/,
+    'The install of lockfile one is used again',
+  );
+  assert.deepEqual(seen(reused.stderr), {
+    probe: '1.0.0',
+    built: false,
+    extra: false,
+    workspace: true,
+  });
+  assert.match(
+    pruned.stderr,
+    installing(pruned.head),
+    'Lockfile two was used least recently, so its install was deleted',
+  );
+  // The state folder is documented, and the pruning has no other output.
+  assert.equal(
+    (await readdir(join(repo.root, '.git/git-hooks/installs'))).length,
+    2,
+  );
+});
+
+test('an install that fails stops the push with the reason npm gave, and the next push installs that lockfile again', async () => {
+  // Arrange
+  await using folder = await new TemporaryFiles().directory('git-hooks-');
+  const repo = await workspace(folder.path, inspect);
+  await repo.install({
+    'probe-dep': repo.tarball.probe1,
+    'scripted-dep': repo.tarball.scripted,
+  });
+  const head = await repo.commit('first');
+  await rm(join(repo.root, 'node_modules'), { recursive: true });
+  const tarball = repo.tarball.probe1.slice('file:'.length);
+  const content = await readFile(tarball);
+  await writeFile(tarball, 'not a tarball');
+
+  // Act
+  const failed = await repo.push('--quiet', 'origin', 'main');
+  await writeFile(tarball, content);
+  const retried = await repo.push('--quiet', 'origin', 'main');
+
+  // Assert
+  assert.notEqual(failed.code, 0, failed.stderr);
+  assert.match(
+    failed.stderr,
+    /^inspect\s+npm ci --ignore-scripts --no-audit --no-fund failed:$/m,
+  );
+  assert.match(
+    failed.stderr,
+    /^ {10}npm error code TAR_BAD_ARCHIVE$/m,
+    'The hook must show the reason that npm gave',
+  );
+  assert.match(failed.stderr, /^✖ push stopped by the pre-push hook$/m);
+  assert.equal(retried.code, 0, retried.stderr);
+  assert.match(
+    retried.stderr,
+    installing(head),
+    'The install that did not end is not used',
+  );
+  assert.deepEqual(seen(retried.stderr), {
+    probe: '1.0.0',
+    built: true,
+    extra: false,
+    workspace: true,
+  });
+});
 
 // A repo whose root depends on shim-dep from the folder vendor/shim-dep
 // (`file:`), which is not a workspace package, as a repo vendors a fixed copy
@@ -465,50 +441,42 @@ await prePush([new Inspect()]);
   return { ...repo, vendor };
 }
 
-test(
-  'a package that the pushed lockfile links to a folder outside the workspaces reads that folder of the pushed commit from an install of the lockfile',
-  { timeout: 60_000 },
-  async () => {
-    // Arrange
-    await using folder = await new TemporaryFiles().directory('git-hooks-');
-    const repo = await vendored(folder.path);
-    const head = await repo.commit('vendored shim-dep');
-    await rm(join(repo.root, 'node_modules'), { recursive: true });
+test('a package that the pushed lockfile links to a folder outside the workspaces reads that folder of the pushed commit from an install of the lockfile', async () => {
+  // Arrange
+  await using folder = await new TemporaryFiles().directory('git-hooks-');
+  const repo = await vendored(folder.path);
+  const head = await repo.commit('vendored shim-dep');
+  await rm(join(repo.root, 'node_modules'), { recursive: true });
 
-    // Act
-    const result = await repo.push('--quiet', 'origin', 'main');
+  // Act
+  const result = await repo.push('--quiet', 'origin', 'main');
 
-    // Assert
-    assert.equal(result.code, 0, result.stderr);
-    assert.match(result.stderr, installing(head));
-    assert.deepEqual(seen(result.stderr), { value: 'first 2.0.0' });
-  },
-);
+  // Assert
+  assert.equal(result.code, 0, result.stderr);
+  assert.match(result.stderr, installing(head));
+  assert.deepEqual(seen(result.stderr), { value: 'first 2.0.0' });
+});
 
-test(
-  'a push that changes a linked folder outside the workspaces and keeps the lockfile reads the new folder through the install of the lockfile',
-  { timeout: 60_000 },
-  async () => {
-    // Arrange
-    await using folder = await new TemporaryFiles().directory('git-hooks-');
-    const repo = await vendored(folder.path);
-    await repo.commit('vendored shim-dep');
-    await rm(join(repo.root, 'node_modules'), { recursive: true });
-    const first = await repo.push('--quiet', 'origin', 'main');
-    assert.equal(first.code, 0, first.stderr);
-    await repo.vendor('second');
-    await repo.commit('shim-dep second');
+test('a push that changes a linked folder outside the workspaces and keeps the lockfile reads the new folder through the install of the lockfile', async () => {
+  // Arrange
+  await using folder = await new TemporaryFiles().directory('git-hooks-');
+  const repo = await vendored(folder.path);
+  await repo.commit('vendored shim-dep');
+  await rm(join(repo.root, 'node_modules'), { recursive: true });
+  const first = await repo.push('--quiet', 'origin', 'main');
+  assert.equal(first.code, 0, first.stderr);
+  await repo.vendor('second');
+  await repo.commit('shim-dep second');
 
-    // Act
-    const result = await repo.push('--quiet', 'origin', 'main');
+  // Act
+  const result = await repo.push('--quiet', 'origin', 'main');
 
-    // Assert
-    assert.equal(result.code, 0, result.stderr);
-    assert.doesNotMatch(
-      result.stderr,
-      /installing/,
-      'The install of the same lockfile is used again',
-    );
-    assert.deepEqual(seen(result.stderr), { value: 'second 2.0.0' });
-  },
-);
+  // Assert
+  assert.equal(result.code, 0, result.stderr);
+  assert.doesNotMatch(
+    result.stderr,
+    /installing/,
+    'The install of the same lockfile is used again',
+  );
+  assert.deepEqual(seen(result.stderr), { value: 'second 2.0.0' });
+});

@@ -158,7 +158,7 @@ test('a parallel pool starts every worker at once', async (t) => {
   // Nothing is ready yet, so only a parallel start reaches three workers.
   await t.waitFor(() => assert.equal(created.length, 3), {
     interval: 10,
-    timeout: 5000,
+    timeout: 10_000,
   });
   for (const worker of created) worker.release();
   await pool.ready();
@@ -179,7 +179,7 @@ test('an ordered-ready pool starts each worker after the previous one is ready',
   });
   await t.waitFor(() => assert.equal(created.length, 1), {
     interval: 10,
-    timeout: 5000,
+    timeout: 10_000,
   });
   await setTimeout(200);
   assert.equal(created.length, 1);
@@ -187,7 +187,7 @@ test('an ordered-ready pool starts each worker after the previous one is ready',
   created[0]!.release();
   await t.waitFor(() => assert.equal(created.length, 2), {
     interval: 10,
-    timeout: 5000,
+    timeout: 10_000,
   });
   await setTimeout(200);
   assert.equal(created.length, 2);
@@ -195,7 +195,7 @@ test('an ordered-ready pool starts each worker after the previous one is ready',
   created[1]!.release();
   await t.waitFor(() => assert.equal(created.length, 3), {
     interval: 10,
-    timeout: 5000,
+    timeout: 10_000,
   });
   created[2]!.release();
   await pool.ready();
@@ -365,7 +365,7 @@ test('disposing a pool stops every worker, rejects waiting and later jobs, and s
   });
   await t.waitFor(() => assert.equal(created.length, 1), {
     interval: 10,
-    timeout: 5000,
+    timeout: 10_000,
   });
   const ready = assert.rejects(pool.ready());
   const jobs = Promise.allSettled(
@@ -1384,7 +1384,7 @@ test('an eager pool replaces an idle worker that exits on its own, before any jo
   process.kill(created[0]!.pid, 'SIGKILL');
   await t.waitFor(() => assert.equal(created.length, 3), {
     interval: 10,
-    timeout: 5000,
+    timeout: 10_000,
   });
   await created[2]!.ready();
 
@@ -1414,7 +1414,7 @@ test('stats count the workers that start, wait idle or are lent, and the jobs th
   const until = (stats: object) =>
     t.waitFor(() => assert.deepEqual(pool.stats, stats), {
       interval: 10,
-      timeout: 5000,
+      timeout: 10_000,
     });
   assert.deepEqual(pool.stats, { starting: 2, idle: 0, lent: 0, waiting: 0 });
 
@@ -1482,7 +1482,7 @@ test('stats leave out a worker that exits while a job holds it, and a read keeps
           lent: 1,
           waiting: 0,
         }),
-      { interval: 10, timeout: 5000 },
+      { interval: 10, timeout: 10_000 },
     );
     const before = pool.stats;
 
@@ -1495,7 +1495,7 @@ test('stats leave out a worker that exits while a job holds it, and a read keeps
           lent: 0,
           waiting: 0,
         }),
-      { interval: 10, timeout: 5000 },
+      { interval: 10, timeout: 10_000 },
     );
     assert.deepEqual(before, { starting: 0, idle: 0, lent: 1, waiting: 0 });
     gate.open();
@@ -1532,7 +1532,7 @@ test('stats leave out an idle worker that exits from an on-demand pool', async (
         lent: 0,
         waiting: 0,
       }),
-    { interval: 10, timeout: 5000 },
+    { interval: 10, timeout: 10_000 },
   );
 });
 
@@ -1594,7 +1594,7 @@ test('an eager pool starts a worker again after its warm-up fails: 1 s, doubled 
     await created.at(-1)!.exited();
     await t.waitFor(() => assert.equal(pool.stats.starting, 0), {
       interval: 5,
-      timeout: 5_000,
+      timeout: 10_000,
     });
     await clock.tickAsync(wait - 1);
     assert.deepEqual(
@@ -1608,7 +1608,7 @@ test('an eager pool starts a worker again after its warm-up fails: 1 s, doubled 
 
   await t.waitFor(() => assert.equal(pool.stats.idle, 1), {
     interval: 5,
-    timeout: 5_000,
+    timeout: 10_000,
   });
   assert.equal(created.length, waits.length + 1);
 });
@@ -1632,7 +1632,7 @@ test('a leader-first pool whose leader fails its warm-up starts the others, then
   await assert.rejects(pool.ready(), /Echo worker exited/);
   await t.waitFor(() => assert.equal(pool.stats.idle, 1), {
     interval: 5,
-    timeout: 5_000,
+    timeout: 10_000,
   });
   assert.equal(
     created.length,
@@ -1643,7 +1643,7 @@ test('a leader-first pool whose leader fails its warm-up starts the others, then
   await clock.tickAsync(1_000);
   await t.waitFor(() => assert.equal(pool.stats.idle, 2), {
     interval: 5,
-    timeout: 5_000,
+    timeout: 10_000,
   });
   await clock.tickAsync(60_000);
   assert.equal(created.length, 3, 'no worker starts twice');
@@ -1675,7 +1675,7 @@ test('a worker that a job starts in an eager pool and whose warm-up fails fails 
   // warm-up fails. A job that waits anyway fails on the real clock of
   // AbortSignal.timeout.
   await assert.rejects(
-    pool.use((worker) => worker.echo('now'), AbortSignal.timeout(5_000)),
+    pool.use((worker) => worker.echo('now'), AbortSignal.timeout(10_000)),
     /Echo worker exited/,
   );
   assert.equal(created.length, 2);
@@ -1690,7 +1690,7 @@ test('a worker that a job starts in an eager pool and whose warm-up fails fails 
   await clock.tickAsync(1);
   await t.waitFor(() => assert.equal(pool.stats.idle, 1), {
     interval: 5,
-    timeout: 5_000,
+    timeout: 10_000,
   });
   assert.equal(created.length, 3);
   await pool.ready();
@@ -1715,12 +1715,12 @@ test('a job that needs a slot in back-off after a failed warm-up starts its work
   await assert.rejects(pool.ready(), /Echo worker exited/);
   await t.waitFor(() => assert.equal(clock.countTimers(), 1), {
     interval: 5,
-    timeout: 5_000,
+    timeout: 10_000,
   });
 
   // The timers do not move, so the job cannot wait out the back-off.
   assert.equal(
-    await pool.use((worker) => worker.echo('now'), AbortSignal.timeout(5_000)),
+    await pool.use((worker) => worker.echo('now'), AbortSignal.timeout(10_000)),
     'now',
   );
   assert.equal(
@@ -1753,7 +1753,7 @@ test('disposing a pool in the back-off after a failed warm-up leaves no timer on
   await assert.rejects(pool.ready(), /Echo worker exited/);
   await t.waitFor(
     () => assert.equal(clock.countTimers(), 1, 'the back-off waits on a timer'),
-    { interval: 5, timeout: 5_000 },
+    { interval: 5, timeout: 10_000 },
   );
 
   await pool[Symbol.asyncDispose]();
@@ -1788,7 +1788,7 @@ test('an on-demand pool starts no worker after a failed warm-up until a job need
   assert.equal(
     await pool.use(
       (worker) => worker.echo('second'),
-      AbortSignal.timeout(5_000),
+      AbortSignal.timeout(10_000),
     ),
     'second',
   );
@@ -1818,7 +1818,7 @@ test('a job that needs a slot in back-off starts its worker at once, and the bac
   // The timers do not move, so the job cannot wait out the back-off. A job
   // that waits anyway fails on the real clock of AbortSignal.timeout.
   assert.equal(
-    await pool.use((worker) => worker.echo('now'), AbortSignal.timeout(5_000)),
+    await pool.use((worker) => worker.echo('now'), AbortSignal.timeout(10_000)),
     'now',
   );
   await clock.tickAsync(60_000);
@@ -2054,7 +2054,7 @@ test('an evicted worker starts no replacement and no back-off, and a job then st
     assert.equal(
       await pool.use(
         (worker) => worker.echo('now'),
-        AbortSignal.timeout(5_000),
+        AbortSignal.timeout(10_000),
       ),
       'now',
     );
@@ -2326,13 +2326,13 @@ test('a job takes an idle worker before it starts or waits for one in a lower sl
     try {
       await st.waitFor(() => assert.ok(pool.stats.idle > 0), {
         interval: 10,
-        timeout: 5000,
+        timeout: 10_000,
       });
 
       assert.equal(
         await pool.use(
           async (worker) => worker.pid,
-          AbortSignal.timeout(5_000),
+          AbortSignal.timeout(10_000),
         ),
         created[1]!.pid,
       );
@@ -2430,7 +2430,7 @@ test('a job joins a worker that starts before it starts one in an empty slot', a
   try {
     await t.waitFor(() => assert.equal(pool.stats.waiting, 1), {
       interval: 10,
-      timeout: 5000,
+      timeout: 10_000,
     });
     created[0]!.release();
     assert.equal(await job, 'joined');

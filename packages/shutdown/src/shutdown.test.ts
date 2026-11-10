@@ -15,7 +15,7 @@ const noEngine = await (async () => {
   try {
     const docker = await Docker.connect({
       clock: globalThis,
-      signal: AbortSignal.timeout(5_000),
+      signal: AbortSignal.timeout(10_000),
     });
     await docker[Symbol.asyncDispose]();
     return false;
@@ -108,14 +108,11 @@ function run(signal: AbortSignal, program: string) {
 }
 
 describe('Shutdown', () => {
-  test(
-    'a second termination signal ends a shutdown whose cleanup does not end, at once and by that signal',
-    { timeout: 10_000 },
-    async (t) => {
-      // Arrange
-      await using program = run(
-        t.signal,
-        `
+  test('a second termination signal ends a shutdown whose cleanup does not end, at once and by that signal', async (t) => {
+    // Arrange
+    await using program = run(
+      t.signal,
+      `
         import { aborted } from 'node:util';
         import { Shutdown } from '@zukhruf/shutdown';
 
@@ -132,29 +129,25 @@ describe('Shutdown', () => {
         await aborted(shutdown.signal, work);
         clearInterval(work);
       `,
-      );
-      await program.wrote('ready');
-      program.send('SIGINT');
-      await program.wrote('cleanup started');
+    );
+    await program.wrote('ready');
+    program.send('SIGINT');
+    await program.wrote('cleanup started');
 
-      // Act
-      program.send('SIGINT');
-      const { code, signal, stdout } = await program.ended();
+    // Act
+    program.send('SIGINT');
+    const { code, signal, stdout } = await program.ended();
 
-      // Assert
-      assert.deepEqual({ code, signal }, { code: null, signal: 'SIGINT' });
-      assert.deepEqual(stdout, ['ready', 'cleanup started']);
-    },
-  );
+    // Assert
+    assert.deepEqual({ code, signal }, { code: null, signal: 'SIGINT' });
+    assert.deepEqual(stdout, ['ready', 'cleanup started']);
+  });
 
-  test(
-    'a listener of another package for the termination signal does not keep the process from dying by it',
-    { timeout: 10_000 },
-    async (t) => {
-      // Arrange
-      await using program = run(
-        t.signal,
-        `
+  test('a listener of another package for the termination signal does not keep the process from dying by it', async (t) => {
+    // Arrange
+    await using program = run(
+      t.signal,
+      `
         import { aborted } from 'node:util';
         import { Shutdown } from '@zukhruf/shutdown';
 
@@ -165,27 +158,23 @@ describe('Shutdown', () => {
         await aborted(shutdown.signal, work);
         clearInterval(work);
       `,
-      );
-      await program.wrote('ready');
+    );
+    await program.wrote('ready');
 
-      // Act
-      program.send('SIGINT');
-      const { code, signal, stdout } = await program.ended();
+    // Act
+    program.send('SIGINT');
+    const { code, signal, stdout } = await program.ended();
 
-      // Assert
-      assert.deepEqual({ code, signal }, { code: null, signal: 'SIGINT' });
-      assert.deepEqual(stdout, ['ready', 'the other listener ran']);
-    },
-  );
+    // Assert
+    assert.deepEqual({ code, signal }, { code: null, signal: 'SIGINT' });
+    assert.deepEqual(stdout, ['ready', 'the other listener ran']);
+  });
 
-  test(
-    'a crash during the cleanup of a crash ends the process at once, with exit code 1',
-    { timeout: 10_000 },
-    async (t) => {
-      // Arrange
-      await using program = run(
-        t.signal,
-        `
+  test('a crash during the cleanup of a crash ends the process at once, with exit code 1', async (t) => {
+    // Arrange
+    await using program = run(
+      t.signal,
+      `
         import { aborted } from 'node:util';
         import { Shutdown } from '@zukhruf/shutdown';
 
@@ -207,27 +196,23 @@ describe('Shutdown', () => {
         await aborted(shutdown.signal, work);
         clearInterval(work);
       `,
-      );
+    );
 
-      // Act
-      const { code, signal, stdout, stderr } = await program.ended();
+    // Act
+    const { code, signal, stdout, stderr } = await program.ended();
 
-      // Assert
-      assert.deepEqual({ code, signal }, { code: 1, signal: null });
-      assert.deepEqual(stdout, ['cleanup started']);
-      assert.match(stderr, /Error: the work crashed/);
-      assert.match(stderr, /Error: the cleanup crashed/);
-    },
-  );
+    // Assert
+    assert.deepEqual({ code, signal }, { code: 1, signal: null });
+    assert.deepEqual(stdout, ['cleanup started']);
+    assert.match(stderr, /Error: the work crashed/);
+    assert.match(stderr, /Error: the cleanup crashed/);
+  });
 
-  test(
-    'a termination signal during the cleanup of a crash ends the process at once, by that signal',
-    { timeout: 10_000 },
-    async (t) => {
-      // Arrange
-      await using program = run(
-        t.signal,
-        `
+  test('a termination signal during the cleanup of a crash ends the process at once, by that signal', async (t) => {
+    // Arrange
+    await using program = run(
+      t.signal,
+      `
         import { aborted } from 'node:util';
         import { Shutdown } from '@zukhruf/shutdown';
 
@@ -246,31 +231,27 @@ describe('Shutdown', () => {
         await aborted(shutdown.signal, work);
         clearInterval(work);
       `,
-      );
-      await program.wrote('cleanup started');
+    );
+    await program.wrote('cleanup started');
 
-      // Act
-      program.send('SIGINT');
-      const { code, signal, stdout } = await program.ended();
+    // Act
+    program.send('SIGINT');
+    const { code, signal, stdout } = await program.ended();
 
-      // Assert
-      assert.deepEqual({ code, signal }, { code: null, signal: 'SIGINT' });
-      assert.deepEqual(stdout, ['cleanup started']);
-    },
-  );
+    // Assert
+    assert.deepEqual({ code, signal }, { code: null, signal: 'SIGINT' });
+    assert.deepEqual(stdout, ['cleanup started']);
+  });
 
-  test(
-    'a crash during the cleanup of a termination signal ends the process at once, by that signal, also while a call waits in the thread pool',
-    { timeout: 10_000 },
-    async (t) => {
-      // Arrange
-      // The key derivation keeps a thread of the thread pool of Node.js busy
-      // for minutes, as a read of a pipe that no program writes does. An exit
-      // that waits for the thread pool, as process.exit() does, then does not
-      // end.
-      await using program = run(
-        t.signal,
-        `
+  test('a crash during the cleanup of a termination signal ends the process at once, by that signal, also while a call waits in the thread pool', async (t) => {
+    // Arrange
+    // The key derivation keeps a thread of the thread pool of Node.js busy
+    // for minutes, as a read of a pipe that no program writes does. An exit
+    // that waits for the thread pool, as process.exit() does, then does not
+    // end.
+    await using program = run(
+      t.signal,
+      `
         import { pbkdf2 } from 'node:crypto';
         import { aborted } from 'node:util';
         import { Shutdown } from '@zukhruf/shutdown';
@@ -292,28 +273,24 @@ describe('Shutdown', () => {
         await aborted(shutdown.signal, work);
         clearInterval(work);
       `,
-      );
-      await program.wrote('ready');
+    );
+    await program.wrote('ready');
 
-      // Act
-      program.send('SIGINT');
-      const { code, signal, stdout, stderr } = await program.ended();
+    // Act
+    program.send('SIGINT');
+    const { code, signal, stdout, stderr } = await program.ended();
 
-      // Assert
-      assert.deepEqual({ code, signal }, { code: null, signal: 'SIGINT' });
-      assert.deepEqual(stdout, ['ready', 'cleanup started']);
-      assert.match(stderr, /Error: the cleanup crashed/);
-    },
-  );
+    // Assert
+    assert.deepEqual({ code, signal }, { code: null, signal: 'SIGINT' });
+    assert.deepEqual(stdout, ['ready', 'cleanup started']);
+    assert.match(stderr, /Error: the cleanup crashed/);
+  });
 
-  test(
-    'work that throws the abort reason of a termination signal, and that no code catches, still ends by the signal',
-    { timeout: 10_000 },
-    async (t) => {
-      // Arrange
-      await using program = run(
-        t.signal,
-        `
+  test('work that throws the abort reason of a termination signal, and that no code catches, still ends by the signal', async (t) => {
+    // Arrange
+    await using program = run(
+      t.signal,
+      `
         import { aborted } from 'node:util';
         import { Shutdown } from '@zukhruf/shutdown';
 
@@ -329,28 +306,24 @@ describe('Shutdown', () => {
         clearInterval(work);
         shutdown.signal.throwIfAborted();
       `,
-      );
-      await program.wrote('ready');
+    );
+    await program.wrote('ready');
 
-      // Act
-      program.send('SIGINT');
-      const { code, signal, stdout, stderr } = await program.ended();
+    // Act
+    program.send('SIGINT');
+    const { code, signal, stdout, stderr } = await program.ended();
 
-      // Assert
-      assert.deepEqual({ code, signal }, { code: null, signal: 'SIGINT' });
-      assert.deepEqual(stdout, ['ready', 'cleanup ran']);
-      assert.match(stderr, /\[AbortError\]: The process received SIGINT/);
-    },
-  );
+    // Assert
+    assert.deepEqual({ code, signal }, { code: null, signal: 'SIGINT' });
+    assert.deepEqual(stdout, ['ready', 'cleanup ran']);
+    assert.match(stderr, /\[AbortError\]: The process received SIGINT/);
+  });
 
-  test(
-    'an uncaught exception aborts the signal with the error, the cleanup runs, and the process exits with code 1',
-    { timeout: 10_000 },
-    async (t) => {
-      // Arrange
-      await using program = run(
-        t.signal,
-        `
+  test('an uncaught exception aborts the signal with the error, the cleanup runs, and the process exits with code 1', async (t) => {
+    // Arrange
+    await using program = run(
+      t.signal,
+      `
         import { aborted } from 'node:util';
         import { Shutdown } from '@zukhruf/shutdown';
 
@@ -369,29 +342,22 @@ describe('Shutdown', () => {
         clearInterval(work);
         console.log(\`the reason is the error: \${shutdown.signal.reason === crash}\`);
       `,
-      );
+    );
 
-      // Act
-      const { code, signal, stdout, stderr } = await program.ended();
+    // Act
+    const { code, signal, stdout, stderr } = await program.ended();
 
-      // Assert
-      assert.deepEqual({ code, signal }, { code: 1, signal: null });
-      assert.deepEqual(stdout, [
-        'the reason is the error: true',
-        'cleanup ran',
-      ]);
-      assert.match(stderr, /Error: the work crashed/);
-    },
-  );
+    // Assert
+    assert.deepEqual({ code, signal }, { code: 1, signal: null });
+    assert.deepEqual(stdout, ['the reason is the error: true', 'cleanup ran']);
+    assert.match(stderr, /Error: the work crashed/);
+  });
 
-  test(
-    'an unhandled rejection of a value that is not an error aborts the signal with that value, the cleanup runs, and the process exits with code 1',
-    { timeout: 10_000 },
-    async (t) => {
-      // Arrange
-      await using program = run(
-        t.signal,
-        `
+  test('an unhandled rejection of a value that is not an error aborts the signal with that value, the cleanup runs, and the process exits with code 1', async (t) => {
+    // Arrange
+    await using program = run(
+      t.signal,
+      `
         import { aborted } from 'node:util';
         import { Shutdown } from '@zukhruf/shutdown';
 
@@ -407,26 +373,22 @@ describe('Shutdown', () => {
         clearInterval(work);
         console.log(\`the reason: \${shutdown.signal.reason}\`);
       `,
-      );
+    );
 
-      // Act
-      const { code, signal, stdout, stderr } = await program.ended();
+    // Act
+    const { code, signal, stdout, stderr } = await program.ended();
 
-      // Assert
-      assert.deepEqual({ code, signal }, { code: 1, signal: null });
-      assert.deepEqual(stdout, ['the reason: the work failed', 'cleanup ran']);
-      assert.match(stderr, /the work failed/);
-    },
-  );
+    // Assert
+    assert.deepEqual({ code, signal }, { code: 1, signal: null });
+    assert.deepEqual(stdout, ['the reason: the work failed', 'cleanup ran']);
+    assert.match(stderr, /the work failed/);
+  });
 
-  test(
-    'a crash keeps an exit code that the program set',
-    { timeout: 10_000 },
-    async (t) => {
-      // Arrange
-      await using program = run(
-        t.signal,
-        `
+  test('a crash keeps an exit code that the program set', async (t) => {
+    // Arrange
+    await using program = run(
+      t.signal,
+      `
         import { aborted } from 'node:util';
         import { Shutdown } from '@zukhruf/shutdown';
 
@@ -439,25 +401,21 @@ describe('Shutdown', () => {
         await aborted(shutdown.signal, work);
         clearInterval(work);
       `,
-      );
+    );
 
-      // Act
-      const { code, signal } = await program.ended();
+    // Act
+    const { code, signal } = await program.ended();
 
-      // Assert
-      assert.deepEqual({ code, signal }, { code: 3, signal: null });
-    },
-  );
+    // Assert
+    assert.deepEqual({ code, signal }, { code: 3, signal: null });
+  });
 
   for (const terminationSignal of ['SIGINT', 'SIGTERM', 'SIGHUP'] as const) {
-    test(
-      `${terminationSignal} aborts the signal with an AbortError that names it, the cleanup runs, and then the process dies by ${terminationSignal}`,
-      { timeout: 10_000 },
-      async (t) => {
-        // Arrange
-        await using program = run(
-          t.signal,
-          `
+    test(`${terminationSignal} aborts the signal with an AbortError that names it, the cleanup runs, and then the process dies by ${terminationSignal}`, async (t) => {
+      // Arrange
+      await using program = run(
+        t.signal,
+        `
           import { aborted } from 'node:util';
           import { Shutdown } from '@zukhruf/shutdown';
 
@@ -475,66 +433,58 @@ describe('Shutdown', () => {
           const { reason } = shutdown.signal;
           console.log(\`\${reason instanceof DOMException} \${reason.name}: \${reason.message}\`);
         `,
-        );
-        await program.wrote('ready');
+      );
+      await program.wrote('ready');
 
-        // Act
-        program.send(terminationSignal);
-        const { code, signal, stdout } = await program.ended();
+      // Act
+      program.send(terminationSignal);
+      const { code, signal, stdout } = await program.ended();
 
-        // Assert
-        assert.deepEqual(
-          { code, signal },
-          { code: null, signal: terminationSignal },
-        );
-        assert.deepEqual(stdout, [
-          'ready',
-          `true AbortError: The process received ${terminationSignal}`,
-          'cleanup ran',
-        ]);
-      },
-    );
+      // Assert
+      assert.deepEqual(
+        { code, signal },
+        { code: null, signal: terminationSignal },
+      );
+      assert.deepEqual(stdout, [
+        'ready',
+        `true AbortError: The process received ${terminationSignal}`,
+        'cleanup ran',
+      ]);
+    });
   }
 
-  test(
-    'a program with no stop request ends when its work ends, with its own exit code, also when the scope never ends',
-    { timeout: 10_000 },
-    async (t) => {
-      for (const declaration of [
-        'using shutdown = new Shutdown();',
-        'const shutdown = new Shutdown();',
-      ]) {
-        for (const exitCode of [0, 3]) {
-          // Arrange
-          await using program = run(
-            t.signal,
-            `
+  test('a program with no stop request ends when its work ends, with its own exit code, also when the scope never ends', async (t) => {
+    for (const declaration of [
+      'using shutdown = new Shutdown();',
+      'const shutdown = new Shutdown();',
+    ]) {
+      for (const exitCode of [0, 3]) {
+        // Arrange
+        await using program = run(
+          t.signal,
+          `
             import { Shutdown } from '@zukhruf/shutdown';
 
             ${declaration}
             process.exitCode = ${exitCode};
           `,
-          );
+        );
 
-          // Act
-          const { code, signal } = await program.ended();
+        // Act
+        const { code, signal } = await program.ended();
 
-          // Assert
-          assert.deepEqual(
-            { declaration, code, signal },
-            { declaration, code: exitCode, signal: null },
-          );
-        }
+        // Assert
+        assert.deepEqual(
+          { declaration, code, signal },
+          { declaration, code: exitCode, signal: null },
+        );
       }
-    },
-  );
+    }
+  });
 
-  test(
-    'the end of the scope with no stop request aborts the signal, stops listening, and leaves the exit of the process alone',
-    { timeout: 10_000 },
-    async (t) => {
-      // Arrange
-      const program = `
+  test('the end of the scope with no stop request aborts the signal, stops listening, and leaves the exit of the process alone', async (t) => {
+    // Arrange
+    const program = `
         import { Shutdown } from '@zukhruf/shutdown';
 
         const signal = (() => {
@@ -544,56 +494,52 @@ describe('Shutdown', () => {
         console.log(\`\${signal.reason.name}: \${signal.reason.message}\`);
         console.log('scope ended');
       `;
-      await using ends = run(t.signal, program);
-      await using waits = run(
-        t.signal,
-        `${program}\nsetInterval(() => {}, 1_000);`,
-      );
-      await using crashes = run(
-        t.signal,
-        `${program}\nsetTimeout(() => {\n  throw new Error('a crash after the scope');\n});`,
-      );
+    await using ends = run(t.signal, program);
+    await using waits = run(
+      t.signal,
+      `${program}\nsetInterval(() => {}, 1_000);`,
+    );
+    await using crashes = run(
+      t.signal,
+      `${program}\nsetTimeout(() => {\n  throw new Error('a crash after the scope');\n});`,
+    );
 
-      // Act
-      const ended = await ends.ended();
-      const linesBeforeSignal = await waits.wrote('scope ended');
-      waits.send('SIGINT');
-      const waited = await waits.ended();
-      const crashed = await crashes.ended();
+    // Act
+    const ended = await ends.ended();
+    const linesBeforeSignal = await waits.wrote('scope ended');
+    waits.send('SIGINT');
+    const waited = await waits.ended();
+    const crashed = await crashes.ended();
 
-      // Assert
-      assert.deepEqual(
-        { code: ended.code, signal: ended.signal, stdout: ended.stdout },
-        {
-          code: 0,
-          signal: null,
-          stdout: ['AbortError: The shutdown scope ended', 'scope ended'],
-        },
-      );
-      assert.deepEqual(linesBeforeSignal, [
-        'AbortError: The shutdown scope ended',
-        'scope ended',
-      ]);
-      assert.deepEqual(
-        { code: waited.code, signal: waited.signal },
-        { code: null, signal: 'SIGINT' },
-      );
-      assert.deepEqual(
-        { code: crashed.code, signal: crashed.signal },
-        { code: 1, signal: null },
-      );
-      assert.match(crashed.stderr, /Error: a crash after the scope/);
-    },
-  );
+    // Assert
+    assert.deepEqual(
+      { code: ended.code, signal: ended.signal, stdout: ended.stdout },
+      {
+        code: 0,
+        signal: null,
+        stdout: ['AbortError: The shutdown scope ended', 'scope ended'],
+      },
+    );
+    assert.deepEqual(linesBeforeSignal, [
+      'AbortError: The shutdown scope ended',
+      'scope ended',
+    ]);
+    assert.deepEqual(
+      { code: waited.code, signal: waited.signal },
+      { code: null, signal: 'SIGINT' },
+    );
+    assert.deepEqual(
+      { code: crashed.code, signal: crashed.signal },
+      { code: 1, signal: null },
+    );
+    assert.match(crashed.stderr, /Error: a crash after the scope/);
+  });
 
-  test(
-    'a stop request that came before the end of the scope stays: the reason is kept, and the process still dies by the signal',
-    { timeout: 10_000 },
-    async (t) => {
-      // Arrange
-      await using program = run(
-        t.signal,
-        `
+  test('a stop request that came before the end of the scope stays: the reason is kept, and the process still dies by the signal', async (t) => {
+    // Arrange
+    await using program = run(
+      t.signal,
+      `
         import { aborted } from 'node:util';
         import { Shutdown } from '@zukhruf/shutdown';
 
@@ -607,21 +553,20 @@ describe('Shutdown', () => {
         })();
         console.log(\`after the scope: \${signal.reason.message}\`);
       `,
-      );
-      await program.wrote('ready');
+    );
+    await program.wrote('ready');
 
-      // Act
-      program.send('SIGINT');
-      const { code, signal, stdout } = await program.ended();
+    // Act
+    program.send('SIGINT');
+    const { code, signal, stdout } = await program.ended();
 
-      // Assert
-      assert.deepEqual({ code, signal }, { code: null, signal: 'SIGINT' });
-      assert.deepEqual(stdout, [
-        'ready',
-        'after the scope: The process received SIGINT',
-      ]);
-    },
-  );
+    // Assert
+    assert.deepEqual({ code, signal }, { code: null, signal: 'SIGINT' });
+    assert.deepEqual(stdout, [
+      'ready',
+      'after the scope: The process received SIGINT',
+    ]);
+  });
 
   const asPidOne = [
     { stopRequest: 'SIGINT', exitCode: 130, cleanup: 'ends' },
@@ -632,7 +577,7 @@ describe('Shutdown', () => {
   for (const { stopRequest, exitCode, cleanup } of asPidOne) {
     test(
       `as PID 1 in a container, ${stopRequest} ends the process with exit code ${exitCode} when the cleanup ${cleanup}`,
-      { skip: noEngine, timeout: 180_000 },
+      { skip: noEngine },
       async () => {
         // Arrange
         await using docker = await Docker.connect({ clock: globalThis });
@@ -719,14 +664,11 @@ describe('Shutdown', () => {
     );
   }
 
-  test(
-    'SIGQUIT keeps its default action: the process ends at once, with no abort and no cleanup',
-    { timeout: 10_000 },
-    async (t) => {
-      // Arrange
-      await using program = run(
-        t.signal,
-        `
+  test('SIGQUIT keeps its default action: the process ends at once, with no abort and no cleanup', async (t) => {
+    // Arrange
+    await using program = run(
+      t.signal,
+      `
         import { aborted } from 'node:util';
         import { Shutdown } from '@zukhruf/shutdown';
 
@@ -741,27 +683,23 @@ describe('Shutdown', () => {
         await aborted(shutdown.signal, work);
         console.log('aborted');
       `,
-      );
-      await program.wrote('ready');
+    );
+    await program.wrote('ready');
 
-      // Act
-      program.send('SIGQUIT');
-      const { code, signal, stdout } = await program.ended();
+    // Act
+    program.send('SIGQUIT');
+    const { code, signal, stdout } = await program.ended();
 
-      // Assert
-      assert.deepEqual({ code, signal }, { code: null, signal: 'SIGQUIT' });
-      assert.deepEqual(stdout, ['ready']);
-    },
-  );
+    // Assert
+    assert.deepEqual({ code, signal }, { code: null, signal: 'SIGQUIT' });
+    assert.deepEqual(stdout, ['ready']);
+  });
 
-  test(
-    'a termination signal during the start, before the work takes the signal, still stops the work and ends the process by that signal',
-    { timeout: 10_000 },
-    async (t) => {
-      // Arrange
-      await using program = run(
-        t.signal,
-        `
+  test('a termination signal during the start, before the work takes the signal, still stops the work and ends the process by that signal', async (t) => {
+    // Arrange
+    await using program = run(
+      t.signal,
+      `
         import { once } from 'node:events';
         import { createInterface } from 'node:readline';
         import { Shutdown } from '@zukhruf/shutdown';
@@ -782,23 +720,22 @@ describe('Shutdown', () => {
         process.stdin.destroy();
         console.log(\`the work gets an aborted signal: \${shutdown.signal.aborted}\`);
       `,
-      );
-      await program.wrote('ready');
-      program.send('SIGTERM');
-      await program.wrote('the signal came');
+    );
+    await program.wrote('ready');
+    program.send('SIGTERM');
+    await program.wrote('the signal came');
 
-      // Act
-      program.write('go');
-      const { code, signal, stdout } = await program.ended();
+    // Act
+    program.write('go');
+    const { code, signal, stdout } = await program.ended();
 
-      // Assert
-      assert.deepEqual({ code, signal }, { code: null, signal: 'SIGTERM' });
-      assert.deepEqual(stdout, [
-        'ready',
-        'the signal came',
-        'the work gets an aborted signal: true',
-        'cleanup ran',
-      ]);
-    },
-  );
+    // Assert
+    assert.deepEqual({ code, signal }, { code: null, signal: 'SIGTERM' });
+    assert.deepEqual(stdout, [
+      'ready',
+      'the signal came',
+      'the work gets an aborted signal: true',
+      'cleanup ran',
+    ]);
+  });
 });

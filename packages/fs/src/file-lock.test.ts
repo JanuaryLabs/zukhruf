@@ -104,318 +104,262 @@ async function tryLockInAnotherProcess(path: string): Promise<boolean> {
 }
 
 describe('FileLock', () => {
-  test(
-    'the kernel frees the lock of a holder that is killed, and the holder leaves no journal file',
-    { timeout: 10_000 },
-    async () => {
-      // Arrange
-      await using directory = await new TemporaryFiles().directory(
-        'zukhruf-fs-',
+  test('the kernel frees the lock of a holder that is killed, and the holder leaves no journal file', async () => {
+    // Arrange
+    await using directory = await new TemporaryFiles().directory('zukhruf-fs-');
+    const path = join(directory.path, 'job.lock');
+    const holder = await startHolder(keepsHandle(path));
+    using lock = FileLock.open(path);
+    try {
+      assert.equal(
+        lock.tryLock(),
+        false,
+        'A lock that another process holds must refuse',
       );
-      const path = join(directory.path, 'job.lock');
-      const holder = await startHolder(keepsHandle(path));
-      using lock = FileLock.open(path);
-      try {
-        assert.equal(
-          lock.tryLock(),
-          false,
-          'A lock that another process holds must refuse',
-        );
 
-        // Act
-        holder.kill();
-        await holder.exited;
+      // Act
+      holder.kill();
+      await holder.exited;
 
-        // Assert
-        assert.deepEqual(
-          await readdir(directory.path),
-          ['job.lock'],
-          'A killed holder must leave no journal beside the file',
-        );
-        assert.equal(
-          lock.tryLock(),
-          true,
-          'The lock of a killed holder must be free with no clean-up',
-        );
-      } finally {
-        holder.kill();
-      }
-    },
-  );
+      // Assert
+      assert.deepEqual(
+        await readdir(directory.path),
+        ['job.lock'],
+        'A killed holder must leave no journal beside the file',
+      );
+      assert.equal(
+        lock.tryLock(),
+        true,
+        'The lock of a killed holder must be free with no clean-up',
+      );
+    } finally {
+      holder.kill();
+    }
+  });
 
   // Published versions and new versions run in separate processes. In one
   // process, SQLite's own lock bookkeeping can exclude two handles where the
   // kernel's locks would not, so these holders are other processes.
-  test(
-    'a lock refuses while another process holds an exclusive transaction of the default journal, and is free after it dies',
-    { timeout: 10_000 },
-    async () => {
-      // Arrange
-      await using directory = await new TemporaryFiles().directory(
-        'zukhruf-fs-',
-      );
-      const path = join(directory.path, 'job.lock');
-      const holder = await startHolder(holdsPublishedTransaction(path));
-      using lock = FileLock.open(path);
-      try {
-        // Act
-        const lockedWhilePublishedHolds = lock.tryLock();
-        holder.kill();
-        await holder.exited;
-        const lockedAfterPublishedDied = lock.tryLock();
-
-        // Assert
-        assert.equal(
-          lockedWhilePublishedHolds,
-          false,
-          'A transaction of a published version must refuse the lock',
-        );
-        assert.equal(lockedAfterPublishedDied, true);
-      } finally {
-        holder.kill();
-      }
-    },
-  );
-
-  test(
-    'an exclusive transaction of the default journal is busy while another process holds the lock',
-    { timeout: 10_000 },
-    async () => {
-      // Arrange
-      await using directory = await new TemporaryFiles().directory(
-        'zukhruf-fs-',
-      );
-      const path = join(directory.path, 'job.lock');
-      const holder = await startHolder(keepsHandle(path));
-      using published = open(path, {
-        journal: new UnchangedJournal(),
-        timeout: 0,
-      });
-      try {
-        // Act
-        const beginning = () => published.exec('BEGIN EXCLUSIVE');
-
-        // Assert
-        assert.throws(
-          beginning,
-          { errcode: 5 },
-          'A held lock must refuse the transaction of a published version',
-        );
-      } finally {
-        holder.kill();
-      }
-    },
-  );
-
-  test(
-    'a lock that another handle in this process holds refuses at once',
-    { timeout: 2_000 },
-    async () => {
-      // Arrange
-      await using directory = await new TemporaryFiles().directory(
-        'zukhruf-fs-',
-      );
-      const path = join(directory.path, 'job.lock');
-      using holder = FileLock.open(path);
-      using other = FileLock.open(path);
-      assert.equal(holder.tryLock(), true, 'The holder must get the lock');
-
+  test('a lock refuses while another process holds an exclusive transaction of the default journal, and is free after it dies', async () => {
+    // Arrange
+    await using directory = await new TemporaryFiles().directory('zukhruf-fs-');
+    const path = join(directory.path, 'job.lock');
+    const holder = await startHolder(holdsPublishedTransaction(path));
+    using lock = FileLock.open(path);
+    try {
       // Act
-      const started = performance.now();
-      const locked = other.tryLock();
-      const elapsed = performance.now() - started;
+      const lockedWhilePublishedHolds = lock.tryLock();
+      holder.kill();
+      await holder.exited;
+      const lockedAfterPublishedDied = lock.tryLock();
 
       // Assert
-      assert.equal(locked, false);
-      // A wait inside tryLock would block the event loop: callers wait between tries instead.
-      assert.ok(
-        elapsed < 40,
-        `A refusal must not wait, but it took ${elapsed.toFixed(1)} ms. A busy timeout of 50 ms or more passes this limit; the rest of it is room for a loaded machine.`,
+      assert.equal(
+        lockedWhilePublishedHolds,
+        false,
+        'A transaction of a published version must refuse the lock',
       );
-    },
-  );
+      assert.equal(lockedAfterPublishedDied, true);
+    } finally {
+      holder.kill();
+    }
+  });
 
-  test(
-    'a held lock stays held after its handle is garbage collected',
-    { timeout: 10_000 },
-    async () => {
-      // Arrange
-      await using directory = await new TemporaryFiles().directory(
-        'zukhruf-fs-',
-      );
-      const path = join(directory.path, 'job.lock');
-      using lock = FileLock.open(path);
-
+  test('an exclusive transaction of the default journal is busy while another process holds the lock', async () => {
+    // Arrange
+    await using directory = await new TemporaryFiles().directory('zukhruf-fs-');
+    const path = join(directory.path, 'job.lock');
+    const holder = await startHolder(keepsHandle(path));
+    using published = open(path, {
+      journal: new UnchangedJournal(),
+      timeout: 0,
+    });
+    try {
       // Act
-      const holder = await startHolder(dropsHandle(path));
-      try {
-        // Assert
-        assert.equal(
-          lock.tryLock(),
-          false,
-          'Garbage collection must not end a lock that nobody let go',
-        );
-      } finally {
-        holder.kill();
-      }
-    },
-  );
+      const beginning = () => published.exec('BEGIN EXCLUSIVE');
 
-  test(
-    'a file with other content makes tryLock throw, not refuse',
-    { timeout: 2_000 },
-    async () => {
-      // Arrange
-      await using directory = await new TemporaryFiles().directory(
-        'zukhruf-fs-',
+      // Assert
+      assert.throws(
+        beginning,
+        { errcode: 5 },
+        'A held lock must refuse the transaction of a published version',
       );
-      const path = join(directory.path, 'job.lock');
-      await writeFile(
-        path,
-        'pid 4242 has held this file since an older release',
-      );
-      using lock = FileLock.open(path);
+    } finally {
+      holder.kill();
+    }
+  });
 
+  test('a lock that another handle in this process holds refuses without a wait', async () => {
+    // Arrange
+    await using directory = await new TemporaryFiles().directory('zukhruf-fs-');
+    const path = join(directory.path, 'job.lock');
+    using holder = FileLock.open(path);
+    using other = FileLock.open(path);
+    assert.equal(holder.tryLock(), true, 'The holder must get the lock');
+
+    // Act: load can slow one try, but it does not slow each of twenty.
+    const tries = Array.from({ length: 20 }, () => {
+      const started = performance.now();
+      const locked = other.tryLock();
+      return { locked, took: performance.now() - started };
+    });
+
+    // Assert
+    assert.deepEqual(
+      new Set(tries.map(({ locked }) => locked)),
+      new Set([false]),
+    );
+    // A wait inside tryLock would block the event loop: callers wait between tries instead.
+    // A busy timeout of 50 ms or more makes every try take at least that long.
+    const fastest = Math.min(...tries.map(({ took }) => took));
+    assert.ok(
+      fastest < 40,
+      `The fastest refusal took ${fastest.toFixed(1)} ms`,
+    );
+  });
+
+  test('a held lock stays held after its handle is garbage collected', async () => {
+    // Arrange
+    await using directory = await new TemporaryFiles().directory('zukhruf-fs-');
+    const path = join(directory.path, 'job.lock');
+    using lock = FileLock.open(path);
+
+    // Act
+    const holder = await startHolder(dropsHandle(path));
+    try {
+      // Assert
+      assert.equal(
+        lock.tryLock(),
+        false,
+        'Garbage collection must not end a lock that nobody let go',
+      );
+    } finally {
+      holder.kill();
+    }
+  });
+
+  test('a file with other content makes tryLock throw, not refuse', async () => {
+    // Arrange
+    await using directory = await new TemporaryFiles().directory('zukhruf-fs-');
+    const path = join(directory.path, 'job.lock');
+    await writeFile(path, 'pid 4242 has held this file since an older release');
+    using lock = FileLock.open(path);
+
+    // Act
+    const locking = () => lock.tryLock();
+
+    // Assert: a refusal would make a caller wait for a holder that never lets go.
+    assert.throws(locking, { errcode: 26 });
+  });
+
+  test('check tells a lock that another process holds from a free one and from a missing file, and creates no file', async () => {
+    // Arrange: the presence of the mutex checks the lock of a caller in
+    // another process, so a lock must refuse readers there too.
+    await using directory = await new TemporaryFiles().directory('zukhruf-fs-');
+    const path = join(directory.path, 'job.lock');
+    const absent = join(directory.path, 'absent.lock');
+    const holder = await startHolder(keepsHandle(path));
+    try {
       // Act
-      const locking = () => lock.tryLock();
+      const whileHeld = FileLock.check(path);
+      holder.kill();
+      await holder.exited;
+      const afterHolderDied = FileLock.check(path);
+      const ofAbsent = FileLock.check(absent);
 
-      // Assert: a refusal would make a caller wait for a holder that never lets go.
-      assert.throws(locking, { errcode: 26 });
-    },
-  );
-
-  test(
-    'check tells a lock that another process holds from a free one and from a missing file, and creates no file',
-    { timeout: 10_000 },
-    async () => {
-      // Arrange: the presence of the mutex checks the lock of a caller in
-      // another process, so a lock must refuse readers there too.
-      await using directory = await new TemporaryFiles().directory(
-        'zukhruf-fs-',
+      // Assert
+      assert.equal(whileHeld, 'locked');
+      assert.equal(afterHolderDied, 'unlocked');
+      assert.equal(ofAbsent, 'missing');
+      assert.deepEqual(
+        await readdir(directory.path),
+        ['job.lock'],
+        'A check must not create the file it checks',
       );
-      const path = join(directory.path, 'job.lock');
-      const absent = join(directory.path, 'absent.lock');
-      const holder = await startHolder(keepsHandle(path));
-      try {
-        // Act
-        const whileHeld = FileLock.check(path);
-        holder.kill();
-        await holder.exited;
-        const afterHolderDied = FileLock.check(path);
-        const ofAbsent = FileLock.check(absent);
-
-        // Assert
-        assert.equal(whileHeld, 'locked');
-        assert.equal(afterHolderDied, 'unlocked');
-        assert.equal(ofAbsent, 'missing');
-        assert.deepEqual(
-          await readdir(directory.path),
-          ['job.lock'],
-          'A check must not create the file it checks',
-        );
-      } finally {
-        holder.kill();
-      }
-    },
-  );
+    } finally {
+      holder.kill();
+    }
+  });
 
   // The single flight's coordinator checks the lock of a key in the process
   // that can hold it. A check closes its connection, and on Unix closing any
   // descriptor of the file drops the process's lock on it.
-  test(
-    'a check in the process that holds the lock answers locked, and the lock stays held for other processes',
-    { timeout: 10_000 },
-    async () => {
-      // Arrange
-      await using directory = await new TemporaryFiles().directory(
-        'zukhruf-fs-',
-      );
-      const path = join(directory.path, 'job.lock');
-      using lock = FileLock.open(path);
-      assert.equal(lock.tryLock(), true, 'The holder must get the lock');
+  test('a check in the process that holds the lock answers locked, and the lock stays held for other processes', async () => {
+    // Arrange
+    await using directory = await new TemporaryFiles().directory('zukhruf-fs-');
+    const path = join(directory.path, 'job.lock');
+    using lock = FileLock.open(path);
+    assert.equal(lock.tryLock(), true, 'The holder must get the lock');
 
-      // Act
-      const checked = FileLock.check(path);
-      const lockedElsewhereAfterCheck = await tryLockInAnotherProcess(path);
-      lock.unlock();
-      const lockedElsewhereAfterUnlock = await tryLockInAnotherProcess(path);
+    // Act
+    const checked = FileLock.check(path);
+    const lockedElsewhereAfterCheck = await tryLockInAnotherProcess(path);
+    lock.unlock();
+    const lockedElsewhereAfterUnlock = await tryLockInAnotherProcess(path);
 
-      // Assert
-      assert.equal(
-        checked,
-        'locked',
-        'A check in the holding process must see the lock',
-      );
-      assert.equal(
-        lockedElsewhereAfterCheck,
-        false,
-        'The in-process check dropped the kernel lock: another process took it',
-      );
-      assert.equal(
-        lockedElsewhereAfterUnlock,
-        true,
-        'Another process must get the lock after unlock',
-      );
-    },
-  );
+    // Assert
+    assert.equal(
+      checked,
+      'locked',
+      'A check in the holding process must see the lock',
+    );
+    assert.equal(
+      lockedElsewhereAfterCheck,
+      false,
+      'The in-process check dropped the kernel lock: another process took it',
+    );
+    assert.equal(
+      lockedElsewhereAfterUnlock,
+      true,
+      'Another process must get the lock after unlock',
+    );
+  });
 
-  test(
-    'a second handle in the process that holds the lock is refused, and disposing it keeps the lock for other processes',
-    { timeout: 10_000 },
-    async () => {
-      // Arrange
-      await using directory = await new TemporaryFiles().directory(
-        'zukhruf-fs-',
-      );
-      const path = join(directory.path, 'job.lock');
-      using lock = FileLock.open(path);
-      assert.equal(lock.tryLock(), true, 'The holder must get the lock');
+  test('a second handle in the process that holds the lock is refused, and disposing it keeps the lock for other processes', async () => {
+    // Arrange
+    await using directory = await new TemporaryFiles().directory('zukhruf-fs-');
+    const path = join(directory.path, 'job.lock');
+    using lock = FileLock.open(path);
+    assert.equal(lock.tryLock(), true, 'The holder must get the lock');
 
-      // Act
-      let lockedByOther: boolean;
-      {
-        using other = FileLock.open(path);
-        lockedByOther = other.tryLock();
-      }
-      const lockedElsewhereAfterDispose = await tryLockInAnotherProcess(path);
-      lock.unlock();
-      const lockedElsewhereAfterUnlock = await tryLockInAnotherProcess(path);
+    // Act
+    let lockedByOther: boolean;
+    {
+      using other = FileLock.open(path);
+      lockedByOther = other.tryLock();
+    }
+    const lockedElsewhereAfterDispose = await tryLockInAnotherProcess(path);
+    lock.unlock();
+    const lockedElsewhereAfterUnlock = await tryLockInAnotherProcess(path);
 
-      // Assert
-      assert.equal(
-        lockedByOther,
-        false,
-        'A second handle in the holding process must be refused',
-      );
-      assert.equal(
-        lockedElsewhereAfterDispose,
-        false,
-        'Disposing the refused handle dropped the kernel lock: another process took it',
-      );
-      assert.equal(
-        lockedElsewhereAfterUnlock,
-        true,
-        'Another process must get the lock after unlock',
-      );
-    },
-  );
+    // Assert
+    assert.equal(
+      lockedByOther,
+      false,
+      'A second handle in the holding process must be refused',
+    );
+    assert.equal(
+      lockedElsewhereAfterDispose,
+      false,
+      'Disposing the refused handle dropped the kernel lock: another process took it',
+    );
+    assert.equal(
+      lockedElsewhereAfterUnlock,
+      true,
+      'Another process must get the lock after unlock',
+    );
+  });
 
-  test(
-    'check throws for a directory at the path, as it is no file to lock',
-    { timeout: 2_000 },
-    async () => {
-      // Arrange
-      await using directory = await new TemporaryFiles().directory(
-        'zukhruf-fs-',
-      );
+  test('check throws for a directory at the path, as it is no file to lock', async () => {
+    // Arrange
+    await using directory = await new TemporaryFiles().directory('zukhruf-fs-');
 
-      // Act
-      const checking = () => FileLock.check(directory.path);
+    // Act
+    const checking = () => FileLock.check(directory.path);
 
-      // Assert
-      assert.throws(checking, { code: 'ERR_SQLITE_ERROR' });
-    },
-  );
+    // Assert
+    assert.throws(checking, { code: 'ERR_SQLITE_ERROR' });
+  });
 
   test(
     'check throws for a file that exists but cannot be read, as it is not missing',
@@ -424,7 +368,6 @@ describe('FileLock', () => {
         process.platform === 'win32' || process.getuid?.() === 0
           ? 'Windows has no file modes, and root reads any file'
           : false,
-      timeout: 2_000,
     },
     async () => {
       // Arrange
@@ -449,68 +392,56 @@ describe('FileLock', () => {
     },
   );
 
-  test(
-    'unlock and dispose free the lock for the next holder, and a second dispose does nothing',
-    { timeout: 2_000 },
-    async () => {
-      // Arrange
-      await using directory = await new TemporaryFiles().directory(
-        'zukhruf-fs-',
-      );
-      const path = join(directory.path, 'job.lock');
-      using first = FileLock.open(path);
-      using second = FileLock.open(path);
-      assert.equal(first.tryLock(), true, 'The first handle must get the lock');
+  test('unlock and dispose free the lock for the next holder, and a second dispose does nothing', async () => {
+    // Arrange
+    await using directory = await new TemporaryFiles().directory('zukhruf-fs-');
+    const path = join(directory.path, 'job.lock');
+    using first = FileLock.open(path);
+    using second = FileLock.open(path);
+    assert.equal(first.tryLock(), true, 'The first handle must get the lock');
 
-      // Act
-      first.unlock();
-      const secondAfterUnlock = second.tryLock();
-      second.unlock();
-      const firstAgain = first.tryLock();
-      first[Symbol.dispose]();
-      const secondAfterDispose = second.tryLock();
-      const disposingAgain = () => first[Symbol.dispose]();
+    // Act
+    first.unlock();
+    const secondAfterUnlock = second.tryLock();
+    second.unlock();
+    const firstAgain = first.tryLock();
+    first[Symbol.dispose]();
+    const secondAfterDispose = second.tryLock();
+    const disposingAgain = () => first[Symbol.dispose]();
 
-      // Assert
-      assert.equal(secondAfterUnlock, true, 'An unlock must free the lock');
-      assert.equal(firstAgain, true, 'A handle must lock again after unlock');
-      assert.equal(
-        secondAfterDispose,
-        true,
-        'A dispose must free the lock that the handle held',
-      );
-      assert.doesNotThrow(disposingAgain);
-    },
-  );
+    // Assert
+    assert.equal(secondAfterUnlock, true, 'An unlock must free the lock');
+    assert.equal(firstAgain, true, 'A handle must lock again after unlock');
+    assert.equal(
+      secondAfterDispose,
+      true,
+      'A dispose must free the lock that the handle held',
+    );
+    assert.doesNotThrow(disposingAgain);
+  });
 
-  test(
-    'tryLock on a handle that holds the lock, and unlock on one that does not, throw',
-    { timeout: 2_000 },
-    async () => {
-      // Arrange
-      await using directory = await new TemporaryFiles().directory(
-        'zukhruf-fs-',
-      );
-      const path = join(directory.path, 'job.lock');
-      using holding = FileLock.open(path);
-      using idle = FileLock.open(path);
-      assert.equal(
-        holding.tryLock(),
-        true,
-        'The holding handle must get the lock',
-      );
+  test('tryLock on a handle that holds the lock, and unlock on one that does not, throw', async () => {
+    // Arrange
+    await using directory = await new TemporaryFiles().directory('zukhruf-fs-');
+    const path = join(directory.path, 'job.lock');
+    using holding = FileLock.open(path);
+    using idle = FileLock.open(path);
+    assert.equal(
+      holding.tryLock(),
+      true,
+      'The holding handle must get the lock',
+    );
 
-      // Act
-      const lockingAgain = () => holding.tryLock();
-      const unlockingIdle = () => idle.unlock();
+    // Act
+    const lockingAgain = () => holding.tryLock();
+    const unlockingIdle = () => idle.unlock();
 
-      // Assert
-      assert.throws(lockingAgain, {
-        message: `This handle holds the file lock ${JSON.stringify(path)} already.`,
-      });
-      assert.throws(unlockingIdle, {
-        message: `This handle does not hold the file lock ${JSON.stringify(path)}.`,
-      });
-    },
-  );
+    // Assert
+    assert.throws(lockingAgain, {
+      message: `This handle holds the file lock ${JSON.stringify(path)} already.`,
+    });
+    assert.throws(unlockingIdle, {
+      message: `This handle does not hold the file lock ${JSON.stringify(path)}.`,
+    });
+  });
 });

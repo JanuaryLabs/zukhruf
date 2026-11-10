@@ -72,54 +72,14 @@ function failWriteHalfway(t: TestContext, code: string) {
 
 describe('createExclusive', () => {
   for (const before of [undefined, 'pid 1']) {
-    test(
-      `a write of the draft that fails halfway rejects with that error, leaves no draft and ${before === undefined ? 'creates no file' : 'keeps the file that is there'}`,
-      { timeout: 2_000 },
-      async (t) => {
-        // Arrange
-        await using directory = await new TemporaryFiles().directory(
-          'zukhruf-fs-',
-        );
-        const path = join(directory.path, 'job.lock');
-        if (before !== undefined) await writeFile(path, before);
-        using disk = failWriteHalfway(t, 'ENOSPC');
-
-        // Act
-        const creating = createExclusive(path, 'pid 4242\n'.repeat(1_000), {
-          clock: globalThis,
-        });
-
-        // Assert
-        await assert.rejects(creating, (error) => error === disk.failure);
-        assert.deepEqual(
-          await readdir(directory.path),
-          before === undefined ? [] : ['job.lock'],
-          'A failed create must not create the file nor leave its draft',
-        );
-        if (before !== undefined) {
-          assert.equal(await readFile(path, 'utf8'), before);
-        }
-      },
-    );
-  }
-
-  test(
-    'a write of the draft that fails halfway rejects with that error, also when the draft cannot be removed',
-    { timeout: 2_000 },
-    async (t) => {
-      // Arrange: a broken disk refuses the removal of the draft too.
+    test(`a write of the draft that fails halfway rejects with that error, leaves no draft and ${before === undefined ? 'creates no file' : 'keeps the file that is there'}`, async (t) => {
+      // Arrange
       await using directory = await new TemporaryFiles().directory(
         'zukhruf-fs-',
       );
       const path = join(directory.path, 'job.lock');
-      using disk = failWriteHalfway(t, 'EIO');
-      t.mock.method(fsPromises, 'unlink', async () => {
-        throw Object.assign(new Error('EIO: unlink failed'), {
-          code: 'EIO',
-          syscall: 'unlink',
-        });
-      });
-      syncBuiltinESMExports();
+      if (before !== undefined) await writeFile(path, before);
+      using disk = failWriteHalfway(t, 'ENOSPC');
 
       // Act
       const creating = createExclusive(path, 'pid 4242\n'.repeat(1_000), {
@@ -128,152 +88,146 @@ describe('createExclusive', () => {
 
       // Assert
       await assert.rejects(creating, (error) => error === disk.failure);
-    },
-  );
-
-  test(
-    'a link that fails for a reason other than an existing file rejects with that error and leaves no draft',
-    { timeout: 2_000 },
-    async (t) => {
-      // Arrange
-      await using directory = await new TemporaryFiles().directory(
-        'zukhruf-fs-',
-      );
-      const path = join(directory.path, 'job.lock');
-      using _failing = failLink(t, 'EIO');
-
-      // Act
-      const creating = createExclusive(path, 'pid 4242', { clock: globalThis });
-
-      // Assert
-      await assert.rejects(creating, { code: 'EIO' });
       assert.deepEqual(
         await readdir(directory.path),
-        [],
-        'A failed create must not leave its draft',
+        before === undefined ? [] : ['job.lock'],
+        'A failed create must not create the file nor leave its draft',
       );
-    },
-  );
+      if (before !== undefined) {
+        assert.equal(await readFile(path, 'utf8'), before);
+      }
+    });
+  }
 
-  test(
-    'no draft stays in the directory, whether the file was created or already there',
-    { timeout: 2_000 },
-    async () => {
-      // Arrange
-      await using directory = await new TemporaryFiles().directory(
-        'zukhruf-fs-',
-      );
-      const path = join(directory.path, 'job.lock');
-
-      // Act
-      const first = await createExclusive(path, 'pid 1', { clock: globalThis });
-      const second = await createExclusive(path, 'pid 2', {
-        clock: globalThis,
+  test('a write of the draft that fails halfway rejects with that error, also when the draft cannot be removed', async (t) => {
+    // Arrange: a broken disk refuses the removal of the draft too.
+    await using directory = await new TemporaryFiles().directory('zukhruf-fs-');
+    const path = join(directory.path, 'job.lock');
+    using disk = failWriteHalfway(t, 'EIO');
+    t.mock.method(fsPromises, 'unlink', async () => {
+      throw Object.assign(new Error('EIO: unlink failed'), {
+        code: 'EIO',
+        syscall: 'unlink',
       });
+    });
+    syncBuiltinESMExports();
 
-      // Assert
-      assert.deepEqual([first, second], [true, false]);
-      assert.deepEqual(await readdir(directory.path), ['job.lock']);
-    },
-  );
+    // Act
+    const creating = createExclusive(path, 'pid 4242\n'.repeat(1_000), {
+      clock: globalThis,
+    });
 
-  test(
-    'a file that is there already keeps its content, and the call returns false',
-    { timeout: 2_000 },
-    async () => {
-      // Arrange
-      await using directory = await new TemporaryFiles().directory(
-        'zukhruf-fs-',
-      );
-      const path = join(directory.path, 'job.lock');
-      await writeFile(path, 'pid 1');
+    // Assert
+    await assert.rejects(creating, (error) => error === disk.failure);
+  });
 
-      // Act
-      const created = await createExclusive(path, 'pid 2', {
-        clock: globalThis,
-      });
+  test('a link that fails for a reason other than an existing file rejects with that error and leaves no draft', async (t) => {
+    // Arrange
+    await using directory = await new TemporaryFiles().directory('zukhruf-fs-');
+    const path = join(directory.path, 'job.lock');
+    using _failing = failLink(t, 'EIO');
 
-      // Assert
-      assert.equal(created, false);
-      assert.equal(await readFile(path, 'utf8'), 'pid 1');
-    },
-  );
+    // Act
+    const creating = createExclusive(path, 'pid 4242', { clock: globalThis });
 
-  test(
-    'an absent file is created with all of its content, and the call returns true',
-    { timeout: 2_000 },
-    async () => {
-      // Arrange
-      await using directory = await new TemporaryFiles().directory(
-        'zukhruf-fs-',
-      );
-      const path = join(directory.path, 'job.lock');
-      const content = 'pid 4242\n'.repeat(1_000);
+    // Assert
+    await assert.rejects(creating, { code: 'EIO' });
+    assert.deepEqual(
+      await readdir(directory.path),
+      [],
+      'A failed create must not leave its draft',
+    );
+  });
 
-      // Act
-      const created = await createExclusive(path, content, {
-        clock: globalThis,
-      });
+  test('no draft stays in the directory, whether the file was created or already there', async () => {
+    // Arrange
+    await using directory = await new TemporaryFiles().directory('zukhruf-fs-');
+    const path = join(directory.path, 'job.lock');
 
-      // Assert
-      assert.equal(created, true);
-      assert.equal(await readFile(path, 'utf8'), content);
-    },
-  );
+    // Act
+    const first = await createExclusive(path, 'pid 1', { clock: globalThis });
+    const second = await createExclusive(path, 'pid 2', {
+      clock: globalThis,
+    });
 
-  test(
-    'of many callers that create one absent file at the same time, exactly one creates it',
-    { timeout: 2_000 },
-    async () => {
-      // Arrange
-      await using directory = await new TemporaryFiles().directory(
-        'zukhruf-fs-',
-      );
-      const path = join(directory.path, 'job.lock');
-      const callers = Array.from({ length: 8 }, (_, index) => `pid ${index}`);
+    // Assert
+    assert.deepEqual([first, second], [true, false]);
+    assert.deepEqual(await readdir(directory.path), ['job.lock']);
+  });
 
-      // Act
-      const results = await Promise.all(
-        callers.map((caller) =>
-          createExclusive(path, caller, { clock: globalThis }),
-        ),
-      );
+  test('a file that is there already keeps its content, and the call returns false', async () => {
+    // Arrange
+    await using directory = await new TemporaryFiles().directory('zukhruf-fs-');
+    const path = join(directory.path, 'job.lock');
+    await writeFile(path, 'pid 1');
 
-      // Assert
-      const winners = callers.filter((_, index) => results[index]);
-      assert.equal(
-        winners.length,
-        1,
-        `One caller must create the file, got ${winners.join(', ')}`,
-      );
-      assert.equal(await readFile(path, 'utf8'), winners[0]);
-      assert.deepEqual(await readdir(directory.path), ['job.lock']);
-    },
-  );
+    // Act
+    const created = await createExclusive(path, 'pid 2', {
+      clock: globalThis,
+    });
 
-  test(
-    'the file appears by a link of a draft that already holds all of the content, so a reader never sees it empty',
-    { timeout: 2_000 },
-    async (t) => {
-      // Arrange
-      await using directory = await new TemporaryFiles().directory(
-        'zukhruf-fs-',
-      );
-      const path = join(directory.path, 'job.lock');
-      const content = 'pid 4242\n'.repeat(1_000);
-      using disk = recordLinks(t);
+    // Assert
+    assert.equal(created, false);
+    assert.equal(await readFile(path, 'utf8'), 'pid 1');
+  });
 
-      // Act
-      await createExclusive(path, content, { clock: globalThis });
+  test('an absent file is created with all of its content, and the call returns true', async () => {
+    // Arrange
+    await using directory = await new TemporaryFiles().directory('zukhruf-fs-');
+    const path = join(directory.path, 'job.lock');
+    const content = 'pid 4242\n'.repeat(1_000);
 
-      // Assert
-      assert.equal(disk.links.length, 1, 'The file must appear in one step');
-      assert.equal(disk.links[0]?.to, path);
-      assert.equal(
-        disk.links[0]?.content,
-        content,
-        'The draft must hold all of the content before it appears at the path',
-      );
-    },
-  );
+    // Act
+    const created = await createExclusive(path, content, {
+      clock: globalThis,
+    });
+
+    // Assert
+    assert.equal(created, true);
+    assert.equal(await readFile(path, 'utf8'), content);
+  });
+
+  test('of many callers that create one absent file at the same time, exactly one creates it', async () => {
+    // Arrange
+    await using directory = await new TemporaryFiles().directory('zukhruf-fs-');
+    const path = join(directory.path, 'job.lock');
+    const callers = Array.from({ length: 8 }, (_, index) => `pid ${index}`);
+
+    // Act
+    const results = await Promise.all(
+      callers.map((caller) =>
+        createExclusive(path, caller, { clock: globalThis }),
+      ),
+    );
+
+    // Assert
+    const winners = callers.filter((_, index) => results[index]);
+    assert.equal(
+      winners.length,
+      1,
+      `One caller must create the file, got ${winners.join(', ')}`,
+    );
+    assert.equal(await readFile(path, 'utf8'), winners[0]);
+    assert.deepEqual(await readdir(directory.path), ['job.lock']);
+  });
+
+  test('the file appears by a link of a draft that already holds all of the content, so a reader never sees it empty', async (t) => {
+    // Arrange
+    await using directory = await new TemporaryFiles().directory('zukhruf-fs-');
+    const path = join(directory.path, 'job.lock');
+    const content = 'pid 4242\n'.repeat(1_000);
+    using disk = recordLinks(t);
+
+    // Act
+    await createExclusive(path, content, { clock: globalThis });
+
+    // Assert
+    assert.equal(disk.links.length, 1, 'The file must appear in one step');
+    assert.equal(disk.links[0]?.to, path);
+    assert.equal(
+      disk.links[0]?.content,
+      content,
+      'The draft must hold all of the content before it appears at the path',
+    );
+  });
 });

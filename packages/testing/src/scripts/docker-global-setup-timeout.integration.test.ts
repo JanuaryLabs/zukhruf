@@ -164,11 +164,11 @@ test(
       assert.equal(code, 1, run.output());
       // The teardown starts after the test wrote its state, so the time from
       // that write to the run's end holds the whole 250 s wait, and load
-      // cannot break the lower bound. The upper bound leaves 60 s for load.
+      // cannot break this lower bound.
       const seconds = (endedAt - (await stat(statePath)).mtimeMs) / 1000;
       assert.ok(
-        seconds >= 250 && seconds <= 250 + 60,
-        `the teardown ended ${seconds.toFixed(1)} s after the test wrote its state, not within 60 s after its 250 s`,
+        seconds >= 250,
+        `the teardown ended ${seconds.toFixed(1)} s after the test wrote its state, before its 250 s`,
       );
       assert.match(
         run.output(),

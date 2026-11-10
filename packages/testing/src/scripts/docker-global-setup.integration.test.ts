@@ -263,7 +263,6 @@ for (const mode of [
           : mode === 'SIGINT' || mode === 'SIGTERM'
             ? signals
             : false,
-      timeout: 180_000,
     },
     async (t) => {
       await using directory = await runsDirectory('zukhruf-testing-cleanup-');
@@ -395,7 +394,7 @@ for (const mode of [
 
 test(
   'a create that the engine finishes after its test process was killed keeps the run, and the next run removes what it created',
-  { skip: proxyless, timeout: 180_000 },
+  { skip: proxyless },
   async (t) => {
     await using directory = await new TemporaryFiles().directory(
       'zukhruf-testing-orphan-create-',
@@ -471,7 +470,7 @@ test(
 
 test(
   'a create that the engine finishes after a later run recovered its killed run is removed by the run after it',
-  { skip: proxyless || signals, timeout: 180_000 },
+  { skip: proxyless || signals },
   async (t) => {
     await using directory = await runsDirectory('zukhruf-testing-late-create-');
     const statePath = join(directory.path, 'state.json');
@@ -518,7 +517,7 @@ test(
       await killed.exited;
       const { pid } = state;
       await t.waitFor(() => assert.equal(alive(pid), false), {
-        timeout: 5_000,
+        timeout: 10_000,
       });
       const label = `dev.zukhruf.testing.run=${state.run}`;
       // A later run recovers the killed run while the engine still has its create.
@@ -545,46 +544,41 @@ test(
   },
 );
 
-test(
-  'recovery leaves a dead runner’s run alone while one of its test processes lives',
-  { timeout: 180_000 },
-  async (t) => {
-    await using directory = await runsDirectory('zukhruf-testing-orphan-');
-    const statePath = join(directory.path, 'state.json');
-    const file = join(directory.path, 'worker.test.ts');
-    await writeFile(
-      file,
-      smallWorkerSource(statePath, 'await setTimeout(120_000);'),
-    );
-    const env = runEnvironment(join(directory.path, 'state'));
-    const killed = started(runnerArgs('--test-force-exit', file), env);
-    let state: SmallState | undefined;
-    let worker: number | undefined;
-    try {
-      state = await readState<SmallState>(t, statePath);
-      worker = state.pid;
+test('recovery leaves a dead runner’s run alone while one of its test processes lives', async (t) => {
+  await using directory = await runsDirectory('zukhruf-testing-orphan-');
+  const statePath = join(directory.path, 'state.json');
+  const file = join(directory.path, 'worker.test.ts');
+  await writeFile(
+    file,
+    smallWorkerSource(statePath, 'await setTimeout(120_000);'),
+  );
+  const env = runEnvironment(join(directory.path, 'state'));
+  const killed = started(runnerArgs('--test-force-exit', file), env);
+  let state: SmallState | undefined;
+  let worker: number | undefined;
+  try {
+    state = await readState<SmallState>(t, statePath);
+    worker = state.pid;
+    killed.child.kill('SIGKILL');
+    await killed.exited;
+    assert.ok(alive(worker), 'the test process outlives its runner');
+
+    await emptyRun(file, env);
+
+    assert.equal(await running(state.id), true);
+    await access(join(state.record, 'run.json'));
+  } finally {
+    if (killed.child.exitCode === null && killed.child.signalCode === null)
       killed.child.kill('SIGKILL');
-      await killed.exited;
-      assert.ok(alive(worker), 'the test process outlives its runner');
-
-      await emptyRun(file, env);
-
-      assert.equal(await running(state.id), true);
-      await access(join(state.record, 'run.json'));
-    } finally {
-      if (killed.child.exitCode === null && killed.child.signalCode === null)
-        killed.child.kill('SIGKILL');
-      await killed.exited.catch(() => null);
-      if (worker !== undefined && alive(worker))
-        process.kill(worker, 'SIGKILL');
-      if (state) await removeContainer(state.id).catch(() => {});
-    }
-  },
-);
+    await killed.exited.catch(() => null);
+    if (worker !== undefined && alive(worker)) process.kill(worker, 'SIGKILL');
+    if (state) await removeContainer(state.id).catch(() => {});
+  }
+});
 
 test(
   'a run whose tests never touch Docker leaves no record and makes no daemon call',
-  { skip: proxyless, timeout: 120_000 },
+  { skip: proxyless },
   async () => {
     await using directory = await new TemporaryFiles().directory(
       'zukhruf-testing-untouched-',
@@ -640,7 +634,7 @@ async function killedRun(
     await dead.exited;
     const pid = worker;
     await t.waitFor(() => assert.equal(alive(pid), false), {
-      timeout: 5_000,
+      timeout: 10_000,
     });
     assert.equal(await exists(state.general), true);
     const recover = () =>
@@ -690,7 +684,7 @@ async function assertRecovered(
 
 test(
   'two runs that start together recover a dead run, and both succeed',
-  { skip: proxyless, timeout: 180_000 },
+  { skip: proxyless },
   async (t) => {
     await using directory = await runsDirectory('zukhruf-testing-recovery-');
     await using proxy = await EngineProxy.start(engine);
@@ -717,7 +711,7 @@ test(
 
 test(
   'a run that starts while another recovers a dead run leaves the run to it',
-  { skip: proxyless, timeout: 180_000 },
+  { skip: proxyless },
   async (t) => {
     await using directory = await runsDirectory('zukhruf-testing-recovery-');
     await using proxy = await EngineProxy.start(engine);
@@ -742,86 +736,40 @@ test(
   },
 );
 
-test(
-  'recovery keeps a dead run while a command lives whose pid an ended command of the run had',
-  { timeout: 120_000 },
-  async () => {
-    await using directory = await new TemporaryFiles().directory(
-      'zukhruf-testing-reused-pid-',
-    );
-    const id = randomUUID();
-    const record = join(
-      directory.path,
-      'state',
-      'zukhruf-testing',
-      'docker-runs',
+test('recovery keeps a dead run while a command lives whose pid an ended command of the run had', async () => {
+  await using directory = await new TemporaryFiles().directory(
+    'zukhruf-testing-reused-pid-',
+  );
+  const id = randomUUID();
+  const record = join(
+    directory.path,
+    'state',
+    'zukhruf-testing',
+    'docker-runs',
+    id,
+  );
+  await mkdir(record, { recursive: true });
+  // Only a global setup writes run.json: this one is of a run whose runner died.
+  await writeFile(
+    join(record, 'run.json'),
+    JSON.stringify({
       id,
-    );
-    await mkdir(record, { recursive: true });
-    // Only a global setup writes run.json: this one is of a run whose runner died.
-    await writeFile(
-      join(record, 'run.json'),
-      JSON.stringify({
-        id,
-        endpoint: engine,
-        pid: await endedPid(),
-      }),
-    );
-    const command = started(
-      ['--eval', 'setTimeout(() => {}, 600_000)'],
-      process.env,
-    );
-    try {
-      assert.ok(command.child.pid !== undefined);
-      const records = new RunRecords(record);
-      // The OS gave the pid of a command that ended to the next command
-      // before the record of the first one was removed.
-      const ended = await records.recordProcess(command.child.pid);
-      await records.recordProcess(command.child.pid);
-      await ended[Symbol.asyncDispose]();
-      const file = join(directory.path, 'plain.test.ts');
-      await writeFile(
-        file,
-        "import { test } from 'node:test';\ntest('no Docker', () => {});\n",
-      );
-
-      await emptyRun(file, runEnvironment(join(directory.path, 'state')));
-
-      await access(join(record, 'run.json'));
-    } finally {
-      command.child.kill('SIGKILL');
-      await command.exited.catch(() => null);
-    }
-  },
-);
-
-test(
-  'recovery leaves a dead run on another engine alone',
-  { timeout: 120_000 },
-  async () => {
-    await using directory = await new TemporaryFiles().directory(
-      'zukhruf-testing-other-engine-',
-    );
-    const id = randomUUID();
-    const record = join(
-      directory.path,
-      'state',
-      'zukhruf-testing',
-      'docker-runs',
-      id,
-    );
-    await mkdir(record, { recursive: true });
-    // Only a global setup writes run.json: this one is of a run on another
-    // engine whose runner and test process died.
-    await writeFile(
-      join(record, 'run.json'),
-      JSON.stringify({
-        id,
-        endpoint: 'ssh://elsewhere.invalid',
-        pid: await endedPid(),
-      }),
-    );
-    await new RunRecords(record).recordProcess(await endedPid());
+      endpoint: engine,
+      pid: await endedPid(),
+    }),
+  );
+  const command = started(
+    ['--eval', 'setTimeout(() => {}, 600_000)'],
+    process.env,
+  );
+  try {
+    assert.ok(command.child.pid !== undefined);
+    const records = new RunRecords(record);
+    // The OS gave the pid of a command that ended to the next command
+    // before the record of the first one was removed.
+    const ended = await records.recordProcess(command.child.pid);
+    await records.recordProcess(command.child.pid);
+    await ended[Symbol.asyncDispose]();
     const file = join(directory.path, 'plain.test.ts');
     await writeFile(
       file,
@@ -831,8 +779,46 @@ test(
     await emptyRun(file, runEnvironment(join(directory.path, 'state')));
 
     await access(join(record, 'run.json'));
-  },
-);
+  } finally {
+    command.child.kill('SIGKILL');
+    await command.exited.catch(() => null);
+  }
+});
+
+test('recovery leaves a dead run on another engine alone', async () => {
+  await using directory = await new TemporaryFiles().directory(
+    'zukhruf-testing-other-engine-',
+  );
+  const id = randomUUID();
+  const record = join(
+    directory.path,
+    'state',
+    'zukhruf-testing',
+    'docker-runs',
+    id,
+  );
+  await mkdir(record, { recursive: true });
+  // Only a global setup writes run.json: this one is of a run on another
+  // engine whose runner and test process died.
+  await writeFile(
+    join(record, 'run.json'),
+    JSON.stringify({
+      id,
+      endpoint: 'ssh://elsewhere.invalid',
+      pid: await endedPid(),
+    }),
+  );
+  await new RunRecords(record).recordProcess(await endedPid());
+  const file = join(directory.path, 'plain.test.ts');
+  await writeFile(
+    file,
+    "import { test } from 'node:test';\ntest('no Docker', () => {});\n",
+  );
+
+  await emptyRun(file, runEnvironment(join(directory.path, 'state')));
+
+  await access(join(record, 'run.json'));
+});
 
 /** What a worker created that only labels tie to its run, and a shared server. */
 interface LabelState {
@@ -841,24 +827,21 @@ interface LabelState {
   shared: string;
 }
 
-test(
-  'the global teardown removes a container and a volume that carry only the run’s labels, and keeps a shared server that carries the run’s label',
-  { timeout: 180_000 },
-  async (t) => {
-    await using directory = await new TemporaryFiles().directory(
-      'zukhruf-testing-labels-',
-    );
-    const statePath = join(directory.path, 'state.json');
-    const file = join(directory.path, 'worker.test.ts');
-    // The test removes the shared server through this label: the teardown
-    // keeps it.
-    const scope = randomUUID();
-    const verification = `dev.zukhruf.testing.verification=${scope}`;
-    // Another Docker client, such as a sandbox launcher, creates the container
-    // and the volume: only docker.defaults.Labels ties them to the run.
-    await writeFile(
-      file,
-      `
+test('the global teardown removes a container and a volume that carry only the run’s labels, and keeps a shared server that carries the run’s label', async (t) => {
+  await using directory = await new TemporaryFiles().directory(
+    'zukhruf-testing-labels-',
+  );
+  const statePath = join(directory.path, 'state.json');
+  const file = join(directory.path, 'worker.test.ts');
+  // The test removes the shared server through this label: the teardown
+  // keeps it.
+  const scope = randomUUID();
+  const verification = `dev.zukhruf.testing.verification=${scope}`;
+  // Another Docker client, such as a sandbox launcher, creates the container
+  // and the volume: only docker.defaults.Labels ties them to the run.
+  await writeFile(
+    file,
+    `
       import { test } from 'node:test';
       import { writeFile } from 'node:fs/promises';
       import { Docker } from ${client};
@@ -874,43 +857,39 @@ test(
         await writeFile(${JSON.stringify(statePath)}, JSON.stringify({ container: created.id, volume, shared: shared.container.id }));
       });
     `,
-    );
-    let state: LabelState | undefined;
-    try {
-      await spawn(process.execPath, runnerArgs(file), {
-        env: runEnvironment(join(directory.path, 'state')),
-        timeout: 150_000,
-      });
-      state = await readState<LabelState>(t, statePath);
+  );
+  let state: LabelState | undefined;
+  try {
+    await spawn(process.execPath, runnerArgs(file), {
+      env: runEnvironment(join(directory.path, 'state')),
+      timeout: 150_000,
+    });
+    state = await readState<LabelState>(t, statePath);
 
-      assert.equal(await exists(state.container), false);
-      assert.equal(await volumeExists(state.volume), false);
-      assert.equal(await running(state.shared), true);
-    } finally {
-      for (const id of await labelled(verification))
-        await removeContainer(id).catch(() => {});
-      if (state) {
-        await removeContainer(state.container).catch(() => {});
-        await removeVolume(state.volume).catch(() => {});
-      }
+    assert.equal(await exists(state.container), false);
+    assert.equal(await volumeExists(state.volume), false);
+    assert.equal(await running(state.shared), true);
+  } finally {
+    for (const id of await labelled(verification))
+      await removeContainer(id).catch(() => {});
+    if (state) {
+      await removeContainer(state.container).catch(() => {});
+      await removeVolume(state.volume).catch(() => {});
     }
-  },
-);
+  }
+});
 
-test(
-  'the global teardown removes a container and a volume of a test process that only read docker.defaults',
-  { timeout: 180_000 },
-  async (t) => {
-    await using directory = await new TemporaryFiles().directory(
-      'zukhruf-testing-defaults-',
-    );
-    const statePath = join(directory.path, 'state.json');
-    const file = join(directory.path, 'worker.test.ts');
-    // A sandbox launcher reads the labels and creates everything through its
-    // own Docker client: the test process makes no other acquisition.
-    await writeFile(
-      file,
-      `
+test('the global teardown removes a container and a volume of a test process that only read docker.defaults', async (t) => {
+  await using directory = await new TemporaryFiles().directory(
+    'zukhruf-testing-defaults-',
+  );
+  const statePath = join(directory.path, 'state.json');
+  const file = join(directory.path, 'worker.test.ts');
+  // A sandbox launcher reads the labels and creates everything through its
+  // own Docker client: the test process makes no other acquisition.
+  await writeFile(
+    file,
+    `
       import { test } from 'node:test';
       import { writeFile } from 'node:fs/promises';
       import { Docker } from ${client};
@@ -924,43 +903,39 @@ test(
         await writeFile(${JSON.stringify(statePath)}, JSON.stringify({ container: created.id, volume }));
       });
     `,
-    );
-    let state: Omit<LabelState, 'shared'> | undefined;
-    try {
-      await spawn(process.execPath, runnerArgs(file), {
-        env: runEnvironment(join(directory.path, 'state')),
-        timeout: 150_000,
-      });
-      state = await readState<Omit<LabelState, 'shared'>>(t, statePath);
+  );
+  let state: Omit<LabelState, 'shared'> | undefined;
+  try {
+    await spawn(process.execPath, runnerArgs(file), {
+      env: runEnvironment(join(directory.path, 'state')),
+      timeout: 150_000,
+    });
+    state = await readState<Omit<LabelState, 'shared'>>(t, statePath);
 
-      assert.equal(await exists(state.container), false);
-      assert.equal(await volumeExists(state.volume), false);
-    } finally {
-      if (state) {
-        await removeContainer(state.container).catch(() => {});
-        await removeVolume(state.volume).catch(() => {});
-      }
+    assert.equal(await exists(state.container), false);
+    assert.equal(await volumeExists(state.volume), false);
+  } finally {
+    if (state) {
+      await removeContainer(state.container).catch(() => {});
+      await removeVolume(state.volume).catch(() => {});
     }
-  },
-);
+  }
+});
 
-test(
-  'start() pulls an image that the engine does not have',
-  { timeout: 180_000 },
-  async (t) => {
-    await using directory = await new TemporaryFiles().directory(
-      'zukhruf-testing-pull-',
-    );
-    // Only this test uses this tag, so it can remove the image.
-    const image = 'busybox:1.37.0-musl';
-    const removeImage = () => docker.images.remove(image, { force: true });
-    await removeImage();
-    assert.equal(await docker.images.inspect(image), undefined);
-    const statePath = join(directory.path, 'state.json');
-    const file = join(directory.path, 'worker.test.ts');
-    await writeFile(
-      file,
-      `
+test('start() pulls an image that the engine does not have', async (t) => {
+  await using directory = await new TemporaryFiles().directory(
+    'zukhruf-testing-pull-',
+  );
+  // Only this test uses this tag, so it can remove the image.
+  const image = 'busybox:1.37.0-musl';
+  const removeImage = () => docker.images.remove(image, { force: true });
+  await removeImage();
+  assert.equal(await docker.images.inspect(image), undefined);
+  const statePath = join(directory.path, 'state.json');
+  const file = join(directory.path, 'worker.test.ts');
+  await writeFile(
+    file,
+    `
       import { test } from 'node:test';
       import { writeFile } from 'node:fs/promises';
       import { DockerTestbed } from ${library};
@@ -972,75 +947,67 @@ test(
         await writeFile(${JSON.stringify(statePath)}, JSON.stringify({ id: container.id }));
       });
     `,
-    );
-    try {
-      await spawn(process.execPath, runnerArgs(file), {
-        env: runEnvironment(join(directory.path, 'state')),
-        timeout: 150_000,
-      });
-
-      const state = await readState<{ id: string }>(t, statePath);
-      assert.match(state.id, /^[\da-f]{64}$/);
-      assert.notEqual(await docker.images.inspect(image), undefined);
-    } finally {
-      await removeImage();
-    }
-  },
-);
-
-test(
-  'a runner whose DOCKER_HOST names a tcp:// engine fails in the global setup',
-  { timeout: 60_000 },
-  async () => {
-    await using directory = await new TemporaryFiles().directory(
-      'zukhruf-testing-tcp-',
-    );
-    const file = join(directory.path, 'plain.test.ts');
-    await writeFile(
-      file,
-      "import { test } from 'node:test';\ntest('no Docker', () => {});\n",
-    );
-    const state = join(directory.path, 'state');
-    const run = started(runnerArgs(file), {
-      ...runEnvironment(state),
-      // A selected context wins over DOCKER_HOST.
-      DOCKER_CONTEXT: undefined,
-      DOCKER_HOST: 'tcp://127.0.0.1:1',
+  );
+  try {
+    await spawn(process.execPath, runnerArgs(file), {
+      env: runEnvironment(join(directory.path, 'state')),
+      timeout: 150_000,
     });
 
-    const code = await run.exited;
+    const state = await readState<{ id: string }>(t, statePath);
+    assert.match(state.id, /^[\da-f]{64}$/);
+    assert.notEqual(await docker.images.inspect(image), undefined);
+  } finally {
+    await removeImage();
+  }
+});
 
-    assert.notEqual(code, 0, run.output());
-    assert.match(
-      run.output(),
-      /Unsupported Docker endpoint tcp:\/\/127\.0\.0\.1:1/,
-    );
-    assert.deepEqual(
-      await readdir(join(state, 'zukhruf-testing', 'docker-runs')),
-      [],
-    );
-  },
-);
+test('a runner whose DOCKER_HOST names a tcp:// engine fails in the global setup', async () => {
+  await using directory = await new TemporaryFiles().directory(
+    'zukhruf-testing-tcp-',
+  );
+  const file = join(directory.path, 'plain.test.ts');
+  await writeFile(
+    file,
+    "import { test } from 'node:test';\ntest('no Docker', () => {});\n",
+  );
+  const state = join(directory.path, 'state');
+  const run = started(runnerArgs(file), {
+    ...runEnvironment(state),
+    // A selected context wins over DOCKER_HOST.
+    DOCKER_CONTEXT: undefined,
+    DOCKER_HOST: 'tcp://127.0.0.1:1',
+  });
 
-test(
-  'the global setup and teardown of the built package clean a run',
-  { timeout: 180_000 },
-  async (t) => {
-    await using directory = await new TemporaryFiles().directory(
-      'zukhruf-testing-dist-',
-    );
-    const built = import.meta.resolve('@zukhruf/testing/docker-global-setup');
-    assert.match(built, /\/dist\/scripts\/docker-global-setup\.js$/);
-    const setupFile = join(directory.path, 'setup.mjs');
-    await writeFile(
-      setupFile,
-      `export { globalSetup, globalTeardown } from ${JSON.stringify(built)};\n`,
-    );
-    const statePath = join(directory.path, 'state.json');
-    const file = join(directory.path, 'worker.test.ts');
-    await writeFile(
-      file,
-      `
+  const code = await run.exited;
+
+  assert.notEqual(code, 0, run.output());
+  assert.match(
+    run.output(),
+    /Unsupported Docker endpoint tcp:\/\/127\.0\.0\.1:1/,
+  );
+  assert.deepEqual(
+    await readdir(join(state, 'zukhruf-testing', 'docker-runs')),
+    [],
+  );
+});
+
+test('the global setup and teardown of the built package clean a run', async (t) => {
+  await using directory = await new TemporaryFiles().directory(
+    'zukhruf-testing-dist-',
+  );
+  const built = import.meta.resolve('@zukhruf/testing/docker-global-setup');
+  assert.match(built, /\/dist\/scripts\/docker-global-setup\.js$/);
+  const setupFile = join(directory.path, 'setup.mjs');
+  await writeFile(
+    setupFile,
+    `export { globalSetup, globalTeardown } from ${JSON.stringify(built)};\n`,
+  );
+  const statePath = join(directory.path, 'state.json');
+  const file = join(directory.path, 'worker.test.ts');
+  await writeFile(
+    file,
+    `
       import { test } from 'node:test';
       import { writeFile } from 'node:fs/promises';
       import { Docker } from ${client};
@@ -1053,32 +1020,31 @@ test(
         await writeFile(${JSON.stringify(statePath)}, JSON.stringify({ container: created.id }));
       });
     `,
+  );
+  const stateHome = join(directory.path, 'state');
+  let state: { container: string } | undefined;
+  try {
+    await spawn(
+      process.execPath,
+      ['--test', `--test-global-setup=${setupFile}`, file],
+      { env: runEnvironment(stateHome), timeout: 150_000 },
     );
-    const stateHome = join(directory.path, 'state');
-    let state: { container: string } | undefined;
-    try {
-      await spawn(
-        process.execPath,
-        ['--test', `--test-global-setup=${setupFile}`, file],
-        { env: runEnvironment(stateHome), timeout: 150_000 },
-      );
-      state = await readState<{ container: string }>(t, statePath);
+    state = await readState<{ container: string }>(t, statePath);
 
-      assert.equal(await exists(state.container), false);
-      assert.deepEqual(
-        await readdir(join(stateHome, 'zukhruf-testing', 'docker-runs')),
-        [],
-      );
-    } finally {
-      // A failed teardown leaves the container: the state still names it.
-      state ??= await readFile(statePath, 'utf8').then(
-        (text): { container: string } => JSON.parse(text),
-        () => undefined,
-      );
-      if (state) await removeContainer(state.container).catch(() => {});
-    }
-  },
-);
+    assert.equal(await exists(state.container), false);
+    assert.deepEqual(
+      await readdir(join(stateHome, 'zukhruf-testing', 'docker-runs')),
+      [],
+    );
+  } finally {
+    // A failed teardown leaves the container: the state still names it.
+    state ??= await readFile(statePath, 'utf8').then(
+      (text): { container: string } => JSON.parse(text),
+      () => undefined,
+    );
+    if (state) await removeContainer(state.container).catch(() => {});
+  }
+});
 
 /** The manifest of this package, whose version its shared servers carry. */
 const manifest: { version: string } = JSON.parse(
@@ -1224,40 +1190,36 @@ test(
   },
 );
 
-test(
-  'a shared server with no version label is removed',
-  { timeout: 180_000 },
-  async (t) => {
-    await using directory = await new TemporaryFiles().directory(
-      'zukhruf-testing-unversioned-',
-    );
-    const statePath = join(directory.path, 'state.json');
-    const file = join(directory.path, 'worker.test.ts');
-    await writeFile(file, smallWorkerSource(statePath, ''));
-    const server = await unversionedServer();
-    // Not a shared server: the sweep must not select it.
-    const other = await docker.containers.create({
-      Image: 'alpine:latest',
-      Cmd: ['sleep', '3600'],
-      Labels: { 'dev.zukhruf.testing.probe': randomUUID() },
+test('a shared server with no version label is removed', async (t) => {
+  await using directory = await new TemporaryFiles().directory(
+    'zukhruf-testing-unversioned-',
+  );
+  const statePath = join(directory.path, 'state.json');
+  const file = join(directory.path, 'worker.test.ts');
+  await writeFile(file, smallWorkerSource(statePath, ''));
+  const server = await unversionedServer();
+  // Not a shared server: the sweep must not select it.
+  const other = await docker.containers.create({
+    Image: 'alpine:latest',
+    Cmd: ['sleep', '3600'],
+    Labels: { 'dev.zukhruf.testing.probe': randomUUID() },
+  });
+  let state: SmallState | undefined;
+  try {
+    await spawn(process.execPath, runnerArgs(file), {
+      env: runEnvironment(join(directory.path, 'state')),
+      timeout: 150_000,
     });
-    let state: SmallState | undefined;
-    try {
-      await spawn(process.execPath, runnerArgs(file), {
-        env: runEnvironment(join(directory.path, 'state')),
-        timeout: 150_000,
-      });
-      state = await readState<SmallState>(t, statePath);
+    state = await readState<SmallState>(t, statePath);
 
-      assert.equal(await exists(server), false);
-      assert.equal(await exists(other.id), true);
-    } finally {
-      await removeContainer(server).catch(() => {});
-      await removeContainer(other.id).catch(() => {});
-      if (state) await removeContainer(state.id).catch(() => {});
-    }
-  },
-);
+    assert.equal(await exists(server), false);
+    assert.equal(await exists(other.id), true);
+  } finally {
+    await removeContainer(server).catch(() => {});
+    await removeContainer(other.id).catch(() => {});
+    if (state) await removeContainer(state.id).catch(() => {});
+  }
+});
 
 /**
  * Code that reuses one shared server from the docker area at `library`,
@@ -1504,7 +1466,7 @@ const uniqueVersion = (): string =>
 
 test(
   'the process lease of a test process is gone after the process is killed',
-  { skip: signals, timeout: 180_000 },
+  { skip: signals },
   async (t) => {
     await using directory = await new TemporaryFiles().directory(
       'zukhruf-testing-killed-lease-',
@@ -1675,7 +1637,7 @@ test(
 test(
   'two teardowns that sweep one version at once both succeed: the second waits while the first holds the sweep lease, and the servers of that version are removed',
   // The holder, two deadlines of 45 s, the 8 s window, the sweeps after it and the wait for the lease to go, with margin.
-  { skip: proxyless, timeout: 180_000 },
+  { skip: proxyless },
   async (t) => {
     await using directory = await runsDirectory('zukhruf-testing-two-sweeps-');
     const version = uniqueVersion();

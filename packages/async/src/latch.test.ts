@@ -5,67 +5,55 @@ import { setImmediate as afterPendingReactions } from 'node:timers/promises';
 import { Latch } from './latch.ts';
 
 describe('Latch', () => {
-  test(
-    'a wait ends only when the latch opens',
-    { timeout: 2_000 },
-    async () => {
-      // Arrange
-      const latch = new Latch();
-      const ended: string[] = [];
-      void latch.wait().then(() => ended.push('ended'));
-      await afterPendingReactions();
-      const beforeOpen = [...ended];
+  test('a wait ends only when the latch opens', async () => {
+    // Arrange
+    const latch = new Latch();
+    const ended: string[] = [];
+    void latch.wait().then(() => ended.push('ended'));
+    await afterPendingReactions();
+    const beforeOpen = [...ended];
 
-      // Act
-      latch.open();
-      await latch.wait();
+    // Act
+    latch.open();
+    await latch.wait();
 
-      // Assert
-      assert.deepEqual(beforeOpen, [], 'A closed latch must hold its waiters');
-      assert.deepEqual(
-        ended,
-        ['ended'],
-        'The wait must end when the latch opens',
-      );
-    },
-  );
+    // Assert
+    assert.deepEqual(beforeOpen, [], 'A closed latch must hold its waiters');
+    assert.deepEqual(
+      ended,
+      ['ended'],
+      'The wait must end when the latch opens',
+    );
+  });
 
-  test(
-    'a wait that started before the latch opened gets the value it opened with',
-    { timeout: 2_000 },
-    async () => {
-      // Arrange
-      const latch = new Latch<string>();
-      const waiting = latch.wait();
+  test('a wait that started before the latch opened gets the value it opened with', async () => {
+    // Arrange
+    const latch = new Latch<string>();
+    const waiting = latch.wait();
 
-      // Act
-      latch.open('report');
+    // Act
+    latch.open('report');
 
-      // Assert
-      assert.equal(await waiting, 'report');
-    },
-  );
+    // Assert
+    assert.equal(await waiting, 'report');
+  });
 
-  test(
-    'a wait that starts after the latch opened ends at once with the same value, also after a second open',
-    { timeout: 2_000 },
-    async () => {
-      // Arrange
-      const latch = new Latch<string>();
-      latch.open('first');
+  test('a wait that starts after the latch opened ends at once with the same value, also after a second open', async () => {
+    // Arrange
+    const latch = new Latch<string>();
+    latch.open('first');
 
-      // Act
-      latch.open('second');
-      const value = await latch.wait();
+    // Act
+    latch.open('second');
+    const value = await latch.wait();
 
-      // Assert
-      assert.equal(
-        value,
-        'first',
-        'An open latch must keep the value it opened with',
-      );
-    },
-  );
+    // Assert
+    assert.equal(
+      value,
+      'first',
+      'An open latch must keep the value it opened with',
+    );
+  });
 
   test('a latch whose type names a promise refuses one', async () => {
     // Arrange
@@ -95,33 +83,29 @@ describe('Latch', () => {
     );
   });
 
-  test(
-    'a latch never holds a rejection, also when its type lets a failing promise in',
-    { timeout: 2_000 },
-    async () => {
-      // Arrange
-      const unhandled: unknown[] = [];
-      const record = (reason: unknown) => unhandled.push(reason);
-      process.on('unhandledRejection', record);
-      try {
-        const failing = Promise.reject(new Error('work failed'));
-        // The caller handles its own promise; only the latch could leave one unhandled.
-        void failing.catch(() => {});
-        const latch = new Latch<unknown>();
+  test('a latch never holds a rejection, also when its type lets a failing promise in', async () => {
+    // Arrange
+    const unhandled: unknown[] = [];
+    const record = (reason: unknown) => unhandled.push(reason);
+    process.on('unhandledRejection', record);
+    try {
+      const failing = Promise.reject(new Error('work failed'));
+      // The caller handles its own promise; only the latch could leave one unhandled.
+      void failing.catch(() => {});
+      const latch = new Latch<unknown>();
 
-        // Act
-        latch.open(failing);
-        await afterPendingReactions();
+      // Act
+      latch.open(failing);
+      await afterPendingReactions();
 
-        // Assert
-        assert.deepEqual(
-          unhandled,
-          [],
-          'A latch must not hold a rejection that nobody awaits',
-        );
-      } finally {
-        process.off('unhandledRejection', record);
-      }
-    },
-  );
+      // Assert
+      assert.deepEqual(
+        unhandled,
+        [],
+        'A latch must not hold a rejection that nobody awaits',
+      );
+    } finally {
+      process.off('unhandledRejection', record);
+    }
+  });
 });

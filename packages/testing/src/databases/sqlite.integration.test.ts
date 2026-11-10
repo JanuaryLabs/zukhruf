@@ -74,31 +74,27 @@ test('SQLite scope failure closes the connection and removes database and WAL fi
   await database.cleanup();
 });
 
-test(
-  'SQLite write locks release on exceptional scope exit',
-  { timeout: 2_000 },
-  async () => {
-    const sqlite = new Sqlite();
-    await using database = await sqlite.database();
-    database.connection.exec('CREATE TABLE records (value INTEGER)');
-    const failure = new Error('intentional lock scope failure');
+test('SQLite write locks release on exceptional scope exit', async () => {
+  const sqlite = new Sqlite();
+  await using database = await sqlite.database();
+  database.connection.exec('CREATE TABLE records (value INTEGER)');
+  const failure = new Error('intentional lock scope failure');
 
-    await assert.rejects(async () => {
-      await using lock = await sqlite.writeLock(database.path, 10_000);
-      assert.throws(
-        () => database.connection.exec('INSERT INTO records VALUES (1)'),
-        /database is locked/,
-      );
-      throw failure;
-    }, failure);
-
-    database.connection.exec('INSERT INTO records VALUES (2)');
-    assert.equal(
-      database.connection.prepare('SELECT value FROM records').get()?.value,
-      2,
+  await assert.rejects(async () => {
+    await using lock = await sqlite.writeLock(database.path, 10_000);
+    assert.throws(
+      () => database.connection.exec('INSERT INTO records VALUES (1)'),
+      /database is locked/,
     );
-  },
-);
+    throw failure;
+  }, failure);
+
+  database.connection.exec('INSERT INTO records VALUES (2)');
+  assert.equal(
+    database.connection.prepare('SELECT value FROM records').get()?.value,
+    2,
+  );
+});
 
 test('SQLite write locks expire while the caller waits in a synchronous write', async () => {
   const sqlite = new Sqlite();

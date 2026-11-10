@@ -95,7 +95,7 @@ describe('A network directory', () => {
   for (const [fileSystem, type] of networkFileSystems) {
     test(
       `a directory on ${fileSystem} is refused with the directory and its file system`,
-      { ...onLinux, timeout: 2_000 },
+      { ...onLinux },
       async (t) => {
         // Arrange
         await using directory = await new TemporaryFiles().directory(
@@ -123,7 +123,7 @@ describe('A network directory', () => {
   ] as const) {
     test(
       `a ${fileSystem} type that statfs reports sign-extended is still refused`,
-      { ...onLinux, timeout: 2_000 },
+      { ...onLinux },
       async (t) => {
         // Arrange: f_type is a signed long, so libuv hands over a magic with its high bit set as 64 sign-extended bits.
         await using directory = await new TemporaryFiles().directory(
@@ -146,7 +146,7 @@ describe('A network directory', () => {
 
   test(
     'a CIFS type read as a negative number is still refused',
-    { ...onLinux, timeout: 2_000 },
+    { ...onLinux },
     async (t) => {
       // Arrange: CIFS's magic has its high bit set, so a signed f_type extends its sign.
       await using directory = await new TemporaryFiles().directory(
@@ -175,7 +175,7 @@ describe('A network directory', () => {
   ] as const) {
     test(
       `a directory on ${name} counts as local`,
-      { ...onLinux, timeout: 2_000 },
+      { ...onLinux },
       async (t) => {
         // Arrange
         await using directory = await new TemporaryFiles().directory(
@@ -194,7 +194,7 @@ describe('A network directory', () => {
 
   test(
     'a directory that does not exist yet is judged by its nearest parent, and is not created',
-    { ...onLinux, timeout: 2_000 },
+    { ...onLinux },
     async (t) => {
       // Arrange
       await using directory = await new TemporaryFiles().directory(
@@ -214,7 +214,7 @@ describe('A network directory', () => {
 
   test(
     'a statfs that fails tells nothing, so the directory is not refused',
-    { ...onLinux, timeout: 2_000 },
+    { ...onLinux },
     async (t) => {
       // Arrange
       await using directory = await new TemporaryFiles().directory(
@@ -232,7 +232,7 @@ describe('A network directory', () => {
 
   test(
     'a statfs that failed once is not remembered, so a later check can still refuse the directory',
-    { ...onLinux, timeout: 2_000 },
+    { ...onLinux },
     async (t) => {
       // Arrange: the first check cannot read the file system, then the mount answers as NFS.
       await using directory = await new TemporaryFiles().directory(
@@ -254,7 +254,7 @@ describe('A network directory', () => {
 
   test(
     'a directory that passed the check is not judged again',
-    { ...onLinux, timeout: 2_000 },
+    { ...onLinux },
     async (t) => {
       // Arrange: the first check finds a local file system.
       await using directory = await new TemporaryFiles().directory(
@@ -282,7 +282,6 @@ describe('A network directory', () => {
         process.platform === 'darwin'
           ? false
           : 'Only macOS numbers its file systems as they load',
-      timeout: 2_000,
     },
     async (t) => {
       // Arrange: a local directory whose number matches NFS on Linux.
@@ -312,7 +311,6 @@ describe('A network directory', () => {
           process.platform === 'win32'
             ? false
             : 'UNC paths exist only on Windows',
-        timeout: 2_000,
       },
       async () => {
         // Act: the check judges the path itself, so the share need not exist.
@@ -331,7 +329,6 @@ describe('A network directory', () => {
         process.platform === 'win32'
           ? false
           : 'The prefix exists only on Windows',
-      timeout: 2_000,
     },
     async () => {
       // Arrange
