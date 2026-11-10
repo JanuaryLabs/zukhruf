@@ -1,5 +1,3 @@
-import { hash } from 'node:crypto';
-
 import { type Clock, timeout } from '@zukhruf/async';
 import {
   type CancelOptions,
@@ -15,6 +13,9 @@ import {
 /** The kind of a lease: `process` for a test process that reuses shared servers, `sweep` for a teardown that removes them. */
 export const LEASE_LABEL = 'dev.zukhruf.testing.lease';
 
+/** The fingerprint of the shared server that a lease is for (ADR 0019). */
+export const LEASED_SERVER_LABEL = 'dev.zukhruf.testing.lease.server';
+
 /** The smallest image with `cat`. A missing image is pulled by the caller. */
 export const LEASE_IMAGE = 'busybox:1.37.0';
 
@@ -24,9 +25,9 @@ const PATIENCE = 5_000;
 /** The states of a lease that ended: no holder can have it. */
 const endedStates = new Set(['exited', 'dead']);
 
-/** The name of the sweep lease of `version` on an engine. */
-export function sweepLeaseName(version: string): string {
-  return `zukhruf-testing-sweep-${hash('sha256', version)}`;
+/** The name of the sweep lease of the shared server of `fingerprint` on an engine. */
+export function sweepLeaseName(fingerprint: string): string {
+  return `zukhruf-testing-sweep-${fingerprint}`;
 }
 
 /** The state of the container, or undefined when it is gone. */

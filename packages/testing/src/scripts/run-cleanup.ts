@@ -3,6 +3,7 @@ import { readFile, readdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 
+import type { WallClock } from '@zukhruf/async';
 import {
   type Container,
   ContainerNotFoundError,
@@ -18,6 +19,7 @@ import {
 } from '../databases/collector.ts';
 import {
   EngineLease,
+  LEASED_SERVER_LABEL,
   LEASE_IMAGE,
   LEASE_LABEL,
   sweepLeaseName,
@@ -28,11 +30,7 @@ import {
   directoryPrefix,
   forwardPrefix,
 } from '../docker/run-records.ts';
-import {
-  PACKAGE_VERSION,
-  SHARED_SERVER_LABEL,
-  VERSION_LABEL,
-} from '../docker/testbed.ts';
+import { SERVER_LABEL } from '../docker/testbed.ts';
 
 /** How long one Engine API call of the cleanup may take. */
 export const ENGINE_CALL_TIMEOUT = 240_000;
@@ -112,7 +110,7 @@ async function dropDatabases(
   signal: () => AbortSignal,
 ): Promise<void> {
   for (const summary of await engine.containers.list({
-    filters: { label: [`${SHARED_SERVER_LABEL}=1`, KIND_LABEL] },
+    filters: { label: [SERVER_LABEL, KIND_LABEL] },
     signal: signal(),
   })) {
     const kind = summary.Labels?.[KIND_LABEL];
@@ -187,7 +185,7 @@ export async function cleanup(
     filters,
     signal: signal(),
   })) {
-    if (summary.Labels?.[SHARED_SERVER_LABEL] === '1') continue;
+    if (summary.Labels?.[SERVER_LABEL] !== undefined) continue;
     const container = await engine.containers.find(summary.Id, {
       signal: signal(),
     });
@@ -229,28 +227,32 @@ export async function cleanup(
 /** The tries of a teardown to take a sweep lease that another holder has. */
 const SWEEP_LEASE_TRIES = 3;
 
-/** How long a teardown waits for the sweep lease of one version that another holder has. */
+/** How long a teardown waits for the sweep lease of one server that another holder has. */
 const SWEEP_LEASE_WAIT = 30_000;
 
+/** The age from which a teardown removes a shared server that no process lease holds (ADR 0019). */
+const SERVER_TTL = 7 * 24 * 60 * 60 * 1000;
+
 /**
- * Takes the sweep lease of `version`, and pulls its image when the engine
+ * Takes the sweep lease of `fingerprint`, and pulls its image when the engine
  * does not have it. When the name is taken, it waits until that lease is
  * gone, as a test process does, and tries again: a teardown killed before
  * the start of its lease leaves it created, and the wait removes it. Gives
  * undefined when each try found the name taken, or when the wait took
- * longer than SWEEP_LEASE_WAIT: the servers of the version stay for a
- * later teardown, and another teardown's sweep never fails this run.
+ * longer than SWEEP_LEASE_WAIT: the server stays for a later teardown, and
+ * another teardown's sweep never fails this run.
  */
 async function takeSweepLease(
   engine: Docker,
-  version: string,
+  fingerprint: string,
   signal: () => AbortSignal,
+  clock: WallClock,
 ): Promise<EngineLease | undefined> {
-  const name = sweepLeaseName(version);
+  const name = sweepLeaseName(fingerprint);
   const take = () =>
     EngineLease.take(
       engine,
-      { [LEASE_LABEL]: 'sweep', [VERSION_LABEL]: version },
+      { [LEASE_LABEL]: 'sweep', [LEASED_SERVER_LABEL]: fingerprint },
       { name, signal: signal() },
     );
   const wait = AbortSignal.timeout(SWEEP_LEASE_WAIT);
@@ -265,7 +267,7 @@ async function takeSweepLease(
     }
     if (lease !== undefined) return lease;
     try {
-      await EngineLease.gone(engine, name, { signal: wait, clock: globalThis });
+      await EngineLease.gone(engine, name, { signal: wait, clock });
     } catch (error) {
       if (wait.aborted) return undefined;
       throw error;
@@ -275,67 +277,71 @@ async function takeSweepLease(
 }
 
 /**
- * Removes each shared server whose version label is not this package's
- * version (ADR 0012), unless a test process of that version holds a process
- * lease (ADR 0014). The sweep lease of the version comes first, and the look
- * for process leases after it. A server with no version label has no lease.
+ * Removes each shared server that is older than SERVER_TTL, unless a test
+ * process holds a process lease for it (ADR 0019). The sweep lease of the
+ * server comes first, and the look for process leases after it (ADR 0014).
  * A removal that fails keeps the server, and the teardown goes on.
  */
-async function removeOtherVersions(engine: Docker): Promise<void> {
+async function removeExpiredServers(
+  engine: Docker,
+  clock: WallClock,
+): Promise<void> {
   const signal = () => AbortSignal.timeout(ENGINE_CALL_TIMEOUT);
-  const versions = Map.groupBy(
-    (
-      await engine.containers.list({
-        all: true,
-        filters: { label: [`${SHARED_SERVER_LABEL}=1`] },
-        signal: signal(),
-      })
-    ).filter(({ Labels }) => Labels?.[VERSION_LABEL] !== PACKAGE_VERSION),
-    ({ Labels }) => Labels?.[VERSION_LABEL],
-  );
-  for (const [version, servers] of versions) {
-    await using lease =
-      version === undefined
-        ? undefined
-        : await takeSweepLease(engine, version, signal);
-    if (version !== undefined) {
-      // Other teardowns held the sweep lease on each try.
-      if (lease === undefined) continue;
-      const holders = await engine.containers.list({
-        filters: {
-          label: [`${LEASE_LABEL}=process`, `${VERSION_LABEL}=${version}`],
-        },
-        signal: signal(),
-      });
-      if (holders.length > 0) continue;
-    }
-    for (const { Id } of servers) {
-      // Another run's teardown can remove it first.
-      const container = await engine.containers.find(Id, { signal: signal() });
-      // A server that the engine does not remove stays for a later
-      // teardown: the servers of another version never fail this run.
-      await container
-        ?.remove({ force: true, v: true, signal: signal() })
-        .catch(() => {});
-    }
+  const expiry = (clock.Date.now() - SERVER_TTL) / 1000;
+  const servers = await engine.containers.list({
+    all: true,
+    filters: { label: [SERVER_LABEL] },
+    signal: signal(),
+  });
+  for (const { Id, Created, Labels } of servers) {
+    // The filter and the engine give both; the Engine API types mark each field optional.
+    const fingerprint = Labels?.[SERVER_LABEL];
+    if (fingerprint === undefined || Created === undefined || Created > expiry)
+      continue;
+    // Other teardowns held the sweep lease on each try.
+    await using lease = await takeSweepLease(
+      engine,
+      fingerprint,
+      signal,
+      clock,
+    );
+    if (lease === undefined) continue;
+    const holders = await engine.containers.list({
+      filters: {
+        label: [
+          `${LEASE_LABEL}=process`,
+          `${LEASED_SERVER_LABEL}=${fingerprint}`,
+        ],
+      },
+      signal: signal(),
+    });
+    if (holders.length > 0) continue;
+    // Another run's teardown can remove it first.
+    const container = await engine.containers.find(Id, { signal: signal() });
+    // A server that the engine does not remove stays for a later teardown:
+    // the sweep never fails this run.
+    await container
+      ?.remove({ force: true, v: true, signal: signal() })
+      .catch(() => {});
   }
 }
 
 /**
- * Connects to the run's engine, cleans the run, removes the shared servers
- * of other versions, and ends the connection. Only the global teardown
- * calls it, for a run that used Docker.
+ * Connects to the run's engine, cleans the run, removes the expired shared
+ * servers, and ends the connection. Only the global teardown calls it, for a
+ * run that used Docker.
  */
 export async function connectAndCleanup(
   previous: Run,
   directory: string,
+  clock: WallClock,
 ): Promise<void> {
   // Disposal ends the connection, and with it the ssh child of an SSH engine.
   await using engine = await Docker.connect({
-    clock: globalThis,
+    clock,
     host: previous.endpoint,
     signal: AbortSignal.timeout(ENGINE_CALL_TIMEOUT),
   });
   await cleanup(engine, previous, directory);
-  await removeOtherVersions(engine);
+  await removeExpiredServers(engine, clock);
 }

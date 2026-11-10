@@ -1,5 +1,4 @@
 import { hash, randomUUID } from 'node:crypto';
-import { readFileSync } from 'node:fs';
 
 import pMemoize from 'p-memoize';
 
@@ -16,27 +15,23 @@ import {
 } from '@zukhruf/docker';
 
 import { DockerDirectory } from './directory.ts';
-import { EngineLease, LEASE_LABEL, sweepLeaseName } from './engine-lease.ts';
+import {
+  EngineLease,
+  LEASED_SERVER_LABEL,
+  LEASE_LABEL,
+  sweepLeaseName,
+} from './engine-lease.ts';
 import { DockerHost } from './host.ts';
 import { type ProcessRun, TEST_RUN_LABEL, readRun } from './run-records.ts';
 import { ServiceContainer } from './service-container.ts';
 
-/** Marks a server that `reuse()` shares across processes and runs. */
-export const SHARED_SERVER_LABEL = 'dev.zukhruf.testing.shared';
-/** The fingerprint of a shared server's configuration. */
-export const CONFIG_LABEL = 'dev.zukhruf.testing.config';
-/** The version of this package that a shared server belongs to (ADR 0012). */
-export const VERSION_LABEL = 'dev.zukhruf.testing.version';
-
-/** The version of this package: `../../package.json` from `src/docker` and from `dist/docker`. */
-export const { version: PACKAGE_VERSION }: { version: string } = JSON.parse(
-  readFileSync(new URL('../../package.json', import.meta.url), 'utf8'),
-);
+/** Marks a server that `reuse()` shares across processes and runs. Its value is the fingerprint of the server's request (ADR 0019). */
+export const SERVER_LABEL = 'dev.zukhruf.testing.server';
 
 export interface ServiceOptions {
   /** The container's port that answers on 127.0.0.1 of this machine. */
   internalPort: number;
-  /** Without it, the engine names a dedicated server; a shared server's name comes from its configuration. */
+  /** Without it, the engine names a dedicated server; a shared server's name comes from its request. */
   name?: string;
   /** Runs on every acquisition. Throw until ready, using timebox for polling. */
   healthy?: (service: ServiceContainer) => unknown;
@@ -57,9 +52,10 @@ interface Engine {
 const RESOURCES = { Memory: 1024 ** 3, NanoCpus: 1e9 };
 
 /**
- * The process lease of this process on each engine, by the engine's host.
- * One process builds many testbeds, so the lease belongs to the module. A
- * lease whose attach ended is taken again by the next reuse().
+ * The process lease of this process for each shared server, by the engine's
+ * host and the server's fingerprint. One process builds many testbeds, so the
+ * lease belongs to the module. A lease whose attach ended is taken again by
+ * the next reuse() of that server.
  */
 const processLeases = new Map<string, Promise<EngineLease>>();
 
@@ -197,61 +193,46 @@ export class DockerTestbed {
   }
 
   /**
-   * Reuse one server per configuration on this engine, across processes and
-   * runs. Docker reserves the name atomically. Readiness failure leaves it
-   * running. Disposal closes only the forward; the server keeps running for
-   * its other users. The engine removes the server when it stops.
+   * Reuse one server per request on this engine, across processes, runs and
+   * versions of this package. Docker reserves the name atomically. Readiness
+   * failure leaves it running. Disposal closes only the forward; the server
+   * keeps running for its other users. The engine removes the server when it
+   * stops.
    */
   async reuse(
     body: EngineApi.ContainerCreateRequest,
     options: ServiceOptions,
   ): Promise<ServiceContainer> {
     const engine = await this.#engine();
-    // Publish this process's lease, then read the sweep lease (ADR 0014).
-    await this.#processLease(engine);
-    await EngineLease.gone(engine.client, sweepLeaseName(PACKAGE_VERSION), {
-      clock: globalThis,
-    });
-    const configured: EngineApi.ContainerCreateRequest = {
-      ...body,
-      HostConfig: { ...RESOURCES, ...body.HostConfig },
+    const published = this.#published(
+      { ...body, HostConfig: { ...RESOURCES, ...body.HostConfig } },
+      options.internalPort,
+    );
+    const request: EngineApi.ContainerCreateRequest = {
+      ...published,
+      HostConfig: { ...published.HostConfig, AutoRemove: true },
     };
     const fingerprint = hash(
       'sha256',
       JSON.stringify(
-        canonical({
-          version: PACKAGE_VERSION,
-          internalPort: options.internalPort,
-          body: configured,
-        }),
+        canonical({ internalPort: options.internalPort, request }),
       ),
     );
+    // Publish this process's lease, then read the sweep lease (ADR 0014).
+    await this.#processLease(engine, fingerprint);
+    await EngineLease.gone(engine.client, sweepLeaseName(fingerprint), {
+      clock: globalThis,
+    });
     const name = options.name ?? `zukhruf-testing-${fingerprint}`;
-    const published = this.#published(
-      {
-        ...configured,
-        Labels: {
-          ...configured.Labels,
-          [SHARED_SERVER_LABEL]: '1',
-          [CONFIG_LABEL]: fingerprint,
-          [VERSION_LABEL]: PACKAGE_VERSION,
-        },
-      },
-      options.internalPort,
-    );
     const shared: EngineApi.ContainerCreateRequest = {
-      ...published,
-      HostConfig: { ...published.HostConfig, AutoRemove: true },
+      ...request,
+      Labels: { ...request.Labels, [SERVER_LABEL]: fingerprint },
     };
     const { container } = await this.#creating(engine, () =>
       engine.client.containers.createOrGet(shared, { name }),
     );
     const inspected = await container.inspect();
-    const labels = inspected.Config?.Labels;
-    if (
-      labels?.[SHARED_SERVER_LABEL] !== '1' ||
-      labels[CONFIG_LABEL] !== fingerprint
-    )
+    if (inspected.Config?.Labels?.[SERVER_LABEL] !== fingerprint)
       throw new Error(
         `Container ${name} does not match the shared test configuration`,
       );
@@ -271,16 +252,19 @@ export class DockerTestbed {
     );
   }
 
-  /** The process lease of this process on the engine: a sweep keeps the shared servers of this version while it runs. */
-  async #processLease(engine: Engine): Promise<EngineLease> {
-    const host = engine.client.host;
-    const taken = processLeases.get(host);
+  /** The process lease of this process for the shared server of `fingerprint`: a sweep keeps that server while it runs. */
+  async #processLease(
+    engine: Engine,
+    fingerprint: string,
+  ): Promise<EngineLease> {
+    const key = `${engine.client.host} ${fingerprint}`;
+    const taken = processLeases.get(key);
     if (taken !== undefined) return taken;
     const taking = this.#creating(engine, async () => {
       const lease = await EngineLease.take(engine.client, {
         ...this.defaults.Labels,
         [LEASE_LABEL]: 'process',
-        [VERSION_LABEL]: PACKAGE_VERSION,
+        [LEASED_SERVER_LABEL]: fingerprint,
       });
       if (lease === undefined)
         throw new Error(
@@ -288,9 +272,9 @@ export class DockerTestbed {
         );
       return lease;
     });
-    processLeases.set(host, taking);
+    processLeases.set(key, taking);
     const forget = () => {
-      if (processLeases.get(host) === taking) processLeases.delete(host);
+      if (processLeases.get(key) === taking) processLeases.delete(key);
     };
     taking.then((lease) => lease.closed().then(forget), forget);
     return taking;

@@ -94,7 +94,7 @@ async function runsDirectory(prefix: string): Promise<TemporaryDirectory> {
           all: true,
           filters: { label: [label] },
         }))
-          if (Labels?.['dev.zukhruf.testing.shared'] !== '1')
+          if (Labels?.['dev.zukhruf.testing.server'] === undefined)
             await removeContainer(Id).catch(() => {});
         for (const { Name } of await docker.volumes.list({
           filters: { label: [label] },

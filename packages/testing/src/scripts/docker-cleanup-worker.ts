@@ -28,7 +28,7 @@ async function sweep(): Promise<CleanupOutcome> {
     // Imported here, so that a module that fails to load is an outcome too:
     // the teardown would otherwise wait until its timeout.
     const { connectAndCleanup } = await import('./run-cleanup.ts');
-    await connectAndCleanup(run, directory);
+    await connectAndCleanup(run, directory, globalThis);
     return { ok: true };
   } catch (error) {
     return {

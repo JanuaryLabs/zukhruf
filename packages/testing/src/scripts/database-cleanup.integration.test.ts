@@ -305,7 +305,7 @@ test(
         Image: 'alpine:latest',
         Cmd: ['sleep', '600'],
         Labels: {
-          'dev.zukhruf.testing.shared': '1',
+          'dev.zukhruf.testing.server': randomUUID(),
           'dev.zukhruf.testing.kind': 'mysql',
           [VERIFICATION]: scope,
         },
