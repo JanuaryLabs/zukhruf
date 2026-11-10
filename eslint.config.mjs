@@ -136,6 +136,14 @@ export default defineConfig(
           message:
             'A private package takes a workspace @zukhruf/* package with "*": a release does not rewrite its ranges (#3438).',
         },
+        // No native dependencies: a feature of another driver comes to
+        // node:sqlite in JS, or not at all (sqlite-open ADR 0007).
+        {
+          selector:
+            'JSONProperty[key.value=/^(dev|peer|optional)?[dD]ependencies$/] > JSONObjectExpression > JSONProperty[key.value=/^(better-sqlite3|sqlite3|@photostructure\\u002Fsqlite|libsql|@libsql\\u002Fclient)$/]',
+          message:
+            'zukhruf uses node:sqlite, not a native SQLite driver. Open a connection with open() of @zukhruf/sqlite-open, and bring a feature of the driver to node:sqlite in JS.',
+        },
       ],
     },
   },

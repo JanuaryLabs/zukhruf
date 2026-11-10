@@ -51,8 +51,9 @@ jobs:
           - name: Check formatting
             run: npx prettier --check .
 
-          - name: Check that the lockfile holds no registry copy of a workspace package
-            run: npx eslint package-lock.json
+          # No Nx project holds these two files, so nx affected never lints them.
+          - name: Lint the root package.json and the lockfile
+            run: npx eslint package.json package-lock.json
 
           - name: Check that a copy ledger records each copy in the test files
             run: npx nx run copy-check:check
