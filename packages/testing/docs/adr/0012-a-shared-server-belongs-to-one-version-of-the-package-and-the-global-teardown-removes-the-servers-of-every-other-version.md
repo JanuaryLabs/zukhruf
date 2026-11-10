@@ -1,5 +1,7 @@
 # A shared server belongs to one version of the package, and the global teardown removes the servers of every other version
 
+Superseded on 2026-11-10 by [ADR 0019](./0019-a-shared-servers-name-comes-from-its-request-and-the-global-teardown-removes-it-after-a-ttl.md). The version is no longer in the name or in a label of a shared server. The name comes from the request, and the global teardown removes a shared server that is older than a time to live (TTL) of 7 days. The text below describes the code before that change.
+
 `reuse()` gives one shared server for each configuration on an engine. The name of the server is `zukhruf-testing-<fingerprint>`. The hash in `reuse()` in `src/docker/testbed.ts` takes the whole configuration: the Engine API body after the testbed adds its defaults (the image, the command, the environment, the labels, the resources), the `internalPort` and the number `transportVersion`. Shared servers outlive runs on purpose (ADR 0006). They exist for speed: in deepagents 528cafa7, the SQL Server tests went from 813 s to 30 s. Thus a removal after each run is not an option.
 
 A change of the configuration gives a new fingerprint, thus a new name and a new server. Nothing removes the old server. The README told the user to stop it with `docker stop`. Each change in `@zukhruf/testing` left one full set of servers on each engine:

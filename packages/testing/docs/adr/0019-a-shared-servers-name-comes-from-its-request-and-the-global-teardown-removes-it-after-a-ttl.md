@@ -1,6 +1,6 @@
 # A shared server's name comes from its request, and the global teardown removes it after a TTL
 
-Accepted on 2026-11-09 (user, #3415). The code is not written yet. Until it is, ADR 0012 and ADR 0014 describe the code.
+Accepted on 2026-11-09 (user, #3415). The code is in place since 2026-11-10: `reuse()` in `src/docker/testbed.ts` and `removeExpiredServers()` in `src/scripts/run-cleanup.ts`. A lease has the label `dev.zukhruf.testing.lease.server` with the fingerprint of its server.
 
 ADR 0012 puts the version of this package in the name of a shared server, and the global teardown removes the shared servers of other versions. Each release of this package thus retires each shared server. In the last 30 releases, 5 changed the source of this package, and 30 retired the servers. Repositories on different versions also remove the servers of each other between their runs. On 2026-11-09, one machine had four locked versions: 0.8.7, 0.8.10, 0.8.11 and 0.8.12. ADR 0014 prevents a removal during a run, but the next run of the other repository starts cold.
 

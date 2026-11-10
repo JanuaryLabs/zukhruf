@@ -35,15 +35,15 @@ A container whose port answers on 127.0.0.1 of this machine.
 _Avoid_: Server container
 
 **Shared server**:
-A service container that `reuse()` shares between processes and runs, one per configuration and package version.
+A service container that `reuse()` shares between processes, runs and versions of this package, one for each request. Its name and its label `dev.zukhruf.testing.server` hold the fingerprint of the request. A global teardown removes a shared server that is older than its time to live (TTL) of 7 days, when no process lease holds it.
 _Avoid_: Global container, singleton
 
 **Lease**:
-A container that runs `cat` on the standard input of the attach of its holder process. When the holder exits for any reason, the attach closes and the engine removes the lease. A process lease tells a global teardown that a test process of a version uses its shared servers now. `reuse()` takes one for each process and engine.
+A container that runs `cat` on the standard input of the attach of its holder process. When the holder exits for any reason, the attach closes and the engine removes the lease. A process lease tells a global teardown that a test process uses one shared server now. `reuse()` takes one for each process and shared server.
 _Avoid_: Heartbeat, lock, Ryuk session
 
 **Sweep lease**:
-The lease that a global teardown holds while it removes the shared servers of another version. Its name comes from that version, so one teardown at a time sweeps a version. A test process of that version waits until the sweep lease is gone.
+The lease that a global teardown holds while it looks for the process leases of one shared server and removes that server. Its name comes from the fingerprint of the server, so one teardown at a time sweeps a server. A test process of that server waits until the sweep lease is gone.
 _Avoid_: Sweep lock
 
 **Run**:
